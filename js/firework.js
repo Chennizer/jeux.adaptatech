@@ -5,6 +5,7 @@ function startFeuArtificeGame() {
 
     // Hide control panel and show the game
     document.getElementById('control-panel').style.display = 'none';
+    document.body.classList.add('hide-cursor'); // Hide the cursor
     isPlaying = true;
 
     // Start the game logic
