@@ -1,48 +1,43 @@
 function startFeuArtificeGame() {
     let lastMouseX = window.innerWidth / 2;
     let lastMouseY = window.innerHeight / 2;
-    let lastTimestamp = Date.now();
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
     let isPlaying = false;
 
     // Hide control panel and show the game
     document.getElementById('control-panel').style.display = 'none';
     isPlaying = true;
 
-    // Start the game logic with trail generation based on speed
+    // Start the game logic with consistent trail generation
     function generateTrail() {
         if (isPlaying) {
-            const currentTime = Date.now();
-            const deltaTime = currentTime - lastTimestamp;
-            lastTimestamp = currentTime;
+            const deltaX = mouseX - lastMouseX;
+            const deltaY = mouseY - lastMouseY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-            const speed = calculateSpeed(lastMouseX, lastMouseY, mouseX, mouseY, deltaTime);
-
-            // Number of circles based on speed (adjust this factor as needed)
-            const circlesToSpawn = Math.max(1, Math.floor(speed / 10));
+            // Number of circles based on distance (spread them along the path)
+            const circlesToSpawn = Math.max(1, Math.floor(distance / 10));
 
             for (let i = 0; i < circlesToSpawn; i++) {
-                createTrailCircle(lastMouseX + (mouseX - lastMouseX) * (i / circlesToSpawn), 
-                                  lastMouseY + (mouseY - lastMouseY) * (i / circlesToSpawn));
+                const x = lastMouseX + (deltaX * i) / circlesToSpawn;
+                const y = lastMouseY + (deltaY * i) / circlesToSpawn;
+                createTrailCircle(x, y);
             }
+
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
 
             requestAnimationFrame(generateTrail);
         }
     }
     requestAnimationFrame(generateTrail);
 
-    // Track mouse movement to update position and calculate speed
+    // Track mouse movement to update position
     document.addEventListener('mousemove', (e) => {
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
         mouseX = e.clientX;
         mouseY = e.clientY;
     });
-}
-
-// Calculate speed based on mouse movement
-function calculateSpeed(x1, y1, x2, y2, deltaTime) {
-    const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    return distance / deltaTime;
 }
 
 function createExplosion(x, y) {
