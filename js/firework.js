@@ -7,13 +7,13 @@ function startFeuArtificeGame() {
     document.getElementById('control-panel').style.display = 'none';
     isPlaying = true;
 
+    // Start the game logic
+    setInterval(createTrailCircle, 10000);
+
     // Request animation frame loop for continuous trail generation
     function generateTrail() {
         if (isPlaying) {
-            // Spawn multiple circles for a denser trail
-            for (let i = 0; i < 5; i++) { // Adjust the number of circles here
-                createTrail(mouseX, mouseY);
-            }
+            createTrail(mouseX, mouseY);
             requestAnimationFrame(generateTrail);
         }
     }
