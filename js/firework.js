@@ -8,7 +8,7 @@ function startFeuArtificeGame() {
     isPlaying = true;
 
     // Start the game logic
-    setInterval(createCircle, 10000);
+    setInterval(createTrailCircle, 10000);
 
     // Request animation frame loop for continuous trail generation
     function generateTrail() {
@@ -76,9 +76,9 @@ function getRandomColor() {
     return colors[Math.floor(Math.random() * colors.length)];
 }
 
-function createCircle() {
+function createTrailCircle() {
     const circle = document.createElement('div');
-    circle.classList.add('circle');
+    circle.classList.add('trail-circle');
     circle.style.backgroundColor = getRandomColor();
     circle.style.left = `${Math.random() * (window.innerWidth - 100)}px`;
     circle.style.top = `${Math.random() * (window.innerHeight - 100)}px`;
@@ -92,7 +92,6 @@ function createCircle() {
     });
 }
 
-// Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
     const startButton = document.querySelector('#start-button');
     if (startButton) {
