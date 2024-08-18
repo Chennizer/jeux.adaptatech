@@ -3,7 +3,8 @@ function startFeuArtificeGame() {
     let mouseY = window.innerHeight / 2;
     let isPlaying = false;
 
-    document.querySelector('.start-button').style.display = 'none'; // Hide start button
+    // Hide control panel and show the game
+    document.getElementById('control-panel').style.display = 'none';
     isPlaying = true;
 
     // Start the game logic
@@ -91,8 +92,9 @@ function createCircle() {
     });
 }
 
+// Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('.start-button');
+    const startButton = document.querySelector('#start-button');
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
     }
