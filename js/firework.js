@@ -1,6 +1,4 @@
 function startFeuArtificeGame() {
-    let lastMouseX = window.innerWidth / 2;
-    let lastMouseY = window.innerHeight / 2;
     let mouseX = window.innerWidth / 2;
     let mouseY = window.innerHeight / 2;
     let isPlaying = false;
@@ -9,25 +7,13 @@ function startFeuArtificeGame() {
     document.getElementById('control-panel').style.display = 'none';
     isPlaying = true;
 
-    // Start the game logic with consistent trail generation
+    // Request animation frame loop for continuous trail generation
     function generateTrail() {
         if (isPlaying) {
-            const deltaX = mouseX - lastMouseX;
-            const deltaY = mouseY - lastMouseY;
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-            // Number of circles based on distance (spread them along the path)
-            const circlesToSpawn = Math.max(1, Math.floor(distance / 10));
-
-            for (let i = 0; i < circlesToSpawn; i++) {
-                const x = lastMouseX + (deltaX * i) / circlesToSpawn;
-                const y = lastMouseY + (deltaY * i) / circlesToSpawn;
-                createTrailCircle(x, y);
+            // Spawn multiple circles for a denser trail
+            for (let i = 0; i < 5; i++) { // Adjust the number of circles here
+                createTrail(mouseX, mouseY);
             }
-
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-
             requestAnimationFrame(generateTrail);
         }
     }
@@ -90,12 +76,12 @@ function getRandomColor() {
     return colors[Math.floor(Math.random() * colors.length)];
 }
 
-function createTrailCircle(x, y) {
+function createTrailCircle() {
     const circle = document.createElement('div');
     circle.classList.add('trail-circle');
     circle.style.backgroundColor = getRandomColor();
-    circle.style.left = `${x}px`;
-    circle.style.top = `${y}px`;
+    circle.style.left = `${Math.random() * (window.innerWidth - 100)}px`;
+    circle.style.top = `${Math.random() * (window.innerHeight - 100)}px`;
 
     document.body.appendChild(circle);
 
