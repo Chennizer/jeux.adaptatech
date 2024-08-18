@@ -3,13 +3,17 @@ function startFeuArtificeGame() {
     let mouseY = window.innerHeight / 2;
     let isPlaying = false;
 
+    // Get the user-specified interval
+    const intervalInput = document.getElementById('interval-input');
+    let interval = parseInt(intervalInput.value) * 1000; // Convert seconds to milliseconds
+
     // Hide control panel and show the game
     document.getElementById('control-panel').style.display = 'none';
     document.body.classList.add('hide-cursor'); // Hide the cursor
     isPlaying = true;
 
-    // Start the game logic
-    setInterval(createTrailCircle, 10000);
+    // Start the game logic with the specified interval
+    setInterval(createTrailCircle, interval);
 
     // Request animation frame loop for continuous trail generation
     function generateTrail() {
