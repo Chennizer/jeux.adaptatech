@@ -1,29 +1,48 @@
 function startFeuArtificeGame() {
-    let mouseX = window.innerWidth / 2;
-    let mouseY = window.innerHeight / 2;
+    let lastMouseX = window.innerWidth / 2;
+    let lastMouseY = window.innerHeight / 2;
+    let lastTimestamp = Date.now();
     let isPlaying = false;
 
     // Hide control panel and show the game
     document.getElementById('control-panel').style.display = 'none';
     isPlaying = true;
 
-    // Start the game logic
-    setInterval(createTrailCircle, 10000);
-
-    // Request animation frame loop for continuous trail generation
+    // Start the game logic with trail generation based on speed
     function generateTrail() {
         if (isPlaying) {
-            createTrail(mouseX, mouseY);
+            const currentTime = Date.now();
+            const deltaTime = currentTime - lastTimestamp;
+            lastTimestamp = currentTime;
+
+            const speed = calculateSpeed(lastMouseX, lastMouseY, mouseX, mouseY, deltaTime);
+
+            // Number of circles based on speed (adjust this factor as needed)
+            const circlesToSpawn = Math.max(1, Math.floor(speed / 10));
+
+            for (let i = 0; i < circlesToSpawn; i++) {
+                createTrailCircle(lastMouseX + (mouseX - lastMouseX) * (i / circlesToSpawn), 
+                                  lastMouseY + (mouseY - lastMouseY) * (i / circlesToSpawn));
+            }
+
             requestAnimationFrame(generateTrail);
         }
     }
     requestAnimationFrame(generateTrail);
 
-    // Track mouse movement to update position
+    // Track mouse movement to update position and calculate speed
     document.addEventListener('mousemove', (e) => {
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         mouseX = e.clientX;
         mouseY = e.clientY;
     });
+}
+
+// Calculate speed based on mouse movement
+function calculateSpeed(x1, y1, x2, y2, deltaTime) {
+    const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+    return distance / deltaTime;
 }
 
 function createExplosion(x, y) {
@@ -76,12 +95,12 @@ function getRandomColor() {
     return colors[Math.floor(Math.random() * colors.length)];
 }
 
-function createTrailCircle() {
+function createTrailCircle(x, y) {
     const circle = document.createElement('div');
     circle.classList.add('trail-circle');
     circle.style.backgroundColor = getRandomColor();
-    circle.style.left = `${Math.random() * (window.innerWidth - 100)}px`;
-    circle.style.top = `${Math.random() * (window.innerHeight - 100)}px`;
+    circle.style.left = `${x}px`;
+    circle.style.top = `${y}px`;
 
     document.body.appendChild(circle);
 
@@ -92,6 +111,7 @@ function createTrailCircle() {
     });
 }
 
+// Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
     const startButton = document.querySelector('#start-button');
     if (startButton) {
