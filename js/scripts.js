@@ -1,6 +1,5 @@
 function setupInteractiveMapGame({
     dwellTimeInputSelector,
-    startButtonSelector,
     zoneEffects
 }) {
     let hoverTimeout;
@@ -8,7 +7,7 @@ function setupInteractiveMapGame({
 
     // Elements
     const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
-    const startButton = document.querySelector(startButtonSelector);
+    const startButton = document.getElementById('control-panel-start-button'); // Directly select the start button
     const hoverCircle = document.getElementById('hover-circle');
     const animationContainer = document.getElementById('animation-container');
     const zoneAnimation = document.getElementById('zone-animation');
