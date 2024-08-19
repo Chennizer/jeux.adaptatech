@@ -99,7 +99,7 @@ function createTrailCircle() {
 
 // Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('#start-button');
+    const startButton = document.querySelector('#control-panel-start-button');
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
     }
