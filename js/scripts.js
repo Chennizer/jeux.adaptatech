@@ -1,6 +1,6 @@
 function setupInteractiveMapGame({
     dwellTimeInputSelector,
-    startButtonSelector,
+    startButtonSelector: '#control-panel-start-button',
     zoneEffects
 }) {
     let hoverTimeout;
