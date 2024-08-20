@@ -7,10 +7,19 @@ function startFeuArtificeGame() {
     const intervalInput = document.getElementById('interval-input');
     let interval = parseInt(intervalInput.value) * 1000; // Convert seconds to milliseconds
 
+    // Get the user-specified initial circle count
+    const initialCirclesInput = document.getElementById('initial-circles-input');
+    let initialCircleCount = parseInt(initialCirclesInput.value);
+
     // Hide control panel and show the game
     document.getElementById('control-panel').style.display = 'none';
     document.body.classList.add('hide-cursor'); // Hide the cursor
     isPlaying = true;
+
+    // Spawn the initial circles
+    for (let i = 0; i < initialCircleCount; i++) {
+        createTrailCircle();
+    }
 
     // Start the game logic with the specified interval
     setInterval(createTrailCircle, interval);
