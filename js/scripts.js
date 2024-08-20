@@ -9,8 +9,6 @@ function setupInteractiveMapGame({
     const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
     const startButton = document.getElementById('control-panel-start-button'); // Directly select the start button
     const hoverCircle = document.getElementById('hover-circle');
-    const animationContainer = document.getElementById('animation-container');
-    const zoneAnimation = document.getElementById('zone-animation');
     const mapContainer = document.getElementById('map-container');
     const overlay = document.getElementById('overlay');
     const videoContainer = document.getElementById('video-container');
@@ -91,22 +89,8 @@ function setupInteractiveMapGame({
         overlay.style.display = 'block';
         mapContainer.style.display = 'none';
 
-        const randomX = 50 + (Math.random() * 20 - 10);
-        const randomY = 50 + (Math.random() * 20 - 10);
-
-        animationContainer.style.left = `${randomX}%`;
-        animationContainer.style.top = `${randomY}%`;
-        zoneAnimation.src = effect.image;
-        animationContainer.style.display = 'block';
-        animationContainer.style.animation = effect.animation;
-
-        const sound = new Audio(effect.sound);
-        sound.play();
-
-        sound.onended = () => {
-            animationContainer.style.display = 'none';
-            playVideo(effect.video);
-        };
+        // Directly play the video without showing an image or playing sound
+        playVideo(effect.video);
     }
 
     function playVideo(videoSrc) {
