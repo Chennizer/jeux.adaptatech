@@ -1,13 +1,31 @@
-function setupInteractiveMapGame({
-    dwellTimeInputSelector,
-    zoneEffects
-}) {
+// Global function to initialize events like the Escape key handling
+function initializeGlobalEvents() {
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            resetToControlPanel();
+        }
+    });
+}
+
+// Function to reset to the control panel (this will need to be customized based on your game structure)
+function resetToControlPanel() {
+    // Hide game elements
+    document.getElementById('map-container').style.display = 'none';
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('video-container').style.display = 'none';
+    
+    // Show control panel
+    document.getElementById('control-panel').style.display = 'block';
+}
+
+// This function is called when a specific game initializes
+function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     let hoverTimeout;
     let dwellTime = 1000; // Default dwell time in milliseconds
 
     // Elements
     const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
-    const startButton = document.getElementById('control-panel-start-button'); // Directly select the start button
+    const startButton = document.getElementById('control-panel-start-button');
     const hoverCircle = document.getElementById('hover-circle');
     const mapContainer = document.getElementById('map-container');
     const overlay = document.getElementById('overlay');
@@ -99,12 +117,14 @@ function setupInteractiveMapGame({
         endVideo.load();
         endVideo.play();
 
-        endVideo.onended = resetToMapState;
+        // Remove the reset to control panel on video end
+        endVideo.onended = () => {
+            videoContainer.style.display = 'none';
+            overlay.style.display = 'none';
+            mapContainer.style.display = 'block';
+        };
     }
 
-    function resetToMapState() {
-        videoContainer.style.display = 'none';
-        overlay.style.display = 'none';
-        mapContainer.style.display = 'block';
-    }
+    // Initialize the global events
+    initializeGlobalEvents();
 }
