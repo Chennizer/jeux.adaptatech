@@ -7,7 +7,7 @@ function initializeGlobalEvents() {
     });
 }
 
-// Function to reset to the control panel (this will need to be customized based on your game structure)
+// Function to reset to the control panel
 function resetToControlPanel() {
     // Hide game elements
     document.getElementById('map-container').style.display = 'none';
@@ -18,39 +18,8 @@ function resetToControlPanel() {
     document.getElementById('control-panel').style.display = 'block';
 }
 
-// This function is called when a specific game initializes
-function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
-    let hoverTimeout;
-    let dwellTime = 1000; // Default dwell time in milliseconds
-
-    // Elements
-    const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
-    const startButton = document.getElementById('control-panel-start-button');
-    const hoverCircle = document.getElementById('hover-circle');
-    const mapContainer = document.getElementById('map-container');
-    const overlay = document.getElementById('overlay');
-    const videoContainer = document.getElementById('video-container');
-    const endVideo = document.getElementById('end-video');
-    const videoSource = document.getElementById('video-source');
-
-    // Start the game
-    startButton.addEventListener('click', () => {
-        const dwellTimeValue = dwellTimeInput.value;
-        if (dwellTimeValue && !isNaN(dwellTimeValue)) {
-            dwellTime = parseInt(dwellTimeValue);
-        } else {
-            alert("Please enter a valid number for dwell time.");
-            return;
-        }
-
-        preloadVideos();
-        document.getElementById('control-panel').style.display = 'none';
-        mapContainer.style.display = 'block';
-        imageMapResize(); // Initialize the image map resizer
-    });
-
-    // Preload videos
-    function preloadVideos() {
+// Preload videos
+function preloadVideos(zoneEffects) {
     const videoElements = []; // Store references to video elements
     let videosLoaded = 0; // Counter for loaded videos
 
@@ -79,7 +48,36 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     }
 }
 
-    }
+// This function is called when a specific game initializes
+function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
+    let hoverTimeout;
+    let dwellTime = 1000; // Default dwell time in milliseconds
+
+    // Elements
+    const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
+    const startButton = document.getElementById('control-panel-start-button');
+    const hoverCircle = document.getElementById('hover-circle');
+    const mapContainer = document.getElementById('map-container');
+    const overlay = document.getElementById('overlay');
+    const videoContainer = document.getElementById('video-container');
+    const endVideo = document.getElementById('end-video');
+    const videoSource = document.getElementById('video-source');
+
+    // Start the game
+    startButton.addEventListener('click', () => {
+        const dwellTimeValue = dwellTimeInput.value;
+        if (dwellTimeValue && !isNaN(dwellTimeValue)) {
+            dwellTime = parseInt(dwellTimeValue);
+        } else {
+            alert("Please enter a valid number for dwell time.");
+            return;
+        }
+
+        preloadVideos(zoneEffects);
+        document.getElementById('control-panel').style.display = 'none';
+        mapContainer.style.display = 'block';
+        imageMapResize(); // Initialize the image map resizer
+    });
 
     // Hover effect handling
     document.querySelectorAll('area').forEach(area => {
@@ -138,7 +136,6 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         endVideo.load();
         endVideo.play();
 
-        // Remove the reset to control panel on video end
         endVideo.onended = () => {
             videoContainer.style.display = 'none';
             overlay.style.display = 'none';
