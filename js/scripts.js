@@ -53,6 +53,7 @@ function preloadVideos(zoneEffects, onComplete) {
 
 
 
+
 function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     let hoverTimeout;
     let dwellTime = 1000; // Default dwell time in milliseconds
