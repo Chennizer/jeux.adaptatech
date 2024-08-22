@@ -1,4 +1,3 @@
-
 function preloadVideos(zoneEffects, onComplete) {
     const videoElements = []; // Store references to video elements
     let videosLoaded = 0; // Counter for loaded videos
@@ -7,9 +6,9 @@ function preloadVideos(zoneEffects, onComplete) {
     console.log("Starting video preloading...");
 
     // Show the loading bar
-    const loadingBarContainer = document.getElementById('loading-bar-container');
-    const loadingBar = document.getElementById('loading-bar');
-    const loadingText = document.getElementById('loading-text');
+    const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+    const loadingBar = document.getElementById('control-panel-loading-bar');
+    const loadingText = document.getElementById('control-panel-loading-text');
     loadingBarContainer.style.display = 'block';
     loadingText.style.display = 'block';
 
