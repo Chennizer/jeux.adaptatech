@@ -7,11 +7,8 @@ function preloadVideos(zoneEffects, onComplete) {
     console.log("Starting video preloading...");
 
     // Show the loading bar
-    const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
     const loadingBar = document.getElementById('control-panel-loading-bar');
     
-    loadingBarContainer.style.display = 'block'; // Display the loading bar
-
     for (let zone in zoneEffects) {
         const video = document.createElement('video');
         video.src = zoneEffects[zone].video;
@@ -19,7 +16,6 @@ function preloadVideos(zoneEffects, onComplete) {
         video.style.display = 'none';
         document.body.appendChild(video);
 
-        // Use canplaythrough event to ensure video is ready for playback
         video.addEventListener('canplaythrough', () => {
             videosLoaded++;
             console.log(`Video for ${zone} preloaded successfully.`);
@@ -33,7 +29,6 @@ function preloadVideos(zoneEffects, onComplete) {
                 onComplete(); // Callback to enable game start when all videos are loaded
                 
                 setTimeout(() => {
-                    loadingBarContainer.style.display = 'none'; // Hide the loading bar
                     const startButton = document.getElementById('control-panel-start-button');
                     startButton.style.display = 'block'; // Show the start button
                 }, 500); // Brief delay to smooth the transition
