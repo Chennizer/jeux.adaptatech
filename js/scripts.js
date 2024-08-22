@@ -1,7 +1,8 @@
 // Preload videos
-function preloadVideos(zoneEffects) {
+function preloadVideos(zoneEffects, onComplete) {
     const videoElements = []; // Store references to video elements
     let videosLoaded = 0; // Counter for loaded videos
+    const totalVideos = Object.keys(zoneEffects).length;
 
     console.log("Starting video preloading...");
 
@@ -12,26 +13,25 @@ function preloadVideos(zoneEffects) {
         video.style.display = 'none';
         document.body.appendChild(video);
 
-        // Force video to load by playing it briefly and then pausing
-        video.play().then(() => {
-            video.pause();
-            video.currentTime = 0; // Reset to the beginning
+        // Use canplaythrough event to ensure video is ready for playback
+        video.addEventListener('canplaythrough', () => {
             videosLoaded++;
             console.log(`Video for ${zone} preloaded successfully.`);
 
-            // Check if all videos are loaded
-            if (videosLoaded === Object.keys(zoneEffects).length) {
+            if (videosLoaded === totalVideos) {
                 console.log('All videos preloaded successfully.');
+                onComplete(); // Callback to enable game start when all videos are loaded
             }
-        }).catch(error => {
-            console.error(`Error preloading video for ${zone}:`, error);
+        });
+
+        video.addEventListener('error', (e) => {
+            console.error(`Error preloading video for ${zone}:`, e);
         });
 
         videoElements.push(video);
     }
 }
 
-// This function is called when a specific game initializes
 function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     let hoverTimeout;
     let dwellTime = 1000; // Default dwell time in milliseconds
@@ -46,7 +46,18 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     const endVideo = document.getElementById('end-video');
     const videoSource = document.getElementById('video-source');
 
-    // Start the game
+    // Disable the start button until videos are preloaded
+    startButton.disabled = true;
+
+    console.log("Game initialization started. Preloading videos...");
+
+    preloadVideos(zoneEffects, () => {
+        // Enable start button once videos are preloaded
+        startButton.disabled = false;
+        console.log("Videos preloaded. Game can start.");
+    });
+
+    // Start the game when the start button is clicked
     startButton.addEventListener('click', () => {
         const dwellTimeValue = dwellTimeInput.value;
         if (dwellTimeValue && !isNaN(dwellTimeValue)) {
@@ -56,8 +67,7 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
             return;
         }
 
-        console.log("Game starting. Preloading videos...");
-        preloadVideos(zoneEffects);
+        console.log("Game starting...");
         document.getElementById('control-panel').style.display = 'none';
         mapContainer.style.display = 'block';
         imageMapResize(); // Initialize the image map resizer
@@ -110,7 +120,6 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         overlay.style.display = 'block';
         mapContainer.style.display = 'none';
 
-        // Directly play the video without showing an image or playing sound
         playVideo(effect.video);
     }
 
@@ -127,6 +136,5 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         };
     }
 
-    // Initialize the global events
     initializeGlobalEvents();
 }
