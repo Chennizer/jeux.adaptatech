@@ -1,3 +1,4 @@
+// Preload videos
 function preloadVideos(zoneEffects, onComplete) {
     const videoElements = []; // Store references to video elements
     let videosLoaded = 0; // Counter for loaded videos
@@ -5,12 +6,13 @@ function preloadVideos(zoneEffects, onComplete) {
 
     console.log("Starting video preloading...");
 
-    // Show the loading bar
+    // Show the loading bar and text
     const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
     const loadingBar = document.getElementById('control-panel-loading-bar');
     const loadingText = document.getElementById('control-panel-loading-text');
+    
     loadingBarContainer.style.display = 'block';
-    loadingText.style.display = 'block';
+    loadingText.style.display = 'block'; // Ensure the loading text is visible
 
     for (let zone in zoneEffects) {
         const video = document.createElement('video');
@@ -47,6 +49,7 @@ function preloadVideos(zoneEffects, onComplete) {
         videoElements.push(video);
     }
 }
+
 
 
 function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
