@@ -51,13 +51,34 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
 
     // Preload videos
     function preloadVideos() {
-        for (let zone in zoneEffects) {
-            const video = document.createElement('video');
-            video.src = zoneEffects[zone].video;
-            video.preload = 'auto';
-            document.body.appendChild(video);
-            video.style.display = 'none';
-        }
+    const videoElements = []; // Store references to video elements
+    let videosLoaded = 0; // Counter for loaded videos
+
+    for (let zone in zoneEffects) {
+        const video = document.createElement('video');
+        video.src = zoneEffects[zone].video;
+        video.preload = 'auto';
+        video.style.display = 'none';
+        document.body.appendChild(video);
+
+        // Force video to load by playing it briefly and then pausing
+        video.play().then(() => {
+            video.pause();
+            video.currentTime = 0; // Reset to the beginning
+            videosLoaded++;
+            
+            // Check if all videos are loaded
+            if (videosLoaded === Object.keys(zoneEffects).length) {
+                console.log('All videos preloaded successfully.');
+            }
+        }).catch(error => {
+            console.error('Video preload error:', error);
+        });
+
+        videoElements.push(video);
+    }
+}
+
     }
 
     // Hover effect handling
