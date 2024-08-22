@@ -1,27 +1,9 @@
-// Global function to initialize events like the Escape key handling
-function initializeGlobalEvents() {
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-            resetToControlPanel();
-        }
-    });
-}
-
-// Function to reset to the control panel
-function resetToControlPanel() {
-    // Hide game elements
-    document.getElementById('map-container').style.display = 'none';
-    document.getElementById('overlay').style.display = 'none';
-    document.getElementById('video-container').style.display = 'none';
-    
-    // Show control panel
-    document.getElementById('control-panel').style.display = 'block';
-}
-
 // Preload videos
 function preloadVideos(zoneEffects) {
     const videoElements = []; // Store references to video elements
     let videosLoaded = 0; // Counter for loaded videos
+
+    console.log("Starting video preloading...");
 
     for (let zone in zoneEffects) {
         const video = document.createElement('video');
@@ -35,13 +17,14 @@ function preloadVideos(zoneEffects) {
             video.pause();
             video.currentTime = 0; // Reset to the beginning
             videosLoaded++;
-            
+            console.log(`Video for ${zone} preloaded successfully.`);
+
             // Check if all videos are loaded
             if (videosLoaded === Object.keys(zoneEffects).length) {
                 console.log('All videos preloaded successfully.');
             }
         }).catch(error => {
-            console.error('Video preload error:', error);
+            console.error(`Error preloading video for ${zone}:`, error);
         });
 
         videoElements.push(video);
@@ -73,6 +56,7 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
             return;
         }
 
+        console.log("Game starting. Preloading videos...");
         preloadVideos(zoneEffects);
         document.getElementById('control-panel').style.display = 'none';
         mapContainer.style.display = 'block';
