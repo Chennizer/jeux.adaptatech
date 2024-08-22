@@ -1,10 +1,17 @@
-// Preload videos
+
 function preloadVideos(zoneEffects, onComplete) {
     const videoElements = []; // Store references to video elements
     let videosLoaded = 0; // Counter for loaded videos
     const totalVideos = Object.keys(zoneEffects).length;
 
     console.log("Starting video preloading...");
+
+    // Show the loading bar
+    const loadingBarContainer = document.getElementById('loading-bar-container');
+    const loadingBar = document.getElementById('loading-bar');
+    const loadingText = document.getElementById('loading-text');
+    loadingBarContainer.style.display = 'block';
+    loadingText.style.display = 'block';
 
     for (let zone in zoneEffects) {
         const video = document.createElement('video');
@@ -18,19 +25,30 @@ function preloadVideos(zoneEffects, onComplete) {
             videosLoaded++;
             console.log(`Video for ${zone} preloaded successfully.`);
 
+            // Update the loading bar width based on the progress
+            const progress = (videosLoaded / totalVideos) * 100;
+            loadingBar.style.width = `${progress}%`;
+
             if (videosLoaded === totalVideos) {
                 console.log('All videos preloaded successfully.');
                 onComplete(); // Callback to enable game start when all videos are loaded
+                loadingText.innerText = 'Vidéos prêtes. Vous pouvez commencer le jeu.';
+                setTimeout(() => {
+                    loadingBarContainer.style.display = 'none'; // Hide the loading bar
+                    loadingText.style.display = 'none'; // Hide the loading text
+                }, 2000); // Hide the loading bar after a brief delay
             }
         });
 
         video.addEventListener('error', (e) => {
             console.error(`Error preloading video for ${zone}:`, e);
+            loadingText.innerText = 'Erreur de chargement des vidéos.';
         });
 
         videoElements.push(video);
     }
 }
+
 
 function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     let hoverTimeout;
@@ -135,6 +153,4 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
             mapContainer.style.display = 'block';
         };
     }
-
-    initializeGlobalEvents();
 }
