@@ -30,10 +30,14 @@ function preloadVideos(zoneEffects, onComplete) {
             const progress = (videosLoaded / totalVideos) * 100;
             loadingBar.style.width = `${progress}%`;
 
+            // Update the loading text to show current progress
+            loadingText.innerText = `Préparation des vidéos... (${videosLoaded}/${totalVideos})`;
+
             if (videosLoaded === totalVideos) {
                 console.log('All videos preloaded successfully.');
-                onComplete(); // Callback to enable game start when all videos are loaded
                 loadingText.innerText = 'Vidéos prêtes. Vous pouvez commencer le jeu.';
+                onComplete(); // Callback to enable game start when all videos are loaded
+                
                 setTimeout(() => {
                     loadingBarContainer.style.display = 'none'; // Hide the loading bar
                     loadingText.style.display = 'none'; // Hide the loading text
@@ -49,6 +53,7 @@ function preloadVideos(zoneEffects, onComplete) {
         videoElements.push(video);
     }
 }
+
 
 
 
