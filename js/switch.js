@@ -1,12 +1,25 @@
 document.addEventListener('DOMContentLoaded', () => {
     const videoPlayer = document.getElementById('video-player');
-    const spacePrompt = document.getElementById('space-prompt');
     const playModeSelect = document.getElementById('play-mode');
     const intervalTimeInput = document.getElementById('interval-time');
     const intervalLabel = document.getElementById('interval-label');
     const startButton = document.getElementById('start-button');
     const videoContainer = document.getElementById('video-container');
-    const controlPanel = document.getElementById('control-panel');
+    const blackBackground = document.getElementById('black-background');
+
+    // Create the space prompt image element dynamically
+    const spacePrompt = document.createElement('img');
+    spacePrompt.id = 'space-prompt';
+    spacePrompt.src = 'test.png';
+    spacePrompt.style.display = 'none';
+    spacePrompt.style.position = 'fixed';
+    spacePrompt.style.top = '50%';
+    spacePrompt.style.left = '50%';
+    spacePrompt.style.transform = 'translate(-50%, -50%)';
+    spacePrompt.style.zIndex = '2';
+
+    // Append the image to the body or the appropriate container
+    document.body.appendChild(spacePrompt);
 
     // Get the videos from the HTML
     const videoElements = document.querySelectorAll('#video-list video');
@@ -30,12 +43,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     startButton.addEventListener('click', () => {
         intervalTime = parseInt(intervalTimeInput.value) || 5;
-        controlPanel.style.display = 'none';
         videoContainer.style.display = 'block';
-        showSpacePrompt();
+        startGame();
     });
 
     function startGame() {
+        blackBackground.style.display = 'block';
+        spacePrompt.style.display = 'block';
+        document.addEventListener('keydown', waitForSpaceToStart);
+    }
+
+    function waitForSpaceToStart(event) {
+        if (event.code === 'Space') {
+            spacePrompt.style.display = 'none';
+            blackBackground.style.display = 'none';
+            document.removeEventListener('keydown', waitForSpaceToStart);
+            startVideoPlayback();
+        }
+    }
+
+    function startVideoPlayback() {
         switch (mode) {
             case 'onePress':
                 playRandomVideo();
@@ -82,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showSpacePrompt() {
-        spacePrompt.src = "../images/test.png"; 
+        blackBackground.style.display = 'block';
         spacePrompt.style.display = 'block';
         document.addEventListener('keydown', waitForSpace);
     }
@@ -90,8 +117,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function waitForSpace(event) {
         if (event.code === 'Space') {
             spacePrompt.style.display = 'none';
+            blackBackground.style.display = 'none';
             document.removeEventListener('keydown', waitForSpace);
-            startGame();  
+            if (mode === 'interval') {
+                playRandomVideo();
+            } else if (mode === 'pressBetween') {
+                playRandomVideo();
+            } else if (mode === 'afterPlaylist') {
+                resetGame();
+            }
         }
     }
 
