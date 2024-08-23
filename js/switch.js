@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const intervalLabel = document.getElementById('interval-label');
     const startButton = document.getElementById('start-button');
     const videoContainer = document.getElementById('video-container');
+    const controlPanel = document.getElementById('control-panel');
 
     // Get the videos from the HTML
     const videoElements = document.querySelectorAll('#video-list video');
@@ -29,8 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     startButton.addEventListener('click', () => {
         intervalTime = parseInt(intervalTimeInput.value) || 5;
+        controlPanel.style.display = 'none';
         videoContainer.style.display = 'block';
-        startGame();
+        showSpacePrompt();
     });
 
     function startGame() {
@@ -80,6 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showSpacePrompt() {
+        // Set the PNG image and display it
+        spacePrompt.src = "test.png"; // Make sure this path is correct for your setup
         spacePrompt.style.display = 'block';
         document.addEventListener('keydown', waitForSpace);
     }
@@ -88,13 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.code === 'Space') {
             spacePrompt.style.display = 'none';
             document.removeEventListener('keydown', waitForSpace);
-            if (mode === 'interval') {
-                playRandomVideo();
-            } else if (mode === 'pressBetween') {
-                playRandomVideo();
-            } else if (mode === 'afterPlaylist') {
-                resetGame();
-            }
+            startGame();  // Start the video playback based on the selected mode
         }
     }
 
