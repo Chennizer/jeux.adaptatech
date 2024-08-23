@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoContainer = document.getElementById('video-container');
     const blackBackground = document.getElementById('black-background');
 
-    // Create the space prompt image element dynamically
     const spacePrompt = document.createElement('img');
     spacePrompt.id = 'space-prompt';
     spacePrompt.src = '../images/test.png';
