@@ -18,10 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
     spacePrompt.style.transform = 'translate(-50%, -50%)';
     spacePrompt.style.zIndex = '2';
 
-    // Append the image to the body or the appropriate container
     document.body.appendChild(spacePrompt);
 
-    // Get the videos from the HTML
     const videoElements = document.querySelectorAll('#video-list video');
     let videos = Array.from(videoElements).map(video => video.getAttribute('data-src'));
 
