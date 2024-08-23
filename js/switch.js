@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleSpacebarPress(event) {
         if (event.code === 'Space') {
-            // Only hide the prompt and start the video on the first space press
+            event.preventDefault(); // Prevent the default play/pause action
             spacePrompt.style.display = 'none';
             blackBackground.style.display = 'none';
             document.removeEventListener('keydown', handleSpacebarPress);
