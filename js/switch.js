@@ -7,16 +7,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoContainer = document.getElementById('video-container');
     const blackBackground = document.getElementById('black-background');
 
-    const spacePrompt = new Image();
+    const spacePrompt = document.createElement('img');
     spacePrompt.id = 'space-prompt';
-    spacePrompt.src = '../../images/test.png';
-    spacePrompt.style.display = 'none';
+    spacePrompt.src = '../images/test.png';
+    spacePrompt.style.display = 'none'; // Start hidden
     spacePrompt.style.position = 'fixed';
     spacePrompt.style.top = '50%';
     spacePrompt.style.left = '50%';
     spacePrompt.style.transform = 'translate(-50%, -50%)';
-    spacePrompt.style.zIndex = '2';
-    
+    spacePrompt.style.zIndex = '1001'; // Ensure it is above the black background
     document.body.appendChild(spacePrompt);
 
     const videoElements = document.querySelectorAll('#video-list video');
@@ -46,13 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startGame() {
         blackBackground.style.display = 'block';
-        spacePrompt.style.display = 'block';
+        spacePrompt.style.display = 'block'; // Show the image when starting the game
+        console.log('Image should now be visible.');
         document.addEventListener('keydown', waitForSpaceToStart);
     }
 
     function waitForSpaceToStart(event) {
         if (event.code === 'Space') {
-            spacePrompt.style.display = 'none';
+            spacePrompt.style.display = 'none'; // Hide the image when space is pressed
+            console.log('Image should now be hidden.');
             blackBackground.style.display = 'none';
             document.removeEventListener('keydown', waitForSpaceToStart);
             startVideoPlayback();
@@ -107,13 +108,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showSpacePrompt() {
         blackBackground.style.display = 'block';
-        spacePrompt.style.display = 'block';
+        spacePrompt.style.display = 'block'; // Show the image when waiting for space
+        console.log('Image should now be visible.');
         document.addEventListener('keydown', waitForSpace);
     }
 
     function waitForSpace(event) {
         if (event.code === 'Space') {
-            spacePrompt.style.display = 'none';
+            spacePrompt.style.display = 'none'; // Hide the image again when space is pressed
+            console.log('Image should now be hidden.');
             blackBackground.style.display = 'none';
             document.removeEventListener('keydown', waitForSpace);
             if (mode === 'interval') {
