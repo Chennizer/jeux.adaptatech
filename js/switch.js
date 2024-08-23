@@ -17,7 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     spacePrompt.style.transform = 'translate(-50%, -50%)';
     spacePrompt.style.zIndex = '1001'; // Ensure it is above other elements
     document.body.appendChild(spacePrompt);
-    
+
+    // Collect video elements from the video list
     const videoElements = document.querySelectorAll('#video-list video');
     const videos = Array.from(videoElements).map(video => video.getAttribute('data-src'));
     
@@ -25,7 +26,45 @@ document.addEventListener('DOMContentLoaded', () => {
     let intervalID = null;
     let mode = 'onePress';
     let intervalTime = 5;
-    
+
+    // Function to preload videos
+    function preloadVideos(videos, onComplete) {
+        let videosLoaded = 0; // Counter for loaded videos
+        const totalVideos = videos.length;
+
+        console.log("Starting video preloading...");
+
+        videos.forEach((videoSrc, index) => {
+            const video = document.createElement('video');
+            video.src = videoSrc;
+            video.preload = 'auto';
+            video.style.display = 'none';
+            document.body.appendChild(video);
+
+            video.addEventListener('canplaythrough', () => {
+                videosLoaded++;
+                console.log(`Video ${index + 1} preloaded successfully.`);
+
+                if (videosLoaded === totalVideos) {
+                    console.log('All videos preloaded successfully.');
+                    onComplete(); // Callback to enable game start when all videos are loaded
+                }
+            });
+
+            video.addEventListener('error', (e) => {
+                console.error(`Error preloading video ${index + 1}:`, e);
+            });
+        });
+    }
+
+    // Initially hide the start button until videos are preloaded
+    startButton.style.display = 'none';
+
+    // Preload videos and then show the start button
+    preloadVideos(videos, () => {
+        startButton.style.display = 'block'; // Show the start button after preloading
+    });
+
     playModeSelect.addEventListener('change', () => {
         mode = playModeSelect.value;
         if (mode === 'interval') {
