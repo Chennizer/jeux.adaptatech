@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Get references to DOM elements
     const videoPlayer = document.getElementById('video-player');
     const playModeSelect = document.getElementById('play-mode');
     const intervalTimeInput = document.getElementById('interval-time');
@@ -7,8 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startButton = document.getElementById('start-button');
     const videoContainer = document.getElementById('video-container');
     const blackBackground = document.getElementById('black-background');
-
-    // Create and style the space prompt image
+    
     const spacePrompt = document.createElement('img');
     spacePrompt.id = 'space-prompt';
     spacePrompt.src = '../../images/test.png'; // Update with your image path
@@ -19,18 +17,15 @@ document.addEventListener('DOMContentLoaded', () => {
     spacePrompt.style.transform = 'translate(-50%, -50%)';
     spacePrompt.style.zIndex = '1001'; // Ensure it is above other elements
     document.body.appendChild(spacePrompt);
-
-    // Collect video sources
+    
     const videoElements = document.querySelectorAll('#video-list video');
     const videos = Array.from(videoElements).map(video => video.getAttribute('data-src'));
-
-    // Initialize variables
+    
     let currentVideoIndex = 0;
     let intervalID = null;
     let mode = 'onePress';
     let intervalTime = 5;
-
-    // Handle play mode selection changes
+    
     playModeSelect.addEventListener('change', () => {
         mode = playModeSelect.value;
         if (mode === 'interval') {
@@ -42,23 +37,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Start button click handler
     startButton.addEventListener('click', () => {
         intervalTime = parseInt(intervalTimeInput.value) || 5;
         videoContainer.style.display = 'none'; // Hide video container initially
         showSpacePrompt(); // Show prompt to start the game
     });
 
-    // Function to show the space prompt
     function showSpacePrompt() {
         blackBackground.style.display = 'block';
         spacePrompt.style.display = 'block';
         document.addEventListener('keydown', handleSpacebarPress);
     }
 
-    // Function to handle spacebar press to start or continue the game
     function handleSpacebarPress(event) {
         if (event.code === 'Space') {
+            // Only hide the prompt and start the video on the first space press
             spacePrompt.style.display = 'none';
             blackBackground.style.display = 'none';
             document.removeEventListener('keydown', handleSpacebarPress);
@@ -66,7 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Function to start video playback based on the selected mode
     function startVideoPlayback() {
         videoContainer.style.display = 'block';
         switch (mode) {
@@ -91,13 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Function to play a random video
     function playRandomVideo() {
         currentVideoIndex = Math.floor(Math.random() * videos.length);
         playVideo(videos[currentVideoIndex]);
     }
 
-    // Function to play videos in a playlist sequence
     function playPlaylist() {
         currentVideoIndex = 0;
         playVideo(videos[currentVideoIndex]);
@@ -112,10 +102,15 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Function to play a specific video
     function playVideo(videoSrc) {
         videoPlayer.src = videoSrc;
         videoPlayer.play();
+
+        // Ensure the black background and prompt are hidden during playback
+        videoPlayer.onplay = () => {
+            blackBackground.style.display = 'none';
+            spacePrompt.style.display = 'none';
+        };
 
         // Handle end of video playback
         videoPlayer.onended = () => {
@@ -123,7 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Function to handle end of video playback
     function endVideoPlayback() {
         videoContainer.style.display = 'none';
         if (intervalID) {
