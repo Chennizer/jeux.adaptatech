@@ -82,8 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showSpacePrompt() {
-        // Set the PNG image and display it
-        spacePrompt.src = "test.png"; // Make sure this path is correct for your setup
+        spacePrompt.src = "../images/test.png"; 
         spacePrompt.style.display = 'block';
         document.addEventListener('keydown', waitForSpace);
     }
@@ -92,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.code === 'Space') {
             spacePrompt.style.display = 'none';
             document.removeEventListener('keydown', waitForSpace);
-            startGame();  // Start the video playback based on the selected mode
+            startGame();  
         }
     }
 
