@@ -102,14 +102,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function playVideo(videoSrc) {
         videoPlayer.src = videoSrc;
-        videoPlayer.requestFullscreen();
         videoPlayer.play();
-
-        // Show black background and space prompt when the video ends
+        
+        // Exit fullscreen and show black background with prompt when video ends
         videoPlayer.onended = () => {
-            blackBackground.style.display = 'block';
-            spacePrompt.style.display = 'block';
-            console.log('Video ended, showing prompt.');
+            if (document.fullscreenElement) {
+                document.exitFullscreen(); // Exit fullscreen if active
+            }
+            videoContainer.style.display = 'none'; // Hide the video container
+            showSpacePrompt(); // Show black background and prompt
         };
     }
 
