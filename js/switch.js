@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoContainer = document.getElementById('video-container');
     const blackBackground = document.getElementById('black-background');
 
-    const spacePrompt = document.createElement('img');
+    const spacePrompt = new Image();
     spacePrompt.id = 'space-prompt';
     spacePrompt.src = '../../images/test.png';
     spacePrompt.style.display = 'none';
@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     spacePrompt.style.left = '50%';
     spacePrompt.style.transform = 'translate(-50%, -50%)';
     spacePrompt.style.zIndex = '2';
-
+    
     document.body.appendChild(spacePrompt);
 
     const videoElements = document.querySelectorAll('#video-list video');
