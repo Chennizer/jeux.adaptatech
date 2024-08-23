@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const spacePrompt = document.createElement('img');
     spacePrompt.id = 'space-prompt';
-    spacePrompt.src = '../images/test.png';
+    spacePrompt.src = '../../images/test.png';
     spacePrompt.style.display = 'none';
     spacePrompt.style.position = 'fixed';
     spacePrompt.style.top = '50%';
