@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Create the space prompt image element dynamically
     const spacePrompt = document.createElement('img');
     spacePrompt.id = 'space-prompt';
-    spacePrompt.src = 'test.png';
+    spacePrompt.src = '../images/test.png';
     spacePrompt.style.display = 'none';
     spacePrompt.style.position = 'fixed';
     spacePrompt.style.top = '50%';
