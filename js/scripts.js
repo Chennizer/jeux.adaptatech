@@ -8,7 +8,10 @@ function preloadVideos(zoneEffects, onComplete) {
 
     // Show the loading bar
     const loadingBar = document.getElementById('control-panel-loading-bar');
+    const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
     
+    loadingBarContainer.style.display = 'block'; // Ensure the loading bar is visible
+
     for (let zone in zoneEffects) {
         const video = document.createElement('video');
         video.src = zoneEffects[zone].video;
@@ -29,6 +32,7 @@ function preloadVideos(zoneEffects, onComplete) {
                 onComplete(); // Callback to enable game start when all videos are loaded
                 
                 setTimeout(() => {
+                    loadingBarContainer.style.display = 'none'; // Hide the loading bar
                     const startButton = document.getElementById('control-panel-start-button');
                     startButton.style.display = 'block'; // Show the start button
                 }, 500); // Brief delay to smooth the transition
@@ -42,6 +46,7 @@ function preloadVideos(zoneEffects, onComplete) {
         videoElements.push(video);
     }
 }
+
 
 function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     let hoverTimeout;
