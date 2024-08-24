@@ -10,29 +10,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const spacePrompt = document.createElement('img');
     spacePrompt.id = 'space-prompt';
     spacePrompt.src = '../../images/test.png'; // Update with your image path
-    spacePrompt.style.display = 'none'; // Start hidden
+    spacePrompt.style.display = 'none';
     spacePrompt.style.position = 'fixed';
     spacePrompt.style.top = '50%';
     spacePrompt.style.left = '50%';
     spacePrompt.style.transform = 'translate(-50%, -50%)';
-    spacePrompt.style.zIndex = '1001'; // Ensure it is above other elements
+    spacePrompt.style.zIndex = '1001';
     document.body.appendChild(spacePrompt);
 
-    // Collect video elements from the video list
     const videoElements = document.querySelectorAll('#video-list video');
     const videos = Array.from(videoElements).map(video => video.getAttribute('data-src'));
-    
+
     let currentVideoIndex = 0;
     let intervalID = null;
     let mode = 'onePress';
     let intervalTime = 5;
 
-    // Function to preload videos
     function preloadVideos(videos, onComplete) {
-        let videosLoaded = 0; // Counter for loaded videos
+        let videosLoaded = 0;
         const totalVideos = videos.length;
 
         console.log("Starting video preloading...");
+
+        const loadingBar = document.getElementById('control-panel-loading-bar');
 
         videos.forEach((videoSrc, index) => {
             const video = document.createElement('video');
@@ -45,9 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 videosLoaded++;
                 console.log(`Video ${index + 1} preloaded successfully.`);
 
+                const progress = (videosLoaded / totalVideos) * 100;
+                loadingBar.style.width = `${progress}%`;
+
                 if (videosLoaded === totalVideos) {
                     console.log('All videos preloaded successfully.');
-                    onComplete(); // Callback to enable game start when all videos are loaded
+                    onComplete();
                 }
             });
 
@@ -57,12 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initially hide the start button until videos are preloaded
     startButton.style.display = 'none';
 
-    // Preload videos and then show the start button
     preloadVideos(videos, () => {
         startButton.style.display = 'block'; // Show the start button after preloading
+        const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+        loadingBarContainer.style.display = 'none'; // Hide the loading bar
     });
 
     playModeSelect.addEventListener('change', () => {
@@ -78,8 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     startButton.addEventListener('click', () => {
         intervalTime = parseInt(intervalTimeInput.value) || 5;
-        videoContainer.style.display = 'none'; // Hide video container initially
-        showSpacePrompt(); // Show prompt to start the game
+        videoContainer.style.display = 'none';
+        showSpacePrompt();
     });
 
     function showSpacePrompt() {
@@ -90,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleSpacebarPress(event) {
         if (event.code === 'Space') {
-            event.preventDefault(); // Prevent the default play/pause action
+            event.preventDefault();
             spacePrompt.style.display = 'none';
             blackBackground.style.display = 'none';
             document.removeEventListener('keydown', handleSpacebarPress);
@@ -145,13 +148,11 @@ document.addEventListener('DOMContentLoaded', () => {
         videoPlayer.src = videoSrc;
         videoPlayer.play();
 
-        // Ensure the black background and prompt are hidden during playback
         videoPlayer.onplay = () => {
             blackBackground.style.display = 'none';
             spacePrompt.style.display = 'none';
         };
 
-        // Handle end of video playback
         videoPlayer.onended = () => {
             endVideoPlayback();
         };
