@@ -6,14 +6,9 @@ function preloadVideos(zoneEffects, onComplete) {
 
     console.log("Starting video preloading...");
 
-    // Show the loading bar and text
-    const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+    // Show the loading bar
     const loadingBar = document.getElementById('control-panel-loading-bar');
-    const loadingText = document.getElementById('control-panel-loading-text');
     
-    loadingBarContainer.style.display = 'block';
-    loadingText.style.display = 'block'; // Ensure the loading text is visible
-
     for (let zone in zoneEffects) {
         const video = document.createElement('video');
         video.src = zoneEffects[zone].video;
@@ -21,7 +16,6 @@ function preloadVideos(zoneEffects, onComplete) {
         video.style.display = 'none';
         document.body.appendChild(video);
 
-        // Use canplaythrough event to ensure video is ready for playback
         video.addEventListener('canplaythrough', () => {
             videosLoaded++;
             console.log(`Video for ${zone} preloaded successfully.`);
@@ -30,34 +24,24 @@ function preloadVideos(zoneEffects, onComplete) {
             const progress = (videosLoaded / totalVideos) * 100;
             loadingBar.style.width = `${progress}%`;
 
-            // Update the loading text to show current progress
-            loadingText.innerText = `Préparation des vidéos... (${videosLoaded}/${totalVideos})`;
-
             if (videosLoaded === totalVideos) {
                 console.log('All videos preloaded successfully.');
-                loadingText.innerText = 'Vidéos prêtes. Vous pouvez commencer le jeu.';
                 onComplete(); // Callback to enable game start when all videos are loaded
                 
                 setTimeout(() => {
-                    loadingBarContainer.style.display = 'none'; // Hide the loading bar
-                    loadingText.style.display = 'none'; // Hide the loading text
-                }, 2000); // Hide the loading bar after a brief delay
+                    const startButton = document.getElementById('control-panel-start-button');
+                    startButton.style.display = 'block'; // Show the start button
+                }, 500); // Brief delay to smooth the transition
             }
         });
 
         video.addEventListener('error', (e) => {
             console.error(`Error preloading video for ${zone}:`, e);
-            loadingText.innerText = 'Erreur de chargement des vidéos.';
         });
 
         videoElements.push(video);
     }
 }
-
-
-
-
-
 
 function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     let hoverTimeout;
@@ -73,14 +57,12 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     const endVideo = document.getElementById('end-video');
     const videoSource = document.getElementById('video-source');
 
-    // Disable the start button until videos are preloaded
-    startButton.disabled = true;
+    // Initially hide the start button until videos are preloaded
+    startButton.style.display = 'none';
 
     console.log("Game initialization started. Preloading videos...");
 
     preloadVideos(zoneEffects, () => {
-        // Enable start button once videos are preloaded
-        startButton.disabled = false;
         console.log("Videos preloaded. Game can start.");
     });
 
