@@ -1,3 +1,53 @@
+// Preload videos
+function preloadVideos(zoneEffects, onComplete) {
+    const videoElements = []; // Store references to video elements
+    let videosLoaded = 0; // Counter for loaded videos
+    const totalVideos = Object.keys(zoneEffects).length;
+
+    console.log("Starting video preloading...");
+
+    // Show the loading bar
+    const loadingBar = document.getElementById('control-panel-loading-bar');
+    const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+    
+    loadingBarContainer.style.display = 'block'; // Ensure the loading bar is visible
+
+    for (let zone in zoneEffects) {
+        const video = document.createElement('video');
+        video.src = zoneEffects[zone].video;
+        video.preload = 'auto';
+        video.style.display = 'none';
+        document.body.appendChild(video);
+
+        video.addEventListener('canplaythrough', () => {
+            videosLoaded++;
+            console.log(`Video for ${zone} preloaded successfully.`);
+
+            // Update the loading bar width based on the progress
+            const progress = (videosLoaded / totalVideos) * 100;
+            loadingBar.style.width = `${progress}%`;
+
+            if (videosLoaded === totalVideos) {
+                console.log('All videos preloaded successfully.');
+                onComplete(); // Callback to enable game start when all videos are loaded
+                
+                setTimeout(() => {
+                    loadingBarContainer.style.display = 'none'; // Hide the loading bar
+                    const startButton = document.getElementById('control-panel-start-button');
+                    startButton.style.display = 'block'; // Show the start button
+                }, 500); // Brief delay to smooth the transition
+            }
+        });
+
+        video.addEventListener('error', (e) => {
+            console.error(`Error preloading video for ${zone}:`, e);
+        });
+
+        videoElements.push(video);
+    }
+}
+
+
 function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
     let hoverTimeout;
     let dwellTime = 1000; // Default dwell time in milliseconds
