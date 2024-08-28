@@ -11,10 +11,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const videos = Array.from(videoElements).map(video => video.getAttribute('data-src'));
 
     let controlsEnabled = false;
+    let playedVideos = [];
     let currentVideoIndex = 0;
     let mode = 'onePress';
     let intervalID = null;
     let intervalTime = 5;
+    let pausedAtTime = 0;
 
     console.log("Document loaded");
 
@@ -77,7 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('control-panel').style.display = 'none';
         console.log("Control panel hidden, showing space prompt");
-        currentVideoIndex = 0; // Start from the first video
+        playedVideos = []; // Reset played videos list
+        currentVideoIndex = getNextVideoIndex(); // Randomize the first video
         showSpacePrompt();
     });
 
@@ -100,7 +103,14 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             console.log("Spacebar pressed, hiding space prompt and starting video playback");
             hideSpacePrompt();
-            startVideoPlayback();
+            if (mode === 'interval' && pausedAtTime > 0) {
+                videoPlayer.currentTime = pausedAtTime; // Resume from where it paused
+                videoPlayer.play();
+                pausedAtTime = 0; // Reset paused time
+                setPauseInterval(); // Restart the interval pause mechanism
+            } else {
+                startVideoPlayback();
+            }
         }
     }
 
@@ -115,12 +125,22 @@ document.addEventListener('DOMContentLoaded', () => {
         videoPlayer.play();
 
         if (mode === 'interval') {
-            intervalID = setInterval(() => {
-                videoPlayer.pause();
-                showSpacePrompt();
-                clearInterval(intervalID);
-            }, intervalTime * 1000);
+            setPauseInterval(); // Set up the interval pauses
         }
+    }
+
+    function setPauseInterval() {
+        // Ensure any existing interval is cleared before starting a new one
+        if (intervalID) {
+            clearInterval(intervalID);
+        }
+
+        intervalID = setInterval(() => {
+            pausedAtTime = videoPlayer.currentTime; // Capture the current time before pausing
+            videoPlayer.pause();
+            showSpacePrompt();
+            clearInterval(intervalID); // Clear the interval once paused
+        }, intervalTime * 1000);
     }
 
     videoPlayer.addEventListener('play', () => {
@@ -134,27 +154,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleVideoEnd() {
         if (mode === 'pressBetween') {
-            if (currentVideoIndex < videos.length - 1) {
-                currentVideoIndex++;
+            if (playedVideos.length < videos.length) {
+                currentVideoIndex = getNextVideoIndex();
                 showSpacePrompt();
             } else {
                 endVideoPlayback();
             }
-        } else if (mode === 'onePress') {  // This handles the playlist mode
-            if (currentVideoIndex < videos.length - 1) {
-                currentVideoIndex++;
+        } else if (mode === 'onePress') {  // Playlist mode
+            if (playedVideos.length < videos.length) {
+                currentVideoIndex = getNextVideoIndex();  // Select the next video that hasn't been played
                 startVideoPlayback();  // Automatically play the next video in the playlist
             } else {
                 endVideoPlayback();  // End playback and show the prompt after the entire playlist is done
             }
         } else if (mode === 'interval') {
-            if (currentVideoIndex < videos.length - 1) {
-                currentVideoIndex++;
+            if (playedVideos.length < videos.length) {
+                currentVideoIndex = getNextVideoIndex();  // Select the next video that hasn't been played
                 startVideoPlayback();
             } else {
                 endVideoPlayback();
             }
         }
+    }
+
+    function getNextVideoIndex() {
+        let nextIndex;
+        do {
+            nextIndex = Math.floor(Math.random() * videos.length);
+        } while (playedVideos.includes(nextIndex));
+
+        playedVideos.push(nextIndex);
+        return nextIndex;
     }
 
     function endVideoPlayback() {
