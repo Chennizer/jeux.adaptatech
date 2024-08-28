@@ -1,37 +1,27 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const startButton = document.getElementById('control-panel-start-button');
+    const blackBackground = document.getElementById('black-background');
+    const spacePrompt = document.getElementById('space-prompt');
+    const videoContainer = document.getElementById('video-container');
     const videoPlayer = document.getElementById('video-player');
-    const playModeSelect = document.getElementById('play-mode');
+    const playModeSelect = document.getElementById('control-panel-play-mode');
     const intervalTimeInput = document.getElementById('interval-time');
     const intervalLabel = document.getElementById('interval-label');
-    const startButton = document.getElementById('start-button');
-    const videoContainer = document.getElementById('video-container');
-    const blackBackground = document.getElementById('black-background');
-    
-    const spacePrompt = document.createElement('img');
-    spacePrompt.id = 'space-prompt';
-    spacePrompt.src = '../../images/test.png'; // Update with your image path
-    spacePrompt.style.display = 'none';
-    spacePrompt.style.position = 'fixed';
-    spacePrompt.style.top = '50%';
-    spacePrompt.style.left = '50%';
-    spacePrompt.style.transform = 'translate(-50%, -50%)';
-    spacePrompt.style.zIndex = '1001';
-    document.body.appendChild(spacePrompt);
-
     const videoElements = document.querySelectorAll('#video-list video');
     const videos = Array.from(videoElements).map(video => video.getAttribute('data-src'));
 
+    let controlsEnabled = false;
     let currentVideoIndex = 0;
-    let intervalID = null;
     let mode = 'onePress';
+    let intervalID = null;
     let intervalTime = 5;
 
+    console.log("Document loaded");
+
+    // Preload Videos
     function preloadVideos(videos, onComplete) {
         let videosLoaded = 0;
         const totalVideos = videos.length;
-
-        console.log("Starting video preloading...");
-
         const loadingBar = document.getElementById('control-panel-loading-bar');
 
         videos.forEach((videoSrc, index) => {
@@ -43,13 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             video.addEventListener('canplaythrough', () => {
                 videosLoaded++;
-                console.log(`Video ${index + 1} preloaded successfully.`);
-
                 const progress = (videosLoaded / totalVideos) * 100;
                 loadingBar.style.width = `${progress}%`;
 
                 if (videosLoaded === totalVideos) {
-                    console.log('All videos preloaded successfully.');
+                    console.log("All videos preloaded");
                     onComplete();
                 }
             });
@@ -63,9 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
     startButton.style.display = 'none';
 
     preloadVideos(videos, () => {
-        startButton.style.display = 'block'; // Show the start button after preloading
-        const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
-        loadingBarContainer.style.display = 'none'; // Hide the loading bar
+        startButton.style.display = 'block';
+        document.getElementById('control-panel-loading-bar-container').style.display = 'none';
     });
 
     playModeSelect.addEventListener('change', () => {
@@ -80,90 +67,87 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     startButton.addEventListener('click', () => {
-        intervalTime = parseInt(intervalTimeInput.value) || 5;
-        videoContainer.style.display = 'none';
+        if (mode === 'interval') {
+            intervalTime = parseInt(intervalTimeInput.value);
+            if (isNaN(intervalTime) || intervalTime <= 0) {
+                alert("Please enter a valid interval time in seconds.");
+                return;
+            }
+        }
+
+        document.getElementById('control-panel').style.display = 'none';
+        console.log("Control panel hidden, showing space prompt");
         showSpacePrompt();
     });
 
     function showSpacePrompt() {
+        console.log("Displaying space prompt");
         blackBackground.style.display = 'block';
         spacePrompt.style.display = 'block';
-        document.addEventListener('keydown', handleSpacebarPress);
+        controlsEnabled = true;
+    }
+
+    function hideSpacePrompt() {
+        console.log("Hiding space prompt");
+        blackBackground.style.display = 'none';
+        spacePrompt.style.display = 'none';
+        controlsEnabled = false;
     }
 
     function handleSpacebarPress(event) {
-        if (event.code === 'Space') {
+        if (controlsEnabled && event.code === 'Space') {
             event.preventDefault();
-            spacePrompt.style.display = 'none';
-            blackBackground.style.display = 'none';
-            document.removeEventListener('keydown', handleSpacebarPress);
+            console.log("Spacebar pressed, hiding space prompt and starting video playback");
+            hideSpacePrompt();
             startVideoPlayback();
         }
     }
 
     function startVideoPlayback() {
+        console.log("Starting video playback");
         videoContainer.style.display = 'block';
-        switch (mode) {
-            case 'onePress':
-                playRandomVideo();
-                break;
-            case 'pressBetween':
-                playRandomVideo();
-                break;
-            case 'interval':
-                playRandomVideo();
-                intervalID = setInterval(() => {
-                    showSpacePrompt();
-                }, intervalTime * 1000);
-                break;
-            case 'afterPlaylist':
-                playPlaylist();
-                break;
-            default:
-                playRandomVideo();
-                break;
+        videoPlayer.src = videos[currentVideoIndex];
+        videoPlayer.play();
+    }
+
+    videoPlayer.addEventListener('play', () => {
+        console.log("Video is playing");
+    });
+
+    videoPlayer.addEventListener('ended', () => {
+        console.log("Video ended");
+        handleVideoEnd();
+    });
+
+    function handleVideoEnd() {
+        if (mode === 'pressBetween') {
+            showSpacePrompt();
+        } else if (mode === 'afterPlaylist' && currentVideoIndex < videos.length - 1) {
+            currentVideoIndex++;
+            startVideoPlayback();
+        } else if (mode === 'interval') {
+            intervalID = setInterval(() => {
+                showSpacePrompt();
+                clearInterval(intervalID);
+            }, intervalTime * 1000);
+        } else {
+            endVideoPlayback();
         }
     }
 
-    function playRandomVideo() {
-        currentVideoIndex = Math.floor(Math.random() * videos.length);
-        playVideo(videos[currentVideoIndex]);
-    }
-
-    function playPlaylist() {
-        currentVideoIndex = 0;
-        playVideo(videos[currentVideoIndex]);
-
-        videoPlayer.onended = () => {
-            currentVideoIndex++;
-            if (currentVideoIndex < videos.length) {
-                playVideo(videos[currentVideoIndex]);
-            } else {
-                endVideoPlayback();
-            }
-        };
-    }
-
-    function playVideo(videoSrc) {
-        videoPlayer.src = videoSrc;
-        videoPlayer.play();
-
-        videoPlayer.onplay = () => {
-            blackBackground.style.display = 'none';
-            spacePrompt.style.display = 'none';
-        };
-
-        videoPlayer.onended = () => {
-            endVideoPlayback();
-        };
-    }
-
     function endVideoPlayback() {
+        console.log("Ending video playback");
         videoContainer.style.display = 'none';
         if (intervalID) {
             clearInterval(intervalID);
             intervalID = null;
         }
+        if (mode === 'afterPlaylist') {
+            currentVideoIndex = 0;
+        }
+        controlsEnabled = false;
         showSpacePrompt();
     }
+
+    document.addEventListener('keydown', handleSpacebarPress);
 });
