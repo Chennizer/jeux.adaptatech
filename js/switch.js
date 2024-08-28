@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('control-panel').style.display = 'none';
         console.log("Control panel hidden, showing space prompt");
+        currentVideoIndex = 0; // Start from the first video
         showSpacePrompt();
     });
 
@@ -105,9 +106,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startVideoPlayback() {
         console.log("Starting video playback");
+
+        // Ensure the controls are not shown
+        videoPlayer.removeAttribute('controls');
+
         videoContainer.style.display = 'block';
         videoPlayer.src = videos[currentVideoIndex];
         videoPlayer.play();
+
+        if (mode === 'interval') {
+            intervalID = setInterval(() => {
+                videoPlayer.pause();
+                showSpacePrompt();
+                clearInterval(intervalID);
+            }, intervalTime * 1000);
+        }
     }
 
     videoPlayer.addEventListener('play', () => {
@@ -121,17 +134,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleVideoEnd() {
         if (mode === 'pressBetween') {
-            showSpacePrompt();
-        } else if (mode === 'afterPlaylist' && currentVideoIndex < videos.length - 1) {
-            currentVideoIndex++;
-            startVideoPlayback();
-        } else if (mode === 'interval') {
-            intervalID = setInterval(() => {
+            if (currentVideoIndex < videos.length - 1) {
+                currentVideoIndex++;
                 showSpacePrompt();
-                clearInterval(intervalID);
-            }, intervalTime * 1000);
-        } else {
-            endVideoPlayback();
+            } else {
+                endVideoPlayback();
+            }
+        } else if (mode === 'onePress') {  // This handles the playlist mode
+            if (currentVideoIndex < videos.length - 1) {
+                currentVideoIndex++;
+                startVideoPlayback();  // Automatically play the next video in the playlist
+            } else {
+                endVideoPlayback();  // End playback and show the prompt after the entire playlist is done
+            }
+        } else if (mode === 'interval') {
+            if (currentVideoIndex < videos.length - 1) {
+                currentVideoIndex++;
+                startVideoPlayback();
+            } else {
+                endVideoPlayback();
+            }
         }
     }
 
@@ -141,9 +163,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (intervalID) {
             clearInterval(intervalID);
             intervalID = null;
-        }
-        if (mode === 'afterPlaylist') {
-            currentVideoIndex = 0;
         }
         controlsEnabled = false;
         showSpacePrompt();
