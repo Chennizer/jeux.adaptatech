@@ -7,9 +7,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const playModeSelect = document.getElementById('control-panel-play-mode');
     const intervalTimeInput = document.getElementById('interval-time');
     const intervalLabel = document.getElementById('interval-label');
-    const videoElements = document.querySelectorAll('#video-list video');
-    const videos = Array.from(videoElements).map(video => video.getAttribute('data-src'));
+    const selectVideosButton = document.getElementById('select-videos-button');
+    const videoSelectionModal = document.getElementById('video-selection-modal');
+    const closeModal = document.getElementById('close-modal');
+    const okButton = document.getElementById('ok-button'); // Reference to the OK button
+    const videoCards = document.querySelectorAll('.video-card'); // Video cards
+    const introJingle = document.getElementById('intro-jingle'); // Reference to the intro jingle element
 
+    // Set all video cards as selected by default when the modal loads
+    videoCards.forEach(card => {
+        card.classList.add('selected'); // Mark all video cards as selected by default
+    });
+
+    let selectedVideos = Array.from(videoCards).map(card => card.dataset.src); // Default to all videos
     let controlsEnabled = false;
     let playedVideos = [];
     let currentVideoIndex = 0;
@@ -19,6 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let pausedAtTime = 0;
 
     console.log("Document loaded");
+
+    // Play the intro jingle when the control panel is shown
+    function playIntroJingle() {
+        introJingle.play();
+    }
 
     // Preload Videos
     function preloadVideos(videos, onComplete) {
@@ -50,11 +65,50 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Initially hide the start button
     startButton.style.display = 'none';
 
-    preloadVideos(videos, () => {
-        startButton.style.display = 'block';
+    // Show the video selection modal
+    selectVideosButton.addEventListener('click', () => {
+        videoSelectionModal.style.display = 'block';
+    });
+
+    // Close the modal using the close button
+    closeModal.addEventListener('click', () => {
+        videoSelectionModal.style.display = 'none';
+    });
+
+    // Handle OK button click to close the modal and update the selected videos
+    okButton.addEventListener('click', () => {
+        updateSelectedVideos();
+        videoSelectionModal.style.display = 'none';
+    });
+
+    // Update selected videos based on clicked video cards
+    videoCards.forEach(card => {
+        card.addEventListener('click', () => {
+            card.classList.toggle('selected');
+            updateSelectedVideos();
+        });
+    });
+
+    // Update the selectedVideos array based on which video cards are selected
+    function updateSelectedVideos() {
+        selectedVideos = Array.from(videoCards)
+            .filter(card => card.classList.contains('selected'))
+            .map(card => card.dataset.src);
+
+        // If no videos are selected, use all videos by default
+        if (selectedVideos.length === 0) {
+            selectedVideos = Array.from(videoCards).map(card => card.dataset.src);
+        }
+    }
+
+    preloadVideos(selectedVideos, () => {
+        console.log("Preloading complete, displaying start button");
+        startButton.style.display = 'block'; // Ensure the button is shown after videos are preloaded
         document.getElementById('control-panel-loading-bar-container').style.display = 'none';
+        playIntroJingle(); // Play the jingle when the control panel is ready
     });
 
     playModeSelect.addEventListener('change', () => {
@@ -69,6 +123,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     startButton.addEventListener('click', () => {
+        if (selectedVideos.length === 0) {
+            alert("Please select at least one video to start the game.");
+            return;
+        }
+
         if (mode === 'interval') {
             intervalTime = parseInt(intervalTimeInput.value);
             if (isNaN(intervalTime) || intervalTime <= 0) {
@@ -107,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoPlayer.currentTime = pausedAtTime; // Resume from where it paused
                 videoPlayer.play();
                 pausedAtTime = 0; // Reset paused time
-                setPauseInterval(); // Restart the interval pause mechanism
+                setTimeout(setPauseInterval, 100); // Restart the interval pause mechanism after a brief delay
             } else {
                 startVideoPlayback();
             }
@@ -121,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
         videoPlayer.removeAttribute('controls');
 
         videoContainer.style.display = 'block';
-        videoPlayer.src = videos[currentVideoIndex];
+        videoPlayer.src = selectedVideos[currentVideoIndex];
         videoPlayer.play();
 
         if (mode === 'interval') {
@@ -154,33 +213,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleVideoEnd() {
         if (mode === 'pressBetween') {
-            if (playedVideos.length < videos.length) {
+            if (playedVideos.length < selectedVideos.length) {
                 currentVideoIndex = getNextVideoIndex();
                 showSpacePrompt();
             } else {
-                endVideoPlayback();
+                playedVideos = []; // Reset the playedVideos array
+                currentVideoIndex = getNextVideoIndex(); // Start a new round with a new video
+                showSpacePrompt();
             }
-        } else if (mode === 'onePress') {  // Playlist mode
-            if (playedVideos.length < videos.length) {
-                currentVideoIndex = getNextVideoIndex();  // Select the next video that hasn't been played
-                startVideoPlayback();  // Automatically play the next video in the playlist
+        } else if (mode === 'onePress' || mode === 'interval') {
+            if (playedVideos.length < selectedVideos.length) {
+                currentVideoIndex = getNextVideoIndex(); // Select the next video that hasn't been played
+                startVideoPlayback(); // Automatically play the next video in the playlist
             } else {
-                endVideoPlayback();  // End playback and show the prompt after the entire playlist is done
-            }
-        } else if (mode === 'interval') {
-            if (playedVideos.length < videos.length) {
-                currentVideoIndex = getNextVideoIndex();  // Select the next video that hasn't been played
-                startVideoPlayback();
-            } else {
-                endVideoPlayback();
+                playedVideos = []; // Reset the playedVideos array
+                currentVideoIndex = getNextVideoIndex(); // Start a new round with a new video
+                showSpacePrompt();
             }
         }
     }
 
     function getNextVideoIndex() {
+        if (playedVideos.length === selectedVideos.length) {
+            playedVideos = []; // Reset playlist if all videos have been played
+        }
+
         let nextIndex;
         do {
-            nextIndex = Math.floor(Math.random() * videos.length);
+            nextIndex = Math.floor(Math.random() * selectedVideos.length);
         } while (playedVideos.includes(nextIndex));
 
         playedVideos.push(nextIndex);
