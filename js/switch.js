@@ -10,16 +10,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectVideosButton = document.getElementById('select-videos-button');
     const videoSelectionModal = document.getElementById('video-selection-modal');
     const closeModal = document.getElementById('close-modal');
-    const okButton = document.getElementById('ok-button'); // Reference to the OK button
-    const videoCards = document.querySelectorAll('.video-card'); // Video cards
-    const introJingle = document.getElementById('intro-jingle'); // Reference to the intro jingle element
+    const okButton = document.getElementById('ok-button');
+    const videoCards = document.querySelectorAll('.video-card');
+    const introJingle = document.getElementById('intro-jingle');
 
-    // Set all video cards as selected by default when the modal loads
-    videoCards.forEach(card => {
-        card.classList.add('selected'); // Mark all video cards as selected by default
-    });
+    // Space Prompt Image Selection
+    const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
+    const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
+    const closeSpacePromptModal = document.getElementById('close-space-prompt-modal');
+    const imageCards = document.querySelectorAll('.image-card');
+    const applySpacePromptButton = document.getElementById('apply-space-prompt');
+    let selectedSpacePromptSrc = '../../images/test.png'; // Default space prompt image
 
-    let selectedVideos = Array.from(videoCards).map(card => card.dataset.src); // Default to all videos
+    // Videos
+    let selectedVideos = Array.from(videoCards).map(card => card.dataset.src);
     let controlsEnabled = false;
     let playedVideos = [];
     let currentVideoIndex = 0;
@@ -29,6 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let pausedAtTime = 0;
 
     console.log("Document loaded");
+
+    // Mark all video cards as selected by default
+    videoCards.forEach(card => card.classList.add('selected'));
 
     // Play the intro jingle when the control panel is shown
     function playIntroJingle() {
@@ -68,12 +75,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initially hide the start button
     startButton.style.display = 'none';
 
+    // Hide interval input and label by default on page load
+    intervalLabel.style.display = 'none';
+    intervalTimeInput.style.display = 'none';
+
     // Show the video selection modal
     selectVideosButton.addEventListener('click', () => {
         videoSelectionModal.style.display = 'block';
     });
 
-    // Close the modal using the close button
+    // Close the video modal using the close button
     closeModal.addEventListener('click', () => {
         videoSelectionModal.style.display = 'none';
     });
@@ -106,18 +117,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     preloadVideos(selectedVideos, () => {
         console.log("Preloading complete, displaying start button");
-        startButton.style.display = 'block'; // Ensure the button is shown after videos are preloaded
+        startButton.style.display = 'block';
         document.getElementById('control-panel-loading-bar-container').style.display = 'none';
-        playIntroJingle(); // Play the jingle when the control panel is ready
+        playIntroJingle();
     });
 
+    // Add event listener for play mode selection change
     playModeSelect.addEventListener('change', () => {
         mode = playModeSelect.value;
         if (mode === 'interval') {
-            intervalLabel.style.display = 'block';
-            intervalTimeInput.style.display = 'block';
+            intervalLabel.style.display = 'inline-block'; // Show interval options
+            intervalTimeInput.style.display = 'inline-block';
         } else {
-            intervalLabel.style.display = 'none';
+            intervalLabel.style.display = 'none'; // Hide interval options
             intervalTimeInput.style.display = 'none';
         }
     });
@@ -138,14 +150,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('control-panel').style.display = 'none';
         console.log("Control panel hidden, showing space prompt");
-        playedVideos = []; // Reset played videos list
-        currentVideoIndex = getNextVideoIndex(); // Randomize the first video
+        playedVideos = [];
+        currentVideoIndex = getNextVideoIndex();
         showSpacePrompt();
     });
 
     function showSpacePrompt() {
         console.log("Displaying space prompt");
         blackBackground.style.display = 'block';
+        spacePrompt.src = selectedSpacePromptSrc; // Use the selected space prompt image
         spacePrompt.style.display = 'block';
         controlsEnabled = true;
     }
@@ -163,10 +176,10 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Spacebar pressed, hiding space prompt and starting video playback");
             hideSpacePrompt();
             if (mode === 'interval' && pausedAtTime > 0) {
-                videoPlayer.currentTime = pausedAtTime; // Resume from where it paused
+                videoPlayer.currentTime = pausedAtTime;
                 videoPlayer.play();
-                pausedAtTime = 0; // Reset paused time
-                setTimeout(setPauseInterval, 100); // Restart the interval pause mechanism after a brief delay
+                pausedAtTime = 0;
+                setTimeout(setPauseInterval, 100);
             } else {
                 startVideoPlayback();
             }
@@ -176,29 +189,26 @@ document.addEventListener('DOMContentLoaded', () => {
     function startVideoPlayback() {
         console.log("Starting video playback");
 
-        // Ensure the controls are not shown
         videoPlayer.removeAttribute('controls');
-
         videoContainer.style.display = 'block';
         videoPlayer.src = selectedVideos[currentVideoIndex];
         videoPlayer.play();
 
         if (mode === 'interval') {
-            setPauseInterval(); // Set up the interval pauses
+            setPauseInterval();
         }
     }
 
     function setPauseInterval() {
-        // Ensure any existing interval is cleared before starting a new one
         if (intervalID) {
             clearInterval(intervalID);
         }
 
         intervalID = setInterval(() => {
-            pausedAtTime = videoPlayer.currentTime; // Capture the current time before pausing
+            pausedAtTime = videoPlayer.currentTime;
             videoPlayer.pause();
             showSpacePrompt();
-            clearInterval(intervalID); // Clear the interval once paused
+            clearInterval(intervalID);
         }, intervalTime * 1000);
     }
 
@@ -217,17 +227,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentVideoIndex = getNextVideoIndex();
                 showSpacePrompt();
             } else {
-                playedVideos = []; // Reset the playedVideos array
-                currentVideoIndex = getNextVideoIndex(); // Start a new round with a new video
+                playedVideos = [];
+                currentVideoIndex = getNextVideoIndex();
                 showSpacePrompt();
             }
         } else if (mode === 'onePress' || mode === 'interval') {
             if (playedVideos.length < selectedVideos.length) {
-                currentVideoIndex = getNextVideoIndex(); // Select the next video that hasn't been played
-                startVideoPlayback(); // Automatically play the next video in the playlist
+                currentVideoIndex = getNextVideoIndex();
+                startVideoPlayback();
             } else {
-                playedVideos = []; // Reset the playedVideos array
-                currentVideoIndex = getNextVideoIndex(); // Start a new round with a new video
+                playedVideos = [];
+                currentVideoIndex = getNextVideoIndex();
                 showSpacePrompt();
             }
         }
@@ -235,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getNextVideoIndex() {
         if (playedVideos.length === selectedVideos.length) {
-            playedVideos = []; // Reset playlist if all videos have been played
+            playedVideos = [];
         }
 
         let nextIndex;
@@ -247,16 +257,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return nextIndex;
     }
 
-    function endVideoPlayback() {
-        console.log("Ending video playback");
-        videoContainer.style.display = 'none';
-        if (intervalID) {
-            clearInterval(intervalID);
-            intervalID = null;
-        }
-        controlsEnabled = false;
-        showSpacePrompt();
-    }
-
     document.addEventListener('keydown', handleSpacebarPress);
+
+    // Show the space prompt selection modal
+    selectSpacePromptButton.addEventListener('click', () => {
+        spacePromptSelectionModal.style.display = 'block';
+    });
+
+    // Close the space prompt modal
+    closeSpacePromptModal.addEventListener('click', () => {
+        spacePromptSelectionModal.style.display = 'none';
+    });
+
+    // Handle space prompt image selection
+    imageCards.forEach(card => {
+        card.addEventListener('click', () => {
+            imageCards.forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            selectedSpacePromptSrc = card.dataset.src; // Update the selected image src
+        });
+    });
+
+    // Apply the selected space prompt image
+    applySpacePromptButton.addEventListener('click', () => {
+        spacePromptSelectionModal.style.display = 'none';
+    });
 });
