@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startButton = document.getElementById('control-panel-start-button');
     const blackBackground = document.getElementById('black-background');
     const spacePrompt = document.getElementById('space-prompt');
+    const textPrompt = document.getElementById('text-prompt'); // Text prompt element
     const videoContainer = document.getElementById('video-container');
     const videoPlayer = document.getElementById('video-player');
     const playModeSelect = document.getElementById('control-panel-play-mode');
@@ -14,13 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoCards = document.querySelectorAll('.video-card');
     const introJingle = document.getElementById('intro-jingle');
 
-    // Space Prompt Image Selection
+    // Space Prompt Image and Text Selection
     const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
     const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
     const closeSpacePromptModal = document.getElementById('close-space-prompt-modal');
     const imageCards = document.querySelectorAll('.image-card');
+    const textPromptInput = document.getElementById('text-prompt-input'); // Text input for custom prompt
     const applySpacePromptButton = document.getElementById('apply-space-prompt');
-    let selectedSpacePromptSrc = '../../images/test.png'; // Default space prompt image
+    let selectedSpacePromptSrc = ''; // Holds either image src or text content
+    let useTextPrompt = false; // Tracks if the user is using text instead of an image
+
+    // Default to the first image in the list
+    imageCards[0].classList.add('selected'); // Select the first image by default
+    selectedSpacePromptSrc = imageCards[0].dataset.src;
 
     // Videos
     let selectedVideos = Array.from(videoCards).map(card => card.dataset.src);
@@ -157,9 +164,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showSpacePrompt() {
         console.log("Displaying space prompt");
+
+        if (useTextPrompt && selectedSpacePromptSrc) {
+            // Show the text prompt
+            textPrompt.textContent = selectedSpacePromptSrc; // Use the text provided in the input
+            textPrompt.style.display = 'block';
+            spacePrompt.style.display = 'none'; // Hide the image prompt
+        } else if (selectedSpacePromptSrc) {
+            // Show the image prompt
+            textPrompt.style.display = 'none';
+            spacePrompt.src = selectedSpacePromptSrc;
+            spacePrompt.style.display = 'block';
+        }
+
         blackBackground.style.display = 'block';
-        spacePrompt.src = selectedSpacePromptSrc; // Use the selected space prompt image
-        spacePrompt.style.display = 'block';
         controlsEnabled = true;
     }
 
@@ -167,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Hiding space prompt");
         blackBackground.style.display = 'none';
         spacePrompt.style.display = 'none';
+        textPrompt.style.display = 'none'; // Hide the text prompt as well
         controlsEnabled = false;
     }
 
@@ -269,17 +288,34 @@ document.addEventListener('DOMContentLoaded', () => {
         spacePromptSelectionModal.style.display = 'none';
     });
 
-    // Handle space prompt image selection
+    // Handle image selection and text input for space prompt
     imageCards.forEach(card => {
         card.addEventListener('click', () => {
+            // Deselect the text input
+            textPromptInput.value = '';
+            useTextPrompt = false;
+
+            // Select the clicked image and deselect others
             imageCards.forEach(c => c.classList.remove('selected'));
             card.classList.add('selected');
-            selectedSpacePromptSrc = card.dataset.src; // Update the selected image src
+            selectedSpacePromptSrc = card.dataset.src; // Set the selected image
         });
     });
 
-    // Apply the selected space prompt image
+    // Handle text input focus (deselect images when text is typed)
+    textPromptInput.addEventListener('input', () => {
+        // Deselect all images when text is typed
+        imageCards.forEach(card => card.classList.remove('selected'));
+        selectedSpacePromptSrc = textPromptInput.value; // Set the inputted text as the prompt
+        useTextPrompt = true;
+    });
+
+    // Apply the selected space prompt image or text
     applySpacePromptButton.addEventListener('click', () => {
         spacePromptSelectionModal.style.display = 'none';
+        if (useTextPrompt && selectedSpacePromptSrc) {
+            // Show the custom text prompt
+            textPrompt.textContent = selectedSpacePromptSrc;
+        }
     });
 });
