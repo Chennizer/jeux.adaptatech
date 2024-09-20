@@ -15,6 +15,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoCards = document.querySelectorAll('.video-card');
     const introJingle = document.getElementById('intro-jingle');
 
+    // Visual and Sound Options
+    const visualOptionsSelect = document.getElementById('special-options-select'); // Corrected ID
+    const soundOptionsSelect = document.getElementById('sound-options-select');
+    const soundEffects = document.querySelectorAll('.sound-effect'); // Select all sound effect elements
+    const gongSound = document.getElementById('gong-sound'); // Corrected to gong-sound
+    const bellSound = document.getElementById('bell-sound');
+    const chimeSound = document.getElementById('chime-sound');
+
+    let selectedSound = 'none'; // Default sound
+    let currentSound = null; // Store the current playing sound
+
+    // Set volume for all sounds using the 'sound-effect' class
+    soundEffects.forEach(sound => {
+        sound.volume = 0.5; // Lower the volume
+    });
+
     // Space Prompt Image and Text Selection
     const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
     const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
@@ -26,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let useTextPrompt = false; // Tracks if the user is using text instead of an image
 
     // Default to the first image in the list
-    imageCards[0].classList.add('selected'); // Select the first image by default
+    imageCards[0].classList.add('selected');
     selectedSpacePromptSrc = imageCards[0].dataset.src;
 
     // Videos
@@ -34,10 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let controlsEnabled = false;
     let playedVideos = [];
     let currentVideoIndex = 0;
-    let mode = 'onePress';
+    let mode = 'pressBetween';
     let intervalID = null;
     let intervalTime = 5;
     let pausedAtTime = 0;
+    
 
     console.log("Document loaded");
 
@@ -141,6 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Handle space prompt sound selection change
+    soundOptionsSelect.addEventListener('change', () => {
+        selectedSound = soundOptionsSelect.value;
+    });
+
     startButton.addEventListener('click', () => {
         if (selectedVideos.length === 0) {
             alert("Please select at least one video to start the game.");
@@ -179,6 +201,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         blackBackground.style.display = 'block';
         controlsEnabled = true;
+
+        // Play selected sound when space prompt is displayed
+        playSpacePromptSound();
+    }
+
+    function playSpacePromptSound() {
+        // Pause the currently playing sound if any
+        if (currentSound) {
+            currentSound.pause();
+            currentSound.currentTime = 0; // Reset the sound to start
+        }
+
+        if (selectedSound === 'gong-sound') {
+            currentSound = gongSound;
+        } else if (selectedSound === 'bell') {
+            currentSound = bellSound;
+        } else if (selectedSound === 'chime') {
+            currentSound = chimeSound;
+        }
+
+        if (currentSound) {
+            currentSound.play();
+        }
     }
 
     function hideSpacePrompt() {
@@ -193,6 +238,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (controlsEnabled && event.code === 'Space') {
             event.preventDefault();
             console.log("Spacebar pressed, hiding space prompt and starting video playback");
+
+            // Stop the current sound if it's still playing
+            if (currentSound) {
+                currentSound.pause();
+                currentSound.currentTime = 0; // Reset the sound to start
+            }
+
             hideSpacePrompt();
             if (mode === 'interval' && pausedAtTime > 0) {
                 videoPlayer.currentTime = pausedAtTime;
@@ -278,8 +330,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', handleSpacebarPress);
 
-    // Show the space prompt selection modal
     selectSpacePromptButton.addEventListener('click', () => {
+        console.log("Space prompt button clicked");
         spacePromptSelectionModal.style.display = 'block';
     });
 
@@ -318,4 +370,45 @@ document.addEventListener('DOMContentLoaded', () => {
             textPrompt.textContent = selectedSpacePromptSrc;
         }
     });
+
+    // Add event listener for visual options selection change
+    visualOptionsSelect.addEventListener('change', () => {
+        const selectedOption = visualOptionsSelect.value;
+
+        // Remove any previously applied filter
+        videoPlayer.className = ''; // Clear existing classes
+
+        // Apply selected visual filter
+        switch (selectedOption) {
+            case 'green-filter':
+                videoPlayer.classList.add('green-filter');
+                break;
+            case 'red-filter':
+                videoPlayer.classList.add('red-filter');
+                break;
+            case 'blue-filter':
+                videoPlayer.classList.add('blue-filter');
+                break;
+            case 'high-contrast':
+                videoPlayer.style.filter = 'contrast(200%)';
+                break;
+            case 'grayscale':
+                videoPlayer.style.filter = 'grayscale(100%)';
+                break;
+            case 'invert':
+                videoPlayer.style.filter = 'invert(100%)';
+                break;
+            case 'brightness':
+                videoPlayer.style.filter = 'brightness(1.5)';
+                break;
+            case 'saturation':
+                videoPlayer.style.filter = 'saturate(200%)';
+                break;
+            default:
+                // Normal (no filter)
+                videoPlayer.style.filter = '';
+                break;
+        }
+    });
+
 });
