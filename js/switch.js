@@ -16,19 +16,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const introJingle = document.getElementById('intro-jingle');
 
     // Visual and Sound Options
-    const visualOptionsSelect = document.getElementById('special-options-select'); // Corrected ID
+    const visualOptionsSelect = document.getElementById('special-options-select'); 
     const soundOptionsSelect = document.getElementById('sound-options-select');
-    const soundEffects = document.querySelectorAll('.sound-effect'); // Select all sound effect elements
-    const gongSound = document.getElementById('gong-sound'); // Corrected to gong-sound
-    const bellSound = document.getElementById('bell-sound');
-    const chimeSound = document.getElementById('chime-sound');
-
+    const soundEffects = document.querySelectorAll('.sound-effect'); 
+    const gongSound = document.getElementById('gong-sound');
+    const pianoSound = document.getElementById('piano-sound');
+    const roosterSound = document.getElementById('rooster-sound');
+    const recordModal = document.getElementById('record-modal'); // New modal for recording
+    const recordButton = document.getElementById('record-button'); // Button inside modal
+    const closeRecordModal = document.getElementById('close-record-modal');
+    
     let selectedSound = 'none'; // Default sound
     let currentSound = null; // Store the current playing sound
-
+    let recordedAudio = null; // Store recorded audio
+    let mediaRecorder; // For recording audio
+    let audioChunks = []; // Stores chunks of audio data during recording
+    
     // Set volume for all sounds using the 'sound-effect' class
     soundEffects.forEach(sound => {
-        sound.volume = 0.5; // Lower the volume
+        sound.volume = 0.5; 
     });
 
     // Space Prompt Image and Text Selection
@@ -36,10 +42,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
     const closeSpacePromptModal = document.getElementById('close-space-prompt-modal');
     const imageCards = document.querySelectorAll('.image-card');
-    const textPromptInput = document.getElementById('text-prompt-input'); // Text input for custom prompt
+    const textPromptInput = document.getElementById('text-prompt-input');
     const applySpacePromptButton = document.getElementById('apply-space-prompt');
-    let selectedSpacePromptSrc = ''; // Holds either image src or text content
-    let useTextPrompt = false; // Tracks if the user is using text instead of an image
+    let selectedSpacePromptSrc = ''; 
+    let useTextPrompt = false; 
 
     // Default to the first image in the list
     imageCards[0].classList.add('selected');
@@ -153,14 +159,57 @@ document.addEventListener('DOMContentLoaded', () => {
             intervalLabel.style.display = 'inline-block'; // Show interval options
             intervalTimeInput.style.display = 'inline-block';
         } else {
-            intervalLabel.style.display = 'none'; // Hide interval options
+            intervalLabel.style.display = 'none'; 
             intervalTimeInput.style.display = 'none';
         }
     });
 
     // Handle space prompt sound selection change
     soundOptionsSelect.addEventListener('change', () => {
-        selectedSound = soundOptionsSelect.value;
+        if (soundOptionsSelect.value === 'record-own') {
+            openRecordModal(); // Open modal to record custom sound
+        } else {
+            selectedSound = soundOptionsSelect.value;
+        }
+    });
+
+    // Function to open the recording modal
+    function openRecordModal() {
+        recordModal.style.display = 'block';
+    }
+
+    // Function to close the recording modal
+    closeRecordModal.addEventListener('click', () => {
+        recordModal.style.display = 'none';
+    });
+
+    // Record button event to start recording audio
+    recordButton.addEventListener('click', () => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+                    recordedAudio = new Audio(URL.createObjectURL(audioBlob));
+                    recordedAudio.volume = 0.5; // Set volume
+                    selectedSound = 'custom'; // Set custom sound
+                };
+
+                // Stop recording after 5 seconds
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 5000);
+            }).catch(err => {
+                console.error('Error accessing microphone: ', err);
+            });
+        }
     });
 
     startButton.addEventListener('click', () => {
@@ -178,22 +227,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         document.getElementById('control-panel').style.display = 'none';
-        console.log("Control panel hidden, showing space prompt");
         playedVideos = [];
         currentVideoIndex = getNextVideoIndex();
         showSpacePrompt();
     });
 
     function showSpacePrompt() {
-        console.log("Displaying space prompt");
-
         if (useTextPrompt && selectedSpacePromptSrc) {
-            // Show the text prompt
-            textPrompt.textContent = selectedSpacePromptSrc; // Use the text provided in the input
+            textPrompt.textContent = selectedSpacePromptSrc; 
             textPrompt.style.display = 'block';
-            spacePrompt.style.display = 'none'; // Hide the image prompt
+            spacePrompt.style.display = 'none'; 
         } else if (selectedSpacePromptSrc) {
-            // Show the image prompt
             textPrompt.style.display = 'none';
             spacePrompt.src = selectedSpacePromptSrc;
             spacePrompt.style.display = 'block';
@@ -202,23 +246,23 @@ document.addEventListener('DOMContentLoaded', () => {
         blackBackground.style.display = 'block';
         controlsEnabled = true;
 
-        // Play selected sound when space prompt is displayed
         playSpacePromptSound();
     }
 
     function playSpacePromptSound() {
-        // Pause the currently playing sound if any
         if (currentSound) {
             currentSound.pause();
-            currentSound.currentTime = 0; // Reset the sound to start
+            currentSound.currentTime = 0; 
         }
 
         if (selectedSound === 'gong-sound') {
             currentSound = gongSound;
-        } else if (selectedSound === 'bell') {
-            currentSound = bellSound;
-        } else if (selectedSound === 'chime') {
-            currentSound = chimeSound;
+        } else if (selectedSound === 'piano-sound') {
+            currentSound = pianoSound;
+        } else if (selectedSound === 'rooster-sound') {
+            currentSound = roosterSound;
+        } else if (selectedSound === 'custom' && recordedAudio) {
+            currentSound = recordedAudio;
         }
 
         if (currentSound) {
@@ -227,22 +271,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function hideSpacePrompt() {
-        console.log("Hiding space prompt");
         blackBackground.style.display = 'none';
         spacePrompt.style.display = 'none';
-        textPrompt.style.display = 'none'; // Hide the text prompt as well
+        textPrompt.style.display = 'none'; 
         controlsEnabled = false;
     }
 
     function handleSpacebarPress(event) {
         if (controlsEnabled && event.code === 'Space') {
             event.preventDefault();
-            console.log("Spacebar pressed, hiding space prompt and starting video playback");
-
-            // Stop the current sound if it's still playing
             if (currentSound) {
                 currentSound.pause();
-                currentSound.currentTime = 0; // Reset the sound to start
+                currentSound.currentTime = 0; 
             }
 
             hideSpacePrompt();
@@ -258,8 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startVideoPlayback() {
-        console.log("Starting video playback");
-
         videoPlayer.removeAttribute('controls');
         videoContainer.style.display = 'block';
         videoPlayer.src = selectedVideos[currentVideoIndex];
@@ -288,7 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     videoPlayer.addEventListener('ended', () => {
-        console.log("Video ended");
         handleVideoEnd();
     });
 
@@ -331,54 +368,41 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', handleSpacebarPress);
 
     selectSpacePromptButton.addEventListener('click', () => {
-        console.log("Space prompt button clicked");
         spacePromptSelectionModal.style.display = 'block';
     });
 
-    // Close the space prompt modal
     closeSpacePromptModal.addEventListener('click', () => {
         spacePromptSelectionModal.style.display = 'none';
     });
 
-    // Handle image selection and text input for space prompt
     imageCards.forEach(card => {
         card.addEventListener('click', () => {
-            // Deselect the text input
             textPromptInput.value = '';
             useTextPrompt = false;
 
-            // Select the clicked image and deselect others
             imageCards.forEach(c => c.classList.remove('selected'));
             card.classList.add('selected');
-            selectedSpacePromptSrc = card.dataset.src; // Set the selected image
+            selectedSpacePromptSrc = card.dataset.src;
         });
     });
 
-    // Handle text input focus (deselect images when text is typed)
     textPromptInput.addEventListener('input', () => {
-        // Deselect all images when text is typed
         imageCards.forEach(card => card.classList.remove('selected'));
-        selectedSpacePromptSrc = textPromptInput.value; // Set the inputted text as the prompt
+        selectedSpacePromptSrc = textPromptInput.value;
         useTextPrompt = true;
     });
 
-    // Apply the selected space prompt image or text
     applySpacePromptButton.addEventListener('click', () => {
         spacePromptSelectionModal.style.display = 'none';
         if (useTextPrompt && selectedSpacePromptSrc) {
-            // Show the custom text prompt
             textPrompt.textContent = selectedSpacePromptSrc;
         }
     });
 
-    // Add event listener for visual options selection change
     visualOptionsSelect.addEventListener('change', () => {
         const selectedOption = visualOptionsSelect.value;
+        videoPlayer.className = ''; 
 
-        // Remove any previously applied filter
-        videoPlayer.className = ''; // Clear existing classes
-
-        // Apply selected visual filter
         switch (selectedOption) {
             case 'green-filter':
                 videoPlayer.classList.add('green-filter');
@@ -405,10 +429,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoPlayer.style.filter = 'saturate(200%)';
                 break;
             default:
-                // Normal (no filter)
                 videoPlayer.style.filter = '';
                 break;
         }
     });
-
 });
