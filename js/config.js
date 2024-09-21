@@ -1,20 +1,23 @@
-
+// Space Prompt Images
 const spacePromptImages = [
-    { src: "../../images/switch-rouge.png", alt: "switch rouge" },
-    { src: "../../images/switch-bleue.png", alt: "switch bleue" },
-    { src: "../../images/big-mack.png", alt: "big mack" },
-    { src: "../../images/interact-switch.png", alt: "interact switch" },
-    { src: "../../images/switch-adaptatech.png", alt: "switch adaptatech" },
-    { src: "../../images/hand.png", alt: "hand" }
+    { src: "../../images/switch-rouge.png", alt: "Switch Rouge" },
+    { src: "../../images/switch-bleue.png", alt: "Switch Bleue" },
+    { src: "../../images/big-mack.png", alt: "Big Mack" },
+    { src: "../../images/interact-switch.png", alt: "Interact Switch" },
+    { src: "../../images/switch-adaptatech.png", alt: "Switch Adaptatech" },
+    { src: "../../images/hand.png", alt: "Hand" }
 ];
 
+// Space Prompt Sounds
 const spacePromptSounds = [
+    { value: "none", label: "Aucun son" },  // Default no sound option
     { value: "gong-sound", label: "Gong", src: "../../sounds/gong.mp3" },
     { value: "piano-sound", label: "Piano", src: "../../sounds/piano.mp3" },
     { value: "rooster-sound", label: "Coq", src: "../../sounds/rooster.mp3" },
     { value: "record-own", label: "Enregistrez le vôtre" }
 ];
 
+// Visual Effect Options
 const visualOptions = [
     { value: "normal", label: "Image normale" },
     { value: "green-filter", label: "Saturation verte" },
