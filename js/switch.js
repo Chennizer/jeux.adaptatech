@@ -16,12 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const introJingle = document.getElementById('intro-jingle');
 
     // Visual and Sound Options
-    const visualOptionsSelect = document.getElementById('special-options-select'); 
+    const visualOptionsSelect = document.getElementById('special-options-select');
     const soundOptionsSelect = document.getElementById('sound-options-select');
-    const soundEffects = document.querySelectorAll('.sound-effect'); 
-    const gongSound = document.getElementById('gong-sound');
-    const pianoSound = document.getElementById('piano-sound');
-    const roosterSound = document.getElementById('rooster-sound');
+    const soundEffects = document.querySelectorAll('.sound-effect');
     const recordModal = document.getElementById('record-modal'); // New modal for recording
     const recordButton = document.getElementById('record-button'); // Button inside modal
     const stopRecordingButton = document.getElementById('stop-recording-button'); // New stop button
@@ -35,10 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let mediaRecorder; // For recording audio
     let audioChunks = []; // Stores chunks of audio data during recording
 
-    // Set volume for all sounds using the 'sound-effect' class
-    soundEffects.forEach(sound => {
-        sound.volume = 0.5; 
-    });
+    // Load data from config.js
+    loadConfig();
 
     // Space Prompt Image and Text Selection
     const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
@@ -47,12 +42,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageCards = document.querySelectorAll('.image-card');
     const textPromptInput = document.getElementById('text-prompt-input');
     const applySpacePromptButton = document.getElementById('apply-space-prompt');
-    let selectedSpacePromptSrc = ''; 
-    let useTextPrompt = false; 
+    let selectedSpacePromptSrc = '';
+    let useTextPrompt = false;
 
     // Default to the first image in the list
-    imageCards[0].classList.add('selected');
-    selectedSpacePromptSrc = imageCards[0].dataset.src;
+    imageCards[0]?.classList.add('selected');
+    selectedSpacePromptSrc = imageCards[0]?.dataset.src || '';
 
     // Videos
     let selectedVideos = Array.from(videoCards).map(card => card.dataset.src);
@@ -161,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
             intervalLabel.style.display = 'inline-block'; // Show interval options
             intervalTimeInput.style.display = 'inline-block';
         } else {
-            intervalLabel.style.display = 'none'; 
+            intervalLabel.style.display = 'none';
             intervalTimeInput.style.display = 'none';
         }
     });
@@ -264,9 +259,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showSpacePrompt() {
         if (useTextPrompt && selectedSpacePromptSrc) {
-            textPrompt.textContent = selectedSpacePromptSrc; 
+            textPrompt.textContent = selectedSpacePromptSrc;
             textPrompt.style.display = 'block';
-            spacePrompt.style.display = 'none'; 
+            spacePrompt.style.display = 'none';
         } else if (selectedSpacePromptSrc) {
             textPrompt.style.display = 'none';
             spacePrompt.src = selectedSpacePromptSrc;
@@ -282,15 +277,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function playSpacePromptSound() {
         if (currentSound) {
             currentSound.pause();
-            currentSound.currentTime = 0; 
+            currentSound.currentTime = 0;
         }
 
         if (selectedSound === 'gong-sound') {
-            currentSound = gongSound;
+            currentSound = document.getElementById('gong-sound');
         } else if (selectedSound === 'piano-sound') {
-            currentSound = pianoSound;
+            currentSound = document.getElementById('piano-sound');
         } else if (selectedSound === 'rooster-sound') {
-            currentSound = roosterSound;
+            currentSound = document.getElementById('rooster-sound');
         } else if (selectedSound === 'custom' && recordedAudio) {
             currentSound = recordedAudio;
         }
@@ -303,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function hideSpacePrompt() {
         blackBackground.style.display = 'none';
         spacePrompt.style.display = 'none';
-        textPrompt.style.display = 'none'; 
+        textPrompt.style.display = 'none';
         controlsEnabled = false;
     }
 
@@ -312,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             if (currentSound) {
                 currentSound.pause();
-                currentSound.currentTime = 0; 
+                currentSound.currentTime = 0;
             }
 
             hideSpacePrompt();
@@ -431,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     visualOptionsSelect.addEventListener('change', () => {
         const selectedOption = visualOptionsSelect.value;
-        videoPlayer.className = ''; 
+        videoPlayer.className = '';
 
         switch (selectedOption) {
             case 'green-filter':
@@ -463,4 +458,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
         }
     });
+
+    // Load dynamic content from config.js (space prompts, sounds, visual effects)
+    function loadConfig() {
+        // Load space prompt images
+        const spacePromptSelection = document.getElementById('space-prompt-selection');
+        spacePromptImages.forEach(prompt => {
+            const imageCard = document.createElement('div');
+            imageCard.className = 'image-card';
+            imageCard.dataset.src = prompt.src;
+            imageCard.innerHTML = `<img src="${prompt.src}" alt="${prompt.alt}">`;
+            spacePromptSelection.appendChild(imageCard);
+        });
+
+        // Load sound options
+        spacePromptSounds.forEach(option => {
+            const soundOption = document.createElement('option');
+            soundOption.value = option.value;
+            soundOption.textContent = option.label;
+            soundOptionsSelect.appendChild(soundOption);
+        });
+
+        // Load visual effects
+        visualOptions.forEach(effect => {
+            const effectOption = document.createElement('option');
+            effectOption.value = effect.value;
+            effectOption.textContent = effect.label;
+            visualOptionsSelect.appendChild(effectOption);
+        });
+
+        // Load audio elements for sound effects
+        const audioContainer = document.getElementById('audio-container');
+        spacePromptSounds.forEach(option => {
+            if (option.src) {
+                const audioElement = document.createElement('audio');
+                audioElement.className = 'sound-effect';
+                audioElement.id = option.value;
+                audioElement.src = option.src;
+                audioElement.preload = 'auto';
+                audioContainer.appendChild(audioElement);
+            }
+        });
+    }
 });
