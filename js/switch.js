@@ -24,14 +24,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const roosterSound = document.getElementById('rooster-sound');
     const recordModal = document.getElementById('record-modal'); // New modal for recording
     const recordButton = document.getElementById('record-button'); // Button inside modal
+    const stopRecordingButton = document.getElementById('stop-recording-button'); // New stop button
+    const okRecordingButton = document.getElementById('ok-recording-button'); // New OK button
     const closeRecordModal = document.getElementById('close-record-modal');
-    
+    const recordStatus = document.getElementById('record-status'); // Status text
+
     let selectedSound = 'none'; // Default sound
     let currentSound = null; // Store the current playing sound
     let recordedAudio = null; // Store recorded audio
     let mediaRecorder; // For recording audio
     let audioChunks = []; // Stores chunks of audio data during recording
-    
+
     // Set volume for all sounds using the 'sound-effect' class
     soundEffects.forEach(sound => {
         sound.volume = 0.5; 
@@ -60,7 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let intervalID = null;
     let intervalTime = 5;
     let pausedAtTime = 0;
-    
 
     console.log("Document loaded");
 
@@ -200,16 +202,44 @@ document.addEventListener('DOMContentLoaded', () => {
                     recordedAudio = new Audio(URL.createObjectURL(audioBlob));
                     recordedAudio.volume = 0.5; // Set volume
                     selectedSound = 'custom'; // Set custom sound
+                    recordStatus.textContent = "Recording complete!";
+                    okRecordingButton.style.display = 'block'; // Show OK button
                 };
 
-                // Stop recording after 5 seconds
+                recordStatus.textContent = "Recording...";
+                stopRecordingButton.style.display = 'block'; // Show stop button during recording
+                recordButton.style.display = 'none'; // Hide the record button during recording
                 setTimeout(() => {
-                    mediaRecorder.stop();
+                    stopRecording(); // Auto stop after 5 seconds
                 }, 5000);
             }).catch(err => {
                 console.error('Error accessing microphone: ', err);
+                recordStatus.textContent = "Error accessing microphone";
             });
         }
+    });
+
+    // Function to stop recording manually or automatically
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop(); // Stop the recording
+            stopRecordingButton.style.display = 'none'; // Hide stop button
+            recordButton.style.display = 'block'; // Show record button again for new recording
+        }
+    }
+
+    // Stop button event to manually stop recording
+    stopRecordingButton.addEventListener('click', () => {
+        stopRecording(); // Stop recording when the stop button is clicked
+    });
+
+    // OK button event to confirm the recording and close the modal
+    okRecordingButton.addEventListener('click', () => {
+        stopRecording(); // Ensure recording is stopped
+        recordModal.style.display = 'none'; // Close the modal
+        okRecordingButton.style.display = 'none'; // Hide the OK button after closing the modal
+        stopRecordingButton.style.display = 'none'; // Hide stop button
+        recordButton.style.display = 'block'; // Reset record button for next use
     });
 
     startButton.addEventListener('click', () => {
@@ -434,4 +464,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
- 
