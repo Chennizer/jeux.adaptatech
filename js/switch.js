@@ -197,11 +197,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     recordedAudio = new Audio(URL.createObjectURL(audioBlob));
                     recordedAudio.volume = 0.5; // Set volume
                     selectedSound = 'custom'; // Set custom sound
-                    recordStatus.textContent = "Recording complete!";
+                    recordStatus.textContent = "Enregistrement complété!";
                     okRecordingButton.style.display = 'block'; // Show OK button
                 };
 
-                recordStatus.textContent = "Recording...";
+                recordStatus.textContent = "Enregistrement...";
                 stopRecordingButton.style.display = 'block'; // Show stop button during recording
                 recordButton.style.display = 'none'; // Hide the record button during recording
                 setTimeout(() => {
@@ -214,7 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Function to stop recording manually or automatically
     function stopRecording() {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             mediaRecorder.stop(); // Stop the recording
@@ -223,12 +222,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Stop button event to manually stop recording
     stopRecordingButton.addEventListener('click', () => {
         stopRecording(); // Stop recording when the stop button is clicked
     });
 
-    // OK button event to confirm the recording and close the modal
     okRecordingButton.addEventListener('click', () => {
         stopRecording(); // Ensure recording is stopped
         recordModal.style.display = 'none'; // Close the modal
@@ -487,7 +484,6 @@ document.addEventListener('DOMContentLoaded', () => {
             visualOptionsSelect.appendChild(effectOption);
         });
 
-        // Load audio elements for sound effects
         const audioContainer = document.getElementById('audio-container');
         spacePromptSounds.forEach(option => {
             if (option.src) {

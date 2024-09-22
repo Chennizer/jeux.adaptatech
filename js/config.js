@@ -10,7 +10,7 @@ const spacePromptImages = [
 
 // Space Prompt Sounds
 const spacePromptSounds = [
-    { value: "none", label: "Aucun son" },  // Default no sound option
+    { value: "none", label: "Son indicateur" },  // Default no sound option
     { value: "gong-sound", label: "Gong", src: "../../sounds/gong.mp3" },
     { value: "piano-sound", label: "Piano", src: "../../sounds/piano.mp3" },
     { value: "rooster-sound", label: "Coq", src: "../../sounds/rooster.mp3" },
@@ -19,7 +19,7 @@ const spacePromptSounds = [
 
 // Visual Effect Options
 const visualOptions = [
-    { value: "normal", label: "Image normale" },
+    { value: "normal", label: "Filtre visuel" },
     { value: "green-filter", label: "Saturation verte" },
     { value: "red-filter", label: "Saturation rouge" },
     { value: "blue-filter", label: "Saturation bleue" },
