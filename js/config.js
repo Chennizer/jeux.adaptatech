@@ -5,7 +5,9 @@ const spacePromptImages = [
     { src: "../../images/big-mack.png", alt: "Big Mack" },
     { src: "../../images/interact-switch.png", alt: "Interact Switch" },
     { src: "../../images/switch-adaptatech.png", alt: "Switch Adaptatech" },
-    { src: "../../images/hand.png", alt: "Hand" }
+    { src: "../../images/hand.png", alt: "Hand" },
+    { src: "../../images/peppa.png", alt: "Peppa" },
+    { src: "../../images/moana.png", alt: "Moana" }
 ];
 
 // Space Prompt Sounds
