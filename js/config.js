@@ -7,6 +7,7 @@ const spacePromptImages = [
     { src: "../../images/switch-adaptatech.png", alt: "Switch Adaptatech" },
     { src: "../../images/hand.png", alt: "Hand" },
     { src: "../../images/peppa.png", alt: "Peppa" },
+    { src: "../../images/djembe.png", alt: "Djembe" },
     { src: "../../images/moana.png", alt: "Moana" }
 ];
 
