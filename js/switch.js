@@ -70,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Preload Videos
+    // Preload Videos
     function preloadVideos(videos, onComplete) {
         let videosLoaded = 0;
         const totalVideos = videos.length;
@@ -89,15 +90,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (videosLoaded === totalVideos) {
                     console.log("All videos preloaded");
-                    onComplete();
+                    onComplete(); // Call the callback function once all videos are preloaded
                 }
             });
 
             video.addEventListener('error', (e) => {
                 console.error(`Error preloading video ${index + 1}:`, e);
+                videosLoaded++; // Treat error cases as "loaded" so preloading can continue
+                const progress = (videosLoaded / totalVideos) * 100;
+                loadingBar.style.width = `${progress}%`;
+
+                if (videosLoaded === totalVideos) {
+                    onComplete();
+                }
             });
         });
     }
+
 
     // Initially hide the start button
     startButton.style.display = 'none';
