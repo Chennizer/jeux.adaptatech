@@ -70,7 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Preload Videos
-    // Preload Videos
     function preloadVideos(videos, onComplete) {
         let videosLoaded = 0;
         const totalVideos = videos.length;
@@ -106,7 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-
 
     // Initially hide the start button
     startButton.style.display = 'none';
@@ -248,6 +246,10 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Please select at least one video to start the game.");
             return;
         }
+
+        // Stop the intro jingle if it's still playing
+        introJingle.pause();
+        introJingle.currentTime = 0; // Reset the jingle to the start
 
         if (mode === 'interval') {
             intervalTime = parseInt(intervalTimeInput.value);
