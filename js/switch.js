@@ -329,15 +329,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentSound.pause();
                 currentSound.currentTime = 0;
             }
-
+    
             hideSpacePrompt();
-            if (mode === 'interval' && pausedAtTime > 0) {
-                videoPlayer.currentTime = pausedAtTime;
+            if (pausedAtTime > 0) {
+                videoPlayer.currentTime = pausedAtTime; // Resume from the paused time
                 videoPlayer.play();
-                pausedAtTime = 0;
-                setTimeout(setPauseInterval, 100);
+                pausedAtTime = 0; // Reset paused time
             } else {
-                startVideoPlayback();
+                startVideoPlayback(); // Regular playback if not paused
             }
         }
     }
@@ -502,7 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const label = document.createElement('label');
             label.htmlFor = option.id;
             label.textContent = option.label;
-            label.style.color = 'black'; // Set the text color to black
+            label.style.color = "black"; // Ensure black text
     
             optionWrapper.appendChild(checkbox);
             optionWrapper.appendChild(label);
@@ -515,7 +514,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-
     loadMiscOptions(); // Load Miscellaneous Options at runtime
 
     // Show the Miscellaneous Options modal
@@ -546,7 +544,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleSpacebarPressEquivalent(event) {
         handleSpacebarPress({ code: 'Space', preventDefault: () => {} });
     }
-
+    
+    function handleEnterPause(event) {
+        if (miscOptionsState['enter-pause-option'] && event.code === 'Enter') {
+            event.preventDefault();
+            pauseActivityAndShowPrompt(); // Custom function to pause and show prompt
+        }
+    }
+    
+    document.addEventListener('keydown', handleEnterPause);
+    
+    function pauseActivityAndShowPrompt() {
+        if (videoPlayer && !videoPlayer.paused) {
+            pausedAtTime = videoPlayer.currentTime; // Store the current time
+            videoPlayer.pause(); // Pause the video
+        }
+        showSpacePrompt(); // Reuse the space prompt function
+    }
+    
+    
     // Load dynamic content from config.js (space prompts, sounds, visual effects, misc options)
     function loadConfig() {
         // Load space prompt images
@@ -588,3 +604,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+ 

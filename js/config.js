@@ -34,5 +34,5 @@ const visualOptions = [
 ];
 const miscOptions = [
     { id: "mouse-click-option", label: "Activation par écran tactile ou tablette", defaultChecked: false },
-    // Add other miscellaneous options here
+    { id: "enter-pause-option", label: "Pause avec la touche entrée (deuxième prise de switch)", defaultChecked: true }
 ];
