@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
+    let preventInput = false; // New flag to prevent input right after clicking start
+
     const startButton = document.getElementById('control-panel-start-button');
     const blackBackground = document.getElementById('black-background');
     const spacePrompt = document.getElementById('space-prompt');
@@ -241,6 +243,14 @@ document.addEventListener('DOMContentLoaded', () => {
         recordButton.style.display = 'block'; // Reset record button for next use
     });
 
+    // Prevent game input for a short time after starting the game
+    function preventInputTemporarily() {
+        preventInput = true;
+        setTimeout(() => {
+            preventInput = false; // Re-enable input after 500ms
+        }, 500);
+    }
+
     startButton.addEventListener('click', () => {
         if (selectedVideos.length === 0) {
             alert("Please select at least one video to start the game.");
@@ -262,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('control-panel').style.display = 'none';
         playedVideos = [];
         currentVideoIndex = getNextVideoIndex();
+        preventInputTemporarily(); // Prevent input right after clicking start
         showSpacePrompt();
     });
 
@@ -311,6 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleSpacebarPress(event) {
+        if (preventInput) return; // Ignore input if it's temporarily disabled
         if (controlsEnabled && event.code === 'Space') {
             event.preventDefault();
             if (currentSound) {
@@ -467,7 +479,75 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Load dynamic content from config.js (space prompts, sounds, visual effects)
+    // Miscellaneous Options elements
+    const miscOptionsContainer = document.getElementById('misc-options-container');
+    const miscOptionsModal = document.getElementById('misc-options-modal');
+    const closeMiscOptionsModal = document.getElementById('close-misc-options-modal');
+    const miscOptionsOkButton = document.getElementById('misc-options-ok-button');
+    const miscOptionsState = {};
+
+    // Load and render Miscellaneous Options from config.js
+    function loadMiscOptions() {
+        miscOptions.forEach(option => {
+            // Create a label and checkbox for each option
+            const optionWrapper = document.createElement('div');
+            optionWrapper.classList.add('misc-option-wrapper');
+    
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = option.id;
+            checkbox.checked = option.defaultChecked;
+            miscOptionsState[option.id] = option.defaultChecked; // Store default state
+    
+            const label = document.createElement('label');
+            label.htmlFor = option.id;
+            label.textContent = option.label;
+            label.style.color = 'black'; // Set the text color to black
+    
+            optionWrapper.appendChild(checkbox);
+            optionWrapper.appendChild(label);
+            miscOptionsContainer.appendChild(optionWrapper);
+    
+            // Update state when checkbox is toggled
+            checkbox.addEventListener('change', () => {
+                miscOptionsState[option.id] = checkbox.checked;
+            });
+        });
+    }
+    
+
+    loadMiscOptions(); // Load Miscellaneous Options at runtime
+
+    // Show the Miscellaneous Options modal
+    const miscOptionsButton = document.getElementById('misc-options-button');
+    miscOptionsButton.addEventListener('click', () => {
+        miscOptionsModal.style.display = 'block';
+    });
+
+    // Close the Miscellaneous Options modal
+    closeMiscOptionsModal.addEventListener('click', () => {
+        miscOptionsModal.style.display = 'none';
+    });
+
+    // Handle Miscellaneous Options OK button click
+    miscOptionsOkButton.addEventListener('click', () => {
+        console.log('Miscellaneous options state:', miscOptionsState);
+        miscOptionsModal.style.display = 'none';
+
+        // Example: Handle the mouse click option
+        if (miscOptionsState['mouse-click-option']) {
+            document.addEventListener('click', handleSpacebarPressEquivalent);
+        } else {
+            document.removeEventListener('click', handleSpacebarPressEquivalent);
+        }
+    });
+
+    // Function to handle mouse click as a spacebar press equivalent
+    function handleSpacebarPressEquivalent(event) {
+        handleSpacebarPress({ code: 'Space', preventDefault: () => {} });
+    }
+
+    // Load dynamic content from config.js (space prompts, sounds, visual effects, misc options)
     function loadConfig() {
         // Load space prompt images
         const spacePromptSelection = document.getElementById('space-prompt-selection');

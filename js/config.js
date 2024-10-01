@@ -32,3 +32,7 @@ const visualOptions = [
     { value: "brightness", label: "Haute clarté" },
     { value: "saturation", label: "Haute saturation" }
 ];
+const miscOptions = [
+    { id: "mouse-click-option", label: "Activation par écran tactile ou tablette", defaultChecked: false },
+    // Add other miscellaneous options here
+];
