@@ -8,7 +8,8 @@ const spacePromptImages = [
     { src: "../../images/hand.png", alt: "Hand" },
     { src: "../../images/peppa.png", alt: "Peppa" },
     { src: "../../images/djembe.png", alt: "Djembe" },
-    { src: "../../images/moana.png", alt: "Moana" }
+    { src: "../../images/moana.png", alt: "Moana" },
+    { src: "../../images/simba.png", alt: "Simba" }
 ];
 
 // Space Prompt Sounds
