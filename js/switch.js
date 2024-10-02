@@ -1,43 +1,59 @@
 document.addEventListener('DOMContentLoaded', () => {
-    let preventInput = false; // New flag to prevent input right after clicking start
+    let preventInput = false;
 
+    const mediaType = document.body.getAttribute('data-media-type'); // 'audio' or 'video'
+
+    // Common elements
     const startButton = document.getElementById('control-panel-start-button');
     const blackBackground = document.getElementById('black-background');
     const spacePrompt = document.getElementById('space-prompt');
-    const textPrompt = document.getElementById('text-prompt'); // Text prompt element
-    const videoContainer = document.getElementById('video-container');
-    const videoPlayer = document.getElementById('video-player');
+    const textPrompt = document.getElementById('text-prompt');
     const playModeSelect = document.getElementById('control-panel-play-mode');
     const intervalTimeInput = document.getElementById('interval-time');
     const intervalLabel = document.getElementById('interval-label');
-    const selectVideosButton = document.getElementById('select-videos-button');
-    const videoSelectionModal = document.getElementById('video-selection-modal');
+    const selectVideosButton = document.getElementById('select-videos-button'); // Keeping the same ID
+    const videoSelectionModal = document.getElementById('video-selection-modal'); // Keeping the same ID
     const closeModal = document.getElementById('close-modal');
     const okButton = document.getElementById('ok-button');
-    const videoCards = document.querySelectorAll('.video-card');
+    const videoCards = document.querySelectorAll('.video-card'); // Keeping the same class
     const introJingle = document.getElementById('intro-jingle');
+
+    // Media elements
+    const videoContainer = document.getElementById('video-container');
+    const audioContainer = document.getElementById('audio-container');
+    const audioPlayer = document.createElement('audio');
+    audioContainer.appendChild(audioPlayer);
+
+    // Decide which media player to use
+    let mediaPlayer = null;
+    
+    if (mediaType === 'audio') {
+        mediaPlayer = audioPlayer;
+        if (videoContainer) videoContainer.style.display = 'none'; // Ensure videoContainer exists
+    } else {
+        mediaPlayer = document.getElementById('video-player');
+        if (audioContainer) audioContainer.style.display = 'none'; // Ensure audioContainer exists
+    }
 
     // Visual and Sound Options
     const visualOptionsSelect = document.getElementById('special-options-select');
     const soundOptionsSelect = document.getElementById('sound-options-select');
     const soundEffects = document.querySelectorAll('.sound-effect');
-    const recordModal = document.getElementById('record-modal'); // New modal for recording
-    const recordButton = document.getElementById('record-button'); // Button inside modal
-    const stopRecordingButton = document.getElementById('stop-recording-button'); // New stop button
-    const okRecordingButton = document.getElementById('ok-recording-button'); // New OK button
+    const recordModal = document.getElementById('record-modal');
+    const recordButton = document.getElementById('record-button');
+    const stopRecordingButton = document.getElementById('stop-recording-button');
+    const okRecordingButton = document.getElementById('ok-recording-button');
     const closeRecordModal = document.getElementById('close-record-modal');
-    const recordStatus = document.getElementById('record-status'); // Status text
+    const recordStatus = document.getElementById('record-status');
 
-    let selectedSound = 'none'; // Default sound
-    let currentSound = null; // Store the current playing sound
-    let recordedAudio = null; // Store recorded audio
-    let mediaRecorder; // For recording audio
-    let audioChunks = []; // Stores chunks of audio data during recording
+    let selectedSound = 'none';
+    let currentSound = null;
+    let recordedAudio = null;
+    let mediaRecorder;
+    let audioChunks = [];
 
-    // Load data from config.js
     loadConfig();
 
-    // Space Prompt Image and Text Selection
     const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
     const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
     const closeSpacePromptModal = document.getElementById('close-space-prompt-modal');
@@ -47,15 +63,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedSpacePromptSrc = '';
     let useTextPrompt = false;
 
-    // Default to the first image in the list
     imageCards[0]?.classList.add('selected');
     selectedSpacePromptSrc = imageCards[0]?.dataset.src || '';
 
-    // Videos
-    let selectedVideos = Array.from(videoCards).map(card => card.dataset.src);
+    // Media selection (videos or audios)
+    let selectedMedia = Array.from(videoCards).map(card => card.dataset.src);
     let controlsEnabled = false;
-    let playedVideos = [];
-    let currentVideoIndex = 0;
+    let playedMedia = [];
+    let currentMediaIndex = 0;
     let mode = 'pressBetween';
     let intervalID = null;
     let intervalTime = 5;
@@ -63,106 +78,104 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log("Document loaded");
 
-    // Mark all video cards as selected by default
+    // Mark all media cards as selected by default
     videoCards.forEach(card => card.classList.add('selected'));
 
-    // Play the intro jingle when the control panel is shown
     function playIntroJingle() {
         introJingle.play();
     }
 
-    // Preload Videos
-    function preloadVideos(videos, onComplete) {
-        let videosLoaded = 0;
-        const totalVideos = videos.length;
-        const loadingBar = document.getElementById('control-panel-loading-bar');
+    function preloadMedia(mediaList, onComplete) {
+        if (mediaType === 'audio') {
+            // Bypass preload for audio, go straight to completion
+            console.log("Skipping preload for audio media");
+            onComplete();
+        } else {
+            let mediaLoaded = 0;
+            const totalMedia = mediaList.length;
+            const loadingBar = document.getElementById('control-panel-loading-bar');
 
-        videos.forEach((videoSrc, index) => {
-            const video = document.createElement('video');
-            video.src = videoSrc;
-            video.preload = 'auto';
-            video.style.display = 'none';
-            document.body.appendChild(video);
+            mediaList.forEach((mediaSrc, index) => {
+                const mediaElement = document.createElement('video');
+                mediaElement.src = mediaSrc;
+                mediaElement.preload = 'auto';
+                mediaElement.style.display = 'none';
+                document.body.appendChild(mediaElement);
 
-            video.addEventListener('canplaythrough', () => {
-                videosLoaded++;
-                const progress = (videosLoaded / totalVideos) * 100;
-                loadingBar.style.width = `${progress}%`;
+                mediaElement.addEventListener('canplaythrough', () => {
+                    mediaLoaded++;
+                    const progress = (mediaLoaded / totalMedia) * 100;
+                    loadingBar.style.width = `${progress}%`;
 
-                if (videosLoaded === totalVideos) {
-                    console.log("All videos preloaded");
-                    onComplete(); // Call the callback function once all videos are preloaded
-                }
+                    if (mediaLoaded === totalMedia) {
+                        console.log("All media preloaded");
+                        onComplete();
+                    }
+                });
+
+                mediaElement.addEventListener('error', (e) => {
+                    console.error(`Error preloading media ${index + 1}:`, e);
+                    mediaLoaded++;
+                    const progress = (mediaLoaded / totalMedia) * 100;
+                    loadingBar.style.width = `${progress}%`;
+
+                    if (mediaLoaded === totalMedia) {
+                        onComplete();
+                    }
+                });
             });
-
-            video.addEventListener('error', (e) => {
-                console.error(`Error preloading video ${index + 1}:`, e);
-                videosLoaded++; // Treat error cases as "loaded" so preloading can continue
-                const progress = (videosLoaded / totalVideos) * 100;
-                loadingBar.style.width = `${progress}%`;
-
-                if (videosLoaded === totalVideos) {
-                    onComplete();
-                }
-            });
-        });
+        }
     }
 
-    // Initially hide the start button
     startButton.style.display = 'none';
-
-    // Hide interval input and label by default on page load
     intervalLabel.style.display = 'none';
     intervalTimeInput.style.display = 'none';
 
-    // Show the video selection modal
+    // Show the media selection modal
     selectVideosButton.addEventListener('click', () => {
         videoSelectionModal.style.display = 'block';
     });
 
-    // Close the video modal using the close button
+    // Close the media modal using the close button
     closeModal.addEventListener('click', () => {
         videoSelectionModal.style.display = 'none';
     });
 
-    // Handle OK button click to close the modal and update the selected videos
+    // Handle OK button click to close the modal and update the selected media
     okButton.addEventListener('click', () => {
-        updateSelectedVideos();
+        updateSelectedMedia();
         videoSelectionModal.style.display = 'none';
     });
 
-    // Update selected videos based on clicked video cards
+    // Update selected media based on clicked media cards
     videoCards.forEach(card => {
         card.addEventListener('click', () => {
             card.classList.toggle('selected');
-            updateSelectedVideos();
+            updateSelectedMedia();
         });
     });
 
-    // Update the selectedVideos array based on which video cards are selected
-    function updateSelectedVideos() {
-        selectedVideos = Array.from(videoCards)
+    function updateSelectedMedia() {
+        selectedMedia = Array.from(videoCards)
             .filter(card => card.classList.contains('selected'))
             .map(card => card.dataset.src);
 
-        // If no videos are selected, use all videos by default
-        if (selectedVideos.length === 0) {
-            selectedVideos = Array.from(videoCards).map(card => card.dataset.src);
+        if (selectedMedia.length === 0) {
+            selectedMedia = Array.from(videoCards).map(card => card.dataset.src);
         }
     }
 
-    preloadVideos(selectedVideos, () => {
+    preloadMedia(selectedMedia, () => {
         console.log("Preloading complete, displaying start button");
         startButton.style.display = 'block';
         document.getElementById('control-panel-loading-bar-container').style.display = 'none';
         playIntroJingle();
     });
 
-    // Add event listener for play mode selection change
     playModeSelect.addEventListener('change', () => {
         mode = playModeSelect.value;
         if (mode === 'interval') {
-            intervalLabel.style.display = 'inline-block'; // Show interval options
+            intervalLabel.style.display = 'inline-block';
             intervalTimeInput.style.display = 'inline-block';
         } else {
             intervalLabel.style.display = 'none';
@@ -170,26 +183,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Handle space prompt sound selection change
     soundOptionsSelect.addEventListener('change', () => {
         if (soundOptionsSelect.value === 'record-own') {
-            openRecordModal(); // Open modal to record custom sound
+            openRecordModal();
         } else {
             selectedSound = soundOptionsSelect.value;
         }
     });
 
-    // Function to open the recording modal
     function openRecordModal() {
         recordModal.style.display = 'block';
     }
 
-    // Function to close the recording modal
     closeRecordModal.addEventListener('click', () => {
         recordModal.style.display = 'none';
     });
 
-    // Record button event to start recording audio
     recordButton.addEventListener('click', () => {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
             navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
@@ -204,17 +213,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 mediaRecorder.onstop = () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
                     recordedAudio = new Audio(URL.createObjectURL(audioBlob));
-                    recordedAudio.volume = 0.5; // Set volume
-                    selectedSound = 'custom'; // Set custom sound
+                    recordedAudio.volume = 0.5;
+                    selectedSound = 'custom';
                     recordStatus.textContent = "Enregistrement complété!";
-                    okRecordingButton.style.display = 'block'; // Show OK button
+                    okRecordingButton.style.display = 'block';
                 };
 
                 recordStatus.textContent = "Enregistrement...";
-                stopRecordingButton.style.display = 'block'; // Show stop button during recording
-                recordButton.style.display = 'none'; // Hide the record button during recording
+                stopRecordingButton.style.display = 'block';
+                recordButton.style.display = 'none';
                 setTimeout(() => {
-                    stopRecording(); // Auto stop after 5 seconds
+                    stopRecording();
                 }, 5000);
             }).catch(err => {
                 console.error('Error accessing microphone: ', err);
@@ -225,54 +234,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function stopRecording() {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop(); // Stop the recording
-            stopRecordingButton.style.display = 'none'; // Hide stop button
-            recordButton.style.display = 'block'; // Show record button again for new recording
+            mediaRecorder.stop();
+            stopRecordingButton.style.display = 'none';
+            recordButton.style.display = 'block';
         }
     }
 
     stopRecordingButton.addEventListener('click', () => {
-        stopRecording(); // Stop recording when the stop button is clicked
+        stopRecording();
     });
 
     okRecordingButton.addEventListener('click', () => {
-        stopRecording(); // Ensure recording is stopped
-        recordModal.style.display = 'none'; // Close the modal
-        okRecordingButton.style.display = 'none'; // Hide the OK button after closing the modal
-        stopRecordingButton.style.display = 'none'; // Hide stop button
-        recordButton.style.display = 'block'; // Reset record button for next use
+        stopRecording();
+        recordModal.style.display = 'none';
+        okRecordingButton.style.display = 'none';
+        stopRecordingButton.style.display = 'none';
+        recordButton.style.display = 'block';
     });
 
-    // Prevent game input for a short time after starting the game
     function preventInputTemporarily() {
         preventInput = true;
         setTimeout(() => {
-            preventInput = false; // Re-enable input after 500ms
+            preventInput = false;
         }, 500);
     }
 
     startButton.addEventListener('click', () => {
-        if (selectedVideos.length === 0) {
-            alert("Please select at least one video to start the game.");
+        if (selectedMedia.length === 0) {
+            alert("Veuillez sélectionner au moins un média pour démarrer le jeu.");
             return;
         }
 
-        // Stop the intro jingle if it's still playing
         introJingle.pause();
-        introJingle.currentTime = 0; // Reset the jingle to the start
+        introJingle.currentTime = 0;
 
         if (mode === 'interval') {
             intervalTime = parseInt(intervalTimeInput.value);
             if (isNaN(intervalTime) || intervalTime <= 0) {
-                alert("Please enter a valid interval time in seconds.");
+                alert("Veuillez entrer un temps d'intervalle valide en secondes.");
                 return;
             }
         }
 
         document.getElementById('control-panel').style.display = 'none';
-        playedVideos = [];
-        currentVideoIndex = getNextVideoIndex();
-        preventInputTemporarily(); // Prevent input right after clicking start
+        playedMedia = [];
+        currentMediaIndex = getNextMediaIndex();
+        preventInputTemporarily();
         showSpacePrompt();
     });
 
@@ -322,30 +329,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleSpacebarPress(event) {
-        if (preventInput) return; // Ignore input if it's temporarily disabled
+        if (preventInput) return;
         if (controlsEnabled && event.code === 'Space') {
             event.preventDefault();
             if (currentSound) {
                 currentSound.pause();
                 currentSound.currentTime = 0;
             }
-    
+
             hideSpacePrompt();
             if (pausedAtTime > 0) {
-                videoPlayer.currentTime = pausedAtTime; // Resume from the paused time
-                videoPlayer.play();
-                pausedAtTime = 0; // Reset paused time
+                mediaPlayer.currentTime = pausedAtTime;
+                mediaPlayer.play();
+                pausedAtTime = 0;
             } else {
-                startVideoPlayback(); // Regular playback if not paused
+                startMediaPlayback();
             }
         }
     }
 
-    function startVideoPlayback() {
-        videoPlayer.removeAttribute('controls');
-        videoContainer.style.display = 'block';
-        videoPlayer.src = selectedVideos[currentVideoIndex];
-        videoPlayer.play();
+    function startMediaPlayback() {
+        mediaPlayer.removeAttribute('controls');
+        mediaPlayer.src = selectedMedia[currentMediaIndex];
+        mediaPlayer.play();
+        if (mediaType === 'video') {
+            videoContainer.style.display = 'block';
+        }
 
         if (mode === 'interval') {
             setPauseInterval();
@@ -358,54 +367,54 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         intervalID = setInterval(() => {
-            pausedAtTime = videoPlayer.currentTime;
-            videoPlayer.pause();
+            pausedAtTime = mediaPlayer.currentTime;
+            mediaPlayer.pause();
             showSpacePrompt();
             clearInterval(intervalID);
         }, intervalTime * 1000);
     }
 
-    videoPlayer.addEventListener('play', () => {
-        console.log("Video is playing");
+    mediaPlayer.addEventListener('play', () => {
+        console.log("Media is playing");
     });
 
-    videoPlayer.addEventListener('ended', () => {
-        handleVideoEnd();
+    mediaPlayer.addEventListener('ended', () => {
+        handleMediaEnd();
     });
 
-    function handleVideoEnd() {
+    function handleMediaEnd() {
         if (mode === 'pressBetween') {
-            if (playedVideos.length < selectedVideos.length) {
-                currentVideoIndex = getNextVideoIndex();
+            if (playedMedia.length < selectedMedia.length) {
+                currentMediaIndex = getNextMediaIndex();
                 showSpacePrompt();
             } else {
-                playedVideos = [];
-                currentVideoIndex = getNextVideoIndex();
+                playedMedia = [];
+                currentMediaIndex = getNextMediaIndex();
                 showSpacePrompt();
             }
         } else if (mode === 'onePress' || mode === 'interval') {
-            if (playedVideos.length < selectedVideos.length) {
-                currentVideoIndex = getNextVideoIndex();
-                startVideoPlayback();
+            if (playedMedia.length < selectedMedia.length) {
+                currentMediaIndex = getNextMediaIndex();
+                startMediaPlayback();
             } else {
-                playedVideos = [];
-                currentVideoIndex = getNextVideoIndex();
+                playedMedia = [];
+                currentMediaIndex = getNextMediaIndex();
                 showSpacePrompt();
             }
         }
     }
 
-    function getNextVideoIndex() {
-        if (playedVideos.length === selectedVideos.length) {
-            playedVideos = [];
+    function getNextMediaIndex() {
+        if (playedMedia.length === selectedMedia.length) {
+            playedMedia = [];
         }
 
         let nextIndex;
         do {
-            nextIndex = Math.floor(Math.random() * selectedVideos.length);
-        } while (playedVideos.includes(nextIndex));
+            nextIndex = Math.floor(Math.random() * selectedMedia.length);
+        } while (playedMedia.includes(nextIndex));
 
-        playedVideos.push(nextIndex);
+        playedMedia.push(nextIndex);
         return nextIndex;
     }
 
@@ -445,94 +454,86 @@ document.addEventListener('DOMContentLoaded', () => {
 
     visualOptionsSelect.addEventListener('change', () => {
         const selectedOption = visualOptionsSelect.value;
-        videoPlayer.className = '';
+        mediaPlayer.className = '';
 
         switch (selectedOption) {
             case 'green-filter':
-                videoPlayer.classList.add('green-filter');
+                mediaPlayer.classList.add('green-filter');
                 break;
             case 'red-filter':
-                videoPlayer.classList.add('red-filter');
+                mediaPlayer.classList.add('red-filter');
                 break;
             case 'blue-filter':
-                videoPlayer.classList.add('blue-filter');
+                mediaPlayer.classList.add('blue-filter');
                 break;
             case 'high-contrast':
-                videoPlayer.style.filter = 'contrast(200%)';
+                mediaPlayer.style.filter = 'contrast(200%)';
                 break;
             case 'grayscale':
-                videoPlayer.style.filter = 'grayscale(100%)';
+                mediaPlayer.style.filter = 'grayscale(100%)';
                 break;
             case 'invert':
-                videoPlayer.style.filter = 'invert(100%)';
+                mediaPlayer.style.filter = 'invert(100%)';
                 break;
             case 'brightness':
-                videoPlayer.style.filter = 'brightness(1.5)';
+                mediaPlayer.style.filter = 'brightness(1.5)';
                 break;
             case 'saturation':
-                videoPlayer.style.filter = 'saturate(200%)';
+                mediaPlayer.style.filter = 'saturate(200%)';
                 break;
             default:
-                videoPlayer.style.filter = '';
+                mediaPlayer.style.filter = '';
                 break;
         }
     });
 
-    // Miscellaneous Options elements
     const miscOptionsContainer = document.getElementById('misc-options-container');
     const miscOptionsModal = document.getElementById('misc-options-modal');
     const closeMiscOptionsModal = document.getElementById('close-misc-options-modal');
     const miscOptionsOkButton = document.getElementById('misc-options-ok-button');
     const miscOptionsState = {};
 
-    // Load and render Miscellaneous Options from config.js
     function loadMiscOptions() {
         miscOptions.forEach(option => {
-            // Create a label and checkbox for each option
             const optionWrapper = document.createElement('div');
             optionWrapper.classList.add('misc-option-wrapper');
-    
+
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.id = option.id;
             checkbox.checked = option.defaultChecked;
-            miscOptionsState[option.id] = option.defaultChecked; // Store default state
-    
+            miscOptionsState[option.id] = option.defaultChecked;
+
             const label = document.createElement('label');
             label.htmlFor = option.id;
             label.textContent = option.label;
-            label.style.color = "black"; // Ensure black text
-    
+            label.style.color = "black";
+
             optionWrapper.appendChild(checkbox);
             optionWrapper.appendChild(label);
             miscOptionsContainer.appendChild(optionWrapper);
-    
-            // Update state when checkbox is toggled
+
             checkbox.addEventListener('change', () => {
                 miscOptionsState[option.id] = checkbox.checked;
             });
         });
     }
-    
-    loadMiscOptions(); // Load Miscellaneous Options at runtime
 
-    // Show the Miscellaneous Options modal
+    loadMiscOptions();
+
     const miscOptionsButton = document.getElementById('misc-options-button');
     miscOptionsButton.addEventListener('click', () => {
         miscOptionsModal.style.display = 'block';
     });
 
-    // Close the Miscellaneous Options modal
     closeMiscOptionsModal.addEventListener('click', () => {
         miscOptionsModal.style.display = 'none';
     });
 
-    // Handle Miscellaneous Options OK button click
     miscOptionsOkButton.addEventListener('click', () => {
         console.log('Miscellaneous options state:', miscOptionsState);
         miscOptionsModal.style.display = 'none';
 
-        // Example: Handle the mouse click option
         if (miscOptionsState['mouse-click-option']) {
             document.addEventListener('click', handleSpacebarPressEquivalent);
         } else {
@@ -540,32 +541,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Function to handle mouse click as a spacebar press equivalent
     function handleSpacebarPressEquivalent(event) {
         handleSpacebarPress({ code: 'Space', preventDefault: () => {} });
     }
-    
+
     function handleEnterPause(event) {
         if (miscOptionsState['enter-pause-option'] && event.code === 'Enter') {
             event.preventDefault();
-            pauseActivityAndShowPrompt(); // Custom function to pause and show prompt
+            pauseActivityAndShowPrompt();
         }
     }
-    
+
     document.addEventListener('keydown', handleEnterPause);
-    
+
     function pauseActivityAndShowPrompt() {
-        if (videoPlayer && !videoPlayer.paused) {
-            pausedAtTime = videoPlayer.currentTime; // Store the current time
-            videoPlayer.pause(); // Pause the video
+        if (mediaPlayer && !mediaPlayer.paused) {
+            pausedAtTime = mediaPlayer.currentTime;
+            mediaPlayer.pause();
         }
-        showSpacePrompt(); // Reuse the space prompt function
+        showSpacePrompt();
     }
-    
-    
-    // Load dynamic content from config.js (space prompts, sounds, visual effects, misc options)
+
     function loadConfig() {
-        // Load space prompt images
         const spacePromptSelection = document.getElementById('space-prompt-selection');
         spacePromptImages.forEach(prompt => {
             const imageCard = document.createElement('div');
@@ -575,7 +572,6 @@ document.addEventListener('DOMContentLoaded', () => {
             spacePromptSelection.appendChild(imageCard);
         });
 
-        // Load sound options
         spacePromptSounds.forEach(option => {
             const soundOption = document.createElement('option');
             soundOption.value = option.value;
@@ -583,7 +579,6 @@ document.addEventListener('DOMContentLoaded', () => {
             soundOptionsSelect.appendChild(soundOption);
         });
 
-        // Load visual effects
         visualOptions.forEach(effect => {
             const effectOption = document.createElement('option');
             effectOption.value = effect.value;
@@ -604,4 +599,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
- 
