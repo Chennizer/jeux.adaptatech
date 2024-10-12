@@ -75,6 +75,28 @@ document.addEventListener('DOMContentLoaded', () => {
         introJingle.play();
     }
 
+    function playSoundPrompt() {
+        if (selectedSound && selectedSound !== 'none') {
+            if (currentSound) {
+                currentSound.pause();
+                currentSound.currentTime = 0;
+            }
+
+            if (selectedSound === 'record-own' && recordedAudio) {
+                currentSound = new Audio(recordedAudio);
+            } else {
+                const soundOption = spacePromptSounds.find(option => option.value === selectedSound);
+                if (soundOption && soundOption.src) {
+                    currentSound = new Audio(soundOption.src);
+                }
+            }
+
+            if (currentSound) {
+                currentSound.play();
+            }
+        }
+    }
+
     function preloadMedia(mediaList, onComplete) {
         let mediaLoaded = 0;
         const totalMedia = mediaList.length;
@@ -120,18 +142,15 @@ document.addEventListener('DOMContentLoaded', () => {
         videoSelectionModal.style.display = 'block';
     });
 
-    // Close the media modal using the close button
     closeModal.addEventListener('click', () => {
         videoSelectionModal.style.display = 'none';
     });
 
-    // Handle OK button click to close the modal and update the selected media
     okButton.addEventListener('click', () => {
         updateSelectedMedia();
         videoSelectionModal.style.display = 'none';
     });
 
-    // Update selected media based on clicked media cards
     videoCards.forEach(card => {
         card.addEventListener('click', () => {
             card.classList.toggle('selected');
@@ -199,6 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function showSpacePrompt() {
+        playSoundPrompt();
+
         if (useTextPrompt && selectedSpacePromptSrc) {
             textPrompt.textContent = selectedSpacePromptSrc;
             textPrompt.style.display = 'block';
@@ -211,6 +232,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         blackBackground.style.display = 'block';
         controlsEnabled = true;
+
+        // Disable right-click while space prompt is visible
+        document.removeEventListener('contextmenu', handleRightClickNextVideo);
     }
 
     function hideSpacePrompt() {
@@ -218,6 +242,11 @@ document.addEventListener('DOMContentLoaded', () => {
         spacePrompt.style.display = 'none';
         textPrompt.style.display = 'none';
         controlsEnabled = false;
+
+        // Re-enable right-click when space prompt is hidden
+        if (miscOptionsState['right-click-next-option']) {
+            document.addEventListener('contextmenu', handleRightClickNextVideo);
+        }
     }
 
     function handleSpacebarPress(event) {
@@ -235,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (mode === 'interval') {
-                setPauseInterval(); // Reset the interval after space press
+                setPauseInterval();
             }
         }
     }
@@ -264,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 pausedAtTime = mediaPlayer.currentTime;
                 mediaPlayer.pause();
                 showSpacePrompt();
-                clearInterval(intervalID); // Clear the interval after the first pause
+                clearInterval(intervalID);
             }
         }, intervalTime * 1000);
     }
@@ -345,6 +374,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (useTextPrompt && selectedSpacePromptSrc) {
             textPrompt.textContent = selectedSpacePromptSrc;
         }
+    });
+
+    soundOptionsSelect.addEventListener('change', () => {
+        selectedSound = soundOptionsSelect.value;
+        console.log(`Selected sound: ${selectedSound}`);
     });
 
     visualOptionsSelect.addEventListener('change', () => {
@@ -434,7 +468,22 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             document.removeEventListener('click', handleSpacebarPressEquivalent);
         }
+
+        // Right-click functionality to advance the video
+        if (miscOptionsState['right-click-next-option']) {
+            document.addEventListener('contextmenu', handleRightClickNextVideo);
+        } else {
+            document.removeEventListener('contextmenu', handleRightClickNextVideo);
+        }
     });
+
+    function handleRightClickNextVideo(event) {
+        event.preventDefault(); // Prevent the context menu from appearing
+        console.log('Right-click detected, advancing to the next video');
+        
+        currentMediaIndex = getNextMediaIndex();
+        startMediaPlayback();
+    }
 
     function handleSpacebarPressEquivalent(event) {
         handleSpacebarPress({ code: 'Space', preventDefault: () => {} });
