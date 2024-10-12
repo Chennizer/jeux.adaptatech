@@ -10,6 +10,7 @@ const spacePromptImages = [
     { src: "../../images/djembe.png", alt: "Djembe" },
     { src: "../../images/moana.png", alt: "Moana" },
     { src: "../../images/beatles.png", alt: "Beatles" },
+    { src: "../../images/halloween-citrouille.png", alt: "Beatles" },
     { src: "../../images/simba.png", alt: "Simba" }
 ];
 
@@ -36,5 +37,7 @@ const visualOptions = [
 ];
 const miscOptions = [
     { id: "mouse-click-option", label: "Activation par écran tactile ou tablette", defaultChecked: false },
-    { id: "enter-pause-option", label: "Pause avec la touche entrée (deuxième prise de switch)", defaultChecked: true }
+    { id: "enter-pause-option", label: "Pause avec la touche entrée (deuxième prise de switch)", defaultChecked: true },
+    { id: "right-click-next-option", label: "Avancer avec le clic droit de la souris", defaultChecked: false }
 ];
+

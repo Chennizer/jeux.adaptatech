@@ -175,6 +175,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         blackBackground.style.display = 'block';
         controlsEnabled = true;
+
+        // Disable right-click while space prompt is visible
+        document.removeEventListener('contextmenu', handleRightClickNextAudio);
     }
 
     function hideSpacePrompt() {
@@ -185,6 +188,11 @@ document.addEventListener('DOMContentLoaded', () => {
         spacePrompt.style.display = 'none';
         textPrompt.style.display = 'none';
         controlsEnabled = false;
+
+        // Re-enable right-click when space prompt is hidden
+        if (miscOptionsState['right-click-next-option']) {
+            document.addEventListener('contextmenu', handleRightClickNextAudio);
+        }
     }
 
     function handleSpacebarPress(event) {
@@ -219,12 +227,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setPauseInterval() {
-        // Ensure the intervalID is cleared first to avoid multiple intervals
         if (intervalID) {
             clearInterval(intervalID);
         }
 
-        // Set up the interval that checks every few seconds
         intervalID = setInterval(() => {
             if (!mediaPlayer.paused) {
                 pausedAtTime = mediaPlayer.currentTime;
@@ -281,6 +287,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', handleSpacebarPress);
 
+    // Right-click functionality to advance to the next audio
+    function handleRightClickNextAudio(event) {
+        event.preventDefault(); // Prevent the context menu from appearing
+        console.log('Right-click detected, advancing to the next audio');
+        
+        currentMediaIndex = getNextMediaIndex();
+        startMediaPlayback();
+    }
+
     selectSpacePromptButton.addEventListener('click', () => {
         spacePromptSelectionModal.style.display = 'block';
     });
@@ -317,10 +332,8 @@ document.addEventListener('DOMContentLoaded', () => {
     soundOptionsSelect.addEventListener('change', () => {
         const selectedOption = soundOptionsSelect.value;
         if (selectedOption === 'record-own') {
-            // Show recording modal
             recordModal.style.display = 'block';
         } else {
-            // Preloaded sound selected
             const sound = spacePromptSounds.find(sound => sound.value === selectedOption);
             currentSound = sound ? sound.src : null;
         }
@@ -423,6 +436,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('click', handleSpacebarPressEquivalent);
         } else {
             document.removeEventListener('click', handleSpacebarPressEquivalent);
+        }
+
+        // Right-click functionality to advance to the next audio
+        if (miscOptionsState['right-click-next-option']) {
+            document.addEventListener('contextmenu', handleRightClickNextAudio);
+        } else {
+            document.removeEventListener('contextmenu', handleRightClickNextAudio);
         }
     });
 
