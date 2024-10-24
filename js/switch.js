@@ -81,18 +81,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentSound.pause();
                 currentSound.currentTime = 0;
             }
-
+    
             if (selectedSound === 'record-own' && recordedAudio) {
-                currentSound = new Audio(recordedAudio);
+                // Create a new Audio object each time we play the recorded sound
+                currentSound = new Audio(recordedAudio);  // Use the recorded audio URL
             } else {
                 const soundOption = spacePromptSounds.find(option => option.value === selectedSound);
                 if (soundOption && soundOption.src) {
                     currentSound = new Audio(soundOption.src);
                 }
             }
-
+    
             if (currentSound) {
-                currentSound.play();
+                console.log("Playing sound: ", currentSound.src);  // Debugging log for sound source
+                currentSound.play().catch(err => {
+                    console.error("Error playing sound: ", err);  // Catch any playback issues
+                });
             }
         }
     }
@@ -133,10 +137,85 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    startButton.style.display = 'none';
-    intervalLabel.style.display = 'none';
-    intervalTimeInput.style.display = 'none';
+     soundOptionsSelect.addEventListener('change', () => {
+        if (soundOptionsSelect.value === 'record-own') {
+            openRecordModal(); // Open modal to record custom sound
+        } else {
+            selectedSound = soundOptionsSelect.value;
+        }
+    });
 
+    // Function to open the recording modal
+    function openRecordModal() {
+        recordModal.style.display = 'block';
+    }
+
+    // Function to close the recording modal
+    closeRecordModal.addEventListener('click', () => {
+        recordModal.style.display = 'none';
+    });
+
+    // Record button event to start recording audio
+    recordButton.addEventListener('click', () => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                audioChunks = [];
+    
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+    
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+                    recordedAudio = URL.createObjectURL(audioBlob);  // Store the URL of the recorded audio
+                    console.log("Recording URL set to: ", recordedAudio); // Debugging log
+                
+                    recordStatus.textContent = "Enregistrement complété!";
+                    okRecordingButton.style.display = 'block';  // Show OK button
+                };
+    
+                recordStatus.textContent = "Enregistrement...";
+                stopRecordingButton.style.display = 'block';  // Show stop button during recording
+                recordButton.style.display = 'none';  // Hide the record button during recording
+    
+                // Auto stop after 5 seconds
+                setTimeout(() => {
+                    stopRecording();
+                }, 5000);
+            }).catch(err => {
+                console.error('Error accessing microphone: ', err);
+                recordStatus.textContent = "Error accessing microphone";
+            });
+        }
+    });
+    
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop(); // Stop the recording
+            stopRecordingButton.style.display = 'none'; // Hide stop button
+            recordButton.style.display = 'block'; // Show record button again for new recording
+        }
+    }
+
+    stopRecordingButton.addEventListener('click', () => {
+        stopRecording(); // Stop recording when the stop button is clicked
+    });
+
+    okRecordingButton.addEventListener('click', () => {
+        stopRecording(); // Ensure recording is stopped
+        recordModal.style.display = 'none';  // Close the modal
+        okRecordingButton.style.display = 'none';  // Hide the OK button after closing the modal
+        stopRecordingButton.style.display = 'none';  // Hide stop button
+        recordButton.style.display = 'block';  // Reset record button for next use
+    
+        // Play the recorded sound after closing the modal
+        if (recordedAudio) {
+            recordedAudio.play();  // Play the recorded audio
+            console.log("Playing the recorded sound");
+        }
+    });
     // Show the media selection modal
     selectVideosButton.addEventListener('click', () => {
         videoSelectionModal.style.display = 'block';
@@ -218,8 +297,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function showSpacePrompt() {
-        playSoundPrompt();
-
+        playSoundPrompt();  // Play the sound here, when the prompt appears
+    
         if (useTextPrompt && selectedSpacePromptSrc) {
             textPrompt.textContent = selectedSpacePromptSrc;
             textPrompt.style.display = 'block';
@@ -229,10 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
             spacePrompt.src = selectedSpacePromptSrc;
             spacePrompt.style.display = 'block';
         }
-
+    
         blackBackground.style.display = 'block';
         controlsEnabled = true;
-
+    
         // Disable right-click while space prompt is visible
         document.removeEventListener('contextmenu', handleRightClickNextVideo);
     }
