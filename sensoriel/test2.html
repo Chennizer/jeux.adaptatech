@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Music Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+</head>
+<body>
+  <h1>Random AI Music Generator</h1>
+  <p id="status">Initializing model...</p>
+  <button id="generate-button" disabled>Generate Random Music</button>
+  <script>
+    // Initialize Magenta.js MusicRNN
+    const musicRNN = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
+    const statusElement = document.getElementById('status');
+    const generateButton = document.getElementById('generate-button');
+    const synth = new Tone.PolySynth().toDestination();
+
+    // Load the model
+    musicRNN.initialize().then(() => {
+      statusElement.textContent = 'Model ready! Click "Generate Random Music" to start.';
+      generateButton.disabled = false;
+    });
+
+    // Helper: Clamp pitch to valid range
+    const clampPitch = (pitch) => Math.max(21, Math.min(108, pitch));
+
+    // Helper: Log and validate all notes
+    const validateNoteSequence = (sequence) => {
+      sequence.notes = sequence.notes.map((note) => {
+        note.pitch = clampPitch(note.pitch); // Ensure pitch is clamped
+        return note;
+      });
+      return sequence;
+    };
+
+    // Generate random music when button is clicked
+    generateButton.addEventListener('click', async () => {
+      statusElement.textContent = 'Generating random music...';
+
+      // Create a random seed sequence
+      const seed = {
+        ticksPerQuarter: 220, // Required for quantization
+        totalTime: 1,
+        notes: [
+          {
+            pitch: clampPitch(Math.floor(Math.random() * 88) + 21), // Random valid pitch
+            startTime: 0,
+            endTime: 0.5,
+          },
+          {
+            pitch: clampPitch(Math.floor(Math.random() * 88) + 21), // Random valid pitch
+            startTime: 0.5,
+            endTime: 1,
+          },
+        ],
+      };
+
+      // Quantize the NoteSequence
+      const quantizedSeed = mm.sequences.quantizeNoteSequence(seed, 4);
+      console.log('Quantized Seed Notes:', quantizedSeed.notes);
+
+      try {
+        // Generate continuation using MusicRNN
+        const continuation = await musicRNN.continueSequence(quantizedSeed, 32, 1.0);
+
+        // Validate continuation notes
+        const validatedContinuation = validateNoteSequence(continuation);
+        console.log('Validated Continuation Notes:', validatedContinuation.notes);
+
+        // Play the validated notes
+        const now = Tone.now();
+        validatedContinuation.notes.forEach((note) => {
+          synth.triggerAttackRelease(
+            Tone.Frequency(note.pitch, 'midi').toNote(),
+            '8n',
+            now + note.startTime
+          );
+        });
+
+        statusElement.textContent = 'Music generated successfully! Click again to generate more.';
+      } catch (error) {
+        console.error('Error generating music:', error);
+        statusElement.textContent = 'Error generating music. Check the console.';
+      }
+    });
+  </script>
+</body>
+</html>
