@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Interactive Musical Playground</title>
+  <!-- Include p5.js library -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <!-- Include p5.sound library -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+  <!-- Include p5.collide2D library for collision detection -->
+  <script src="https://cdn.jsdelivr.net/npm/p5.collide2d@0.7.3/p5.collide2d.min.js"></script>
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; font-family: 'Roboto', sans-serif; }
+    canvas { display: block; }
+    #menu {
+      position: fixed;
+      top: 60px;
+      right: -300px;
+      width: 270px;
+      background: rgba(0, 0, 0, 0.85);
+      padding: 10px 15px;
+      border-radius: 5px;
+      z-index: 1000;
+      transition: right 0.3s ease, opacity 0.3s ease;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      color: #fff;
+      overflow-y: auto;
+      max-height: calc(100vh - 80px);
+    }
+    #menu.show {
+      right: 10px;
+      opacity: 1;
+    }
+    #menu h2, #menu h3 {
+      margin-top: 15px;
+      margin-bottom: 8px;
+      color: #00bfff;
+      font-weight: 500;
+    }
+    #menu h2 {
+      font-size: 20px;
+      text-align: center;
+    }
+    #menu h3 {
+      font-size: 16px;
+    }
+    #menu label {
+      display: flex;
+      flex-direction: column;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    #menu label:hover {
+      color: #00bfff;
+    }
+    #menu input[type="range"],
+    #menu select,
+    #menu input[type="checkbox"] {
+      margin-top: 5px;
+    }
+    #menu input[type="checkbox"] {
+      align-self: flex-start;
+      transform: scale(1.1);
+      cursor: pointer;
+    }
+    #menu select {
+      padding: 4px;
+      border: none;
+      border-radius: 3px;
+      background-color: #333;
+      color: #fff;
+    }
+    #settings-icon {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #fff;
+      cursor: pointer;
+      z-index: 1001;
+      background-color: rgba(0, 0, 0, 0.7);
+      transition: transform 0.3s ease, background-color 0.3s ease;
+    }
+    #settings-icon:hover {
+      transform: rotate(90deg);
+      background-color: rgba(0, 0, 0, 0.9);
+    }
+    #menu h2, #menu h3, #menu label {
+      font-family: 'Roboto', sans-serif;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+    }
+    input[type="range"]:focus {
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 6px;
+      cursor: pointer;
+      background: #555;
+      border-radius: 5px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 16px;
+      width: 16px;
+      background: #00bfff;
+      border-radius: 50%;
+      margin-top: -5px;
+    }
+    input[type="range"]::-moz-range-thumb {
+      height: 16px;
+      width: 16px;
+      background: #00bfff;
+      border-radius: 50%;
+    }
+    input[type="range"]::-ms-thumb {
+      height: 16px;
+      width: 16px;
+      background: #00bfff;
+      border-radius: 50%;
+    }
+    .custom-file-upload {
+      display: inline-block;
+      padding: 5px 10px;
+      cursor: pointer;
+      background-color: #00bfff;
+      color: white;
+      border-radius: 4px;
+      margin-top: 5px;
+      text-align: center;
+      font-size: 12px;
+    }
+    .custom-file-upload:hover {
+      background-color: #008fcc;
+    }
+    #startOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: white;
+      font-family: 'Roboto', sans-serif;
+      z-index: 10;
+      text-align: center;
+      font-size: 20px;
+    }
+    #startButton {
+      padding: 20px 40px;
+      font-size: 24px;
+      cursor: pointer;
+      background-color: #0077be;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      margin-top: 20px;
+    }
+    #startButton:hover {
+      background-color: #0088cc;
+    }
+    #fullscreen-btn {
+      position: fixed;
+      top: 15px;
+      right: 60px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    #fullscreen-btn:hover {
+      background: rgba(0, 0, 0, 0.9);
+    }
+  </style>
+</head>
+<body>
+  <!-- Start Overlay -->
+  <div id="startOverlay">
+    <p>Jeu sensoriel à thématique d'espace. Options dans le coin supérieur droit.</p>
+    <button id="startButton">Commencer</button>
+  </div>
+
+  <!-- Settings Icon -->
+  <div id="settings-icon">⚙️</div>
+
+  <!-- Fullscreen Button -->
+  <button id="fullscreen-btn">Plein écran</button>
+
+  <!-- Settings Menu -->
+  <div id="menu">
+    <h2>Options</h2>
+
+    <h3>Graphiques</h3>
+    <label>
+      Taille <span id="sizeValue">100</span>
+      <input type="range" id="sizeSlider" min="50" max="700" value="100">
+    </label>
+    <label>
+      Quantité <span id="numberValue">10</span>
+      <input type="range" id="numberSlider" min="1" max="300" value="10">
+    </label>
+    <label>
+      Vitesse <span id="speedValue">1</span>
+      <input type="range" id="speedSlider" min="0" max="30" step="1" value="5">
+    </label>
+    <label>
+      Couleur
+      <select id="colorSelector">
+        <option value="cold">Couleurs froides</option>
+        <option value="hot">Couleurs chaudes</option>
+        <option value="yellow">Jaune</option>
+        <option value="white">Blanc</option>
+      </select>
+    </label>
+    <label>
+      Effet de sillage
+      <input type="checkbox" id="trailToggle">
+    </label>
+
+    <h3>Musique et son</h3>
+    <label>
+      Désactiver la musique
+      <input type="checkbox" id="muteToggle">
+    </label>
+    <label>
+      Volume de la musique <span id="musicVolumeValue">50</span>
+      <input type="range" id="musicVolumeSlider" min="1" max="100" value="50">
+    </label>
+    <label>
+      Désactiver les sons
+      <input type="checkbox" id="muteSFXToggle">
+    </label>
+    <label>
+      Volume des sons <span id="starSoundVolumeValue">50</span>
+      <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
+    </label>
+  </div>
+
+  <script>
+    // Variables
+    let shapes = [];
+    let particles = [];
+    let bgMusic;
+    let started = false;
+    let starfield = [];
+    let numStars = 200;
+    let starSize = 100;
+    let numberOfStars = 10;
+    let starSpeed = 1;
+    let starColorOption = 'cold';
+    let isMuted = false;
+    let isSFXMuted = false; // New variable for SFX mute
+    let musicVolume = 0.5;
+    let starSoundVolume = 1.0;
+    let showTrail = false; // New variable for trail effect
+    let currentSongIndex = 0;
+    let songList = ['../../songs/space/space1.mp3', '../../songs/space/space1.mp3', '../../songs/space/space1.mp3','../../songs/space/spacegood1.mp3','../../songs/space/spacegood2.mp3','../../songs/space/spacegood3.mp3','../../songs/space/spacebest1.mp3','../../songs/space/spacebest2.mp3','../../songs/space/spacebest3.mp3','../../songs/space/spacebest4.mp3'];
+    let bgMusicFiles = [];
+    let starSoundList = ['../../sounds/space/twinklingstar1.mp3', '../../sounds/space/twinklingstar2.mp3', '../../sounds/space/twinklingstar3.mp3'];
+    let starSounds = [];
+
+    // Function to shuffle an array
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1)); // Use Math.floor and Math.random
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    // Shuffle the song list before preloading
+    shuffleArray(songList);
+
+    function preload() {
+      // Preload background music files
+      for (let i = 0; i < songList.length; i++) {
+        bgMusicFiles[i] = loadSound(songList[i]);
+      }
+      // Preload star sound effects
+      for (let i = 0; i < starSoundList.length; i++) {
+        starSounds[i] = loadSound(starSoundList[i]);
+      }
+    }
+
+    // Star class for starfield (Moved before setup)
+    class Star {
+      constructor() {
+        this.reset();
+      }
+
+      reset() {
+        this.x = random(-width, width);
+        this.y = random(-height, height);
+        this.z = random(width);
+        this.pz = this.z;
+      }
+
+      update() {
+        this.z -= 2; // Slower movement
+        if (this.z < 1) {
+          this.reset();
+          this.z = width;
+          this.pz = this.z;
+        }
+      }
+
+      display() {
+        fill(255);
+        noStroke();
+
+        let sx = map(this.x / this.z, 0, 1, 0, width / 2);
+        let sy = map(this.y / this.z, 0, 1, 0, height / 2);
+
+        let r = map(this.z, 0, width, 8, 0);
+
+        ellipse(sx + width / 2, sy + height / 2, r, r);
+      }
+    }
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+
+      // Hide canvas until the experience starts
+      select('canvas').style('display', 'none');
+
+      // Generate starfield
+      for (let i = 0; i < numStars; i++) {
+        starfield.push(new Star());
+      }
+
+      // Get the start button element
+      const startButton = document.getElementById('startButton');
+      startButton.addEventListener('click', startExperience);
+
+      // Settings menu elements
+      const menu = document.getElementById('menu');
+      const settingsIcon = document.getElementById('settings-icon');
+      const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+      const sizeSlider = document.getElementById('sizeSlider');
+      const sizeValue = document.getElementById('sizeValue');
+      const numberSlider = document.getElementById('numberSlider');
+      const numberValue = document.getElementById('numberValue');
+      const speedSlider = document.getElementById('speedSlider');
+      const speedValue = document.getElementById('speedValue');
+      const colorSelector = document.getElementById('colorSelector');
+      const muteToggle = document.getElementById('muteToggle');
+      const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+      const musicVolumeValue = document.getElementById('musicVolumeValue');
+      const muteSFXToggle = document.getElementById('muteSFXToggle'); // New mute SFX toggle
+      const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
+      const starSoundVolumeValue = document.getElementById('starSoundVolumeValue');
+      const trailToggle = document.getElementById('trailToggle'); // New trail toggle
+
+      // Settings icon toggle
+      settingsIcon.addEventListener('click', () => {
+        menu.classList.toggle('show');
+      });
+
+      // Fullscreen button
+      fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+      // Star size slider
+      sizeSlider.addEventListener('input', () => {
+        starSize = parseInt(sizeSlider.value);
+        sizeValue.textContent = sizeSlider.value;
+        updateStars();
+      });
+
+      // Number of stars slider
+      numberSlider.addEventListener('input', () => {
+        numberOfStars = parseInt(numberSlider.value);
+        numberValue.textContent = numberSlider.value;
+        updateStars();
+      });
+
+      // Star speed slider
+      speedSlider.addEventListener('input', () => {
+        starSpeed = parseFloat(speedSlider.value);
+        speedValue.textContent = speedSlider.value;
+        updateStars();
+      });
+
+      // Color selector
+      colorSelector.addEventListener('change', () => {
+        starColorOption = colorSelector.value;
+        updateStars();
+      });
+
+      // Trail toggle
+      trailToggle.addEventListener('change', () => {
+        showTrail = trailToggle.checked;
+      });
+
+      // Mute toggle
+      muteToggle.addEventListener('change', () => {
+        isMuted = muteToggle.checked;
+        if (bgMusic) {
+          bgMusic.setVolume(isMuted ? 0 : musicVolume);
+        }
+      });
+
+      // Music volume slider
+      musicVolumeSlider.addEventListener('input', () => {
+        musicVolume = parseInt(musicVolumeSlider.value) / 100; // Convert to 0.0 - 1.0
+        musicVolumeValue.textContent = musicVolumeSlider.value;
+        if (bgMusic && !isMuted) {
+          bgMusic.setVolume(musicVolume);
+        }
+      });
+
+      // Mute SFX toggle
+      muteSFXToggle.addEventListener('change', () => {
+        isSFXMuted = muteSFXToggle.checked;
+      });
+
+      // Star sound volume slider
+      starSoundVolumeSlider.addEventListener('input', () => {
+        starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100; // Convert to 0.0 - 1.0
+        starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
+      });
+
+      // Keydown event for fullscreen toggle
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'f' || event.key === 'F') {
+          toggleFullscreen();
+        }
+      });
+    }
+
+    function startExperience() {
+      // Remove the start overlay
+      const startOverlay = document.getElementById('startOverlay');
+      startOverlay.remove();
+
+      // Show the canvas
+      select('canvas').style('display', 'block');
+
+      // Start background music
+      playNextSong();
+
+      // Generate initial shapes (stars)
+      updateStars();
+
+      started = true;
+      console.log('Experience started:', started);
+    }
+
+    function updateStars() {
+      shapes = [];
+      for (let i = 0; i < numberOfStars; i++) {
+        shapes.push(new FloatingStar());
+      }
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch((err) => {
+          console.error(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    function playNextSong() {
+      if (bgMusic) {
+        bgMusic.stop();
+      }
+      bgMusic = bgMusicFiles[currentSongIndex];
+      if (bgMusic && bgMusic.isLoaded()) {
+        bgMusic.setVolume(isMuted ? 0 : musicVolume);
+        bgMusic.playMode('restart');
+        bgMusic.play();
+        bgMusic.onended(() => {
+          currentSongIndex = (currentSongIndex + 1) % bgMusicFiles.length;
+          playNextSong();
+        });
+      } else {
+        console.error('Background music is not loaded.');
+      }
+    }
+
+    function draw() {
+      if (!started) {
+        // Display initial screen before starting
+        background(0);
+        fill(255);
+        textSize(18);
+        textAlign(CENTER);
+        text('Click "Start" to begin the experience.', width / 2, height / 2);
+        return;
+      }
+
+      // Background for trail effect
+      if (showTrail) {
+        background(0, 50); // Semi-transparent background for trail
+      } else {
+        background(0); // Solid background
+      }
+
+      // Draw starfield
+      for (let star of starfield) {
+        star.update();
+        star.display();
+      }
+
+      // Update and display shapes (stars)
+      for (let shape of shapes) {
+        shape.update();
+        shape.display();
+      }
+
+      // Update and display particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].display();
+        if (particles[i].isDead()) {
+          particles.splice(i, 1);
+        }
+      }
+
+      displayInstructions();
+    }
+
+    // Resize canvas when window is resized
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    // FloatingStar class
+    class FloatingStar {
+      constructor() {
+        this.reset();
+      }
+
+      reset() {
+        // Star properties
+        this.x = random(width);
+        this.y = random(height);
+        this.vx = random(-1, 1) * starSpeed;
+        this.vy = random(-1, 1) * starSpeed;
+        this.size = starSize; // Use the starSize variable
+        this.baseSize = this.size;
+        this.color = this.getRandomColor(250); // Color based on selection
+        this.isPlaying = false;
+        this.alpha = 0; // For fade-in and fade-out
+        this.fadeIn = true;
+        this.fadeOut = false;
+      }
+
+      update() {
+        // Move star
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Wrap around edges
+        if (this.x > width + this.size) this.x = -this.size;
+        if (this.x < -this.size) this.x = width + this.size;
+        if (this.y > height + this.size) this.y = -this.size;
+        if (this.y < -this.size) this.y = height + this.size;
+
+        // Handle fading
+        if (this.fadeOut) {
+          // If fading out, decrease alpha
+          this.alpha -= 5;
+          if (this.alpha <= 0) {
+            this.alpha = 0;
+            this.fadeOut = false;
+            this.reset(); // Reset the star
+          }
+        } else if (this.fadeIn) {
+          // If fading in, increase alpha
+          this.alpha += 5;
+          if (this.alpha >= 255) {
+            this.alpha = 255;
+            this.fadeIn = false;
+          }
+        }
+      }
+
+      display() {
+        noStroke();
+        this.color.setAlpha(this.alpha);
+        fill(this.color);
+
+        // Add glow effect if interacting
+        if (this.isPlaying) {
+          drawingContext.shadowBlur = 30;
+          drawingContext.shadowColor = 'white';
+        } else {
+          drawingContext.shadowBlur = 0;
+        }
+
+        // Draw the star
+        push();
+        translate(this.x, this.y);
+        rotate(frameCount / 100);
+        this.drawStarShape(this.size / 2, 5, 0.5); // 5 points
+        pop();
+
+        drawingContext.shadowBlur = 0; // Reset shadow
+      }
+
+      drawStarShape(radius1, npoints, inset) {
+        beginShape();
+        for (let i = 0; i < npoints * 2; i++) {
+          let angle = i * PI / npoints;
+          let r = i % 2 === 0 ? radius1 : radius1 * inset;
+          vertex(r * cos(angle), r * sin(angle));
+        }
+        endShape(CLOSE);
+      }
+
+      // Generate color based on selection
+      getRandomColor(alpha = 255) {
+        let hue, saturation, brightness;
+        colorMode(HSB, 360, 100, 100, 255);
+        switch (starColorOption) {
+          case 'cold':
+            hue = random(160, 260); // Blues and purples
+            saturation = random(50, 100);
+            brightness = random(70, 100);
+            break;
+          case 'hot':
+            hue = random(0, 60); // Reds and oranges
+            saturation = random(50, 100);
+            brightness = random(70, 100);
+            break;
+          case 'yellow':
+            hue = random(50, 60); // Yellow
+            saturation = random(80, 100);
+            brightness = random(80, 100);
+            break;
+          case 'white':
+            hue = 0;
+            saturation = 0;
+            brightness = 100;
+            break;
+          default:
+            hue = random(160, 260);
+            saturation = random(50, 100);
+            brightness = random(70, 100);
+        }
+        let col = color(hue, saturation, brightness, alpha);
+        colorMode(RGB, 255, 255, 255, 255);
+        return col;
+      }
+
+      // Modified isMouseOver() to accept coordinates
+      isMouseOver(x, y) {
+        return collidePointCircle(x, y, this.x, this.y, this.size);
+      }
+
+      // Play sound effect, emit particles, and start fade-out animation
+      playNote() {
+        if (!this.isPlaying) {
+          this.isPlaying = true;
+
+          // Stop fade-in if it's still happening
+          this.fadeIn = false;
+
+          // Start fade-out animation
+          this.fadeOut = true;
+
+          // Play sound effect if not muted
+          if (!isSFXMuted) {
+            let soundEffect = random(starSounds);
+            if (soundEffect && soundEffect.isLoaded()) {
+              soundEffect.setVolume(starSoundVolume);
+              soundEffect.play();
+            } else {
+              console.error('Sound effect not loaded');
+            }
+          }
+
+          // Emit particles
+          for (let i = 0; i < 100; i++) {
+            particles.push(new Particle(this.x, this.y));
+          }
+        }
+      }
+
+      // Reset the star instead of removing it
+      removeStar() {
+        this.reset();
+      }
+    }
+
+    // Particle class
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = random(-5, 5); // Faster particles
+        this.vy = random(-5, 5); // Faster particles
+        this.life = 300; // Longer lifespan
+        this.size = random(5, 15);
+        this.color = this.getRandomColor(200); // Random color with alpha
+      }
+
+      // Generate color based on star color option
+      getRandomColor(alpha = 255) {
+        let hue, saturation, brightness;
+        colorMode(HSB, 360, 100, 100, 255);
+        switch (starColorOption) {
+          case 'cold':
+            hue = random(160, 260); // Blues and purples
+            saturation = random(50, 100);
+            brightness = random(70, 100);
+            break;
+          case 'hot':
+            hue = random(0, 60); // Reds and oranges
+            saturation = random(50, 100);
+            brightness = random(70, 100);
+            break;
+          case 'yellow':
+            hue = random(50, 60); // Yellow
+            saturation = random(80, 100);
+            brightness = random(80, 100);
+            break;
+          case 'white':
+            hue = 0;
+            saturation = 0;
+            brightness = 100;
+            break;
+          default:
+            hue = random(160, 260);
+            saturation = random(50, 100);
+            brightness = random(70, 100);
+        }
+        let col = color(hue, saturation, brightness, alpha);
+        colorMode(RGB, 255, 255, 255, 255);
+        return col;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= 2;
+      }
+
+      display() {
+        noStroke();
+        this.color.setAlpha(map(this.life, 0, 300, 0, 255)); // Fade out particles
+        fill(this.color);
+        ellipse(this.x, this.y, this.size);
+      }
+
+      isDead() {
+        return this.life <= 0;
+      }
+    }
+
+    // Handle mouse pressed
+    function mousePressed() {
+      if (!started) return;
+      handleInteraction(mouseX, mouseY);
+    }
+
+    // Handle touch started
+    function touchStarted() {
+      if (!started) return;
+      for (let touch of touches) {
+        handleInteraction(touch.x, touch.y);
+      }
+      // Prevent default behavior
+      return false;
+    }
+
+    // Function to handle both mouse and touch interactions
+    function handleInteraction(x, y) {
+      for (let i = shapes.length - 1; i >= 0; i--) {
+        if (shapes[i].isMouseOver(x, y)) {
+          shapes[i].playNote();
+          break; // Stop after the first matching star
+        }
+      }
+    }
+
+    function displayInstructions() {
+      fill(255);
+      textSize(18);
+      textAlign(CENTER);
+      text('', width / 2, 30);
+    }
+  </script>
+</body>
+</html>
