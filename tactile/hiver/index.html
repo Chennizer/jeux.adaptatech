@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Jeu Sensoriel Hivernal</title>
+  <title>Jeu Sensoriel Hivernal Optimisé</title>
   <!-- Include p5.js and necessary libraries -->
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
@@ -11,7 +11,7 @@
     /* Basic CSS Styles */
     body { margin: 0; padding: 0; overflow: hidden; font-family: 'Roboto', sans-serif; }
     canvas { display: block; }
-    
+
     /* Settings Menu Styles */
     #menu {
       position: fixed;
@@ -72,7 +72,7 @@
       background-color: #333;
       color: #fff;
     }
-    
+
     /* Settings Icon Styles */
     #settings-icon {
       position: fixed;
@@ -95,7 +95,7 @@
       transform: rotate(90deg);
       background-color: rgba(0, 0, 0, 0.9);
     }
-    
+
     /* Slider Styles */
     input[type="range"] {
       -webkit-appearance: none;
@@ -132,23 +132,7 @@
       background: #00bfff;
       border-radius: 50%;
     }
-    
-    /* Custom File Upload Styles */
-    .custom-file-upload {
-      display: inline-block;
-      padding: 5px 10px;
-      cursor: pointer;
-      background-color: #00bfff;
-      color: white;
-      border-radius: 4px;
-      margin-top: 5px;
-      text-align: center;
-      font-size: 12px;
-    }
-    .custom-file-upload:hover {
-      background-color: #008fcc;
-    }
-    
+
     /* Start Overlay Styles */
     #startOverlay {
       position: absolute;
@@ -180,7 +164,7 @@
     #startButton:hover {
       background-color: #0088cc;
     }
-    
+
     /* Fullscreen Button Styles */
     #fullscreen-btn {
       position: fixed;
@@ -199,7 +183,7 @@
     #fullscreen-btn:hover {
       background: rgba(0, 0, 0, 0.9);
     }
-    
+
     /* Counter Styles */
     #clickCounter {
       position: fixed;
@@ -226,7 +210,7 @@
 
   <!-- Fullscreen Button -->
   <button id="fullscreen-btn">Plein écran</button>
-  <span id="clickCounter">0</span>
+  <span id="clickCounter">Flocons : 0</span>
 
   <!-- Settings Menu -->
   <div id="menu">
@@ -239,11 +223,10 @@
     </label>
     <label>
       Quantité <span id="numberValue">10</span>
-      <input type="range" id="numberSlider" min="1" max="200" step="1" value="10">
+      <input type="range" id="numberSlider" min="1" max="100" step="1" value="10">
     </label>
     <label>
       Vitesse <span id="speedValue">5</span>
-      <!-- Updated Speed Slider: 1 to 15, internally mapped to 0 to 6 -->
       <input type="range" id="speedSlider" min="1" max="15" step="1" value="5">
     </label>
     <label>
@@ -255,7 +238,6 @@
       <select id="colorSelector">
         <option value="cold">Bleu</option>
         <option value="white" selected>Blanc</option>
-        <!-- Removed the "random" option -->
       </select>
     </label>
 
@@ -309,10 +291,15 @@
     let stripeStars = [];
     let wind = 0;
     let windIntensity = 2; // Updated to match initial slider value
-    const totalStripeStars = 800; // Number of stripe stars
+    const totalStaticSnowflakes = 200; // Reduced from 400 for performance
+    const totalStripeStars = 400; // Reduced from 800 for performance
     let moon;
     let moonSound;
     let hillTopY; // Variable to define the top boundary of the hills
+    let windTimer = 0;
+    const windUpdateInterval = 100; // Update wind every 100 milliseconds
+    let clickCounterTimer = 0;
+    const clickCounterUpdateInterval = 100; // Update counter every 100 milliseconds
 
     // Utility Function to Shuffle Array
     function shuffleArray(array) {
@@ -341,7 +328,7 @@
       select('canvas').style('display', 'none'); // Hide canvas initially
       hillTopY = height * 0.8; // Define the top boundary of the hills
       moon = new Moon(width * 0.2, height * 0.2, 240);
-      
+
       // DOM Elements
       const startButton = document.getElementById('startButton');
       const menu = document.getElementById('menu');
@@ -418,10 +405,11 @@
           toggleFullscreen();
         }
       });
-      
+
       // Initialize Stars
-      initializeStars();
+      initializeStaticSnowflakes();
       initializeStripeStars();
+      initializeShapes(); // Initialize floating snowflakes
     }
 
     // Start Experience Function
@@ -436,6 +424,10 @@
 
     // Adjust Snowflake Count Function
     function adjustSnowflakeCount(newNumber) {
+      const maxSnowflakes = 100; // Limit the maximum number of snowflakes
+      newNumber = constrain(newNumber, 1, maxSnowflakes);
+      numberSlider.value = newNumber;
+      numberValue.textContent = newNumber;
       const currentNumber = shapes.length;
       if (newNumber > currentNumber) {
         // Add new snowflakes
@@ -454,20 +446,21 @@
     function updateSnowflakeSizes() {
       for (let shape of shapes) {
         shape.size = starSize;
+        shape.baseSize = starSize; // Ensure baseSize is updated
       }
     }
 
     // Update Snowflake Speeds Function
     function updateSnowflakeSpeeds() {
       for (let shape of shapes) {
-        shape.vy = random(1, 2) * starSpeed;
+        shape.vy = random(1, 2) * starSpeed; // Adjust speed based on starSpeed
       }
     }
 
     // Update Snowflake Colors Function
     function updateSnowflakeColors() {
       for (let shape of shapes) {
-        shape.color = shape.getRandomColor(255);
+        shape.color = shape.getColor();
       }
     }
 
@@ -503,46 +496,32 @@
 
     // Draw Function
     function draw() {
-      if (!started) {
-        background(0);
-        fill(255);
-        textSize(18);
-        textAlign(CENTER);
-        text('Cliquez sur "Commencer" pour débuter l\'expérience.', width / 2, height / 2);
-        return;
-      }
-      
-      wind = sin(frameCount * 0.01) * windIntensity; // Calculate wind effect
+      if (!started) return; // Early return if the game hasn't started
+
+      updateWind(); // Update wind periodically
+
       drawWinterBackground();
       moon.update();
       moon.display();
       drawStaticSnowflakes();
-      
+
       // Update and Display Snowflakes
       for (let shape of shapes) {
         shape.update(wind);
         shape.display();
       }
-      
-      // Update and Display Particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].update();
-        particles[i].display();
-        if (particles[i].isDead()) {
-          particles.splice(i, 1); // Remove dead particles
-        }
-      }
 
-      displayInstructions();
+      // Update and Display Particles
+      updateAndDisplayParticles();
+
+      updateClickCounter(); // Update click counter periodically
     }
 
     // Window Resized Function
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
       hillTopY = height * 0.8; // Update hillTopY based on new window height
-      staticSnowflakes = [];
-      initializeStars();
-      stripeStars = [];
+      initializeStaticSnowflakes();
       initializeStripeStars();
       moon.updatePosition(width * 0.2, height * 0.2);
     }
@@ -560,7 +539,7 @@
         this.vy = random(1, 2) * starSpeed; // Adjusted speed based on starSpeed
         this.size = starSize;
         this.baseSize = this.size;
-        this.color = this.getRandomColor(255); // Full opacity initially
+        this.color = this.getColor(); // Get color based on selected option
         this.isShining = false; // Indicates if the snowflake is shining
         this.shineStartTime = 0; // Time when shine started
         this.shineDuration = 750; // Shine duration in milliseconds
@@ -570,14 +549,12 @@
         this.fadeAlpha = 255; // Current alpha during fade
         this.angle = random(TWO_PI);
         this.angularSpeed = random(0.008, 0.018); // Rotation speed
-        this.numBranches = floor(random(6, 9));
-        this.numSmallArms = 3;
-        this.smallArmAngle = PI / 6;
-        this.smallArmLengthRatio = 0.25;
-        this.branchVariations = [];
-        for (let i = 0; i < this.numBranches; i++) {
-          this.branchVariations.push(random(0.95, 1.05));
-        }
+
+        // Fixed snowflake design parameters
+        this.numBranches = 6; // Fixed number of branches
+        this.numSmallArms = 3; // Fixed number of small arms per branch
+        this.smallArmAngle = PI / 6; // Fixed angle for small arms
+        this.smallArmLengthRatio = 0.25; // Fixed ratio for small arm length
         this.hasHitHill = false;
       }
 
@@ -659,8 +636,8 @@
         const angle = TWO_PI / this.numBranches;
         for (let i = 0; i < this.numBranches; i++) {
           push();
-          rotate(i * angle);
-          this.drawBranch(radius * this.branchVariations[i]);
+          rotate((TWO_PI / this.numBranches) * i);
+          this.drawBranch(radius);
           pop();
         }
       }
@@ -671,7 +648,7 @@
         let colorStart = this.color;
         let colorEnd = this.color.levels.slice();
         colorEnd[2] = constrain(colorEnd[2] + 10, 80, 100);
-        let cStart = color(colorStart[0], colorStart[1], colorStart[2], colorStart[3]);
+        let cStart = color(colorStart[0], colorStart[1], colorStart[2], colorStart.levels[3]);
         let cEnd = color(colorEnd[0], colorEnd[1], colorEnd[2], colorStart.levels[3]);
         for (let i = 0; i < segments; i++) {
           let inter = map(i, 0, segments, 0, 1);
@@ -712,7 +689,7 @@
         }
       }
 
-      getRandomColor(alpha = 255) {
+      getColor(alpha = 255) {
         let hue, saturation, brightness;
         colorMode(HSB, 360, 100, 100, 255);
         switch (starColorOption) {
@@ -754,7 +731,7 @@
 
           // Increment the click counter
           snowflakeClickCount++;
-          document.getElementById('clickCounter').textContent = ` ${snowflakeClickCount}`;
+          document.getElementById('clickCounter').textContent = `Flocons: ${snowflakeClickCount}`;
 
           // Generate Particles at the snowflake's position
           let numParticles = floor(random(5, 11)); // 5 to 10 particles
@@ -775,19 +752,18 @@
       constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.size = random(2, 5);
+        this.size = random(2, 4); // Reduced size
         this.alpha = 255;
-        this.lifespan = 1500; // 1.5 seconds
+        this.lifespan = 1000; // Reduced lifespan to 1 second
         this.startTime = millis();
+        this.vx = random(-1, 1); // Slight horizontal movement
+        this.vy = random(-1, -3); // Slight upward movement
       }
 
       update() {
-        let elapsed = millis() - this.startTime;
-        if (elapsed < this.lifespan) {
-          this.alpha = lerp(255, 0, elapsed / this.lifespan);
-        } else {
-          this.alpha = 0;
-        }
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= 5; // Fade out
       }
 
       display() {
@@ -839,11 +815,6 @@
         noStroke();
         fill(255, 255, 200, 255);
         ellipse(0, 0, this.size, this.size);
-        for (let i = 0; i < 15; i++) {
-          noFill();
-          stroke(255, 255, 200, 40 - i * 2);
-          ellipse(0, 0, this.size + i * 15, this.size + i * 15);
-        }
         pop();
       }
 
@@ -866,9 +837,9 @@
     }
 
     // Initialize Static Snowflakes Function
-    function initializeStars() {
+    function initializeStaticSnowflakes() {
       staticSnowflakes = [];
-      for (let i = 0; i < 400; i++) { // Increased from 200 to 400 for more static snowflakes
+      for (let i = 0; i < totalStaticSnowflakes; i++) {
         let x = random(width);
         let y = random(0, hillTopY); // Ensure stars are above the hills
         let size = random(1, 3);
@@ -891,6 +862,39 @@
         let size = random(1, 3);
         let col = color(255, 255, 255, random(150, 255));
         stripeStars.push({ x, y, size, color: col });
+      }
+    }
+
+    // Initialize Floating Snowflakes
+    function initializeShapes() {
+      shapes = [];
+      adjustSnowflakeCount(numberOfStars);
+    }
+
+    // Update Wind Function
+    function updateWind() {
+      if (millis() - windTimer > windUpdateInterval) {
+        wind = sin(frameCount * 0.01) * windIntensity;
+        windTimer = millis();
+      }
+    }
+
+    // Update and Display Particles Function
+    function updateAndDisplayParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].display();
+        if (particles[i].isDead()) {
+          particles.splice(i, 1); // Remove dead particles
+        }
+      }
+    }
+
+    // Update Click Counter Function
+    function updateClickCounter() {
+      if (millis() - clickCounterTimer > clickCounterUpdateInterval) {
+        document.getElementById('clickCounter').textContent = `Flocons: ${snowflakeClickCount}`;
+        clickCounterTimer = millis();
       }
     }
 
@@ -921,14 +925,6 @@
       }
     }
 
-    // Display Instructions Function
-    function displayInstructions() {
-      fill(255);
-      textSize(18);
-      textAlign(CENTER);
-      text('', width / 2, 30); // Currently empty, can add instructions if desired
-    }
-
     // Draw Winter Background Function
     function drawWinterBackground() {
       drawSkyGradient();
@@ -938,13 +934,12 @@
 
     // Draw Sky Gradient Function
     function drawSkyGradient() {
-      noFill();
-      for (let y = 0; y < height; y++) {
-        let inter = map(y, 0, height, 0, 1);
-        let c = lerpColor(color(40, 80, 120), color(0, 20, 40), inter);
-        stroke(c);
-        line(0, y, width, y);
-      }
+      let ctx = drawingContext;
+      let gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, 'rgb(40, 80, 120)');
+      gradient.addColorStop(1, 'rgb(0, 20, 40)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
     }
 
     // Draw Stripe Stars Function
@@ -962,9 +957,9 @@
     function drawSnowyHills() {
       // Ensure colorMode is set to RGB with alpha
       colorMode(RGB, 255, 255, 255, 255);
-      
+
       noStroke();
-      
+
       // First hill with full opacity
       fill(230, 255); // Grayscale 230 with full opacity
       beginShape();
@@ -973,7 +968,7 @@
       vertex(width, height);
       vertex(0, height);
       endShape(CLOSE);
-      
+
       // Second hill with full opacity
       fill(220, 255); // Grayscale 220 with full opacity
       beginShape();

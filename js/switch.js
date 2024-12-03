@@ -277,10 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Veuillez sélectionner au moins un média pour démarrer le jeu.");
             return;
         }
-
+    
         introJingle.pause();
         introJingle.currentTime = 0;
-
+    
         if (mode === 'interval') {
             intervalTime = parseInt(intervalTimeInput.value);
             if (isNaN(intervalTime) || intervalTime <= 0) {
@@ -288,8 +288,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
         }
-
+    
+        // Enter fullscreen mode
+        const elem = document.documentElement; // The entire document
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen().catch(err => {
+                console.error("Error attempting to enable fullscreen mode:", err.message);
+            });
+        } else if (elem.mozRequestFullScreen) { // Firefox
+            elem.mozRequestFullScreen();
+        } else if (elem.webkitRequestFullscreen) { // Chrome, Safari, and Opera
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) { // IE/Edge
+            elem.msRequestFullscreen();
+        }
+    
+        // Hide the control panel
         document.getElementById('control-panel').style.display = 'none';
+    
         playedMedia = [];
         currentMediaIndex = getNextMediaIndex();
         preventInputTemporarily();
