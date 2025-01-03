@@ -11,7 +11,9 @@ const spacePromptImages = [
     { src: "../../images/moana.png", alt: "Moana" },
     { src: "../../images/beatles.png", alt: "Beatles" },
     { src: "../../images/halloween-citrouille.png", alt: "Beatles" },
-    { src: "../../images/simba.png", alt: "Simba" }
+    { src: "../../images/simba.png", alt: "Simba" },
+    { src: "../../images/wingsuit.png", alt: "Wingsuit" },
+    { src: "../../images/astronaut.png", alt: "Astronaute" }
 ];
 
 // Space Prompt Sounds
