@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Interactive Central Rotating Shape with PixiJS</title>
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap"
+  />
+  <style>
+    /* Reset default margins and paddings */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* Ensure the canvas fills the entire screen */
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000000; /* Black background by default */
+      font-family: 'Roboto', sans-serif;
+    }
+
+    /* Styling for the menu container */
+    #menu {
+      position: fixed;
+      top: 60px;
+      right: -300px; /* Hidden by default */
+      width: 270px;
+      background: rgba(0, 0, 0, 0.85);
+      padding: 15px;
+      border-radius: 5px;
+      z-index: 1000; /* Ensure the menu stays above the canvas */
+      transition: right 0.3s ease, opacity 0.3s ease;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      color: #fff;
+      overflow-y: auto;
+      max-height: calc(100vh - 80px);
+    }
+
+    /* Show the menu when the 'show' class is added */
+    #menu.show {
+      right: 10px;
+      opacity: 1;
+    }
+
+    /* Menu Headings */
+    #menu h2, #menu h3 {
+      margin-top: 15px;
+      margin-bottom: 8px;
+      color: #00bfff;
+      font-weight: 500;
+    }
+
+    #menu h2 {
+      font-size: 20px;
+      text-align: center;
+    }
+
+    #menu h3 {
+      font-size: 16px;
+    }
+
+    /* Styling for individual menu items */
+    #menu label {
+      display: flex;
+      flex-direction: column;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+
+    #menu label:hover {
+      color: #00bfff;
+    }
+
+    /* Styling for inputs and selects */
+    #menu input[type="range"],
+    #menu input[type="color"],
+    #menu select {
+      margin-top: 5px;
+    }
+
+    /* Range input styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+    }
+
+    input[type="range"]:focus {
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 6px;
+      cursor: pointer;
+      background: #555;
+      border-radius: 5px;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 16px;
+      width: 16px;
+      background: #00bfff;
+      border-radius: 50%;
+      margin-top: -5px;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      height: 16px;
+      width: 16px;
+      background: #00bfff;
+      border-radius: 50%;
+    }
+
+    input[type="range"]::-ms-thumb {
+      height: 16px;
+      width: 16px;
+      background: #00bfff;
+      border-radius: 50%;
+    }
+
+    /* Settings Icon */
+    #settings-icon {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #fff;
+      cursor: pointer;
+      z-index: 1001;
+      background-color: rgba(0, 0, 0, 0.7);
+      transition: transform 0.3s ease, background-color 0.3s ease;
+    }
+
+    #settings-icon:hover {
+      transform: rotate(90deg);
+      background-color: rgba(0, 0, 0, 0.9);
+    }
+
+    /* Fullscreen Button */
+    #fullscreen-btn {
+      position: fixed;
+      top: 15px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+
+    #fullscreen-btn:hover {
+      background: rgba(0, 0, 0, 0.9);
+    }
+
+    /* Start Overlay Styles */
+    #startOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: white;
+      font-family: 'Roboto', sans-serif;
+      z-index: 10;
+      text-align: center;
+      font-size: 20px;
+    }
+
+    /* Removed the startButton styles as it's no longer needed */
+
+  </style>
+</head>
+<body>
+  <!-- Start Overlay -->
+  <div id="startOverlay">
+    <p>Génération de stimuli visuels personnalisable. Plein écran suggéré. Options dans le coin supérieur droit.</p>
+    <p>Appuyez sur la barre d'espace pour commencer.</p> <!-- Instruction to press space -->
+    <!-- Removed the startButton -->
+  </div>
+
+  <!-- Fullscreen Button -->
+  <button id="fullscreen-btn">Plein écran</button>
+
+  <!-- Settings Icon -->
+  <div id="settings-icon">⚙️</div>
+
+  <!-- Menu Container -->
+  <div id="menu">
+    <h2>Paramètres</h2>
+
+    <h3>Apparence</h3>
+    <label>
+      Forme:
+      <select id="shapeSelector">
+        <option value="triangle">Triangle</option>
+        <option value="square">Carré</option>
+        <option value="pentagon">Pentagone</option>
+        <option value="hexagon">Hexagone</option>
+        <option value="star">Étoile</option>
+        <option value="diamond">Diamant</option>
+        <option value="arrow">Flèche</option>
+        <option value="spiral">Spirale</option>
+        <option value="octagon">Octogone</option>
+        <option value="bezier">Courbe de Bézier</option>
+      </select>
+    </label>
+
+    <label>
+      Couleur de l'objet:
+      <input type="color" id="colorPicker" value="#ffffff"> <!-- White by default -->
+    </label>
+
+    <label>
+      Taille: <span id="sizeValue">300</span>
+      <input type="range" id="sizeSlider" min="100" max="600" value="300"> <!-- Adjusted for larger size -->
+    </label>
+
+    <label>
+      Vitesse de rotation: <span id="rotationSpeedValue">0.05</span>
+      <input type="range" id="rotationSpeedSlider" min="0.01" max="0.10" step="0.01" value="0.05"> <!-- Reduced max to 0.10 -->
+    </label>
+  </div>
+
+  <!-- Container for the PixiJS application -->
+  <div id="fractal-container"></div>
+
+  <!-- PixiJS Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.8/browser/pixi.min.js"></script>
+
+  <!-- Custom JavaScript -->
+  <script>
+    // Wait until the window loads to initialize PixiJS and setup controls
+    window.addEventListener('load', () => {
+      // References to HTML elements
+      const menu = document.getElementById("menu");
+      const settingsIcon = document.getElementById("settings-icon");
+      const fullscreenBtn = document.getElementById('fullscreen-btn');
+      const startOverlay = document.getElementById('startOverlay'); // Start overlay
+
+      // Menu Controls
+      const shapeSelector = document.getElementById("shapeSelector");
+      const sizeSlider = document.getElementById("sizeSlider");
+      const sizeValue = document.getElementById("sizeValue");
+      const colorPicker = document.getElementById("colorPicker");
+      const rotationSpeedSlider = document.getElementById("rotationSpeedSlider");
+      const rotationSpeedValue = document.getElementById("rotationSpeedValue");
+
+      // ------------------ SOUND EFFECTS SETUP ------------------
+
+      // Initialize Audio objects for sound effects
+      const buttonClickSound = new Audio('path/to/click-sound.mp3'); // Replace with your click sound file path
+      const spacebarSound = new Audio('path/to/spacebar-sound.mp3'); // Replace with your spacebar sound file path
+
+      /**
+       * Plays a given sound.
+       * @param {HTMLAudioElement} sound - The Audio object to play.
+       */
+      function playSound(sound) {
+        sound.currentTime = 0; // Reset to start
+        sound.play().catch(error => {
+          console.error('Error playing sound:', error);
+        });
+      }
+
+      // ------------------ END SOUND EFFECTS SETUP ------------------
+
+      // Initialize PixiJS Application
+      const app = new PIXI.Application({
+        width: window.innerWidth,
+        height: window.innerHeight,
+        backgroundColor: PIXI.utils.string2hex("#000000"), // Black background by default
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
+        antialias: true
+      });
+
+      // Append the PixiJS canvas to the container
+      document.getElementById('fractal-container').appendChild(app.view);
+
+      // Configuration Parameters
+      let config = {
+        baseShapeSize: parseInt(sizeSlider.value, 10),       // Size of the shape
+        rotationSpeed: parseFloat(rotationSpeedSlider.value), // Rotation speed (radians per frame)
+        color: PIXI.utils.string2hex("#ffffff"), // White by default
+        shapeType: shapeSelector.value,                      // Current shape type
+        backgroundColor: "#000000"                            // Black background by default
+      };
+
+      // Container to hold the central shape
+      const shapeContainer = new PIXI.Container();
+      app.stage.addChild(shapeContainer);
+
+      // Reference to the central shape
+      let centralShape = null;
+
+      // Flags for animation control
+      let isAnimating = false;
+      let hasStarted = false; // Flag to track if the experience has started
+
+      /**
+       * Converts HSL to Hexadecimal
+       * @param {number} h - Hue [0, 360]
+       * @param {number} s - Saturation [0, 100]
+       * @param {number} l - Lightness [0, 100]
+       * @returns {number} Hexadecimal color
+       */
+      function hslToHex(h, s, l) {
+        s /= 100;
+        l /= 100;
+
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        const m = l - c / 2;
+        let r = 0, g = 0, b = 0;
+
+        if (0 <= h && h < 60) {
+          r = c; g = x; b = 0;
+        } else if (60 <= h && h < 120) {
+          r = x; g = c; b = 0;
+        } else if (120 <= h && h < 180) {
+          r = 0; g = c; b = x;
+        } else if (180 <= h && h < 240) {
+          r = 0; g = x; b = c;
+        } else if (240 <= h && h < 300) {
+          r = x; g = 0; b = c;
+        } else if (300 <= h && h < 360) {
+          r = c; g = 0; b = x;
+        }
+
+        r = Math.round((r + m) * 255);
+        g = Math.round((g + m) * 255);
+        b = Math.round((b + m) * 255);
+
+        return (r << 16) + (g << 8) + b;
+      }
+
+      /**
+       * Creates a shape based on the selected type.
+       * @param {string} type - The type of shape ('triangle', 'square', 'pentagon', 'hexagon', 'star', 'diamond', 'arrow', 'spiral', 'octagon', 'bezier').
+       * @param {number} size - The size parameter for the shape.
+       * @param {number} color - The fill color of the shape in hexadecimal.
+       * @returns {PIXI.Graphics} The created shape as a PixiJS Graphics object.
+       */
+      function createShape(type, size, color) {
+        let shape;
+
+        switch(type) {
+          case 'triangle':
+            shape = new PIXI.Graphics();
+            shape.beginFill(color);
+            shape.drawPolygon([
+              -size / 2, size,   // Bottom left
+              size / 2, size,    // Bottom right
+              0, -size            // Top center
+            ]);
+            shape.endFill();
+            break;
+          case 'square':
+            shape = new PIXI.Graphics();
+            shape.beginFill(color);
+            shape.drawRect(-size / 2, -size / 2, size, size);
+            shape.endFill();
+            break;
+          case 'pentagon':
+            shape = new PIXI.Graphics();
+            shape.beginFill(color);
+            shape.drawPolygon(getRegularPolygonPoints(5, size));
+            shape.endFill();
+            break;
+          case 'hexagon':
+            shape = new PIXI.Graphics();
+            shape.beginFill(color);
+            shape.drawPolygon(getRegularPolygonPoints(6, size));
+            shape.endFill();
+            break;
+          case 'star':
+            shape = new PIXI.Graphics();
+            shape.beginFill(color);
+            shape.drawPolygon(getStarPoints(5, size / 2, size));
+            shape.endFill();
+            break;
+          case 'diamond':
+            shape = createDiamond(size, color);
+            break;
+          case 'arrow':
+            shape = createArrow(size, size, color); // Adjust dimensions as needed
+            break;
+          case 'spiral':
+            shape = createSpiral(3, 10, color); // Adjust turns and steps as needed
+            break;
+          case 'octagon':
+            shape = createOctagon(size, color);
+            break;
+          case 'bezier':
+            shape = createBezierShape(size, size, color);
+            break;
+          default:
+            // Default to triangle if unknown type
+            shape = new PIXI.Graphics();
+            shape.beginFill(color);
+            shape.drawPolygon([
+              -size / 2, size,
+              size / 2, size,
+              0, -size
+            ]);
+            shape.endFill();
+        }
+
+        // Common properties
+        shape.pivot.set(0, 0); // Center pivot for rotation
+        shape.rotationSpeed = config.rotationSpeed;
+
+        return shape;
+      }
+
+      /**
+       * Generates the points of a regular polygon.
+       * @param {number} sides - Number of sides of the polygon.
+       * @param {number} radius - Radius of the polygon.
+       * @returns {Array<number>} Array of x and y coordinates.
+       */
+      function getRegularPolygonPoints(sides, radius) {
+        const points = [];
+        for(let i = 0; i < sides; i++) {
+          const angle = (Math.PI * 2 / sides) * i - Math.PI / 2;
+          points.push(Math.cos(angle) * radius, Math.sin(angle) * radius);
+        }
+        return points;
+      }
+
+      /**
+       * Generates the points of a star shape.
+       * @param {number} points - Number of points of the star.
+       * @param {number} innerRadius - Inner radius of the star.
+       * @param {number} outerRadius - Outer radius of the star.
+       * @returns {Array<number>} Array of x and y coordinates.
+       */
+      function getStarPoints(points, innerRadius, outerRadius) {
+        const starPoints = [];
+        const angle = Math.PI / points;
+        for(let i = 0; i < 2 * points; i++) {
+          const r = i % 2 === 0 ? outerRadius : innerRadius;
+          const a = i * angle - Math.PI / 2;
+          starPoints.push(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        return starPoints;
+      }
+
+      /**
+       * Creates a spiral shape.
+       * @param {number} turns - Number of turns in the spiral.
+       * @param {number} step - Degree step between points.
+       * @param {number} color - Fill color in hexadecimal.
+       * @returns {PIXI.Graphics} The spiral shape.
+       */
+      function createSpiral(turns, step, color) {
+        const spiral = new PIXI.Graphics();
+        spiral.lineStyle(2, color);
+        
+        spiral.moveTo(0, 0);
+        
+        for(let i = 0; i < turns * 360; i += step) {
+          const rad = PIXI.DEG_TO_RAD * i;
+          const radius = i * 0.5; // Adjust the multiplier for spacing
+          const x = radius * Math.cos(rad);
+          const y = radius * Math.sin(rad);
+          spiral.lineTo(x, y);
+        }
+        
+        return spiral;
+      }
+
+      /**
+       * Creates an octagon shape.
+       * @param {number} size - Size of the octagon.
+       * @param {number} color - Fill color in hexadecimal.
+       * @returns {PIXI.Graphics} The octagon shape.
+       */
+      function createOctagon(size, color) {
+        const octagon = new PIXI.Graphics();
+        octagon.beginFill(color);
+        octagon.drawPolygon(getRegularPolygonPoints(8, size));
+        octagon.endFill();
+        return octagon;
+      }
+
+      /**
+       * Creates a Bezier curve shape.
+       * @param {number} width - Width of the shape.
+       * @param {number} height - Height of the shape.
+       * @param {number} color - Fill color in hexadecimal.
+       * @returns {PIXI.Graphics} The Bezier curve shape.
+       */
+      function createBezierShape(width, height, color) {
+        const bezierShape = new PIXI.Graphics();
+        bezierShape.beginFill(color);
+        
+        bezierShape.moveTo(-width / 2, 0);
+        bezierShape.bezierCurveTo(-width / 2, -height / 2, width / 2, -height / 2, width / 2, 0);
+        bezierShape.bezierCurveTo(width / 2, height / 2, -width / 2, height / 2, -width / 2, 0);
+        
+        bezierShape.endFill();
+        return bezierShape;
+      }
+
+      /**
+       * Creates a diamond shape.
+       * @param {number} size - The size of the diamond.
+       * @param {number} color - The fill color in hexadecimal.
+       * @returns {PIXI.Graphics} The diamond shape.
+       */
+      function createDiamond(size, color) {
+        const diamond = new PIXI.Graphics();
+        diamond.beginFill(color);
+        diamond.drawPolygon([
+          0, -size / 2,    // Top
+          size / 2, 0,     // Right
+          0, size / 2,     // Bottom
+          -size / 2, 0     // Left
+        ]);
+        diamond.endFill();
+        return diamond;
+      }
+
+      /**
+       * Creates an arrow shape.
+       * @param {number} width - Width of the arrow.
+       * @param {number} height - Height of the arrow.
+       * @param {number} color - Fill color in hexadecimal.
+       * @returns {PIXI.Graphics} The arrow shape.
+       */
+      function createArrow(width, height, color) {
+        const arrow = new PIXI.Graphics();
+        arrow.beginFill(color);
+        
+        // Draw shaft
+        arrow.drawRect(-width / 2, -height / 4, width, height / 2);
+        
+        // Draw head
+        arrow.drawPolygon([
+          width / 2, -height / 2,
+          width, 0,
+          width / 2, height / 2
+        ]);
+        
+        arrow.endFill();
+        return arrow;
+      }
+
+      /**
+       * Initializes the central shape and positions it at the center of the screen.
+       * @param {string} shapeType - The type of shape to create.
+       * @param {number} size - The size of the shape.
+       * @param {number} color - The fill color of the shape.
+       */
+      function initializeCentralShape(shapeType, size, color) {
+        if (centralShape) {
+          shapeContainer.removeChild(centralShape);
+          centralShape.destroy();
+          centralShape = null;
+        }
+
+        centralShape = createShape(shapeType, size, color);
+        centralShape.x = app.renderer.width / 2;
+        centralShape.y = app.renderer.height / 2;
+
+        // Adjust size based on window dimensions to fill about half the screen
+        const maxDimension = Math.min(app.renderer.width, app.renderer.height) / 2;
+        centralShape.scale.set(maxDimension / config.baseShapeSize);
+
+        shapeContainer.addChild(centralShape);
+      }
+
+      /**
+       * Generates a random bright hexadecimal color.
+       * Uses HSL to ensure high saturation and lightness.
+       * @returns {number} Random bright color in hexadecimal.
+       */
+      function getRandomBrightColor() {
+        const hue = Math.floor(Math.random() * 360); // Hue between 0 and 360
+        const saturation = 80 + Math.random() * 20; // Saturation between 80% and 100%
+        const lightness = 60 + Math.random() * 20; // Lightness between 60% and 80%
+        return hslToHex(hue, saturation, lightness);
+      }
+
+      /**
+       * Rotates the central shape by its rotation speed.
+       */
+      function rotateShape(delta) {
+        if (centralShape) {
+          centralShape.rotation += centralShape.rotationSpeed * delta;
+        }
+      }
+
+      /**
+       * Sets up event listeners for menu controls.
+       */
+      function setupMenuListeners() {
+        // Event listener for shape selection
+        shapeSelector.addEventListener("change", () => {
+          config.shapeType = shapeSelector.value;
+          if (isAnimating) {
+            initializeCentralShape(config.shapeType, config.baseShapeSize, config.color);
+          }
+        });
+
+        // Event listener for size slider
+        sizeSlider.addEventListener("input", () => {
+          sizeValue.textContent = sizeSlider.value;
+          config.baseShapeSize = parseInt(sizeSlider.value, 10);
+          if (isAnimating) {
+            initializeCentralShape(config.shapeType, config.baseShapeSize, config.color);
+          }
+        });
+
+        // Event listener for color picker
+        colorPicker.addEventListener("input", () => {
+          config.color = PIXI.utils.string2hex(colorPicker.value);
+          if (isAnimating) {
+            initializeCentralShape(config.shapeType, config.baseShapeSize, config.color);
+          }
+        });
+
+        // Event listener for rotation speed slider
+        rotationSpeedSlider.addEventListener("input", () => {
+          rotationSpeedValue.textContent = rotationSpeedSlider.value;
+          config.rotationSpeed = parseFloat(rotationSpeedSlider.value);
+          if (isAnimating && centralShape) {
+            centralShape.rotationSpeed = config.rotationSpeed;
+          }
+        });
+      }
+
+      /**
+       * Toggles the visibility of the menu.
+       */
+      function toggleMenu() {
+        menu.classList.toggle("show");
+      }
+
+      /**
+       * Toggles fullscreen mode.
+       */
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch((err) => {
+            console.error(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
+          });
+        } else {
+          document.exitFullscreen();
+        }
+      }
+
+      /**
+       * Initializes event listeners for menu controls and buttons.
+       */
+      function initializeControls() {
+        // Settings icon to toggle menu
+        settingsIcon.addEventListener("click", () => {
+          toggleMenu();
+          playSound(buttonClickSound); // Play click sound
+        });
+
+        // Initialize menu listeners
+        setupMenuListeners();
+
+        // Fullscreen button
+        fullscreenBtn.addEventListener('click', () => {
+          toggleFullscreen();
+          playSound(buttonClickSound); // Play click sound
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (event) => {
+          if (event.code === 'Space') {
+            if (!isAnimating) { // Ensure not already animating
+              event.preventDefault(); // Prevent default space bar behavior (e.g., page scrolling)
+              if (!hasStarted) {
+                playSound(spacebarSound); // Play spacebar sound
+                startExperience(); // Start the experience if not started yet
+                hasStarted = true;
+              } else {
+                // Optionally, implement additional actions on subsequent spacebar presses
+                // For now, no action
+              }
+            }
+          } else if (event.key === 'f' || event.key === 'F') {
+            toggleFullscreen();
+            playSound(buttonClickSound); // Play click sound
+          }
+        });
+      }
+
+      /**
+       * Starts the visual experience by initializing the central shape and preparing for rotation.
+       */
+      function startExperience() {
+        if (isAnimating) return; // Prevent starting during animation
+
+        // Remove the start overlay
+        startOverlay.remove();
+
+        // Initialize central shape with current configurations
+        initializeCentralShape(config.shapeType, config.baseShapeSize, config.color);
+
+        // Start the rotation
+        app.ticker.add(rotateShape);
+        isAnimating = true;
+      }
+
+      /**
+       * Initializes the PixiJS application and sets up the central shape.
+       */
+      function initializePixiJS() {
+        // Initially, do not initialize the central shape. It's initialized on startExperience.
+      }
+
+      // Initialize controls on load
+      initializeControls();
+
+      // Handle window resize to maintain responsiveness
+      window.addEventListener('resize', () => {
+        app.renderer.resize(window.innerWidth, window.innerHeight);
+        if (isAnimating) {
+          // Reinitialize the central shape to adjust its position and scale
+          initializeCentralShape(config.shapeType, config.baseShapeSize, config.color);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
