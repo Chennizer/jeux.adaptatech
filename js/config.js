@@ -16,6 +16,7 @@ const spacePromptImages = [
     { src: "../../images/ski.png", alt: "Ski" },
     { src: "../../images/snowplow.png", alt: "Déneigeuse" },
     { src: "../../images/snowboard.png", alt: "Snowboard" },
+    { src: "../../images/RC.png", alt: "Roller Coaster" },
     { src: "../../images/astronaut.png", alt: "Astronaute" }
 ];
 
