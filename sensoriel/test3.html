@@ -1,334 +1,133 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Interactive Blob Expansion Game</title>
-  <!-- Include p5.js Library -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.5.0/p5.min.js" ></script>
+  <meta charset="UTF-8" />
+  <title>Interactive Growing Image with p5.js</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
   <style>
-    /* Remove default margins and paddings */
-    body, html {
+    body {
       margin: 0;
-      padding: 0;
-      overflow: hidden; /* Prevent scrolling */
-      background-color: black; /* Fallback background color */
-    }
-    /* Canvas should cover the entire window */
-    canvas {
-      display: block;
-    }
-    /* Instructions and Settings Container */
-    #overlay {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: white;
-      font-family: Arial, sans-serif;
-      font-size: 16px;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 10px 20px;
-      border-radius: 8px;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
-    /* Dropdown and Input Styles */
-    #overlay div {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    /* Dropdown Menu Styles */
-    #colorPicker,
-    #lifespanSlider {
-      padding: 5px;
-      border-radius: 4px;
-      border: none;
-      font-size: 14px;
-    }
-    /* Lifespan Slider Container */
-    #lifespanContainer {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    /* Optional: Style the instructions */
-    #instructions {
-      margin-right: 20px;
+      overflow: hidden;
+      background-color: #000;
     }
   </style>
 </head>
 <body>
-  <!-- Instructions and Settings Overlay -->
-  <div id="overlay">
-    <div id="instructions">Cliquez ou touchez pour générer des formes concentriques.</div>
-    <div>
-      <label for="colorPicker">Couleur:</label>
-      <input type="color" id="colorPicker" value="#FF69B4"> <!-- Default vibrant color -->
-    </div>
-    <div id="lifespanContainer">
-      <label for="lifespanSlider">Durée de vie: <span id="lifespanValue">5</span>s</label> <!-- Default lifespan set to 5s -->
-      <input type="range" id="lifespanSlider" min="2" max="10" step="1" value="5">
-    </div>
-  </div>
-  
   <script>
-    // Array to hold all active shapes
-    let shapes = [];
+    let items = []; // Array to hold objects of {img, sound}
+    let currentItem;
+    let currentScale = 0.5;
+    let growing = false;
+    let isPaused = false;
 
-    // Object to hold active interaction points
-    let activePoints = {};
+    let posX, posY;
+    const baseSize = 200;  // Fixed width in pixels for new images
+    let baseHeight = 0;    // Calculated height to maintain aspect ratio
 
-    // Time interval (in milliseconds) between generating new shapes from the same point
-    const shapeInterval = 500; // Set to 500ms (0.5s)
+    // List of image and sound file paths
+    const imagePaths = [
+      '../../images/etoile.png', 
+      '../../images/big-mack.png', 
+      '../../images/astronaut.png'
+    ];
+    const soundPaths = [
+      '../../sounds/moana.mp3', 
+      '../../sounds/roi-lion-jingle.mp3', 
+      '../../sounds/shakira.mp3'
+    ];
 
-    // Current selected color and lifespan
-    let currentShapeColor = '#FF69B4'; // Default pink color for visibility
-    let currentLifespan = 5; // Default lifespan in seconds
-
-    // DOM Elements
-    let colorPicker;
-    let lifespanSlider;
-    let lifespanValue;
-
-    // Shape Class for Random Blobs
-    class Shape {
-      constructor(x, y, template) {
-        this.x = x;
-        this.y = y;
-        this.color = template.color;
-        this.radius = template.radius; // Base radius
-        this.alpha = 255; // Fully opaque initially (No fade-out effect)
-        this.speed = template.speed; // Radius growth per frame
-        this.lifespan = template.lifespan * 1000; // Convert seconds to milliseconds
-        this.creationTime = millis(); // Record the creation time
-        // this.fadeStartTime = this.creationTime + (this.lifespan - 1000); // Removed fade-out timing
-        this.numPoints = template.numPoints;
-        this.angleStep = TWO_PI / this.numPoints;
-        this.noiseOffset = template.noiseOffset;
-        this.noiseScale = template.noiseScale;
-        this.rotation = template.rotation; // Initial rotation
-        this.rotationSpeed = template.rotationSpeed; // Rotation speed
+    function preload() {
+      // Load images and sounds into the items array
+      for (let i = 0; i < imagePaths.length; i++) {
+        let img = loadImage(imagePaths[i]);
+        let snd = loadSound(soundPaths[i]);
+        items.push({ img: img, sound: snd });
       }
+    }
 
-      update() {
-        this.radius += this.speed;
-        this.rotation += this.rotationSpeed; // Update rotation
-        // Removed fade-out effect
-        // let currentTime = millis();
-        // if (currentTime >= this.fadeStartTime) {
-        //   let elapsed = currentTime - this.fadeStartTime;
-        //   this.alpha = map(elapsed, 0, 1000, 255, 0);
-        //   this.alpha = constrain(this.alpha, 0, 255);
-        // }
-      }
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      imageMode(CENTER);
+      selectNewItem();
+    }
 
-      display() {
+    function draw() {
+      background(0);
+      if (currentItem && currentItem.img) {
         push();
-        translate(this.x, this.y);
-        rotate(this.rotation); // Apply rotation
-        noFill();
-        let strokeColor = this.hexToRGB(this.color, this.alpha);
-        stroke(...strokeColor); // Spread the RGBA array into separate arguments
-        strokeWeight(10); // Increased line thickness from 5 to 10
-        beginShape();
-        // Add two extra points for curveVertex smoothing
-        let vertices = [];
-        for (let i = 0; i <= this.numPoints; i++) {
-          let angle = i * this.angleStep;
-          // Use Perlin noise to vary the radius for smooth perturbations
-          let noiseVal = noise(this.noiseOffset + cos(angle) * this.noiseScale, this.noiseOffset + sin(angle) * this.noiseScale);
-          let r = this.radius + map(noiseVal, 0, 1, -40, 40); // Perturbation range ±40 pixels
-          let xPos = r * cos(angle);
-          let yPos = r * sin(angle);
-          vertices.push({x: xPos, y: yPos});
-        }
-        // To ensure smooth curves, add the last two vertices at the beginning
-        vertices.unshift(vertices[vertices.length - 2], vertices[vertices.length - 1]);
-        // Draw curve vertices
-        for (let v of vertices) {
-          curveVertex(v.x, v.y);
-        }
-        endShape(CLOSE);
+        // Draw the image at the random position with current scale
+        translate(posX, posY);
+        scale(currentScale);
+        image(currentItem.img, 0, 0, baseSize, baseHeight);
         pop();
       }
 
-      isDead() {
-        let currentTime = millis();
-        return currentTime > this.creationTime + this.lifespan;
-      }
-
-      // Helper function to convert hex color to p5.js color with alpha
-      hexToRGB(hex, alpha) {
-        let c;
-        if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
-          c = hex.substring(1).split('');
-          if(c.length === 3){
-            c = [c[0], c[0], c[1], c[1], c[2], c[2]];
-          }
-          c = '0x' + c.join('');
-          return [(c>>16)&255, (c>>8)&255, c&255, alpha];
-        }
-        throw new Error('Bad Hex');
+      // While growing, increase scale factor
+      if (growing) {
+        currentScale += 0.01; // Adjust growth rate as needed
       }
     }
 
-    // BlobTemplate Class to store consistent properties per interaction
-    class BlobTemplate {
-      constructor(color, lifespan) {
-        this.color = color;
-        this.lifespan = lifespan; // In seconds
-        this.radius = random(30, 60); // Random base radius between 30 and 60 pixels
-        this.speed = random(1, 3); // Random speed for radius growth
-        this.numPoints = floor(random(24, 48)); // Increased number of points between 24 and 48 for higher complexity
-        this.noiseOffset = random(1000); // Unique noise offset for each shape
-        this.noiseScale = 2; // Increased noise scale for more variation
-        this.rotation = random(TWO_PI); // Initial rotation
-        this.rotationSpeed = random(-0.005, 0.005); // Slower rotation speed for subtlety
-      }
-    }
+    function keyPressed() {
+      // Only react to spacebar if not paused and not already growing
+      if (key === ' ' && !growing && !isPaused) {
+        growing = true;
+        currentScale = 0.5; // Reset scale for new growth cycle
 
-    // Point Class to track active interactions and their blob templates
-    class Point {
-      constructor(id, x, y, template) {
-        this.id = id;
-        this.x = x;
-        this.y = y;
-        this.template = template; // BlobTemplate instance
-        this.lastShapeTime = 0; // Timestamp of the last shape generated
-      }
-    }
-
-    // p5.js setup function
-    function setup() {
-      createCanvas(windowWidth, windowHeight);
-      background(0); // Black background
-
-      // Get the DOM elements
-      colorPicker = document.getElementById('colorPicker');
-      lifespanSlider = document.getElementById('lifespanSlider');
-      lifespanValue = document.getElementById('lifespanValue');
-
-      // Event Listeners for Settings
-      colorPicker.addEventListener('input', (e) => {
-        currentShapeColor = e.target.value;
-      });
-
-      lifespanSlider.addEventListener('input', (e) => {
-        currentLifespan = parseInt(e.target.value);
-        lifespanValue.textContent = currentLifespan;
-      });
-
-      // Initialize lifespanValue display
-      lifespanValue.textContent = currentLifespan;
-
-      // Disable default context menu on right-click (optional)
-      let canvasElement = document.getElementsByTagName('canvas')[0];
-      if (canvasElement) {
-        canvasElement.oncontextmenu = () => false;
-      }
-    }
-
-    // p5.js draw function
-    function draw() {
-      background(0); // Fully opaque black background to remove trailing shadow
-
-      // Iterate over all active points
-      for (let id in activePoints) {
-        let point = activePoints[id];
-        // Check if enough time has passed since the last shape was generated
-        if (millis() - point.lastShapeTime > shapeInterval) {
-          // Create a new shape from this point using its template
-          shapes.push(new Shape(point.x, point.y, point.template));
-          point.lastShapeTime = millis();
-        }
-      }
-
-      // Update and display all shapes
-      for (let i = shapes.length - 1; i >= 0; i--) {
-        let shape = shapes[i];
-        shape.update();
-        shape.display();
-        if (shape.isDead()) {
-          shapes.splice(i, 1); // Remove the shape if it's fully transparent
+        // Play sound in loop if available
+        if (currentItem && currentItem.sound && currentItem.sound.isLoaded()) {
+          currentItem.sound.loop();
         }
       }
     }
 
-    // Function to handle shape creation
-    function createShape(x, y, id) {
-      // Create a blob template based on current settings
-      let template = new BlobTemplate(currentShapeColor, currentLifespan);
-      // Create a new Point with the template
-      activePoints[id] = new Point(id, x, y, template);
-    }
-
-    // Handle mouse pressed (desktop)
-    function mousePressed() {
-      // Create a new shape at the mouse position with id 'mouse'
-      createShape(mouseX, mouseY, 'mouse');
-    }
-
-    // Handle mouse dragged (desktop)
-    function mouseDragged() {
-      let id = 'mouse';
-      if (id in activePoints) {
-        activePoints[id].x = mouseX;
-        activePoints[id].y = mouseY;
+    function keyReleased() {
+      // Ignore spacebar releases during pause period
+      if (key === ' ' && isPaused) {
+        return;
       }
-    }
 
-    // Handle mouse released (desktop)
-    function mouseReleased() {
-      // Remove the 'mouse' point
-      delete activePoints['mouse'];
-    }
+      if (key === ' ') {
+        growing = false;
+        currentScale = 0.5; // Reset scale
 
-    // Handle touch started (mobile)
-    function touchStarted() {
-      for (let t of touches) {
-        let id = `touch${t.id}`;
-        if (!(id in activePoints)) {
-          createShape(t.x, t.y, id);
+        // Stop current sound looping
+        if (currentItem && currentItem.sound && currentItem.sound.isPlaying()) {
+          currentItem.sound.stop();
         }
+
+        // Clear the current image to create a black screen
+        currentItem = null;
+
+        // Set isPaused to true to disable spacebar input during pause
+        isPaused = true;
+
+        // After a 3-second delay, select a new random item and unpause
+        setTimeout(() => {
+          selectNewItem();
+          isPaused = false;
+        }, 3000);
       }
-      // Prevent default to avoid multiple touch events
-      return false;
     }
 
-    // Handle touch moved (mobile)
-    function touchMoved() {
-      for (let t of touches) {
-        let id = `touch${t.id}`;
-        if (id in activePoints) {
-          activePoints[id].x = t.x;
-          activePoints[id].y = t.y;
-        }
+    function selectNewItem() {
+      // Randomly select a new item from the list
+      currentItem = random(items);
+      currentScale = 0.5; // Start new image at a smaller scale
+
+      // Set a random position around the center
+      posX = width / 2 + random(-300, 300); // adjust range as needed
+      posY = height / 2 + random(-300, 300); // adjust range as needed
+
+      // Calculate baseHeight to maintain aspect ratio for the fixed baseSize
+      if (currentItem && currentItem.img) {
+        baseHeight = currentItem.img.height * (baseSize / currentItem.img.width);
       }
-      // Prevent default
-      return false;
     }
 
-    // Handle touch ended (mobile)
-    function touchEnded() {
-      // Generate list of active touch IDs
-      let activeTouchIds = touches.map(t => `touch${t.id}`);
-      // Remove points not in activeTouchIds
-      for (let id in activePoints) {
-        if (id.startsWith('touch') && !activeTouchIds.includes(id)) {
-          delete activePoints[id];
-        }
-      }
-      // Prevent default
-      return false;
-    }
-
-    // Handle window resize
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
-      background(0);
     }
   </script>
 </body>
