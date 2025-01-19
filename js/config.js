@@ -22,7 +22,6 @@ const spacePromptImages = [
 
 // Space Prompt Sounds
 const spacePromptSounds = [
-    { value: "none", label: "Son indicateur" },  // Default no sound option
     { value: "gong-sound", label: "Gong", src: "../../sounds/gong.mp3" },
     { value: "piano-sound", label: "Piano", src: "../../sounds/piano.mp3" },
     { value: "rooster-sound", label: "Coq", src: "../../sounds/rooster.mp3" },
@@ -42,8 +41,34 @@ const visualOptions = [
     { value: "saturation", label: "Haute saturation" }
 ];
 const miscOptions = [
-    { id: "mouse-click-option", label: "Activation par écran tactile ou tablette", defaultChecked: false },
-    { id: "enter-pause-option", label: "Pause avec la touche entrée (deuxième prise de switch)", defaultChecked: true },
-    { id: "right-click-next-option", label: "Avancer avec le clic droit de la souris", defaultChecked: false }
+    {
+      id: "mouse-click-option",
+      label: "Activation par écran tactile ou tablette",
+      defaultChecked: false
+    },
+    {
+        id: "two-player-mode-option",
+        label: "Mode à deux joueurs",
+        defaultChecked: false
+      },
+    {
+      id: "enter-pause-option",
+      label: "Pause avec la touche backspace",
+      defaultChecked: true
+    },
+    {
+      id: "right-click-next-option",
+      label: "Prochain vidéo avec clic droit de la souris",
+      defaultChecked: true
+    },
+    
+    {
+      id: "timed-prompt-option",
+      label: "Mode limite de temps",
+      defaultChecked: false
+    },
+    {
+        id: "timed-prompt-seconds",
+        label: "5" // We'll treat label = "5" as the default numeric 
+    }
 ];
-
