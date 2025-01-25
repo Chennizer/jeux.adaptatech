@@ -17,13 +17,9 @@
       --card-border: #cccccc;
       --card-hover: #e2e8f0;
       --matched-bg: #38c172;
-      --transition-speed: 0.3s;
+      --transition-speed: 0.6s;
       --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       --text-color: #2d3748;
-      --message-bg-success: rgba(56, 193, 114, 0.9);
-      --message-bg-error: rgba(220, 38, 38, 0.9);
-      --button-font-size: 1.2em;
-      --message-font-size: 1.2em;
       --gap-size: 10px;
       --container-padding: 10px;
     }
@@ -50,8 +46,9 @@
       justify-content: center;
       background-color: #fff;
       border-radius: 10px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
       padding: 10px;
+      overflow: visible;
     }
     .game-grid {
       display: grid;
@@ -63,60 +60,75 @@
       width: 100%;
       flex: 1 1 auto;
       padding: var(--gap-size);
-      overflow: hidden;
+      overflow: visible;
+      justify-content: center;
+      align-content: center;
     }
     .card {
+      width: 100px;
+      height: 100px;
       background-color: var(--card-bg);
       border: 2px solid var(--card-border);
       border-radius: 10px;
       cursor: pointer;
       position: relative;
-      transition: transform var(--transition-speed), background-color var(--transition-speed);
+      perspective: 1000px;
+      overflow: visible;
+      transition: background-color var(--transition-speed);
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
     }
     .card:hover {
       background-color: var(--card-hover);
       transform: scale(1.05);
+      transform-origin: center center;
+      z-index: 2;
     }
-    .card img {
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transition: transform var(--transition-speed);
+      transform-style: preserve-3d;
+    }
+    .flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+    .card-front, .card-back {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      backface-visibility: hidden;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .card-front {
+      background-color: var(--card-bg);
+    }
+    .card-back {
+      transform: rotateY(180deg);
+      background-color: var(--card-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card-back img {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      display: none;
     }
-    .card.flipped img {
-      display: block;
-    }
-    .card.matched {
+    .matched {
       background-color: var(--matched-bg);
       cursor: default;
       opacity: 0.6;
       animation: pulse 1s infinite;
     }
-    .message {
-      padding: 15px 25px;
-      border-radius: 5px;
-      font-size: var(--message-font-size);
-      color: #ffffff;
-      display: none;
-      width: 80%;
-      max-width: 400px;
-      margin-top: 20px;
-    }
-    .message.success {
-      background-color: var(--message-bg-success);
-    }
-    .message.error {
-      background-color: var(--message-bg-error);
-    }
-    @keyframes fadeInOut {
-      0% { opacity: 0; }
-      10% { opacity: 1; }
-      90% { opacity: 1; }
-      100% { opacity: 0; }
+    .selected {
+      outline: 3px solid var(--primary-color);
+      outline-offset: -3px;
     }
     @keyframes pulse {
       0%, 100% {
@@ -137,15 +149,11 @@
         grid-template-rows: repeat(4, 1fr);
       }
     }
-    .card:focus {
-      outline: 3px solid var(--primary-color);
-    }
   </style>
 </head>
 <body>
   <div class="game-container">
     <div class="game-grid" id="game-grid"></div>
-    <div class="message" id="message"></div>
   </div>
   <audio id="flip-sound" src="../../sounds/pageturn.mp3" preload="auto"></audio>
   <audio id="match-sound" src="../../sounds/flip.mp3" preload="auto"></audio>
@@ -154,11 +162,11 @@
   <script>
     const characters = [
       '../../images/toupieetbinou.png',
-      '../../images/big-mack.png',
-      '../../images/djembe.png',
-      '../../images/simba.png',
-      '../../images/moana.png',
-      '../../images/peppa.png'
+      '../../images/toupieetbinouavion.png',
+      '../../images/toupieetbinou2.png',
+      '../../images/toupieetbinouhalloween.png',
+      '../../images/toupieetbinouart.png',
+      '../../images/binou.png'
     ];
     let gameGrid = [];
     let firstCard = null;
@@ -166,11 +174,11 @@
     let lockBoard = false;
     let matchesFound = 0;
     const gameGridElement = document.getElementById('game-grid');
-    const messageDiv = document.getElementById('message');
     const flipSound = document.getElementById('flip-sound');
     const matchSound = document.getElementById('match-sound');
     const errorSound = document.getElementById('error-sound');
     const victorySound = document.getElementById('victory-sound');
+
     function shuffle(array) {
       for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -178,14 +186,13 @@
       }
       return array;
     }
+
     function initializeGame() {
       gameGrid = [];
       firstCard = null;
       secondCard = null;
       lockBoard = false;
       matchesFound = 0;
-      messageDiv.style.display = 'none';
-      messageDiv.textContent = '';
       const gameCharacters = [...characters, ...characters];
       shuffle(gameCharacters);
       gameGridElement.innerHTML = '';
@@ -194,10 +201,19 @@
         card.classList.add('card');
         card.dataset.character = char;
         card.dataset.index = index;
+        const cardInner = document.createElement('div');
+        cardInner.classList.add('card-inner');
+        const cardFront = document.createElement('div');
+        cardFront.classList.add('card-front');
+        const cardBack = document.createElement('div');
+        cardBack.classList.add('card-back');
         const img = document.createElement('img');
         img.src = char;
         img.alt = 'Cartoon Character';
-        card.appendChild(img);
+        cardBack.appendChild(img);
+        cardInner.appendChild(cardFront);
+        cardInner.appendChild(cardBack);
+        card.appendChild(cardInner);
         gameGridElement.appendChild(card);
         card.addEventListener('click', flipCard);
         card.setAttribute('tabindex', '0');
@@ -211,13 +227,14 @@
       });
       adjustCardSizes();
     }
+
     function adjustCardSizes() {
       const containerWidth = gameGridElement.offsetWidth;
       const containerHeight = gameGridElement.offsetHeight;
       const columns = window.innerWidth <= 600 ? 3 : 4;
       const rows = window.innerWidth <= 600 ? 4 : 3;
-      const maxCardWidth = containerWidth / columns - 10;
-      const maxCardHeight = containerHeight / rows - 10;
+      const maxCardWidth = containerWidth / columns - 15;
+      const maxCardHeight = containerHeight / rows - 15;
       const cardSize = Math.min(maxCardWidth, maxCardHeight);
       const cards = document.querySelectorAll('.card');
       cards.forEach(card => {
@@ -225,14 +242,17 @@
         card.style.height = cardSize + 'px';
       });
     }
+
     window.addEventListener('resize', () => {
       adjustCardSizes();
     });
+
     window.onload = initializeGame;
+
     function flipCard() {
       if (lockBoard) return;
       if (this === firstCard) return;
-      this.classList.add('flipped');
+      this.classList.add('flipped', 'selected');
       flipSound.play();
       if (!firstCard) {
         firstCard = this;
@@ -241,6 +261,7 @@
       secondCard = this;
       checkForMatch();
     }
+
     function checkForMatch() {
       const isMatch = firstCard.dataset.character === secondCard.dataset.character;
       if (isMatch) {
@@ -258,34 +279,28 @@
         }, 3000);
       }
     }
+
     function disableCards() {
       firstCard.removeEventListener('click', flipCard);
       secondCard.removeEventListener('click', flipCard);
+      firstCard.classList.remove('selected');
+      secondCard.classList.remove('selected');
       firstCard.classList.add('matched');
       secondCard.classList.add('matched');
       resetBoard();
     }
+
     function unflipCards() {
       setTimeout(() => {
-        firstCard.classList.remove('flipped');
-        secondCard.classList.remove('flipped');
+        firstCard.classList.remove('flipped', 'selected');
+        secondCard.classList.remove('flipped', 'selected');
         resetBoard();
       }, 1000);
     }
+
     function resetBoard() {
       [firstCard, secondCard] = [null, null];
       lockBoard = false;
-    }
-    function showMessage(message, type) {
-      messageDiv.textContent = message;
-      messageDiv.className = 'message';
-      if (type === 'success') {
-        messageDiv.classList.add('success');
-      } else if (type === 'error') {
-        messageDiv.classList.add('error');
-      }
-      messageDiv.style.display = 'block';
-      messageDiv.style.animation = 'fadeInOut 3s forwards';
     }
   </script>
 </body>
