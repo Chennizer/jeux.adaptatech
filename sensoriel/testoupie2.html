@@ -89,8 +89,7 @@
         z-index: 2;
       }
     }
-    .card-front,
-    .card-back {
+    .card-front, .card-back {
       position: absolute;
       width: 100%;
       height: 100%;
@@ -163,9 +162,20 @@
       align-items: center;
       justify-content: center;
       z-index: 9999;
+      flex-direction: column;
     }
-    /* Hide native controls for the video to remove the bar */
+    #reinforcerOverlay button {
+      margin-bottom: 20px;
+      padding: 12px 20px;
+      font-size: 1em;
+      background-color: var(--primary-color);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
     #reinforcerVideo {
+      display: none;
       width: 80%;
       height: auto;
       max-width: 800px;
@@ -173,7 +183,13 @@
       border-radius: 10px;
       background: #000;
       outline: none;
-      /* no controls attribute => no bar */
+      /* Attempt to hide iOS controls */
+      -webkit-media-controls: none;
+      controlslist="nodownload noremoteplayback";
+    }
+    /* Additional attempt to hide controls in iOS Safari */
+    #reinforcerVideo::-webkit-media-controls {
+      display: none !important;
     }
   </style>
 </head>
@@ -181,14 +197,20 @@
   <div class="game-container">
     <div class="game-grid" id="game-grid"></div>
   </div>
-
   <audio id="flip-sound" src="../../sounds/pageturn.mp3" preload="auto"></audio>
   <audio id="match-sound" src="../../sounds/flip.mp3" preload="auto"></audio>
   <audio id="error-sound" src="../../sounds/error.mp3" preload="auto"></audio>
   <audio id="victory-sound" src="../../sounds/victory.mp3" preload="auto"></audio>
 
   <div id="reinforcerOverlay">
-    <video id="reinforcerVideo" playsinline webkit-playsinline></video>
+    <button id="reinforcerButton">Play Reinforcer</button>
+    <video
+      id="reinforcerVideo"
+      playsinline
+      webkit-playsinline
+      disablepictureinpicture
+      style="display: none;"
+    ></video>
   </div>
 
   <script>
@@ -213,6 +235,7 @@
     const victorySound = document.getElementById('victory-sound');
     const reinforcerOverlay = document.getElementById('reinforcerOverlay');
     const reinforcerVideo = document.getElementById('reinforcerVideo');
+    const reinforcerButton = document.getElementById('reinforcerButton');
 
     function shuffle(array) {
       for (let i = array.length - 1; i > 0; i--) {
@@ -310,7 +333,7 @@
           matchesFound++;
           if (matchesFound === characters.length) {
             victorySound.play();
-            showReinforcer();
+            showReinforcerPrompt();
           }
         }, 1000); 
       } else {
@@ -345,27 +368,37 @@
       lockBoard = false;
     }
 
-    function showReinforcer() {
-      // Hide controls by default. Provide your video file path here:
-      reinforcerVideo.src = '../../videos/encanto-sous-les-apparences.mp4';
-
-      // Show overlay
+    // Called once all pairs are matched
+    function showReinforcerPrompt() {
       reinforcerOverlay.style.display = 'flex';
-
-      // Attempt to go fullscreen on iOS (if allowed by user gesture)
-      // This may or may not be supported on all iPads:
-      if (reinforcerVideo.webkitEnterFullscreen) {
-        try {
-          reinforcerVideo.webkitEnterFullscreen();
-        } catch (e) {
-          console.warn('webkitEnterFullscreen not supported', e);
-        }
-      }
-
-      // Start playing
-      reinforcerVideo.currentTime = 0;
-      reinforcerVideo.play();
+      // The video is hidden by default. Just set the source
+      reinforcerVideo.src = '../../videos/africa.mp4';
+      // Remove controls attribute if present
+      reinforcerVideo.removeAttribute('controls');
+      reinforcerVideo.controls = false;
     }
+
+    // The user taps "Play Reinforcer" => show video, try fullscreen, play
+    reinforcerButton.addEventListener('click', () => {
+      reinforcerButton.style.display = 'none';
+      reinforcerVideo.style.display = 'block';
+      // Attempt iOS or standard fullscreen
+      try {
+        if (typeof reinforcerVideo.webkitEnterFullscreen === 'function') {
+          reinforcerVideo.webkitEnterFullscreen();
+        } else if (typeof reinforcerVideo.requestFullscreen === 'function') {
+          reinforcerVideo.requestFullscreen();
+        }
+      } catch(e) {
+        console.warn('Fullscreen request failed:', e);
+      }
+      // Force no controls
+      reinforcerVideo.controls = false;
+      // Start playback
+      reinforcerVideo.play().catch(err => {
+        console.warn('Video play failed:', err);
+      });
+    });
   </script>
 </body>
 </html>
