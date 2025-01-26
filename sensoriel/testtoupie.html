@@ -55,11 +55,11 @@
       width: 40%;
       height: 100%;
       padding: 10px;
+      overflow-x: visible;
       overflow-y: auto;
       background-color: teal;
       border-radius: 20px;
       box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-      position: relative;
     }
     .letter {
       width: 80px;
@@ -84,7 +84,9 @@
       transform: scale(1.2);
       box-shadow: 4px 4px 12px rgba(0,0,0,0.5);
       z-index: 1000;
-      position: absolute;
+      position: fixed;
+      left: 0;
+      top: 0;
     }
     .letter:hover {
       transform: scale(1.05);
@@ -406,12 +408,15 @@
     }
 
     function dragStartMouse(e) {
+      e.preventDefault();
       activeDragElement = e.target;
-      initialX = e.clientX - activeDragElement.offsetLeft;
-      initialY = e.clientY - activeDragElement.offsetTop;
+      const rect = activeDragElement.getBoundingClientRect();
+      initialX = e.clientX - rect.left;
+      initialY = e.clientY - rect.top;
+      activeDragElement.classList.add('dragging');
       document.addEventListener('mousemove', dragMoveMouse);
       document.addEventListener('mouseup', dragEndMouse);
-      activeDragElement.classList.add('dragging');
+      moveToBody(activeDragElement, rect.left, rect.top);
     }
 
     function dragMoveMouse(e) {
@@ -431,21 +436,25 @@
       if (dropSlot) {
         handleDrop(activeDragElement, dropSlot);
       } else {
+        appendToLettersContainer(activeDragElement);
         positionLetterRandomly(activeDragElement);
       }
       activeDragElement = null;
     }
 
     function touchStart(e) {
-      e.preventDefault();
-      activeDragElement = e.target;
-      const touch = e.touches[0];
-      initialX = touch.clientX - activeDragElement.getBoundingClientRect().left;
-      initialY = touch.clientY - activeDragElement.getBoundingClientRect().top;
-      isDraggingTouch = true;
-      activeDragElement.classList.add('dragging');
-      document.addEventListener('touchmove', touchMove, { passive: false });
-      document.addEventListener('touchend', touchEnd);
+      if (e.target.classList.contains('letter')) {
+        e.preventDefault();
+        activeDragElement = e.target;
+        const touch = e.touches[0];
+        const rect = activeDragElement.getBoundingClientRect();
+        initialX = touch.clientX - rect.left;
+        initialY = touch.clientY - rect.top;
+        activeDragElement.classList.add('dragging');
+        moveToBody(activeDragElement, rect.left, rect.top);
+        document.addEventListener('touchmove', touchMove, { passive: false });
+        document.addEventListener('touchend', touchEnd);
+      }
     }
 
     function touchMove(e) {
@@ -459,18 +468,30 @@
     }
 
     function touchEnd(e) {
-      if (!isDraggingTouch || !activeDragElement) return;
+      if (!activeDragElement) return;
       activeDragElement.classList.remove('dragging');
-      isDraggingTouch = false;
       document.removeEventListener('touchmove', touchMove);
       document.removeEventListener('touchend', touchEnd);
       const dropSlot = getDropSlot(activeDragElement);
       if (dropSlot) {
         handleDrop(activeDragElement, dropSlot);
       } else {
+        appendToLettersContainer(activeDragElement);
         positionLetterRandomly(activeDragElement);
       }
       activeDragElement = null;
+    }
+
+    function moveToBody(element, left, top) {
+      document.body.appendChild(element);
+      element.style.position = 'fixed';
+      element.style.left = `${left}px`;
+      element.style.top = `${top}px`;
+    }
+
+    function appendToLettersContainer(element) {
+      lettersContainer.appendChild(element);
+      element.style.position = 'absolute';
     }
 
     function getDropSlot(draggedElement) {
@@ -510,6 +531,7 @@
         setTimeout(() => {
           slot.classList.remove('error');
         }, 500);
+        appendToLettersContainer(draggedElement);
         positionLetterRandomly(draggedElement);
       }
     }
