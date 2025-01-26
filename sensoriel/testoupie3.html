@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fixed-Size Puzzle (Same Dimensions Left & Right)</title>
+  <style>
+    /* Remove default margins, hide any overflow if needed */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden; /* no scrolling */
+      font-family: sans-serif;
+      background: #f0f0f0;
+    }
+
+    /* Main flex container: side-by-side layout */
+    .puzzle-container {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      gap: 40px; /* space between left and right areas */
+    }
+
+    /* Left side: a fixed area for scrambled pieces */
+    #piecesArea {
+      position: relative;
+      width: 500px;   /* enough space to scatter 9 pieces at 130×130 */
+      height: 500px;  /* you can adjust if needed */
+      background: #ddd;
+      border: 2px solid #999;
+      border-radius: 8px;
+      overflow: hidden; /* if any piece goes out of bounds, it won't show scrollbars */
+    }
+
+    /* Right side: the puzzle board = exactly 3×3 slots of 130×130 */
+    #puzzleArea {
+      width: 390px;   /* 3 columns × 130px each */
+      height: 390px;  /* 3 rows × 130px each */
+      background: #fff;
+      border: 2px dashed #999;
+      border-radius: 8px;
+      display: grid;
+      grid-template-columns: repeat(3, 130px);
+      grid-template-rows: repeat(3, 130px);
+      gap: 0; /* tight puzzle */
+    }
+
+    /* Each puzzle slot = 130×130 exactly */
+    .slot {
+      width: 130px;
+      height: 130px;
+      background: #e2e2e2;
+      border: 1px solid #ccc;
+      position: relative;
+      overflow: hidden; 
+      box-sizing: border-box;
+    }
+
+    /* All puzzle pieces = 130×130 no matter where they are */
+    .draggable-piece {
+      width: 130px;
+      height: 130px;
+      cursor: grab;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      position: absolute; /* on the left side, we place them absolutely */
+      object-fit: cover;  
+    }
+
+    .draggable-piece:active {
+      cursor: grabbing;
+      opacity: 0.8;
+    }
+
+    /* Hidden canvas for slicing the puzzle image */
+    #hiddenCanvas {
+      display: none;
+    }
+
+    /* Optional Title */
+    h1 {
+      position: absolute;
+      top: 5px;
+      left: 10px;
+      margin: 0;
+      font-size: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Fixed Size Puzzle (130×130 pieces, no resizing)</h1>
+
+  <div class="puzzle-container">
+    <!-- LEFT: area for scrambled pieces -->
+    <div id="piecesArea"></div>
+    <!-- RIGHT: puzzle board (3×3 slots of 130×130) -->
+    <div id="puzzleArea"></div>
+  </div>
+
+  <!-- Hidden canvas for slicing -->
+  <canvas id="hiddenCanvas"></canvas>
+
+  <script>
+    /* 
+       1) Provide your local puzzle image path here.
+          E.g. "myPuzzle.jpg" in the same folder.
+    */
+    const puzzleImagePath = "../../images/moana-background.jpg";
+
+    /* 2) Puzzle rows & columns (3x3). Each piece = 130×130 in the final layout. */
+    const ROWS = 3;
+    const COLS = 3;
+    const PIECE_SIZE = 130; // px
+
+    let puzzlePieces = [];
+
+    /* Grab DOM references */
+    const hiddenCanvas = document.getElementById('hiddenCanvas');
+    const piecesArea   = document.getElementById('piecesArea');
+    const puzzleArea   = document.getElementById('puzzleArea');
+    const ctx          = hiddenCanvas.getContext('2d');
+
+    /* On page load, create the puzzle from the given image path */
+    window.addEventListener('load', () => {
+      const puzzleImage = new Image();
+      puzzleImage.src = puzzleImagePath;
+      puzzleImage.onload = () => createPuzzleFromImage(puzzleImage);
+      puzzleImage.onerror = err => console.error("Image failed to load:", err);
+    });
+
+    /* Create puzzle by slicing the image into 3×3 => 9 pieces */
+    function createPuzzleFromImage(image) {
+      // Clear old puzzle if any
+      puzzleArea.innerHTML = "";
+      piecesArea.innerHTML = "";
+      puzzlePieces = [];
+
+      // We'll slice the *actual* image via a hidden canvas
+      hiddenCanvas.width = image.width;
+      hiddenCanvas.height = image.height;
+      ctx.drawImage(image, 0, 0);
+
+      // Calculate piece dimensions from the source image
+      const sourcePieceWidth  = image.width  / COLS;
+      const sourcePieceHeight = image.height / ROWS;
+
+      let pieceIndex = 0;
+      for (let row = 0; row < ROWS; row++) {
+        for (let col = 0; col < COLS; col++) {
+          const pieceCanvas = document.createElement('canvas');
+          pieceCanvas.width = sourcePieceWidth;
+          pieceCanvas.height = sourcePieceHeight;
+          const pieceCtx = pieceCanvas.getContext('2d');
+
+          // Copy that slice from the main image
+          pieceCtx.drawImage(
+            image,
+            col * sourcePieceWidth,
+            row * sourcePieceHeight,
+            sourcePieceWidth,
+            sourcePieceHeight,
+            0,
+            0,
+            sourcePieceWidth,
+            sourcePieceHeight
+          );
+
+          // Convert to base64
+          const pieceDataURL = pieceCanvas.toDataURL();
+
+          puzzlePieces.push({
+            index: pieceIndex,
+            row,
+            col,
+            img: pieceDataURL
+          });
+          pieceIndex++;
+        }
+      }
+
+      // Build the puzzle board's 9 slots
+      for (let i = 0; i < puzzlePieces.length; i++) {
+        const slot = document.createElement('div');
+        slot.classList.add('slot');
+        slot.dataset.index = i; // so we can check correctness if needed
+
+        // Make it droppable
+        slot.addEventListener('dragover', allowDrop);
+        slot.addEventListener('drop', onDrop);
+
+        puzzleArea.appendChild(slot);
+      }
+
+      // Shuffle the pieces, place them randomly in the left area
+      shuffleArray(puzzlePieces);
+      puzzlePieces.forEach(piece => {
+        const imgEl = document.createElement('img');
+        imgEl.src = piece.img;
+        imgEl.classList.add('draggable-piece');
+        imgEl.draggable = true;
+        imgEl.dataset.index = piece.index;
+
+        // All pieces are 130×130 always
+        imgEl.style.width  = PIECE_SIZE + "px";
+        imgEl.style.height = PIECE_SIZE + "px";
+
+        // Drag events
+        imgEl.addEventListener('dragstart', onDragStart);
+        imgEl.addEventListener('dragend',   onDragEnd);
+
+        // Randomly position them within #piecesArea (500×500)
+        positionPieceRandomly(imgEl, 500 - PIECE_SIZE, 500 - PIECE_SIZE);
+
+        piecesArea.appendChild(imgEl);
+      });
+    }
+
+    /* Randomly place a piece within the available space */
+    function positionPieceRandomly(pieceEl, maxX, maxY) {
+      // maxX / maxY is the largest top-left coordinate 
+      // so the piece fully fits within 500×500 area.
+      const randX = Math.floor(Math.random() * (maxX + 1));
+      const randY = Math.floor(Math.random() * (maxY + 1));
+      pieceEl.style.left = randX + "px";
+      pieceEl.style.top  = randY + "px";
+    }
+
+    /* DRAG & DROP LOGIC */
+    function onDragStart(e) {
+      e.dataTransfer.setData('text/plain', e.target.dataset.index);
+      e.target.classList.add('dragging');
+    }
+
+    function onDragEnd(e) {
+      e.target.classList.remove('dragging');
+    }
+
+    function allowDrop(e) {
+      e.preventDefault(); // must do this to allow dropping
+    }
+
+    function onDrop(e) {
+      e.preventDefault();
+      const pieceIndex = e.dataTransfer.getData('text/plain');
+      const slot       = e.currentTarget;
+      const draggedImg = document.querySelector(`.draggable-piece[data-index='${pieceIndex}']`);
+      if (!draggedImg) return;
+
+      // If there's a piece in this slot, swap
+      const existingPiece = slot.querySelector('img');
+      const oldParent     = draggedImg.parentElement;
+      if (existingPiece) {
+        oldParent.appendChild(existingPiece);
+        // If old parent is #piecesArea, re-randomize that piece
+        if (oldParent.id === 'piecesArea') {
+          existingPiece.style.position = 'absolute';
+          existingPiece.style.width  = PIECE_SIZE + "px";
+          existingPiece.style.height = PIECE_SIZE + "px";
+          positionPieceRandomly(existingPiece, 500 - PIECE_SIZE, 500 - PIECE_SIZE);
+        }
+      }
+
+      // Place dragged piece into this slot
+      slot.innerHTML = "";
+      slot.appendChild(draggedImg);
+
+      // Make sure the piece is exactly 130×130, 
+      // and "relative" so it fits in the slot neatly
+      draggedImg.style.position = 'relative';
+      draggedImg.style.left = '0';
+      draggedImg.style.top  = '0';
+      draggedImg.style.width  = PIECE_SIZE + "px";
+      draggedImg.style.height = PIECE_SIZE + "px";
+    }
+
+    /* Shuffle array in-place */
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    /* OPTIONAL: puzzle completion check */
+    function checkPuzzleCompletion() {
+      let correct = 0;
+      const slots = document.querySelectorAll('.slot');
+      slots.forEach(slot => {
+        const slotIndex = slot.dataset.index;
+        const pieceImg  = slot.querySelector('img');
+        if (pieceImg && pieceImg.dataset.index === slotIndex) {
+          correct++;
+        }
+      });
+      if (correct === ROWS * COLS) {
+        alert("Puzzle terminé !");
+      }
+    }
+  </script>
+</body>
+</html>
