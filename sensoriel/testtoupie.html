@@ -97,8 +97,8 @@
       align-items: center;
       width: 50%;
       min-width: 250px;
-      padding: 20px;
       height: 100%;
+      padding: 20px;
     }
     .target-image {
       width: 50%;
@@ -213,6 +213,7 @@
     @media (max-width: 600px) {
       .game-container {
         flex-direction: column;
+        height: 100vh;
       }
       .letters-container, .target-word-container {
         width: 100%;
@@ -268,26 +269,13 @@
 
   <script>
     const words = [
-      {
-        word: "Binou",
-        image: "../../images/binou.png"
-      },
-      {
-        word: "Toupie",
-        image: "../../images/toupieetbinou.png"
-      },
-      {
-        word: "Chaton",
-        image: "../../images/chaton.png"
-      },
-      {
-        word: "Pomme",
-        image: "../../images/pomme.png"
-      }
+      { word: "Binou", image: "../../images/binou.png" },
+      { word: "Toupie", image: "../../images/toupieetbinou.png" },
+      { word: "Chaton", image: "../../images/chaton.png" },
+      { word: "Pomme", image: "../../images/pomme.png" }
     ];
 
     let currentWordIndex = 0;
-
     const lettersContainer = document.getElementById('letters-container');
     let slots = [];
     const reinforcer = document.getElementById('reinforcer');
@@ -296,14 +284,13 @@
     const finalRewardSound = document.getElementById('final-reward-sound');
     const targetImage = document.getElementById('target-image');
 
+    let showModelLetters = true;
     let activeDragElement = null;
     let initialX = 0;
     let initialY = 0;
     let currentX = 0;
     let currentY = 0;
     let isDraggingTouch = false;
-
-    let showModelLetters = true;
 
     function initializeTargetImage() {
       const currentWord = words[currentWordIndex].word;
@@ -336,16 +323,12 @@
       lettersArray.forEach(letter => {
         const letterDiv = document.createElement('div');
         letterDiv.classList.add('letter');
-        letterDiv.setAttribute('draggable', 'true');
         letterDiv.setAttribute('data-letter', letter);
         letterDiv.textContent = letter;
         lettersContainer.appendChild(letterDiv);
         positionLetterRandomly(letterDiv);
-        letterDiv.addEventListener('dragstart', dragStart);
-        letterDiv.addEventListener('dragend', dragEnd);
+        letterDiv.addEventListener('mousedown', dragStartMouse);
         letterDiv.addEventListener('touchstart', touchStart, { passive: false });
-        letterDiv.addEventListener('touchmove', touchMove, { passive: false });
-        letterDiv.addEventListener('touchend', touchEnd);
       });
     }
 
@@ -376,8 +359,8 @@
     }
 
     function shuffleArray(array) {
-      for (let i = array.length -1; i >0; i--){
-        const j = Math.floor(Math.random() * (i+1));
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
       }
     }
@@ -388,14 +371,16 @@
       const letterHeight = letterDiv.offsetHeight;
       const maxLeft = container.clientWidth - letterWidth - 20;
       const maxTop = container.clientHeight - letterHeight - 20;
-      let left = Math.floor(Math.random() * maxLeft) + 10;
-      let top = Math.floor(Math.random() * maxTop) + 10;
+      const safeMaxLeft = Math.max(maxLeft, 0);
+      const safeMaxTop = Math.max(maxTop, 0);
+      let left = Math.floor(Math.random() * safeMaxLeft) + 10;
+      let top = Math.floor(Math.random() * safeMaxTop) + 10;
       const existingLetters = document.querySelectorAll('.letters-container .letter:not(.dragging)');
       let attempts = 0;
       const maxAttempts = 10;
       while (isOverlapping(left, top, letterWidth, letterHeight, existingLetters) && attempts < maxAttempts) {
-        left = Math.floor(Math.random() * maxLeft) + 10;
-        top = Math.floor(Math.random() * maxTop) + 10;
+        left = Math.floor(Math.random() * safeMaxLeft) + 10;
+        top = Math.floor(Math.random() * safeMaxTop) + 10;
         attempts++;
       }
       letterDiv.style.left = `${left}px`;
@@ -420,66 +405,113 @@
       return false;
     }
 
-    function dragStart(e) {
-      e.dataTransfer.setData('text/plain', e.target.dataset.letter);
-      setTimeout(() => {
-        e.target.classList.add('dragging');
-      }, 0);
+    function dragStartMouse(e) {
+      activeDragElement = e.target;
+      initialX = e.clientX - activeDragElement.offsetLeft;
+      initialY = e.clientY - activeDragElement.offsetTop;
+      document.addEventListener('mousemove', dragMoveMouse);
+      document.addEventListener('mouseup', dragEndMouse);
+      activeDragElement.classList.add('dragging');
     }
 
-    function dragEnd(e) {
-      e.target.classList.remove('dragging');
-      if (!e.target.parentElement.classList.contains('letter-slot')) {
-        positionLetterRandomly(e.target);
+    function dragMoveMouse(e) {
+      if (!activeDragElement) return;
+      currentX = e.clientX - initialX;
+      currentY = e.clientY - initialY;
+      activeDragElement.style.left = `${currentX}px`;
+      activeDragElement.style.top = `${currentY}px`;
+    }
+
+    function dragEndMouse(e) {
+      if (!activeDragElement) return;
+      activeDragElement.classList.remove('dragging');
+      document.removeEventListener('mousemove', dragMoveMouse);
+      document.removeEventListener('mouseup', dragEndMouse);
+      const dropSlot = getDropSlot(activeDragElement);
+      if (dropSlot) {
+        handleDrop(activeDragElement, dropSlot);
+      } else {
+        positionLetterRandomly(activeDragElement);
       }
+      activeDragElement = null;
     }
 
-    function attachSlotEventListeners() {
-      slots.forEach((slot, index) => {
-        slot.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          slot.classList.add('over');
-        });
+    function touchStart(e) {
+      e.preventDefault();
+      activeDragElement = e.target;
+      const touch = e.touches[0];
+      initialX = touch.clientX - activeDragElement.getBoundingClientRect().left;
+      initialY = touch.clientY - activeDragElement.getBoundingClientRect().top;
+      isDraggingTouch = true;
+      activeDragElement.classList.add('dragging');
+      document.addEventListener('touchmove', touchMove, { passive: false });
+      document.addEventListener('touchend', touchEnd);
+    }
 
-        slot.addEventListener('dragleave', () => {
-          slot.classList.remove('over');
-        });
+    function touchMove(e) {
+      if (!isDraggingTouch || !activeDragElement) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      currentX = touch.clientX - initialX;
+      currentY = touch.clientY - initialY;
+      activeDragElement.style.left = `${currentX}px`;
+      activeDragElement.style.top = `${currentY}px`;
+    }
 
-        slot.addEventListener('drop', (e) => {
-          e.preventDefault();
-          slot.classList.remove('over');
-          const letter = e.dataTransfer.getData('text/plain');
-          const draggedElement = document.querySelector(`.letter[data-letter='${letter}']`);
-          if (slot.classList.contains('filled')) {
-            errorSound.play();
-            slot.classList.add('error');
-            setTimeout(() => {
-              slot.classList.remove('error');
-            }, 500);
-            return;
-          }
-          const requiredLetter = words[currentWordIndex].word[index];
-          if (letter !== requiredLetter) {
-            errorSound.play();
-            slot.classList.add('error');
-            setTimeout(() => {
-              slot.classList.remove('error');
-            }, 500);
-            return;
-          }
-          const placedLetterDiv = slot.querySelector('.placed-letter');
-          if (placedLetterDiv) {
-            placedLetterDiv.textContent = letter;
-          }
-          slot.classList.add('filled');
-          successSound.play();
-          showReinforcer();
-          if (draggedElement) {
-            draggedElement.remove();
-          }
-          checkCompletion();
-        });
-      });
+    function touchEnd(e) {
+      if (!isDraggingTouch || !activeDragElement) return;
+      activeDragElement.classList.remove('dragging');
+      isDraggingTouch = false;
+      document.removeEventListener('touchmove', touchMove);
+      document.removeEventListener('touchend', touchEnd);
+      const dropSlot = getDropSlot(activeDragElement);
+      if (dropSlot) {
+        handleDrop(activeDragElement, dropSlot);
+      } else {
+        positionLetterRandomly(activeDragElement);
+      }
+      activeDragElement = null;
+    }
+
+    function getDropSlot(draggedElement) {
+      const draggedRect = draggedElement.getBoundingClientRect();
+      const slots = document.querySelectorAll('.letter-slot');
+      for (let slot of slots) {
+        const slotRect = slot.getBoundingClientRect();
+        if (
+          draggedRect.left < slotRect.right &&
+          draggedRect.right > slotRect.left &&
+          draggedRect.top < slotRect.bottom &&
+          draggedRect.bottom > slotRect.top
+        ) {
+          return slot;
+        }
+      }
+      return null;
+    }
+
+    function handleDrop(draggedElement, slot) {
+      const index = parseInt(slot.getAttribute('data-position'));
+      const requiredLetter = words[currentWordIndex].word[index];
+      const draggedLetter = draggedElement.dataset.letter;
+      if (draggedLetter === requiredLetter) {
+        const placedLetterDiv = slot.querySelector('.placed-letter');
+        if (placedLetterDiv) {
+          placedLetterDiv.textContent = draggedLetter;
+        }
+        slot.classList.add('filled');
+        successSound.play();
+        showReinforcer();
+        draggedElement.remove();
+        checkCompletion();
+      } else {
+        errorSound.play();
+        slot.classList.add('error');
+        setTimeout(() => {
+          slot.classList.remove('error');
+        }, 500);
+        positionLetterRandomly(draggedElement);
+      }
     }
 
     function showReinforcer() {
@@ -533,89 +565,6 @@
       initializeLetters();
       insertModelLetters();
       attachSlotEventListeners();
-    }
-
-    function touchStart(e) {
-      if (e.target.classList.contains('letter')) {
-        activeDragElement = e.target;
-        const touch = e.touches[0];
-        initialX = touch.clientX - activeDragElement.offsetLeft;
-        initialY = touch.clientY - activeDragElement.offsetTop;
-        isDraggingTouch = true;
-        activeDragElement.classList.add('dragging');
-      }
-    }
-
-    function touchMove(e) {
-      if (!isDraggingTouch || !activeDragElement) return;
-      e.preventDefault();
-      const touch = e.touches[0];
-      currentX = touch.clientX - initialX;
-      currentY = touch.clientY - initialY;
-      const container = lettersContainer.getBoundingClientRect();
-      const letterRect = activeDragElement.getBoundingClientRect();
-      if (currentX < 0) currentX = 0;
-      if (currentY < 0) currentY = 0;
-      if (currentX + letterRect.width > container.width)
-        currentX = container.width - letterRect.width;
-      if (currentY + letterRect.height > container.height)
-        currentY = container.height - letterRect.height;
-      activeDragElement.style.left = `${currentX}px`;
-      activeDragElement.style.top = `${currentY}px`;
-    }
-
-    function touchEnd(e) {
-      if (!isDraggingTouch || !activeDragElement) return;
-      activeDragElement.classList.remove('dragging');
-      isDraggingTouch = false;
-      const dropResult = getDropSlot(activeDragElement);
-      if (dropResult) {
-        handleDrop(activeDragElement, dropResult);
-      } else {
-        positionLetterRandomly(activeDragElement);
-      }
-      activeDragElement = null;
-    }
-
-    function getDropSlot(draggedElement) {
-      const draggedRect = draggedElement.getBoundingClientRect();
-      const slots = document.querySelectorAll('.letter-slot');
-      for (let slot of slots) {
-        const slotRect = slot.getBoundingClientRect();
-        if (
-          draggedRect.left < slotRect.right &&
-          draggedRect.right > slotRect.left &&
-          draggedRect.top < slotRect.bottom &&
-          draggedRect.bottom > slotRect.top
-        ) {
-          return slot;
-        }
-      }
-      return null;
-    }
-
-    function handleDrop(draggedElement, slot) {
-      const index = parseInt(slot.getAttribute('data-position'));
-      const requiredLetter = words[currentWordIndex].word[index];
-      const draggedLetter = draggedElement.dataset.letter;
-      if (draggedLetter === requiredLetter) {
-        const placedLetterDiv = slot.querySelector('.placed-letter');
-        if (placedLetterDiv) {
-          placedLetterDiv.textContent = draggedLetter;
-        }
-        slot.classList.add('filled');
-        successSound.play();
-        showReinforcer();
-        draggedElement.remove();
-        checkCompletion();
-      } else {
-        errorSound.play();
-        slot.classList.add('error');
-        setTimeout(() => {
-          slot.classList.remove('error');
-        }, 500);
-        positionLetterRandomly(draggedElement);
-      }
     }
 
     const toggleCheckbox = document.getElementById('toggle-model-letters');
