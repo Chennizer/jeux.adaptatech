@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Fixed-Size Puzzle (Same Dimensions Left & Right)</title>
+  <title>Enhanced Dispersed Puzzle with Moana Background</title>
   <style>
-    /* Remove default margins, hide any overflow if needed */
+    /* Ensure the page fills the entire viewport without scrollbars */
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
-      overflow: hidden; /* no scrolling */
-      font-family: sans-serif;
+      overflow: hidden; /* No scrollbars */
+      font-family: Arial, sans-serif;
       background: #f0f0f0;
     }
 
-    /* Main flex container: side-by-side layout */
+    /* Main container: side-by-side layout */
     .puzzle-container {
       display: flex;
       flex-direction: row;
@@ -24,21 +24,26 @@
       width: 100%;
       height: 100%;
       box-sizing: border-box;
-      gap: 40px; /* space between left and right areas */
+      gap: 40px; /* Space between left and right areas */
+      padding: 20px;
     }
 
-    /* Left side: a fixed area for scrambled pieces */
+    /* Left side: fixed area for scrambled pieces using grid for dispersion */
     #piecesArea {
       position: relative;
-      width: 500px;   /* enough space to scatter 9 pieces at 130×130 */
-      height: 500px;  /* you can adjust if needed */
+      width: 600px;   /* Adjusted for larger play zone */
+      height: 600px;  /* Adjusted for larger play zone */
       background: #ddd;
       border: 2px solid #999;
       border-radius: 8px;
-      overflow: hidden; /* if any piece goes out of bounds, it won't show scrollbars */
+      overflow: hidden; /* Hide overflow */
+      display: grid;
+      grid-template-columns: repeat(3, 1fr); /* 3 columns */
+      grid-template-rows: repeat(3, 1fr);    /* 3 rows */
+      gap: 20px; /* Space between grid cells */
     }
 
-    /* Right side: the puzzle board = exactly 3×3 slots of 130×130 */
+    /* Right side: puzzle board = exactly 3×3 slots of 130×130 */
     #puzzleArea {
       width: 390px;   /* 3 columns × 130px each */
       height: 390px;  /* 3 rows × 130px each */
@@ -48,7 +53,9 @@
       display: grid;
       grid-template-columns: repeat(3, 130px);
       grid-template-rows: repeat(3, 130px);
-      gap: 0; /* tight puzzle */
+      gap: 0; /* Tight puzzle */
+      box-sizing: border-box;
+      position: relative;
     }
 
     /* Each puzzle slot = 130×130 exactly */
@@ -69,13 +76,16 @@
       cursor: grab;
       border: 2px solid transparent;
       border-radius: 4px;
-      position: absolute; /* on the left side, we place them absolutely */
       object-fit: cover;  
+      position: absolute; /* Initial absolute positioning */
+      touch-action: none; /* Prevent default touch actions */
+      user-select: none; /* Prevent text selection */
     }
 
-    .draggable-piece:active {
-      cursor: grabbing;
+    .draggable-piece.active {
       opacity: 0.8;
+      cursor: grabbing;
+      z-index: 1000; /* Bring to front when dragging */
     }
 
     /* Hidden canvas for slicing the puzzle image */
@@ -86,20 +96,31 @@
     /* Optional Title */
     h1 {
       position: absolute;
-      top: 5px;
-      left: 10px;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
       margin: 0;
-      font-size: 1.2rem;
+      font-size: 1.5rem;
+      color: #333;
+    }
+
+    /* Highlight indicator: add/remove this class on dragenter/dragleave */
+    .highlight {
+      outline: 3px dashed #00aaff; 
+      outline-offset: -5px;
+      background-color: rgba(0, 170, 255, 0.1); /* Subtle highlight */
     }
   </style>
 </head>
 <body>
 
-  <h1>Fixed Size Puzzle (130×130 pieces, no resizing)</h1>
+  <h1>Enhanced Dispersed Puzzle with Moana Background</h1>
 
   <div class="puzzle-container">
-    <!-- LEFT: area for scrambled pieces -->
-    <div id="piecesArea"></div>
+    <!-- LEFT: area for scrambled pieces, using grid for dispersion -->
+    <div id="piecesArea">
+      <!-- Puzzle pieces will be inserted here -->
+    </div>
     <!-- RIGHT: puzzle board (3×3 slots of 130×130) -->
     <div id="puzzleArea"></div>
   </div>
@@ -109,12 +130,14 @@
 
   <script>
     /* 
-       1) Provide your local puzzle image path here.
-          E.g. "myPuzzle.jpg" in the same folder.
+       1) Use the specified image path.
+          Ensure that "../../images/moana-background.jpg" is correct relative to this HTML file's location.
     */
     const puzzleImagePath = "../../images/moana-background.jpg";
 
-    /* 2) Puzzle rows & columns (3x3). Each piece = 130×130 in the final layout. */
+    /* 
+       2) Puzzle rows & columns (3x3). Each piece = 130×130 in the final layout.
+    */
     const ROWS = 3;
     const COLS = 3;
     const PIECE_SIZE = 130; // px
@@ -142,7 +165,7 @@
       piecesArea.innerHTML = "";
       puzzlePieces = [];
 
-      // We'll slice the *actual* image via a hidden canvas
+      // Slice the image via the hidden canvas
       hiddenCanvas.width = image.width;
       hiddenCanvas.height = image.height;
       ctx.drawImage(image, 0, 0);
@@ -193,12 +216,22 @@
 
         // Make it droppable
         slot.addEventListener('dragover', allowDrop);
-        slot.addEventListener('drop', onDrop);
+        slot.addEventListener('drop', onDrop); // Ensure onDrop is defined
+
+        // Also highlight on dragenter/dragleave
+        slot.addEventListener('dragenter', onDragEnter);
+        slot.addEventListener('dragleave', onDragLeave);
 
         puzzleArea.appendChild(slot);
       }
 
-      // Shuffle the pieces, place them randomly in the left area
+      // Also allow dropping back into the left #piecesArea
+      piecesArea.addEventListener('dragover', allowDrop);
+      piecesArea.addEventListener('drop', onDropLeft); // Ensure onDropLeft is defined
+      piecesArea.addEventListener('dragenter', onDragEnter);
+      piecesArea.addEventListener('dragleave', onDragLeave);
+
+      // Shuffle the pieces, then place them randomly in the left area grid
       shuffleArray(puzzlePieces);
       puzzlePieces.forEach(piece => {
         const imgEl = document.createElement('img');
@@ -215,41 +248,77 @@
         imgEl.addEventListener('dragstart', onDragStart);
         imgEl.addEventListener('dragend',   onDragEnd);
 
-        // Randomly position them within #piecesArea (500×500)
-        positionPieceRandomly(imgEl, 500 - PIECE_SIZE, 500 - PIECE_SIZE);
-
+        // Place randomly within their assigned grid cell for better dispersion
+        placePieceInGridCell(imgEl, piece);
         piecesArea.appendChild(imgEl);
       });
     }
 
-    /* Randomly place a piece within the available space */
-    function positionPieceRandomly(pieceEl, maxX, maxY) {
-      // maxX / maxY is the largest top-left coordinate 
-      // so the piece fully fits within 500×500 area.
-      const randX = Math.floor(Math.random() * (maxX + 1));
-      const randY = Math.floor(Math.random() * (maxY + 1));
-      pieceEl.style.left = randX + "px";
-      pieceEl.style.top  = randY + "px";
+    /* Place a piece within a specific grid cell to ensure better dispersion */
+    function placePieceInGridCell(pieceEl, piece) {
+      // Assign to a random grid cell
+      const totalCells = ROWS * COLS;
+      const availableCells = [...Array(totalCells).keys()];
+      // Randomly pick an available cell and remove it from the list to avoid multiple pieces per cell
+      const randomIndex = Math.floor(Math.random() * availableCells.length);
+      const selectedCell = availableCells.splice(randomIndex, 1)[0];
+
+      // Calculate grid row and column
+      const cellRow = Math.floor(selectedCell / COLS);
+      const cellCol = selectedCell % COLS;
+
+      // Calculate cell position within #piecesArea
+      const piecesAreaWidth = piecesArea.clientWidth;
+      const piecesAreaHeight = piecesArea.clientHeight;
+      const cellWidth = piecesAreaWidth / COLS;
+      const cellHeight = piecesAreaHeight / ROWS;
+
+      // Calculate random offset within the cell to prevent perfect alignment
+      const maxOffsetX = cellWidth - PIECE_SIZE - 10; // 10px padding
+      const maxOffsetY = cellHeight - PIECE_SIZE - 10; // 10px padding
+      const offsetX = Math.floor(Math.random() * Math.max(1, maxOffsetX));
+      const offsetY = Math.floor(Math.random() * Math.max(1, maxOffsetY));
+
+      // Set the position
+      pieceEl.style.position = 'absolute';
+      pieceEl.style.left = (cellCol * cellWidth + offsetX) + 'px';
+      pieceEl.style.top  = (cellRow * cellHeight + offsetY) + 'px';
     }
 
     /* DRAG & DROP LOGIC */
+
+    // Common dragstart
     function onDragStart(e) {
       e.dataTransfer.setData('text/plain', e.target.dataset.index);
       e.target.classList.add('dragging');
     }
 
+    // Common dragend
     function onDragEnd(e) {
       e.target.classList.remove('dragging');
     }
 
+    // Must prevent default to allow dropping
     function allowDrop(e) {
-      e.preventDefault(); // must do this to allow dropping
+      e.preventDefault();
     }
 
+    // Highlight on drag enter
+    function onDragEnter(e) {
+      e.currentTarget.classList.add('highlight');
+    }
+
+    // Remove highlight on drag leave
+    function onDragLeave(e) {
+      e.currentTarget.classList.remove('highlight');
+    }
+
+    // Dropping onto a puzzle slot
     function onDrop(e) {
       e.preventDefault();
+      e.currentTarget.classList.remove('highlight'); // remove highlight
       const pieceIndex = e.dataTransfer.getData('text/plain');
-      const slot       = e.currentTarget;
+      const slot = e.currentTarget;
       const draggedImg = document.querySelector(`.draggable-piece[data-index='${pieceIndex}']`);
       if (!draggedImg) return;
 
@@ -257,27 +326,49 @@
       const existingPiece = slot.querySelector('img');
       const oldParent     = draggedImg.parentElement;
       if (existingPiece) {
-        oldParent.appendChild(existingPiece);
-        // If old parent is #piecesArea, re-randomize that piece
-        if (oldParent.id === 'piecesArea') {
-          existingPiece.style.position = 'absolute';
-          existingPiece.style.width  = PIECE_SIZE + "px";
-          existingPiece.style.height = PIECE_SIZE + "px";
-          positionPieceRandomly(existingPiece, 500 - PIECE_SIZE, 500 - PIECE_SIZE);
-        }
+        // Move existing piece back to piecesArea
+        piecesArea.appendChild(existingPiece);
+        existingPiece.style.position = 'absolute';
+        existingPiece.style.width  = PIECE_SIZE + "px";
+        existingPiece.style.height = PIECE_SIZE + "px";
+        placePieceInGridCell(existingPiece, puzzlePieces[existingPiece.dataset.index]);
       }
 
       // Place dragged piece into this slot
       slot.innerHTML = "";
       slot.appendChild(draggedImg);
 
-      // Make sure the piece is exactly 130×130, 
-      // and "relative" so it fits in the slot neatly
+      // Ensure the piece fits nicely within the slot
       draggedImg.style.position = 'relative';
       draggedImg.style.left = '0';
       draggedImg.style.top  = '0';
+      draggedImg.style.width  = '100%';
+      draggedImg.style.height = '100%';
+
+      // Optionally check puzzle completion
+      checkPuzzleCompletion();
+    }
+
+    // Dropping back into the left piecesArea
+    function onDropLeft(e) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('highlight'); // remove highlight
+      const pieceIndex = e.dataTransfer.getData('text/plain');
+      const draggedImg = document.querySelector(`.draggable-piece[data-index='${pieceIndex}']`);
+      if (!draggedImg) return;
+
+      // If it was in a slot, remove it from there
+      const oldParent = draggedImg.parentElement;
+      if (oldParent && oldParent.classList.contains('slot')) {
+        oldParent.innerHTML = ""; // remove the piece from that slot
+      }
+
+      // Now place it in the left area
+      piecesArea.appendChild(draggedImg);
+      draggedImg.style.position = 'absolute';
       draggedImg.style.width  = PIECE_SIZE + "px";
       draggedImg.style.height = PIECE_SIZE + "px";
+      placePieceInGridCell(draggedImg, puzzlePieces[pieceIndex]);
     }
 
     /* Shuffle array in-place */
@@ -301,9 +392,148 @@
         }
       });
       if (correct === ROWS * COLS) {
-        alert("Puzzle terminé !");
+        alert("🎉 Puzzle terminé ! 🎉");
       }
     }
+
+    /* Touch Event Handling for iPad */
+
+    let touchData = {
+      dragging: false,
+      element: null,
+      offsetX: 0,
+      offsetY: 0
+    };
+
+    // Add touch event listeners to draggable pieces
+    const draggablePieces = document.querySelectorAll('.draggable-piece');
+    draggablePieces.forEach(piece => {
+      piece.addEventListener('touchstart', touchStartHandler, { passive: false });
+      piece.addEventListener('touchmove', touchMoveHandler, { passive: false });
+      piece.addEventListener('touchend', touchEndHandler);
+    });
+
+    function touchStartHandler(e) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      touchData.dragging = true;
+      touchData.element = e.target;
+      touchData.element.classList.add('active');
+
+      const rect = touchData.element.getBoundingClientRect();
+      touchData.offsetX = touch.clientX - rect.left;
+      touchData.offsetY = touch.clientY - rect.top;
+
+      // Bring the element to front
+      touchData.element.style.zIndex = 1000;
+    }
+
+    function touchMoveHandler(e) {
+      if (!touchData.dragging) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const piecesAreaRect = piecesArea.getBoundingClientRect();
+      let newX = touch.clientX - piecesAreaRect.left - touchData.offsetX;
+      let newY = touch.clientY - piecesAreaRect.top - touchData.offsetY;
+
+      // Constrain within piecesArea
+      newX = Math.max(0, Math.min(newX, piecesArea.clientWidth - PIECE_SIZE));
+      newY = Math.max(0, Math.min(newY, piecesArea.clientHeight - PIECE_SIZE));
+
+      touchData.element.style.left = `${newX}px`;
+      touchData.element.style.top  = `${newY}px`;
+    }
+
+    function touchEndHandler(e) {
+      if (!touchData.dragging) return;
+      touchData.dragging = false;
+      touchData.element.classList.remove('active');
+
+      // Get the touch end position
+      const touch = e.changedTouches[0];
+      const dropTarget = getDropTarget(touch.clientX, touch.clientY);
+
+      if (dropTarget) {
+        if (dropTarget.classList.contains('slot')) {
+          onDropTouch(touch.clientX, touch.clientY, dropTarget, touchData.element);
+        } else if (dropTarget.id === 'piecesArea') {
+          onDropLeftTouch(touch.clientX, touch.clientY, touchData.element);
+        } else {
+          // Snap back to original position if not a valid drop target
+          resetTouchElementPosition(touchData.element);
+        }
+      } else {
+        // Snap back to original position if not dropped on a valid target
+        resetTouchElementPosition(touchData.element);
+      }
+
+      // Reset zIndex
+      touchData.element.style.zIndex = '';
+      touchData.element = null;
+    }
+
+    function onDropTouch(clientX, clientY, slotEl, draggedImg) {
+      // If there's a piece in this slot, swap
+      const existingPiece = slotEl.querySelector('img');
+      const oldParent     = draggedImg.parentElement;
+      const pieceIndex    = draggedImg.dataset.index;
+
+      if (existingPiece) {
+        // Move existing piece back to piecesArea
+        piecesArea.appendChild(existingPiece);
+        existingPiece.style.position = 'absolute';
+        existingPiece.style.width  = PIECE_SIZE + "px";
+        existingPiece.style.height = PIECE_SIZE + "px";
+        placePieceInGridCell(existingPiece, puzzlePieces[existingPiece.dataset.index]);
+      }
+
+      // Place dragged piece into this slot
+      slotEl.innerHTML = "";
+      slotEl.appendChild(draggedImg);
+
+      // Ensure the piece fits nicely within the slot
+      draggedImg.style.position = 'relative';
+      draggedImg.style.left = '0';
+      draggedImg.style.top  = '0';
+      draggedImg.style.width  = '100%';
+      draggedImg.style.height = '100%';
+
+      // Optionally check puzzle completion
+      checkPuzzleCompletion();
+    }
+
+    function onDropLeftTouch(clientX, clientY, draggedImg) {
+      // If the piece was in a slot, remove it from there
+      const oldParent = draggedImg.parentElement;
+      if (oldParent && oldParent.classList.contains('slot')) {
+        oldParent.innerHTML = ""; // remove the piece from that slot
+      }
+
+      // Now place it in the left area
+      piecesArea.appendChild(draggedImg);
+      draggedImg.style.position = 'absolute';
+      draggedImg.style.width  = PIECE_SIZE + "px";
+      draggedImg.style.height = PIECE_SIZE + "px";
+      placePieceInGridCell(draggedImg, puzzlePieces[draggedImg.dataset.index]);
+    }
+
+    function resetTouchElementPosition(pieceEl) {
+      // If the piece is in the piecesArea, ensure it's correctly placed
+      if (pieceEl.parentElement.id === 'piecesArea') {
+        placePieceInGridCell(pieceEl, puzzlePieces[pieceEl.dataset.index]);
+      } else {
+        // If the piece was in a slot but not dropped correctly, snap back
+        // You can implement snapping back logic if needed
+      }
+    }
+
+    /* Helper function to get the drop target element based on coordinates */
+    function getDropTarget(x, y) {
+      const elem = document.elementFromPoint(x, y);
+      if (!elem) return null;
+      return elem.closest('.slot') || (elem.id === 'piecesArea' ? elem : null);
+    }
+
   </script>
 </body>
 </html>
