@@ -150,6 +150,79 @@
       user-select: none;
     }
 
+    /* Reinforcer Overlay Styles */
+    #reinforcerOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.8);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    /* "Button" with big smiley */
+    #reinforcerButton {
+        margin-bottom: 20px;
+        width: 40vw;  
+        height: 40vw; 
+        max-width: 400px; 
+        max-height: 400px; 
+        background: none;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        outline: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 8em; /* big text for the emoji */
+        line-height: 1;
+        transition: transform 0.2s ease;
+    }
+    
+    #reinforcerButton::before {
+        content: '😀'; /* default smiley icon */
+        display: block;
+    }
+    
+    #reinforcerButton:hover {
+        transform: scale(1.05);
+    }
+    
+    #reinforcerButton:active {
+        transform: scale(0.95);
+    }
+    
+    /* Reinforcer Video */
+    #reinforcerVideo {
+        display: none;
+        width: 90%;
+        max-width: 800px; /* Adjusted for better responsiveness */
+        height: auto;
+        background: #000;
+        border: 3px solid #fff;
+        border-radius: 10px;
+        outline: none;
+        -webkit-media-controls: none;
+    }
+    
+    #reinforcerVideo::-webkit-media-controls {
+        display: none !important;
+    }
+    
+    /* Video Overlay Cover */
+    #videoOverlayCover {
+        display: none;
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        pointer-events: none; /* Prevents the overlay from capturing clicks */
+        z-index: 10;
+    }
   </style>
 </head>
 <body>
@@ -243,35 +316,25 @@
     }
 
     function speakText(text, callback) {
-    if (!synth) {
-        console.error("Speech Synthesis not supported.");
+      if (!synth) {
+        console.error("Speech Synthesis not supported in this browser.");
+        // Proceed even if speech synthesis is not supported
+        if (callback) callback();
         return;
+      }
+      if (!frenchVoice) {
+        console.warn("French voice not selected. Attempting to select.");
+        selectFrenchVoice().then(() => {
+          speak(text, callback);
+        }).catch((error) => {
+          console.error(error);
+          // Proceed even if no French voice is found
+          if (callback) callback();
+        });
+      } else {
+        speak(text, callback);
+      }
     }
-
-  // Ensure voices are loaded properly on iOS
-  setTimeout(() => {
-    if (!frenchVoice) {
-      let voices = synth.getVoices();
-      frenchVoice = voices.find(voice => voice.lang.startsWith('fr'));
-    }
-
-    if (!frenchVoice) {
-      console.warn("No French voice available.");
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.voice = frenchVoice;
-    utterance.lang = "fr-FR";
-
-    utterance.onend = () => {
-      if (callback) callback();
-    };
-
-    synth.speak(utterance);
-        }, 200); // Small delay to allow voice selection on iOS
-    }
-
 
     function speak(text, callback) {
       const utterThis = new SpeechSynthesisUtterance(text);
@@ -280,13 +343,25 @@
       utterThis.onend = () => {
         if (callback) callback();
       };
+      utterThis.onerror = (e) => {
+        console.error("Speech Synthesis Error:", e);
+        if (callback) callback();
+      };
       synth.speak(utterThis);
     }
 
     // Initialize Speech Synthesis Voices
-    selectFrenchVoice().catch((error) => {
-      console.error(error);
-    });
+    // It's crucial to load voices after a user interaction to comply with iOS restrictions
+    // We'll initialize voices upon the first user interaction
+    let voicesInitialized = false;
+
+    function initializeSpeechSynthesis() {
+      if (voicesInitialized) return;
+      voicesInitialized = true;
+      selectFrenchVoice().catch((error) => {
+        console.error(error);
+      });
+    }
 
     // Initialize Target Image
     function initializeTargetImage() {
@@ -415,6 +490,9 @@
       document.addEventListener('mousemove', dragMoveMouse);
       document.addEventListener('mouseup', dragEndMouse);
       moveToBody(activeDragElement, rect.left, rect.top);
+      
+      // Initialize speech synthesis upon first interaction
+      initializeSpeechSynthesis();
     }
 
     function dragMoveMouse(e) {
@@ -453,6 +531,9 @@
         moveToBody(activeDragElement, rect.left, rect.top);
         document.addEventListener('touchmove', touchMove, { passive: false });
         document.addEventListener('touchend', touchEnd);
+        
+        // Initialize speech synthesis upon first interaction
+        initializeSpeechSynthesis();
       }
     }
 
@@ -524,8 +605,10 @@
           placedLetterDiv.textContent = draggedLetter;
         }
         slot.classList.add('filled');
-        speakText(draggedLetter);
-        // Removed showReinforcer() to prevent video from playing on every correct drop
+        speakText(draggedLetter, () => {
+          // Optional: Additional actions after speaking the letter
+        });
+        // Remove the dragged element from the letters container
         draggedElement.remove();
         checkCompletion();
       } else {
@@ -544,6 +627,24 @@
     function showReinforcerSound() {
       wordRewardSound.currentTime = 0;
       wordRewardSound.play();
+      
+      // Remove any existing 'ended' listeners to prevent multiple triggers
+      wordRewardSound.onended = null;
+      
+      // Define the 'ended' handler
+      function onEnded() {
+        clearTimeout(fallbackTimeout);
+        moveToNextWord();
+      }
+      
+      // Add 'ended' listener with { once: true }
+      wordRewardSound.addEventListener('ended', onEnded, { once: true });
+
+      // Fallback: Proceed after 3 seconds in case 'ended' doesn't fire
+      const fallbackTimeout = setTimeout(() => {
+        moveToNextWord();
+        wordRewardSound.removeEventListener('ended', onEnded);
+      }, 3000);
     }
 
     // Check Completion of Current Word
@@ -559,10 +660,6 @@
         const completeWord = words[currentWordIndex].word;
         speakText(completeWord, () => {
           showReinforcerSound();
-          // After the sound finishes, move to the next word
-          wordRewardSound.onended = () => {
-            moveToNextWord();
-          };
         });
       }
     }
@@ -646,8 +743,10 @@
             placedLetterDiv.textContent = letterData;
           }
           slot.classList.add('filled');
-          speakText(draggedLetter);
-          // Removed showReinforcer() to prevent video from playing on every correct drop
+          speakText(draggedLetter, () => {
+            // Optional: Additional actions after speaking the letter
+          });
+          // Remove the dragged element from the letters container
           draggedElement.remove();
           checkCompletion();
         });
@@ -662,6 +761,8 @@
       videoOverlayCover.style.display = 'block'; // Show the overlay cover
       reinforcerVideo.play().catch(err => {
         console.warn('Video play failed:', err);
+        // Proceed to hide the reinforcer even if video fails to play
+        hideReinforcer();
       });
     });
 
