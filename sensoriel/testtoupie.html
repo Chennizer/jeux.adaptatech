@@ -9,20 +9,11 @@
   <link rel="stylesheet" href="../../css/ipadteachh.css">
   <title>Jeu de Complétion de Mot</title>
   <style>
-    /* Reset and Basic Styles */
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
-    body, html {
-      width: 100%;
-      height: 100%;
-      font-family: Arial, sans-serif;
-      background-color: #f0f0f0;
-    }
-
-    /* Game Container Styles */
     .game-container {
       display: flex;
       justify-content: space-between;
@@ -35,8 +26,6 @@
       position: relative;
       overflow: hidden;
       border-radius: 15px;
-      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-      margin: 30px auto;
     }
 
     .letters-container {
@@ -51,6 +40,7 @@
       overflow-x: visible;
       background-color: teal;
       border-radius: 20px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
       position: relative;
     }
 
@@ -145,11 +135,6 @@
       background-color: #a5d6a7;
     }
 
-    .letter-slot.error {
-      border-bottom: 4px solid #e53935;
-      background-color: #ffcdd2;
-    }
-
     .placed-letter {
       font-size: 30px;
       color: #000;
@@ -238,21 +223,6 @@
         pointer-events: none; /* Prevents the overlay from capturing clicks */
         z-index: 10;
     }
-
-    /* Optional: Message Styles */
-    .message {
-      position: fixed;
-      top: 10%;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.7);
-      color: white;
-      padding: 15px 30px;
-      border-radius: 10px;
-      z-index: 11000;
-      font-size: 1.5em;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
   </style>
 </head>
 <body>
@@ -286,9 +256,6 @@
   <audio id="word-reward-sound" src="../../sounds/rooster.mp3" preload="auto"></audio>
   <audio id="final-reward-sound" src="../../sounds/victory.mp3" preload="auto"></audio>
   
-  <!-- Message Container -->
-  <div id="messageContainer"></div>
-  
   <script>
     // Game Variables
     const words = [
@@ -314,9 +281,6 @@
     const finalRewardSound = document.getElementById('final-reward-sound');
 
     const targetImage = document.getElementById('target-image');
-
-    // Message Container
-    const messageContainer = document.getElementById('messageContainer');
 
     let showModelLetters = true;
     let activeDragElement = null;
@@ -352,33 +316,38 @@
     }
 
     function speakText(text, callback) {
-      if ('speechSynthesis' in window) {
-        // Cancel any ongoing speech to prevent overlap
-        synth.cancel();
-
-        const utterThis = new SpeechSynthesisUtterance(text);
-        utterThis.lang = 'fr-FR';
-
-        // Attempt to select a French voice
-        if (frenchVoice) {
-          utterThis.voice = frenchVoice;
-        }
-
-        utterThis.onend = () => {
-          console.log(`Finished speaking: "${text}"`);
-          if (callback) callback();
-        };
-
-        utterThis.onerror = (e) => {
-          console.error("Speech Synthesis Error:", e);
-          if (callback) callback();
-        };
-
-        synth.speak(utterThis);
-      } else {
-        console.warn("Speech Synthesis not supported in this browser.");
+      if (!synth) {
+        console.error("Speech Synthesis not supported in this browser.");
+        // Proceed even if speech synthesis is not supported
         if (callback) callback();
+        return;
       }
+      if (!frenchVoice) {
+        console.warn("French voice not selected. Attempting to select.");
+        selectFrenchVoice().then(() => {
+          speak(text, callback);
+        }).catch((error) => {
+          console.error(error);
+          // Proceed even if no French voice is found
+          if (callback) callback();
+        });
+      } else {
+        speak(text, callback);
+      }
+    }
+
+    function speak(text, callback) {
+      const utterThis = new SpeechSynthesisUtterance(text);
+      utterThis.voice = frenchVoice;
+      utterThis.lang = 'fr-FR';
+      utterThis.onend = () => {
+        if (callback) callback();
+      };
+      utterThis.onerror = (e) => {
+        console.error("Speech Synthesis Error:", e);
+        if (callback) callback();
+      };
+      synth.speak(utterThis);
     }
 
     // Initialize Speech Synthesis Voices
@@ -392,18 +361,6 @@
       selectFrenchVoice().catch((error) => {
         console.error(error);
       });
-    }
-
-    // Function to display messages
-    function displayMessage(text) {
-      const msgDiv = document.createElement('div');
-      msgDiv.classList.add('message');
-      msgDiv.textContent = text;
-      messageContainer.appendChild(msgDiv);
-
-      setTimeout(() => {
-        msgDiv.remove();
-      }, 3000);
     }
 
     // Initialize Target Image
@@ -536,10 +493,6 @@
       
       // Initialize speech synthesis upon first interaction
       initializeSpeechSynthesis();
-
-      // Speak the letter being dragged
-      const letter = activeDragElement.dataset.letter;
-      speakText(letter);
     }
 
     function dragMoveMouse(e) {
@@ -581,10 +534,6 @@
         
         // Initialize speech synthesis upon first interaction
         initializeSpeechSynthesis();
-
-        // Speak the letter being dragged
-        const letter = activeDragElement.dataset.letter;
-        speakText(letter);
       }
     }
 
@@ -656,22 +605,19 @@
           placedLetterDiv.textContent = draggedLetter;
         }
         slot.classList.add('filled');
-        // Optionally, you can play a sound or provide visual feedback here
-        // For example, play a success sound
-        // wordRewardSound.play();
-        // Speak the placed letter (already done on drag start)
-        // Proceed to check if the word is completed
+        speakText(draggedLetter, () => {
+          // Optional: Additional actions after speaking the letter
+        });
+        // Remove the dragged element from the letters container
+        draggedElement.remove();
         checkCompletion();
       } else {
-        // Play error sound
         errorSound.currentTime = 0;
         errorSound.play();
-        // Provide visual feedback for incorrect placement
         slot.classList.add('error');
         setTimeout(() => {
           slot.classList.remove('error');
         }, 500);
-        // Return the letter to its original position
         appendToLettersContainer(draggedElement);
         positionLetterRandomly(draggedElement);
       }
@@ -712,8 +658,7 @@
 
       if (correct) {
         const completeWord = words[currentWordIndex].word;
-        // Optionally, speak the complete word
-        speakText(`Mot complet: ${completeWord}`, () => {
+        speakText(completeWord, () => {
           showReinforcerSound();
         });
       }
@@ -756,7 +701,7 @@
       attachSlotEventListeners();
     }
 
-    // Attach Event Listeners to Slots for Drag-and-Drop (Not Using Drag-and-Drop API)
+    // Attach Event Listeners to Slots for Drag-and-Drop
     function attachSlotEventListeners() {
       slots.forEach((slot, index) => {
         slot.addEventListener('dragover', (e) => {
@@ -798,9 +743,11 @@
             placedLetterDiv.textContent = letterData;
           }
           slot.classList.add('filled');
-          // Optionally, you can play a success sound here
-          // wordRewardSound.play();
-          // Proceed to check if the word is completed
+          speakText(draggedLetter, () => {
+            // Optional: Additional actions after speaking the letter
+          });
+          // Remove the dragged element from the letters container
+          draggedElement.remove();
           checkCompletion();
         });
       });
