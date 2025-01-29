@@ -223,50 +223,13 @@
         pointer-events: none; /* Prevents the overlay from capturing clicks */
         z-index: 10;
     }
-
-    /* ===== Added Start Overlay Styles ===== */
-    /* Start Overlay Styles */
-    #startOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(255, 255, 255, 0.95);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000; /* Ensure it's on top of all other elements */
-    }
-
-    /* Start Button Styles */
-    #startButton {
-      padding: 20px 40px;
-      font-size: 2em;
-      background-color: #38c172;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: transform 0.2s;
-    }
-
-    #startButton:hover {
-      transform: scale(1.05);
-    }
-
-    #startButton:active {
-      transform: scale(0.95);
-    }
-    /* ===== End of Start Overlay Styles ===== */
   </style>
 </head>
 <body>
-  <!-- ===== Added Start Overlay ===== -->
+  <!-- Start Overlay -->
   <div id="startOverlay">
-    <button id="startButton">Démarrer</button>
+    <button id="startButton">Start Game</button>
   </div>
-  <!-- ===== End of Start Overlay ===== -->
 
   <div class="game-container">
     <div class="letters-container" id="letters-container"></div>
@@ -298,6 +261,9 @@
   <audio id="word-reward-sound" src="../../sounds/rooster.mp3" preload="auto"></audio>
   <audio id="final-reward-sound" src="../../sounds/victory.mp3" preload="auto"></audio>
   
+  <!-- Message Container -->
+  <div id="messageContainer"></div>
+  
   <script>
     // Game Variables
     const words = [
@@ -323,6 +289,13 @@
     const finalRewardSound = document.getElementById('final-reward-sound');
 
     const targetImage = document.getElementById('target-image');
+
+    // Start Overlay Elements
+    const startOverlay = document.getElementById('startOverlay');
+    const startButton = document.getElementById('startButton');
+
+    // Message Container
+    const messageContainer = document.getElementById('messageContainer');
 
     let showModelLetters = true;
     let activeDragElement = null;
@@ -383,6 +356,7 @@
       utterThis.voice = frenchVoice;
       utterThis.lang = 'fr-FR';
       utterThis.onend = () => {
+        console.log(`Finished speaking: "${text}"`);
         if (callback) callback();
       };
       utterThis.onerror = (e) => {
@@ -403,6 +377,18 @@
       selectFrenchVoice().catch((error) => {
         console.error(error);
       });
+    }
+
+    // Function to display messages
+    function displayMessage(text) {
+      const msgDiv = document.createElement('div');
+      msgDiv.classList.add('message');
+      msgDiv.textContent = text;
+      messageContainer.appendChild(msgDiv);
+
+      setTimeout(() => {
+        msgDiv.remove();
+      }, 3000);
     }
 
     // Initialize Target Image
@@ -534,7 +520,11 @@
       moveToBody(activeDragElement, rect.left, rect.top);
       
       // Initialize speech synthesis upon first interaction
-      // initializeSpeechSynthesis(); // Removed since we handle it via Start button
+      initializeSpeechSynthesis();
+
+      // Speak the letter being dragged
+      const letter = activeDragElement.dataset.letter;
+      speakText(letter);
     }
 
     function dragMoveMouse(e) {
@@ -575,7 +565,11 @@
         document.addEventListener('touchend', touchEnd);
         
         // Initialize speech synthesis upon first interaction
-        // initializeSpeechSynthesis(); // Removed since we handle it via Start button
+        initializeSpeechSynthesis();
+
+        // Speak the letter being dragged
+        const letter = activeDragElement.dataset.letter;
+        speakText(letter);
       }
     }
 
@@ -647,19 +641,20 @@
           placedLetterDiv.textContent = draggedLetter;
         }
         slot.classList.add('filled');
-        speakText(draggedLetter, () => {
-          // Optional: Additional actions after speaking the letter
-        });
-        // Remove the dragged element from the letters container
-        draggedElement.remove();
+        // Optionally, you can play a success sound here
+        // wordRewardSound.play();
+        // Proceed to check if the word is completed
         checkCompletion();
       } else {
+        // Play error sound
         errorSound.currentTime = 0;
         errorSound.play();
+        // Provide visual feedback for incorrect placement
         slot.classList.add('error');
         setTimeout(() => {
           slot.classList.remove('error');
         }, 500);
+        // Return the letter to its original position
         appendToLettersContainer(draggedElement);
         positionLetterRandomly(draggedElement);
       }
@@ -700,7 +695,8 @@
 
       if (correct) {
         const completeWord = words[currentWordIndex].word;
-        speakText(completeWord, () => {
+        // Speak the complete word
+        speakText(`Mot complet: ${completeWord}`, () => {
           showReinforcerSound();
         });
       }
@@ -743,7 +739,7 @@
       attachSlotEventListeners();
     }
 
-    // Attach Event Listeners to Slots for Drag-and-Drop
+    // Attach Event Listeners to Slots for Drag-and-Drop (Not Using Drag-and-Drop API)
     function attachSlotEventListeners() {
       slots.forEach((slot, index) => {
         slot.addEventListener('dragover', (e) => {
@@ -785,11 +781,9 @@
             placedLetterDiv.textContent = letterData;
           }
           slot.classList.add('filled');
-          speakText(draggedLetter, () => {
-            // Optional: Additional actions after speaking the letter
-          });
-          // Remove the dragged element from the letters container
-          draggedElement.remove();
+          // Optionally, you can play a success sound here
+          // wordRewardSound.play();
+          // Proceed to check if the word is completed
           checkCompletion();
         });
       });
@@ -824,26 +818,38 @@
       reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)'; // Reset overlay background
     }
 
-    // ===== Added Start Button Functionality =====
-    const startOverlay = document.getElementById('startOverlay');
-    const startButton = document.getElementById('startButton');
-
+    // Start Button Event Listener
     startButton.addEventListener('click', () => {
-      // Initialize speech synthesis with an empty utterance
-      speakText('', () => {
-        // Hide the start overlay
-        startOverlay.style.display = 'none';
+      startOverlay.style.display = 'none';
+      initializeGame();
+      
+      // Play a minimal speech utterance to unlock Speech Synthesis on iOS Safari
+      // Instead of an empty string, use a simple greeting like "Bonjour"
+      speakText("Bonjour", () => {
+        console.log("Speech Synthesis unlocked.");
       });
+      
+      // Alternatively, if you prefer to use an empty string, uncomment the following lines:
+      /*
+      speakText("", () => {
+        console.log("Speech Synthesis unlocked.");
+      });
+      */
     });
-    // ===== End of Start Button Functionality =====
 
-    // Initialize the Game on Window Load
-    window.onload = () => {
+    // Initialize the Game Function
+    function initializeGame() {
       initializeTargetImage();
       initializeSlots();
       initializeLetters();
       insertModelLetters();
       attachSlotEventListeners();
+    }
+
+    // Initialize the Game on Window Load
+    window.onload = () => {
+      // Keep the game hidden until the start button is clicked
+      // All initialization is handled after the start button is clicked
     };
   </script>
 </body>
