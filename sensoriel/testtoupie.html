@@ -150,76 +150,6 @@
       user-select: none;
     }
 
-    #reinforcerOverlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.8);
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-    }
-
-    #reinforcerButton {
-        margin-bottom: 20px;
-        width: 40vw;  
-        height: 40vw; 
-        max-width: 400px; 
-        max-height: 400px; 
-        background: none;
-        border: none;
-        border-radius: 50%;
-        cursor: pointer;
-        outline: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 8em;
-        line-height: 1;
-        transition: transform 0.2s ease;
-    }
-    
-    #reinforcerButton::before {
-        content: '😀';
-        display: block;
-    }
-    
-    #reinforcerButton:hover {
-        transform: scale(1.05);
-    }
-    
-    #reinforcerButton:active {
-        transform: scale(0.95);
-    }
-    
-    #reinforcerVideo {
-        display: none;
-        width: 90%;
-        max-width: 800px;
-        height: auto;
-        background: #000;
-        border: 3px solid #fff;
-        border-radius: 10px;
-        outline: none;
-        -webkit-media-controls: none;
-    }
-    
-    #reinforcerVideo::-webkit-media-controls {
-        display: none !important;
-    }
-    
-    #videoOverlayCover {
-        display: none;
-        position: absolute;
-        top: 0; left: 0;
-        width: 100%;
-        height: 100%;
-        background: transparent;
-        pointer-events: none;
-        z-index: 10;
-    }
-
     #startOverlay {
       position: fixed;
       top: 0;
@@ -318,7 +248,7 @@
     const reinforcerVideo = document.getElementById('reinforcerVideo');
     const videoOverlayCover = document.getElementById('videoOverlayCover');
 
-    const errorSound = document.getElementById('error-sound');
+    const errorSoundElement = document.getElementById('error-sound');
     const wordRewardSound = document.getElementById('word-reward-sound');
     const finalRewardSound = document.getElementById('final-reward-sound');
 
@@ -331,6 +261,32 @@
 
     let synth = window.speechSynthesis;
     let frenchVoice = null;
+
+    // Initialize Web Audio API for error sound
+    let audioContext;
+    let errorSoundBuffer = null;
+
+    async function loadErrorSound() {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const response = await fetch(errorSoundElement.src);
+        const arrayBuffer = await response.arrayBuffer();
+        errorSoundBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      } catch (error) {
+        console.error('Error loading error sound:', error);
+      }
+    }
+
+    function playErrorSound() {
+      if (!audioContext || !errorSoundBuffer) {
+        console.warn('AudioContext not initialized or errorSoundBuffer not loaded.');
+        return;
+      }
+      const source = audioContext.createBufferSource();
+      source.buffer = errorSoundBuffer;
+      source.connect(audioContext.destination);
+      source.start(0);
+    }
 
     function selectFrenchVoice() {
       return new Promise((resolve, reject) => {
@@ -400,27 +356,21 @@
     }
 
     function unlockAudio() {
-      const audioElements = [wordRewardSound, errorSound, finalRewardSound];
-      audioElements.forEach(audio => {
-        if (audio.paused) {
-          audio.play().then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-          }).catch((error) => {
-            console.error(`Error unlocking audio element ${audio.id}:`, error);
-          });
-        }
-      });
+      // Unlock Web Audio API by creating a silent buffer source
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().catch(error => {
+          console.error('Error resuming AudioContext:', error);
+        });
+      }
     }
 
-    function playErrorSound() {
-      const errorSoundClone = errorSound.cloneNode();
-      errorSoundClone.play().catch((error) => {
-        console.error('Error playing error sound:', error);
-      });
-      errorSoundClone.addEventListener('ended', () => {
-        errorSoundClone.remove();
-      });
+    async function initialize() {
+      await loadErrorSound();
+      initializeTargetImage();
+      initializeSlots();
+      initializeLetters();
+      insertModelLetters();
+      attachSlotEventListeners();
     }
 
     function initializeTargetImage() {
@@ -649,7 +599,7 @@
         draggedElement.remove();
         checkCompletion();
       } else {
-        playErrorSound(); // Modified line
+        playErrorSound(); // Use Web Audio API to play error sound
         slot.classList.add('error');
         setTimeout(() => {
           slot.classList.remove('error');
@@ -751,7 +701,7 @@
           const draggedElement = document.querySelector(`.letter[data-letter='${letterData}']`);
           if (!draggedElement) return;
           if (slot.classList.contains('filled')) {
-            playErrorSound(); // Modified line
+            playErrorSound(); // Play error sound using Web Audio API
             slot.classList.add('error');
             setTimeout(() => {
               slot.classList.remove('error');
@@ -760,7 +710,7 @@
           }
           const requiredLetter = words[currentWordIndex].word[index];
           if (letterData !== requiredLetter) {
-            playErrorSound(); // Modified line
+            playErrorSound(); // Play error sound using Web Audio API
             slot.classList.add('error');
             setTimeout(() => {
               slot.classList.remove('error');
@@ -815,11 +765,7 @@
     });
 
     window.onload = () => {
-      initializeTargetImage();
-      initializeSlots();
-      initializeLetters();
-      insertModelLetters();
-      attachSlotEventListeners();
+      initialize();
     };
   </script>
 </body>
