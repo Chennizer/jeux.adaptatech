@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="../../images/binou.png">
+  <link rel="stylesheet" href="../../css/ipadteachh.css">
+  <title>Match Number Game</title>
+  <!-- Load shared themes file -->
+  <script src="../../js/themes.js"></script>
+  <style>
+    /* Basic reset and layout styles */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    /* Game container – same basic layout for all games */
+    .game-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: calc(100% - 60px);
+      height: calc(100% - 60px);
+      max-width: 1200px;
+      padding: 20px;
+      background-color: #ffffff;
+      position: relative;
+      overflow: hidden;
+      border-radius: 15px;
+    }
+    /* Placeholder for game-specific content */
+    #game-content {
+      width: 100%;
+      height: 100%;
+    }
+    /* Style for the images container */
+    .images-container {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 20px;
+      background-color: #fafafa;
+      min-width: 250px;
+      min-height: 250px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      margin: 10px;
+    }
+    /* Style for the buttons container */
+    .buttons-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      margin: 10px;
+    }
+    /* Style for number buttons */
+    .buttons-container button {
+      font-size: 24px;
+      padding: 10px 20px;
+      margin: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    @keyframes pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.35); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Activity overlay (shows the game index) -->
+  <div id="activityNumberOverlay">
+    <div class="number-text"></div>
+  </div>
+
+  <!-- Main game container -->
+  <div class="game-container">
+    <!-- This div is where your game‐specific UI will go -->
+    <div id="game-content">
+      <!-- Game-specific elements will be inserted here by your code -->
+    </div>
+  </div>
+
+  <!-- Reinforcer overlay (common for all games) -->
+  <div id="reinforcerOverlay" style="display: none;">
+    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement">Renforcer</button>
+    <video id="reinforcerVideo"
+           playsinline
+           webkit-playsinline
+           disablepictureinpicture
+           controlslist="nodownload noremoteplayback"
+           preload="auto"
+           style="display: none; max-width: 100%; max-height: 100%;">
+      <source id="reinforcerVideoSource" src="" type="video/mp4">
+      Votre navigateur ne supporte pas la balise vidéo.
+    </video>
+    <div id="videoOverlayCover" style="display: none;"></div>
+  </div>
+
+  <!-- Audio elements for error, reinforcer, and final reward sounds -->
+  <audio id="error-sound" src="" preload="auto"></audio>
+  <audio id="word-reward-sound" src="" preload="auto"></audio>
+  <audio id="final-reward-sound" src="" preload="auto"></audio>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Retrieve game selections and theme information from localStorage and themes.js
+      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
+      const mediaOption = selections.mediaOption || "";
+      const themeData = (window.themes && window.themes[mediaOption])
+                        ? window.themes[mediaOption]
+                        : window.themes["default"] || {};
+
+      // Set up audio element sources from theme data
+      document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
+      // Use the dynamically imported reinforcer sound (or fallback to rooster)
+      document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
+      document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
+
+      // Set the reinforcer video source (randomly selected from theme)
+      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
+      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
+        reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
+      } else {
+        reinforcerVideoSource.src = "../../videos/africa.mp4";
+      }
+      const reinforcerVideo = document.getElementById('reinforcerVideo');
+      reinforcerVideo.load();
+
+      // Show the activity overlay with the game index
+      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+      if (isNaN(overallGameIndex)) {
+        alert("Game selections not found. Redirecting to main page.");
+        window.location.href = "main.html";
+        return;
+      }
+      // (Optionally: check that the current game ID matches what you expect.)
+      const activityOverlay = document.getElementById('activityNumberOverlay');
+      const numberTextEl = activityOverlay.querySelector('.number-text');
+      numberTextEl.textContent = (overallGameIndex + 1).toString();
+      activityOverlay.style.display = 'flex';
+
+      // When the user clicks/touches the overlay, hide it and start the game.
+      function hideOverlayAndStart() {
+        if (themeData.startSound) {
+          let sfx = new Audio(themeData.startSound);
+          sfx.play().catch(err => console.warn('Sound play error:', err));
+        }
+        activityOverlay.style.display = 'none';
+        document.removeEventListener('click', hideOverlayAndStart);
+        document.removeEventListener('touchend', hideOverlayAndStart);
+        // Call your game‐specific start function
+        startGame();
+      }
+      document.addEventListener('click', hideOverlayAndStart);
+      document.addEventListener('touchend', hideOverlayAndStart);
+
+      // Generic function to navigate to the next game.
+      function navigateToNextGame() {
+        const selections = JSON.parse(localStorage.getItem('gameSelections'));
+        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        currentGameIndex++;  // Increment overall game index.
+        localStorage.setItem('currentGameIndex', currentGameIndex);
+        if (currentGameIndex < selections.gameOrder.length) {
+          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
+        } else {
+          window.location.href = "completion.html";
+        }
+      }
+
+      // Generic function to show the reinforcer sound between words.
+      function showReinforcerSound() {
+        setTimeout(() => {
+          const wordRewardSound = document.getElementById('word-reward-sound');
+          wordRewardSound.currentTime = 0;
+          wordRewardSound.play().catch(error => {
+            console.error('Error playing reinforcer sound:', error);
+          });
+        }, 2000); // 2-second delay
+      }
+
+      // Generic function to show the final reinforcer overlay.
+      function showFinalReinforcerVideo() {
+        const finalRewardSound = document.getElementById('final-reward-sound');
+        finalRewardSound.currentTime = 0;
+        finalRewardSound.play().catch(error => {
+          console.error('Error playing final reward sound:', error);
+        });
+        const reinforcerOverlay = document.getElementById('reinforcerOverlay');
+        reinforcerOverlay.style.display = 'flex';
+        reinforcerVideo.style.display = 'none';
+        document.getElementById('videoOverlayCover').style.display = 'none';
+      }
+
+      // Set up the reinforcer button event.
+      const reinforcerButton = document.getElementById('reinforcerButton');
+      reinforcerButton.addEventListener('click', function() {
+        reinforcerButton.style.display = 'none';
+        document.getElementById('reinforcerOverlay').style.background = '#000';
+        reinforcerVideo.style.display = 'block';
+        document.getElementById('videoOverlayCover').style.display = 'block';
+        reinforcerVideo.play().catch(err => {
+          console.warn('Video play failed:', err);
+          hideReinforcer();
+        });
+      });
+      // When the reinforcer video ends, navigate to the next game.
+      reinforcerVideo.addEventListener('ended', function() {
+        navigateToNextGame();
+      }, { once: true });
+
+      function hideReinforcer() {
+        const reinforcerOverlay = document.getElementById('reinforcerOverlay');
+        reinforcerOverlay.style.display = 'none';
+        reinforcerButton.style.display = 'flex';
+        reinforcerVideo.style.display = 'none';
+        reinforcerVideo.pause();
+        reinforcerVideo.currentTime = 0;
+        document.getElementById('videoOverlayCover').style.display = 'none';
+        reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
+      }
+
+      // --- Game-Specific Logic: Match Number Game with Options ---
+      window.startGame = function() {
+        // Get the game-content div and clear previous content
+        const gameContent = document.getElementById('game-content');
+        gameContent.innerHTML = '';
+
+        // Read game-specific options from localStorage.
+        // (Assumes selections.gameOptions is an array whose index corresponds to current game.)
+        const currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        const gameOptions = selections.gameOptions && selections.gameOptions[currentGameIndex] ? selections.gameOptions[currentGameIndex] : {};
+        // Option: If true, a wrong answer automatically resets the activity with a new pair.
+        const wrongAnswerRetry = gameOptions.wrongAnswerRetry === "true";
+        // Option: The number of times the user needs to do the activity before moving on.
+        const activityRepetitions = gameOptions.activityRepetitions ? parseInt(gameOptions.activityRepetitions, 10) : 1;
+        // Counter to track the number of correct attempts.
+        let correctAttempts = 0;
+
+        // Create a main container with a flex layout to hold both sides of the game.
+        const container = document.createElement('div');
+        container.style.display = 'flex';
+        container.style.justifyContent = 'space-around';
+        container.style.alignItems = 'center';
+        container.style.height = '100%';
+        container.style.flexWrap = 'wrap';
+        gameContent.appendChild(container);
+
+        // LEFT SIDE: Images container.
+        const imageContainer = document.createElement('div');
+        imageContainer.classList.add('images-container');
+        container.appendChild(imageContainer);
+
+        // RIGHT SIDE: Buttons container.
+        const buttonContainer = document.createElement('div');
+        buttonContainer.classList.add('buttons-container');
+        container.appendChild(buttonContainer);
+
+        // Variable to hold the current correct number.
+        let currentCorrectNumber;
+
+        // Function to render a new activity (new pair of images and buttons).
+        function newActivity() {
+          // Clear the containers.
+          imageContainer.innerHTML = '';
+          buttonContainer.innerHTML = '';
+
+          // 1. Pick a random number between 1 and 5.
+          currentCorrectNumber = Math.floor(Math.random() * 5) + 1;
+
+          // 2. Pick a random PNG from themeData.transparentPNGs.
+          let pngArray = themeData.transparentPNGs;
+          if (!pngArray || pngArray.length === 0) {
+            pngArray = ["../../images/default.png"];
+          }
+          const randomPng = pngArray[Math.floor(Math.random() * pngArray.length)];
+
+          // 3. Display the chosen image the currentCorrectNumber of times.
+          for (let i = 0; i < currentCorrectNumber; i++) {
+            const img = document.createElement('img');
+            img.src = randomPng;
+            img.style.width = '100px';
+            img.style.height = '100px';
+            img.style.margin = '10px';
+            imageContainer.appendChild(img);
+          }
+
+          // 4. Create touchable number buttons (1 to 5).
+          for (let i = 1; i <= 5; i++) {
+            const btn = document.createElement('button');
+            btn.textContent = i.toString();
+            btn.addEventListener('click', function() {
+              // Correct answer.
+              if (i === currentCorrectNumber) {
+                btn.style.backgroundColor = 'green';
+                // Disable all buttons.
+                Array.from(buttonContainer.children).forEach(child => child.disabled = true);
+
+                // Increase the count of correct attempts.
+                correctAttempts++;
+                // If the user has met the required repetitions, show the reinforcer video.
+                if (correctAttempts >= activityRepetitions) {
+                  setTimeout(() => {
+                    showFinalReinforcerVideo();
+                  }, 500);
+                } else {
+                  // Otherwise, wait briefly and load a new activity.
+                  setTimeout(() => {
+                    newActivity();
+                  }, 500);
+                }
+              } else {
+                // Wrong answer.
+                btn.style.backgroundColor = 'red';
+                const errorSound = document.getElementById('error-sound');
+                errorSound.currentTime = 0;
+                errorSound.play().catch(err => console.warn('Error playing error sound:', err));
+
+                // If the wrongAnswerRetry option is enabled, automatically load a new activity.
+                if (wrongAnswerRetry) {
+                  setTimeout(() => {
+                    newActivity();
+                  }, 500);
+                } else {
+                  // Otherwise, let the user try again (reset the button color after a short delay).
+                  setTimeout(() => {
+                    btn.style.backgroundColor = '';
+                  }, 500);
+                }
+              }
+            });
+            buttonContainer.appendChild(btn);
+          }
+        }
+
+        // Start the first activity.
+        newActivity();
+      };
+
+      // --- End of Game-Specific Logic ---
+    });
+  </script>
+</body>
+</html>

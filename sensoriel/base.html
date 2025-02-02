@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="../../images/binou.png">
+  <link rel="stylesheet" href="../../css/ipadteachh.css">
+  <title>Base Game</title>
+  <!-- Load shared themes file -->
+  <script src="../../js/themes.js"></script>
+  <style>
+    /* Basic reset and layout styles */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    /* Game container – same basic layout for all games */
+    .game-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: calc(100% - 60px);
+      height: calc(100% - 60px);
+      max-width: 1200px;
+      padding: 20px;
+      background-color: #ffffff;
+      position: relative;
+      overflow: hidden;
+      border-radius: 15px;
+    }
+    /* Placeholder for game-specific content */
+    #game-content {
+      width: 100%;
+      height: 100%;
+    }
+
+    @keyframes pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.35); }
+      100% { transform: scale(1); }
+    }
+
+  </style>
+</head>
+<body>
+  <!-- Activity overlay (shows the game index) -->
+  <div id="activityNumberOverlay">
+    <div class="number-text"></div>
+  </div>
+
+  <!-- Main game container -->
+  <div class="game-container">
+    <!-- This div is where your game‐specific UI will go -->
+    <div id="game-content">
+      <!-- Game-specific elements will be inserted here by your code -->
+    </div>
+  </div>
+
+  <!-- Reinforcer overlay (common for all games) -->
+  <div id="reinforcerOverlay">
+    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
+    <video id="reinforcerVideo"
+           playsinline
+           webkit-playsinline
+           disablepictureinpicture
+           controlslist="nodownload noremoteplayback"
+           preload="auto">
+      <source id="reinforcerVideoSource" src="" type="video/mp4">
+      Votre navigateur ne supporte pas la balise vidéo.
+    </video>
+    <div id="videoOverlayCover"></div>
+  </div>
+
+  <!-- Audio elements for error, reinforcer, and final reward sounds -->
+  <audio id="error-sound" src="" preload="auto"></audio>
+  <audio id="word-reward-sound" src="" preload="auto"></audio>
+  <audio id="final-reward-sound" src="" preload="auto"></audio>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Retrieve game selections and theme information from localStorage and themes.js
+      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
+      const mediaOption = selections.mediaOption || "";
+      const themeData = (window.themes && window.themes[mediaOption])
+                        ? window.themes[mediaOption]
+                        : window.themes["default"] || {};
+
+      // Set up audio element sources from theme data
+      document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
+      // Use the dynamically imported reinforcer sound (or fallback to rooster)
+      document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
+      document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
+
+      // Set the reinforcer video source (randomly selected from theme)
+      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
+      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
+        reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
+      } else {
+        reinforcerVideoSource.src = "../../videos/africa.mp4";
+      }
+      const reinforcerVideo = document.getElementById('reinforcerVideo');
+      reinforcerVideo.load();
+
+      // Show the activity overlay with the game index
+      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+      if (isNaN(overallGameIndex)) {
+        alert("Game selections not found. Redirecting to main page.");
+        window.location.href = "main.html";
+        return;
+      }
+      // (Optionally: check that the current game ID matches what you expect.)
+
+      const activityOverlay = document.getElementById('activityNumberOverlay');
+      const numberTextEl = activityOverlay.querySelector('.number-text');
+      numberTextEl.textContent = (overallGameIndex + 1).toString();
+      activityOverlay.style.display = 'flex';
+
+      // When the user clicks/touches the overlay, hide it and start the game.
+      function hideOverlayAndStart() {
+        if (themeData.startSound) {
+          let sfx = new Audio(themeData.startSound);
+          sfx.play().catch(err => console.warn('Sound play error:', err));
+        }
+        activityOverlay.style.display = 'none';
+        document.removeEventListener('click', hideOverlayAndStart);
+        document.removeEventListener('touchend', hideOverlayAndStart);
+        // Call your game‐specific start function
+        startGame();
+      }
+      document.addEventListener('click', hideOverlayAndStart);
+      document.addEventListener('touchend', hideOverlayAndStart);
+
+      // Generic function to navigate to the next game.
+      function navigateToNextGame() {
+        const selections = JSON.parse(localStorage.getItem('gameSelections'));
+        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        currentGameIndex++;  // Increment overall game index.
+        localStorage.setItem('currentGameIndex', currentGameIndex);
+        if (currentGameIndex < selections.gameOrder.length) {
+          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
+        } else {
+          window.location.href = "completion.html";
+        }
+      }
+
+      // Generic function to show the reinforcer sound between words.
+      // (It plays the reinforcer sound after a 2‑second delay.)
+      function showReinforcerSound() {
+        setTimeout(() => {
+          const wordRewardSound = document.getElementById('word-reward-sound');
+          wordRewardSound.currentTime = 0;
+          wordRewardSound.play().then(() => {
+            // After the sound ends, you might want to move on to the next part of your game.
+          }).catch(error => {
+            console.error('Error playing reinforcer sound:', error);
+          });
+        }, 2000); // 2-second delay
+      }
+
+      // Generic function to show the final reinforcer overlay.
+      // In this mode, the reinforcer button remains visible until the user clicks it.
+      function showFinalReinforcerVideo() {
+        finalRewardSound.currentTime = 0;
+        finalRewardSound.play().catch(error => {
+          console.error('Error playing final reward sound:', error);
+        });
+        reinforcerOverlay.style.display = 'flex';
+        reinforcerVideo.style.display = 'none';
+        document.getElementById('videoOverlayCover').style.display = 'none';
+        // Note: Do not auto-navigate; wait for the user to click the reinforcer button.
+      }
+
+      // Set up the reinforcer button event.
+      const reinforcerButton = document.getElementById('reinforcerButton');
+      reinforcerButton.addEventListener('click', function() {
+        reinforcerButton.style.display = 'none';
+        reinforcerOverlay.style.background = '#000';
+        reinforcerVideo.style.display = 'block';
+        document.getElementById('videoOverlayCover').style.display = 'block';
+        reinforcerVideo.play().catch(err => {
+          console.warn('Video play failed:', err);
+          hideReinforcer();
+        });
+      });
+      // When the reinforcer video ends, navigate to the next game.
+      reinforcerVideo.addEventListener('ended', function() {
+        navigateToNextGame();
+      }, { once: true });
+
+      function hideReinforcer() {
+        reinforcerOverlay.style.display = 'none';
+        reinforcerButton.style.display = 'flex';
+        reinforcerVideo.style.display = 'none';
+        reinforcerVideo.pause();
+        reinforcerVideo.currentTime = 0;
+        document.getElementById('videoOverlayCover').style.display = 'none';
+        reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
+      }
+
+      // --- PLACEHOLDER: Insert your game-specific logic here ---
+      // For each new game, you can define a function named startGame()
+      // that initializes and runs the game. This function will be called
+      // after the activity overlay is hidden.
+      window.startGame = function() {
+        // (Insert your game-specific code here)
+        // For example: render your game elements inside the #game-content div.
+        console.log("Game started! Insert your game-specific logic here.");
+        // When the game is finished (or when you want to move on), call either:
+        // - showReinforcerSound() (if you want to play a sound between words), or
+        // - showFinalReinforcerVideo() (if the game is over and you want to display the reinforcer button).
+      };
+
+      // --- End of game-specific section ---
+
+    });
+  </script>
+</body>
+</html>
