@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="../../images/binou.png">
+  <link rel="stylesheet" href="../../css/ipadteachh.css">
+  <title>Jeu de Complétion de Mot</title>
+  <!-- Load shared themes file -->
+  <script src="../../js/themes.js"></script>
+  <style>
+    /* Reset and base styles */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    .game-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: calc(100% - 60px);
+      height: calc(100% - 60px);
+      max-width: 1200px;
+      padding: 20px;
+      background-color: #ffffff;
+      position: relative;
+      overflow: hidden;
+      border-radius: 15px;
+    }
+    .letters-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      justify-content: center;
+      width: 30%;
+      height: 100%;
+      padding: 10px;
+      overflow-y: auto;
+      overflow-x: visible;
+      background-color: teal;
+      border-radius: 20px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+      position: relative;
+    }
+    .letter {
+      width: 70px;
+      height: 70px;
+      background-color: white;
+      border: 4px solid black;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      cursor: grab;
+      user-select: none;
+      position: absolute;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+      color: black;
+      touch-action: none;
+    }
+    .letter.dragging {
+      opacity: 0.7;
+      transform: scale(1.2);
+      box-shadow: 4px 4px 12px rgba(0,0,0,0.5);
+      z-index: 1000;
+      position: fixed;
+      left: 0;
+      top: 0;
+    }
+    .letter:hover {
+      transform: scale(1.05);
+      box-shadow: 3px 3px 10px rgba(0,0,0,0.4);
+    }
+    .target-word-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      width: 70%;
+      height: 100%;
+      padding: 20px;
+      overflow-x: auto;
+    }
+    .target-image {
+      width: 40%;
+      max-width: 200px;
+      margin: 0 auto 15px;
+      border-radius: 15px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      object-fit: contain;
+      display: block;
+    }
+    .target-word {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+      grid-template-rows: auto auto;
+      justify-items: center;
+      align-items: center;
+      row-gap: 5px;
+      column-gap: 5px;
+      width: 100%;
+      margin-top: 40px;
+    }
+    .letter-slot {
+      width: 70px;
+      height: 70px;
+      border-bottom: 4px solid #000;
+      margin: 5px;
+      position: relative;
+      text-align: center;
+      font-size: 30px;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background-color: #f1f8e9;
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+      transition: background-color 0.2s, border 0.2s, transform 0.2s, box-shadow 0.2s;
+      flex-direction: column;
+    }
+    .letter-slot.filled {
+      border-bottom: 4px solid #38c172;
+      background-color: #a5d6a7;
+    }
+    /* Blue drop indicator for individual letter-slot */
+    .letter-slot.over {
+      background-color: #e6f0ff;         /* Light blue background */
+      border: 4px dashed #007BFF;          /* Blue dashed border */
+      transform: scale(1.05);
+      box-shadow: inset 0 0 10px rgba(0,123,255,0.5);  /* Blue-tinted shadow */
+    }
+    .placed-letter {
+      font-size: 30px;
+      color: #000;
+      pointer-events: none;
+      user-select: none;
+      margin-bottom: 5px;
+    }
+    .model-letter {
+      font-size: 14px;
+      color: #555555;
+      pointer-events: none;
+      user-select: none;
+    }
+    /* Updated Activity Number Overlay Styles */
+    #activityNumberOverlay {
+      position: fixed; 
+      top: 0; 
+      left: 0;
+      width: 100%; 
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: none;
+      justify-content: center; 
+      align-items: center;
+      z-index: 2000;
+    }
+    #activityNumberOverlay .number-text {
+      font-size: 12rem; 
+      color: #fff; 
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.35); }
+      100% { transform: scale(1); }
+    }
+    /* Visual indicator for errors */
+    .letter-slot.error {
+      border-bottom-color: red;
+      animation: shake 0.3s;
+    }
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+      100% { transform: translateX(0); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Activity overlay shows the current game index -->
+  <div id="activityNumberOverlay">
+    <div class="number-text"></div>
+  </div>
+
+  <div class="game-container">
+    <div class="letters-container" id="letters-container"></div>
+    <div class="target-word-container">
+      <img src="../../images/binou.png" alt="Image" class="target-image" id="target-image">
+      <div class="target-word" id="target-word"></div>
+    </div>
+  </div>
+  <div id="reinforcerOverlay">
+    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
+    <video id="reinforcerVideo"
+           playsinline
+           webkit-playsinline
+           disablepictureinpicture
+           controlslist="nodownload noremoteplayback"
+           preload="auto">
+      <!-- The source will be set dynamically from themes.js -->
+      <source id="reinforcerVideoSource" src="" type="video/mp4">
+      Votre navigateur ne supporte pas la balise vidéo.
+    </video>
+    <div id="videoOverlayCover"></div>
+  </div>
+  <!-- Audio elements (sources set dynamically) -->
+  <audio id="error-sound" src="" preload="auto"></audio>
+  <!-- Dynamically imported reinforcer sound instead of a hardcoded rooster sound -->
+  <audio id="word-reward-sound" src="" preload="auto"></audio>
+  <audio id="final-reward-sound" src="" preload="auto"></audio>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Retrieve selections and theme information from localStorage and themes.js
+      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
+      const mediaOption = selections.mediaOption || "";
+      const themeData = (window.themes && window.themes[mediaOption])
+                        ? window.themes[mediaOption]
+                        : window.themes["default"] || {};
+      
+      // Build the full words array paired by index (first word with first image, etc.)
+      let fullWords = [];
+      if (themeData.words && themeData.words.length > 0) {
+        fullWords = themeData.words.map((word, index) => ({
+          word: word,
+          image: (themeData.images && themeData.images.length > index)
+                   ? themeData.images[index]
+                   : "../../images/toupieetbinou.png"
+        }));
+      } else {
+        fullWords = [
+          { word: "Binou", image: "../../images/binou.png" },
+          { word: "Toupie", image: "../../images/toupieetbinou.png" },
+          { word: "Chaton", image: "../../images/chaton.png" },
+          { word: "Pomme", image: "../../images/pomme.png" }
+        ];
+      }
+      
+      // Retrieve the current game options (for testtoupie) from selections.
+      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+      if (isNaN(overallGameIndex)) {
+        alert("Game selections not found. Redirecting to main page.");
+        window.location.href = "main.html";
+        return;
+      }
+      if (selections.gameOrder[overallGameIndex] !== "testtoupie") {
+        alert("This is not your current game. Redirecting to the correct game.");
+        window.location.href = selections.gameOrder[overallGameIndex] + ".html";
+        return;
+      }
+      
+      // Read the word count option (for testtoupie)
+      const currentGameOptions = selections.gameOptions[overallGameIndex] || {};
+      let desiredCount = parseInt(currentGameOptions.testtoupieWordCount, 10);
+      if (isNaN(desiredCount) || desiredCount < 1) {
+        desiredCount = fullWords.length;
+      }
+      
+      // Randomize fullWords and limit to the desired count.
+      let shuffledWords = fullWords.slice().sort(() => Math.random() - 0.5);
+      let words = shuffledWords.slice(0, Math.min(desiredCount, shuffledWords.length));
+      
+      // Use a separate local word index so the game always starts at 0.
+      let wordIndex = 0;
+      
+      // Update audio element sources (using defaults if the theme does not define them)
+      document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
+      // Dynamically import the reinforcer sound from the theme.
+      document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
+      document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
+      
+      // Set the reinforcer video source (choose one at random from the theme's list)
+      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
+      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
+        const randomIndex = Math.floor(Math.random() * themeData.reinforcerVideos.length);
+        reinforcerVideoSource.src = themeData.reinforcerVideos[randomIndex];
+      } else {
+        reinforcerVideoSource.src = "../../videos/africa.mp4";
+      }
+      const reinforcerVideo = document.getElementById('reinforcerVideo');
+      reinforcerVideo.load();
+      
+      // DOM references used by the game
+      const lettersContainer = document.getElementById('letters-container');
+      const targetImage = document.getElementById('target-image');
+      // target-word is the grid container for letter slots.
+      const targetWordContainer = document.getElementById('target-word');
+      const reinforcerOverlay = document.getElementById('reinforcerOverlay');
+      const reinforcerButton = document.getElementById('reinforcerButton');
+      const videoOverlayCover = document.getElementById('videoOverlayCover');
+      
+      // Audio elements
+      const errorSoundElement = document.getElementById('error-sound');
+      const wordRewardSound = document.getElementById('word-reward-sound');
+      const finalRewardSound = document.getElementById('final-reward-sound');
+  
+      // -----------------------------
+      // Activity Overlay Feature
+      // -----------------------------
+      const activityOverlay = document.getElementById('activityNumberOverlay');
+      const numberTextEl = activityOverlay.querySelector('.number-text');
+      numberTextEl.textContent = (overallGameIndex + 1).toString();
+      activityOverlay.style.display = 'flex';
+      
+      function hideOverlayAndStart() {
+        if (themeData.startSound) {
+          const sfx = new Audio(themeData.startSound);
+          sfx.currentTime = 0;
+          sfx.play().catch(err => console.warn('Sound play error:', err));
+        }
+        activityOverlay.style.display = 'none';
+        document.removeEventListener('click', hideOverlayAndStart);
+        document.removeEventListener('touchend', hideOverlayAndStart);
+        initialize();
+      }
+      
+      document.addEventListener('click', hideOverlayAndStart);
+      document.addEventListener('touchend', hideOverlayAndStart);
+      // -----------------------------
+      // End Activity Overlay Feature
+      // -----------------------------
+  
+      let slots = [];
+      let showModelLetters = true;
+      let activeDragElement = null;
+      let initialX = 0, initialY = 0;
+      let currentX = 0, currentY = 0;
+  
+      let synth = window.speechSynthesis;
+      let frenchVoice = null;
+      let audioContext;
+      let errorSoundBuffer = null;
+  
+      async function loadErrorSound() {
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const response = await fetch(errorSoundElement.src);
+          const arrayBuffer = await response.arrayBuffer();
+          errorSoundBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        } catch (error) {
+          console.error('Error loading error sound:', error);
+        }
+      }
+  
+      function playErrorSound() {
+        if (!audioContext || !errorSoundBuffer) {
+          console.warn('AudioContext not initialized or errorSoundBuffer not loaded.');
+          return;
+        }
+        const source = audioContext.createBufferSource();
+        source.buffer = errorSoundBuffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+      }
+  
+      function selectFrenchVoice() {
+        return new Promise((resolve, reject) => {
+          let voices = synth.getVoices();
+          if (voices.length !== 0) {
+            frenchVoice = voices.find(voice => voice.lang.startsWith('fr'));
+            if (frenchVoice) {
+              resolve();
+            } else {
+              reject('No French voice found.');
+            }
+          } else {
+            synth.onvoiceschanged = () => {
+              voices = synth.getVoices();
+              frenchVoice = voices.find(voice => voice.lang.startsWith('fr'));
+              if (frenchVoice) {
+                resolve();
+              } else {
+                reject('No French voice found.');
+              }
+            };
+          }
+        });
+      }
+  
+      function speakText(text, callback) {
+        if (!synth) {
+          console.error("Speech Synthesis not supported in this browser.");
+          if (callback) callback();
+          return;
+        }
+        if (!frenchVoice) {
+          console.warn("French voice not selected. Attempting to select.");
+          selectFrenchVoice().then(() => {
+            speak(text, callback);
+          }).catch((error) => {
+            console.error(error);
+            if (callback) callback();
+          });
+        } else {
+          speak(text, callback);
+        }
+      }
+  
+      function speak(text, callback) {
+        const utterThis = new SpeechSynthesisUtterance(text);
+        utterThis.voice = frenchVoice;
+        utterThis.lang = 'fr-FR';
+        utterThis.onend = () => {
+          if (callback) callback();
+        };
+        utterThis.onerror = (e) => {
+          console.error("Speech Synthesis Error:", e);
+          if (callback) callback();
+        };
+        synth.speak(utterThis);
+      }
+  
+      let voicesInitialized = false;
+      function initializeSpeechSynthesis() {
+        if (voicesInitialized) return;
+        voicesInitialized = true;
+        selectFrenchVoice().catch((error) => {
+          console.error(error);
+        });
+      }
+  
+      function unlockAudio() {
+        if (audioContext && audioContext.state === 'suspended') {
+          audioContext.resume().catch(error => {
+            console.error('Error resuming AudioContext:', error);
+          });
+        }
+      }
+  
+      async function initialize() {
+        await loadErrorSound();
+        initializeTargetImage();
+        initializeSlots();
+        initializeLetters();
+        insertModelLetters();
+        attachSlotEventListeners();
+      }
+  
+      function initializeTargetImage() {
+        const currentWord = words[wordIndex].word;
+        const imagePath = words[wordIndex].image;
+        targetImage.src = imagePath;
+        targetImage.alt = currentWord + " Image";
+      }
+  
+      function initializeSlots() {
+        const currentWord = words[wordIndex].word;
+        const targetWordContainer = document.getElementById('target-word');
+        targetWordContainer.innerHTML = '';
+        targetWordContainer.style.gridTemplateColumns = `repeat(${currentWord.length}, 1fr)`;
+        for (let i = 0; i < currentWord.length; i++) {
+          const slot = document.createElement('div');
+          slot.classList.add('letter-slot');
+          slot.setAttribute('data-position', i);
+          const placedLetterDiv = document.createElement('div');
+          placedLetterDiv.classList.add('placed-letter');
+          slot.appendChild(placedLetterDiv);
+          targetWordContainer.appendChild(slot);
+        }
+        slots = document.querySelectorAll('.letter-slot');
+      }
+  
+      function initializeLetters() {
+        const currentWord = words[wordIndex].word;
+        const lettersArray = currentWord.split('');
+        shuffleArray(lettersArray);
+        lettersArray.forEach(letter => {
+          const letterDiv = document.createElement('div');
+          letterDiv.classList.add('letter');
+          letterDiv.setAttribute('data-letter', letter);
+          letterDiv.textContent = letter;
+          lettersContainer.appendChild(letterDiv);
+          positionLetterRandomly(letterDiv);
+          letterDiv.addEventListener('mousedown', dragStartMouse);
+          letterDiv.addEventListener('touchstart', touchStart, { passive: false });
+        });
+      }
+  
+      function insertModelLetters() {
+        const currentWord = words[wordIndex].word;
+        const targetWordContainer = document.getElementById('target-word');
+        slots.forEach(slot => {
+          const position = parseInt(slot.getAttribute('data-position'));
+          const modelLetter = currentWord[position];
+          const modelDiv = document.createElement('div');
+          modelDiv.classList.add('model-letter');
+          modelDiv.textContent = modelLetter;
+          targetWordContainer.appendChild(modelDiv);
+        });
+        toggleModelLetters();
+      }
+  
+      function toggleModelLetters() {
+        const modelLetters = document.querySelectorAll('.model-letter');
+        modelLetters.forEach(modelDiv => {
+          modelDiv.style.display = showModelLetters ? 'block' : 'none';
+        });
+      }
+  
+      function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+      }
+  
+      function positionLetterRandomly(letterDiv) {
+        const container = lettersContainer;
+        const letterWidth = letterDiv.offsetWidth;
+        const letterHeight = letterDiv.offsetHeight;
+        const maxLeft = container.clientWidth - letterWidth - 20;
+        const maxTop = container.clientHeight - letterHeight - 20;
+        const safeMaxLeft = Math.max(maxLeft, 0);
+        const safeMaxTop = Math.max(maxTop, 0);
+        let left = Math.floor(Math.random() * safeMaxLeft) + 10;
+        let top = Math.floor(Math.random() * safeMaxTop) + 10;
+        const existingLetters = document.querySelectorAll('.letters-container .letter:not(.dragging)');
+        let attempts = 0;
+        const maxAttempts = 10;
+        while (isOverlapping(left, top, letterWidth, letterHeight, existingLetters) && attempts < maxAttempts) {
+          left = Math.floor(Math.random() * safeMaxLeft) + 10;
+          top = Math.floor(Math.random() * safeMaxTop) + 10;
+          attempts++;
+        }
+        letterDiv.style.left = `${left}px`;
+        letterDiv.style.top = `${top}px`;
+      }
+  
+      function isOverlapping(left, top, width, height, existingLetters) {
+        for (let el of existingLetters) {
+          const elLeft = parseInt(el.style.left);
+          const elTop = parseInt(el.style.top);
+          const elWidth = el.offsetWidth;
+          const elHeight = el.offsetHeight;
+          if (
+            left < elLeft + elWidth &&
+            left + width > elLeft &&
+            top < elTop + elHeight &&
+            top + height > elTop
+          ) {
+            return true;
+          }
+        }
+        return false;
+      }
+  
+      function dragStartMouse(e) {
+        e.preventDefault();
+        activeDragElement = e.target;
+        const rect = activeDragElement.getBoundingClientRect();
+        initialX = e.clientX - rect.left;
+        initialY = e.clientY - rect.top;
+        activeDragElement.classList.add('dragging');
+        document.addEventListener('mousemove', dragMoveMouse);
+        document.addEventListener('mouseup', dragEndMouse);
+        moveToBody(activeDragElement, rect.left, rect.top);
+      }
+  
+      function dragMoveMouse(e) {
+        if (!activeDragElement) return;
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
+        activeDragElement.style.left = `${currentX}px`;
+        activeDragElement.style.top = `${currentY}px`;
+        // Update drop indicator on the letter-slot under the dragged element.
+        updateDropIndicator();
+      }
+  
+      function dragEndMouse(e) {
+        if (!activeDragElement) return;
+        activeDragElement.classList.remove('dragging');
+        removeDropIndicator();
+        document.removeEventListener('mousemove', dragMoveMouse);
+        document.removeEventListener('mouseup', dragEndMouse);
+        const dropSlot = getDropSlot(activeDragElement);
+        if (dropSlot) {
+          handleDrop(activeDragElement, dropSlot);
+        } else {
+          appendToLettersContainer(activeDragElement);
+          positionLetterRandomly(activeDragElement);
+        }
+        activeDragElement = null;
+      }
+  
+      function touchStart(e) {
+        if (e.target.classList.contains('letter')) {
+          e.preventDefault();
+          activeDragElement = e.target;
+          const touch = e.touches[0];
+          const rect = activeDragElement.getBoundingClientRect();
+          initialX = touch.clientX - rect.left;
+          initialY = touch.clientY - rect.top;
+          activeDragElement.classList.add('dragging');
+          moveToBody(activeDragElement, rect.left, rect.top);
+          document.addEventListener('touchmove', touchMove, { passive: false });
+          document.addEventListener('touchend', touchEnd);
+        }
+      }
+  
+      function touchMove(e) {
+        if (!activeDragElement) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        currentX = touch.clientX - initialX;
+        currentY = touch.clientY - initialY;
+        activeDragElement.style.left = `${currentX}px`;
+        activeDragElement.style.top = `${currentY}px`;
+        updateDropIndicator();
+      }
+  
+      function touchEnd(e) {
+        if (!activeDragElement) return;
+        activeDragElement.classList.remove('dragging');
+        removeDropIndicator();
+        document.removeEventListener('touchmove', touchMove);
+        document.removeEventListener('touchend', touchEnd);
+        const dropSlot = getDropSlot(activeDragElement);
+        if (dropSlot) {
+          handleDrop(activeDragElement, dropSlot);
+        } else {
+          appendToLettersContainer(activeDragElement);
+          positionLetterRandomly(activeDragElement);
+        }
+        activeDragElement = null;
+      }
+  
+      // Function to update drop indicator styling on the letter-slot currently under the dragged element.
+      function updateDropIndicator() {
+        slots.forEach(slot => slot.classList.remove('over'));
+        const slot = getDropSlot(activeDragElement);
+        if (slot) {
+          slot.classList.add('over');
+        }
+      }
+  
+      function removeDropIndicator() {
+        slots.forEach(slot => slot.classList.remove('over'));
+      }
+  
+      function moveToBody(element, left, top) {
+        document.body.appendChild(element);
+        element.style.position = 'fixed';
+        element.style.left = `${left}px`;
+        element.style.top = `${top}px`;
+      }
+  
+      function appendToLettersContainer(element) {
+        lettersContainer.appendChild(element);
+        element.style.position = 'absolute';
+      }
+  
+      function getDropSlot(draggedElement) {
+        const draggedRect = draggedElement.getBoundingClientRect();
+        for (let slot of slots) {
+          const slotRect = slot.getBoundingClientRect();
+          if (
+            draggedRect.left < slotRect.right &&
+            draggedRect.right > slotRect.left &&
+            draggedRect.top < slotRect.bottom &&
+            draggedRect.bottom > slotRect.top
+          ) {
+            return slot;
+          }
+        }
+        return null;
+      }
+  
+      function handleDrop(draggedElement, slot) {
+        const index = parseInt(slot.getAttribute('data-position'));
+        const requiredLetter = words[wordIndex].word[index];
+        const draggedLetter = draggedElement.dataset.letter;
+        if (draggedLetter === requiredLetter) {
+          const placedLetterDiv = slot.querySelector('.placed-letter');
+          if (placedLetterDiv) {
+            placedLetterDiv.textContent = draggedLetter;
+          }
+          slot.classList.add('filled');
+          speakText(draggedLetter, () => {});
+          draggedElement.remove();
+          checkCompletion();
+        } else {
+          playErrorSound();
+          slot.classList.add('error');
+          setTimeout(() => {
+            slot.classList.remove('error');
+          }, 500);
+          appendToLettersContainer(draggedElement);
+          positionLetterRandomly(draggedElement);
+        }
+      }
+  
+      // NEW: Delay playing the reinforcer sound after the word is read.
+      function showReinforcerSound() {
+        setTimeout(() => {
+          wordRewardSound.currentTime = 0;
+          wordRewardSound.play().then(() => {
+            // Optional: actions after sound plays.
+          }).catch(error => {
+            console.error('Error playing reinforcer sound:', error);
+          });
+  
+          wordRewardSound.onended = null;
+  
+          function onEnded() {
+            clearTimeout(fallbackTimeout);
+            moveToNextWord();
+          }
+  
+          wordRewardSound.addEventListener('ended', onEnded, { once: true });
+  
+          const fallbackTimeout = setTimeout(() => {
+            moveToNextWord();
+            wordRewardSound.removeEventListener('ended', onEnded);
+          }, 3000);
+        }, 2000); // 2-second delay before playing the reinforcer sound.
+      }
+  
+      function checkCompletion() {
+        let correct = true;
+        slots.forEach(slot => {
+          if (!slot.classList.contains('filled')) {
+            correct = false;
+          }
+        });
+  
+        if (correct) {
+          const completeWord = words[wordIndex].word;
+          speakText(completeWord, () => {
+            showReinforcerSound();
+          });
+        }
+      }
+  
+      // Final reinforcer video is shown when there are no more words.
+      function showFinalReinforcerVideo() {
+        finalRewardSound.currentTime = 0;
+        finalRewardSound.play().catch(error => {
+          console.error('Error playing finalRewardSound:', error);
+        });
+        reinforcerOverlay.style.display = 'flex';
+        reinforcerVideo.style.display = 'none';
+        videoOverlayCover.style.display = 'none';
+        // Do not auto-navigate: the reinforcer button will remain until the user clicks it.
+      }
+  
+      // NEW: Function to navigate to the next game.
+      function navigateToNextGame() {
+        const selections = JSON.parse(localStorage.getItem('gameSelections'));
+        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        currentGameIndex++;  // Increment the overall game index.
+        localStorage.setItem('currentGameIndex', currentGameIndex);
+        if (currentGameIndex < selections.gameOrder.length) {
+          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
+        } else {
+          window.location.href = "completion.html";
+        }
+      }
+  
+      function moveToNextWord() {
+        wordIndex++;
+        if (wordIndex >= words.length) {
+          showFinalReinforcerVideo();
+        } else {
+          resetGame();
+        }
+      }
+  
+      function resetGame() {
+        slots.forEach(slot => {
+          const placedLetterDiv = slot.querySelector('.placed-letter');
+          if (placedLetterDiv) {
+            placedLetterDiv.textContent = '';
+          }
+          slot.classList.remove('filled');
+        });
+        lettersContainer.innerHTML = '';
+        initializeTargetImage();
+        initializeSlots();
+        initializeLetters();
+        insertModelLetters();
+        attachSlotEventListeners();
+      }
+  
+      function attachSlotEventListeners() {
+        slots.forEach((slot, index) => {
+          slot.addEventListener('dragover', (e) => {
+            e.preventDefault();
+          });
+          
+          slot.addEventListener('dragleave', () => {
+            slot.classList.remove('over');
+          });
+          
+          slot.addEventListener('drop', (e) => {
+            e.preventDefault();
+            slot.classList.remove('over');
+            const letterData = e.dataTransfer.getData('text/plain');
+            const draggedElement = document.querySelector(`.letter[data-letter='${letterData}']`);
+            if (!draggedElement) return;
+            if (slot.classList.contains('filled')) {
+              playErrorSound();
+              slot.classList.add('error');
+              setTimeout(() => {
+                slot.classList.remove('error');
+              }, 500);
+              return;
+            }
+            const requiredLetter = words[wordIndex].word[index];
+            if (letterData !== requiredLetter) {
+              playErrorSound();
+              slot.classList.add('error');
+              setTimeout(() => {
+                slot.classList.remove('error');
+              }, 500);
+              return;
+            }
+            const placedLetterDiv = slot.querySelector('.placed-letter');
+            if (placedLetterDiv) {
+              placedLetterDiv.textContent = letterData;
+            }
+            slot.classList.add('filled');
+            speakText(draggedElement.dataset.letter, () => {});
+            draggedElement.remove();
+            checkCompletion();
+          });
+        });
+      }
+  
+      reinforcerButton.addEventListener('click', () => {
+        // When the reinforcer button is clicked at the end,
+        // hide the button and play the reinforcer video.
+        reinforcerButton.style.display = 'none';
+        reinforcerOverlay.style.background = '#000';
+        reinforcerVideo.style.display = 'block';
+        videoOverlayCover.style.display = 'block';
+        reinforcerVideo.play().catch(err => {
+          console.warn('Video play failed:', err);
+          hideReinforcer();
+        });
+      });
+  
+      // When the reinforcer video ends, navigate to the next game.
+      reinforcerVideo.addEventListener('ended', () => {
+        navigateToNextGame();
+      }, { once: true });
+  
+      function hideReinforcer() {
+        reinforcerOverlay.style.display = 'none';
+        reinforcerButton.style.display = 'flex';
+        reinforcerVideo.style.display = 'none';
+        reinforcerVideo.pause();
+        reinforcerVideo.currentTime = 0;
+        videoOverlayCover.style.display = 'none';
+        reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
+      }
+  
+    });
+  </script>
+</body>
+</html>
