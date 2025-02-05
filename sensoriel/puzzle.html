@@ -61,7 +61,7 @@
     }
     .slot {
       background: #e2e2e2;
-      border: 1px solid #ccc;
+      border: none;
       position: relative;
       overflow: hidden;
       box-sizing: border-box;
@@ -75,6 +75,7 @@
       touch-action: none;
       user-select: none;
       transition: opacity 0.2s;
+      box-sizing: border-box; /* ensure borders don’t alter size */
     }
     .draggable-piece.active { opacity: 0.8; cursor: grabbing; z-index: 1000; }
     #hiddenCanvas { display: none; }
@@ -137,7 +138,7 @@
     <div id="puzzleArea"></div>
   </div>
   <div id="toggleReferenceContainer">
-    <button id="toggleReference" class="button">Show Reference</button>
+    <button id="toggleReference" class="button">Image complète</button>
   </div>
   <div id="referenceModal" class="modal">
     <div class="modal-content">
@@ -202,6 +203,7 @@
       const puzzleImageSrc = imagesArr[randomIndex];
       const referenceImageSrc = puzzleImageSrc;
       const puzzleOptions = selections.gameOptions[currentGameIndex] || {};
+      console.log("Puzzle options:", puzzleOptions);
       let dimension = puzzleOptions.puzzleDimension || '2x2';
       if (dimension === '3x3') { ROWS = 3; COLS = 3; }
       else if (dimension === '4x4') { ROWS = 4; COLS = 4; }
@@ -215,23 +217,31 @@
       const hiddenCanvas = document.getElementById('hiddenCanvas');
       const ctx = hiddenCanvas.getContext('2d');
       referenceImg.src = referenceImagePath;
+      
+      // Set the puzzle area's dimensions based on the grid and PIECE_SIZE.
       const puzzleWidth = COLS * PIECE_SIZE;
       const puzzleHeight = ROWS * PIECE_SIZE;
+      // Adding a small offset (8px) for borders
       puzzleArea.style.width = (puzzleWidth + 8) + 'px';
       puzzleArea.style.height = (puzzleHeight + 8) + 'px';
       puzzleArea.style.gridTemplateColumns = `repeat(${COLS}, ${PIECE_SIZE}px)`;
       puzzleArea.style.gridTemplateRows = `repeat(${ROWS}, ${PIECE_SIZE}px)`;
+
       const puzzleImage = new Image();
       puzzleImage.src = puzzleImagePath;
       puzzleImage.onload = () => {
         puzzleArea.innerHTML = "";
         piecesArea.innerHTML = "";
         window.puzzlePieces = [];
-        hiddenCanvas.width = puzzleImage.width;
-        hiddenCanvas.height = puzzleImage.height;
-        ctx.drawImage(puzzleImage, 0, 0);
-        const sourcePieceWidth = puzzleImage.width / COLS;
-        const sourcePieceHeight = puzzleImage.height / ROWS;
+
+        // Scale the entire image to fit the puzzle container.
+        hiddenCanvas.width = puzzleWidth;
+        hiddenCanvas.height = puzzleHeight;
+        ctx.drawImage(puzzleImage, 0, 0, puzzleWidth, puzzleHeight);
+
+        // Slice the scaled image into pieces.
+        const sourcePieceWidth = puzzleWidth / COLS;
+        const sourcePieceHeight = puzzleHeight / ROWS;
         let pieceIndex = 0;
         for (let row = 0; row < ROWS; row++) {
           for (let col = 0; col < COLS; col++) {
@@ -239,12 +249,21 @@
             pieceCanvas.width = sourcePieceWidth;
             pieceCanvas.height = sourcePieceHeight;
             const pieceCtx = pieceCanvas.getContext('2d');
-            pieceCtx.drawImage(puzzleImage, col * sourcePieceWidth, row * sourcePieceHeight, sourcePieceWidth, sourcePieceHeight, 0, 0, sourcePieceWidth, sourcePieceHeight);
+            // Slice out the section from the hidden canvas.
+            pieceCtx.drawImage(
+              hiddenCanvas,
+              col * sourcePieceWidth, row * sourcePieceHeight,
+              sourcePieceWidth, sourcePieceHeight,
+              0, 0,
+              sourcePieceWidth, sourcePieceHeight
+            );
             const pieceDataURL = pieceCanvas.toDataURL();
             puzzlePieces.push({ index: pieceIndex, row, col, img: pieceDataURL });
             pieceIndex++;
           }
         }
+
+        // Create slots in the puzzle area.
         for (let i = 0; i < puzzlePieces.length; i++) {
           const slot = document.createElement('div');
           slot.classList.add('slot');
@@ -261,6 +280,17 @@
         piecesArea.addEventListener('drop', onDropLeft);
         piecesArea.addEventListener('dragenter', onDragEnter);
         piecesArea.addEventListener('dragleave', onDragLeave);
+
+        // Retrieve the easy-mode flag from the stored options.
+        const selections = JSON.parse(localStorage.getItem('gameSelections'));
+        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        const puzzleOptions = selections.gameOptions[currentGameIndex] || {};
+        console.log("For piece creation, puzzleOptions:", puzzleOptions);
+        console.log("puzzleEasy flag value:", puzzleOptions.puzzleEasy);
+        const easyMode = puzzleOptions.puzzleEasy === "on" || puzzleOptions.puzzleEasy === "true";
+        console.log("Easy mode enabled:", easyMode);
+
+        // Create and shuffle the draggable pieces.
         shuffleArray(puzzlePieces);
         puzzlePieces.forEach(piece => {
           const imgEl = document.createElement('img');
@@ -270,6 +300,27 @@
           imgEl.dataset.index = piece.index;
           imgEl.style.width = PIECE_SIZE + "px";
           imgEl.style.height = PIECE_SIZE + "px";
+          
+          // Log and apply borders if easy mode is enabled.
+          if (easyMode) {
+            console.log(`Applying easy mode borders for piece ${piece.index} at row ${piece.row}, col ${piece.col}`);
+            if (piece.row === 0) {
+              imgEl.style.borderTop = "4px solid #000";
+            }
+            if (piece.row === ROWS - 1) {
+              imgEl.style.borderBottom = "4px solid #000";
+            }
+            if (piece.col === 0) {
+              imgEl.style.borderLeft = "4px solid #000";
+            }
+            if (piece.col === COLS - 1) {
+              imgEl.style.borderRight = "4px solid #000";
+            }
+          } else {
+            // No extra border if easy mode is off.
+            imgEl.style.border = "2px solid transparent";
+          }
+          
           imgEl.addEventListener('dragstart', onDragStart);
           imgEl.addEventListener('dragend', onDragEnd);
           placePieceRandomlyInGrid(imgEl, piecesArea.clientWidth, piecesArea.clientHeight);
