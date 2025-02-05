@@ -153,7 +153,6 @@
         grid-template-rows: repeat(4, 1fr);
       }
     }
-
   </style>
 </head>
 <body>
@@ -203,7 +202,6 @@
                         : window.themes["default"] || {};
 
       // --- Read the user-chosen number of pairs for the memory game ---
-      // For the memory game (testoupie2) the config uses the field name "testoupie2Pairs"
       let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
       if (isNaN(overallGameIndex)) {
         alert("Game selections not found. Redirecting to main page.");
@@ -314,8 +312,10 @@
       /****************************************
        * 2) Memory Game (Jeu de Répartition de Jetons)
        ****************************************/
-      // We'll use images from the theme (or fallback) for the memory game.
-      // The number of distinct pairs used is limited by the desiredPairs option.
+
+      // --- Define two lists of images ---
+
+      // Normal images (using themeData.images if available, or fallback)
       let puzzleImages = [];
       const fallbackImages = [
         '../../images/toupieetbinou.png',
@@ -331,12 +331,34 @@
         puzzleImages = fallbackImages;
       }
 
-      // The startGame function receives the number of pairs as its argument.
+      // Transparent PNG images (using themeData.transparentPNGs if available, or fallback)
+      let transparentPNGs = [];
+      const fallbackTransparentPNGs = [
+        '../../images/transparent1.png',
+        '../../images/transparent2.png',
+        '../../images/transparent3.png'
+      ];
+      if (themeData.transparentPNGs && themeData.transparentPNGs.length > 0) {
+        transparentPNGs = themeData.transparentPNGs;
+      } else {
+        transparentPNGs = fallbackTransparentPNGs;
+      }
+
+      // The startGame function now combines both arrays.
       window.startGame = function(numberOfPairs) {
         console.log("Memory game started with " + numberOfPairs + " pairs.");
-        // Limit the puzzleImages array to the desired number of distinct images
-        puzzleImages = puzzleImages.slice(0, Math.min(numberOfPairs, puzzleImages.length));
-        initializeGame(puzzleImages);
+
+        // Combine both arrays into one list of possible images.
+        let allImages = [...puzzleImages, ...transparentPNGs];
+
+        // Shuffle the combined array so that the selection is random.
+        shuffle(allImages);
+
+        // Limit the selection to the desired number of unique pairs.
+        const selectedImages = allImages.slice(0, Math.min(numberOfPairs, allImages.length));
+
+        // Start the game with these selected images.
+        initializeGame(selectedImages);
       };
 
       // Memory game variables and elements
@@ -352,6 +374,7 @@
       const errorSound = document.getElementById('error-sound');
       const victorySound = document.getElementById('victory-sound');
 
+      // Standard Fisher-Yates shuffle function.
       function shuffle(array) {
         for (let i = array.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
@@ -367,11 +390,14 @@
         secondCard = null;
         lockBoard = false;
         matchesFound = 0;
+
         // Create pairs: duplicate the imagesArray so total cards = 2 * numberOfPairs
         const gameCharacters = [...imagesArray, ...imagesArray];
         shuffle(gameCharacters);
+
         // Clear the game grid
         gameGridElement.innerHTML = '';
+
         // Build each card
         gameCharacters.forEach((char, index) => {
           const card = document.createElement('div');
@@ -448,8 +474,8 @@
             matchSound.play();
             disableCards();
             matchesFound++;
-            // When matchesFound equals the number of pairs used (puzzleImages.length), game is complete
-            if (matchesFound === puzzleImages.length) {
+            // When matchesFound equals the number of pairs used, the game is complete.
+            if (matchesFound === (document.querySelectorAll('.card').length / 2)) {
               victorySound.play();
               showReinforcerPrompt();
             }

@@ -3,8 +3,7 @@ window.themes = {
     moana: {
       images: [
         "../../images/moana-background.jpg",
-        "../../images/noel.jpg",
-        "../../images/switch.webp"
+
       ],
       transparentPNGs: [
         "../../images/moana.png",
@@ -23,6 +22,30 @@ window.themes = {
       startSound: "../../sounds/firework.mp3",
       reinforcerSound: "../../sounds/firework.mp3"
     },
+    Toupiebinou: {
+        images: [
+          "../../images/toupiecamping.jpg",
+          "../../images/toupiechambre.jpeg",
+          "../../images/toupiecinema.jpeg"
+        ],
+        transparentPNGs: [
+          "../../images/toupieetbinou.png",
+          "../../images/toupieetbinou2.png",
+          "../../images/toupieetbinouart.png",
+          "../../images/toupieetbinouavion.png",
+          "../../images/binou.png",
+          "../../images/toupieetbinouhalloween.png"
+        ],
+        reinforcerVideos: [
+          "../../videos/toupieetbinouecole.mp4",
+         
+        ],
+        words: [
+          "Camping", "Chambre","Cinéma"
+        ],
+        startSound: "../../sounds/firework.mp3",
+        reinforcerSound: "../../sounds/firework.mp3"
+      },
     monde: {
       images: [
         "../../images/worldmap.jpg",
