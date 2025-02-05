@@ -34,25 +34,25 @@
       position: relative;
     }
 
-    /* Split container into left and right */
+    /* Split container into left (20%) and right (80%) */
     .game-layout {
       display: flex;
       flex: 1;
     }
 
-    /*
-      LEFT CONTAINER (20%):
-      Using flex-wrap so buttons can wrap to multiple rows.
-      The prompt is at the top (100% width), and the buttons below.
-    */
+    /***********************************************************
+     * LEFT PANEL (20%):
+     * Using flex-wrap so round buttons can form multiple rows,
+     * filling most of the horizontal space in that 20%.
+     ***********************************************************/
     .numeral-container {
       width: 20%;
       display: flex;
-      flex-direction: row;  /* place items left-to-right, then wrap */
+      flex-direction: row;
       flex-wrap: wrap;
-      justify-content: space-around; /* horizontally center them in each row */
-      align-content: flex-start;     /* start new rows at the top */
-      gap: 10px;                     /* space between buttons/prompt */
+      justify-content: space-around;  /* horizontally center them in each row */
+      align-content: flex-start;      /* start new rows at the top */
+      gap: 10px;
       border-right: 4px solid #ccc;
       padding: 10px;
       box-sizing: border-box;
@@ -68,17 +68,17 @@
     }
 
     /*
-      We’ll try to make 2 buttons per row, so each button is ~45% wide.
-      aspect-ratio: 1 => squares => circles with border-radius:50%.
+      Buttons: about 45% wide => 2 circles per row (plus gap).
+      aspect-ratio: 1 => squares => circles w/ border-radius: 50%.
     */
     .numeral-button {
-      flex: 0 1 calc(45% - 10px); /* 45% minus gap or so to avoid wrapping issues */
+      flex: 0 1 calc(45% - 10px);
       aspect-ratio: 1 / 1;
       border-radius: 50%;
       background-color: #3498db;
       color: #fff;
       font-weight: bold;
-      font-size: 1.4rem; /* Adjust if you want bigger text */
+      font-size: 1.4rem;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -86,27 +86,33 @@
       border: none;
     }
 
-    /*
-      If you prefer 3 buttons per row, just tweak the calc: e.g.,
-      flex: 0 1 calc(28% - 10px);
-      (28% * 3 ~ 84%, plus gaps.)
-    */
-
-    /* RIGHT CONTAINER (80%): grid of themed objects */
+    /***********************************************************
+     * RIGHT PANEL (80%):
+     * A grid with 4 columns, but we define row heights via a CSS variable
+     * so images get smaller when fewer rows are needed.
+     ***********************************************************/
     .objects-container {
+      /* Occupy the remaining 80% width */
       width: 80%;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      /* Increase to 4 columns => narrower cells => smaller images */
+      grid-template-columns: repeat(4, 1fr);
+      /* Each row's height is set in JS -> var(--row-height) */
+      grid-auto-rows: var(--row-height, 1fr);
       gap: 10px;
       padding: 10px;
       justify-items: center;
       align-items: center;
+      box-sizing: border-box;
     }
 
-    /* Images fill their grid cell while maintaining aspect ratio */
+    /*
+      Force each cell’s content (the image) to shrink if row height is small,
+      while preserving aspect ratio.
+    */
     .objects-container img {
-      max-width: 100%;
-      max-height: 100%;
+      width: 100%;
+      height: 100%;
       object-fit: contain;
       animation: pulse 2s infinite;
     }
@@ -126,6 +132,7 @@
       z-index: 1000;
       font-size: 3em;
     }
+
     #reinforcerOverlay {
       position: fixed;
       top: 0;
@@ -139,17 +146,20 @@
       align-items: center;
       z-index: 2000;
     }
+
     #reinforcerButton {
       padding: 10px 20px;
       font-size: 1.5em;
       cursor: pointer;
       margin-bottom: 20px;
     }
+
     #reinforcerVideo {
       width: 80%;
       max-width: 600px;
       display: none;
     }
+
     #videoOverlayCover {
       position: absolute;
       top: 0;
@@ -307,7 +317,9 @@
         reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
       }
 
-      // --- GAME-SPECIFIC LOGIC: COUNTING WITH THEMED OBJECTS ---
+      /***********************************************************
+       * GAME-SPECIFIC LOGIC: COUNTING WITH THEMED OBJECTS
+       ***********************************************************/
       window.startGame = function() {
         var gameContent = document.getElementById('game-content');
         gameContent.innerHTML = "";
@@ -333,20 +345,20 @@
             maxOption = 3;
         }
 
-        // Create numeral and objects containers
+        // Left side: numeral container
         var numeralContainer = document.createElement('div');
         numeralContainer.className = "numeral-container";
 
-        // The prompt at the top
         var promptElement = document.createElement('div');
         promptElement.className = "numeral-prompt";
         promptElement.textContent = "Compte!";
         numeralContainer.appendChild(promptElement);
 
+        // Right side: objects container
         var objectsContainer = document.createElement('div');
         objectsContainer.className = "objects-container";
 
-        // Create numeral buttons from 1 to maxOption
+        // Numeral buttons 1..maxOption
         for (var i = 1; i <= maxOption; i++) {
           var btn = document.createElement('button');
           btn.className = "numeral-button";
@@ -375,8 +387,36 @@
           objectsContainer.appendChild(img);
         }
 
+        // Append both sides
         gameContent.appendChild(numeralContainer);
         gameContent.appendChild(objectsContainer);
+
+        /***********************************************************
+         * Dynamically size the rows of images on the right
+         * so that if "numObjects" is small, the images do NOT get too huge.
+         * We also use more columns (4), so each object cell is narrower.
+         ***********************************************************/
+        var columns = 4; // must match the CSS "repeat(4, 1fr)" above
+        var rows = Math.ceil(numObjects / columns);
+
+        // Grab the .game-layout to measure how tall that area is
+        var layoutEl = document.querySelector('.game-layout');
+        var layoutHeight = layoutEl.clientHeight; // available vertical space
+
+        // .objects-container has 10px top + 10px bottom => 20px total vertical padding
+        var verticalPadding = 20;
+        var totalAvailableHeight = layoutHeight - verticalPadding;
+
+        // If no images, fallback to something small
+        var rowHeight = rows > 0 ? totalAvailableHeight / rows : 50;
+
+        // Prevent images from becoming too large if there's only 1 row
+        // (You can lower maxRowHeight if you want them even smaller)
+        var maxRowHeight = 120; 
+        rowHeight = Math.min(rowHeight, maxRowHeight);
+
+        // Set the CSS variable
+        objectsContainer.style.setProperty('--row-height', rowHeight + "px");
       };
     });
   </script>
