@@ -14,6 +14,7 @@ window.themes = {
       ],
       reinforcerVideos: [
         "../../videos/asia.mp4",
+        "../../videos/africa.mp4"
        
       ],
       words: [
