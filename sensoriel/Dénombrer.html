@@ -28,10 +28,11 @@
       margin: auto;
       background-color: #ffffff;
       border-radius: 15px;
-      overflow: hidden;
       display: flex;
       flex-direction: column;
       position: relative;
+      /* No scrolling => images must fit or become very small */
+      overflow: hidden;
     }
 
     /* Split container into left (20%) and right (80%) */
@@ -42,35 +43,30 @@
 
     /***********************************************************
      * LEFT PANEL (20%):
-     * Using flex-wrap so round buttons can form multiple rows,
-     * filling most of the horizontal space in that 20%.
+     * Using flex-wrap so round buttons can form multiple rows
      ***********************************************************/
     .numeral-container {
       width: 20%;
       display: flex;
       flex-direction: row;
       flex-wrap: wrap;
-      justify-content: space-around;  /* horizontally center them in each row */
-      align-content: flex-start;      /* start new rows at the top */
+      justify-content: space-around;  
+      align-content: flex-start;      
       gap: 10px;
       border-right: 4px solid #ccc;
       padding: 10px;
       box-sizing: border-box;
+      position: relative;
     }
 
-    /* Prompt: full width in the container (first row) */
     .numeral-prompt {
       width: 100%;
       text-align: center;
       font-size: 1.6rem;
       font-weight: bold;
-      margin-bottom: 10px; /* spacing below the prompt */
+      margin-bottom: 10px;
     }
 
-    /*
-      Buttons: about 45% wide => 2 circles per row (plus gap).
-      aspect-ratio: 1 => squares => circles w/ border-radius: 50%.
-    */
     .numeral-button {
       flex: 0 1 calc(45% - 10px);
       aspect-ratio: 1 / 1;
@@ -87,97 +83,48 @@
     }
 
     /***********************************************************
-     * RIGHT PANEL (80%):
-     * A grid with 4 columns, but we define row heights via a CSS variable
-     * so images get smaller when fewer rows are needed.
+     * RIGHT PANEL (80%) - ABSOLUTE POSITIONING for images
      ***********************************************************/
     .objects-container {
-      /* Occupy the remaining 80% width */
       width: 80%;
-      display: grid;
-      /* Increase to 4 columns => narrower cells => smaller images */
-      grid-template-columns: repeat(4, 1fr);
-      /* Each row's height is set in JS -> var(--row-height) */
-      grid-auto-rows: var(--row-height, 1fr);
-      gap: 10px;
+      height: 100%; /* fill vertical space in .game-layout */
       padding: 10px;
-      justify-items: center;
-      align-items: center;
       box-sizing: border-box;
+      position: relative; /* parent for absolute children */
+      background-color: #fafafa;
+      /* No scrolling => images must fit in this area. */
+      overflow: hidden;
     }
 
     /*
-      Force each cell’s content (the image) to shrink if row height is small,
-      while preserving aspect ratio.
+      Each image is wrapped in .object-item
+      We'll place them at absolute positions (left, top) in JS
     */
-    .objects-container img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      animation: pulse 2s infinite;
-    }
-
-    /* Overlays (unchanged) */
-    #activityNumberOverlay {
+    .object-item {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.7);
-      color: #fff;
+      overflow: hidden;
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 1000;
-      font-size: 3em;
     }
 
-    #reinforcerOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
+    .object-item img {
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.8);
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 2000;
+      object-fit: contain; /* keeps entire image visible */
+      animation: pulse 2s infinite;
     }
 
-    #reinforcerButton {
-      padding: 10px 20px;
-      font-size: 1.5em;
-      cursor: pointer;
-      margin-bottom: 20px;
-    }
-
-    #reinforcerVideo {
-      width: 80%;
-      max-width: 600px;
-      display: none;
-    }
-
-    #videoOverlayCover {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: none;
-    }
-
+ 
     @keyframes pulse {
       0%   { transform: scale(1); }
-      50%  { transform: scale(1.1); }
+      50%  { transform: scale(1.04); }
       100% { transform: scale(1); }
     }
   </style>
 </head>
 <body>
-  <!-- Overlay -->
+  <!-- Overlay (on page load) -->
   <div id="activityNumberOverlay">
     <div class="number-text"></div>
   </div>
@@ -185,7 +132,7 @@
   <!-- Main container -->
   <div class="game-container">
     <div id="game-content" class="game-layout">
-      <!-- Numeral grid and objects grid created via script -->
+      <!-- Numeral container and objects container created in JS -->
     </div>
   </div>
 
@@ -211,7 +158,9 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Retrieve global settings
+      /***********************************************************
+       * 1) Retrieve global settings from localStorage
+       ***********************************************************/
       var selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       var mediaOption = selections.mediaOption || "default";
       var themeData = (window.themes && window.themes[mediaOption]) ||
@@ -230,7 +179,9 @@
       var reinforcerVideo = document.getElementById('reinforcerVideo');
       reinforcerVideo.load();
 
-      // Overlay
+      /***********************************************************
+       * 2) Activity Number Overlay
+       ***********************************************************/
       var overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
       if (isNaN(overallGameIndex)) {
         alert("Game selections not found. Redirecting to main page.");
@@ -255,11 +206,15 @@
       document.addEventListener('click', hideOverlayAndStart);
       document.addEventListener('touchend', hideOverlayAndStart);
 
+      /***********************************************************
+       * 3) Navigation to next game
+       ***********************************************************/
       function navigateToNextGame() {
         var selections = JSON.parse(localStorage.getItem('gameSelections'));
         var currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
         currentGameIndex++;
         localStorage.setItem('currentGameIndex', currentGameIndex);
+
         if (currentGameIndex < selections.gameOrder.length) {
           window.location.href = selections.gameOrder[currentGameIndex] + ".html";
         } else {
@@ -267,11 +222,15 @@
         }
       }
 
+      /***********************************************************
+       * 4) Reinforcer / Reward
+       ***********************************************************/
       function showReinforcerSound() {
         setTimeout(function() {
           var wordRewardSound = document.getElementById('word-reward-sound');
           wordRewardSound.currentTime = 0;
           wordRewardSound.play().then(function() {
+            // after it finishes, go to next game
             setTimeout(navigateToNextGame, 1500);
           }).catch(function(error) {
             console.error('Error playing reinforcer sound:', error);
@@ -302,6 +261,7 @@
           hideReinforcer();
         });
       });
+
       reinforcerVideo.addEventListener('ended', function() {
         navigateToNextGame();
       }, { once: true });
@@ -318,13 +278,25 @@
       }
 
       /***********************************************************
-       * GAME-SPECIFIC LOGIC: COUNTING WITH THEMED OBJECTS
+       * 5) MAIN GAME LOGIC: Counting with Themed Objects
        ***********************************************************/
       window.startGame = function() {
         var gameContent = document.getElementById('game-content');
         gameContent.innerHTML = "";
 
-        // Retrieve difficulty from localStorage ("easy", "medium", "hard")
+        // Create left side (numeral container)
+        var numeralContainer = document.createElement('div');
+        numeralContainer.className = "numeral-container";
+        var promptElement = document.createElement('div');
+        promptElement.className = "numeral-prompt";
+        promptElement.textContent = "Compte!";
+        numeralContainer.appendChild(promptElement);
+
+        // Right side (objects container)
+        var objectsContainer = document.createElement('div');
+        objectsContainer.className = "objects-container";
+
+        // Difficulty => numObjects, maxOption
         var difficulty = localStorage.getItem('difficulty') || "easy";
         var numObjects, maxOption;
         switch (difficulty) {
@@ -345,79 +317,99 @@
             maxOption = 3;
         }
 
-        // Left side: numeral container
-        var numeralContainer = document.createElement('div');
-        numeralContainer.className = "numeral-container";
-
-        var promptElement = document.createElement('div');
-        promptElement.className = "numeral-prompt";
-        promptElement.textContent = "Compte!";
-        numeralContainer.appendChild(promptElement);
-
-        // Right side: objects container
-        var objectsContainer = document.createElement('div');
-        objectsContainer.className = "objects-container";
-
-        // Numeral buttons 1..maxOption
+        // Create numeral buttons 1..maxOption
         for (var i = 1; i <= maxOption; i++) {
           var btn = document.createElement('button');
           btn.className = "numeral-button";
           btn.textContent = i;
           btn.addEventListener('click', function() {
             if (parseInt(this.textContent, 10) === numObjects) {
+              // Correct => show reinforcer
               showReinforcerSound();
             } else {
+              // Incorrect => error sound
               document.getElementById('error-sound').play();
             }
           });
           numeralContainer.appendChild(btn);
         }
 
-        // Create image elements for numObjects
+        // Create image items for numObjects
         var themeImages = themeData.transparentPNGs;
         if (!themeImages || themeImages.length === 0) {
           console.error("No themed images available for this game.");
           return;
         }
         var chosenImage = themeImages[Math.floor(Math.random() * themeImages.length)];
+
         for (var j = 0; j < numObjects; j++) {
-          var img = document.createElement('img');
-          img.src = chosenImage;
-          img.alt = "Themed object";
-          objectsContainer.appendChild(img);
+          // each item is absolutely positioned => .object-item
+          var itemDiv = document.createElement('div');
+          itemDiv.className = "object-item";
+
+          var imgEl = document.createElement('img');
+          imgEl.src = chosenImage;
+          imgEl.alt = "Themed object " + (j + 1);
+
+          itemDiv.appendChild(imgEl);
+          objectsContainer.appendChild(itemDiv);
         }
 
-        // Append both sides
+        // Add both containers to layout
         gameContent.appendChild(numeralContainer);
         gameContent.appendChild(objectsContainer);
 
-        /***********************************************************
-         * Dynamically size the rows of images on the right
-         * so that if "numObjects" is small, the images do NOT get too huge.
-         * We also use more columns (4), so each object cell is narrower.
-         ***********************************************************/
-        var columns = 4; // must match the CSS "repeat(4, 1fr)" above
+        /*
+          After we've created all items, let's lay them out so
+          they never exceed the available area.
+        */
+        setTimeout(function() {
+          layoutImages(objectsContainer, numObjects);
+        }, 50);
+      };
+
+
+      /***********************************************************
+       * 6) layoutImages - absolute positions for each .object-item
+       ***********************************************************/
+      function layoutImages(objectsContainer, numObjects) {
+        // You can decide how many columns you want:
+        var columns = 3; 
         var rows = Math.ceil(numObjects / columns);
 
-        // Grab the .game-layout to measure how tall that area is
-        var layoutEl = document.querySelector('.game-layout');
-        var layoutHeight = layoutEl.clientHeight; // available vertical space
+        // measure the container
+        var cWidth  = objectsContainer.clientWidth;
+        var cHeight = objectsContainer.clientHeight;
 
-        // .objects-container has 10px top + 10px bottom => 20px total vertical padding
-        var verticalPadding = 20;
-        var totalAvailableHeight = layoutHeight - verticalPadding;
+        // define a gap
+        var gap = 10;
+        var totalGapX = gap * (columns - 1);
+        var totalGapY = gap * (rows - 1);
 
-        // If no images, fallback to something small
-        var rowHeight = rows > 0 ? totalAvailableHeight / rows : 50;
+        // available space for actual squares
+        var usableWidth  = cWidth  - totalGapX;
+        var usableHeight = cHeight - totalGapY;
 
-        // Prevent images from becoming too large if there's only 1 row
-        // (You can lower maxRowHeight if you want them even smaller)
-        var maxRowHeight = 120; 
-        rowHeight = Math.min(rowHeight, maxRowHeight);
+        // each cell is a square => min of (usableWidth / columns, usableHeight / rows)
+        var cellSize = Math.floor(Math.min(usableWidth / columns, usableHeight / rows));
 
-        // Set the CSS variable
-        objectsContainer.style.setProperty('--row-height', rowHeight + "px");
-      };
+        // position each item
+        var items = objectsContainer.querySelectorAll('.object-item');
+        for (var i = 0; i < items.length; i++) {
+          var rowIndex = Math.floor(i / columns);
+          var colIndex = i % columns;
+
+          var x = colIndex * (cellSize + gap);
+          var y = rowIndex * (cellSize + gap);
+
+          var item = items[i];
+          item.style.width = cellSize + "px";
+          item.style.height = cellSize + "px";
+          item.style.left = x + "px";
+          item.style.top  = y + "px";
+        }
+      }
+
     });
   </script>
 </body>
