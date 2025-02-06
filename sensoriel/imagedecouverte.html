@@ -8,16 +8,18 @@
   <link rel="apple-touch-icon" href="../../images/binou.png">
   <link rel="stylesheet" href="../../css/ipadteachh.css">
   <title>Base Game</title>
-  <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
   <style>
-    /* Basic reset and layout styles */
-    *, *::before, *::after {
-      box-sizing: border-box;
+    html, body {
+      height: 100%;
       margin: 0;
-      padding: 0;
     }
-    /* Game container – same basic layout for all games */
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #f9f9f9;
+    }
     .game-container {
       display: flex;
       justify-content: center;
@@ -25,51 +27,45 @@
       width: calc(100% - 60px);
       height: calc(100% - 60px);
       max-width: 1200px;
-      padding: 20px;
       background-color: #ffffff;
       position: relative;
       overflow: hidden;
-      border-radius: 15px;
     }
-    /* Placeholder for game-specific content */
     #game-content {
       width: 100%;
       height: 100%;
       position: relative;
     }
-    /* Canvas wrapper for responsive scaling */
     .canvas-wrapper {
       position: relative;
       width: 100%;
-      max-width: 800px; /* maximum drawing resolution width */
+      max-width: 800px;
       margin: 0 auto;
+      border-radius: 10px;
+      overflow: hidden;
     }
-    /* The canvases will fill the width of the wrapper and keep their aspect ratio */
     .canvas-wrapper canvas {
       width: 100%;
       height: auto;
-      touch-action: none; /* Prevent default gestures on touch devices */
+      touch-action: none;
       display: block;
     }
-    /* Position the overlay canvas on top of the image canvas */
     #overlayCanvas {
       position: absolute;
       left: 0;
       top: 0;
       z-index: 2;
     }
+    #particleCanvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
     #imageCanvas {
       z-index: 1;
     }
-    /* Style for the Finish button (if needed) */
-    #finishButton {
-      display: block;
-      margin: 20px auto;
-      padding: 10px 20px;
-      font-size: 1.2em;
-      cursor: pointer;
-    }
-    
     @keyframes pulse {
       0%   { transform: scale(1); }
       50%  { transform: scale(1.35); }
@@ -78,20 +74,12 @@
   </style>
 </head>
 <body>
-  <!-- Activity overlay (shows the game index) -->
   <div id="activityNumberOverlay">
     <div class="number-text"></div>
   </div>
-
-  <!-- Main game container -->
   <div class="game-container">
-    <!-- This div is where your game‐specific UI will go -->
-    <div id="game-content">
-      <!-- Game-specific elements will be inserted here by your code -->
-    </div>
+    <div id="game-content"></div>
   </div>
-
-  <!-- Reinforcer overlay (common for all games) -->
   <div id="reinforcerOverlay">
     <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
     <video id="reinforcerVideo"
@@ -105,27 +93,17 @@
     </video>
     <div id="videoOverlayCover"></div>
   </div>
-
-  <!-- Audio elements for error, reinforcer, and final reward sounds -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
   <audio id="final-reward-sound" src="" preload="auto"></audio>
-
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Retrieve game selections and theme information from localStorage and themes.js
       const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       const mediaOption = selections.mediaOption || "";
-      const themeData = (window.themes && window.themes[mediaOption])
-                        ? window.themes[mediaOption]
-                        : window.themes["default"] || {};
-
-      // Set up audio element sources from theme data
+      const themeData = (window.themes && window.themes[mediaOption]) ? window.themes[mediaOption] : window.themes["default"] || {};
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
-
-      // Set the reinforcer video source (randomly selected from theme)
       const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
       if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
         reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
@@ -134,8 +112,6 @@
       }
       const reinforcerVideo = document.getElementById('reinforcerVideo');
       reinforcerVideo.load();
-
-      // Show the activity overlay with the game index
       let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
       if (isNaN(overallGameIndex)) {
         alert("Game selections not found. Redirecting to main page.");
@@ -146,8 +122,6 @@
       const numberTextEl = activityOverlay.querySelector('.number-text');
       numberTextEl.textContent = (overallGameIndex + 1).toString();
       activityOverlay.style.display = 'flex';
-
-      // When the user clicks/touches the overlay, hide it and start the game.
       function hideOverlayAndStart() {
         if (themeData.startSound) {
           let sfx = new Audio(themeData.startSound);
@@ -160,12 +134,10 @@
       }
       document.addEventListener('click', hideOverlayAndStart);
       document.addEventListener('touchend', hideOverlayAndStart);
-
-      // Generic function to navigate to the next game.
       function navigateToNextGame() {
         const selections = JSON.parse(localStorage.getItem('gameSelections'));
         let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;  // Increment overall game index.
+        currentGameIndex++;
         localStorage.setItem('currentGameIndex', currentGameIndex);
         if (currentGameIndex < selections.gameOrder.length) {
           window.location.href = selections.gameOrder[currentGameIndex] + ".html";
@@ -173,47 +145,29 @@
           window.location.href = "completion.html";
         }
       }
-
-      // Generic function to show the reinforcer sound between words.
       function showReinforcerSound() {
         setTimeout(() => {
           const wordRewardSound = document.getElementById('word-reward-sound');
           wordRewardSound.currentTime = 0;
-          wordRewardSound.play().then(() => {
-            // After the sound ends, you might want to move on.
-          }).catch(error => {
-            console.error('Error playing reinforcer sound:', error);
-          });
+          wordRewardSound.play().catch(error => { console.error('Error playing reinforcer sound:', error); });
         }, 2000);
       }
-
-      // Generic function to show the final reinforcer overlay.
       function showFinalReinforcerVideo() {
         finalRewardSound.currentTime = 0;
-        finalRewardSound.play().catch(error => {
-          console.error('Error playing final reward sound:', error);
-        });
+        finalRewardSound.play().catch(error => { console.error('Error playing final reward sound:', error); });
         reinforcerOverlay.style.display = 'flex';
         reinforcerVideo.style.display = 'none';
         document.getElementById('videoOverlayCover').style.display = 'none';
       }
-
-      // Set up the reinforcer button event.
       const reinforcerButton = document.getElementById('reinforcerButton');
       reinforcerButton.addEventListener('click', function() {
         reinforcerButton.style.display = 'none';
         reinforcerOverlay.style.background = '#000';
         reinforcerVideo.style.display = 'block';
         document.getElementById('videoOverlayCover').style.display = 'block';
-        reinforcerVideo.play().catch(err => {
-          console.warn('Video play failed:', err);
-          hideReinforcer();
-        });
+        reinforcerVideo.play().catch(err => { console.warn('Video play failed:', err); hideReinforcer(); });
       });
-      reinforcerVideo.addEventListener('ended', function() {
-        navigateToNextGame();
-      }, { once: true });
-
+      reinforcerVideo.addEventListener('ended', function() { navigateToNextGame(); }, { once: true });
       function hideReinforcer() {
         reinforcerOverlay.style.display = 'none';
         reinforcerButton.style.display = 'flex';
@@ -223,111 +177,127 @@
         document.getElementById('videoOverlayCover').style.display = 'none';
         reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
       }
-
-      // --- GAME-SPECIFIC CODE: Discover the Image Game ---
       window.startGame = function() {
-        console.log("Discover the Image Game started!");
-
         const gameContent = document.getElementById('game-content');
         gameContent.innerHTML = '';
-
         const canvasWrapper = document.createElement('div');
         canvasWrapper.className = 'canvas-wrapper';
         gameContent.appendChild(canvasWrapper);
-
-        // Define the drawing resolution.
         const drawingWidth = 800;
         const drawingHeight = 600;
-
-        // Create the bottom canvas for the image.
         const imageCanvas = document.createElement('canvas');
         imageCanvas.id = 'imageCanvas';
         imageCanvas.width = drawingWidth;
         imageCanvas.height = drawingHeight;
         const imgCtx = imageCanvas.getContext('2d');
         canvasWrapper.appendChild(imageCanvas);
-
-        // Create the top canvas for the overlay.
         const overlayCanvas = document.createElement('canvas');
         overlayCanvas.id = 'overlayCanvas';
         overlayCanvas.width = drawingWidth;
         overlayCanvas.height = drawingHeight;
         const overlayCtx = overlayCanvas.getContext('2d');
         canvasWrapper.appendChild(overlayCanvas);
-
-        // Load an image chosen at random from the common images list.
-        const image = new Image();
-        if (themeData.images && themeData.images.length > 0) {
-          image.src = themeData.images[Math.floor(Math.random() * themeData.images.length)];
-        } else {
-          image.src = "../../images/defaultImage.jpg";
+        const particleCanvas = document.createElement('canvas');
+        particleCanvas.id = 'particleCanvas';
+        particleCanvas.width = drawingWidth;
+        particleCanvas.height = drawingHeight;
+        canvasWrapper.appendChild(particleCanvas);
+        const particleCtx = particleCanvas.getContext('2d');
+        let particles = [];
+        function spawnParticles(x, y) {
+          const numParticles = 10;
+          for (let i = 0; i < numParticles; i++) {
+            const hue = Math.floor(Math.random() * 360);
+            particles.push({
+              x: x,
+              y: y,
+              vx: (Math.random() - 0.5) * 4,
+              vy: (Math.random() - 0.5) * 4,
+              radius: Math.random() * 3 + 2,
+              life: 0,
+              maxLife: Math.random() * 30 + 20,
+              h: hue,
+              s: 100,
+              l: 50
+            });
+          }
         }
+        function updateParticles() {
+          particleCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+          for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life++;
+            let alpha = 1 - (p.life / p.maxLife);
+            particleCtx.fillStyle = `hsla(${p.h}, ${p.s}%, ${p.l}%, ${alpha})`;
+            particleCtx.beginPath();
+            particleCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            particleCtx.fill();
+            if (p.life >= p.maxLife) { particles.splice(i, 1); }
+          }
+          requestAnimationFrame(updateParticles);
+        }
+        updateParticles();
+        const globalSelections = JSON.parse(localStorage.getItem('gameSelections'));
+        const currentIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        const gameOptionsForThisGame = globalSelections.gameOptions && globalSelections.gameOptions[currentIndex] ? globalSelections.gameOptions[currentIndex] : {};
+        const difficulty = gameOptionsForThisGame.difficulty || "medium";
+        let eraseRadius = 30;
+        if (difficulty === "easy") { eraseRadius = 50; }
+        else if (difficulty === "hard") { eraseRadius = 20; }
+        let offsetX = 0, offsetY = 0, drawWidth = drawingWidth, drawHeight = drawingHeight;
+        const image = new Image();
+        if (themeData.images && themeData.images.length > 0) { image.src = themeData.images[Math.floor(Math.random() * themeData.images.length)]; }
+        else { image.src = "../../images/defaultImage.jpg"; }
         image.onload = function() {
-          // Draw the image while preserving its aspect ratio.
           const imgAspect = image.width / image.height;
           const canvasAspect = drawingWidth / drawingHeight;
-          let drawWidth, drawHeight, offsetX, offsetY;
           if (imgAspect > canvasAspect) {
-            // Image is wider than canvas.
             drawWidth = drawingWidth;
             drawHeight = drawingWidth / imgAspect;
             offsetX = 0;
             offsetY = (drawingHeight - drawHeight) / 2;
           } else {
-            // Image is taller than canvas.
             drawHeight = drawingHeight;
             drawWidth = drawingHeight * imgAspect;
             offsetX = (drawingWidth - drawWidth) / 2;
             offsetY = 0;
           }
           imgCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-          // Fill the overlay canvas with gray.
-          overlayCtx.fillStyle = 'gray';
-          overlayCtx.fillRect(0, 0, drawingWidth, drawingHeight);
+          overlayCtx.fillStyle = 'black';
+          overlayCtx.fillRect(offsetX, offsetY, drawWidth, drawHeight);
         };
-
-        // Set the threshold: percentage of overlay that must be cleared.
-        const completionThreshold = 0.80;
-
-        // Check if enough of the overlay has been cleared.
+        const completionThreshold = 0.98;
         function checkCompletion() {
           try {
-            const imageData = overlayCtx.getImageData(0, 0, drawingWidth, drawingHeight);
+            const imageData = overlayCtx.getImageData(offsetX, offsetY, drawWidth, drawHeight);
             const data = imageData.data;
             let clearedPixels = 0;
             for (let i = 3; i < data.length; i += 4) {
-              if (data[i] === 0) {
-                clearedPixels++;
-              }
+              if (data[i] === 0) { clearedPixels++; }
             }
-            const totalPixels = drawingWidth * drawingHeight;
+            const totalPixels = drawWidth * drawHeight;
             const clearedRatio = clearedPixels / totalPixels;
             if (clearedRatio >= completionThreshold) {
               overlayCanvas.removeEventListener('touchstart', handleInteraction);
               overlayCanvas.removeEventListener('touchmove', handleInteraction);
               overlayCanvas.removeEventListener('mousedown', handleInteraction);
               overlayCanvas.removeEventListener('mousemove', mouseMoveHandler);
-              setTimeout(() => {
-                navigateToNextGame();
-              }, 500);
+              setTimeout(() => { navigateToNextGame(); }, 500);
             }
-          } catch (err) {
-            console.error("Error checking completion:", err);
-          }
+          } catch (err) { console.error("Error checking completion:", err); }
         }
-
-        // Reveal a circular area on the overlay.
         function revealArea(x, y) {
-          const radius = 30;
+          if (x < offsetX || x > offsetX + drawWidth || y < offsetY || y > offsetY + drawHeight) { return; }
           overlayCtx.globalCompositeOperation = 'destination-out';
           overlayCtx.beginPath();
-          overlayCtx.arc(x, y, radius, 0, Math.PI * 2, false);
+          overlayCtx.arc(x, y, eraseRadius, 0, Math.PI * 2, false);
           overlayCtx.fill();
           overlayCtx.globalCompositeOperation = 'source-over';
           checkCompletion();
+          spawnParticles(x, y);
         }
-
-        // Handle touch and mouse interactions.
         function handleInteraction(e) {
           e.preventDefault();
           const rect = overlayCanvas.getBoundingClientRect();
@@ -341,29 +311,12 @@
           }
           revealArea(x, y);
         }
-
-        function mouseMoveHandler(e) {
-          if (e.buttons > 0) {
-            handleInteraction(e);
-          }
-        }
-
+        function mouseMoveHandler(e) { if (e.buttons > 0) { handleInteraction(e); } }
         overlayCanvas.addEventListener('touchstart', handleInteraction);
         overlayCanvas.addEventListener('touchmove', handleInteraction);
         overlayCanvas.addEventListener('mousedown', handleInteraction);
         overlayCanvas.addEventListener('mousemove', mouseMoveHandler);
-
-        // Optional manual Finish button.
-        const finishButton = document.createElement('button');
-        finishButton.id = 'finishButton';
-        finishButton.textContent = 'Finish';
-        finishButton.addEventListener('click', function() {
-          navigateToNextGame();
-        });
-        gameContent.appendChild(finishButton);
       };
-
-      // --- End of game-specific section ---
     });
   </script>
 </body>
