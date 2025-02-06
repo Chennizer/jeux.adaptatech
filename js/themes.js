@@ -23,7 +23,7 @@ window.themes = {
       startSound: "../../sounds/firework.mp3",
       reinforcerSound: "../../sounds/firework.mp3"
     },
-    Toupiebinou: {
+    Toupie_et_Binou: {
         images: [
           "../../images/toupiecamping.jpg",
           "../../images/toupiechambre.jpeg",
