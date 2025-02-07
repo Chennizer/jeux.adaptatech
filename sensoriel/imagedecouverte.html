@@ -62,8 +62,6 @@
     #imageCanvas {
       z-index: 1;
     }
-
-
     @keyframes pulse {
       0%   { transform: scale(1); }
       50%  { transform: scale(1.35); }
@@ -95,30 +93,38 @@
   <audio id="final-reward-sound" src="" preload="auto"></audio>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      // Retrieve selections and theme data
       const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       const mediaOption = selections.mediaOption || "";
-      const themeData = (window.themes && window.themes[mediaOption]) ? window.themes[mediaOption] : window.themes["default"] || {};
+      const themeData = (window.themes && window.themes[mediaOption])
+                          ? window.themes[mediaOption]
+                          : window.themes["default"] || {};
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
+      
       const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
       if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
         reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
       } else {
         reinforcerVideoSource.src = "../../videos/africa.mp4";
       }
+      
       const reinforcerVideo = document.getElementById('reinforcerVideo');
       reinforcerVideo.load();
+      
       let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
       if (isNaN(overallGameIndex)) {
         alert("Game selections not found. Redirecting to main page.");
         window.location.href = "main.html";
         return;
       }
+      
       const activityOverlay = document.getElementById('activityNumberOverlay');
       const numberTextEl = activityOverlay.querySelector('.number-text');
       numberTextEl.textContent = (overallGameIndex + 1).toString();
       activityOverlay.style.display = 'flex';
+      
       function hideOverlayAndStart() {
         if (themeData.startSound) {
           let sfx = new Audio(themeData.startSound);
@@ -129,8 +135,10 @@
         document.removeEventListener('touchend', hideOverlayAndStart);
         startGame();
       }
+      
       document.addEventListener('click', hideOverlayAndStart);
       document.addEventListener('touchend', hideOverlayAndStart);
+      
       function navigateToNextGame() {
         const selections = JSON.parse(localStorage.getItem('gameSelections'));
         let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
@@ -142,27 +150,43 @@
           window.location.href = "completion.html";
         }
       }
+      
       function showReinforcerSound() {
         const wordRewardSound = document.getElementById('word-reward-sound');
         wordRewardSound.currentTime = 0;
         wordRewardSound.play().catch(error => { console.error('Error playing reinforcer sound:', error); });
       }
+      
       const reinforcerOverlay = document.getElementById('reinforcerOverlay');
       const reinforcerButton = document.getElementById('reinforcerButton');
       reinforcerButton.addEventListener('click', function() {
+        // Hide the button immediately so it doesn't show during video playback.
         reinforcerButton.style.display = 'none';
         reinforcerVideo.style.display = 'block';
         reinforcerVideo.play().catch(err => { console.warn('Video play failed:', err); });
       });
+      
       reinforcerVideo.addEventListener('ended', function() { navigateToNextGame(); }, { once: true });
+      
       window.startGame = function() {
         const gameContent = document.getElementById('game-content');
         gameContent.innerHTML = '';
         const canvasWrapper = document.createElement('div');
         canvasWrapper.className = 'canvas-wrapper';
         gameContent.appendChild(canvasWrapper);
-        const drawingWidth = 800;
-        const drawingHeight = 600;
+        
+        // Calculate responsive dimensions based on viewport
+        const availableWidth = window.innerWidth - 60;  // account for container padding/margins
+        const availableHeight = window.innerHeight - 60;
+        const wrapperWidth = Math.min(canvasWrapper.clientWidth, availableWidth);
+        // Use a 4:3 ratio, but ensure the height does not exceed availableHeight
+        let drawingWidth = wrapperWidth;
+        let drawingHeight = drawingWidth * 0.75;
+        if(drawingHeight > availableHeight) {
+          drawingHeight = availableHeight;
+          drawingWidth = drawingHeight / 0.75;
+        }
+        
         const imageCanvas = document.createElement('canvas');
         imageCanvas.id = 'imageCanvas';
         imageCanvas.width = drawingWidth;
@@ -170,18 +194,21 @@
         imageCanvas.style.border = "5px solid #000";
         const imgCtx = imageCanvas.getContext('2d');
         canvasWrapper.appendChild(imageCanvas);
+        
         const overlayCanvas = document.createElement('canvas');
         overlayCanvas.id = 'overlayCanvas';
         overlayCanvas.width = drawingWidth;
         overlayCanvas.height = drawingHeight;
         const overlayCtx = overlayCanvas.getContext('2d');
         canvasWrapper.appendChild(overlayCanvas);
+        
         const particleCanvas = document.createElement('canvas');
         particleCanvas.id = 'particleCanvas';
         particleCanvas.width = drawingWidth;
         particleCanvas.height = drawingHeight;
         canvasWrapper.appendChild(particleCanvas);
         const particleCtx = particleCanvas.getContext('2d');
+        
         let particles = [];
         function spawnParticles(x, y) {
           const numParticles = 10;
@@ -218,19 +245,23 @@
           requestAnimationFrame(updateParticles);
         }
         updateParticles();
+        
         const globalSelections = JSON.parse(localStorage.getItem('gameSelections'));
         const currentIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        const gameOptionsForThisGame = globalSelections.gameOptions && globalSelections.gameOptions[currentIndex] ? globalSelections.gameOptions[currentIndex] : {};
+        const gameOptionsForThisGame = (globalSelections.gameOptions && globalSelections.gameOptions[currentIndex])
+                                        ? globalSelections.gameOptions[currentIndex]
+                                        : {};
         const difficulty = gameOptionsForThisGame.difficulty || "medium";
         let eraseRadius = 30;
         if (difficulty === "easy") { eraseRadius = 50; }
         else if (difficulty === "hard") { eraseRadius = 20; }
+        
         let offsetX = 0, offsetY = 0, drawWidth = drawingWidth, drawHeight = drawingHeight;
         const image = new Image();
-        if (themeData.images && themeData.images.length > 0) {
-          image.src = themeData.images[Math.floor(Math.random() * themeData.images.length)];
-        } else {
-          image.src = "../../images/defaultImage.jpg";
+        if (themeData.images && themeData.images.length > 0) { 
+          image.src = themeData.images[Math.floor(Math.random() * themeData.images.length)]; 
+        } else { 
+          image.src = "../../images/defaultImage.jpg"; 
         }
         image.onload = function() {
           const imgAspect = image.width / image.height;
@@ -238,18 +269,17 @@
           if (imgAspect > canvasAspect) {
             drawWidth = drawingWidth;
             drawHeight = drawingWidth / imgAspect;
-            offsetX = 0;
-            offsetY = (drawingHeight - drawHeight) / 2;
           } else {
             drawHeight = drawingHeight;
             drawWidth = drawingHeight * imgAspect;
-            offsetX = (drawingWidth - drawWidth) / 2;
-            offsetY = 0;
           }
+          offsetX = (drawingWidth - drawWidth) / 2;
+          offsetY = (drawingHeight - drawHeight) / 2;
           imgCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
           overlayCtx.fillStyle = 'black';
           overlayCtx.fillRect(offsetX, offsetY, drawWidth, drawHeight);
         };
+        
         const completionThreshold = 0.5;
         function checkCompletion() {
           try {
@@ -269,7 +299,7 @@
               setTimeout(() => {
                 reinforcerOverlay.style.display = 'flex';
                 reinforcerOverlay.style.background = 'black';
-                reinforcerButton.style.display = 'block';
+                reinforcerButton.style.display = ''; // Clear inline style so external CSS centers it.
                 showReinforcerSound();
               }, 500);
             }
