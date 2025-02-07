@@ -61,7 +61,8 @@ window.themes = {
       words: [
         "Monde", "Wingsuit"
       ],
-      startSound: "../../sounds/monde-start.mp3"
+      startSound: "../../sounds/monde-start.mp3",
+      reinforcerSound: "../../sounds/firework.mp3"
     },
     nature: {
       images: [
