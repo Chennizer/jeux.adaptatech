@@ -34,10 +34,10 @@
     }
     .canvas-wrapper {
       position: relative;
-      width: 100%;
+      width: 90vw;
       max-width: 800px;
       margin: 0 auto;
-      border-radius: 10px;
+      border-radius: 20px;
       overflow: hidden;
     }
     .canvas-wrapper canvas {
@@ -93,12 +93,12 @@
   <audio id="final-reward-sound" src="" preload="auto"></audio>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Retrieve selections and theme data
       const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       const mediaOption = selections.mediaOption || "";
       const themeData = (window.themes && window.themes[mediaOption])
                           ? window.themes[mediaOption]
                           : window.themes["default"] || {};
+      
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
@@ -109,7 +109,6 @@
       } else {
         reinforcerVideoSource.src = "../../videos/africa.mp4";
       }
-      
       const reinforcerVideo = document.getElementById('reinforcerVideo');
       reinforcerVideo.load();
       
@@ -160,7 +159,6 @@
       const reinforcerOverlay = document.getElementById('reinforcerOverlay');
       const reinforcerButton = document.getElementById('reinforcerButton');
       reinforcerButton.addEventListener('click', function() {
-        // Hide the button immediately so it doesn't show during video playback.
         reinforcerButton.style.display = 'none';
         reinforcerVideo.style.display = 'block';
         reinforcerVideo.play().catch(err => { console.warn('Video play failed:', err); });
@@ -175,23 +173,15 @@
         canvasWrapper.className = 'canvas-wrapper';
         gameContent.appendChild(canvasWrapper);
         
-        // Calculate responsive dimensions based on viewport
-        const availableWidth = window.innerWidth - 60;  // account for container padding/margins
-        const availableHeight = window.innerHeight - 60;
-        const wrapperWidth = Math.min(canvasWrapper.clientWidth, availableWidth);
-        // Use a 4:3 ratio, but ensure the height does not exceed availableHeight
-        let drawingWidth = wrapperWidth;
-        let drawingHeight = drawingWidth * 0.75;
-        if(drawingHeight > availableHeight) {
-          drawingHeight = availableHeight;
-          drawingWidth = drawingHeight / 0.75;
-        }
+        // Compute canvas dimensions responsively based on canvasWrapper's width.
+        const drawingWidth = canvasWrapper.clientWidth;
+        const drawingHeight = drawingWidth * 0.75; // 4:3 ratio
         
         const imageCanvas = document.createElement('canvas');
         imageCanvas.id = 'imageCanvas';
         imageCanvas.width = drawingWidth;
         imageCanvas.height = drawingHeight;
-        imageCanvas.style.border = "5px solid #000";
+
         const imgCtx = imageCanvas.getContext('2d');
         canvasWrapper.appendChild(imageCanvas);
         
@@ -208,6 +198,48 @@
         particleCanvas.height = drawingHeight;
         canvasWrapper.appendChild(particleCanvas);
         const particleCtx = particleCanvas.getContext('2d');
+        
+        // Vertically center the canvasWrapper in the game-container.
+        const containerHeight = document.querySelector('.game-container').clientHeight;
+        const topMargin = (containerHeight - drawingHeight) / 2;
+        canvasWrapper.style.marginTop = topMargin + 'px';
+        
+        let canvasData = { offsetX: 0, offsetY: 0, drawWidth: drawingWidth, drawHeight: drawingHeight };
+        
+        function drawImage() {
+          let drawWidth, drawHeight, offsetX, offsetY;
+          const imgAspect = image.width / image.height;
+          const canvasAspect = drawingWidth / drawingHeight;
+          if (imgAspect > canvasAspect) {
+            drawWidth = drawingWidth;
+            drawHeight = drawingWidth / imgAspect;
+          } else {
+            drawHeight = drawingHeight;
+            drawWidth = drawingHeight * imgAspect;
+          }
+          offsetX = (drawingWidth - drawWidth) / 2;
+          offsetY = (drawingHeight - drawHeight) / 2;
+          canvasData = { offsetX, offsetY, drawWidth, drawHeight };
+          imgCtx.clearRect(0, 0, drawingWidth, drawingHeight);
+          imgCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+          // Draw a border around the drawn image
+          imgCtx.lineWidth = 10;
+          imgCtx.strokeStyle = 'black';
+          imgCtx.strokeRect(offsetX, offsetY, drawWidth, drawHeight);
+          overlayCtx.clearRect(0, 0, drawingWidth, drawingHeight);
+          overlayCtx.fillStyle = 'black';
+          overlayCtx.fillRect(offsetX, offsetY, drawWidth, drawHeight);
+        }
+        
+        const image = new Image();
+        if (themeData.images && themeData.images.length > 0) { 
+          image.src = themeData.images[Math.floor(Math.random() * themeData.images.length)]; 
+        } else { 
+          image.src = "../../images/defaultImage.jpg"; 
+        }
+        image.onload = function() {
+          drawImage();
+        };
         
         let particles = [];
         function spawnParticles(x, y) {
@@ -256,31 +288,7 @@
         if (difficulty === "easy") { eraseRadius = 50; }
         else if (difficulty === "hard") { eraseRadius = 20; }
         
-        let offsetX = 0, offsetY = 0, drawWidth = drawingWidth, drawHeight = drawingHeight;
-        const image = new Image();
-        if (themeData.images && themeData.images.length > 0) { 
-          image.src = themeData.images[Math.floor(Math.random() * themeData.images.length)]; 
-        } else { 
-          image.src = "../../images/defaultImage.jpg"; 
-        }
-        image.onload = function() {
-          const imgAspect = image.width / image.height;
-          const canvasAspect = drawingWidth / drawingHeight;
-          if (imgAspect > canvasAspect) {
-            drawWidth = drawingWidth;
-            drawHeight = drawingWidth / imgAspect;
-          } else {
-            drawHeight = drawingHeight;
-            drawWidth = drawingHeight * imgAspect;
-          }
-          offsetX = (drawingWidth - drawWidth) / 2;
-          offsetY = (drawingHeight - drawHeight) / 2;
-          imgCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-          overlayCtx.fillStyle = 'black';
-          overlayCtx.fillRect(offsetX, offsetY, drawWidth, drawHeight);
-        };
-        
-        const completionThreshold = 0.5;
+        let { offsetX, offsetY, drawWidth, drawHeight } = canvasData;
         function checkCompletion() {
           try {
             const imageData = overlayCtx.getImageData(offsetX, offsetY, drawWidth, drawHeight);
@@ -291,7 +299,7 @@
             }
             const totalPixels = drawWidth * drawHeight;
             const clearedRatio = clearedPixels / totalPixels;
-            if (clearedRatio >= completionThreshold) {
+            if (clearedRatio >= 0.5) {
               overlayCanvas.removeEventListener('touchstart', handleInteraction);
               overlayCanvas.removeEventListener('touchmove', handleInteraction);
               overlayCanvas.removeEventListener('mousedown', handleInteraction);
@@ -299,7 +307,7 @@
               setTimeout(() => {
                 reinforcerOverlay.style.display = 'flex';
                 reinforcerOverlay.style.background = 'black';
-                reinforcerButton.style.display = ''; // Clear inline style so external CSS centers it.
+                reinforcerButton.style.display = ''; // Clear inline so CSS applies
                 showReinforcerSound();
               }, 500);
             }
