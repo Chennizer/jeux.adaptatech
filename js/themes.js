@@ -1,5 +1,35 @@
 /* themes.js */
 window.themes = {
+    PatPatrouille: {
+      images: [
+        "../../images/patpatrouille1.jpg",
+        "../../images/patpatrouille2.jpg"
+
+      ],
+      transparentPNGs: [
+        "../../images/pawpatrolruben.png",
+        "../../images/pawpatrolchase.png",
+        "../../images/pawpatroleverest.png",
+        "../../images/pawpatrollogo.png",
+        "../../images/pawpatrolmarshall.png",
+        "../../images/pawpatrolrocky.png",
+        "../../images/pawpatrolryder.png",
+        "../../images/pawpatrolstella.png",
+        "../../images/pawpatrolzuma.png"
+      ],
+      reinforcerVideos: [
+        "../../videos/patpatrouilleintro.mp4",
+        "../../videos/patpatrouillejungle.mp4",
+        "../../videos/patpatrouillepirate.mp4",
+        "../../videos/patpatrouillesauvetage.mp4"
+      
+      ],
+      words: [
+        "Ruben", "Chase","Everest","Logo","Marshall","Rocky","Ryder","Stella","Zuma"
+      ],
+      startSound: "../../sounds/pawpatrol1.mp3",
+      reinforcerSound: "../../sounds/pawpatrol1.mp3"
+    },
     moana: {
       images: [
         "../../images/moana-background.jpg",
@@ -42,10 +72,10 @@ window.themes = {
          
         ],
         words: [
-          "Camping", "Chambre","Cinéma"
+          "Amitié", "Courir","Peinture","Avion", "Binou","Costume"
         ],
         startSound: "../../sounds/firework.mp3",
-        reinforcerSound: "../../sounds/firework.mp3"
+        reinforcerSound: "../../sounds/victory.mp3"
       },
     monde: {
       images: [

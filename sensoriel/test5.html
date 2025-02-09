@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="../../images/binou.png">
+  <link rel="stylesheet" href="../../css/ipadteachh.css">
+  <title>Size Sorting Game</title>
+  <!-- Load shared themes file -->
+  <script src="../../js/themes.js"></script>
+  <style>
+    /* Basic reset and layout styles */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .game-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: calc(100% - 60px);
+      height: calc(100% - 60px);
+      max-width: 1200px;
+      padding: 20px;
+      background-color: #ffffff;
+      position: relative;
+      overflow: hidden;
+      border-radius: 15px;
+    }
+
+    #game-content {
+      width: 100%;
+      height: 100%;
+    }
+
+    @keyframes pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.35); }
+      100% { transform: scale(1); }
+    }
+
+    /* Size Sorting Game Specific Styles */
+    .size-prompt {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 2rem;
+      font-weight: bold;
+      color: #000;
+      text-transform: uppercase;
+    }
+
+    /* Grid layout for symmetric placement */
+    .size-container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      height: 100%;
+      justify-items: center;
+      align-items: center;
+    }
+
+    .size-option {
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+
+    .size-option:hover {
+      transform: scale(1.05);
+    }
+
+    /* Ensure the images are responsive and fill their containers */
+    .size-option img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+
+    /* Reinforcer Overlay Styling: full screen with black background */
+    #reinforcerOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      display: none; /* Hidden until needed */
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    /* Optional: Adjust the reinforcer video appearance */
+    #reinforcerVideo {
+      max-width: 90%;
+      max-height: 90%;
+    }
+
+    /* Additional Media Queries (Optional) */
+    @media (max-width: 600px) {
+      .size-prompt {
+        font-size: 1.5rem;
+      }
+      .size-container {
+        gap: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Activity overlay (shows the game index) -->
+  <div id="activityNumberOverlay">
+    <div class="number-text"></div>
+  </div>
+
+  <!-- Main game container -->
+  <div class="game-container">
+    <div id="game-content"></div>
+  </div>
+
+  <!-- Reinforcer overlay (common for all games) -->
+  <div id="reinforcerOverlay">
+    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
+    <video id="reinforcerVideo"
+           playsinline
+           webkit-playsinline
+           disablepictureinpicture
+           controlslist="nodownload noremoteplayback"
+           preload="auto">
+      <source id="reinforcerVideoSource" src="" type="video/mp4">
+      Votre navigateur ne supporte pas la balise vidéo.
+    </video>
+    <div id="videoOverlayCover"></div>
+  </div>
+
+  <!-- Audio elements for error, reinforcer, and final reward sounds -->
+  <audio id="error-sound" src="" preload="auto"></audio>
+  <audio id="word-reward-sound" src="" preload="auto"></audio>
+  <audio id="final-reward-sound" src="" preload="auto"></audio>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
+      const mediaOption = selections.mediaOption || "";
+      const themeData = (window.themes && window.themes[mediaOption])
+                        ? window.themes[mediaOption]
+                        : window.themes["default"] || {};
+
+      // Audio setup
+      document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
+      document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
+      document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
+
+      // Video setup
+      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
+      if (themeData.reinforcerVideos?.length > 0) {
+        reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
+      } else {
+        reinforcerVideoSource.src = "../../videos/africa.mp4";
+      }
+      const reinforcerVideo = document.getElementById('reinforcerVideo');
+      reinforcerVideo.load();
+
+      // Activity overlay setup
+      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10) || 0;
+      const activityOverlay = document.getElementById('activityNumberOverlay');
+      const numberTextEl = activityOverlay.querySelector('.number-text');
+      numberTextEl.textContent = (overallGameIndex + 1).toString();
+      activityOverlay.style.display = 'flex';
+
+      function hideOverlayAndStart() {
+        if (themeData.startSound) {
+          new Audio(themeData.startSound).play().catch(console.warn);
+        }
+        activityOverlay.style.display = 'none';
+        document.removeEventListener('click', hideOverlayAndStart);
+        document.removeEventListener('touchend', hideOverlayAndStart);
+        startGame();
+      }
+      document.addEventListener('click', hideOverlayAndStart);
+      document.addEventListener('touchend', hideOverlayAndStart);
+
+      // Navigation and reinforcer functions
+      function navigateToNextGame() {
+        const currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10) + 1;
+        localStorage.setItem('currentGameIndex', currentGameIndex);
+        if (currentGameIndex < selections.gameOrder?.length) {
+          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
+        } else {
+          window.location.href = "completion.html";
+        }
+      }
+
+      function showFinalReinforcerVideo() {
+        document.getElementById('final-reward-sound').play().catch(console.error);
+        document.getElementById('reinforcerOverlay').style.display = 'flex';
+      }
+
+      // Reinforcer button setup
+      document.getElementById('reinforcerButton').addEventListener('click', function() {
+        this.style.display = 'none';
+        reinforcerVideo.style.display = 'block';
+        reinforcerVideo.play().catch(err => {
+          console.warn('Video play failed:', err);
+          reinforcerVideo.style.display = 'none';
+          navigateToNextGame();
+        });
+      });
+
+      reinforcerVideo.addEventListener('ended', navigateToNextGame, { once: true });
+
+      // Utility function to shuffle an array (Fisher-Yates)
+      function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+
+      // Game implementation
+      window.startGame = function() {
+        const gameContent = document.getElementById('game-content');
+        const sizes = ['small', 'medium', 'large'];
+        // Randomly choose one of the three sizes as the target
+        const targetSize = sizes[Math.floor(Math.random() * sizes.length)];
+        const images = themeData.transparentPNGs || [];
+
+        // Clear previous content
+        gameContent.innerHTML = '';
+
+        // Create prompt
+        const promptEl = document.createElement('div');
+        promptEl.className = 'size-prompt';
+        promptEl.textContent = targetSize.toUpperCase();
+        gameContent.appendChild(promptEl);
+
+        // Create image container (grid container)
+        const container = document.createElement('div');
+        container.className = 'size-container';
+
+        // Updated size configuration: small remains, medium is a bit bigger, large is significantly bigger
+        const sizeConfig = {
+          small: '20%',
+          medium: '45%', 
+          large: '70%'
+        };
+
+        // Select unique images (if available)
+        const selectedImages = [];
+        while (selectedImages.length < 3 && images.length > 0) {
+          const img = images[Math.floor(Math.random() * images.length)];
+          if (!selectedImages.includes(img)) selectedImages.push(img);
+        }
+
+        // Create wrappers for each size option and store them in an array
+        const wrappers = sizes.map((size, index) => {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'size-option';
+          wrapper.style.width = sizeConfig[size];
+          wrapper.style.height = sizeConfig[size];
+          wrapper.dataset.size = size;
+
+          const img = document.createElement('img');
+          img.src = selectedImages[index] || "";
+          img.alt = "";
+          wrapper.appendChild(img);
+          return wrapper;
+        });
+
+        // Shuffle the wrappers array (for randomness) and append them to the grid container
+        shuffle(wrappers).forEach(wrapper => container.appendChild(wrapper));
+        
+        gameContent.appendChild(container);
+
+        // Click handling
+        let canInteract = true;
+        container.querySelectorAll('.size-option').forEach(option => {
+          option.addEventListener('click', function() {
+            if (!canInteract) return;
+            canInteract = false;
+
+            const isCorrect = this.dataset.size === targetSize;
+            this.style.animation = isCorrect ? 'pulse 0.8s' : 'shake 0.5s';
+            
+            const audio = document.getElementById(isCorrect ? 'word-reward-sound' : 'error-sound');
+            audio.currentTime = 0;
+            audio.play().catch(console.error);
+
+            if (isCorrect) {
+              setTimeout(showFinalReinforcerVideo, 2000);
+            }
+
+            setTimeout(() => {
+              this.style.animation = '';
+              canInteract = true;
+            }, isCorrect ? 2000 : 1000);
+          });
+        });
+      };
+    });
+  </script>
+</body>
+</html>

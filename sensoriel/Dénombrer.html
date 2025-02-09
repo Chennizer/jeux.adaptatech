@@ -39,19 +39,13 @@
       flex: 1;
     }
 
-    /***********************************************************
-     * LEFT PANEL (20%):
-     * The numeral container now uses align-items: center so that
-     * its contents (the prompt and the numeral-buttons wrapper)
-     * are always centered.
-     ***********************************************************/
-     .numeral-container {
+    .numeral-container {
       width: 20%;
       display: flex;
       flex-direction: column;
       align-items: center; /* Force horizontal centering */
       justify-content: center; /* Add this line for vertical centering */
-      border-right: 4px solid #ccc;
+      border-right: 8px solid #000000;
       padding: 10px;
       box-sizing: border-box;
       position: relative;
@@ -75,11 +69,11 @@
     .numeral-button {
       flex: 0 1 calc(45% - 10px);
       aspect-ratio: 1 / 1;
-      border-radius: 50%;
+      border-radius: 20%;
       background-color: #3498db;
       color: #fff;
       font-weight: bold;
-      font-size: 1.4rem;
+      font-size: 2rem;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -87,9 +81,6 @@
       border: none;
     }
 
-    /***********************************************************
-     * RIGHT PANEL (80%) - ABSOLUTE POSITIONING for images
-     ***********************************************************/
     .objects-container {
       width: 80%;
       height: 100%; /* fill vertical space in .game-layout */
@@ -101,10 +92,6 @@
       overflow: hidden;
     }
 
-    /*
-      Each image is wrapped in .object-item.
-      We will position these absolutely in JS.
-    */
     .object-item {
       position: absolute;
       overflow: hidden;
@@ -145,7 +132,7 @@
 
   <!-- Reinforcer overlay -->
   <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement">Voir le renforcement</button>
+    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
     <video id="reinforcerVideo"
            playsinline
            webkit-playsinline
@@ -185,6 +172,17 @@
       }
       var reinforcerVideo = document.getElementById('reinforcerVideo');
       reinforcerVideo.load();
+
+      /***********************************************************
+       * Global Repetition Settings
+       * Retrieve the number of required repetitions (correct answers)
+       * and initialize the counter.
+       ***********************************************************/
+      var activityRepetitions = parseInt(localStorage.getItem('activityRepetitions'), 10);
+      if (isNaN(activityRepetitions) || activityRepetitions < 1) {
+        activityRepetitions = 1;
+      }
+      var correctCount = 0;
 
       /***********************************************************
        * 2) Activity Number Overlay
@@ -245,6 +243,7 @@
         }, 2000);
       }
 
+      // Modified function: show reinforcer overlay with button visible.
       function showFinalReinforcerVideo() {
         var finalRewardSound = document.getElementById('final-reward-sound');
         finalRewardSound.currentTime = 0;
@@ -252,13 +251,20 @@
           console.error('Error playing final reward sound:', error);
         });
         var reinforcerOverlay = document.getElementById('reinforcerOverlay');
+        var reinforcerButton = document.getElementById('reinforcerButton');
+        var reinforcerVideo = document.getElementById('reinforcerVideo');
+        var videoOverlayCover = document.getElementById('videoOverlayCover');
+
+        // Show overlay with button visible and video hidden
         reinforcerOverlay.style.display = 'flex';
+        reinforcerButton.style.display = 'flex';
         reinforcerVideo.style.display = 'none';
-        document.getElementById('videoOverlayCover').style.display = 'none';
+        videoOverlayCover.style.display = 'none';
       }
 
       var reinforcerButton = document.getElementById('reinforcerButton');
       reinforcerButton.addEventListener('click', function() {
+        // Hide the button and show the video.
         reinforcerButton.style.display = 'none';
         document.getElementById('reinforcerOverlay').style.background = '#000';
         reinforcerVideo.style.display = 'block';
@@ -336,10 +342,25 @@
           btn.textContent = i;
           btn.addEventListener('click', function() {
             if (parseInt(this.textContent, 10) === numObjects) {
-              // Correct => show reinforcer
-              showReinforcerSound();
+              // Correct answer: increase the correct answer count.
+              correctCount++;
+              if (correctCount < activityRepetitions) {
+                // Not enough correct answers yet.
+                var wordRewardSound = document.getElementById('word-reward-sound');
+                wordRewardSound.currentTime = 0;
+                wordRewardSound.play().catch(function(error) {
+                  console.error('Error playing reward sound:', error);
+                });
+                // Start a new trial after a short delay.
+                setTimeout(function(){
+                  startGame();
+                }, 1500);
+              } else {
+                // The required number of repetitions is reached.
+                showFinalReinforcerVideo();
+              }
             } else {
-              // Incorrect => error sound
+              // Incorrect answer: play error sound.
               document.getElementById('error-sound').play();
             }
           });
@@ -371,23 +392,11 @@
         gameContent.appendChild(numeralContainer);
         gameContent.appendChild(objectsContainer);
 
-        /*
-          After we've created all items, let's lay them out so
-          they never exceed the available area.
-          We now use a dynamic column count:
-            - 3 columns if numObjects <= 6
-            - 4 columns if numObjects is between 7 and 9
-            - 5 columns if numObjects >= 10
-          Also, we subtract 1 pixel from the cell size.
-        */
         setTimeout(function() {
           layoutImages(objectsContainer, numObjects);
         }, 50);
       };
 
-      /***********************************************************
-       * 6) layoutImages - absolute positioning for each .object-item
-       ***********************************************************/
       function pickColumns(n) {
         if (n <= 6) return 3;
         if (n <= 9) return 4;
