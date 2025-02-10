@@ -39,7 +39,6 @@ window.themes = {
         "../../images/moana.png",
         "../../images/maui.png",
         "../../images/pua.png",
-        "../../images/heihei.png",
         "../../images/palmier.png"
       ],
       reinforcerVideos: [
