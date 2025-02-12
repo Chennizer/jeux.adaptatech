@@ -8,12 +8,10 @@ window.themes = {
       ],
       transparentPNGs: [
         "../../images/pawpatrolruben.png",
-        "../../images/pawpatrolchase.png",
+        "../../images/chase.png",
         "../../images/pawpatroleverest.png",
-        "../../images/pawpatrollogo.png",
         "../../images/pawpatrolmarshall.png",
         "../../images/pawpatrolrocky.png",
-        "../../images/pawpatrolryder.png",
         "../../images/pawpatrolstella.png",
         "../../images/pawpatrolzuma.png"
       ],
@@ -25,10 +23,10 @@ window.themes = {
       
       ],
       words: [
-        "Ruben", "Chase","Everest","Logo","Marshall","Rocky","Ryder","Stella","Zuma"
+        "Ruben", "Chase","Everest","Logo","Marshall","Rocky","Stella","Zuma"
       ],
       startSound: "../../sounds/pawpatrol1.mp3",
-      reinforcerSound: "../../sounds/pawpatrol1.mp3"
+      reinforcerSound: "../../sounds/victory.mp3"
     },
     moana: {
       images: [
@@ -50,7 +48,7 @@ window.themes = {
         "Moana", "noel","g","h"
       ],
       startSound: "../../sounds/firework.mp3",
-      reinforcerSound: "../../sounds/firework.mp3"
+      reinforcerSound: "../../sounds/victory.mp3"
     },
     Toupie_et_Binou: {
         images: [
