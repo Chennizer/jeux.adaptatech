@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="../../images/binou.png">
   <link rel="stylesheet" href="../../css/ipadteachh.css">
-  <title>Tracing Labyrinth Activity</title>
+  <title>Tracer le chemin (Hard Mode Integration)</title>
   <!-- Load opentype.js from CDN (if needed) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
   <!-- Load shared themes file -->
@@ -36,12 +36,8 @@
       width: 100%;
       height: 100%;
     }
-    @keyframes pulse {
-      0%   { transform: scale(1); }
-      50%  { transform: scale(1.35); }
-      100% { transform: scale(1); }
-    }
-    /* SVG layer for boundaries (z-index: 2) */
+    
+    /* SVG layer for the main path (z-index: 2) */
     .svg-layer {
       position: absolute;
       width: 100%;
@@ -49,51 +45,54 @@
       z-index: 2;
       pointer-events: none;
     }
-    /* Interactive layer for markers and token (z-index: 3) */
+    /* Interactive layer for markers, token, and particles (z-index: 3) */
     .interactive-layer {
       position: absolute;
       width: 100%;
       height: 100%;
       z-index: 3;
-      /* For fade transition */
-      opacity: 1;
-      transition: opacity 0.5s ease;
     }
-    /* Marker styles */
-    .marker {
+    
+    /* End marker: uses the provided flag image, enlarged and centered */
+    .end-marker {
+      width: 200px;
+      height: auto;
       position: absolute;
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      border: 3px solid #444;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-weight: bold;
-      background-color: white;
+      object-fit: contain;
+      transform: translate(-50%, -50%);
     }
-    /* Token styles: smooth movement and drop shadow */
+    
     .token {
       transition: left 0.1s ease-out, top 0.1s ease-out;
-      box-shadow: 2px 2px 6px rgba(0,0,0,0.5);
       cursor: grab;
       position: absolute;
-      width: 80px;
-      height: 80px;
+      width: 90px; 
+      height: 90px;
       object-fit: contain;
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
     }
+    
+    /* Particle styling with multicolor support */
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      width: 6px;
+      height: 6px;
+      opacity: 1;
+      transform: translate(-50%, -50%);
+      transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+      z-index: 4;
+    }
   </style>
 </head>
 <body>
-  <!-- Activity overlay (shows the game index) -->
   <div id="activityNumberOverlay">
     <div class="number-text"></div>
   </div>
   
-  <!-- Main game container -->
   <div class="game-container">
     <div id="game-content"></div>
   </div>
@@ -119,12 +118,8 @@
   <audio id="final-reward-sound" src="" preload="auto"></audio>
   
   <script>
-    // Global variables to hold repetition count and target
-    let repetitionCount = 0;
-    let repetitionTarget = 1; // default
-      
     document.addEventListener('DOMContentLoaded', function() {
-      // --- Theme/Audio Setup (unchanged) ---
+      // --- Theme/Audio Setup ---
       const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       const mediaOption = selections.mediaOption || "";
       const themeData = (window.themes && window.themes[mediaOption])
@@ -163,13 +158,7 @@
         activityOverlay.style.display = 'none';
         document.removeEventListener('click', hideOverlayAndStart);
         document.removeEventListener('touchend', hideOverlayAndStart);
-        // Initialize repetition count and target from localStorage
-        repetitionCount = 0;
-        repetitionTarget = parseInt(localStorage.getItem("activityRepetitions"), 10);
-        if (isNaN(repetitionTarget) || repetitionTarget < 1) { 
-          repetitionTarget = 1;
-        }
-        generatePath();
+        startGame(); // Begin the game
       }
       document.addEventListener('click', hideOverlayAndStart);
       document.addEventListener('touchend', hideOverlayAndStart);
@@ -184,14 +173,6 @@
         } else {
           window.location.href = "completion.html";
         }
-      }
-      
-      function showReinforcerSound() {
-        setTimeout(() => {
-          const wordRewardSound = document.getElementById('word-reward-sound');
-          wordRewardSound.currentTime = 0;
-          wordRewardSound.play().catch(error => console.error('Error playing reinforcer sound:', error));
-        }, 200);
       }
       
       function showFinalReinforcerVideo() {
@@ -216,6 +197,7 @@
           hideReinforcer();
         });
       });
+      
       reinforcerVideo.addEventListener('ended', function() {
         navigateToNextGame();
       }, { once: true });
@@ -231,12 +213,81 @@
         reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
       }
       
-      // --- Global function to (re)generate a new tracing path ---
-      function generatePath() {
+      // ----------------------------------------------------------------------------
+      // TRACING ACTIVITY WITH HARD MODE RESET, REPETITIONS, and PARTICLE EFFECTS
+      // ----------------------------------------------------------------------------
+      let repetitionsLeft = 1;
+      
+      function initRepetitions() {
+        const selectionsObj = JSON.parse(localStorage.getItem('gameSelections'));
+        if (selectionsObj &&
+            selectionsObj.gameOrder &&
+            selectionsObj.gameOrder.includes("Suivre le chemin")) {
+          const index = selectionsObj.gameOrder.indexOf("Suivre le chemin");
+          if (selectionsObj.gameOptions &&
+              selectionsObj.gameOptions[index] &&
+              selectionsObj.gameOptions[index]["activityRepetitions"]) {
+            repetitionsLeft = parseInt(selectionsObj.gameOptions[index]["activityRepetitions"], 10) || 1;
+          }
+        }
+      }
+      initRepetitions();
+      
+      function handleCompletion() {
+        repetitionsLeft--;
+        console.log(`Tracing completed once. Repetitions left: ${repetitionsLeft}`);
+      
+        if (repetitionsLeft > 0) {
+          const wordRewardSound = document.getElementById('word-reward-sound');
+          wordRewardSound.currentTime = 0;
+          wordRewardSound.play().catch(error => console.error('Error playing partial reward sound:', error));
+          setTimeout(() => {
+            const gameContent = document.getElementById('game-content');
+            gameContent.innerHTML = '';
+            startGame();
+          }, 1200);
+        } else {
+          showFinalReinforcerVideo();
+        }
+      }
+      
+      // Utility: spawn a particle at (x, y) inside the interactive layer.
+      // Converts viewport coordinates to parent's coordinate space, picks a random color, etc.
+      function spawnParticle(x, y, parent) {
+        const parentRect = parent.getBoundingClientRect();
+        const relativeX = x - parentRect.left;
+        const relativeY = y - parentRect.top;
+        const particle = document.createElement("div");
+        particle.className = "particle";
+        const colors = ["#00bcd4", "#ff4081", "#ffc107", "#8bc34a", "#673ab7"];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        particle.style.backgroundColor = randomColor;
+        const offsetX = (Math.random() - 0.5) * 20;
+        const offsetY = (Math.random() - 0.5) * 20;
+        particle.style.left = (relativeX + offsetX) + "px";
+        particle.style.top = (relativeY + offsetY) + "px";
+        parent.appendChild(particle);
+        const angle = Math.random() * 2 * Math.PI;
+        const distance = Math.random() * 20 + 10;
+        const dx = Math.cos(angle) * distance;
+        const dy = Math.sin(angle) * distance;
+        requestAnimationFrame(() => {
+          particle.style.transform = `translate(${dx}px, ${dy}px)`;
+          particle.style.opacity = 0;
+        });
+        setTimeout(() => {
+          if (particle.parentNode) {
+            particle.parentNode.removeChild(particle);
+          }
+        }, 500);
+      }
+      
+      let particleInterval;
+      
+      window.startGame = function() {
         const gameContent = document.getElementById('game-content');
         gameContent.innerHTML = '';
       
-        // Create container for game elements
         const pathContainer = document.createElement('div');
         pathContainer.style.position = 'relative';
         pathContainer.style.width = '100%';
@@ -246,7 +297,6 @@
         pathContainer.style.overflow = 'hidden';
         gameContent.appendChild(pathContainer);
       
-        // Create SVG layer (z-index 2)
         const svgNS = "http://www.w3.org/2000/svg";
         const svgElem = document.createElementNS(svgNS, "svg");
         svgElem.setAttribute("width", "100%");
@@ -254,7 +304,6 @@
         svgElem.className = "svg-layer";
         pathContainer.appendChild(svgElem);
       
-        // Create interactive layer (z-index 3)
         const interactiveLayer = document.createElement("div");
         interactiveLayer.className = "interactive-layer";
         interactiveLayer.style.top = "0";
@@ -263,49 +312,48 @@
         interactiveLayer.style.height = "100%";
         pathContainer.appendChild(interactiveLayer);
       
-        // --- Determine allowed zone width and hard mode from localStorage ---
-        let offsetDist = 52; // default (medium)
-        let hardMode = false;
+        let offsetDist = 35;
         const selectionsObj = JSON.parse(localStorage.getItem('gameSelections'));
-        if (selectionsObj && selectionsObj.gameOrder.includes("Suivre le chemin")) {
+        if (selectionsObj && selectionsObj.gameOrder && selectionsObj.gameOrder.includes("Suivre le chemin")) {
           const index = selectionsObj.gameOrder.indexOf("Suivre le chemin");
-          if (selectionsObj.gameOptions &&
-              selectionsObj.gameOptions[index] &&
-              selectionsObj.gameOptions[index]["Largeur du tracé"]) {
+          if (selectionsObj.gameOptions && selectionsObj.gameOptions[index] && selectionsObj.gameOptions[index]["Largeur du tracé"]) {
             const tracingOption = selectionsObj.gameOptions[index]["Largeur du tracé"];
-            // Mapping: "hard" → narrow (26px), "medium" → medium (52px), "easy" → wide (76px)
             switch(tracingOption) {
               case "hard":
-                offsetDist = 26;
+                offsetDist = 20;
                 break;
               case "easy":
-                offsetDist = 76;
+                offsetDist = 50;
                 break;
               case "medium":
               default:
-                offsetDist = 52;
+                offsetDist = 35;
                 break;
             }
           }
-          if (selectionsObj.gameOptions &&
-              selectionsObj.gameOptions[index] &&
-              selectionsObj.gameOptions[index]["Hard mode"] === "true") {
-            hardMode = true;
+        }
+      
+        let isHardMode = false;
+        if (selectionsObj && selectionsObj.gameOptions) {
+          const index = selectionsObj.gameOrder.indexOf("Suivre le chemin");
+          if (selectionsObj.gameOptions[index]["Hard mode"] === "true") {
+            isHardMode = true;
           }
         }
       
-        // --- Generate a twisty randomized path using a Catmull-Rom spline ---
         const containerWidth = interactiveLayer.clientWidth;
         const containerHeight = interactiveLayer.clientHeight;
         const numPoints = 8;
+        const amplitude = 20;
         const keyPoints = [];
+      
         keyPoints.push({
           x: containerWidth * 0.1,
           y: containerHeight * (0.3 + Math.random() * 0.4)
         });
         for (let i = 1; i < numPoints - 1; i++) {
           keyPoints.push({
-            x: containerWidth * (0.1 + i * 0.8 / (numPoints - 1)) + (Math.random() - 0.5) * 50,
+            x: containerWidth * (0.1 + (i * 0.8) / (numPoints - 1)) + (Math.random() - 0.5) * amplitude,
             y: containerHeight * (0.2 + Math.random() * 0.6)
           });
         }
@@ -315,7 +363,7 @@
         });
       
         function catmullRomToBezier(points) {
-          let d = "M " + points[0].x + " " + points[0].y;
+          let d = `M ${points[0].x} ${points[0].y}`;
           for (let i = 0; i < points.length - 1; i++) {
             const p0 = i === 0 ? points[0] : points[i - 1];
             const p1 = points[i];
@@ -325,99 +373,58 @@
             const cp1y = p1.y + (p2.y - p0.y) / 6;
             const cp2x = p2.x - (p3.x - p1.x) / 6;
             const cp2y = p2.y - (p3.y - p1.y) / 6;
-            d += " C " + cp1x + " " + cp1y + ", " + cp2x + " " + cp2y + ", " + p2.x + " " + p2.y;
+            d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
           }
           return d;
         }
       
         const pathData = catmullRomToBezier(keyPoints);
       
-        // Create the main (invisible) path
         const mainPath = document.createElementNS(svgNS, "path");
         mainPath.setAttribute("d", pathData);
-        mainPath.setAttribute("stroke", "none");
         mainPath.setAttribute("fill", "none");
+        mainPath.setAttribute("stroke", "teal");
+        mainPath.setAttribute("stroke-width", (offsetDist * 2).toString());
+        mainPath.setAttribute("stroke-linecap", "round");
+        mainPath.setAttribute("stroke-linejoin", "round");
         svgElem.appendChild(mainPath);
       
-        // --- Generate parallel boundaries from the main path ---
-        function generateOffsetBoundaries(pathElem, offset, samples = 150) {
-          const totalLength = pathElem.getTotalLength();
-          const upperPoints = [];
-          const lowerPoints = [];
-          for (let i = 0; i <= samples; i++) {
-            const l = (i / samples) * totalLength;
-            const p = pathElem.getPointAtLength(l);
-            const delta = 0.1;
-            const p2 = pathElem.getPointAtLength(Math.min(l + delta, totalLength));
-            let dx = p2.x - p.x;
-            let dy = p2.y - p.y;
-            const mag = Math.sqrt(dx * dx + dy * dy) || 1;
-            dx /= mag;
-            dy /= mag;
-            const nx = -dy, ny = dx;
-            upperPoints.push({ x: p.x + nx * offset, y: p.y + ny * offset });
-            lowerPoints.push({ x: p.x - nx * offset, y: p.y - ny * offset });
-          }
-          return { upperPoints, lowerPoints };
-        }
-      
-        const { upperPoints, lowerPoints } = generateOffsetBoundaries(mainPath, offsetDist, 150);
-      
-        function createPolyline(points) {
-          const polyline = document.createElementNS(svgNS, "polyline");
-          const pointsAttr = points.map(p => `${p.x},${p.y}`).join(" ");
-          polyline.setAttribute("points", pointsAttr);
-          // Styling for boundaries
-          polyline.setAttribute("stroke", "black");
-          polyline.setAttribute("stroke-width", "5");
-          polyline.setAttribute("fill", "none");
-          polyline.setAttribute("stroke-linecap", "round");
-          polyline.setAttribute("stroke-linejoin", "round");
-          // Uncomment for a dashed effect:
-          // polyline.setAttribute("stroke-dasharray", "8,4");
-          return polyline;
-        }
-      
-        const upperBoundary = createPolyline(upperPoints);
-        const lowerBoundary = createPolyline(lowerPoints);
-        svgElem.appendChild(upperBoundary);
-        svgElem.appendChild(lowerBoundary);
-      
-        // --- Markers ---
         const totalLen = mainPath.getTotalLength();
         const actualStartPoint = mainPath.getPointAtLength(0);
         const actualEndPoint = mainPath.getPointAtLength(totalLen);
       
-        function createMarker(point, text, bgColor) {
-          const marker = document.createElement("div");
-          marker.className = "marker";
-          marker.style.left = (point.x - 30) + "px";
-          marker.style.top = (point.y - 30) + "px";
-          marker.style.backgroundColor = bgColor;
-          marker.textContent = text;
-          return marker;
-        }
+        // Do not create a start marker.
       
-        const startMarker = createMarker(actualStartPoint, "Start", "#8be");
-        const endMarker = createMarker(actualEndPoint, "End", "#cfc");
-        interactiveLayerAppend(interactiveLayer, startMarker);
-        interactiveLayerAppend(interactiveLayer, endMarker);
+        // Create end marker (an enlarged image)
+        const endMarker = document.createElement("img");
+        endMarker.className = "end-marker";
+        endMarker.src = "../../images/endflag.png";
+        // Using transform: translate(-50%, -50%) in CSS centers the marker,
+        // so set left/top to the actual endpoint.
+        endMarker.style.left = actualEndPoint.x + "px";
+        endMarker.style.top = actualEndPoint.y + "px";
+        interactiveLayer.appendChild(endMarker);
       
-        // --- Draggable Token ---
+        // Create the draggable token.
         const token = document.createElement("img");
         token.src = (themeData.transparentPNGs && themeData.transparentPNGs.length > 0)
-                    ? themeData.transparentPNGs[Math.floor(Math.random() * themeData.transparentPNGs.length)]
-                    : "../../images/fallback.png";
+          ? themeData.transparentPNGs[Math.floor(Math.random() * themeData.transparentPNGs.length)]
+          : "../../images/fallback.png";
         token.className = "token";
-        token.style.left = (actualStartPoint.x - 40) + "px";
-        token.style.top = (actualStartPoint.y - 40) + "px";
-        interactiveLayerAppend(interactiveLayer, token);
+      
+        const tokenHalfSize = 45;
+        const startCoordLeft = actualStartPoint.x - tokenHalfSize;
+        const startCoordTop = actualStartPoint.y - tokenHalfSize;
+        token.style.left = startCoordLeft + "px";
+        token.style.top = startCoordTop + "px";
+        interactiveLayer.appendChild(token);
       
         let lastAllowedLeft = parseFloat(token.style.left);
         let lastAllowedTop = parseFloat(token.style.top);
         let isDragging = false;
         let offsetX = 0;
         let offsetY = 0;
+        let outOfBounds = false;
       
         function distance(p1, p2) {
           return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
@@ -438,14 +445,6 @@
       
         const threshold = offsetDist;
       
-        // Helper function to reset the token to the start position
-        function resetToken() {
-          token.style.left = (actualStartPoint.x - 40) + "px";
-          token.style.top = (actualStartPoint.y - 40) + "px";
-          lastAllowedLeft = parseFloat(token.style.left);
-          lastAllowedTop = parseFloat(token.style.top);
-        }
-      
         token.addEventListener("pointerdown", (e) => {
           e.preventDefault();
           isDragging = true;
@@ -454,6 +453,12 @@
           offsetX = e.clientX - rect.left;
           offsetY = e.clientY - rect.top;
           token.setPointerCapture(e.pointerId);
+          const tokenRect = token.getBoundingClientRect();
+          spawnParticle(tokenRect.left + tokenRect.width / 2, tokenRect.top + tokenRect.height / 2, interactiveLayer);
+          particleInterval = setInterval(() => {
+            const rect = token.getBoundingClientRect();
+            spawnParticle(rect.left + rect.width / 2, rect.top + rect.height / 2, interactiveLayer);
+          }, 70);
         });
       
         token.addEventListener("pointermove", (e) => {
@@ -462,34 +467,41 @@
           const containerRect = interactiveLayer.getBoundingClientRect();
           let newLeft = e.clientX - containerRect.left - offsetX;
           let newTop = e.clientY - containerRect.top - offsetY;
-      
-          const fullMaxLeft = interactiveLayer.clientWidth - token.clientWidth;
-          const fullMaxTop = interactiveLayer.clientHeight - token.clientHeight;
-          newLeft = Math.max(0, Math.min(newLeft, fullMaxLeft));
-          newTop = Math.max(0, Math.min(newTop, fullMaxTop));
-      
+          const maxLeft = interactiveLayer.clientWidth - token.clientWidth;
+          const maxTop = interactiveLayer.clientHeight - token.clientHeight;
+          newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+          newTop = Math.max(0, Math.min(newTop, maxTop));
           const tokenCenter = {
             x: newLeft + token.clientWidth / 2,
             y: newTop + token.clientHeight / 2
           };
           const d = distanceToPath(tokenCenter, mainPath, 150);
+          
           if (d < threshold) {
             lastAllowedLeft = newLeft;
             lastAllowedTop = newTop;
             token.style.left = newLeft + "px";
             token.style.top = newTop + "px";
+            outOfBounds = false;
           } else {
-            // In hard mode, play mistake sound and reset token immediately.
-            if (hardMode && d >= threshold * 0.95) {
-              const errorSound = document.getElementById('error-sound');
-              errorSound.currentTime = 0;
-              errorSound.play().catch(err => console.warn(err));
-              resetToken();
+            if (isHardMode) {
+              token.style.left = startCoordLeft + "px";
+              token.style.top = startCoordTop + "px";
+              lastAllowedLeft = startCoordLeft;
+              lastAllowedTop = startCoordTop;
+              if (!outOfBounds) {
+                outOfBounds = true;
+                const errSound = document.getElementById('error-sound');
+                errSound.currentTime = 0;
+                errSound.play().catch(() => {});
+              }
             } else {
               token.style.left = lastAllowedLeft + "px";
               token.style.top = lastAllowedTop + "px";
             }
           }
+          const tokenRect = token.getBoundingClientRect();
+          spawnParticle(tokenRect.left + tokenRect.width / 2, tokenRect.top + tokenRect.height / 2, interactiveLayer);
         });
       
         token.addEventListener("pointerup", (e) => {
@@ -497,7 +509,7 @@
           isDragging = false;
           token.style.cursor = "grab";
           token.releasePointerCapture(e.pointerId);
-      
+          clearInterval(particleInterval);
           const tokenRect = token.getBoundingClientRect();
           const tokenCenter = {
             x: tokenRect.left + tokenRect.width / 2,
@@ -509,39 +521,42 @@
             y: endRect.top + endRect.height / 2
           };
           const dToEnd = distance(tokenCenter, endCenter);
-      
           if (dToEnd < 50) {
-            // Successful completion of a trace.
-            if (repetitionCount < repetitionTarget - 1) {
-              repetitionCount++;
-              // Play the reinforcer sound immediately
-              showReinforcerSound();
-              // Fade out the interactive layer, then generate a new path.
-              interactiveLayer.style.opacity = 0;
-              setTimeout(() => {
-                // Generate a new randomized path (keeping the same repetition count)
-                generatePath();
-                // Fade in the new path.
-                interactiveLayer.style.opacity = 1;
-              }, 600); // delay should be slightly longer than the CSS transition duration
-            } else {
-              // Last repetition reached – proceed to final video.
-              showFinalReinforcerVideo();
-            }
+            handleCompletion();
           }
         });
       
-        console.log("Tracing activity started with enhanced options!");
+        console.log("Tracing activity started with offsetDist =", offsetDist, "Hard mode =", isHardMode);
       
-        // Helper function to append elements to the interactive layer (z-index: 3)
-        function interactiveLayerAppend(parent, child) {
-          child.style.position = "absolute";
-          parent.appendChild(child);
+        function spawnParticle(x, y, parent) {
+          const parentRect = parent.getBoundingClientRect();
+          const relativeX = x - parentRect.left;
+          const relativeY = y - parentRect.top;
+          const particle = document.createElement("div");
+          particle.className = "particle";
+          const colors = ["#00bcd4", "#ff4081", "#ffc107", "#8bc34a", "#673ab7"];
+          const randomColor = colors[Math.floor(Math.random() * colors.length)];
+          particle.style.backgroundColor = randomColor;
+          const offsetX = (Math.random() - 0.5) * 20;
+          const offsetY = (Math.random() - 0.5) * 20;
+          particle.style.left = (relativeX + offsetX) + "px";
+          particle.style.top = (relativeY + offsetY) + "px";
+          parent.appendChild(particle);
+          const angle = Math.random() * 2 * Math.PI;
+          const distance = Math.random() * 20 + 10;
+          const dx = Math.cos(angle) * distance;
+          const dy = Math.sin(angle) * distance;
+          requestAnimationFrame(() => {
+            particle.style.transform = `translate(${dx}px, ${dy}px)`;
+            particle.style.opacity = 0;
+          });
+          setTimeout(() => {
+            if (particle.parentNode) {
+              particle.parentNode.removeChild(particle);
+            }
+          }, 500);
         }
-      }
-      // ----------------------------------------------------------------------------
-      // END OF GAME-SPECIFIC LOGIC
-      // ----------------------------------------------------------------------------
+      };
     });
   </script>
 </body>
