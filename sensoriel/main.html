@@ -28,7 +28,7 @@
     }
     /* Grid container for baskets: 2 columns per row */
     #gameSelections {
-      position: relative; /* so animated basket is positioned relative to it */
+      position: relative; /* so we can measure container's dimensions */
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 20px;
@@ -47,18 +47,11 @@
       flex-direction: column;
       align-items: center;
       background-color: #fff;
-      position: relative;
-      overflow: hidden;
       opacity: 1;
     }
     .game-selection-block.basket:hover {
       border-color: #333;
       box-shadow: 3px 3px 8px rgba(0,0,0,0.2);
-    }
-    .basket-icon {
-      width: 80px;
-      height: 80px;
-      margin-bottom: 10px;
     }
     .basket-title {
       font-size: 1.2rem;
@@ -109,7 +102,7 @@
       border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
-    /* New container for checkbox options: text on left, checkbox on right */
+    /* Container for checkbox options: text on left, checkbox on right */
     .checkbox-container {
       display: flex;
       justify-content: space-between;
@@ -186,7 +179,7 @@
       margin-top: 10px;
       text-align: center;
     }
-    /* Styled game-specific options with a minimum height */
+    /* Styled game-specific options */
     .game-specific-options {
       display: none;
       min-width: 100px;
@@ -224,22 +217,20 @@
       margin-right: 5px;
     }
 
-    /* --- Animation Styles --- */
-    @keyframes basketAdd {
-      0% { transform: translateX(-150px); opacity: 1; }
-      90% { transform: translateX(0); opacity: 1; }
-      100% { transform: translateX(0); opacity: 0; }
+    /* --- Animation Styles Using JS and CSS Keyframes --- */
+    /* Keyframes for sliding the animated basket image in a fixed 120px distance */
+    @keyframes slideInFromLeft {
+      0%   { transform: translateX(-120px); opacity: 0; }
+      100% { transform: translateX(0); opacity: 1; }
     }
+    @keyframes slideInFromRight {
+      0%   { transform: translateX(120px); opacity: 0; }
+      100% { transform: translateX(0); opacity: 1; }
+    }
+    /* Removal animation */
     @keyframes basketRemove {
       0% { opacity: 1; transform: translateX(0); }
       100% { transform: translateX(150px); opacity: 0; }
-    }
-    .basket-animation-add {
-      position: absolute;
-      animation: basketAdd 1s forwards;
-      z-index: 1000;
-      width: 200px; /* match container width */
-      height: auto;
     }
     .basket-animation-remove {
       animation: basketRemove 1s forwards;
@@ -264,7 +255,6 @@
           <!-- Options from themes.js will be appended here -->
         </select>
       </div>
-      <!-- (Optional) Additional sections for reinforcer options could go here -->
       <button type="submit">Commencer la séquence d'activités</button>
       <div class="error" id="errorMsg"></div>
     </form>
@@ -306,7 +296,6 @@
 
     let gameCount = 0;
 
-    // Game-specific configuration
     const gameOptionsConfig = {
       'puzzle': [
         {
@@ -445,87 +434,16 @@
       });
     }
 
-    // Animate basket addition:
-    function addGameSelectionAnimated() {
-      if (gameCount >= maxGames) return;
-
-      // 1) Clone template, create new node hidden
-      const template = gameSelectionTemplate.content.cloneNode(true);
-      const newBlock = template.querySelector('.game-selection-block');
-      newBlock.style.opacity = "0";
-
-      // 2) Increment gameCount, set basket number
-      gameCount++;
-      newBlock.querySelector('.game-number').textContent = gameCount;
-
-      // 3) Attach remove/select events
-      const removeBtn = newBlock.querySelector('.remove-game-btn');
-      removeBtn.addEventListener('click', () => {
-        newBlock.classList.add("basket-animation-remove");
-        newBlock.addEventListener("animationend", () => {
-          newBlock.remove();
-          gameCount--;
-          updateGameNumbers();
-        });
-      });
-      const gameSelect = newBlock.querySelector('.game-select');
-      gameSelect.addEventListener('change', (e) => {
-        handleGameSelectionChange(e, newBlock);
-      });
-
-      // 4) Append the new hidden block to the container
-      gameSelectionsContainer.appendChild(newBlock);
-
-      // 5) Compute final coords for newBlock
-      const blockRect = newBlock.getBoundingClientRect();
-      const containerRect = gameSelectionsContainer.getBoundingClientRect();
-      const destX = blockRect.left - containerRect.left;
-      const destY = blockRect.top - containerRect.top + blockRect.height / 2 - 100;
-
-      // 6) Determine whether basket starts from left or right
-      // If gameCount is odd => from left, else => from right
-      let startX = "-150px"; 
-      if (gameCount % 2 === 0) {
-        // If even: start from the right side
-        startX = containerRect.width + 150 + "px";
-      }
-
-      // 7) Create the animated basket image
-      const animatedBasket = document.createElement('img');
-      animatedBasket.src = "../../images/plasticbasket.png"; // your transparent PNG
-      animatedBasket.className = "basket-animation-add";
-      animatedBasket.style.width = "200px";
-      animatedBasket.style.left = startX;
-      animatedBasket.style.top = destY + "px";
-      gameSelectionsContainer.appendChild(animatedBasket);
-
-      // 8) Animate from off-screen left or right to that container position
-      animatedBasket.animate([
-        { left: startX, opacity: 1 },
-        { left: destX + "px", opacity: 1 },
-        { left: destX + "px", opacity: 0 }
-      ], { duration: 1000, fill: 'forwards' });
-
-      // 9) End: remove the animated basket, show the new block, update numbers
-      setTimeout(() => {
-        animatedBasket.remove();
-        newBlock.style.opacity = "1";
-        updateGameNumbers();
-      }, 1000);
-    }
-
-    // Standard function to add a basket container (no animation)
+    // Standard function to add a basket container (non-animated, for initial load)
     function addGameSelection() {
       if (gameCount >= maxGames) return;
       gameCount++;
       const template = gameSelectionTemplate.content.cloneNode(true);
       const block = template.querySelector('.game-selection-block');
-      block.style.opacity = "1";
-      const gameNumber = block.querySelector('.game-number');
-      gameNumber.textContent = gameCount;
+      block.querySelector('.game-number').textContent = gameCount;
 
-      const removeBtn = block.querySelector('.remove-game-btn');
-      removeBtn.addEventListener('click', () => {
+      // Attach remove logic
+      block.querySelector('.remove-game-btn').addEventListener('click', () => {
         block.classList.add("basket-animation-remove");
         block.addEventListener("animationend", () => {
           block.remove();
@@ -534,12 +452,87 @@
         });
       });
 
-      const gameSelect = block.querySelector('.game-select');
-      gameSelect.addEventListener('change', (e) => {
+      // Attach game select logic
+      block.querySelector('.game-select').addEventListener('change', (e) => {
         handleGameSelectionChange(e, block);
       });
 
       gameSelectionsContainer.appendChild(block);
+      updateGameNumbers();
+    }
+
+    // Animated add: use an extra image element with your transparent basket PNG.
+    // The image will slide in from farther away (200px offset) and end exactly at its final destination.
+    // A 20px correction is applied to destX, and we add a fixed offset of 200px (adjusted to 200px offset).
+    // Finally, we want it to end a tiny bit more to the right (an extra 10px), so we add that to destX.
+    function addGameSelectionAnimated() {
+      if (gameCount >= maxGames) return;
+      gameCount++;
+      const template = gameSelectionTemplate.content.cloneNode(true);
+      const block = template.querySelector('.game-selection-block');
+      block.querySelector('.game-number').textContent = gameCount;
+      
+      // Attach remove logic
+      block.querySelector('.remove-game-btn').addEventListener('click', () => {
+        block.classList.add("basket-animation-remove");
+        block.addEventListener("animationend", () => {
+          block.remove();
+          gameCount--;
+          updateGameNumbers();
+        });
+      });
+      // Attach game select logic
+      block.querySelector('.game-select').addEventListener('change', (e) => {
+        handleGameSelectionChange(e, block);
+      });
+      
+      // Hide the block until the animation completes.
+      block.style.opacity = "0";
+      gameSelectionsContainer.appendChild(block);
+      
+      // Use requestAnimationFrame to ensure the block is rendered and measurable.
+      requestAnimationFrame(() => {
+        const blockRect = block.getBoundingClientRect();
+        const containerRect = gameSelectionsContainer.getBoundingClientRect();
+        // Compute final destination; add 20px correction plus extra 10px to end slightly more right.
+        const destX = blockRect.left - containerRect.left + 20 + 10; // now +30px total correction
+        const destY = blockRect.top - containerRect.top;
+        
+        // Fixed start offset: 200px.
+        const startOffset = 200;
+        // Determine offset: if odd, start 200px to the left; if even, 200px to the right.
+        const offset = (gameCount % 2 === 1) ? -startOffset : startOffset;
+        
+        // Create the animated basket image element using your transparent basket PNG.
+        const animatedBasket = document.createElement('img');
+        animatedBasket.src = "../../images/plasticbasket.png"; // Your transparent basket PNG
+        animatedBasket.style.width = "200px";
+        animatedBasket.style.position = "absolute";
+        // Set the starting left: final destination plus the fixed offset.
+        animatedBasket.style.left = (destX + offset) + "px";
+        animatedBasket.style.top = destY + "px";
+        
+        // Append the animated image to the container.
+        gameSelectionsContainer.appendChild(animatedBasket);
+        
+        // Animate the image: translate by -offset so it arrives at destX.
+        animatedBasket.animate([
+          { transform: `translateX(0px)`, opacity: 1 },
+          { transform: `translateX(${ -offset }px)`, opacity: 1 },
+          { transform: `translateX(${ -offset }px)`, opacity: 0 }
+        ], {
+          duration: 1000,
+          fill: 'forwards',
+          easing: 'linear'
+        });
+        
+        // After the animation, remove the animated image and reveal the block.
+        setTimeout(() => {
+          animatedBasket.remove();
+          block.style.opacity = "1";
+          updateGameNumbers();
+        }, 1000);
+      });
     }
 
     function updateGameNumbers() {
@@ -561,13 +554,10 @@
             container.className = 'checkbox-container';
             const textSpan = document.createElement('span');
             textSpan.textContent = option.label;
-
             const input = document.createElement('input');
             input.type = 'checkbox';
             input.name = option.name;
-            if (option.defaultChecked) {
-              input.checked = true;
-            }
+            if (option.defaultChecked) { input.checked = true; }
             container.appendChild(textSpan);
             container.appendChild(input);
             optionsContainer.appendChild(container);
@@ -576,7 +566,6 @@
             label.textContent = option.label;
             label.setAttribute('for', option.name);
             optionsContainer.appendChild(label);
-
             let input;
             if (option.type === 'select') {
               input = document.createElement('select');
@@ -615,7 +604,7 @@
 
     window.addEventListener('DOMContentLoaded', () => {
       populateThemesDropdown();
-      // Add 2 baskets on load:
+      // Add 2 baskets on load (using standard add)
       addGameSelection();
       addGameSelection();
     });
