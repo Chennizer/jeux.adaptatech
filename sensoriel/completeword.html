@@ -130,10 +130,10 @@
     }
     /* Blue drop indicator for individual letter-slot */
     .letter-slot.over {
-      background-color: #e6f0ff;         /* Light blue background */
-      border: 4px dashed #007BFF;          /* Blue dashed border */
+      background-color: #e6f0ff;
+      border: 4px dashed #007BFF;
       transform: scale(1.05);
-      box-shadow: inset 0 0 10px rgba(0,123,255,0.5);  /* Blue-tinted shadow */
+      box-shadow: inset 0 0 10px rgba(0,123,255,0.5);
     }
     .placed-letter {
       font-size: 30px;
@@ -214,7 +214,6 @@
   </div>
   <!-- Audio elements (sources set dynamically) -->
   <audio id="error-sound" src="" preload="auto"></audio>
-  <!-- Dynamically imported reinforcer sound instead of a hardcoded rooster sound -->
   <audio id="word-reward-sound" src="" preload="auto"></audio>
   <audio id="final-reward-sound" src="" preload="auto"></audio>
   
@@ -245,7 +244,7 @@
         ];
       }
       
-      // Retrieve the current game options (for testtoupie) from selections.
+      // Retrieve the current game options (for completeword) from selections.
       let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
       if (isNaN(overallGameIndex)) {
         alert("Game selections not found. Redirecting to main page.");
@@ -258,12 +257,15 @@
         return;
       }
       
-      // Read the word count option (for testtoupie)
+      // Read the word count option (for completeword)
       const currentGameOptions = selections.gameOptions[overallGameIndex] || {};
       let desiredCount = parseInt(currentGameOptions.testtoupieWordCount, 10);
       if (isNaN(desiredCount) || desiredCount < 1) {
         desiredCount = fullWords.length;
       }
+      
+      // Read and convert the "showModelLetters" option
+      let showModelLetters = (currentGameOptions.showModelLetters === "true");
       
       // Randomize fullWords and limit to the desired count.
       let shuffledWords = fullWords.slice().sort(() => Math.random() - 0.5);
@@ -274,7 +276,6 @@
       
       // Update audio element sources (using defaults if the theme does not define them)
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
-      // Dynamically import the reinforcer sound from the theme.
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
       
@@ -292,7 +293,6 @@
       // DOM references used by the game
       const lettersContainer = document.getElementById('letters-container');
       const targetImage = document.getElementById('target-image');
-      // target-word is the grid container for letter slots.
       const targetWordContainer = document.getElementById('target-word');
       const reinforcerOverlay = document.getElementById('reinforcerOverlay');
       const reinforcerButton = document.getElementById('reinforcerButton');
@@ -311,21 +311,13 @@
       numberTextEl.textContent = (overallGameIndex + 1).toString();
       activityOverlay.style.display = 'flex';
       
-      // Modified: Call unlockAudio and initializeSpeechSynthesis on user gesture,
-      // trigger a voices refresh, and add a dummy utterance.
       function hideOverlayAndStart() {
-        // Unlock audio context if suspended.
         unlockAudio();
-        // Force a voices refresh.
         window.speechSynthesis.getVoices();
-        // Initialize speech synthesis to select French voice.
         initializeSpeechSynthesis();
-        
-        // Add a dummy utterance to warm up the TTS engine.
         const warmupUtterance = new SpeechSynthesisUtterance(" ");
         warmupUtterance.lang = 'fr-FR';
         window.speechSynthesis.speak(warmupUtterance);
-        
         if (themeData.startSound) {
           const sfx = new Audio(themeData.startSound);
           sfx.currentTime = 0;
@@ -340,11 +332,8 @@
       document.addEventListener('click', hideOverlayAndStart);
       document.addEventListener('touchend', hideOverlayAndStart);
       // -----------------------------
-      // End Activity Overlay Feature
-      // -----------------------------
   
       let slots = [];
-      let showModelLetters = true;
       let activeDragElement = null;
       let initialX = 0, initialY = 0;
       let currentX = 0, currentY = 0;
@@ -376,7 +365,6 @@
         source.start(0);
       }
   
-      // Modified: Added logging of available voices for debugging.
       function selectFrenchVoice() {
         return new Promise((resolve, reject) => {
           let voices = synth.getVoices();
@@ -422,11 +410,8 @@
         }
       }
   
-      // Modified: Cancel any pending utterances before speaking.
       function speak(text, callback) {
         const utterThis = new SpeechSynthesisUtterance(text);
-        // Uncomment the next line if you wish to cancel any ongoing utterances.
-        // synth.cancel();
         utterThis.voice = frenchVoice;
         utterThis.lang = 'fr-FR';
         utterThis.onend = () => {
@@ -441,7 +426,6 @@
       }
   
       let voicesInitialized = false;
-      // Modified: Call initializeSpeechSynthesis early on user gesture.
       function initializeSpeechSynthesis() {
         if (voicesInitialized) return;
         voicesInitialized = true;
@@ -593,7 +577,6 @@
         currentY = e.clientY - initialY;
         activeDragElement.style.left = `${currentX}px`;
         activeDragElement.style.top = `${currentY}px`;
-        // Update drop indicator on the letter-slot under the dragged element.
         updateDropIndicator();
       }
   
@@ -655,7 +638,6 @@
         activeDragElement = null;
       }
   
-      // Function to update drop indicator styling on the letter-slot currently under the dragged element.
       function updateDropIndicator() {
         slots.forEach(slot => slot.classList.remove('over'));
         const slot = getDropSlot(activeDragElement);
@@ -696,7 +678,16 @@
         return null;
       }
   
+      // Updated handleDrop function:
       function handleDrop(draggedElement, slot) {
+        // Block drop if the slot is already filled.
+        if (slot.classList.contains('filled')) {
+          playErrorSound();
+          appendToLettersContainer(draggedElement);
+          positionLetterRandomly(draggedElement);
+          return;
+        }
+  
         const index = parseInt(slot.getAttribute('data-position'));
         const requiredLetter = words[wordIndex].word[index];
         const draggedLetter = draggedElement.dataset.letter;
@@ -720,25 +711,19 @@
         }
       }
   
-      // Delay playing the reinforcer sound after the word is read.
       function showReinforcerSound() {
         setTimeout(() => {
           wordRewardSound.currentTime = 0;
           wordRewardSound.play().then(() => {
-            // Optional: actions after sound plays.
           }).catch(error => {
             console.error('Error playing reinforcer sound:', error);
           });
-  
           wordRewardSound.onended = null;
-  
           function onEnded() {
             clearTimeout(fallbackTimeout);
             moveToNextWord();
           }
-  
           wordRewardSound.addEventListener('ended', onEnded, { once: true });
-  
           const fallbackTimeout = setTimeout(() => {
             moveToNextWord();
             wordRewardSound.removeEventListener('ended', onEnded);
@@ -753,7 +738,6 @@
             correct = false;
           }
         });
-  
         if (correct) {
           const completeWord = words[wordIndex].word;
           speakText(completeWord, () => {
@@ -762,7 +746,6 @@
         }
       }
   
-      // Final reinforcer video is shown when there are no more words.
       function showFinalReinforcerVideo() {
         finalRewardSound.currentTime = 0;
         finalRewardSound.play().catch(error => {
@@ -771,14 +754,12 @@
         reinforcerOverlay.style.display = 'flex';
         reinforcerVideo.style.display = 'none';
         videoOverlayCover.style.display = 'none';
-        // Do not auto-navigate: the reinforcer button will remain until the user clicks it.
       }
   
-      // Function to navigate to the next game.
       function navigateToNextGame() {
         const selections = JSON.parse(localStorage.getItem('gameSelections'));
         let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;  // Increment the overall game index.
+        currentGameIndex++;
         localStorage.setItem('currentGameIndex', currentGameIndex);
         if (currentGameIndex < selections.gameOrder.length) {
           window.location.href = selections.gameOrder[currentGameIndex] + ".html";
@@ -817,11 +798,9 @@
           slot.addEventListener('dragover', (e) => {
             e.preventDefault();
           });
-          
           slot.addEventListener('dragleave', () => {
             slot.classList.remove('over');
           });
-          
           slot.addEventListener('drop', (e) => {
             e.preventDefault();
             slot.classList.remove('over');
@@ -858,8 +837,6 @@
       }
   
       reinforcerButton.addEventListener('click', () => {
-        // When the reinforcer button is clicked at the end,
-        // hide the button and play the reinforcer video.
         reinforcerButton.style.display = 'none';
         reinforcerOverlay.style.background = '#000';
         reinforcerVideo.style.display = 'block';
@@ -870,7 +847,6 @@
         });
       });
   
-      // When the reinforcer video ends, navigate to the next game.
       reinforcerVideo.addEventListener('ended', () => {
         navigateToNextGame();
       }, { once: true });

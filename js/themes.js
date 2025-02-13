@@ -23,7 +23,7 @@ window.themes = {
       
       ],
       words: [
-        "Ruben", "Chase","Everest","Logo","Marshall","Rocky","Stella","Zuma"
+        "Ruben", "Chase","Everest","Marshall","Rocky","Stella","Zuma"
       ],
       startSound: "../../sounds/pawpatrol1.mp3",
       reinforcerSound: "../../sounds/victory.mp3"
@@ -65,13 +65,17 @@ window.themes = {
           "../../images/toupieetbinouhalloween.png"
         ],
         reinforcerVideos: [
-          "../../videos/toupieetbinouecole.mp4",
+          "../../videos/toupieetbinou1.mp4",
+          "../../videos/toupieetbinou2.mp4",
+          "../../videos/toupieetbinou3.mp4",
+          "../../videos/toupieetbinou4.mp4",
+          "../../videos/toupieetbinou5.mp4",
          
         ],
         words: [
           "Amitié", "Courir","Peinture","Avion", "Binou","Costume"
         ],
-        startSound: "../../sounds/firework.mp3",
+        startSound: "../../sounds/toupieetbinoustart.mp3",
         reinforcerSound: "../../sounds/victory.mp3"
       },
     monde: {
