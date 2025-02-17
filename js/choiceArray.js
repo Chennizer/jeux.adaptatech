@@ -27,6 +27,11 @@ const mediaChoices = [
       image: "../../images/ladygaga.jpg",    // path to tile image
       video: "../../videos/ladygagabadromance.mp4",
     },
+    {
+      name: "Kids United",
+      image: "../../images/kidsunited.jpg",    // path to tile image
+      video: "../../videos/kidsunited-on-ecrit.mp4",
+    },
 
   ];
   
