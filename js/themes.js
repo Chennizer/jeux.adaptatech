@@ -78,22 +78,32 @@ window.themes = {
         startSound: "../../sounds/toupieetbinoustart.mp3",
         reinforcerSound: "../../sounds/victory.mp3"
       },
-    monde: {
+    Afrique: {
       images: [
-        "../../images/worldmap.jpg",
-        "../../images/wingsuit.png"
+        "../../images/africanbackground1.webp",
+        "../../images/africanbackground2.webp",
+        "../../images/africanbackground3.webp"
       ],
       transparentPNGs: [
-        "../../images/worldTrans1.png"
+        "../../images/cartoonelephant.png",
+        "../../images/cartoongiraffe.png",
+        "../../images/cartoongorilla.png",
+        "../../images/cartoonlion.png",
+        "../../images/cartoonrhino.png",
+        "../../images/cartoontiger.png",
       ],
       reinforcerVideos: [
-        "../../videos/asia.mp4"
+        "../../videos/afrique1.mp4",
+        "../../videos/afrique2.mp4",
+        "../../videos/afrique3.mp4",
+        "../../videos/afrique4.mp4",
+        "../../videos/afrique5.mp4",
       ],
       words: [
-        "Monde", "Wingsuit"
+        "Éléphant", "Giraffe", "Gorille", "Lion", "Rhinocéros", "Tigre"
       ],
-      startSound: "../../sounds/monde-start.mp3",
-      reinforcerSound: "../../sounds/firework.mp3"
+      startSound: "../../sounds/africaflute.mp3",
+      reinforcerSound: "../../sounds/victory.mp3"
     },
     nature: {
       images: [
