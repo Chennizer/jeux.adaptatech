@@ -1,53 +1,106 @@
 document.addEventListener('DOMContentLoaded', () => {
   /* --- DOM ELEMENTS --- */
-  // Options Modal (Step 1) elements
-  const gameOptionsModal = document.getElementById('game-options');
-  const tileCountInput = document.getElementById('tile-count');
-  const chooseTilesButton = document.getElementById('choose-tiles-button');
-  
-  // Mode selection elements (using our styled buttons)
-  const modeChoiceButton = document.getElementById('mode-choice-button');
-  const modeScanButton = document.getElementById('mode-scan-button');
-  const scanDelayContainer = document.getElementById('scan-delay-container');
-  const scanDelayInput = document.getElementById('scan-delay');
-  
-  // New checkbox for enabling cycle sound effect
+  // (1) Game Options Modal (Step 1)
+  const gameOptionsModal    = document.getElementById('game-options');
+  const tileCountInput      = document.getElementById('tile-count');
+  const chooseTilesButton   = document.getElementById('choose-tiles-button');
+
+  // Mode selection
+  const modeChoiceButton    = document.getElementById('mode-choice-button');
+  const modeScanButton      = document.getElementById('mode-scan-button');
+  const scanDelayContainer  = document.getElementById('scan-delay-container');
+  const scanDelayInput      = document.getElementById('scan-delay');
+
+  // (NEW) Advanced Options
+  const advancedOptionsButton    = document.getElementById('advanced-options-button');
+  const advancedOptionsModal     = document.getElementById('advanced-options-modal');
+  const closeAdvancedOptionsBtn  = document.getElementById('close-advanced-options');
+
+  // (In advanced modal) "Son de transition"
   const enableCycleSoundCheckbox = document.getElementById('enable-cycle-sound');
-  
-  // Tile Picker Modal (Step 2) elements
-  const tilePickerModal = document.getElementById('tile-picker-modal');
-  const tilePickerGrid = document.getElementById('tile-picker-grid');
-  const tileCountDisplay = document.getElementById('tile-count-display');
-  const startGameButton = document.getElementById('start-game-button');
-  
-  // Game Containers
-  const tileContainer = document.getElementById('tile-container');
-  const videoContainer = document.getElementById('video-container');
-  const videoPlayer = document.getElementById('video-player');
-  const videoSource = document.getElementById('video-source');
-  
+
+  // (NEW) Time Limit Elements in Advanced Options
+  const enableTimeLimitCheckbox  = document.getElementById('enable-time-limit');
+  const timeLimitContainer       = document.getElementById('time-limit-container');
+  const timeLimitInput           = document.getElementById('time-limit-seconds');
+
+  // (NEW) Resume Video Option (container and checkbox)  
+  const resumeVideoContainer     = document.getElementById('resume-video-container');  
+  const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
+
+  // (2) Tile Picker Modal (Step 2)
+  const tilePickerModal     = document.getElementById('tile-picker-modal');
+  const tilePickerGrid      = document.getElementById('tile-picker-grid');
+  const tileCountDisplay    = document.getElementById('tile-count-display');
+  const startGameButton     = document.getElementById('start-game-button');
+
+  // (NEW) category dropdown for filtering
+  const categorySelect      = document.getElementById('categorySelect');
+
+  // (3) Main Game (Choices Screen)
+  const tileContainer       = document.getElementById('tile-container');
+  const videoContainer      = document.getElementById('video-container');
+  const videoPlayer         = document.getElementById('video-player');
+  const videoSource         = document.getElementById('video-source');
+
   /* --- GAME VARIABLES --- */
-  // mediaChoices is assumed to be defined in choiceArray.js
-  let currentSelectedIndex = 0;
-  let videoPlaying = false; // Disable input while video plays
-  // Array to hold the indices of the tiles selected by the user in the picker
-  let selectedTileIndices = [];
-  let desiredTileCount = 0; // The number of tiles the user wants to use
+  // Assumes mediaChoices is defined in choiceArray.js
+  let currentSelectedIndex  = 0;
+  let videoPlaying          = false;
+  let selectedTileIndices   = [];  // which tiles the user has chosen
+  let desiredTileCount      = 0;   // how many tiles user must select
+  let mode                  = "choice";  // "choice" or "scan"
+  let autoScanInterval      = null;      // for scanning
+  let currentPreview        = null;      // audio preview
+  let previewTimeout        = null;      // stops preview after 10s
+  let previewDelayTimeout   = null;      // small delay before starting preview
+
+  // category for the tile picker single-grid
+  let currentCategory       = "all";
   
-  // Mode variable: default to "choice"
-  let mode = "choice";
-  
-  // Variable for auto-scan interval (if in scan mode)
-  let autoScanInterval = null;
-  
-  // Variables for audio preview of the selected tile
-  let currentPreview = null;
-  let previewTimeout = null;
-  let previewDelayTimeout = null;  // Delay before starting preview
-  
-  /* --- HELPER FUNCTIONS --- */
-  
-  // Stops any preview audio and clears the preview delay timeout.
+  // NEW: Flag to prevent auto-preview when returning from video
+  let preventAutoPreview    = false;
+
+  // NEW: Inactivity timer to replay preview after 30s
+  let inactivityTimer       = null;
+
+  // NEW: Timeout to enforce video time limit
+  let videoTimeLimitTimeout = null;
+
+  // NEW: Object to store resume positions for videos (keyed by video URL)
+  let videoResumePositions = {};
+
+  /* ----------------------------------------------------------------
+     (A) INACTIVITY TIMER LOGIC
+     ---------------------------------------------------------------- */
+
+  function clearInactivityTimer() {
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = null;
+    }
+  }
+
+  function startInactivityTimer() {
+    clearInactivityTimer();
+    inactivityTimer = setTimeout(() => {
+      if (!videoPlaying && !preventAutoPreview) {
+        console.log('No user input for 30s — replaying preview...');
+        playPreviewForTile(currentSelectedIndex);
+      }
+    }, 30000);
+  }
+
+  function resetInactivityTimer() {
+    if (!videoPlaying) {
+      startInactivityTimer();
+    }
+  }
+
+  /* ----------------------------------------------------------------
+     (B) HELPER FUNCTIONS
+     ---------------------------------------------------------------- */
+
   function stopPreview() {
     if (currentPreview) {
       currentPreview.pause();
@@ -62,68 +115,102 @@ document.addEventListener('DOMContentLoaded', () => {
       clearTimeout(previewDelayTimeout);
       previewDelayTimeout = null;
     }
+    startInactivityTimer();
   }
-  
-  // Function to play the cycle sound effect.
+
   function playCycleSound() {
     if (enableCycleSoundCheckbox.checked) {
       const cycleSound = new Audio("../../sounds/woosh.mp3");
       cycleSound.play().catch(err => console.error("Cycle sound error:", err));
     }
   }
-  
-  /* --- MODE BUTTON EVENT HANDLERS --- */
+
+  /* ----------------------------------------------------------------
+     (C) MODE BUTTON EVENT HANDLERS
+     ---------------------------------------------------------------- */
   modeChoiceButton.addEventListener('click', () => {
     mode = "choice";
     modeChoiceButton.classList.add('selected');
     modeScanButton.classList.remove('selected');
     scanDelayContainer.style.display = 'none';
   });
-  
+
   modeScanButton.addEventListener('click', () => {
     mode = "scan";
     modeScanButton.classList.add('selected');
     modeChoiceButton.classList.remove('selected');
     scanDelayContainer.style.display = 'block';
   });
-  
-  /* --- FUNCTIONS --- */
-  
-  // Render the tile picker grid with all available tile options.
+
+  /* ----------------------------------------------------------------
+     ADVANCED OPTIONS MODAL: Show/Hide & Time Limit / Resume Toggle
+     ---------------------------------------------------------------- */
+  advancedOptionsButton.addEventListener('click', () => {
+    advancedOptionsModal.style.display = 'flex';
+  });
+
+  closeAdvancedOptionsBtn.addEventListener('click', () => {
+    advancedOptionsModal.style.display = 'none';
+  });
+
+  // Toggle time limit input display when checkbox is changed
+  enableTimeLimitCheckbox.addEventListener('change', () => {
+    if (enableTimeLimitCheckbox.checked) {
+      timeLimitContainer.style.display = 'block';
+      // Also show the resume option container when time limit is enabled
+      resumeVideoContainer.style.display = 'block';
+    } else {
+      timeLimitContainer.style.display = 'none';
+      resumeVideoContainer.style.display = 'none';
+    }
+  });
+
+  /* ----------------------------------------------------------------
+     (D) POPULATE TILE PICKER (Single-Grid with Category + Selection)
+     ---------------------------------------------------------------- */
   function populateTilePickerGrid() {
     tilePickerGrid.innerHTML = "";
     mediaChoices.forEach((choice, index) => {
-      const tileOption = document.createElement('div');
-      tileOption.classList.add('tile');
-      tileOption.setAttribute('data-index', index);
-      tileOption.style.backgroundImage = `url(${choice.image})`;
-  
-      const caption = document.createElement('div');
-      caption.classList.add('caption');
-      caption.textContent = choice.name;
-      tileOption.appendChild(caption);
-  
-      // Toggle selection on click.
-      tileOption.addEventListener('click', () => {
-        if (selectedTileIndices.includes(index)) {
-          // Deselect tile.
-          selectedTileIndices = selectedTileIndices.filter(i => i !== index);
-          tileOption.classList.remove('selected');
-        } else {
-          // Only allow selection if we haven't reached the desired count.
-          if (selectedTileIndices.length < desiredTileCount) {
-            selectedTileIndices.push(index);
-            tileOption.classList.add('selected');
-          }
+      const inCategory = (currentCategory === 'all' || choice.category === currentCategory);
+      const isSelected = selectedTileIndices.includes(index);
+      if (inCategory || isSelected) {
+        const tileOption = document.createElement('div');
+        tileOption.classList.add('tile');
+        tileOption.setAttribute('data-index', index);
+        tileOption.style.backgroundImage = `url(${choice.image})`;
+
+        if (isSelected) {
+          tileOption.classList.add('selected');
         }
-        startGameButton.disabled = (selectedTileIndices.length !== desiredTileCount);
-      });
-  
-      tilePickerGrid.appendChild(tileOption);
+
+        const caption = document.createElement('div');
+        caption.classList.add('caption');
+        caption.textContent = choice.name;
+        tileOption.appendChild(caption);
+
+        tileOption.addEventListener('click', () => {
+          resetInactivityTimer();
+          if (selectedTileIndices.includes(index)) {
+            selectedTileIndices = selectedTileIndices.filter(i => i !== index);
+          } else if (selectedTileIndices.length < desiredTileCount) {
+            selectedTileIndices.push(index);
+          }
+          updateStartButtonState();
+          populateTilePickerGrid();
+        });
+
+        tilePickerGrid.appendChild(tileOption);
+      }
     });
   }
-  
-  // Render the main game tile grid using only the selected tile indices.
+
+  function updateStartButtonState() {
+    startGameButton.disabled = (selectedTileIndices.length !== desiredTileCount);
+  }
+
+  /* ----------------------------------------------------------------
+     (E) RENDER MAIN GAME (Choices Screen)
+     ---------------------------------------------------------------- */
   function renderGameTiles() {
     tileContainer.innerHTML = "";
     const tilesToDisplay = selectedTileIndices.map(i => mediaChoices[i]);
@@ -132,18 +219,18 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.classList.add('tile');
       tile.setAttribute('data-index', idx);
       tile.style.backgroundImage = `url(${choice.image})`;
-  
+
       const caption = document.createElement('div');
       caption.classList.add('caption');
       caption.textContent = choice.name;
       tile.appendChild(caption);
-  
+
       tileContainer.appendChild(tile);
     });
+
     currentSelectedIndex = 0;
     updateSelection();
-  
-    // If mode is "scan", start the auto-scan interval.
+
     if (mode === "scan") {
       const delay = parseInt(scanDelayInput.value, 10) || 3;
       autoScanInterval = setInterval(() => {
@@ -151,8 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }, delay * 1000);
     }
   }
-  
-  // Update the visual selection on the main game tile grid.
+
   function updateSelection() {
     const tiles = document.querySelectorAll('#tile-container .tile');
     tiles.forEach((tile, index) => {
@@ -162,55 +248,76 @@ document.addEventListener('DOMContentLoaded', () => {
         tile.classList.remove('selected');
       }
     });
-    if (!videoPlaying) {
-      // Cancel any pending preview delay, then start a new delay.
-      if (previewDelayTimeout) {
-        clearTimeout(previewDelayTimeout);
-        previewDelayTimeout = null;
-      }
+    if (!videoPlaying && !preventAutoPreview) {
+      if (previewDelayTimeout) clearTimeout(previewDelayTimeout);
       previewDelayTimeout = setTimeout(() => {
         playPreviewForTile(currentSelectedIndex);
-      }, 1200); // 
+      }, 1200);
     }
   }
-  
-  // Cycle to the next tile, cancel any preview, update selection, and play the cycle sound.
+
   function cycleToNextTile() {
-    // Stop any ongoing preview before cycling.
     stopPreview();
     const tiles = document.querySelectorAll('#tile-container .tile');
-    const total = tiles.length;
-    if (total === 0) return;
-    currentSelectedIndex = (currentSelectedIndex + 1) % total;
+    if (!tiles.length) return;
+    currentSelectedIndex = (currentSelectedIndex + 1) % tiles.length;
     updateSelection();
     playCycleSound();
   }
-  
-  // Play a 10-second audio preview from the video file associated with the selected tile.
+
   function playPreviewForTile(index) {
-    stopPreview(); // Ensure no other preview is running
-    if (selectedTileIndices.length === 0) return;
+    stopPreview();
+    if (!selectedTileIndices.length) return;
     const mediaIndex = selectedTileIndices[index];
     const videoFile = mediaChoices[mediaIndex].video;
     if (videoFile) {
       currentPreview = new Audio(videoFile);
       currentPreview.play().catch(err => console.error("Audio preview error:", err));
-      previewTimeout = setTimeout(() => {
-        stopPreview();
-      }, 10000); // 10-second preview duration
+      previewTimeout = setTimeout(stopPreview, 10000);
     }
   }
-  
-  // Keyboard navigation and selection for the main game grid.
+
+  /* ----------------------------------------------------------------
+     (F) BACKSPACE TO RESET TO CHOICES SCREEN
+     ---------------------------------------------------------------- */
+  function resetToChoicesScreen() {
+    stopPreview();
+    videoPlayer.pause();
+    videoPlayer.currentTime = 0;
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(err => console.warn(err));
+    }
+    if (autoScanInterval) {
+      clearInterval(autoScanInterval);
+      autoScanInterval = null;
+    }
+    if (videoTimeLimitTimeout) {
+      clearTimeout(videoTimeLimitTimeout);
+      videoTimeLimitTimeout = null;
+    }
+    videoPlaying = false;
+    preventAutoPreview = true;
+    setTimeout(() => {
+      preventAutoPreview = false;
+      updateSelection();
+    }, 1200);
+    
+    tileContainer.style.display = 'flex';
+    videoContainer.style.display = 'none';
+  }
+
   document.addEventListener('keydown', (e) => {
+    resetInactivityTimer();
+    if (videoPlaying && e.key === 'Backspace') {
+      e.preventDefault();
+      resetToChoicesScreen();
+      return;
+    }
     if (videoPlaying) return;
-  
     const tiles = document.querySelectorAll('#tile-container .tile');
+    if (!tiles.length) return;
     const total = tiles.length;
-    if (total === 0) return;
-  
     if (mode === "choice" && e.key === "Enter") {
-      // In choice mode, pressing Enter should cycle to next tile and cancel the preview.
       cycleToNextTile();
     } else if (e.key === "ArrowRight") {
       currentSelectedIndex = (currentSelectedIndex + 1) % total;
@@ -232,8 +339,10 @@ document.addEventListener('DOMContentLoaded', () => {
       playVideo(mediaChoices[mediaIndex].video);
     }
   });
-  
-  // Plays the video in fullscreen and disables further input.
+
+  /* ----------------------------------------------------------------
+     (G) PLAY VIDEO (with resume support and time limit enforcement)
+     ---------------------------------------------------------------- */
   function playVideo(videoUrl) {
     stopPreview();
     if (autoScanInterval) {
@@ -241,58 +350,87 @@ document.addEventListener('DOMContentLoaded', () => {
       autoScanInterval = null;
     }
     videoPlaying = true;
+
     tileContainer.style.display = 'none';
     tilePickerModal.style.display = 'none';
     gameOptionsModal.style.display = 'none';
     videoContainer.style.display = 'flex';
-  
+
     videoSource.src = videoUrl;
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
-    videoPlayer.play();
-  
+    videoPlayer.onloadedmetadata = () => {
+      // If resume is enabled and a resume position exists, continue from that time.
+      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+        videoPlayer.currentTime = videoResumePositions[videoUrl];
+      }
+      videoPlayer.play();
+    };
+
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(err => console.error(err));
-    } else if (videoContainer.mozRequestFullScreen) {
-      videoContainer.mozRequestFullScreen();
     } else if (videoContainer.webkitRequestFullscreen) {
       videoContainer.webkitRequestFullscreen();
-    } else if (videoContainer.msRequestFullscreen) {
-      videoContainer.msRequestFullscreen();
+    }
+
+    if (enableTimeLimitCheckbox.checked) {
+      const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
+      if (videoTimeLimitTimeout) {
+        clearTimeout(videoTimeLimitTimeout);
+      }
+      videoTimeLimitTimeout = setTimeout(() => {
+        if (videoPlaying) {
+          // If resume option is enabled, store the current playback position.
+          if (enableResumeVideoCheckbox.checked) {
+            videoResumePositions[videoUrl] = videoPlayer.currentTime;
+          } else {
+            delete videoResumePositions[videoUrl];
+          }
+          videoPlayer.pause();
+          resetToChoicesScreen();
+        }
+      }, limitSeconds * 1000);
     }
   }
-  
-  // When the video ends, exit fullscreen and return to the main game grid.
+
   videoPlayer.addEventListener('ended', () => {
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-    }
-    videoContainer.style.display = 'none';
-    tileContainer.style.display = 'flex';
-    videoPlayer.currentTime = 0;
-    videoPlaying = false;
-    updateSelection();
+    delete videoResumePositions[videoSource.src];
+    resetToChoicesScreen();
   });
-  
-  /* --- EVENT HANDLERS --- */
-  
-  // When "Choose Tiles" is clicked in the first modal (Step 1),
-  // read the desired tile count, update display, and show the Tile Picker Modal (Step 2).
+
+  /* ----------------------------------------------------------------
+     (H) EVENT HANDLERS
+     ---------------------------------------------------------------- */
+  // Step 1: "Choose Tiles" => show tile-picker (and request fullscreen)
   chooseTilesButton.addEventListener('click', () => {
     desiredTileCount = parseInt(tileCountInput.value, 10) || 0;
     tileCountDisplay.textContent = desiredTileCount;
     selectedTileIndices = [];
-    populateTilePickerGrid();
+    updateStartButtonState();
     gameOptionsModal.style.display = 'none';
     tilePickerModal.style.display = 'flex';
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.warn("Fullscreen request failed:", err);
+      });
+    } else if (document.documentElement.webkitRequestFullscreen) {
+      document.documentElement.webkitRequestFullscreen();
+    }
+    currentCategory = "all";
+    categorySelect.value = "all";
+    populateTilePickerGrid();
   });
-  
-  // Enable the "Start Game" button in the tile picker only when the user has selected exactly the required number of tiles.
+
+  // Step 2: "Commencer" => go to main game (choices screen)
   startGameButton.addEventListener('click', () => {
     renderGameTiles();
     tilePickerModal.style.display = 'none';
     tileContainer.style.display = 'flex';
+    startInactivityTimer();
   });
-  
-  // (Optional: Additional code can be added here to toggle scan delay input when mode changes, etc.)
+
+  categorySelect.addEventListener('change', (e) => {
+    currentCategory = e.target.value;
+    populateTilePickerGrid();
+  });
 });
