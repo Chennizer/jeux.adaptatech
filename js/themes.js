@@ -105,32 +105,5 @@ window.themes = {
       startSound: "../../sounds/africaflute.mp3",
       reinforcerSound: "../../sounds/victory.mp3"
     },
-    nature: {
-      images: [
-        "../../images/nature-background1.png",
-        "../../images/nature-background2.png"
-      ],
-      transparentPNGs: [
-        "../../images/nature-leaf.png"
-      ],
-      reinforcerVideos: [
-        "../../videos/nature-reinforcer1.mp4"
-      ],
-      words: [
-        "Tree", "River", "Forest"
-      ],
-      startSound: "../../sounds/nature-start.mp3"
-    },
-    default: {
-      images: [
-        "../../images/toupieetbinou.png"
-      ],
-      transparentPNGs: [],
-      reinforcerVideos: [
-        "../../videos/toupieetbinouecole.mp4"
-      ],
-      words: [],
-      startSound: "../../sounds/default-start.mp3"
-    }
   };
   
