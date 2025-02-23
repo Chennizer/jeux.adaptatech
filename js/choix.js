@@ -24,8 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const timeLimitContainer       = document.getElementById('time-limit-container');
   const timeLimitInput           = document.getElementById('time-limit-seconds');
 
-  // (NEW) Resume Video Option (container and checkbox)  
-  const resumeVideoContainer     = document.getElementById('resume-video-container');  
+  // (NEW) Resume Video Option (container and checkbox)
+  const resumeVideoContainer     = document.getElementById('resume-video-container');
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
 
   // (2) Tile Picker Modal (Step 2)
@@ -73,7 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------------
      (A) INACTIVITY TIMER LOGIC
      ---------------------------------------------------------------- */
-
   function clearInactivityTimer() {
     if (inactivityTimer) {
       clearTimeout(inactivityTimer);
@@ -100,7 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------------
      (B) HELPER FUNCTIONS
      ---------------------------------------------------------------- */
-
   function stopPreview() {
     if (currentPreview) {
       currentPreview.pause();
@@ -123,6 +121,32 @@ document.addEventListener('DOMContentLoaded', () => {
       const cycleSound = new Audio("../../sounds/woosh.mp3");
       cycleSound.play().catch(err => console.error("Cycle sound error:", err));
     }
+  }
+
+  // NEW: Preload videos for the selected tiles.
+  // Accepts an array of video URLs and a loading indicator element to update progress.
+  function preloadVideos(videoUrls, loadingIndicator) {
+    let loadedCount = 0;
+    const totalCount = videoUrls.length;
+    return Promise.all(videoUrls.map(url => {
+      return new Promise((resolve) => {
+        let tempVideo = document.createElement('video');
+        tempVideo.preload = 'auto';
+        tempVideo.src = url;
+        tempVideo.addEventListener('canplaythrough', () => {
+          loadedCount++;
+          loadingIndicator.textContent = `Chargement... (${loadedCount} / ${totalCount})`;
+          console.log("Preloaded video:", url);
+          resolve(url);
+        });
+        tempVideo.addEventListener('error', () => {
+          loadedCount++;
+          loadingIndicator.textContent = `Chargement... (${loadedCount} / ${totalCount})`;
+          console.error("Error preloading video:", url);
+          resolve(url);
+        });
+      });
+    }));
   }
 
   /* ----------------------------------------------------------------
@@ -341,7 +365,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* ----------------------------------------------------------------
-     (G) PLAY VIDEO (with resume support and time limit enforcement)
+     (G) PLAY VIDEO (with resume support, time limit enforcement,
+         and preloading for selected tiles)
      ---------------------------------------------------------------- */
   function playVideo(videoUrl) {
     stopPreview();
@@ -421,12 +446,47 @@ document.addEventListener('DOMContentLoaded', () => {
     populateTilePickerGrid();
   });
 
-  // Step 2: "Commencer" => go to main game (choices screen)
+  // Step 2: "Commencer" => preload selected videos then go to main game (choices screen)
   startGameButton.addEventListener('click', () => {
-    renderGameTiles();
-    tilePickerModal.style.display = 'none';
-    tileContainer.style.display = 'flex';
-    startInactivityTimer();
+    // Create and show a simple loading screen with progress indicator
+    const loadingScreen = document.createElement('div');
+    loadingScreen.id = 'loading-screen';
+    loadingScreen.style.position = 'fixed';
+    loadingScreen.style.top = '0';
+    loadingScreen.style.left = '0';
+    loadingScreen.style.width = '100vw';
+    loadingScreen.style.height = '100vh';
+    loadingScreen.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    loadingScreen.style.display = 'flex';
+    loadingScreen.style.flexDirection = 'column';
+    loadingScreen.style.justifyContent = 'center';
+    loadingScreen.style.alignItems = 'center';
+    loadingScreen.style.color = 'white';
+    loadingScreen.style.fontSize = '24px';
+
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.id = 'loading-indicator';
+    loadingIndicator.textContent = 'Chargement... (0 / 0)';
+    loadingScreen.appendChild(loadingIndicator);
+    document.body.appendChild(loadingScreen);
+
+    // Get video URLs from selected tiles
+    const videoUrls = selectedTileIndices
+      .map(i => mediaChoices[i].video)
+      .filter(url => url);
+    const totalCount = videoUrls.length;
+    loadingIndicator.textContent = `Chargement... (0 / ${totalCount})`;
+
+    // Preload the videos and update progress via the loadingIndicator.
+    preloadVideos(videoUrls, loadingIndicator).then(() => {
+      console.log("Preloading complete for videos:", videoUrls);
+      // Once preloading is complete, remove the loading screen and start the game.
+      document.body.removeChild(loadingScreen);
+      renderGameTiles();
+      tilePickerModal.style.display = 'none';
+      tileContainer.style.display = 'flex';
+      startInactivityTimer();
+    });
   });
 
   categorySelect.addEventListener('change', (e) => {
