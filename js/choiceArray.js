@@ -129,6 +129,30 @@ const mediaChoices = [
     video: "../../videos/macklemore-thriftshop.mp4",
     category: "hip hop"
   },
+  {
+    name: "Sum 41 - Landmines",
+    image: "../../images/sum41.jpg",
+    video: "../../videos/sum41-landmines.mp4",
+    category: "rock"
+  },
+  {
+    name: "Green Day - Basketcase",
+    image: "../../images/greenday-basketcase.jpg",
+    video: "../../videos/greenday-basketcase.mp4",
+    category: "rock"
+  },
+  {
+    name: "Cage The Elephant - Come a little closer",
+    image: "../../images/cagetheelephant-comealittlecloser.jpg",
+    video: "../../videos/cagetheelephant-comealittlecloser.mp4",
+    category: "rock"
+  },
+  {
+    name: "Linkin Park - In the end",
+    image: "../../images/linkinpark.webp",
+    video: "../../videos/linkinpark-intheend.mp4",
+    category: "rock"
+  },
 
 
 
