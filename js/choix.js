@@ -95,9 +95,11 @@ document.addEventListener('DOMContentLoaded', () => {
       startInactivityTimer();
     }
   }
+
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
   });
+
   /* ----------------------------------------------------------------
      (B) HELPER FUNCTIONS
      ---------------------------------------------------------------- */
@@ -468,27 +470,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loading-indicator';
-    loadingIndicator.textContent = 'Chargement... (0 / 0)';
-    loadingScreen.appendChild(loadingIndicator);
-    document.body.appendChild(loadingScreen);
-
     // Get video URLs from selected tiles
     const videoUrls = selectedTileIndices
       .map(i => mediaChoices[i].video)
       .filter(url => url);
     const totalCount = videoUrls.length;
     loadingIndicator.textContent = `Chargement... (0 / ${totalCount})`;
+    loadingScreen.appendChild(loadingIndicator);
+    document.body.appendChild(loadingScreen);
 
-    // Preload the videos and update progress via the loadingIndicator.
-    preloadVideos(videoUrls, loadingIndicator).then(() => {
-      console.log("Preloading complete for videos:", videoUrls);
-      // Once preloading is complete, remove the loading screen and start the game.
-      document.body.removeChild(loadingScreen);
-      renderGameTiles();
-      tilePickerModal.style.display = 'none';
-      tileContainer.style.display = 'flex';
-      startInactivityTimer();
-    });
+    // Yield to the browser so the loading screen renders before preloading begins.
+    setTimeout(() => {
+      preloadVideos(videoUrls, loadingIndicator).then(() => {
+        console.log("Preloading complete for videos:", videoUrls);
+        // Once preloading is complete, remove the loading screen and start the game.
+        document.body.removeChild(loadingScreen);
+        renderGameTiles();
+        tilePickerModal.style.display = 'none';
+        tileContainer.style.display = 'flex';
+        startInactivityTimer();
+      });
+    }, 0);
   });
 
   categorySelect.addEventListener('change', (e) => {
