@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const advancedOptionsButton    = document.getElementById('advanced-options-button');
   const advancedOptionsModal     = document.getElementById('advanced-options-modal');
   const closeAdvancedOptionsBtn  = document.getElementById('close-advanced-options');
-
+  
   // (In advanced modal) "Son de transition"
   const enableCycleSoundCheckbox = document.getElementById('enable-cycle-sound');
 
@@ -95,7 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
       startInactivityTimer();
     }
   }
-
+  tileCountInput.addEventListener('input', () => {
+    document.getElementById('tile-count-value').textContent = tileCountInput.value;
+  });
   /* ----------------------------------------------------------------
      (B) HELPER FUNCTIONS
      ---------------------------------------------------------------- */
