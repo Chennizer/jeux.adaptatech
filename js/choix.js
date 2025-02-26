@@ -198,24 +198,48 @@ document.addEventListener('DOMContentLoaded', () => {
      ---------------------------------------------------------------- */
   function populateTilePickerGrid() {
     tilePickerGrid.innerHTML = "";
+    
+    // Create two containers with flex styling:
+    const inCategoryContainer = document.createElement('div');
+    inCategoryContainer.classList.add('in-category-container');
+    inCategoryContainer.style.display = 'flex';
+    inCategoryContainer.style.flexWrap = 'wrap';
+    inCategoryContainer.style.gap = '10px';
+    
+    const selectedOutContainer = document.createElement('div');
+    selectedOutContainer.classList.add('selected-out-container');
+    selectedOutContainer.style.display = 'flex';
+    selectedOutContainer.style.flexWrap = 'wrap';
+    selectedOutContainer.style.gap = '10px';
+    
     mediaChoices.forEach((choice, index) => {
-      const inCategory = (currentCategory === 'all' || choice.category === currentCategory);
+      let inCategory = false;
+      if (currentCategory === 'all') {
+        inCategory = true;
+      } else if (typeof choice.category === 'string') {
+        inCategory = (choice.category === currentCategory);
+      } else if (Array.isArray(choice.category)) {
+        inCategory = choice.category.includes(currentCategory);
+      }
+      
       const isSelected = selectedTileIndices.includes(index);
+      
+      // Only create a tile if it's in the current category or if it's selected.
       if (inCategory || isSelected) {
         const tileOption = document.createElement('div');
         tileOption.classList.add('tile');
         tileOption.setAttribute('data-index', index);
         tileOption.style.backgroundImage = `url(${choice.image})`;
-
+        
         if (isSelected) {
           tileOption.classList.add('selected');
         }
-
+        
         const caption = document.createElement('div');
         caption.classList.add('caption');
         caption.textContent = choice.name;
         tileOption.appendChild(caption);
-
+        
         tileOption.addEventListener('click', () => {
           resetInactivityTimer();
           if (selectedTileIndices.includes(index)) {
@@ -226,10 +250,28 @@ document.addEventListener('DOMContentLoaded', () => {
           updateStartButtonState();
           populateTilePickerGrid();
         });
-
-        tilePickerGrid.appendChild(tileOption);
+        
+        // Append tileOption to the appropriate container.
+        if (inCategory) {
+          inCategoryContainer.appendChild(tileOption);
+        } else if (isSelected) {
+          selectedOutContainer.appendChild(tileOption);
+        }
       }
     });
+    
+    // Append the two containers to the main grid.
+    tilePickerGrid.appendChild(inCategoryContainer);
+    // If there are selected tiles outside the current category, add a separator and then the container.
+    if (selectedOutContainer.childNodes.length > 0) {
+      const separator = document.createElement('div');
+      separator.style.width = '100%';
+      separator.style.height = '2px';
+      separator.style.backgroundColor = '#ccc';
+      separator.style.margin = '10px 0';
+      tilePickerGrid.appendChild(separator);
+      tilePickerGrid.appendChild(selectedOutContainer);
+    }
   }
 
   function updateStartButtonState() {
@@ -247,18 +289,18 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.classList.add('tile');
       tile.setAttribute('data-index', idx);
       tile.style.backgroundImage = `url(${choice.image})`;
-
+      
       const caption = document.createElement('div');
       caption.classList.add('caption');
       caption.textContent = choice.name;
       tile.appendChild(caption);
-
+      
       tileContainer.appendChild(tile);
     });
-
+    
     currentSelectedIndex = 0;
     updateSelection();
-
+    
     if (mode === "scan") {
       const delay = parseInt(scanDelayInput.value, 10) || 3;
       autoScanInterval = setInterval(() => {
@@ -332,6 +374,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     tileContainer.style.display = 'flex';
     videoContainer.style.display = 'none';
+    
+    // UPDATED: Restart scanning if in scan mode
+    if (mode === "scan") {
+      const delay = parseInt(scanDelayInput.value, 10) || 3;
+      autoScanInterval = setInterval(() => {
+        cycleToNextTile();
+      }, delay * 1000);
+    }
   }
 
   document.addEventListener('keydown', (e) => {
@@ -379,12 +429,12 @@ document.addEventListener('DOMContentLoaded', () => {
       autoScanInterval = null;
     }
     videoPlaying = true;
-
+    
     tileContainer.style.display = 'none';
     tilePickerModal.style.display = 'none';
     gameOptionsModal.style.display = 'none';
     videoContainer.style.display = 'flex';
-
+    
     videoSource.src = videoUrl;
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
@@ -395,13 +445,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       videoPlayer.play();
     };
-
+    
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(err => console.error(err));
     } else if (videoContainer.webkitRequestFullscreen) {
       videoContainer.webkitRequestFullscreen();
     }
-
+    
     if (enableTimeLimitCheckbox.checked) {
       const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
       if (videoTimeLimitTimeout) {
@@ -467,7 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingScreen.style.alignItems = 'center';
     loadingScreen.style.color = 'white';
     loadingScreen.style.fontSize = '24px';
-
+    
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loading-indicator';
     // Get video URLs from selected tiles
@@ -478,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingIndicator.textContent = `Chargement... (0 / ${totalCount})`;
     loadingScreen.appendChild(loadingIndicator);
     document.body.appendChild(loadingScreen);
-
+    
     // Yield to the browser so the loading screen renders before preloading begins.
     setTimeout(() => {
       preloadVideos(videoUrls, loadingIndicator).then(() => {
@@ -492,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }, 0);
   });
-
+  
   categorySelect.addEventListener('change', (e) => {
     currentCategory = e.target.value;
     populateTilePickerGrid();

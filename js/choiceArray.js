@@ -97,7 +97,7 @@ const mediaChoices = [
     name: "TFO - bonjour",
     image: "../../images/tfo-saisons.jpg",
     video: "../../videos/tfo-bonjour.mp4",
-    category: "enfant"
+    category: ["enfant","bonjour"]
   },
   {
     name: "Kendrick Lamar - All the stars",
@@ -152,6 +152,18 @@ const mediaChoices = [
     image: "../../images/linkinpark.webp",
     video: "../../videos/linkinpark-intheend.mp4",
     category: "rock"
+  },
+  {
+    name: "Alain le Lait - Bonjour",
+    image: "../../images/alainlelait-bonjour.jpg",
+    video: "../../videos/alainlelait-bonjour.mp4",
+    category: ["enfant","bonjour"]
+  },
+  {
+    name: "Déménageurs - Bonjour",
+    image: "../../images/demenageurs-bonjour.jpg",
+    video: "../../videos/demenageurs-bonjour.mp4",
+    category: ["enfant","bonjour"]
   },
 
 
