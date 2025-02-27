@@ -165,6 +165,12 @@ const mediaChoices = [
     video: "../../videos/demenageurs-bonjour.mp4",
     category: ["enfant","bonjour"]
   },
+  {
+    name: "All American Rejects - Dirty Little Secret",
+    image: "../../images/allamericanrejects-dirtylittlesecret.jpg",   
+    video: "../../videos/allamericanrejects-dirtylittlesecret.mp4",
+    category: ["rock"]
+  },
 
 
 
