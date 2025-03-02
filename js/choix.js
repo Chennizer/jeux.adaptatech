@@ -1,77 +1,70 @@
 document.addEventListener('DOMContentLoaded', () => {
   /* --- DOM ELEMENTS --- */
-  // (1) Game Options Modal (Step 1)
   const gameOptionsModal    = document.getElementById('game-options');
   const tileCountInput      = document.getElementById('tile-count');
   const chooseTilesButton   = document.getElementById('choose-tiles-button');
+  const tileCountContainer  = document.getElementById('game-options-controls');
 
-  // Mode selection
-  const modeChoiceButton    = document.getElementById('mode-choice-button');
-  const modeScanButton      = document.getElementById('mode-scan-button');
-  const scanDelayContainer  = document.getElementById('scan-delay-container');
-  const scanDelayInput      = document.getElementById('scan-delay');
+  // Mode selection buttons
+  const modeChoiceButton     = document.getElementById('mode-choice-button');
+  const modeScanButton       = document.getElementById('mode-scan-button');
+  const modeThisOrThatButton = document.getElementById('mode-thisOrThat-button');
+  const modeFlashcardButton  = document.getElementById('mode-flashcard-button');
+  const scanDelayContainer   = document.getElementById('scan-delay-container');
+  const scanDelayInput       = document.getElementById('scan-delay');
 
-  // (NEW) Advanced Options
-  const advancedOptionsButton    = document.getElementById('advanced-options-button');
-  const advancedOptionsModal     = document.getElementById('advanced-options-modal');
-  const closeAdvancedOptionsBtn  = document.getElementById('close-advanced-options');
-  
-  // (In advanced modal) "Son de transition"
-  const enableCycleSoundCheckbox = document.getElementById('enable-cycle-sound');
-
-  // (NEW) Time Limit Elements in Advanced Options
-  const enableTimeLimitCheckbox  = document.getElementById('enable-time-limit');
-  const timeLimitContainer       = document.getElementById('time-limit-container');
-  const timeLimitInput           = document.getElementById('time-limit-seconds');
-
-  // (NEW) Resume Video Option (container and checkbox)
-  const resumeVideoContainer     = document.getElementById('resume-video-container');
+  // Advanced Options
+  const advancedOptionsButton   = document.getElementById('advanced-options-button');
+  const advancedOptionsModal    = document.getElementById('advanced-options-modal');
+  const closeAdvancedOptionsBtn = document.getElementById('close-advanced-options');
+  const enableCycleSoundCheckbox= document.getElementById('enable-cycle-sound');
+  const enableTimeLimitCheckbox = document.getElementById('enable-time-limit');
+  const timeLimitContainer      = document.getElementById('time-limit-container');
+  const timeLimitInput          = document.getElementById('time-limit-seconds');
+  const resumeVideoContainer    = document.getElementById('resume-video-container');
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
 
-  // (2) Tile Picker Modal (Step 2)
-  const tilePickerModal     = document.getElementById('tile-picker-modal');
-  const tilePickerGrid      = document.getElementById('tile-picker-grid');
-  const tileCountDisplay    = document.getElementById('tile-count-display');
-  const startGameButton     = document.getElementById('start-game-button');
+  // Tile Picker Modal
+  const tilePickerModal    = document.getElementById('tile-picker-modal');
+  const tilePickerGrid     = document.getElementById('tile-picker-grid');
+  const tileCountDisplay   = document.getElementById('tile-count-display');
+  const startGameButton    = document.getElementById('start-game-button');
+  const categorySelect     = document.getElementById('categorySelect');
 
-  // (NEW) category dropdown for filtering
-  const categorySelect      = document.getElementById('categorySelect');
-
-  // (3) Main Game (Choices Screen)
-  const tileContainer       = document.getElementById('tile-container');
-  const videoContainer      = document.getElementById('video-container');
-  const videoPlayer         = document.getElementById('video-player');
-  const videoSource         = document.getElementById('video-source');
+  // Main Game / Video
+  const tileContainer      = document.getElementById('tile-container');
+  const videoContainer     = document.getElementById('video-container');
+  const videoPlayer        = document.getElementById('video-player');
+  const videoSource        = document.getElementById('video-source');
 
   /* --- GAME VARIABLES --- */
-  // Assumes mediaChoices is defined in choiceArray.js
-  let currentSelectedIndex  = 0;
-  let videoPlaying          = false;
-  let selectedTileIndices   = [];  // which tiles the user has chosen
-  let desiredTileCount      = 0;   // how many tiles user must select
-  let mode                  = "choice";  // "choice" or "scan"
-  let autoScanInterval      = null;      // for scanning
-  let currentPreview        = null;      // audio preview
-  let previewTimeout        = null;      // stops preview after 10s
-  let previewDelayTimeout   = null;      // small delay before starting preview
+  let mode                 = "choice"; // "choice", "scan", "thisOrThat", "flashcard"
+  let desiredTileCount     = 0;
+  let selectedTileIndices  = [];
+  let currentSelectedIndex = 0;
 
-  // category for the tile picker single-grid
-  let currentCategory       = "all";
+  let videoPlaying         = false;
   
-  // NEW: Flag to prevent auto-preview when returning from video
-  let preventAutoPreview    = false;
+  // Scanning (for "scan" mode)
+  let autoScanInterval     = null;
+  let scanningActive       = false;
+  
+  // Flashcard auto-advance (for "flashcard" mode)
+  let flashcardTimer       = null;
+  let flashcardActive      = false;
 
-  // NEW: Inactivity timer to replay preview after 30s
-  let inactivityTimer       = null;
+  // Preview audio
+  let currentPreview       = null;
+  let previewTimeout       = null;
+  let previewDelayTimeout  = null;
 
-  // NEW: Timeout to enforce video time limit
-  let videoTimeLimitTimeout = null;
-
-  // NEW: Object to store resume positions for videos (keyed by video URL)
+  let preventAutoPreview   = false;
+  let inactivityTimer      = null;
+  let videoTimeLimitTimeout= null;
   let videoResumePositions = {};
 
   /* ----------------------------------------------------------------
-     (A) INACTIVITY TIMER LOGIC
+     (A) INACTIVITY TIMER
      ---------------------------------------------------------------- */
   function clearInactivityTimer() {
     if (inactivityTimer) {
@@ -79,23 +72,17 @@ document.addEventListener('DOMContentLoaded', () => {
       inactivityTimer = null;
     }
   }
-
   function startInactivityTimer() {
     clearInactivityTimer();
     inactivityTimer = setTimeout(() => {
       if (!videoPlaying && !preventAutoPreview) {
-        console.log('No user input for 30s — replaying preview...');
         playPreviewForTile(currentSelectedIndex);
       }
     }, 30000);
   }
-
   function resetInactivityTimer() {
-    if (!videoPlaying) {
-      startInactivityTimer();
-    }
+    if (!videoPlaying) startInactivityTimer();
   }
-
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
   });
@@ -119,33 +106,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     startInactivityTimer();
   }
-
   function playCycleSound() {
     if (enableCycleSoundCheckbox.checked) {
       const cycleSound = new Audio("../../sounds/woosh.mp3");
       cycleSound.play().catch(err => console.error("Cycle sound error:", err));
     }
   }
-
-  // NEW: Preload videos for the selected tiles.
-  // Accepts an array of video URLs and a loading indicator element to update progress.
   function preloadVideos(videoUrls, loadingIndicator) {
     let loadedCount = 0;
     const totalCount = videoUrls.length;
     return Promise.all(videoUrls.map(url => {
       return new Promise((resolve) => {
-        let tempVideo = document.createElement('video');
-        tempVideo.preload = 'auto';
-        tempVideo.src = url;
-        tempVideo.addEventListener('canplaythrough', () => {
+        const tempVid = document.createElement('video');
+        tempVid.preload = 'auto';
+        tempVid.src = url;
+        tempVid.addEventListener('canplaythrough', () => {
           loadedCount++;
-          loadingIndicator.textContent = `Chargement... (${loadedCount} / ${totalCount})`;
-          console.log("Preloaded video:", url);
+          loadingIndicator.textContent = `Chargement... (${loadedCount}/${totalCount})`;
           resolve(url);
         });
-        tempVideo.addEventListener('error', () => {
+        tempVid.addEventListener('error', () => {
           loadedCount++;
-          loadingIndicator.textContent = `Chargement... (${loadedCount} / ${totalCount})`;
+          loadingIndicator.textContent = `Chargement... (${loadedCount}/${totalCount})`;
           console.error("Error preloading video:", url);
           resolve(url);
         });
@@ -154,38 +136,105 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ----------------------------------------------------------------
-     (C) MODE BUTTON EVENT HANDLERS
+     (B.1) PAUSE / RESUME GAME ACTIVITY
+     ---------------------------------------------------------------- */
+  function pauseGameActivity() {
+    stopPreview();
+    if (autoScanInterval) {
+      clearInterval(autoScanInterval);
+      autoScanInterval = null;
+      scanningActive = true;
+    } else {
+      scanningActive = false;
+    }
+    if (flashcardTimer) {
+      clearTimeout(flashcardTimer);
+      flashcardTimer = null;
+      flashcardActive = true;
+    } else {
+      flashcardActive = false;
+    }
+    videoPlaying = true;
+  }
+  function resumeGameActivity() {
+    videoPlaying = false;
+    if (scanningActive && mode === "scan") {
+      scanningActive = false;
+      const delay = parseInt(scanDelayInput.value, 10) || 3;
+      autoScanInterval = setInterval(() => {
+        cycleToNextTile();
+      }, delay * 1000);
+    }
+    if (flashcardActive && mode === "flashcard") {
+      flashcardActive = false;
+      startFlashcardTimer();
+    }
+    resetInactivityTimer();
+  }
+
+  /* ----------------------------------------------------------------
+     (C) MODE BUTTON HANDLERS
      ---------------------------------------------------------------- */
   modeChoiceButton.addEventListener('click', () => {
     mode = "choice";
     modeChoiceButton.classList.add('selected');
     modeScanButton.classList.remove('selected');
+    modeThisOrThatButton.classList.remove('selected');
+    modeFlashcardButton.classList.remove('selected');
+    tileCountInput.disabled = false;
+    tileCountContainer.style.display = 'flex';
     scanDelayContainer.style.display = 'none';
+    document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
   });
-
   modeScanButton.addEventListener('click', () => {
     mode = "scan";
     modeScanButton.classList.add('selected');
     modeChoiceButton.classList.remove('selected');
+    modeThisOrThatButton.classList.remove('selected');
+    modeFlashcardButton.classList.remove('selected');
+    tileCountInput.disabled = false;
+    tileCountContainer.style.display = 'flex';
     scanDelayContainer.style.display = 'block';
+    document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
+  });
+  modeThisOrThatButton.addEventListener('click', () => {
+    mode = "thisOrThat";
+    modeThisOrThatButton.classList.add('selected');
+    modeChoiceButton.classList.remove('selected');
+    modeScanButton.classList.remove('selected');
+    modeFlashcardButton.classList.remove('selected');
+    tileCountInput.value = 2;
+    tileCountInput.disabled = true;
+    tileCountContainer.style.display = 'none';
+    scanDelayContainer.style.display = 'none';
+    document.body.classList.add('this-or-that-mode');
+    document.body.classList.remove('flashcard-mode');
+  });
+  modeFlashcardButton.addEventListener('click', () => {
+    mode = "flashcard";
+    modeFlashcardButton.classList.add('selected');
+    modeChoiceButton.classList.remove('selected');
+    modeScanButton.classList.remove('selected');
+    modeThisOrThatButton.classList.remove('selected');
+    tileCountInput.disabled = false;
+    tileCountContainer.style.display = 'flex';
+    scanDelayContainer.style.display = 'block';
+    document.body.classList.add('flashcard-mode');
+    document.body.classList.remove('this-or-that-mode');
   });
 
   /* ----------------------------------------------------------------
-     ADVANCED OPTIONS MODAL: Show/Hide & Time Limit / Resume Toggle
+     (D) ADVANCED OPTIONS
      ---------------------------------------------------------------- */
   advancedOptionsButton.addEventListener('click', () => {
     advancedOptionsModal.style.display = 'flex';
   });
-
   closeAdvancedOptionsBtn.addEventListener('click', () => {
     advancedOptionsModal.style.display = 'none';
   });
-
-  // Toggle time limit input display when checkbox is changed
   enableTimeLimitCheckbox.addEventListener('change', () => {
     if (enableTimeLimitCheckbox.checked) {
       timeLimitContainer.style.display = 'block';
-      // Also show the resume option container when time limit is enabled
       resumeVideoContainer.style.display = 'block';
     } else {
       timeLimitContainer.style.display = 'none';
@@ -194,25 +243,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* ----------------------------------------------------------------
-     (D) POPULATE TILE PICKER (Single-Grid with Category + Selection)
+     (E) TILE PICKER
      ---------------------------------------------------------------- */
   function populateTilePickerGrid() {
     tilePickerGrid.innerHTML = "";
-    
-    // Create two containers with flex styling:
     const inCategoryContainer = document.createElement('div');
-    inCategoryContainer.classList.add('in-category-container');
     inCategoryContainer.style.display = 'flex';
     inCategoryContainer.style.flexWrap = 'wrap';
     inCategoryContainer.style.gap = '10px';
-    
     const selectedOutContainer = document.createElement('div');
-    selectedOutContainer.classList.add('selected-out-container');
     selectedOutContainer.style.display = 'flex';
     selectedOutContainer.style.flexWrap = 'wrap';
     selectedOutContainer.style.gap = '10px';
-    
-    mediaChoices.forEach((choice, index) => {
+    mediaChoices.forEach((choice, idx) => {
       let inCategory = false;
       if (currentCategory === 'all') {
         inCategory = true;
@@ -221,48 +264,32 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (Array.isArray(choice.category)) {
         inCategory = choice.category.includes(currentCategory);
       }
-      
-      const isSelected = selectedTileIndices.includes(index);
-      
-      // Only create a tile if it's in the current category or if it's selected.
+      const isSelected = selectedTileIndices.includes(idx);
       if (inCategory || isSelected) {
         const tileOption = document.createElement('div');
         tileOption.classList.add('tile');
-        tileOption.setAttribute('data-index', index);
+        tileOption.setAttribute('data-index', idx);
         tileOption.style.backgroundImage = `url(${choice.image})`;
-        
-        if (isSelected) {
-          tileOption.classList.add('selected');
-        }
-        
+        if (isSelected) tileOption.classList.add('selected');
         const caption = document.createElement('div');
         caption.classList.add('caption');
         caption.textContent = choice.name;
         tileOption.appendChild(caption);
-        
         tileOption.addEventListener('click', () => {
           resetInactivityTimer();
-          if (selectedTileIndices.includes(index)) {
-            selectedTileIndices = selectedTileIndices.filter(i => i !== index);
+          if (selectedTileIndices.includes(idx)) {
+            selectedTileIndices = selectedTileIndices.filter(i => i !== idx);
           } else if (selectedTileIndices.length < desiredTileCount) {
-            selectedTileIndices.push(index);
+            selectedTileIndices.push(idx);
           }
           updateStartButtonState();
           populateTilePickerGrid();
         });
-        
-        // Append tileOption to the appropriate container.
-        if (inCategory) {
-          inCategoryContainer.appendChild(tileOption);
-        } else if (isSelected) {
-          selectedOutContainer.appendChild(tileOption);
-        }
+        if (inCategory) inCategoryContainer.appendChild(tileOption);
+        else if (isSelected) selectedOutContainer.appendChild(tileOption);
       }
     });
-    
-    // Append the two containers to the main grid.
     tilePickerGrid.appendChild(inCategoryContainer);
-    // If there are selected tiles outside the current category, add a separator and then the container.
     if (selectedOutContainer.childNodes.length > 0) {
       const separator = document.createElement('div');
       separator.style.width = '100%';
@@ -279,44 +306,86 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ----------------------------------------------------------------
-     (E) RENDER MAIN GAME (Choices Screen)
+     (F) FLASHCARD MODE FUNCTIONS
+     ---------------------------------------------------------------- */
+  function renderFlashcard() {
+    tileContainer.innerHTML = "";
+    const mediaIndex = selectedTileIndices[currentSelectedIndex];
+    const choice = mediaChoices[mediaIndex];
+    const tile = document.createElement('div');
+    tile.classList.add('tile');
+    tile.style.backgroundImage = `url(${choice.image})`;
+    const caption = document.createElement('div');
+    caption.classList.add('caption');
+    caption.textContent = choice.name;
+    tile.appendChild(caption);
+    tileContainer.appendChild(tile);
+    tileContainer.style.display = 'flex';
+    // Play preview only if not in thisOrThat mode
+    playPreviewForTile(currentSelectedIndex);
+  }
+  function clearFlashcardTimer() {
+    if (flashcardTimer) {
+      clearTimeout(flashcardTimer);
+      flashcardTimer = null;
+    }
+  }
+  function startFlashcardTimer() {
+    clearFlashcardTimer();
+    const delay = parseInt(scanDelayInput.value, 10) || 10;
+    flashcardTimer = setTimeout(() => {
+      currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
+      renderFlashcard();
+      startFlashcardTimer();
+    }, delay * 1000);
+    flashcardActive = true;
+  }
+
+  /* ----------------------------------------------------------------
+     (G) RENDER MAIN GAME
      ---------------------------------------------------------------- */
   function renderGameTiles() {
-    tileContainer.innerHTML = "";
-    const tilesToDisplay = selectedTileIndices.map(i => mediaChoices[i]);
-    tilesToDisplay.forEach((choice, idx) => {
-      const tile = document.createElement('div');
-      tile.classList.add('tile');
-      tile.setAttribute('data-index', idx);
-      tile.style.backgroundImage = `url(${choice.image})`;
-      
-      const caption = document.createElement('div');
-      caption.classList.add('caption');
-      caption.textContent = choice.name;
-      tile.appendChild(caption);
-      
-      tileContainer.appendChild(tile);
-    });
-    
-    currentSelectedIndex = 0;
-    updateSelection();
-    
-    if (mode === "scan") {
-      const delay = parseInt(scanDelayInput.value, 10) || 3;
-      autoScanInterval = setInterval(() => {
-        cycleToNextTile();
-      }, delay * 1000);
+    if (mode === "flashcard") {
+      renderFlashcard();
+      startFlashcardTimer();
+    } else {
+      tileContainer.innerHTML = "";
+      const tilesToDisplay = selectedTileIndices.map(i => mediaChoices[i]);
+      tilesToDisplay.forEach((choice, idx) => {
+        const tile = document.createElement('div');
+        tile.classList.add('tile');
+        tile.setAttribute('data-index', idx);
+        tile.style.backgroundImage = `url(${choice.image})`;
+        const caption = document.createElement('div');
+        caption.classList.add('caption');
+        caption.textContent = choice.name;
+        tile.appendChild(caption);
+        if (mode === "thisOrThat") {
+          if (idx === 0) tile.classList.add('selected-left');
+          else if (idx === 1) tile.classList.add('selected-right');
+        }
+        tileContainer.appendChild(tile);
+      });
+      tileContainer.style.display = 'flex';
+      currentSelectedIndex = 0;
+      if (mode !== "thisOrThat") updateSelection();
+      if (mode === "scan") {
+        scanningActive = true;
+        const delay = parseInt(scanDelayInput.value, 10) || 3;
+        autoScanInterval = setInterval(() => {
+          cycleToNextTile();
+        }, delay * 1000);
+      }
     }
   }
 
+  // For non-flashcard modes.
   function updateSelection() {
+    if (mode === "thisOrThat" || mode === "flashcard") return;
     const tiles = document.querySelectorAll('#tile-container .tile');
-    tiles.forEach((tile, index) => {
-      if (index === currentSelectedIndex) {
-        tile.classList.add('selected');
-      } else {
-        tile.classList.remove('selected');
-      }
+    tiles.forEach((tile, idx) => {
+      if (idx === currentSelectedIndex) tile.classList.add('selected');
+      else tile.classList.remove('selected');
     });
     if (!videoPlaying && !preventAutoPreview) {
       if (previewDelayTimeout) clearTimeout(previewDelayTimeout);
@@ -335,20 +404,22 @@ document.addEventListener('DOMContentLoaded', () => {
     playCycleSound();
   }
 
-  function playPreviewForTile(index) {
+  function playPreviewForTile(idx) {
+    // In "thisOrThat" mode, no preview should be played.
+    if (mode === "thisOrThat") return;
     stopPreview();
     if (!selectedTileIndices.length) return;
-    const mediaIndex = selectedTileIndices[index];
+    const mediaIndex = selectedTileIndices[idx];
     const videoFile = mediaChoices[mediaIndex].video;
     if (videoFile) {
       currentPreview = new Audio(videoFile);
-      currentPreview.play().catch(err => console.error("Audio preview error:", err));
+      currentPreview.play().catch(err => console.error("Preview error:", err));
       previewTimeout = setTimeout(stopPreview, 10000);
     }
   }
 
   /* ----------------------------------------------------------------
-     (F) BACKSPACE TO RESET TO CHOICES SCREEN
+     (H) RESET TO CHOICES SCREEN
      ---------------------------------------------------------------- */
   function resetToChoicesScreen() {
     stopPreview();
@@ -361,6 +432,9 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(autoScanInterval);
       autoScanInterval = null;
     }
+    scanningActive = false;
+    clearFlashcardTimer();
+    flashcardActive = false;
     if (videoTimeLimitTimeout) {
       clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = null;
@@ -371,19 +445,20 @@ document.addEventListener('DOMContentLoaded', () => {
       preventAutoPreview = false;
       updateSelection();
     }, 1200);
-    
     tileContainer.style.display = 'flex';
     videoContainer.style.display = 'none';
-    
-    // UPDATED: Restart scanning if in scan mode
     if (mode === "scan") {
       const delay = parseInt(scanDelayInput.value, 10) || 3;
       autoScanInterval = setInterval(() => {
         cycleToNextTile();
       }, delay * 1000);
+      scanningActive = true;
     }
   }
 
+  /* ----------------------------------------------------------------
+     (I) KEYDOWN HANDLER
+     ---------------------------------------------------------------- */
   document.addEventListener('keydown', (e) => {
     resetInactivityTimer();
     if (videoPlaying && e.key === 'Backspace') {
@@ -392,6 +467,29 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (videoPlaying) return;
+    // In flashcard mode, space plays video without preview
+    if (mode === "flashcard" && e.key === " ") {
+      e.preventDefault();
+      clearFlashcardTimer();
+      flashcardActive = false;
+      const mediaIndex = selectedTileIndices[currentSelectedIndex];
+      playVideo(mediaChoices[mediaIndex].video);
+      return;
+    }
+    // This or That mode
+    if (mode === "thisOrThat" && selectedTileIndices.length === 2) {
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        const mediaIndex = selectedTileIndices[0];
+        playVideo(mediaChoices[mediaIndex].video);
+        return;
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const mediaIndex = selectedTileIndices[1];
+        playVideo(mediaChoices[mediaIndex].video);
+        return;
+      }
+    }
     const tiles = document.querySelectorAll('#tile-container .tile');
     if (!tiles.length) return;
     const total = tiles.length;
@@ -404,14 +502,14 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSelectedIndex = (currentSelectedIndex - 1 + total) % total;
       updateSelection();
     } else if (e.key === "ArrowUp") {
-      const columns = Math.floor(Math.sqrt(total)) || 1;
-      currentSelectedIndex = (currentSelectedIndex - columns + total) % total;
+      const cols = Math.floor(Math.sqrt(total)) || 1;
+      currentSelectedIndex = (currentSelectedIndex - cols + total) % total;
       updateSelection();
     } else if (e.key === "ArrowDown") {
-      const columns = Math.floor(Math.sqrt(total)) || 1;
-      currentSelectedIndex = (currentSelectedIndex + columns) % total;
+      const cols = Math.floor(Math.sqrt(total)) || 1;
+      currentSelectedIndex = (currentSelectedIndex + cols) % total;
       updateSelection();
-    } else if (e.key === " ") {
+    } else if (e.key === " " && mode !== "flashcard") {
       e.preventDefault();
       const mediaIndex = selectedTileIndices[currentSelectedIndex];
       playVideo(mediaChoices[mediaIndex].video);
@@ -419,47 +517,33 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* ----------------------------------------------------------------
-     (G) PLAY VIDEO (with resume support, time limit enforcement,
-         and preloading for selected tiles)
+     (J) PLAY VIDEO
      ---------------------------------------------------------------- */
   function playVideo(videoUrl) {
-    stopPreview();
-    if (autoScanInterval) {
-      clearInterval(autoScanInterval);
-      autoScanInterval = null;
-    }
-    videoPlaying = true;
-    
+    pauseGameActivity();
     tileContainer.style.display = 'none';
     tilePickerModal.style.display = 'none';
     gameOptionsModal.style.display = 'none';
     videoContainer.style.display = 'flex';
-    
     videoSource.src = videoUrl;
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
     videoPlayer.onloadedmetadata = () => {
-      // If resume is enabled and a resume position exists, continue from that time.
       if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
         videoPlayer.currentTime = videoResumePositions[videoUrl];
       }
       videoPlayer.play();
     };
-    
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(err => console.error(err));
     } else if (videoContainer.webkitRequestFullscreen) {
       videoContainer.webkitRequestFullscreen();
     }
-    
     if (enableTimeLimitCheckbox.checked) {
       const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
-      if (videoTimeLimitTimeout) {
-        clearTimeout(videoTimeLimitTimeout);
-      }
+      if (videoTimeLimitTimeout) clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
-          // If resume option is enabled, store the current playback position.
           if (enableResumeVideoCheckbox.checked) {
             videoResumePositions[videoUrl] = videoPlayer.currentTime;
           } else {
@@ -474,24 +558,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   videoPlayer.addEventListener('ended', () => {
     delete videoResumePositions[videoSource.src];
-    resetToChoicesScreen();
+    videoPlaying = false;
+    videoContainer.style.display = 'none';
+    if (mode === "flashcard") {
+      currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
+      renderFlashcard();
+      startFlashcardTimer();
+    }
+    resumeGameActivity();
+    tileContainer.style.display = 'flex';
   });
 
   /* ----------------------------------------------------------------
-     (H) EVENT HANDLERS
+     (K) TILE PICKER & START GAME
      ---------------------------------------------------------------- */
-  // Step 1: "Choose Tiles" => show tile-picker (and request fullscreen)
   chooseTilesButton.addEventListener('click', () => {
-    desiredTileCount = parseInt(tileCountInput.value, 10) || 0;
+    if (mode === "thisOrThat") {
+      desiredTileCount = 2;
+    } else {
+      desiredTileCount = parseInt(tileCountInput.value, 10) || 0;
+    }
     tileCountDisplay.textContent = desiredTileCount;
     selectedTileIndices = [];
     updateStartButtonState();
     gameOptionsModal.style.display = 'none';
     tilePickerModal.style.display = 'flex';
     if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.warn("Fullscreen request failed:", err);
-      });
+      document.documentElement.requestFullscreen().catch(err => console.warn(err));
     } else if (document.documentElement.webkitRequestFullscreen) {
       document.documentElement.webkitRequestFullscreen();
     }
@@ -500,9 +593,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populateTilePickerGrid();
   });
 
-  // Step 2: "Commencer" => preload selected videos then go to main game (choices screen)
   startGameButton.addEventListener('click', () => {
-    // Create and show a simple loading screen with progress indicator
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';
     loadingScreen.style.position = 'fixed';
@@ -510,39 +601,38 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingScreen.style.left = '0';
     loadingScreen.style.width = '100vw';
     loadingScreen.style.height = '100vh';
-    loadingScreen.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    loadingScreen.style.backgroundColor = 'rgba(0,0,0,0.8)';
     loadingScreen.style.display = 'flex';
     loadingScreen.style.flexDirection = 'column';
     loadingScreen.style.justifyContent = 'center';
     loadingScreen.style.alignItems = 'center';
     loadingScreen.style.color = 'white';
     loadingScreen.style.fontSize = '24px';
-    
+
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loading-indicator';
-    // Get video URLs from selected tiles
-    const videoUrls = selectedTileIndices
-      .map(i => mediaChoices[i].video)
-      .filter(url => url);
+    const videoUrls = selectedTileIndices.map(i => mediaChoices[i].video).filter(url => url);
     const totalCount = videoUrls.length;
     loadingIndicator.textContent = `Chargement... (0 / ${totalCount})`;
     loadingScreen.appendChild(loadingIndicator);
     document.body.appendChild(loadingScreen);
-    
-    // Yield to the browser so the loading screen renders before preloading begins.
+
     setTimeout(() => {
       preloadVideos(videoUrls, loadingIndicator).then(() => {
-        console.log("Preloading complete for videos:", videoUrls);
-        // Once preloading is complete, remove the loading screen and start the game.
         document.body.removeChild(loadingScreen);
-        renderGameTiles();
+        if (mode === "flashcard") {
+          renderFlashcard();
+          startFlashcardTimer();
+        } else {
+          renderGameTiles();
+        }
         tilePickerModal.style.display = 'none';
         tileContainer.style.display = 'flex';
         startInactivityTimer();
       });
     }, 0);
   });
-  
+
   categorySelect.addEventListener('change', (e) => {
     currentCategory = e.target.value;
     populateTilePickerGrid();
