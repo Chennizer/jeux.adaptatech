@@ -93,11 +93,11 @@ window.themes = {
         "../../images/cartoontiger.png",
       ],
       reinforcerVideos: [
-        "../../videos/afrique1.mp4",
-        "../../videos/afrique2.mp4",
-        "../../videos/afrique3.mp4",
-        "../../videos/afrique4.mp4",
-        "../../videos/afrique5.mp4",
+        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique1.mp4",
+        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique2.mp4",
+        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique3.mp4",
+        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique4.mp4",
+        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique5.mp4",
       ],
       words: [
         "Éléphant", "Giraffe", "Gorille", "Lion", "Rhinocéros", "Tigre"
