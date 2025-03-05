@@ -191,6 +191,15 @@
     #fullscreen-btn:hover {
       background: rgba(0, 0, 0, 0.9);
     }
+    /* Explosion counter in bottom right */
+    #startCounter {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      color: white;
+      font-size: 16px;
+      z-index: 1001;
+    }
   </style>
 </head>
 <body>
@@ -209,7 +218,6 @@
   <!-- Settings Menu -->
   <div id="menu">
     <h2>Options</h2>
-
     <h3>Graphiques</h3>
     <label>
       Taille <span id="sizeValue">100</span>
@@ -236,7 +244,6 @@
       Effet de sillage
       <input type="checkbox" id="trailToggle">
     </label>
-
     <h3>Musique et son</h3>
     <label>
       Désactiver la musique
@@ -256,8 +263,11 @@
     </label>
   </div>
 
+  <!-- Explosion counter -->
+  <div id="startCounter">0</div>
+
   <script>
-    // Variables
+    // Global Variables
     let shapes = [];
     let particles = [];
     let bgMusic;
@@ -269,20 +279,21 @@
     let starSpeed = 1;
     let starColorOption = 'cold';
     let isMuted = false;
-    let isSFXMuted = false; // New variable for SFX mute
+    let isSFXMuted = false;
     let musicVolume = 0.5;
     let starSoundVolume = 1.0;
-    let showTrail = false; // New variable for trail effect
+    let showTrail = false;
     let currentSongIndex = 0;
     let songList = ['../../songs/space/space1.mp3', '../../songs/space/space1.mp3', '../../songs/space/space1.mp3','../../songs/space/spacegood1.mp3','../../songs/space/spacegood2.mp3','../../songs/space/spacegood3.mp3','../../songs/space/spacebest1.mp3','../../songs/space/spacebest2.mp3','../../songs/space/spacebest3.mp3','../../songs/space/spacebest4.mp3'];
     let bgMusicFiles = [];
     let starSoundList = ['../../sounds/space/twinklingstar1.mp3', '../../sounds/space/twinklingstar2.mp3', '../../sounds/space/twinklingstar3.mp3'];
     let starSounds = [];
+    let explosionCount = 0; // Count of star explosions
 
     // Function to shuffle an array
     function shuffleArray(array) {
       for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1)); // Use Math.floor and Math.random
+        const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
       }
     }
@@ -301,45 +312,37 @@
       }
     }
 
-    // Star class for starfield (Moved before setup)
+    // Star class for starfield
     class Star {
       constructor() {
         this.reset();
       }
-
       reset() {
         this.x = random(-width, width);
         this.y = random(-height, height);
         this.z = random(width);
         this.pz = this.z;
       }
-
       update() {
-        this.z -= 2; // Slower movement
+        this.z -= 2;
         if (this.z < 1) {
           this.reset();
           this.z = width;
           this.pz = this.z;
         }
       }
-
       display() {
         fill(255);
         noStroke();
-
         let sx = map(this.x / this.z, 0, 1, 0, width / 2);
         let sy = map(this.y / this.z, 0, 1, 0, height / 2);
-
         let r = map(this.z, 0, width, 8, 0);
-
         ellipse(sx + width / 2, sy + height / 2, r, r);
       }
     }
 
     function setup() {
       createCanvas(windowWidth, windowHeight);
-
-      // Hide canvas until the experience starts
       select('canvas').style('display', 'none');
 
       // Generate starfield
@@ -347,11 +350,8 @@
         starfield.push(new Star());
       }
 
-      // Get the start button element
+      // Get DOM elements
       const startButton = document.getElementById('startButton');
-      startButton.addEventListener('click', startExperience);
-
-      // Settings menu elements
       const menu = document.getElementById('menu');
       const settingsIcon = document.getElementById('settings-icon');
       const fullscreenBtn = document.getElementById('fullscreen-btn');
@@ -366,80 +366,74 @@
       const muteToggle = document.getElementById('muteToggle');
       const musicVolumeSlider = document.getElementById('musicVolumeSlider');
       const musicVolumeValue = document.getElementById('musicVolumeValue');
-      const muteSFXToggle = document.getElementById('muteSFXToggle'); // New mute SFX toggle
+      const muteSFXToggle = document.getElementById('muteSFXToggle');
       const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
       const starSoundVolumeValue = document.getElementById('starSoundVolumeValue');
-      const trailToggle = document.getElementById('trailToggle'); // New trail toggle
+      const trailToggle = document.getElementById('trailToggle');
 
-      // Settings icon toggle
-      settingsIcon.addEventListener('click', () => {
+      // Start experience when "Commencer" is activated (using pointerup for mobile)
+      startButton.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        startExperience();
+      });
+
+      // Settings icon using pointer events
+      settingsIcon.addEventListener('pointerup', (e) => {
+        e.preventDefault();
         menu.classList.toggle('show');
       });
 
-      // Fullscreen button
-      fullscreenBtn.addEventListener('click', toggleFullscreen);
+      // Fullscreen button using pointer events
+      fullscreenBtn.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        toggleFullscreen();
+      });
 
-      // Star size slider
+      // Slider event listeners
       sizeSlider.addEventListener('input', () => {
         starSize = parseInt(sizeSlider.value);
         sizeValue.textContent = sizeSlider.value;
         updateStars();
       });
-
-      // Number of stars slider
       numberSlider.addEventListener('input', () => {
         numberOfStars = parseInt(numberSlider.value);
         numberValue.textContent = numberSlider.value;
         updateStars();
       });
-
-      // Star speed slider
       speedSlider.addEventListener('input', () => {
         starSpeed = parseFloat(speedSlider.value);
         speedValue.textContent = speedSlider.value;
         updateStars();
       });
-
-      // Color selector
       colorSelector.addEventListener('change', () => {
         starColorOption = colorSelector.value;
         updateStars();
       });
-
-      // Trail toggle
       trailToggle.addEventListener('change', () => {
         showTrail = trailToggle.checked;
       });
-
-      // Mute toggle
       muteToggle.addEventListener('change', () => {
         isMuted = muteToggle.checked;
         if (bgMusic) {
           bgMusic.setVolume(isMuted ? 0 : musicVolume);
         }
       });
-
-      // Music volume slider
       musicVolumeSlider.addEventListener('input', () => {
-        musicVolume = parseInt(musicVolumeSlider.value) / 100; // Convert to 0.0 - 1.0
+        musicVolume = parseInt(musicVolumeSlider.value) / 100;
         musicVolumeValue.textContent = musicVolumeSlider.value;
         if (bgMusic && !isMuted) {
           bgMusic.setVolume(musicVolume);
         }
       });
-
-      // Mute SFX toggle
       muteSFXToggle.addEventListener('change', () => {
         isSFXMuted = muteSFXToggle.checked;
       });
-
-      // Star sound volume slider
       starSoundVolumeSlider.addEventListener('input', () => {
-        starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100; // Convert to 0.0 - 1.0
+        starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100;
         starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
       });
 
-      // Keydown event for fullscreen toggle
+      // Keydown event for fullscreen toggle using 'f'
       document.addEventListener('keydown', (event) => {
         if (event.key === 'f' || event.key === 'F') {
           toggleFullscreen();
@@ -454,6 +448,9 @@
 
       // Show the canvas
       select('canvas').style('display', 'block');
+
+      // Automatically request fullscreen
+      toggleFullscreen();
 
       // Start background music
       playNextSong();
@@ -502,7 +499,6 @@
 
     function draw() {
       if (!started) {
-        // Display initial screen before starting
         background(0);
         fill(255);
         textSize(18);
@@ -510,27 +506,19 @@
         text('Click "Start" to begin the experience.', width / 2, height / 2);
         return;
       }
-
-      // Background for trail effect
       if (showTrail) {
-        background(0, 50); // Semi-transparent background for trail
+        background(0, 50);
       } else {
-        background(0); // Solid background
+        background(0);
       }
-
-      // Draw starfield
       for (let star of starfield) {
         star.update();
         star.display();
       }
-
-      // Update and display shapes (stars)
       for (let shape of shapes) {
         shape.update();
         shape.display();
       }
-
-      // Update and display particles
       for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update();
         particles[i].display();
@@ -538,58 +526,45 @@
           particles.splice(i, 1);
         }
       }
-
       displayInstructions();
     }
 
-    // Resize canvas when window is resized
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
     }
 
-    // FloatingStar class
     class FloatingStar {
       constructor() {
         this.reset();
       }
-
       reset() {
-        // Star properties
         this.x = random(width);
         this.y = random(height);
         this.vx = random(-1, 1) * starSpeed;
         this.vy = random(-1, 1) * starSpeed;
-        this.size = starSize; // Use the starSize variable
+        this.size = starSize;
         this.baseSize = this.size;
-        this.color = this.getRandomColor(250); // Color based on selection
+        this.color = this.getRandomColor(250);
         this.isPlaying = false;
-        this.alpha = 0; // For fade-in and fade-out
+        this.alpha = 0;
         this.fadeIn = true;
         this.fadeOut = false;
       }
-
       update() {
-        // Move star
         this.x += this.vx;
         this.y += this.vy;
-
-        // Wrap around edges
         if (this.x > width + this.size) this.x = -this.size;
         if (this.x < -this.size) this.x = width + this.size;
         if (this.y > height + this.size) this.y = -this.size;
         if (this.y < -this.size) this.y = height + this.size;
-
-        // Handle fading
         if (this.fadeOut) {
-          // If fading out, decrease alpha
           this.alpha -= 5;
           if (this.alpha <= 0) {
             this.alpha = 0;
             this.fadeOut = false;
-            this.reset(); // Reset the star
+            this.reset();
           }
         } else if (this.fadeIn) {
-          // If fading in, increase alpha
           this.alpha += 5;
           if (this.alpha >= 255) {
             this.alpha = 255;
@@ -597,30 +572,23 @@
           }
         }
       }
-
       display() {
         noStroke();
         this.color.setAlpha(this.alpha);
         fill(this.color);
-
-        // Add glow effect if interacting
         if (this.isPlaying) {
           drawingContext.shadowBlur = 30;
           drawingContext.shadowColor = 'white';
         } else {
           drawingContext.shadowBlur = 0;
         }
-
-        // Draw the star
         push();
         translate(this.x, this.y);
         rotate(frameCount / 100);
-        this.drawStarShape(this.size / 2, 5, 0.5); // 5 points
+        this.drawStarShape(this.size / 2, 5, 0.5);
         pop();
-
-        drawingContext.shadowBlur = 0; // Reset shadow
+        drawingContext.shadowBlur = 0;
       }
-
       drawStarShape(radius1, npoints, inset) {
         beginShape();
         for (let i = 0; i < npoints * 2; i++) {
@@ -630,24 +598,22 @@
         }
         endShape(CLOSE);
       }
-
-      // Generate color based on selection
       getRandomColor(alpha = 255) {
         let hue, saturation, brightness;
         colorMode(HSB, 360, 100, 100, 255);
         switch (starColorOption) {
           case 'cold':
-            hue = random(160, 260); // Blues and purples
+            hue = random(160, 260);
             saturation = random(50, 100);
             brightness = random(70, 100);
             break;
           case 'hot':
-            hue = random(0, 60); // Reds and oranges
+            hue = random(0, 60);
             saturation = random(50, 100);
             brightness = random(70, 100);
             break;
           case 'yellow':
-            hue = random(50, 60); // Yellow
+            hue = random(50, 60);
             saturation = random(80, 100);
             brightness = random(80, 100);
             break;
@@ -665,24 +631,21 @@
         colorMode(RGB, 255, 255, 255, 255);
         return col;
       }
-
-      // Modified isMouseOver() to accept coordinates
       isMouseOver(x, y) {
         return collidePointCircle(x, y, this.x, this.y, this.size);
       }
-
-      // Play sound effect, emit particles, and start fade-out animation
       playNote() {
         if (!this.isPlaying) {
           this.isPlaying = true;
-
-          // Stop fade-in if it's still happening
+          // Increment explosion count each time a star explodes
+          explosionCount++;
+          const counterEl = document.getElementById('startCounter');
+          if (counterEl) {
+            counterEl.textContent = explosionCount;
+          }
+          // Stop fade-in if still happening, then start fade-out
           this.fadeIn = false;
-
-          // Start fade-out animation
           this.fadeOut = true;
-
-          // Play sound effect if not muted
           if (!isSFXMuted) {
             let soundEffect = random(starSounds);
             if (soundEffect && soundEffect.isLoaded()) {
@@ -692,49 +655,39 @@
               console.error('Sound effect not loaded');
             }
           }
-
-          // Emit particles
           for (let i = 0; i < 100; i++) {
             particles.push(new Particle(this.x, this.y));
           }
         }
       }
-
-      // Reset the star instead of removing it
-      removeStar() {
-        this.reset();
-      }
     }
 
-    // Particle class
     class Particle {
       constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.vx = random(-5, 5); // Faster particles
-        this.vy = random(-5, 5); // Faster particles
-        this.life = 300; // Longer lifespan
+        this.vx = random(-5, 5);
+        this.vy = random(-5, 5);
+        this.life = 300;
         this.size = random(5, 15);
-        this.color = this.getRandomColor(200); // Random color with alpha
+        this.color = this.getRandomColor(200);
       }
-
-      // Generate color based on star color option
       getRandomColor(alpha = 255) {
         let hue, saturation, brightness;
         colorMode(HSB, 360, 100, 100, 255);
         switch (starColorOption) {
           case 'cold':
-            hue = random(160, 260); // Blues and purples
+            hue = random(160, 260);
             saturation = random(50, 100);
             brightness = random(70, 100);
             break;
           case 'hot':
-            hue = random(0, 60); // Reds and oranges
+            hue = random(0, 60);
             saturation = random(50, 100);
             brightness = random(70, 100);
             break;
           case 'yellow':
-            hue = random(50, 60); // Yellow
+            hue = random(50, 60);
             saturation = random(80, 100);
             brightness = random(80, 100);
             break;
@@ -752,47 +705,40 @@
         colorMode(RGB, 255, 255, 255, 255);
         return col;
       }
-
       update() {
         this.x += this.vx;
         this.y += this.vy;
         this.life -= 2;
       }
-
       display() {
         noStroke();
-        this.color.setAlpha(map(this.life, 0, 300, 0, 255)); // Fade out particles
+        this.color.setAlpha(map(this.life, 0, 300, 0, 255));
         fill(this.color);
         ellipse(this.x, this.y, this.size);
       }
-
       isDead() {
         return this.life <= 0;
       }
     }
 
-    // Handle mouse pressed
     function mousePressed() {
       if (!started) return;
       handleInteraction(mouseX, mouseY);
     }
 
-    // Handle touch started
     function touchStarted() {
       if (!started) return;
       for (let touch of touches) {
         handleInteraction(touch.x, touch.y);
       }
-      // Prevent default behavior
       return false;
     }
 
-    // Function to handle both mouse and touch interactions
     function handleInteraction(x, y) {
       for (let i = shapes.length - 1; i >= 0; i--) {
         if (shapes[i].isMouseOver(x, y)) {
           shapes[i].playNote();
-          break; // Stop after the first matching star
+          break;
         }
       }
     }
