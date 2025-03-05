@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Chemin animé avec réglages avancés</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap" />
+  <style>
+    /* Global reset and full-screen canvas styling */
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Roboto', sans-serif;
+    }
+    #canvas {
+      display: block;
+      background: #000;
+    }
+    /* Prompt overlay styles */
+    #promptOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 10;
+      color: #fff;
+      text-align: center;
+    }
+    #promptOverlay p {
+      font-size: 20px;
+      margin: 0 20px;
+    }
+    /* Start button styling */
+    #startButton {
+      padding: 20px 40px;
+      font-size: 24px;
+      cursor: pointer;
+      background-color: #0077be;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      margin-top: 20px;
+    }
+    #startButton:hover {
+      background-color: #0088cc;
+    }
+    /* Fullscreen button styling */
+    #fullscreen-btn {
+      position: fixed;
+      top: 10px;
+      right: 140px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 1001;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    #fullscreen-btn:hover {
+      background: rgba(0,0,0,0.9);
+    }
+    /* Reset button styling – text wraps on two lines */
+    #reset-btn {
+      position: fixed;
+      top: 10px;
+      right: 60px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 1001;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+      text-align: center;
+      white-space: normal;
+    }
+    #reset-btn:hover {
+      background: rgba(0,0,0,0.9);
+    }
+    /* Settings icon and menu styles */
+    #settings-icon {
+      position: fixed;
+      top: 4px;
+      right: 10px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #fff;
+      cursor: pointer;
+      z-index: 1001;
+      background-color: rgba(0,0,0,0.7);
+      transition: transform 0.3s ease, background-color 0.3s ease;
+    }
+    #settings-icon:hover {
+      transform: rotate(90deg);
+      background-color: rgba(0,0,0,0.9);
+    }
+    #menu {
+      position: fixed;
+      top: 60px;
+      right: -300px;
+      width: 270px;
+      background: rgba(0,0,0,0.85);
+      padding: 10px 15px;
+      border-radius: 5px;
+      z-index: 1000;
+      transition: right 0.3s ease, opacity 0.3s ease;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      opacity: 0;
+      color: #fff;
+      overflow-y: auto;
+      max-height: calc(100vh - 80px);
+    }
+    #menu.show {
+      right: 10px;
+      opacity: 1;
+    }
+    #menu h2 {
+      font-size: 20px;
+      text-align: center;
+      margin: 10px 0;
+      color: #00bfff;
+      font-weight: 500;
+    }
+    #menu label {
+      display: flex;
+      flex-direction: column;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    #menu label:hover {
+      color: #00bfff;
+    }
+    #menu input[type="range"],
+    #menu select,
+    #menu input[type="color"],
+    #menu input[type="text"],
+    #menu input[type="checkbox"] {
+      margin-top: 5px;
+    }
+    /* Additional shape options */
+    #shapeOptions div {
+      display: none;
+      flex-direction: column;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    #shapeOptions div.active {
+      display: flex;
+    }
+    /* For checkbox labels, align items horizontally */
+    #menu label.checkbox-label {
+      flex-direction: row;
+      align-items: center;
+    }
+    #menu label.checkbox-label input[type="checkbox"] {
+      margin-left: 5px;
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <!-- Prompt overlay -->
+  <div id="promptOverlay">
+    <p>Veuillez dessiner un chemin en cliquant et en glissant sur l'écran.</p>
+    <button id="startButton">Commencer</button>
+  </div>
+
+  <!-- Fullscreen Button -->
+  <button id="fullscreen-btn">Plein écran</button>
+  
+  <!-- Reset Button (text wrapped on two lines) -->
+  <button id="reset-btn">Réinitialiser<br>le tracé</button>
+
+  <!-- Settings Icon -->
+  <div id="settings-icon">⚙️</div>
+  
+  <!-- Settings Menu -->
+  <div id="menu">
+    <h2>Paramètres</h2>
+    <label>
+      Vitesse: <span id="speedValue">5</span>
+      <input type="range" id="speedSlider" min="0" max="50" value="5">
+    </label>
+    <label>
+      Taille: <span id="sizeValue">100</span>
+      <input type="range" id="sizeSlider" min="0" max="400" value="100">
+    </label>
+    <label>
+      Forme:
+      <select id="shapeSelector">
+        <option value="circle">Cercle</option>
+        <option value="square">Carré</option>
+        <option value="triangle">Triangle</option>
+        <option value="polygon">Polygone</option>
+        <option value="star">Étoile</option>
+        <option value="character">Caractère</option>
+        <option value="emoji">Emoji</option>
+        <option value="image">Image</option>
+      </select>
+    </label>
+    <!-- Extra shape options container -->
+    <div id="shapeOptions">
+      <div id="characterOption">
+        <label>Caractère:</label>
+        <input type="text" id="characterInput" maxlength="10" value="A">
+      </div>
+      <div id="emojiOption">
+        <label>Emoji:</label>
+        <select id="emojiSelector">
+          <option value="😀">😀</option>
+          <option value="🍂">🍂</option>
+          <option value="🔥">🔥</option>
+          <option value="🌟">🌟</option>
+          <option value="❤️">❤️</option>
+          <option value="🎉">🎉</option>
+          <option value="💩">💩</option>
+          <option value="🚀">🚀</option>
+          <option value="🍀">🍀</option>
+          <option value="🌈">🌈</option>
+          <option value="🍕">🍕</option>
+          <option value="🎃">🎃</option>
+          <option value="❄️">❄️</option>
+          <option value="☀️">☀️</option>
+          <option value="💎">💎</option>
+          <option value="⚽">⚽</option>
+          <option value="🎁">🎁</option>
+          <option value="🌹">🌹</option>
+          <option value="🌍">🌍</option>
+          <option value="🎵">🎵</option>
+          <option value="🧡">🧡</option>
+          <option value="😊">😊</option>
+          <option value="😎">😎</option>
+          <option value="🐱">🐱</option>
+          <option value="🐶">🐶</option>
+          <option value="🍓">🍓</option>
+          <option value="🍔">🍔</option>
+          <option value="🎲">🎲</option>
+          <option value="🛸">🛸</option>
+          <option value="🦄">🦄</option>
+          <option value="⚡">⚡</option>
+          <option value="💡">💡</option>
+        </select>
+      </div>
+      <div id="imageOption">
+        <label>Image:</label>
+        <input type="file" id="imageUploader" accept="image/*" style="display: none;">
+        <label for="imageUploader" id="imageUploadLabel" style="cursor: pointer; padding: 5px; background: #00bfff; border-radius: 4px; text-align: center;">Choisir une image</label>
+        <span id="fileName" style="font-size: 12px; color: #bbb; margin-top: 5px;">Aucun fichier choisi</span>
+      </div>
+    </div>
+    <!-- Dropdown for path animation mode -->
+    <label>
+      Mode d'animation du tracé:
+      <select id="pathModeSelector">
+        <option value="loop">Boucle (pause 5s)</option>
+        <option value="pingpong">Aller‑retour (pause 2s)</option>
+      </select>
+    </label>
+    <!-- Pause time input (in seconds) -->
+    <label>
+      Temps de pause (s):
+      <input type="number" id="pauseTimeInput" value="5" min="0" step="0.5">
+    </label>
+    <label>
+      Couleur:
+      <input type="color" id="colorPicker" value="#ffffff">
+    </label>
+    <label>
+      Couleur d'arrière-plan:
+      <input type="color" id="backgroundColorPicker" value="#000000">
+    </label>
+    <label class="checkbox-label">
+      Couleur aléatoire:
+      <input type="checkbox" id="randomColorToggle">
+    </label>
+    <label class="checkbox-label">
+      Effet de sillage:
+      <input type="checkbox" id="trailToggle">
+    </label>
+    <label class="checkbox-label">
+      Garder la forme visible:
+      <input type="checkbox" id="stayVisibleToggle" checked>
+    </label>
+  </div>
+
+  <script>
+    // --- Canvas, Fullscreen & Basic Setup ---
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Prompt and settings elements
+    const promptOverlay = document.getElementById("promptOverlay");
+    const startButton = document.getElementById("startButton");
+    const settingsIcon = document.getElementById("settings-icon");
+    const menu = document.getElementById("menu");
+    const fullscreenBtn = document.getElementById("fullscreen-btn");
+    const resetBtn = document.getElementById("reset-btn");
+    const backgroundColorPicker = document.getElementById("backgroundColorPicker");
+
+    // Settings elements
+    const speedSlider = document.getElementById("speedSlider");
+    const speedValue = document.getElementById("speedValue");
+    const shapeSelector = document.getElementById("shapeSelector");
+    const colorPicker = document.getElementById("colorPicker");
+    const sizeSlider = document.getElementById("sizeSlider");
+    const sizeValue = document.getElementById("sizeValue");
+    const shapeOptions = document.getElementById("shapeOptions");
+    const characterOption = document.getElementById("characterOption");
+    const characterInput = document.getElementById("characterInput");
+    const emojiOption = document.getElementById("emojiOption");
+    const emojiSelector = document.getElementById("emojiSelector");
+    const imageOption = document.getElementById("imageOption");
+    const imageUploader = document.getElementById("imageUploader");
+    const fileNameDisplay = document.getElementById("fileName");
+    const randomColorToggle = document.getElementById("randomColorToggle");
+    const trailToggle = document.getElementById("trailToggle");
+    const pathModeSelector = document.getElementById("pathModeSelector");
+    const pauseTimeInput = document.getElementById("pauseTimeInput");
+    const stayVisibleToggle = document.getElementById("stayVisibleToggle");
+
+    // --- Global Variables ---
+    let path = [];
+    let drawing = false;
+    let animationStarted = false;
+    let pausing = false; // flag to indicate pause state
+    let particlePos = { x: 0, y: 0 };
+    let currentPathIndex = 0;
+    let speed = parseInt(speedSlider.value, 10);
+    let shape = shapeSelector.value;
+    let particleColor = colorPicker.value;
+    let particleRadius = parseInt(sizeSlider.value, 10);
+    let characterValue = characterInput.value || "A";
+    let emojiValue = emojiSelector.value || "😀";
+    let uploadedImage = null;
+    let randomColor = false;
+    let trail = false;
+    let backgroundColor = backgroundColorPicker.value;
+    
+    // New variables for path animation mode:
+    let pathMode = "loop"; // "loop" or "pingpong"
+    let direction = 1;     // for pingpong mode
+    let pauseTime = parseFloat(pauseTimeInput.value) || 5; // seconds
+    let stayVisible = stayVisibleToggle.checked;
+
+    // Animation frame IDs for cancellation.
+    let particleAnimationId = null;
+    let pathAnimationId = null;
+
+    // --- Helper: Convert hex color to RGBA string ---
+    function hexToRGBA(hex, alpha) {
+      hex = hex.replace('#', '');
+      if (hex.length === 3) {
+        hex = hex.split('').map(c => c + c).join('');
+      }
+      const bigint = parseInt(hex, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    // --- Custom Shape Helpers ---
+    function drawPolygon(x, y, sides, radius) {
+      if (sides < 3) return;
+      const angle = (Math.PI * 2) / sides;
+      ctx.beginPath();
+      for (let i = 0; i < sides; i++) {
+        const currX = x + radius * Math.cos(i * angle - Math.PI / 2);
+        const currY = y + radius * Math.sin(i * angle - Math.PI / 2);
+        if (i === 0) ctx.moveTo(currX, currY);
+        else ctx.lineTo(currX, currY);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    function drawStar(x, y, points, outerRadius, innerRadius) {
+      const angle = Math.PI / points;
+      ctx.beginPath();
+      for (let i = 0; i < 2 * points; i++) {
+        const r = (i % 2 === 0) ? outerRadius : innerRadius;
+        const currX = x + r * Math.cos(i * angle - Math.PI / 2);
+        const currY = y + r * Math.sin(i * angle - Math.PI / 2);
+        if (i === 0) ctx.moveTo(currX, currY);
+        else ctx.lineTo(currX, currY);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    // --- End Custom Shape Helpers ---
+
+    // --- Extra Shape Options Visibility ---
+    function updateShapeOptions() {
+      const value = shapeSelector.value;
+      characterOption.classList.toggle("active", value === "character");
+      emojiOption.classList.toggle("active", value === "emoji");
+      imageOption.classList.toggle("active", value === "image");
+      const options = shapeOptions.children;
+      for (let option of options) {
+        option.classList.toggle("active", option.id === value + "Option");
+      }
+      // If "image" is selected, automatically trigger the file input.
+      if (value === "image") {
+        imageUploader.click();
+      }
+    }
+    // --- End Extra Shape Options ---
+
+    // --- Draw the Path Line ---
+    function drawPathLine() {
+      if (path.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "#fff";
+      ctx.shadowBlur = Math.abs(Math.sin(Date.now() / 200)) * 10;
+      ctx.beginPath();
+      ctx.moveTo(path[0].x, path[0].y);
+      for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(path[i].x, path[i].y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    // --- End Draw the Path Line ---
+
+    // --- Path Drawing Animation (while drawing) ---
+    function animatePathDrawing() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawPathLine();
+      if (drawing) {
+        pathAnimationId = requestAnimationFrame(animatePathDrawing);
+      }
+    }
+    // --- End Path Drawing Animation ---
+
+    // --- Path Drawing Event Handlers ---
+    function startPath(e) {
+      if (animationStarted) return;
+      drawing = true;
+      path = [];
+      path.push({ x: e.clientX, y: e.clientY });
+      animatePathDrawing();
+    }
+    function recordPath(e) {
+      if (!drawing || animationStarted) return;
+      path.push({ x: e.clientX, y: e.clientY });
+    }
+    function endPath(e) {
+      if (!drawing || animationStarted) return;
+      drawing = false;
+      cancelAnimationFrame(pathAnimationId);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (path.length > 1) {
+        if (randomColor) {
+          particleColor = getRandomColor();
+          colorPicker.value = particleColor;
+        }
+        animationStarted = true;
+        particlePos = { ...path[0] };
+        currentPathIndex = 0;
+        animateParticle();
+      }
+    }
+    // --- End Path Drawing Event Handlers ---
+
+    // --- Main Particle Animation ---
+    function animateParticle() {
+      // Read updated pauseTime and stayVisible values.
+      pauseTime = parseFloat(pauseTimeInput.value) || 5;
+      stayVisible = stayVisibleToggle.checked;
+      
+      // Clear canvas unless we are pausing and want to keep the shape visible.
+      if (!pausing || !stayVisible) {
+        if (trail) {
+          ctx.fillStyle = hexToRGBA(backgroundColor, 0.1);
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.fillStyle = backgroundColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+      
+      if (pathMode === "loop") {
+        let lastIndex = path.length - 1;
+        if (currentPathIndex === lastIndex) {
+          pausing = true;
+          // Draw the final particle if staying visible.
+          if (stayVisible) drawParticle(particlePos.x, particlePos.y);
+          setTimeout(() => {
+            pausing = false;
+            particlePos = { ...path[0] };
+            currentPathIndex = 0;
+            requestAnimationFrame(animateParticle);
+          }, pauseTime * 1000);
+          return;
+        }
+        let target = path[currentPathIndex + 1];
+        const dx = target.x - particlePos.x;
+        const dy = target.y - particlePos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < speed) {
+          particlePos = { ...target };
+          currentPathIndex++;
+        } else {
+          particlePos.x += (dx / distance) * speed;
+          particlePos.y += (dy / distance) * speed;
+        }
+      } else if (pathMode === "pingpong") {
+        let nextIndex = currentPathIndex + direction;
+        if (nextIndex < 0 || nextIndex >= path.length) {
+          pausing = true;
+          if (stayVisible) drawParticle(particlePos.x, particlePos.y);
+          setTimeout(() => {
+            pausing = false;
+            direction = -direction;
+            requestAnimationFrame(animateParticle);
+          }, pauseTime * 1000);
+          return;
+        }
+        let target = path[nextIndex];
+        const dx = target.x - particlePos.x;
+        const dy = target.y - particlePos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < speed) {
+          particlePos = { ...target };
+          currentPathIndex = nextIndex;
+        } else {
+          particlePos.x += (dx / distance) * speed;
+          particlePos.y += (dy / distance) * speed;
+        }
+      }
+      
+      drawParticle(particlePos.x, particlePos.y);
+      particleAnimationId = requestAnimationFrame(animateParticle);
+    }
+    // --- End Main Particle Animation ---
+
+    // --- Draw the Main Particle Based on Settings ---
+    function drawParticle(x, y) {
+      ctx.fillStyle = particleColor;
+      ctx.beginPath();
+      switch (shape) {
+        case "circle":
+          ctx.arc(x, y, particleRadius, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        case "square":
+          ctx.fillRect(x - particleRadius, y - particleRadius, particleRadius * 2, particleRadius * 2);
+          break;
+        case "triangle":
+          ctx.moveTo(x, y - particleRadius);
+          ctx.lineTo(x - particleRadius, y + particleRadius);
+          ctx.lineTo(x + particleRadius, y + particleRadius);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        case "polygon":
+          drawPolygon(x, y, 6, particleRadius);
+          break;
+        case "star":
+          drawStar(x, y, 5, particleRadius, particleRadius / 2);
+          break;
+        case "character":
+          ctx.font = `${particleRadius * 2}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(characterValue, x, y);
+          break;
+        case "emoji":
+          ctx.font = `${particleRadius * 2}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(emojiValue, x, y);
+          break;
+        case "image":
+          if (uploadedImage) {
+            ctx.drawImage(uploadedImage, x - particleRadius, y - particleRadius, particleRadius * 2, particleRadius * 2);
+          } else {
+            ctx.arc(x, y, particleRadius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        default:
+          ctx.arc(x, y, particleRadius, 0, Math.PI * 2);
+          ctx.fill();
+      }
+    }
+    // --- End Draw the Main Particle ---
+
+    // --- Fullscreen Functions ---
+    function requestFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch((err) => {
+          console.error(`Erreur en activant le plein écran: ${err.message} (${err.name})`);
+        });
+      }
+    }
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) requestFullscreen();
+      else document.exitFullscreen();
+    }
+    fullscreenBtn.addEventListener("click", toggleFullscreen);
+    // --- End Fullscreen Functions ---
+
+    // --- Reset Button Functionality ---
+    resetBtn.addEventListener("click", () => {
+      if (particleAnimationId) cancelAnimationFrame(particleAnimationId);
+      if (pathAnimationId) cancelAnimationFrame(pathAnimationId);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      path = [];
+      drawing = false;
+      animationStarted = false;
+      // Remain in drawing state.
+    });
+    // --- End Reset Button Functionality ---
+
+    // --- Event Listeners for Drawing (Mouse & Touch) ---
+    startButton.addEventListener("click", () => {
+      promptOverlay.style.display = "none";
+      requestFullscreen();
+      canvas.addEventListener("mousedown", startPath);
+      canvas.addEventListener("mousemove", recordPath);
+      canvas.addEventListener("mouseup", endPath);
+      // Touch support:
+      canvas.addEventListener("touchstart", (e) => startPath(e.touches[0]));
+      canvas.addEventListener("touchmove", (e) => recordPath(e.touches[0]));
+      canvas.addEventListener("touchend", (e) => endPath(e.changedTouches[0]));
+    });
+    // --- End Event Listeners for Drawing ---
+
+    // --- Toggle Settings Menu ---
+    settingsIcon.addEventListener("click", () => {
+      menu.classList.toggle("show");
+    });
+    // --- End Toggle Settings Menu ---
+
+    // --- Update Settings on Input Changes ---
+    speedSlider.addEventListener("input", () => {
+      speed = parseInt(speedSlider.value, 10);
+      speedValue.textContent = speedSlider.value;
+    });
+    shapeSelector.addEventListener("change", () => {
+      shape = shapeSelector.value;
+      updateShapeOptions();
+    });
+    colorPicker.addEventListener("input", () => {
+      particleColor = colorPicker.value;
+    });
+    sizeSlider.addEventListener("input", () => {
+      particleRadius = parseInt(sizeSlider.value, 10);
+      sizeValue.textContent = sizeSlider.value;
+    });
+    characterInput.addEventListener("input", () => {
+      characterValue = characterInput.value || "A";
+    });
+    emojiSelector.addEventListener("change", () => {
+      emojiValue = emojiSelector.value;
+    });
+    imageUploader.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        fileNameDisplay.textContent = file.name;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => { uploadedImage = img; };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        setTimeout(() => { imageUploader.value = ""; }, 100);
+      } else {
+        fileNameDisplay.textContent = "Aucun fichier choisi";
+      }
+    });
+    randomColorToggle.addEventListener("change", () => {
+      randomColor = randomColorToggle.checked;
+      if (randomColor) {
+        particleColor = getRandomColor();
+        colorPicker.value = particleColor;
+      }
+    });
+    trailToggle.addEventListener("change", () => {
+      trail = trailToggle.checked;
+    });
+    backgroundColorPicker.addEventListener("input", () => {
+      backgroundColor = backgroundColorPicker.value;
+    });
+    pathModeSelector.addEventListener("change", () => {
+      pathMode = pathModeSelector.value;
+      if (pathMode === "pingpong") {
+        direction = 1;
+      }
+    });
+    pauseTimeInput.addEventListener("input", () => {
+      pauseTime = parseFloat(pauseTimeInput.value) || 5;
+    });
+    stayVisibleToggle.addEventListener("change", () => {
+      stayVisible = stayVisibleToggle.checked;
+    });
+    // --- End Update Settings ---
+
+    // --- Adjust Canvas on Resize ---
+    window.addEventListener("resize", () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+    // --- End Adjust Canvas ---
+
+    updateShapeOptions();
+  </script>
+</body>
+</html>
