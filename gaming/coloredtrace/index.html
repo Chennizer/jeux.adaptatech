@@ -2,309 +2,215 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Shape Mode Auto-Draw Explosion</title>
-  <!-- p5.js and p5.sound libraries -->
+  <title>Tracé automatique</title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
-  <!-- Import external jingles file (it creates window.jingleLibraryArray) -->
   <script src="../../js/jingles.js"></script>
-  <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-      font-family: 'Roboto', sans-serif;
-    }
-    canvas {
-      display: block;
-    }
-    /* Prompt overlay styles */
-    #promptOverlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.85);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 10;
-      color: #fff;
-      text-align: center;
-    }
-    #promptOverlay p {
-      font-size: 20px;
-      margin: 0 20px 20px;
-    }
-    #startButton {
-      padding: 20px 40px;
-      font-size: 24px;
-      cursor: pointer;
-      background-color: #0077be;
-      border: none;
-      border-radius: 10px;
-      color: white;
-    }
-    #startButton:hover {
-      background-color: #0088cc;
-    }
-  </style>
 </head>
 <body>
-  <!-- Prompt overlay with instructions and "Commencer" button -->
   <div id="promptOverlay">
+    <button id="infoButton" title="More info">ⓘ</button>
     <p>
-      Appuyer et relâche une switch pour activer une animation et de la musique<br>
     </p>
     <button id="startButton">Commencer</button>
   </div>
   
-<script>
-  /* ===============================
-     GLOBAL VARIABLES
-     =============================== */
-  let started = false;          // Game starts when user clicks "Commencer"
-  let canvas;
+  <div id="infoModal">
+    <p>Compétence: appuyer et maintenir<br> SENICT switch skills niveau 2 <br>Switch Progression Roadmap niveau 11 à 13</p>
+    <button id="closeModal">Fermer</button>
+  </div>
   
-  // Music
-  let musicFiles = [];          // Loaded from external jingles.js
-  let currentMusic = null;      // The current looping jingle
-  
-  // Manual fade-out variables (duration extended to 1000ms)
-  let releaseTime = null;       // Timestamp (ms) when SPACE is released
-  const fadeDuration = 1000;    // Fade-out duration in milliseconds
-  
-  // Auto-draw (Shape Mode) variables
-  let shapeDrawing = false;     // True while SPACE is held
-  let autoStroke = [];          // Array of points for the auto-drawn path
-  let currentPoint = {};        // Current simulated "mouse" position
-  
-  // Persistent velocity for smoother, longer lines
-  let velocity = { x: 0, y: 0 };
-  
-  // Explosion particles (used for autoStroke explosion)
-  let explosionParticles = [];
-  
-  /* ===============================
-     PRELOAD & SETUP
-     =============================== */
-  function preload() {
-    // Load music files from window.jingleLibraryArray
-    if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
-      for (let item of window.jingleLibraryArray) {
-        musicFiles.push(loadSound(item.src));
-      }
-    } else {
-      console.error("Jingle library not found!");
-    }
-  }
-  
-  function setup() {
-    canvas = createCanvas(windowWidth, windowHeight);
-    canvas.position(0, 0);
-    // Start auto-draw from the center of the canvas
-    currentPoint = { x: width / 2, y: height / 2 };
-  }
-  
-  /* ===============================
-     DRAW LOOP
-     =============================== */
-  function draw() {
-    background(255);
-    if (!started) return;
+  <script>
+    let started = false;
+    let canvas;
+    let musicFiles = [];
+    let currentMusic = null;
+    let releaseTime = null;
+    const fadeDuration = 1000;
+    let shapeDrawing = false;
+    let autoStroke = [];
+    let currentPoint = {};
+    let velocity = { x: 0, y: 0 };
+    let explosionParticles = [];
+    let traceWidth = 20;
     
-    // Fade-out process for music with non-linear volume decrease
-    if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
-      let elapsed = millis() - releaseTime;
-      // Use a squared factor for a more "deflating" sound fade
-      let volFactor = pow(1 - (elapsed / fadeDuration), 2);
-      let newVol = constrain(volFactor, 0, 1);
-      currentMusic.setVolume(newVol);
-      if (elapsed >= fadeDuration) {
-        currentMusic.stop();
-        releaseTime = null;
-      }
-    }
-    
-    // If SPACE is held, simulate auto-drawing with persistent velocity:
-    if (shapeDrawing) {
-      // Update the velocity every frame with a slight random adjustment
-      velocity.x += random(-0.2, 0.2);
-      velocity.y += random(-0.2, 0.2);
-      
-      // Calculate new point with a multiplier for longer lines (7 here)
-      let newX = currentPoint.x + velocity.x * 5;
-      let newY = currentPoint.y + velocity.y * 5;
-      
-      // If hitting canvas boundaries, reflect velocity
-      if (newX <= 0 || newX >= width) {
-        velocity.x = -velocity.x;
-      }
-      if (newY <= 0 || newY >= height) {
-        velocity.y = -velocity.y;
-      }
-      
-      // Constrain new coordinates inside the canvas
-      newX = constrain(newX, 0, width);
-      newY = constrain(newY, 0, height);
-      
-      currentPoint = { x: newX, y: newY };
-      autoStroke.push({ x: newX, y: newY });
-    }
-    
-    // Draw the auto-drawn stroke if available
-    if (autoStroke.length > 1) {
-      drawAutoStroke();
-    }
-    
-    // Draw explosion particles (if in explosion state)
-    updateAndDrawParticles();
-  }
-  
-  /* ===============================
-     AUTO-DRAW STROKE DRAWING
-     =============================== */
-  function drawAutoStroke() {
-    colorMode(HSB, 360, 100, 100, 255);
-    drawingContext.shadowBlur = 10;
-    let hueOffset = 200;
-    for (let i = 1; i < autoStroke.length; i++) {
-      let hueVal = (hueOffset + map(i, 0, autoStroke.length, 0, 360)) % 360;
-      let segColor = color(hueVal, 80, 100, 255);
-      stroke(segColor);
-      strokeWeight(20); // Increased thickness
-      line(autoStroke[i - 1].x, autoStroke[i - 1].y, autoStroke[i].x, autoStroke[i].y);
-      drawingContext.shadowColor = segColor.toString();
-    }
-    drawingContext.shadowBlur = 0;
-    colorMode(RGB, 255);
-  }
-  
-  /* ===============================
-     EXPLOSION PARTICLES
-     =============================== */
-  function updateAndDrawParticles() {
-    for (let i = explosionParticles.length - 1; i >= 0; i--) {
-      explosionParticles[i].update();
-      explosionParticles[i].display();
-      if (explosionParticles[i].isDead()) {
-        explosionParticles.splice(i, 1);
-      }
-    }
-  }
-  
-  /* ===============================
-     EVENT HANDLING - KEYBOARD (SPACE BAR)
-     =============================== */
-  function keyPressed() {
-    if (!started) return;
-    if (key === " " && !shapeDrawing) {
-      shapeDrawing = true;
-      // Cancel any fade-out in progress
-      if (releaseTime !== null) {
-        if (currentMusic && currentMusic.isPlaying()) {
-          currentMusic.stop();
+    function preload() {
+      if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
+        for (let item of window.jingleLibraryArray) {
+          musicFiles.push(loadSound(item.src));
         }
-        releaseTime = null;
+      } else {
+        console.error("Jingle library not found!");
       }
-      // Reset autoStroke, reinitialize position and velocity
-      autoStroke = [];
+    }
+    
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.position(0, 0);
       currentPoint = { x: width / 2, y: height / 2 };
-      velocity = { x: random(-2, 2), y: random(-2, 2) };
-      // Choose a random jingle, set its volume to 1, and loop it
-      currentMusic = random(musicFiles);
-      if (currentMusic && currentMusic.isLoaded()) {
-        currentMusic.setVolume(1);
-        currentMusic.loop();
-      }
     }
-  }
-  
-  function keyReleased() {
-    if (!started) return;
-    if (key === " " && shapeDrawing) {
-      shapeDrawing = false;
-      // Begin fade-out: record the release time (fade over fadeDuration)
-      if (currentMusic && currentMusic.isPlaying()) {
-        releaseTime = millis();
-      }
-      // Spawn more explosion particles along the autoStroke path (5 per point)
-      for (let pt of autoStroke) {
-        for (let i = 0; i < 5; i++) {
-          explosionParticles.push(new Particle(pt.x, pt.y));
+    
+    function draw() {
+      background(255);
+      if (!started) return;
+      if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
+        let elapsed = millis() - releaseTime;
+        let volFactor = pow(1 - (elapsed / fadeDuration), 2);
+        let newVol = constrain(volFactor, 0, 1);
+        currentMusic.setVolume(newVol);
+        if (elapsed >= fadeDuration) {
+          currentMusic.stop();
+          releaseTime = null;
         }
       }
-      // Clear autoStroke so the drawn path disappears after explosion
-      autoStroke = [];
+      if (shapeDrawing) {
+        velocity.x += random(-0.2, 0.2);
+        velocity.y += random(-0.2, 0.2);
+        let newX = currentPoint.x + velocity.x * 2.0;
+        let newY = currentPoint.y + velocity.y * 2.0;
+        if (newX <= 0 || newX >= width) {
+          velocity.x = -velocity.x;
+        }
+        if (newY <= 0 || newY >= height) {
+          velocity.y = -velocity.y;
+        }
+        newX = constrain(newX, 0, width);
+        newY = constrain(newY, 0, height);
+        currentPoint = { x: newX, y: newY };
+        autoStroke.push({ x: newX, y: newY });
+      }
+      if (autoStroke.length > 1) {
+        drawAutoStroke();
+      }
+      updateAndDrawParticles();
     }
-  }
-  
-  /* ===============================
-     PARTICLE CLASS (MULTICOLOR)
-     =============================== */
-  class Particle {
-    constructor(x, y) {
-      this.x = x;
-      this.y = y;
-      this.vx = random(-5, 5);
-      this.vy = random(-5, 5);
-      this.alpha = 255;
-      this.size = random(5, 12);
-      this.hue = random(360);
-    }
-    update() {
-      this.x += this.vx;
-      this.y += this.vy;
-      // Reduce alpha more slowly for a longer explosion effect
-      this.alpha -= 3;
-      this.alpha = max(this.alpha, 0);
-    }
-    display() {
-      push();
+    
+    function drawAutoStroke() {
       colorMode(HSB, 360, 100, 100, 255);
-      noStroke();
-      fill(this.hue, 80, 100, this.alpha);
-      ellipse(this.x, this.y, this.size);
-      pop();
+      drawingContext.shadowBlur = 10;
+      let hueOffset = 200;
+      for (let i = 1; i < autoStroke.length; i++) {
+        let hueVal = (hueOffset + map(i, 0, autoStroke.length, 0, 360)) % 360;
+        let segColor = color(hueVal, 80, 100, 255);
+        stroke(segColor);
+        strokeWeight(traceWidth);
+        line(autoStroke[i - 1].x, autoStroke[i - 1].y, autoStroke[i].x, autoStroke[i].y);
+        drawingContext.shadowColor = segColor.toString();
+      }
+      drawingContext.shadowBlur = 0;
+      colorMode(RGB, 255);
     }
-    isDead() {
-      return this.alpha <= 0;
+    
+    function updateAndDrawParticles() {
+      for (let i = explosionParticles.length - 1; i >= 0; i--) {
+        explosionParticles[i].update();
+        explosionParticles[i].display();
+        if (explosionParticles[i].isDead()) {
+          explosionParticles.splice(i, 1);
+        }
+      }
     }
-  }
-  
-  /* ===============================
-     UTILITY FUNCTIONS
-     =============================== */
-  function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-  }
-  
-  function goFullscreen() {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.error(`Erreur lors du passage en plein écran: ${err.message}`);
-      });
+    
+    function keyPressed() {
+      if (!started) return;
+      if (key === " " && !shapeDrawing) {
+        shapeDrawing = true;
+        traceWidth = random(20, 60);
+        if (releaseTime !== null) {
+          if (currentMusic && currentMusic.isPlaying()) {
+            currentMusic.stop();
+          }
+          releaseTime = null;
+        }
+        autoStroke = [];
+        currentPoint = { x: width / 2, y: height / 2 };
+        velocity = { x: random(-2, 2), y: random(-2, 2) };
+        currentMusic = random(musicFiles);
+        if (currentMusic && currentMusic.isLoaded()) {
+          currentMusic.setVolume(1);
+          currentMusic.loop();
+        }
+      }
     }
-  }
-  
-  /* ===============================
-     PROMPT OVERLAY & GAME START
-     =============================== */
-  document.getElementById("promptOverlay").innerHTML = `
-    <p>
-      Shape Mode : Maintenez la barre d’espace pour lancer l’auto‑dessin.<br>
-      Relâchez pour déclencher une explosion !
-    </p>
-    <button id="startButton">Commencer</button>
-  `;
-  document.getElementById("startButton").addEventListener("click", function() {
-    started = true;
-    document.getElementById("promptOverlay").style.display = "none";
-    goFullscreen();
-  });
-</script>
+    
+    function keyReleased() {
+      if (!started) return;
+      if (key === " " && shapeDrawing) {
+        shapeDrawing = false;
+        if (currentMusic && currentMusic.isPlaying()) {
+          releaseTime = millis();
+        }
+        for (let pt of autoStroke) {
+          for (let i = 0; i < 5; i++) {
+            explosionParticles.push(new Particle(pt.x, pt.y));
+          }
+        }
+        autoStroke = [];
+      }
+    }
+    
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = random(-5, 5);
+        this.vy = random(-5, 5);
+        this.alpha = 255;
+        this.size = random(5, 12);
+        this.hue = random(360);
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= 3;
+        this.alpha = max(this.alpha, 0);
+      }
+      display() {
+        push();
+        colorMode(HSB, 360, 100, 100, 255);
+        noStroke();
+        fill(this.hue, 80, 100, this.alpha);
+        ellipse(this.x, this.y, this.size);
+        pop();
+      }
+      isDead() {
+        return this.alpha <= 0;
+      }
+    }
+    
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+    
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error(`Erreur lors du passage en plein écran: ${err.message}`);
+        });
+      }
+    }
+    
+    document.getElementById("promptOverlay").innerHTML = `
+      <button id="infoButton" title="More info">ⓘ</button>
+      <p>
+        Appuyer et maintenir une switch pour activer <br> une animation
+        et de la musique
+      </p>
+      <button id="startButton">Commencer</button>
+    `;
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+    });
+    
+    document.getElementById("infoButton").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "block";
+    });
+    document.getElementById("closeModal").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "none";
+    });
+  </script>
 </body>
 </html>

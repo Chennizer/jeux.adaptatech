@@ -3,217 +3,141 @@
 <head>
   <meta charset="UTF-8">
   <title>Concentric Shapes Game</title>
-  <!-- p5.js and p5.sound libraries -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
-  <!-- Import external jingles file (creates window.jingleLibraryArray) -->
   <script src="../../js/jingles.js"></script>
-  <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-      font-family: 'Roboto', sans-serif;
-    }
-    canvas {
-      display: block;
-    }
-    /* Prompt overlay styles */
-    #promptOverlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.85);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      color: #fff;
-      text-align: center;
-      z-index: 10;
-    }
-    #promptOverlay p {
-      font-size: 20px;
-      margin: 0 20px 20px;
-    }
-    #startButton {
-      padding: 20px 40px;
-      font-size: 24px;
-      cursor: pointer;
-      background-color: #0077be;
-      border: none;
-      border-radius: 10px;
-      color: white;
-    }
-    #startButton:hover {
-      background-color: #0088cc;
-    }
-  </style>
+
 </head>
 <body>
-  <!-- Prompt overlay with instructions and "Commencer" button -->
   <div id="promptOverlay">
-    <p>
-      Concentric Shapes Game : Maintenez la barre d’espace pour créer des formes concentriques.<br>
-      Relâchez pour déclencher l’animation de disparition et arrêter le son.
-    </p>
+    <button id="infoButton" title="More info">ⓘ</button>
+    <p>Appuyer et maintenir une switch pour activer<br>une animation épicée et de la musique</p>
     <button id="startButton">Commencer</button>
   </div>
-  
-<script>
-  /* GLOBAL VARIABLES */
-  let shapes = [];         // Each shape is { type, radius }
-  let isGrowing = false;   // True while space is held down
-  let isFading = false;    // True while fade-out animation is in progress
-  let fadeStartTime = null;// Time when fade started
-  const shapeFadeDuration = 1000; // Fade-out duration in ms
-  
-  let currentShapeType = ""; // "circle", "square", or "triangle"
-  let centerPoint = {};      // { x, y }
-  let musicFiles = [];       // Array of loaded music files (from jingles.js)
-  let currentMusic = null;   // Currently playing music
-  let started = false;       // Game started flag
-  
-  // Settings for shape growth:
-  const gap = 10;            // Gap between shapes
-  const growthDelay = 20;    // Add a new shape every 20 frames
-  
-  const shapeTypes = ["circle", "square", "triangle"];
-  
-  // List of colors to choose from:
-  let colorList = ["#FF5733", "#33FF57", "#3357FF", "#F0F033", "#FF33F0", "#33FFF0"];
-  let currentColor = "#FFFFFF";  // Chosen color for current round
-  
-  /* PRELOAD & SETUP */
-  function preload() {
-    // Load music files from window.jingleLibraryArray if available.
-    if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
-      for (let item of window.jingleLibraryArray) {
-        musicFiles.push(loadSound(item.src));
-      }
-    } else {
-      console.error("Jingle library not found!");
+  <div id="infoModal">
+    <p>Compétence: appuyer et maintenir<br>SENICT switch skills niveau 2<br>Switch Progression Roadmap niveau 11 à 13</p>
+    <button id="closeModal">Fermer</button>
+  </div>
+  <script>
+    let started = false;
+    let canvas;
+    let musicFiles = [];
+    let currentMusic = null;
+    let releaseTime = null;
+    const fadeDuration = 1000;
+    let isGrowing = false;
+    let isFading = false;
+    let fadeStartTime = null;
+    let shapes = [];
+    let currentShapeType = "";
+    let centerPoint = {};
+    const gap = 12;
+    const growthDelay = 14;
+    const shapeFadeDuration = 1000;
+    const shapeTypes = ["circle", "square", "triangle", "pentagon", "hexagon"];
+    let colorList = ["#FF5733", "#33FF57", "#3357FF", "#F0F033", "#FF33F0", "#33FFF0", "#FF00FF", "#00FFFF", "#FFFF00", "#FF0000", "#00FF00", "#0000FF", "#FF1493", "#00BFFF", "#ADFF2F", "#FFD700"];
+    let currentColor = "#FFFFFF";
+    let restartCooldown = false;
+    function preload() {
+      if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
+        for (let item of window.jingleLibraryArray) { musicFiles.push(loadSound(item.src)); }
+      } else { console.error("Jingle library not found!"); }
     }
-  }
-  
-  function setup() {
-    createCanvas(windowWidth, windowHeight);
-    noFill();
-    strokeWeight(4);
-    ellipseMode(RADIUS);
-    rectMode(CENTER);
-    centerPoint = { x: width/2, y: height/2 };
-  }
-  
-  /* DRAW LOOP */
-  function draw() {
-    background(0);
-    if (!started) return;
-    
-    // If growing, add new shapes based on delay.
-    if (isGrowing && frameCount % growthDelay === 0) {
-      let newRadius = shapes.length > 0 ? shapes[shapes.length - 1].radius + gap : gap * 2;
-      shapes.push({ type: currentShapeType, radius: newRadius });
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.position(0, 0);
+      noFill();
+      strokeWeight(4);
+      ellipseMode(RADIUS);
+      rectMode(CENTER);
+      centerPoint = { x: width / 2, y: height / 2 };
     }
-    
-    // Check if we are in fade-out mode.
-    let alphaVal = 255;
-    if (isFading) {
-      let elapsed = millis() - fadeStartTime;
-      alphaVal = map(elapsed, 0, shapeFadeDuration, 255, 0, true);
-      // If fade complete, clear shapes and stop fading.
-      if (elapsed >= shapeFadeDuration) {
-        shapes = [];
-        isFading = false;
+    function draw() {
+      background(0);
+      if (!started) return;
+      if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
+        let elapsedMusic = millis() - releaseTime;
+        let volFactor = pow(1 - (elapsedMusic / fadeDuration), 2);
+        currentMusic.setVolume(constrain(volFactor, 0, 1));
+        if (elapsedMusic >= fadeDuration) { musicFiles.forEach(s => s.stop()); currentMusic = null; releaseTime = null; }
       }
-    }
-    
-    // Draw all shapes centered at centerPoint.
-    push();
-      translate(centerPoint.x, centerPoint.y);
-      // Convert the currentColor to a p5 Color and apply alpha.
-      let fadedColor = color(currentColor);
-      fadedColor.setAlpha(alphaVal);
-      stroke(fadedColor);
-      
-      for (let shape of shapes) {
-        if (shape.type === "circle") {
-          ellipse(0, 0, shape.radius, shape.radius);
-        } else if (shape.type === "square") {
-          rect(0, 0, shape.radius * 2, shape.radius * 2);
-        } else if (shape.type === "triangle") {
-          beginShape();
-            for (let i = 0; i < 3; i++) {
-              let angle = TWO_PI / 3 * i - PI/2;
-              let x = shape.radius * cos(angle);
-              let y = shape.radius * sin(angle);
-              vertex(x, y);
-            }
-          endShape(CLOSE);
-        }
+      if (isGrowing && frameCount % growthDelay === 0) {
+        let newRadius = shapes.length > 0 ? shapes[shapes.length - 1].radius + gap : gap * 2;
+        shapes.push({ type: currentShapeType, radius: newRadius });
       }
-    pop();
-  }
-  
-  /* EVENT HANDLING - KEYBOARD (SPACE BAR) */
-  function keyPressed() {
-    if (!started) return;
-    if (key === ' ' && !isGrowing) {
-      // If a fade-out was in progress, cancel it.
+      let alphaVal = 255;
+      let scaleFactor = 1;
+      let rotationAngle = 0;
       if (isFading) {
-        isFading = false;
-        shapes = [];
+        let elapsed = millis() - fadeStartTime;
+        let p = constrain(elapsed / shapeFadeDuration, 0, 1);
+        alphaVal = 255 * (1 - p * p);
+        scaleFactor = lerp(1, 0.5, p);
+        rotationAngle = lerp(0, PI / 4, p);
+        if (elapsed >= shapeFadeDuration) { shapes = []; isFading = false; }
       }
-      isGrowing = true;
-      // Reset shapes.
-      shapes = [];
-      // Pick a random center within ±300px of the canvas center.
-      centerPoint = {
-        x: width / 2 + random(-300, 300),
-        y: height / 2 + random(-300, 300)
-      };
-      // Choose a random shape type.
-      currentShapeType = random(shapeTypes);
-      // Choose a random color from the list.
-      currentColor = random(colorList);
-      // Choose and start a random jingle.
-      if (musicFiles.length > 0) {
-        currentMusic = random(musicFiles);
-        if (currentMusic && currentMusic.isLoaded()) {
-          currentMusic.setVolume(1);
-          currentMusic.loop();
+      push();
+        translate(centerPoint.x, centerPoint.y);
+        rotate(rotationAngle);
+        scale(scaleFactor);
+        let fadedColor = color(currentColor);
+        fadedColor.setAlpha(alphaVal);
+        stroke(fadedColor);
+        for (let shape of shapes) {
+          if (shape.type === "circle") { ellipse(0, 0, shape.radius, shape.radius); }
+          else if (shape.type === "square") { rect(0, 0, shape.radius * 2, shape.radius * 2); }
+          else if (shape.type === "triangle") {
+            beginShape();
+              for (let i = 0; i < 3; i++) { let angle = TWO_PI / 3 * i - PI / 2; let x = shape.radius * cos(angle); let y = shape.radius * sin(angle); vertex(x, y); }
+            endShape(CLOSE);
+          }
+          else if (shape.type === "pentagon") {
+            beginShape();
+              for (let i = 0; i < 5; i++) { let angle = TWO_PI / 5 * i - PI / 2; let x = shape.radius * cos(angle); let y = shape.radius * sin(angle); vertex(x, y); }
+            endShape(CLOSE);
+          }
+          else if (shape.type === "hexagon") {
+            beginShape();
+              for (let i = 0; i < 6; i++) { let angle = TWO_PI / 6 * i - PI / 2; let x = shape.radius * cos(angle); let y = shape.radius * sin(angle); vertex(x, y); }
+            endShape(CLOSE);
+          }
+        }
+      pop();
+    }
+    function keyPressed() {
+      if (!started || restartCooldown) return;
+      if (key === ' ' && !isGrowing) {
+        musicFiles.forEach(s => s.stop());
+        getAudioContext().resume();
+        if (isFading) { isFading = false; shapes = []; }
+        isGrowing = true;
+        shapes = [];
+        centerPoint = { x: width / 2 + random(-300, 300), y: height / 2 + random(-300, 300) };
+        currentShapeType = random(shapeTypes);
+        currentColor = random(colorList);
+        if (musicFiles.length > 0) {
+          currentMusic = random(musicFiles);
+          if (currentMusic && currentMusic.isLoaded()) { currentMusic.setVolume(1); currentMusic.loop(); }
         }
       }
     }
-  }
-  
-  function keyReleased() {
-    if (!started) return;
-    if (key === ' ' && isGrowing) {
-      isGrowing = false;
-      // Begin fade-out for the shapes.
-      isFading = true;
-      fadeStartTime = millis();
-      // Stop the music when space is released.
-      if (currentMusic && currentMusic.isPlaying()) {
-        currentMusic.stop();
+    function keyReleased() {
+      if (!started) return;
+      if (key === ' ' && isGrowing) {
+        isGrowing = false;
+        isFading = true;
+        fadeStartTime = millis();
+        if (currentMusic && currentMusic.isPlaying()) { releaseTime = millis(); }
+        restartCooldown = true;
+        setTimeout(() => { restartCooldown = false; }, fadeDuration + 50);
       }
     }
-  }
-  
-  /* UTILITY */
-  function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-  }
-  
-  /* PROMPT OVERLAY & GAME START */
-  document.getElementById("startButton").addEventListener("click", function() {
-    started = true;
-    document.getElementById("promptOverlay").style.display = "none";
-  });
-</script>
+    function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+    function goFullscreen() { if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(err => { console.error(`Erreur lors du passage en plein écran: ${err.message}`); }); } }
+    document.getElementById("startButton").addEventListener("click", function() { started = true; document.getElementById("promptOverlay").style.display = "none"; goFullscreen(); });
+    document.getElementById("infoButton").addEventListener("click", function() { document.getElementById("infoModal").style.display = "block"; });
+    document.getElementById("closeModal").addEventListener("click", function() { document.getElementById("infoModal").style.display = "none"; });
+  </script>
 </body>
 </html>
