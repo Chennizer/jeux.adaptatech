@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive Fireworks</title>
+  <!-- p5.js and p5.sound libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+  <style>
+    body, html {
+      margin: 0; 
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: sans-serif;
+      color: #fff;
+    }
+    canvas { display: block; }
+    /* Start Overlay for iOS audio unlock */
+    #startOverlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      text-align: center;
+    }
+    #startOverlay p {
+      font-size: 20px;
+      margin: 0 20px;
+    }
+    #startButton {
+      margin-top: 20px;
+      padding: 20px 40px;
+      font-size: 24px;
+      background: #0077be;
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      cursor: pointer;
+    }
+    #startButton:hover {
+      background: #0088cc;
+    }
+  </style>
+</head>
+<body>
+  <!-- Start overlay -->
+  <div id="startOverlay">
+    <p>Interactive Fireworks Show<br>Tap where you want the firework to start!</p>
+    <button id="startButton">Commencer</button>
+  </div>
+
+  <script>
+    let fireworks = [];
+    let gravity;
+    let explosionSound;
+    let started = false;
+
+    // Preload the explosion sound from the relative path,
+    // and log a message when it loads.
+    function preload() {
+      explosionSound = loadSound("../../sounds/firework.mp3", () => {
+        console.log("Explosion sound loaded!");
+      });
+    }
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      gravity = createVector(0, 0.2);
+      
+      // Hide the canvas until the user starts
+      select('canvas').style('display', 'none');
+      
+      // Set up the start overlay button for audio unlocking (important on iOS)
+      let startButton = document.getElementById('startButton');
+      startButton.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        let overlay = document.getElementById('startOverlay');
+        if (overlay) overlay.remove();
+        select('canvas').style('display', 'block');
+        userStartAudio().then(() => {
+          started = true;
+        });
+      });
+    }
+
+    function draw() {
+      if (!started) {
+        background(0);
+        return;
+      }
+      // Create a trailing effect
+      background(0, 25);
+      for (let i = fireworks.length - 1; i >= 0; i--) {
+        fireworks[i].update();
+        fireworks[i].show();
+        if (fireworks[i].done()) {
+          fireworks.splice(i, 1);
+        }
+      }
+    }
+
+    // Launch a firework from the point where the user taps/clicks.
+    function mousePressed() {
+      if (!started) return;
+      let fw = new Firework(mouseX, mouseY);
+      fireworks.push(fw);
+    }
+
+    // Firework class encapsulates the rocket and its explosion bursts.
+    class Firework {
+      constructor(x, y) {
+        // The firework rocket starts exactly at the user's tap (x, y)
+        this.firework = new Particle(x, y, true);
+        this.exploded = false;
+        this.particles = [];
+      }
+      
+      done() {
+        return this.exploded && this.particles.length === 0;
+      }
+      
+      update() {
+        if (!this.exploded) {
+          this.firework.applyForce(gravity);
+          this.firework.update();
+          // When the rocket's vertical velocity becomes non-negative, explode.
+          if (this.firework.vel.y >= 0) {
+            this.exploded = true;
+            this.explode();
+            console.log("Explosion sound playing!");
+            explosionSound.setVolume(1.0);
+            setTimeout(() => {
+              explosionSound.play();
+            }, 50);
+          }
+        }
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          this.particles[i].applyForce(gravity);
+          this.particles[i].update();
+          if (this.particles[i].done()) {
+            this.particles.splice(i, 1);
+          }
+        }
+      }
+      
+      explode() {
+        // Create several small bursts for a more even distribution.
+        let burstCount = floor(random(6, 11)); // 6 to 10 bursts
+        for (let b = 0; b < burstCount; b++) {
+          let burstAngle = random(TWO_PI);
+          let numParticles = floor(random(10, 30)); // Fewer particles per burst
+          for (let i = 0; i < numParticles; i++) {
+            let p = new Particle(this.firework.pos.x, this.firework.pos.y, false);
+            // Each particle's angle is the burst base angle plus a small random offset.
+            let angle = burstAngle + random(-PI/16, PI/16);
+            let speed = random(2, 8); // Lower speed for smaller bursts
+            p.vel = p5.Vector.fromAngle(angle, speed);
+            p.size = random(6, 12);
+            this.particles.push(p);
+          }
+        }
+      }
+      
+      show() {
+        if (!this.exploded) {
+          this.firework.show();
+        }
+        for (let p of this.particles) {
+          p.show();
+        }
+      }
+    }
+
+    // Particle class for both the rocket and explosion particles.
+    class Particle {
+      constructor(x, y, firework) {
+        this.pos = createVector(x, y);
+        if (firework) {
+          // For the rocket, give an upward velocity.
+          this.vel = createVector(0, random(-12, -8));
+          this.size = 20;
+        } else {
+          // For explosion particles, initialize velocity later.
+          this.vel = createVector(0, 0);
+          this.size = 12;
+        }
+        this.acc = createVector(0, 0);
+        this.firework = firework;
+        this.lifespan = 255;
+        this.hue = random(0, 360);
+      }
+      
+      applyForce(force) {
+        this.acc.add(force);
+      }
+      
+      update() {
+        this.vel.add(this.acc);
+        this.pos.add(this.vel);
+        if (!this.firework) {
+          this.vel.mult(0.9);
+          this.lifespan -= 4;
+        }
+        this.acc.mult(0);
+      }
+      
+      done() {
+        return this.lifespan < 0;
+      }
+      
+      show() {
+        colorMode(HSB);
+        noStroke();
+        if (this.firework) {
+          fill(this.hue, 255, 255);
+          ellipse(this.pos.x, this.pos.y, this.size, this.size);
+        } else {
+          // Add a glow effect to the explosion particles.
+          drawingContext.shadowBlur = 15;
+          drawingContext.shadowColor = "white";
+          fill(this.hue, 255, 255, this.lifespan);
+          ellipse(this.pos.x, this.pos.y, this.size, this.size);
+          drawingContext.shadowBlur = 0;
+        }
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Chemin animé avec réglages avancés</title>
+  <title>Stimulation visuelle (tracé)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap" />
   <style>
     /* Global reset and full-screen canvas styling */
@@ -173,6 +173,68 @@
       margin-left: 5px;
       margin-top: 0;
     }
+    
+    /* Custom Modal CSS */
+    .modal-overlay {
+      position: fixed; 
+      top: 0; 
+      left: 0; 
+      width: 100%; 
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      z-index: 9998;
+    }
+    .modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;  /* white background */
+      border: 2px solid teal;  /* teal border */
+      padding: 10px;
+      border-radius: 8px;
+      display: none;
+      z-index: 9999;
+      width: 400px;
+      max-width: 90%;
+      max-height: 80%;
+      overflow: auto;
+    }
+    .modal h3 {
+      text-align: center;
+      color: #000;
+      margin-top: 0;
+    }
+    .modal button.closeModal {
+      float: right; 
+      padding: 5px 10px; 
+      margin: 5px;
+      background: #444;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .modal .image-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+    .modal .image-grid img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      background-color: #f0f0f0;
+    }
+    .modal .image-grid img:hover {
+      border-color: #00bfff;
+    }
   </style>
 </head>
 <body>
@@ -187,7 +249,7 @@
   <!-- Fullscreen Button -->
   <button id="fullscreen-btn">Plein écran</button>
   
-  <!-- Reset Button (text wrapped on two lines) -->
+  <!-- Reset Button -->
   <button id="reset-btn">Réinitialiser<br>le tracé</button>
 
   <!-- Settings Icon -->
@@ -197,11 +259,11 @@
   <div id="menu">
     <h2>Paramètres</h2>
     <label>
-      Vitesse: <span id="speedValue">5</span>
-      <input type="range" id="speedSlider" min="0" max="50" value="5">
+      Vitesse (px/s): <span id="speedValue">50</span>
+      <input type="range" id="speedSlider" min="0" max="200" value="50">
     </label>
     <label>
-      Taille: <span id="sizeValue">100</span>
+      Taille (px): <span id="sizeValue">100</span>
       <input type="range" id="sizeSlider" min="0" max="400" value="100">
     </label>
     <label>
@@ -214,7 +276,8 @@
         <option value="star">Étoile</option>
         <option value="character">Caractère</option>
         <option value="emoji">Emoji</option>
-        <option value="image">Image</option>
+        <option value="imageUpload">Image (fichier)</option>
+        <option value="imageLibrary">Image (bibliothèque)</option>
       </select>
     </label>
     <!-- Extra shape options container -->
@@ -260,22 +323,28 @@
           <option value="💡">💡</option>
         </select>
       </div>
-      <div id="imageOption">
-        <label>Image:</label>
+      <div id="imageUploadOption">
+        <label>Image (Fichier):</label>
         <input type="file" id="imageUploader" accept="image/*" style="display: none;">
-        <label for="imageUploader" id="imageUploadLabel" style="cursor: pointer; padding: 5px; background: #00bfff; border-radius: 4px; text-align: center;">Choisir une image</label>
+        <label for="imageUploader" style="cursor: pointer; padding: 5px; background: #00bfff; border-radius: 4px; text-align: center;">
+          Choisir une image
+        </label>
         <span id="fileName" style="font-size: 12px; color: #bbb; margin-top: 5px;">Aucun fichier choisi</span>
       </div>
+      <div id="imageLibraryOption">
+        <label>Librairie d'images:</label>
+        <button id="openLibraryBtn" style="padding: 5px; margin-top:5px; background:#00bfff; border:none; border-radius:4px; cursor:pointer;">
+          Ouvrir la librairie
+        </button>
+      </div>
     </div>
-    <!-- Dropdown for path animation mode -->
     <label>
       Mode d'animation du tracé:
       <select id="pathModeSelector">
-        <option value="loop">Boucle (pause 5s)</option>
-        <option value="pingpong">Aller‑retour (pause 2s)</option>
+        <option value="loop">Unidirectionnel</option>
+        <option value="pingpong">Aller‑retour</option>
       </select>
     </label>
-    <!-- Pause time input (in seconds) -->
     <label>
       Temps de pause (s):
       <input type="number" id="pauseTimeInput" value="5" min="0" step="0.5">
@@ -302,14 +371,26 @@
     </label>
   </div>
 
+  <!-- Modal & Overlay for library images -->
+  <div id="overlay" class="modal-overlay"></div>
+  <div id="libraryModal" class="modal">
+    <button class="closeModal">X</button>
+    <h3>Choisissez une image</h3>
+    <div class="image-grid" id="libraryGrid"></div>
+  </div>
+
+  <!-- Load external PNG array definitions -->
+  <script src="../../js/pngArray.js"></script>
+  
+  <!-- Main Script -->
   <script>
-    // --- Canvas, Fullscreen & Basic Setup ---
+    // Canvas Setup
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Prompt and settings elements
+    // DOM elements
     const promptOverlay = document.getElementById("promptOverlay");
     const startButton = document.getElementById("startButton");
     const settingsIcon = document.getElementById("settings-icon");
@@ -318,133 +399,257 @@
     const resetBtn = document.getElementById("reset-btn");
     const backgroundColorPicker = document.getElementById("backgroundColorPicker");
 
-    // Settings elements
     const speedSlider = document.getElementById("speedSlider");
     const speedValue = document.getElementById("speedValue");
     const shapeSelector = document.getElementById("shapeSelector");
     const colorPicker = document.getElementById("colorPicker");
     const sizeSlider = document.getElementById("sizeSlider");
     const sizeValue = document.getElementById("sizeValue");
-    const shapeOptions = document.getElementById("shapeOptions");
+
+    const shapeOptionsDiv = document.getElementById("shapeOptions");
     const characterOption = document.getElementById("characterOption");
     const characterInput = document.getElementById("characterInput");
     const emojiOption = document.getElementById("emojiOption");
     const emojiSelector = document.getElementById("emojiSelector");
-    const imageOption = document.getElementById("imageOption");
+    const imageUploadOption = document.getElementById("imageUploadOption");
     const imageUploader = document.getElementById("imageUploader");
     const fileNameDisplay = document.getElementById("fileName");
+    
+    const imageLibraryOption = document.getElementById("imageLibraryOption");
+    const openLibraryBtn = document.getElementById("openLibraryBtn");
+    const libraryModal = document.getElementById("libraryModal");
+    const libraryGrid = document.getElementById("libraryGrid");
+    const overlay = document.getElementById("overlay");
+
     const randomColorToggle = document.getElementById("randomColorToggle");
     const trailToggle = document.getElementById("trailToggle");
     const pathModeSelector = document.getElementById("pathModeSelector");
     const pauseTimeInput = document.getElementById("pauseTimeInput");
     const stayVisibleToggle = document.getElementById("stayVisibleToggle");
 
-    // --- Global Variables ---
+    // Animation & path variables
     let path = [];
     let drawing = false;
     let animationStarted = false;
-    let pausing = false; // flag to indicate pause state
+    let pausing = false;
     let particlePos = { x: 0, y: 0 };
     let currentPathIndex = 0;
-    let speed = parseInt(speedSlider.value, 10);
+    let speed = parseFloat(speedSlider.value); // px/s (time-based movement)
     let shape = shapeSelector.value;
     let particleColor = colorPicker.value;
     let particleRadius = parseInt(sizeSlider.value, 10);
     let characterValue = characterInput.value || "A";
     let emojiValue = emojiSelector.value || "😀";
-    let uploadedImage = null;
+
+    // Two image variables:
+    let uploadedImage = null;  // from file input
+    let libraryImage = null;   // from the external library/modal
+
     let randomColor = false;
     let trail = false;
     let backgroundColor = backgroundColorPicker.value;
-    
-    // New variables for path animation mode:
-    let pathMode = "loop"; // "loop" or "pingpong"
-    let direction = 1;     // for pingpong mode
-    let pauseTime = parseFloat(pauseTimeInput.value) || 5; // seconds
+    let pathMode = "loop"; 
+    let direction = 1;  
+    let pauseTime = parseFloat(pauseTimeInput.value) || 5; 
     let stayVisible = stayVisibleToggle.checked;
 
-    // Animation frame IDs for cancellation.
+    let previousTimestamp;
     let particleAnimationId = null;
     let pathAnimationId = null;
 
-    // --- Helper: Convert hex color to RGBA string ---
-    function hexToRGBA(hex, alpha) {
-      hex = hex.replace('#', '');
-      if (hex.length === 3) {
-        hex = hex.split('').map(c => c + c).join('');
-      }
-      const bigint = parseInt(hex, 16);
-      const r = (bigint >> 16) & 255;
-      const g = (bigint >> 8) & 255;
-      const b = bigint & 255;
-      return `rgba(${r},${g},${b},${alpha})`;
+    // MODAL & LIBRARY SETUP
+    // Populate the library grid using window.imageLibraryArray (defined in ../../js/pngArray.js)
+    window.imageLibraryArray.forEach(item => {
+      const imgElem = document.createElement("img");
+      imgElem.src = item.src;
+      imgElem.title = item.name;
+      imgElem.addEventListener("click", () => {
+        const tmpImage = new Image();
+        tmpImage.onload = () => {
+          libraryImage = tmpImage;
+          closeLibraryModal();
+          // Hide prompt overlay so drawing can start
+          promptOverlay.style.display = "none";
+        };
+        tmpImage.src = item.src;
+      });
+      libraryGrid.appendChild(imgElem);
+    });
+
+    openLibraryBtn.addEventListener("click", openLibraryModal);
+    libraryModal.querySelector("button.closeModal").addEventListener("click", closeLibraryModal);
+    overlay.addEventListener("click", closeLibraryModal);
+
+    function openLibraryModal() {
+      overlay.style.display = "block";
+      libraryModal.style.display = "block";
+    }
+    function closeLibraryModal() {
+      overlay.style.display = "none";
+      libraryModal.style.display = "none";
     }
 
-    // --- Custom Shape Helpers ---
-    function drawPolygon(x, y, sides, radius) {
-      if (sides < 3) return;
-      const angle = (Math.PI * 2) / sides;
+    // TIME-BASED ANIMATION
+    function animateNextFrame() {
+      particleAnimationId = requestAnimationFrame(animateParticle);
+    }
+    function animateParticle(timestamp) {
+      if (previousTimestamp === undefined) {
+        previousTimestamp = timestamp;
+      }
+      const deltaTime = (timestamp - previousTimestamp) * 0.001; 
+      previousTimestamp = timestamp;
+
+      pauseTime = parseFloat(pauseTimeInput.value) || 5;
+      stayVisible = stayVisibleToggle.checked;
+
+      if (!pausing || !stayVisible) {
+        if (trail) {
+          ctx.fillStyle = hexToRGBA(backgroundColor, 0.1);
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.fillStyle = backgroundColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      const distanceThisFrame = speed * deltaTime;
+      if (pathMode === "loop") {
+        const lastIndex = path.length - 1;
+        if (currentPathIndex === lastIndex) {
+          pausing = true;
+          if (stayVisible) drawParticle(particlePos.x, particlePos.y);
+          setTimeout(() => {
+            pausing = false;
+            previousTimestamp = undefined;
+            particlePos = { ...path[0] };
+            currentPathIndex = 0;
+            animateNextFrame();
+          }, pauseTime * 1000);
+          return;
+        }
+        const target = path[currentPathIndex + 1];
+        const dx = target.x - particlePos.x;
+        const dy = target.y - particlePos.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < distanceThisFrame) {
+          particlePos = { ...target };
+          currentPathIndex++;
+        } else {
+          particlePos.x += (dx/dist)*distanceThisFrame;
+          particlePos.y += (dy/dist)*distanceThisFrame;
+        }
+      }
+      else if (pathMode === "pingpong") {
+        const nextIndex = currentPathIndex + direction;
+        if (nextIndex < 0 || nextIndex >= path.length) {
+          pausing = true;
+          if (stayVisible) drawParticle(particlePos.x, particlePos.y);
+          setTimeout(() => {
+            pausing = false;
+            previousTimestamp = undefined;
+            direction = -direction;
+            animateNextFrame();
+          }, pauseTime*1000);
+          return;
+        }
+        const target = path[nextIndex];
+        const dx = target.x - particlePos.x;
+        const dy = target.y - particlePos.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < distanceThisFrame) {
+          particlePos = { ...target };
+          currentPathIndex = nextIndex;
+        } else {
+          particlePos.x += (dx/dist)*distanceThisFrame;
+          particlePos.y += (dy/dist)*distanceThisFrame;
+        }
+      }
+      drawParticle(particlePos.x, particlePos.y);
+      animateNextFrame();
+    }
+
+    // DRAWING THE PARTICLE
+    function drawParticle(x, y) {
+      ctx.fillStyle = particleColor;
       ctx.beginPath();
-      for (let i = 0; i < sides; i++) {
-        const currX = x + radius * Math.cos(i * angle - Math.PI / 2);
-        const currY = y + radius * Math.sin(i * angle - Math.PI / 2);
-        if (i === 0) ctx.moveTo(currX, currY);
-        else ctx.lineTo(currX, currY);
+      switch (shape) {
+        case "circle":
+          ctx.arc(x, y, particleRadius, 0, Math.PI*2);
+          ctx.fill();
+          break;
+        case "square":
+          ctx.fillRect(x - particleRadius, y - particleRadius, particleRadius*2, particleRadius*2);
+          break;
+        case "triangle":
+          ctx.moveTo(x, y - particleRadius);
+          ctx.lineTo(x - particleRadius, y + particleRadius);
+          ctx.lineTo(x + particleRadius, y + particleRadius);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        case "polygon":
+          drawPolygon(x, y, 6, particleRadius);
+          break;
+        case "star":
+          drawStar(x, y, 5, particleRadius, particleRadius/2);
+          break;
+        case "character":
+          ctx.font = `${particleRadius*2}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(characterValue, x, y);
+          break;
+        case "emoji":
+          ctx.font = `${particleRadius*2}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(emojiValue, x, y);
+          break;
+        case "imageUpload":
+          if (uploadedImage) {
+            ctx.drawImage(uploadedImage, x - particleRadius, y - particleRadius, particleRadius*2, particleRadius*2);
+          } else {
+            ctx.arc(x, y, particleRadius, 0, Math.PI*2);
+            ctx.fill();
+          }
+          break;
+        case "imageLibrary":
+          if (libraryImage) {
+            ctx.drawImage(libraryImage, x - particleRadius, y - particleRadius, particleRadius*2, particleRadius*2);
+          } else {
+            ctx.arc(x, y, particleRadius, 0, Math.PI*2);
+            ctx.fill();
+          }
+          break;
+        default:
+          ctx.arc(x, y, particleRadius, 0, Math.PI*2);
+          ctx.fill();
       }
-      ctx.closePath();
-      ctx.fill();
     }
-    function drawStar(x, y, points, outerRadius, innerRadius) {
-      const angle = Math.PI / points;
-      ctx.beginPath();
-      for (let i = 0; i < 2 * points; i++) {
-        const r = (i % 2 === 0) ? outerRadius : innerRadius;
-        const currX = x + r * Math.cos(i * angle - Math.PI / 2);
-        const currY = y + r * Math.sin(i * angle - Math.PI / 2);
-        if (i === 0) ctx.moveTo(currX, currY);
-        else ctx.lineTo(currX, currY);
-      }
-      ctx.closePath();
-      ctx.fill();
-    }
-    // --- End Custom Shape Helpers ---
 
-    // --- Extra Shape Options Visibility ---
-    function updateShapeOptions() {
-      const value = shapeSelector.value;
-      characterOption.classList.toggle("active", value === "character");
-      emojiOption.classList.toggle("active", value === "emoji");
-      imageOption.classList.toggle("active", value === "image");
-      const options = shapeOptions.children;
-      for (let option of options) {
-        option.classList.toggle("active", option.id === value + "Option");
-      }
-      // If "image" is selected, automatically trigger the file input.
-      if (value === "image") {
-        imageUploader.click();
-      }
-    }
-    // --- End Extra Shape Options ---
-
-    // --- Draw the Path Line ---
+    // DRAWING THE PATH
     function drawPathLine() {
       if (path.length < 2) return;
       ctx.save();
       ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 5;
       ctx.shadowColor = "#fff";
       ctx.shadowBlur = Math.abs(Math.sin(Date.now() / 200)) * 10;
+      
       ctx.beginPath();
       ctx.moveTo(path[0].x, path[0].y);
       for (let i = 1; i < path.length; i++) {
         ctx.lineTo(path[i].x, path[i].y);
       }
       ctx.stroke();
+
+      const from = path[path.length - 2];
+      const to = path[path.length - 1];
+      drawArrow(from, to, 20);
+
       ctx.restore();
     }
-    // --- End Draw the Path Line ---
-
-    // --- Path Drawing Animation (while drawing) ---
     function animatePathDrawing() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawPathLine();
@@ -452,9 +657,6 @@
         pathAnimationId = requestAnimationFrame(animatePathDrawing);
       }
     }
-    // --- End Path Drawing Animation ---
-
-    // --- Path Drawing Event Handlers ---
     function startPath(e) {
       if (animationStarted) return;
       drawing = true;
@@ -479,140 +681,16 @@
         animationStarted = true;
         particlePos = { ...path[0] };
         currentPathIndex = 0;
-        animateParticle();
+        previousTimestamp = undefined;
+        animateNextFrame();
       }
     }
-    // --- End Path Drawing Event Handlers ---
 
-    // --- Main Particle Animation ---
-    function animateParticle() {
-      // Read updated pauseTime and stayVisible values.
-      pauseTime = parseFloat(pauseTimeInput.value) || 5;
-      stayVisible = stayVisibleToggle.checked;
-      
-      // Clear canvas unless we are pausing and want to keep the shape visible.
-      if (!pausing || !stayVisible) {
-        if (trail) {
-          ctx.fillStyle = hexToRGBA(backgroundColor, 0.1);
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        } else {
-          ctx.fillStyle = backgroundColor;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-      }
-      
-      if (pathMode === "loop") {
-        let lastIndex = path.length - 1;
-        if (currentPathIndex === lastIndex) {
-          pausing = true;
-          // Draw the final particle if staying visible.
-          if (stayVisible) drawParticle(particlePos.x, particlePos.y);
-          setTimeout(() => {
-            pausing = false;
-            particlePos = { ...path[0] };
-            currentPathIndex = 0;
-            requestAnimationFrame(animateParticle);
-          }, pauseTime * 1000);
-          return;
-        }
-        let target = path[currentPathIndex + 1];
-        const dx = target.x - particlePos.x;
-        const dy = target.y - particlePos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < speed) {
-          particlePos = { ...target };
-          currentPathIndex++;
-        } else {
-          particlePos.x += (dx / distance) * speed;
-          particlePos.y += (dy / distance) * speed;
-        }
-      } else if (pathMode === "pingpong") {
-        let nextIndex = currentPathIndex + direction;
-        if (nextIndex < 0 || nextIndex >= path.length) {
-          pausing = true;
-          if (stayVisible) drawParticle(particlePos.x, particlePos.y);
-          setTimeout(() => {
-            pausing = false;
-            direction = -direction;
-            requestAnimationFrame(animateParticle);
-          }, pauseTime * 1000);
-          return;
-        }
-        let target = path[nextIndex];
-        const dx = target.x - particlePos.x;
-        const dy = target.y - particlePos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < speed) {
-          particlePos = { ...target };
-          currentPathIndex = nextIndex;
-        } else {
-          particlePos.x += (dx / distance) * speed;
-          particlePos.y += (dy / distance) * speed;
-        }
-      }
-      
-      drawParticle(particlePos.x, particlePos.y);
-      particleAnimationId = requestAnimationFrame(animateParticle);
-    }
-    // --- End Main Particle Animation ---
-
-    // --- Draw the Main Particle Based on Settings ---
-    function drawParticle(x, y) {
-      ctx.fillStyle = particleColor;
-      ctx.beginPath();
-      switch (shape) {
-        case "circle":
-          ctx.arc(x, y, particleRadius, 0, Math.PI * 2);
-          ctx.fill();
-          break;
-        case "square":
-          ctx.fillRect(x - particleRadius, y - particleRadius, particleRadius * 2, particleRadius * 2);
-          break;
-        case "triangle":
-          ctx.moveTo(x, y - particleRadius);
-          ctx.lineTo(x - particleRadius, y + particleRadius);
-          ctx.lineTo(x + particleRadius, y + particleRadius);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        case "polygon":
-          drawPolygon(x, y, 6, particleRadius);
-          break;
-        case "star":
-          drawStar(x, y, 5, particleRadius, particleRadius / 2);
-          break;
-        case "character":
-          ctx.font = `${particleRadius * 2}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(characterValue, x, y);
-          break;
-        case "emoji":
-          ctx.font = `${particleRadius * 2}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(emojiValue, x, y);
-          break;
-        case "image":
-          if (uploadedImage) {
-            ctx.drawImage(uploadedImage, x - particleRadius, y - particleRadius, particleRadius * 2, particleRadius * 2);
-          } else {
-            ctx.arc(x, y, particleRadius, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          break;
-        default:
-          ctx.arc(x, y, particleRadius, 0, Math.PI * 2);
-          ctx.fill();
-      }
-    }
-    // --- End Draw the Main Particle ---
-
-    // --- Fullscreen Functions ---
+    // FULLSCREEN & RESET
     function requestFullscreen() {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch((err) => {
-          console.error(`Erreur en activant le plein écran: ${err.message} (${err.name})`);
+          console.error(`Erreur en activant le plein écran: ${err.message}`);
         });
       }
     }
@@ -621,9 +699,7 @@
       else document.exitFullscreen();
     }
     fullscreenBtn.addEventListener("click", toggleFullscreen);
-    // --- End Fullscreen Functions ---
 
-    // --- Reset Button Functionality ---
     resetBtn.addEventListener("click", () => {
       if (particleAnimationId) cancelAnimationFrame(particleAnimationId);
       if (pathAnimationId) cancelAnimationFrame(pathAnimationId);
@@ -631,45 +707,61 @@
       path = [];
       drawing = false;
       animationStarted = false;
-      // Remain in drawing state.
+      pausing = false;
+      previousTimestamp = undefined;
     });
-    // --- End Reset Button Functionality ---
 
-    // --- Event Listeners for Drawing (Mouse & Touch) ---
+    // PROMPT START
     startButton.addEventListener("click", () => {
       promptOverlay.style.display = "none";
       requestFullscreen();
       canvas.addEventListener("mousedown", startPath);
       canvas.addEventListener("mousemove", recordPath);
       canvas.addEventListener("mouseup", endPath);
-      // Touch support:
       canvas.addEventListener("touchstart", (e) => startPath(e.touches[0]));
-      canvas.addEventListener("touchmove", (e) => recordPath(e.touches[0]));
-      canvas.addEventListener("touchend", (e) => endPath(e.changedTouches[0]));
+      canvas.addEventListener("touchmove",  (e) => recordPath(e.touches[0]));
+      canvas.addEventListener("touchend",   (e) => endPath(e.changedTouches[0]));
     });
-    // --- End Event Listeners for Drawing ---
 
-    // --- Toggle Settings Menu ---
+    // TOGGLE SETTINGS MENU
     settingsIcon.addEventListener("click", () => {
       menu.classList.toggle("show");
     });
-    // --- End Toggle Settings Menu ---
 
-    // --- Update Settings on Input Changes ---
+    // SETTINGS CHANGES
     speedSlider.addEventListener("input", () => {
-      speed = parseInt(speedSlider.value, 10);
-      speedValue.textContent = speedSlider.value;
-    });
-    shapeSelector.addEventListener("change", () => {
-      shape = shapeSelector.value;
-      updateShapeOptions();
-    });
-    colorPicker.addEventListener("input", () => {
-      particleColor = colorPicker.value;
+      speed = parseFloat(speedSlider.value);
+      speedValue.textContent = speed;
     });
     sizeSlider.addEventListener("input", () => {
       particleRadius = parseInt(sizeSlider.value, 10);
       sizeValue.textContent = sizeSlider.value;
+    });
+    colorPicker.addEventListener("input", () => {
+      particleColor = colorPicker.value;
+    });
+    backgroundColorPicker.addEventListener("input", () => {
+      backgroundColor = backgroundColorPicker.value;
+    });
+    randomColorToggle.addEventListener("change", () => {
+      randomColor = randomColorToggle.checked;
+      if (randomColor) {
+        particleColor = getRandomColor();
+        colorPicker.value = particleColor;
+      }
+    });
+    trailToggle.addEventListener("change", () => {
+      trail = trailToggle.checked;
+    });
+    pathModeSelector.addEventListener("change", () => {
+      pathMode = pathModeSelector.value;
+      if (pathMode === "pingpong") direction = 1;
+    });
+    pauseTimeInput.addEventListener("input", () => {
+      pauseTime = parseFloat(pauseTimeInput.value) || 5;
+    });
+    stayVisibleToggle.addEventListener("change", () => {
+      stayVisible = stayVisibleToggle.checked;
     });
     characterInput.addEventListener("input", () => {
       characterValue = characterInput.value || "A";
@@ -693,41 +785,96 @@
         fileNameDisplay.textContent = "Aucun fichier choisi";
       }
     });
-    randomColorToggle.addEventListener("change", () => {
-      randomColor = randomColorToggle.checked;
-      if (randomColor) {
-        particleColor = getRandomColor();
-        colorPicker.value = particleColor;
-      }
-    });
-    trailToggle.addEventListener("change", () => {
-      trail = trailToggle.checked;
-    });
-    backgroundColorPicker.addEventListener("input", () => {
-      backgroundColor = backgroundColorPicker.value;
-    });
-    pathModeSelector.addEventListener("change", () => {
-      pathMode = pathModeSelector.value;
-      if (pathMode === "pingpong") {
-        direction = 1;
-      }
-    });
-    pauseTimeInput.addEventListener("input", () => {
-      pauseTime = parseFloat(pauseTimeInput.value) || 5;
-    });
-    stayVisibleToggle.addEventListener("change", () => {
-      stayVisible = stayVisibleToggle.checked;
-    });
-    // --- End Update Settings ---
 
-    // --- Adjust Canvas on Resize ---
+    shapeSelector.addEventListener("change", updateShapeOptions);
+    function updateShapeOptions() {
+      shape = shapeSelector.value;
+      // Hide all extra options first
+      characterOption.style.display   = "none";
+      emojiOption.style.display       = "none";
+      imageUploadOption.style.display = "none";
+      imageLibraryOption.style.display= "none";
+
+      if (shape === "character") {
+        characterOption.style.display = "block";
+      } else if (shape === "emoji") {
+        emojiOption.style.display = "block";
+      } else if (shape === "imageUpload") {
+        imageUploadOption.style.display = "block";
+      } else if (shape === "imageLibrary") {
+        imageLibraryOption.style.display = "block";
+        // Automatically open the modal when the library option is selected
+        openLibraryModal();
+      }
+    }
+    updateShapeOptions();
+
+    // UTILITIES
     window.addEventListener("resize", () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     });
-    // --- End Adjust Canvas ---
-
-    updateShapeOptions();
+    function hexToRGBA(hex, alpha) {
+      hex = hex.replace('#', '');
+      if (hex.length === 3) {
+        hex = hex.split('').map(c => c + c).join('');
+      }
+      const bigint = parseInt(hex, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+    function getRandomColor() {
+      const letters = "0123456789ABCDEF";
+      let color = "#";
+      for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+    function drawPolygon(x, y, sides, radius) {
+      if (sides < 3) return;
+      const angle = (Math.PI * 2) / sides;
+      ctx.beginPath();
+      for (let i = 0; i < sides; i++) {
+        const currX = x + radius * Math.cos(i * angle - Math.PI/2);
+        const currY = y + radius * Math.sin(i * angle - Math.PI/2);
+        if (i === 0) ctx.moveTo(currX, currY);
+        else ctx.lineTo(currX, currY);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    function drawStar(x, y, points, outerRadius, innerRadius) {
+      const angle = Math.PI / points;
+      ctx.beginPath();
+      for (let i = 0; i < 2 * points; i++) {
+        const r = (i % 2 === 0) ? outerRadius : innerRadius;
+        const currX = x + r * Math.cos(i * angle - Math.PI/2);
+        const currY = y + r * Math.sin(i * angle - Math.PI/2);
+        if (i === 0) ctx.moveTo(currX, currY);
+        else ctx.lineTo(currX, currY);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    function drawArrow(from, to, arrowSize=20) {
+      const angle = Math.atan2(to.y - from.y, to.x - from.x);
+      ctx.beginPath();
+      ctx.moveTo(to.x, to.y);
+      ctx.lineTo(
+        to.x - arrowSize * Math.cos(angle - Math.PI/6),
+        to.y - arrowSize * Math.sin(angle - Math.PI/6)
+      );
+      ctx.lineTo(
+        to.x - arrowSize * Math.cos(angle + Math.PI/6),
+        to.y - arrowSize * Math.sin(angle + Math.PI/6)
+      );
+      ctx.closePath();
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+    }
   </script>
 </body>
 </html>
