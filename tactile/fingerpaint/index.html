@@ -6,7 +6,7 @@
   <!-- p5.js and p5.sound libraries -->
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
-  <!-- Import external jingles file (sets window.jingleLibraryArray) -->
+  <!-- Import external jingles file (it sets window.jingleLibraryArray) -->
   <script src="../../js/jingles.js"></script>
   <style>
     /* Global styles */
@@ -20,11 +20,13 @@
     canvas {
       display: block;
     }
-    /* Prompt overlay */
+    /* Prompt overlay styling */
     #promptOverlay {
       position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
+      top: 0; 
+      left: 0;
+      width: 100%; 
+      height: 100%;
       background: rgba(0,0,0,0.85);
       display: flex;
       flex-direction: column;
@@ -50,7 +52,7 @@
     #startButton:hover {
       background-color: #0088cc;
     }
-    /* Settings Icon */
+    /* Settings Icon styling */
     #settings-icon {
       position: fixed;
       top: 10px;
@@ -72,7 +74,7 @@
       transform: rotate(90deg);
       background-color: rgba(0,0,0,0.9);
     }
-    /* Options Menu */
+    /* Options Menu styling */
     #menu {
       position: fixed;
       top: 60px;
@@ -88,10 +90,12 @@
       color: #fff;
       overflow-y: auto;
       max-height: calc(100vh - 80px);
+      pointer-events: none; /* disabled when not open */
     }
     #menu.show {
       right: 10px;
       opacity: 1;
+      pointer-events: auto;
     }
     #menu h2 {
       font-size: 20px;
@@ -158,7 +162,6 @@
   </div>
 
   <script>
-    // Ensure DOM is loaded
     window.addEventListener("DOMContentLoaded", function() {
       // -------------------------
       // Global Variables
@@ -167,17 +170,18 @@
       let strokePoints = [];        // Current stroke points
       let savedStrokes = [];        // Saved strokes if "keep drawing" is enabled
       let explosionParticles = [];  // Explosion particles array
-      let musicFiles = [];          // p5.SoundFile objects (loaded from jingles.js)
+      let musicFiles = [];          // p5.SoundFile objects loaded from jingles.js
       let currentMusic = null;      // Currently playing jingle
-      let strokeHueOffset = 0;      // Random hue offset for gradient effect
-      let started = false;          // True after "Commencer" is pressed
-      let releaseTime = null;       // Timestamp for fade-out (500ms)
-      let strokeWidth = 10;         // Stroke width from menu
+      let strokeHueOffset = 0;      // Random hue offset for stroke gradient
+      let started = false;          // Set true after "Commencer" is pressed
+      let releaseTime = null;       // Timestamp (ms) for manual fade-out (500ms duration)
+      let strokeWidth = 10;         // Stroke width (adjustable from menu)
       let keepDrawing = false;      // If true, stroke is saved instead of exploded
       let canvas;                   // p5 canvas reference
+      let menuOpen = false;         // True when menu is open
 
       // -------------------------
-      // Preload function for p5
+      // Preload jingles from external file
       // -------------------------
       window.preload = function() {
         if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
@@ -190,7 +194,7 @@
       };
 
       // -------------------------
-      // p5 Setup
+      // Setup p5 canvas
       // -------------------------
       window.setup = function() {
         canvas = createCanvas(windowWidth, windowHeight);
@@ -198,22 +202,18 @@
       };
 
       // -------------------------
-      // p5 Draw Loop
+      // Main draw loop
       // -------------------------
       window.draw = function() {
         background(255);
         if (!started) return;
 
-        // If options menu is open, do not allow drawing.
-        const menuOpen = document.getElementById("menu").classList.contains("show");
-        if (menuOpen) return;
-        
-        // Draw saved strokes (if any)
+        // Draw saved strokes if any
         for (let s of savedStrokes) {
           drawStrokeFromPoints(s);
         }
         
-        // Manual fade-out over 500ms
+        // Handle manual fade-out over 500ms
         if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
           let elapsed = millis() - releaseTime;
           let newVol = map(elapsed, 0, 500, 1, 0, true);
@@ -224,19 +224,14 @@
           }
         }
         
-        // Draw current stroke if drawing
+        // Draw the current stroke if drawing
         if (state === "drawing") {
           drawStrokeFromPoints(strokePoints);
-        }
-        
-        // Update and draw explosion particles if in explosion state
-        if (state === "exploding") {
-          updateAndDrawParticles();
         }
       };
 
       // -------------------------
-      // Draw stroke from an array of points
+      // Draw a stroke from an array of points
       // -------------------------
       function drawStrokeFromPoints(pointsArray) {
         if (pointsArray.length < 2) return;
@@ -255,7 +250,7 @@
       }
 
       // -------------------------
-      // Update and draw explosion particles
+      // Update and draw explosion particles (if not keeping drawing)
       // -------------------------
       function updateAndDrawParticles() {
         for (let i = explosionParticles.length - 1; i >= 0; i--) {
@@ -274,9 +269,9 @@
       // p5 Mouse/Touch Events for Drawing
       // -------------------------
       window.mousePressed = function() {
+        // Do not allow drawing if menu is open
+        if (menuOpen) return;
         if (!started) return;
-        // If the menu is open, don't paint
-        if (document.getElementById("menu").classList.contains("show")) return;
         // Cancel any fade-out in progress
         if (releaseTime !== null) {
           if (currentMusic && currentMusic.isPlaying()) {
@@ -288,7 +283,7 @@
           state = "drawing";
           strokePoints = [];
           strokeHueOffset = random(360);
-          // Choose a random jingle and loop it
+          // Start a new jingle for every new stroke
           currentMusic = random(musicFiles);
           if (currentMusic && currentMusic.isLoaded()) {
             currentMusic.setVolume(1);
@@ -299,30 +294,36 @@
       };
 
       window.mouseDragged = function() {
+        if (menuOpen) return;
         if (!started) return;
-        if (document.getElementById("menu").classList.contains("show")) return;
         if (state === "drawing") {
           strokePoints.push({ x: mouseX, y: mouseY });
         }
       };
 
       window.mouseReleased = function() {
+        if (menuOpen) return;
         if (!started) return;
-        if (document.getElementById("menu").classList.contains("show")) return;
         if (state === "drawing") {
-          // If "keep drawing" is enabled, save the stroke and set state to idle.
           if (keepDrawing) {
+            // Save the stroke so it remains visible
             savedStrokes.push([...strokePoints]);
+            // Stop current music and start a new one for the next stroke
+            if (currentMusic && currentMusic.isPlaying()) {
+              currentMusic.stop();
+            }
+            // Restart music immediately for next stroke
+            currentMusic = random(musicFiles);
+            if (currentMusic && currentMusic.isLoaded()) {
+              currentMusic.setVolume(1);
+              currentMusic.loop();
+            }
+          } else {
+            // Trigger explosion: start fade-out and spawn particles
+            state = "exploding";
             if (currentMusic && currentMusic.isPlaying()) {
               releaseTime = millis();
             }
-            state = "idle"; // Reset state so that next stroke starts fresh.
-          } else {
-            state = "exploding";
-            if (currentMusic && currentMusic.isPlaying()) {
-              releaseTime = millis(); // start fade-out (500ms)
-            }
-            // Spawn explosion particles along the stroke
             for (let pt of strokePoints) {
               for (let i = 0; i < 3; i++) {
                 explosionParticles.push(new Particle(pt.x, pt.y));
@@ -334,7 +335,7 @@
       };
 
       // -------------------------
-      // Particle Class for Explosion (Multicolor)
+      // Particle Class (Multicolor Explosion)
       // -------------------------
       class Particle {
         constructor(x, y) {
@@ -392,23 +393,21 @@
         goFullscreen();
       });
 
-      // Toggle menu on settings icon click
       document.getElementById("settings-icon").addEventListener("click", function() {
-        document.getElementById("menu").classList.toggle("show");
+        const menuElem = document.getElementById("menu");
+        menuElem.classList.toggle("show");
+        menuOpen = menuElem.classList.contains("show");
       });
 
-      // Update stroke width from slider
       document.getElementById("strokeWidthSlider").addEventListener("input", function() {
         strokeWidth = parseInt(this.value);
         document.getElementById("strokeWidthValue").innerText = strokeWidth;
       });
 
-      // Update keep drawing option from checkbox
       document.getElementById("keepDrawingToggle").addEventListener("change", function() {
         keepDrawing = this.checked;
       });
 
-      // Reset button clears saved strokes
       document.getElementById("resetButton").addEventListener("click", function() {
         savedStrokes = [];
       });

@@ -16,10 +16,10 @@ window.themes = {
         "../../images/pawpatrolzuma.png"
       ],
       reinforcerVideos: [
-        "../../videos/patpatrouilleintro.mp4",
-        "../../videos/patpatrouillejungle.mp4",
-        "../../videos/patpatrouillepirate.mp4",
-        "../../videos/patpatrouillesauvetage.mp4"
+        "https://bucket.adaptatech.org/patpatrouilleintro.mp4",
+        "https://bucket.adaptatech.org/patpatrouillejungle.mp4",
+        "https://bucket.adaptatech.org/patpatrouillepirate.mp4",
+        "https://bucket.adaptatech.org/patpatrouillesauvetage.mp4"
       
       ],
       words: [
@@ -40,8 +40,10 @@ window.themes = {
         "../../images/palmier.png"
       ],
       reinforcerVideos: [
-        "../../videos/asia.mp4",
-        "../../videos/africa.mp4"
+        "https://bucket.adaptatech.org/moana-finale.mp4",
+        "https://bucket.adaptatech.org/moana-le-bleu-lumiere.mp4",
+        "https://bucket.adaptatech.org/moana-logo-te-pate.mp4",
+        "https://bucket.adaptatech.org/moana-pour-les-hommes.mp4",
        
       ],
       words: [
@@ -65,11 +67,11 @@ window.themes = {
           "../../images/toupieetbinouhalloween.png"
         ],
         reinforcerVideos: [
-          "../../videos/toupieetbinou1.mp4",
-          "../../videos/toupieetbinou2.mp4",
-          "../../videos/toupieetbinou3.mp4",
-          "../../videos/toupieetbinou4.mp4",
-          "../../videos/toupieetbinou5.mp4",
+          "https://bucket.adaptatech.org/toupieetbinou1.mp4",
+          "https://bucket.adaptatech.org/toupieetbinou2.mp4",
+          "https://bucket.adaptatech.org/toupieetbinou3.mp4",
+          "https://bucket.adaptatech.org/toupieetbinou4.mp4",
+          "https://bucket.adaptatech.org/toupieetbinou5.mp4",
          
         ],
         words: [
@@ -93,11 +95,11 @@ window.themes = {
         "../../images/cartoontiger.png",
       ],
       reinforcerVideos: [
-        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique1.mp4",
-        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique2.mp4",
-        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique3.mp4",
-        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique4.mp4",
-        "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/afrique5.mp4",
+        "https://bucket.adaptatech.org/afrique1.mp4",
+        "https://bucket.adaptatech.org/afrique2.mp4",
+        "https://bucket.adaptatech.org/afrique3.mp4",
+        "https://bucket.adaptatech.org/afrique4.mp4",
+        "https://bucket.adaptatech.org/afrique5.mp4",
       ],
       words: [
         "Éléphant", "Giraffe", "Gorille", "Lion", "Rhinocéros", "Tigre"
