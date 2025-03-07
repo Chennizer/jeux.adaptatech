@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Concentric Shapes Game</title>
+  <!-- p5.js and p5.sound libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+  <!-- Import external jingles file (creates window.jingleLibraryArray) -->
+  <script src="../../js/jingles.js"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Roboto', sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    /* Prompt overlay styles */
+    #promptOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      text-align: center;
+      z-index: 10;
+    }
+    #promptOverlay p {
+      font-size: 20px;
+      margin: 0 20px 20px;
+    }
+    #startButton {
+      padding: 20px 40px;
+      font-size: 24px;
+      cursor: pointer;
+      background-color: #0077be;
+      border: none;
+      border-radius: 10px;
+      color: white;
+    }
+    #startButton:hover {
+      background-color: #0088cc;
+    }
+  </style>
+</head>
+<body>
+  <!-- Prompt overlay with instructions and "Commencer" button -->
+  <div id="promptOverlay">
+    <p>
+      Concentric Shapes Game : Maintenez la barre d’espace pour créer des formes concentriques.<br>
+      Relâchez pour déclencher l’animation de disparition et arrêter le son.
+    </p>
+    <button id="startButton">Commencer</button>
+  </div>
+  
+<script>
+  /* GLOBAL VARIABLES */
+  let shapes = [];         // Each shape is { type, radius }
+  let isGrowing = false;   // True while space is held down
+  let isFading = false;    // True while fade-out animation is in progress
+  let fadeStartTime = null;// Time when fade started
+  const shapeFadeDuration = 1000; // Fade-out duration in ms
+  
+  let currentShapeType = ""; // "circle", "square", or "triangle"
+  let centerPoint = {};      // { x, y }
+  let musicFiles = [];       // Array of loaded music files (from jingles.js)
+  let currentMusic = null;   // Currently playing music
+  let started = false;       // Game started flag
+  
+  // Settings for shape growth:
+  const gap = 10;            // Gap between shapes
+  const growthDelay = 20;    // Add a new shape every 20 frames
+  
+  const shapeTypes = ["circle", "square", "triangle"];
+  
+  // List of colors to choose from:
+  let colorList = ["#FF5733", "#33FF57", "#3357FF", "#F0F033", "#FF33F0", "#33FFF0"];
+  let currentColor = "#FFFFFF";  // Chosen color for current round
+  
+  /* PRELOAD & SETUP */
+  function preload() {
+    // Load music files from window.jingleLibraryArray if available.
+    if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
+      for (let item of window.jingleLibraryArray) {
+        musicFiles.push(loadSound(item.src));
+      }
+    } else {
+      console.error("Jingle library not found!");
+    }
+  }
+  
+  function setup() {
+    createCanvas(windowWidth, windowHeight);
+    noFill();
+    strokeWeight(4);
+    ellipseMode(RADIUS);
+    rectMode(CENTER);
+    centerPoint = { x: width/2, y: height/2 };
+  }
+  
+  /* DRAW LOOP */
+  function draw() {
+    background(0);
+    if (!started) return;
+    
+    // If growing, add new shapes based on delay.
+    if (isGrowing && frameCount % growthDelay === 0) {
+      let newRadius = shapes.length > 0 ? shapes[shapes.length - 1].radius + gap : gap * 2;
+      shapes.push({ type: currentShapeType, radius: newRadius });
+    }
+    
+    // Check if we are in fade-out mode.
+    let alphaVal = 255;
+    if (isFading) {
+      let elapsed = millis() - fadeStartTime;
+      alphaVal = map(elapsed, 0, shapeFadeDuration, 255, 0, true);
+      // If fade complete, clear shapes and stop fading.
+      if (elapsed >= shapeFadeDuration) {
+        shapes = [];
+        isFading = false;
+      }
+    }
+    
+    // Draw all shapes centered at centerPoint.
+    push();
+      translate(centerPoint.x, centerPoint.y);
+      // Convert the currentColor to a p5 Color and apply alpha.
+      let fadedColor = color(currentColor);
+      fadedColor.setAlpha(alphaVal);
+      stroke(fadedColor);
+      
+      for (let shape of shapes) {
+        if (shape.type === "circle") {
+          ellipse(0, 0, shape.radius, shape.radius);
+        } else if (shape.type === "square") {
+          rect(0, 0, shape.radius * 2, shape.radius * 2);
+        } else if (shape.type === "triangle") {
+          beginShape();
+            for (let i = 0; i < 3; i++) {
+              let angle = TWO_PI / 3 * i - PI/2;
+              let x = shape.radius * cos(angle);
+              let y = shape.radius * sin(angle);
+              vertex(x, y);
+            }
+          endShape(CLOSE);
+        }
+      }
+    pop();
+  }
+  
+  /* EVENT HANDLING - KEYBOARD (SPACE BAR) */
+  function keyPressed() {
+    if (!started) return;
+    if (key === ' ' && !isGrowing) {
+      // If a fade-out was in progress, cancel it.
+      if (isFading) {
+        isFading = false;
+        shapes = [];
+      }
+      isGrowing = true;
+      // Reset shapes.
+      shapes = [];
+      // Pick a random center within ±300px of the canvas center.
+      centerPoint = {
+        x: width / 2 + random(-300, 300),
+        y: height / 2 + random(-300, 300)
+      };
+      // Choose a random shape type.
+      currentShapeType = random(shapeTypes);
+      // Choose a random color from the list.
+      currentColor = random(colorList);
+      // Choose and start a random jingle.
+      if (musicFiles.length > 0) {
+        currentMusic = random(musicFiles);
+        if (currentMusic && currentMusic.isLoaded()) {
+          currentMusic.setVolume(1);
+          currentMusic.loop();
+        }
+      }
+    }
+  }
+  
+  function keyReleased() {
+    if (!started) return;
+    if (key === ' ' && isGrowing) {
+      isGrowing = false;
+      // Begin fade-out for the shapes.
+      isFading = true;
+      fadeStartTime = millis();
+      // Stop the music when space is released.
+      if (currentMusic && currentMusic.isPlaying()) {
+        currentMusic.stop();
+      }
+    }
+  }
+  
+  /* UTILITY */
+  function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+  }
+  
+  /* PROMPT OVERLAY & GAME START */
+  document.getElementById("startButton").addEventListener("click", function() {
+    started = true;
+    document.getElementById("promptOverlay").style.display = "none";
+  });
+</script>
+</body>
+</html>
