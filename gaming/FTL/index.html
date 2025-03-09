@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>FTL Travel with Dual FTL Modes (SPACE = Slow, ENTER = Fast)</title>
+  <!-- p5.js and p5.sound libraries -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+</head>
+<body>
+  <div id="promptOverlay">
+    <button id="infoButton" title="Plus d'infos">ⓘ</button>
+    <p>
+        Tenir la switch pour faire avancer un vaisseau spatial à travers l'espace interstellaire.<br>
+        Première switch pour le mode croisière (lent)<br>
+        Deuxième switch pour le mode aventure (rapide)<br>
+      </p>
+    <button id="startButton">Commencer</button>
+  </div>
+  <div id="infoModal" style="display:none;">
+    <p>
+        <p>Compétence: appuyer et maintenir<br> SENICT switch skills niveau 2 <br>Switch Progression Roadmap niveau 11 à 13</p>
+    <button id="closeModal">Fermer</button>
+  </div>
+
+  <script>
+    let started = false;
+    // ftlMode: "slow", "fast", or null (no FTL mode active)
+    let ftlMode = null;
+    let canvas;
+
+    // Sound variables
+    let currentSong = null;
+    let currentSongType = null; // "slow" or "fast"
+    let launchSound, engineHumSound;
+    let launchPlayed = false;
+    let slowSongs = [];
+    let fastSongs = [];
+    // Playlists paths
+    let slowSongPaths = [
+      "../../songs/space/spacequest1.mp3",
+      "../../songs/space/spacequest2.mp3",
+      "../../songs/space/spacequest3.mp3"
+    ];
+    let fastSongPaths = [
+      "../../songs/space/spacequestfast1.mp3",
+      "../../songs/space/spacequestfast2.mp3"
+    ];
+
+    // Starfield
+    let swStars = [];
+    const numSWStars = 200;
+    const normalStarSpeed = 0.2;
+    const ftlStarSpeed = 10; // Base speed for FTL mode
+
+    // Global speed factor for object approach
+    const globalSpeedFactor = 0.8;
+    
+    // Shooting stars
+    let shootingStars = [];
+    const shootingStarInterval = 5000;
+    let lastShootingStarTime = 0;
+    
+    // Galactic objects – spawn from a pool of six types
+    let galacticObjects = [];
+    const objectInterval = 5000; // one object every 5 seconds (default)
+    let lastObjectSpawnTime = 0;
+    
+    function preload() {
+      for (let i = 0; i < slowSongPaths.length; i++) {
+        slowSongs[i] = loadSound(slowSongPaths[i]);
+      }
+      for (let i = 0; i < fastSongPaths.length; i++) {
+        fastSongs[i] = loadSound(fastSongPaths[i]);
+      }
+      // Load launch and engine hum sounds
+      launchSound = loadSound("../../sounds/spacequestlaunch.mp3");
+      engineHumSound = loadSound("../../sounds/spacequesthum.mp3");
+    }
+    
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.position(0, 0);
+      // Create background stars
+      for (let i = 0; i < numSWStars; i++) {
+        swStars.push(new Star());
+      }
+    }
+    
+    function draw() {
+      background(0, 20);
+      
+      // Update and display starfield
+      push();
+      translate(width / 2, height / 2);
+      for (let star of swStars) {
+        star.update();
+        star.display();
+      }
+      pop();
+      
+      if (!started) return;
+      
+      // Music control: if FTL mode changes, switch playlist accordingly.
+      if (ftlMode !== null && ftlMode !== currentSongType) {
+        if (currentSong) currentSong.pause(); // pause current song
+        currentSong = null; // so that a new song will be selected next time
+        currentSongType = ftlMode;
+      }
+      
+      // Shooting stars (only in FTL mode)
+      if (ftlMode !== null && millis() - lastShootingStarTime > shootingStarInterval) {
+        shootingStars.push(new ShootingStar());
+        lastShootingStarTime = millis();
+      }
+      for (let i = shootingStars.length - 1; i >= 0; i--) {
+        shootingStars[i].update();
+        shootingStars[i].display();
+        if (shootingStars[i].isOffScreen()) {
+          shootingStars.splice(i, 1);
+        }
+      }
+      
+      // Adjust spawn interval based on mode:
+      let currentInterval = objectInterval;
+      if (ftlMode === "slow") {
+        currentInterval *= 2; // spawn objects half as frequently in slow mode.
+      }
+      
+      // Spawn new galactic objects only in FTL mode
+      if (ftlMode !== null && millis() - lastObjectSpawnTime > currentInterval) {
+        let types = ["fire", "ice", "sun", "asteroid", "gaseous", "toxic"];
+        let pick = random(types);
+        if (pick === "fire") {
+          galacticObjects.push(new FirePlanet());
+        } else if (pick === "ice") {
+          galacticObjects.push(new IcePlanet());
+        } else if (pick === "sun") {
+          galacticObjects.push(new Sun());
+        } else if (pick === "asteroid") {
+          galacticObjects.push(new Asteroid());
+        } else if (pick === "gaseous") {
+          galacticObjects.push(new GaseousGiant());
+        } else if (pick === "toxic") {
+          galacticObjects.push(new ToxicPlanet());
+        }
+        lastObjectSpawnTime = millis();
+      }
+      
+      // Update and display galactic objects
+      push();
+      translate(width / 2, height / 2);
+      for (let i = galacticObjects.length - 1; i >= 0; i--) {
+        galacticObjects[i].update();
+        galacticObjects[i].display();
+        if (galacticObjects[i].isGone()) {
+          galacticObjects.splice(i, 1);
+        }
+      }
+      pop();
+      
+      // Music playback: if FTL mode is active, resume (or start) the appropriate track.
+      if (ftlMode !== null) {
+        // If there's an existing currentSong, resume it if it's paused.
+        if (currentSong && !currentSong.isPlaying()) {
+          currentSong.play();
+        } else if (!currentSong) {
+          // Otherwise, if no song is selected, choose one from the appropriate playlist.
+          if (ftlMode === "fast") {
+            currentSong = pickRandomSongFrom(fastSongs);
+          } else if (ftlMode === "slow") {
+            currentSong = pickRandomSongFrom(slowSongs);
+          }
+          currentSong.loop();
+          currentSongType = ftlMode;
+        }
+      }
+    }
+    
+    // Utility: returns base speed based on FTL mode
+    function ftlActiveForUpdate() {
+      if (ftlMode === "fast" || ftlMode === "slow") {
+        return ftlStarSpeed;
+      } else {
+        return normalStarSpeed;
+      }
+    }
+    
+    // =========== Star (Background) ===========
+    class Star {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width);
+      }
+      update() {
+        // Multiplier: 0.5 in slow mode, 1.5 in fast mode, 1 if no FTL
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        let speed = ftlActiveForUpdate();
+        this.z -= speed * multiplier;
+        if (this.z < 1) this.reset();
+      }
+      display() {
+        fill(255);
+        noStroke();
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width, 4, 0);
+        ellipse(sx, sy, r, r);
+      }
+    }
+    
+    // =========== Shooting Star ===========
+    class ShootingStar {
+      constructor() {
+        if (random() < 0.5) {
+          this.x = -50;
+          this.y = random(height);
+          this.vel = createVector(random(5, 10), random(-2, 2));
+        } else {
+          this.x = random(width);
+          this.y = -50;
+          this.vel = createVector(random(-2, 2), random(5, 10));
+        }
+        this.trailLength = random(50, 150);
+        this.alpha = 255;
+      }
+      update() {
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        this.x += this.vel.x * multiplier;
+        this.y += this.vel.y * multiplier;
+        this.alpha -= 5;
+      }
+      display() {
+        stroke(255, this.alpha);
+        strokeWeight(2);
+        line(
+          this.x, this.y,
+          this.x - this.vel.x * (this.trailLength / 20),
+          this.y - this.vel.y * (this.trailLength / 20)
+        );
+        noStroke();
+        fill(255, this.alpha);
+        ellipse(this.x, this.y, 4);
+      }
+      isOffScreen() {
+        return (this.x > width + 50 || this.x < -50 ||
+                this.y > height + 50 || this.y < -50 ||
+                this.alpha <= 0);
+      }
+    }
+    
+    // ====== FirePlanet (Lava Planet) ======
+    class FirePlanet {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(70, 130);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        let planetR = this.baseSize * 0.5;
+        let c1 = color(255, 140, 0);
+        let c2 = color(255, 110, 0);
+        for (let r = planetR; r > 0; r--) {
+          let t = r / planetR;
+          let col = lerpColor(c1, c2, 1 - t);
+          pg.noStroke();
+          pg.fill(col);
+          pg.ellipse(0, 0, r * 2, r * 2);
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        let s = ftlActiveForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+    
+    // ====== IcePlanet ======
+    class IcePlanet {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(70, 130);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        let planetR = this.baseSize * 0.5;
+        let c1 = color(180, 220, 255);
+        let c2 = color(255, 255, 255);
+        for (let r = planetR; r > 0; r--) {
+          let t = r / planetR;
+          let col = lerpColor(c1, c2, 1 - t);
+          pg.noStroke();
+          pg.fill(col);
+          pg.ellipse(0, 0, r * 2, r * 2);
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        let s = ftlActiveForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+    
+    // ====== Sun ======
+    class Sun {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(150, 250);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        let sunR = this.baseSize * 0.5;
+        for (let r = sunR; r > 0; r--) {
+          let t = r / sunR;
+          let col = lerpColor(color(255,255,255), color(255,255,0), 1 - t);
+          pg.noStroke();
+          pg.fill(col);
+          pg.ellipse(0, 0, r * 2, r * 2);
+        }
+        for (let r = sunR * 1.2; r < sunR * 1.8; r += 2) {
+          let t = (r - sunR * 1.2) / (sunR * 0.6);
+          let col = lerpColor(color(255,200,0,80), color(255,150,0,0), t);
+          pg.noStroke();
+          pg.fill(col);
+          pg.ellipse(0, 0, r * 2, r * 2);
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        let s = ftlActiveForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+    
+    // ====== Asteroid ======
+    class Asteroid {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(20, 40);
+        this.vertexCount = floor(random(6, 10));
+        this.variation = random(0.3, 0.8);
+        this.vertexOffsets = [];
+        for (let i = 0; i < this.vertexCount; i++) {
+          this.vertexOffsets.push(random(-this.variation, this.variation));
+        }
+      }
+      update() {
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        let s = ftlActiveForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        noStroke();
+        fill(100,100,100);
+        beginShape();
+        for (let i = 0; i < this.vertexCount; i++) {
+          let angle = map(i, 0, this.vertexCount, 0, TWO_PI);
+          let offset = this.vertexOffsets[i];
+          let rad = r * (1 + offset);
+          vertex(rad * cos(angle), rad * sin(angle));
+        }
+        endShape(CLOSE);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+    
+    // ====== GaseousGiant ======
+    class GaseousGiant {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(120, 200);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        let radius = this.baseSize * 0.5;
+        let centerColor = color(100,150,255);
+        let edgeColor = color(20,50,150);
+        for (let r = radius; r > 0; r--) {
+          let t = r / radius;
+          let col = lerpColor(centerColor, edgeColor, 1 - t);
+          pg.noStroke();
+          pg.fill(col);
+          pg.ellipse(0, 0, r * 2, r * 2);
+        }
+        let numBands = 6;
+        for (let i = 0; i < numBands; i++) {
+          let yPos = map(i, 0, numBands - 1, -radius, radius);
+          let bandWidth = 2 * sqrt(sq(radius) - sq(yPos));
+          let bandHeight = radius * 0.1;
+          if (i % 2 === 0) {
+            pg.fill(255,255,255,30);
+          } else {
+            pg.fill(0,0,0,30);
+          }
+          pg.noStroke();
+          pg.ellipse(0, yPos, bandWidth, bandHeight);
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        let s = ftlActiveForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+    
+    // ====== ToxicPlanet (Green Marsh / Toxic Planet) ======
+    class ToxicPlanet {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(70, 130);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        let planetR = this.baseSize * 0.5;
+        let centerColor = color(100,255,100);
+        let edgeColor = color(20,100,20);
+        for (let r = planetR; r > 0; r--) {
+          let t = r / planetR;
+          let col = lerpColor(centerColor, edgeColor, 1 - t);
+          pg.noStroke();
+          pg.fill(col);
+          pg.ellipse(0, 0, r * 2, r * 2);
+        }
+        let blotchCount = 5;
+        for (let i = 0; i < blotchCount; i++) {
+          let bx = random(-planetR * 0.3, planetR * 0.3);
+          let by = random(-planetR * 0.3, planetR * 0.3);
+          let blotchSize = random(planetR * 0.05, planetR * 0.1);
+          pg.fill(50,200,50,150);
+          pg.ellipse(bx, by, blotchSize, blotchSize);
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
+        let s = ftlActiveForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+    
+    // ========== Utility Functions ==========
+    function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error(`Erreur: ${err.message}`);
+        });
+      }
+    }
+    function pickRandomSongFrom(arr) {
+      let index = floor(random(arr.length));
+      return arr[index];
+    }
+    
+    // =========== Key Controls ===========
+    function keyPressed() {
+      if (!started) return;
+      // SPACE triggers slow mode; ENTER triggers fast mode.
+      if (keyCode === 32) { // SPACE
+        ftlMode = "slow";
+      }
+      if (keyCode === ENTER) {
+        ftlMode = "fast";
+        if (!launchPlayed) {
+          launchSound.play();
+          launchPlayed = true;
+        }
+        if (!engineHumSound.isPlaying()) {
+          engineHumSound.loop();
+        }
+      }
+      if ((currentSong === null) || (currentSongType !== ftlMode)) {
+        if (ftlMode === "fast") {
+          currentSong = pickRandomSongFrom(fastSongs);
+          currentSong.loop();
+          currentSongType = "fast";
+        } else if (ftlMode === "slow") {
+          currentSong = pickRandomSongFrom(slowSongs);
+          currentSong.loop();
+          currentSongType = "slow";
+        }
+      } else if (currentSong && !currentSong.isPlaying()) {
+        // Resume the paused track if it's already loaded and paused.
+        currentSong.play();
+      }
+    }
+    
+    function keyReleased() {
+      if (!started) return;
+      if (keyCode === 32 && ftlMode === "slow") {
+        ftlMode = null;
+      }
+      if (keyCode === ENTER && ftlMode === "fast") {
+        ftlMode = null;
+        launchPlayed = false;
+        if (engineHumSound.isPlaying()) {
+          engineHumSound.stop();
+        }
+      }
+      // Instead of stopping the song, we pause it so it resumes next time.
+      if (ftlMode === null && currentSong !== null) {
+        currentSong.pause();
+        // Do not set currentSong or currentSongType to null, so it can resume.
+      }
+    }
+    
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+    });
+    document.getElementById("infoButton").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "block";
+    });
+    document.getElementById("closeModal").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "none";
+    });
+  </script>
+</body>
+</html>

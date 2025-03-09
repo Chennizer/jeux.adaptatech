@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Switch: vortex</title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+
+</head>
+<body>
+  <div id="promptOverlay">
+    <button id="infoButton" title="Plus d'infos">ⓘ</button>
+    <p>
+      Jeu pour une switch, maintenir pour activer l'animation et la musique.
+    </p>
+    <button id="startButton">Commencer</button>
+  </div>
+  <div id="infoModal" style="display:none;">
+    <p>
+        <p>Compétence: appuyer et maintenir<br>SENICT switch skills niveau 2<br>Switch Progression Roadmap niveau 11 à 13</p>
+    </p>
+    <button id="closeModal">Fermer</button>
+  </div>
+  <script>
+    let started = false;
+    let canvas;
+    let vortexActive = false;
+    let activationLocked = false;
+    let vortexParticles = [];
+    let shootingStars = [];
+    let centerX, centerY;
+    const shootingStarInterval = 5000;
+    let lastShootingStarTime = 0;
+    const waveDuration = 3000;
+    const wavePause = 2000;
+    let lastWaveCycle = 0;
+    let swStars = [];
+    const numSWStars = 200;
+    let songPaths = [
+      "../../songs/space/spacevortex1.mp3",
+      "../../songs/space/spacevortex2.mp3",
+      "../../songs/space/spacevortex3.mp3",
+      "../../songs/space/spacevortex4.mp3",
+      "../../songs/space/spacevortex5.mp3"
+    ];
+    let songs = [];
+    let currentSong = null;
+    let palettes = [
+      { name: "cold", colors: [] },
+      { name: "hot", colors: [] }
+    ];
+    let currentPalette = null;
+    function preload() {
+      for (let i = 0; i < songPaths.length; i++) {
+        songs[i] = loadSound(songPaths[i]);
+      }
+      palettes[0].colors = [color('#00ccff'), color('#cc00ff'), color('#66ccff')];
+      palettes[1].colors = [color('#ff0000'), color('#ff6600'), color('#ffcc00')];
+    }
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.position(0, 0);
+      centerX = width / 2;
+      centerY = height / 2;
+      lastWaveCycle = millis();
+      for (let i = 0; i < numSWStars; i++) {
+        swStars.push(new Star());
+      }
+    }
+    function draw() {
+      background(0, 20);
+      push();
+        translate(width / 2, height / 2);
+        for (let star of swStars) {
+          star.update();
+          star.display();
+        }
+      pop();
+      if (!started) return;
+      if (vortexActive) {
+        let waveTime = millis() - lastWaveCycle;
+        if (waveTime < waveDuration) {
+          for (let i = 0; i < 3; i++) {
+            vortexParticles.push(new VortexParticle());
+          }
+        } else if (waveTime > waveDuration + wavePause) {
+          lastWaveCycle = millis();
+        }
+      }
+      for (let i = vortexParticles.length - 1; i >= 0; i--) {
+        vortexParticles[i].update();
+        vortexParticles[i].display();
+        if (vortexParticles[i].alpha <= 0) {
+          vortexParticles.splice(i, 1);
+        }
+      }
+      if (millis() - lastShootingStarTime > shootingStarInterval) {
+        shootingStars.push(new ShootingStar());
+        lastShootingStarTime = millis();
+      }
+      for (let i = shootingStars.length - 1; i >= 0; i--) {
+        shootingStars[i].update();
+        shootingStars[i].display();
+        if (shootingStars[i].isOffScreen()) {
+          shootingStars.splice(i, 1);
+        }
+      }
+    }
+    class VortexParticle {
+      constructor() {
+        this.angle = random(TWO_PI);
+        this.radius = random(0, 10);
+        this.angularSpeed = random(0.010, 0.02);
+        this.radialSpeed = random(2, 2.5);
+        this.col = currentPalette ? random(currentPalette) : color('#00ccff');
+        this.size = random(4, 8);
+        this.alpha = 255;
+      }
+      update() {
+        this.radius += this.radialSpeed;
+        this.angle += this.angularSpeed;
+        if (!vortexActive) {
+          this.alpha -= 5;
+        }
+      }
+      display() {
+        let x = centerX + this.radius * cos(this.angle);
+        let y = centerY + this.radius * sin(this.angle);
+        noStroke();
+        fill(red(this.col), green(this.col), blue(this.col), this.alpha);
+        ellipse(x, y, this.size);
+      }
+    }
+    class ShootingStar {
+      constructor() {
+        if (random() < 0.5) {
+          this.x = -50;
+          this.y = random(height);
+        } else {
+          this.x = random(width);
+          this.y = -50;
+        }
+        this.vel = createVector(random(5, 10), random(5, 10));
+        this.trailLength = random(50, 150);
+        this.alpha = 255;
+      }
+      update() {
+        this.x += this.vel.x;
+        this.y += this.vel.y;
+        this.alpha -= 5;
+      }
+      display() {
+        stroke(255, this.alpha);
+        strokeWeight(2);
+        line(this.x, this.y, this.x - this.vel.x * this.trailLength / 20, this.y - this.vel.y * this.trailLength / 20);
+        noStroke();
+        fill(255, this.alpha);
+        ellipse(this.x, this.y, 4);
+      }
+      isOffScreen() {
+        return this.x > width + 50 || this.y > height + 50 || this.alpha <= 0;
+      }
+    }
+    class Star {
+      constructor() {
+        this.x = random(-width / 2, width / 2);
+        this.y = random(-height / 2, height / 2);
+        this.z = random(width);
+        this.origZ = this.z;
+      }
+      update() {
+        let speed = 0.2;
+        this.z -= speed;
+        if (this.z < 1) {
+          this.z = this.origZ;
+          this.x = random(-width / 2, width / 2);
+          this.y = random(-height / 2, height / 2);
+        }
+      }
+      display() {
+        fill(255);
+        noStroke();
+        let sx = (this.x / this.z) * width / 2;
+        let sy = (this.y / this.z) * height / 2;
+        let r = map(this.z, 0, width, 3, 0);
+        ellipse(sx, sy, r, r);
+      }
+    }
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      centerX = width / 2;
+      centerY = height / 2;
+      lastWaveCycle = millis();
+    }
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error(`Erreur: ${err.message}`);
+        });
+      }
+    }
+    function pickRandomSong() {
+      let index = floor(random(songs.length));
+      return songs[index];
+    }
+    function keyPressed() {
+      if (!started || activationLocked) return;
+      if (key === ' ') {
+        vortexActive = true;
+        currentPalette = random(palettes).colors;
+        lastWaveCycle = millis();
+        if (currentSong === null) {
+          currentSong = pickRandomSong();
+          currentSong.onended(() => {
+            if (vortexActive) {
+              currentSong = pickRandomSong();
+              currentSong.onended(arguments.callee);
+              currentSong.play();
+            }
+          });
+          currentSong.play();
+        } else if (!currentSong.isPlaying()) {
+          currentSong.play();
+        }
+      }
+    }
+    function keyReleased() {
+      if (!started) return;
+      if (key === ' ') {
+        vortexActive = false;
+        if (currentSong && currentSong.isPlaying()) {
+          currentSong.pause();
+        }
+        activationLocked = true;
+        setTimeout(() => {
+          activationLocked = false;
+        }, 1000);
+      }
+    }
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+    });
+    document.getElementById("infoButton").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "block";
+    });
+    document.getElementById("closeModal").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "none";
+    });
+  </script>
+</body>
+</html>
