@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Zen Water Ripple Simulation</title>
+  <title>Zen Water Ripple Simulation (Faster & Organic)</title>
   <link rel="stylesheet" href="../../css/otherswitch.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
@@ -102,7 +102,7 @@
 
   <script>
     /***************************************************************
-     *        GLOBAL VARIABLES & BASIC SETUP
+     *   GLOBAL VARIABLES & BASIC SETUP
      ***************************************************************/
     let started = false;
     let canvas;
@@ -114,27 +114,38 @@
     const fadeDuration = 1000;
 
     // 2D wave simulation
-    let cols, rows;         // grid size
-    let resolution = 2;     // pixel size of each cell in the simulation
-    let damping = 0.995;    // how quickly waves die out (closer to 1 = slower fade)
-    let previous, current;  // 2D arrays for wave height
+    let cols, rows;          // grid size
+    let resolution = 2;      // pixel size of each cell in the simulation
+    let damping = 0.99;      // how quickly waves die out (closer to 1 => slower fade)
+    let previous, current;   // 2D arrays for wave height
     let centerCellX, centerCellY;
+
+    // We’ll do multiple wave updates each frame to speed up propagation
+    let waveIterations = 2;  // number of times to run the update per draw()
 
     // Prevent spamming
     let cooldownPeriod = 2100; 
     let restartCooldown = false;
 
     // You can adjust the amplitude of the “pebble drop”
-    let dropStrength = 1000; // how big a wave is generated
+    let dropStrength = 400; // bigger => larger wave
 
-    // Colors: We'll map wave height to a gentle color
-    // but keep it subtle for a zen vibe
+    // Color function to get a more watery vibe
     function waveColor(h) {
-      // h might range roughly from -1000 to +1000 in big waves
-      // We can map that range to 0..255 for a gentle blueish color
-      let val = map(h, -1000, 1000, 100, 255, true);
-      // Then we do a fill with a slight blue hue
-      return color(val * 0.5, val, val); 
+      // h might range around [-400..400] after a strong ripple.
+      // We'll map that to a watery color with subtle variation.
+
+      // Map h to a range for brightness
+      // Negative wave “valley” => slightly darker color
+      // Positive wave “peak” => slightly brighter color
+      let val = map(h, -400, 400, 80, 220, true);
+
+      // We'll do a bluish base, shifting the G/B channels
+      // so the waves have a bit of a “liquid” shift in brightness.
+      let r = 0.2 * val;    // just a bit of red
+      let g = 0.6 * val;    
+      let b = val;
+      return color(r, g, b);
     }
 
     // Preload jingles if available
@@ -150,59 +161,38 @@
       canvas = createCanvas(windowWidth, windowHeight);
       canvas.position(0, 0);
       noStroke();
-      // For a calmer vibe, we can use colorMode(HSB) or just keep RGB
-      colorMode(RGB, 255);
 
-      // Calculate how many columns & rows based on our resolution
+      // Setup the wave grid
       cols = floor(width / resolution);
       rows = floor(height / resolution);
 
-      // Create & fill 2D arrays
       previous = new Array(cols).fill().map(() => new Array(rows).fill(0));
       current  = new Array(cols).fill().map(() => new Array(rows).fill(0));
 
-      // Identify the center cell for our “pebble”
+      // Identify center cell
       centerCellX = floor(cols / 2);
       centerCellY = floor(rows / 2);
+
+      // We’ll use colorMode(RGB) – default is fine
     }
 
     function draw() {
-      // Dark background
       background(0, 10, 40);
-
       if (!started) return; // if overlay not cleared, do nothing
 
-      // Water ripple simulation
-      for (let x = 1; x < cols - 1; x++) {
-        for (let y = 1; y < rows - 1; y++) {
-          // The wave equation
-          current[x][y] = (
-            previous[x-1][y] +
-            previous[x+1][y] +
-            previous[x][y-1] +
-            previous[x][y+1]
-          ) / 2 - current[x][y];
-
-          // Apply damping so waves fade over time
-          current[x][y] *= damping;
-        }
+      // Run the wave equation multiple times each frame to speed it up
+      for (let i = 0; i < waveIterations; i++) {
+        waveUpdate();
       }
 
-      // Draw and color each cell based on its wave height
+      // Draw the final result after updates
       for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
           let h = current[x][y];
-          // A subtle color
-          let c = waveColor(h);
-          fill(c);
+          fill(waveColor(h));
           rect(x * resolution, y * resolution, resolution, resolution);
         }
       }
-
-      // Swap the buffers: 'previous' becomes 'current' and vice versa
-      let temp = previous;
-      previous = current;
-      current = temp;
 
       // Handle music fade out (if Enter was released)
       if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
@@ -210,7 +200,6 @@
         let elapsed = now - releaseTime;
         let vol = pow(1 - (elapsed / fadeDuration), 2);
         currentMusic.setVolume(constrain(vol, 0, 1));
-
         if (elapsed >= fadeDuration) {
           // Stop all once we pass fadeDuration
           musicFiles.forEach(s => s.stop());
@@ -221,20 +210,50 @@
     }
 
     /***************************************************************
-     *        KEYBOARD & WINDOW RESIZE EVENTS
+     *   WAVE UPDATE: The Key to Our “Water” Simulation
      ***************************************************************/
+    function waveUpdate() {
+      // For each cell, apply the wave equation
+      // and store in `current[][]`
+      for (let x = 1; x < cols - 1; x++) {
+        for (let y = 1; y < rows - 1; y++) {
+          // A value based on neighbors:
+          // Using /1.95 instead of /2 speeds up wave propagation
+          let val = (
+            previous[x-1][y] +
+            previous[x+1][y] +
+            previous[x][y-1] +
+            previous[x][y+1]
+          ) / 1.95 - current[x][y];
 
+          // Apply damping to reduce amplitude over time
+          current[x][y] = val * damping;
+        }
+      }
+
+      // Swap buffers: previous <--> current
+      let temp = previous;
+      previous = current;
+      current = temp;
+    }
+
+    /***************************************************************
+     *   KEYBOARD & WINDOW RESIZE EVENTS
+     ***************************************************************/
     function keyPressed() {
-      // If the user hasn't started or we are in cooldown, ignore
       if (!started || restartCooldown) return;
-
-      // Check for Enter key
+      // If user presses Enter
       if (keyCode === ENTER) {
         restartCooldown = true;
         setTimeout(() => { restartCooldown = false; }, cooldownPeriod);
 
-        // Drop a “pebble” at the center (you could randomize the location if you want)
+        // “Drop a pebble” at center
         previous[centerCellX][centerCellY] = dropStrength;
+
+        // Optional: random location instead of center
+        // let rx = floor(random(cols));
+        // let ry = floor(random(rows));
+        // previous[rx][ry] = dropStrength;
 
         // Stop any existing music, pick a random jingle, and loop it
         musicFiles.forEach(s => s.stop());
@@ -251,8 +270,7 @@
 
     function keyReleased() {
       if (!started) return;
-
-      // If the Enter key is released, begin fade out
+      // If Enter key is released, start fade out
       if (keyCode === ENTER && currentMusic && currentMusic.isPlaying()) {
         releaseTime = millis();
       }
@@ -266,15 +284,13 @@
       previous = new Array(cols).fill().map(() => new Array(rows).fill(0));
       current  = new Array(cols).fill().map(() => new Array(rows).fill(0));
 
-      // Re-center
       centerCellX = floor(cols / 2);
       centerCellY = floor(rows / 2);
     }
 
     /***************************************************************
-     *        FULLSCREEN & OVERLAY HANDLERS
+     *   FULLSCREEN & OVERLAY HANDLERS
      ***************************************************************/
-
     function goFullscreen() {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen()
