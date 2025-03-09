@@ -1,71 +1,52 @@
 document.addEventListener('DOMContentLoaded', () => {
-  /* --- DOM ELEMENTS --- */
-  const gameOptionsModal    = document.getElementById('game-options');
-  const tileCountInput      = document.getElementById('tile-count');
-  const chooseTilesButton   = document.getElementById('choose-tiles-button');
-  const tileCountContainer  = document.getElementById('game-options-controls');
-
-  // Mode selection buttons
-  const modeChoiceButton     = document.getElementById('mode-choice-button');
-  const modeScanButton       = document.getElementById('mode-scan-button');
+  const gameOptionsModal = document.getElementById('game-options');
+  const tileCountInput = document.getElementById('tile-count');
+  const tileSliderContainer = document.getElementById('tile-slider-container'); // Container for the tile slider only
+  const tileCountContainer = document.getElementById('game-options-controls');
+  const chooseTilesButton = document.getElementById('choose-tiles-button');
+  const modeChoiceButton = document.getElementById('mode-choice-button');
+  const modeScanButton = document.getElementById('mode-scan-button');
   const modeThisOrThatButton = document.getElementById('mode-thisOrThat-button');
-  const modeFlashcardButton  = document.getElementById('mode-flashcard-button');
-  const scanDelayContainer   = document.getElementById('scan-delay-container');
-  const scanDelayInput       = document.getElementById('scan-delay');
-
-  // Advanced Options
-  const advancedOptionsButton   = document.getElementById('advanced-options-button');
-  const advancedOptionsModal    = document.getElementById('advanced-options-modal');
-  const closeAdvancedOptionsBtn = document.getElementById('close-advanced-options');
-  const enableCycleSoundCheckbox= document.getElementById('enable-cycle-sound');
+  const modeFlashcardButton = document.getElementById('mode-flashcard-button');
+  const modeFlashcardManualButton = document.getElementById('mode-flashcard-manual-button');
+  const scanDelayContainer = document.getElementById('scan-delay-container');
+  const scanDelayInput = document.getElementById('scan-delay');
+  const enableCycleSoundCheckbox = document.getElementById('enable-cycle-sound');
   const enableTimeLimitCheckbox = document.getElementById('enable-time-limit');
-  const timeLimitContainer      = document.getElementById('time-limit-container');
-  const timeLimitInput          = document.getElementById('time-limit-seconds');
-  const resumeVideoContainer    = document.getElementById('resume-video-container');
+  const timeLimitContainer = document.getElementById('time-limit-container');
+  const timeLimitInput = document.getElementById('time-limit-seconds');
+  const resumeVideoContainer = document.getElementById('resume-video-container');
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
+  const tilePickerModal = document.getElementById('tile-picker-modal');
+  const tilePickerGrid = document.getElementById('tile-picker-grid');
+  const tileCountDisplay = document.getElementById('tile-count-display');
+  const startGameButton = document.getElementById('start-game-button');
+  const categorySelect = document.getElementById('categorySelect');
+  const tileContainer = document.getElementById('tile-container');
+  const videoContainer = document.getElementById('video-container');
+  const videoPlayer = document.getElementById('video-player');
+  const videoSource = document.getElementById('video-source');
 
-  // Tile Picker Modal
-  const tilePickerModal    = document.getElementById('tile-picker-modal');
-  const tilePickerGrid     = document.getElementById('tile-picker-grid');
-  const tileCountDisplay   = document.getElementById('tile-count-display');
-  const startGameButton    = document.getElementById('start-game-button');
-  const categorySelect     = document.getElementById('categorySelect');
-
-  // Main Game / Video
-  const tileContainer      = document.getElementById('tile-container');
-  const videoContainer     = document.getElementById('video-container');
-  const videoPlayer        = document.getElementById('video-player');
-  const videoSource        = document.getElementById('video-source');
-
-  /* --- GAME VARIABLES --- */
-  let mode                 = "choice"; // "choice", "scan", "thisOrThat", "flashcard"
-  let desiredTileCount     = 0;
-  let selectedTileIndices  = [];
+  // Variables to hold game state
+  let mode = "choice";
+  let desiredTileCount = 0;
+  let selectedTileIndices = [];
   let currentSelectedIndex = 0;
-
-  let videoPlaying         = false;
-  
-  // Scanning (for "scan" mode)
-  let autoScanInterval     = null;
-  let scanningActive       = false;
-  
-  // Flashcard auto-advance (for "flashcard" mode)
-  let flashcardTimer       = null;
-  let flashcardActive      = false;
-
-  // Preview audio
-  let currentPreview       = null;
-  let previewTimeout       = null;
-  let previewDelayTimeout  = null;
-
-  let preventAutoPreview   = false;
-  let inactivityTimer      = null;
-  let videoTimeLimitTimeout= null;
+  let videoPlaying = false;
+  let autoScanInterval = null;
+  let scanningActive = false;
+  let flashcardTimer = null;
+  let flashcardActive = false;
+  let currentPreview = null;
+  let previewTimeout = null;
+  let previewDelayTimeout = null;
+  let preventAutoPreview = false;
+  let inactivityTimer = null;
+  let videoTimeLimitTimeout = null;
   let videoResumePositions = {};
+  let currentCategory = "all";
 
-  /* ----------------------------------------------------------------
-     (A) INACTIVITY TIMER
-     ---------------------------------------------------------------- */
+  // Inactivity timer functions
   function clearInactivityTimer() {
     if (inactivityTimer) {
       clearTimeout(inactivityTimer);
@@ -83,13 +64,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function resetInactivityTimer() {
     if (!videoPlaying) startInactivityTimer();
   }
+
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
   });
 
-  /* ----------------------------------------------------------------
-     (B) HELPER FUNCTIONS
-     ---------------------------------------------------------------- */
   function stopPreview() {
     if (currentPreview) {
       currentPreview.pause();
@@ -106,12 +85,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     startInactivityTimer();
   }
+
   function playCycleSound() {
     if (enableCycleSoundCheckbox.checked) {
       const cycleSound = new Audio("../../sounds/woosh.mp3");
       cycleSound.play().catch(err => console.error("Cycle sound error:", err));
     }
   }
+
   function preloadVideos(videoUrls, loadingIndicator) {
     let loadedCount = 0;
     const totalCount = videoUrls.length;
@@ -135,9 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
   }
 
-  /* ----------------------------------------------------------------
-     (B.1) PAUSE / RESUME GAME ACTIVITY
-     ---------------------------------------------------------------- */
   function pauseGameActivity() {
     stopPreview();
     if (autoScanInterval) {
@@ -156,6 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     videoPlaying = true;
   }
+
   function resumeGameActivity() {
     videoPlaying = false;
     if (scanningActive && mode === "scan") {
@@ -172,66 +151,104 @@ document.addEventListener('DOMContentLoaded', () => {
     resetInactivityTimer();
   }
 
-  /* ----------------------------------------------------------------
-     (C) MODE BUTTON HANDLERS
-     ---------------------------------------------------------------- */
+  // Helper function to reset tile count back to default (3)
+  function resetTileCountToDefault() {
+    tileCountInput.value = 3;
+    document.getElementById('tile-count-value').textContent = 3;
+    tileCountInput.disabled = false;
+  }
+
+  // Mode selection events
   modeChoiceButton.addEventListener('click', () => {
     mode = "choice";
     modeChoiceButton.classList.add('selected');
     modeScanButton.classList.remove('selected');
     modeThisOrThatButton.classList.remove('selected');
     modeFlashcardButton.classList.remove('selected');
-    tileCountInput.disabled = false;
+    modeFlashcardManualButton.classList.remove('selected');
+
+    // Restore tile count to default
+    resetTileCountToDefault();
+
     tileCountContainer.style.display = 'flex';
+    tileSliderContainer.style.visibility = 'visible';
     scanDelayContainer.style.display = 'none';
     document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
   });
+
   modeScanButton.addEventListener('click', () => {
     mode = "scan";
     modeScanButton.classList.add('selected');
     modeChoiceButton.classList.remove('selected');
     modeThisOrThatButton.classList.remove('selected');
     modeFlashcardButton.classList.remove('selected');
-    tileCountInput.disabled = false;
+    modeFlashcardManualButton.classList.remove('selected');
+
+    // Restore tile count to default
+    resetTileCountToDefault();
+
     tileCountContainer.style.display = 'flex';
+    tileSliderContainer.style.visibility = 'visible';
     scanDelayContainer.style.display = 'block';
     document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
   });
+
   modeThisOrThatButton.addEventListener('click', () => {
     mode = "thisOrThat";
     modeThisOrThatButton.classList.add('selected');
     modeChoiceButton.classList.remove('selected');
     modeScanButton.classList.remove('selected');
     modeFlashcardButton.classList.remove('selected');
+    modeFlashcardManualButton.classList.remove('selected');
+
+    // Force tile count to 2 and disable the slider
     tileCountInput.value = 2;
+    document.getElementById('tile-count-value').textContent = 2;
     tileCountInput.disabled = true;
-    tileCountContainer.style.display = 'none';
+    // Hide only the slider part but reserve the column space
+    tileSliderContainer.style.visibility = 'hidden';
     scanDelayContainer.style.display = 'none';
     document.body.classList.add('this-or-that-mode');
     document.body.classList.remove('flashcard-mode');
   });
+
   modeFlashcardButton.addEventListener('click', () => {
     mode = "flashcard";
     modeFlashcardButton.classList.add('selected');
     modeChoiceButton.classList.remove('selected');
     modeScanButton.classList.remove('selected');
     modeThisOrThatButton.classList.remove('selected');
-    tileCountInput.disabled = false;
+    modeFlashcardManualButton.classList.remove('selected');
+
+    // Restore tile count to default
+    resetTileCountToDefault();
+
     tileCountContainer.style.display = 'flex';
+    tileSliderContainer.style.visibility = 'visible';
     scanDelayContainer.style.display = 'block';
     document.body.classList.add('flashcard-mode');
     document.body.classList.remove('this-or-that-mode');
   });
 
-  /* ----------------------------------------------------------------
-     (D) ADVANCED OPTIONS
-     ---------------------------------------------------------------- */
-  advancedOptionsButton.addEventListener('click', () => {
-    advancedOptionsModal.style.display = 'flex';
+  modeFlashcardManualButton.addEventListener('click', () => {
+    mode = "flashcard-manual";
+    modeFlashcardManualButton.classList.add('selected');
+    modeFlashcardButton.classList.remove('selected');
+    modeChoiceButton.classList.remove('selected');
+    modeScanButton.classList.remove('selected');
+    modeThisOrThatButton.classList.remove('selected');
+
+    // Restore tile count to default
+    resetTileCountToDefault();
+
+    tileCountContainer.style.display = 'flex';
+    tileSliderContainer.style.visibility = 'visible';
+    scanDelayContainer.style.display = 'none';
+    document.body.classList.add('flashcard-mode');
+    document.body.classList.remove('this-or-that-mode');
   });
-  closeAdvancedOptionsBtn.addEventListener('click', () => {
-    advancedOptionsModal.style.display = 'none';
-  });
+
+  // Advanced Options: Show/hide time limit and resume video options
   enableTimeLimitCheckbox.addEventListener('change', () => {
     if (enableTimeLimitCheckbox.checked) {
       timeLimitContainer.style.display = 'block';
@@ -242,9 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  /* ----------------------------------------------------------------
-     (E) TILE PICKER
-     ---------------------------------------------------------------- */
+  // Populate tile picker grid
   function populateTilePickerGrid() {
     tilePickerGrid.innerHTML = "";
     const inCategoryContainer = document.createElement('div');
@@ -305,9 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
     startGameButton.disabled = (selectedTileIndices.length !== desiredTileCount);
   }
 
-  /* ----------------------------------------------------------------
-     (F) FLASHCARD MODE FUNCTIONS
-     ---------------------------------------------------------------- */
+  // Render flashcard mode
   function renderFlashcard() {
     tileContainer.innerHTML = "";
     const mediaIndex = selectedTileIndices[currentSelectedIndex];
@@ -321,15 +334,16 @@ document.addEventListener('DOMContentLoaded', () => {
     tile.appendChild(caption);
     tileContainer.appendChild(tile);
     tileContainer.style.display = 'flex';
-    // Play preview only if not in thisOrThat mode
     playPreviewForTile(currentSelectedIndex);
   }
+
   function clearFlashcardTimer() {
     if (flashcardTimer) {
       clearTimeout(flashcardTimer);
       flashcardTimer = null;
     }
   }
+
   function startFlashcardTimer() {
     clearFlashcardTimer();
     const delay = parseInt(scanDelayInput.value, 10) || 10;
@@ -341,13 +355,13 @@ document.addEventListener('DOMContentLoaded', () => {
     flashcardActive = true;
   }
 
-  /* ----------------------------------------------------------------
-     (G) RENDER MAIN GAME
-     ---------------------------------------------------------------- */
+  // Render game tiles for non-flashcard modes
   function renderGameTiles() {
     if (mode === "flashcard") {
       renderFlashcard();
       startFlashcardTimer();
+    } else if (mode === "flashcard-manual") {
+      renderFlashcard();
     } else {
       tileContainer.innerHTML = "";
       const tilesToDisplay = selectedTileIndices.map(i => mediaChoices[i]);
@@ -379,7 +393,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // For non-flashcard modes.
   function updateSelection() {
     if (mode === "thisOrThat" || mode === "flashcard") return;
     const tiles = document.querySelectorAll('#tile-container .tile');
@@ -405,7 +418,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function playPreviewForTile(idx) {
-    // In "thisOrThat" mode, no preview should be played.
     if (mode === "thisOrThat") return;
     stopPreview();
     if (!selectedTileIndices.length) return;
@@ -418,9 +430,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /* ----------------------------------------------------------------
-     (H) RESET TO CHOICES SCREEN
-     ---------------------------------------------------------------- */
   function resetToChoicesScreen() {
     stopPreview();
     videoPlayer.pause();
@@ -456,9 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /* ----------------------------------------------------------------
-     (I) KEYDOWN HANDLER
-     ---------------------------------------------------------------- */
+  // Keyboard navigation and controls
   document.addEventListener('keydown', (e) => {
     resetInactivityTimer();
     if (videoPlaying && e.key === 'Backspace') {
@@ -467,16 +474,22 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (videoPlaying) return;
-    // In flashcard mode, space plays video without preview
-    if (mode === "flashcard" && e.key === " ") {
+    if ((mode === "flashcard" || mode === "flashcard-manual") && e.key === " ") {
       e.preventDefault();
-      clearFlashcardTimer();
-      flashcardActive = false;
+      if (mode === "flashcard") {
+        clearFlashcardTimer();
+        flashcardActive = false;
+      }
       const mediaIndex = selectedTileIndices[currentSelectedIndex];
       playVideo(mediaChoices[mediaIndex].video);
       return;
     }
-    // This or That mode
+    if (mode === "flashcard-manual" && e.key === "Enter") {
+      e.preventDefault();
+      currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
+      renderFlashcard();
+      return;
+    }
     if (mode === "thisOrThat" && selectedTileIndices.length === 2) {
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
@@ -516,9 +529,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  /* ----------------------------------------------------------------
-     (J) PLAY VIDEO
-     ---------------------------------------------------------------- */
   function playVideo(videoUrl) {
     pauseGameActivity();
     tileContainer.style.display = 'none';
@@ -569,9 +579,6 @@ document.addEventListener('DOMContentLoaded', () => {
     tileContainer.style.display = 'flex';
   });
 
-  /* ----------------------------------------------------------------
-     (K) TILE PICKER & START GAME
-     ---------------------------------------------------------------- */
   chooseTilesButton.addEventListener('click', () => {
     if (mode === "thisOrThat") {
       desiredTileCount = 2;
@@ -608,7 +615,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingScreen.style.alignItems = 'center';
     loadingScreen.style.color = 'white';
     loadingScreen.style.fontSize = '24px';
-
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loading-indicator';
     const videoUrls = selectedTileIndices.map(i => mediaChoices[i].video).filter(url => url);
@@ -616,13 +622,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingIndicator.textContent = `Chargement... (0 / ${totalCount})`;
     loadingScreen.appendChild(loadingIndicator);
     document.body.appendChild(loadingScreen);
-
     setTimeout(() => {
       preloadVideos(videoUrls, loadingIndicator).then(() => {
         document.body.removeChild(loadingScreen);
         if (mode === "flashcard") {
           renderFlashcard();
           startFlashcardTimer();
+        } else if (mode === "flashcard-manual") {
+          renderFlashcard();
         } else {
           renderGameTiles();
         }

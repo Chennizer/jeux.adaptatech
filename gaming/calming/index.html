@@ -2,118 +2,301 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Zen Garden Ripple</title>
+  <title>Zen Water Ripple Simulation</title>
   <link rel="stylesheet" href="../../css/otherswitch.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
   <script src="../../js/jingles.js"></script>
   <style>
-    body, html { margin: 0; padding: 0; overflow: hidden; background: #0A0A28; font-family: 'Roboto', sans-serif; }
-    canvas { display: block; }
-    #promptOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; text-align: center; z-index: 10; }
-    #promptOverlay p { font-size: 20px; margin: 0 20px 20px; }
-    #startButton { padding: 20px 40px; font-size: 24px; cursor: pointer; background-color: #0077be; border: none; border-radius: 10px; color: white; }
-    #startButton:hover { background-color: #0088cc; }
-    #infoModal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; color: #fff; padding: 20px; border-radius: 10px; z-index: 20; text-align: center; }
-    #infoModal p { margin: 0 0 20px; font-size: 18px; }
-    #closeModal { padding: 10px 20px; font-size: 18px; cursor: pointer; background-color: #0077be; border: none; border-radius: 5px; color: white; }
-    #infoButton { position: absolute; top: 20px; right: 20px; background: none; border: none; font-size: 24px; color: #fff; cursor: pointer; }
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #0A0A28;
+      font-family: 'Roboto', sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    #promptOverlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      text-align: center;
+      z-index: 10;
+    }
+    #promptOverlay p {
+      font-size: 20px;
+      margin: 0 20px 20px;
+    }
+    #startButton {
+      padding: 20px 40px;
+      font-size: 24px;
+      cursor: pointer;
+      background-color: #0077be;
+      border: none;
+      border-radius: 10px;
+      color: white;
+    }
+    #startButton:hover {
+      background-color: #0088cc;
+    }
+    #infoModal {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: #222;
+      color: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      z-index: 20;
+      text-align: center;
+    }
+    #infoModal p {
+      margin: 0 0 20px;
+      font-size: 18px;
+    }
+    #closeModal {
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+      background-color: #0077be;
+      border: none;
+      border-radius: 5px;
+      color: white;
+    }
+    #infoButton {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #fff;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <div id="promptOverlay">
     <button id="infoButton" title="More info">ⓘ</button>
-    <p>Appuyer sur espace pour créer une ondulation d'eau zen</p>
+    <p>Appuyer sur Entrée pour jeter un caillou dans l'eau</p>
     <button id="startButton">Commencer</button>
   </div>
+
   <div id="infoModal">
-    <p>Compétence: appuyer et maintenir<br>SENICT switch skills niveau 2<br>Switch Progression Roadmap niveau 11 à 13</p>
+    <p>
+      Compétence: appuyer et maintenir<br>
+      SENICT switch skills niveau 2<br>
+      Switch Progression Roadmap niveau 11 à 13
+    </p>
     <button id="closeModal">Fermer</button>
   </div>
+
   <script>
+    /***************************************************************
+     *        GLOBAL VARIABLES & BASIC SETUP
+     ***************************************************************/
     let started = false;
     let canvas;
+
+    // Sound/music handling
     let musicFiles = [];
     let currentMusic = null;
     let releaseTime = null;
     const fadeDuration = 1000;
-    let ripples = [];
+
+    // 2D wave simulation
+    let cols, rows;         // grid size
+    let resolution = 2;     // pixel size of each cell in the simulation
+    let damping = 0.995;    // how quickly waves die out (closer to 1 = slower fade)
+    let previous, current;  // 2D arrays for wave height
+    let centerCellX, centerCellY;
+
+    // Prevent spamming
     let cooldownPeriod = 2100; 
-    let centerX, centerY;
-    const initialRadius = 0;
-    let finalRadius;
-    let colorList = ["#1E90FF", "#00BFFF", "#87CEFA", "#4682B4", "#5F9EA0", "#6495ED"];
-    let currentColor = "#1E90FF";
     let restartCooldown = false;
+
+    // You can adjust the amplitude of the “pebble drop”
+    let dropStrength = 1000; // how big a wave is generated
+
+    // Colors: We'll map wave height to a gentle color
+    // but keep it subtle for a zen vibe
+    function waveColor(h) {
+      // h might range roughly from -1000 to +1000 in big waves
+      // We can map that range to 0..255 for a gentle blueish color
+      let val = map(h, -1000, 1000, 100, 255, true);
+      // Then we do a fill with a slight blue hue
+      return color(val * 0.5, val, val); 
+    }
+
+    // Preload jingles if available
     function preload() {
       if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
-        for (let item of window.jingleLibraryArray) { musicFiles.push(loadSound(item.src)); }
+        for (let item of window.jingleLibraryArray) {
+          musicFiles.push(loadSound(item.src));
+        }
       }
     }
+
     function setup() {
       canvas = createCanvas(windowWidth, windowHeight);
       canvas.position(0, 0);
-      noFill();
-      strokeWeight(2);
-      centerX = width / 2;
-      centerY = height / 2;
-      finalRadius = width / 2;
+      noStroke();
+      // For a calmer vibe, we can use colorMode(HSB) or just keep RGB
+      colorMode(RGB, 255);
+
+      // Calculate how many columns & rows based on our resolution
+      cols = floor(width / resolution);
+      rows = floor(height / resolution);
+
+      // Create & fill 2D arrays
+      previous = new Array(cols).fill().map(() => new Array(rows).fill(0));
+      current  = new Array(cols).fill().map(() => new Array(rows).fill(0));
+
+      // Identify the center cell for our “pebble”
+      centerCellX = floor(cols / 2);
+      centerCellY = floor(rows / 2);
     }
+
     function draw() {
-      background(10, 10, 40);
-      if (!started) return;
-      let now = millis();
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        let r = ripples[i];
-        let p = constrain((now - r.startTime) / r.duration, 0, 1);
-        let radius = lerp(r.initialRadius, r.finalRadius, p);
-        let a = 255 * (1 - p * p);
-        r.c.setAlpha(a);
-        push();
-          translate(r.x, r.y);
-          beginShape();
-            for (let angle = 0; angle < TWO_PI; angle += 0.1) {
-              let n = noise(cos(angle)*100, sin(angle)*100, p * 5);
-              let offset = map(n, 0, 1, -5, 5);
-              let r2 = radius + offset;
-              let x = r2 * cos(angle);
-              let y = r2 * sin(angle);
-              vertex(x, y);
-            }
-          endShape(CLOSE);
-        pop();
-        if (p >= 1) { ripples.splice(i, 1); }
+      // Dark background
+      background(0, 10, 40);
+
+      if (!started) return; // if overlay not cleared, do nothing
+
+      // Water ripple simulation
+      for (let x = 1; x < cols - 1; x++) {
+        for (let y = 1; y < rows - 1; y++) {
+          // The wave equation
+          current[x][y] = (
+            previous[x-1][y] +
+            previous[x+1][y] +
+            previous[x][y-1] +
+            previous[x][y+1]
+          ) / 2 - current[x][y];
+
+          // Apply damping so waves fade over time
+          current[x][y] *= damping;
+        }
       }
+
+      // Draw and color each cell based on its wave height
+      for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+          let h = current[x][y];
+          // A subtle color
+          let c = waveColor(h);
+          fill(c);
+          rect(x * resolution, y * resolution, resolution, resolution);
+        }
+      }
+
+      // Swap the buffers: 'previous' becomes 'current' and vice versa
+      let temp = previous;
+      previous = current;
+      current = temp;
+
+      // Handle music fade out (if Enter was released)
       if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
+        let now = millis();
         let elapsed = now - releaseTime;
         let vol = pow(1 - (elapsed / fadeDuration), 2);
         currentMusic.setVolume(constrain(vol, 0, 1));
-        if (elapsed >= fadeDuration) { musicFiles.forEach(s => s.stop()); currentMusic = null; releaseTime = null; }
+
+        if (elapsed >= fadeDuration) {
+          // Stop all once we pass fadeDuration
+          musicFiles.forEach(s => s.stop());
+          currentMusic = null;
+          releaseTime = null;
+        }
       }
     }
+
+    /***************************************************************
+     *        KEYBOARD & WINDOW RESIZE EVENTS
+     ***************************************************************/
+
     function keyPressed() {
+      // If the user hasn't started or we are in cooldown, ignore
       if (!started || restartCooldown) return;
-      if (key === ' ') {
+
+      // Check for Enter key
+      if (keyCode === ENTER) {
         restartCooldown = true;
         setTimeout(() => { restartCooldown = false; }, cooldownPeriod);
-        ripples.push({ x: centerX, y: centerY, startTime: millis(), duration: 2000, initialRadius: initialRadius, finalRadius: finalRadius, c: color(random(colorList)) });
+
+        // Drop a “pebble” at the center (you could randomize the location if you want)
+        previous[centerCellX][centerCellY] = dropStrength;
+
+        // Stop any existing music, pick a random jingle, and loop it
         musicFiles.forEach(s => s.stop());
         getAudioContext().resume();
         if (musicFiles.length > 0) {
           currentMusic = random(musicFiles);
-          if (currentMusic && currentMusic.isLoaded()) { currentMusic.setVolume(1); currentMusic.loop(); }
+          if (currentMusic && currentMusic.isLoaded()) {
+            currentMusic.setVolume(1);
+            currentMusic.loop();
+          }
         }
       }
     }
+
     function keyReleased() {
       if (!started) return;
-      if (key === ' ' && currentMusic && currentMusic.isPlaying()) { releaseTime = millis(); }
+
+      // If the Enter key is released, begin fade out
+      if (keyCode === ENTER && currentMusic && currentMusic.isPlaying()) {
+        releaseTime = millis();
+      }
     }
-    function windowResized() { resizeCanvas(windowWidth, windowHeight); centerX = width/2; centerY = height/2; finalRadius = width/2; }
-    function goFullscreen() { if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(err => { console.error(`Erreur lors du passage en plein écran: ${err.message}`); }); } }
-    document.getElementById("startButton").addEventListener("click", function() { started = true; document.getElementById("promptOverlay").style.display = "none"; goFullscreen(); });
-    document.getElementById("infoButton").addEventListener("click", function() { document.getElementById("infoModal").style.display = "block"; });
-    document.getElementById("closeModal").addEventListener("click", function() { document.getElementById("infoModal").style.display = "none"; });
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      cols = floor(width / resolution);
+      rows = floor(height / resolution);
+
+      previous = new Array(cols).fill().map(() => new Array(rows).fill(0));
+      current  = new Array(cols).fill().map(() => new Array(rows).fill(0));
+
+      // Re-center
+      centerCellX = floor(cols / 2);
+      centerCellY = floor(rows / 2);
+    }
+
+    /***************************************************************
+     *        FULLSCREEN & OVERLAY HANDLERS
+     ***************************************************************/
+
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen()
+          .catch(err => {
+            console.error(`Erreur lors du passage en plein écran: ${err.message}`);
+          });
+      }
+    }
+
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+    });
+
+    document.getElementById("infoButton").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "block";
+    });
+
+    document.getElementById("closeModal").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "none";
+    });
   </script>
 </body>
 </html>
