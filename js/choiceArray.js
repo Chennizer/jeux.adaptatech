@@ -136,6 +136,18 @@ const mediaChoices = [
     category: "rock"
   },
   {
+    name: "Enfantastiques - Dire bonjour c'est joli",
+    image: "../../images/enfantastiques.jpg",
+    video: "https://bucket.adaptatech.org/lesenfantastiques-direbonjourcestjoli.mp4",
+    category: ["enfant","bonjour"]
+  },
+  {
+    name: "Jérémmy et Jazzy - Bonjour",
+    image: "../../images/jeremyetjazzy.webp",
+    video: "https://bucket.adaptatech.org/jeremyetjazzy-bonjour.mp4",
+    category: ["enfant","bonjour"]
+  },
+  {
     name: "Green Day - Basketcase",
     image: "../../images/greenday-basketcase.jpg",
     video: "https://bucket.adaptatech.org/greenday-basketcase.mp4",

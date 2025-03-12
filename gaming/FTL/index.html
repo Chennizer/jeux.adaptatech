@@ -68,11 +68,19 @@
     const shootingStarInterval = 5000;
     let lastShootingStarTime = 0;
     
-    // Galactic objects – spawn from a pool of types (including new ones)
+    // Galactic objects – spawn from a pool of types
     let galacticObjects = [];
     const objectInterval = 5000; // one object every 5 seconds (default)
     let lastObjectSpawnTime = 0;
-    
+
+    // ============= NEW TURN FEATURE =============
+    // We keep track of a "currentAngle" (what the camera is actually rotated to)
+    // and a "targetAngle" (where we want to rotate to).
+    // In draw(), we interpolate (lerp) from currentAngle to targetAngle,
+    // giving a smooth turn animation.
+    let currentAngle = 0;
+    let targetAngle = 0;
+
     function preload() {
       for (let i = 0; i < slowSongPaths.length; i++) {
         slowSongs[i] = loadSound(slowSongPaths[i]);
@@ -99,7 +107,17 @@
     
     function draw() {
       background(0, 20);
-      
+
+      // Smoothly animate the camera rotation toward targetAngle
+      currentAngle = lerp(currentAngle, targetAngle, 0.1);
+
+      // Wrap everything in a push/pop so we can rotate the entire scene
+      push();
+      // Move to the center, rotate, then move back
+      translate(width / 2, height / 2);
+      rotate(radians(currentAngle));
+      translate(-width / 2, -height / 2);
+
       // Update and display starfield
       push();
       translate(width / 2, height / 2);
@@ -109,7 +127,10 @@
       }
       pop();
       
-      if (!started) return;
+      if (!started) {
+        pop(); // Close the big push for rotation
+        return;
+      }
       
       // Music control: if FTL mode changes, update currentSongType
       if (ftlMode !== null && ftlMode !== currentSongType) {
@@ -123,6 +144,9 @@
         shootingStars.push(new ShootingStar());
         lastShootingStarTime = millis();
       }
+      // Update + display
+      push();
+      translate(width / 2, height / 2);
       for (let i = shootingStars.length - 1; i >= 0; i--) {
         shootingStars[i].update();
         shootingStars[i].display();
@@ -130,16 +154,16 @@
           shootingStars.splice(i, 1);
         }
       }
+      pop();
       
       // Adjust spawn interval based on mode:
       let currentInterval = objectInterval;
       if (ftlMode === "slow") {
-        currentInterval *= 2; // Spawn objects half as frequently in slow mode.
+        currentInterval *= 2; // Spawn objects half as frequently in slow mode
       }
       
       // Spawn new galactic objects only in FTL mode
       if (ftlMode !== null && millis() - lastObjectSpawnTime > currentInterval) {
-        // Updated pool: including "wormhole" and "crystal"
         let types = ["fire", "ice", "sun", "asteroid", "gaseous", "toxic", "wormhole", "crystal"];
         let pick = random(types);
         if (pick === "fire") {
@@ -168,7 +192,7 @@
       for (let i = galacticObjects.length - 1; i >= 0; i--) {
         galacticObjects[i].update();
         galacticObjects[i].display();
-        // In fast mode, if an object is nearing disappearance (z < 200) and hasn't yet played the pass-by sound, play it.
+        // In fast mode, if an object is nearing disappearance and hasn't played passBySound, do so.
         if (ftlMode === "fast" && galacticObjects[i].z < 200 && !galacticObjects[i].passSoundPlayed) {
           passBySound.play();
           galacticObjects[i].passSoundPlayed = true;
@@ -193,6 +217,8 @@
           currentSongType = ftlMode;
         }
       }
+
+      pop(); // Close the big push for rotation
     }
     
     // Utility: returns base speed based on FTL mode
@@ -390,6 +416,7 @@
           pg.fill(col);
           pg.ellipse(0, 0, r * 2, r * 2);
         }
+        // A soft glow effect
         for (let r = sunR * 1.2; r < sunR * 1.8; r += 2) {
           let t = (r - sunR * 1.2) / (sunR * 0.6);
           let col = lerpColor(color(255,200,0,80), color(255,150,0,0), t);
@@ -478,6 +505,7 @@
         let radius = this.baseSize * 0.5;
         let centerColor = color(100,150,255);
         let edgeColor = color(20,50,150);
+        // Planet gradient
         for (let r = radius; r > 0; r--) {
           let t = r / radius;
           let col = lerpColor(centerColor, edgeColor, 1 - t);
@@ -485,6 +513,7 @@
           pg.fill(col);
           pg.ellipse(0, 0, r * 2, r * 2);
         }
+        // Some faint horizontal banding
         let numBands = 6;
         for (let i = 0; i < numBands; i++) {
           let yPos = map(i, 0, numBands - 1, -radius, radius);
@@ -518,7 +547,7 @@
       isGone() { return (this.z < 1); }
     }
     
-    // ====== ToxicPlanet (Green Marsh / Toxic Planet) ======
+    // ====== ToxicPlanet ======
     class ToxicPlanet {
       constructor() {
         this.x = random(-width/2, width/2);
@@ -545,6 +574,7 @@
           pg.fill(col);
           pg.ellipse(0, 0, r * 2, r * 2);
         }
+        // Some random blotches
         let blotchCount = 5;
         for (let i = 0; i < blotchCount; i++) {
           let bx = random(-planetR * 0.3, planetR * 0.3);
@@ -586,14 +616,13 @@
         this.drawTexture();
         this.passSoundPlayed = false;
       }
-
       drawTexture() {
         let pg = this.texture;
         pg.clear();
         pg.push();
         pg.translate(pg.width / 2, pg.height / 2);
 
-        // Draw a spiral or multiple arcs
+        // Draw multiple concentric ellipses for a simple "portal" look
         let layers = 20;
         for (let i = 0; i < layers; i++) {
           let t = i / layers;
@@ -603,24 +632,18 @@
           let rad = this.baseSize * 0.5 * (1 + t);
           pg.ellipse(0, 0, rad * 2, rad * 2);
         }
-
         pg.pop();
       }
-
       update() {
         let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
         let s = ftlActiveForUpdate();
         this.z -= s * globalSpeedFactor * multiplier;
-
-        // Slowly rotate the wormhole
-        this.angle += 0.01 * multiplier;
+        this.angle += 0.01 * multiplier; // slow rotation
       }
-
       display() {
         let sx = (this.x / this.z) * (width / 2);
         let sy = (this.y / this.z) * (height / 2);
         let r = map(this.z, 0, width * 2.5, this.baseSize * 2, 0);
-
         push();
         translate(sx, sy);
         rotate(this.angle);
@@ -628,14 +651,12 @@
         image(this.texture, 0, 0, r, r);
         pop();
       }
-
       isGone() {
         return this.z < 1;
       }
     }
 
     // ====== CrystalPlanet ======
-    // A planet with a faceted, "gem-like" texture.
     class CrystalPlanet {
       constructor() {
         this.x = random(-width/2, width/2);
@@ -647,37 +668,29 @@
         this.drawTexture();
         this.passSoundPlayed = false;
       }
-
       drawTexture() {
         let pg = this.texture;
         pg.clear();
         pg.push();
         pg.translate(pg.width / 2, pg.height / 2);
-
-        // We'll draw a circle but subdivide it into random "facets."
-        // You can tweak the number of facets for more or fewer slices.
         let slices = floor(random(6, 10));
         let angleStep = TWO_PI / slices;
         let radius = this.baseSize * 0.5;
-
-        // We'll store random colors in a palette for a crystalline look.
-        let color1 = color(170, 220, 255); // light bluish
-        let color2 = color(200, 150, 255); // purple tinted
-        let color3 = color(255, 220, 250); // pink tinted
+        // Some random pastel-like colors to mimic crystal facets
+        let color1 = color(170, 220, 255);
+        let color2 = color(200, 150, 255);
+        let color3 = color(255, 220, 250);
         let colors = [color1, color2, color3];
 
-        // Draw each "slice" as a polygon from center to arc edges
         for (let i = 0; i < slices; i++) {
           let startA = i * angleStep;
           let endA = startA + angleStep;
-
           pg.beginShape();
           pg.noStroke();
           pg.fill(random(colors));
-          // Center vertex
+          // center vertex
           pg.vertex(0, 0);
-
-          // Edge vertices along the arc
+          // arc edges
           for (let a = startA; a <= endA; a += angleStep / 3) {
             let rOffset = random(-radius * 0.1, radius * 0.1);
             let rr = radius + rOffset;
@@ -687,35 +700,32 @@
           }
           pg.endShape(CLOSE);
         }
-
         pg.pop();
       }
-
       update() {
         let multiplier = (ftlMode === "fast") ? 1.5 : (ftlMode === "slow") ? 0.5 : 1;
         let s = ftlActiveForUpdate();
         this.z -= s * globalSpeedFactor * multiplier;
       }
-
       display() {
         let sx = (this.x / this.z) * (width / 2);
         let sy = (this.y / this.z) * (height / 2);
         let size = map(this.z, 0, width * 2.5, this.baseSize * 2, 0);
-
         push();
         translate(sx, sy);
         imageMode(CENTER);
         image(this.texture, 0, 0, size, size);
         pop();
       }
-
       isGone() {
         return (this.z < 1);
       }
     }
     
     // ========== Utility Functions ==========
-    function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+    function windowResized() { 
+      resizeCanvas(windowWidth, windowHeight); 
+    }
     function goFullscreen() {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(err => {
@@ -731,8 +741,9 @@
     // =========== Key Controls ===========
     function keyPressed() {
       if (!started) return;
-      // If one mode is active, ignore the other key press.
-      if (keyCode === 32) { // SPACE for slow mode
+
+      // If one mode is active, ignore the other key press for FTL.
+      if (keyCode === 32) { // SPACE = slow mode
         if (ftlMode === "fast") return;
         ftlMode = "slow";
         if (!launchPlayedSlow) {
@@ -740,7 +751,7 @@
           launchPlayedSlow = true;
         }
       }
-      if (keyCode === ENTER) { // ENTER for fast mode
+      if (keyCode === ENTER) { // ENTER = fast mode
         if (ftlMode === "slow") return;
         ftlMode = "fast";
         if (!launchPlayed) {
@@ -751,6 +762,18 @@
           engineHumSound.loop();
         }
       }
+
+      // NEW: Turn 90° left or right with arrow keys
+      if (keyCode === LEFT_ARROW) {
+        // Turn left
+        targetAngle -= 90;
+      }
+      else if (keyCode === RIGHT_ARROW) {
+        // Turn right
+        targetAngle += 90;
+      }
+      
+      // Music logic (start or resume the correct track)
       if ((currentSong === null) || (currentSongType !== ftlMode)) {
         if (ftlMode === "fast") {
           currentSong = pickRandomSongFrom(fastSongs);
@@ -762,13 +785,13 @@
           currentSongType = "slow";
         }
       } else if (currentSong && !currentSong.isPlaying()) {
-        // Resume the paused track if it's already loaded and paused.
         currentSong.play();
       }
     }
     
     function keyReleased() {
       if (!started) return;
+
       if (keyCode === 32 && ftlMode === "slow") {
         ftlMode = null;
         launchPlayedSlow = false;
@@ -780,10 +803,9 @@
           engineHumSound.stop();
         }
       }
-      // Instead of stopping the song, we pause it so it resumes next time.
+      // Pause (but don't reset) the current song if no mode is active.
       if (ftlMode === null && currentSong !== null) {
         currentSong.pause();
-        // Do not nullify currentSong or currentSongType so it can resume.
       }
     }
     
