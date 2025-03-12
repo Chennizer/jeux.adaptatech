@@ -27,6 +27,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoPlayer = document.getElementById('video-player');
   const videoSource = document.getElementById('video-source');
 
+  // Variable to disable keyboard input until ready
+  let inputEnabled = false;
+
   // Variables to hold game state
   let mode = "choice";
   let desiredTileCount = 0;
@@ -467,6 +470,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Keyboard navigation and controls
   document.addEventListener('keydown', (e) => {
+    // Only process key events if input is enabled
+    if (!inputEnabled) return;
+    
     resetInactivityTimer();
     if (videoPlaying && e.key === 'Backspace') {
       e.preventDefault();
@@ -601,6 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   startGameButton.addEventListener('click', () => {
+    // Create and display the loading screen
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';
     loadingScreen.style.position = 'fixed';
@@ -622,26 +629,39 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingIndicator.textContent = `Chargement... (0 / ${totalCount})`;
     loadingScreen.appendChild(loadingIndicator);
     document.body.appendChild(loadingScreen);
-    setTimeout(() => {
-      preloadVideos(videoUrls, loadingIndicator).then(() => {
-        document.body.removeChild(loadingScreen);
-        if (mode === "flashcard") {
-          renderFlashcard();
-          startFlashcardTimer();
-        } else if (mode === "flashcard-manual") {
-          renderFlashcard();
-        } else {
-          renderGameTiles();
-        }
-        tilePickerModal.style.display = 'none';
-        tileContainer.style.display = 'flex';
-        startInactivityTimer();
-      });
-    }, 0);
+
+    // Force reflow and wait for next repaint
+    void loadingScreen.offsetWidth;
+    requestAnimationFrame(() => {
+      // Delay the preload by 100ms to let the loading screen render
+      setTimeout(() => {
+        preloadVideos(videoUrls, loadingIndicator).then(() => {
+          document.body.removeChild(loadingScreen);
+          if (mode === "flashcard") {
+            renderFlashcard();
+            startFlashcardTimer();
+          } else if (mode === "flashcard-manual") {
+            renderFlashcard();
+          } else {
+            renderGameTiles();
+          }
+          tilePickerModal.style.display = 'none';
+          tileContainer.style.display = 'flex';
+          startInactivityTimer();
+          // Activate keyboard input after a 1-second delay
+          setTimeout(() => {
+            inputEnabled = true;
+          }, 3000);
+        });
+      }, 100);
+    });
   });
 
   categorySelect.addEventListener('change', (e) => {
     currentCategory = e.target.value;
     populateTilePickerGrid();
   });
+
+  // Initially disable keyboard input until game starts
+  inputEnabled = false;
 });
