@@ -347,10 +347,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // In sequential flashcard mode, play the transition sound when the tile changes
   function startFlashcardTimer() {
     clearFlashcardTimer();
     const delay = parseInt(scanDelayInput.value, 10) || 10;
     flashcardTimer = setTimeout(() => {
+      playCycleSound(); // Play transition sound before changing tile
       currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
       renderFlashcard();
       startFlashcardTimer();
@@ -492,6 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (mode === "flashcard-manual" && e.key === "Enter") {
       e.preventDefault();
+      playCycleSound(); // Play transition sound when manually changing tile
       currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
       renderFlashcard();
       return;
@@ -648,10 +651,10 @@ document.addEventListener('DOMContentLoaded', () => {
           tilePickerModal.style.display = 'none';
           tileContainer.style.display = 'flex';
           startInactivityTimer();
-          // Activate keyboard input after a 1-second delay
+          
           setTimeout(() => {
             inputEnabled = true;
-          }, 3000);
+          }, 2000);
         });
       }, 100);
     });

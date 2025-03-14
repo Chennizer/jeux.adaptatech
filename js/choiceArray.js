@@ -142,7 +142,7 @@ const mediaChoices = [
     category: ["enfant","bonjour"]
   },
   {
-    name: "Jérémmy et Jazzy - Bonjour",
+    name: "Jérémy et Jazzy - Bonjour",
     image: "../../images/jeremyetjazzy.webp",
     video: "https://bucket.adaptatech.org/jeremyetjazzy-bonjour.mp4",
     category: ["enfant","bonjour"]
