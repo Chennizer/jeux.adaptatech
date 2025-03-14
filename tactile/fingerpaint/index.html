@@ -6,7 +6,7 @@
   <!-- p5.js and p5.sound libraries -->
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
-  <!-- Import external jingles file (it sets window.jingleLibraryArray) -->
+  <!-- External jingles file (should define window.jingleLibraryArray) -->
   <script src="../../js/jingles.js"></script>
   <style>
     /* Global styles */
@@ -17,16 +17,13 @@
       background: #000;
       font-family: 'Roboto', sans-serif;
     }
-    canvas {
-      display: block;
-    }
-    /* Prompt overlay styling */
+    canvas { display: block; }
+    
+    /* Prompt Overlay */
     #promptOverlay {
       position: absolute;
-      top: 0; 
-      left: 0;
-      width: 100%; 
-      height: 100%;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       background: rgba(0,0,0,0.85);
       display: flex;
       flex-direction: column;
@@ -38,29 +35,28 @@
     }
     #promptOverlay p {
       font-size: 20px;
-      margin: 0 20px 20px;
+      margin-bottom: 20px;
     }
     #startButton {
       padding: 20px 40px;
       font-size: 24px;
       cursor: pointer;
-      background-color: #0077be;
+      background: #0077be;
       border: none;
       border-radius: 10px;
-      color: white;
+      color: #fff;
     }
-    #startButton:hover {
-      background-color: #0088cc;
-    }
-    /* Settings Icon styling */
-    #settings-icon {
+    #startButton:hover { background: #0088cc; }
+    
+    /* Settings Icon */
+    #settingsIcon {
       position: fixed;
       top: 10px;
       right: 10px;
       width: 40px;
       height: 40px;
+      background: rgba(0,0,0,0.7);
       border-radius: 50%;
-      background-color: rgba(0,0,0,0.7);
       color: #fff;
       display: flex;
       align-items: center;
@@ -68,13 +64,11 @@
       font-size: 20px;
       cursor: pointer;
       z-index: 1001;
-      transition: transform 0.3s ease, background-color 0.3s ease;
+      transition: transform 0.3s, background 0.3s;
     }
-    #settings-icon:hover {
-      transform: rotate(90deg);
-      background-color: rgba(0,0,0,0.9);
-    }
-    /* Options Menu styling */
+    #settingsIcon:hover { transform: rotate(90deg); background: rgba(0,0,0,0.9); }
+    
+    /* Options Menu */
     #menu {
       position: fixed;
       top: 60px;
@@ -84,7 +78,7 @@
       padding: 10px 15px;
       border-radius: 5px;
       z-index: 1000;
-      transition: right 0.3s ease, opacity 0.3s ease;
+      transition: right 0.3s, opacity 0.3s;
       box-shadow: 0 2px 5px rgba(0,0,0,0.3);
       opacity: 0;
       color: #fff;
@@ -92,7 +86,7 @@
       max-height: calc(100vh - 80px);
       pointer-events: none; /* disabled when not open */
     }
-    #menu.show {
+    #menu.visible {
       right: 10px;
       opacity: 1;
       pointer-events: auto;
@@ -108,10 +102,7 @@
       display: flex;
       flex-direction: column;
       margin: 8px 0;
-      font-size: 13px;
-    }
-    #menu label:hover {
-      color: #00bfff;
+      font-size: 14px;
     }
     #menu input[type="range"],
     #menu input[type="checkbox"] {
@@ -126,11 +117,9 @@
       background: rgba(0,0,0,0.7);
       color: #fff;
       cursor: pointer;
-      transition: background 0.3s ease;
+      transition: background 0.3s;
     }
-    #menu button:hover {
-      background: rgba(0,0,0,0.9);
-    }
+    #menu button:hover { background: rgba(0,0,0,0.9); }
   </style>
 </head>
 <body>
@@ -143,42 +132,43 @@
     </p>
     <button id="startButton">Commencer</button>
   </div>
-
+  
   <!-- Settings Icon -->
-  <div id="settings-icon">⚙️</div>
+  <div id="settingsIcon">⚙️</div>
   
   <!-- Options Menu -->
   <div id="menu">
     <h2>Paramètres</h2>
     <label>
-      Largeur du trait : <span id="strokeWidthValue">10</span> px
+      Largeur du trait : <span id="strokeWidthDisplay">10</span> px
       <input type="range" id="strokeWidthSlider" min="1" max="50" value="10">
     </label>
-    <label class="checkbox-label">
+    <label>
       Garder le tracé
       <input type="checkbox" id="keepDrawingToggle">
     </label>
     <button id="resetButton">Réinitialiser le dessin</button>
   </div>
-
+  
   <script>
+    // Wrap everything to ensure DOM is loaded.
     window.addEventListener("DOMContentLoaded", function() {
       // -------------------------
       // Global Variables
       // -------------------------
       let state = "idle";           // "idle", "drawing", or "exploding"
-      let strokePoints = [];        // Current stroke points
-      let savedStrokes = [];        // Saved strokes if "keep drawing" is enabled
-      let explosionParticles = [];  // Explosion particles array
-      let musicFiles = [];          // p5.SoundFile objects loaded from jingles.js
+      let strokePoints = [];        // Points of the current stroke
+      let savedStrokes = [];        // Saved strokes if "Garder le tracé" is enabled
+      let particles = [];           // Explosion particles array
+      let musicFiles = [];          // p5.SoundFile objects from jingles.js
       let currentMusic = null;      // Currently playing jingle
-      let strokeHueOffset = 0;      // Random hue offset for stroke gradient
-      let started = false;          // Set true after "Commencer" is pressed
-      let releaseTime = null;       // Timestamp (ms) for manual fade-out (500ms duration)
-      let strokeWidth = 10;         // Stroke width (adjustable from menu)
+      let strokeHueOffset = 0;      // For stroke gradient effect
+      let started = false;          // True after "Commencer" is pressed
+      let releaseTime = null;       // Timestamp for music fade-out (500ms)
+      let strokeWidth = 10;         // Stroke width (from menu)
       let keepDrawing = false;      // If true, stroke is saved instead of exploded
       let canvas;                   // p5 canvas reference
-      let menuOpen = false;         // True when menu is open
+      let menuOpen = false;         // True when options menu is open
 
       // -------------------------
       // Preload jingles from external file
@@ -207,72 +197,81 @@
       window.draw = function() {
         background(255);
         if (!started) return;
-
-        // Draw saved strokes if any
+        
+        // Draw saved strokes
         for (let s of savedStrokes) {
-          drawStrokeFromPoints(s);
+          drawStroke(s);
         }
         
-        // Handle manual fade-out over 500ms
+        // Handle music fade-out over 500ms
         if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
           let elapsed = millis() - releaseTime;
-          let newVol = map(elapsed, 0, 500, 1, 0, true);
-          currentMusic.setVolume(newVol);
+          let vol = map(elapsed, 0, 500, 1, 0, true);
+          currentMusic.setVolume(vol);
           if (elapsed >= 500) {
             currentMusic.stop();
             releaseTime = null;
           }
         }
         
-        // Draw the current stroke if drawing
+        // Draw current stroke if in drawing state
         if (state === "drawing") {
-          drawStrokeFromPoints(strokePoints);
+          drawStroke(strokePoints);
+        }
+        
+        // Update and draw explosion particles if any
+        if (state === "exploding") {
+          updateParticles();
         }
       };
 
       // -------------------------
       // Draw a stroke from an array of points
       // -------------------------
-      function drawStrokeFromPoints(pointsArray) {
-        if (pointsArray.length < 2) return;
+      function drawStroke(points) {
+        if (points.length < 2) return;
         colorMode(HSB, 360, 100, 100, 255);
         drawingContext.shadowBlur = 10;
-        for (let i = 1; i < pointsArray.length; i++) {
-          let hueVal = (strokeHueOffset + map(i, 0, pointsArray.length, 0, 360)) % 360;
-          let segColor = color(hueVal, 80, 100, 255);
-          stroke(segColor);
+        for (let i = 1; i < points.length; i++) {
+          let h = (strokeHueOffset + map(i, 0, points.length, 0, 360)) % 360;
+          let col = color(h, 80, 100, 255);
+          stroke(col);
           strokeWeight(strokeWidth);
-          line(pointsArray[i - 1].x, pointsArray[i - 1].y, pointsArray[i].x, pointsArray[i].y);
-          drawingContext.shadowColor = segColor.toString();
+          line(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y);
+          drawingContext.shadowColor = col.toString();
         }
         drawingContext.shadowBlur = 0;
         colorMode(RGB, 255);
       }
 
       // -------------------------
-      // Update and draw explosion particles (if not keeping drawing)
+      // Update and draw explosion particles
       // -------------------------
-      function updateAndDrawParticles() {
-        for (let i = explosionParticles.length - 1; i >= 0; i--) {
-          explosionParticles[i].update();
-          explosionParticles[i].display();
-          if (explosionParticles[i].isDead()) {
-            explosionParticles.splice(i, 1);
+      function updateParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+          particles[i].update();
+          particles[i].display();
+          if (particles[i].isDead()) {
+            particles.splice(i, 1);
           }
         }
-        if (explosionParticles.length === 0) {
+        if (particles.length === 0 && state === "exploding") {
           state = "idle";
         }
       }
 
       // -------------------------
-      // p5 Mouse/Touch Events for Drawing
+      // p5 Mouse/Touch Events
       // -------------------------
       window.mousePressed = function() {
-        // Do not allow drawing if menu is open
-        if (menuOpen) return;
+        // If menu is open, close it and prevent drawing from triggering underneath.
+        if (menuOpen) {
+          document.getElementById("menu").classList.remove("visible");
+          menuOpen = false;
+          return;  // Skip drawing event this time.
+        }
         if (!started) return;
-        // Cancel any fade-out in progress
+        // Cancel any fade-out
         if (releaseTime !== null) {
           if (currentMusic && currentMusic.isPlaying()) {
             currentMusic.stop();
@@ -283,7 +282,7 @@
           state = "drawing";
           strokePoints = [];
           strokeHueOffset = random(360);
-          // Start a new jingle for every new stroke
+          // Start a new jingle for this stroke.
           currentMusic = random(musicFiles);
           if (currentMusic && currentMusic.isLoaded()) {
             currentMusic.setVolume(1);
@@ -306,27 +305,26 @@
         if (!started) return;
         if (state === "drawing") {
           if (keepDrawing) {
-            // Save the stroke so it remains visible
+            // Save the stroke so it remains visible.
             savedStrokes.push([...strokePoints]);
-            // Stop current music and start a new one for the next stroke
+            // Stop current music and immediately start a new jingle for the next stroke.
             if (currentMusic && currentMusic.isPlaying()) {
               currentMusic.stop();
             }
-            // Restart music immediately for next stroke
             currentMusic = random(musicFiles);
             if (currentMusic && currentMusic.isLoaded()) {
               currentMusic.setVolume(1);
               currentMusic.loop();
             }
           } else {
-            // Trigger explosion: start fade-out and spawn particles
+            // Explosion mode: trigger fade-out and spawn particles.
             state = "exploding";
             if (currentMusic && currentMusic.isPlaying()) {
               releaseTime = millis();
             }
             for (let pt of strokePoints) {
               for (let i = 0; i < 3; i++) {
-                explosionParticles.push(new Particle(pt.x, pt.y));
+                particles.push(new Particle(pt.x, pt.y));
               }
             }
           }
@@ -379,7 +377,7 @@
       function goFullscreen() {
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen().catch(err => {
-            console.error(`Erreur lors du passage en plein écran: ${err.message}`);
+            console.error("Erreur en plein écran:", err);
           });
         }
       }
@@ -393,15 +391,34 @@
         goFullscreen();
       });
 
-      document.getElementById("settings-icon").addEventListener("click", function() {
-        const menuElem = document.getElementById("menu");
-        menuElem.classList.toggle("show");
-        menuOpen = menuElem.classList.contains("show");
+      // Prevent menu events from propagating to canvas
+      let menuElem = document.getElementById("menu");
+      menuElem.addEventListener("mousedown", function(e) { e.stopPropagation(); });
+      menuElem.addEventListener("touchstart", function(e) { e.stopPropagation(); });
+
+      document.getElementById("settingsIcon").addEventListener("click", function(e) {
+        menuElem.classList.toggle("visible");
+        menuOpen = menuElem.classList.contains("visible");
+        // If opening the menu while drawing, cancel the stroke.
+        if (menuOpen && state === "drawing") {
+          state = "idle";
+          strokePoints = [];
+        }
+        e.stopPropagation();
+      });
+
+      // Clicking outside the menu closes it.
+      document.addEventListener("click", function(e) {
+        const settingsIcon = document.getElementById("settingsIcon");
+        if (menuOpen && !menuElem.contains(e.target) && e.target !== settingsIcon) {
+          menuElem.classList.remove("visible");
+          menuOpen = false;
+        }
       });
 
       document.getElementById("strokeWidthSlider").addEventListener("input", function() {
         strokeWidth = parseInt(this.value);
-        document.getElementById("strokeWidthValue").innerText = strokeWidth;
+        document.getElementById("strokeWidthDisplay").innerText = strokeWidth;
       });
 
       document.getElementById("keepDrawingToggle").addEventListener("change", function() {
