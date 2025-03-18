@@ -189,6 +189,13 @@
       <span id="starSoundVolumeValue">50</span>
       <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
     </label>
+    <h3 data-fr="Autres options" data-en="Other options">Options</h3>
+    <label class="inline">
+      <span data-fr="Fonction tactile et souris" data-en="touchscreen and mouse activation">
+        Activer clic/touch pour déclencher l'animation
+      </span>
+      <input type="checkbox" id="clickTransitionToggle" checked>
+    </label>
   </div>
 
   <script src="../../js/translationonly.js"></script>
@@ -223,6 +230,27 @@
     let isSFXMuted = false;
     let musicVolume = 0.5;
     let starSoundVolume = 0.5;
+    // Controls whether clicking/touching the canvas triggers the animation transition
+    let clickTransitionEnabled = true;
+
+    // Function to trigger the same transition as pressing SPACE.
+    function triggerTransition() {
+      if (!flipping) {
+        nextColor = pickAnotherColor(currentColor);
+        resetTileTimes();
+        flipping = true;
+        flipStartTime = millis();
+        let transitions = ["flip", "fade", "slide", "zoom", "diagonal", "spin", "swirl", "wave"];
+        currentTransition = random(transitions);
+        if (transitionSoundFiles.length > 0 && !isSFXMuted) {
+          let ts = random(transitionSoundFiles);
+          if (ts && ts.isLoaded()) {
+            ts.setVolume(starSoundVolume);
+            ts.play();
+          }
+        }
+      }
+    }
     
     function preload() {
       if (window.stonerMusicArray && window.stonerMusicArray.length > 0) {
@@ -301,7 +329,9 @@
               let s = lerp(0.1, 1, map(localT, 0.5, 1, 0, 1));
               scale(s);
               fill(nextColor[0], nextColor[1], nextColor[2]);
-            } else { scale(1); }
+            } else { 
+              scale(1); 
+            }
             plane(t.w, t.h);
           } else if (currentTransition === "diagonal") {
             let angle = (localT < 0) ? 0 : (localT > 1 ? 180 : 180 * localT);
@@ -342,24 +372,31 @@
       }
     }
     
+    // Trigger transition on SPACE key press.
     function keyPressed() {
       if (!started) return;
       if (key === ' ') {
-        if (!flipping) {
-          nextColor = pickAnotherColor(currentColor);
-          resetTileTimes();
-          flipping = true;
-          flipStartTime = millis();
-          let transitions = ["flip", "fade", "slide", "zoom", "diagonal", "spin", "swirl", "wave"];
-          currentTransition = random(transitions);
-          if (transitionSoundFiles.length > 0) {
-            let ts = random(transitionSoundFiles);
-            if (ts && ts.isLoaded()) {
-              ts.setVolume(starSoundVolume);
-              ts.play();
-            }
-          }
-        }
+        triggerTransition();
+      }
+    }
+    
+    // Also trigger transition when clicking/touching the canvas,
+    // if the option is enabled. Ignore clicks that occur on the menu or its controls.
+    function mousePressed(event) {
+      // Get references to DOM elements that should not trigger transitions.
+      const menu = document.getElementById("menu");
+      const settingsIcon = document.getElementById("settings-icon");
+      const fullscreenBtn = document.getElementById("fullscreen-btn");
+      
+      // If the click is within the menu, settings icon, or fullscreen button, do nothing.
+      if (menu.contains(event.target) ||
+          settingsIcon.contains(event.target) ||
+          fullscreenBtn.contains(event.target)) {
+        return;
+      }
+      if (!started) return;
+      if (clickTransitionEnabled) {
+        triggerTransition();
       }
     }
     
@@ -404,9 +441,12 @@
       return (a[0] === b[0] && a[1] === b[1] && a[2] === b[2]);
     }
     
+    // Toggle fullscreen: if not in fullscreen, request fullscreen; if already in fullscreen, exit it.
     function goFullscreen() {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(err => { console.error(err); });
+      } else {
+        document.exitFullscreen();
       }
     }
     
@@ -414,7 +454,7 @@
       started = true;
       document.getElementById("promptOverlay").style.display = "none";
       goFullscreen();
-      // Show settings icon after starting
+      // Show settings icon after starting.
       document.getElementById("settings-icon").style.display = "flex";
       if (window.stonerMusicArray && musicFiles.length > 0) {
         currentMusic = random(musicFiles);
@@ -447,6 +487,7 @@
     const muteSFXToggle = document.getElementById('muteSFXToggle');
     const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
     const starSoundVolumeValue = document.getElementById('starSoundVolumeValue');
+    const clickTransitionToggle = document.getElementById('clickTransitionToggle');
     
     muteToggle.addEventListener('change', () => {
       isMuted = muteToggle.checked;
@@ -466,6 +507,23 @@
     starSoundVolumeSlider.addEventListener('input', () => {
       starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100;
       starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
+    });
+    
+    // Update clickTransitionEnabled based on the checkbox toggle.
+    clickTransitionToggle.addEventListener('change', () => {
+      clickTransitionEnabled = clickTransitionToggle.checked;
+    });
+    
+    // Close the settings menu when clicking outside it and the settings icon.
+    document.addEventListener('click', function(event) {
+      const menu = document.getElementById("menu");
+      const settingsIcon = document.getElementById("settings-icon");
+      
+      if (menu.classList.contains("show") &&
+          !menu.contains(event.target) &&
+          !settingsIcon.contains(event.target)) {
+        menu.classList.remove("show");
+      }
     });
   </script>
 </body>
