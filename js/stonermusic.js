@@ -11,5 +11,13 @@ window.stonerMusicArray = [
       name: "3",
       src: "../../songs/funkysong3.mp3"
     },
+    {
+      name: "4",
+      src: "../../songs/funkysong4.mp3"
+    },
+    {
+      name: "5",
+      src: "../../songs/funkysong5.mp3"
+    },
 
 ]
