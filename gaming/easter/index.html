@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="../../css/otherswitch.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
-  <!-- Optional JS for your music arrays; remove if not needed -->
+  <!-- Optional music and transition sound scripts -->
   <script src="../../js/stonermusic.js"></script>
   <script src="../../js/transitionSounds.js"></script>
   <style>
@@ -107,7 +107,7 @@
     }
     #menu label.inline span { margin: 0; }
     
-    /* Slider styling matching the checkbox color (#008080) */
+    /* Slider styling */
     #menu input[type="range"]::-webkit-slider-runnable-track {
       height: 4px;
       background: #008080;
@@ -260,20 +260,56 @@
     let musicFiles = [];
     let transitionSoundFiles = [];
     
-    // We'll store each active Egg in an array
+    // Array for active eggs
     let eggs = [];
+    
+    // Array for moving clouds
+    let clouds = [];
     
     // Bunny data
     let bunnyImg;
-    let bunnyW = 0, bunnyH = 0;   // Scale bunny to width = 400
+    let bunnyW = 0, bunnyH = 0;   // Bunny scaled to width = 400
     let bunnyX, bunnyY;          // Positioned in bottom-right
     let bunnyShakeEndTime = 0;   // When bunny stops shaking
+    
+    /* ------------------------------------------------------
+       Cloud Class: Each cloud moves from right to left
+    ------------------------------------------------------ */
+    class Cloud {
+      constructor(x, y, w, h, speed) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.speed = speed;
+      }
+      
+      update() {
+        this.x -= this.speed;
+        // If cloud moves completely off the left, reposition on the right with new random parameters
+        if (this.x + this.w < 0) {
+          this.x = width + random(20, 100);
+          this.y = random(30, height / 2);
+          this.w = random(80, 250);
+          this.h = random(40, 120);
+          this.speed = random(0.5, 2.0);
+        }
+      }
+      
+      draw() {
+        noStroke();
+        fill(255, 255, 255, 220);
+        ellipse(this.x, this.y, this.w, this.h);
+        ellipse(this.x - this.w * 0.4, this.y + 10, this.w * 0.7, this.h * 0.7);
+        ellipse(this.x + this.w * 0.4, this.y + 10, this.w * 0.7, this.h * 0.7);
+      }
+    }
     
     /* ------------------------------------------------------
        p5 Preload and Setup
     ------------------------------------------------------ */
     function preload() {
-      // Load music and sound assets if needed
+      // Load music and sound assets if available
       if (window.stonerMusicArray && window.stonerMusicArray.length > 0) {
         for (let item of window.stonerMusicArray) {
           musicFiles.push(loadSound(item.src, () => {}, (err) => {
@@ -294,7 +330,17 @@
     
     function setup() {
       createCanvas(windowWidth, windowHeight);
-      noLoop(); // We'll switch to loop() after pressing "Start"
+      noLoop(); // Start looping after pressing "Start"
+      
+      // Initialize clouds: Create 6 clouds with a mix of sizes (some larger)
+      for (let i = 0; i < 6; i++) {
+        let x = random(0, width);
+        let y = random(30, height / 2);
+        let w = random(80, 250);
+        let h = random(40, 120);
+        let speed = random(0.5, 2.0);
+        clouds.push(new Cloud(x, y, w, h, speed));
+      }
     }
     
     /* ------------------------------------------------------
@@ -303,18 +349,18 @@
     function draw() {
       if (!started) return;
       
-      // Scale bunny to width = 400 (aspect ratio preserved)
+      // Scale bunny to width = 400 (maintaining aspect ratio)
       if (bunnyImg && bunnyImg.width > 0) {
         bunnyW = 400;
         let scaleFactor = bunnyW / bunnyImg.width;
         bunnyH = bunnyImg.height * scaleFactor;
-        // Position bunny in bottom-right with 20px margin
+        // Position bunny in bottom-right with a 20px margin
         bunnyX = width - bunnyW - 20;
         bunnyY = height - bunnyH - 20;
       }
       
       drawSimpleBackground();
-      drawClouds();
+      updateAndDrawClouds();
       drawBunny();
       
       // Update and draw each egg
@@ -328,47 +374,38 @@
     }
     
     /* ------------------------------------------------------
-       Simple Background with Bright Easter Colors and Large Arcs for Hills
+       Simple Background with Bright Easter Colors and Arcs for Hills
+       + Animated Sun: The sun gently pulses (breathes) using a sine function.
     ------------------------------------------------------ */
     function drawSimpleBackground() {
       // Bright blue sky
       background(135, 206, 250);
       
-      // Bright sun in top-left
+      // Animate the sun: gentle pulsing effect
+      let baseSunSize = 80;
+      let pulse = 5 * sin(frameCount * 0.02); // oscillates between -5 and 5
+      let sunSize = baseSunSize + pulse;
+      
       noStroke();
       fill(255, 223, 0);
-      ellipse(100, 100, 80, 80);
+      ellipse(100, 100, sunSize, sunSize);
       
-      // Large arcs for lush hills using a vivid green
-      fill(50, 205, 50); // Lime Green
-      // Left hill
+      // Large arcs for lush hills using vivid green (Lime Green)
+      fill(50, 205, 50);
       arc(300, height, 900, 500, PI, TWO_PI);
-      // Right hill
       arc(width - 200, height, 800, 400, PI, TWO_PI);
-      // Center hill
       arc(width * 0.5, height, 1000, 600, PI, TWO_PI);
-      // Optional rect to fill the bottom gap
       rect(0, height - 50, width, 50);
     }
     
     /* ------------------------------------------------------
-       Draw Clouds with Overlapping Ellipses
+       Update and Draw Clouds
     ------------------------------------------------------ */
-    function drawClouds() {
-      noStroke();
-      fill(255, 255, 255, 220);
-      // Cloud 1
-      drawCloud(150, 80, 80, 50);
-      // Cloud 2
-      drawCloud(width * 0.5, 60, 100, 60);
-      // Cloud 3
-      drawCloud(width - 250, 90, 90, 55);
-    }
-    
-    function drawCloud(x, y, w, h) {
-      ellipse(x, y, w, h);
-      ellipse(x - w * 0.4, y + 10, w * 0.7, h * 0.7);
-      ellipse(x + w * 0.4, y + 10, w * 0.7, h * 0.7);
+    function updateAndDrawClouds() {
+      for (let cloud of clouds) {
+        cloud.update();
+        cloud.draw();
+      }
     }
     
     /* ------------------------------------------------------
@@ -388,17 +425,15 @@
     }
     
     /* ------------------------------------------------------
-       Egg Class
+       New Egg Class: Simple, Elegant, Fully Opaque Egg with an Improved Shape
        Timeline:
-         0–2s: scale up
-         2–3s: shake
-         3–5s: float toward bunny (landing slightly below bunny center)
-         5–6s: fade out
-         >6s: done → trigger bunny shake for 1s
+         0–2s: Egg scales in from 0.2 to full size
+         2–4s: Egg moves linearly toward the bunny (landing slightly below bunny center)
+         >4s: Egg is removed (and triggers bunny shake for 1s)
     ------------------------------------------------------ */
     class Egg {
       constructor() {
-        // Start near center ±200 px
+        // Start near center with random offset (±200px)
         this.startX = width / 2 + random(-200, 200);
         this.startY = height / 2 + random(-200, 200);
         this.x = this.startX;
@@ -408,41 +443,15 @@
         this.w = random(120, 200);
         this.h = random(180, 260);
         
-        // Bright, vivid egg body colors
-        const eggBodyPalette = [
-          [255, 105, 180],  // Hot Pink
-          [255, 215, 0],    // Gold
-          [64, 224, 208],   // Turquoise
-          [186, 85, 211],   // Medium Orchid
-          [60, 179, 113]    // Medium Sea Green
+        // Choose a bright, vivid color from a palette
+        const palette = [
+          color(255,105,180),  // Hot Pink
+          color(255,215,0),    // Gold
+          color(64,224,208),   // Turquoise
+          color(186,85,211),   // Medium Orchid
+          color(60,179,113)    // Medium Sea Green
         ];
-        let chosenBody = random(eggBodyPalette);
-        this.topColor = color(chosenBody[0], chosenBody[1], chosenBody[2]);
-        this.bottomColor = color(chosenBody[0] - 25, chosenBody[1] - 25, chosenBody[2] - 25);
-        
-        // Bright stripe colors
-        let stripeCount = floor(random(2, 5));
-        this.stripes = [];
-        const stripesPalette = [
-          [255, 99, 71],    // Tomato
-          [255, 165, 0],    // Orange
-          [0, 191, 255],    // Deep Sky Blue
-          [154, 205, 50],   // Yellow Green
-          [147, 112, 219]   // Medium Purple
-        ];
-        let currentStart = 0;
-        for (let i = 0; i < stripeCount; i++) {
-          let heightRatio = random(0.1, 0.3);
-          let c = random(stripesPalette);
-          let stripe = {
-            yStart: currentStart,
-            yEnd: currentStart + heightRatio,
-            color: color(c[0], c[1], c[2], 180)
-          };
-          this.stripes.push(stripe);
-          currentStart += heightRatio;
-          if (currentStart >= 1) break;
-        }
+        this.col = random(palette);
         
         this.birthTime = millis();
       }
@@ -452,27 +461,23 @@
       }
       
       isFinished() {
-        return this.getElapsedTime() > 6;
+        return this.getElapsedTime() > 4;
       }
       
       update() {
         let t = this.getElapsedTime();
-        if (t < 3) {
-          // 0–2s scale up, 2–3s shake
-        } else if (t < 5) {
-          // 3–5s: float toward bunny
+        if (t < 2) {
+          // 0–2s: Egg scales in (no movement)
+        } else if (t < 4) {
+          // 2–4s: Egg moves linearly toward the bunny
           if (bunnyX !== undefined && bunnyY !== undefined) {
             let targetX = bunnyX + bunnyW / 2;
-            let targetY = bunnyY + bunnyH * 0.8; // landing slightly below bunny center
-            let u = map(t, 3, 5, 0, 1);
-            u = constrain(u, 0, 1);
+            let targetY = bunnyY + bunnyH * 0.8; // lands slightly below bunny center
+            let u = map(t, 2, 4, 0, 1);
             this.x = lerp(this.startX, targetX, u);
             this.y = lerp(this.startY, targetY, u);
           }
-        } else if (t < 6) {
-          // 5–6s: fade out
         } else {
-          // >6s: done → trigger bunny shake for 1s
           this.triggerBunnyShake();
         }
       }
@@ -485,81 +490,42 @@
       
       draw() {
         let t = this.getElapsedTime();
-        if (t >= 6) return;
+        if (t >= 4) return;
         
         let scaleFactor = 1.0;
         if (t < 2) {
           scaleFactor = map(t, 0, 2, 0.2, 1.0);
-        } else if (t < 3) {
-          scaleFactor = 1.0;
-        }
-        
-        let shakeX = 0, shakeY = 0;
-        if (t >= 2 && t < 3) {
-          let freq = 0.5;
-          let amp = 10;
-          shakeX = sin(frameCount * freq * 0.1) * amp;
-          shakeY = cos(frameCount * freq * 0.1) * amp;
-        }
-        
-        let alphaVal = 255;
-        if (t >= 5 && t < 6) {
-          alphaVal = map(t, 5, 6, 255, 0);
         }
         
         push();
-        translate(this.x + shakeX, this.y + shakeY);
+        translate(this.x, this.y);
         scale(scaleFactor);
-        this.drawEggShape(alphaVal);
+        this.drawEggShape();
         pop();
       }
       
-      drawEggShape(a) {
-        stroke(60, a);
-        strokeWeight(2);
-        
-        beginShape();
-        let topY = -this.h / 2;
-        let bottomY = this.h / 2;
-        for (let y = topY; y <= bottomY; y++) {
-          let r = map(y, topY, bottomY, 0, 1);
-          let c = lerpColor(this.topColor, this.bottomColor, r);
-          c.setAlpha(a);
-          fill(c);
-          let normY = map(y, topY, bottomY, -1, 1);
-          let xRadius = (this.w / 2) * sqrt(1 - normY * normY);
-          vertex(xRadius, y);
-        }
-        for (let y = bottomY; y >= topY; y--) {
-          let normY = map(y, topY, bottomY, -1, 1);
-          let xRadius = (this.w / 2) * sqrt(1 - normY * normY);
-          vertex(-xRadius, y);
-        }
-        endShape(CLOSE);
-        
+      // Improved Egg Shape: Asymmetrical, egg-like shape with a smooth gradient fill and a subtle highlight.
+      drawEggShape() {
         noStroke();
-        for (let y = topY; y <= bottomY; y++) {
-          let verticalRatio = map(y, topY, bottomY, 0, 1);
-          let activeStripe = this.stripes.find(s => verticalRatio >= s.yStart && verticalRatio <= s.yEnd);
-          if (activeStripe) {
-            let sc = color(activeStripe.color);
-            sc.setAlpha(a);
-            fill(sc);
-            let normY = map(y, topY, bottomY, -1, 1);
-            let xRadius = (this.w / 2) * sqrt(1 - normY * normY);
-            rectMode(CORNERS);
-            rect(-xRadius, y, xRadius, y + 1);
-          }
-        }
+        fill(this.col);
+        beginShape();
+          vertex(0, -this.h/2);
+          bezierVertex(this.w*0.55, -this.h*0.45, this.w*0.55, this.h*0.75, 0, this.h/2);
+          bezierVertex(-this.w*0.55, this.h*0.75, -this.w*0.55, -this.h*0.45, 0, -this.h/2);
+        endShape(CLOSE);
+        // Subtle white highlight for a glossy finish
+        noStroke();
+        fill(255);
+        ellipse(-this.w*0.2, -this.h*0.3, this.w*0.25, this.h*0.12);
       }
     }
     
     /* ------------------------------------------------------
-       Key Handling
+       Key Handling: Only allow egg spawning if no egg is active
     ------------------------------------------------------ */
     function keyPressed() {
       if (!started) return;
-      if (key === ' ') {
+      if (key === ' ' && eggs.length === 0) {
         eggs.push(new Egg());
         if (!isSFXMuted && transitionSoundFiles.length > 0) {
           let ts = random(transitionSoundFiles);
