@@ -385,6 +385,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         tileContainer.appendChild(tile);
       });
+      
+      // If exactly 4 tiles, switch to grid layout
+      if (selectedTileIndices.length === 4) {
+        tileContainer.classList.add('grid-2x2');
+      } else {
+        tileContainer.classList.remove('grid-2x2');
+      }
+      
       tileContainer.style.display = 'flex';
       currentSelectedIndex = 0;
       if (mode !== "thisOrThat") updateSelection();
@@ -397,6 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
+  
 
   function updateSelection() {
     if (mode === "thisOrThat" || mode === "flashcard") return;

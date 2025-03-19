@@ -4,22 +4,92 @@
   <meta charset="UTF-8">
   <title 
     class="translate" 
-    data-fr="FTL Travel avec modes FTL doubles (ESPACE = Lent, ENTRÉE = Rapide)" 
-    data-en="FTL Travel with Dual FTL Modes (SPACE = Slow, ENTER = Fast)">
+    data-fr="Voyage dans l'espace" 
+    data-en="Spatial voyage">
     FTL Travel avec modes FTL doubles (ESPACE = Lent, ENTRÉE = Rapide)
   </title>
   <!-- p5.js and p5.sound libraries -->
   <link rel="stylesheet" href="../../css/otherswitch.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+  <!-- Settings menu styles -->
+  <style>
+    /* Settings Icon */
+    #settings-icon {
+      position: fixed;
+      top: 10px; right: 10px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      display: none;  /* Hidden until game starts */
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #fff;
+      cursor: pointer;
+      background-color: rgba(0,0,0,0.7);
+      transition: transform 0.3s ease, background-color 0.3s ease;
+      z-index: 1100;
+    }
+    #settings-icon:hover {
+      transform: rotate(90deg);
+      background-color: rgba(0,0,0,0.9);
+    }
+    /* Fullscreen Button */
+    #fullscreen-btn {
+      position: fixed;
+      top: 15px; right: 60px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 1100;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    #fullscreen-btn:hover { background: rgba(0,0,0,0.9); }
+    /* Settings Menu */
+    #menu {
+      position: fixed;
+      top: 60px;
+      right: -300px;
+      width: 270px;
+      background: rgba(0,0,0,0.85);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      transition: right 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+      color: #fff;
+      overflow-y: auto;
+      max-height: calc(100vh - 80px);
+      z-index: 2000;
+    }
+    #menu.show {
+      right: 10px;
+      opacity: 1;
+    }
+    #menu h3 {
+      font-size: 20px;
+      text-align: center;
+      margin-bottom: 10px;
+      color: #00bfff;
+    }
+    /* Inline label for checkbox */
+    #menu label.inline {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      background: #008080;
+      padding: 5px 8px;
+      border-radius: 4px;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+  </style>
 </head>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-B45TJG4GBJ');
-</script>
 <body>
   <!-- Prompt Overlay with translation markup -->
   <div id="promptOverlay">
@@ -44,13 +114,31 @@
     </p>
     <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
   </div>
+  
+  <!-- Settings Icon, Fullscreen Button, and Settings Menu -->
+  <div id="settings-icon" title="Settings" class="translate" data-fr="⚙️" data-en="⚙️">⚙️</div>
+  <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+  <div id="menu">
+    <h3>Options</h3>
+    <label class="inline">
+      <span>One-Button Mode</span>
+      <input type="checkbox" id="oneButtonToggle">
+    </label>
+  </div>
 
   <script>
+    // Global game and settings variables
     let started = false;
     // ftlMode: "slow", "fast", or null (no FTL mode active)
     let ftlMode = null;
+    let oneButtonMode = false;  // Controlled via settings checkbox
     let canvas;
-
+    
+    // Glow effect variables
+    let glowActive = false;
+    let glowStartTime = 0;
+    let glowDuration = 1000; // 1 second
+    
     // Sound variables
     let currentSong = null;
     let currentSongType = null; // "slow" or "fast"
@@ -93,7 +181,7 @@
     const objectInterval = 5000; // one object every 5 seconds (default)
     let lastObjectSpawnTime = 0;
 
-    // ============= NEW TURN FEATURE =============
+    // NEW TURN FEATURE – for camera rotation
     let currentAngle = 0;
     let targetAngle = 0;
 
@@ -104,7 +192,7 @@
       for (let i = 0; i < fastSongPaths.length; i++) {
         fastSongs[i] = loadSound(fastSongPaths[i]);
       }
-      // Load launch sounds: one for fast mode and a different one for slow mode.
+      // Load launch and other sounds.
       launchSound = loadSound("../../sounds/spacequestlaunch2.mp3");
       launchSoundSlow = loadSound("../../sounds/spacequestlaunch.mp3");
       engineHumSound = loadSound("../../sounds/spacequesthum.mp3");
@@ -125,13 +213,13 @@
       // Smooth camera rotation
       currentAngle = lerp(currentAngle, targetAngle, 0.1);
       push();
-      translate(width / 2, height / 2);
+      translate(width/2, height/2);
       rotate(radians(currentAngle));
-      translate(-width / 2, -height / 2);
+      translate(-width/2, -height/2);
 
       // Update and display starfield
       push();
-      translate(width / 2, height / 2);
+      translate(width/2, height/2);
       for (let star of swStars) {
         star.update();
         star.display();
@@ -143,7 +231,7 @@
         return;
       }
       
-      // Music control: if FTL mode changes, update currentSongType
+      // If mode has changed, reset currentSong accordingly
       if (ftlMode !== null && ftlMode !== currentSongType) {
         if (currentSong) currentSong.pause();
         currentSong = null;
@@ -156,7 +244,7 @@
         lastShootingStarTime = millis();
       }
       push();
-      translate(width / 2, height / 2);
+      translate(width/2, height/2);
       for (let i = shootingStars.length - 1; i >= 0; i--) {
         shootingStars[i].update();
         shootingStars[i].display();
@@ -197,7 +285,7 @@
       
       // Update and display galactic objects
       push();
-      translate(width / 2, height / 2);
+      translate(width/2, height/2);
       for (let i = galacticObjects.length - 1; i >= 0; i--) {
         galacticObjects[i].update();
         galacticObjects[i].display();
@@ -225,13 +313,136 @@
           currentSongType = ftlMode;
         }
       }
+      pop(); // End camera transformation
 
-      pop();
+      // Draw screen brightness overlay if glow is active
+      if (glowActive) {
+        let elapsed = millis() - glowStartTime;
+        if (elapsed < glowDuration) {
+          let overlayAlpha = map(elapsed, 0, glowDuration, 100, 0);
+          push();
+          noStroke();
+          fill(255, overlayAlpha);
+          rect(0, 0, width, height);
+          pop();
+        } else {
+          glowActive = false;
+        }
+      }
     }
     
     // Utility: returns base speed based on FTL mode
     function ftlActiveForUpdate() {
       return (ftlMode === "fast" || ftlMode === "slow") ? ftlStarSpeed : normalStarSpeed;
+    }
+    
+    // =========== Key Controls ===========
+    function keyPressed() {
+      if (!started) return;
+      
+      // One-Button Mode: cycle through slow -> fast -> off on SPACE press.
+      if (oneButtonMode && keyCode === 32) {
+        if (ftlMode === null) {
+          ftlMode = "slow";
+          if (!launchPlayedSlow) {
+            launchSoundSlow.play();
+            launchPlayedSlow = true;
+          }
+        } else if (ftlMode === "slow") {
+          ftlMode = "fast";
+          if (!launchPlayed) {
+            launchSound.play();
+            launchPlayed = true;
+          }
+          if (!engineHumSound.isPlaying()) {
+            engineHumSound.loop();
+          }
+        } else if (ftlMode === "fast") {
+          ftlMode = null;
+          launchPlayed = false;
+          launchPlayedSlow = false;
+          if (engineHumSound.isPlaying()) {
+            engineHumSound.stop();
+          }
+          if (currentSong && currentSong.isPlaying()) {
+            currentSong.pause();
+          }
+          currentSong = null;
+          currentSongType = null;
+        }
+        glowActive = true;
+        glowStartTime = millis();
+      }
+      // Two-Button Mode: use SPACE for slow and ENTER for fast.
+      else if (!oneButtonMode) {
+        if (keyCode === 32) { // SPACE = slow mode
+          if (ftlMode === "fast") return;
+          ftlMode = "slow";
+          if (!launchPlayedSlow) {
+            launchSoundSlow.play();
+            launchPlayedSlow = true;
+          }
+          glowActive = true;
+          glowStartTime = millis();
+        }
+        if (keyCode === ENTER) { // ENTER = fast mode
+          if (ftlMode === "slow") return;
+          ftlMode = "fast";
+          if (!launchPlayed) {
+            launchSound.play();
+            launchPlayed = true;
+          }
+          if (!engineHumSound.isPlaying()) {
+            engineHumSound.loop();
+          }
+          glowActive = true;
+          glowStartTime = millis();
+        }
+        // Turn left or right with arrow keys.
+        if (keyCode === LEFT_ARROW) {
+          targetAngle -= 90;
+        } else if (keyCode === RIGHT_ARROW) {
+          targetAngle += 90;
+        }
+        if ((currentSong === null) || (currentSongType !== ftlMode)) {
+          if (ftlMode === "fast") {
+            currentSong = pickRandomSongFrom(fastSongs);
+            currentSong.loop();
+            currentSongType = "fast";
+          } else if (ftlMode === "slow") {
+            currentSong = pickRandomSongFrom(slowSongs);
+            currentSong.loop();
+            currentSongType = "slow";
+          }
+        } else if (currentSong && !currentSong.isPlaying()) {
+          currentSong.play();
+        }
+      }
+    }
+    
+    function keyReleased() {
+      if (!started) return;
+      if (!oneButtonMode) { // Only in two-button mode do we reset on key release.
+        if (keyCode === 32 && ftlMode === "slow") {
+          ftlMode = null;
+          launchPlayedSlow = false;
+        }
+        if (keyCode === ENTER && ftlMode === "fast") {
+          ftlMode = null;
+          launchPlayed = false;
+          if (engineHumSound.isPlaying()) {
+            engineHumSound.stop();
+          }
+        }
+        if (ftlMode === null && currentSong !== null) {
+          currentSong.pause();
+        }
+      }
+    }
+    
+    function pickRandomSongFrom(arr) {
+      let index = floor(random(arr.length));
+      return arr[index];
     }
     
     // =========== Star (Background) ===========
@@ -601,7 +812,7 @@
       }
       isGone() { return (this.z < 1); }
     }
-
+    
     // ====== Wormhole ======
     class Wormhole {
       constructor() {
@@ -619,7 +830,7 @@
         let pg = this.texture;
         pg.clear();
         pg.push();
-        pg.translate(pg.width / 2, pg.height / 2);
+        pg.translate(pg.width/2, pg.height/2);
         let layers = 20;
         for (let i = 0; i < layers; i++) {
           let t = i / layers;
@@ -638,9 +849,9 @@
         this.angle += 0.01 * multiplier;
       }
       display() {
-        let sx = (this.x / this.z) * (width / 2);
-        let sy = (this.y / this.z) * (height / 2);
-        let r = map(this.z, 0, width * 2.5, this.baseSize * 2, 0);
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
         push();
         translate(sx, sy);
         rotate(this.angle);
@@ -667,7 +878,7 @@
         let pg = this.texture;
         pg.clear();
         pg.push();
-        pg.translate(pg.width / 2, pg.height / 2);
+        pg.translate(pg.width/2, pg.height/2);
         let slices = floor(random(6, 10));
         let angleStep = TWO_PI / slices;
         let radius = this.baseSize * 0.5;
@@ -699,9 +910,9 @@
         this.z -= s * globalSpeedFactor * multiplier;
       }
       display() {
-        let sx = (this.x / this.z) * (width / 2);
-        let sy = (this.y / this.z) * (height / 2);
-        let size = map(this.z, 0, width * 2.5, this.baseSize * 2, 0);
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let size = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
         push();
         translate(sx, sy);
         imageMode(CENTER);
@@ -722,76 +933,14 @@
         });
       }
     }
-    function pickRandomSongFrom(arr) {
-      let index = floor(random(arr.length));
-      return arr[index];
-    }
     
-    // =========== Key Controls ===========
-    function keyPressed() {
-      if (!started) return;
-      if (keyCode === 32) { // SPACE = slow mode
-        if (ftlMode === "fast") return;
-        ftlMode = "slow";
-        if (!launchPlayedSlow) {
-          launchSoundSlow.play();
-          launchPlayedSlow = true;
-        }
-      }
-      if (keyCode === ENTER) { // ENTER = fast mode
-        if (ftlMode === "slow") return;
-        ftlMode = "fast";
-        if (!launchPlayed) {
-          launchSound.play();
-          launchPlayed = true;
-        }
-        if (!engineHumSound.isPlaying()) {
-          engineHumSound.loop();
-        }
-      }
-      // Turn left or right with arrow keys
-      if (keyCode === LEFT_ARROW) {
-        targetAngle -= 90;
-      } else if (keyCode === RIGHT_ARROW) {
-        targetAngle += 90;
-      }
-      if ((currentSong === null) || (currentSongType !== ftlMode)) {
-        if (ftlMode === "fast") {
-          currentSong = pickRandomSongFrom(fastSongs);
-          currentSong.loop();
-          currentSongType = "fast";
-        } else if (ftlMode === "slow") {
-          currentSong = pickRandomSongFrom(slowSongs);
-          currentSong.loop();
-          currentSongType = "slow";
-        }
-      } else if (currentSong && !currentSong.isPlaying()) {
-        currentSong.play();
-      }
-    }
-    
-    function keyReleased() {
-      if (!started) return;
-      if (keyCode === 32 && ftlMode === "slow") {
-        ftlMode = null;
-        launchPlayedSlow = false;
-      }
-      if (keyCode === ENTER && ftlMode === "fast") {
-        ftlMode = null;
-        launchPlayed = false;
-        if (engineHumSound.isPlaying()) {
-          engineHumSound.stop();
-        }
-      }
-      if (ftlMode === null && currentSong !== null) {
-        currentSong.pause();
-      }
-    }
-    
+    // Event Listeners for start, settings, fullscreen, and menu toggle.
     document.getElementById("startButton").addEventListener("click", function() {
       started = true;
       document.getElementById("promptOverlay").style.display = "none";
       goFullscreen();
+      // Show settings icon once the game starts.
+      document.getElementById("settings-icon").style.display = "flex";
     });
     document.getElementById("infoButton").addEventListener("click", function() {
       document.getElementById("infoModal").style.display = "block";
@@ -799,8 +948,24 @@
     document.getElementById("closeModal").addEventListener("click", function() {
       document.getElementById("infoModal").style.display = "none";
     });
-
+    document.getElementById("settings-icon").addEventListener("click", function() {
+      document.getElementById("menu").classList.toggle("show");
+    });
+    document.getElementById("fullscreen-btn").addEventListener("click", function() {
+      goFullscreen();
+    });
+    document.getElementById("oneButtonToggle").addEventListener("change", function() {
+      oneButtonMode = this.checked;
+      // Reset FTL mode when switching modes.
+      ftlMode = null;
+      launchPlayed = false;
+      launchPlayedSlow = false;
+      if (currentSong && currentSong.isPlaying()) {
+        currentSong.pause();
+      }
+      currentSong = null;
+      currentSongType = null;
+    });
   </script>
-  <script src="../../js/translationonly.js"></script>
 </body>
 </html>

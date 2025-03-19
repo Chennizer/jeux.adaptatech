@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title 
+    class="translate" 
+    data-fr="Aventure Sous-Marine avec modes de déplacement doubles (ESPACE = Lent, ENTRÉE = Rapide)" 
+    data-en="Underwater Adventure with Dual Travel Speeds (SPACE = Slow, ENTER = Fast)">
+    Aventure Sous-Marine avec modes de déplacement doubles (ESPACE = Lent, ENTRÉE = Rapide)
+  </title>
+  <!-- p5.js and p5.sound libraries -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+</head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-B45TJG4GBJ');
+</script>
+<body>
+  <!-- Prompt Overlay with translation markup -->
+  <div id="promptOverlay">
+    <button id="infoButton" title="Plus d'infos" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+    <p class="translate" data-fr="Tenir la switch pour piloter un sous-marin à travers les profondeurs.<br>
+        Première switch pour le mode d'exploration (lent) – Espace<br>
+        Deuxième switch pour le mode de poursuite (rapide) – Enter" 
+       data-en="Hold the switch to guide a submarine through the depths.<br>
+        First switch for exploration mode (slow) – Space<br>
+        Second switch for pursuit mode (fast) – Enter">
+      Tenir la switch pour piloter un sous-marin à travers les profondeurs.<br>
+      Première switch pour le mode d'exploration (lent) – Espace<br>
+      Deuxième switch pour le mode de poursuite (rapide) – Enter
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+  <!-- Info Modal with translation markup -->
+  <div id="infoModal" style="display:none;">
+    <p class="translate" data-fr="Compétence: appuyer et maintenir et différencier l'action de deux switchs<br>SENICT switch skills niveau 2 et 6<br>Switch Progression Roadmap niveau 11 à 13 et 20" 
+       data-en="Skill: press and hold and differentiate the action of two switches<br>SENICT switch skills level 2 and 6<br>Switch Progression Roadmap levels 11 to 13 and 20">
+      Compétence: appuyer et maintenir et différencier l'action de deux switchs<br>SENICT switch skills niveau 2 et 6<br>Switch Progression Roadmap niveau 11 à 13 et 20
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+  </div>
+
+  <script>
+    let started = false;
+    // travelMode: "slow", "fast", or null
+    let travelMode = null;
+    let canvas;
+
+    // Sound variables (placeholder references to space-themed assets)
+    let currentSong = null;
+    let currentSongType = null; // "slow" or "fast"
+    let launchSound, launchSoundSlow, engineHumSound, passBySound;
+    let launchPlayed = false;
+    let launchPlayedSlow = false;
+    let slowSongs = [];
+    let fastSongs = [];
+    // Playlists paths (still referencing space files as placeholders)
+    let slowSongPaths = [
+      "../../songs/space/spacequest1.mp3",
+      "../../songs/space/spacequest2.mp3",
+      "../../songs/space/spacequest3.mp3"
+    ];
+    let fastSongPaths = [
+      "../../songs/space/spacequestfast1.mp3",
+      "../../songs/space/spacequestfast2.mp3",
+      "../../songs/space/spacequestfast3.mp3",
+      "../../songs/space/spacequestfast4.mp3",
+      "../../songs/space/spacequestfast5.mp3",
+      "../../songs/space/spacequestfast6.mp3"
+    ];
+
+    // "Bubbles" (background drifting objects)
+    let bubbles = [];
+    const numBubbles = 200;
+    const normalDriftSpeed = 0.2;
+    const turboSpeed = 10; // Base speed for "fast" mode
+
+    // Global speed factor for object approach
+    const globalSpeedFactor = 0.8;
+    
+    // School of Fish (replaces Shooting Stars)
+    let schools = [];
+    const fishInterval = 5000;
+    let lastSchoolTime = 0;
+    
+    // Underwater objects (instead of planets, asteroids, etc.)
+    let marineObjects = [];
+    const objectInterval = 5000; 
+    let lastObjectSpawnTime = 0;
+
+    // ============= CAMERA TURN FEATURE =============
+    let currentAngle = 0;
+    let targetAngle = 0;
+
+    function preload() {
+      // Placeholder audio (same as space game)
+      for (let i = 0; i < slowSongPaths.length; i++) {
+        slowSongs[i] = loadSound(slowSongPaths[i]);
+      }
+      for (let i = 0; i < fastSongPaths.length; i++) {
+        fastSongs[i] = loadSound(fastSongPaths[i]);
+      }
+      launchSound = loadSound("../../sounds/spacequestlaunch2.mp3");
+      launchSoundSlow = loadSound("../../sounds/spacequestlaunch.mp3");
+      engineHumSound = loadSound("../../sounds/spacequesthum.mp3");
+      passBySound = loadSound("../../sounds/spacequestwoosh.mp3");
+    }
+    
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.position(0, 0);
+
+      // Initialize background bubbles
+      for (let i = 0; i < numBubbles; i++) {
+        bubbles.push(new Bubble());
+      }
+    }
+    
+    function draw() {
+      // Deep-sea colored background
+      background(0, 30, 60, 25);
+
+      // Smooth camera rotation
+      currentAngle = lerp(currentAngle, targetAngle, 0.1);
+      push();
+      translate(width / 2, height / 2);
+      rotate(radians(currentAngle));
+      translate(-width / 2, -height / 2);
+
+      // Update/display Bubbles
+      push();
+      translate(width / 2, height / 2);
+      for (let b of bubbles) {
+        b.update();
+        b.display();
+      }
+      pop();
+      
+      if (!started) {
+        pop();
+        return;
+      }
+      
+      // Music control: if travelMode changes, update currentSongType
+      if (travelMode !== null && travelMode !== currentSongType) {
+        if (currentSong) currentSong.pause();
+        currentSong = null;
+        currentSongType = travelMode;
+      }
+      
+      // School of Fish (formerly shooting stars)
+      if (travelMode !== null && millis() - lastSchoolTime > fishInterval) {
+        schools.push(new SchoolOfFish());
+        lastSchoolTime = millis();
+      }
+      push();
+      translate(width / 2, height / 2);
+      for (let i = schools.length - 1; i >= 0; i--) {
+        schools[i].update();
+        schools[i].display();
+        if (schools[i].isOffScreen()) {
+          schools.splice(i, 1);
+        }
+      }
+      pop();
+      
+      // Adjust object spawn rate based on slow or fast
+      let currentInterval = objectInterval;
+      if (travelMode === "slow") {
+        currentInterval *= 2;
+      }
+      
+      // Spawn new marine objects
+      if (travelMode !== null && millis() - lastObjectSpawnTime > currentInterval) {
+        let types = ["whale", "jellyfish", "shipwreck", "giantSquid", "coralReef", "ancientTemple", "seaTurtle", "sunkenTreasure"];
+        let pick = random(types);
+        if (pick === "whale") {
+          marineObjects.push(new Whale());
+        } else if (pick === "jellyfish") {
+          marineObjects.push(new Jellyfish());
+        } else if (pick === "shipwreck") {
+          marineObjects.push(new Shipwreck());
+        } else if (pick === "giantSquid") {
+          marineObjects.push(new GiantSquid());
+        } else if (pick === "coralReef") {
+          marineObjects.push(new CoralReef());
+        } else if (pick === "ancientTemple") {
+          marineObjects.push(new AncientTemple());
+        } else if (pick === "seaTurtle") {
+          marineObjects.push(new SeaTurtle());
+        } else if (pick === "sunkenTreasure") {
+          marineObjects.push(new SunkenTreasure());
+        }
+        lastObjectSpawnTime = millis();
+      }
+      
+      // Update and display marine objects
+      push();
+      translate(width / 2, height / 2);
+      for (let i = marineObjects.length - 1; i >= 0; i--) {
+        marineObjects[i].update();
+        marineObjects[i].display();
+        // Play pass-by sound if close
+        if (travelMode === "fast" && marineObjects[i].z < 200 && !marineObjects[i].passSoundPlayed) {
+          passBySound.play();
+          marineObjects[i].passSoundPlayed = true;
+        }
+        if (marineObjects[i].isGone()) {
+          marineObjects.splice(i, 1);
+        }
+      }
+      pop();
+      
+      // Music playback
+      if (travelMode !== null) {
+        if (currentSong && !currentSong.isPlaying()) {
+          currentSong.play();
+        } else if (!currentSong) {
+          if (travelMode === "fast") {
+            currentSong = pickRandomSongFrom(fastSongs);
+          } else if (travelMode === "slow") {
+            currentSong = pickRandomSongFrom(slowSongs);
+          }
+          currentSong.loop();
+          currentSongType = travelMode;
+        }
+      }
+
+      pop();
+    }
+    
+    // Utility: returns base speed based on current travel mode
+    function activeSpeedForUpdate() {
+      // “turboSpeed” for either fast or slow, but we scale it differently in each object
+      return (travelMode === "fast" || travelMode === "slow") ? turboSpeed : normalDriftSpeed;
+    }
+    
+    // ======== Bubble (Background) ========
+    class Bubble {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width);
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let speed = activeSpeedForUpdate();
+        this.z -= speed * multiplier;
+        if (this.z < 1) this.reset();
+      }
+      display() {
+        fill(200, 230, 255, 150);
+        noStroke();
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width, 4, 0);
+        ellipse(sx, sy, r, r);
+      }
+    }
+    
+    // ====== SchoolOfFish (Replaces ShootingStar) ======
+    class SchoolOfFish {
+      constructor() {
+        // Start at random edges
+        if (random() < 0.5) {
+          this.x = -50;
+          this.y = random(height);
+          this.vel = createVector(random(5, 10), random(-2, 2));
+        } else {
+          this.x = random(width);
+          this.y = -50;
+          this.vel = createVector(random(-2, 2), random(5, 10));
+        }
+        this.trailLength = random(50, 150);
+        this.alpha = 255;
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        this.x += this.vel.x * multiplier;
+        this.y += this.vel.y * multiplier;
+        this.alpha -= 5;
+      }
+      display() {
+        // Imagine a “swish” of fish
+        stroke(255, this.alpha);
+        strokeWeight(2);
+        line(
+          this.x, this.y,
+          this.x - this.vel.x * (this.trailLength / 20),
+          this.y - this.vel.y * (this.trailLength / 20)
+        );
+        noStroke();
+        fill(255, this.alpha);
+        ellipse(this.x, this.y, 4);
+      }
+      isOffScreen() {
+        return (this.x > width + 50 || this.x < -50 ||
+                this.y > height + 50 || this.y < -50 ||
+                this.alpha <= 0);
+      }
+    }
+    
+    // ====== Whale ======
+    class Whale {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(150, 250);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // Simple “whale silhouette” or gradient
+        let r = this.baseSize * 0.6;
+        pg.noStroke();
+        let bodyColor = color(60, 60, 90);
+        for (let i = r; i > 0; i--) {
+          let alpha = map(i, 0, r, 255, 100);
+          pg.fill(red(bodyColor), green(bodyColor), blue(bodyColor), alpha);
+          pg.ellipse(0, 0, i * 2.2, i); // Whale shape (rough ellipse)
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r * 1.5, r); 
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+
+    // ====== Jellyfish ======
+    class Jellyfish {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(70, 130);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // Jellyfish bell
+        let bellRadius = this.baseSize * 0.5;
+        let c1 = color(200, 100, 255, 150);
+        let c2 = color(255, 220, 255, 30);
+        for (let r = bellRadius; r > 0; r--) {
+          let t = r / bellRadius;
+          let col = lerpColor(c2, c1, t);
+          pg.noStroke();
+          pg.fill(col);
+          pg.ellipse(0, 0, r * 2, r * 1.5);
+        }
+        // Tentacles
+        pg.stroke(200, 100, 255, 100);
+        for (let i = 0; i < 5; i++) {
+          let startX = random(-bellRadius/2, bellRadius/2);
+          pg.line(startX, bellRadius * 0.75, startX + random(-10, 10), bellRadius * 2);
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+
+    // ====== Shipwreck ======
+    class Shipwreck {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(120, 200);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // Rough shape of a broken ship
+        pg.noStroke();
+        pg.fill(80, 50, 30);
+        pg.quad(-60, 0, 60, 0, 40, 40, -40, 40);   // hull
+        pg.triangle(-60, 0, -60, -20, -30, 0);     // stern
+        pg.triangle(60, 0, 60, -20, 30, 0);        // bow
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r * 0.75);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+
+    // ====== GiantSquid ======
+    class GiantSquid {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(100, 160);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // Simple “squid body”
+        pg.noStroke();
+        pg.fill(150, 0, 50);
+        let bodyLen = this.baseSize * 0.7;
+        let bodyWid = this.baseSize * 0.4;
+        pg.ellipse(0, 0, bodyWid, bodyLen);
+        // Tentacles
+        pg.stroke(150, 0, 50);
+        for (let i = -2; i <= 2; i++) {
+          pg.line(i*10, bodyLen*0.3, i*10 + random(-20, 20), bodyLen*0.8);
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r * 0.8, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+
+    // ====== CoralReef ======
+    class CoralReef {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(70, 130);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // Vibrant coral lumps
+        for (let i = 0; i < 5; i++) {
+          let cx = random(-this.baseSize*0.4, this.baseSize*0.4);
+          let cy = random(-this.baseSize*0.4, this.baseSize*0.4);
+          let size = random(20, this.baseSize*0.4);
+          pg.fill(random(200,255), random(50,200), random(100,255), 180);
+          pg.noStroke();
+          pg.ellipse(cx, cy, size, size * random(1, 2));
+        }
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+
+    // ====== AncientTemple ======
+    class AncientTemple {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(120, 180);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // A simple “temple silhouette”
+        pg.fill(120, 100, 80);
+        pg.noStroke();
+        pg.rectMode(CENTER);
+        let w = this.baseSize;
+        let h = this.baseSize * 0.6;
+        pg.rect(0, 0, w, h);
+        // Triangular roof
+        pg.triangle(-w/2, -h/2, w/2, -h/2, 0, -h);
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let r = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, r, r * 0.8);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+
+    // ====== SeaTurtle ======
+    class SeaTurtle {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(80, 140);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // Turtle shell
+        let shellRadius = this.baseSize * 0.5;
+        pg.noStroke();
+        pg.fill(100, 155, 90);
+        pg.ellipse(0, 0, shellRadius * 2, shellRadius);
+        // Pattern on shell
+        pg.fill(80, 130, 60);
+        pg.ellipse(0, 0, shellRadius * 1.4, shellRadius * 0.7);
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let size = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, size, size * 0.7);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+
+    // ====== SunkenTreasure ======
+    class SunkenTreasure {
+      constructor() {
+        this.x = random(-width/2, width/2);
+        this.y = random(-height/2, height/2);
+        this.z = random(width*1.5, width*2.5);
+        this.baseSize = random(60, 100);
+        this.pgSize = this.baseSize * 2;
+        this.texture = createGraphics(this.pgSize, this.pgSize);
+        this.drawTexture();
+        this.passSoundPlayed = false;
+      }
+      drawTexture() {
+        let pg = this.texture;
+        pg.clear();
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        // Chest
+        pg.fill(139,69,19);
+        pg.rectMode(CENTER);
+        pg.noStroke();
+        let w = this.baseSize * 0.8;
+        let h = this.baseSize * 0.5;
+        pg.rect(0, 0, w, h);
+        // Lid
+        pg.fill(160,82,45);
+        pg.rect(0, -h*0.4, w, h*0.3);
+        // Gold hint
+        pg.fill(255, 215, 0);
+        pg.rect(0, 0, w*0.6, h*0.3);
+        pg.pop();
+      }
+      update() {
+        let multiplier = (travelMode === "fast") ? 1.5 : (travelMode === "slow") ? 0.5 : 1;
+        let s = activeSpeedForUpdate();
+        this.z -= s * globalSpeedFactor * multiplier;
+      }
+      display() {
+        let sx = (this.x / this.z) * (width/2);
+        let sy = (this.y / this.z) * (height/2);
+        let size = map(this.z, 0, width*2.5, this.baseSize * 2, 0);
+        push();
+        translate(sx, sy);
+        imageMode(CENTER);
+        image(this.texture, 0, 0, size, size * 0.8);
+        pop();
+      }
+      isGone() { return (this.z < 1); }
+    }
+    
+    // ========== Utility Functions ==========
+    function windowResized() { 
+      resizeCanvas(windowWidth, windowHeight); 
+    }
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error(`Erreur: ${err.message}`);
+        });
+      }
+    }
+    function pickRandomSongFrom(arr) {
+      let index = floor(random(arr.length));
+      return arr[index];
+    }
+    
+    // =========== Key Controls ===========
+    function keyPressed() {
+      if (!started) return;
+      if (keyCode === 32) { // SPACE = slow
+        if (travelMode === "fast") return;
+        travelMode = "slow";
+        if (!launchPlayedSlow) {
+          launchSoundSlow.play();
+          launchPlayedSlow = true;
+        }
+      }
+      if (keyCode === ENTER) { // ENTER = fast
+        if (travelMode === "slow") return;
+        travelMode = "fast";
+        if (!launchPlayed) {
+          launchSound.play();
+          launchPlayed = true;
+        }
+        if (!engineHumSound.isPlaying()) {
+          engineHumSound.loop();
+        }
+      }
+      // Turn left or right with arrow keys
+      if (keyCode === LEFT_ARROW) {
+        targetAngle -= 90;
+      } else if (keyCode === RIGHT_ARROW) {
+        targetAngle += 90;
+      }
+      // Start appropriate background music
+      if ((currentSong === null) || (currentSongType !== travelMode)) {
+        if (travelMode === "fast") {
+          currentSong = pickRandomSongFrom(fastSongs);
+          currentSong.loop();
+          currentSongType = "fast";
+        } else if (travelMode === "slow") {
+          currentSong = pickRandomSongFrom(slowSongs);
+          currentSong.loop();
+          currentSongType = "slow";
+        }
+      } else if (currentSong && !currentSong.isPlaying()) {
+        currentSong.play();
+      }
+    }
+    
+    function keyReleased() {
+      if (!started) return;
+      if (keyCode === 32 && travelMode === "slow") {
+        travelMode = null;
+        launchPlayedSlow = false;
+      }
+      if (keyCode === ENTER && travelMode === "fast") {
+        travelMode = null;
+        launchPlayed = false;
+        if (engineHumSound.isPlaying()) {
+          engineHumSound.stop();
+        }
+      }
+      if (travelMode === null && currentSong !== null) {
+        currentSong.pause();
+      }
+    }
+    
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+    });
+    document.getElementById("infoButton").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "block";
+    });
+    document.getElementById("closeModal").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "none";
+    });
+  </script>
+  <script src="../../js/translationonly.js"></script>
+</body>
+</html>
