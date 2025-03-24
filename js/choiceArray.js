@@ -183,6 +183,12 @@ const mediaChoices = [
     video: "https://bucket.adaptatech.org/allamericanrejects-dirtylittlesecret.mp4",
     category: ["rock"]
   },
+  {
+    name: "Statique (faux choix)",
+    image: "../../images/statique.jpeg",   
+    video: "https://bucket.adaptatech.org/whitenoise.mp4",
+    category: ["rock"]
+  },
 
 
 

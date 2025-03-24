@@ -15,7 +15,12 @@
       margin: 0;
       padding: 0;
     }
-    /* Style for the overlay to center content */
+    html, body {
+      background-color: black;
+      height: 100%;
+      margin: 0;
+    }
+    /* Container overlay */
     #reinforcerOverlay {
       position: relative;
       display: flex;
@@ -24,7 +29,7 @@
       height: 100vh;
       background-color: black;
     }
-    /* Updated style for the play button */
+    /* Play button styling */
     #playButton {
       position: absolute;
       top: 50%;
@@ -34,14 +39,41 @@
       border: none;
       background: none;
       cursor: pointer;
+      padding: 0;
+      outline: none;
+    }
+    #playButton svg {
+      width: 120px;
+      height: 120px;
+      filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
+      transition: transform 0.2s ease-in-out;
+      animation: pulse 2s infinite;
+    }
+    #playButton:hover svg {
+      transform: scale(1.1);
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    /* Overlay to block interactions with the video */
+    #videoOverlayCover {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
       display: none;
+      z-index: 5;
     }
   </style>
 </head>
 <body>
-  <!-- The overlay will hold either a video or an image -->
+  <!-- Overlay container for video or image reinforcer -->
   <div id="reinforcerOverlay">
-    <!-- Video element (for shortvideo reinforcer) -->
+    <!-- Video element for short video reinforcer -->
     <video id="reinforcerVideo"
            playsinline
            webkit-playsinline
@@ -52,41 +84,68 @@
       <source id="reinforcerVideoSource" src="" type="video/mp4">
       Votre navigateur ne supporte pas la balise vidéo.
     </video>
-    <!-- Play button with a big cartoony icon -->
-    <button id="playButton" style="border: none; background: none; padding: 0;">
-      <svg viewBox="0 0 100 100" width="100" height="100">
-        <circle cx="50" cy="50" r="45" fill="#ffcc00" stroke="#fff" stroke-width="5" />
+    <!-- Play button with a fun, animated SVG icon -->
+    <button id="playButton">
+      <svg viewBox="0 0 100 100">
+        <defs>
+          <radialGradient id="grad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#7aff59; stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#12941d; stop-opacity:1" />
+          </radialGradient>
+        </defs>
+        <circle cx="50" cy="50" r="45" fill="url(#grad)" stroke="#fff" stroke-width="5" />
         <polygon points="40,30 70,50 40,70" fill="#fff"/>
       </svg>
     </button>
     
-    <!-- Image element (for image reinforcer); initially hidden -->
+    <!-- Image element for image reinforcer (initially hidden) -->
     <img id="reinforcerImage" src="" alt="Reinforcer Image" style="display:none; background-color:black; max-width:90%; border:3px solid #fff; border-radius:10px;">
     <div id="videoOverlayCover"></div>
   </div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // 1) Retrieve selections and theme data from localStorage and themes.js
+      // Attempt auto-fullscreen on page load
+      const docElm = document.documentElement;
+      if (docElm.requestFullscreen) {
+        docElm.requestFullscreen().catch(err => {
+          console.error('Auto-fullscreen failed:', err);
+        });
+      } else if (docElm.mozRequestFullScreen) { // Firefox
+        docElm.mozRequestFullScreen().catch(err => {
+          console.error('Auto-fullscreen failed:', err);
+        });
+      } else if (docElm.webkitRequestFullscreen) { // Chrome, Safari, Opera
+        docElm.webkitRequestFullscreen().catch(err => {
+          console.error('Auto-fullscreen failed:', err);
+        });
+      } else if (docElm.msRequestFullscreen) { // IE/Edge
+        docElm.msRequestFullscreen().catch(err => {
+          console.error('Auto-fullscreen failed:', err);
+        });
+      }
+
+      // Retrieve selections and theme data from localStorage and themes.js
       const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       const mediaOption = selections.mediaOption || "default";
       const themeData = (window.themes && window.themes[mediaOption]) ||
                         (window.themes && window.themes["default"]) || {};
 
-      // 2) Retrieve the reinforcer type ("shortvideo" or "image")
+      // Determine reinforcer type ("shortvideo" or "image")
       const reinforcerType = selections.reinforcerType || "shortvideo";
 
-      // 3) Get elements for video, play button, and image
+      // Get elements for video, play button, image, and interaction blocker overlay.
       const reinforcerVideo = document.getElementById('reinforcerVideo');
       const reinforcerSource = document.getElementById('reinforcerVideoSource');
       const reinforcerImage = document.getElementById('reinforcerImage');
       const playButton = document.getElementById('playButton');
+      const videoOverlayCover = document.getElementById('videoOverlayCover');
 
-      // Make sure the overlay is visible
+      // Ensure the overlay is visible
       document.getElementById('reinforcerOverlay').style.display = 'flex';
 
       if (reinforcerType === "shortvideo") {
-        // Set the video source from the theme or default to a fallback video.
+        // Set the video source from the theme or use a fallback video.
         if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
           const randomIndex = Math.floor(Math.random() * themeData.reinforcerVideos.length);
           reinforcerSource.src = themeData.reinforcerVideos[randomIndex];
@@ -95,16 +154,37 @@
         }
         reinforcerVideo.load();
         reinforcerVideo.controls = false;
-        // Hide the video until the user clicks play.
+        // Hide video until the user clicks play.
         reinforcerVideo.style.display = 'none';
         // Show the play button.
         playButton.style.display = 'block';
 
-        // On play button click, play the video and hide the button.
+        // On play button click, request fullscreen (fallback) and play the video.
         playButton.addEventListener('click', function() {
+          // Request fullscreen as fallback (triggered by user gesture)
+          if (docElm.requestFullscreen) {
+            docElm.requestFullscreen().catch(err => {
+              console.error('Fullscreen request failed:', err);
+            });
+          } else if (docElm.mozRequestFullScreen) {
+            docElm.mozRequestFullScreen().catch(err => {
+              console.error('Fullscreen request failed:', err);
+            });
+          } else if (docElm.webkitRequestFullscreen) {
+            docElm.webkitRequestFullscreen().catch(err => {
+              console.error('Fullscreen request failed:', err);
+            });
+          } else if (docElm.msRequestFullscreen) {
+            docElm.msRequestFullscreen().catch(err => {
+              console.error('Fullscreen request failed:', err);
+            });
+          }
+          
           reinforcerVideo.play().then(() => {
             reinforcerVideo.style.display = 'block';
             playButton.style.display = 'none';
+            // Show the overlay to block further user interaction with the video.
+            videoOverlayCover.style.display = 'block';
           }).catch(err => {
             console.error("Video play error:", err);
           });
@@ -114,28 +194,27 @@
         reinforcerVideo.addEventListener('ended', function() {
           navigateToNextGame();
         }, { once: true });
-      }
-      else if (reinforcerType === "image") {
-        // If reinforcer type is image, select a random image.
+      } else if (reinforcerType === "image") {
+        // If the reinforcer is an image, select a random image.
         let imageSrc = "";
         if (themeData.images && themeData.images.length > 0) {
           const randomIndex = Math.floor(Math.random() * themeData.images.length);
           imageSrc = themeData.images[randomIndex];
         } else {
-          imageSrc = "../../images/default_reinforcer.png"; // default image if none provided
+          imageSrc = "../../images/default_reinforcer.png";
         }
-        // Hide video element and play button, then show image.
+        // Hide video and play button, then show the image.
         reinforcerVideo.style.display = 'none';
         playButton.style.display = 'none';
         reinforcerImage.src = imageSrc;
         reinforcerImage.style.display = 'block';
-        // After 10 seconds, navigate to next game.
+        // After 10 seconds, navigate to the next game.
         setTimeout(() => {
           navigateToNextGame();
         }, 10000);
       }
 
-      // 4) Navigate to the next game.
+      // Navigate to the next game.
       function navigateToNextGame() {
         const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
         let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
