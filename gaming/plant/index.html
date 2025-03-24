@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title data-fr="Croissance de la plante" data-en="Plant Growth Adventure">
+    Plant Growth Adventure
+  </title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+  <style></style>
+</head>
+<body>
+  <div id="promptOverlay">
+    <button id="infoButton" title="More info" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+    <p class="translate" data-fr="Appuyez 5 fois sur ESPACE pour faire pousser la plante !" data-en="Press SPACE 5 times to grow the plant!">
+      Appuyez 5 fois sur ESPACE pour faire pousser la plante !
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+  <div id="infoModal">
+    <p class="translate" data-fr="Votre mission: faire pousser la plante jusqu'à ce qu'elle fleurisse, puis à la 6ème pression, la fleur rétrécit et se place sur l'herbe à gauche. Une nouvelle fleur apparaîtra à droite, et ainsi de suite, formant une ligne. Quand vous avez atteint le nombre choisi de fleurs, une animation de célébration s'affiche et le jeu redémarre." data-en="Grow the plant until it blooms; on the 6th press the flower shrinks and moves onto the grass. A new flower appears to its right, forming a line. When you reach the chosen number of finished flowers, a celebration animation plays and the game resets.">
+      Votre mission: faire pousser la plante jusqu'à ce qu'elle fleurisse, puis à la 6ème pression, la fleur rétrécit et se place sur l'herbe à gauche. Une nouvelle fleur apparaîtra à droite, et ainsi de suite, formant une ligne. Quand vous avez atteint le nombre choisi de fleurs, une animation de célébration s'affiche et le jeu redémarre.
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+  </div>
+  <div id="settings-icon" title="Settings" class="translate" data-fr="⚙️" data-en="⚙️">⚙️</div>
+  <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+  <div id="menu">
+    <h3 data-fr="Musique et son" data-en="Music &amp; Sound">Musique et son</h3>
+    <label class="inline">
+      <span data-fr="Désactiver la musique" data-en="Disable music">Désactiver la musique</span>
+      <input type="checkbox" id="muteToggle">
+    </label>
+    <label>
+      <span data-fr="Volume de la musique" data-en="Music volume">Volume de la musique</span>
+      <span id="musicVolumeValue">50</span>
+      <input type="range" id="musicVolumeSlider" min="1" max="100" value="50">
+    </label>
+    <h3 data-fr="Effets sonores" data-en="Sound effects">Effets sonores</h3>
+    <label class="inline">
+      <span data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+      <input type="checkbox" id="muteSFXToggle">
+    </label>
+    <label>
+      <span data-fr="Volume des sons" data-en="Sound volume">Volume des sons</span>
+      <span id="starSoundVolumeValue">50</span>
+      <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
+    </label>
+    <label>
+      <span data-fr="Nombre de fleurs pour récompense" data-en="Flowers for reward">Fleurs pour récompense</span>
+      <span id="rewardThresholdValue">10</span>
+      <input type="range" id="rewardThresholdSlider" min="2" max="10" value="10" step="1">
+    </label>
+  </div>
+  <script>
+    let musicTracks = [];
+    let plantGrowSounds = [];
+    let flowerSounds = [];
+    let flowerTransitionSounds = [];
+    
+    // Global variables for the sun animation
+    let sunScale = 1;
+    let sunAnimating = false;
+    let sunAnimStartTime = 0;
+    
+    // Enforce a 2-second delay between space presses
+    let lastSpacePress = 0;
+    
+    function preload() {
+      for (let i = 1; i <= 5; i++) {
+        musicTracks.push(loadSound("../../songs/spring/spring" + i + ".mp3"));
+      }
+      for (let i = 1; i <= 3; i++) {
+        plantGrowSounds.push(loadSound("../../songs/spring/plantgrow" + i + ".mp3"));
+      }
+      for (let i = 1; i <= 4; i++) {
+        flowerSounds.push(loadSound("../../songs/spring/flower" + i + ".mp3"));
+      }
+      for (let i = 1; i <= 2; i++) {
+        flowerTransitionSounds.push(loadSound("../../songs/spring/flowertransition" + i + ".mp3"));
+      }
+    }
+    
+    function playRandomMusic() {
+      currentMusic = random(musicTracks);
+      if (currentMusic) {
+        currentMusic.setVolume(isMuted ? 0 : musicVolume);
+        currentMusic.play();
+        currentMusic.onended(playRandomMusic);
+      }
+    }
+    
+    function getGlobalPlantScale() { return width / 1920; }
+    let started = false;
+    let isMuted = false;
+    let isSFXMuted = false;
+    let musicVolume = 0.5;
+    let starSoundVolume = 0.5;
+    let currentMusic = null;
+    const factorMultiplier = 1.5;
+    let clouds = [];
+    let growthStage = 0;
+    const maxGrowthStage = 6;
+    let flowerAnimationProgress = 0;
+    let finishedFlowers = [];
+    let celebrationActive = false;
+    let celebrationStartTime = 0;
+    const travelDuration = 2000;
+    const spinDuration = 3000;
+    const totalDuration = travelDuration + spinDuration;
+    let rewardThreshold = 10;
+    document.getElementById("rewardThresholdSlider").addEventListener("input", function() {
+      rewardThreshold = parseInt(this.value);
+      document.getElementById("rewardThresholdValue").textContent = this.value;
+    });
+    const firstFlowerOffset = 20;
+    let plant;
+    
+    class Cloud {
+      constructor(x, y, w, h, speed) {
+        this.x = x; this.y = y; this.w = w; this.h = h; this.speed = speed;
+      }
+      update() {
+        this.x -= this.speed;
+        if (this.x + this.w < 0) {
+          this.x = width + random(20, 100);
+          this.y = random(30, height / 2);
+          this.w = random(80, 250);
+          this.h = random(40, 120);
+          this.speed = random(0.5, 2.0);
+        }
+      }
+      draw() {
+        noStroke();
+        fill(255, 255, 255, 220);
+        ellipse(this.x, this.y, this.w, this.h);
+        ellipse(this.x - this.w * 0.4, this.y + 10, this.w * 0.7, this.h * 0.7);
+        ellipse(this.x + this.w * 0.4, this.y + 10, this.w * 0.7, this.h * 0.7);
+      }
+    }
+    
+    function drawLeaf(x, y, w, h, angle) {
+      push();
+      translate(x, y);
+      rotate(angle);
+      fill(34, 139, 34);
+      beginShape();
+      curveVertex(0, 0);
+      curveVertex(0, 0);
+      curveVertex(-w / 2, -h / 4);
+      curveVertex(0, -h);
+      curveVertex(w / 2, -h / 4);
+      curveVertex(0, 0);
+      curveVertex(0, 0);
+      endShape();
+      pop();
+    }
+    
+    class Plant {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.tilt = random(-0.1, 0.1);
+        this.curvePhase = random(0, TWO_PI);
+        // updated to include the new 10-petal flower type
+        this.flowerType = random(['A', 'B', 'C', 'T', '10']);
+        let vividColors = [
+          color(255, 105, 180),
+          color(255, 20, 147),
+          color(255, 69, 0),
+          color(255, 140, 0),
+          color(138, 43, 226),
+          color(75, 0, 130),
+          color(0, 191, 255),
+          color(60, 179, 113)
+        ];
+        this.flowerOuterColor = random(vividColors);
+        this.flowerCenterColor = random([color(255, 215, 0), color(255, 255, 255)]);
+        if (this.flowerType === 'T') {
+          this.tulipColor = random(vividColors);
+        }
+      }
+      // wind offset scales with plant height so the base remains fixed
+      drawAttached(stage, baseScale = 3) {
+        push();
+        scale(baseScale);
+        rotate(this.tilt);
+        noStroke();
+        let effectiveStage = min(stage, 3);
+        // if the flower is T or 10 and screen is 1080, you can slightly reduce
+        // the max stem to avoid clipping (example shown below):
+        let maxStemHeight = 150;
+        if ((this.flowerType === 'T' || this.flowerType === '10') && (height <= 1080)) {
+          maxStemHeight = 130;
+        }
+        let stemHeight = map(effectiveStage, 0, 3, 10, maxStemHeight);
+        
+        let stemWidth = 6;
+        let amplitude = 2;
+        let n = 10;
+        fill(34, 139, 34);
+        beginShape();
+        for (let i = 0; i <= n; i++) {
+          let yPos = lerp(0, -stemHeight, i / n);
+          let factor = map(yPos, 0, -stemHeight, 0, 1);
+          let offset = amplitude * factor * sin(map(yPos, 0, -stemHeight, 0, TWO_PI) + this.curvePhase);
+          vertex(-stemWidth / 2 + offset, yPos);
+        }
+        for (let i = n; i >= 0; i--) {
+          let yPos = lerp(0, -stemHeight, i / n);
+          let factor = map(yPos, 0, -stemHeight, 0, 1);
+          let offset = amplitude * factor * sin(map(yPos, 0, -stemHeight, 0, TWO_PI) + this.curvePhase);
+          vertex(stemWidth / 2 + offset, yPos);
+        }
+        endShape(CLOSE);
+        
+        // leaves at progressive stages
+        if (stage >= 1) {
+          drawLeaf(-10, -stemHeight * 0.3, 30, 20, -PI / 6);
+        }
+        if (stage >= 2) {
+          drawLeaf(10, -stemHeight * 0.4, 30, 20, PI / 6);
+        }
+        if (stage >= 3) {
+          drawLeaf(-15, -stemHeight * 0.6, 40, 25, -PI / 8);
+          drawLeaf(15, -stemHeight * 0.7, 40, 25, PI / 8);
+        }
+        // flower buds
+        if (stage === 4) {
+          push();
+          translate(0, -stemHeight);
+          scale(0.5);
+          this.drawCelebrationFlower();
+          pop();
+        }
+        if (stage === 5) {
+          push();
+          translate(0, -stemHeight);
+          this.drawCelebrationFlower();
+          pop();
+        }
+        pop();
+      }
+      
+      drawFlower() {
+        push();
+        let numPetals = 6;
+        let petalSize = 40;
+        let petalDistance = 25;
+        fill(this.flowerOuterColor);
+        for (let i = 0; i < numPetals; i++) {
+          let angle = TWO_PI / numPetals * i;
+          let petalX = petalDistance * cos(angle);
+          let petalY = petalDistance * sin(angle);
+          ellipse(petalX, petalY, petalSize, petalSize);
+        }
+        fill(this.flowerCenterColor);
+        ellipse(0, 0, 35, 35);
+        pop();
+      }
+      drawFlowerTypeB() {
+        push();
+        let numPetals = 5;
+        let petalLength = 50;
+        let petalWidth = 20;
+        fill(this.flowerOuterColor);
+        for (let i = 0; i < numPetals; i++) {
+          push();
+          rotate((TWO_PI / numPetals) * i);
+          beginShape();
+          vertex(0, 0);
+          vertex(petalWidth, -petalLength * 0.6);
+          vertex(0, -petalLength);
+          vertex(-petalWidth, -petalLength * 0.6);
+          endShape(CLOSE);
+          pop();
+        }
+        fill(this.flowerCenterColor);
+        ellipse(0, 0, 30, 30);
+        pop();
+      }
+      drawFlowerTypeC() {
+        push();
+        let numPetals = 6;
+        let outerPetalSize = 50;
+        let outerPetalDistance = 30;
+        fill(this.flowerOuterColor);
+        for (let i = 0; i < numPetals; i++) {
+          let angle = TWO_PI / numPetals * i;
+          let petalX = outerPetalDistance * cos(angle);
+          let petalY = outerPetalDistance * sin(angle);
+          ellipse(petalX, petalY, outerPetalSize, outerPetalSize);
+        }
+        let innerPetalSize = 30;
+        let innerPetalDistance = 15;
+        fill(this.flowerCenterColor);
+        for (let i = 0; i < numPetals; i++) {
+          let angle = TWO_PI / numPetals * i + PI / numPetals;
+          let petalX = innerPetalDistance * cos(angle);
+          let petalY = innerPetalDistance * sin(angle);
+          ellipse(petalX, petalY, innerPetalSize, innerPetalSize);
+        }
+        fill(255, 255, 0);
+        ellipse(0, 0, 40, 40);
+        pop();
+      }
+      drawTulip() {
+        push();
+        noStroke();
+        fill(this.tulipColor);
+        let petals = 1;
+        let br = PI / 2;
+        let petalsLength = height * 0.14;
+        let bh = height * 0.12;
+        let bc = 0.4;
+        let rr = PI;
+        for (let i = 0; i < petals; i++) {
+          let u = TWO_PI / petals;
+          let d = i * u;
+          let x = sin(d + rr) * petalsLength;
+          let y = cos(d + rr) * petalsLength;
+          let b1x = sin(d + rr + br) * bh;
+          let b1y = cos(d + rr + br) * bh;
+          let b2x = sin(d + rr - br) * bh;
+          let b2y = cos(d + rr - br) * bh;
+          bezier(0, 0, b1x, b1y, x, y, x * bc, y * bc);
+          bezier(0, 0, b2x, b2y, x, y, x * bc, y * bc);
+        }
+        pop();
+      }
+      drawFlowerType10() {
+        push();
+        noStroke();
+        let numPetals = 10;
+        let petalLength = height * 0.08;
+        let petalWidth = height * 0.012;
+        fill(this.flowerOuterColor);
+        for (let i = 0; i < numPetals; i++) {
+          push();
+          rotate((TWO_PI / numPetals) * i);
+          beginShape();
+          curveVertex(0, 0);
+          curveVertex(0, 0);
+          curveVertex(petalWidth, -petalLength * 0.3);
+          curveVertex(petalWidth * 1.2, -petalLength * 0.6);
+          curveVertex(0, -petalLength);
+          curveVertex(-petalWidth * 1.2, -petalLength * 0.6);
+          curveVertex(-petalWidth, -petalLength * 0.3);
+          curveVertex(0, 0);
+          curveVertex(0, 0);
+          endShape(CLOSE);
+          pop();
+        }
+        fill(this.flowerCenterColor);
+        ellipse(0, 0, height * 0.03, height * 0.03);
+        pop();
+      }
+      
+      drawCelebrationFlower() {
+        if (this.flowerType === 'T') {
+          this.drawTulip();
+        } else if (this.flowerType === 'B') {
+          this.drawFlowerTypeB();
+        } else if (this.flowerType === 'C') {
+          this.drawFlowerTypeC();
+        } else if (this.flowerType === '10') {
+          this.drawFlowerType10();
+        } else {
+          this.drawFlower();
+        }
+      }
+      
+      draw(stage) {
+        push();
+        let globalPlantScale = getGlobalPlantScale();
+        if (stage < 5) {
+          translate(this.x, this.y);
+          this.drawAttached(stage, 3 * factorMultiplier * globalPlantScale);
+        } else if (stage === 5) {
+          translate(this.x, this.y);
+          this.drawAttached(5, 3 * factorMultiplier * globalPlantScale);
+        } else if (stage === 6) {
+          let marginX = 0.04 * width;
+          let computedFlowerSpacing = (width - 2 * marginX) / 9;
+          let extraOffset = (finishedFlowers.length === 0) ? firstFlowerOffset : 0;
+          let targetX = marginX + extraOffset + finishedFlowers.length * computedFlowerSpacing;
+          let targetY = height - 50;
+          let p = flowerAnimationProgress;
+          let curX = lerp(this.x, targetX, p);
+          let curY = lerp(this.y, targetY, p);
+          let shrinkFactor = lerp(1, 0.3, p);
+          translate(curX, curY);
+          scale(shrinkFactor * 3 * factorMultiplier * globalPlantScale);
+          this.drawAttached(5, 1);
+        }
+        pop();
+      }
+    }
+    
+    function startCelebration() {
+      celebrationActive = true;
+      celebrationStartTime = millis();
+      finishedFlowers.forEach(f => {
+        f.startX = f.x;
+        f.startY = f.y;
+        f.destX = random(100, width - 100);
+        f.destY = random(100, height - 100);
+        f.celebrationSpinAngle = random(TWO_PI);
+        f.celebrationSpinSpeed = random(0.01, 0.05);
+      });
+    }
+    
+    function drawCelebration() {
+      background(0);
+      let elapsed = millis() - celebrationStartTime;
+      let globalPlantScale = getGlobalPlantScale();
+      finishedFlowers.forEach(f => {
+        push();
+        if (elapsed < travelDuration) {
+          let p = elapsed / travelDuration;
+          let curX = lerp(f.startX, f.destX, p);
+          let curY = lerp(f.startY, f.destY, p);
+          translate(curX, curY);
+          scale(0.5 * 3 * factorMultiplier * globalPlantScale);
+          f.plant.drawCelebrationFlower();
+        } else {
+          translate(f.destX, f.destY);
+          scale(0.5 * 3 * factorMultiplier * globalPlantScale);
+          f.celebrationSpinAngle += f.celebrationSpinSpeed;
+          rotate(f.celebrationSpinAngle);
+          f.plant.drawCelebrationFlower();
+        }
+        pop();
+      });
+      if (elapsed > totalDuration) {
+        resetGame();
+      }
+    }
+    
+    function resetGame() {
+      finishedFlowers = [];
+      plant = new Plant(width / 2, height - 50);
+      growthStage = 0;
+      flowerAnimationProgress = 0;
+      celebrationActive = false;
+    }
+    
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      noLoop();
+      for (let i = 0; i < 6; i++) {
+        let x = random(0, width);
+        let y = random(30, height / 2);
+        let w = random(80, 250);
+        let h = random(40, 120);
+        let speed = random(0.5, 2.0);
+        clouds.push(new Cloud(x, y, w, h, speed));
+      }
+      plant = new Plant(width / 2, height - 50);
+    }
+    
+    function draw() {
+      if (!started) return;
+      if (celebrationActive) {
+        drawCelebration();
+        return;
+      }
+      drawSimpleBackground();
+      let globalPlantScale = getGlobalPlantScale();
+      let marginX = 0.04 * width;
+      let computedFlowerSpacing = (width - 2 * marginX) / 9;
+      
+      // update and draw clouds
+      for (let cloud of clouds) {
+        cloud.update();
+        cloud.draw();
+      }
+      
+      // draw finished flowers
+      finishedFlowers.forEach(f => {
+        push();
+        let windOsc = sin(frameCount * 0.05 + f.x) * 2;
+        translate(f.x + windOsc, f.y);
+        scale(0.1 * 3 * factorMultiplier * globalPlantScale);
+        f.plant.drawAttached(5);
+        pop();
+      });
+      
+      // main plant logic
+      if (growthStage < 5) {
+        plant.draw(growthStage);
+      } else if (growthStage === 5) {
+        plant.draw(5);
+      } else if (growthStage === 6) {
+        plant.draw(6);
+        flowerAnimationProgress += 0.005;
+        if (flowerAnimationProgress >= 1) {
+          let extraOffset = (finishedFlowers.length === 0) ? firstFlowerOffset : 0;
+          let targetX = marginX + extraOffset + finishedFlowers.length * computedFlowerSpacing;
+          let targetY = height - 50;
+          finishedFlowers.push({ plant: plant, x: targetX, y: targetY });
+          if (finishedFlowers.length >= rewardThreshold) {
+            startCelebration();
+          } else {
+            growthStage = 0;
+            flowerAnimationProgress = 0;
+            plant = new Plant(width / 2, height - 50);
+          }
+        }
+      }
+    }
+    
+    function drawSimpleBackground() {
+      background(135, 206, 250);
+      
+      // handle sun animations
+      if (sunAnimating) {
+        let t = millis() - sunAnimStartTime;
+        if (t < 1000) {
+          sunScale = lerp(1, 1.6, t / 1000);
+        } else if (t < 2000) {
+          sunScale = lerp(1.6, 1, (t - 1000) / 1000);
+        } else {
+          sunScale = 1;
+          sunAnimating = false;
+        }
+      }
+      
+      // draw rays
+      push();
+      translate(100, 100);
+      scale(sunScale);
+      let baseSunSize = 120;
+      let pulse = 15 * sin(frameCount * 0.02);
+      baseSunSize += pulse;
+      let numRays = 16;
+      let rayLength = baseSunSize * 1.3;
+      rotate(frameCount * 0.01);
+      stroke(255, 223, 0, 180);
+      strokeWeight(4);
+      for (let i = 0; i < numRays; i++) {
+        let angle = i * TWO_PI / numRays;
+        let x1 = (baseSunSize / 2) * cos(angle);
+        let y1 = (baseSunSize / 2) * sin(angle);
+        let x2 = rayLength * cos(angle);
+        let y2 = rayLength * sin(angle);
+        line(x1, y1, x2, y2);
+      }
+      pop();
+      
+      // draw sun
+      push();
+      translate(100, 100);
+      scale(sunScale);
+      fill(255, 223, 0);
+      noStroke();
+      ellipse(0, 0, 120, 120);
+      pop();
+      
+      // warm overlay
+      if (sunAnimating) {
+        let alpha = 100 * (sunScale - 1) / 0.6;
+        fill(255, 235, 10, alpha);
+        noStroke();
+        rect(0, 0, width, height);
+      }
+      
+      // ground
+      fill(50, 205, 50);
+      rect(0, height - 50, width, 50);
+    }
+    
+    function playGrowthSound() {
+      if (!isSFXMuted) {
+        if (growthStage < 4) {
+          let s = random(plantGrowSounds);
+          s.setVolume(starSoundVolume);
+          s.play();
+        } else if (growthStage < 6) {
+          let s = random(flowerSounds);
+          s.setVolume(starSoundVolume);
+          s.play();
+        } else if (growthStage === 6) {
+          let s = random(flowerTransitionSounds);
+          s.setVolume(starSoundVolume);
+          s.play();
+        }
+      }
+    }
+    
+    // Accept space presses only if at least 2 seconds have passed
+    function keyPressed() {
+      if (!started) return;
+      if (key !== ' ') return;
+      
+      if (millis() - lastSpacePress < 2000) {
+        // ignore if < 2 sec
+        return;
+      }
+      lastSpacePress = millis();
+      
+      if (!celebrationActive && growthStage < 6) {
+        growthStage++;
+        playGrowthSound();
+        if (growthStage <= 5) {
+          sunAnimating = true;
+          sunAnimStartTime = millis();
+        }
+      }
+    }
+    
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      plant = new Plant(width / 2, height - 50);
+    }
+    
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.error(err));
+      }
+    }
+    
+    document.getElementById("startButton").addEventListener("click", function(){
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+      document.getElementById("settings-icon").style.display = "flex";
+      playRandomMusic();
+      loop();
+    });
+    document.getElementById("infoButton").addEventListener("click", function(){
+      document.getElementById("infoModal").style.display = "block";
+    });
+    document.getElementById("closeModal").addEventListener("click", function(){
+      document.getElementById("infoModal").style.display = "none";
+    });
+    document.getElementById("settings-icon").addEventListener("click", function(){
+      document.getElementById("menu").classList.toggle("show");
+    });
+    document.getElementById("fullscreen-btn").addEventListener("click", goFullscreen);
+    
+    const muteToggle = document.getElementById('muteToggle');
+    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+    const musicVolumeValue = document.getElementById('musicVolumeValue');
+    const muteSFXToggle = document.getElementById('muteSFXToggle');
+    const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
+    const starSoundVolumeValue = document.getElementById('starSoundVolumeValue');
+    
+    muteToggle.addEventListener('change', () => {
+      isMuted = muteToggle.checked;
+      if (currentMusic) currentMusic.setVolume(isMuted ? 0 : musicVolume);
+    });
+    musicVolumeSlider.addEventListener('input', () => {
+      musicVolume = parseInt(musicVolumeSlider.value) / 100;
+      musicVolumeValue.textContent = musicVolumeSlider.value;
+      if (currentMusic && !isMuted) currentMusic.setVolume(musicVolume);
+    });
+    muteSFXToggle.addEventListener('change', () => { 
+      isSFXMuted = muteSFXToggle.checked; 
+    });
+    starSoundVolumeSlider.addEventListener('input', () => {
+      starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100;
+      starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
+    });
+  </script>
+</body>
+</html>
