@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let pauseSoundInterval = null; 
     let fadeOutTimeout = null;
     let hideTimeout = null;
-
+    
     // -------------------------
     // Initialize / Load Config
     // -------------------------
@@ -76,11 +76,17 @@ document.addEventListener('DOMContentLoaded', () => {
             spacePromptImagesContainer.textContent = "No images available.";
             return;
         }
+        // If no image is selected yet, set the first image as the default
+        if (!selectedSpacePromptImage) {
+            selectedSpacePromptImage = spacePromptImages[0].src;
+        }
         spacePromptImages.forEach(image => {
             const imageCard = document.createElement('div');
             imageCard.className = 'image-card';
             imageCard.dataset.src = image.src;
-            imageCard.innerHTML = `<img src="${image.src}" alt="${image.alt}">`;
+            // Use the proper alt text based on the current language (if needed)
+            let altText = image.alt[document.documentElement.lang] || image.alt.en || "";
+            imageCard.innerHTML = `<img src="${image.src}" alt="${altText}">`;
             if (selectedSpacePromptImage === image.src) {
                 imageCard.classList.add('selected');
             }
@@ -95,18 +101,38 @@ document.addEventListener('DOMContentLoaded', () => {
             spacePromptImagesContainer.appendChild(imageCard);
         });
     }
+    
+    
 
     function populateSoundOptions() {
-        if (!Array.isArray(spacePromptSounds) || spacePromptSounds.length === 0) {
-            return;
-        }
-        spacePromptSounds.forEach(option => {
+        // Clear existing options
+        soundOptionsSelect.innerHTML = '';
+        
+        // Determine the current language; default to 'en'
+        const currentLang = document.documentElement.lang || "en";
+        
+        // Loop through the sound options and create option elements
+        spacePromptSounds.forEach((option) => {
             const soundOption = document.createElement('option');
             soundOption.value = option.value;
-            soundOption.textContent = option.label;
+            // Use the appropriate label based on current language
+            if (typeof option.label === 'object') {
+                soundOption.textContent = option.label[currentLang] || option.label.en;
+            } else {
+                soundOption.textContent = option.label;
+            }
             soundOptionsSelect.appendChild(soundOption);
         });
+        
+        // Set the default selected value to 'piano-sound'
+        soundOptionsSelect.value = 'piano-sound';
+        // Also update the selectedSound variable so playPauseSound() knows which sound to play
+        selectedSound = 'piano-sound';
     }
+    
+    
+    
+    
 
     function loadConfig() {
         // Called initially or on changes to reassign timestamps, etc.
@@ -626,7 +652,11 @@ document.addEventListener('DOMContentLoaded', () => {
         customTextPrompt = textPromptInput.value.trim() || null;
         spacePromptModal.style.display = 'none';
     });
-
+    populateSpacePromptImages();
     loadMiscOptions();
     loadConfig();
+    if(levelSelect.value) {
+        const event = new Event('change');
+        levelSelect.dispatchEvent(event);
+      }
 });
