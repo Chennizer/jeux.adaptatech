@@ -23,6 +23,7 @@ const spacePromptImages = [
 
 // Space Prompt Sounds
 const spacePromptSounds = [
+  
   { value: "gong-sound", label: { fr: "Gong", en: "Gong" }, src: "../../sounds/gong.mp3" },
   { value: "piano-sound", label: { fr: "Piano", en: "Piano" }, src: "../../sounds/piano.mp3" },
   { value: "rooster-sound", label: { fr: "Coq", en: "Rooster" }, src: "../../sounds/rooster.mp3" },
