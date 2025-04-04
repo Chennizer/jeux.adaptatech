@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title data-fr="Lancement de la fusée" data-en="Rocket Launch Countdown">Rocket Launch Countdown</title>
+
+  <!-- p5 Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+
+  <!-- Optional: your CSS file -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <style>
+    /* Remove default margins and scrolling to eliminate white bars */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000; /* If you want the background black */
+    }
+
+    canvas {
+      display: block;
+    }
+
+    /* COUNTDOWN TEXT (HTML overlay) */
+    #countdownDisplay {
+      position: fixed;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 48px;
+      font-weight: bold;
+      color: #ff0000;
+      z-index: 1200;
+    }
+
+    /* SETTINGS MENU (optional) */
+    #menu {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      display: none;
+      z-index: 2000;
+    }
+    #menu.show {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- START OVERLAY: instructions & "Start" -->
+  <div id="promptOverlay">
+    <button id="infoButton" title="More info" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+    <p class="translate" 
+       data-fr="Appuyez sur ESPACE pour faire décoller la fusée!" 
+       data-en="Press space to launch the rocket!">
+      Press space to launch the rocket!
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Start</button>
+  </div>
+  
+  <!-- INFO MODAL -->
+  <div id="infoModal">
+    <p class="translate" 
+       data-fr="Compétence: appuyer 5 fois pour lancer la fusée<br>SENICT switch skills niveau 3<br>Switch Progression Roadmap niveaux 13 à 15"
+       data-en="Skill: press 5 times to launch the rocket<br>SENICT switch skills level 3<br>Switch Progression Roadmap levels 13 to 15">
+      Skill: press 5 times to launch the rocket<br>SENICT switch skills level 3<br>Switch Progression Roadmap levels 13 to 15
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Close</button>
+  </div>
+  
+  <!-- COUNTDOWN DISPLAY -->
+  <div id="countdownDisplay">5</div>
+
+  <!-- SETTINGS MENU (optional) -->
+  <div id="menu">
+    <h3 data-fr="Musique et son" data-en="Music &amp; Sound">Music &amp; Sound</h3>
+    <label class="inline">
+      <span data-fr="Désactiver la musique" data-en="Disable music">Disable music</span>
+      <input type="checkbox" id="muteToggle">
+    </label>
+    <label>
+      <span data-fr="Volume de la musique" data-en="Music volume">Music volume</span>
+      <span id="musicVolumeValue">50</span>
+      <input type="range" id="musicVolumeSlider" min="1" max="100" value="50">
+    </label>
+    <h3 data-fr="Effets sonores" data-en="Sound effects">Sound effects</h3>
+    <label class="inline">
+      <span data-fr="Désactiver les sons" data-en="Disable sounds">Disable sounds</span>
+      <input type="checkbox" id="muteSFXToggle">
+    </label>
+    <label>
+      <span data-fr="Volume des sons" data-en="Sound volume">Sound volume</span>
+      <span id="starSoundVolumeValue">50</span>
+      <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
+    </label>
+  </div>
+
+  <script>
+    /*
+      CORE GAME LOGIC
+    */
+    let started = false;
+    let spacePressCount = 0;
+    let countdown = 5;
+
+    /*
+      ROCKET IMAGES
+    */
+    let rocketImages = [];
+    let rocketStages = [
+      "rocket1.png",
+      "rocket2.png",
+      "rocket3.png",
+      "rocket4.png",
+      "rocket5.png",
+      "rocket6.png"
+    ];
+
+    /*
+      p5: PRELOAD
+    */
+    function preload() {
+      for (let i = 0; i < rocketStages.length; i++) {
+        rocketImages[i] = loadImage(`../../images/rocket/${rocketStages[i]}`);
+      }
+    }
+
+    /*
+      p5: SETUP
+    */
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      noLoop(); // We'll manually control rendering
+
+      spacePressCount = 0;
+      countdown = 5;
+      document.getElementById("countdownDisplay").textContent = countdown;
+    }
+
+    /*
+      p5: DRAW
+    */
+    function draw() {
+      background(0); // black
+
+      if (!started) return;
+
+      // Determine which image index
+      let stageIndex = min(spacePressCount, 5);
+      let rocketImg = rocketImages[stageIndex];
+
+      // Force rocket to 500px wide, keep aspect ratio
+      let nativeW = rocketImg.width;
+      let nativeH = rocketImg.height;
+      let forcedWidth = 300;
+      let scaleFactor = forcedWidth / nativeW;
+      let forcedHeight = nativeH * scaleFactor;
+
+      // Position rocket so its bottom edge is at the bottom of the screen
+      let rocketX = (width - forcedWidth) / 2;
+      // The rocket's bottom is at `height`, so top-left is at `height - forcedHeight`
+      let rocketY = height - forcedHeight; 
+
+      image(rocketImg, rocketX, rocketY, forcedWidth, forcedHeight);
+    }
+
+    /*
+      p5: KEY PRESSED
+    */
+    function keyPressed() {
+      if (!started) return;
+
+      if (key === ' ') {
+        spacePressCount++;
+        if (spacePressCount > 5) spacePressCount = 5;
+
+        countdown--;
+        if (countdown < 0) countdown = 0;
+
+        // Update countdown on HTML
+        document.getElementById("countdownDisplay").textContent = countdown;
+
+        // Redraw
+        redraw();
+      }
+    }
+
+    /*
+      START BUTTON LOGIC
+    */
+    const startBtn = document.getElementById("startButton");
+    startBtn.addEventListener("click", () => {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+      loop();
+      redraw();
+    });
+
+    /*
+      FULLSCREEN
+    */
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.error(err));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    /*
+      INFO MODAL LOGIC
+    */
+    const infoButton = document.getElementById("infoButton");
+    const closeModalBtn = document.getElementById("closeModal");
+
+    infoButton.addEventListener("click", () => {
+      document.getElementById("infoModal").style.display = "block";
+    });
+    closeModalBtn.addEventListener("click", () => {
+      document.getElementById("infoModal").style.display = "none";
+    });
+
+    /*
+      SETTINGS
+      (Adapt as needed if you have music or sfx)
+    */
+    let isMuted = false;
+    let isSFXMuted = false;
+    let musicVolume = 0.5;
+    let starSoundVolume = 0.5;
+
+    const muteToggle = document.getElementById('muteToggle');
+    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+    const musicVolumeValue = document.getElementById('musicVolumeValue');
+    const muteSFXToggle = document.getElementById('muteSFXToggle');
+    const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
+    const starSoundVolumeValue = document.getElementById('starSoundVolumeValue');
+
+    muteToggle.addEventListener('change', () => {
+      isMuted = muteToggle.checked;
+      if (typeof currentMusic !== 'undefined' && currentMusic) {
+        currentMusic.setVolume(isMuted ? 0 : musicVolume);
+      }
+    });
+
+    musicVolumeSlider.addEventListener('input', () => {
+      musicVolume = parseInt(musicVolumeSlider.value) / 100;
+      musicVolumeValue.textContent = musicVolumeSlider.value;
+      if (typeof currentMusic !== 'undefined' && currentMusic && !isMuted) {
+        currentMusic.setVolume(musicVolume);
+      }
+    });
+
+    muteSFXToggle.addEventListener('change', () => {
+      isSFXMuted = muteSFXToggle.checked;
+    });
+
+    starSoundVolumeSlider.addEventListener('input', () => {
+      starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100;
+      starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
+    });
+
+    /*
+      P5: RESIZE
+    */
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      redraw();
+    }
+  </script>
+
+  <!-- translation script if you have it -->
+  <script src="../../js/translationonly.js"></script>
+</body>
+</html>
