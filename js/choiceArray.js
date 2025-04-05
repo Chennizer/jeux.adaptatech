@@ -189,6 +189,18 @@ const mediaChoices = [
     video: "https://bucket.adaptatech.org/whitenoise.mp4",
     category: ["rock"]
   },
+  {
+    name: "Rosé - APT",
+    image: "../../images/Rose-APT.webp",   
+    video: "https://bucket.adaptatech.org/Rose-APT.mp4",
+    category: ["pop"]
+  },
+  {
+    name: "Lonely island - Threw it on the ground",
+    image: "../../images/threwitontheground.jpg",   
+    video: "https://bucket.adaptatech.org/lonelyisland-throwitontheground.mp4",
+    category: ["pop"]
+  },
 
 
 
