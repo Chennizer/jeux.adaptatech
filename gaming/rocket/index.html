@@ -3,42 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <title data-fr="Lancement de la fusée" data-en="Rocket Launch Countdown">Rocket Launch Countdown</title>
-
-  <!-- p5 Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
-
-  <!-- Optional: your CSS file -->
   <link rel="stylesheet" href="../../css/otherswitch.css">
-
   <style>
-    /* Remove default margins and scrolling to eliminate white bars */
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #000; /* If you want the background black */
+      background: #000;
     }
-
     canvas {
       display: block;
     }
-
-    /* COUNTDOWN TEXT (HTML overlay) */
-    #countdownDisplay {
-      position: fixed;
-      top: 20%;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 48px;
-      font-weight: bold;
-      color: #ff0000;
-      z-index: 1200;
-    }
-
-    /* SETTINGS MENU (optional) */
     #menu {
       position: fixed;
       top: 10px;
@@ -55,33 +34,16 @@
     }
   </style>
 </head>
-
 <body>
-  <!-- START OVERLAY: instructions & "Start" -->
   <div id="promptOverlay">
     <button id="infoButton" title="More info" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
-    <p class="translate" 
-       data-fr="Appuyez sur ESPACE pour faire décoller la fusée!" 
-       data-en="Press space to launch the rocket!">
-      Press space to launch the rocket!
-    </p>
+    <p class="translate" data-fr="Appuyez sur ESPACE pour faire décoller la fusée!" data-en="Press space to launch the rocket!">Press space to launch the rocket!</p>
     <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Start</button>
   </div>
-  
-  <!-- INFO MODAL -->
   <div id="infoModal">
-    <p class="translate" 
-       data-fr="Compétence: appuyer 5 fois pour lancer la fusée<br>SENICT switch skills niveau 3<br>Switch Progression Roadmap niveaux 13 à 15"
-       data-en="Skill: press 5 times to launch the rocket<br>SENICT switch skills level 3<br>Switch Progression Roadmap levels 13 to 15">
-      Skill: press 5 times to launch the rocket<br>SENICT switch skills level 3<br>Switch Progression Roadmap levels 13 to 15
-    </p>
+    <p class="translate" data-fr="Compétence: appuyer 5 fois pour lancer la fusée<br>SENICT switch skills niveau 3<br>Switch Progression Roadmap niveaux 13 à 15" data-en="Skill: press 5 times to launch the rocket<br>SENICT switch skills level 3<br>Switch Progression Roadmap levels 13 to 15">Skill: press 5 times to launch the rocket<br>SENICT switch skills level 3<br>Switch Progression Roadmap levels 13 to 15</p>
     <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Close</button>
   </div>
-  
-  <!-- COUNTDOWN DISPLAY -->
-  <div id="countdownDisplay">5</div>
-
-  <!-- SETTINGS MENU (optional) -->
   <div id="menu">
     <h3 data-fr="Musique et son" data-en="Music &amp; Sound">Music &amp; Sound</h3>
     <label class="inline">
@@ -104,100 +66,251 @@
       <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
     </label>
   </div>
-
   <script>
-    /*
-      CORE GAME LOGIC
-    */
     let started = false;
     let spacePressCount = 0;
-    let countdown = 5;
+    let currentRocketStage = 0;
+    let isFlying = false;
+    let rocketYPos;
+    let flightStartTime = 0;
 
-    /*
-      ROCKET IMAGES
-    */
+    // Stage 2 variables
+    let postLaunch = false;
+    let zoomFactor = 1;
+    let zoomOutSpeed = 0.01; 
+    let rocketPostLaunchSpeed = 3;
+    let rocketPostLaunchAngle = -3 * Math.PI / 4; // Points up-left
+    let rocketXPost, rocketYPost;
+
+    // Stage 3 variables
+    let stage3 = false;            // Will become true once rocket finishes stage 2
+    let rocketXStage3, rocketYStage3;
+    let rocketSpeedStage3 = 5;     // Speed for stage 3
+    let rocketAngleStage3 = -Math.PI / 2; // so the rocket appears pointing left (image is "up" by default)
+
+    // Images/sounds
+    let bgImg, earthBg, thirdBg, fuelImg;
     let rocketImages = [];
-    let rocketStages = [
-      "rocket1.png",
-      "rocket2.png",
-      "rocket3.png",
-      "rocket4.png",
-      "rocket5.png",
-      "rocket6.png"
-    ];
+    let rocketStages = ["rocket1.png","rocket2.png","rocket3.png","rocket4.png","rocket5.png","rocket6.png","rocket7.png"];
+    let soundStage4, soundStage5, soundFuel;
+    let stage5SoundPlayed = false;
+    
+    // Fuel animation
+    let fuelAnimating = false;
+    let fuelAnimationStart = 0;
+    const fuelAnimationDuration = 2600;
+    let fuelSoundPlayed = false;
 
-    /*
-      p5: PRELOAD
-    */
     function preload() {
       for (let i = 0; i < rocketStages.length; i++) {
         rocketImages[i] = loadImage(`../../images/rocket/${rocketStages[i]}`);
       }
+      bgImg = loadImage("../../images/rocket/rocketbackground.png");
+      earthBg = loadImage("../../images/rocket/rocketearth.png");
+      
+      // Placeholder third-stage background:
+      // Replace with the real image path once available
+      thirdBg = loadImage("../../images/rocket/rocketmoon.png"); 
+      
+      fuelImg = loadImage("../../images/rocket/rocketfuel.png");
+
+      soundStage4 = loadSound("../../sounds/rocket/rocketrumble.mp3");
+      soundStage5 = loadSound("../../sounds/rocket/rocketlaunch.mp3");
+      soundFuel = loadSound("../../sounds/rocket/rocketfuel.mp3");
     }
 
-    /*
-      p5: SETUP
-    */
     function setup() {
       createCanvas(windowWidth, windowHeight);
-      noLoop(); // We'll manually control rendering
-
+      noLoop();
       spacePressCount = 0;
-      countdown = 5;
-      document.getElementById("countdownDisplay").textContent = countdown;
+      currentRocketStage = 0;
     }
 
-    /*
-      p5: DRAW
-    */
     function draw() {
-      background(0); // black
+      // --- Stage 3 logic ---
+      if (stage3) {
+        image(thirdBg, 0, 0, width, height);
 
+        // Move rocket left until it hits center of the screen
+        if (rocketXStage3 > width / 2) {
+          rocketXStage3 -= rocketSpeedStage3;
+        } else {
+          // Clamp it at center
+          rocketXStage3 = width / 2;
+        }
+
+        // Draw rocket, pointing left
+        push();
+          translate(rocketXStage3, rocketYStage3);
+          rotate(rocketAngleStage3); 
+          let rocketImg = rocketImages[6];
+          let forcedW = 250;
+          let sf = forcedW / rocketImg.width;
+          let forcedH = rocketImg.height * sf;
+          image(rocketImg, -forcedW / 2, -forcedH / 2, forcedW, forcedH);
+        pop();
+
+        // We'll keep looping here for further expansions if needed
+        return;
+      }
+
+      // --- Stage 2 logic (postLaunch) ---
+      if (postLaunch) {
+        // Draw space background
+        image(earthBg, 0, 0, width, height);
+
+        // Move rocket along its velocity
+        let vx = rocketPostLaunchSpeed * Math.cos(rocketPostLaunchAngle);
+        let vy = rocketPostLaunchSpeed * Math.sin(rocketPostLaunchAngle);
+        rocketXPost += vx;
+        rocketYPost += vy;
+
+        push();
+          translate(rocketXPost, rocketYPost);
+          scale(zoomFactor);
+          // Rotate the rocket so that “up” in the image points in its actual direction of travel
+          rotate(rocketPostLaunchAngle + HALF_PI);
+
+          let rocketImg = rocketImages[6];
+          let forcedW = width * 0.10;
+          let sf = forcedW / rocketImg.width;
+          let forcedH = rocketImg.height * sf;
+          image(rocketImg, -forcedW / 2, -forcedH / 2, forcedW, forcedH);
+        pop();
+
+        // Increase zoom
+        zoomFactor += zoomOutSpeed;
+
+        // Once rocket leaves screen boundary, transition to stage 3
+        if (rocketXPost < -300 || rocketYPost < -300 || rocketXPost > width + 300 || rocketYPost > height + 300) {
+          // End stage 2
+          postLaunch = false;
+          // Begin stage 3
+          stage3 = true;
+          // Initialize rocket at upper-right, off screen
+          rocketXStage3 = width + 300;
+          rocketYStage3 = 100;
+        }
+        return;
+      }
+
+      // --- Stage 1 logic (on launchpad) ---
+      if (started) {
+        image(bgImg, 0, 0, width, height);
+      } else {
+        background(0);
+      }
       if (!started) return;
 
-      // Determine which image index
-      let stageIndex = min(spacePressCount, 5);
-      let rocketImg = rocketImages[stageIndex];
+      let stageIndex = (spacePressCount <= 3) ? currentRocketStage : spacePressCount;
+      stageIndex = min(stageIndex, 5);
 
-      // Force rocket to 500px wide, keep aspect ratio
+      let rocketImg = rocketImages[stageIndex];
       let nativeW = rocketImg.width;
       let nativeH = rocketImg.height;
       let forcedWidth = 300;
       let scaleFactor = forcedWidth / nativeW;
       let forcedHeight = nativeH * scaleFactor;
+      let baseRocketX = (width - forcedWidth) / 2;
+      let shakeOffset = 0;
 
-      // Position rocket so its bottom edge is at the bottom of the screen
-      let rocketX = (width - forcedWidth) / 2;
-      // The rocket's bottom is at `height`, so top-left is at `height - forcedHeight`
-      let rocketY = height - forcedHeight; 
+      if (isFlying) {
+        let elapsed = millis() - flightStartTime;
+        let shakeAmplitude = 0;
+        let currentSpeed = 0;
 
-      image(rocketImg, rocketX, rocketY, forcedWidth, forcedHeight);
-    }
+        if (elapsed < 2000) {
+          shakeAmplitude = 5;
+          currentSpeed = 2;
+        } else if (elapsed < 4000) {
+          shakeAmplitude = 2.5;
+          currentSpeed = map(elapsed, 2000, 4000, 2, 5);
+        } else {
+          shakeAmplitude = 0;
+          if (elapsed < 8000) {
+            currentSpeed = map(elapsed, 4000, 8000, 5, 20);
+          } else {
+            currentSpeed = 20 + (elapsed - 8000) / 1000 * 5;
+          }
+        }
+        if (shakeAmplitude > 0) {
+          shakeOffset = random(-shakeAmplitude, shakeAmplitude);
+        }
+        rocketYPos -= currentSpeed;
+      } else {
+        rocketYPos = height - forcedHeight;
+        if (spacePressCount === 4) {
+          shakeOffset = random(-2, 2);
+        }
+      }
 
-    /*
-      p5: KEY PRESSED
-    */
-    function keyPressed() {
-      if (!started) return;
+      let rocketX = baseRocketX + shakeOffset;
+      image(rocketImg, rocketX, rocketYPos, forcedWidth, forcedHeight);
 
-      if (key === ' ') {
-        spacePressCount++;
-        if (spacePressCount > 5) spacePressCount = 5;
+      // Fuel animation (Stages 1-4)
+      if (fuelAnimating) {
+        let elapsedFuel = millis() - fuelAnimationStart;
+        if (elapsedFuel >= (fuelAnimationDuration - 1000)) {
+          if (!fuelSoundPlayed) {
+            soundFuel.play();
+            fuelSoundPlayed = true;
+          }
+          fuelAnimating = false;
+          currentRocketStage = spacePressCount;
+        } else {
+          let fuelWidth = 140;
+          let fuelScaleFactor = fuelWidth / fuelImg.width;
+          let fuelHeight = fuelImg.height * fuelScaleFactor;
+          let fuelStartX = -fuelWidth;
+          let targetX = rocketX + forcedWidth / 2 - fuelWidth / 2;
+          let progress = elapsedFuel / fuelAnimationDuration;
+          let currentFuelX = lerp(fuelStartX, targetX, progress);
+          let fuelY = rocketYPos + forcedHeight / 2 - fuelHeight / 2;
+          image(fuelImg, currentFuelX, fuelY, fuelWidth, fuelHeight);
+        }
+      }
 
-        countdown--;
-        if (countdown < 0) countdown = 0;
-
-        // Update countdown on HTML
-        document.getElementById("countdownDisplay").textContent = countdown;
-
-        // Redraw
-        redraw();
+      // Check if the rocket has cleared the top => start stage 2
+      if (isFlying && rocketYPos + forcedHeight < 0 && !postLaunch) {
+        postLaunch = true;
+        zoomFactor = 1;
+        rocketXPost = width * 0.75;
+        rocketYPost = height * 0.70;
       }
     }
 
-    /*
-      START BUTTON LOGIC
-    */
+    function keyPressed() {
+      if (!started) return;
+      if (key === ' ') {
+        if (!isFlying) {
+          spacePressCount++;
+          if (spacePressCount > 5) spacePressCount = 5;
+
+          if (spacePressCount <= 3) {
+            fuelAnimating = true;
+            fuelAnimationStart = millis();
+            fuelSoundPlayed = false;
+          }
+          if (spacePressCount === 4) {
+            if (!soundStage4.isPlaying()) {
+              soundStage4.loop();
+            }
+          }
+          if (spacePressCount === 5 && !isFlying) {
+            if (soundStage4.isPlaying()) {
+              soundStage4.stop();
+            }
+            isFlying = true;
+            flightStartTime = millis();
+            if (!stage5SoundPlayed) {
+              soundStage5.play();
+              stage5SoundPlayed = true;
+            }
+          }
+        }
+      }
+    }
+
     const startBtn = document.getElementById("startButton");
     startBtn.addEventListener("click", () => {
       started = true;
@@ -207,9 +320,6 @@
       redraw();
     });
 
-    /*
-      FULLSCREEN
-    */
     function goFullscreen() {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(err => console.error(err));
@@ -218,12 +328,8 @@
       }
     }
 
-    /*
-      INFO MODAL LOGIC
-    */
     const infoButton = document.getElementById("infoButton");
     const closeModalBtn = document.getElementById("closeModal");
-
     infoButton.addEventListener("click", () => {
       document.getElementById("infoModal").style.display = "block";
     });
@@ -231,15 +337,8 @@
       document.getElementById("infoModal").style.display = "none";
     });
 
-    /*
-      SETTINGS
-      (Adapt as needed if you have music or sfx)
-    */
-    let isMuted = false;
-    let isSFXMuted = false;
-    let musicVolume = 0.5;
-    let starSoundVolume = 0.5;
-
+    // Audio Controls
+    let isMuted = false, isSFXMuted = false, musicVolume = 0.5, starSoundVolume = 0.5;
     const muteToggle = document.getElementById('muteToggle');
     const musicVolumeSlider = document.getElementById('musicVolumeSlider');
     const musicVolumeValue = document.getElementById('musicVolumeValue');
@@ -253,7 +352,6 @@
         currentMusic.setVolume(isMuted ? 0 : musicVolume);
       }
     });
-
     musicVolumeSlider.addEventListener('input', () => {
       musicVolume = parseInt(musicVolumeSlider.value) / 100;
       musicVolumeValue.textContent = musicVolumeSlider.value;
@@ -261,26 +359,19 @@
         currentMusic.setVolume(musicVolume);
       }
     });
-
     muteSFXToggle.addEventListener('change', () => {
       isSFXMuted = muteSFXToggle.checked;
     });
-
     starSoundVolumeSlider.addEventListener('input', () => {
       starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100;
       starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
     });
 
-    /*
-      P5: RESIZE
-    */
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
       redraw();
     }
   </script>
-
-  <!-- translation script if you have it -->
   <script src="../../js/translationonly.js"></script>
 </body>
 </html>
