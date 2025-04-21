@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title class="translate"
+         data-fr="Générateur d'images DVC"
+         data-en="CVI images generator">
+    PNG Picker with Caption & Aspect‑Fit PDF Export
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <link rel="stylesheet" href="../../css/choix.css"/>
+  <link rel="stylesheet" href="../../css/cvigenerator.css"/>
+
+  <style>
+    /* sidebar positioning */
+    #menu {
+      position: relative;
+      z-index: 1;
+      padding: 20px;
+    }
+
+    /* title spacing without horizontal line */
+    #menu h2 {
+      margin-top: 10px;
+      margin-bottom: 1rem;
+    }
+
+    /* carousel spacing without horizontal line */
+    #carousel-container {
+      margin-bottom: 1rem;
+      
+    }
+
+    /* colors section spacing without horizontal line */
+    .color-sections {
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  padding: 1rem 1.5rem;
+  margin: 1rem 0;
+  margin-top:20px;
+}
+
+
+    /* separation between PDF and PNG panels (only vertical line) */
+    .export-section {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.5rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      padding: 1rem;
+    }
+    .export-pdf {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-right: 1rem;
+      border-right: 2px solid #009688; /* vertical teal line */
+    }
+    .export-png {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding-left: 1rem;
+    }
+
+    /* toast */
+    .toast {
+      position: fixed;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #fff;
+      color: #009688;
+      border: 2px solid #009688;
+      padding: 15px 30px;
+      border-radius: 4px;
+      font-family: Arial, sans-serif;
+      font-size: 1.1rem;
+      z-index: 1000;
+      transition: top 0.5s ease-in-out;
+    }
+    .toast.visible {
+      top: 25%;
+    }
+
+    /* info icon */
+    .info-icon {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 1.5rem;
+      color: #009688;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      z-index: 1001;
+    }
+
+    /* modal overlay */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 5%;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+      z-index: 2000;
+      pointer-events: none;
+    }
+    .modal.show {
+      display: flex;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* modal box */
+    .modal-content {
+      background: #fff;
+      color: #000;
+      border: 2px solid #009688;
+      border-radius: 4px;
+      padding: 20px;
+      max-width: 90%;
+      width: 400px;
+      text-align: center;
+    }
+    .modal-content h3 {
+      margin-top: 0;
+      color: #009688;
+    }
+    .modal-content .export-btn {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <aside id="menu">
+      <!-- info icon -->
+      <button id="infoBtn"
+              class="translate info-icon"
+              data-fr="ⓘ"
+              data-en="ⓘ"
+              title="Instructions">
+        ⓘ
+      </button>
+
+      <h2 class="translate"
+          data-fr="Générateur d'images DVC"
+          data-en="CVI image generator">
+        CVI image generator
+      </h2>
+
+      <select id="categorySelect"></select>
+
+      <div id="carousel-container">
+        <button id="carouselPrev" class="carousel-arrow">&lt;</button>
+        <div id="carousel-track"></div>
+        <button id="carouselNext" class="carousel-arrow">&gt;</button>
+      </div>
+
+      <div class="color-sections">
+        <div class="color-section">
+          <h3 class="translate" data-fr="Couleur de l’image" data-en="Image Color">Icon Color</h3>
+          <div id="fillColorGrid" class="color-grid"></div>
+        </div>
+        <div class="color-section">
+          <h3 class="translate" data-fr="Arrière‑plan" data-en="Background">Background</h3>
+          <div id="bgColorGrid" class="color-grid"></div>
+        </div>
+      </div>
+
+      <div class="toggle-container" style="margin-top:30px">
+        <label class="teal-label">
+          <input type="checkbox" id="toggleTextOptions"/>
+          <span class="translate"
+                data-fr="Afficher les options de texte"
+                data-en="Show caption options">
+            Show caption options
+          </span>
+        </label>
+      </div>
+
+      <div class="text-options">
+        <div class="color-section">
+          <h3 class="translate" data-fr="Couleur du texte" data-en="Text Color">Text Color</h3>
+          <div id="textColorGrid" class="color-grid"></div>
+        </div>
+        <div class="text-section">
+          <label for="textInput"
+                 class="control-label translate"
+                 data-fr="Texte"
+                 data-en="Caption Text">
+            Caption Text
+          </label>
+          <input id="textInput" type="text" placeholder="Enter caption…" class="styled-input"/>
+
+          <label for="fontSizeSlider"
+                 class="control-label translate"
+                 data-fr="Taille de la police"
+                 data-en="Font Size">
+            Font Size
+          </label>
+          <input id="fontSizeSlider" type="range" min="20" max="144" value="48"/>
+          <div id="fontSizeVal">48 px</div>
+        </div>
+      </div>
+
+      <h3 class="translate"
+          data-fr="Télécharger"
+          data-en="Download"
+          style="text-align:center; margin-top:1.5rem;">
+        Export
+      </h3>
+
+      <div class="export-section">
+        <div class="export-pdf">
+          <select id="sizeSelect" style="margin-bottom:0.5rem;">
+            <option value="quarter"
+                    class="translate"
+                    data-fr="Quart de page"
+                    data-en="Quarter page">Quarter page</option>
+            <option value="half"
+                    class="translate"
+                    data-fr="Demi‑page"
+                    data-en="Half page">Half page</option>
+            <option value="full"
+                    class="translate"
+                    data-fr="Pleine page"
+                    data-en="Full page">Full page</option>
+          </select>
+          <button id="addPdfBtn"
+                  class="export-btn translate"
+                  data-fr="Ajouter au PDF"
+                  data-en="Add to PDF"
+                  style="margin-bottom:0.5rem;">
+            Add to PDF
+          </button>
+          <button id="downloadPdfBtn"
+                  class="export-btn translate"
+                  data-fr="Télécharger le PDF"
+                  data-en="Download PDF">
+            Download PDF
+          </button>
+        </div>
+        <div class="export-png">
+          <button id="downloadPngBtn"
+                  class="export-btn translate"
+                  data-fr="Télécharger l'image (format PNG)"
+                  data-en="Download PNG">
+            Download PNG
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main id="content">
+      <div id="preview-wrapper">
+        <div id="icon-container"></div>
+        <div id="text-preview"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- toast -->
+  <div id="toast"
+       class="toast translate"
+       data-fr="Ajouté au PDF"
+       data-en="Added to PDF">
+    Added to PDF
+  </div>
+
+  <!-- instruction modal -->
+  <div id="instructionModal" class="modal">
+    <div class="modal-content">
+      <h3 class="translate" data-fr="Instructions" data-en="Instructions">
+        Instructions
+      </h3>
+      <p class="translate"
+         data-fr="• Sélectionnez une catégorie dans le menu déroulant pour filtrer les images.<br>• Cliquez sur les flèches ou sur une image dans le carrousel pour la sélectionner.<br>• Utilisez les palettes de couleurs pour définir la couleur de l’image, la couleur de fond et, si souhaité, la couleur du texte.<br>• Cochez « Afficher les options de texte » pour ajouter un texte, saisissez votre texte et ajustez la taille de la police.<br>• Cliquez sur « Ajouter au PDF » pour ajouter l’image actuelle à votre document PDF.<br>• Cliquez sur « Télécharger le PDF » pour enregistrer le PDF, ou sur « Télécharger le PNG » pour enregistrer l’image au format PNG."
+         data-en="• Choose a category from the dropdown to filter icons.<br>• Click the arrows or an icon in the carousel to select it.<br>• Use the color grids to set icon color, background color, and (optionally) text color.<br>• Check “Show caption options” to add a caption, type your text, and adjust font size.<br>• Click “Add to PDF” to add the current image to your PDF sheet.<br>• Click “Download PDF” to save your PDF, or “Download PNG” to save the image as a PNG.">
+        • Choose a category from the dropdown to filter icons.<br>
+        • Click the arrows or an icon in the carousel to select it.<br>
+        • Use the color grids to set icon color, background color, and (optionally) text color.<br>
+        • Check “Show caption options” to add a caption, type your text, and adjust font size.<br>
+        • Click “Add to PDF” to add the current image to your PDF sheet.<br>
+        • Click “Download PDF” to save your PDF, or “Download PNG” to save the image as a PNG.
+      </p>
+      <button id="closeInfo"
+              class="export-btn translate"
+              data-fr="Fermer"
+              data-en="Close">
+        Close
+      </button>
+    </div>
+  </div>
+
+  <script src="../../js/cviPngArray.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const ITEMS_PER_PAGE = 3;
+      const COLORS = [
+        '#000','#fff',
+        '#E6194B','#3CB44B','#FFE119','#0082C8',
+        '#F58231','#911EB4','#46F0F0','#F032E6',
+        '#D2F53C','#FABEBE','#008080','#E6BEFF',
+        '#AA6E28','#800000',
+        '#FF6B6B','#FFD700','#6B8E23','#4B0082'
+      ];
+
+      const PNG_ARRAY = window.PNG_ARRAY || [];
+      const categories = [...new Set(PNG_ARRAY.map(i => i.category))];
+      const CATEGORY_LABELS = {
+        food:          { en: 'Food',         fr: 'Aliments' },
+        plants:        { en: 'Plants',       fr: 'Plantes' },
+        animals:       { en: 'Animals',      fr: 'Animaux' },
+        birds:         { en: 'Birds',        fr: 'Oiseaux' },
+        'sea animals': { en: 'Sea Animals',  fr: 'Animaux marins' },
+        insect:        { en: 'Insects',      fr: 'Insectes' },
+        vehicles:      { en: 'Vehicles',     fr: 'Véhicules' },
+        shapes:        { en: 'Shapes',       fr: 'Formes' }
+      };
+
+      let selectedCat, currentIndex;
+      if (PNG_ARRAY.length) {
+        const rnd = PNG_ARRAY[Math.floor(Math.random()*PNG_ARRAY.length)];
+        selectedCat = rnd.category;
+        const items = PNG_ARRAY.filter(i => i.category === selectedCat);
+        currentIndex = items.findIndex(i => i.file === rnd.file);
+        if (currentIndex < 0) currentIndex = 0;
+      } else {
+        selectedCat = categories[0];
+        currentIndex = 0;
+      }
+
+      let textStr        = '';
+      let textColor      = '#3CB44B';
+      let textSize       = 48;
+      let currentIconHex = '#3CB44B';
+      let currentBgHex   = '#000';
+
+      const catSelect      = document.getElementById('categorySelect');
+      const carouselTrack  = document.getElementById('carousel-track');
+      const btnPrev        = document.getElementById('carouselPrev');
+      const btnNext        = document.getElementById('carouselNext');
+      const iconCont       = document.getElementById('icon-container');
+      const fillGrid       = document.getElementById('fillColorGrid');
+      const bgGrid         = document.getElementById('bgColorGrid');
+      const textColorGrid  = document.getElementById('textColorGrid');
+      const textInput      = document.getElementById('textInput');
+      const fontSizeSlider = document.getElementById('fontSizeSlider');
+      const fontSizeVal    = document.getElementById('fontSizeVal');
+      const textPreview    = document.getElementById('text-preview');
+      const sizeSel        = document.getElementById('sizeSelect');
+      const addBtn         = document.getElementById('addPdfBtn');
+      const dlBtn          = document.getElementById('downloadPdfBtn');
+      const downloadPngBtn = document.getElementById('downloadPngBtn');
+      const contentBg      = document.getElementById('content');
+      const toast          = document.getElementById('toast');
+      const infoBtn        = document.getElementById('infoBtn');
+      const instructionM   = document.getElementById('instructionModal');
+      const closeInfo      = document.getElementById('closeInfo');
+
+      function showToast() {
+        toast.classList.add('visible');
+        setTimeout(() => toast.classList.remove('visible'), 2000);
+      }
+
+      infoBtn.addEventListener('click', () => {
+        instructionM.classList.add('show');
+      });
+      closeInfo.addEventListener('click', () => {
+        instructionM.classList.remove('show');
+      });
+
+      const toggle   = document.getElementById('toggleTextOptions');
+      const textOpts = document.querySelector('.text-options');
+      textOpts.style.display = 'none';
+      toggle.addEventListener('change', () => {
+        if (toggle.checked) {
+          textOpts.style.display = 'flex';
+        } else {
+          textOpts.style.display = 'none';
+          textInput.value = '';
+          textPreview.textContent = '';
+          textStr = '';
+        }
+      });
+
+      categories.forEach(cat => {
+        const o = document.createElement('option');
+        o.value = cat;
+        o.classList.add('translate');
+        o.setAttribute('data-en', CATEGORY_LABELS[cat].en);
+        o.setAttribute('data-fr', CATEGORY_LABELS[cat].fr);
+        o.textContent = CATEGORY_LABELS[cat].en;
+        catSelect.appendChild(o);
+      });
+      catSelect.value = selectedCat;
+      catSelect.onchange = () => {
+        selectedCat = catSelect.value;
+        currentIndex = 0;
+        renderCarousel();
+      };
+
+      COLORS.forEach(c => {
+        const ic = document.createElement('div');
+        ic.className = 'color-tile'; ic.style.backgroundColor = c;
+        ic.onclick = () => { iconCont.style.color = c; currentIconHex = c; };
+        fillGrid.appendChild(ic);
+
+        const bc = document.createElement('div');
+        bc.className = 'color-tile'; bc.style.backgroundColor = c;
+        bc.onclick = () => { contentBg.style.background = c; currentBgHex = c; };
+        bgGrid.appendChild(bc);
+
+        const tc = document.createElement('div');
+        tc.className = 'color-tile'; tc.style.backgroundColor = c;
+        tc.onclick = () => { textColor = c; textPreview.style.color = c; };
+        textColorGrid.appendChild(tc);
+      });
+      iconCont.style.color       = currentIconHex;
+      contentBg.style.background = currentBgHex;
+      textPreview.style.color    = textColor;
+      textPreview.style.fontSize = textSize + 'px';
+
+      textInput.oninput = () => {
+        textStr = textInput.value;
+        textPreview.textContent = textStr;
+      };
+      fontSizeSlider.oninput = () => {
+        textSize = +fontSizeSlider.value;
+        fontSizeVal.textContent = textSize + ' px';
+        textPreview.style.fontSize = textSize + 'px';
+      };
+
+      btnPrev.onclick = () => {
+        const items = PNG_ARRAY.filter(i => i.category === selectedCat);
+        currentIndex = (currentIndex - 1 + items.length) % items.length;
+        renderCarousel();
+      };
+      btnNext.onclick = () => {
+        const items = PNG_ARRAY.filter(i => i.category === selectedCat);
+        currentIndex = (currentIndex + 1) % items.length;
+        renderCarousel();
+      };
+      function renderCarousel() {
+        const items = PNG_ARRAY.filter(i => i.category === selectedCat);
+        carouselTrack.innerHTML = '';
+        for (let i = 0; i < ITEMS_PER_PAGE; i++) {
+          const idx = (currentIndex + i) % items.length;
+          const it = items[idx];
+          const d = document.createElement('div');
+          d.className = 'carousel-item';
+          d.innerHTML = `<img src="${it.file}" alt="${it.name}">`;
+          d.onclick = () => {
+            currentIndex = idx;
+            document.querySelectorAll('.carousel-item.selected')
+                    .forEach(e => e.classList.remove('selected'));
+            d.classList.add('selected');
+            iconCont.style.setProperty('--mask-url', `url("${it.file}")`);
+          };
+          carouselTrack.appendChild(d);
+        }
+        const first = carouselTrack.querySelector('.carousel-item');
+        if (first) first.classList.add('selected');
+        const it = PNG_ARRAY.filter(i => i.category === selectedCat)[currentIndex];
+        iconCont.style.setProperty('--mask-url', `url("${it.file}")`);
+      }
+      renderCarousel();
+
+      const { jsPDF } = window.jspdf;
+      const pdf       = new jsPDF({ unit:'mm', format:'letter', orientation:'portrait' });
+      const maskCache = new Map();
+
+      async function toCanvas(path, iconColor, bgColor) {
+        const size = 800;
+        const c    = document.createElement('canvas');
+        c.width = c.height = size;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = iconColor; ctx.fillRect(0,0,size,size);
+        ctx.globalCompositeOperation = 'destination-in';
+        let img = maskCache.get(path);
+        if (!img) {
+          img = new Image(); img.src = path;
+          await img.decode();
+          maskCache.set(path,img);
+        }
+        ctx.drawImage(img,0,0,size,size);
+        ctx.globalCompositeOperation = 'destination-over';
+        ctx.fillStyle = bgColor; ctx.fillRect(0,0,size,size);
+        ctx.globalCompositeOperation = 'source-over';
+        return c;
+      }
+
+      function slotInfo(type) {
+        const W = pdf.internal.pageSize.getWidth();
+        const H = pdf.internal.pageSize.getHeight();
+        if (type==='full')   return { w:W,   h:H,   slots:[{x:0,y:0}] };
+        if (type==='half')   return { w:W,   h:H/2, slots:[{x:0,y:0},{x:0,y:H/2}] };
+        return { w:W/2, h:H/2, slots:[
+          {x:0,y:0},{x:W/2,y:0},
+          {x:0,y:H/2},{x:W/2,y:H/2}
+        ]};
+      }
+
+      let sheetType = null, sheetCursor = 0;
+      addBtn.onclick = async () => {
+        const type  = sizeSel.value;
+        const items = PNG_ARRAY.filter(i=>i.category===selectedCat);
+        const cur   = items[currentIndex];
+        if (!cur) return;
+        const bgColor = getComputedStyle(contentBg).backgroundColor;
+        const cvs     = await toCanvas(cur.file, iconCont.style.color, bgColor);
+        const maskImg = maskCache.get(cur.file), imgRatio = maskImg.width/maskImg.height;
+        const {w,h,slots} = slotInfo(type);
+        if (sheetType!==type || sheetCursor>=slots.length) {
+          if (sheetType!==null) pdf.addPage();
+          sheetType   = type; sheetCursor = 0;
+        }
+        const pos = slots[sheetCursor++];
+        const rgb = bgColor.match(/\d+/g).map(Number);
+        pdf.setFillColor(...rgb);
+        pdf.rect(pos.x,pos.y,w,h,'F');
+        const hasText = textStr.trim().length > 0;
+        const capMM   = hasText ? textSize * (25.4/72) : 0;
+        const spaceMM = hasText ? 10                : 0;
+        const imgH    = h - (capMM + spaceMM);
+        const slotR   = w / imgH;
+        let drawW, drawH;
+        if (imgRatio > slotR) { drawW = w;    drawH = w / imgRatio; }
+        else                   { drawH = imgH; drawW = imgH * imgRatio; }
+        const offX = pos.x + (w - drawW)/2;
+        const offY = pos.y + (imgH - drawH)/2;
+        pdf.addImage(cvs.toDataURL('image/png'), 'PNG', offX, offY, drawW, drawH);
+        if (hasText) {
+          pdf.setFontSize(textSize);
+          const tv = parseInt(textColor.replace('#',''), 16);
+          pdf.setTextColor((tv>>16)&255, (tv>>8)&255, tv&255);
+          pdf.text(textStr.trim(), pos.x + w/2, offY + drawH + spaceMM, { align:'center' });
+        }
+        showToast();
+      };
+
+      dlBtn.onclick = () => pdf.save('my_pictures.pdf');
+
+      downloadPngBtn.onclick = async () => {
+        const items = PNG_ARRAY.filter(i=>i.category===selectedCat);
+        const cur   = items[currentIndex];
+        if (!cur) return;
+        const safeName = cur.name.toLowerCase()
+          .replace(/^cvi/, '')
+          .replace(/\s+/g, '_')
+          .replace(/[^a-z0-9_]/g, '');
+        const COLOR_NAMES = {/* same mapping as before */};
+        const iconName = COLOR_NAMES[currentIconHex.toLowerCase()] || currentIconHex.slice(1);
+        const bgName   = COLOR_NAMES[currentBgHex.toLowerCase()]   || currentBgHex.slice(1);
+
+        const cvs = await toCanvas(cur.file, currentIconHex, currentBgHex);
+        const ctx = cvs.getContext('2d');
+        if (textStr.trim()) {
+          ctx.fillStyle    = textColor;
+          ctx.font         = `${textSize}px Arial, sans-serif`;
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(textStr.trim(), cvs.width/2, cvs.height - textSize - 10);
+        }
+        cvs.toBlob(blob => {
+          const filename = `${iconName}_${safeName}_${bgName}.png`;
+          const a = document.createElement('a');
+          a.download = filename;
+          a.href     = URL.createObjectURL(blob);
+          a.click();
+          URL.revokeObjectURL(a.href);
+        });
+      };
+
+      translateAll();
+    });
+  </script>
+  <script src="../../js/translationonly.js"></script>
+</body>
+</html>
