@@ -1,5 +1,9 @@
 // Space Prompt Images
 const spacePromptImages = [
+  { src: "../../images/redswitch.png", alt: { fr: "Switch Rouge", en: "Red Switch" } },
+  { src: "../../images/blueswitch.png", alt: { fr: "Switch Bleue", en: "Blue Switch" } },
+  { src: "../../images/yellowswitch.png", alt: { fr: "Big Mack", en: "Big Mack" } },
+  { src: "../../images/greenswitch.png", alt: { fr: "Interact Switch", en: "Interact Switch" } },
   { src: "../../images/switch-rouge.png", alt: { fr: "Switch Rouge", en: "Red Switch" } },
   { src: "../../images/switch-bleue.png", alt: { fr: "Switch Bleue", en: "Blue Switch" } },
   { src: "../../images/big-mack.png", alt: { fr: "Big Mack", en: "Big Mack" } },
