@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Far-Flying Shard Explosion</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
+</head>
+<body style="margin:0;overflow:hidden;">
+<script>
+// ——— Global state ———
+let shards           = [];
+let explosionShards  = [];
+let stage            = 0;    
+let targetX, targetY;
+let tolerance;              
+let missTime = -Infinity;   
+
+const N = 24;               
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  tolerance = width * 0.05;
+  spawnTarget();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  tolerance = width * 0.05;
+}
+
+function draw() {
+  if (stage === 4) {
+    fill(255, 30);
+    rect(0,0,width,height);
+  } else {
+    background(255);
+  }
+
+  if (stage >= 1) {
+    noStroke();
+    fill(255, 50);
+    ellipse(targetX, targetY, tolerance * 3);
+  }
+
+  if (stage === 0) {
+    let dx=0, dy=0;
+    if (millis() - missTime < 200) {
+      dx = random(-5,5); dy = random(-5,5);
+      strokeWeight(4); stroke(255,0,0);
+    } else {
+      strokeWeight(3); stroke(0);
+    }
+    noFill();
+    ellipse(targetX+dx, targetY+dy, tolerance*2);
+    return;
+  }
+
+  if (stage >= 1 && stage < 4) {
+    noStroke(); fill(0); rect(0,0,width,height);
+    noFill(); stroke(255);
+    strokeWeight(stage===1?2: stage===2?6:12);
+    for (let s of shards) {
+      beginShape();
+        for (let p of s.crackPath) vertex(p.x,p.y);
+      endShape();
+      if (s.branchPath) {
+        beginShape();
+          for (let p of s.branchPath) vertex(p.x,p.y);
+        endShape();
+      }
+    }
+    return;
+  }
+
+  if (stage === 4) {
+    noStroke(); fill(0); rect(0,0,width,height);
+    drawingContext.shadowBlur  = 5;
+    drawingContext.shadowColor = 'rgba(0,0,0,0.5)';
+    for (let e of explosionShards) {
+      e.update();
+      e.draw();
+    }
+    drawingContext.shadowBlur  = 0;
+    drawingContext.shadowColor = 'transparent';
+  }
+}
+
+function touchStarted() {
+  handleTap(mouseX, mouseY);
+  return false;
+}
+function mousePressed() {
+  if (touches.length === 0) handleTap(mouseX, mouseY);
+}
+
+function handleTap(x,y) {
+  if (dist(x,y,targetX,targetY) > tolerance) {
+    missTime = millis();
+    return;
+  }
+
+  if (stage === 0) {
+    spawnShards(targetX, targetY);
+    stage = 1;
+  }
+  else if (stage < 3) {
+    stage++;
+  }
+  else if (stage === 3) {
+    stage = 4;
+    spawnExplosion(targetX, targetY);
+  }
+  else {
+    spawnTarget();
+  }
+}
+
+function spawnTarget() {
+  targetX = random(tolerance, width - tolerance);
+  targetY = random(tolerance, height - tolerance);
+  stage    = 0;
+  shards   = [];
+  explosionShards = [];
+}
+
+function spawnShards(cx, cy) {
+  shards = [];
+  let R = max(width, height);
+  for (let i = 0; i < N; i++) {
+    let a1 = TWO_PI * i     / N;
+    let a2 = TWO_PI * (i+1) / N;
+    let v1 = createVector(cos(a1)*R, sin(a1)*R);
+    let v2 = createVector(cos(a2)*R, sin(a2)*R);
+    shards.push(new Shard(cx, cy, [v1, v2]));
+  }
+}
+
+function spawnExplosion(cx, cy) {
+  explosionShards = [];
+  let count = floor(random(40, 60));
+  for (let i = 0; i < count; i++) {
+    explosionShards.push(new ExplosionShard(cx, cy));
+  }
+}
+
+// — Shard class for cracks — unchanged —
+class Shard {
+  constructor(cx, cy, vertices) {
+    this.cx        = cx; this.cy        = cy;
+    this.vertices  = vertices;
+    let mid        = p5.Vector.add(vertices[0], vertices[1]).mult(0.5);
+    this.midAngle  = mid.heading();
+    this.crackPath = this._makeCrackPath();
+    if (random() < 0.3) this.branchPath = this._makeBranch();
+  }
+  _makeCrackPath() {
+    let path = [{ x:this.cx, y:this.cy }];
+    let R    = max(width, height);
+    let steps= floor(random(6,10));
+    for (let i = 1; i <= steps; i++) {
+      let t = i/steps, r = R * t;
+      let bx = this.cx + cos(this.midAngle)*r;
+      let by = this.cy + sin(this.midAngle)*r;
+      let maxJ = map(r,0,R,5,30);
+      let off  = random(-maxJ, maxJ);
+      let norm = this.midAngle + HALF_PI;
+      path.push({ x: bx + cos(norm)*off, y: by + sin(norm)*off });
+    }
+    return path;
+  }
+  _makeBranch() {
+    let idx  = floor(random(2, this.crackPath.length-2));
+    let pt   = this.crackPath[idx];
+    let len  = random(max(width,height)*0.2, max(width,height)*0.5);
+    let ang  = this.midAngle + random(-PI/4, PI/4);
+    return [
+      { x: pt.x, y: pt.y },
+      { x: pt.x + cos(ang)*len, y: pt.y + sin(ang)*len }
+    ];
+  }
+}
+
+// — ExplosionShard class with much farther reach —
+class ExplosionShard {
+  constructor(cx, cy) {
+    this.pos      = createVector(cx, cy);
+    // ✦ much higher launch speed 
+    this.velocity = p5.Vector.fromAngle(random(TWO_PI))
+                     .mult(random(30, 60));   
+    this.rotation = random(TWO_PI);
+    this.rotSpeed = random(-0.3, 0.3);
+    this.shape    = [];
+    let pts = floor(random(4, 8));
+    // ✦ much larger shards
+    let maxR = random(40, 80);           
+    for (let i = 0; i < pts; i++) {
+      let a = random(TWO_PI);
+      let r = random(maxR*0.5, maxR);
+      this.shape.push(createVector(cos(a)*r, sin(a)*r));
+    }
+    this.col      = color(
+      random(150,255),
+      random(150,255),
+      random(150,255),
+      200
+    );
+    // ✦ extended lifetime so they stay until well off-screen
+    this.lifetime = 240;                 
+  }
+  update() {
+    this.pos.add(this.velocity);
+    // a gentler deceleration so they keep moving far
+    this.velocity.mult(0.98);
+    this.rotation += this.rotSpeed;
+    this.lifetime--;
+  }
+  draw() {
+    if (this.lifetime <= 0) return;
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.rotation);
+    noStroke();
+    fill(this.col);
+    beginShape();
+      this.shape.forEach(v => vertex(v.x, v.y));
+    endShape(CLOSE);
+    pop();
+  }
+}
+</script>
+</body>
+</html>

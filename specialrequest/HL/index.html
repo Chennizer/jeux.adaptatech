@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stimulation visuelle</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap"/>
+  <style>
+    body,html{margin:0;padding:0;overflow:hidden;font-family:'Roboto',sans-serif;}
+    canvas{position:absolute;top:0;left:0;z-index:0;}
+    /* ---------- UI styles (same as before) ---------- */
+    #startOverlay{position:absolute;inset:0;background:#000;color:#fff;font-size:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;z-index:10;}
+    #startButton{margin-top:20px;padding:20px 40px;font-size:24px;background:#0077be;border:none;border-radius:10px;color:#fff;cursor:pointer;}
+    #startButton:hover{background:#0088cc;}
+    #fullscreen-btn{position:fixed;top:15px;right:60px;padding:8px 12px;font-size:12px;background:rgba(0,0,0,.7);color:#fff;border:none;border-radius:5px;cursor:pointer;z-index:1001;}
+    #fullscreen-btn:hover{background:rgba(0,0,0,.9);}
+    #settings-icon{position:fixed;top:10px;right:10px;width:40px;height:40px;background:rgba(0,0,0,.7);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:1001;transition:transform .3s;}
+    #settings-icon:hover{transform:rotate(90deg);}
+    #menu{position:fixed;top:60px;right:-300px;width:270px;background:rgba(0,0,0,.85);padding:10px 15px;border-radius:5px;color:#fff;opacity:0;transition:right .3s,opacity .3s;z-index:1000;max-height:calc(100vh - 80px);overflow-y:auto;}
+    #menu.show{right:10px;opacity:1;}
+    #menu h2,#menu h3{color:#00bfff;margin:15px 0 8px;font-weight:500;}
+    #menu label{display:flex;flex-direction:column;margin:8px 0;font-size:13px;}
+    #menu input,#menu select{margin-top:5px;}
+    .custom-file-upload{display:inline-block;padding:5px 10px;background:#00bfff;color:#fff;border-radius:4px;font-size:12px;cursor:pointer;margin-top:5px;}
+    .custom-file-upload:hover{background:#008fcc;}
+    #fileName{display:block;margin-top:5px;font-size:12px;color:#bbb;}
+    #explosionCounter{position:fixed;bottom:10px;right:10px;color:#fff;font-size:16px;pointer-events:none;z-index:1001;}
+  </style>
+</head>
+<body>
+
+  <!-- ---------- OVERLAY ---------- -->
+  <div id="startOverlay">
+    <p>Pour écran tactile, ajustements dans le menu en haut à droite</p>
+    <button id="startButton">Commencer</button>
+  </div>
+
+  <!-- ---------- BUTTONS ---------- -->
+  <button id="fullscreen-btn">Plein écran</button>
+  <div id="settings-icon">⚙️</div>
+
+  <!-- ---------- SETTINGS PANEL ---------- -->
+  <div id="menu">
+    <h2>Paramètres</h2>
+
+    <h3>Apparence</h3>
+    <label>Forme:
+      <select id="shapeSelector">
+        <option value="circle">Cercle</option>
+        <option value="square">Carré</option>
+        <option value="triangle">Triangle</option>
+        <option value="polygon">Polygone</option>
+        <option value="star">Étoile</option>
+        <option value="character">Caractère</option>
+        <option value="image">Image</option>
+      </select>
+    </label>
+
+    <div id="shapeOptions">
+      <label id="characterOption" style="display:none;">Caractère:
+        <input type="text" id="characterInput" maxlength="10" value="A">
+      </label>
+    </div>
+
+    <label>Taille: <span id="sizeValue">100</span>
+      <input type="range" id="sizeSlider" min="0" max="100" value="100">
+    </label>
+    <label>Couleur des objets: <input type="color" id="colorPicker" value="#ffffff"></label>
+    <label>Couleur aléatoire:  <input type="checkbox" id="randomColorToggle" checked></label>
+    <label>Couleur d'arrière-plan: <input type="color" id="backgroundColorPicker" value="#000000"></label>
+    <label>Quantité: <span id="numberValue">5</span>
+      <input type="range" id="numberSlider" min="1" max="500" value="5">
+    </label>
+    <label class="custom-file-upload">
+      <input type="file" id="imageUploader" accept="image/*" style="display:none;">
+      Choisir une image
+    </label>
+    <span id="fileName">Aucun fichier choisi</span>
+
+    <h3>Mouvement</h3>
+    <label>Vitesse: <span id="speedValue">8</span>
+      <input type="range" id="speedSlider" min="0" max="50" value="8">
+    </label>
+    <label>Direction:
+      <select id="directionSelector">
+        <option value="none">Aléatoire</option>
+        <option value="right">Droite</option>
+        <option value="left">Gauche</option>
+        <option value="bottom">En bas</option>
+        <option value="top">En haut</option>
+      </select>
+    </label>
+    <label id="quadrantLabel" style="display:none;">Zone:
+      <select id="quadrantSelector"></select>
+    </label>
+    <label>Mouvement en ligne droite: <input type="checkbox" id="straightToggle" checked></label>
+  </div>
+
+  <!-- ---------- COUNTER ---------- -->
+  <div id="explosionCounter">0</div>
+
+  <!-- ---------- SCRIPTS ---------- -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.collide2d@0.7.3/p5.collide2d.min.js"></script>
+  <script>
+/* ---------- SOUND LIST ---------- */
+const starSoundList=[
+  '../../sounds/space/twinklingstar1.mp3',
+  '../../sounds/space/twinklingstar2.mp3',
+  '../../sounds/space/twinklingstar3.mp3'
+];
+
+/* ---------- GLOBALS & CONFIG ---------- */
+let shapes=[],particles=[],ripples=[],started=false,uploadedImg=null,explosionCount=0;
+const config={
+  shape:'star',character:'A',
+  color:'#ffffff',randomColor:true,bgColor:'#000000',
+  sizePct:100,count:5,speed:8,
+  direction:'right',straight:true,quadrant:'bottom'
+};
+
+/* ---------- P5 SETUP ---------- */
+function setup(){createCanvas(windowWidth,windowHeight);select('canvas').hide();bindUI();}
+
+/* ---------- UI BINDING ---------- */
+function bindUI(){
+  const $=id=>document.getElementById(id);
+
+  const overlay=$('startOverlay'), startBtn=$('startButton'),
+        fullBtn=$('fullscreen-btn'), gear=$('settings-icon'), menu=$('menu');
+
+  const shapeSel=$('shapeSelector'), charOpt=$('characterOption'), charInp=$('characterInput'),
+        sizeSl=$('sizeSlider'), sizeVal=$('sizeValue'),
+        colPick=$('colorPicker'), rndTog=$('randomColorToggle'), bgPick=$('backgroundColorPicker'),
+        numSl=$('numberSlider'), numVal=$('numberValue'),
+        imgUp=$('imageUploader'), fileName=$('fileName'),
+        spdSl=$('speedSlider'), spdVal=$('speedValue'),
+        dirSel=$('directionSelector'), quadLab=$('quadrantLabel'), quadSel=$('quadrantSelector'),
+        strTog=$('straightToggle');
+
+  /* init controls */
+  shapeSel.value=config.shape; colPick.value=config.color; rndTog.checked=config.randomColor;
+  bgPick.value=config.bgColor; sizeSl.value=config.sizePct; sizeVal.textContent=config.sizePct;
+  numSl.value=config.count; numVal.textContent=config.count;
+  spdSl.value=config.speed; spdVal.textContent=config.speed; dirSel.value=config.direction;
+  strTog.checked=config.straight;
+
+  const showShapeField=()=>{charOpt.style.display=config.shape==='character'?'flex':'none';};
+
+  const buildQuadrantList=()=>{
+    if(config.direction==='none'){quadLab.style.display='none';return;}
+    quadLab.style.display='flex'; quadSel.innerHTML='';
+    const list=(config.direction==='top'||config.direction==='bottom')
+      ?[['left','Gauche'],['center','Centre'],['right','Droite']]
+      :[['top','Haut'],['middle','Milieu'],['bottom','Bas']];
+    list.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;quadSel.appendChild(o);});
+    quadSel.value=config.quadrant;
+  };
+
+  startBtn.onclick=()=>{overlay.remove();select('canvas').show();toggleFS();resetShapes();started=true;};
+
+  let hideTimer; const poke=()=>{clearTimeout(hideTimer);hideTimer=setTimeout(()=>menu.classList.remove('show'),5000);};
+  gear.onclick=()=>{menu.classList.toggle('show');if(menu.classList.contains('show'))poke();};
+  menu.addEventListener('mousemove',poke);menu.addEventListener('input',poke);
+
+  fullBtn.onclick=toggleFS; document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f')toggleFS();});
+
+  /* handlers */
+  shapeSel.onchange=()=>{config.shape=shapeSel.value;showShapeField();resetShapes();}
+  charInp.oninput=()=>{config.character=charInp.value||'A';resetShapes();}
+  sizeSl.oninput=()=>{config.sizePct=+sizeSl.value;sizeVal.textContent=sizeSl.value;resetShapes();}
+  colPick.oninput=()=>{config.color=colPick.value;resetShapes();}
+  rndTog.onchange=()=>{config.randomColor=rndTog.checked;resetShapes();}
+  bgPick.oninput=()=>{config.bgColor=bgPick.value;}
+  numSl.oninput=()=>{config.count=+numSl.value;numVal.textContent=numSl.value;resetShapes();}
+  spdSl.oninput=()=>{config.speed=+spdSl.value;spdVal.textContent=spdSl.value;resetShapes();}
+  imgUp.onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    fileName.textContent=f.name;
+    const r=new FileReader();
+    r.onload=ev=>{uploadedImg=loadImage(ev.target.result,resetShapes);}
+    r.readAsDataURL(f);
+    config.shape='image';shapeSel.value='image';showShapeField();
+  };
+  dirSel.onchange=()=>{config.direction=dirSel.value;buildQuadrantList();resetShapes();}
+  quadSel.onchange=()=>{config.quadrant=quadSel.value;resetShapes();}
+  strTog.onchange=()=>{config.straight=strTog.checked;resetShapes();}
+
+  showShapeField(); buildQuadrantList();
+}
+
+/* ---------- DRAW LOOP ---------- */
+function draw(){
+  if(!started)return;
+  background(config.bgColor);
+  ripples.forEach((r,i)=>{r.update();r.display();if(r.done())ripples.splice(i,1);});
+  shapes.forEach(s=>{s.update();s.display();});
+  particles.forEach((p,i)=>{p.update();p.display();if(p.dead())particles.splice(i,1);});
+}
+
+/* ---------- CLICK ---------- */
+function mousePressed(){if(!started)return;for(let i=shapes.length-1;i>=0;i--){if(shapes[i].hit(mouseX,mouseY)){shapes[i].pop();break;}}}
+
+/* ---------- RIPPLE ---------- */
+class Ripple{
+  constructor(x,y){this.x=x;this.y=y;this.r=0;this.a=180;}
+  update(){this.r+=20;this.a-=6;}
+  display(){noFill();stroke(255,this.a);strokeWeight(3);circle(this.x,this.y,this.r);}
+  done(){return this.a<=0;}
+}
+
+/* ---------- SHAPE ---------- */
+class Shape{
+  constructor(){this.alpha=0;this.fadeIn=true;this.fadeOut=false;this.reset();}
+  reset(){
+    const w=width,h=height,half=map(config.sizePct,0,100,10,min(w,h)/4)/2;
+    const safeX=()=>random(half,w-half), safeY=()=>random(half,h-half);
+    if(config.direction==='none'){this.x=safeX();this.y=safeY();}
+    else if(config.direction==='top'||config.direction==='bottom'){
+      const band=[random(half,w/3-half),random(w/3+half,2*w/3-half),random(2*w/3+half,w-half)];
+      this.x=config.quadrant==='left'?band[0]:config.quadrant==='center'?band[1]:band[2];
+      this.y=safeY();
+    }else{                                  // left/right → vertical thirds
+      const band=[random(half,h/3-half),random(h/3+half,2*h/3-half),random(2*h/3+half,h-half)];
+      this.y=config.quadrant==='top'?band[0]:config.quadrant==='middle'?band[1]:band[2];
+      this.x=safeX();
+    }
+
+    const sp=config.speed/5;
+    if(config.direction==='none'){const a=random(TWO_PI);this.vx=cos(a)*sp;this.vy=sin(a)*sp;}
+    else{this.vx=(config.direction==='left'?-sp:config.direction==='right'?sp:0);
+         this.vy=(config.direction==='top'?-sp:config.direction==='bottom'?sp:0);}
+    if(!config.straight){this.vx*=random(0.5,1.5);this.vy*=random(0.5,1.5);}
+    this.c=config.randomColor?color(random(255),random(255),random(255)):color(config.color);
+    this.type=config.shape;this.popped=false;
+    this.rot=random(TWO_PI);this.rotSpd=random(-0.02,0.02);
+  }
+  update(){
+    this.x=(this.x+this.vx+width)%width;
+    this.y=(this.y+this.vy+height)%height;
+    this.rot+=this.rotSpd;
+    if(this.fadeIn){this.alpha=min(this.alpha+15,255);if(this.alpha===255)this.fadeIn=false;}
+    if(this.fadeOut){this.alpha=max(this.alpha-10,0);if(this.alpha===0){this.fadeOut=false;this.fadeIn=true;this.alpha=0;this.reset();}}
+  }
+  display(){
+    push();translate(this.x,this.y);rotate(this.rot);noStroke();
+    fill(red(this.c),green(this.c),blue(this.c),this.alpha);
+    const s=map(config.sizePct,0,100,10,min(width,height)/4);
+    switch(this.type){
+      case'circle':ellipse(0,0,s,s);break;
+      case'square':rectMode(CENTER);square(0,0,s);break;
+      case'triangle':triangle(-s/2,s/2,0,-s/2,s/2,s/2);break;
+      case'polygon':polygon(0,0,s,5);break;
+      case'star':star(0,0,s/2,s/4,5);break;
+      case'character':textAlign(CENTER,CENTER);textSize(s);text(config.character,0,0);break;
+      case'image':if(uploadedImg){imageMode(CENTER);image(uploadedImg,0,0,s,s);}else ellipse(0,0,s,s);break;
+    }
+    pop();
+  }
+  hit(px,py){const r=map(config.sizePct,0,100,10,min(width,height)/4)/2;return dist(px,py,this.x,this.y)<=r;}
+  pop(){
+    if(this.popped)return;this.popped=true;
+    /* play random star sound */
+    new Audio(starSoundList[floor(random(starSoundList.length))]).play();
+
+    ripples.push(new Ripple(this.x,this.y));
+    explosionCount++;document.getElementById('explosionCounter').textContent=explosionCount;
+
+    for(let i=0;i<40;i++)particles.push(new Dot(this.x,this.y,this.c));
+    for(let i=0;i<40;i++)particles.push(new Confetti(this.x,this.y,this.c));
+    for(let i=0;i<60;i++)particles.push(new Firefly(this.x,this.y,this.c));
+    this.fadeIn=false;this.fadeOut=true;
+  }
+}
+
+/* ---------- PARTICLES ---------- */
+class Dot{
+  constructor(x,y,col){this.x=x;this.y=y;const a=random(TWO_PI),sp=random(3,8);this.vx=cos(a)*sp;this.vy=sin(a)*sp;this.size=random(3,8);this.life=200;this.col=col;}
+  update(){this.x+=this.vx;this.y+=this.vy;this.vy+=0.2;this.life-=2;}
+  display(){noStroke();fill(red(this.col),green(this.col),blue(this.col),this.life);ellipse(this.x,this.y,this.size);}
+  dead(){return this.life<=0;}
+}
+class Confetti{
+  constructor(x,y,col){this.x=x;this.y=y;this.vx=random(-2,2);this.vy=random(1,5);this.size=random(10,20);this.life=300;this.col=col;this.rot=random(TWO_PI);this.rotSpd=random(-0.05,0.05);}
+  update(){this.x+=this.vx;this.y+=this.vy;this.vy+=0.1;this.rot+=this.rotSpd;this.life-=3;}
+  display(){push();translate(this.x,this.y);rotate(this.rot);noStroke();fill(red(this.col),green(this.col),blue(this.col),this.life);square(-this.size/2,-this.size/2,this.size);pop();}
+  dead(){return this.life<=0;}
+}
+class Firefly{
+  constructor(x,y,col){this.x=x;this.y=y;const a=random(TWO_PI),sp=random(3,8);this.vx=cos(a)*sp;this.vy=sin(a)*sp;this.life=300;this.col=col;this.size=random(8,16);this.seed=random(1000);}
+  update(){this.vx*=0.97;this.vy*=0.97;const drift=noise(this.seed,frameCount*0.005)*TWO_PI*2;this.vx+=cos(drift)*0.1;this.vy+=sin(drift)*0.1;this.x+=this.vx;this.y+=this.vy;this.life--;}
+  display(){const fade=map(this.life,0,300,0,255);const twk=map(sin(this.life*0.2),-1,1,0.6,1);fill(red(this.col),green(this.col),blue(this.col),fade*twk);noStroke();ellipse(this.x,this.y,this.size);}
+  dead(){return this.life<=0;}
+}
+
+/* ---------- HELPERS ---------- */
+function resetShapes(){shapes=[];particles=[];ripples=[];for(let i=0;i<config.count;i++)shapes.push(new Shape());}
+function toggleFS(){if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();}
+function windowResized(){resizeCanvas(windowWidth,windowHeight);if(started)resetShapes();}
+function polygon(x,y,r,n){beginShape();for(let i=0;i<n;i++){const a=TWO_PI*i/n;vertex(x+cos(a)*r,y+sin(a)*r);}endShape(CLOSE);}
+function star(x,y,r1,r2,n){beginShape();for(let a=0;a<TWO_PI;a+=TWO_PI/n){vertex(x+cos(a)*r1,y+sin(a)*r1);vertex(x+cos(a+TWO_PI/(2*n))*r2,y+sin(a+TWO_PI/(2*n))*r2);}endShape(CLOSE);}
+  </script>
+</body>
+</html>
