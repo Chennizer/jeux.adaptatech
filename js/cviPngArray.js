@@ -105,7 +105,7 @@ window.PNG_ARRAY = [
   { name: 'cvisledhockey',         file: '../../images/cvipng/cvisledhockey.png',         category: 'adapted sports' },
   { name: 'cvihorsetherapy',       file: '../../images/cvipng/cvihorsetherapy.png',       category: 'adapted sports' },
   { name: 'cvisassistiveswimming', file: '../../images/cvipng/cvisassistiveswimming.png', category: 'adapted sports' },
-  { name: 'cviassistivebycicle',  file: '../../images/cvipng/cviassistivebycicle.png',  category: 'assistive materials' },
+  { name: 'cviassistivebycicle',   file: '../../images/cvipng/cviassistivebycicle.png',  category: 'assistive materials' },
 
   // Assistive materials
   { name: 'cviwheelchair',        file: '../../images/cvipng/cviwheelchair.png',        category: 'assistive materials' },
