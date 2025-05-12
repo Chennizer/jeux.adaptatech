@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const gameOptionsModal = document.getElementById('game-options');
   const tileCountInput = document.getElementById('tile-count');
-  const tileSliderContainer = document.getElementById('tile-slider-container'); // Container for the tile slider only
+  const tileSliderContainer = document.getElementById('tile-slider-container');
   const tileCountContainer = document.getElementById('game-options-controls');
   const chooseTilesButton = document.getElementById('choose-tiles-button');
   const modeChoiceButton = document.getElementById('mode-choice-button');
@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const modeFlashcardManualButton = document.getElementById('mode-flashcard-manual-button');
   const scanDelayContainer = document.getElementById('scan-delay-container');
   const scanDelayInput = document.getElementById('scan-delay');
+  const previewEqualsScanCheckbox = document.getElementById('preview-equals-scan');
+  const previewEqualsScanContainer = previewEqualsScanCheckbox.parentElement.parentElement;
   const enableCycleSoundCheckbox = document.getElementById('enable-cycle-sound');
   const enableTimeLimitCheckbox = document.getElementById('enable-time-limit');
   const timeLimitContainer = document.getElementById('time-limit-container');
@@ -27,10 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoPlayer = document.getElementById('video-player');
   const videoSource = document.getElementById('video-source');
 
-  // Variable to disable keyboard input until ready
+  // Hide the preview-equals-scan option until relevant
+  previewEqualsScanContainer.style.display = 'none';
+
   let inputEnabled = false;
 
-  // Variables to hold game state
+  // Game state
   let mode = "choice";
   let desiredTileCount = 0;
   let selectedTileIndices = [];
@@ -49,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let videoResumePositions = {};
   let currentCategory = "all";
 
-  // Inactivity timer functions
+  // Inactivity timer helpers
   function clearInactivityTimer() {
     if (inactivityTimer) {
       clearTimeout(inactivityTimer);
@@ -58,11 +62,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function startInactivityTimer() {
     clearInactivityTimer();
+    // default 30s, or (scanTime - 500ms) if checkbox checked
+    let inactivityMs = 30000;
+    if (previewEqualsScanCheckbox.checked) {
+      const scanMs = (parseInt(scanDelayInput.value, 10) || 3) * 1000;
+      inactivityMs = Math.max(scanMs - 500, 0);
+    }
     inactivityTimer = setTimeout(() => {
       if (!videoPlaying && !preventAutoPreview) {
         playPreviewForTile(currentSelectedIndex);
       }
-    }, 30000);
+    }, inactivityMs);
   }
   function resetInactivityTimer() {
     if (!videoPlaying) startInactivityTimer();
@@ -91,32 +101,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function playCycleSound() {
     if (enableCycleSoundCheckbox.checked) {
-      const cycleSound = new Audio("../../sounds/woosh.mp3");
-      cycleSound.play().catch(err => console.error("Cycle sound error:", err));
+      new Audio("../../sounds/woosh.mp3").play().catch(console.error);
     }
   }
 
   function preloadVideos(videoUrls, loadingIndicator) {
-    let loadedCount = 0;
-    const totalCount = videoUrls.length;
-    return Promise.all(videoUrls.map(url => {
-      return new Promise((resolve) => {
-        const tempVid = document.createElement('video');
-        tempVid.preload = 'auto';
-        tempVid.src = url;
-        tempVid.addEventListener('canplaythrough', () => {
-          loadedCount++;
-          loadingIndicator.textContent = `Chargement... (${loadedCount}/${totalCount})`;
-          resolve(url);
-        });
-        tempVid.addEventListener('error', () => {
-          loadedCount++;
-          loadingIndicator.textContent = `Chargement... (${loadedCount}/${totalCount})`;
-          console.error("Error preloading video:", url);
-          resolve(url);
-        });
+    let loaded = 0;
+    return Promise.all(videoUrls.map(url => new Promise(resolve => {
+      const vid = document.createElement('video');
+      vid.preload = 'auto';
+      vid.src = url;
+      vid.addEventListener('canplaythrough', () => {
+        loaded++;
+        loadingIndicator.textContent = `Chargement... (${loaded}/${videoUrls.length})`;
+        resolve();
       });
-    }));
+      vid.addEventListener('error', () => {
+        loaded++;
+        loadingIndicator.textContent = `Chargement... (${loaded}/${videoUrls.length})`;
+        console.error("Error preloading", url);
+        resolve();
+      });
+    })));
   }
 
   function pauseGameActivity() {
@@ -125,16 +131,12 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(autoScanInterval);
       autoScanInterval = null;
       scanningActive = true;
-    } else {
-      scanningActive = false;
-    }
+    } else scanningActive = false;
     if (flashcardTimer) {
       clearTimeout(flashcardTimer);
       flashcardTimer = null;
       flashcardActive = true;
-    } else {
-      flashcardActive = false;
-    }
+    } else flashcardActive = false;
     videoPlaying = true;
   }
 
@@ -142,10 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
     videoPlaying = false;
     if (scanningActive && mode === "scan") {
       scanningActive = false;
-      const delay = parseInt(scanDelayInput.value, 10) || 3;
-      autoScanInterval = setInterval(() => {
-        cycleToNextTile();
-      }, delay * 1000);
+      const d = parseInt(scanDelayInput.value, 10) || 3;
+      autoScanInterval = setInterval(cycleToNextTile, d * 1000);
     }
     if (flashcardActive && mode === "flashcard") {
       flashcardActive = false;
@@ -154,63 +154,52 @@ document.addEventListener('DOMContentLoaded', () => {
     resetInactivityTimer();
   }
 
-  // Helper function to reset tile count back to default (3)
   function resetTileCountToDefault() {
     tileCountInput.value = 3;
     document.getElementById('tile-count-value').textContent = 3;
     tileCountInput.disabled = false;
   }
 
-  // Mode selection events
+  function showScanOptions(show) {
+    scanDelayContainer.style.display = show ? 'block' : 'none';
+    previewEqualsScanContainer.style.display = show ? 'block' : 'none';
+  }
+
+  // Mode buttons
   modeChoiceButton.addEventListener('click', () => {
     mode = "choice";
     modeChoiceButton.classList.add('selected');
-    modeScanButton.classList.remove('selected');
-    modeThisOrThatButton.classList.remove('selected');
-    modeFlashcardButton.classList.remove('selected');
-    modeFlashcardManualButton.classList.remove('selected');
-
-    // Restore tile count to default
+    [modeScanButton, modeThisOrThatButton, modeFlashcardButton, modeFlashcardManualButton]
+      .forEach(b => b.classList.remove('selected'));
     resetTileCountToDefault();
-
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
-    scanDelayContainer.style.display = 'none';
+    showScanOptions(false);
     document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
   });
 
   modeScanButton.addEventListener('click', () => {
     mode = "scan";
     modeScanButton.classList.add('selected');
-    modeChoiceButton.classList.remove('selected');
-    modeThisOrThatButton.classList.remove('selected');
-    modeFlashcardButton.classList.remove('selected');
-    modeFlashcardManualButton.classList.remove('selected');
-
-    // Restore tile count to default
+    [modeChoiceButton, modeThisOrThatButton, modeFlashcardButton, modeFlashcardManualButton]
+      .forEach(b => b.classList.remove('selected'));
     resetTileCountToDefault();
-
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
-    scanDelayContainer.style.display = 'block';
+    showScanOptions(true);
     document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
   });
 
   modeThisOrThatButton.addEventListener('click', () => {
     mode = "thisOrThat";
     modeThisOrThatButton.classList.add('selected');
-    modeChoiceButton.classList.remove('selected');
-    modeScanButton.classList.remove('selected');
-    modeFlashcardButton.classList.remove('selected');
-    modeFlashcardManualButton.classList.remove('selected');
-
-    // Force tile count to 2 and disable the slider
+    [modeChoiceButton, modeScanButton, modeFlashcardButton, modeFlashcardManualButton]
+      .forEach(b => b.classList.remove('selected'));
     tileCountInput.value = 2;
     document.getElementById('tile-count-value').textContent = 2;
     tileCountInput.disabled = true;
-    // Hide only the slider part but reserve the column space
     tileSliderContainer.style.visibility = 'hidden';
-    scanDelayContainer.style.display = 'none';
+    showScanOptions(false);
     document.body.classList.add('this-or-that-mode');
     document.body.classList.remove('flashcard-mode');
   });
@@ -218,17 +207,12 @@ document.addEventListener('DOMContentLoaded', () => {
   modeFlashcardButton.addEventListener('click', () => {
     mode = "flashcard";
     modeFlashcardButton.classList.add('selected');
-    modeChoiceButton.classList.remove('selected');
-    modeScanButton.classList.remove('selected');
-    modeThisOrThatButton.classList.remove('selected');
-    modeFlashcardManualButton.classList.remove('selected');
-
-    // Restore tile count to default
+    [modeChoiceButton, modeScanButton, modeThisOrThatButton, modeFlashcardManualButton]
+      .forEach(b => b.classList.remove('selected'));
     resetTileCountToDefault();
-
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
-    scanDelayContainer.style.display = 'block';
+    showScanOptions(true);
     document.body.classList.add('flashcard-mode');
     document.body.classList.remove('this-or-that-mode');
   });
@@ -236,66 +220,53 @@ document.addEventListener('DOMContentLoaded', () => {
   modeFlashcardManualButton.addEventListener('click', () => {
     mode = "flashcard-manual";
     modeFlashcardManualButton.classList.add('selected');
-    modeFlashcardButton.classList.remove('selected');
-    modeChoiceButton.classList.remove('selected');
-    modeScanButton.classList.remove('selected');
-    modeThisOrThatButton.classList.remove('selected');
-
-    // Restore tile count to default
+    [modeChoiceButton, modeScanButton, modeThisOrThatButton, modeFlashcardButton]
+      .forEach(b => b.classList.remove('selected'));
     resetTileCountToDefault();
-
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
-    scanDelayContainer.style.display = 'none';
+    showScanOptions(false);
     document.body.classList.add('flashcard-mode');
     document.body.classList.remove('this-or-that-mode');
   });
 
-  // Advanced Options: Show/hide time limit and resume video options
+  // Time-limit toggle
   enableTimeLimitCheckbox.addEventListener('change', () => {
-    if (enableTimeLimitCheckbox.checked) {
-      timeLimitContainer.style.display = 'block';
-      resumeVideoContainer.style.display = 'block';
-    } else {
-      timeLimitContainer.style.display = 'none';
-      resumeVideoContainer.style.display = 'none';
-    }
+    const show = enableTimeLimitCheckbox.checked;
+    timeLimitContainer.style.display = show ? 'block' : 'none';
+    resumeVideoContainer.style.display = show ? 'block' : 'none';
   });
 
-  // Populate tile picker grid
+  // Tile picker
   function populateTilePickerGrid() {
-    tilePickerGrid.innerHTML = "";
-    const inCategoryContainer = document.createElement('div');
-    inCategoryContainer.style.display = 'flex';
-    inCategoryContainer.style.flexWrap = 'wrap';
-    inCategoryContainer.style.gap = '10px';
-    const selectedOutContainer = document.createElement('div');
-    selectedOutContainer.style.display = 'flex';
-    selectedOutContainer.style.flexWrap = 'wrap';
-    selectedOutContainer.style.gap = '10px';
+    tilePickerGrid.innerHTML = '';
+    const inCat = document.createElement('div');
+    inCat.style.display = 'flex';
+    inCat.style.flexWrap = 'wrap';
+    inCat.style.gap = '10px';
+    const outCat = document.createElement('div');
+    outCat.style.display = 'flex';
+    outCat.style.flexWrap = 'wrap';
+    outCat.style.gap = '10px';
+
     mediaChoices.forEach((choice, idx) => {
-      let inCategory = false;
-      if (currentCategory === 'all') {
-        inCategory = true;
-      } else if (typeof choice.category === 'string') {
-        inCategory = (choice.category === currentCategory);
-      } else if (Array.isArray(choice.category)) {
-        inCategory = choice.category.includes(currentCategory);
-      }
-      const isSelected = selectedTileIndices.includes(idx);
-      if (inCategory || isSelected) {
-        const tileOption = document.createElement('div');
-        tileOption.classList.add('tile');
-        tileOption.setAttribute('data-index', idx);
-        tileOption.style.backgroundImage = `url(${choice.image})`;
-        if (isSelected) tileOption.classList.add('selected');
-        const caption = document.createElement('div');
-        caption.classList.add('caption');
-        caption.textContent = choice.name;
-        tileOption.appendChild(caption);
-        tileOption.addEventListener('click', () => {
+      const matches = currentCategory === 'all' ||
+        (typeof choice.category === 'string' && choice.category === currentCategory) ||
+        (Array.isArray(choice.category) && choice.category.includes(currentCategory));
+      const isSel = selectedTileIndices.includes(idx);
+      if (matches || isSel) {
+        const tile = document.createElement('div');
+        tile.classList.add('tile');
+        tile.dataset.index = idx;
+        tile.style.backgroundImage = `url(${choice.image})`;
+        if (isSel) tile.classList.add('selected');
+        const cap = document.createElement('div');
+        cap.classList.add('caption');
+        cap.textContent = choice.name;
+        tile.appendChild(cap);
+        tile.addEventListener('click', () => {
           resetInactivityTimer();
-          if (selectedTileIndices.includes(idx)) {
+          if (isSel) {
             selectedTileIndices = selectedTileIndices.filter(i => i !== idx);
           } else if (selectedTileIndices.length < desiredTileCount) {
             selectedTileIndices.push(idx);
@@ -303,38 +274,39 @@ document.addEventListener('DOMContentLoaded', () => {
           updateStartButtonState();
           populateTilePickerGrid();
         });
-        if (inCategory) inCategoryContainer.appendChild(tileOption);
-        else if (isSelected) selectedOutContainer.appendChild(tileOption);
+        if (matches) inCat.appendChild(tile);
+        else outCat.appendChild(tile);
       }
     });
-    tilePickerGrid.appendChild(inCategoryContainer);
-    if (selectedOutContainer.childNodes.length > 0) {
-      const separator = document.createElement('div');
-      separator.style.width = '100%';
-      separator.style.height = '2px';
-      separator.style.backgroundColor = '#ccc';
-      separator.style.margin = '10px 0';
-      tilePickerGrid.appendChild(separator);
-      tilePickerGrid.appendChild(selectedOutContainer);
+
+    tilePickerGrid.appendChild(inCat);
+    if (outCat.childNodes.length) {
+      const sep = document.createElement('div');
+      sep.style.width = '100%';
+      sep.style.height = '2px';
+      sep.style.backgroundColor = '#ccc';
+      sep.style.margin = '10px 0';
+      tilePickerGrid.appendChild(sep);
+      tilePickerGrid.appendChild(outCat);
     }
   }
 
   function updateStartButtonState() {
-    startGameButton.disabled = (selectedTileIndices.length !== desiredTileCount);
+    startGameButton.disabled = selectedTileIndices.length !== desiredTileCount;
   }
 
-  // Render flashcard mode
+  // Render flashcard
   function renderFlashcard() {
-    tileContainer.innerHTML = "";
-    const mediaIndex = selectedTileIndices[currentSelectedIndex];
-    const choice = mediaChoices[mediaIndex];
+    tileContainer.innerHTML = '';
+    const idx = selectedTileIndices[currentSelectedIndex];
+    const choice = mediaChoices[idx];
     const tile = document.createElement('div');
     tile.classList.add('tile');
     tile.style.backgroundImage = `url(${choice.image})`;
-    const caption = document.createElement('div');
-    caption.classList.add('caption');
-    caption.textContent = choice.name;
-    tile.appendChild(caption);
+    const cap = document.createElement('div');
+    cap.classList.add('caption');
+    cap.textContent = choice.name;
+    tile.appendChild(cap);
     tileContainer.appendChild(tile);
     tileContainer.style.display = 'flex';
     playPreviewForTile(currentSelectedIndex);
@@ -347,73 +319,59 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // In sequential flashcard mode, play the transition sound when the tile changes
   function startFlashcardTimer() {
     clearFlashcardTimer();
-    const delay = parseInt(scanDelayInput.value, 10) || 10;
+    const d = parseInt(scanDelayInput.value, 10) || 10;
     flashcardTimer = setTimeout(() => {
-      playCycleSound(); // Play transition sound before changing tile
+      playCycleSound();
       currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
       renderFlashcard();
       startFlashcardTimer();
-    }, delay * 1000);
+    }, d * 1000);
     flashcardActive = true;
   }
 
-  // Render game tiles for non-flashcard modes
+  // Render non-flashcard modes
   function renderGameTiles() {
-    if (mode === "flashcard") {
+    if (mode === 'flashcard') {
       renderFlashcard();
       startFlashcardTimer();
-    } else if (mode === "flashcard-manual") {
+    } else if (mode === 'flashcard-manual') {
       renderFlashcard();
     } else {
-      tileContainer.innerHTML = "";
-      const tilesToDisplay = selectedTileIndices.map(i => mediaChoices[i]);
-      tilesToDisplay.forEach((choice, idx) => {
+      tileContainer.innerHTML = '';
+      const tiles = selectedTileIndices.map(i => mediaChoices[i]);
+      tiles.forEach((choice, idx) => {
         const tile = document.createElement('div');
         tile.classList.add('tile');
-        tile.setAttribute('data-index', idx);
+        tile.dataset.index = idx;
         tile.style.backgroundImage = `url(${choice.image})`;
-        const caption = document.createElement('div');
-        caption.classList.add('caption');
-        caption.textContent = choice.name;
-        tile.appendChild(caption);
-        if (mode === "thisOrThat") {
-          if (idx === 0) tile.classList.add('selected-left');
-          else if (idx === 1) tile.classList.add('selected-right');
+        const cap = document.createElement('div');
+        cap.classList.add('caption');
+        cap.textContent = choice.name;
+        tile.appendChild(cap);
+        if (mode === 'thisOrThat') {
+          tile.classList.add(idx === 0 ? 'selected-left' : 'selected-right');
         }
         tileContainer.appendChild(tile);
       });
-      
-      // If exactly 4 tiles, switch to grid layout
-      if (selectedTileIndices.length === 4) {
-        tileContainer.classList.add('grid-2x2');
-      } else {
-        tileContainer.classList.remove('grid-2x2');
-      }
-      
+      if (selectedTileIndices.length === 4) tileContainer.classList.add('grid-2x2');
+      else tileContainer.classList.remove('grid-2x2');
       tileContainer.style.display = 'flex';
       currentSelectedIndex = 0;
-      if (mode !== "thisOrThat") updateSelection();
-      if (mode === "scan") {
+      if (mode !== 'thisOrThat') updateSelection();
+      if (mode === 'scan') {
         scanningActive = true;
-        const delay = parseInt(scanDelayInput.value, 10) || 3;
-        autoScanInterval = setInterval(() => {
-          cycleToNextTile();
-        }, delay * 1000);
+        const d = parseInt(scanDelayInput.value, 10) || 3;
+        autoScanInterval = setInterval(cycleToNextTile, d * 1000);
       }
     }
   }
-  
 
   function updateSelection() {
-    if (mode === "thisOrThat" || mode === "flashcard") return;
+    if (mode === 'thisOrThat' || mode === 'flashcard') return;
     const tiles = document.querySelectorAll('#tile-container .tile');
-    tiles.forEach((tile, idx) => {
-      if (idx === currentSelectedIndex) tile.classList.add('selected');
-      else tile.classList.remove('selected');
-    });
+    tiles.forEach((t, i) => t.classList.toggle('selected', i === currentSelectedIndex));
     if (!videoPlaying && !preventAutoPreview) {
       if (previewDelayTimeout) clearTimeout(previewDelayTimeout);
       previewDelayTimeout = setTimeout(() => {
@@ -432,15 +390,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function playPreviewForTile(idx) {
-    if (mode === "thisOrThat") return;
+    if (mode === 'thisOrThat') return;
     stopPreview();
     if (!selectedTileIndices.length) return;
-    const mediaIndex = selectedTileIndices[idx];
-    const videoFile = mediaChoices[mediaIndex].video;
+    const mediaIdx = selectedTileIndices[idx];
+    const videoFile = mediaChoices[mediaIdx].video;
     if (videoFile) {
       currentPreview = new Audio(videoFile);
-      currentPreview.play().catch(err => console.error("Preview error:", err));
-      previewTimeout = setTimeout(stopPreview, 10000);
+      currentPreview.play().catch(console.error);
+      // default 10s, or (scanTime - 500ms) if checked
+      let ms = 10000;
+      if (previewEqualsScanCheckbox.checked) {
+        const scanMs = (parseInt(scanDelayInput.value, 10) || 3) * 1000;
+        ms = Math.max(scanMs - 500, 0);
+      }
+      previewTimeout = setTimeout(stopPreview, ms);
     }
   }
 
@@ -448,20 +412,12 @@ document.addEventListener('DOMContentLoaded', () => {
     stopPreview();
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
-    if (document.exitFullscreen) {
-      document.exitFullscreen().catch(err => console.warn(err));
-    }
-    if (autoScanInterval) {
-      clearInterval(autoScanInterval);
-      autoScanInterval = null;
-    }
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    if (autoScanInterval) clearInterval(autoScanInterval);
     scanningActive = false;
     clearFlashcardTimer();
     flashcardActive = false;
-    if (videoTimeLimitTimeout) {
-      clearTimeout(videoTimeLimitTimeout);
-      videoTimeLimitTimeout = null;
-    }
+    if (videoTimeLimitTimeout) clearTimeout(videoTimeLimitTimeout);
     videoPlaying = false;
     preventAutoPreview = true;
     setTimeout(() => {
@@ -470,20 +426,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1200);
     tileContainer.style.display = 'flex';
     videoContainer.style.display = 'none';
-    if (mode === "scan") {
-      const delay = parseInt(scanDelayInput.value, 10) || 3;
-      autoScanInterval = setInterval(() => {
-        cycleToNextTile();
-      }, delay * 1000);
+    if (mode === 'scan') {
+      const d = parseInt(scanDelayInput.value, 10) || 3;
+      autoScanInterval = setInterval(cycleToNextTile, d * 1000);
       scanningActive = true;
     }
   }
 
-  // Keyboard navigation and controls
-  document.addEventListener('keydown', (e) => {
-    // Only process key events if input is enabled
+  document.addEventListener('keydown', e => {
     if (!inputEnabled) return;
-    
     resetInactivityTimer();
     if (videoPlaying && e.key === 'Backspace') {
       e.preventDefault();
@@ -491,59 +442,56 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (videoPlaying) return;
-    if ((mode === "flashcard" || mode === "flashcard-manual") && e.key === " ") {
+    if ((mode === 'flashcard' || mode === 'flashcard-manual') && e.key === ' ') {
       e.preventDefault();
-      if (mode === "flashcard") {
+      if (mode === 'flashcard') {
         clearFlashcardTimer();
         flashcardActive = false;
       }
-      const mediaIndex = selectedTileIndices[currentSelectedIndex];
-      playVideo(mediaChoices[mediaIndex].video);
+      playVideo(mediaChoices[selectedTileIndices[currentSelectedIndex]].video);
       return;
     }
-    if (mode === "flashcard-manual" && e.key === "Enter") {
+    if (mode === 'flashcard-manual' && e.key === 'Enter') {
       e.preventDefault();
-      playCycleSound(); // Play transition sound when manually changing tile
+      playCycleSound();
       currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
       renderFlashcard();
       return;
     }
-    if (mode === "thisOrThat" && selectedTileIndices.length === 2) {
-      if (e.key === " " || e.code === "Space") {
+    if (mode === 'thisOrThat' && selectedTileIndices.length === 2) {
+      if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
-        const mediaIndex = selectedTileIndices[0];
-        playVideo(mediaChoices[mediaIndex].video);
+        playVideo(mediaChoices[selectedTileIndices[0]].video);
         return;
-      } else if (e.key === "Enter") {
+      }
+      if (e.key === 'Enter') {
         e.preventDefault();
-        const mediaIndex = selectedTileIndices[1];
-        playVideo(mediaChoices[mediaIndex].video);
+        playVideo(mediaChoices[selectedTileIndices[1]].video);
         return;
       }
     }
     const tiles = document.querySelectorAll('#tile-container .tile');
     if (!tiles.length) return;
     const total = tiles.length;
-    if (mode === "choice" && e.key === "Enter") {
+    if (mode === 'choice' && e.key === 'Enter') {
       cycleToNextTile();
-    } else if (e.key === "ArrowRight") {
+    } else if (e.key === 'ArrowRight') {
       currentSelectedIndex = (currentSelectedIndex + 1) % total;
       updateSelection();
-    } else if (e.key === "ArrowLeft") {
+    } else if (e.key === 'ArrowLeft') {
       currentSelectedIndex = (currentSelectedIndex - 1 + total) % total;
       updateSelection();
-    } else if (e.key === "ArrowUp") {
+    } else if (e.key === 'ArrowUp') {
       const cols = Math.floor(Math.sqrt(total)) || 1;
       currentSelectedIndex = (currentSelectedIndex - cols + total) % total;
       updateSelection();
-    } else if (e.key === "ArrowDown") {
+    } else if (e.key === 'ArrowDown') {
       const cols = Math.floor(Math.sqrt(total)) || 1;
       currentSelectedIndex = (currentSelectedIndex + cols) % total;
       updateSelection();
-    } else if (e.key === " " && mode !== "flashcard") {
+    } else if (e.key === ' ' && mode !== 'flashcard') {
       e.preventDefault();
-      const mediaIndex = selectedTileIndices[currentSelectedIndex];
-      playVideo(mediaChoices[mediaIndex].video);
+      playVideo(mediaChoices[selectedTileIndices[currentSelectedIndex]].video);
     }
   });
 
@@ -563,12 +511,12 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.play();
     };
     if (videoContainer.requestFullscreen) {
-      videoContainer.requestFullscreen().catch(err => console.error(err));
+      videoContainer.requestFullscreen().catch(() => {});
     } else if (videoContainer.webkitRequestFullscreen) {
       videoContainer.webkitRequestFullscreen();
     }
     if (enableTimeLimitCheckbox.checked) {
-      const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
+      const limit = parseInt(timeLimitInput.value, 10) || 60;
       if (videoTimeLimitTimeout) clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
@@ -580,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
           videoPlayer.pause();
           resetToChoicesScreen();
         }
-      }, limitSeconds * 1000);
+      }, limit * 1000);
     }
   }
 
@@ -588,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
     delete videoResumePositions[videoSource.src];
     videoPlaying = false;
     videoContainer.style.display = 'none';
-    if (mode === "flashcard") {
+    if (mode === 'flashcard') {
       currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
       renderFlashcard();
       startFlashcardTimer();
@@ -598,61 +546,49 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   chooseTilesButton.addEventListener('click', () => {
-    if (mode === "thisOrThat") {
-      desiredTileCount = 2;
-    } else {
-      desiredTileCount = parseInt(tileCountInput.value, 10) || 0;
-    }
+    desiredTileCount = (mode === 'thisOrThat') ? 2 : (parseInt(tileCountInput.value, 10) || 0);
     tileCountDisplay.textContent = desiredTileCount;
     selectedTileIndices = [];
     updateStartButtonState();
     gameOptionsModal.style.display = 'none';
     tilePickerModal.style.display = 'flex';
     if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(err => console.warn(err));
+      document.documentElement.requestFullscreen().catch(() => {});
     } else if (document.documentElement.webkitRequestFullscreen) {
       document.documentElement.webkitRequestFullscreen();
     }
-    currentCategory = "all";
-    categorySelect.value = "all";
+    currentCategory = 'all';
+    categorySelect.value = 'all';
     populateTilePickerGrid();
   });
 
   startGameButton.addEventListener('click', () => {
-    // Create and display the loading screen
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';
-    loadingScreen.style.position = 'fixed';
-    loadingScreen.style.top = '0';
-    loadingScreen.style.left = '0';
-    loadingScreen.style.width = '100vw';
-    loadingScreen.style.height = '100vh';
-    loadingScreen.style.backgroundColor = 'rgba(0,0,0,0.8)';
-    loadingScreen.style.display = 'flex';
-    loadingScreen.style.flexDirection = 'column';
-    loadingScreen.style.justifyContent = 'center';
-    loadingScreen.style.alignItems = 'center';
-    loadingScreen.style.color = 'white';
-    loadingScreen.style.fontSize = '24px';
+    Object.assign(loadingScreen.style, {
+      position: 'fixed', top: 0, left: 0,
+      width: '100vw', height: '100vh',
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      display: 'flex', flexDirection: 'column',
+      justifyContent: 'center', alignItems: 'center',
+      color: 'white', fontSize: '24px', zIndex: '9999'
+
+    });
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'loading-indicator';
-    const videoUrls = selectedTileIndices.map(i => mediaChoices[i].video).filter(url => url);
-    const totalCount = videoUrls.length;
-    loadingIndicator.textContent = `Chargement... (0 / ${totalCount})`;
+    const urls = selectedTileIndices.map(i => mediaChoices[i].video).filter(u => u);
+    loadingIndicator.textContent = `Chargement... (0 / ${urls.length})`;
     loadingScreen.appendChild(loadingIndicator);
     document.body.appendChild(loadingScreen);
 
-    // Force reflow and wait for next repaint
     void loadingScreen.offsetWidth;
     requestAnimationFrame(() => {
-      // Delay the preload by 100ms to let the loading screen render
       setTimeout(() => {
-        preloadVideos(videoUrls, loadingIndicator).then(() => {
+        preloadVideos(urls, loadingIndicator).then(() => {
           document.body.removeChild(loadingScreen);
-          if (mode === "flashcard") {
-            renderFlashcard();
-            startFlashcardTimer();
-          } else if (mode === "flashcard-manual") {
+          if (mode === 'flashcard') {
+            renderFlashcard(); startFlashcardTimer();
+          } else if (mode === 'flashcard-manual') {
             renderFlashcard();
           } else {
             renderGameTiles();
@@ -660,20 +596,17 @@ document.addEventListener('DOMContentLoaded', () => {
           tilePickerModal.style.display = 'none';
           tileContainer.style.display = 'flex';
           startInactivityTimer();
-          
-          setTimeout(() => {
-            inputEnabled = true;
-          }, 2000);
+          setTimeout(() => { inputEnabled = true; }, 2000);
         });
       }, 100);
     });
   });
 
-  categorySelect.addEventListener('change', (e) => {
+  categorySelect.addEventListener('change', e => {
     currentCategory = e.target.value;
     populateTilePickerGrid();
   });
 
-  // Initially disable keyboard input until game starts
+  // Disable keyboard input until game starts
   inputEnabled = false;
 });
