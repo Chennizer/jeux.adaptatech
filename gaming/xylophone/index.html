@@ -199,6 +199,10 @@
         <input type="radio" name="mode" value="scan">
         <span data-fr="Mode balayage" data-en="Scanning mode">Mode balayage</span>
       </label>
+      <label>
+        <input type="radio" name="mode" value="step">
+        <span data-fr="Mode étape" data-en="Step mode">Mode étape</span>
+      </label>
       <label id="scanIntervalLabel" style="display:none; margin-top:10px;">
         <span data-fr="Intervalle de balayage (s)" data-en="Scan interval (s)">
           Intervalle de balayage (s)
@@ -285,150 +289,143 @@
   <script>
     const ctx = new (window.AudioContext||window.webkitAudioContext)();
     const freqs = [261.63,293.66,329.63,349.23,392,440,493.88,523.25];
-    const master = ctx.createGain();
-    master.gain.value = 1;
-    master.connect(ctx.destination);
+    const master = ctx.createGain(); master.gain.value=1; master.connect(ctx.destination);
 
-    function createReverb(d=1.6, decay=2.5) {
-      const len = ctx.sampleRate * d;
-      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-      for (let ch = 0; ch < 2; ch++) {
-        const data = buf.getChannelData(ch);
-        for (let i = 0; i < len; i++) {
-          data[i] = (Math.random()*2 - 1) * Math.pow(1 - i/len, decay);
+    function createReverb(d=1.6, decay=2.5){
+      const len=ctx.sampleRate*d, buf=ctx.createBuffer(2,len,ctx.sampleRate);
+      for(let ch=0; ch<2; ch++){
+        const data=buf.getChannelData(ch);
+        for(let i=0;i<len;i++){
+          data[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);
         }
       }
-      const conv = ctx.createConvolver();
-      conv.buffer = buf;
-      return conv;
+      const conv=ctx.createConvolver(); conv.buffer=buf; return conv;
     }
-    const wet = ctx.createGain();
-    wet.gain.value = .35;
+    const wet=ctx.createGain(); wet.gain.value=.35;
     wet.connect(createReverb()).connect(master);
 
-    let timeScale = 1,
-        mode = 'manual',
-        scanInterval = 2000,
-        scanTimer = null,
-        current = -1,
-        direction = 1;
+    let timeScale=1,
+        mode='manual',
+        scanInterval=2000,
+        scanTimer=null,
+        current=-1,
+        direction=1;
 
-    const bars = [...document.querySelectorAll('.bar')];
+    const bars=[...document.querySelectorAll('.bar')];
 
-    function moveIndicator() {
-      if (current >= 0) bars[current].classList.remove('selected');
-      let next = current + direction;
-      if (next >= bars.length) { direction = -1; next = current + direction; }
-      else if (next < 0)       { direction = 1;  next = current + direction; }
-      current = next;
+    function moveIndicator(){
+      if(current>=0) bars[current].classList.remove('selected');
+      let next=current+direction;
+      if(next>=bars.length){ direction=-1; next=current+direction; }
+      else if(next<0){ direction=1; next=current+direction; }
+      current=next;
       bars[current].classList.add('selected');
     }
 
-    function playNote(i) {
-      const f0 = freqs[i];
-      const partials = [
-        {r:1,    g:1,   d:1},
-        {r:3.99, g:.55, d:.9},
-        {r:9,    g:.30, d:.75},
-        {r:14.37,g:.22, d:.6},
-        {r:19.2, g:.12, d:.45}
+    function playNote(i){
+      const f0=freqs[i];
+      const partials=[
+        {r:1,g:1,d:1},{r:3.99,g:.55,d:.9},{r:9,g:.3,d:.75},
+        {r:14.37,g:.22,d:.6},{r:19.2,g:.12,d:.45}
       ];
-      const dry = ctx.createGain();
-      dry.gain.value = .9;
-      dry.connect(master);
-      dry.connect(wet);
-      partials.forEach(p => {
-        const osc = ctx.createOscillator(), g = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = f0 * p.r;
-        const dur = p.d * timeScale;
-        g.gain.setValueAtTime(0, ctx.currentTime);
-        g.gain.linearRampToValueAtTime(p.g, ctx.currentTime + .008);
-        g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + dur);
-        osc.connect(g).connect(dry);
-        osc.start();
-        osc.stop(ctx.currentTime + dur);
+      const dry=ctx.createGain(); dry.gain.value=.9;
+      dry.connect(master); dry.connect(wet);
+      partials.forEach(p=>{
+        const o=ctx.createOscillator(), g=ctx.createGain();
+        o.type='sine'; o.frequency.value=f0*p.r;
+        const dur=p.d*timeScale;
+        g.gain.setValueAtTime(0,ctx.currentTime);
+        g.gain.linearRampToValueAtTime(p.g,ctx.currentTime+0.008);
+        g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+dur);
+        o.connect(g).connect(dry);
+        o.start(); o.stop(ctx.currentTime+dur);
       });
     }
 
-    window.addEventListener('keydown', e => {
-      if (e.code === 'Space' && !document.getElementById('promptOverlay')) {
-        e.preventDefault();
-        if (mode === 'manual') {
+    window.addEventListener('keydown', e=>{
+      if(!document.getElementById('promptOverlay')){
+        if(mode==='manual' && e.code==='Space'){
+          e.preventDefault();
           moveIndicator();
           playNote(current);
-        } else {
-          if (current >= 0) {
-            playNote(current);
-            bars[current].classList.add('flash');
-            setTimeout(() => bars[current].classList.remove('flash'), 200);
+        }
+        else if(mode==='scan' && e.code==='Space'){
+          e.preventDefault();
+          if(current>=0) playNote(current);
+        }
+        else if(mode==='step'){
+          if(e.code==='Enter'){
+            e.preventDefault();
+            moveIndicator();
+          }
+          else if(e.code==='Space'){
+            e.preventDefault();
+            if(current>=0){
+              playNote(current);
+              bars[current].classList.add('flash');
+              setTimeout(()=>bars[current].classList.remove('flash'),200);
+            }
           }
         }
       }
     });
 
-    window.addEventListener('load', () => {
-      const overlay      = document.getElementById('promptOverlay');
-      const startBtn     = document.getElementById('startButton');
-      const modeRadios   = [...document.querySelectorAll('input[name=mode]')];
-      const scanLabel    = document.getElementById('scanIntervalLabel');
-      const scanSlider   = document.getElementById('scanInterval');
-      const scanVal      = document.getElementById('scanIntVal');
-      const volSlider    = document.getElementById('volumeSlider');
-      const volVal       = document.getElementById('volVal');
-      const timeSlider   = document.getElementById('timeSlider');
-      const timeVal      = document.getElementById('timeVal');
-      const bgToggle     = document.getElementById('bgToggle');
-      const icon         = document.getElementById('settings-icon');
-      const menu         = document.getElementById('menu');
+    window.addEventListener('load', ()=>{
+      const overlay=document.getElementById('promptOverlay'),
+            startBtn=document.getElementById('startButton'),
+            modeRadios=[...document.querySelectorAll('input[name=mode]')],
+            scanLabel=document.getElementById('scanIntervalLabel'),
+            scanSlider=document.getElementById('scanInterval'),
+            scanVal=document.getElementById('scanIntVal'),
+            volSlider=document.getElementById('volumeSlider'),
+            volVal=document.getElementById('volVal'),
+            timeSlider=document.getElementById('timeSlider'),
+            timeVal=document.getElementById('timeVal'),
+            bgToggle=document.getElementById('bgToggle'),
+            icon=document.getElementById('settings-icon'),
+            menu=document.getElementById('menu');
 
-      modeRadios.forEach(radio => {
-        radio.addEventListener('change', () => {
-          mode = radio.value;
-          scanLabel.style.display = mode === 'scan' ? 'block' : 'none';
+      modeRadios.forEach(r=>{
+        r.addEventListener('change', ()=>{
+          mode=r.value;
+          scanLabel.style.display=mode==='scan'?'block':'none';
         });
       });
-
-      scanSlider.addEventListener('input', e => {
-        scanInterval = e.target.value * 1000;
-        scanVal.textContent = e.target.value;
-        if (scanTimer) {
+      scanSlider.addEventListener('input', e=>{
+        scanInterval=e.target.value*1000;
+        scanVal.textContent=e.target.value;
+        if(scanTimer){
           clearInterval(scanTimer);
-          scanTimer = setInterval(moveIndicator, scanInterval);
+          scanTimer=setInterval(moveIndicator,scanInterval);
         }
       });
-
-      volSlider.addEventListener('input', e => {
-        master.gain.value = e.target.value / 100;
-        volVal.textContent = e.target.value;
+      volSlider.addEventListener('input', e=>{
+        master.gain.value=e.target.value/100;
+        volVal.textContent=e.target.value;
       });
-
-      timeSlider.addEventListener('input', e => {
-        timeScale = parseFloat(e.target.value);
-        timeVal.textContent = `${e.target.value}s`;
+      timeSlider.addEventListener('input', e=>{
+        timeScale=parseFloat(e.target.value);
+        timeVal.textContent=`${e.target.value}s`;
       });
-
-      bgToggle.addEventListener('change', e => {
+      bgToggle.addEventListener('change', e=>{
         document.body.classList.toggle('light', e.target.checked);
       });
 
-      // default to light background
       document.body.classList.add('light');
 
-      startBtn.addEventListener('pointerup', e => {
+      startBtn.addEventListener('pointerup', e=>{
         e.preventDefault();
-        mode = modeRadios.find(r => r.checked).value;
+        mode=modeRadios.find(r=>r.checked).value;
         overlay.remove();
-        icon.style.display = 'flex';
-        document.documentElement.requestFullscreen?.().catch(() => {});
-        if (ctx.state === 'suspended') ctx.resume();
-        if (mode === 'scan') {
-          scanInterval = scanSlider.value * 1000;
-          scanTimer = setInterval(moveIndicator, scanInterval);
+        icon.style.display='flex';
+        document.documentElement.requestFullscreen?.().catch(()=>{});
+        if(ctx.state==='suspended') ctx.resume();
+        if(mode==='scan'){
+          scanInterval=scanSlider.value*1000;
+          scanTimer=setInterval(moveIndicator,scanInterval);
         }
       });
-
-      icon.addEventListener('pointerup', () => menu.classList.toggle('show'));
+      icon.addEventListener('pointerup', ()=>menu.classList.toggle('show'));
     });
   </script>
 
