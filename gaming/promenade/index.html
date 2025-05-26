@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title class="translate"
+         data-fr="Promenade iconique"
+         data-en="Iconic Walk">Promenade iconique</title>
+
+  <!-- Mapillary CSS & JS -->
+  <link rel="stylesheet"
+        href="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css">
+  <script src="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js" defer></script>
+
+  <!-- Vos CSS -->
+  <link rel="stylesheet" href="../../css/control-panel.css">
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/gaming.css">
+  <link rel="stylesheet" href="../../css/layout.css">
+
+  <style>
+    /* -------------- Structure générale -------------- */
+    html, body { margin:0; height:100%; width:100%; }
+    .hidden { display:none !important; }
+
+    /* -------- Fond & centrage du panneau -------- */
+    body {
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+      background:url('../../images/world.jpg') center/cover no-repeat;
+      background-color:rgba(0,0,0,0.4);
+      background-blend-mode:overlay;
+    }
+    #control-panel {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:20px;
+    }
+    #control-panel-options {
+      width:auto;
+      max-width:600px;
+    }
+
+    /* ---- Mapillary viewer full-screen ---- */
+    #mly { height:100%; width:100%; }
+
+    /* -------- Overlay prompt -------- */
+    #overlay-screen {
+      position:fixed; inset:0; z-index:3000;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,0.8);
+      visibility:hidden;
+    }
+    #overlay-screen.show { visibility:visible; }
+    #space-prompt-image {
+      max-width:50vw;
+      max-height:50vh;
+      /* animation */
+      transform-origin:center center;
+      transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+    }
+
+    /* ---- Uniform select/input ---- */
+    .control-panel-custom-select,
+    .control-panel-input {
+      width:100%; max-width:300px;
+      padding:12px; margin-top:10px;
+      font-size:16px; text-align:center;
+      border:2px solid #00796B; border-radius:50px;
+      background-color:#009688; color:#fff;
+      cursor:pointer; appearance:none; box-sizing:border-box;
+    }
+    .control-panel-custom-select:focus,
+    .control-panel-input:focus {
+      border-color:#004D40; outline:none;
+    }
+
+    /* ---- Modal basique (votre CSS peut déjà l’avoir) ---- */
+    .modal {
+      display:none; position:fixed;
+      left:0; top:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.7);
+      z-index:2000;
+      align-items:center; justify-content:center;
+    }
+    .modal-content {
+      background:#fff; padding:30px; border-radius:8px;
+      max-width:90vw; max-height:90vh; overflow:auto;
+    }
+  </style>
+</head>
+
+<body data-media-type="mapillary">
+  <!-- 1. CONTROL PANEL -->
+  <div id="control-panel">
+    <div id="control-panel-options" class="control-panel-options">
+      <div id="control-panel-title" class="control-panel-title">
+        <span class="translate"
+              data-fr="Promenade iconique"
+              data-en="Iconic Walk">
+          Promenade iconique
+        </span>
+      </div>
+      <div id="options-grid" class="options-grid">
+        <select id="destination-select" class="control-panel-custom-select">
+          <option disabled selected>-- Destination --</option>
+          <option data-image-id="760767052593679">Tour Eiffel</option>
+          <option data-image-id="144257704393318">Times Square</option>
+          <option data-image-id="1681148831178254">Colisée</option>
+        </select>
+        <button id="select-space-prompt-button"
+                class="button translate"
+                data-fr="Image indicatrice"
+                data-en="Indicator image">
+          Image indicatrice
+        </button>
+        <select id="sound-options-select"
+                class="control-panel-custom-select"></select>
+        <input id="inactivity-time"
+               type="number" min="2" max="60" step="1"
+               value="10"
+               class="control-panel-input"
+               title="Secondes avant prompt">
+      </div>
+    </div>
+    <div id="button-container" class="button-container">
+      <button id="control-panel-start-button"
+              class="button translate"
+              data-fr="Commencer"
+              data-en="Start">
+        Commencer
+      </button>
+    </div>
+  </div>
+
+  <!-- 2. MAPILLARY VIEWER -->
+  <div id="mly" class="hidden"></div>
+
+  <!-- 3. OVERLAY PROMPT -->
+  <div id="overlay-screen">
+    <img id="space-prompt-image" src="" alt="">
+  </div>
+
+  <!-- 4. MODALE IMAGE PROMPT -->
+  <div id="space-prompt-selection-modal" class="modal">
+    <div class="modal-content">
+      <span id="close-space-prompt-modal" class="close">&times;</span>
+      <h2 class="translate"
+          data-fr="Sélectionner l'image indicatrice"
+          data-en="Select the indicator image">
+        Sélectionner l'image indicatrice
+      </h2>
+      <div id="space-prompt-selection" class="space-prompt-images-container"></div>
+      <button id="apply-space-prompt" class="button">OK</button>
+    </div>
+  </div>
+
+  <!-- CONFIG (images & sons) -->
+  <script src="../../js/config.js"></script>
+  <script>
+    // 1. État & références DOM
+    let viewer, idleTimer, promptHideTimeout, overlayVisible = false;
+    let selectedPromptImg, selectedSound = 'piano-sound', currentAudio = null;
+    let idleDelay = 10000;
+
+    const destSel   = document.getElementById('destination-select');
+    const soundSel  = document.getElementById('sound-options-select');
+    const promptBtn = document.getElementById('select-space-prompt-button');
+    const promptMod = document.getElementById('space-prompt-selection-modal');
+    const promptGrid= document.getElementById('space-prompt-selection');
+    const promptOK  = document.getElementById('apply-space-prompt');
+    const overlay   = document.getElementById('overlay-screen');
+    const promptImg = document.getElementById('space-prompt-image');
+
+    // 2. Peupler le menu des sons
+    function populateSoundMenu(){
+      soundSel.innerHTML='';
+      spacePromptSounds.forEach(s=>{
+        const o=document.createElement('option');
+        o.value=s.value;
+        o.textContent=s.label.fr||s.label.en;
+        soundSel.appendChild(o);
+      });
+      soundSel.value='piano-sound';
+    }
+    populateSoundMenu();
+    soundSel.onchange = e => selectedSound = e.target.value;
+
+    // 3. Peupler le modal d’images
+    function populatePromptImages(){
+      promptGrid.innerHTML='';
+      spacePromptImages.forEach(img=>{
+        const card=document.createElement('div');
+        card.className='image-card';
+        card.innerHTML=`<img src="${img.src}" alt="${img.alt.fr}">`;
+        card.onclick = ()=>{
+          selectedPromptImg = img.src;
+          [...promptGrid.children].forEach(c=>c.classList.remove('selected'));
+          card.classList.add('selected');
+        };
+        promptGrid.appendChild(card);
+      });
+      selectedPromptImg = spacePromptImages[0].src;
+    }
+
+    // Afficher/masquer le modal avec style.display
+    promptBtn.onclick = () => {
+      populatePromptImages();
+      promptMod.style.display = 'flex';
+    };
+    document.getElementById('close-space-prompt-modal').onclick = () => {
+      promptMod.style.display = 'none';
+    };
+    promptOK.onclick = () => {
+      promptMod.style.display = 'none';
+    };
+
+    // 4. Gestion de l’inactivité & du prompt
+    function resetIdle(){
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(showPrompt, idleDelay);
+    }
+    function showPrompt(){
+      promptImg.src = selectedPromptImg;
+      overlay.classList.add('show');
+      overlayVisible = true;
+      // animation d’apparition
+      promptImg.style.transform = 'scale(0.1)';
+      promptImg.style.opacity = '0';
+      void promptImg.offsetWidth;
+      promptImg.style.transform = 'scale(1)';
+      promptImg.style.opacity = '1';
+      playSound();
+      // cacher après 5s
+      clearTimeout(promptHideTimeout);
+      promptHideTimeout = setTimeout(() => {
+        hidePrompt();
+      }, 5000);
+    }
+    function hidePrompt(){
+      overlay.classList.remove('show');
+      overlayVisible = false;
+      stopSound();
+      clearTimeout(promptHideTimeout);
+      resetIdle();
+    }
+    function playSound(){
+      stopSound();
+      const o = spacePromptSounds.find(s=>s.value===selectedSound);
+      if(o && o.src){
+        currentAudio = new Audio(o.src);
+        currentAudio.play().catch(()=>{});
+      }
+    }
+    function stopSound(){
+      if(currentAudio){
+        currentAudio.pause();
+        currentAudio = null;
+      }
+    }
+
+    // 5. Lancement de la promenade
+    document.getElementById('control-panel-start-button').onclick = ()=>{
+      const opt = destSel.selectedOptions[0];
+      if(!opt){
+        alert('Choisissez une destination');
+        return;
+      }
+      idleDelay = (parseInt(document.getElementById('inactivity-time').value,10)||10)*1000;
+      document.getElementById('control-panel').classList.add('hidden');
+      document.getElementById('mly').classList.remove('hidden');
+
+      const {Viewer, NavigationDirection} = mapillary;
+      viewer = new Viewer({
+        container: 'mly',
+        accessToken: 'MLY|9814623925291060|6c1c16c97ef122789a3cd728248ade58',
+        imageId: opt.dataset.imageId,
+        component: { cover:false, attribution:false }
+      });
+
+      const step = () => {
+        viewer.moveDir(NavigationDirection.Next).catch(()=>{});
+        resetIdle();
+      };
+
+      // Espace : cacher + avancer
+      window.addEventListener('keydown', e=>{
+        if(e.code !== 'Space') return;
+        if(overlayVisible){
+          hidePrompt();
+          step();
+        } else {
+          step();
+        }
+      });
+
+      // Gamepad
+      window.addEventListener('gamepadconnected', ()=>{
+        const loop = ()=>{
+          const g = navigator.getGamepads()[0];
+          if(g && g.buttons[0].pressed){
+            if(overlayVisible){
+              hidePrompt();
+              step();
+            } else {
+              step();
+            }
+            while(g.buttons[0].pressed){}
+          }
+          requestAnimationFrame(loop);
+        };
+        loop();
+      });
+
+      resetIdle();
+    };
+  </script>
+</body>
+</html>
