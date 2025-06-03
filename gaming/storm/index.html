@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title
+    class="translate"
+    data-fr="Orage : jeu switch"
+    data-en="Storm : switch game">
+    Orage : jeu switch
+  </title>
+
+  <!-- p5.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+
+  <!-- thème global -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#0f0f1e;}
+    canvas{display:block;position:fixed;top:0;left:0;}
+
+    /* icône réglages (40 × 40) */
+    #settings-icon{
+      position:fixed; top:16px; right:16px;
+      width:40px; height:40px; border-radius:50%;
+      background:#000; color:#fff; font-size:22px;
+      display:flex; align-items:center; justify-content:center;
+      visibility:hidden; cursor:pointer; z-index:9999;
+    }
+    #menu{z-index:10000;}
+  </style>
+</head>
+
+<body>
+<!-- ────────── Landing ────────── -->
+<div id="promptOverlay">
+  <button id="infoButton"
+          title="More info"
+          class="translate"
+          data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+
+  <p class="translate"
+     data-fr="Appuie sur une switch pour déclencher un éclair (ou simplement écouter la pluie)"
+     data-en="Press the switch to trigger a lightning bolt, or just listen to the rain">
+    Appuie sur la barre d’espace pour déclencher un éclair
+  </p>
+
+  <button id="startButton"
+          class="translate"
+          data-fr="Commencer"
+          data-en="Start">
+    Commencer
+  </button>
+</div>
+
+<!-- ────────── Modal info ────────── -->
+<div id="infoModal" style="display:none;">
+  <p class="translate"
+     data-fr="Compétence&nbsp;: appui simple<br>SENICT niveau&nbsp;1 · Roadmap&nbsp;8-10"
+     data-en="Skill: single press<br>SENICT level 1 · Roadmap 8-10">
+    Compétence : appui simple<br>SENICT niveau 1 · Roadmap 8-10
+  </p>
+  <button id="closeModal"
+          class="translate"
+          data-fr="Fermer"
+          data-en="Close">
+    Fermer
+  </button>
+</div>
+
+<!-- icône réglages -->
+<div id="settings-icon"
+     title="Settings"
+     class="translate"
+     data-fr="⚙️" data-en="⚙️">⚙️</div>
+
+<!-- ────────── Menu options ────────── -->
+<div id="menu">
+  <h2 class="translate" data-fr="Options" data-en="Options">Options</h2>
+
+  <h3 class="translate" data-fr="Musique &amp; son" data-en="Music &amp; Sound">
+    Musique & son
+  </h3>
+
+  <label class="inline">
+    <span class="translate"
+          data-fr="Désactiver la musique"
+          data-en="Disable music">Désactiver la musique</span>
+    <input type="checkbox" id="muteMusic">
+  </label>
+
+  <label>
+    <span class="translate" data-fr="Volume musique" data-en="Music volume">
+      Volume musique
+    </span>
+    <span id="musicVolVal">50</span>
+    <input type="range" id="musicVol" min="0" max="100" value="50">
+  </label>
+
+  <label class="inline">
+    <span class="translate"
+          data-fr="Désactiver les effets"
+          data-en="Disable SFX">Désactiver les effets</span>
+    <input type="checkbox" id="muteSFX">
+  </label>
+
+  <label>
+    <span class="translate" data-fr="Volume effets" data-en="SFX volume">
+      Volume effets
+    </span>
+    <span id="sfxVolVal">50</span>
+    <input type="range" id="sfxVol" min="0" max="100" value="50">
+  </label>
+
+  <h3 class="translate" data-fr="Délai entre appuis" data-en="Press delay">
+    Délai entre appuis (ms)
+  </h3>
+
+  <label>
+    <span class="translate" data-fr="Délai" data-en="Delay">Délai</span>
+    <span id="tapDelayVal">2000</span>
+    <input type="range" id="tapDelaySlider" min="500" max="5000" value="2000">
+  </label>
+</div>
+
+<!-- ────────── JS : logique du jeu ────────── -->
+<script>
+/* === AUDIO ================================================== */
+const thunderPaths=[
+  '../../sounds/thunder/bolt1.mp3',
+  '../../sounds/thunder/bolt2.mp3',
+  '../../sounds/thunder/bolt3.mp3',
+  '../../sounds/thunder/bolt4.mp3'
+];
+let thunderSounds=[], rainSound;
+
+/* === VISUEL ================================================= */
+const cloudHeightPct=.15, groundHeightPct=.05;
+const drops=[], NUM_DROPS=400;
+
+/* === ÉTAT =================================================== */
+let tapDelay=2000, lastTap=-Infinity;
+let lightningActive=false, lightningStart=0, lightningDur=4000;
+let trunk=[], branches=[], boltX;
+
+/* === VOLUMES =============================================== */
+let isMusicMuted=false, isSFXMuted=false;
+let volMusic=.5, volSFX=.5;
+
+/* === p5 : PRELOAD ========================================== */
+function preload(){
+  thunderSounds=thunderPaths.map(p=>loadSound(p));
+  rainSound=loadSound('../../sounds/rain1.mp3');
+}
+
+/* === p5 : SETUP ============================================ */
+function setup(){
+  createCanvas(displayWidth,displayHeight);
+  noiseDetail(2,.5);
+  for(let i=0;i<NUM_DROPS;i++) drops.push(new Drop());
+}
+
+/* === p5 : DRAW ============================================= */
+function draw(){
+  background(15,15,30);
+
+  fill(220,220,255,160); noStroke();
+  drops.forEach(d=>{d.fall(); if(d.y+d.len<groundY(d.x)) d.show();});
+
+  drawClouds();
+  drawGround();
+
+  if(lightningActive){
+    drawLightning();
+    flashOverlay();
+    if(millis()-lightningStart>lightningDur) lightningActive=false;
+  }
+}
+
+/* === CLASSE GOUTTE ========================================= */
+class Drop{
+  constructor(){this.reset();}
+  reset(){this.x=random(width); this.y=random(-height,0);
+    this.len=random(20,35); this.speed=random(4,12); this.w=this.len*.3;}
+  fall(){this.y+=this.speed; if(this.y>height) this.reset();}
+  show(){
+    const {x,y,len,w}=this, b=y+len, c=y+len, h=w/2;
+    beginShape();
+      vertex(x,y);
+      bezierVertex(x-h,c,x-h,b-w*.2,x,b);
+      bezierVertex(x+h,b-w*.2,x+h,c,x,y);
+    endShape(CLOSE);
+  }
+}
+
+/* === SOL & NUAGES  ========================================= */
+function groundY(x){
+  const h=height*groundHeightPct, base=height-h;
+  return base-noise(x*.005)*h*.3;
+}
+function drawGround(){
+  fill(10,50,10); noStroke();
+  beginShape(); vertex(0,height);
+    for(let x=0;x<=width;x+=10) vertex(x,groundY(x));
+  vertex(width,height); endShape(CLOSE);
+
+  stroke(20,80,20,120); strokeWeight(2);
+  beginShape(); for(let x=0;x<=width;x+=10) vertex(x,groundY(x)); endShape();
+}
+
+/* trois couches : clair (bas) → moyen → foncé (haut) */
+function drawClouds(){
+  const base=height*cloudHeightPct;
+  const layers=[
+    {shade:170, offY:40, amp:base*0.45, scale:.006},
+    {shade:110, offY:15, amp:base*0.40, scale:.005},
+    {shade: 60, offY: 0, amp:base*0.35, scale:.004}
+  ];
+  layers.forEach(({shade,offY,amp,scale})=>{
+    fill(shade); noStroke();
+    beginShape();
+      vertex(-60, base+offY);
+      for(let x=-60;x<=width+60;x+=20){
+        const y=base+offY-noise(x*scale)*amp;
+        curveVertex(x,y);
+      }
+      vertex(width+60,base+offY); vertex(width+60,0); vertex(-60,0);
+    endShape(CLOSE);
+  });
+}
+
+/* === ÉCLAIR  =============================================== */
+function generateBolt(){
+  trunk=[]; branches=[];
+  const seg=12,startY=height*cloudHeightPct,
+        ground=height-height*groundHeightPct,
+        segLen=(ground-startY)/seg, maxX=width*.02;
+  let cx=boltX, cy=startY; trunk.push(createVector(cx,cy));
+  for(let i=1;i<=seg;i++){
+    let ny=startY+i*segLen, nx=cx+random(-maxX,maxX);
+    if(ny>=ground){trunk.push(createVector(nx,ground)); break;}
+    trunk.push(createVector(nx,ny)); cx=nx; cy=ny;
+  }
+  for(let i=1;i<trunk.length-1;i++) if(random()<.2){
+    let pts=[trunk[i].copy()], dir=random()<.5?-1:1, segL=segLen*.6;
+    for(let s=0;s<4;s++){
+      let nx=pts[pts.length-1].x+dir*random(maxX*.5,maxX),
+          ny=pts[pts.length-1].y+segL;
+      if(ny>=ground){pts.push(createVector(nx,ground)); break;}
+      pts.push(createVector(nx,ny));
+    }
+    branches.push(pts);
+  }
+}
+function drawLightning(){
+  const a=map(millis()-lightningStart,0,lightningDur,255,0);
+  const yellow=[255,235,120];
+  drawingContext.shadowBlur=30;
+  drawingContext.shadowColor=`rgba(${yellow[0]},${yellow[1]},${yellow[2]},.3)`;
+  strokeCap(SQUARE); strokeJoin(ROUND);
+
+  stroke(...yellow,a*.2); strokeWeight(40); noFill();
+  beginShape(); trunk.forEach(v=>vertex(v.x,v.y)); endShape();
+  branches.forEach(b=>{beginShape(); b.forEach(v=>vertex(v.x,v.y)); endShape();});
+
+  drawingContext.shadowBlur=0;
+  stroke(...yellow,a); strokeWeight(20);
+  beginShape(); trunk.forEach(v=>vertex(v.x,v.y)); endShape();
+  branches.forEach(b=>{beginShape(); b.forEach(v=>vertex(v.x,v.y)); endShape();});
+}
+function flashOverlay(){
+  const alpha=map(millis()-lightningStart,0,lightningDur,150,0);
+  fill(255,255,255,alpha); noStroke();
+  rect(0,0,width,height);
+}
+
+/* === BARRE D’ESPACE ======================================== */
+function keyPressed(){
+  if(key===' '){
+    const now=millis(); if(now-lastTap<tapDelay) return; lastTap=now;
+    boltX=random(width*.2,width*.8);
+    lightningActive=true; lightningStart=now; generateBolt();
+    if(!isSFXMuted) random(thunderSounds).play().setVolume(volSFX);
+  }
+}
+
+/* === UI : plein-écran, sliders, menu, son =================== */
+window.addEventListener('load',()=>{
+  const overlay=document.getElementById('promptOverlay'),
+        btn=document.getElementById('startButton'),
+        icon=document.getElementById('settings-icon'),
+        menu=document.getElementById('menu'),
+        muteMusic=document.getElementById('muteMusic'),
+        musicVol=document.getElementById('musicVol'),
+        musicVal=document.getElementById('musicVolVal'),
+        muteSFX=document.getElementById('muteSFX'),
+        sfxVol=document.getElementById('sfxVol'),
+        sfxVal=document.getElementById('sfxVolVal'),
+        tapSlider=document.getElementById('tapDelaySlider'),
+        tapVal=document.getElementById('tapDelayVal'),
+        infoBtn=document.getElementById('infoButton'),
+        infoModal=document.getElementById('infoModal'),
+        closeModal=document.getElementById('closeModal');
+
+  /* sliders & mute */
+  tapSlider.oninput=e=>{tapDelay=e.target.value; tapVal.textContent=e.target.value;};
+  musicVol.oninput=e=>{volMusic=e.target.value/100; musicVal.textContent=e.target.value; if(!isMusicMuted) rainSound?.setVolume(volMusic);};
+  sfxVol.oninput=e=>{volSFX=e.target.value/100; sfxVal.textContent=e.target.value; if(!isSFXMuted) thunderSounds.forEach(s=>s.setVolume(volSFX));};
+  muteMusic.onchange=e=>{isMusicMuted=e.target.checked; rainSound?.setVolume(isMusicMuted?0:volMusic);};
+  muteSFX.onchange=e=>{isSFXMuted=e.target.checked; thunderSounds.forEach(s=>s.setVolume(isSFXMuted?0:volSFX));};
+
+  /* Commencer */
+  btn.addEventListener('pointerup',()=>{
+    overlay.remove();
+
+    const docEl=document.documentElement;
+    if(docEl.requestFullscreen) docEl.requestFullscreen().catch(()=>{});
+    else if(docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+
+    const fitCanvas=()=>resizeCanvas(displayWidth,displayHeight);
+    fitCanvas(); document.addEventListener('fullscreenchange',fitCanvas);
+    window.addEventListener('resize',fitCanvas);
+
+    icon.style.visibility='visible';
+
+    const startRain=()=>{
+      rainSound.setLoop(true);
+      rainSound.setVolume(isMusicMuted?0:volMusic);
+      rainSound.play();
+    };
+    rainSound.isLoaded() ? startRain() : rainSound.once('loaded',startRain);
+  });
+
+  /* menu toggle */
+  icon.onclick=()=>menu.classList.toggle('show');
+  document.onclick=e=>{
+    if(!menu.contains(e.target)&&!icon.contains(e.target)) menu.classList.remove('show');
+  };
+
+  /* info modal */
+  infoBtn.onclick=()=>{infoModal.style.display='block';};
+  closeModal.onclick=()=>{infoModal.style.display='none';};
+});
+</script>
+
+<!-- module traduction -->
+<script src="../../js/translationonly.js"></script>
+</body>
+</html>
