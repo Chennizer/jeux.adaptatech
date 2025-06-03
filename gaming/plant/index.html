@@ -6,12 +6,14 @@
     Plant Growth Adventure
   </title>
   <style>
-    /* You can add your own styles here if needed */
+    /* Add page-specific CSS here if needed */
   </style>
   <link rel="stylesheet" href="../../css/otherswitch.css">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
 </head>
+
+<!-- Google Analytics (unchanged) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -19,22 +21,32 @@
   gtag('js', new Date());
   gtag('config', 'G-B45TJG4GBJ');
 </script>
+
 <body>
+  <!-- ================= OVERLAYS / MENUS ================= -->
   <div id="promptOverlay">
     <button id="infoButton" title="More info" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
-    <p class="translate" data-fr="Appuyer à plusieurs reprises pour remplir le champs <br>de fleurs avant que la nuit tombe." data-en="Press multiple times to fill the field <br>with flowers before night falls">
+    <p class="translate"
+       data-fr="Appuyer à plusieurs reprises pour remplir le champs <br>de fleurs avant que la nuit tombe."
+       data-en="Press multiple times to fill the field <br>with flowers before night falls">
       Appuyez 5 fois sur ESPACE pour faire pousser la plante !
     </p>
     <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
   </div>
+
   <div id="infoModal">
-    <p class="translate" data-fr="Compétence: appuyer et maintenir<br>SENICT switch skills niveau 4<br>Switch Progression Roadmap niveau 17 et 18" data-en="Skill: press and hold<br>SENICT switch skills level 4<br>Switch Progression Roadmap levels 17 and 18">
-      Compétence: appuyer à plusieurs reprises pour atteindre un but<br>SENICT switch skills niveau 4<br>Switch Progression Roadmap niveau 17 et 18
+    <p class="translate"
+       data-fr="Compétence : appuyer à plusieurs reprises pour atteindre un but<br>SENICT switch skills N4<br>Switch Progression Roadmap N17-18"
+       data-en="Skill : press repeatedly to reach a goal<br>SENICT switch skills L4<br>Switch Progression Roadmap 17-18">
+      Compétence : appuyer à plusieurs reprises pour atteindre un but<br>SENICT switch skills niveau 4<br>Switch Progression Roadmap niveaux 17 et 18
     </p>
     <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
   </div>
+
   <div id="settings-icon" title="Settings" class="translate" data-fr="⚙️" data-en="⚙️">⚙️</div>
   <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+
+  <!-- ================= SETTINGS MENU ================= -->
   <div id="menu">
     <h3 data-fr="Musique et son" data-en="Music &amp; Sound">Musique et son</h3>
     <label class="inline">
@@ -46,6 +58,7 @@
       <span id="musicVolumeValue">50</span>
       <input type="range" id="musicVolumeSlider" min="1" max="100" value="50">
     </label>
+
     <h3 data-fr="Effets sonores" data-en="Sound effects">Effets sonores</h3>
     <label class="inline">
       <span data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
@@ -56,6 +69,7 @@
       <span id="starSoundVolumeValue">50</span>
       <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
     </label>
+
     <label>
       <span data-fr="Fleurs avant la nuit" data-en="Flowers before night">Fleurs avant la nuit</span>
       <span id="rewardThresholdValue">10</span>
@@ -63,726 +77,315 @@
     </label>
   </div>
 
+  <!-- ================= MAIN SCRIPT ================= -->
   <script>
-    // ============== GLOBAL VARIABLES ==============
-    let musicTracks = [];
-    let plantGrowSounds = [];
-    let flowerSounds = [];
-    let flowerTransitionSounds = [];
-
-    let sunScale = 1;
-    let sunAnimating = false;
-    let sunAnimStartTime = 0;
-    let lastSpacePress = 0;
-    
-    let totalRewardDuration = 10000; 
-    let rewardAnimationActive = false;
-    let rewardAnimationStartTime = 0;
-    let initialSkyColor;
-    
-    let sunReentryActive = false;
-    let sunReentryStartTime = 0;
-    let sunReentryDuration = 3000;
-    
-    let started = false;
-    let isMuted = false;
-    let isSFXMuted = false;
-    let musicVolume = 0.5;
-    let starSoundVolume = 0.5;
-    let currentMusic = null;
-    
+    /* ========== GLOBAL VARIABLES ========== */
+    let musicTracks = [], plantGrowSounds = [], flowerSounds = [], flowerTransitionSounds = [];
+    let sunScale = 1, sunAnimating = false, sunAnimStartTime = 0, lastSpacePress = 0;
+    let totalRewardDuration = 10000, rewardAnimationActive = false, rewardAnimationStartTime = 0, initialSkyColor;
+    let sunReentryActive = false, sunReentryStartTime = 0, sunReentryDuration = 3000;
+    let started = false, isMuted = false, isSFXMuted = false, musicVolume = 0.5, starSoundVolume = 0.5, currentMusic = null;
     const factorMultiplier = 1.5;
-    let clouds = [];
-    let growthStage = 0;
-    let flowerAnimationProgress = 0;
-    let finishedFlowers = [];
+    let clouds = [], growthStage = 0, flowerAnimationProgress = 0, finishedFlowers = [];
     const firstFlowerOffset = 20;
-    let rewardThreshold = 10;
-    let plant;
+    let rewardThreshold = 10, plant;
+    /* Wait flag */
+    let isAssetsLoaded = false;
 
-    // ============== PRELOAD ==============
+    /* ========== PRELOAD (loadSound) ========== */
     function preload() {
-      for (let i = 1; i <= 7; i++) {
-        musicTracks.push(loadSound("../../songs/spring/spring" + i + ".mp3"));
-      }
-      for (let i = 1; i <= 3; i++) {
-        plantGrowSounds.push(loadSound("../../songs/spring/plantgrow" + i + ".mp3"));
-      }
-      for (let i = 1; i <= 4; i++) {
-        flowerSounds.push(loadSound("../../songs/spring/flower" + i + ".mp3"));
-      }
-      for (let i = 1; i <= 2; i++) {
-        flowerTransitionSounds.push(loadSound("../../songs/spring/flowertransition" + i + ".mp3"));
-      }
+      for (let i = 1; i <= 7; i++) musicTracks.push(loadSound(`../../songs/spring/spring${i}.mp3`));
+      for (let i = 1; i <= 3; i++) plantGrowSounds.push(loadSound(`../../songs/spring/plantgrow${i}.mp3`));
+      for (let i = 1; i <= 4; i++) flowerSounds.push(loadSound(`../../songs/spring/flower${i}.mp3`));
+      for (let i = 1; i <= 2; i++) flowerTransitionSounds.push(loadSound(`../../songs/spring/flowertransition${i}.mp3`));
     }
 
-    // ============== MUSIC PLAYLIST LOGIC (SINGLE-START) ==============
-    // We call this once, and it never stops when the game resets!
+    /* ========== MUSIC PLAYLIST ========== */
     function startContinuousMusic() {
-      // Just pick a random track, play it at current volume,
-      // then when it ends, pick another track, forever.
-      
-      // 1) Pick a random track
-      currentMusic = random(musicTracks);
-      if (!currentMusic) return;  // if no tracks loaded
-      currentMusic.setVolume(isMuted ? 0 : musicVolume);
-      currentMusic.play();
-
-      // 2) When it ends naturally, choose a new random track
-      currentMusic.onended(() => {
+      if (musicTracks.some(t => !t.isLoaded())) { setTimeout(startContinuousMusic, 100); return; }
+      currentMusic = random(musicTracks); if (!currentMusic) return;
+      currentMusic.setVolume(isMuted ? 0 : musicVolume); currentMusic.play();
+      currentMusic.onended(function playNext() {
         currentMusic = random(musicTracks);
-        if (currentMusic) {
-          currentMusic.setVolume(isMuted ? 0 : musicVolume);
-          currentMusic.play();
-          // And again on .onended...
-          currentMusic.onended(arguments.callee);
-        }
+        if (currentMusic) { currentMusic.setVolume(isMuted ? 0 : musicVolume); currentMusic.play(); currentMusic.onended(playNext); }
       });
     }
 
-    // ============== SETUP ==============
+    /* ========== SETUP ========== */
     function setup() {
-      createCanvas(windowWidth, windowHeight);
-      noLoop();
-      // Create clouds
-      for (let i = 0; i < 6; i++) {
-        let x = random(0, width);
-        let y = random(30, height / 2);
-        let w = random(80, 250);
-        let h = random(40, 120);
-        let speed = random(0.5, 2.0);
-        clouds.push(new Cloud(x, y, w, h, speed));
-      }
+      createCanvas(windowWidth, windowHeight); noLoop();
+      for (let i = 0; i < 6; i++)
+        clouds.push(new Cloud(random(0, width), random(30, height / 2),
+                              random(80, 250), random(40, 120), random(0.5, 2.0)));
       plant = new Plant(width / 2, height - 50);
+      isAssetsLoaded = true;   // everything loaded
     }
 
-    // ============== DRAW LOOP ==============
+    /* ========== DRAW LOOP ========== */
     function draw() {
       if (!started) return;
-      
-      if (rewardAnimationActive) {
-        drawRewardAnimation();
-        return;
-      }
-      if (sunReentryActive) {
-        drawSunReentryAnimation();
-        return;
-      }
-      
+      if (rewardAnimationActive) { drawRewardAnimation(); return; }
+      if (sunReentryActive)   { drawSunReentryAnimation(); return; }
+
       drawSimpleBackground();
-      
-      let globalPlantScale = getGlobalPlantScale();
-      let marginX = 0.04 * width;
-      let computedFlowerSpacing = (width - 2 * marginX) / 9;
-      
-      // Clouds
-      for (let cloud of clouds) {
-        cloud.update();
-        cloud.draw();
-      }
-      
-      // Finished (small) flowers
+
+      const globalScale = getGlobalPlantScale();
+      const marginX = 0.04 * width;
+      const spacing = (width - 2 * marginX) / 9;
+
+      clouds.forEach(c => { c.update(); c.draw(); });
+
       finishedFlowers.forEach(f => {
         push();
-        let windOsc = sin(frameCount * 0.05 + f.x) * 2;
-        translate(f.x + windOsc, f.y);
-        scale(0.1 * 3 * factorMultiplier * globalPlantScale);
+        translate(f.x + sin(frameCount * 0.05 + f.x) * 2, f.y);
+        scale(0.1 * 3 * factorMultiplier * globalScale);
         f.plant.drawAttached(5);
         pop();
       });
-      
-      // Main plant states
-      if (growthStage < 5) {
-        plant.draw(growthStage);
-      } else if (growthStage === 5) {
-        plant.draw(5);
-      } else if (growthStage === 6) {
+
+      if (growthStage < 5)      plant.draw(growthStage);
+      else if (growthStage === 5) plant.draw(5);
+      else {
         plant.draw(6);
         flowerAnimationProgress += 0.005;
         if (flowerAnimationProgress >= 1) {
-          let extraOffset = (finishedFlowers.length === 0) ? firstFlowerOffset : 0;
-          let targetX = marginX + extraOffset + finishedFlowers.length * computedFlowerSpacing;
-          let targetY = height - 50;
-          finishedFlowers.push({ plant: plant, x: targetX, y: targetY });
-          if (finishedFlowers.length >= rewardThreshold) {
-            startRewardAnimation();
-          } else {
-            // If not enough flowers, reset the main plant
-            growthStage = 0;
-            flowerAnimationProgress = 0;
-            plant = new Plant(width / 2, height - 50);
-          }
+          const extra = finishedFlowers.length ? 0 : firstFlowerOffset;
+          const x = marginX + extra + finishedFlowers.length * spacing;
+          finishedFlowers.push({ plant, x, y: height - 50 });
+          if (finishedFlowers.length >= rewardThreshold) startRewardAnimation();
+          else { growthStage = 0; flowerAnimationProgress = 0; plant = new Plant(width / 2, height - 50); }
         }
       }
     }
 
-    // ============== BACKGROUND + UTILS ==============
+    /* ========== BACKGROUND / UTILS ========== */
     function drawSimpleBackground() {
       background(135, 206, 250);
-      
       if (sunAnimating) {
-        let overlayAlpha = map(sunScale, 1, 1.6, 0, 80);
-        noStroke();
-        fill(255, 165, 0, overlayAlpha);
-        rect(0, 0, width, height);
+        fill(255,165,0, map(sunScale,1,1.6,0,80)); noStroke(); rect(0,0,width,height);
+        const t = millis() - sunAnimStartTime;
+        if (t < 1000) sunScale = lerp(1,1.6,t/1000);
+        else if (t < 2000) sunScale = lerp(1.6,1,(t-1000)/1000);
+        else { sunScale=1; sunAnimating=false; }
       }
-      
-      if (sunAnimating) {
-        let t = millis() - sunAnimStartTime;
-        if (t < 1000) {
-          sunScale = lerp(1, 1.6, t / 1000);
-        } else if (t < 2000) {
-          sunScale = lerp(1.6, 1, (t - 1000) / 1000);
-        } else {
-          sunScale = 1;
-          sunAnimating = false;
-        }
-      }
-      
-      // Sun rays
-      push();
-      translate(100, 100);
-      scale(sunScale);
-      let baseSunSize = 120;
-      let pulse = 15 * sin(frameCount * 0.02);
-      baseSunSize += pulse;
-      let numRays = 16;
-      let rayLength = baseSunSize * 1.3;
-      rotate(frameCount * 0.01);
-      stroke(255, 223, 0, 180);
-      strokeWeight(4);
-      for (let i = 0; i < numRays; i++) {
-        let angle = (i * TWO_PI) / numRays;
-        let x1 = (baseSunSize / 2) * cos(angle);
-        let y1 = (baseSunSize / 2) * sin(angle);
-        let x2 = rayLength * cos(angle);
-        let y2 = rayLength * sin(angle);
-        line(x1, y1, x2, y2);
-      }
-      pop();
-      
-      // Main sun circle
-      push();
-      translate(100, 100);
-      scale(sunScale);
-      fill(255, 223, 0);
-      noStroke();
-      ellipse(0, 0, 120, 120);
-      pop();
-      
-      // Ground
-      fill(50, 205, 50);
-      rect(0, height - 50, width, 50);
+
+      /* Rays */
+      push(); translate(100,100); scale(sunScale);
+      const base = 120 + 15*sin(frameCount*0.02), rays=16, rayL=base*1.3;
+      rotate(frameCount*0.01); stroke(255,223,0,180); strokeWeight(4);
+      for (let i=0;i<rays;i++){
+        const a=i*TWO_PI/rays;
+        line((base/2)*cos(a),(base/2)*sin(a),rayL*cos(a),rayL*sin(a));
+      } pop();
+
+      /* Disk */
+      push(); translate(100,100); scale(sunScale);
+      noStroke(); fill(255,223,0); ellipse(0,0,120,120); pop();
+
+      fill(50,205,50); rect(0,height-50,width,50);
     }
-    
-    function getGlobalPlantScale() {
-      return width / 1920;
-    }
-    
-    function windowResized() {
-      resizeCanvas(windowWidth, windowHeight);
-      plant = new Plant(width / 2, height - 50);
-    }
-    
-    function goFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => console.error(err));
-      } else {
-        document.exitFullscreen();
+
+    const getGlobalPlantScale = ()=>width/1920;
+
+    function windowResized(){ resizeCanvas(windowWidth,windowHeight); plant=new Plant(width/2,height-50); }
+
+    function goFullscreen(){ document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(console.error); }
+
+    /* ========== KEY & SOUND ========== */
+    function keyPressed(){
+      if(!started||key!==' '||millis()-lastSpacePress<1300) return;
+      lastSpacePress=millis();
+      if(!rewardAnimationActive&&growthStage<6){
+        growthStage++; playGrowthSound();
+        if(growthStage<=5){ sunAnimating=true; sunAnimStartTime=millis(); }
       }
     }
 
-    // ============== KEY & SOUND EFFECTS ==============
-    function keyPressed() {
-      if (!started) return;
-      if (key !== ' ') return;
-      if (millis() - lastSpacePress < 1300) return;
-      lastSpacePress = millis();
-      
-      if (!rewardAnimationActive && growthStage < 6) {
-        growthStage++;
-        playGrowthSound();
-        if (growthStage <= 5) {
-          sunAnimating = true;
-          sunAnimStartTime = millis();
-        }
-      }
-    }
-    
-    function playGrowthSound() {
-      if (!isSFXMuted) {
-        if (growthStage < 4) {
-          let s = random(plantGrowSounds);
-          s.setVolume(starSoundVolume);
-          s.play();
-        } else if (growthStage < 6) {
-          let s = random(flowerSounds);
-          s.setVolume(starSoundVolume);
-          s.play();
-        } else if (growthStage === 6) {
-          let s = random(flowerTransitionSounds);
-          s.setVolume(starSoundVolume);
-          s.play();
-        }
-      }
+    function playGrowthSound(){
+      if(isSFXMuted) return; let s;
+      if(growthStage<4) s=random(plantGrowSounds);
+      else if(growthStage<6) s=random(flowerSounds);
+      else s=random(flowerTransitionSounds);
+      if(s){ s.setVolume(starSoundVolume); s.play(); }
     }
 
-    // ============== REWARD ANIMATION ==============
-    function drawRewardAnimation() {
-      let elapsed = millis() - rewardAnimationStartTime;
-      let t = constrain(elapsed / totalRewardDuration, 0, 1);
-      
-      // Keep music at full volume, no fade
-      if (t < 0.5) {
-        let currentSky = lerpColor(initialSkyColor, color(255, 140, 0), t * 2);
-        background(currentSky);
-      } else {
-        let currentSky = lerpColor(color(255, 140, 0), color(0, 0, 0), (t - 0.5) * 2);
-        background(currentSky);
-      }
-      let currentGround = lerpColor(color(50, 205, 50), color(0, 0, 0), t);
-      fill(currentGround);
-      rect(0, height - 50, width, 50);
-      
-      let globalPlantScale = getGlobalPlantScale();
-      finishedFlowers.forEach(f => {
-        push();
-        let windOsc = sin(frameCount * 0.05 + f.x) * 2;
-        translate(f.x + windOsc, f.y);
-        scale(0.1 * 3 * factorMultiplier * globalPlantScale);
-        f.plant.drawAttached(5);
-        pop();
-      });
-      
-      let orangeOverlayAlpha = floor(150 * t);
-      fill(255, 165, 0, orangeOverlayAlpha);
-      rect(0, 0, width, height);
-      
-      let overlayAlpha = floor(255 * t);
-      fill(0, overlayAlpha);
-      rect(0, 0, width, height);
-      
-      // "Sun" traveling downward
-      let sunPos = cubicBezier(
-        { x: 100, y: 100 },
-        { x: width * 0.7, y: 100 },
-        { x: width * 0.8, y: height * 0.7 },
-        { x: width - 50, y: height - 50 },
-        t
-      );
-      
-      push();
-      drawingContext.beginPath();
-      drawingContext.rect(0, 0, width, height - 50);
-      drawingContext.clip();
-      noStroke();
-      fill(255, 223, 0);
-      ellipse(sunPos.x, sunPos.y, 120, 120);
-      pop();
-      
-      if (t >= 1) {
-        rewardAnimationActive = false;
-        startSunReentryAnimation();
-      }
-    }
-    
-    function startRewardAnimation() {
-      rewardAnimationActive = true;
-      rewardAnimationStartTime = millis();
-      initialSkyColor = color(135, 206, 250);
+    /* ========== REWARD & SUN RE-ENTRY ========== */
+    function drawRewardAnimation(){
+      const t=constrain((millis()-rewardAnimationStartTime)/totalRewardDuration,0,1);
+      const sky=t<0.5?lerpColor(initialSkyColor,color(255,140,0),t*2)
+                     :lerpColor(color(255,140,0),color(0), (t-0.5)*2);
+      background(sky); fill(lerpColor(color(50,205,50),color(0),t));
+      rect(0,height-50,width,50);
+
+      const gScale=getGlobalPlantScale();
+      finishedFlowers.forEach(f=>{ push(); translate(f.x+sin(frameCount*0.05+f.x)*2,f.y);
+        scale(0.1*3*factorMultiplier*gScale); f.plant.drawAttached(5); pop(); });
+
+      fill(255,165,0,150*t); rect(0,0,width,height);
+      fill(0,255*t);         rect(0,0,width,height);
+
+      const sunPos=cubicBezier({x:100,y:100},{x:width*.7,y:100},
+                                {x:width*.8,y:height*.7},{x:width-50,y:height-50},t);
+      push(); drawingContext.beginPath(); drawingContext.rect(0,0,width,height-50);
+      drawingContext.clip(); noStroke(); fill(255,223,0); ellipse(sunPos.x,sunPos.y,120,120); pop();
+      if(t>=1){ rewardAnimationActive=false; startSunReentryAnimation(); }
     }
 
-    // ============== SUN RE-ENTRY, RESET GAME ==============
-    function startSunReentryAnimation() {
-      sunReentryActive = true;
-      sunReentryStartTime = millis();
-    }
-    
-    function drawSunReentryAnimation() {
-      background(135, 206, 250);
-      fill(50, 205, 50);
-      rect(0, height - 50, width, 50);
-      
-      let t2 = constrain((millis() - sunReentryStartTime) / sunReentryDuration, 0, 1);
-      let startPos = { x: -50, y: -50 };
-      let targetPos = { x: 100, y: 100 };
-      let currentPos = {
-        x: lerp(startPos.x, targetPos.x, t2),
-        y: lerp(startPos.y, targetPos.y, t2)
-      };
-      
-      push();
-      translate(currentPos.x, currentPos.y);
-      noStroke();
-      fill(255, 223, 0);
-      ellipse(0, 0, 120, 120);
-      pop();
-      
-      if (t2 >= 1) {
-        sunReentryActive = false;
-        resetGame();
-      }
-    }
-    
-    function resetGame() {
-      // The music is NEVER stopped or restarted here! 
-      // We just reset the plant & flowers visually.
-      finishedFlowers = [];
-      plant = new Plant(width / 2, height - 50);
-      growthStage = 0;
-      flowerAnimationProgress = 0;
+    const startRewardAnimation=()=>{ rewardAnimationActive=true; rewardAnimationStartTime=millis(); initialSkyColor=color(135,206,250); };
+
+    const startSunReentryAnimation=()=>{ sunReentryActive=true; sunReentryStartTime=millis(); };
+
+    function drawSunReentryAnimation(){
+      background(135,206,250); fill(50,205,50); rect(0,height-50,width,50);
+      const t=constrain((millis()-sunReentryStartTime)/sunReentryDuration,0,1);
+      push(); translate(lerp(-50,100,t),lerp(-50,100,t)); noStroke(); fill(255,223,0); ellipse(0,0,120,120); pop();
+      if(t>=1){ sunReentryActive=false; resetGame(); }
     }
 
-    // ============== EVENT LISTENERS ==============
-    document.getElementById("startButton").addEventListener("click", function(){
-      started = true;
-      document.getElementById("promptOverlay").style.display = "none";
-      goFullscreen();
-      document.getElementById("settings-icon").style.display = "flex";
+    function resetGame(){ finishedFlowers=[]; plant=new Plant(width/2,height-50); growthStage=0; flowerAnimationProgress=0; }
 
-      // 1) Start the continuous music playlist ONCE
-      startContinuousMusic();
+    /* ========== EVENT LISTENERS ========== */
+    document.getElementById("startButton").addEventListener("click",()=>{
+      if(!isAssetsLoaded) return;  // block premature click
+      started=true; document.getElementById("promptOverlay").style.display="none";
+      goFullscreen(); document.getElementById("settings-icon").style.display="flex";
+      startContinuousMusic(); loop();
+    });
+    document.getElementById("infoButton").addEventListener("click",()=>document.getElementById("infoModal").style.display="block");
+    document.getElementById("closeModal").addEventListener("click",()=>document.getElementById("infoModal").style.display="none");
+    document.getElementById("settings-icon").addEventListener("click",()=>document.getElementById("menu").classList.toggle("show"));
+    document.getElementById("fullscreen-btn").addEventListener("click",goFullscreen);
 
-      // 2) Begin the draw loop
-      loop();
-    });
-    document.getElementById("infoButton").addEventListener("click", function(){
-      document.getElementById("infoModal").style.display = "block";
-    });
-    document.getElementById("closeModal").addEventListener("click", function(){
-      document.getElementById("infoModal").style.display = "none";
-    });
-    document.getElementById("settings-icon").addEventListener("click", function(){
-      document.getElementById("menu").classList.toggle("show");
-    });
-    document.getElementById("fullscreen-btn").addEventListener("click", goFullscreen);
+    /* ========== SETTINGS SLIDERS & TOGGLES ========== */
+    const muteToggle=document.getElementById('muteToggle');
+    const musicVolumeSlider=document.getElementById('musicVolumeSlider');
+    const musicVolumeValue =document.getElementById('musicVolumeValue');
+    const muteSFXToggle=document.getElementById('muteSFXToggle');
+    const starSoundVolumeSlider=document.getElementById('starSoundVolumeSlider');
+    const starSoundVolumeValue=document.getElementById('starSoundVolumeValue');
 
-    // ============== SETTINGS (VOLUME, MUTE, ETC.) ==============
-    const muteToggle = document.getElementById('muteToggle');
-    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
-    const musicVolumeValue = document.getElementById('musicVolumeValue');
-    const muteSFXToggle = document.getElementById('muteSFXToggle');
-    const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
-    const starSoundVolumeValue = document.getElementById('starSoundVolumeValue');
-    
-    muteToggle.addEventListener('change', () => {
-      isMuted = muteToggle.checked;
-      if (currentMusic) currentMusic.setVolume(isMuted ? 0 : musicVolume);
-    });
-    musicVolumeSlider.addEventListener('input', () => {
-      musicVolume = parseInt(musicVolumeSlider.value) / 100;
-      musicVolumeValue.textContent = musicVolumeSlider.value;
-      if (currentMusic && !isMuted) currentMusic.setVolume(musicVolume);
-    });
-    muteSFXToggle.addEventListener('change', () => {
-      isSFXMuted = muteSFXToggle.checked;
-    });
-    starSoundVolumeSlider.addEventListener('input', () => {
-      starSoundVolume = parseInt(starSoundVolumeSlider.value) / 100;
-      starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
-    });
-    document.getElementById("rewardThresholdSlider").addEventListener("input", function(){
-      rewardThreshold = parseInt(this.value);
-      document.getElementById("rewardThresholdValue").textContent = this.value;
-    });
+    muteToggle.addEventListener('change',()=>{ isMuted=muteToggle.checked; if(currentMusic) currentMusic.setVolume(isMuted?0:musicVolume); });
+    musicVolumeSlider.addEventListener('input',()=>{ musicVolume=+musicVolumeSlider.value/100; musicVolumeValue.textContent=musicVolumeSlider.value;
+      if(currentMusic&&!isMuted) currentMusic.setVolume(musicVolume); });
+    muteSFXToggle.addEventListener('change',()=>isSFXMuted=muteSFXToggle.checked);
+    starSoundVolumeSlider.addEventListener('input',()=>{ starSoundVolume=+starSoundVolumeSlider.value/100;
+      starSoundVolumeValue.textContent=starSoundVolumeSlider.value; });
+    document.getElementById("rewardThresholdSlider").addEventListener("input",function(){ rewardThreshold=+this.value; document.getElementById("rewardThresholdValue").textContent=this.value; });
 
-    // ============== CLASSES ==============
-    class Cloud {
-      constructor(x, y, w, h, speed) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
-        this.speed = speed;
-      }
-      update() {
-        this.x -= this.speed;
-        if (this.x + this.w < 0) {
-          this.x = width + random(20, 100);
-          this.y = random(30, height / 2);
-          this.w = random(80, 250);
-          this.h = random(40, 120);
-          this.speed = random(0.5, 2.0);
-        }
-      }
-      draw() {
-        noStroke();
-        fill(255, 255, 255, 220);
-        ellipse(this.x, this.y, this.w, this.h);
-        ellipse(this.x - this.w * 0.4, this.y + 10, this.w * 0.7, this.h * 0.7);
-        ellipse(this.x + this.w * 0.4, this.y + 10, this.w * 0.7, this.h * 0.7);
-      }
+    /* ========== CLASSES ========== */
+    class Cloud{
+      constructor(x,y,w,h,speed){ this.x=x; this.y=y; this.w=w; this.h=h; this.speed=speed; }
+      update(){ this.x-=this.speed; if(this.x+this.w<0){ this.x=width+random(20,100);
+        this.y=random(30,height/2); this.w=random(80,250); this.h=random(40,120); this.speed=random(0.5,2); } }
+      draw(){ noStroke(); fill(255,255,255,220);
+        ellipse(this.x,this.y,this.w,this.h); ellipse(this.x-this.w*0.4,this.y+10,this.w*0.7,this.h*0.7);
+        ellipse(this.x+this.w*0.4,this.y+10,this.w*0.7,this.h*0.7); }
     }
-    
-    function drawLeaf(x, y, w, h, angle) {
-      push();
-      translate(x, y);
-      rotate(angle);
-      fill(34, 139, 34);
-      beginShape();
-      curveVertex(0, 0);
-      curveVertex(0, 0);
-      curveVertex(-w / 2, -h / 4);
-      curveVertex(0, -h);
-      curveVertex(w / 2, -h / 4);
-      curveVertex(0, 0);
-      curveVertex(0, 0);
-      endShape();
-      pop();
+
+    function drawLeaf(x,y,w,h,a){
+      push(); translate(x,y); rotate(a); fill(34,139,34);
+      beginShape(); curveVertex(0,0); curveVertex(0,0); curveVertex(-w/2,-h/4); curveVertex(0,-h);
+      curveVertex(w/2,-h/4); curveVertex(0,0); curveVertex(0,0); endShape(); pop();
     }
-    
-    class Plant {
-      constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.tilt = random(-0.1, 0.1);
-        this.curvePhase = random(0, TWO_PI);
-        this.flowerType = random(['A', 'B', 'C', 'T', '10']);
-        let vividColors = [
-          color(255, 105, 180),
-          color(255, 20, 147),
-          color(255, 69, 0),
-          color(255, 140, 0),
-          color(138, 43, 226),
-          color(75, 0, 130),
-          color(0, 191, 255),
-          color(60, 179, 113)
-        ];
-        this.flowerOuterColor = random(vividColors);
-        this.flowerCenterColor = random([color(255, 215, 0), color(255, 255, 255)]);
-        if (this.flowerType === 'T') {
-          this.tulipColor = random(vividColors);
-        }
+
+    class Plant{
+      constructor(x,y){
+        this.x=x; this.y=y; this.tilt=random(-0.1,0.1); this.curvePhase=random(TWO_PI);
+        this.flowerType=random(['A','B','C','T','10']);
+        const colors=[color(255,105,180),color(255,20,147),color(255,69,0),color(255,140,0),
+                      color(138,43,226),color(75,0,130),color(0,191,255),color(60,179,113)];
+        this.flowerOuterColor=random(colors); this.flowerCenterColor=random([color(255,215,0),color(255)]);
+        if(this.flowerType==='T') this.tulipColor=random(colors);
       }
-      
-      drawAttached(stage, baseScale = 3) {
-        push();
-        scale(baseScale);
-        rotate(this.tilt);
-        noStroke();
-        let effectiveStage = min(stage, 3);
-        let maxStemHeight = 150;
-        if ((this.flowerType === 'T' || this.flowerType === '10') && (height <= 1080)) {
-          maxStemHeight = 130;
-        }
-        let stemHeight = map(effectiveStage, 0, 3, 10, maxStemHeight);
-        let stemWidth = 6;
-        let amplitude = 2;
-        let n = 10;
-        fill(34, 139, 34);
-        beginShape();
-        for (let i = 0; i <= n; i++) {
-          let yPos = lerp(0, -stemHeight, i / n);
-          let factor = map(yPos, 0, -stemHeight, 0, 1);
-          let offset = amplitude * factor * sin(
-            map(yPos, 0, -stemHeight, 0, TWO_PI) + this.curvePhase
-          );
-          vertex(-stemWidth / 2 + offset, yPos);
-        }
-        for (let i = n; i >= 0; i--) {
-          let yPos = lerp(0, -stemHeight, i / n);
-          let factor = map(yPos, 0, -stemHeight, 0, 1);
-          let offset = amplitude * factor * sin(
-            map(yPos, 0, -stemHeight, 0, TWO_PI) + this.curvePhase
-          );
-          vertex(stemWidth / 2 + offset, yPos);
-        }
+
+      /* -------- shared helpers -------- */
+      drawAttached(stage,baseScale=3){
+        push(); scale(baseScale); rotate(this.tilt); noStroke();
+        const effStage=min(stage,3); let maxStem=150;
+        if((this.flowerType==='T'||this.flowerType==='10')&&height<=1080) maxStem=130;
+        const stemH=map(effStage,0,3,10,maxStem), stemW=6, amp=2, n=10;
+        fill(34,139,34); beginShape();
+        for(let i=0;i<=n;i++){ const yPos=lerp(0,-stemH,i/n); const f=map(yPos,0,-stemH,0,1);
+          const off=amp*f*sin(map(yPos,0,-stemH,0,TWO_PI)+this.curvePhase); vertex(-stemW/2+off,yPos); }
+        for(let i=n;i>=0;i--){ const yPos=lerp(0,-stemH,i/n); const f=map(yPos,0,-stemH,0,1);
+          const off=amp*f*sin(map(yPos,0,-stemH,0,TWO_PI)+this.curvePhase); vertex(stemW/2+off,yPos); }
         endShape(CLOSE);
-        
-        if (stage >= 1) {
-          drawLeaf(-10, -stemHeight * 0.3, 30, 20, -PI / 6);
-        }
-        if (stage >= 2) {
-          drawLeaf(10, -stemHeight * 0.4, 30, 20, PI / 6);
-        }
-        if (stage >= 3) {
-          drawLeaf(-15, -stemHeight * 0.6, 40, 25, -PI / 8);
-          drawLeaf(15, -stemHeight * 0.7, 40, 25, PI / 8);
-        }
-        if (stage === 4) {
-          push();
-          translate(0, -stemHeight);
-          scale(0.5);
-          this.drawCelebrationFlower();
-          pop();
-        }
-        if (stage === 5) {
-          push();
-          translate(0, -stemHeight);
-          this.drawCelebrationFlower();
-          pop();
-        }
+
+        if(stage>=1) drawLeaf(-10,-stemH*0.3,30,20,-PI/6);
+        if(stage>=2) drawLeaf( 10,-stemH*0.4,30,20, PI/6);
+        if(stage>=3){ drawLeaf(-15,-stemH*0.6,40,25,-PI/8); drawLeaf(15,-stemH*0.7,40,25,PI/8); }
+
+        if(stage===4){ push(); translate(0,-stemH); scale(0.5); this.drawCelebrationFlower(); pop(); }
+        if(stage===5){ push(); translate(0,-stemH); this.drawCelebrationFlower(); pop(); }
         pop();
       }
-      
-      drawFlower() {
-        push();
-        let numPetals = 6;
-        let petalSize = 40;
-        let petalDistance = 25;
-        fill(this.flowerOuterColor);
-        for (let i = 0; i < numPetals; i++) {
-          let angle = (TWO_PI / numPetals) * i;
-          let px = petalDistance * cos(angle);
-          let py = petalDistance * sin(angle);
-          ellipse(px, py, petalSize, petalSize);
-        }
+
+      drawFlower(){ push();
+        const petals=6, size=40, dist=25; fill(this.flowerOuterColor);
+        for(let i=0;i<petals;i++){ const a=i*TWO_PI/petals; ellipse(dist*cos(a),dist*sin(a),size,size); }
+        fill(this.flowerCenterColor); ellipse(0,0,35,35); pop();
+      }
+
+      drawFlowerTypeB(){ push(); fill(this.flowerOuterColor);
+        const petals=5,len=50,wid=20;
+        for(let i=0;i<petals;i++){ push(); rotate(i*TWO_PI/petals);
+          beginShape(); vertex(0,0); vertex(wid,-len*0.6); vertex(0,-len); vertex(-wid,-len*0.6); endShape(CLOSE); pop(); }
+        fill(this.flowerCenterColor); ellipse(0,0,30,30); pop();
+      }
+
+      drawFlowerTypeC(){ push(); fill(this.flowerOuterColor);
+        const petals=6,out=50,outD=30,inD=15,inSize=30;
+        for(let i=0;i<petals;i++){ const a=i*TWO_PI/petals; ellipse(outD*cos(a),outD*sin(a),out,out); }
         fill(this.flowerCenterColor);
-        ellipse(0, 0, 35, 35);
+        for(let i=0;i<petals;i++){ const a=i*TWO_PI/petals+PI/petals; ellipse(inD*cos(a),inD*sin(a),inSize,inSize); }
+        fill(255,255,0); ellipse(0,0,40,40); pop();
+      }
+
+      drawTulip(){ push(); noStroke(); fill(this.tulipColor);
+        const petals=1, br=PI/2, len=height*0.14, bh=height*0.12, bc=0.4, rr=PI;
+        for(let i=0;i<petals;i++){ const d=i*TWO_PI/petals;
+          const x=sin(d+rr)*len, y=cos(d+rr)*len, b1x=sin(d+rr+br)*bh, b1y=cos(d+rr+br)*bh,
+                b2x=sin(d+rr-br)*bh, b2y=cos(d+rr-br)*bh;
+          bezier(0,0,b1x,b1y,x,y,x*bc,y*bc); bezier(0,0,b2x,b2y,x,y,x*bc,y*bc); }
         pop();
       }
-      
-      drawFlowerTypeB() {
-        push();
-        let numPetals = 5;
-        let petalLength = 50;
-        let petalWidth = 20;
-        fill(this.flowerOuterColor);
-        for (let i = 0; i < numPetals; i++) {
-          push();
-          rotate((TWO_PI / numPetals) * i);
-          beginShape();
-          vertex(0, 0);
-          vertex(petalWidth, -petalLength * 0.6);
-          vertex(0, -petalLength);
-          vertex(-petalWidth, -petalLength * 0.6);
-          endShape(CLOSE);
-          pop();
-        }
-        fill(this.flowerCenterColor);
-        ellipse(0, 0, 30, 30);
-        pop();
+
+      drawFlowerType10(){ push(); noStroke(); fill(this.flowerOuterColor);
+        const petals=10,len=height*0.08,wid=height*0.012;
+        for(let i=0;i<petals;i++){ push(); rotate(i*TWO_PI/petals);
+          beginShape(); curveVertex(0,0); curveVertex(0,0); curveVertex(wid,-len*0.3);
+            curveVertex(wid*1.2,-len*0.6); curveVertex(0,-len); curveVertex(-wid*1.2,-len*0.6);
+            curveVertex(-wid,-len*0.3); curveVertex(0,0); curveVertex(0,0); endShape(CLOSE); pop(); }
+        fill(this.flowerCenterColor); ellipse(0,0,height*0.03,height*0.03); pop();
       }
-      
-      drawFlowerTypeC() {
-        push();
-        let numPetals = 6;
-        let outerPetalSize = 50;
-        let outerPetalDistance = 30;
-        fill(this.flowerOuterColor);
-        for (let i = 0; i < numPetals; i++) {
-          let angle = (TWO_PI / numPetals) * i;
-          let px = outerPetalDistance * cos(angle);
-          let py = outerPetalDistance * sin(angle);
-          ellipse(px, py, outerPetalSize, outerPetalSize);
-        }
-        let innerPetalSize = 30;
-        let innerPetalDistance = 15;
-        fill(this.flowerCenterColor);
-        for (let i = 0; i < numPetals; i++) {
-          let angle = (TWO_PI / numPetals) * i + PI / numPetals;
-          let px = innerPetalDistance * cos(angle);
-          let py = innerPetalDistance * sin(angle);
-          ellipse(px, py, innerPetalSize, innerPetalSize);
-        }
-        fill(255, 255, 0);
-        ellipse(0, 0, 40, 40);
-        pop();
+
+      drawCelebrationFlower(){
+        if(this.flowerType==='T') this.drawTulip();
+        else if(this.flowerType==='B') this.drawFlowerTypeB();
+        else if(this.flowerType==='C') this.drawFlowerTypeC();
+        else if(this.flowerType==='10') this.drawFlowerType10();
+        else this.drawFlower();
       }
-      
-      drawTulip() {
+
+      draw(stage){
         push();
-        noStroke();
-        fill(this.tulipColor);
-        let petals = 1;
-        let br = PI / 2;
-        let petalsLength = height * 0.14;
-        let bh = height * 0.12;
-        let bc = 0.4;
-        let rr = PI;
-        for (let i = 0; i < petals; i++) {
-          let u = TWO_PI / petals;
-          let d = i * u;
-          let x = sin(d + rr) * petalsLength;
-          let y = cos(d + rr) * petalsLength;
-          let b1x = sin(d + rr + br) * bh;
-          let b1y = cos(d + rr + br) * bh;
-          let b2x = sin(d + rr - br) * bh;
-          let b2y = cos(d + rr - br) * bh;
-          bezier(0, 0, b1x, b1y, x, y, x * bc, y * bc);
-          bezier(0, 0, b2x, b2y, x, y, x * bc, y * bc);
-        }
-        pop();
-      }
-      
-      drawFlowerType10() {
-        push();
-        noStroke();
-        let numPetals = 10;
-        let petalLength = height * 0.08;
-        let petalWidth = height * 0.012;
-        fill(this.flowerOuterColor);
-        for (let i = 0; i < numPetals; i++) {
-          push();
-          rotate((TWO_PI / numPetals) * i);
-          beginShape();
-          curveVertex(0, 0);
-          curveVertex(0, 0);
-          curveVertex(petalWidth, -petalLength * 0.3);
-          curveVertex(petalWidth * 1.2, -petalLength * 0.6);
-          curveVertex(0, -petalLength);
-          curveVertex(-petalWidth * 1.2, -petalLength * 0.6);
-          curveVertex(-petalWidth, -petalLength * 0.3);
-          curveVertex(0, 0);
-          curveVertex(0, 0);
-          endShape(CLOSE);
-          pop();
-        }
-        fill(this.flowerCenterColor);
-        ellipse(0, 0, height * 0.03, height * 0.03);
-        pop();
-      }
-      
-      drawCelebrationFlower() {
-        if (this.flowerType === 'T') {
-          this.drawTulip();
-        } else if (this.flowerType === 'B') {
-          this.drawFlowerTypeB();
-        } else if (this.flowerType === 'C') {
-          this.drawFlowerTypeC();
-        } else if (this.flowerType === '10') {
-          this.drawFlowerType10();
-        } else {
-          this.drawFlower();
-        }
-      }
-      
-      draw(stage) {
-        push();
-        let globalPlantScale = getGlobalPlantScale();
-        if (stage < 5) {
-          translate(this.x, this.y);
-          this.drawAttached(stage, 3 * factorMultiplier * globalPlantScale);
-        } else if (stage === 5) {
-          translate(this.x, this.y);
-          this.drawAttached(5, 3 * factorMultiplier * globalPlantScale);
-        } else if (stage === 6) {
-          let marginX = 0.04 * width;
-          let computedFlowerSpacing = (width - 2 * marginX) / 9;
-          let extraOffset = (finishedFlowers.length === 0) ? firstFlowerOffset : 0;
-          let targetX = marginX + extraOffset + finishedFlowers.length * computedFlowerSpacing;
-          let targetY = height - 50;
-          let p = flowerAnimationProgress;
-          let curX = lerp(this.x, targetX, p);
-          let curY = lerp(this.y, targetY, p);
-          let shrinkFactor = lerp(1, 0.3, p);
-          translate(curX, curY);
-          scale(shrinkFactor * 3 * factorMultiplier * globalPlantScale);
-          this.drawAttached(5, 1);
+        const gScale=getGlobalPlantScale();
+        if(stage<5){ translate(this.x,this.y); this.drawAttached(stage,3*factorMultiplier*gScale); }
+        else if(stage===5){ translate(this.x,this.y); this.drawAttached(5,3*factorMultiplier*gScale); }
+        else{
+          const marginX=0.04*width, spacing=(width-2*marginX)/9, extra=finishedFlowers.length?0:firstFlowerOffset;
+          const targetX=marginX+extra+finishedFlowers.length*spacing, targetY=height-50, p=flowerAnimationProgress;
+          const curX=lerp(this.x,targetX,p), curY=lerp(this.y,targetY,p), shrink=lerp(1,0.3,p);
+          translate(curX,curY); scale(shrink*3*factorMultiplier*gScale); this.drawAttached(5,1);
         }
         pop();
       }
     }
-    
-    function cubicBezier(p0, p1, p2, p3, t) {
-      let u = 1 - t;
-      let tt = t * t;
-      let uu = u * u;
-      let uuu = uu * u;
-      let ttt = tt * t;
-      let x = uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x;
-      let y = uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y;
-      return { x, y };
+
+    function cubicBezier(p0,p1,p2,p3,t){
+      const u=1-t, tt=t*t, uu=u*u, uuu=uu*u, ttt=tt*t;
+      return{ x:uuu*p0.x+3*uu*t*p1.x+3*u*tt*p2.x+ttt*p3.x,
+              y:uuu*p0.y+3*uu*t*p1.y+3*u*tt*p2.y+ttt*p3.y };
     }
   </script>
   <script src="../../js/translationonly.js"></script>
