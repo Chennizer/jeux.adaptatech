@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<title>Soleil : Jeu Switch</title>
+<!-- p5.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+<link rel="stylesheet" href="../../css/otherswitch.css">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#5aa9e6;}
+  canvas{display:block;position:fixed;top:0;left:0;}
+  #modeOverlay{
+    position:fixed;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:24px;
+    background:#000;color:#fff;z-index:10000;}
+  #modeOverlay button{
+    padding:10px 24px;font-size:18px;border:none;border-radius:6px;
+    cursor:pointer;background:#ffd250;color:#000;}
+  #modeOverlay button:hover{background:#ffb930;}
+  #settings-icon{
+    position:fixed;top:16px;right:16px;width:40px;height:40px;
+    border-radius:50%;background:#000;color:#fff;font-size:22px;
+    display:flex;align-items:center;justify-content:center;visibility:hidden;
+    cursor:pointer;z-index:9999;
+  }
+  #menu{z-index:10000;display:none;}
+  #menu.show{display:block;}
+</style>
+</head>
+<body>
+<!-- ────────── Choix du mode ────────── -->
+<div id="modeOverlay">
+  <h2>Choisis ton mode&nbsp;:</h2>
+  <button id="btnNormal">Mode normal</button>
+  <button id="btnRapid">Mode éclair (1 clic)</button>
+  <p style="font-size:14px;opacity:.8;">
+    Espace pour les rayons · Entrée pour rejouer
+  </p>
+</div>
+
+<!-- icône réglages + menu -->
+<div id="settings-icon" title="Settings">⚙️</div>
+<div id="menu">
+  <h2>Options</h2>
+  <h3>Musique &amp; son</h3>
+  <label class="inline"><span>Désactiver la musique</span>
+    <input type="checkbox" id="muteMusic"></label><br>
+  <label><span>Volume musique :</span> <span id="musicVolVal">50</span><br>
+    <input type="range" id="musicVol" min="0" max="100" value="50"></label><br>
+  <label class="inline"><span>Désactiver les effets</span>
+    <input type="checkbox" id="muteSFX"></label><br>
+  <label><span>Volume effets :</span> <span id="sfxVolVal">50</span><br>
+    <input type="range" id="sfxVol" min="0" max="100" value="50"></label>
+  <h3>Délai entre appuis (ms)</h3>
+  <label><span>Délai :</span> <span id="tapDelayVal">2000</span><br>
+    <input type="range" id="tapDelaySlider" min="500" max="5000" value="2000"></label>
+</div>
+
+<script>
+/* === AUDIO & ÉTAT ================================================= */
+let gameStarted=false, gameOver=false;
+const ambiencePath='../../sounds/sun/sunnyday.mp3';
+const finishPath  ='../../sounds/sun/fanfare.mp3';
+const rayPath     ='../../sounds/sun/sun1.mp3';
+let ambience, raySound, finishSound;
+let volMusic=.5, volSFX=.5;
+let isSFXMuted=false, isMusicMuted=false;
+/* === VISUEL ======================================================= */
+const MAX_RAYS=8;
+let rays=[], rayCount=0;
+let sunRadius, innerR, longLen, shortLen, strokeW;
+let basePulse=1, sunRot=0;
+/* animation finale */
+let finalStage=0, finalT=0, finalScale=1;
+let warmFlashAlpha=0;
+let screenFlashAlpha=0, FLASH_INITIAL=80, FLASH_STEP=FLASH_INITIAL/120;
+let lastTap=-Infinity, tapDelay=2000;
+/* mode éclair */
+let rapidMode=false;
+/* décor */
+let clouds=[], balloon, birds=[];
+let balloonImg, birdImg;
+/* Buffer pour le ciel */
+let skyBuffer;
+/* ---------- preload ---------- */
+function preload(){
+  ambience   = loadSound(ambiencePath);
+  raySound   = loadSound(rayPath);
+  finishSound= loadSound(finishPath);
+  balloonImg = loadImage('../../images/sun/montgolfiere1.png');
+  birdImg    = loadImage('../../images/sun/oiseau_vol.png');
+}
+/* ---------- setup ---------- */
+function setup(){
+  createCanvas(windowWidth,windowHeight);
+  angleMode(RADIANS);
+  for(let i=0;i<6;i++)
+    clouds.push(new Cloud(random(width),random(30,height/2),
+               random(80,250),random(40,120),random(0.5,2)));
+  balloon = new Balloon(
+    width+random(50,150), random(height/4,height/2-50),
+    random(0.5,0.6), 0.25, 'horizontal');
+  for(let i=0;i<3;i++) birds.push(new Bird());
+  /* Générer le dégradé une seule fois */
+  skyBuffer = createGraphics(width, height);
+  for (let y = 0; y < height; y++) {
+    const t = y / height;
+    skyBuffer.stroke(90 + 40 * t, 169 + 40 * t, 230 + 10 * t);
+    skyBuffer.line(0, y, width, y);
+  }
+  computeSizes();
+}
+/* ---------- responsive sizes ---------- */
+function computeSizes(){
+  const base=min(width,height)*0.15;
+  sunRadius=base;
+  innerR   =base*1.2;
+  longLen  =base*2.2;
+  shortLen =base*2;
+  strokeW  =base*0.08;
+}
+/* ---------- draw ---------- */
+function draw(){
+  if(!gameStarted){background(0);return;}
+  image(skyBuffer, 0, 0); // dégradé ultra-rapide
+  drawSun();
+  birds.forEach(b=>{b.update();b.draw();});
+  balloon.update(); balloon.draw();
+  clouds.forEach(c=>{c.update();c.draw();});
+  if(warmFlashAlpha>1){
+    noStroke(); fill(255,200,80,warmFlashAlpha);
+    rect(0,0,width,height);
+  }
+  basePulse=1+0.05*sin(frameCount*0.03);
+  if(rayCount===MAX_RAYS) handleFinalAnim();
+  sunRot+=0.003;
+  if(screenFlashAlpha>0){
+    screenFlashAlpha=max(0,screenFlashAlpha-FLASH_STEP);
+    noStroke(); fill(255,180,50,screenFlashAlpha);
+    rect(0,0,width,height);
+  }
+  // Quand la fin est terminée, reset auto SANS ramener le menu
+  if (gameOver) {
+    setTimeout(()=>{resetScene(); gameOver=false;}, 100);
+  }
+}
+function drawSun(){
+  push();
+  translate(width/2,height/2);
+  rotate(sunRot);
+  scale(basePulse*(finalStage?finalScale:1));
+  noStroke();
+  fill(255,180,50);
+  ellipse(0,0,sunRadius*2,sunRadius*2);
+  stroke(255,210,100);
+  strokeWeight(strokeW);
+  for(const r of rays){
+    r.currLen=lerp(r.currLen,r.targetLen,0.02);
+    r.alpha  =lerp(r.alpha,255,0.1);
+    stroke(255,210,100,r.alpha);
+    line(innerR*cos(r.angle),innerR*sin(r.angle),
+         r.currLen*cos(r.angle),r.currLen*sin(r.angle));
+  }
+  pop();
+}
+/* ---------- décor ---------- */
+class Cloud{
+  constructor(x,y,w,h,s){this.x=x;this.y=y;this.w=w;this.h=h;this.s=s;}
+  update(){
+    this.x-=this.s;
+    if(this.x+this.w<0){
+      Object.assign(this,{
+        x:width+random(20,100),y:random(30,height/2),
+        w:random(80,250),h:random(40,120),s:random(0.5,2)
+      });
+    }
+  }
+  draw(){
+    noStroke(); fill(255,255,255,180);
+    ellipse(this.x,this.y,this.w,this.h);
+    ellipse(this.x-this.w*0.4,this.y+10,this.w*0.7,this.h*0.7);
+    ellipse(this.x+this.w*0.4,this.y+10,this.w*0.7,this.h*0.7);
+  }
+}
+class Balloon{
+  constructor(x,y,v,sc,mode){this.x=x;this.y=y;this.v=v;this.sc=sc;this.mode=mode;}
+  switchVertical(){
+    this.mode='vertical';
+    this.x=random(50,width-50);
+    this.y=height+random(40,150);
+    this.v=random(1.2,2);
+  }
+  update(){
+    if(finalStage>=1 && this.mode==='horizontal') this.switchVertical();
+    if(this.mode==='horizontal'){
+      this.x-=this.v;
+      if(this.x+balloonImg.width*this.sc<0){
+        this.x=width+random(50,150);
+        this.y=random(height/4,height/2-50);
+        this.v=random(0.5,0.6);
+      }
+    }else{
+      this.y-=this.v;
+      if(this.y+balloonImg.height*this.sc<-40){
+        this.y=height+random(40,150);
+        this.x=random(50,width-50);
+        this.v=random(1.2,2);
+      }
+    }
+  }
+  draw(){
+    push();
+    translate(this.x,this.y);
+    scale(this.sc);
+    imageMode(CENTER);
+    image(balloonImg,0,0);
+    pop();
+  }
+}
+class Bird{
+  constructor(){this.reset();}
+  reset(){
+    this.sc=0.05;
+    this.x=-birdImg.width*this.sc-random(20,100);
+    this.y=random(height/6,height/2);
+    this.baseV=random(1,2);
+    this.phase=random(TWO_PI);
+  }
+  update(){
+    this.x+=this.baseV*(finalStage>=1?2:1);
+    this.y+=0.25*sin(frameCount*0.05+this.phase);
+    if(this.x>width+40) this.reset();
+  }
+  draw(){
+    push();
+    translate(this.x,this.y);
+    scale(this.sc);
+    imageMode(CENTER);
+    image(birdImg,0,0);
+    pop();
+  }
+}
+/* ---------- animation finale ---------- */
+function handleFinalAnim(){
+  if(finalStage===0){finalStage=1;finalT=0;startFinishSound();}
+  else if(finalStage===1){
+    finalScale=map(finalT,0,60,1,1.6);
+    warmFlashAlpha=map(finalT,0,60,0,150);
+    if(finalT>=60){finalStage=2;finalT=0;}
+  }else if(finalStage===2){
+    finalScale=1.6;
+    if(finalT<120) warmFlashAlpha=map(finalT,0,120,150,0);
+    if(finalT>=120){finalStage=3;finalT=0;}
+  }else if(finalStage===3){
+    finalScale=map(finalT,0,60,1.6,1);
+    if(finalT>=60){finalStage=4;gameOver=true;}
+  }
+  finalT++;
+}
+function startFinishSound(){
+  ambience?.fade(volMusic,0.2);
+  finishSound.setVolume(volMusic);
+  finishSound.play();
+}
+/* ---------- interaction ---------- */
+function addAllRays(){
+  for(let i=0;i<MAX_RAYS;i++){
+    rays.push({
+      angle: i*TWO_PI/MAX_RAYS,
+      currLen: innerR,
+      targetLen: (i%2 ? shortLen : longLen),
+      alpha: 0
+    });
+  }
+  rayCount=MAX_RAYS;
+  screenFlashAlpha=FLASH_INITIAL;
+}
+function addSingleRay(){
+  const i=rayCount;
+  rays.push({
+    angle: i*TWO_PI/MAX_RAYS,
+    currLen: innerR,
+    targetLen: (i%2 ? shortLen : longLen),
+    alpha: 0
+  });
+  rayCount++;
+  screenFlashAlpha=FLASH_INITIAL;
+}
+function trigger(){
+  // Bloque input si animation finale ou game over
+  if(!gameStarted||gameOver||(finalStage>0 && !gameOver)) return;
+  if(millis()-lastTap<tapDelay) return;
+  lastTap=millis();
+  if(rapidMode && rayCount===0){
+    addAllRays();
+  }else if(!rapidMode && rayCount<MAX_RAYS){
+    addSingleRay();
+  }
+  /* son de rayon : joué à chaque appui */
+  if(!isSFXMuted && raySound){
+    raySound.setVolume(volSFX);
+    raySound.isLoaded()
+      ? raySound.play()
+      : raySound.once('loaded',()=>{ if(!isSFXMuted) raySound.play(); });
+  }
+}
+function keyPressed(){
+  if(key===' '&&gameStarted) trigger();
+}
+// Mouse input is now ignored
+
+/* ---------- reset/retour au début ---------- */
+function resetScene(){
+  rays=[];rayCount=0;finalStage=0;finalT=0;finalScale=1;
+  warmFlashAlpha=0;screenFlashAlpha=0;
+  balloon.mode='horizontal';balloon.v=random(0.5,0.6);
+  // gameOver reste false, permet de recommencer directement
+}
+
+/* ---------- UI : options et menu ---------- */
+window.addEventListener('load',()=>{
+  // Mode overlay
+  const ov=document.getElementById('modeOverlay'),
+        btnN=document.getElementById('btnNormal'),
+        btnR=document.getElementById('btnRapid');
+  btnN.onclick=()=>{rapidMode=false;startGame();};
+  btnR.onclick=()=>{rapidMode=true; startGame();};
+
+  // Menu options
+  const ico=document.getElementById('settings-icon'),
+        menu=document.getElementById('menu'),
+        muteM=document.getElementById('muteMusic'),
+        volM=document.getElementById('musicVol'),
+        valM=document.getElementById('musicVolVal'),
+        muteS=document.getElementById('muteSFX'),
+        volS=document.getElementById('sfxVol'),
+        valS=document.getElementById('sfxVolVal'),
+        slider=document.getElementById('tapDelaySlider'),
+        valT=document.getElementById('tapDelayVal');
+  slider.oninput=e=>{tapDelay=e.target.value;valT.textContent=e.target.value;};
+  volM.oninput=e=>{
+    volMusic=e.target.value/100; valM.textContent=e.target.value;
+    if(!isMusicMuted) ambience?.setVolume(volMusic);
+    finishSound.setVolume(isMusicMuted?0:volMusic);
+  };
+  volS.oninput=e=>{
+    volSFX=e.target.value/100; valS.textContent=e.target.value;
+    raySound.setVolume(isSFXMuted?0:volSFX);
+  };
+  muteM.onchange=e=>{
+    isMusicMuted=e.target.checked;
+    ambience?.setVolume(isMusicMuted?0:volMusic);
+    finishSound.setVolume(isMusicMuted?0:volMusic);
+  };
+  muteS.onchange=e=>{
+    isSFXMuted=e.target.checked;
+    raySound.setVolume(isSFXMuted?0:volSFX);
+  };
+
+  function startGame(){
+    ov.remove();
+    gameStarted=true;
+    ico.style.visibility='visible';
+    (document.documentElement.requestFullscreen||
+     document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
+    resizeCanvas(windowWidth,windowHeight);
+    computeSizes();
+    skyBuffer = createGraphics(width, height);
+    for (let y = 0; y < height; y++) {
+      const t = y / height;
+      skyBuffer.stroke(90 + 40 * t, 169 + 40 * t, 230 + 10 * t);
+      skyBuffer.line(0, y, width, y);
+    }
+    ambience.setLoop(true);
+    ambience.setVolume(isMusicMuted?0:volMusic);
+    ambience.play();
+  }
+  ico.onclick=()=>{if(gameStarted) menu.classList.toggle('show');};
+  document.onclick=e=>{
+    if(!menu.contains(e.target)&&!ico.contains(e.target)) menu.classList.remove('show');};
+});
+
+/* ---------- Resize ---------- */
+function windowResized(){
+  if(gameStarted){
+    resizeCanvas(windowWidth,windowHeight);
+    computeSizes();
+    // Refaire le buffer du ciel si resize
+    skyBuffer = createGraphics(width, height);
+    for (let y = 0; y < height; y++) {
+      const t = y / height;
+      skyBuffer.stroke(90 + 40 * t, 169 + 40 * t, 230 + 10 * t);
+      skyBuffer.line(0, y, width, y);
+    }
+  }
+}
+</script>
+</body>
+</html>
