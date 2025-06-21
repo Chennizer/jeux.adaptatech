@@ -38,6 +38,12 @@
    padding: 2rem 2.5rem; border-radius: 1.5rem; font-size: 1.25rem;
    text-align: center; z-index: 30;
  }
+ #startBtn {
+   position: fixed; left: 50%; top: 75%; transform: translate(-50%,-50%);
+   font-size: 1.4rem; padding: 1rem 2.5rem; border-radius: 1rem; border: none;
+   background: #ffd700; color: #222; font-weight: bold; cursor: pointer; z-index: 30;
+   box-shadow: 0 2px 12px #0007;
+ }
 </style>
 </head>
 <body>
@@ -47,38 +53,60 @@
 <div id="instructions">
   <b>Pop the Stars!</b><br>
   <br>
-  1. When prompted, allow access to your camera.<br>
-  2. Move your head and look for the big yellow pointer.<br>
-  3. Dwell on a star (hold the pointer over it) to pop it.<br>
+  1. Click the <b>Start Head Tracking</b> button.<br>
+  2. Allow camera access when prompted.<br>
+  3. Move your head and look for the big yellow pointer.<br>
+  4. Dwell on a star (hold the pointer over it) to pop it.<br>
 </div>
 <div id="error-msg" style="display:none;"></div>
+<button id="startBtn">Start Head Tracking</button>
 
 <script>
-function startGame() {
-  // 1. Start Tracky Mouse (with dwell-click)
-  const tracker = createHeadTracker({
-      dwellClick: 1000,      // ms pointer must hover before a click is fired
-      smoothing: 0.3,        // 0–1; more = steadier but slower
+let tracker = null;
+
+async function startHeadTracking() {
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("instructions").style.display = "none";
+  document.getElementById("error-msg").style.display = "none";
+  console.clear();
+  console.log("Button clicked. Attempting to create tracker…");
+  try {
+    tracker = createHeadTracker({
+      dwellClick: 1000,
+      smoothing: 0.3,
       pointerSize: 80
-  });
+    });
+    console.log("Tracker created:", tracker);
 
-  tracker.start();
+    await tracker.start();
+    console.log("Tracker started. Camera should be active!");
+    setupGame(); // Now safe to draw stars and set up the canvas
 
-  // Hide instructions once head tracking is working (on pointer appear)
-  const instr = document.getElementById("instructions");
-  let pointerAppeared = false;
-  function hideInstructionsWhenPointerAppears() {
-    if (document.querySelector('.tracky-mouse-pointer')) {
-      if (!pointerAppeared) {
-        pointerAppeared = true;
-        instr.style.display = "none";
+    // Hide instructions once the pointer appears
+    let pointerAppeared = false;
+    function hideInstructionsWhenPointerAppears() {
+      if (document.querySelector('.tracky-mouse-pointer')) {
+        if (!pointerAppeared) {
+          pointerAppeared = true;
+          document.getElementById("instructions").style.display = "none";
+        }
+      } else {
+        setTimeout(hideInstructionsWhenPointerAppears, 200);
       }
-    } else {
-      setTimeout(hideInstructionsWhenPointerAppears, 200);
     }
-  }
-  hideInstructionsWhenPointerAppears();
+    hideInstructionsWhenPointerAppears();
 
+  } catch (e) {
+    document.getElementById("error-msg").textContent =
+      "Tracky Mouse failed to start: " + e.message;
+    document.getElementById("error-msg").style.display = "";
+    document.getElementById("startBtn").disabled = false;
+    console.error("Tracky Mouse error:", e);
+  }
+}
+
+// Setup game logic
+function setupGame() {
   // 2. Canvas setup
   const canvas = document.getElementById("gameCanvas");
   const ctx     = canvas.getContext("2d");
@@ -139,29 +167,15 @@ function startGame() {
   },true);
 }
 
-// Wait until DOM is ready AND tracky-mouse is loaded
-function runWhenReady() {
-  if (window.createHeadTracker) {
-    startGame();
-  } else {
-    setTimeout(runWhenReady, 20);
-  }
-}
+document.getElementById("startBtn").addEventListener("click", startHeadTracking);
 
-// Handle camera errors gracefully
+// Also print errors if Tracky Mouse fails to load
 document.getElementById("trackyScript").addEventListener("error", function() {
   document.getElementById("instructions").style.display = "none";
   document.getElementById("error-msg").textContent =
     "Tracky Mouse failed to load. (Check your network or firewall settings.)";
   document.getElementById("error-msg").style.display = "";
 });
-
-// Try to launch as soon as everything is loaded
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", runWhenReady);
-} else {
-  runWhenReady();
-}
 </script>
 </body>
 </html>
