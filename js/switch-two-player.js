@@ -119,6 +119,10 @@ document.addEventListener('DOMContentLoaded', () => {
       let loaded = 0;
       const total = list.length;
       const loadingBar = document.getElementById('control-panel-loading-bar-container').querySelector('#control-panel-loading-bar');
+      if (total === 0) {
+        onComplete();
+        return;
+      }
       list.forEach(src => {
         const mediaEl = document.createElement('video');
         mediaEl.src = src;
@@ -157,35 +161,38 @@ document.addEventListener('DOMContentLoaded', () => {
       videoSelectionModal.style.display = 'none';
     });
 
-    addVideoFileButton.addEventListener('click', () => {
-      if (addVideoInput) addVideoInput.click();
-    });
-
-    addVideoInput.addEventListener('change', () => {
-      Array.from(addVideoInput.files).forEach(file => {
-        const url = URL.createObjectURL(file);
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.dataset.src = url;
-        card.textContent = file.name;
-        videoSelectionDiv.appendChild(card);
+    if (addVideoFileButton && addVideoInput) {
+      addVideoFileButton.addEventListener('click', () => {
+        addVideoInput.click();
       });
-      addVideoInput.value = '';
-      updateSelectedMedia();
-    });
 
-    addVideoUrlButton.addEventListener('click', () => {
-      const url = addVideoUrlInput.value.trim();
-      if (url) {
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.dataset.src = url;
-        card.textContent = url.split('/').pop();
-        videoSelectionDiv.appendChild(card);
-        addVideoUrlInput.value = '';
+      addVideoInput.addEventListener('change', () => {
+        Array.from(addVideoInput.files).forEach(file => {
+          const url = URL.createObjectURL(file);
+          const card = document.createElement('div');
+          card.className = 'video-card';
+          card.dataset.src = url;
+          card.textContent = file.name;
+          videoSelectionDiv.appendChild(card);
+        });
+        addVideoInput.value = '';
         updateSelectedMedia();
-      }
-    });
+      });
+    }
+    if (addVideoUrlButton && addVideoUrlInput) {
+      addVideoUrlButton.addEventListener('click', () => {
+        const url = addVideoUrlInput.value.trim();
+        if (url) {
+          const card = document.createElement('div');
+          card.className = 'video-card';
+          card.dataset.src = url;
+          card.textContent = url.split('/').pop();
+          videoSelectionDiv.appendChild(card);
+          addVideoUrlInput.value = '';
+          updateSelectedMedia();
+        }
+      });
+    }
   
     videoSelectionDiv.addEventListener('click', (e) => {
       const card = e.target.closest('.video-card');
@@ -201,12 +208,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!selectedMedia.length) {
         selectedMedia = videoCardsArray.map(c => c.dataset.src);
       }
+      startButton.style.display = selectedMedia.length ? 'block' : 'none';
     }
   
     preloadMedia(selectedMedia, () => {
-      startButton.style.display = 'block';
       document.getElementById('control-panel-loading-bar-container').style.display = 'none';
-      playIntroJingle();
+      if (selectedMedia.length) {
+        startButton.style.display = 'block';
+        playIntroJingle();
+      }
     });
   
     function showPlayerNamesModal() {
