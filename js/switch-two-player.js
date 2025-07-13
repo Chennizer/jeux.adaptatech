@@ -114,6 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
   
     selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
     document.querySelectorAll('.video-card').forEach(card => card.classList.add('selected'));
+    if (videoCardsArray.length === 0 && addVideoInput) {
+      videoSelectionModal.style.display = 'block';
+    }
   
     function preloadMedia(list, onComplete) {
       let loaded = 0;
@@ -170,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Array.from(addVideoInput.files).forEach(file => {
           const url = URL.createObjectURL(file);
           const card = document.createElement('div');
-          card.className = 'video-card';
+          card.className = 'video-card selected';
           card.dataset.src = url;
           card.textContent = file.name;
           videoSelectionDiv.appendChild(card);
@@ -184,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = addVideoUrlInput.value.trim();
         if (url) {
           const card = document.createElement('div');
-          card.className = 'video-card';
+          card.className = 'video-card selected';
           card.dataset.src = url;
           card.textContent = url.split('/').pop();
           videoSelectionDiv.appendChild(card);
@@ -215,7 +218,10 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('control-panel-loading-bar-container').style.display = 'none';
       if (selectedMedia.length) {
         startButton.style.display = 'block';
-        playIntroJingle();
+      }
+      playIntroJingle();
+      if (videoCardsArray.length === 0 && addVideoInput) {
+        videoSelectionModal.style.display = 'block';
       }
     });
   
