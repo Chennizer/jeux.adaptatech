@@ -10,7 +10,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoSelectionModal = document.getElementById('video-selection-modal');
     const closeModal = document.getElementById('close-modal');
     const okButton = document.getElementById('ok-button');
-    const videoCards = document.querySelectorAll('.video-card');
+    const videoSelectionDiv = document.getElementById('video-selection');
+    const addVideoFileButton = document.getElementById('add-video-file-button');
+    const addVideoInput = document.getElementById('add-video-input');
+    const addVideoUrlInput = document.getElementById('add-video-url-input');
+    const addVideoUrlButton = document.getElementById('add-video-url-button');
+
+    let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
     const introJingle = document.getElementById('intro-jingle');
     const visualOptionsSelect = document.getElementById('special-options-select');
     const videoContainer = document.getElementById('video-container');
@@ -106,9 +112,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return !!miscOptionsState['two-player-mode-option'];
     }
   
-    const videoCardsArray = Array.from(videoCards);
-    selectedMedia = videoCardsArray.map(card => card.dataset.src);
-    videoCardsArray.forEach(card => card.classList.add('selected'));
+    selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
+    document.querySelectorAll('.video-card').forEach(card => card.classList.add('selected'));
   
     function preloadMedia(list, onComplete) {
       let loaded = 0;
@@ -151,15 +156,47 @@ document.addEventListener('DOMContentLoaded', () => {
       updateSelectedMedia();
       videoSelectionModal.style.display = 'none';
     });
+
+    addVideoFileButton.addEventListener('click', () => {
+      if (addVideoInput) addVideoInput.click();
+    });
+
+    addVideoInput.addEventListener('change', () => {
+      Array.from(addVideoInput.files).forEach(file => {
+        const url = URL.createObjectURL(file);
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.dataset.src = url;
+        card.textContent = file.name;
+        videoSelectionDiv.appendChild(card);
+      });
+      addVideoInput.value = '';
+      updateSelectedMedia();
+    });
+
+    addVideoUrlButton.addEventListener('click', () => {
+      const url = addVideoUrlInput.value.trim();
+      if (url) {
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.dataset.src = url;
+        card.textContent = url.split('/').pop();
+        videoSelectionDiv.appendChild(card);
+        addVideoUrlInput.value = '';
+        updateSelectedMedia();
+      }
+    });
   
-    videoCards.forEach(card => {
-      card.addEventListener('click', () => {
+    videoSelectionDiv.addEventListener('click', (e) => {
+      const card = e.target.closest('.video-card');
+      if (card) {
         card.classList.toggle('selected');
         updateSelectedMedia();
-      });
+      }
     });
   
     function updateSelectedMedia() {
+      videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
       selectedMedia = videoCardsArray.filter(c => c.classList.contains('selected')).map(c => c.dataset.src);
       if (!selectedMedia.length) {
         selectedMedia = videoCardsArray.map(c => c.dataset.src);
