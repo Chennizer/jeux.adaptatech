@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let mediaPlayer = null;
     if (mediaType === 'video') {
       mediaPlayer = document.getElementById('video-player');
+      if (mediaPlayer) {
+        mediaPlayer.crossOrigin = 'anonymous';
+      }
     }
   
     const spacePrompt = document.getElementById('space-prompt');
@@ -128,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       list.forEach(src => {
         const mediaEl = document.createElement('video');
+        mediaEl.crossOrigin = 'anonymous';
         mediaEl.src = src;
         mediaEl.preload = 'auto';
         mediaEl.style.display = 'none';
@@ -444,7 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!mediaPlayer) return;
       mediaPlayer.removeAttribute('controls');
       mediaPlayer.src = selectedMedia[currentMediaIndex];
-      mediaPlayer.play();
+      mediaPlayer.load();
+      mediaPlayer.play().catch(() => {});
       if (mediaType === 'video') {
         videoContainer.style.display = 'block';
       }
