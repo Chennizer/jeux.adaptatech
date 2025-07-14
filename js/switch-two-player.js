@@ -14,8 +14,10 @@ function onYouTubeIframeAPIReady() {
   const container = document.getElementById('youtube-player');
   if (container) {
     youtubePlayer = new YT.Player('youtube-player', {
+      playerVars: { controls: 0, disablekb: 1 },
       events: { 'onStateChange': onYouTubePlayerStateChange }
     });
+    container.style.pointerEvents = 'none';
   }
 }
 
@@ -81,8 +83,10 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       if (window.YT && typeof YT.Player !== 'undefined' && !youtubePlayer) {
         youtubePlayer = new YT.Player('youtube-player', {
+          playerVars: { controls: 0, disablekb: 1 },
           events: { 'onStateChange': onYouTubePlayerStateChange }
         });
+        youtubeDiv.style.pointerEvents = 'none';
       }
     }
   
@@ -508,8 +512,10 @@ document.addEventListener('DOMContentLoaded', () => {
           const id = getYouTubeId(src);
           youtubePlayer = new YT.Player('youtube-player', {
             videoId: id,
+            playerVars: { controls: 0, disablekb: 1 },
             events: { 'onStateChange': onYouTubePlayerStateChange }
           });
+          youtubeDiv.style.pointerEvents = 'none';
         }
       } else if (mediaPlayer) {
         if (youtubeDiv) youtubeDiv.style.display = 'none';
