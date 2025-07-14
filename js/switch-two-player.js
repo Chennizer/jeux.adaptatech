@@ -1,3 +1,24 @@
+let youtubePlayer = null;
+let youtubeStateChangeHandler = null;
+function isYouTubeUrl(url) {
+  return /youtu(?:\.be|be\.com)/.test(url);
+}
+function getYouTubeId(url) {
+  const match = url.match(/(?:v=|\/)([A-Za-z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+function onYouTubePlayerStateChange(event) {
+  if (youtubeStateChangeHandler) youtubeStateChangeHandler(event);
+}
+function onYouTubeIframeAPIReady() {
+  const container = document.getElementById('youtube-player');
+  if (container) {
+    youtubePlayer = new YT.Player('youtube-player', {
+      events: { 'onStateChange': onYouTubePlayerStateChange }
+    });
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     let preventInput = false;
     const mediaType = document.body.getAttribute('data-media-type');
@@ -20,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const introJingle = document.getElementById('intro-jingle');
     const visualOptionsSelect = document.getElementById('special-options-select');
     const videoContainer = document.getElementById('video-container');
+    const youtubeDiv = document.getElementById('youtube-player');
   
     let mediaPlayer = null;
     if (mediaType === 'video') {
@@ -50,6 +72,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageCardsContainer2 = document.getElementById('space-prompt-selection-2');
     let selectedSpacePromptSrc2 = '';
     let useTextPrompt2 = false;
+
+    if (youtubeDiv) {
+      youtubeStateChangeHandler = (event) => {
+        if (event.data === YT.PlayerState.ENDED) {
+          handleMediaEnd();
+        }
+      };
+      if (window.YT && typeof YT.Player !== 'undefined' && !youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          events: { 'onStateChange': onYouTubePlayerStateChange }
+        });
+      }
+    }
   
     const soundOptionsSelect = document.getElementById('sound-options-select');
     let selectedSound = 'none';
@@ -130,6 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       list.forEach(src => {
+        if (isYouTubeUrl(src)) {
+          loaded++;
+          const percent = (loaded / total) * 100;
+          loadingBar.style.width = `${percent}%`;
+          if (loaded === total) onComplete();
+          return;
+        }
         const mediaEl = document.createElement('video');
         mediaEl.crossOrigin = 'anonymous';
         mediaEl.src = src;
@@ -433,8 +475,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function proceedAfterPrompt() {
       hideAllPrompts();
       if (pausedAtTime > 0) {
-        mediaPlayer.currentTime = pausedAtTime;
-        mediaPlayer.play();
+        const currentSrc = selectedMedia[currentMediaIndex];
+        if (isYouTubeUrl(currentSrc) && youtubePlayer) {
+          youtubePlayer.seekTo(pausedAtTime, true);
+          youtubePlayer.playVideo();
+          youtubeDiv.style.display = 'block';
+          if (mediaPlayer) mediaPlayer.style.display = 'none';
+        } else if (mediaPlayer) {
+          mediaPlayer.currentTime = pausedAtTime;
+          mediaPlayer.play();
+          mediaPlayer.style.display = 'block';
+          if (youtubeDiv) youtubeDiv.style.display = 'none';
+        }
         pausedAtTime = 0;
       } else {
         startMediaPlayback();
@@ -443,13 +495,30 @@ document.addEventListener('DOMContentLoaded', () => {
         setPauseInterval();
       }
     }
-  
+
     function startMediaPlayback() {
-      if (!mediaPlayer) return;
-      mediaPlayer.removeAttribute('controls');
-      mediaPlayer.src = selectedMedia[currentMediaIndex];
-      mediaPlayer.load();
-      mediaPlayer.play().catch(() => {});
+      const src = selectedMedia[currentMediaIndex];
+      if (isYouTubeUrl(src)) {
+        if (youtubeDiv) youtubeDiv.style.display = 'block';
+        if (mediaPlayer) mediaPlayer.style.display = 'none';
+        if (youtubePlayer) {
+          const id = getYouTubeId(src);
+          if (id) youtubePlayer.loadVideoById(id);
+        } else if (window.YT && typeof YT.Player !== 'undefined') {
+          const id = getYouTubeId(src);
+          youtubePlayer = new YT.Player('youtube-player', {
+            videoId: id,
+            events: { 'onStateChange': onYouTubePlayerStateChange }
+          });
+        }
+      } else if (mediaPlayer) {
+        if (youtubeDiv) youtubeDiv.style.display = 'none';
+        mediaPlayer.style.display = 'block';
+        mediaPlayer.removeAttribute('controls');
+        mediaPlayer.src = src;
+        mediaPlayer.load();
+        mediaPlayer.play().catch(() => {});
+      }
       if (mediaType === 'video') {
         videoContainer.style.display = 'block';
       }
@@ -457,11 +526,20 @@ document.addEventListener('DOMContentLoaded', () => {
         setPauseInterval();
       }
     }
-  
+
     function setPauseInterval() {
       if (intervalID) clearInterval(intervalID);
       intervalID = setInterval(() => {
-        if (!mediaPlayer.paused) {
+        const currentSrc = selectedMedia[currentMediaIndex];
+        if (isYouTubeUrl(currentSrc)) {
+          if (youtubePlayer && youtubePlayer.getPlayerState && youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+            pausedAtTime = youtubePlayer.getCurrentTime();
+            youtubePlayer.pauseVideo();
+            switchPlayer();
+            showPromptForCurrentPlayer();
+            clearInterval(intervalID);
+          }
+        } else if (mediaPlayer && !mediaPlayer.paused) {
           pausedAtTime = mediaPlayer.currentTime;
           mediaPlayer.pause();
           switchPlayer();
@@ -474,8 +552,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mediaPlayer) {
       mediaPlayer.addEventListener('ended', handleMediaEnd);
     }
-  
+
     function handleMediaEnd() {
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+      if (mediaPlayer) mediaPlayer.style.display = 'none';
       if (mode === 'pressBetween') {
         if (playedMedia.length < selectedMedia.length) {
           currentMediaIndex = getNextMediaIndex();
@@ -732,7 +812,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   
     function pauseActivityAndShowPrompt() {
-      if (mediaPlayer && !mediaPlayer.paused) {
+      const currentSrc = selectedMedia[currentMediaIndex];
+      if (isYouTubeUrl(currentSrc)) {
+        if (youtubePlayer && youtubePlayer.getPlayerState && youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+          pausedAtTime = youtubePlayer.getCurrentTime();
+          youtubePlayer.pauseVideo();
+        }
+      } else if (mediaPlayer && !mediaPlayer.paused) {
         pausedAtTime = mediaPlayer.currentTime;
         mediaPlayer.pause();
       }
