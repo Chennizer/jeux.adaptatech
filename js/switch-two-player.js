@@ -1,5 +1,7 @@
 let youtubePlayer = null;
 let youtubeStateChangeHandler = null;
+let youtubeApiReady = false;
+let pendingYouTubeId = null;
 const YT_PLAYER_VARS = {
   controls: 0,
   disablekb: 1,
@@ -24,17 +26,24 @@ function getYouTubeId(url) {
 function onYouTubePlayerStateChange(event) {
   if (youtubeStateChangeHandler) youtubeStateChangeHandler(event);
 }
-function onYouTubeIframeAPIReady() {
+function createYouTubePlayer(id) {
+  youtubePlayer = new YT.Player('youtube-player', {
+    videoId: id || undefined,
+    playerVars: YT_PLAYER_VARS,
+    events: {
+      'onReady': onYouTubePlayerReady,
+      'onStateChange': onYouTubePlayerStateChange
+    }
+  });
   const container = document.getElementById('youtube-player');
-  if (container) {
-    youtubePlayer = new YT.Player('youtube-player', {
-      playerVars: YT_PLAYER_VARS,
-      events: {
-        'onReady': onYouTubePlayerReady,
-        'onStateChange': onYouTubePlayerStateChange
-      }
-    });
-    container.style.pointerEvents = 'none';
+  if (container) container.style.pointerEvents = 'none';
+}
+
+function onYouTubeIframeAPIReady() {
+  youtubeApiReady = true;
+  if (!youtubePlayer && pendingYouTubeId) {
+    createYouTubePlayer(pendingYouTubeId);
+    pendingYouTubeId = null;
   }
 }
 
@@ -98,14 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
           handleMediaEnd();
         }
       };
-      if (window.YT && typeof YT.Player !== 'undefined' && !youtubePlayer) {
-        youtubePlayer = new YT.Player('youtube-player', {
-          playerVars: YT_PLAYER_VARS,
-          events: {
-            'onReady': onYouTubePlayerReady,
-            'onStateChange': onYouTubePlayerStateChange
-          }
-        });
+      if (window.YT && typeof YT.Player !== 'undefined') {
+        youtubeApiReady = true;
       }
     }
   
@@ -526,21 +529,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (youtubeDiv) youtubeDiv.style.display = 'block';
         if (mediaPlayer) mediaPlayer.style.display = 'none';
         const id = getYouTubeId(src);
-        if (youtubePlayer) {
-          if (id) {
+        if (youtubeApiReady) {
+          if (!youtubePlayer) {
+            createYouTubePlayer(id);
+          } else if (id) {
             youtubePlayer.loadVideoById(id);
             youtubePlayer.playVideo();
             onYouTubePlayerReady();
           }
-        } else if (window.YT && typeof YT.Player !== 'undefined') {
-          youtubePlayer = new YT.Player('youtube-player', {
-            videoId: id,
-            playerVars: YT_PLAYER_VARS,
-            events: {
-              'onReady': onYouTubePlayerReady,
-              'onStateChange': onYouTubePlayerStateChange
-            }
-          });
+        } else {
+          pendingYouTubeId = id;
         }
       } else if (mediaPlayer) {
         if (youtubeDiv) youtubeDiv.style.display = 'none';
