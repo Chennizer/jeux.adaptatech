@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
     selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
     document.querySelectorAll('.video-card').forEach(card => card.classList.add('selected'));
-    if (videoCardsArray.length === 0 && addVideoInput) {
+    if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
       videoSelectionModal.style.display = 'block';
     }
   
@@ -329,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startButton.style.display = 'block';
       }
       playIntroJingle();
-      if (videoCardsArray.length === 0 && addVideoInput) {
+      if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
         videoSelectionModal.style.display = 'block';
       }
     });
