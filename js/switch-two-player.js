@@ -23,6 +23,30 @@ function getYouTubeId(url) {
   const match = url.match(/(?:v=|\/)([A-Za-z0-9_-]{11})/);
   return match ? match[1] : null;
 }
+
+function extractFileNameFromUrl(url) {
+  try {
+    const { pathname } = new URL(url);
+    let name = pathname.substring(pathname.lastIndexOf('/') + 1);
+    if (name.includes('?')) name = name.split('?')[0];
+    return decodeURIComponent(name) || url;
+  } catch {
+    return url;
+  }
+}
+
+async function fetchVideoTitle(url) {
+  if (isYouTubeUrl(url)) {
+    try {
+      const response = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.title) return data.title;
+      }
+    } catch (e) {}
+  }
+  return extractFileNameFromUrl(url);
+}
 function onYouTubePlayerStateChange(event) {
   if (youtubeStateChangeHandler) youtubeStateChangeHandler(event);
 }
@@ -261,10 +285,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const card = document.createElement('div');
           card.className = 'video-card selected';
           card.dataset.src = url;
-          card.textContent = url.split('/').pop();
+          card.textContent = extractFileNameFromUrl(url);
           videoSelectionDiv.appendChild(card);
           addVideoUrlInput.value = '';
           updateSelectedMedia();
+          fetchVideoTitle(url).then(title => {
+            card.textContent = title;
+          });
         }
       });
     }
