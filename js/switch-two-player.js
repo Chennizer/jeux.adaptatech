@@ -12,6 +12,7 @@ const YT_PLAYER_VARS = {
 function onYouTubePlayerReady() {
   const iframe = youtubePlayer.getIframe();
   if (iframe) iframe.style.pointerEvents = 'none';
+  youtubePlayer.playVideo();
 }
 function isYouTubeUrl(url) {
   return /youtu(?:\.be|be\.com)/.test(url);
