@@ -91,6 +91,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const addVideoUrlInput = document.getElementById('add-video-url-input');
     const addVideoUrlButton = document.getElementById('add-video-url-button');
 
+    const YT_STORAGE_KEY = 'customYoutubeUrls';
+
+    function loadStoredYoutubeUrls() {
+      if (!urlVideoList) return;
+      const saved = localStorage.getItem(YT_STORAGE_KEY);
+      if (!saved) return;
+      try {
+        const urls = JSON.parse(saved);
+        urls.forEach(url => {
+          const card = document.createElement('div');
+          card.className = 'video-card selected';
+          card.dataset.src = url;
+          card.textContent = extractFileNameFromUrl(url);
+          urlVideoList.appendChild(card);
+          fetchVideoTitle(url).then(title => {
+            card.textContent = title;
+          });
+        });
+      } catch (e) {
+        console.error('Failed to parse saved YouTube URLs', e);
+      }
+    }
+
+    function saveYoutubeUrls() {
+      if (!urlVideoList) return;
+      const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
+      localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
+    }
+
+    loadStoredYoutubeUrls();
+
     let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
     const introJingle = document.getElementById('intro-jingle');
     const visualOptionsSelect = document.getElementById('special-options-select');
@@ -321,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedMedia = videoCardsArray.map(c => c.dataset.src);
       }
       startButton.style.display = selectedMedia.length ? 'block' : 'none';
+      if (urlVideoList) saveYoutubeUrls();
     }
   
     preloadMedia(selectedMedia, () => {
