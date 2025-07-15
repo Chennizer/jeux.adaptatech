@@ -84,6 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeModal = document.getElementById('close-modal');
     const okButton = document.getElementById('ok-button');
     const videoSelectionDiv = document.getElementById('video-selection');
+    const localVideoList = document.getElementById('local-video-list');
+    const urlVideoList = document.getElementById('url-video-list');
     const addVideoFileButton = document.getElementById('add-video-file-button');
     const addVideoInput = document.getElementById('add-video-input');
     const addVideoUrlInput = document.getElementById('add-video-url-input');
@@ -272,7 +274,11 @@ document.addEventListener('DOMContentLoaded', () => {
           card.className = 'video-card selected';
           card.dataset.src = url;
           card.textContent = file.name;
-          videoSelectionDiv.appendChild(card);
+          if (localVideoList) {
+            localVideoList.appendChild(card);
+          } else {
+            videoSelectionDiv.appendChild(card);
+          }
         });
         addVideoInput.value = '';
         updateSelectedMedia();
@@ -286,7 +292,11 @@ document.addEventListener('DOMContentLoaded', () => {
           card.className = 'video-card selected';
           card.dataset.src = url;
           card.textContent = extractFileNameFromUrl(url);
-          videoSelectionDiv.appendChild(card);
+          if (urlVideoList) {
+            urlVideoList.appendChild(card);
+          } else {
+            videoSelectionDiv.appendChild(card);
+          }
           addVideoUrlInput.value = '';
           updateSelectedMedia();
           fetchVideoTitle(url).then(title => {
