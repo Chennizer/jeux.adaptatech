@@ -93,6 +93,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const YT_STORAGE_KEY = 'customYoutubeUrls';
 
+    const isCustomPage = !!(addVideoInput || addVideoUrlInput);
+    let manualOrder = false;
+    let draggedCard = null;
+
+    function initCard(card) {
+      card.classList.add('selected');
+      card.setAttribute('draggable', 'true');
+      card.addEventListener('dragstart', () => { draggedCard = card; });
+      card.addEventListener('dragend', () => { draggedCard = null; manualOrder = true; updateSelectedMedia(); });
+      if (isCustomPage) {
+        const rm = document.createElement('span');
+        rm.textContent = '×';
+        rm.className = 'remove-btn';
+        rm.addEventListener('click', (e) => { e.stopPropagation(); card.remove(); updateSelectedMedia(); if (urlVideoList) saveYoutubeUrls(); });
+        card.appendChild(rm);
+      }
+    }
+
     function loadStoredYoutubeUrls() {
       if (!urlVideoList) return;
       const saved = localStorage.getItem(YT_STORAGE_KEY);
@@ -101,12 +119,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const urls = JSON.parse(saved);
         urls.forEach(url => {
           const card = document.createElement('div');
-          card.className = 'video-card selected';
+          card.className = 'video-card';
           card.dataset.src = url;
           card.textContent = extractFileNameFromUrl(url);
           urlVideoList.appendChild(card);
+          initCard(card);
           fetchVideoTitle(url).then(title => {
-            card.textContent = title;
+            card.firstChild.nodeValue = title;
           });
         });
       } catch (e) {
@@ -123,6 +142,23 @@ document.addEventListener('DOMContentLoaded', () => {
     loadStoredYoutubeUrls();
 
     let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
+    videoCardsArray.forEach(initCard);
+
+    [videoSelectionDiv, localVideoList, urlVideoList].forEach(c => {
+      if (c) {
+        c.addEventListener('dragover', (e) => {
+          if (!draggedCard) return;
+          e.preventDefault();
+          const target = e.target.closest('.video-card');
+          if (target && target !== draggedCard) {
+            const rect = target.getBoundingClientRect();
+            const after = (e.clientY - rect.top) > rect.height / 2;
+            target.parentNode.insertBefore(draggedCard, after ? target.nextSibling : target);
+          }
+        });
+        c.addEventListener('drop', (e) => { e.preventDefault(); });
+      }
+    });
     const introJingle = document.getElementById('intro-jingle');
     const visualOptionsSelect = document.getElementById('special-options-select');
     const videoContainer = document.getElementById('video-container');
@@ -234,7 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   
     selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
-    document.querySelectorAll('.video-card').forEach(card => card.classList.add('selected'));
     if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
       videoSelectionModal.style.display = 'block';
     }
@@ -302,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Array.from(addVideoInput.files).forEach(file => {
           const url = URL.createObjectURL(file);
           const card = document.createElement('div');
-          card.className = 'video-card selected';
+          card.className = 'video-card';
           card.dataset.src = url;
           card.textContent = file.name;
           if (localVideoList) {
@@ -310,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             videoSelectionDiv.appendChild(card);
           }
+          initCard(card);
         });
         addVideoInput.value = '';
         updateSelectedMedia();
@@ -320,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = addVideoUrlInput.value.trim();
         if (url) {
           const card = document.createElement('div');
-          card.className = 'video-card selected';
+          card.className = 'video-card';
           card.dataset.src = url;
           card.textContent = extractFileNameFromUrl(url);
           if (urlVideoList) {
@@ -328,10 +364,11 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             videoSelectionDiv.appendChild(card);
           }
+          initCard(card);
           addVideoUrlInput.value = '';
           updateSelectedMedia();
           fetchVideoTitle(url).then(title => {
-            card.textContent = title;
+            card.firstChild.nodeValue = title;
           });
         }
       });
@@ -679,6 +716,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   
     function getNextMediaIndex() {
+      if (manualOrder) {
+        if (playedMedia.length === selectedMedia.length) playedMedia = [];
+        const next = playedMedia.length;
+        playedMedia.push(next);
+        return next;
+      }
       if (playedMedia.length === selectedMedia.length) {
         playedMedia = [];
       }
