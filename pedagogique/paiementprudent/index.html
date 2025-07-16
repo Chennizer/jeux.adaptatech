@@ -95,10 +95,6 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
 .pinbtn:active{background:#e2e2f1;}
 #pinBtnClear,#studentPinBtnClear{color:#888;font-size:1.1rem;}
 #pinBtnOk,#studentPinBtnOk{background:#244774;color:#fff;border:none;font-weight:600;}
-#studentPinBtnSet{
-  width:100%;padding:9px 0;background:#f5f3f8;border-radius:7px;margin-top:7px;
-  border:1px solid #ece6fa;font-size:1.07rem;cursor:pointer;display:none;
-}
 #studentPinPanel{z-index:10050;}
 
 /* ---------- ADMIN PANEL (BOTTOM-SHEET) ---------- */
@@ -317,10 +313,9 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
       <div style="font-weight:600;margin-bottom:16px;text-align:center;">Entrer le NIP élève</div>
       <div id="studentPinMsg" class="pin-msg"></div>
       <div id="studentPinDots" class="pin-dots">
-        <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
       </div>
       <div id="studentPinKeypad" class="pin-keypad"></div>
-      <button id="studentPinBtnSet">Définir le NIP élève</button>
     </div>
   </div>
 
@@ -646,7 +641,12 @@ updateToggles();
 studentPinToggleBtn.onclick = ()=>{
   studentPinActive = !studentPinActive;
   localStorage.setItem('studentPinActive', studentPinActive ? '1' : '0');
-  if (studentPinActive) showStudentPinPanel(true);
+  if (studentPinActive){
+    awaitingStudentPin=true;
+    showStudentPinPanel(true);
+  } else {
+    awaitingStudentPin=false;
+  }
   updateToggles();
 };
 
@@ -668,8 +668,8 @@ const studentPinCloseEl = $('studentPinClose');
 const studentPinDotsEl  = $('studentPinDots');
 const studentPinMsgEl   = $('studentPinMsg');
 const studentPinKeypadEl= $('studentPinKeypad');
-const studentPinBtnSetEl= $('studentPinBtnSet');
 let studentPinEntry='', studentPinSetMode=false, studentPinSuccessCallback=null;
+let awaitingStudentPin=false;
 
 // Prevent admin panel from closing when interacting inside the student PIN panel
 studentPinPanelEl.addEventListener('pointerdown', e => e.stopPropagation());
@@ -677,7 +677,6 @@ studentPinPanelEl.addEventListener('pointerdown', e => e.stopPropagation());
 function showStudentPinPanel(setMode=false,cb=null){
   studentPinEntry=''; studentPinMsgEl.textContent='';
   renderStuDots();
-  studentPinBtnSetEl.style.display = setMode?'block':'none';
   studentPinPanelEl.classList.add('open');
   studentPinSetMode = setMode;
   studentPinSuccessCallback = cb;
@@ -685,6 +684,13 @@ function showStudentPinPanel(setMode=false,cb=null){
 function hideStudentPinPanel(){
   studentPinPanelEl.classList.remove('open');
   studentPinEntry=''; studentPinSetMode=false; studentPinSuccessCallback=null;
+  if(awaitingStudentPin && !studentPin){
+    studentPinActive=false;
+    localStorage.setItem('studentPinActive','0');
+    updateToggles();
+    alertBox('NIP élève non défini');
+  }
+  awaitingStudentPin=false;
 }
 function renderStuDots(err=false){
   studentPinDotsEl.querySelectorAll('.dot').forEach((d,i)=>{
@@ -694,9 +700,9 @@ function renderStuDots(err=false){
   });
 }
 studentPinCloseEl.onclick = hideStudentPinPanel;
-studentPinBtnSetEl.onclick = ()=>{
-  if(studentPinEntry.length<4){
-    studentPinMsgEl.textContent='4 chiffres minimum';
+function finishStuPinCreation(){
+  if(studentPinEntry.length<1){
+    studentPinMsgEl.textContent='1 chiffre minimum';
     renderStuDots(true);
     setTimeout(renderStuDots,800);
     return;
@@ -704,14 +710,15 @@ studentPinBtnSetEl.onclick = ()=>{
   studentPin = studentPinEntry;
   localStorage.setItem('studentPin', studentPin);
   studentPinMsgEl.textContent='NIP élève enregistré !';
+  awaitingStudentPin=false;
   setTimeout(hideStudentPinPanel,900);
-};
+}
 function handleStuInput(v){
   if(v==='clear'){
     studentPinEntry=''; renderStuDots(); studentPinMsgEl.textContent=''; return;
   }
   if(v==='ok'){
-    if(studentPinSetMode){ studentPinBtnSetEl.click(); return; }
+    if(studentPinSetMode){ finishStuPinCreation(); return; }
     if(studentPinEntry===studentPin){
       const cb=studentPinSuccessCallback;
       setTimeout(()=>{
@@ -729,7 +736,7 @@ function handleStuInput(v){
     }
     return;
   }
-  if(studentPinEntry.length<8){
+  if(studentPinEntry.length<5){
     studentPinEntry+=v; renderStuDots();
   }
 }
