@@ -40,6 +40,17 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
 }
 #adminBtn:active{box-shadow:0 1px 2px #0002;}
 
+/* ---------- FULLSCREEN BTN ---------- */
+#fsBtn{
+  position:fixed;left:16px;top:16px;z-index:2600;
+  width:40px;height:40px;border-radius:8px;
+  background:#4a2c49;color:#fff;border:none;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  box-shadow:0 2px 10px rgba(0,0,0,.12);
+}
+#fsBtn:active{box-shadow:0 1px 2px #0002;}
+
 /* ---------- DRAGGABLE SOURCES ---------- */
 .dragSource, .dragSource.dragging{
   width:92px;height:92px;border-radius:50%;
@@ -108,20 +119,20 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
 .admin-panel-content{
   width:100%;max-width:960px;display:flex;justify-content:space-between;align-items:center;
 }
-.admin-main{display:flex;gap:1rem;}
+.admin-main{display:flex;gap:1rem;justify-content:center;flex-grow:1;}
 #dragCoinArea{display:flex;align-items:center;gap:1rem;}
 
 /* --- square admin buttons --- */
 .admin-option-btn{
   width:96px;aspect-ratio:1/1;border-radius:18px;
-  background:#f6f7f8;border:2px solid #e4e2ef;box-shadow:0 2px 5px #0001;
+  background:#fff;border:2px solid #e4e2ef;box-shadow:0 2px 5px #0001;
   font-size:1rem;font-weight:500;color:#333;text-align:center;
   display:flex;align-items:center;justify-content:center;padding:0 4px;
   cursor:pointer;transition:background .15s,transform .1s,box-shadow .15s;
 }
-.admin-option-btn:hover{background:#eceefc;transform:translateY(-3px);box-shadow:0 4px 10px #0002;}
+.admin-option-btn:hover{background:#f6f6f6;transform:translateY(-3px);box-shadow:0 4px 10px #0002;}
 .admin-option-btn:active{transform:translateY(0);box-shadow:0 1px 4px #0002;}
-.admin-option-btn.toggle.active{background:#244774;color:#fff;border-color:#244774;}
+.admin-option-btn.toggle.active{background:var(--green);color:#fff;border-color:var(--green);}
 #resetAllBtn{background:#e74c3c;color:#fff;border-color:#e74c3c;}
 #resetAllBtn:hover{background:#d94836;}
 
@@ -268,6 +279,8 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
     <button id="startBtn">COMMENCER</button>
   </div>
 
+  <button id="fsBtn" title="Plein écran">⛶</button>
+
   <button id="adminBtn" title="Admin">
     <svg viewBox="0 0 24 24" style="width:32px;height:32px;stroke:#fff;stroke-width:2;fill:none;">
       <circle cx="12" cy="8" r="4"/><path d="M2 22c0-4 4-7 10-7s10 3 10 7"/>
@@ -385,6 +398,8 @@ function confirmBox(m,yes){ $('confirmMsg').textContent=m; show($('confirmModal'
 
 const isiIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 function enterFS(){ if(isiIOS||document.fullscreenElement)return; document.documentElement.requestFullscreen?.().catch(()=>{}); }
+function exitFS(){ if(document.fullscreenElement) document.exitFullscreen?.(); }
+function toggleFS(){ document.fullscreenElement ? exitFS() : enterFS(); }
 function displayName(){ if(studentName) $('userName').textContent = studentName.toUpperCase(); }
 
 // INITIAL SETUP
@@ -485,6 +500,7 @@ const paySelectedFlow = ()=>{ animateCoins([...selected],()=>{
 
 // ADMIN PIN
 const adminBtnEl = $('adminBtn');
+const fsBtnEl    = $('fsBtn');
 const adminPanelModalEl = $('adminPanelModal');
 const adminPinPanelEl = $('adminPinPanel');
 const adminPinCloseEl = $('adminPinClose');
@@ -521,6 +537,8 @@ adminBtnEl.onclick = ()=>{
     ? adminPanelModalEl.classList.remove('open')
     : showPinPanel(adminPin==='');
 };
+fsBtnEl.addEventListener('pointerdown',e=>e.stopPropagation());
+fsBtnEl.onclick = toggleFS;
 $('closeAdminPanel').onclick = ()=>adminPanelModalEl.classList.remove('open');
 adminPinCloseEl.onclick = hidePinPanel;
 pinBtnSetEl.onclick = ()=>{
@@ -761,7 +779,10 @@ dragSources.forEach(el=>{
 
 // PRICE MODAL
 let priceSelection={dollar:1,cent:0};
+const setPriceBtn=$('setPriceBtn');
 function openPriceModal(){
+  priceSelection.dollar=Math.floor(price);
+  priceSelection.cent=Math.round(price*100)%100;
   let h='';
   for(let i=1;i<=10;i++){
     h+=`<button class="priceDollarBtn${priceSelection.dollar===i?' selected':''}" data-v="${i}">${i}$</button>`;
@@ -771,16 +792,26 @@ function openPriceModal(){
   h=cents.map(c=>`<button class="priceCentBtn${priceSelection.cent===c?' selected':''}" data-v="${c}">.${c.toString().padStart(2,'0')}</button>`).join('');
   $('priceCentGrid').innerHTML=h;
   const upd=()=>{$('pricePreview').textContent=`Prix choisi : ${priceSelection.dollar}.${priceSelection.cent.toString().padStart(2,'0')}$`;};
-  document.querySelectorAll('.priceDollarBtn').forEach(b=>b.onclick=()=>{ priceSelection.dollar=+b.dataset.v; upd(); });
-  document.querySelectorAll('.priceCentBtn').forEach(b=>b.onclick=()=>{ priceSelection.cent=+b.dataset.v; upd(); });
-  upd(); show($('priceModal'));
+  document.querySelectorAll('.priceDollarBtn').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.priceDollarBtn').forEach(btn=>btn.classList.remove('selected'));
+    b.classList.add('selected');
+    priceSelection.dollar=+b.dataset.v; upd();
+  });
+  document.querySelectorAll('.priceCentBtn').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.priceCentBtn').forEach(btn=>btn.classList.remove('selected'));
+    b.classList.add('selected');
+    priceSelection.cent=+b.dataset.v; upd();
+  });
+  upd();
+  setPriceBtn.classList.add('active');
+  show($('priceModal'));
 }
 $('priceConfirm').onclick = ()=>{
   price = +(priceSelection.dollar + priceSelection.cent/100).toFixed(2);
-  hide($('priceModal')); saveRender();
+  hide($('priceModal')); setPriceBtn.classList.remove('active'); saveRender();
 };
-$('priceCancel').onclick = ()=> hide($('priceModal'));
-$('setPriceBtn').onclick = openPriceModal;
+$('priceCancel').onclick = ()=>{ hide($('priceModal')); setPriceBtn.classList.remove('active'); };
+setPriceBtn.onclick = openPriceModal;
 
 // START/SETUP
 $('startBtn').onclick = ()=>{
@@ -817,7 +848,7 @@ document.addEventListener('pointerdown',e=>{
   if(adminPanelModalEl.classList.contains('open')&&!insideAdmin&&!insideStuPin&&e.target!==adminBtnEl&&!insidePrice){
     adminPanelModalEl.classList.remove('open');
   }
-  if(priceVis&&!insidePrice){ hide(priceModalEl); }
+  if(priceVis&&!insidePrice){ hide(priceModalEl); setPriceBtn.classList.remove('active'); }
 });
   </script>
 </body>
