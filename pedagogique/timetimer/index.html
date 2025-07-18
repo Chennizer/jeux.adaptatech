@@ -6,31 +6,214 @@
   <title>Time Timer</title>
   <style>
     body {
+      margin:0;
+      font-family:Arial, sans-serif;
+      height:100vh;
+      overflow:hidden;
+    }
+
+    #overlay {
+      position:fixed;
+      top:0;
+      left:0;
+      width:100vw;
+      height:100vh;
       display:flex;
       justify-content:center;
       align-items:center;
-      height:100vh;
-      margin:0;
-      font-family:Arial, sans-serif;
+      background:#fff;
+      z-index:2;
     }
-    button {
+
+    #overlay button {
       font-size:5vmin;
       padding:1em 2em;
     }
+
+    #timerCanvas {
+      position:absolute;
+      top:0;
+      left:0;
+      width:100vw;
+      height:100vh;
+      background:none;
+    }
+
+    .controls {
+      position:absolute;
+      bottom:2vh;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:1;
+      text-align:center;
+      font-size:3vmin;
+    }
+
+    input[type=number] { width:6vmin; font-size:1em; }
+    button { padding:0.5em 1em; font-size:1em; margin-left:1vmin; }
   </style>
 </head>
 <body>
-  <button id="startBtn">Start</button>
+  <div id="overlay"><button id="enterBtn">Start</button></div>
+  <canvas id="timerCanvas"></canvas>
+  <div class="controls">
+    <label>Minutes: <input type="number" id="minutes" min="1" max="60" value="5"></label>
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="fsBtn">Fullscreen</button>
+    <button id="stopBtn">Stop</button>
+  </div>
   <script>
-    document.getElementById('startBtn').addEventListener('click', () => {
-      const docEl = document.documentElement;
-      if (!document.fullscreenElement) {
-        (docEl.requestFullscreen || docEl.webkitRequestFullscreen).call(docEl);
+    const overlay = document.getElementById('overlay');
+    const enterBtn = document.getElementById('enterBtn');
+    const canvas = document.getElementById('timerCanvas');
+    const ctx = canvas.getContext('2d');
+    let totalSeconds = 300; // default 5 minutes
+    let remainingSeconds = 0;
+    let intervalId = null;
+    let paused = false;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      draw();
+    }
+
+    function draw() {
+      const size = Math.min(canvas.width, canvas.height) * 0.9; // leave margin
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const outerRadius = size * 0.4; // room for ticks and numbers
+      const borderWidth = size * 0.0067;
+      const wedgeRadius = outerRadius - borderWidth / 2;
+      const tickLong = size * 0.05;
+      const tickShort = size * 0.025;
+      const tickStart = outerRadius + borderWidth / 2;
+      const numbersRadius = tickStart + tickLong + size * 0.03;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // outer circle
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = borderWidth;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (remainingSeconds > 0) {
+        const angle = (remainingSeconds / totalSeconds) * Math.PI * 2;
+        ctx.fillStyle = '#d9534f';
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, wedgeRadius, -Math.PI / 2, -Math.PI / 2 - angle, true);
+        ctx.closePath();
+        ctx.fill();
       }
-      setTimeout(() => {
-        window.location.href = 'timer.html';
-      }, 100);
+
+      // ticks
+      for (let i = 0; i < 60; i++) {
+        const ang = -Math.PI / 2 - (i / 60) * Math.PI * 2;
+        const startX = centerX + Math.cos(ang) * tickStart;
+        const startY = centerY + Math.sin(ang) * tickStart;
+        const len = i % 5 === 0 ? tickLong : tickShort;
+        const endX = centerX + Math.cos(ang) * (tickStart + len);
+        const endY = centerY + Math.sin(ang) * (tickStart + len);
+        ctx.lineWidth = i % 5 === 0 ? size * 0.006 : size * 0.003;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+      }
+
+      // numbers every 5 minutes
+      ctx.fillStyle = '#000';
+      ctx.font = `${size * 0.04}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let m = 0; m < 60; m += 5) {
+        const ang = -Math.PI / 2 - (m / 60) * Math.PI * 2;
+        const x = centerX + Math.cos(ang) * numbersRadius;
+        const y = centerY + Math.sin(ang) * numbersRadius;
+        ctx.fillText(m.toString(), x, y);
+      }
+
+      ctx.fillStyle = '#000';
+      ctx.font = `bold ${size * 0.12}px Arial`;
+      const mins = Math.floor(remainingSeconds / 60);
+      const secs = remainingSeconds % 60;
+      ctx.fillText(`${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`, centerX, centerY);
+    }
+
+    function tick() {
+      if (!paused) {
+        remainingSeconds--;
+        if (remainingSeconds <= 0) {
+          remainingSeconds = 0;
+          clearInterval(intervalId);
+          beep();
+        }
+        draw();
+      }
+    }
+
+    function startTimer() {
+      totalSeconds = parseInt(document.getElementById('minutes').value, 10) * 60;
+      if (isNaN(totalSeconds) || totalSeconds <= 0) return;
+      remainingSeconds = totalSeconds;
+      paused = false;
+      document.getElementById('pauseBtn').textContent = 'Pause';
+      clearInterval(intervalId);
+      intervalId = setInterval(tick, 1000);
+      draw();
+    }
+
+    function pauseTimer() {
+      paused = !paused;
+      document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+    }
+
+    function stopTimer() {
+      clearInterval(intervalId);
+      remainingSeconds = 0;
+      paused = false;
+      document.getElementById('pauseBtn').textContent = 'Pause';
+      draw();
+    }
+
+    function beep() {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ac.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      osc.connect(ac.destination);
+      osc.start();
+      osc.stop(ac.currentTime + 0.2);
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+      } else {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      }
+      setTimeout(resizeCanvas, 100);
+    }
+
+    enterBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+      }
+      overlay.style.display = 'none';
+      resizeCanvas();
     });
+
+    document.getElementById('startBtn').addEventListener('click', startTimer);
+    document.getElementById('pauseBtn').addEventListener('click', pauseTimer);
+    document.getElementById('stopBtn').addEventListener('click', stopTimer);
+    document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
   </script>
 </body>
 </html>
