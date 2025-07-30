@@ -120,9 +120,20 @@
   let dragging = false;
   let showDigits = false;
   let dialMax = 60;
-  document.getElementById('minutes').max = dialMax;
+  const minutesInput = document.getElementById('minutes');
+  minutesInput.max = dialMax;
+  minutesInput.step = dialCfg[dialMax].dragStep / 60;
 
-  function getMinutesFromEvent(e) {
+  const dialCfg = {
+    60:  {ticks:60, nums:[0,5,10,15,20,25,30,35,40,45,50,55], denom:60, short:true,  step:5,  dragStep:60},
+    120: {ticks:60, nums:[0,10,20,30,40,50,60,70,80,90,100,110], denom:120, short:true,  step:5,  dragStep:60},
+    30:  {ticks:30, nums:[0,5,10,15,20,25], denom:30, short:false, step:1,  dragStep:60},
+    10:  {ticks:60, nums:[0,1,2,3,4,5,6,7,8,9], denom:10, short:true,  step:6,  dragStep:10},
+    5:   {ticks:60, nums:[0,1,2,3,4], denom:5,  short:true,  step:12, dragStep:5},
+    1:   {ticks:60, nums:[0,5,10,15,20,25,30,35,40,45,50,55], denom:60, short:true,  step:5,  dragStep:1}
+  };
+
+  function getSecondsFromEvent(e) {
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -133,15 +144,20 @@
     const rawAng = Math.atan2(y - centerY, x - centerX);
     let ang = -Math.PI / 2 - rawAng;
     while (ang < 0) ang += Math.PI * 2;
-    const minutes = Math.round((ang / (Math.PI * 2)) * dialMax);
-    return minutes === 0 ? dialMax : minutes;
+    const secsPerCircle = dialMax * 60;
+    const raw = (ang / (Math.PI * 2)) * secsPerCircle;
+    const step = dialCfg[dialMax].dragStep;
+    let secs = Math.round(raw / step) * step;
+    if (secs === 0) secs = secsPerCircle;
+    return Math.min(secsPerCircle, Math.max(step, secs));
   }
 
   function updateDrag(e) {
-    const mins = Math.max(1, Math.min(dialMax, getMinutesFromEvent(e)));
-    document.getElementById('minutes').value = mins;
-    totalSeconds = mins * 60;
-    remainingSeconds = totalSeconds;
+    const secs = getSecondsFromEvent(e);
+    totalSeconds = secs;
+    remainingSeconds = secs;
+    const step = dialCfg[dialMax].dragStep;
+    minutesInput.value = (secs / 60).toFixed(step >= 60 ? 0 : 2);
     draw();
   }
 
@@ -183,14 +199,7 @@
         ctx.fill();
       }
 
-      const cfg = {
-        60:  {ticks:60, nums:[0,5,10,15,20,25,30,35,40,45,50,55], denom:60, short:true,  step:5},
-        120: {ticks:60, nums:[0,10,20,30,40,50,60,70,80,90,100,110], denom:120, short:true,  step:5},
-        30:  {ticks:30, nums:[0,5,10,15,20,25], denom:30, short:false, step:1},
-        10:  {ticks:60, nums:[0,1,2,3,4,5,6,7,8,9], denom:10, short:true,  step:6},
-        5:   {ticks:60, nums:[0,1,2,3,4], denom:5,  short:true,  step:12},
-        1:   {ticks:60, nums:[0,5,10,15,20,25,30,35,40,45,50,55], denom:60, short:true,  step:5}
-      }[dialMax];
+      const cfg = dialCfg[dialMax];
 
       // ticks
       for (let i = 0; i < cfg.ticks; i++) {
@@ -241,12 +250,16 @@
       }
     }
 
-    function startTimer() {
-      totalSeconds = parseInt(document.getElementById('minutes').value, 10) * 60;
+    function startTimer(secs) {
+      if (typeof secs === 'number') {
+        totalSeconds = secs;
+      } else {
+        totalSeconds = parseFloat(minutesInput.value) * 60;
+      }
       if (isNaN(totalSeconds) || totalSeconds <= 0) return;
       if (totalSeconds > dialMax * 60) {
         totalSeconds = dialMax * 60;
-        document.getElementById('minutes').value = dialMax;
+        minutesInput.value = dialMax;
       }
       remainingSeconds = totalSeconds;
       paused = false;
@@ -297,7 +310,7 @@
       if (!dragging) return;
       dragMove(e);
       dragging = false;
-      startTimer();
+      startTimer(remainingSeconds);
     }
 
     function toggleFullscreen() {
@@ -330,9 +343,11 @@
     const dialSelect = document.getElementById('dialSelect');
     dialSelect.addEventListener('change', () => {
       dialMax = parseInt(dialSelect.value, 10);
-      document.getElementById('minutes').max = dialMax;
-      if (parseInt(document.getElementById('minutes').value, 10) > dialMax) {
-        document.getElementById('minutes').value = dialMax;
+      const cfg = dialCfg[dialMax];
+      minutesInput.max = dialMax;
+      minutesInput.step = cfg.dragStep / 60;
+      if (parseFloat(minutesInput.value) > dialMax) {
+        minutesInput.value = dialMax;
       }
       remainingSeconds = 0;
       draw();
