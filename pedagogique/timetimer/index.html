@@ -40,9 +40,9 @@
     }
 
     .controls {
-      position:absolute;
+      position:fixed;
       top:50%;
-      right:2vw;
+      right:-240px;
       transform:translateY(-50%);
       z-index:1;
       text-align:center;
@@ -50,18 +50,58 @@
       display:flex;
       flex-direction:column;
       align-items:center;
+      background:rgba(255,255,255,0.95);
+      padding:1em;
+      border-radius:8px;
+      box-shadow:0 2px 5px rgba(0,0,0,0.3);
+      width:200px;
+      transition:right 0.3s ease;
     }
+
+    .controls.show { right:2vw; }
 
     .controls > * { margin:0.5vmin 0; }
     input[type=number] { width:6vmin; font-size:1em; }
     button { padding:0.5em 1em; font-size:1em; margin:0; }
+
+    #menuBtn {
+      position:fixed;
+      top:10px;
+      right:10px;
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:22px;
+      cursor:pointer;
+      background:rgba(0,0,0,0.7);
+      color:#fff;
+      z-index:1;
+      transition:background 0.3s ease;
+    }
+
+    #menuBtn:hover { background:rgba(0,0,0,0.9); }
   </style>
 </head>
 <body>
   <div id="overlay"><button id="enterBtn">Start</button></div>
   <canvas id="timerCanvas"></canvas>
+  <div id="menuBtn">⚙️</div>
   <div class="controls">
     <label>Minutes: <input type="number" id="minutes" min="1" max="60" value="5"></label>
+    <label>Dial scale:
+      <select id="dialSelect">
+        <option value="60" selected>60&nbsp;min</option>
+        <option value="120">120&nbsp;min</option>
+        <option value="30">30&nbsp;min</option>
+        <option value="10">10&nbsp;min</option>
+        <option value="5">5&nbsp;min</option>
+        <option value="1">1&nbsp;min</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="toggleDigits"> Show numbers</label>
     <button id="startBtn">Start</button>
     <button id="pauseBtn">Pause</button>
     <button id="fsBtn">Fullscreen</button>
@@ -77,6 +117,28 @@
   let intervalId = null;
   let paused = false;
   let dragging = false;
+  let showDigits = false;
+  let dialBase = 60;
+  document.getElementById('minutes').max = dialBase;
+
+  function getDialSettings(base) {
+    switch (base) {
+      case 120:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i*2):null};
+      case 60:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i):null};
+      case 30:
+        return {ticks:30, major:5, label:i=>i%5===0?String(i):null};
+      case 10:
+        return {ticks:10, major:1, label:i=>String(9-i)};
+      case 5:
+        return {ticks:5, major:1, label:i=>String(4-i)};
+      case 1:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i):null};
+      default:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i):null};
+    }
+  }
 
   function getMinutesFromEvent(e) {
     const rect = canvas.getBoundingClientRect();
@@ -89,12 +151,12 @@
     const rawAng = Math.atan2(y - centerY, x - centerX);
     let ang = -Math.PI / 2 - rawAng;
     while (ang < 0) ang += Math.PI * 2;
-    const minutes = Math.round((ang / (Math.PI * 2)) * 60);
-    return minutes === 0 ? 60 : minutes;
+    const minutes = Math.round((ang / (Math.PI * 2)) * dialBase);
+    return minutes === 0 ? dialBase : minutes;
   }
 
   function updateDrag(e) {
-    const mins = Math.max(1, getMinutesFromEvent(e));
+    const mins = Math.max(1, Math.min(dialBase, getMinutesFromEvent(e)));
     document.getElementById('minutes').value = mins;
     totalSeconds = mins * 60;
     remainingSeconds = totalSeconds;
@@ -129,8 +191,8 @@
       ctx.stroke();
 
       if (remainingSeconds > 0) {
-        const maxAngle = (totalSeconds / 3600) * Math.PI * 2;
-        const angle = maxAngle * (remainingSeconds / totalSeconds);
+        const baseSeconds = dialBase * 60;
+        const angle = (Math.min(remainingSeconds, baseSeconds) / baseSeconds) * Math.PI * 2;
         ctx.fillStyle = '#d9534f';
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
@@ -139,38 +201,40 @@
         ctx.fill();
       }
 
-      // ticks
-      for (let i = 0; i < 60; i++) {
-        const ang = -Math.PI / 2 - (i / 60) * Math.PI * 2;
-        const startX = centerX + Math.cos(ang) * tickStart;
-        const startY = centerY + Math.sin(ang) * tickStart;
-        const len = i % 5 === 0 ? tickLong : tickShort;
-        const endX = centerX + Math.cos(ang) * (tickStart + len);
-        const endY = centerY + Math.sin(ang) * (tickStart + len);
-        ctx.lineWidth = i % 5 === 0 ? size * 0.006 : size * 0.003;
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-      }
-
-      // numbers every 5 minutes
+      // ticks and numbers
+      const settings = getDialSettings(dialBase);
       ctx.fillStyle = '#000';
       ctx.font = `${size * 0.04}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (let m = 0; m < 60; m += 5) {
-        const ang = -Math.PI / 2 - (m / 60) * Math.PI * 2;
-        const x = centerX + Math.cos(ang) * numbersRadius;
-        const y = centerY + Math.sin(ang) * numbersRadius;
-        ctx.fillText(m.toString(), x, y);
+      for (let i = 0; i < settings.ticks; i++) {
+        const ang = -Math.PI / 2 - (i / settings.ticks) * Math.PI * 2;
+        const startX = centerX + Math.cos(ang) * tickStart;
+        const startY = centerY + Math.sin(ang) * tickStart;
+        const len = i % settings.major === 0 ? tickLong : tickShort;
+        const endX = centerX + Math.cos(ang) * (tickStart + len);
+        const endY = centerY + Math.sin(ang) * (tickStart + len);
+        ctx.lineWidth = i % settings.major === 0 ? size * 0.006 : size * 0.003;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        const label = settings.label(i);
+        if (label !== null) {
+          const lx = centerX + Math.cos(ang) * numbersRadius;
+          const ly = centerY + Math.sin(ang) * numbersRadius;
+          ctx.fillText(label, lx, ly);
+        }
       }
 
-      ctx.fillStyle = '#000';
-      ctx.font = `bold ${size * 0.12}px Arial`;
-      const mins = Math.floor(remainingSeconds / 60);
-      const secs = remainingSeconds % 60;
-      ctx.fillText(`${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`, centerX, centerY);
+      if (showDigits) {
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${size * 0.12}px Arial`;
+        const mins = Math.floor(remainingSeconds / 60);
+        const secs = remainingSeconds % 60;
+        ctx.fillText(`${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`, centerX, centerY);
+      }
     }
 
     function tick() {
@@ -186,8 +250,9 @@
     }
 
     function startTimer() {
-      totalSeconds = parseInt(document.getElementById('minutes').value, 10) * 60;
-      if (isNaN(totalSeconds) || totalSeconds <= 0) return;
+      const minutesVal = parseInt(document.getElementById('minutes').value, 10);
+      if (isNaN(minutesVal) || minutesVal <= 0) return;
+      totalSeconds = Math.min(minutesVal, dialBase) * 60;
       remainingSeconds = totalSeconds;
       paused = false;
       document.getElementById('pauseBtn').textContent = 'Pause';
@@ -261,6 +326,35 @@
     document.getElementById('pauseBtn').addEventListener('click', pauseTimer);
     document.getElementById('stopBtn').addEventListener('click', stopTimer);
     document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
+    const toggleDigits = document.getElementById('toggleDigits');
+    toggleDigits.addEventListener('change', () => {
+      showDigits = toggleDigits.checked;
+      draw();
+    });
+
+    const dialSelect = document.getElementById('dialSelect');
+    dialSelect.addEventListener('change', () => {
+      dialBase = parseInt(dialSelect.value, 10);
+      const minutesInput = document.getElementById('minutes');
+      minutesInput.max = dialBase;
+      if (parseInt(minutesInput.value, 10) > dialBase) {
+        minutesInput.value = dialBase;
+      }
+      draw();
+    });
+    dialSelect.dispatchEvent(new Event('change'));
+
+    const menuBtn = document.getElementById('menuBtn');
+    const menu = document.querySelector('.controls');
+    menuBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      menu.classList.toggle('show');
+    });
+    document.addEventListener('click', e => {
+      if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
+        menu.classList.remove('show');
+      }
+    });
 
     canvas.addEventListener('mousedown', startDrag);
     canvas.addEventListener('touchstart', startDrag);
