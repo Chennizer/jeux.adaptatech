@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Timer</title>
+  <style>
+    body {
+      margin:0;
+      font-family:Arial, sans-serif;
+      height:100vh;
+      overflow:hidden;
+    }
+
+    #overlay {
+      position:fixed;
+      top:0;
+      left:0;
+      width:100vw;
+      height:100vh;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      background:#fff;
+      z-index:2;
+    }
+
+    #overlay button {
+      font-size:5vmin;
+      padding:1em 2em;
+    }
+
+    #timerCanvas {
+      position:absolute;
+      top:0;
+      left:0;
+      width:100vw;
+      height:100vh;
+      background:none;
+    }
+
+    .controls {
+      position:absolute;
+      top:50%;
+      right:2vw;
+      transform:translateY(-50%);
+      z-index:1;
+      text-align:center;
+      font-size:3vmin;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+    }
+
+    .controls > * { margin:0.5vmin 0; }
+    input[type=number] { width:6vmin; font-size:1em; }
+    button { padding:0.5em 1em; font-size:1em; margin:0; }
+  </style>
+</head>
+<body>
+  <div id="overlay"><button id="enterBtn">Start</button></div>
+  <canvas id="timerCanvas"></canvas>
+  <div class="controls">
+    <label>Minutes: <input type="number" id="minutes" min="1" max="60" value="5"></label>
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="fsBtn">Fullscreen</button>
+    <button id="stopBtn">Stop</button>
+  </div>
+  <script>
+    const overlay = document.getElementById('overlay');
+    const enterBtn = document.getElementById('enterBtn');
+    const canvas = document.getElementById('timerCanvas');
+  const ctx = canvas.getContext('2d');
+  let totalSeconds = 300; // default 5 minutes
+  let remainingSeconds = 0;
+  let intervalId = null;
+  let paused = false;
+  let dragging = false;
+
+  function getMinutesFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const rawAng = Math.atan2(y - centerY, x - centerX);
+    let ang = -Math.PI / 2 - rawAng;
+    while (ang < 0) ang += Math.PI * 2;
+    const minutes = Math.round((ang / (Math.PI * 2)) * 60);
+    return minutes === 0 ? 60 : minutes;
+  }
+
+  function updateDrag(e) {
+    const mins = Math.max(1, getMinutesFromEvent(e));
+    document.getElementById('minutes').value = mins;
+    totalSeconds = mins * 60;
+    remainingSeconds = totalSeconds;
+    draw();
+  }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      draw();
+    }
+
+    function draw() {
+      const size = Math.min(canvas.width, canvas.height) * 0.9; // leave margin
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const outerRadius = size * 0.4; // room for ticks and numbers
+      const borderWidth = size * 0.0067;
+      const wedgeRadius = outerRadius - borderWidth / 2;
+      const tickLong = size * 0.05;
+      const tickShort = size * 0.025;
+      const tickStart = outerRadius + borderWidth / 2;
+      const numbersRadius = tickStart + tickLong + size * 0.03;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // outer circle
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = borderWidth;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (remainingSeconds > 0) {
+        const maxAngle = (totalSeconds / 3600) * Math.PI * 2;
+        const angle = maxAngle * (remainingSeconds / totalSeconds);
+        ctx.fillStyle = '#d9534f';
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, wedgeRadius, -Math.PI / 2, -Math.PI / 2 - angle, true);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // ticks
+      for (let i = 0; i < 60; i++) {
+        const ang = -Math.PI / 2 - (i / 60) * Math.PI * 2;
+        const startX = centerX + Math.cos(ang) * tickStart;
+        const startY = centerY + Math.sin(ang) * tickStart;
+        const len = i % 5 === 0 ? tickLong : tickShort;
+        const endX = centerX + Math.cos(ang) * (tickStart + len);
+        const endY = centerY + Math.sin(ang) * (tickStart + len);
+        ctx.lineWidth = i % 5 === 0 ? size * 0.006 : size * 0.003;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+      }
+
+      // numbers every 5 minutes
+      ctx.fillStyle = '#000';
+      ctx.font = `${size * 0.04}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let m = 0; m < 60; m += 5) {
+        const ang = -Math.PI / 2 - (m / 60) * Math.PI * 2;
+        const x = centerX + Math.cos(ang) * numbersRadius;
+        const y = centerY + Math.sin(ang) * numbersRadius;
+        ctx.fillText(m.toString(), x, y);
+      }
+
+      ctx.fillStyle = '#000';
+      ctx.font = `bold ${size * 0.12}px Arial`;
+      const mins = Math.floor(remainingSeconds / 60);
+      const secs = remainingSeconds % 60;
+      ctx.fillText(`${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`, centerX, centerY);
+    }
+
+    function tick() {
+      if (!paused) {
+        remainingSeconds--;
+        if (remainingSeconds <= 0) {
+          remainingSeconds = 0;
+          clearInterval(intervalId);
+          beep();
+        }
+        draw();
+      }
+    }
+
+    function startTimer() {
+      totalSeconds = parseInt(document.getElementById('minutes').value, 10) * 60;
+      if (isNaN(totalSeconds) || totalSeconds <= 0) return;
+      remainingSeconds = totalSeconds;
+      paused = false;
+      document.getElementById('pauseBtn').textContent = 'Pause';
+      clearInterval(intervalId);
+      intervalId = setInterval(tick, 1000);
+      draw();
+    }
+
+    function pauseTimer() {
+      paused = !paused;
+      document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+    }
+
+    function stopTimer() {
+      clearInterval(intervalId);
+      remainingSeconds = 0;
+      paused = false;
+      document.getElementById('pauseBtn').textContent = 'Pause';
+      draw();
+    }
+
+    function beep() {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ac.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      osc.connect(ac.destination);
+      osc.start();
+      osc.stop(ac.currentTime + 0.2);
+    }
+
+    function startDrag(e) {
+      clearInterval(intervalId);
+      paused = false;
+      document.getElementById('pauseBtn').textContent = 'Pause';
+      dragging = true;
+      updateDrag(e);
+    }
+
+    function dragMove(e) {
+      if (!dragging) return;
+      e.preventDefault();
+      updateDrag(e);
+    }
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragMove(e);
+      dragging = false;
+      startTimer();
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+      } else {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      }
+      setTimeout(resizeCanvas, 100);
+    }
+
+    enterBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+      }
+      overlay.style.display = 'none';
+      resizeCanvas();
+    });
+
+    document.getElementById('startBtn').addEventListener('click', startTimer);
+    document.getElementById('pauseBtn').addEventListener('click', pauseTimer);
+    document.getElementById('stopBtn').addEventListener('click', stopTimer);
+    document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
+
+    canvas.addEventListener('mousedown', startDrag);
+    canvas.addEventListener('touchstart', startDrag);
+    window.addEventListener('mousemove', dragMove);
+    window.addEventListener('touchmove', dragMove, {passive:false});
+    window.addEventListener('mouseup', endDrag);
+    window.addEventListener('touchend', endDrag);
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+  </script>
+</body>
+</html>
