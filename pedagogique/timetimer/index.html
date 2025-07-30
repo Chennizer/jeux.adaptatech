@@ -91,6 +91,16 @@
   <div id="menuBtn">⚙️</div>
   <div class="controls">
     <label>Minutes: <input type="number" id="minutes" min="1" max="60" value="5"></label>
+    <label>Dial scale:
+      <select id="dialSelect">
+        <option value="60" selected>60&nbsp;min</option>
+        <option value="120">120&nbsp;min</option>
+        <option value="30">30&nbsp;min</option>
+        <option value="10">10&nbsp;min</option>
+        <option value="5">5&nbsp;min</option>
+        <option value="1">1&nbsp;min</option>
+      </select>
+    </label>
     <label><input type="checkbox" id="toggleDigits"> Show numbers</label>
     <button id="startBtn">Start</button>
     <button id="pauseBtn">Pause</button>
@@ -108,6 +118,27 @@
   let paused = false;
   let dragging = false;
   let showDigits = false;
+  let dialBase = 60;
+  document.getElementById('minutes').max = dialBase;
+
+  function getDialSettings(base) {
+    switch (base) {
+      case 120:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i*2):null};
+      case 60:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i):null};
+      case 30:
+        return {ticks:30, major:5, label:i=>i%5===0?String(i):null};
+      case 10:
+        return {ticks:10, major:1, label:i=>String(9-i)};
+      case 5:
+        return {ticks:5, major:1, label:i=>String(4-i)};
+      case 1:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i):null};
+      default:
+        return {ticks:60, major:5, label:i=>i%5===0?String(i):null};
+    }
+  }
 
   function getMinutesFromEvent(e) {
     const rect = canvas.getBoundingClientRect();
@@ -120,12 +151,12 @@
     const rawAng = Math.atan2(y - centerY, x - centerX);
     let ang = -Math.PI / 2 - rawAng;
     while (ang < 0) ang += Math.PI * 2;
-    const minutes = Math.round((ang / (Math.PI * 2)) * 60);
-    return minutes === 0 ? 60 : minutes;
+    const minutes = Math.round((ang / (Math.PI * 2)) * dialBase);
+    return minutes === 0 ? dialBase : minutes;
   }
 
   function updateDrag(e) {
-    const mins = Math.max(1, getMinutesFromEvent(e));
+    const mins = Math.max(1, Math.min(dialBase, getMinutesFromEvent(e)));
     document.getElementById('minutes').value = mins;
     totalSeconds = mins * 60;
     remainingSeconds = totalSeconds;
@@ -160,8 +191,8 @@
       ctx.stroke();
 
       if (remainingSeconds > 0) {
-        const maxAngle = (totalSeconds / 3600) * Math.PI * 2;
-        const angle = maxAngle * (remainingSeconds / totalSeconds);
+        const baseSeconds = dialBase * 60;
+        const angle = (Math.min(remainingSeconds, baseSeconds) / baseSeconds) * Math.PI * 2;
         ctx.fillStyle = '#d9534f';
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
@@ -170,31 +201,31 @@
         ctx.fill();
       }
 
-      // ticks
-      for (let i = 0; i < 60; i++) {
-        const ang = -Math.PI / 2 - (i / 60) * Math.PI * 2;
-        const startX = centerX + Math.cos(ang) * tickStart;
-        const startY = centerY + Math.sin(ang) * tickStart;
-        const len = i % 5 === 0 ? tickLong : tickShort;
-        const endX = centerX + Math.cos(ang) * (tickStart + len);
-        const endY = centerY + Math.sin(ang) * (tickStart + len);
-        ctx.lineWidth = i % 5 === 0 ? size * 0.006 : size * 0.003;
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-      }
-
-      // numbers every 5 minutes
+      // ticks and numbers
+      const settings = getDialSettings(dialBase);
       ctx.fillStyle = '#000';
       ctx.font = `${size * 0.04}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (let m = 0; m < 60; m += 5) {
-        const ang = -Math.PI / 2 - (m / 60) * Math.PI * 2;
-        const x = centerX + Math.cos(ang) * numbersRadius;
-        const y = centerY + Math.sin(ang) * numbersRadius;
-        ctx.fillText(m.toString(), x, y);
+      for (let i = 0; i < settings.ticks; i++) {
+        const ang = -Math.PI / 2 - (i / settings.ticks) * Math.PI * 2;
+        const startX = centerX + Math.cos(ang) * tickStart;
+        const startY = centerY + Math.sin(ang) * tickStart;
+        const len = i % settings.major === 0 ? tickLong : tickShort;
+        const endX = centerX + Math.cos(ang) * (tickStart + len);
+        const endY = centerY + Math.sin(ang) * (tickStart + len);
+        ctx.lineWidth = i % settings.major === 0 ? size * 0.006 : size * 0.003;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        const label = settings.label(i);
+        if (label !== null) {
+          const lx = centerX + Math.cos(ang) * numbersRadius;
+          const ly = centerY + Math.sin(ang) * numbersRadius;
+          ctx.fillText(label, lx, ly);
+        }
       }
 
       if (showDigits) {
@@ -219,8 +250,9 @@
     }
 
     function startTimer() {
-      totalSeconds = parseInt(document.getElementById('minutes').value, 10) * 60;
-      if (isNaN(totalSeconds) || totalSeconds <= 0) return;
+      const minutesVal = parseInt(document.getElementById('minutes').value, 10);
+      if (isNaN(minutesVal) || minutesVal <= 0) return;
+      totalSeconds = Math.min(minutesVal, dialBase) * 60;
       remainingSeconds = totalSeconds;
       paused = false;
       document.getElementById('pauseBtn').textContent = 'Pause';
@@ -299,6 +331,18 @@
       showDigits = toggleDigits.checked;
       draw();
     });
+
+    const dialSelect = document.getElementById('dialSelect');
+    dialSelect.addEventListener('change', () => {
+      dialBase = parseInt(dialSelect.value, 10);
+      const minutesInput = document.getElementById('minutes');
+      minutesInput.max = dialBase;
+      if (parseInt(minutesInput.value, 10) > dialBase) {
+        minutesInput.value = dialBase;
+      }
+      draw();
+    });
+    dialSelect.dispatchEvent(new Event('change'));
 
     const menuBtn = document.getElementById('menuBtn');
     const menu = document.querySelector('.controls');
