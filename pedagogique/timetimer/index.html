@@ -39,7 +39,8 @@
       background:none;
     }
 
-    .controls {
+    .controls,
+    .color-controls {
       position:fixed;
       top:50%;
       right:-240px;
@@ -58,9 +59,11 @@
       transition:right 0.3s ease;
     }
 
-    .controls.show { right:2vw; }
+    .controls.show,
+    .color-controls.show { right:2vw; }
 
-    .controls > * { margin:0.5vmin 0; }
+    .controls > *,
+    .color-controls > * { margin:0.5vmin 0; }
     input[type=number] { width:6vmin; font-size:1em; }
     button { padding:0.5em 1em; font-size:1em; margin:0; }
 
@@ -83,12 +86,33 @@
     }
 
     #menuBtn:hover { background:rgba(0,0,0,0.9); }
+
+    #colorBtn {
+      position:fixed;
+      top:60px;
+      right:10px;
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:22px;
+      cursor:pointer;
+      background:rgba(0,0,0,0.7);
+      color:#fff;
+      z-index:1;
+      transition:background 0.3s ease;
+    }
+
+    #colorBtn:hover { background:rgba(0,0,0,0.9); }
   </style>
 </head>
 <body>
   <div id="overlay"><button id="enterBtn">Start</button></div>
   <canvas id="timerCanvas"></canvas>
   <div id="menuBtn">⚙️</div>
+  <div id="colorBtn">🎨</div>
   <div class="controls">
     <label>Minutes: <input type="number" id="minutes" min="1" max="60" value="5"></label>
     <label>
@@ -108,6 +132,9 @@
     <button id="fsBtn">Fullscreen</button>
     <button id="stopBtn">Stop</button>
   </div>
+  <div class="color-controls">
+    <label>Select color: <input type="color" id="colorPicker" value="#d9534f"></label>
+  </div>
   <script>
     const overlay = document.getElementById('overlay');
     const enterBtn = document.getElementById('enterBtn');
@@ -120,6 +147,7 @@
   let dragging = false;
   let showDigits = false;
   let dialMax = 60;
+  let timerColor = '#d9534f';
   const minutesInput = document.getElementById('minutes');
   minutesInput.max = dialMax;
   const dialConfigs = {
@@ -152,6 +180,20 @@
       const minutes = Math.round(ratio * dialMax);
       return (minutes === 0 ? dialMax : minutes) * 60;
     }
+  }
+
+  function insideDial(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const size = Math.min(canvas.width, canvas.height) * 0.9;
+    const outerRadius = size * 0.4;
+    const dist = Math.hypot(x - centerX, y - centerY);
+    return dist <= outerRadius;
   }
 
   function updateDrag(e) {
@@ -192,7 +234,7 @@
       if (remainingSeconds > 0) {
         const maxAngle = (totalSeconds / (dialMax * 60)) * Math.PI * 2;
         const angle = maxAngle * (remainingSeconds / totalSeconds);
-        ctx.fillStyle = '#d9534f';
+        ctx.fillStyle = timerColor;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, wedgeRadius, -Math.PI / 2, -Math.PI / 2 - angle, true);
@@ -234,7 +276,7 @@
         ctx.fillStyle = '#000';
         ctx.font = `bold ${size * 0.12}px Arial`;
         const mins = Math.floor(remainingSeconds / 60);
-        const secs = remainingSeconds % 60;
+        const secs = Math.floor(remainingSeconds % 60);
         ctx.fillText(`${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`, centerX, centerY);
       }
     }
@@ -252,7 +294,7 @@
     }
 
     function startTimer() {
-      totalSeconds = parseFloat(minutesInput.value) * 60;
+      totalSeconds = Math.round(parseFloat(minutesInput.value) * 60);
       if (isNaN(totalSeconds) || totalSeconds <= 0) return;
       if (totalSeconds > dialMax * 60) {
         totalSeconds = dialMax * 60;
@@ -290,6 +332,7 @@
     }
 
     function startDrag(e) {
+      if (!insideDial(e)) return;
       clearInterval(intervalId);
       paused = false;
       document.getElementById('pauseBtn').textContent = 'Pause';
@@ -352,14 +395,32 @@
 
     const menuBtn = document.getElementById('menuBtn');
     const menu = document.querySelector('.controls');
+    const colorBtn = document.getElementById('colorBtn');
+    const colorMenu = document.querySelector('.color-controls');
+    const colorPicker = document.getElementById('colorPicker');
+
     menuBtn.addEventListener('click', e => {
       e.stopPropagation();
       menu.classList.toggle('show');
+      colorMenu.classList.remove('show');
+    });
+    colorBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      colorMenu.classList.toggle('show');
+      menu.classList.remove('show');
     });
     document.addEventListener('click', e => {
       if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
         menu.classList.remove('show');
       }
+      if (!colorMenu.contains(e.target) && !colorBtn.contains(e.target)) {
+        colorMenu.classList.remove('show');
+      }
+    });
+
+    colorPicker.addEventListener('input', () => {
+      timerColor = colorPicker.value;
+      draw();
     });
 
     canvas.addEventListener('mousedown', startDrag);
