@@ -40,7 +40,8 @@
     }
 
     .controls,
-    .color-controls {
+    .color-controls,
+    .feature-controls {
       position:fixed;
       top:50%;
       right:-240px;
@@ -60,10 +61,12 @@
     }
 
     .controls.show,
-    .color-controls.show { right:2vw; }
+    .color-controls.show,
+    .feature-controls.show { right:2vw; }
 
     .controls > *,
-    .color-controls > * { margin:0.5vmin 0; }
+    .color-controls > *,
+    .feature-controls > * { margin:0.5vmin 0; }
     input[type=number] { width:6vmin; font-size:1em; }
     button { padding:0.5em 1em; font-size:1em; margin:0; }
 
@@ -106,6 +109,26 @@
     }
 
     #colorBtn:hover { background:rgba(0,0,0,0.9); }
+
+    #featureBtn {
+      position:fixed;
+      top:110px;
+      right:10px;
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:22px;
+      cursor:pointer;
+      background:rgba(0,0,0,0.7);
+      color:#fff;
+      z-index:1;
+      transition:background 0.3s ease;
+    }
+
+    #featureBtn:hover { background:rgba(0,0,0,0.9); }
   </style>
 </head>
 <body>
@@ -113,6 +136,7 @@
   <canvas id="timerCanvas"></canvas>
   <div id="menuBtn">⚙️</div>
   <div id="colorBtn">🎨</div>
+  <div id="featureBtn">⭐</div>
   <div class="controls">
     <label>Minutes: <input type="number" id="minutes" min="1" max="60" value="5"></label>
     <label>
@@ -135,6 +159,15 @@
   <div class="color-controls">
     <label>Select color: <input type="color" id="colorPicker" value="#d9534f"></label>
   </div>
+  <div class="feature-controls">
+    <label><input type="radio" name="layoutMode" value="none" checked> None</label>
+    <label><input type="radio" name="layoutMode" value="around"> Images around timer</label>
+    <label><input type="radio" name="layoutMode" value="stack"> Images stacked left</label>
+    <label>Image 1: <input type="file" id="img1"></label>
+    <label>Image 2: <input type="file" id="img2"></label>
+    <label>Image 3: <input type="file" id="img3"></label>
+    <label>Image 4: <input type="file" id="img4"></label>
+  </div>
   <script>
     const overlay = document.getElementById('overlay');
     const enterBtn = document.getElementById('enterBtn');
@@ -148,6 +181,20 @@
   let showDigits = false;
   let dialMax = 60;
   let timerColor = '#d9534f';
+  let layoutMode = 'none';
+  const segmentColors = ['#ff0000', '#ffff00', '#00ff00', '#0000ff'];
+  const images = [null, null, null, null];
+  const defaultImagePaths = [
+    '../../images/cartoonelephant.png',
+    '../../images/window.png',
+    '../../images/fingerpaint.png',
+    '../../images/pawpatrollogo.png'
+  ];
+  defaultImagePaths.forEach((src, i) => {
+    const img = new Image();
+    img.src = src;
+    img.onload = () => { images[i] = img; draw(); };
+  });
   const minutesInput = document.getElementById('minutes');
   minutesInput.max = dialMax;
   const dialConfigs = {
@@ -221,6 +268,7 @@
       const tickShort = size * 0.025;
       const tickStart = outerRadius + borderWidth / 2;
       const numbersRadius = tickStart + tickLong + size * 0.03;
+      const quarterAngle = Math.PI / 2;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -231,10 +279,33 @@
       ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
       ctx.stroke();
 
+      if (layoutMode === 'around') {
+        ctx.globalAlpha = 0.25;
+        for (let i = 0; i < 4; i++) {
+          ctx.fillStyle = segmentColors[i];
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          ctx.arc(
+            centerX,
+            centerY,
+            wedgeRadius,
+            -Math.PI / 2 - i * quarterAngle,
+            -Math.PI / 2 - (i + 1) * quarterAngle,
+            true
+          );
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      let activeQuarter = 0;
       if (remainingSeconds > 0) {
         const maxAngle = (totalSeconds / (dialMax * 60)) * Math.PI * 2;
         const angle = maxAngle * (remainingSeconds / totalSeconds);
-        ctx.fillStyle = timerColor;
+        const elapsed = (maxAngle - angle) % (Math.PI * 2);
+        activeQuarter = Math.floor(elapsed / quarterAngle);
+        ctx.fillStyle = layoutMode === 'stack' ? segmentColors[activeQuarter] : timerColor;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, wedgeRadius, -Math.PI / 2, -Math.PI / 2 - angle, true);
@@ -278,6 +349,40 @@
         const mins = Math.floor(remainingSeconds / 60);
         const secs = Math.floor(remainingSeconds % 60);
         ctx.fillText(`${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`, centerX, centerY);
+      }
+
+      if (layoutMode === 'around') {
+        for (let i = 0; i < 4; i++) {
+          const img = images[i];
+          if (!img) continue;
+          const ang = -Math.PI / 2 - quarterAngle * i - quarterAngle / 2;
+          const imgRadius = numbersRadius + size * 0.05;
+          const imgSize = size * 0.15;
+          const x = centerX + Math.cos(ang) * imgRadius - imgSize / 2;
+          const y = centerY + Math.sin(ang) * imgRadius - imgSize / 2;
+          ctx.drawImage(img, x, y, imgSize, imgSize);
+          ctx.strokeStyle = segmentColors[i];
+          ctx.lineWidth = borderWidth;
+          ctx.strokeRect(x, y, imgSize, imgSize);
+        }
+      } else if (layoutMode === 'stack') {
+        const imgSize = size * 0.15;
+        const bigSize = imgSize * 2;
+        const spacing = size * 0.03;
+        const startX = (centerX - outerRadius) / 2 - imgSize / 2;
+        const startY = centerY - (imgSize * 4 + spacing * 3) / 2;
+        for (let i = 0; i < 4; i++) {
+          const img = images[i];
+          if (!img) continue;
+          const yCenter = startY + i * (imgSize + spacing) + imgSize / 2;
+          const curSize = i === activeQuarter ? bigSize : imgSize;
+          const x = startX - (curSize - imgSize) / 2;
+          const y = yCenter - curSize / 2;
+          ctx.drawImage(img, x, y, curSize, curSize);
+          ctx.strokeStyle = segmentColors[i];
+          ctx.lineWidth = borderWidth;
+          ctx.strokeRect(x, y, curSize, curSize);
+        }
       }
     }
 
@@ -398,16 +503,26 @@
     const colorBtn = document.getElementById('colorBtn');
     const colorMenu = document.querySelector('.color-controls');
     const colorPicker = document.getElementById('colorPicker');
+    const featureBtn = document.getElementById('featureBtn');
+    const featureMenu = document.querySelector('.feature-controls');
 
     menuBtn.addEventListener('click', e => {
       e.stopPropagation();
       menu.classList.toggle('show');
       colorMenu.classList.remove('show');
+      featureMenu.classList.remove('show');
     });
     colorBtn.addEventListener('click', e => {
       e.stopPropagation();
       colorMenu.classList.toggle('show');
       menu.classList.remove('show');
+      featureMenu.classList.remove('show');
+    });
+    featureBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      featureMenu.classList.toggle('show');
+      menu.classList.remove('show');
+      colorMenu.classList.remove('show');
     });
     document.addEventListener('click', e => {
       if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
@@ -416,11 +531,34 @@
       if (!colorMenu.contains(e.target) && !colorBtn.contains(e.target)) {
         colorMenu.classList.remove('show');
       }
+      if (!featureMenu.contains(e.target) && !featureBtn.contains(e.target)) {
+        featureMenu.classList.remove('show');
+      }
     });
 
     colorPicker.addEventListener('input', () => {
       timerColor = colorPicker.value;
       draw();
+    });
+
+    document.querySelectorAll('input[name="layoutMode"]').forEach(r => {
+      r.addEventListener('change', () => {
+        layoutMode = r.value;
+        draw();
+      });
+    });
+    ['img1','img2','img3','img4'].forEach((id,i)=>{
+      document.getElementById(id).addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) { images[i] = null; draw(); return; }
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const img = new Image();
+          img.onload = () => { images[i] = img; draw(); };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
     });
 
     canvas.addEventListener('mousedown', startDrag);
