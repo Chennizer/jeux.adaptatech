@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title data-fr="Aire de jeux - Arc-en-ciel" data-en="Playground - Rainbow">
+    Aire de jeux - Arc-en-ciel
+  </title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <!-- p5 -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+
+  <!-- banques audio -->
+  <script src="../../js/stonermusic.js"></script>
+  <script src="../../js/transitionSounds.js"></script>
+
+  <style>
+    html, body { margin:0; padding:0; background:#a7d5ff; }
+    canvas { display:block; }
+
+    /* Overlay de départ */
+    #promptOverlay{
+      position:fixed; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:1rem;
+      background:rgba(10,15,24,.85); color:#fff; text-align:center; z-index:5;
+      padding:2rem;
+    }
+    #promptOverlay p{ font-size:clamp(1rem,2.5vmin,1.2rem); line-height:1.4; }
+    #startButton{ font-size:1.1rem; padding:.7rem 1.1rem; }
+    #infoButton{
+      position:absolute; top:12px; left:12px; border:none; background:transparent;
+      font-size:1.3rem; color:#fff; cursor:pointer;
+    }
+
+    /* Modal info */
+    #infoModal{
+      position:fixed; inset:0; display:none; place-items:center; z-index:6;
+      background:rgba(0,0,0,.5);
+    }
+    #infoModal .box{
+      background:#101826; color:#fff; padding:1rem 1.2rem; max-width:min(90vw,560px);
+      border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5);
+    }
+    #closeModal{ padding:.6rem 1rem; }
+
+    /* Icône réglages */
+    #settings-icon{
+      position:fixed; right:12px; bottom:12px; z-index:4;
+      width:42px; height:42px; border-radius:50%;
+      display:none; align-items:center; justify-content:center;
+      background:#1f2a44; color:#fff; cursor:pointer; user-select:none;
+      box-shadow:0 4px 16px rgba(0,0,0,.35);
+      font-size:20px;
+    }
+
+    /* Bouton plein écran – override fort d'éventuels styles globaux */
+    #fullscreen-btn{
+      position: fixed !important;
+      right: 12px !important;
+      bottom: 60px !important;
+      inset: auto !important;
+      display: inline-flex !important;
+      align-items: center; justify-content: center;
+      width: auto !important; height: auto !important;
+      min-height: unset !important; min-width: unset !important;
+      padding: .45rem .75rem; font-size: .95rem; line-height: 1;
+      background:#1f2a44; color:#fff; border:none; border-radius:10px; cursor:pointer;
+      box-shadow:0 4px 16px rgba(0,0,0,.35);
+      z-index: 4; display:none;
+    }
+
+    /* Menu latéral */
+    #menu{ width:280px; z-index:4; }
+    #menu h3{ margin-top:.5rem; }
+    #menu input[type="range"]{ width:100%; }
+    #menu label.inline{ display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
+  </style>
+</head>
+
+<!-- Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-B45TJG4GBJ');
+</script>
+
+<body>
+  <!-- Overlay -->
+  <div id="promptOverlay">
+    <button id="infoButton" title="Plus d'infos" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+    <p class="translate"
+       data-fr="Bienvenue!<br>Appuyez sur ESPACE (ou touchez) pour allumer un segment de l’arc-en-ciel."
+       data-en="Welcome!<br>Press SPACE (or tap) to light up a rainbow segment.">
+      Bienvenue!<br>Appuyez sur ESPACE (ou touchez) pour allumer un segment de l’arc-en-ciel.
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+
+  <!-- Modal info -->
+  <div id="infoModal">
+    <div class="box">
+      <p class="translate"
+         data-fr="Compétence : appuyer (cause→effet).<br>SENICT niveau 1.<br>Switch Progression Roadmap niveaux 8 à 10."
+         data-en="Skill: press (cause→effect).<br>SENICT level 1.<br>Switch Progression Roadmap levels 8–10.">
+        Compétence : appuyer (cause→effet).<br>SENICT niveau 1.<br>Switch Progression Roadmap niveaux 8 à 10.
+      </p>
+      <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+    </div>
+  </div>
+
+  <!-- Icône réglages + plein écran -->
+  <div id="settings-icon" title="Réglages" class="translate" data-fr="⚙️" data-en="⚙️">⚙️</div>
+  <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+
+  <!-- Menu -->
+  <div id="menu">
+    <h3 data-fr="Musique et son" data-en="Music &amp; Sound">Musique et son</h3>
+    <label class="inline">
+      <span data-fr="Désactiver la musique" data-en="Disable music">Désactiver la musique</span>
+      <input type="checkbox" id="muteToggle">
+    </label>
+    <label>
+      <span data-fr="Volume de la musique" data-en="Music volume">Volume de la musique</span>
+      <span id="musicVolumeValue">50</span>
+      <input type="range" id="musicVolumeSlider" min="1" max="100" value="50">
+    </label>
+
+    <h3 data-fr="Effets sonores" data-en="Sound effects">Effets sonores</h3>
+    <label class="inline">
+      <span data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+      <input type="checkbox" id="muteSFXToggle">
+    </label>
+    <label>
+      <span data-fr="Volume des sons" data-en="Sound volume">Volume des sons</span>
+      <span id="starSoundVolumeValue">50</span>
+      <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
+    </label>
+
+    <h3 data-fr="Autres options" data-en="Other options">Options</h3>
+    <label class="inline">
+      <span class="translate"
+            data-fr="Activer clic/touch pour ajouter un segment"
+            data-en="Enable click/touch to add a segment">
+        Activer clic/touch pour ajouter un segment
+      </span>
+      <input type="checkbox" id="clickTransitionToggle" checked>
+    </label>
+  </div>
+
+  <script src="../../js/translationonly.js"></script>
+
+  <script>
+    /* ---------- Audio & contrôles ---------- */
+    let musicFiles = [], transitionSoundFiles = [], currentMusic = null;
+    let isMuted = false, isSFXMuted = false, musicVolume = 0.5, starSoundVolume = 0.5;
+    let clickTransitionEnabled = true;
+
+    const muteToggle = document.getElementById('muteToggle');
+    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+    const musicVolumeValue  = document.getElementById('musicVolumeValue');
+    const muteSFXToggle = document.getElementById('muteSFXToggle');
+    const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
+    const starSoundVolumeValue  = document.getElementById('starSoundVolumeValue');
+    const clickTransitionToggle = document.getElementById('clickTransitionToggle');
+
+    muteToggle.addEventListener('change', () => {
+      isMuted = muteToggle.checked;
+      if (currentMusic) currentMusic.setVolume(isMuted ? 0 : musicVolume);
+    });
+    musicVolumeSlider.addEventListener('input', () => {
+      musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
+      musicVolumeValue.textContent = musicVolumeSlider.value;
+      if (currentMusic && !isMuted) currentMusic.setVolume(musicVolume);
+    });
+    muteSFXToggle.addEventListener('change', () => { isSFXMuted = muteSFXToggle.checked; });
+    starSoundVolumeSlider.addEventListener('input', () => {
+      starSoundVolume = parseInt(starSoundVolumeSlider.value, 10) / 100;
+      starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
+    });
+    clickTransitionToggle.addEventListener('change', () => { clickTransitionEnabled = clickTransitionToggle.checked; });
+
+    function goFullscreen(){
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+      else document.exitFullscreen();
+    }
+
+    document.getElementById("startButton").addEventListener("click", async () => {
+      // lire réglages
+      isMuted = muteToggle.checked; isSFXMuted = muteSFXToggle.checked;
+      musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
+      starSoundVolume = parseInt(starSoundVolumeSlider.value, 10) / 100;
+
+      // déverrouiller audio mobile
+      if (typeof getAudioContext === 'function') { try { await userStartAudio(); } catch(e){} }
+
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      goFullscreen();
+      document.getElementById("settings-icon").style.display = "flex";
+      document.getElementById("fullscreen-btn").style.display = "inline-flex";
+
+      if (window.stonerMusicArray && musicFiles.length > 0) {
+        currentMusic = randomFrom(musicFiles);
+        if (currentMusic && currentMusic.isLoaded()) {
+          currentMusic.setVolume(isMuted ? 0 : musicVolume);
+          currentMusic.loop();
+        }
+      }
+    });
+
+    document.getElementById("infoButton").addEventListener("click", () => {
+      document.getElementById("infoModal").style.display = "grid";
+    });
+    document.getElementById("closeModal").addEventListener("click", () => {
+      document.getElementById("infoModal").style.display = "none";
+    });
+    document.getElementById("settings-icon").addEventListener("click", () => {
+      document.getElementById("menu").classList.toggle("show");
+    });
+    document.getElementById("fullscreen-btn").addEventListener("click", () => { goFullscreen(); });
+
+    document.addEventListener('click', (event) => {
+      const menu = document.getElementById("menu");
+      const settingsIcon = document.getElementById("settings-icon");
+      if (menu.classList.contains("show") && !menu.contains(event.target) && !settingsIcon.contains(event.target)) {
+        menu.classList.remove("show");
+      }
+    });
+
+    /* ---------- Utilitaires ---------- */
+    function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+    function lerpCol(a,b,t){ return [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)]; }
+
+    /* ---------- p5 : Arc-en-ciel ---------- */
+    let started = false;
+
+    // Couleurs (collées)
+    const RAINBOW = [
+      [255, 60, 60],   // Rouge
+      [255, 150, 0],   // Orange
+      [255, 225, 0],   // Jaune
+      [0, 190, 80],    // Vert
+      [0, 135, 255],   // Bleu
+      [90, 0, 170],    // Indigo
+      [170, 0, 210]    // Violet
+    ];
+
+    const SEGMENTS = 16;           // nb d'appuis pour compléter l’arc
+    let revealedSegments = 0;      // progression 0..SEGMENTS
+
+    const ARC_START = Math.PI;     // demi-cercle
+    const ARC_END   = Math.PI * 2;
+
+    let baseRadius, bandThickness, cx, cy, margin;
+
+    let celebrating = false, stars = [];
+    const STAR_COUNT = 140, CELEBRATION_TIME = 2600;
+    let celebrationStart = 0;
+
+    let clouds = [];
+
+    function preload(){
+      if (window.stonerMusicArray?.length){
+        for (const item of window.stonerMusicArray){ musicFiles.push(loadSound(item.src, ()=>{}, ()=>{})); }
+      }
+      if (window.transitionSoundsArray?.length){
+        for (const item of window.transitionSoundsArray){ transitionSoundFiles.push(loadSound(item.src, ()=>{}, ()=>{})); }
+      }
+    }
+
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      noStroke();
+      computeGeometry();
+      initClouds();
+    }
+
+    function draw(){
+      if (!started) return;
+      drawSky();
+      drawClouds();
+      drawRainbowProgress(revealedSegments);
+
+      if (celebrating){
+        updateAndDrawStars();
+        if (millis() - celebrationStart > CELEBRATION_TIME){
+          celebrating = false; stars = []; revealedSegments = 0;
+        }
+      }
+    }
+
+    function keyPressed(){ if (started && key === ' ') triggerSegment(); }
+
+    function mousePressed(e){
+      const menu = document.getElementById("menu");
+      const settingsIcon = document.getElementById("settings-icon");
+      const fullscreenBtn = document.getElementById("fullscreen-btn");
+      if (menu.contains(e.target) || settingsIcon.contains(e.target) || fullscreenBtn.contains(e.target)) return;
+      if (menu.classList.contains('show')) return;
+      if (!started) return;
+      if (clickTransitionEnabled) triggerSegment();
+    }
+
+    function windowResized(){ resizeCanvas(windowWidth, windowHeight); computeGeometry(); initClouds(true); }
+
+    function triggerSegment(){
+      if (celebrating) return;
+      revealedSegments = constrain(revealedSegments + 1, 0, SEGMENTS);
+      if (!isSFXMuted && transitionSoundFiles.length){
+        const ts = randomFrom(transitionSoundFiles);
+        if (ts && ts.isLoaded()){ ts.setVolume(starSoundVolume); ts.play(); }
+      }
+      if (revealedSegments >= SEGMENTS) startCelebration();
+    }
+
+    function startCelebration(){
+      celebrating = true; celebrationStart = millis(); stars = [];
+      for (let i=0;i<STAR_COUNT;i++) stars.push(makeStar());
+    }
+
+    function makeStar(){ return { x: random(width), y: random(-height*0.3, -20), vx: random(-0.5,0.5), vy: random(2.5,5), spin: random(-0.1,0.1), angle: random(TWO_PI), size: random(6,14), alpha:255 }; }
+
+    function updateAndDrawStars(){
+      noStroke();
+      for (const s of stars){
+        s.x+=s.vx; s.y+=s.vy; s.angle+=s.spin; s.alpha-=2.2; s.vy+=0.05;
+        push(); translate(s.x,s.y); rotate(s.angle);
+        fill(255,240,180,s.alpha);
+        beginShape(); const spikes=5, outer=s.size, inner=s.size*0.45;
+        for (let i=0;i<spikes*2;i++){ const rad=(i%2===0)?outer:inner, a=i*Math.PI/spikes; vertex(Math.cos(a)*rad, Math.sin(a)*rad); }
+        endShape(CLOSE); pop();
+      }
+      stars = stars.filter(s => s.alpha>0 && s.y < height+40);
+    }
+
+    /* === Arc sans sections, intérieur vraiment transparent (anneaux remplis) === */
+    function drawRainbowProgress(segments){
+      // progression continue en angle (0..1)
+      const t = segments / SEGMENTS;
+      if (t <= 0) return;
+      const endAngle = ARC_START + (ARC_END - ARC_START) * t;
+
+      const bw = bandThickness;
+      const overlap = 1.0; // px d'overlap radial pour éviter toute fente AA
+
+      for (let i = 0; i < RAINBOW.length; i++){
+        const col = RAINBOW[i];
+        const outerR = baseRadius - i * (bw - overlap);
+        const innerR = outerR - bw + overlap;
+
+        ringSector(cx, cy, outerR, innerR, ARC_START, endAngle, col);
+      }
+      // rien d'autre : l'intérieur reste totalement transparent → on voit le ciel
+    }
+
+    // Dessine un secteur d'anneau rempli (Canvas 2D), évite les artefacts de stroke
+    function ringSector(cx, cy, rOuter, rInner, a0, a1, rgb){
+      const ctx = drawingContext; // p5 → CanvasRenderingContext2D
+      ctx.beginPath();
+      // arc extérieur
+      ctx.arc(cx, cy, rOuter, a0, a1, false);
+      // arc intérieur (sens inverse) pour refermer l'anneau
+      ctx.arc(cx, cy, rInner, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+      ctx.fill();
+    }
+
+    function computeGeometry(){
+      margin = max(24, min(width, height) * 0.04);
+
+      const rFitWidth  = (width/2) - margin;
+      const rFitHeight = height * 0.95;
+      baseRadius = max(60, min(rFitWidth, rFitHeight));
+
+      cx = width/2;
+      cy = height + baseRadius * 0.22;  // centre sous l’écran (extrémités cachées)
+
+      bandThickness = max(12, min(width, height) / 26);
+    }
+
+    /* ---------- Ciel et nuages ---------- */
+    function drawSky(){
+      const top = [167,213,255], bottom = [229,247,255]; // ciel doux
+      const bands = 16;
+      noStroke();
+      for (let i=0;i<bands;i++){
+        const t = i/(bands-1);
+        const c = lerpCol(top, bottom, t);
+        fill(c[0], c[1], c[2]);
+        const y0 = Math.floor(map(i,0,bands,0,height));
+        const y1 = Math.floor(map(i+1,0,bands,0,height));
+        rect(0, y0, width, y1 - y0 + 1);
+      }
+    }
+
+    function initClouds(keep=false){
+      const count = 6;
+      if (!keep) clouds = [];
+      while (clouds.length < count) clouds.push(makeCloud());
+      if (clouds.length > count) clouds.length = count;
+    }
+    function makeCloud(){ return { x: random(width), y: random(height*0.08, height*0.42), w: random(160, 300), h: random(60, 110), speed: random(0.15, 0.35), puff: floor(random(4,7)) }; }
+    function drawClouds(){
+      noStroke();
+      for (const c of clouds){
+        c.x += c.speed;
+        if (c.x - c.w > width + 60){ c.x = -c.w; c.y = random(height*0.08, height*0.42); }
+        for (let i=0;i<c.puff;i++){
+          const ox=(i - c.puff/2)*(c.w/c.puff)*0.7, oy=(sin((frameCount*0.01)+i)*3);
+          fill(255,255,255, 165 - i*12);
+          ellipse(c.x + ox, c.y + oy, c.w*0.45, c.h*0.6);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

@@ -7,21 +7,227 @@
   <link rel="stylesheet" href="../../css/control-panel.css">
   <link rel="stylesheet" href="../../css/games.css">
   <link rel="stylesheet" href="../../css/layout.css">
-<style>
-#video-selection-modal .modal-content {max-width:70vw;min-width:600px;}
-#video-selection-modal .actions{display:flex;justify-content:center;margin-top:10px;}
-#video-selection-modal .actions-row{display:flex;justify-content:center;gap:10px;width:100%;margin-top:10px;}
-#video-selection-modal .actions-row .button{width:auto;max-width:none;margin-top:0;}
-#video-selection-modal .control-panel-input{flex:1;padding:12px;font-size:16px;border:2px solid #00796B;border-radius:50px;}
-#video-selection-modal .control-panel-input:focus{border-color:#004D40;outline:none;}
-#video-selection-modal #video-selection{display:flex;justify-content:center;gap:20px;width:100%;flex-wrap:wrap;}
-#video-selection-modal .video-section{margin-bottom:15px;flex:1;min-width:300px;}
-#video-selection-modal .video-section-title{color:black;margin:10px 0 5px;}
-#video-selection-modal .video-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:5px;width:100%;}
-#video-selection-modal .video-card{position:relative;}
-#video-selection-modal .remove-btn{position:absolute;top:2px;right:6px;color:#c00;font-weight:bold;cursor:pointer;}
-</style>
+  <!-- Sortable is no longer required (drag disabled), can be removed if you like -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  <style>
+    /* ==============================
+       VIDEO SELECTION MODAL — COMPACT LAYOUT
+       ============================== */
+
+    /* Modal shell */
+    #video-selection-modal .modal-content {
+      max-width: 70vw;
+      min-width: 600px;
+      background: #fff;
+      padding: 16px 18px; /* a bit tighter on sides */
+      /* TWEAK: cap the modal height so the footer row can stay visible */
+      max-height: 80vh;               /* TWEAK: change 80vh if you want it taller/shorter */
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;               /* prevent whole-modal scroll; grid will scroll */
+    }
+
+    #video-selection-modal h2 { margin: 0 0 8px; }
+
+    /* Only the selection area scrolls internally */
+    #video-selection-modal #video-selection {
+      flex: 1 1 auto;                 /* occupy remaining height */
+      overflow: auto;                 /* internal scroll here */
+      padding-right: 4px;             /* room for scrollbar */
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    /* ===== Footer row: actions (left) + OK (right) ===== */
+    #video-selection-modal .footer-bar{
+      display:flex;
+      justify-content:space-between;  /* left cluster + right OK */
+      align-items:center;
+      gap:12px;
+      padding-top:8px;
+      margin-top:6px;
+      background:#fff;                /* TWEAK: can add gradient if desired */
+
+    }
+    #video-selection-modal .footer-bar .actions-left{
+      display:flex;
+      gap:20px;                       /* TWEAK: space between the two buttons */
+      flex-wrap:wrap;                 /* prevents overflow on small widths */
+    }
+
+    #video-selection-modal .footer-bar .button{
+      width:auto;
+      max-width:none;
+      margin-top:0;
+      padding-inline:14px;
+      border-radius:999px;
+    }
+
+    /* Inputs in other modals */
+    #video-selection-modal .control-panel-input{
+      flex:1;
+      padding:12px;
+      font-size:16px;
+      border:2px solid #00796B;
+      border-radius:50px;
+    }
+    #video-selection-modal .control-panel-input:focus{
+      border-color:#004D40;
+      outline:none;
+    }
+
+    /* Sections */
+    #video-selection-modal .video-section{
+      margin-bottom:10px;
+      flex:1;
+      min-width:300px;
+    }
+    /* Removed the "Vidéos importées" title for compactness */
+    #video-selection-modal .video-section-title{ display:none; }
+
+    /* Card grid — smaller min width + smaller gaps for denser layout */
+    #video-selection-modal .video-list{
+      /* TWEAK: change minmax(150px, 1fr) to 140/130px to fit more per row, or 160px to loosen */
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      display:grid;
+      gap:10px;                /* TWEAK: card-to-card gap */
+      margin-bottom:8px;       /* TWEAK: space under the grid */
+      width:100%;
+    }
+
+    /* Card + preview + caption */
+    #video-selection-modal .video-card{
+      position:relative;
+      cursor: default;         /* no drag anymore */
+      display:flex;
+      flex-direction:column;
+      gap:6px;                 /* TWEAK: space between thumbnail and filename */
+      padding:4px;             /* TWEAK: inner padding of each card */
+      border-radius:8px;       /* TWEAK: card corner radius */
+      background:#fafafa;
+      /* >>> Uniform border to avoid thin edges anywhere <<< */
+      border:4px solid rgba(0,0,0,.12);
+      box-sizing: border-box;  /* ensures border is included in sizing */
+      transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease, background-color .15s ease;
+      user-select:none;
+    }
+    #video-selection-modal .video-card:hover{
+      box-shadow: 0 4px 14px rgba(0,0,0,.08);
+      transform: translateY(-1px);
+    }
+
+    /* Selected state — border color instead of outline (fixes “unequal border” look) */
+    #video-selection-modal .video-card.selected{
+      border-color:#00796B;
+      box-shadow: 0 0 0 3px rgba(0,121,107,.15), 0 8px 20px rgba(0,0,0,.12);
+      background: #f0fbf9;
+    }
+
+    /* Thumbnail */
+    #video-selection-modal .thumb {
+      width:100%;
+      aspect-ratio: 16/9;
+      object-fit: cover;
+      border-radius: 6px; /* TWEAK: thumb corner radius */
+      background:#111;
+    }
+
+    /* Multi-line filename (default) */
+    .video-filename{
+      /* TWEAK: filename size/density */
+      font-size:12px;     /* was 14px, reduced for compactness */
+      line-height:1.2;    /* was 1.3 */
+      font-weight:600;
+      color:#111;
+      text-align:center;
+      margin-top:2px;
+      padding:0 4px 6px;  /* reduced bottom padding */
+      width:100%;
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      word-break: break-word;
+      display:block;
+    }
+    .video-name.video-filename{
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      font-size:12px;
+      line-height:1.2;
+      font-weight:600;
+      padding:0 4px 6px;
+    }
+
+    /* Number badge */
+    #video-selection-modal .video-index{
+      /* TWEAK: badge size/position */
+      position:absolute; top:6px; left:6px;
+      width:24px; height:24px; border-radius:999px;
+      background:#00796B; color:#fff; font-weight:800; font-size:12px;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow: 0 2px 6px rgba(0,0,0,.15); z-index:2;
+      user-select:none; pointer-events:none;
+    }
+
+    /* Reorder controls (▲/▼) placed under the number badge */
+    #video-selection-modal .reorder-controls{
+      /* TWEAK: position the stack of ▲ ▼ relative to the top-left corner */
+      position:absolute;
+      left:6px;
+      top:34px;            /* below the 24px badge + ~4px gap */
+      display:flex;
+      flex-direction:column;
+      gap:2px;             /* TWEAK: vertical gap between ▲ and ▼ */
+      z-index:2;
+    }
+    #video-selection-modal .reorder-controls button{
+      /* TWEAK: button size/shape */
+      width:24px; height:22px;
+      border-radius:6px;
+      border:1px solid rgba(0,0,0,.15);
+      background:rgba(255,255,255,.9);
+      cursor:pointer;
+      font-size:14px;
+      line-height:1;
+      padding:0;
+    }
+    #video-selection-modal .reorder-controls button:hover{
+      background:#fff;
+      box-shadow:0 2px 6px rgba(0,0,0,.08);
+    }
+
+    /* Remove button — stays top-right; no longer overlaps arrows */
+    #video-selection-modal .remove-btn{
+      position:absolute;
+      top:4px;
+      right:6px;
+      color:#c00;
+      font-weight:900;
+      cursor:pointer;
+      font-size:22px;          /* bigger X */
+      line-height:1;
+      text-shadow: 0 1px 2px rgba(0,0,0,.2);
+      background: rgba(255,255,255,.75);
+      border-radius: 999px;
+      width:26px;
+      height:26px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    #video-selection-modal .remove-btn:hover{
+      background:#fff;
+      transform: scale(1.05);
+    }
+  </style>
 </head>
+
+<!-- Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -29,14 +235,13 @@
   gtag('js', new Date());
   gtag('config', 'G-B45TJG4GBJ');
 </script>
+
 <body data-media-type="video">
   <!-- Control Panel for custom videos -->
-  <div id="control-panel" style="background-image: url('../../images/custom-videos.svg');">
+  <div id="control-panel" style="background-image: url('../../images/ghibli//ghiblilocalvideo.png');">
     <div id="control-panel-options">
       <div id="control-panel-title" data-fr="Vidéos personnalisées" data-en="Custom Videos">Vidéos personnalisées</div>
-      <div id="control-panel-instructions">
-        <!-- (Optional instructions can be added here with data attributes) -->
-      </div>
+      <div id="control-panel-instructions"></div>
       <div id="options-grid">
         <div>
           <select id="control-panel-play-mode" class="control-panel-custom-select">
@@ -47,30 +252,28 @@
           </select>
         </div>
         <div>
-          <label for="interval-time" id="interval-label" style="display:none;" 
+          <label for="interval-time" id="interval-label" style="display:none;"
             data-fr="Temps d'intervalle en secondes" data-en="Interval time in seconds">
             Temps d'intervalle en secondes
           </label>
           <input id="interval-time" type="number" value="30" style="display:none;">
         </div>
         <div>
-          <button id="select-videos-button" class="button" 
+          <button id="select-videos-button" class="button"
             data-fr="Sélection de vidéos" data-en="Video Selection">
             Sélection de vidéos
           </button>
         </div>
         <div>
-          <!-- This select will be populated dynamically from visualOptions -->
           <select id="special-options-select" class="control-panel-custom-select"></select>
         </div>
         <div>
-          <button id="select-space-prompt-button" class="button" 
+          <button id="select-space-prompt-button" class="button"
             data-fr="Image indicatrice" data-en="Indicator Image">
             Image indicatrice
           </button>
         </div>
         <div>
-          <!-- This select will be populated dynamically from spacePromptSounds -->
           <select id="sound-options-select" class="control-panel-custom-select">
             <option disabled selected hidden data-fr="Son indicateur" data-en="Indicator Sound">
               Son indicateur
@@ -78,7 +281,7 @@
           </select>
         </div>
         <div style="display:none;" id="player2-prompt-container">
-          <button id="select-space-prompt-button-2" class="button" 
+          <button id="select-space-prompt-button-2" class="button"
             data-fr="Image indicatrice du 2e joueur" data-en="Player 2 Indicator Image">
             Image indicatrice du 2e joueur
           </button>
@@ -92,7 +295,7 @@
         </div>
       </div>
       <div>
-        <button id="misc-options-button" class="button" 
+        <button id="misc-options-button" class="button"
           data-fr="Options Diverses" data-en="Miscellaneous Options">
           Options Diverses
         </button>
@@ -102,7 +305,7 @@
       <div id="control-panel-loading-bar-container">
         <div id="control-panel-loading-bar"></div>
       </div>
-      <button id="control-panel-start-button" class="button" style="display:none;" 
+      <button id="control-panel-start-button" class="button" style="display:none;"
         data-fr="Commencer" data-en="Start">
         Commencer
       </button>
@@ -115,7 +318,7 @@
       <span id="close-misc-options-modal" class="close">&times;</span>
       <h2 style="color:black" data-fr="Options Diverses" data-en="Miscellaneous Options">Options Diverses</h2>
       <div id="misc-options-container"></div>
-      <button id="misc-options-ok-button" class="button" style="margin-top:15px;" 
+      <button id="misc-options-ok-button" class="button" style="margin-top:15px;"
         data-fr="OK" data-en="OK">
         OK
       </button>
@@ -123,49 +326,66 @@
   </div>
 
   <!-- Video Selection Modal for custom videos -->
-  <div id="video-selection-modal" class="modal">
+  <div id="video-selection-modal" class="modal" style="display:none;">
     <div class="modal-content">
       <span id="close-modal" class="close">&times;</span>
-      <h2 style="color:black" data-fr="Vidéos actives (cliquer pour désélectionner)" data-en="Active Videos (click to deselect)">Sélection de vidéos</h2>
+      <h2 style="color:black"
+          data-fr="Vidéos actives (cliquer pour désélectionner)"
+          data-en="Active Videos (click to deselect)">Sélection de vidéos</h2>
+
       <div id="video-selection">
         <div class="video-section" id="local-videos-section">
-          <h3 class="video-section-title" data-fr="Vidéos importées" data-en="Uploaded Videos">Vidéos importées</h3>
+          <!-- Title removed for compactness -->
           <div id="local-video-list" class="video-list"></div>
-          <div class="actions-row">
-            <button id="add-video-file-button" class="button" data-fr="Ajouter vidéos" data-en="Add Videos">Ajouter vidéos</button>
-            <input type="file" id="add-video-input" accept="video/*" multiple style="display:none;">
-          </div>
         </div>
       </div>
-      <div class="actions">
-        <button id="ok-button" class="button" data-fr="OK" data-en="OK">OK</button>
+
+      <!-- Footer row: actions left + OK right -->
+      <div class="footer-bar">
+        <div class="actions-left">
+          <button id="add-video-file-button" class="button" data-fr="Ajouter vidéos" data-en="Add Videos">Ajouter vidéos</button>
+          <input type="file" id="add-video-input" accept="video/*" multiple style="display:none;">
+          <button id="pick-video-folder-button" class="button"
+            data-fr="Dossier vidéos" data-en="Video Folder">Dossier vidéos</button>
+        </div>
+        <div class="actions-right">
+          <button id="ok-button" class="button" data-fr="OK" data-en="OK">OK</button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Intro jingle -->
-  <audio id="intro-jingle" src="../../sounds/victory.mp3" preload="auto"></audio>
+  <audio id="intro-jingle" src="../../sounds/pagestart.mp3" preload="auto"></audio>
 
   <!-- Record Modal -->
-  <div id="record-modal" class="modal">
+  <div id="record-modal" class="modal" style="display:none;">
     <div class="modal-content">
       <span id="close-record-modal" class="close">&times;</span>
-      <h3 style="color:black" data-fr="Enregistrez votre son indicateur. Autoriser l'utilisation du microphone par le navigateur." data-en="Record your indicator sound. Allow the browser to use the microphone.">
+      <h3 style="color:black"
+          data-fr="Enregistrez votre son indicateur. Autoriser l'utilisation du microphone par le navigateur."
+          data-en="Record your indicator sound. Allow the browser to use the microphone.">
         Enregistrez votre son indicateur. Autoriser l'utilisation du microphone par le navigateur.
       </h3>
-      <button id="record-button" class="button" data-fr="Enregistrer (maximum 5 secondes)" data-en="Record (max 5 seconds)">
+      <button id="record-button" class="button"
+              data-fr="Enregistrer (maximum 5 secondes)"
+              data-en="Record (max 5 seconds)">
         Enregistrer (maximum 5 secondes)
       </button>
-      <button id="stop-recording-button" class="button" style="display:none;" data-fr="Stop" data-en="Stop">Stop</button>
-      <p style="color:black" id="record-status" data-fr="Appuyer sur enregistrer pour commencer" data-en="Press record to start">
+      <button id="stop-recording-button" class="button" style="display:none;"
+              data-fr="Stop" data-en="Stop">Stop</button>
+      <p style="color:black" id="record-status"
+         data-fr="Appuyer sur enregistrer pour commencer"
+         data-en="Press record to start">
         Appuyer sur enregistrer pour commencer
       </p>
-      <button id="ok-recording-button" class="button" style="display:none;" data-fr="OK" data-en="OK">OK</button>
+      <button id="ok-recording-button" class="button" style="display:none;"
+              data-fr="OK" data-en="OK">OK</button>
     </div>
   </div>
-    
+
   <!-- Space Prompt Selection Modal for Player 1 -->
-  <div id="space-prompt-selection-modal" class="modal">
+  <div id="space-prompt-selection-modal" class="modal" style="display:none;">
     <div class="modal-content">
       <span id="close-space-prompt-modal" class="close">&times;</span>
       <h2 style="color:black" data-fr="Sélectionner l'image indicatrice J1" data-en="Select indicator image for P1">
@@ -182,7 +402,7 @@
   </div>
 
   <!-- Space Prompt Selection Modal for Player 2 -->
-  <div id="space-prompt-selection-modal-2" class="modal">
+  <div id="space-prompt-selection-modal-2" class="modal" style="display:none;">
     <div class="modal-content">
       <span id="close-space-prompt-modal-2" class="close">&times;</span>
       <h2 style="color:black" data-fr="Sélectionner l'image indicatrice J2" data-en="Select indicator image for P2">
@@ -233,7 +453,6 @@
   <!-- External JS (your config and main logic) -->
   <script src="../../js/config.js"></script>
   <script src="../../js/switch-two-player-custom.js"></script>
-  <!-- Translation Script for Static Elements -->
   <script src="../../js/translationonly.js"></script>
 </body>
 </html>
