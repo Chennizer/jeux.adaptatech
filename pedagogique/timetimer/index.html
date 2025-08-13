@@ -1,122 +1,138 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Time Timer</title>
-  <style>
-    body {
-      margin:0;
-      font-family:Arial, sans-serif;
-      height:100vh;
-      overflow:hidden;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title data-fr="Minuteur Visuel" data-en="Time Timer">Minuteur Visuel</title>
 
-    #overlay {
-      position:fixed;
-      top:0;
-      left:0;
-      width:100vw;
-      height:100vh;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      background:#fff;
-      z-index:2;
-    }
+<link rel="stylesheet" href="../../css/otherswitch.css">
 
-    #overlay button {
-      font-size:5vmin;
-      padding:1em 2em;
-    }
+<style>
+  html, body { background:#fff !important; margin:0; height:100%; }
 
-    #timerCanvas {
-      position:absolute;
-      top:0;
-      left:0;
-      width:100vw;
-      height:100vh;
-      background:none;
-    }
+  /* Overlay + canvas */
+  #overlay{
+    position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
+    background:#fff;z-index:2;
+  }
+  #overlay button{font-size:5vmin;padding:1em 2em;}
+  #timerCanvas{
+    position:absolute;top:0;left:0;width:100vw;height:100vh;background:transparent;
+  }
 
-    .controls,
-    .color-controls {
-      position:fixed;
-      top:50%;
-      right:-240px;
-      transform:translateY(-50%);
-      z-index:1;
-      text-align:center;
-      font-size:3vmin;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      background:rgba(255,255,255,0.95);
-      padding:1em;
-      border-radius:8px;
-      box-shadow:0 2px 5px rgba(0,0,0,0.3);
-      width:200px;
-      transition:right 0.3s ease;
-    }
+  /* Panels (unified look) */
+  .controls,.special-controls{
+    position:fixed;right:12px;top:50%;
+    width:260px;max-height:calc(100vh - 100px);padding:14px;border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.35);
+    background:rgba(18,18,18,0.94);color:#fff;overflow-y:auto;opacity:0;
+    transform:translate(120%,-50%);transition:transform .28s ease,opacity .28s ease;z-index:2000;
+    backdrop-filter:saturate(120%) blur(6px);
+  }
+  .controls.show,.special-controls.show{transform:translate(0,-50%);opacity:1;}
+  .panel-title{margin:0 0 10px; font-size:16px; font-weight:700; letter-spacing:.2px; color:#7bdfff; text-align:center;}
+  .controls label,.special-controls label{display:flex;flex-direction:column;gap:6px;margin:10px 0;font-size:13px;}
+  .row,.formline,.inline{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;padding:6px 8px;border-radius:8px;background:#0f2c2c;
+    font-size:13px;
+  }
+  .controls select,.controls input[type="color"],.special-controls select,.special-controls input[type="color"]{
+    border-radius:6px;border:1px solid #2b2b2b;background:#0f0f0f;color:#fff;padding:.45em .6em;font-size:13px;
+  }
+  .special-controls input[type="range"]{width:140px;}
 
-    .controls.show,
-    .color-controls.show { right:2vw; }
+  /* Compact color swatch (shows actual color) */
+  .swatch{
+    -webkit-appearance:none;appearance:none;
+    width:42px;height:24px;
+    padding:0;border:none;border-radius:6px;cursor:pointer;outline:none;
+    background:transparent;
+    box-shadow:0 0 0 1px rgba(255,255,255,0.18), inset 0 0 0 2px rgba(0,0,0,0.6);
+  }
+  .swatch:focus{ box-shadow:0 0 0 2px #00bfff, inset 0 0 0 2px rgba(0,0,0,0.5); }
+  .swatch::-webkit-color-swatch-wrapper{ padding:0; border-radius:6px; }
+  .swatch::-webkit-color-swatch{ border:none; border-radius:6px; }
+  .swatch::-moz-color-swatch{ border:none; border-radius:6px; }
 
-    .controls > *,
-    .color-controls > * { margin:0.5vmin 0; }
-    input[type=number] { width:6vmin; font-size:1em; }
-    button { padding:0.5em 1em; font-size:1em; margin:0; }
+  .btn{
+    padding:.5em .8em;font-size:12px;border:none;border-radius:8px;cursor:pointer;
+    background:#008080;color:#fff;transition:background .18s ease,transform .12s ease;display:inline-flex;align-items:center;gap:.4em;
+  }
+  .btn:hover{background:#006a6a;}
+  .btn:active{transform:translateY(1px);}
+  .btn.secondary{background:#2a2a2a;}
+  .btn.secondary:hover{background:#1d1d1d;}
+  .btn.ghost{background:transparent;border:1px solid #2a2a2a;}
+  .btn.ghost:hover{background:#1a1a1a;}
 
-    #menuBtn {
-      position:fixed;
-      top:10px;
-      right:10px;
-      width:40px;
-      height:40px;
-      border-radius:50%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:22px;
-      cursor:pointer;
-      background:rgba(0,0,0,0.7);
-      color:#fff;
-      z-index:1;
-      transition:background 0.3s ease;
-    }
+  /* Floating toggles */
+  #menuBtn,#specialBtn{
+    position:fixed;right:10px;width:40px;height:40px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;
+    color:#fff;background:rgba(0,0,0,0.7);z-index:2100;transition:background .2s ease,transform .1s ease;
+  }
+  #menuBtn:hover,#specialBtn:hover{background:rgba(0,0,0,0.9);transform:scale(1.06);}
+  #menuBtn{top:10px;} #specialBtn{top:60px;}
 
-    #menuBtn:hover { background:rgba(0,0,0,0.9); }
+  /* Picker Modal */
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:2500;
+  }
+  .modal{
+    background:#111;color:#eee; width:min(760px,94vw); max-height:86vh;
+    border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.45); display:flex; flex-direction:column; overflow:hidden;
+    border:1px solid #2a2a2a;
+  }
+  .modal header{
+    padding:.6rem .8rem;border-bottom:1px solid #222;display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+  }
+  .modal header .title{display:flex;align-items:center;gap:.5rem;font-weight:600;}
+  .modal header .title small{opacity:.8;font-weight:400;}
+  .modal .grid{
+    padding:.75rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(95px,1fr));gap:10px;overflow:auto;
+  }
+  .thumb{
+    border:1px solid #2a2a2a;border-radius:8px;padding:6px;display:flex;flex-direction:column;align-items:center;background:#0e0e0e;
+    transition:transform .08s ease,border-color .16s ease, box-shadow .16s ease;
+  }
+  .thumb.dragging{opacity:.6; transform:scale(.98);}
+  .thumb:hover{border-color:#00bfff; box-shadow:0 0 0 2px rgba(0,191,255,.25) inset;}
+  .thumb img{max-width:100%;max-height:70px;display:block;border-radius:6px;pointer-events:none;}
+  .thumb span{font-size:11px;margin-top:.35rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;opacity:.85;}
 
-    #colorBtn {
-      position:fixed;
-      top:60px;
-      right:10px;
-      width:40px;
-      height:40px;
-      border-radius:50%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:22px;
-      cursor:pointer;
-      background:rgba(0,0,0,0.7);
-      color:#fff;
-      z-index:1;
-      transition:background 0.3s ease;
-    }
+  .modal .selected{border-top:1px solid #222; padding:.55rem .8rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .slot{
+    width:80px;height:80px;border:2px dashed #2a2a2a;border-radius:10px;display:flex;align-items:center;justify-content:center;position:relative;
+    background:#0e0e0e; overflow:hidden;
+  }
+  .slot img{max-width:100%;max-height:100%;pointer-events:none;}
+  .slot .badge{
+    position:absolute;top:4px;left:4px;background:#0008;color:#fff;border-radius:999px;padding:2px 6px;font-size:11px;
+    border:1px solid rgba(255,255,255,.25);
+  }
+  .slot[data-idx="0"]{border-color:#ff6b6b;}
+  .slot[data-idx="1"]{border-color:#ffd93d;}
+  .slot[data-idx="2"]{border-color:#4cd964;}
+  .slot[data-idx="3"]{border-color:#66a5ff;}
+  .slot.dragover{outline:2px solid #00bfff; outline-offset:2px;}
 
-    #colorBtn:hover { background:rgba(0,0,0,0.9); }
-  </style>
+  .modal footer{padding:.6rem .8rem;border-top:1px solid #222;display:flex;gap:.5rem;justify-content:flex-end;}
+  .hidden{display:none !important;}
+</style>
 </head>
 <body>
-  <div id="overlay"><button id="enterBtn">Start</button></div>
+  <div id="overlay"><button id="enterBtn" data-fr="Démarrer" data-en="Start">Démarrer</button></div>
   <canvas id="timerCanvas"></canvas>
-  <div id="menuBtn">⚙️</div>
-  <div id="colorBtn">🎨</div>
-  <div class="controls">
-    <label>Minutes: <input type="number" id="minutes" min="1" max="60" value="5"></label>
+
+  <div id="menuBtn" title="Settings">⚙️</div>
+  <div id="specialBtn" title="Images">✨</div>
+
+  <!-- Settings -->
+  <div class="controls" aria-label="Settings">
+    <h3 class="panel-title" data-fr="Paramètres" data-en="Settings">Paramètres</h3>
+
     <label>
-      Dial:
+      <span class="i18n" data-fr="Cadran" data-en="Dial">Cadran</span>
       <select id="dialSelect">
         <option value="60" selected>60 min</option>
         <option value="30">30 min</option>
@@ -126,312 +142,998 @@
         <option value="120">120 min</option>
       </select>
     </label>
-    <label><input type="checkbox" id="toggleDigits"> Show numbers</label>
-    <button id="startBtn">Start</button>
-    <button id="pauseBtn">Pause</button>
-    <button id="fsBtn">Fullscreen</button>
-    <button id="stopBtn">Stop</button>
-  </div>
-  <div class="color-controls">
-    <label>Select color: <input type="color" id="colorPicker" value="#d9534f"></label>
-  </div>
-  <script>
-    const overlay = document.getElementById('overlay');
-    const enterBtn = document.getElementById('enterBtn');
-  const canvas = document.getElementById('timerCanvas');
-  const ctx = canvas.getContext('2d');
-  let totalSeconds = 300; // default 5 minutes
-  let remainingSeconds = 0;
-  let intervalId = null;
-  let paused = false;
-  let dragging = false;
-  let showDigits = false;
-  let dialMax = 60;
-  let timerColor = '#d9534f';
-  const minutesInput = document.getElementById('minutes');
-  minutesInput.max = dialMax;
-  const dialConfigs = {
-    60:  {ticks:60, nums:[0,5,10,15,20,25,30,35,40,45,50,55], denom:60, short:true,  step:5},
-    120: {ticks:60, nums:[0,10,20,30,40,50,60,70,80,90,100,110], denom:120, short:true,  step:5},
-    30:  {ticks:30, nums:[0,5,10,15,20,25], denom:30, short:false, step:1},
-    10:  {ticks:60, nums:[0,1,2,3,4,5,6,7,8,9], denom:10, short:true,  step:6},
-    5:   {ticks:60, nums:[0,1,2,3,4], denom:5,  short:true,  step:12},
-    1:   {ticks:60, nums:[0,5,10,15,20,25,30,35,40,45,50,55], denom:60, short:true,  step:5}
-  };
 
-  function getSecondsFromEvent(e) {
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const rawAng = Math.atan2(y - centerY, x - centerX);
-    let ang = -Math.PI / 2 - rawAng;
-    while (ang < 0) ang += Math.PI * 2;
-    const cfg = dialConfigs[dialMax];
-    const ratio = ang / (Math.PI * 2);
-    if (dialMax <= 10) {
-      const tick = Math.round(ratio * cfg.ticks);
-      let secs = tick * (dialMax * 60 / cfg.ticks);
-      return secs === 0 ? dialMax * 60 : secs;
-    } else {
-      const minutes = Math.round(ratio * dialMax);
-      return (minutes === 0 ? dialMax : minutes) * 60;
+    <div class="inline">
+      <span data-fr="Afficher les chiffres" data-en="Show numbers">Afficher les chiffres</span>
+      <input type="checkbox" id="toggleDigits">
+    </div>
+
+    <label>
+      <span class="i18n" data-fr="Couleur du secteur (Spécial = Désactivé / Tâche→Récompense)" data-en="Wedge color (Special = Off / Task→Reward)">
+        Couleur du secteur (Spécial = Désactivé / Tâche→Récompense)
+      </span>
+      <input type="color" id="colorPicker" class="swatch" value="#d9534f" aria-label="Select colour">
+    </label>
+
+    <label>
+      <span class="i18n" data-fr="Son d’alarme" data-en="Alarm sound">Son d’alarme</span>
+      <select id="alarmSelect">
+        <option value="1" selected data-fr="TimeTimer 1" data-en="TimeTimer 1">TimeTimer 1</option>
+        <option value="2" data-fr="TimeTimer 2" data-en="TimeTimer 2">TimeTimer 2</option>
+        <option value="3" data-fr="TimeTimer 3" data-en="TimeTimer 3">TimeTimer 3</option>
+        <option value="4" data-fr="TimeTimer 4" data-en="TimeTimer 4">TimeTimer 4</option>
+      </select>
+    </label>
+
+    <div class="inline">
+      <button class="btn secondary" id="pauseBtn"
+        data-fr-pause="Pause" data-en-pause="Pause"
+        data-fr-resume="Reprendre" data-en-resume="Resume">Pause</button>
+      <button class="btn" id="fsBtn" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+    </div>
+  </div>
+
+  <!-- Special (images) -->
+  <div class="special-controls" aria-label="Special features">
+    <h3 class="panel-title" data-fr="Images" data-en="Images">Images</h3>
+
+    <label>
+      <span class="i18n" data-fr="Mode" data-en="Feature mode">Mode</span>
+      <select id="specialMode">
+        <option value="none" selected data-fr="Désactivé" data-en="Off">Désactivé</option>
+        <option value="radial" data-fr="Images autour de l’horloge" data-en="Images Around Clock">Images autour de l’horloge</option>
+        <option value="stacked" data-fr="Pile d’images à gauche" data-en="Images Stacked Left">Pile d’images à gauche</option>
+        <option value="taskreward" data-fr="Tâche → Récompense (gauche)" data-en="Task → Reward (Left)">Tâche → Récompense (gauche)</option>
+      </select>
+    </label>
+
+    <div class="formline">
+      <span data-fr="Taille des images" data-en="Image size">Taille des images</span>
+      <input type="range" id="imgSizeRange" min="0.16" max="0.48" step="0.01" value="0.30">
+    </div>
+
+    <div class="formline">
+      <span data-fr="Nombre d’images" data-en="Image count">Nombre d’images</span>
+      <input type="range" id="imgCountRange" min="2" max="4" step="2" value="4">
+    </div>
+
+    <div class="inline">
+      <span data-fr="Teinte de page" data-en="Page tint">Teinte de page</span>
+      <input type="checkbox" id="bgTintToggleSpecial">
+    </div>
+
+    <div class="row">
+      <span data-fr="Dossier d’images" data-en="Repository">Dossier d’images</span>
+      <button class="btn" id="setRepoBtn" data-fr="📁 Choisir un dossier" data-en="📁 Set Repository">📁 Choisir un dossier</button>
+    </div>
+    <div id="repoStatus" style="opacity:.8;margin:-6px 0 6px 6px;font-size:12px;"
+         data-fr="Aucun dossier sélectionné" data-en="No repository selected">Aucun dossier sélectionné</div>
+
+    <div class="row">
+      <span data-fr="Bibliothèque CVI" data-en="CVI Library">Bibliothèque CVI</span>
+      <button class="btn" id="openManifestBtn" data-fr="🖼️ Ouvrir la bibliothèque CVI" data-en="🖼️ Open CVI Library">🖼️ Ouvrir la bibliothèque CVI</button>
+    </div>
+  </div>
+
+  <!-- Shared Picker Modal -->
+  <div id="pickerModal" class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+      <header>
+        <div class="title">
+          <span id="pickerTitle" data-fr="Sélectionner des images" data-en="Select images">Sélectionner des images</span>
+          <small id="pickerSub"></small>
+        </div>
+        <div style="display:flex;gap:.5rem;">
+          <button id="autoFillBtn" class="btn ghost"
+            title="Fill slots 1–4"
+            data-fr="Remplir 1–4" data-en="Auto-fill 1–4">Remplir 1–4</button>
+          <button id="switchSourceBtn" class="btn secondary hidden"
+            data-fr="Changer de dossier" data-en="Change Folder">Changer de dossier</button>
+          <button id="closePickerBtn" class="btn secondary" data-fr="Fermer" data-en="Close">Fermer</button>
+        </div>
+      </header>
+
+      <div id="pickerGrid" class="grid" aria-live="polite"></div>
+
+      <div class="selected">
+        <div class="slot" data-idx="0" draggable="true"><span class="badge">1</span></div>
+        <div class="slot" data-idx="1" draggable="true"><span class="badge">2</span></div>
+        <div class="slot" data-idx="2" draggable="true"><span class="badge">3</span></div>
+        <div class="slot" data-idx="3" draggable="true"><span class="badge">4</span></div>
+      </div>
+
+      <footer>
+        <button id="clearSlotsBtn" class="btn secondary" data-fr="Vider" data-en="Clear">Vider</button>
+        <button id="assignBtn" class="btn" data-fr="Assigner" data-en="Assign">Assigner</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Manifest array -->
+  <script src="../../js/cviPngArray.js"></script>
+
+<script>
+/* ===========================================================
+   CONSTANTS YOU CAN TWEAK
+   =========================================================== */
+const H_SHIFT = 0.26;             // horizontal nudge (4-image radial)
+const H_SHIFT_2 = 0.12;           // horizontal nudge (2-image radial)
+const V_OFFSET_TOP = 0.16;        // vertical offset for NE & NW (4-image radial)
+const V_OFFSET_BOTTOM = -0.16;    // vertical offset for SE & SW (4-image radial)
+const SHIFT_RIGHT_STACKED = 0.18; // move dial center right in stacked/taskreward modes
+const INACTIVE_ALPHA = 0.45;      // dim inactive images
+const IDLE_CLOSE_MS = 10000;      // auto-close panels after 10s idle
+
+// Pulse: active image subtle breathing (radial/stacked only)
+const PULSE_PERIOD = 1800;        // ms (slower)
+const PULSE_AMPLITUDE = 0.04;     // +/- 4%
+
+// Radial distance from number ring
+const RADIAL_RADIUS_OFFSET_4 = 0.12;
+const RADIAL_RADIUS_OFFSET_2 = 0.06; // 2-image: closer to center
+
+// Task→Reward spacing multiplier (relative to stacked spacing)
+const TASKREWARD_SPACING_MULT = 3.5; // farther apart
+
+/* ===========================================================
+   LAYOUT (size slider only)
+   =========================================================== */
+const LAYOUT = {
+  imgBase: 0.30,
+  activeScale: 1.33, // ~+33%
+  radial: { radiusOffset: RADIAL_RADIUS_OFFSET_4 },
+  stacked:{ spacing: 0.025, marginLeft: 0.06 }
+};
+/* ===========================================================
+   END CONFIG
+   =========================================================== */
+
+/* ---------- i18n helpers ---------- */
+function getLang(){
+  const l = document.documentElement.getAttribute('lang') || 'fr';
+  return l.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+}
+function setPauseLabel(paused){
+  const btn = document.getElementById('pauseBtn');
+  const lang = getLang();
+  const label = paused ? (lang==='fr' ? btn.dataset.frResume : btn.dataset.enResume)
+                       : (lang==='fr' ? btn.dataset.frPause  : btn.dataset.enPause);
+  btn.textContent = label || (paused ? 'Resume' : 'Pause');
+}
+
+/* ---------- Canvas & state ---------- */
+const canvas=document.getElementById('timerCanvas'),ctx=canvas.getContext('2d');
+const overlay=document.getElementById('overlay'),enterBtn=document.getElementById('enterBtn');
+
+let totalSeconds=300,remainingSeconds=0,intervalId=null,paused=false,dragging=false;
+let showDigits=false,dialMax=60,timerColor='#d9534f';
+let bgTintEnabled=false; const TINT_ALPHA=0.35;
+
+let nowMs = 0; // for pulse
+
+/* ---------- Special features ---------- */
+let specialMode='none';
+let IMG_COUNT = 4; // 2 or 4
+const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff']; // r,y,g,b
+const imgs=[null,null,null,null];
+
+/* Optional placeholders (remove if you want blank by default) */
+['../../images/loona/loonacochon.png','../../images/loona/loonapanda.png',
+ '../../images/loona/loonachat.png','../../images/loona/loonaparesseux.png']
+.forEach((src,i)=>{const im=new Image();im.onload=()=>{imgs[i]=im;draw();};im.src=src;});
+
+/* Persist last selection */
+const LAST_KEY = 'timer-last-4';
+function saveLastImages(){
+  const sources = imgs.map(im => im ? im.src : null);
+  localStorage.setItem(LAST_KEY, JSON.stringify(sources));
+}
+function loadLastImagesIfEmpty(cb){
+  if (imgs.some(Boolean)) { cb?.(); return; }
+  try{
+    const arr = JSON.parse(localStorage.getItem(LAST_KEY) || '[]');
+    if(Array.isArray(arr) && arr.filter(Boolean).length){
+      const loads = arr.map((src, i) => {
+        if(!src){ imgs[i]=null; return Promise.resolve(); }
+        return new Promise(res=>{
+          const im = new Image();
+          im.onload = ()=>{ imgs[i]=im; res(); };
+          im.onerror = ()=> res();
+          im.src = src;
+        });
+      });
+      Promise.all(loads).then(()=>{ cb?.(); draw(); });
+      return;
     }
+  }catch(e){}
+  cb?.();
+}
+
+/* Dial configs */
+const dialConfigs={
+  60:{ticks:60,nums:[0,5,10,15,20,25,30,35,40,45,50,55],denom:60,short:true,step:5},
+  120:{ticks:60,nums:[0,10,20,30,40,50,60,70,80,90,100,110],denom:120,short:true,step:5},
+  30:{ticks:30,nums:[0,5,10,15,20,25],denom:30,short:false,step:1},
+  10:{ticks:60,nums:[0,1,2,3,4,5,6,7,8,9],denom:10,short:true,step:6},
+  5:{ticks:60,nums:[0,1,2,3,4],denom:5,short:true,step:12},
+  1:{ticks:60,nums:[0,5,10,15,20,25,30,35,40,45,50,55],denom:60,short:true,step:5}
+};
+
+/* Helpers */
+function hexToRGBA(hex,alpha){
+  const r=parseInt(hex.substr(1,2),16),g=parseInt(hex.substr(3,2),16),b=parseInt(hex.substr(5,2),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function computeContainSize(img, targetPx){
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  if(!iw || !ih){ return {w:targetPx, h:targetPx}; }
+  const scale = targetPx / Math.max(iw, ih);
+  return { w: iw * scale, h: ih * scale };
+}
+function getCenter(size){
+  const baseCx = canvas.width/2, cy = canvas.height/2;
+  if(specialMode==='stacked' || specialMode==='taskreward'){
+    return { cx: baseCx + size * SHIFT_RIGHT_STACKED, cy };
+  }
+  return { cx: baseCx, cy };
+}
+
+/* Drag helpers for dial (uses shifted center) */
+function getSecondsFromEvent(e){
+  const r=canvas.getBoundingClientRect(),
+        x=(e.touches?e.touches[0].clientX:e.clientX)-r.left,
+        y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+  const size=Math.min(canvas.width,canvas.height)*0.9;
+  const {cx,cy} = getCenter(size);
+  let ang=-Math.PI/2-Math.atan2(y-cy,x-cx);while(ang<0)ang+=Math.PI*2;
+  const cfg=dialConfigs[dialMax],ratio=ang/(Math.PI*2);
+  if(dialMax<=10){
+    const tick=Math.round(ratio*cfg.ticks),secs=tick*(dialMax*60/cfg.ticks);
+    return secs===0?dialMax*60:secs;
+  }
+  const mins=Math.round(ratio*dialMax);
+  return (mins===0?dialMax:mins)*60;
+}
+function insideDial(e){
+  const r=canvas.getBoundingClientRect(),
+        x=(e.touches?e.touches[0].clientX:e.clientX)-r.left,
+        y=(e.touches?e.touches[0].clientY:e.clientY)-r.top,
+        size=Math.min(canvas.width,canvas.height)*0.9;
+  const {cx,cy} = getCenter(size);
+  return Math.hypot(x-cx,y-cy)<=size*0.4;
+}
+function updateDrag(e){
+  const s=Math.max(1,Math.min(dialMax*60,getSecondsFromEvent(e)));
+  totalSeconds=remainingSeconds=s;
+  draw();
+}
+
+/* 2 or 4 active index */
+function getActiveIndex(uiSeconds, denom, count){
+  const t = Math.max(1, uiSeconds);
+  if(count===4){
+    const qLen = denom/4;
+    const qIdx = Math.floor((t-1)/qLen);
+    return 3 - qIdx; // NE,SE,SW,NW mapping
+  }else{
+    const hLen = denom/2;
+    const hIdx = Math.floor((t-1)/hLen);
+    return 1 - hIdx; // 0=Right,1=Left
+  }
+}
+function colorForIndex(i,N){ return quadrantColors[ N===2 ? (i===0?0:3) : i ]; }
+function getAnglesForCount(N){ return (N===2) ? [0, Math.PI] : [-Math.PI/4, Math.PI/4, 3*Math.PI/4, -3*Math.PI/4]; }
+
+/* Draw */
+function draw(){
+  const size=Math.min(canvas.width,canvas.height)*0.9;
+  const {cx,cy} = getCenter(size);
+
+  const outerR=size*0.4,borderW=size*0.0067,wedgeR=outerR-borderW/2;
+  const tickLong=size*0.05,tickShort=size*0.025,tickStart=outerR+borderW/2;
+  const numbersR=tickStart+tickLong+size*0.03;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Outer circle
+  ctx.strokeStyle='#000';ctx.lineWidth=borderW;
+  ctx.beginPath();ctx.arc(cx,cy,outerR,0,Math.PI*2);ctx.stroke();
+
+  // Preview vs running seconds
+  const uiSeconds = (remainingSeconds>0)
+    ? remainingSeconds
+    : Math.max(1, Math.round((dialMax*60))); // preview full dial
+
+  const denom = dialMax*60;
+  const angle = (uiSeconds/denom) * Math.PI * 2;
+
+  // Wedge & background sectors
+  if(specialMode==='radial' || specialMode==='stacked'){
+    ctx.save();
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,wedgeR,-Math.PI/2,-Math.PI/2-angle,true);
+    ctx.closePath();ctx.clip();
+
+    const N = IMG_COUNT;
+    const fillSector = (start,end,color)=>{
+      ctx.fillStyle=color;
+      ctx.beginPath(); ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,wedgeR,start,end,true);
+      ctx.closePath(); ctx.fill();
+    };
+
+    if(N===2){
+      // Left (blue), Right (red) with anti-clockwise arcs
+      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));      // Left
+      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));     // Right
+    }else{
+      for(let i=0;i<4;i++){
+        const start = -Math.PI/2 - i*Math.PI/2;
+        const end   = -Math.PI/2 - (i+1)*Math.PI/2;
+        ctx.fillStyle = quadrantColors[(3-i)&3];
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.arc(cx,cy,wedgeR,start,end,true);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }else{
+    // 'none' and 'taskreward' => single-color wedge
+    ctx.fillStyle=timerColor;
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,wedgeR,-Math.PI/2,-Math.PI/2-angle,true);
+    ctx.closePath();ctx.fill();
   }
 
-  function insideDial(e) {
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const size = Math.min(canvas.width, canvas.height) * 0.9;
-    const outerRadius = size * 0.4;
-    const dist = Math.hypot(x - centerX, y - centerY);
-    return dist <= outerRadius;
+  // Ticks & numbers
+  const cfg=dialConfigs[dialMax];
+  for(let i=0;i<cfg.ticks;i++){
+    const ang=-Math.PI/2-(i/cfg.ticks)*Math.PI*2,
+          sx=cx+Math.cos(ang)*tickStart, sy=cy+Math.sin(ang)*tickStart;
+    const long=i%cfg.step===0, len=cfg.short?(long?tickLong:tickShort):tickLong;
+    const ex=cx+Math.cos(ang)*(tickStart+len), ey=cy+Math.sin(ang)*(tickStart+len);
+    ctx.lineWidth=long?size*0.006:size*0.003;
+    ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
   }
 
-  function updateDrag(e) {
-    const secs = Math.max(1, Math.min(dialMax * 60, getSecondsFromEvent(e)));
-    minutesInput.value = (secs / 60).toFixed(dialMax <= 10 ? 2 : 0);
-    totalSeconds = Math.round(secs);
-    remainingSeconds = totalSeconds;
+  ctx.fillStyle='#000';ctx.font=`${size*0.04}px Arial`;ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const m of cfg.nums){
+    const ang=-Math.PI/2-(m/cfg.denom)*Math.PI*2;
+    ctx.fillText(m.toString(),cx+Math.cos(ang)*numbersR,cy+Math.sin(ang)*numbersR);
+  }
+
+  if(showDigits){
+    ctx.font=`bold ${size*0.12}px Arial`;
+    const m=Math.floor(uiSeconds/60),s=Math.floor(uiSeconds%60);
+    ctx.fillText(`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,cx,cy);
+  }
+
+  if(specialMode==='radial')      drawRadial(size,cx,cy,numbersR,uiSeconds,denom);
+  if(specialMode==='stacked')     drawStacked(size,cx,cy,outerR,uiSeconds,denom);
+  if(specialMode==='taskreward')  drawTaskReward(size,cx,cy,outerR);
+
+  updatePageTint(uiSeconds, denom);
+}
+
+/* Page tint */
+function updatePageTint(uiSeconds, denom){
+  if(!bgTintEnabled){ document.body.style.backgroundColor=''; return; }
+
+  if(specialMode==='none' || specialMode==='taskreward'){
+    document.body.style.backgroundColor = hexToRGBA(timerColor, TINT_ALPHA);
+    return;
+  }
+  const N = IMG_COUNT;
+  const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
+  const col = colorForIndex(active, (N===2?2:4));
+  document.body.style.backgroundColor = hexToRGBA(col, TINT_ALPHA);
+}
+
+/* ---- RADIAL ---- */
+function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
+  const basePx = size * LAYOUT.imgBase;
+  const radialOffset = (IMG_COUNT===2 ? RADIAL_RADIUS_OFFSET_2 : LAYOUT.radial.radiusOffset);
+  const imgR   = numbersR + size * radialOffset;
+  const hShiftPx_4 = size * H_SHIFT;
+  const hShiftPx_2 = size * H_SHIFT_2;
+  const vTopPx   = size * V_OFFSET_TOP;
+  const vBotPx   = size * V_OFFSET_BOTTOM;
+
+  const N = IMG_COUNT;
+  const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
+  const angles = getAnglesForCount(N);
+
+  for(let i=0;i<N;i++){
+    const im = imgs[i];
+    if(!im) continue;
+
+    const isActive = (i===active);
+    const pulse = isActive ? (1 + PULSE_AMPLITUDE * Math.sin((nowMs % PULSE_PERIOD)/PULSE_PERIOD * 2*Math.PI)) : 1;
+    const scale = (isActive ? LAYOUT.activeScale : 1) * pulse;
+    const target = basePx * scale;
+    const {w, h} = computeContainSize(im, target);
+
+    const ang=angles[i];
+    let dx=0, dy=0;
+    if (N===2){
+      const dxSign = (i===0) ? 1 : -1; // right, left
+      dx = dxSign * hShiftPx_2;
+    } else {
+      const dxSign = (i===0 || i===1) ? 1 : -1; // east = +, west = -
+      dx = dxSign * hShiftPx_4;
+      dy = (i===0 || i===3) ? vTopPx : vBotPx;
+    }
+
+    const x = cx + Math.cos(ang)*imgR - w/2 + dx;
+    const y = cy + Math.sin(ang)*imgR - h/2 + dy;
+
+    ctx.save();
+    if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
+    ctx.drawImage(im, x, y, w, h);
+    ctx.strokeStyle=colorForIndex(i, (N===2?2:4));ctx.lineWidth=size*0.006;
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+  }
+}
+
+/* ---- STACKED ---- */
+function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
+  const basePx   = size * LAYOUT.imgBase;
+  const spacing  = size * LAYOUT.stacked.spacing;
+  const leftEdge = cx - outerR - size * LAYOUT.stacked.marginLeft;
+  const xCenter  = leftEdge/2;
+
+  const N = IMG_COUNT;
+  const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
+
+  // precompute base heights so pulse doesn't push others
+  const baseHeights = [];
+  for(let i=0;i<N;i++){
+    const im = imgs[i];
+    if(!im){ baseHeights[i] = basePx; continue; }
+    const s = (i===active) ? LAYOUT.activeScale : 1;
+    baseHeights[i] = computeContainSize(im, basePx * s).h;
+  }
+
+  let totalH = spacing * (N-1);
+  for(let i=0;i<N;i++) totalH += baseHeights[i];
+  let y = cy - totalH/2;
+
+  for(let i=0;i<N;i++){
+    const im = imgs[i];
+    const isActive = (i===active);
+    const pulse = isActive ? (1 + PULSE_AMPLITUDE * Math.sin((nowMs % PULSE_PERIOD)/PULSE_PERIOD * 2*Math.PI)) : 1;
+    const scale = (isActive ? LAYOUT.activeScale : 1) * pulse;
+
+    if(!im){
+      y += baseHeights[i] + spacing; continue;
+    }
+    const {w: w0, h: h0} = computeContainSize(im, basePx * scale);
+    const layoutH = baseHeights[i];
+    const x = xCenter - w0/2;
+
+    ctx.save();
+    if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
+    ctx.drawImage(im, x, y, w0, h0);
+    ctx.strokeStyle=colorForIndex(i, (N===2?2:4));ctx.lineWidth=size*0.006;
+    ctx.strokeRect(x, y, w0, h0);
+    ctx.restore();
+
+    y += layoutH + spacing;
+  }
+}
+
+/* ---- TASK → REWARD (Left, 2 images, single-color timer) ---- */
+function drawTaskReward(size,cx,cy,outerR){
+  const basePx   = size * LAYOUT.imgBase;
+  const spacing  = size * LAYOUT.stacked.spacing * TASKREWARD_SPACING_MULT;
+  const leftEdge = cx - outerR - size * LAYOUT.stacked.marginLeft;
+  const xCenter  = leftEdge/2;
+
+  const task = imgs[0], reward = imgs[1];
+  if(!task && !reward) return;
+
+  const tSize = task ? computeContainSize(task, basePx) : {w:basePx, h:basePx};
+  const rSize = reward ? computeContainSize(reward, basePx) : {w:basePx, h:basePx};
+
+  const totalH = tSize.h + spacing + rSize.h;
+  let yTop = cy - totalH/2;
+  let yBot = yTop + tSize.h + spacing;
+
+  const tx = xCenter - tSize.w/2;
+  const ty = yTop;
+  const rx = xCenter - rSize.w/2;
+  const ry = yBot;
+
+  if(task) ctx.drawImage(task, tx, ty, tSize.w, tSize.h);
+  if(reward) ctx.drawImage(reward, rx, ry, rSize.w, rSize.h);
+
+  // timer-colored border around task
+  if(task){
+    ctx.save();
+    ctx.strokeStyle = timerColor;
+    ctx.lineWidth = Math.max(2, size * 0.008);
+    ctx.strokeRect(tx, ty, tSize.w, tSize.h);
+    ctx.restore();
+  }
+
+  // arrow (down)
+  if(task && reward){
+    const startX = xCenter;
+    const startY = ty + tSize.h + Math.min(spacing*0.25, size*0.04);
+    const endX   = xCenter;
+    const endY   = ry - Math.min(spacing*0.25, size*0.04);
+    const head   = Math.min(size*0.03, 14);
+
+    ctx.save();
+    ctx.strokeStyle = timerColor;
+    ctx.fillStyle = timerColor;
+    ctx.lineWidth = Math.max(2, size*0.004);
+
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(endX, endY + head);
+    ctx.lineTo(endX - head*0.7, endY - head*0.6);
+    ctx.lineTo(endX + head*0.7, endY - head*0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* Timer */
+function tick(){
+  if(!paused){
+    remainingSeconds--;
+    if(remainingSeconds<=0){ remainingSeconds=0; clearInterval(intervalId); playAlarm(); }
     draw();
   }
+}
+function startTimerFromDrag(){
+  if(isNaN(totalSeconds)||totalSeconds<=0) return;
+  if(totalSeconds>dialMax*60){totalSeconds=dialMax*60;}
+  remainingSeconds=totalSeconds;paused=false;
+  setPauseLabel(false);
+  clearInterval(intervalId);intervalId=setInterval(tick,1000);
+  draw();
+}
+/* New: start full dial when pressing Démarrer */
+function startTimerAtFullDial(){
+  totalSeconds = dialMax * 60;
+  remainingSeconds = totalSeconds;
+  paused = false;
+  setPauseLabel(false);
+  clearInterval(intervalId);
+  intervalId = setInterval(tick, 1000);
+  draw();
+}
+const pauseTimer=()=>{ paused=!paused; setPauseLabel(paused); };
 
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      draw();
+/* Drag & resize for dial */
+function startDrag(e){
+  if(!insideDial(e))return;
+  clearInterval(intervalId);paused=false;
+  setPauseLabel(false);
+  dragging=true;updateDrag(e);
+}
+const dragMove=e=>{ if(!dragging)return; e.preventDefault(); updateDrag(e); };
+const endDrag=()=>{ if(!dragging)return; dragging=false; startTimerFromDrag(); };
+function resizeCanvas(){ canvas.width=innerWidth; canvas.height=innerHeight; draw(); }
+
+/* Fullscreen helpers */
+function requestFS(){
+  (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
+}
+function exitFS(){
+  (document.exitFullscreen||document.webkitExitFullscreen)?.call(document);
+}
+function ensureReturnToFullscreen(){
+  if(overlay.style.display==='none' && !document.fullscreenElement){
+    requestFS();
+    setTimeout(resizeCanvas,120);
+  }
+}
+function toggleFS(){
+  if(!document.fullscreenElement){ requestFS(); }
+  else{ exitFS(); }
+  setTimeout(resizeCanvas,120);
+}
+
+/* Panel toggles + auto-close on idle */
+const menuBtn=document.getElementById('menuBtn'),menu=document.querySelector('.controls');
+const specialBtn=document.getElementById('specialBtn'),specialMenu=document.querySelector('.special-controls');
+
+let menuIdle=null, specialIdle=null;
+function startIdle(panel){
+  stopIdle(panel);
+  const t = setTimeout(()=>{ const el = (panel==='menu') ? menu : specialMenu; el.classList.remove('show'); }, IDLE_CLOSE_MS);
+  if(panel==='menu') menuIdle=t; else specialIdle=t;
+}
+function stopIdle(panel){
+  if(panel==='menu' && menuIdle){ clearTimeout(menuIdle); menuIdle=null; }
+  if(panel==='special' && specialIdle){ clearTimeout(specialIdle); specialIdle=null; }
+}
+function attachIdleSources(el, panel){
+  ['pointerdown','input','change','wheel','keydown'].forEach(ev=>{ el.addEventListener(ev, ()=> startIdle(panel)); });
+}
+attachIdleSources(menu,'menu');
+attachIdleSources(specialMenu,'special');
+
+menuBtn.addEventListener('click',e=>{
+  e.stopPropagation();
+  const open = !menu.classList.contains('show');
+  menu.classList.toggle('show');
+  specialMenu.classList.remove('show'); stopIdle('special');
+  if(open) startIdle('menu'); else stopIdle('menu');
+});
+specialBtn.addEventListener('click',e=>{
+  e.stopPropagation();
+  const open = !specialMenu.classList.contains('show');
+  specialMenu.classList.toggle('show');
+  menu.classList.remove('show'); stopIdle('menu');
+  if(open) startIdle('special'); else stopIdle('special');
+});
+document.addEventListener('click',e=>{
+  if(!menu.contains(e.target)&&!menuBtn.contains(e.target)){ menu.classList.remove('show'); stopIdle('menu'); }
+  if(!specialMenu.contains(e.target)&&!specialBtn.contains(e.target)){ specialMenu.classList.remove('show'); stopIdle('special'); }
+});
+
+/* Inputs */
+document.getElementById('pauseBtn').addEventListener('click',pauseTimer);
+document.getElementById('fsBtn').addEventListener('click',toggleFS);
+document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw();});
+document.getElementById('dialSelect').addEventListener('change',e=>{
+  // Change dial, stop any running timer without beeping
+  dialMax=parseInt(e.target.value,10);
+  clearInterval(intervalId); intervalId=null;
+  remainingSeconds=0; draw();
+  setPauseLabel(false);
+});
+const specialModeSelect=document.getElementById('specialMode');
+specialModeSelect.addEventListener('change',e=>{
+  specialMode=e.target.value;
+  if(specialMode==='radial' || specialMode==='stacked' || specialMode==='taskreward'){
+    loadLastImagesIfEmpty(()=>draw());
+  } else {
+    draw();
+  }
+});
+const colorPicker=document.getElementById('colorPicker');
+colorPicker.addEventListener('input',e=>{ timerColor=e.target.value; if(specialMode==='none' || specialMode==='taskreward') draw(); });
+
+document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); });
+document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); });
+
+/* Page tint toggle now lives in Special menu */
+document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{
+  bgTintEnabled = e.target.checked;
+  draw();
+});
+
+/* Alarm sound */
+let selectedSound = '1', audioPreview = null;
+function soundPath(id){ return `../../sounds/timetimer/timetimer${id}.mp3`; }
+document.getElementById('alarmSelect').addEventListener('change',(e)=>{
+  selectedSound = e.target.value;
+  try{
+    if(audioPreview){ audioPreview.pause(); audioPreview = null; }
+    const a = new Audio(soundPath(selectedSound));
+    audioPreview = a; a.volume=1; a.play().catch(()=>{});
+  }catch(_){}
+});
+function playAlarm(){
+  try{
+    const a=new Audio(soundPath(selectedSound));
+    a.volume=1; a.play().catch(()=>{});
+  }catch(_){}
+}
+
+/* ---------- File System Access (repo) ---------- */
+const supportsDirPicker = 'showDirectoryPicker' in window;
+const setRepoBtn = document.getElementById('setRepoBtn');
+const repoStatus = document.getElementById('repoStatus');
+if(!supportsDirPicker){
+  setRepoBtn.classList.add('hidden');
+  repoStatus.textContent = (getLang()==='fr') ? 'Dossier non pris en charge dans ce navigateur' : 'Repository not supported in this browser';
+}
+let repoHandle = null;
+
+const DB_NAME='timer-handles', STORE='handles';
+function withHandleStore(mode, fn){
+  return new Promise((res, rej)=>{
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore(STORE);
+    req.onerror = ()=> rej(req.error);
+    req.onsuccess = ()=>{
+      const db = req.result;
+      const tx = db.transaction(STORE, mode);
+      fn(tx.objectStore(STORE));
+      tx.oncomplete = ()=> res();
+      tx.onerror = ()=> rej(tx.error);
+    };
+  });
+}
+async function saveRepoHandle(handle){
+  try{ await withHandleStore('readwrite', store => store.put(handle,'repo')); localStorage.setItem('hasRepo','1'); }catch(e){}
+}
+function getRepoHandle(){
+  return new Promise((res)=>{
+    const req = indexedDB.open(DB_NAME,1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore(STORE);
+    req.onsuccess = ()=>{
+      const db = req.result;
+      const tx = db.transaction(STORE,'readonly');
+      const store = tx.objectStore(STORE);
+      const g = store.get('repo');
+      g.onsuccess = async ()=>{
+        const h = g.result || null;
+        if(h && (await h.queryPermission?.({mode:'read'})) === 'granted'){ res(h); }
+        else { res(null); }
+      };
+      g.onerror = ()=> res(null);
+    };
+    req.onerror = ()=> res(null);
+  });
+}
+
+/* ---------- Picker Modal (shared) ---------- */
+const pickerModal = document.getElementById('pickerModal');
+const pickerGrid  = document.getElementById('pickerGrid');
+const pickerTitle = document.getElementById('pickerTitle');
+const pickerSub   = document.getElementById('pickerSub');
+const closePickerBtn = document.getElementById('closePickerBtn');
+const switchSourceBtn = document.getElementById('switchSourceBtn');
+const autoFillBtn = document.getElementById('autoFillBtn');
+const assignBtn = document.getElementById('assignBtn');
+const clearSlotsBtn = document.getElementById('clearSlotsBtn');
+const openManifestBtn = document.getElementById('openManifestBtn');
+const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
+
+let pickerSource = null;
+let lastGridItems = [];
+
+/* Drag & drop inside slots (reorder) */
+let dragFromIdx = null;
+selectedSlots.forEach(slot=>{
+  slot.addEventListener('dragstart', e=>{
+    dragFromIdx = parseInt(slot.dataset.idx,10);
+    e.dataTransfer.effectAllowed='move';
+    e.dataTransfer.setData('text/x-slot', String(dragFromIdx));
+  });
+  slot.addEventListener('dragover', e=>{ e.preventDefault(); slot.classList.add('dragover'); });
+  slot.addEventListener('dragleave', ()=> slot.classList.remove('dragover'));
+  slot.addEventListener('drop', e=>{
+    e.preventDefault(); slot.classList.remove('dragover');
+    const toIdx = parseInt(slot.dataset.idx,10);
+
+    const gridUrl = e.dataTransfer.getData('text/plain');
+    if(gridUrl){ setSlotSrc(toIdx, gridUrl); return; }
+
+    const fromStr = e.dataTransfer.getData('text/x-slot');
+    const fromIdx = fromStr ? parseInt(fromStr,10) : dragFromIdx;
+    if(Number.isInteger(fromIdx) && fromIdx!==toIdx){ swapSlotImages(fromIdx, toIdx); }
+    dragFromIdx=null;
+  });
+  slot.addEventListener('dragend', ()=>{ dragFromIdx=null; selectedSlots.forEach(s=>s.classList.remove('dragover')); });
+});
+function swapSlotImages(a,b){
+  const srcA = selectedSlots[a].querySelector('img')?.src || null;
+  const srcB = selectedSlots[b].querySelector('img')?.src || null;
+  setSlotSrc(a, srcB); setSlotSrc(b, srcA);
+}
+function setSlotSrc(idx, src){
+  const slot = selectedSlots[idx];
+  slot.innerHTML = `<span class="badge">${idx+1}</span>` + (src ? `<img src="${src}" alt="" draggable="false" />` : '');
+  slot.setAttribute('draggable','true');
+}
+
+/* Modal helpers */
+function openPickerModal(){ pickerModal.style.display='flex'; }
+function closePickerModal(){
+  pickerModal.style.display='none';
+  pickerGrid.innerHTML='';
+  for(const it of lastGridItems){ if(it.file && it.url) URL.revokeObjectURL(it.url); }
+  lastGridItems = [];
+  ensureReturnToFullscreen();
+}
+
+/* Choose / load repository */
+async function chooseRepository(){
+  try{
+    const handle = await window.showDirectoryPicker();
+    repoHandle = handle;
+    const lang = getLang();
+    if (repoStatus) {
+      repoStatus.textContent = (lang==='fr' ? `Dossier : ${handle.name}` : `Repository: ${handle.name}`);
     }
+    await saveRepoHandle(handle);
+    // Stay in modal and refresh immediately
+    await populateFromRepo();
+    return true;
+  }catch(e){ return false; }
+}
 
-    function draw() {
-      const size = Math.min(canvas.width, canvas.height) * 0.9; // leave margin
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const outerRadius = size * 0.4; // room for ticks and numbers
-      const borderWidth = size * 0.0067;
-      const wedgeRadius = outerRadius - borderWidth / 2;
-      const tickLong = size * 0.05;
-      const tickShort = size * 0.025;
-      const tickStart = outerRadius + borderWidth / 2;
-      const numbersRadius = tickStart + tickLong + size * 0.03;
+/* Iterate image files */
+async function* iterImages(dirHandle){
+  for await (const entry of dirHandle.values()){
+    if(entry.kind !== 'file') continue;
+    if(!/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(entry.name)) continue;
+    yield entry;
+  }
+}
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+/* Populate grid from repo */
+async function populateFromRepo(){
+  pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
+  pickerSub.textContent = repoHandle ? `(${repoHandle.name})` : '';
+  switchSourceBtn.classList.remove('hidden');
+  pickerGrid.innerHTML=''; lastGridItems = [];
+  if(!repoHandle){
+    const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
+    p.textContent = (getLang()==='fr' ? 'Aucun dossier sélectionné. Cliquez « Changer de dossier ».' : 'No folder selected. Click “Change Folder”.');
+    pickerGrid.appendChild(p); return;
+  }
+  const frag = document.createDocumentFragment();
+  for await (const entry of iterImages(repoHandle)){
+    const file = await entry.getFile();
+    const url = URL.createObjectURL(file);
+    lastGridItems.push({ name: entry.name, url, file });
 
-      // outer circle
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = borderWidth;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
-      ctx.stroke();
+    const card = document.createElement('div');
+    card.className='thumb'; card.draggable = true;
+    card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
+    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    frag.appendChild(card);
+  }
+  if(!frag.childNodes.length){
+    const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
+    p.textContent = (getLang()==='fr' ? 'Aucune image dans ce dossier.' : 'No images in this folder.');
+    pickerGrid.appendChild(p);
+  }else{ pickerGrid.appendChild(frag); }
+}
 
-      if (remainingSeconds > 0) {
-        const maxAngle = (totalSeconds / (dialMax * 60)) * Math.PI * 2;
-        const angle = maxAngle * (remainingSeconds / totalSeconds);
-        ctx.fillStyle = timerColor;
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.arc(centerX, centerY, wedgeRadius, -Math.PI / 2, -Math.PI / 2 - angle, true);
-        ctx.closePath();
-        ctx.fill();
-      }
+/* Populate grid from manifest */
+function populateFromManifest(){
+  pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
+  pickerSub.textContent = (getLang()==='fr' ? '(depuis la bibliothèque)' : '(from manifest)');
+  switchSourceBtn.classList.add('hidden');
+  pickerGrid.innerHTML=''; lastGridItems = [];
+  if(!Array.isArray(window.PNG_ARRAY) || !window.PNG_ARRAY.length){
+    const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
+    p.textContent = (getLang()==='fr' ? 'Aucun élément dans la bibliothèque CVI.' : 'No items in CVI library.');
+    pickerGrid.appendChild(p); return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const it of window.PNG_ARRAY){
+    const url = it.file; const name = it.name || it.file.split('/').pop();
+    lastGridItems.push({name,url});
+    const card = document.createElement('div');
+    card.className='thumb'; card.draggable = true;
+    card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
+    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    frag.appendChild(card);
+  }
+  pickerGrid.appendChild(frag);
+}
 
-      const cfg = dialConfigs[dialMax];
+/* Auto-fill top 4 */
+function autoFillTop4(){ const top4 = lastGridItems.slice(0,4); for(let i=0;i<4;i++){ setSlotSrc(i, top4[i]?.url || null); } }
 
-      // ticks
-      for (let i = 0; i < cfg.ticks; i++) {
-        const ang = -Math.PI / 2 - (i / cfg.ticks) * Math.PI * 2;
-        const startX = centerX + Math.cos(ang) * tickStart;
-        const startY = centerY + Math.sin(ang) * tickStart;
-        const long = i % cfg.step === 0;
-        const len = cfg.short ? (long ? tickLong : tickShort) : tickLong;
-        const endX = centerX + Math.cos(ang) * (tickStart + len);
-        const endY = centerY + Math.sin(ang) * (tickStart + len);
-        ctx.lineWidth = long ? size * 0.006 : size * 0.003;
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-      }
+/* Prefer radial when images chosen */
+function ensureRadialIfImagesChosen(){
+  const any = imgs.some(Boolean);
+  if(any && (specialMode === 'none')){
+    specialMode = 'radial';
+    const sel = document.getElementById('specialMode'); if(sel) sel.value = 'radial';
+  }
+}
 
-      // numbers every 5 minutes
-      ctx.fillStyle = '#000';
-      ctx.font = `${size * 0.04}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (let m of cfg.nums) {
-        const ang = -Math.PI / 2 - (m / cfg.denom) * Math.PI * 2;
-        const x = centerX + Math.cos(ang) * numbersRadius;
-        const y = centerY + Math.sin(ang) * numbersRadius;
-        ctx.fillText(m.toString(), x, y);
-      }
+/* Assign selected slots into imgs[] */
+function assignFromSlots(){
+  const toLoad = [];
+  for(let i=0;i<4;i++){
+    const src = selectedSlots[i].querySelector('img')?.src || null;
+    if(!src){ imgs[i]=null; continue; }
+    toLoad.push(new Promise(res=>{
+      const im = new Image();
+      im.onload = ()=>{ imgs[i]=im; res(); };
+      im.src = src;
+    }));
+  }
+  Promise.all(toLoad).then(()=>{
+    ensureRadialIfImagesChosen();
+    saveLastImages();
+    draw();
+    closePickerModal();
+  });
+}
 
-      if (showDigits) {
-        ctx.fillStyle = '#000';
-        ctx.font = `bold ${size * 0.12}px Arial`;
-        const mins = Math.floor(remainingSeconds / 60);
-        const secs = Math.floor(remainingSeconds % 60);
-        ctx.fillText(`${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`, centerX, centerY);
+/* Clear slots */
+function clearSlots(){ for(let i=0;i<4;i++) setSlotSrc(i, null); }
+
+/* Openers */
+setRepoBtn.addEventListener('click', async ()=>{
+  if(!supportsDirPicker) return;
+  if(!repoHandle){
+    const ok = await chooseRepository(); if(!ok) return;
+    openPickerModal(); // open after first choose
+    await populateFromRepo();
+  } else {
+    openPickerModal();
+    await populateFromRepo();
+  }
+});
+openManifestBtn.addEventListener('click', ()=>{ openPickerModal(); populateFromManifest(); });
+
+/* Modal controls */
+closePickerBtn.addEventListener('click', closePickerModal);
+switchSourceBtn.addEventListener('click', async ()=>{
+  const ok = await chooseRepository();
+  if(ok){
+    // ensure modal visible and grid refreshed immediately
+    if(pickerModal.style.display!=='flex') openPickerModal();
+    await populateFromRepo();
+  }
+});
+autoFillBtn.addEventListener('click', autoFillTop4);
+assignBtn.addEventListener('click', assignFromSlots);
+clearSlotsBtn.addEventListener('click', clearSlots);
+
+/* Try restore repo on boot */
+(async ()=>{
+  if (navigator.storage?.persist) { try{ await navigator.storage.persist(); }catch(e){} }
+  const saved = await getRepoHandle();
+  if(saved){
+    const perm = await saved.requestPermission?.({mode:'read'});
+    if(perm === 'granted'){
+      repoHandle = saved;
+      const lang = getLang();
+      if (repoStatus) {
+        repoStatus.textContent = (lang==='fr' ? `Dossier : ${repoHandle.name}` : `Repository: ${repoHandle.name}`);
       }
     }
+  }
+})();
 
-    function tick() {
-      if (!paused) {
-        remainingSeconds--;
-        if (remainingSeconds <= 0) {
-          remainingSeconds = 0;
-          clearInterval(intervalId);
-          beep();
-        }
-        draw();
-      }
-    }
+/* Boot */
+enterBtn.addEventListener('click',()=>{
+  if(!document.fullscreenElement){ requestFS(); }
+  overlay.style.display='none';
+  resizeCanvas();
+  // Start the countdown immediately at full dial
+  startTimerAtFullDial();
+});
+canvas.addEventListener('mousedown',startDrag);
+canvas.addEventListener('touchstart',startDrag);
+window.addEventListener('mousemove',dragMove,{passive:false});
+window.addEventListener('touchmove',dragMove,{passive:false});
+window.addEventListener('mouseup',endDrag);
+window.addEventListener('touchend',endDrag);
+window.addEventListener('resize',resizeCanvas);
 
-    function startTimer() {
-      totalSeconds = Math.round(parseFloat(minutesInput.value) * 60);
-      if (isNaN(totalSeconds) || totalSeconds <= 0) return;
-      if (totalSeconds > dialMax * 60) {
-        totalSeconds = dialMax * 60;
-        minutesInput.value = dialMax;
-      }
-      remainingSeconds = totalSeconds;
-      paused = false;
-      document.getElementById('pauseBtn').textContent = 'Pause';
-      clearInterval(intervalId);
-      intervalId = setInterval(tick, 1000);
-      draw();
-    }
+/* RAF loop for pulse */
+function rafLoop(ts){ nowMs = ts || 0; draw(); requestAnimationFrame(rafLoop); }
+requestAnimationFrame(rafLoop);
 
-    function pauseTimer() {
-      paused = !paused;
-      document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
-    }
+/* Defaults */
+dialMax = 60;
+remainingSeconds = 0;
+setPauseLabel(false); // initialize Pause/Resume in current language
+resizeCanvas();
 
-    function stopTimer() {
-      clearInterval(intervalId);
-      remainingSeconds = 0;
-      paused = false;
-      document.getElementById('pauseBtn').textContent = 'Pause';
-      draw();
-    }
+/* Alarm sound (declared after defaults to ensure variables exist) */
 
-    function beep() {
-      const ac = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ac.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      osc.connect(ac.destination);
-      osc.start();
-      osc.stop(ac.currentTime + 0.2);
-    }
+function soundPath(id){ return `../../sounds/timetimer/timetimer${id}.mp3`; }
+</script>
 
-    function startDrag(e) {
-      if (!insideDial(e)) return;
-      clearInterval(intervalId);
-      paused = false;
-      document.getElementById('pauseBtn').textContent = 'Pause';
-      dragging = true;
-      updateDrag(e);
-    }
-
-    function dragMove(e) {
-      if (!dragging) return;
-      e.preventDefault();
-      updateDrag(e);
-    }
-
-    function endDrag(e) {
-      if (!dragging) return;
-      dragMove(e);
-      dragging = false;
-      startTimer();
-    }
-
-    function toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
-      } else {
-        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-      }
-      setTimeout(resizeCanvas, 100);
-    }
-
-    enterBtn.addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
-      }
-      overlay.style.display = 'none';
-      resizeCanvas();
-    });
-
-    document.getElementById('startBtn').addEventListener('click', startTimer);
-    document.getElementById('pauseBtn').addEventListener('click', pauseTimer);
-    document.getElementById('stopBtn').addEventListener('click', stopTimer);
-    document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
-    const toggleDigits = document.getElementById('toggleDigits');
-    toggleDigits.addEventListener('change', () => {
-      showDigits = toggleDigits.checked;
-      draw();
-    });
-
-    const dialSelect = document.getElementById('dialSelect');
-    dialSelect.addEventListener('change', () => {
-      dialMax = parseInt(dialSelect.value, 10);
-      minutesInput.max = dialMax;
-      minutesInput.step = dialMax <= 10 ? 0.01 : 1;
-      minutesInput.min = dialMax <= 10 ? 0 : 1;
-      if (parseFloat(minutesInput.value) > dialMax) {
-        minutesInput.value = dialMax;
-      }
-      remainingSeconds = 0;
-      draw();
-    });
-
-    const menuBtn = document.getElementById('menuBtn');
-    const menu = document.querySelector('.controls');
-    const colorBtn = document.getElementById('colorBtn');
-    const colorMenu = document.querySelector('.color-controls');
-    const colorPicker = document.getElementById('colorPicker');
-
-    menuBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      menu.classList.toggle('show');
-      colorMenu.classList.remove('show');
-    });
-    colorBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      colorMenu.classList.toggle('show');
-      menu.classList.remove('show');
-    });
-    document.addEventListener('click', e => {
-      if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
-        menu.classList.remove('show');
-      }
-      if (!colorMenu.contains(e.target) && !colorBtn.contains(e.target)) {
-        colorMenu.classList.remove('show');
-      }
-    });
-
-    colorPicker.addEventListener('input', () => {
-      timerColor = colorPicker.value;
-      draw();
-    });
-
-    canvas.addEventListener('mousedown', startDrag);
-    canvas.addEventListener('touchstart', startDrag);
-    window.addEventListener('mousemove', dragMove);
-    window.addEventListener('touchmove', dragMove, {passive:false});
-    window.addEventListener('mouseup', endDrag);
-    window.addEventListener('touchend', endDrag);
-
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-  </script>
+<!-- Translation Script for Static Elements -->
+<script src="../../js/translationonly.js"></script>
 </body>
 </html>
