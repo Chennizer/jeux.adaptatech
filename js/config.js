@@ -1,4 +1,6 @@
-// Space Prompt Images
+// config.js
+window.YT_API_KEY = "AIzaSyBj1QWd98L0ULAVmdvrnmCr1SbKFng-EpY";
+
 const spacePromptImages = [
   { src: "../../images/redswitch.png", alt: { fr: "Switch Rouge", en: "Red Switch" } },
   { src: "../../images/blueswitch.png", alt: { fr: "Switch Bleue", en: "Blue Switch" } },
