@@ -18,6 +18,7 @@
   #overlay button{font-size:5vmin;padding:1em 2em;}
   #timerCanvas{
     position:absolute;top:0;left:0;width:100vw;height:100vh;background:transparent;
+    touch-action:none; /* smoother dragging on iPad */
   }
 
   /* Panels (unified look) */
@@ -203,7 +204,7 @@
     </div>
 
     <div class="row">
-      <span data-fr="Dossier d’images" data-en="Repository">Dossier d’images</span>
+      <span data-fr="Dossier d’images" data-en="Repository" id="repoLabel">Dossier d’images</span>
       <button class="btn" id="setRepoBtn" data-fr="📁 Choisir un dossier" data-en="📁 Set Repository">📁 Choisir un dossier</button>
     </div>
     <div id="repoStatus" style="opacity:.8;margin:-6px 0 6px 6px;font-size:12px;"
@@ -214,6 +215,9 @@
       <button class="btn" id="openManifestBtn" data-fr="🖼️ Ouvrir la bibliothèque CVI" data-en="🖼️ Open CVI Library">🖼️ Ouvrir la bibliothèque CVI</button>
     </div>
   </div>
+
+  <!-- Hidden upload fallback for iPad -->
+  <input id="uploadInput" type="file" accept="image/*" multiple style="display:none;" />
 
   <!-- Shared Picker Modal -->
   <div id="pickerModal" class="modal-backdrop">
@@ -259,7 +263,7 @@
 const H_SHIFT = 0.26;             // horizontal nudge (4-image radial)
 const H_SHIFT_2 = 0.12;           // horizontal nudge (2-image radial)
 const V_OFFSET_TOP = 0.16;        // vertical offset for NE & NW (4-image radial)
-const V_OFFSET_BOTTOM = -0.16;    // vertical offset for SE & SW (4-image radial)
+theV_OFFSET_BOTTOM = -0.16;    // vertical offset for SE & SW (4-image radial)
 const SHIFT_RIGHT_STACKED = 0.18; // move dial center right in stacked/taskreward modes
 const INACTIVE_ALPHA = 0.45;      // dim inactive images
 const IDLE_CLOSE_MS = 10000;      // auto-close panels after 10s idle
@@ -317,7 +321,7 @@ let IMG_COUNT = 4; // 2 or 4
 const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff']; // r,y,g,b
 const imgs=[null,null,null,null];
 
-/* Optional placeholders (remove if you want blank by default) */
+/* Optional placeholders */
 ['../../images/loona/loonacochon.png','../../images/loona/loonapanda.png',
  '../../images/loona/loonachat.png','../../images/loona/loonaparesseux.png']
 .forEach((src,i)=>{const im=new Image();im.onload=()=>{imgs[i]=im;draw();};im.src=src;});
@@ -377,6 +381,15 @@ function getCenter(size){
     return { cx: baseCx + size * SHIFT_RIGHT_STACKED, cy };
   }
   return { cx: baseCx, cy };
+}
+
+/* --- Auto-fit utility to prevent cropping on small screens --- */
+function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
+  const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
+  const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
+  const maxH = Math.max(1, Math.min(2*(cyR - pad), 2*(canvas.height - pad - cyR)));
+  const s = Math.min(1, maxW / w, maxH / h);
+  return (isFinite(s) && s>0) ? s : 1;
 }
 
 /* Drag helpers for dial (uses shifted center) */
@@ -538,7 +551,7 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   const hShiftPx_4 = size * H_SHIFT;
   const hShiftPx_2 = size * H_SHIFT_2;
   const vTopPx   = size * V_OFFSET_TOP;
-  const vBotPx   = size * V_OFFSET_BOTTOM;
+  const vBotPx   = size * theV_OFFSET_BOTTOM;
 
   const N = IMG_COUNT;
   const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
@@ -552,7 +565,7 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
     const pulse = isActive ? (1 + PULSE_AMPLITUDE * Math.sin((nowMs % PULSE_PERIOD)/PULSE_PERIOD * 2*Math.PI)) : 1;
     const scale = (isActive ? LAYOUT.activeScale : 1) * pulse;
     const target = basePx * scale;
-    const {w, h} = computeContainSize(im, target);
+    let {w, h} = computeContainSize(im, target);
 
     const ang=angles[i];
     let dx=0, dy=0;
@@ -565,8 +578,16 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
       dy = (i===0 || i===3) ? vTopPx : vBotPx;
     }
 
-    const x = cx + Math.cos(ang)*imgR - w/2 + dx;
-    const y = cy + Math.sin(ang)*imgR - h/2 + dy;
+    // Center of this image
+    const cxI = cx + Math.cos(ang)*imgR + dx;
+    const cyI = cy + Math.sin(ang)*imgR + dy;
+
+    // Auto-fit to canvas if needed
+    const fitS = fitScaleForCenteredRect(cxI, cyI, w, h);
+    w *= fitS; h *= fitS;
+
+    const x = cxI - w/2;
+    const y = cyI - h/2;
 
     ctx.save();
     if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
@@ -609,8 +630,15 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
     if(!im){
       y += baseHeights[i] + spacing; continue;
     }
-    const {w: w0, h: h0} = computeContainSize(im, basePx * scale);
+    let {w: w0, h: h0} = computeContainSize(im, basePx * scale);
     const layoutH = baseHeights[i];
+
+    // Auto-fit horizontally
+    const cxI = xCenter;
+    const cyI = y + h0/2;
+    const fitS = fitScaleForCenteredRect(cxI, cyI, w0, h0);
+    w0 *= fitS; h0 *= fitS;
+
     const x = xCenter - w0/2;
 
     ctx.save();
@@ -634,12 +662,33 @@ function drawTaskReward(size,cx,cy,outerR){
   const task = imgs[0], reward = imgs[1];
   if(!task && !reward) return;
 
-  const tSize = task ? computeContainSize(task, basePx) : {w:basePx, h:basePx};
-  const rSize = reward ? computeContainSize(reward, basePx) : {w:basePx, h:basePx};
+  let tSize = task ? computeContainSize(task, basePx) : {w:basePx, h:basePx};
+  let rSize = reward ? computeContainSize(reward, basePx) : {w:basePx, h:basePx};
 
-  const totalH = tSize.h + spacing + rSize.h;
-  let yTop = cy - totalH/2;
+  const totalH0 = tSize.h + spacing + rSize.h;
+  let yTop = cy - totalH0/2;
   let yBot = yTop + tSize.h + spacing;
+
+  // Fit each one independently to avoid cropping on iPad
+  // Task
+  if(task){
+    const cxI = xCenter;
+    const cyI = yTop + tSize.h/2;
+    const s = fitScaleForCenteredRect(cxI, cyI, tSize.w, tSize.h);
+    tSize = { w: tSize.w*s, h: tSize.h*s };
+  }
+  // Reward
+  if(reward){
+    const cxI = xCenter;
+    const cyI = yBot + rSize.h/2;
+    const s = fitScaleForCenteredRect(cxI, cyI, rSize.w, rSize.h);
+    rSize = { w: rSize.w*s, h: rSize.h*s };
+  }
+
+  // Recompute layout with fitted sizes
+  const totalH = tSize.h + spacing + rSize.h;
+  yTop = cy - totalH/2;
+  yBot = yTop + tSize.h + spacing;
 
   const tx = xCenter - tSize.w/2;
   const ty = yTop;
@@ -702,7 +751,7 @@ function startTimerFromDrag(){
   clearInterval(intervalId);intervalId=setInterval(tick,1000);
   draw();
 }
-/* New: start full dial when pressing Démarrer */
+/* Start full dial when pressing Démarrer */
 function startTimerAtFullDial(){
   totalSeconds = dialMax * 60;
   remainingSeconds = totalSeconds;
@@ -833,16 +882,25 @@ function playAlarm(){
   }catch(_){}
 }
 
-/* ---------- File System Access (repo) ---------- */
+/* ---------- File Source Handling (Repo or Upload Fallback) ---------- */
 const supportsDirPicker = 'showDirectoryPicker' in window;
 const setRepoBtn = document.getElementById('setRepoBtn');
 const repoStatus = document.getElementById('repoStatus');
-if(!supportsDirPicker){
-  setRepoBtn.classList.add('hidden');
-  repoStatus.textContent = (getLang()==='fr') ? 'Dossier non pris en charge dans ce navigateur' : 'Repository not supported in this browser';
-}
-let repoHandle = null;
+const repoLabel  = document.getElementById('repoLabel');
+const uploadInput = document.getElementById('uploadInput');
 
+if(!supportsDirPicker){
+  // iPad/Safari: switch to upload wording
+  const lang = getLang();
+  setRepoBtn.textContent = (lang==='fr' ? '⬆️ Importer des images' : '⬆️ Upload images');
+  repoLabel.textContent  = (lang==='fr' ? 'Images importées' : 'Uploaded images');
+  repoStatus.textContent = (lang==='fr' ? 'Aucune image importée' : 'No images uploaded');
+}
+
+let repoHandle = null;
+let uploadedFiles = []; // fallback files [{name, file, url}]
+
+/* IndexedDB for repo handle (desktop) */
 const DB_NAME='timer-handles', STORE='handles';
 function withHandleStore(mode, fn){
   return new Promise((res, rej)=>{
@@ -894,7 +952,6 @@ const clearSlotsBtn = document.getElementById('clearSlotsBtn');
 const openManifestBtn = document.getElementById('openManifestBtn');
 const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
 
-let pickerSource = null;
 let lastGridItems = [];
 
 /* Drag & drop inside slots (reorder) */
@@ -942,7 +999,7 @@ function closePickerModal(){
   ensureReturnToFullscreen();
 }
 
-/* Choose / load repository */
+/* Choose / load repository (desktop) */
 async function chooseRepository(){
   try{
     const handle = await window.showDirectoryPicker();
@@ -952,11 +1009,30 @@ async function chooseRepository(){
       repoStatus.textContent = (lang==='fr' ? `Dossier : ${handle.name}` : `Repository: ${handle.name}`);
     }
     await saveRepoHandle(handle);
-    // Stay in modal and refresh immediately
+    // If modal is open, refresh grid immediately
+    if (pickerModal.style.display !== 'flex') openPickerModal();
     await populateFromRepo();
     return true;
   }catch(e){ return false; }
 }
+
+/* Upload fallback (iPad) */
+uploadInput.addEventListener('change', ()=>{
+  // Clean previous object URLs
+  for (const it of uploadedFiles){ if(it.url) URL.revokeObjectURL(it.url); }
+  uploadedFiles = [];
+  for (const file of Array.from(uploadInput.files||[])){
+    if(!file.type.startsWith('image/')) continue;
+    uploadedFiles.push({ name:file.name, file, url:URL.createObjectURL(file) });
+  }
+  const lang = getLang();
+  repoStatus.textContent = uploadedFiles.length
+    ? (lang==='fr' ? `${uploadedFiles.length} image(s) importée(s)` : `${uploadedFiles.length} image(s) uploaded`)
+    : (lang==='fr' ? 'Aucune image importée' : 'No images uploaded');
+  // Show/refresh grid immediately
+  if (pickerModal.style.display !== 'flex') openPickerModal();
+  populateFromUploads();
+});
 
 /* Iterate image files */
 async function* iterImages(dirHandle){
@@ -996,6 +1072,30 @@ async function populateFromRepo(){
     p.textContent = (getLang()==='fr' ? 'Aucune image dans ce dossier.' : 'No images in this folder.');
     pickerGrid.appendChild(p);
   }else{ pickerGrid.appendChild(frag); }
+}
+
+/* Populate grid from uploads (iPad) */
+function populateFromUploads(){
+  pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
+  pickerSub.textContent = (getLang()==='fr' ? '(importées)' : '(uploaded)');
+  switchSourceBtn.classList.remove('hidden');
+  pickerGrid.innerHTML=''; lastGridItems = [];
+  if(!uploadedFiles.length){
+    const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
+    p.textContent = (getLang()==='fr' ? 'Aucune image importée.' : 'No images uploaded.');
+    pickerGrid.appendChild(p); return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const it of uploadedFiles){
+    lastGridItems.push({ name: it.name, url: it.url, file: it.file });
+    const card = document.createElement('div');
+    card.className='thumb'; card.draggable = true;
+    card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
+    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', it.url); });
+    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    frag.appendChild(card);
+  }
+  pickerGrid.appendChild(frag);
 }
 
 /* Populate grid from manifest */
@@ -1060,14 +1160,16 @@ function clearSlots(){ for(let i=0;i<4;i++) setSlotSrc(i, null); }
 
 /* Openers */
 setRepoBtn.addEventListener('click', async ()=>{
-  if(!supportsDirPicker) return;
-  if(!repoHandle){
-    const ok = await chooseRepository(); if(!ok) return;
-    openPickerModal(); // open after first choose
-    await populateFromRepo();
-  } else {
-    openPickerModal();
-    await populateFromRepo();
+  if(supportsDirPicker){
+    if(!repoHandle){
+      const ok = await chooseRepository(); if(!ok) return;
+    }else{
+      if (pickerModal.style.display !== 'flex') openPickerModal();
+      await populateFromRepo();
+    }
+  }else{
+    // iPad: trigger file upload
+    uploadInput.click();
   }
 });
 openManifestBtn.addEventListener('click', ()=>{ openPickerModal(); populateFromManifest(); });
@@ -1075,20 +1177,24 @@ openManifestBtn.addEventListener('click', ()=>{ openPickerModal(); populateFromM
 /* Modal controls */
 closePickerBtn.addEventListener('click', closePickerModal);
 switchSourceBtn.addEventListener('click', async ()=>{
-  const ok = await chooseRepository();
-  if(ok){
-    // ensure modal visible and grid refreshed immediately
-    if(pickerModal.style.display!=='flex') openPickerModal();
-    await populateFromRepo();
+  if(supportsDirPicker){
+    const ok = await chooseRepository();
+    if(ok){
+      if(pickerModal.style.display!=='flex') openPickerModal();
+      await populateFromRepo();
+    }
+  }else{
+    uploadInput.click();
   }
 });
 autoFillBtn.addEventListener('click', autoFillTop4);
 assignBtn.addEventListener('click', assignFromSlots);
 clearSlotsBtn.addEventListener('click', clearSlots);
 
-/* Try restore repo on boot */
+/* Try restore repo on boot (desktop) */
 (async ()=>{
   if (navigator.storage?.persist) { try{ await navigator.storage.persist(); }catch(e){} }
+  if(!supportsDirPicker) return;
   const saved = await getRepoHandle();
   if(saved){
     const perm = await saved.requestPermission?.({mode:'read'});
@@ -1111,7 +1217,7 @@ enterBtn.addEventListener('click',()=>{
   startTimerAtFullDial();
 });
 canvas.addEventListener('mousedown',startDrag);
-canvas.addEventListener('touchstart',startDrag);
+canvas.addEventListener('touchstart',startDrag,{passive:false});
 window.addEventListener('mousemove',dragMove,{passive:false});
 window.addEventListener('touchmove',dragMove,{passive:false});
 window.addEventListener('mouseup',endDrag);
@@ -1127,10 +1233,6 @@ dialMax = 60;
 remainingSeconds = 0;
 setPauseLabel(false); // initialize Pause/Resume in current language
 resizeCanvas();
-
-/* Alarm sound (declared after defaults to ensure variables exist) */
-
-function soundPath(id){ return `../../sounds/timetimer/timetimer${id}.mp3`; }
 </script>
 
 <!-- Translation Script for Static Elements -->

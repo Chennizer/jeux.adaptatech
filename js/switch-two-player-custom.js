@@ -1,3 +1,8 @@
+/* switch-two-player-custom.js — unified version with folder picker + thumbnails + YouTube playlist import
+   Ordering fixes:
+   - Sequential by default (DOM order). Set shuffleEnabled=true if you want random.
+   - Resets internal playback order whenever the selected set or its order changes.
+*/
 
 let youtubePlayer = null;
 let youtubeStateChangeHandler = null;
@@ -211,6 +216,50 @@ async function buildVideoCardElement({ src, name }) {
   return card;
 }
 
+/* ----------------------- YouTube playlist helpers ----------------------- */
+function getPlaylistIdFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const list = u.searchParams.get('list');
+    if (list) return list;
+    const m = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+  } catch {}
+  return null;
+}
+
+async function fetchPlaylistVideoIds(apiKey, playlistId) {
+  const ids = [];
+  let pageToken = "";
+  while (true) {
+    const q = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    q.searchParams.set("part", "contentDetails");
+    q.searchParams.set("maxResults", "50");
+    q.searchParams.set("playlistId", playlistId);
+    q.searchParams.set("key", apiKey);
+    if (pageToken) q.searchParams.set("pageToken", pageToken);
+
+    const resp = await fetch(q.toString());
+    const text = await resp.text();
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try {
+        const j = JSON.parse(text);
+        if (j.error?.message) msg += ` – ${j.error.message}`;
+      } catch {}
+      throw new Error(msg);
+    }
+    const data = JSON.parse(text);
+    (data.items || []).forEach(it => {
+      const vid = it?.contentDetails?.videoId;
+      if (vid) ids.push(vid);
+    });
+    pageToken = data.nextPageToken || "";
+    if (!pageToken) break;
+  }
+  return ids;
+}
+
 /* ----------------------- MAIN APP ----------------------- */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -233,7 +282,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const addVideoUrlInput = document.getElementById('add-video-url-input');
   const addVideoUrlButton = document.getElementById('add-video-url-button');
 
-  /* folder button (present in HTML) */
+  // Playlist UI elements
+  const ytPlaylistInput = document.getElementById('yt-playlist-url-input');
+  const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
+  const ytPlaylistStatus = document.getElementById('yt-playlist-status');
+
+  /* Folder picker (present in HTML?) */
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
     pickFolderButton.style.display = 'none';
@@ -242,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const YT_STORAGE_KEY = 'customYoutubeUrls';
 
   const isCustomPage = !!(addVideoInput || addVideoUrlInput);
-  let manualOrder = false;
+  let manualOrder = false; // kept for UI buttons, but playback uses DOM order regardless
 
   /* numbering helper: renumber per container (uniquement les grilles) */
   function renumberCards() {
@@ -286,52 +340,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   function ensureOrderButtons(card) {
-  if (card.querySelector('.order-controls')) return;
+    if (card.querySelector('.order-controls')) return;
 
-  const wrap = document.createElement('div');
-  wrap.className = 'order-controls';
-  Object.assign(wrap.style, {
-    position: 'absolute',
-    right: '6px',
-    top: '50px',            // under the 22px badge (+6px gap)
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    background: 'rgba(255,255,255,.9)',
-    border: '1px solid #ddd',
-    borderRadius: '8px',
-    padding: '2px',
-    zIndex: '2'
-  });
-
-  function mkBtn(label, title) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = label;
-    btn.title = title;
-    Object.assign(btn.style, {
-      cursor: 'pointer',
-      fontSize: '14px',
-      lineHeight: '16px',
-      padding: '2px 6px',
-      border: '0',
-      background: 'transparent',
-      borderRadius: '6px'
+    const wrap = document.createElement('div');
+    wrap.className = 'order-controls';
+    Object.assign(wrap.style, {
+      position: 'absolute',
+      right: '6px',
+      top: '50px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+      background: 'rgba(255,255,255,.9)',
+      border: '1px solid #ddd',
+      borderRadius: '8px',
+      padding: '2px',
+      zIndex: '2'
     });
-    btn.addEventListener('click', (e) => e.stopPropagation());
-    return btn;
+
+    function mkBtn(label, title) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.title = title;
+      Object.assign(btn.style, {
+        cursor: 'pointer',
+        fontSize: '14px',
+        lineHeight: '16px',
+        padding: '2px 6px',
+        border: '0',
+        background: 'transparent',
+        borderRadius: '6px'
+      });
+      btn.addEventListener('click', (e) => e.stopPropagation());
+      return btn;
+    }
+
+    const up = mkBtn('▲', 'Move up');
+    const down = mkBtn('▼', 'Move down');
+
+    up.addEventListener('click', () => moveCardUp(card));
+    down.addEventListener('click', () => moveCardDown(card));
+
+    wrap.append(up, down);
+    card.appendChild(wrap);
   }
-
-  const up = mkBtn('▲', 'Move up');
-  const down = mkBtn('▼', 'Move down');
-
-  up.addEventListener('click', () => moveCardUp(card));
-  down.addEventListener('click', () => moveCardDown(card));
-
-  wrap.append(up, down);
-  card.appendChild(wrap);
-}
-
 
   function initCard(card) {
     card.classList.add('selected');
@@ -381,10 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.className = 'video-card';
         card.dataset.src = url;
 
-        // numbering badge
         card.appendChild(createIndexBadge());
-
-        // show filename quickly, replace with title if we can
         card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
 
         urlVideoList.appendChild(card);
@@ -404,6 +454,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!urlVideoList) return;
     const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
+  }
+
+  // ✅ addYoutubeUrlCard lives inside DOMContentLoaded (needs urlVideoList/videoSelectionDiv)
+  function addYoutubeUrlCard(url) {
+    const card = document.createElement('div');
+    card.className = 'video-card';
+    card.dataset.src = url;
+    card.appendChild(createIndexBadge());
+    card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
+    (urlVideoList || videoSelectionDiv).appendChild(card);
+    initCard(card);
+    fetchVideoTitle(url).then(title => {
+      const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.nodeValue = title;
+    });
   }
 
   loadStoredYoutubeUrls();
@@ -496,6 +561,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let player1Name = '';
   let player2Name = '';
+
+  // --- ordering state helpers (NEW) ---
+  let lastSelectionSignature = '';
+  let shuffleEnabled = false; // set true if you add a UI toggle to shuffle
+  function isCurrentlyPlaying() {
+    const ytPlaying = (typeof YT !== 'undefined' && youtubePlayer && youtubePlayer.getPlayerState && youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING);
+    const html5Playing = (mediaPlayer && !mediaPlayer.paused && !mediaPlayer.ended);
+    return ytPlaying || html5Playing;
+  }
+  function resetPlaybackOrder() {
+    playedMedia = [];
+    currentMediaIndex = 0;
+  }
+  function selectionSignature(arr) {
+    return (arr || []).join('|'); // uses DOM-ordered URLs, so order changes update the sig
+  }
 
   const playerNameOverlay = document.createElement('div');
   playerNameOverlay.id = 'player-name-overlay';
@@ -637,29 +718,109 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Sélection/désélection par clic (sur le WRAPPER)
-if (videoSelectionDiv) {
-  videoSelectionDiv.addEventListener('click', (e) => {
-    // keep controls working
-    if (e.target.closest('.order-controls') || e.target.classList.contains('remove-btn')) return;
+  // YouTube playlist import button
+  if (ytPlaylistBtn && ytPlaylistInput) {
+    ytPlaylistBtn.addEventListener('click', async () => {
+      const url = ytPlaylistInput.value.trim();
+      const apiKey = window.YT_API_KEY;
+      ytPlaylistStatus.textContent = '';
 
-    // do nothing on card click (no deselect)
-    const card = e.target.closest('.video-card');
-    if (card && !card.classList.contains('selected')) {
-      // safety: ensure any card ends up selected (teal border)
-      card.classList.add('selected');
-      updateSelectedMedia();
-    }
-  });
-}
+      if (!url) { ytPlaylistStatus.textContent = "Veuillez entrer une URL de playlist."; return; }
+      const pid = getPlaylistIdFromUrl(url);
+      if (!pid) { ytPlaylistStatus.textContent = "URL invalide: impossible d'extraire l'identifiant de playlist."; return; }
+      if (!apiKey) { ytPlaylistStatus.textContent = "Clé API absente (window.YT_API_KEY)."; return; }
+
+      ytPlaylistBtn.disabled = true;
+      ytPlaylistStatus.textContent = "Import en cours…";
+      try {
+        const ids = await fetchPlaylistVideoIds(apiKey, pid);
+        if (!ids.length) {
+          ytPlaylistStatus.textContent = "Aucune vidéo trouvée dans cette playlist.";
+        } else {
+          ids.forEach(id => addYoutubeUrlCard(`https://www.youtube.com/watch?v=${id}`));
+          renumberCards();
+          updateSelectedMedia();
+          if (urlVideoList) saveYoutubeUrls();
+          ytPlaylistStatus.textContent = `Import terminé: ${ids.length} vidéo(s).`;
+        }
+      } catch (err) {
+        console.error(err);
+        ytPlaylistStatus.textContent = "Import échoué: " + (err?.message || "erreur inconnue");
+      } finally {
+        ytPlaylistBtn.disabled = false;
+      }
+    });
+  }
+
+  // Selection click (keep selected, no toggle-off)
+  if (videoSelectionDiv) {
+    videoSelectionDiv.addEventListener('click', (e) => {
+      if (e.target.closest('.order-controls') || e.target.classList.contains('remove-btn')) return;
+      const card = e.target.closest('.video-card');
+      if (card && !card.classList.contains('selected')) {
+        card.classList.add('selected');
+        updateSelectedMedia();
+      }
+    });
+  }
+
+  // --- UPDATED: updateSelectedMedia resets ordering when list/order changes
   function updateSelectedMedia() {
     videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
-    selectedMedia = videoCardsArray.filter(c => c.classList.contains('selected')).map(c => c.dataset.src);
+
+    // Keep only selected cards, but preserve DOM order
+    selectedMedia = videoCardsArray
+      .filter(c => c.classList.contains('selected'))
+      .map(c => c.dataset.src);
+
+    // If none explicitly selected, treat all as selected (still DOM order)
     if (!selectedMedia.length) {
       selectedMedia = videoCardsArray.map(c => c.dataset.src);
     }
+
+    // show/hide Start button
     startButton.style.display = selectedMedia.length ? 'block' : 'none';
+
+    // Persist YouTube URLs if relevant
     if (urlVideoList) saveYoutubeUrls();
+
+    // Detect any change (add/remove/reorder) and reset indices if not actively playing
+    const sig = selectionSignature(selectedMedia);
+    if (sig !== lastSelectionSignature) {
+      lastSelectionSignature = sig;
+      if (!isCurrentlyPlaying()) {
+        resetPlaybackOrder();
+      } else {
+        // Clamp current index and clean played indices
+        if (currentMediaIndex >= selectedMedia.length) {
+          currentMediaIndex = selectedMedia.length ? selectedMedia.length - 1 : 0;
+        }
+        playedMedia = playedMedia.filter(i => i < selectedMedia.length);
+      }
+    }
+  }
+
+  // --- UPDATED: sequential by default; optional shuffle via shuffleEnabled
+  function getNextMediaIndex() {
+    if (!selectedMedia.length) return 0;
+
+    // If we've played all, wrap around and start fresh
+    if (playedMedia.length >= selectedMedia.length) {
+      playedMedia = [];
+    }
+
+    if (shuffleEnabled) {
+      let next;
+      do {
+        next = Math.floor(Math.random() * selectedMedia.length);
+      } while (playedMedia.includes(next) && playedMedia.length < selectedMedia.length);
+      playedMedia.push(next);
+      return next;
+    } else {
+      const next = playedMedia.length; // 0,1,2,...
+      playedMedia.push(next);
+      return next;
+    }
   }
 
   preloadMedia(selectedMedia, () => {
@@ -990,24 +1151,6 @@ if (videoSelectionDiv) {
     }
   }
 
-  function getNextMediaIndex() {
-    if (manualOrder) {
-      if (playedMedia.length === selectedMedia.length) playedMedia = [];
-      const next = playedMedia.length;
-      playedMedia.push(next);
-      return next;
-    }
-    if (playedMedia.length === selectedMedia.length) {
-      playedMedia = [];
-    }
-    let next;
-    do {
-      next = Math.floor(Math.random() * selectedMedia.length);
-    } while (playedMedia.includes(next));
-    playedMedia.push(next);
-    return next;
-  }
-
   function switchPlayer() {
     if (!isTwoPlayerMode()) {
       currentPlayer = 1;
@@ -1196,6 +1339,11 @@ if (videoSelectionDiv) {
       document.addEventListener('contextmenu', handleRightClickNextVideo);
     } else {
       document.removeEventListener('contextmenu', handleRightClickNextVideo);
+    }
+
+    // Optional: wire a shuffle option if you add it to miscOptions
+    if ('shuffle-option' in miscOptionsState) {
+      shuffleEnabled = !!miscOptionsState['shuffle-option'];
     }
     const player2SoundContainer = document.getElementById('player2-sound-container');
     if (miscOptionsState['two-player-mode-option']) {
