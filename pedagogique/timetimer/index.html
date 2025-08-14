@@ -42,7 +42,7 @@
   }
   .special-controls input[type="range"]{width:140px;}
 
-  /* Compact color swatch (shows actual color) */
+  /* Compact color swatch (desktop/Android) */
   .swatch{
     -webkit-appearance:none;appearance:none;
     width:42px;height:24px;
@@ -54,6 +54,12 @@
   .swatch::-webkit-color-swatch-wrapper{ padding:0; border-radius:6px; }
   .swatch::-webkit-color-swatch{ border:none; border-radius:6px; }
   .swatch::-moz-color-swatch{ border:none; border-radius:6px; }
+
+  /* iOS fallback swatch button */
+  .swatch-proxy{
+    width:42px;height:24px;border-radius:6px;cursor:pointer;outline:none;
+    border:1px solid #2b2b2b; box-shadow:inset 0 0 0 2px rgba(0,0,0,0.6);
+  }
 
   .btn{
     padding:.5em .8em;font-size:12px;border:none;border-radius:8px;cursor:pointer;
@@ -119,6 +125,16 @@
 
   .modal footer{padding:.6rem .8rem;border-top:1px solid #222;display:flex;gap:.5rem;justify-content:flex-end;}
   .hidden{display:none !important;}
+
+  /* Color picker mini modal */
+  .mini-body{padding:.75rem;display:flex;flex-direction:column;gap:.6rem;}
+  .chips{display:flex;gap:.4rem;flex-wrap:wrap}
+  .chip{width:24px;height:24px;border-radius:6px;border:1px solid #333;cursor:pointer;}
+  .rgblines{display:flex;flex-direction:column;gap:.5rem}
+  .rgblines label{display:grid;grid-template-columns:16px 1fr 42px;align-items:center;gap:.5rem;font-size:12px;}
+  .rgblines input[type=range]{width:100%;}
+  .hexline{display:flex;gap:.4rem;align-items:center}
+  .hexline input{flex:1; border-radius:6px;border:1px solid #2b2b2b;background:#0f0f0f;color:#fff;padding:.35em .5em}
 </style>
 </head>
 <body>
@@ -149,11 +165,16 @@
       <input type="checkbox" id="toggleDigits">
     </div>
 
-    <label>
+    <label id="colorLabel">
       <span class="i18n" data-fr="Couleur du secteur (Spécial = Désactivé / Tâche→Récompense)" data-en="Wedge color (Special = Off / Task→Reward)">
         Couleur du secteur (Spécial = Désactivé / Tâche→Récompense)
       </span>
+
+      <!-- Desktop/Android -->
       <input type="color" id="colorPicker" class="swatch" value="#d9534f" aria-label="Select colour">
+
+      <!-- iOS fallback proxy (hidden by default, shown on iOS) -->
+      <button id="colorProxy" type="button" class="swatch-proxy hidden" aria-label="Select colour"></button>
     </label>
 
     <label>
@@ -190,7 +211,7 @@
 
     <div class="formline">
       <span data-fr="Taille des images" data-en="Image size">Taille des images</span>
-      <input type="range" id="imgSizeRange" min="0.16" max="0.48" step="0.01" value="0.30">
+      <input type="range" id="imgSizeRange" min="0.16" max="0.48" step="0.01" value="0.22">
     </div>
 
     <div class="formline">
@@ -253,6 +274,44 @@
     </div>
   </div>
 
+  <!-- Color Picker Mini Modal (iOS fallback) -->
+  <div id="colorModal" class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="colorTitle">
+      <header>
+        <div class="title">
+          <span id="colorTitle" data-fr="Choisir une couleur" data-en="Pick a color">Choisir une couleur</span>
+        </div>
+        <div style="display:flex;gap:.5rem;">
+          <button id="closeColorBtn" class="btn secondary" data-fr="Fermer" data-en="Close">Fermer</button>
+        </div>
+      </header>
+      <div class="mini-body">
+        <div class="chips">
+          <div class="chip" data-col="#d9534f" style="background:#d9534f"></div>
+          <div class="chip" data-col="#ff6b6b" style="background:#ff6b6b"></div>
+          <div class="chip" data-col="#ffd93d" style="background:#ffd93d"></div>
+          <div class="chip" data-col="#4cd964" style="background:#4cd964"></div>
+          <div class="chip" data-col="#66a5ff" style="background:#66a5ff"></div>
+          <div class="chip" data-col="#b36bff" style="background:#b36bff"></div>
+          <div class="chip" data-col="#000000" style="background:#000"></div>
+          <div class="chip" data-col="#ffffff" style="background:#fff;border-color:#888"></div>
+        </div>
+
+        <div class="rgblines">
+          <label><span>R</span><input id="rRange" type="range" min="0" max="255" value="217"><span id="rVal">217</span></label>
+          <label><span>G</span><input id="gRange" type="range" min="0" max="255" value="83"><span id="gVal">83</span></label>
+          <label><span>B</span><input id="bRange" type="range" min="0" max="255" value="79"><span id="bVal">79</span></label>
+        </div>
+
+        <div class="hexline">
+          <span>#</span>
+          <input id="hexInput" type="text" value="d9534f" maxlength="6" spellcheck="false" inputmode="latin" />
+          <button id="okColorBtn" class="btn" data-fr="OK" data-en="OK">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Manifest array -->
   <script src="../../js/cviPngArray.js"></script>
 
@@ -263,13 +322,15 @@
 const H_SHIFT = 0.26;             // horizontal nudge (4-image radial)
 const H_SHIFT_2 = 0.12;           // horizontal nudge (2-image radial)
 const V_OFFSET_TOP = 0.16;        // vertical offset for NE & NW (4-image radial)
-theV_OFFSET_BOTTOM = -0.16;    // vertical offset for SE & SW (4-image radial)
+const V_OFFSET_BOTTOM = -0.16;    // vertical offset for SE & SW (4-image radial)
 const SHIFT_RIGHT_STACKED = 0.18; // move dial center right in stacked/taskreward modes
 const INACTIVE_ALPHA = 0.45;      // dim inactive images
 const IDLE_CLOSE_MS = 10000;      // auto-close panels after 10s idle
+const MIN_STACKED_FIT = 0.55;     // desktop minimum column fit
+const STACK_V_MARGIN = 0.06;      // top/bottom breathing space for stacked column
 
 // Pulse: active image subtle breathing (radial/stacked only)
-const PULSE_PERIOD = 1800;        // ms (slower)
+const PULSE_PERIOD = 1800;        // ms
 const PULSE_AMPLITUDE = 0.04;     // +/- 4%
 
 // Radial distance from number ring
@@ -291,6 +352,10 @@ const LAYOUT = {
 /* ===========================================================
    END CONFIG
    =========================================================== */
+
+/* ---------- iOS detection ---------- */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 /* ---------- i18n helpers ---------- */
 function getLang(){
@@ -383,7 +448,7 @@ function getCenter(size){
   return { cx: baseCx, cy };
 }
 
-/* --- Auto-fit utility to prevent cropping on small screens --- */
+/* --- Auto-fit utility (for radial & taskreward) --- */
 function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
   const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
@@ -551,7 +616,7 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   const hShiftPx_4 = size * H_SHIFT;
   const hShiftPx_2 = size * H_SHIFT_2;
   const vTopPx   = size * V_OFFSET_TOP;
-  const vBotPx   = size * theV_OFFSET_BOTTOM;
+  const vBotPx   = size * V_OFFSET_BOTTOM;
 
   const N = IMG_COUNT;
   const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
@@ -598,7 +663,7 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   }
 }
 
-/* ---- STACKED ---- */
+/* ---- STACKED (uniform column scale + pulse inside lanes) ---- */
 function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const basePx   = size * LAYOUT.imgBase;
   const spacing  = size * LAYOUT.stacked.spacing;
@@ -608,47 +673,52 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const N = IMG_COUNT;
   const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
 
-  // precompute base heights so pulse doesn't push others
-  const baseHeights = [];
-  for(let i=0;i<N;i++){
+  // 1) measure base (no pulse) dims per image
+  const baseDims = Array.from({length:N}, (_,i)=>{
     const im = imgs[i];
-    if(!im){ baseHeights[i] = basePx; continue; }
-    const s = (i===active) ? LAYOUT.activeScale : 1;
-    baseHeights[i] = computeContainSize(im, basePx * s).h;
-  }
+    if(!im) return {w:basePx, h:basePx, has:false};
+    const s  = (i===active) ? LAYOUT.activeScale : 1;
+    const d  = computeContainSize(im, basePx * s);
+    return {w:d.w, h:d.h, has:true, im};
+  });
 
-  let totalH = spacing * (N-1);
-  for(let i=0;i<N;i++) totalH += baseHeights[i];
+  // 2) compute a single uniform scale to keep full column onscreen
+  const sumH   = baseDims.reduce((a,d)=>a+(d.h||basePx), 0);
+  const availH = canvas.height - 2*(size*STACK_V_MARGIN);
+  let g = Math.min(1, (availH - spacing*(N-1)) / Math.max(1, sumH));
+  if(!isFinite(g) || g <= 0) g = 1;
+  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT); // on desktop never shrink too much
+
+  // 3) reserve vertical height and center the whole column
+  let totalH = baseDims.reduce((a,d)=>a + d.h*g, 0) + spacing*(N-1);
   let y = cy - totalH/2;
 
+  // 4) draw items; pulse animates inside their reserved lanes
   for(let i=0;i<N;i++){
-    const im = imgs[i];
+    const d = baseDims[i];
     const isActive = (i===active);
-    const pulse = isActive ? (1 + PULSE_AMPLITUDE * Math.sin((nowMs % PULSE_PERIOD)/PULSE_PERIOD * 2*Math.PI)) : 1;
-    const scale = (isActive ? LAYOUT.activeScale : 1) * pulse;
 
-    if(!im){
-      y += baseHeights[i] + spacing; continue;
+    const pulse = isActive ? (1 + PULSE_AMPLITUDE *
+                     Math.sin((nowMs % PULSE_PERIOD)/PULSE_PERIOD * 2*Math.PI)) : 1;
+
+    const reservedH = d.h * g;
+    const drawH     = d.h * g * pulse;
+    const drawW     = d.w * g * pulse;
+
+    const x = xCenter - drawW/2;
+    const yDraw = y + (reservedH - drawH)/2;
+
+    if(d.has){
+      ctx.save();
+      if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
+      ctx.drawImage(d.im, x, yDraw, drawW, drawH);
+      ctx.strokeStyle = colorForIndex(i, (N===2?2:4));
+      ctx.lineWidth   = size*0.006;
+      ctx.strokeRect(x, yDraw, drawW, drawH);
+      ctx.restore();
     }
-    let {w: w0, h: h0} = computeContainSize(im, basePx * scale);
-    const layoutH = baseHeights[i];
 
-    // Auto-fit horizontally
-    const cxI = xCenter;
-    const cyI = y + h0/2;
-    const fitS = fitScaleForCenteredRect(cxI, cyI, w0, h0);
-    w0 *= fitS; h0 *= fitS;
-
-    const x = xCenter - w0/2;
-
-    ctx.save();
-    if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
-    ctx.drawImage(im, x, y, w0, h0);
-    ctx.strokeStyle=colorForIndex(i, (N===2?2:4));ctx.lineWidth=size*0.006;
-    ctx.strokeRect(x, y, w0, h0);
-    ctx.restore();
-
-    y += layoutH + spacing;
+    y += reservedH + spacing;
   }
 }
 
@@ -669,15 +739,13 @@ function drawTaskReward(size,cx,cy,outerR){
   let yTop = cy - totalH0/2;
   let yBot = yTop + tSize.h + spacing;
 
-  // Fit each one independently to avoid cropping on iPad
-  // Task
+  // Fit each one independently
   if(task){
     const cxI = xCenter;
     const cyI = yTop + tSize.h/2;
     const s = fitScaleForCenteredRect(cxI, cyI, tSize.w, tSize.h);
     tSize = { w: tSize.w*s, h: tSize.h*s };
   }
-  // Reward
   if(reward){
     const cxI = xCenter;
     const cyI = yBot + rSize.h/2;
@@ -843,6 +911,8 @@ document.getElementById('dialSelect').addEventListener('change',e=>{
   remainingSeconds=0; draw();
   setPauseLabel(false);
 });
+
+/* Special mode */
 const specialModeSelect=document.getElementById('specialMode');
 specialModeSelect.addEventListener('change',e=>{
   specialMode=e.target.value;
@@ -852,13 +922,105 @@ specialModeSelect.addEventListener('change',e=>{
     draw();
   }
 });
-const colorPicker=document.getElementById('colorPicker');
-colorPicker.addEventListener('input',e=>{ timerColor=e.target.value; if(specialMode==='none' || specialMode==='taskreward') draw(); });
 
+/* Color handling (desktop + iOS fallback) */
+const colorPicker=document.getElementById('colorPicker');
+const colorProxy=document.getElementById('colorProxy');
+function applyTimerColor(hex){
+  timerColor = hex;
+  if(!isIOS){ colorPicker.value = hex; }
+  colorProxy.style.background = hex;
+  if(specialMode==='none' || specialMode==='taskreward'){ draw(); }
+  if(bgTintEnabled){
+    updatePageTint(remainingSeconds>0?remainingSeconds:(dialMax*60), dialMax*60);
+  }
+}
+if(!isIOS){
+  colorProxy.classList.add('hidden');
+  colorPicker.classList.remove('hidden');
+  colorPicker.addEventListener('input',e=>{ applyTimerColor(e.target.value); });
+}else{
+  // iOS: hide native input, show proxy & modal
+  colorPicker.classList.add('hidden');
+  colorProxy.classList.remove('hidden');
+  colorProxy.style.background = timerColor;
+  colorProxy.addEventListener('click', openColorModal);
+  colorProxy.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openColorModal(); }});
+}
+
+/* Simple color modal logic (iOS) */
+const colorModal = document.getElementById('colorModal');
+const closeColorBtn = document.getElementById('closeColorBtn');
+const okColorBtn = document.getElementById('okColorBtn');
+const hexInput = document.getElementById('hexInput');
+const rRange = document.getElementById('rRange');
+const gRange = document.getElementById('gRange');
+const bRange = document.getElementById('bRange');
+const rVal = document.getElementById('rVal');
+const gVal = document.getElementById('gVal');
+const bVal = document.getElementById('bVal');
+
+function hexToRgbObj(hex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if(!m) return {r:217,g:83,b:79};
+  const n = parseInt(m[1],16);
+  return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
+}
+function rgbToHex(r,g,b){
+  const h = (x)=>x.toString(16).padStart(2,'0');
+  return '#'+h(r)+h(g)+h(b);
+}
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function syncRGBtoUI(rgb){
+  rRange.value = rgb.r; gRange.value = rgb.g; bRange.value = rgb.b;
+  rVal.textContent = rgb.r; gVal.textContent = rgb.g; bVal.textContent = rgb.b;
+  hexInput.value = rgbToHex(rgb.r, rgb.g, rgb.b).slice(1);
+}
+function syncUItoColor(){
+  const r = clamp(parseInt(rRange.value,10)||0,0,255);
+  const g = clamp(parseInt(gRange.value,10)||0,0,255);
+  const b = clamp(parseInt(bRange.value,10)||0,0,255);
+  rVal.textContent=r; gVal.textContent=g; bVal.textContent=b;
+  hexInput.value = rgbToHex(r,g,b).slice(1);
+}
+function openColorModal(){
+  const rgb = hexToRgbObj(timerColor);
+  syncRGBtoUI(rgb);
+  colorModal.style.display='flex';
+}
+function closeColorModal(){
+  colorModal.style.display='none';
+  ensureReturnToFullscreen();
+}
+[rRange,gRange,bRange].forEach(el=>{
+  el.addEventListener('input', ()=>{ syncUItoColor(); });
+});
+hexInput.addEventListener('input', ()=>{
+  const h = '#'+hexInput.value.replace(/[^0-9a-f]/ig,'').slice(0,6);
+  const rgb = hexToRgbObj(h.length===7?h:'#d9534f');
+  syncRGBtoUI(rgb);
+});
+document.querySelectorAll('#colorModal .chip').forEach(ch=>{
+  ch.addEventListener('click', ()=>{
+    const col = ch.getAttribute('data-col');
+    const rgb = hexToRgbObj(col);
+    syncRGBtoUI(rgb);
+  });
+});
+closeColorBtn.addEventListener('click', closeColorModal);
+okColorBtn.addEventListener('click', ()=>{
+  const r = parseInt(rRange.value,10)||217;
+  const g = parseInt(gRange.value,10)||83;
+  const b = parseInt(bRange.value,10)||79;
+  const hex = rgbToHex(clamp(r,0,255), clamp(g,0,255), clamp(b,0,255));
+  applyTimerColor(hex);
+  closeColorModal();
+});
+
+/* Image size/count + tint */
 document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); });
 document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); });
 
-/* Page tint toggle now lives in Special menu */
 document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{
   bgTintEnabled = e.target.checked;
   draw();
@@ -890,7 +1052,6 @@ const repoLabel  = document.getElementById('repoLabel');
 const uploadInput = document.getElementById('uploadInput');
 
 if(!supportsDirPicker){
-  // iPad/Safari: switch to upload wording
   const lang = getLang();
   setRepoBtn.textContent = (lang==='fr' ? '⬆️ Importer des images' : '⬆️ Upload images');
   repoLabel.textContent  = (lang==='fr' ? 'Images importées' : 'Uploaded images');
@@ -1009,7 +1170,6 @@ async function chooseRepository(){
       repoStatus.textContent = (lang==='fr' ? `Dossier : ${handle.name}` : `Repository: ${handle.name}`);
     }
     await saveRepoHandle(handle);
-    // If modal is open, refresh grid immediately
     if (pickerModal.style.display !== 'flex') openPickerModal();
     await populateFromRepo();
     return true;
@@ -1018,7 +1178,6 @@ async function chooseRepository(){
 
 /* Upload fallback (iPad) */
 uploadInput.addEventListener('change', ()=>{
-  // Clean previous object URLs
   for (const it of uploadedFiles){ if(it.url) URL.revokeObjectURL(it.url); }
   uploadedFiles = [];
   for (const file of Array.from(uploadInput.files||[])){
@@ -1029,7 +1188,6 @@ uploadInput.addEventListener('change', ()=>{
   repoStatus.textContent = uploadedFiles.length
     ? (lang==='fr' ? `${uploadedFiles.length} image(s) importée(s)` : `${uploadedFiles.length} image(s) uploaded`)
     : (lang==='fr' ? 'Aucune image importée' : 'No images uploaded');
-  // Show/refresh grid immediately
   if (pickerModal.style.display !== 'flex') openPickerModal();
   populateFromUploads();
 });
@@ -1168,7 +1326,6 @@ setRepoBtn.addEventListener('click', async ()=>{
       await populateFromRepo();
     }
   }else{
-    // iPad: trigger file upload
     uploadInput.click();
   }
 });
@@ -1213,7 +1370,6 @@ enterBtn.addEventListener('click',()=>{
   if(!document.fullscreenElement){ requestFS(); }
   overlay.style.display='none';
   resizeCanvas();
-  // Start the countdown immediately at full dial
   startTimerAtFullDial();
 });
 canvas.addEventListener('mousedown',startDrag);
@@ -1231,7 +1387,10 @@ requestAnimationFrame(rafLoop);
 /* Defaults */
 dialMax = 60;
 remainingSeconds = 0;
-setPauseLabel(false); // initialize Pause/Resume in current language
+setPauseLabel(false); // initialize Pause/Resume
+// Seed swatch visuals
+document.getElementById('colorProxy').style.background = timerColor;
+document.getElementById('colorPicker').value = timerColor;
 resizeCanvas();
 </script>
 

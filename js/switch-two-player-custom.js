@@ -2,19 +2,27 @@
    Ordering fixes:
    - Sequential by default (DOM order). Set shuffleEnabled=true if you want random.
    - Resets internal playback order whenever the selected set or its order changes.
+
+   Embedding/VEVO handling:
+   - During playlist import: we validate with videos?part=status and import ONLY embeddable, public/unlisted items.
+   - When adding a single YouTube URL: we validate first; if blocked, we DO NOT add a card.
+   - When restoring saved URLs from localStorage: batch-validate and only re-add playable ones (storage is cleaned).
+   - At playback, if a video still errors, we auto-skip.
 */
 
 let youtubePlayer = null;
 let youtubeStateChangeHandler = null;
 let youtubeApiReady = false;
 let pendingYouTubeId = null;
+
 const YT_PLAYER_VARS = {
   controls: 0,
   disablekb: 1,
   fs: 0,
   modestbranding: 1,
   rel: 0,
-  playsinline: 1
+  playsinline: 1,
+  enablejsapi: 1
 };
 
 function onYouTubePlayerReady() {
@@ -49,21 +57,31 @@ async function fetchVideoTitle(url) {
         const data = await response.json();
         if (data && data.title) return data.title;
       }
-    } catch (e) {}
+    } catch {}
   }
   return extractFileNameFromUrl(url);
 }
+
 function onYouTubePlayerStateChange(event) {
   if (youtubeStateChangeHandler) youtubeStateChangeHandler(event);
 }
+
+/* ===== RUNTIME AUTO-SKIP (safety net) ===== */
+function onYouTubePlayerError(e) {
+  console.warn('YT error', e?.data);
+  handleMediaEnd(); // move on to next item
+}
+
 function createYouTubePlayer(id) {
   youtubePlayer = new YT.Player('youtube-player', {
+    host: 'https://www.youtube-nocookie.com',
     videoId: id || undefined,
     playerVars: YT_PLAYER_VARS,
     events: {
-      'onReady': onYouTubePlayerReady,
-      'onStateChange': onYouTubePlayerStateChange
-    }
+      onReady: onYouTubePlayerReady,
+      onStateChange: onYouTubePlayerStateChange,
+      onError: onYouTubePlayerError,
+    },
   });
   const container = document.getElementById('youtube-player');
   if (container) container.style.pointerEvents = 'none';
@@ -79,7 +97,6 @@ function onYouTubeIframeAPIReady() {
 
 /* ----------------------- thumbnails + folder picker helpers ----------------------- */
 
-/** Generate a JPEG dataURL thumbnail from a File or URL (first frame ~0.1s) */
 async function makeThumbnailFromVideo(srcOrFile) {
   return new Promise(async (resolve) => {
     const url = typeof srcOrFile === 'string' ? srcOrFile : URL.createObjectURL(srcOrFile);
@@ -167,7 +184,7 @@ async function* iterVideos(dirHandle) {
   }
 }
 
-/* helper: create index badge (inline styles so no HTML/CSS change needed) */
+/* helper: create index badge */
 function createIndexBadge() {
   const b = document.createElement('span');
   b.className = 'video-index';
@@ -216,7 +233,7 @@ async function buildVideoCardElement({ src, name }) {
   return card;
 }
 
-/* ----------------------- YouTube playlist helpers ----------------------- */
+/* ----------------------- YouTube helpers (import + validation) ----------------------- */
 function getPlaylistIdFromUrl(url) {
   try {
     const u = new URL(url);
@@ -260,10 +277,66 @@ async function fetchPlaylistVideoIds(apiKey, playlistId) {
   return ids;
 }
 
+/* Validate embeddability for a set of IDs */
+async function validateEmbeddableIds(apiKey, ids) {
+  const embeddable = new Set();
+  const blocked = new Map(); // id -> reason
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const u = new URL("https://www.googleapis.com/youtube/v3/videos");
+    u.searchParams.set("part", "status");
+    u.searchParams.set("id", chunk.join(","));
+    u.searchParams.set("key", apiKey);
+    const r = await fetch(u.toString());
+    const t = await r.text();
+    if (!r.ok) {
+      let msg = `HTTP ${r.status}`;
+      try { const j = JSON.parse(t); if (j.error?.message) msg += ` – ${j.error.message}`; } catch {}
+      throw new Error(msg);
+    }
+    const j = JSON.parse(t);
+    (j.items || []).forEach(item => {
+      const s = item.status || {};
+      const emb = s.embeddable === true;
+      const pubOrUnlisted = (s.privacyStatus === 'public' || s.privacyStatus === 'unlisted');
+      if (emb && pubOrUnlisted) {
+        embeddable.add(item.id);
+      } else {
+        let reason = !pubOrUnlisted ? 'private' : 'embedding disabled';
+        blocked.set(item.id, reason);
+      }
+    });
+  }
+  return { ok: Array.from(embeddable), blocked };
+}
+
+/* Validate a single YouTube URL before adding */
+async function validateSingleYouTubeUrl(url, apiKey) {
+  const id = getYouTubeId(url);
+  if (!id || !apiKey) return { ok: true, reason: '' }; // fail-open if no key
+  const u = new URL("https://www.googleapis.com/youtube/v3/videos");
+  u.searchParams.set("part", "status");
+  u.searchParams.set("id", id);
+  u.searchParams.set("key", apiKey);
+  const r = await fetch(u.toString());
+  const t = await r.text();
+  if (!r.ok) return { ok: true, reason: '' }; // fail-open on quota/etc.
+  try {
+    const j = JSON.parse(t);
+    const it = (j.items || [])[0];
+    if (!it) return { ok: true, reason: '' };
+    const s = it.status || {};
+    const emb = s.embeddable === true;
+    const pubOrUnlisted = (s.privacyStatus === 'public' || s.privacyStatus === 'unlisted');
+    if (emb && pubOrUnlisted) return { ok: true, reason: '' };
+    return { ok: false, reason: !pubOrUnlisted ? 'private' : 'embedding disabled' };
+  } catch { return { ok: true, reason: '' }; }
+}
+
 /* ----------------------- MAIN APP ----------------------- */
 
-document.addEventListener('DOMContentLoaded', () => {
-  let preventInput = false;
+document.addEventListener('DOMContentLoaded', async () => {
+  // ---- DOM refs (unique) ----
   const mediaType = document.body.getAttribute('data-media-type');
   const startButton = document.getElementById('control-panel-start-button');
   const blackBackground = document.getElementById('black-background');
@@ -274,31 +347,157 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoSelectionModal = document.getElementById('video-selection-modal');
   const closeModal = document.getElementById('close-modal');
   const okButton = document.getElementById('ok-button');
-  const videoSelectionDiv = document.getElementById('video-selection'); // wrapper
-  const localVideoList = document.getElementById('local-video-list');   // grid
-  const urlVideoList = document.getElementById('url-video-list');       // optional grid
+  const videoSelectionDiv = document.getElementById('video-selection');
+  const localVideoList = document.getElementById('local-video-list');
+  const urlVideoList = document.getElementById('url-video-list');
   const addVideoFileButton = document.getElementById('add-video-file-button');
   const addVideoInput = document.getElementById('add-video-input');
   const addVideoUrlInput = document.getElementById('add-video-url-input');
   const addVideoUrlButton = document.getElementById('add-video-url-button');
 
-  // Playlist UI elements
+  // Playlist UI
   const ytPlaylistInput = document.getElementById('yt-playlist-url-input');
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
 
-  /* Folder picker (present in HTML?) */
+  // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
     pickFolderButton.style.display = 'none';
   }
 
+  // Players / visuals
+  const introJingle = document.getElementById('intro-jingle');
+  const visualOptionsSelect = document.getElementById('special-options-select');
+  const videoContainer = document.getElementById('video-container');
+  const youtubeDiv = document.getElementById('youtube-player');
+
+  const spacePrompt = document.getElementById('space-prompt');
+  const textPrompt = document.getElementById('text-prompt');
+  const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
+  const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
+  const closeSpacePromptModal = document.getElementById('close-space-prompt-modal');
+  const applySpacePromptButton = document.getElementById('apply-space-prompt');
+  const textPromptInput = document.getElementById('text-prompt-input');
+  const imageCardsContainer1 = document.getElementById('space-prompt-selection');
+
+  const spacePrompt2 = document.getElementById('space-prompt-2');
+  const textPrompt2 = document.getElementById('text-prompt-2');
+  const selectSpacePromptButton2 = document.getElementById('select-space-prompt-button-2');
+  const spacePromptSelectionModal2 = document.getElementById('space-prompt-selection-modal-2');
+  const closeSpacePromptModal2 = document.getElementById('close-space-prompt-modal-2');
+  const applySpacePromptButton2 = document.getElementById('apply-space-prompt-2');
+  const textPromptInput2 = document.getElementById('text-prompt-input-2');
+  const imageCardsContainer2 = document.getElementById('space-prompt-selection-2');
+
+  const soundOptionsSelect = document.getElementById('sound-options-select');
+  const soundOptionsSelect2 = document.getElementById('sound-options-select-2');
+
+  const recordModal = document.getElementById('record-modal');
+  const recordButton = document.getElementById('record-button');
+  const stopRecordingButton = document.getElementById('stop-recording-button');
+  const okRecordingButton = document.getElementById('ok-recording-button');
+  const closeRecordModal = document.getElementById('close-record-modal');
+  const recordStatus = document.getElementById('record-status');
+
+  const miscOptionsContainer = document.getElementById('misc-options-container');
+  const miscOptionsModal = document.getElementById('misc-options-modal');
+  const closeMiscOptionsModal = document.getElementById('close-misc-options-modal');
+  const miscOptionsOkButton = document.getElementById('misc-options-ok-button');
+  const miscOptionsButton = document.getElementById('misc-options-button');
+  const player2PromptContainer = document.getElementById('player2-prompt-container');
+
+  // ---- runtime state (unique) ----
+  let preventInput = false;
+  let mediaPlayer = null;
+  if (mediaType === 'video') {
+    mediaPlayer = document.getElementById('video-player');
+    if (mediaPlayer) mediaPlayer.crossOrigin = 'anonymous';
+  }
+
+  let selectedSpacePromptSrc = '';
+  let useTextPrompt = false;
+  let selectedSpacePromptSrc2 = '';
+  let useTextPrompt2 = false;
+
+  if (youtubeDiv) {
+    youtubeStateChangeHandler = (event) => {
+      if (event.data === YT.PlayerState.ENDED) {
+        handleMediaEnd();
+      }
+    };
+    if (window.YT && typeof YT.Player !== 'undefined') {
+      youtubeApiReady = true;
+    }
+  }
+
+  let selectedSound = 'none';
+  let selectedSound2 = 'none';
+  let currentSound = null;
+  let recordedAudio = null;
+  let mediaRecorder;
+  let audioChunks = [];
+
+  const miscOptionsState = {};
+  let selectedMedia = [];
+  let controlsEnabled = false;
+  let playedMedia = [];
+  let currentMediaIndex = 0;
+  let mode = 'pressBetween';
+  let intervalID = null;
+  let intervalTime = 5;
+  let pausedAtTime = 0;
+  let currentPlayer = 1;
+  let player1Name = '';
+  let player2Name = '';
+  let lastSelectionSignature = '';
+  let shuffleEnabled = false; // optional toggle if you add it to miscOptions
   const YT_STORAGE_KEY = 'customYoutubeUrls';
-
   const isCustomPage = !!(addVideoInput || addVideoUrlInput);
-  let manualOrder = false; // kept for UI buttons, but playback uses DOM order regardless
+  let manualOrder = false;
 
-  /* numbering helper: renumber per container (uniquement les grilles) */
+  function isCurrentlyPlaying() {
+    const ytPlaying = (typeof YT !== 'undefined' && youtubePlayer && youtubePlayer.getPlayerState && youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING);
+    const html5Playing = (mediaPlayer && !mediaPlayer.paused && !mediaPlayer.ended);
+    return ytPlaying || html5Playing;
+  }
+  function resetPlaybackOrder() {
+    playedMedia = [];
+    currentMediaIndex = 0;
+  }
+  function selectionSignature(arr) {
+    return (arr || []).join('|');
+  }
+
+  // Player name overlay
+  const playerNameOverlay = document.createElement('div');
+  playerNameOverlay.id = 'player-name-overlay';
+  playerNameOverlay.style.position = 'absolute';
+  playerNameOverlay.style.top = '12%';
+  playerNameOverlay.style.left = '50%';
+  playerNameOverlay.style.transform = 'translateX(-50%)';
+  playerNameOverlay.style.fontSize = '40px';
+  playerNameOverlay.style.color = 'white';
+  playerNameOverlay.style.textAlign = 'center';
+  playerNameOverlay.style.display = 'none';
+  playerNameOverlay.style.zIndex = '3002';
+  document.body.appendChild(playerNameOverlay);
+
+  const playerNamesModal = document.getElementById('player-names-modal');
+  const closePlayerNamesModal = document.getElementById('close-player-names-modal');
+  const playerNamesOkButton = document.getElementById('player-names-ok-button');
+  const playerNamesCancelButton = document.getElementById('player-names-cancel-button');
+  const player1NameInput = document.getElementById('player1-name-input');
+  const player2NameInput = document.getElementById('player2-name-input');
+
+  let timedCycleTimeout = null;
+  let promptCurrentlyVisible = true;
+
+  function isTwoPlayerMode() {
+    return !!miscOptionsState['two-player-mode-option'];
+  }
+
+  // numbering helper
   function renumberCards() {
     const containers = [localVideoList, urlVideoList].filter(Boolean);
     containers.forEach(container => {
@@ -314,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* Reorder helpers — UP / DOWN buttons (no drag & drop) */
+  // Reorder helpers — UP / DOWN buttons
   function moveCardUp(card) {
     const parent = card.parentElement;
     if (!parent) return;
@@ -389,15 +588,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function initCard(card) {
     card.classList.add('selected');
 
-    // ensure index badge exists
     if (!card.querySelector('.video-index')) {
       card.insertBefore(createIndexBadge(), card.firstChild);
     }
 
-    // add order buttons (replacing drag mechanics completely)
     ensureOrderButtons(card);
 
-    // remove button on custom page
     if (isCustomPage && !card.querySelector('.remove-btn')) {
       const rm = document.createElement('span');
       rm.textContent = '×';
@@ -423,41 +619,79 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function loadStoredYoutubeUrls() {
-    if (!urlVideoList) return;
-    const saved = localStorage.getItem(YT_STORAGE_KEY);
-    if (!saved) return;
-    try {
-      const urls = JSON.parse(saved);
-      urls.forEach(async (url) => {
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.dataset.src = url;
-
-        card.appendChild(createIndexBadge());
-        card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
-
-        urlVideoList.appendChild(card);
-        initCard(card);
-        fetchVideoTitle(url).then(title => {
-          const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-          if (textNode) textNode.nodeValue = title;
-        });
-        renumberCards();
-      });
-    } catch (e) {
-      console.error('Failed to parse saved YouTube URLs', e);
-    }
-  }
-
+  // ===== SAVE/RESTORE URL LISTS =====
   function saveYoutubeUrls() {
     if (!urlVideoList) return;
     const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
   }
 
-  // ✅ addYoutubeUrlCard lives inside DOMContentLoaded (needs urlVideoList/videoSelectionDiv)
-  function addYoutubeUrlCard(url) {
+  async function loadStoredYoutubeUrls() {
+    if (!urlVideoList) return;
+    const saved = localStorage.getItem(YT_STORAGE_KEY);
+    if (!saved) return;
+
+    try {
+      const urls = JSON.parse(saved);
+      const apiKey = window.YT_API_KEY;
+      const ytUrls = urls.filter(u => isYouTubeUrl(u));
+      const otherUrls = urls.filter(u => !isYouTubeUrl(u));
+
+      // Add non-YouTube URLs immediately
+      for (const url of otherUrls) {
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.dataset.src = url;
+        card.appendChild(createIndexBadge());
+        card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
+        urlVideoList.appendChild(card);
+        initCard(card);
+        fetchVideoTitle(url).then(title => {
+          const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+          if (textNode) textNode.nodeValue = title;
+        });
+      }
+
+      // Validate YouTube URLs (only add playable ones)
+      let okSet = new Set();
+      if (ytUrls.length && apiKey) {
+        const ids = ytUrls.map(u => getYouTubeId(u)).filter(Boolean);
+        const { ok } = await validateEmbeddableIds(apiKey, ids);
+        okSet = new Set(ok);
+      }
+
+      const okUrls = [];
+      for (const url of ytUrls) {
+        const id = getYouTubeId(url);
+        if (apiKey) {
+          if (!id || !okSet.has(id)) continue; // skip blocked/unplayable
+        }
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.dataset.src = url;
+        card.appendChild(createIndexBadge());
+        card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
+        urlVideoList.appendChild(card);
+        initCard(card);
+        fetchVideoTitle(url).then(title => {
+          const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+          if (textNode) textNode.nodeValue = title;
+        });
+        okUrls.push(url);
+      }
+
+      // Clean storage to only keep currently valid ones
+      const cleaned = [...otherUrls, ...okUrls];
+      localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(cleaned));
+
+      renumberCards();
+    } catch (e) {
+      console.error('Failed to parse saved YouTube URLs', e);
+    }
+  }
+
+  // add card helper (use only AFTER validation)
+  async function addYoutubeUrlCard(url) {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.dataset.src = url;
@@ -471,145 +705,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  loadStoredYoutubeUrls();
+  // Load saved URLs (with validation)
+  await loadStoredYoutubeUrls();
 
+  // Initialize any pre-existing cards (if present in DOM at load)
   let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
   videoCardsArray.forEach(initCard);
   renumberCards();
 
   // (Drag & drop fully removed)
 
-  const introJingle = document.getElementById('intro-jingle');
-  const visualOptionsSelect = document.getElementById('special-options-select');
-  const videoContainer = document.getElementById('video-container');
-  const youtubeDiv = document.getElementById('youtube-player');
-
-  let mediaPlayer = null;
-  if (mediaType === 'video') {
-    mediaPlayer = document.getElementById('video-player');
-    if (mediaPlayer) {
-      mediaPlayer.crossOrigin = 'anonymous';
-    }
-  }
-
-  const spacePrompt = document.getElementById('space-prompt');
-  const textPrompt = document.getElementById('text-prompt');
-  const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
-  const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
-  const closeSpacePromptModal = document.getElementById('close-space-prompt-modal');
-  const applySpacePromptButton = document.getElementById('apply-space-prompt');
-  const textPromptInput = document.getElementById('text-prompt-input');
-  const imageCardsContainer1 = document.getElementById('space-prompt-selection');
-  let selectedSpacePromptSrc = '';
-  let useTextPrompt = false;
-
-  const spacePrompt2 = document.getElementById('space-prompt-2');
-  const textPrompt2 = document.getElementById('text-prompt-2');
-  const selectSpacePromptButton2 = document.getElementById('select-space-prompt-button-2');
-  const spacePromptSelectionModal2 = document.getElementById('space-prompt-selection-modal-2');
-  const closeSpacePromptModal2 = document.getElementById('close-space-prompt-modal-2');
-  const applySpacePromptButton2 = document.getElementById('apply-space-prompt-2');
-  const textPromptInput2 = document.getElementById('text-prompt-input-2');
-  const imageCardsContainer2 = document.getElementById('space-prompt-selection-2');
-  let selectedSpacePromptSrc2 = '';
-  let useTextPrompt2 = false;
-
-  if (youtubeDiv) {
-    youtubeStateChangeHandler = (event) => {
-      if (event.data === YT.PlayerState.ENDED) {
-        handleMediaEnd();
-      }
-    };
-    if (window.YT && typeof YT.Player !== 'undefined') {
-      youtubeApiReady = true;
-    }
-  }
-
-  const soundOptionsSelect = document.getElementById('sound-options-select');
-  let selectedSound = 'none';
-  const soundOptionsSelect2 = document.getElementById('sound-options-select-2');
-  let selectedSound2 = 'none';
-  let currentSound = null;
-  let recordedAudio = null;
-  let mediaRecorder;
-  let audioChunks = [];
-  const recordModal = document.getElementById('record-modal');
-  const recordButton = document.getElementById('record-button');
-  const stopRecordingButton = document.getElementById('stop-recording-button');
-  const okRecordingButton = document.getElementById('ok-recording-button');
-  const closeRecordModal = document.getElementById('close-record-modal');
-  const recordStatus = document.getElementById('record-status');
-
-  const miscOptionsContainer = document.getElementById('misc-options-container');
-  const miscOptionsModal = document.getElementById('misc-options-modal');
-  const closeMiscOptionsModal = document.getElementById('close-misc-options-modal');
-  const miscOptionsOkButton = document.getElementById('misc-options-ok-button');
-  const miscOptionsButton = document.getElementById('misc-options-button');
-  const miscOptionsState = {};
-
-  const player2PromptContainer = document.getElementById('player2-prompt-container');
-
-  let selectedMedia = [];
-  let controlsEnabled = false;
-  let playedMedia = [];
-  let currentMediaIndex = 0;
-  let mode = 'pressBetween';
-  let intervalID = null;
-  let intervalTime = 5;
-  let pausedAtTime = 0;
-  let currentPlayer = 1;
-
-  let player1Name = '';
-  let player2Name = '';
-
-  // --- ordering state helpers (NEW) ---
-  let lastSelectionSignature = '';
-  let shuffleEnabled = false; // set true if you add a UI toggle to shuffle
-  function isCurrentlyPlaying() {
-    const ytPlaying = (typeof YT !== 'undefined' && youtubePlayer && youtubePlayer.getPlayerState && youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING);
-    const html5Playing = (mediaPlayer && !mediaPlayer.paused && !mediaPlayer.ended);
-    return ytPlaying || html5Playing;
-  }
-  function resetPlaybackOrder() {
-    playedMedia = [];
-    currentMediaIndex = 0;
-  }
-  function selectionSignature(arr) {
-    return (arr || []).join('|'); // uses DOM-ordered URLs, so order changes update the sig
-  }
-
-  const playerNameOverlay = document.createElement('div');
-  playerNameOverlay.id = 'player-name-overlay';
-  playerNameOverlay.style.position = 'absolute';
-  playerNameOverlay.style.top = '12%';
-  playerNameOverlay.style.left = '50%';
-  playerNameOverlay.style.transform = 'translateX(-50%)';
-  playerNameOverlay.style.fontSize = '40px';
-  playerNameOverlay.style.color = 'white';
-  playerNameOverlay.style.textAlign = 'center';
-  playerNameOverlay.style.display = 'none';
-  playerNameOverlay.style.zIndex = '3002';
-  document.body.appendChild(playerNameOverlay);
-
-  const playerNamesModal = document.getElementById('player-names-modal');
-  const closePlayerNamesModal = document.getElementById('close-player-names-modal');
-  const playerNamesOkButton = document.getElementById('player-names-ok-button');
-  const playerNamesCancelButton = document.getElementById('player-names-cancel-button');
-  const player1NameInput = document.getElementById('player1-name-input');
-  const player2NameInput = document.getElementById('player2-name-input');
-
-  let timedCycleTimeout = null;
-  let promptCurrentlyVisible = true;
-
-  function isTwoPlayerMode() {
-    return !!miscOptionsState['two-player-mode-option'];
-  }
-
+  // initial selection
   selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
   if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
     videoSelectionModal.style.display = 'block';
   }
 
+  // preload
   function preloadMedia(list, onComplete) {
     let loaded = 0;
     const total = list.length;
@@ -653,25 +765,21 @@ document.addEventListener('DOMContentLoaded', () => {
     introJingle.play().catch(() => {});
   }
 
+  // UI events
   selectVideosButton.addEventListener('click', () => {
     videoSelectionModal.style.display = 'block';
   });
-
   closeModal.addEventListener('click', () => {
     videoSelectionModal.style.display = 'none';
   });
-
   okButton.addEventListener('click', () => {
     updateSelectedMedia();
     videoSelectionModal.style.display = 'none';
   });
 
-  /* local file uploads with thumbnails */
+  // Local file uploads with thumbnails
   if (addVideoFileButton && addVideoInput) {
-    addVideoFileButton.addEventListener('click', () => {
-      addVideoInput.click();
-    });
-
+    addVideoFileButton.addEventListener('click', () => addVideoInput.click());
     addVideoInput.addEventListener('change', async () => {
       const files = Array.from(addVideoInput.files);
       for (const file of files) {
@@ -687,38 +795,32 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Add single URL (with validation)
   if (addVideoUrlButton && addVideoUrlInput) {
-    addVideoUrlButton.addEventListener('click', () => {
+    addVideoUrlButton.addEventListener('click', async () => {
       const url = addVideoUrlInput.value.trim();
-      if (url) {
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.dataset.src = url;
+      if (!url) return;
 
-        // add numbering badge
-        card.appendChild(createIndexBadge());
-
-        // quick text; no thumb for URL-only cards
-        card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
-
-        if (urlVideoList) {
-          urlVideoList.appendChild(card);
-        } else {
-          videoSelectionDiv.appendChild(card);
-        }
-        initCard(card);
-        addVideoUrlInput.value = '';
-        updateSelectedMedia();
-        renumberCards();
-        fetchVideoTitle(url).then(title => {
-          const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-          if (textNode) textNode.nodeValue = title;
-        });
+      if (isYouTubeUrl(url) && window.YT_API_KEY) {
+        try {
+          const { ok, reason } = await validateSingleYouTubeUrl(url, window.YT_API_KEY);
+          if (!ok) {
+            alert(`Cette vidéo ne peut pas être intégrée (${reason}).`);
+            addVideoUrlInput.value = '';
+            return; // DO NOT add card
+          }
+        } catch {}
       }
+
+      await addYoutubeUrlCard(url);
+      addVideoUrlInput.value = '';
+      renumberCards();
+      updateSelectedMedia();
+      if (urlVideoList) saveYoutubeUrls();
     });
   }
 
-  // YouTube playlist import button
+  // YouTube playlist import (validate & add)
   if (ytPlaylistBtn && ytPlaylistInput) {
     ytPlaylistBtn.addEventListener('click', async () => {
       const url = ytPlaylistInput.value.trim();
@@ -737,11 +839,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!ids.length) {
           ytPlaylistStatus.textContent = "Aucune vidéo trouvée dans cette playlist.";
         } else {
-          ids.forEach(id => addYoutubeUrlCard(`https://www.youtube.com/watch?v=${id}`));
+          const { ok, blocked } = await validateEmbeddableIds(apiKey, ids);
+          let added = 0, refused = 0;
+          for (const id of ok) {
+            await addYoutubeUrlCard(`https://www.youtube.com/watch?v=${id}`);
+            added++;
+          }
+          refused = blocked.size;
           renumberCards();
           updateSelectedMedia();
           if (urlVideoList) saveYoutubeUrls();
-          ytPlaylistStatus.textContent = `Import terminé: ${ids.length} vidéo(s).`;
+          ytPlaylistStatus.textContent = `Import terminé: ${added} ajouté(s)${refused ? `, ${refused} ignoré(s)` : ''}.`;
         }
       } catch (err) {
         console.error(err);
@@ -764,34 +872,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // --- UPDATED: updateSelectedMedia resets ordering when list/order changes
+  // updateSelectedMedia: reset ordering when list/order changes
   function updateSelectedMedia() {
     videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
-
-    // Keep only selected cards, but preserve DOM order
     selectedMedia = videoCardsArray
       .filter(c => c.classList.contains('selected'))
       .map(c => c.dataset.src);
 
-    // If none explicitly selected, treat all as selected (still DOM order)
     if (!selectedMedia.length) {
       selectedMedia = videoCardsArray.map(c => c.dataset.src);
     }
 
-    // show/hide Start button
     startButton.style.display = selectedMedia.length ? 'block' : 'none';
-
-    // Persist YouTube URLs if relevant
     if (urlVideoList) saveYoutubeUrls();
 
-    // Detect any change (add/remove/reorder) and reset indices if not actively playing
     const sig = selectionSignature(selectedMedia);
     if (sig !== lastSelectionSignature) {
       lastSelectionSignature = sig;
       if (!isCurrentlyPlaying()) {
         resetPlaybackOrder();
       } else {
-        // Clamp current index and clean played indices
         if (currentMediaIndex >= selectedMedia.length) {
           currentMediaIndex = selectedMedia.length ? selectedMedia.length - 1 : 0;
         }
@@ -800,15 +900,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // --- UPDATED: sequential by default; optional shuffle via shuffleEnabled
+  // sequential by default; optional shuffle via shuffleEnabled
   function getNextMediaIndex() {
     if (!selectedMedia.length) return 0;
-
-    // If we've played all, wrap around and start fresh
     if (playedMedia.length >= selectedMedia.length) {
       playedMedia = [];
     }
-
     if (shuffleEnabled) {
       let next;
       do {
@@ -823,11 +920,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // preload and show UI
   preloadMedia(selectedMedia, () => {
     document.getElementById('control-panel-loading-bar-container').style.display = 'none';
-    if (selectedMedia.length) {
-      startButton.style.display = 'block';
-    }
+    if (selectedMedia.length) startButton.style.display = 'block';
     playIntroJingle();
     if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
       videoSelectionModal.style.display = 'block';
@@ -838,9 +934,7 @@ document.addEventListener('DOMContentLoaded', () => {
     [player1NameInput, player2NameInput].forEach(input => {
       if (input) {
         input.addEventListener('keydown', (e) => {
-          if (e.key === 'Backspace') {
-            e.stopPropagation();
-          }
+          if (e.key === 'Backspace') e.stopPropagation();
         });
       }
     });
@@ -881,15 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen().catch(() => {});
-    } else if (elem.mozRequestFullScreen) {
-      elem.mozRequestFullScreen();
-    } else if (elem.webkitRequestFullscreen) {
-      elem.webkitRequestFullscreen();
-    } else if (elem.msRequestFullscreen) {
-      elem.msRequestFullscreen();
-    }
+    if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
     document.getElementById('control-panel').style.display = 'none';
     playedMedia = [];
     currentMediaIndex = getNextMediaIndex();
@@ -915,9 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function preventInputTemporarily() {
     preventInput = true;
-    setTimeout(() => {
-      preventInput = false;
-    }, 500);
+    setTimeout(() => { preventInput = false; }, 500);
   }
 
   function clearTimedCycle() {
@@ -933,9 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     timedCycleTimeout = setTimeout(() => {
       setPromptVisibility(false);
       timedCycleTimeout = setTimeout(() => {
-        if (controlsEnabled) {
-          startTimedPromptCycle(visibleSecs);
-        }
+        if (controlsEnabled) startTimedPromptCycle(visibleSecs);
       }, 5000);
     }, visibleSecs * 1000);
   }
@@ -943,22 +1025,16 @@ document.addEventListener('DOMContentLoaded', () => {
   function setPromptVisibility(show) {
     promptCurrentlyVisible = show;
     if (!controlsEnabled) return;
-    if (show) {
-      playSoundPromptForPlayer(currentPlayer);
-    }
+    if (show) playSoundPromptForPlayer(currentPlayer);
     if (currentPlayer === 1) {
-      if (isTwoPlayerMode() && player1Name) {
-        playerNameOverlay.style.display = show ? 'block' : 'none';
-      }
+      if (isTwoPlayerMode() && player1Name) playerNameOverlay.style.display = show ? 'block' : 'none';
       if (useTextPrompt && selectedSpacePromptSrc) {
         textPrompt.style.display = show ? 'block' : 'none';
       } else if (selectedSpacePromptSrc) {
         spacePrompt.style.display = show ? 'block' : 'none';
       }
     } else {
-      if (isTwoPlayerMode() && player2Name) {
-        playerNameOverlay.style.display = show ? 'block' : 'none';
-      }
+      if (isTwoPlayerMode() && player2Name) playerNameOverlay.style.display = show ? 'block' : 'none';
       if (useTextPrompt2 && selectedSpacePromptSrc2) {
         textPrompt2.style.display = show ? 'block' : 'none';
       } else if (selectedSpacePromptSrc2) {
@@ -977,18 +1053,14 @@ document.addEventListener('DOMContentLoaded', () => {
     textPrompt2.style.display = 'none';
     playerNameOverlay.style.display = 'none';
     if (currentPlayer === 1) {
-      if (isTwoPlayerMode() && player1Name) {
-        playerNameOverlay.textContent = player1Name;
-      }
+      if (isTwoPlayerMode() && player1Name) playerNameOverlay.textContent = player1Name;
       if (useTextPrompt && selectedSpacePromptSrc) {
         textPrompt.textContent = selectedSpacePromptSrc;
       } else if (selectedSpacePromptSrc) {
         spacePrompt.src = selectedSpacePromptSrc;
       }
     } else {
-      if (isTwoPlayerMode() && player2Name) {
-        playerNameOverlay.textContent = player2Name;
-      }
+      if (isTwoPlayerMode() && player2Name) playerNameOverlay.textContent = player2Name;
       if (useTextPrompt2 && selectedSpacePromptSrc2) {
         textPrompt2.textContent = selectedSpacePromptSrc2;
       } else if (selectedSpacePromptSrc2) {
@@ -996,10 +1068,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     const timedOn = !!miscOptionsState['timed-prompt-option'];
-    if (!timedOn) {
-      setPromptVisibility(true);
-      return;
-    }
+    if (!timedOn) { setPromptVisibility(true); return; }
     let visibleSecs = parseInt(miscOptionsState['timed-prompt-seconds'] || '5', 10);
     if (isNaN(visibleSecs) || visibleSecs < 1) visibleSecs = 5;
     startTimedPromptCycle(visibleSecs);
@@ -1043,14 +1112,12 @@ document.addEventListener('DOMContentLoaded', () => {
         youtubePlayer.seekTo(pausedAtTime, true);
         youtubePlayer.playVideo();
         onYouTubePlayerReady();
-        const youtubeDiv = document.getElementById('youtube-player');
         if (youtubeDiv) youtubeDiv.style.display = 'block';
         if (mediaPlayer) mediaPlayer.style.display = 'none';
       } else if (mediaPlayer) {
         mediaPlayer.currentTime = pausedAtTime;
         mediaPlayer.play();
         mediaPlayer.style.display = 'block';
-        const youtubeDiv = document.getElementById('youtube-player');
         if (youtubeDiv) youtubeDiv.style.display = 'none';
       }
       pausedAtTime = 0;
@@ -1064,7 +1131,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function startMediaPlayback() {
     const src = selectedMedia[currentMediaIndex];
-    const youtubeDiv = document.getElementById('youtube-player');
+    if (!src) return;
+
     if (isYouTubeUrl(src)) {
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       if (mediaPlayer) mediaPlayer.style.display = 'none';
@@ -1089,7 +1157,6 @@ document.addEventListener('DOMContentLoaded', () => {
       mediaPlayer.play().catch(() => {});
     }
     if (mediaType === 'video') {
-      const videoContainer = document.getElementById('video-container');
       if (videoContainer) videoContainer.style.display = 'block';
     }
     if (mode === 'interval') {
@@ -1124,7 +1191,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleMediaEnd() {
-    const youtubeDiv = document.getElementById('youtube-player');
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mediaPlayer) mediaPlayer.style.display = 'none';
     if (mode === 'pressBetween') {
@@ -1160,7 +1226,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function playSoundPromptForPlayer(num) {
-    let s = num === 1 ? selectedSound : selectedSound2;
+    const s = num === 1 ? selectedSound : selectedSound2;
     if (!s || s === 'none') return;
     if (currentSound) {
       currentSound.pause();
@@ -1170,19 +1236,12 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSound = new Audio(recordedAudio);
     } else {
       const found = spacePromptSounds.find(opt => opt.value === s);
-      if (found && found.src) {
-        currentSound = new Audio(found.src);
-      }
+      if (found && found.src) currentSound = new Audio(found.src);
     }
-    if (currentSound) {
-      currentSound.play().catch(() => {});
-    }
+    if (currentSound) currentSound.play().catch(() => {});
   }
 
-  function openRecordModal() {
-    recordModal.style.display = 'block';
-  }
-
+  // Record modal
   closeRecordModal.addEventListener('click', () => {
     recordModal.style.display = 'none';
   });
@@ -1194,9 +1253,7 @@ document.addEventListener('DOMContentLoaded', () => {
           mediaRecorder = new MediaRecorder(stream);
           mediaRecorder.start();
           audioChunks = [];
-          mediaRecorder.ondataavailable = e => {
-            audioChunks.push(e.data);
-          };
+          mediaRecorder.ondataavailable = e => { audioChunks.push(e.data); };
           mediaRecorder.onstop = () => {
             const blob = new Blob(audioChunks, { type: 'audio/mp3' });
             recordedAudio = URL.createObjectURL(blob);
@@ -1206,9 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
           recordStatus.textContent = 'Enregistrement...';
           stopRecordingButton.style.display = 'block';
           recordButton.style.display = 'none';
-          setTimeout(() => {
-            stopRecording();
-          }, 5000);
+          setTimeout(() => { stopRecording(); }, 5000);
         })
         .catch(() => {
           recordStatus.textContent = 'Error accessing microphone';
@@ -1223,157 +1278,114 @@ document.addEventListener('DOMContentLoaded', () => {
       recordButton.style.display = 'block';
     }
   }
-
-  stopRecordingButton.addEventListener('click', () => {
-    stopRecording();
-  });
-
+  stopRecordingButton.addEventListener('click', () => stopRecording());
   okRecordingButton.addEventListener('click', () => {
     stopRecording();
     recordModal.style.display = 'none';
     okRecordingButton.style.display = 'none';
     stopRecordingButton.style.display = 'none';
     recordButton.style.display = 'block';
-    if (recordedAudio) {
-      const r = new Audio(recordedAudio);
-      r.play();
-    }
+    if (recordedAudio) new Audio(recordedAudio).play();
   });
 
+  // Space prompt pickers
   selectSpacePromptButton.addEventListener('click', () => {
     spacePromptSelectionModal.style.display = 'block';
   });
-
   closeSpacePromptModal.addEventListener('click', () => {
     spacePromptSelectionModal.style.display = 'none';
   });
-
   applySpacePromptButton.addEventListener('click', () => {
     spacePromptSelectionModal.style.display = 'none';
-    if (useTextPrompt && selectedSpacePromptSrc) {
-      textPrompt.textContent = selectedSpacePromptSrc;
-    }
+    if (useTextPrompt && selectedSpacePromptSrc) textPrompt.textContent = selectedSpacePromptSrc;
   });
 
   selectSpacePromptButton2.addEventListener('click', () => {
     spacePromptSelectionModal2.style.display = 'block';
   });
-
   closeSpacePromptModal2.addEventListener('click', () => {
     spacePromptSelectionModal2.style.display = 'none';
   });
-
   applySpacePromptButton2.addEventListener('click', () => {
     spacePromptSelectionModal2.style.display = 'none';
-    if (useTextPrompt2 && selectedSpacePromptSrc2) {
-      textPrompt2.textContent = selectedSpacePromptSrc2;
-    }
+    if (useTextPrompt2 && selectedSpacePromptSrc2) textPrompt2.textContent = selectedSpacePromptSrc2;
   });
 
-  soundOptionsSelect.addEventListener('change', () => {
-    if (soundOptionsSelect.value === 'record-own') {
-      openRecordModal();
-    } else {
-      selectedSound = soundOptionsSelect.value;
-    }
-  });
-
-  soundOptionsSelect2.addEventListener('change', () => {
-    if (soundOptionsSelect2.value === 'record-own') {
-      openRecordModal();
-    } else {
-      selectedSound2 = soundOptionsSelect2.value;
-    }
-  });
-
-  visualOptionsSelect.addEventListener('change', () => {
-    if (!mediaPlayer) return;
-    mediaPlayer.className = '';
-    mediaPlayer.style.filter = '';
-    switch (visualOptionsSelect.value) {
-      case 'green-filter':
-        mediaPlayer.classList.add('green-filter');
-        break;
-      case 'red-filter':
-        mediaPlayer.classList.add('red-filter');
-        break;
-      case 'blue-filter':
-        mediaPlayer.classList.add('blue-filter');
-        break;
-      case 'high-contrast':
-        mediaPlayer.style.filter = 'contrast(200%)';
-        break;
-      case 'grayscale':
-        mediaPlayer.style.filter = 'grayscale(100%)';
-        break;
-      case 'invert':
-        mediaPlayer.style.filter = 'invert(100%)';
-        break;
-      case 'brightness':
-        mediaPlayer.style.filter = 'brightness(1.5)';
-        break;
-      case 'saturation':
-        mediaPlayer.style.filter = 'saturate(200%)';
-        break;
-      default:
-        break;
-    }
-  });
-
-  miscOptionsButton.addEventListener('click', () => {
-    miscOptionsModal.style.display = 'block';
-  });
-
-  closeMiscOptionsModal.addEventListener('click', () => {
-    miscOptionsModal.style.display = 'none';
-  });
-
-  miscOptionsOkButton.addEventListener('click', () => {
-    miscOptionsModal.style.display = 'none';
-    if (miscOptionsState['mouse-click-option']) {
-      document.addEventListener('click', handleSpacebarPressEquivalent);
-    } else {
-      document.removeEventListener('click', handleSpacebarPressEquivalent);
-    }
-    if (miscOptionsState['right-click-next-option']) {
-      document.addEventListener('contextmenu', handleRightClickNextVideo);
-    } else {
-      document.removeEventListener('contextmenu', handleRightClickNextVideo);
-    }
-
-    // Optional: wire a shuffle option if you add it to miscOptions
-    if ('shuffle-option' in miscOptionsState) {
-      shuffleEnabled = !!miscOptionsState['shuffle-option'];
-    }
-    const player2SoundContainer = document.getElementById('player2-sound-container');
-    if (miscOptionsState['two-player-mode-option']) {
-      if (player2PromptContainer) player2PromptContainer.style.display = 'block';
-      if (player2SoundContainer) player2SoundContainer.style.display = 'block';
-    } else {
-      if (player2PromptContainer) player2PromptContainer.style.display = 'none';
-      if (player2SoundContainer) player2SoundContainer.style.display = 'none';
-    }
-  });
-
-  function handleSpacebarPressEquivalent() {
-    if (currentPlayer === 1 && controlsEnabled && promptCurrentlyVisible) {
-      proceedAfterPrompt();
-    }
+  // Sounds dropdowns
+  function hidePlaceholderOnFocus(selectElement) {
+    selectElement.addEventListener('focus', function() {
+      const firstOption = this.options[0];
+      if (firstOption.disabled && firstOption.selected) {
+        firstOption.style.display = 'none';
+      }
+    });
+  }
+  function showPlaceholderOnBlur(selectElement) {
+    selectElement.addEventListener('blur', function() {
+      const firstOption = this.options[0];
+      if (firstOption.disabled && this.selectedIndex === 0) {
+        firstOption.style.display = 'block';
+      }
+    });
+  }
+  if (soundOptionsSelect) {
+    hidePlaceholderOnFocus(soundOptionsSelect);
+    showPlaceholderOnBlur(soundOptionsSelect);
+    soundOptionsSelect.addEventListener('change', () => {
+      if (soundOptionsSelect.value === 'record-own') {
+        recordModal.style.display = 'block';
+      } else {
+        selectedSound = soundOptionsSelect.value;
+      }
+    });
+  }
+  if (soundOptionsSelect2) {
+    hidePlaceholderOnFocus(soundOptionsSelect2);
+    showPlaceholderOnBlur(soundOptionsSelect2);
+    soundOptionsSelect2.addEventListener('change', () => {
+      if (soundOptionsSelect2.value === 'record-own') {
+        recordModal.style.display = 'block';
+      } else {
+        selectedSound2 = soundOptionsSelect2.value;
+      }
+    });
   }
 
+  // Visual options
+  if (visualOptionsSelect) {
+    visualOptionsSelect.addEventListener('change', () => {
+      if (!mediaPlayer) return;
+      mediaPlayer.className = '';
+      mediaPlayer.style.filter = '';
+      switch (visualOptionsSelect.value) {
+        case 'green-filter': mediaPlayer.classList.add('green-filter'); break;
+        case 'red-filter': mediaPlayer.classList.add('red-filter'); break;
+        case 'blue-filter': mediaPlayer.classList.add('blue-filter'); break;
+        case 'high-contrast': mediaPlayer.style.filter = 'contrast(200%)'; break;
+        case 'grayscale': mediaPlayer.style.filter = 'grayscale(100%)'; break;
+        case 'invert': mediaPlayer.style.filter = 'invert(100%)'; break;
+        case 'brightness': mediaPlayer.style.filter = 'brightness(1.5)'; break;
+        case 'saturation': mediaPlayer.style.filter = 'saturate(200%)'; break;
+        default: break;
+      }
+    });
+  }
+
+  // Misc options
+  function handleSpacebarPressEquivalent() {
+    if (currentPlayer === 1 && controlsEnabled && promptCurrentlyVisible) proceedAfterPrompt();
+  }
   function handleRightClickNextVideo(e) {
     e.preventDefault();
     currentMediaIndex = getNextMediaIndex();
     startMediaPlayback();
   }
-
   function handleEnterPause(e) {
     if (miscOptionsState['enter-pause-option'] && e.code === 'Backspace') {
       e.preventDefault();
       pauseActivityAndShowPrompt();
     }
   }
-
   function pauseActivityAndShowPrompt() {
     const currentSrc = selectedMedia[currentMediaIndex];
     if (isYouTubeUrl(currentSrc)) {
@@ -1388,9 +1400,23 @@ document.addEventListener('DOMContentLoaded', () => {
     switchPlayer();
     showPromptForCurrentPlayer();
   }
+  function applyMiscOptions() {
+    if (miscOptionsState['right-click-next-option']) {
+      document.addEventListener('contextmenu', handleRightClickNextVideo);
+    } else {
+      document.removeEventListener('contextmenu', handleRightClickNextVideo);
+    }
+    if (miscOptionsState['mouse-click-option']) {
+      document.addEventListener('click', handleSpacebarPressEquivalent);
+    } else {
+      document.removeEventListener('click', handleSpacebarPressEquivalent);
+    }
+  }
 
+  // Populate config-driven UI
   function loadConfig() {
     const userLang = localStorage.getItem('siteLanguage') || 'fr';
+    // images for both players
     spacePromptImages.forEach((p) => {
       const card = document.createElement('div');
       card.className = 'image-card';
@@ -1487,14 +1513,14 @@ document.addEventListener('DOMContentLoaded', () => {
         wrapper.id = 'timed-seconds-wrapper';
         wrapper.style.display = 'none';
         const numericLabelText = { fr: "Temps pour appuyer sur la switch (s)", en: "Time to press the switch (s)" };
-        const userLang = localStorage.getItem('siteLanguage') || 'fr';
+        const userLang2 = localStorage.getItem('siteLanguage') || 'fr';
         const numericLabel = document.createElement('label');
-        numericLabel.textContent = numericLabelText[userLang];
+        numericLabel.textContent = numericLabelText[userLang2];
         numericLabel.style.color = 'black';
         const numberInput = document.createElement('input');
         numberInput.type = 'number';
         numberInput.min = '1';
-        let fallback = (typeof o.label === 'object') ? o.label[userLang] : o.label;
+        let fallback = (typeof o.label === 'object') ? o.label[userLang2] : o.label;
         if (!fallback) fallback = '5';
         numberInput.value = fallback;
         numberInput.style.width = '60px';
@@ -1526,48 +1552,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function hidePlaceholderOnFocus(selectElement) {
-    selectElement.addEventListener('focus', function() {
-      const firstOption = this.options[0];
-      if (firstOption.disabled && firstOption.selected) {
-        firstOption.style.display = 'none';
-      }
-    });
-  }
-
-  function showPlaceholderOnBlur(selectElement) {
-    selectElement.addEventListener('blur', function() {
-      const firstOption = this.options[0];
-      if (firstOption.disabled && this.selectedIndex === 0) {
-        firstOption.style.display = 'block';
-      }
-    });
-  }
-
-  function applyMiscOptions() {
-    if (miscOptionsState['right-click-next-option']) {
-      document.addEventListener('contextmenu', handleRightClickNextVideo);
-    } else {
-      document.removeEventListener('contextmenu', handleRightClickNextVideo);
-    }
-    if (miscOptionsState['mouse-click-option']) {
-      document.addEventListener('click', handleSpacebarPressEquivalent);
-    } else {
-      document.removeEventListener('click', handleSpacebarPressEquivalent);
-    }
-  }
-
-  const soundSelect1 = document.getElementById('sound-options-select');
-  const soundSelect2 = document.getElementById('sound-options-select-2');
-  if (soundSelect1) {
-    hidePlaceholderOnFocus(soundSelect1);
-    showPlaceholderOnBlur(soundSelect1);
-  }
-  if (soundSelect2) {
-    hidePlaceholderOnFocus(soundSelect2);
-    showPlaceholderOnBlur(soundSelect2);
-  }
-
   loadConfig();
   applyMiscOptions();
 
@@ -1597,7 +1581,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (pickFolderButton && 'showDirectoryPicker' in window) {
     pickFolderButton.addEventListener('click', chooseFolder);
-
     (async () => {
       try {
         if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
@@ -1612,5 +1595,37 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch {}
     })();
   }
+
+  // Misc dialog open/close
+  miscOptionsButton.addEventListener('click', () => {
+    miscOptionsModal.style.display = 'block';
+  });
+  closeMiscOptionsModal.addEventListener('click', () => {
+    miscOptionsModal.style.display = 'none';
+  });
+  miscOptionsOkButton.addEventListener('click', () => {
+    miscOptionsModal.style.display = 'none';
+    if (miscOptionsState['mouse-click-option']) {
+      document.addEventListener('click', handleSpacebarPressEquivalent);
+    } else {
+      document.removeEventListener('click', handleSpacebarPressEquivalent);
+    }
+    if (miscOptionsState['right-click-next-option']) {
+      document.addEventListener('contextmenu', handleRightClickNextVideo);
+    } else {
+      document.removeEventListener('contextmenu', handleRightClickNextVideo);
+    }
+    if ('shuffle-option' in miscOptionsState) {
+      shuffleEnabled = !!miscOptionsState['shuffle-option'];
+    }
+    const player2SoundContainer = document.getElementById('player2-sound-container');
+    if (miscOptionsState['two-player-mode-option']) {
+      if (player2PromptContainer) player2PromptContainer.style.display = 'block';
+      if (player2SoundContainer) player2SoundContainer.style.display = 'block';
+    } else {
+      if (player2PromptContainer) player2PromptContainer.style.display = 'none';
+      if (player2SoundContainer) player2SoundContainer.style.display = 'none';
+    }
+  });
 
 });
