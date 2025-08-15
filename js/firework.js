@@ -3,13 +3,9 @@ function startFeuArtificeGame() {
     let mouseY = window.innerHeight / 2;
     let isPlaying = false;
 
-    // Get the user-specified interval
-    const intervalInput = document.getElementById('interval-input');
-    let interval = parseInt(intervalInput.value) * 1000; // Convert seconds to milliseconds
-
-    // Get the user-specified initial circle count
-    const initialCirclesInput = document.getElementById('initial-circles-input');
-    let initialCircleCount = parseInt(initialCirclesInput.value);
+    // Default timing and circle count
+    const interval = 10000; // milliseconds between circle spawns
+    const initialCircleCount = 5; // starting number of circles
 
     // Hide overlay and show the game
     eyegazeSettings.hideOverlay();
