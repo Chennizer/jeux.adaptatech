@@ -33,7 +33,7 @@ function preloadVideos(zoneEffects, onComplete) {
                 
                 setTimeout(() => {
                     loadingBarContainer.style.display = 'none'; // Hide the loading bar
-                    const startButton = document.getElementById('control-panel-start-button');
+                    const startButton = document.getElementById('startButton');
                     startButton.style.display = 'block'; // Show the start button
                 }, 500); // Brief delay to smooth the transition
             }
@@ -48,13 +48,11 @@ function preloadVideos(zoneEffects, onComplete) {
 }
 
 
-function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
+function setupInteractiveMapGame({ zoneEffects }) {
     let hoverTimeout;
-    let dwellTime = 1000; // Default dwell time in milliseconds
 
     // Elements
-    const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
-    const startButton = document.getElementById('control-panel-start-button');
+    const startButton = document.getElementById('startButton');
     const hoverCircle = document.getElementById('hover-circle');
     const mapContainer = document.getElementById('map-container');
     const overlay = document.getElementById('overlay');
@@ -73,23 +71,15 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
 
     // Start the game when the start button is clicked
     startButton.addEventListener('click', () => {
-        const dwellTimeValue = dwellTimeInput.value;
-        if (dwellTimeValue && !isNaN(dwellTimeValue)) {
-            dwellTime = parseInt(dwellTimeValue);
-        } else {
-            alert("Please enter a valid number for dwell time.");
-            return;
-        }
-
         console.log("Game starting...");
-        document.getElementById('control-panel').style.display = 'none';
+        eyegazeSettings.hideOverlay();
         mapContainer.style.display = 'block';
-        
+
         // Ensure the map is resized and interactive
         imageMapResize(); // Initialize the image map resizer
-        
+
         // Additional logging to confirm visibility changes
-        console.log("Control panel hidden, map container visible.");
+        console.log("Overlay hidden, map container visible.");
     });
 
     // Hover effect handling
@@ -106,8 +96,9 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         hoverCircle.style.height = '20px';
         hoverCircle.style.transition = 'none';
 
+        const dwell = eyegazeSettings.dwellTime;
         setTimeout(() => {
-            hoverCircle.style.transition = `width ${dwellTime}ms ease, height ${dwellTime}ms ease`;
+            hoverCircle.style.transition = `width ${dwell}ms ease, height ${dwell}ms ease`;
             hoverCircle.style.width = '100px';
             hoverCircle.style.height = '100px';
         }, 0);
@@ -115,7 +106,7 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         hoverTimeout = setTimeout(() => {
             playEffect(zone);
             hoverCircle.style.display = 'none';
-        }, dwellTime);
+        }, dwell);
     }
 
     function stopHover() {
