@@ -3,16 +3,12 @@ function startFeuArtificeGame() {
     let mouseY = window.innerHeight / 2;
     let isPlaying = false;
 
-    // Get the user-specified interval
-    const intervalInput = document.getElementById('interval-input');
-    let interval = parseInt(intervalInput.value) * 1000; // Convert seconds to milliseconds
+    // Default timing and circle count
+    const interval = 10000; // milliseconds between circle spawns
+    const initialCircleCount = 5; // starting number of circles
 
-    // Get the user-specified initial circle count
-    const initialCirclesInput = document.getElementById('initial-circles-input');
-    let initialCircleCount = parseInt(initialCirclesInput.value);
-
-    // Hide control panel and show the game
-    document.getElementById('control-panel').style.display = 'none';
+    // Hide overlay and show the game
+    eyegazeSettings.hideOverlay();
     document.body.classList.add('hide-cursor'); // Hide the cursor
     isPlaying = true;
 
@@ -68,6 +64,7 @@ function createExplosion(x, y) {
 
 function playExplosionSound() {
     const explosionSound = document.getElementById('explosionSound');
+    explosionSound.volume = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
     explosionSound.currentTime = 0;
     explosionSound.play();
 }
@@ -108,7 +105,7 @@ function createTrailCircle() {
 
 // Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('#control-panel-start-button');
+    const startButton = document.querySelector('#startButton');
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
     }
