@@ -1384,18 +1384,40 @@ touchModeBtn.addEventListener('click', ()=>{ touchSelectMode = !touchSelectMode;
 
 /* ---------- START BUTTON: robust for iPad ---------- */
 let started = false;
-function startFromOverlay(){
+
+function startFromOverlay() {
   if (started) return;
   started = true;
-  requestFS();                 // try fullscreen, but don't block start
-  overlay.style.display='none';
+
+  // 1) Hide overlay immediately so the timer is visible no matter what
+  overlay.style.display = 'none';
+
+  // 2) Start timer & draw right away
   resizeCanvas();
   startTimerAtFullDial();
+
+  // 3) Try fullscreen after a tick so it can't block the above
+  setTimeout(() => {
+    try {
+      const el = document.documentElement;
+      const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (fn) {
+        const p = fn.call(el);
+        if (p && p.catch) p.catch(()=>{});
+      }
+    } catch (_) {}
+  }, 0);
 }
-// Fire on click, pointerup, or touchend (covers iPad Safari quirks)
-enterBtn.addEventListener('click', (e)=>{ e.preventDefault(); startFromOverlay(); });
-enterBtn.addEventListener('pointerup', (e)=>{ e.preventDefault(); startFromOverlay(); });
-enterBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); startFromOverlay(); }, {passive:false});
+
+// Fire on multiple input types (some iOS builds miss click/touchend)
+const startOpts = { once: true, passive: false };
+enterBtn.addEventListener('click',      (e)=>{ e.preventDefault(); startFromOverlay(); }, startOpts);
+enterBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); startFromOverlay(); }, startOpts);
+enterBtn.addEventListener('pointerdown',(e)=>{ e.preventDefault(); startFromOverlay(); }, startOpts);
+enterBtn.addEventListener('keydown',    (e)=>{
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startFromOverlay(); }
+}, startOpts);
+
 
 /* Canvas interactions */
 canvas.addEventListener('mousedown',startDrag);
