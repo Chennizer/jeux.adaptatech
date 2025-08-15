@@ -4,15 +4,15 @@ function startFeuArtificeGame() {
     let isPlaying = false;
 
     // Get the user-specified interval
-    const intervalInput = document.getElementById('interval-input');
+    const intervalInput = document.getElementById('respawn-timer');
     let interval = parseInt(intervalInput.value) * 1000; // Convert seconds to milliseconds
 
     // Get the user-specified initial circle count
-    const initialCirclesInput = document.getElementById('initial-circles-input');
+    const initialCirclesInput = document.getElementById('initial-circles');
     let initialCircleCount = parseInt(initialCirclesInput.value);
 
-    // Hide control panel and show the game
-    document.getElementById('control-panel').style.display = 'none';
+    // Hide overlay and show the game
+    eyegazeSettings.hideOverlay();
     document.body.classList.add('hide-cursor'); // Hide the cursor
     isPlaying = true;
 
@@ -68,6 +68,7 @@ function createExplosion(x, y) {
 
 function playExplosionSound() {
     const explosionSound = document.getElementById('explosionSound');
+    explosionSound.volume = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
     explosionSound.currentTime = 0;
     explosionSound.play();
 }
@@ -108,7 +109,26 @@ function createTrailCircle() {
 
 // Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('#control-panel-start-button');
+    const startButton = document.querySelector('#startButton');
+    const respawnSlider = document.getElementById('respawn-timer');
+    const respawnVal = document.getElementById('respawn-timer-value');
+    const initialSlider = document.getElementById('initial-circles');
+    const initialVal = document.getElementById('initial-circles-value');
+
+    if (respawnSlider && respawnVal) {
+        respawnVal.textContent = respawnSlider.value;
+        respawnSlider.addEventListener('input', e => {
+            respawnVal.textContent = e.target.value;
+        });
+    }
+
+    if (initialSlider && initialVal) {
+        initialVal.textContent = initialSlider.value;
+        initialSlider.addEventListener('input', e => {
+            initialVal.textContent = e.target.value;
+        });
+    }
+
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
     }
