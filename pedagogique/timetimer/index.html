@@ -122,8 +122,6 @@
   .slot[data-idx="2"]{border-color:#4cd964;}
   .slot[data-idx="3"]{border-color:#66a5ff;}
   .slot.dragover{outline:2px solid #00bfff; outline-offset:2px;}
-  /* Touch fallback: selected slot highlight */
-  .slot.active{ outline:2px solid #00bfff; outline-offset:2px; }
 
   .modal footer{padding:.6rem .8rem;border-top:1px solid #222;display:flex;gap:.5rem;justify-content:flex-end;}
   .hidden{display:none !important;}
@@ -131,7 +129,7 @@
   /* Color picker mini modal */
   .mini-body{padding:.75rem;display:flex;flex-direction:column;gap:.6rem;}
   .chips{display:flex;gap:.4rem;flex-wrap:wrap}
-  .chip{width:24px;height:24px;border-radius:6px;border:1px solid #333;cursor:pointer;}
+  .chip{width:24px;height:24px;border:1px solid #333;border-radius:6px;cursor:pointer;}
   .rgblines{display:flex;flex-direction:column;gap:.5rem}
   .rgblines label{display:grid;grid-template-columns:16px 1fr 42px;align-items:center;gap:.5rem;font-size:12px;}
   .rgblines input[type=range]{width:100%;}
@@ -257,12 +255,11 @@
           <button id="switchSourceBtn" class="btn secondary hidden"
             data-fr="Changer de dossier" data-en="Change Folder">Changer de dossier</button>
 
-          <!-- NEW: tap-assign toggle -->
-          <button id="tapModeBtn" class="btn ghost"
-            data-fr-on="Sélection tactile : Activée"
-            data-en-on="Touch Select: On"
-            data-fr-off="Sélection tactile : Désactivée"
-            data-en-off="Touch Select: Off">
+          <!-- Touch select mode toggle -->
+          <button id="touchModeBtn" class="btn ghost"
+            data-fr-on="Sélection tactile : Activée" data-en-on="Touch select: On"
+            data-fr-off="Sélection tactile : Désactivée" data-en-off="Touch select: Off">
+            Sélection tactile : Désactivée
           </button>
 
           <button id="closePickerBtn" class="btn secondary" data-fr="Fermer" data-en="Close">Fermer</button>
@@ -338,11 +335,13 @@ const SHIFT_RIGHT_STACKED = 0.18;
 const INACTIVE_ALPHA = 0.45;
 const IDLE_CLOSE_MS = 10000;
 const MIN_STACKED_FIT = 0.55;
+
 const PULSE_PERIOD = 1800;
 const PULSE_AMPLITUDE = 0.04;
 
 const RADIAL_RADIUS_OFFSET_4 = 0.12;
 const RADIAL_RADIUS_OFFSET_2 = 0.06;
+
 const TASKREWARD_SPACING_MULT = 3.5;
 
 /* ===========================================================
@@ -355,12 +354,9 @@ const LAYOUT = {
   stacked:{ spacing: 0.025, marginLeft: 0.06 }
 };
 
-/* ---------- device detection ---------- */
+/* ---------- iOS detection ---------- */
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-/* New: selection mode state (tap-to-assign) */
-let tapSelectEnabled = isIOS; // ON by default on iPad, OFF on desktop
 
 /* ---------- i18n helpers ---------- */
 function getLang(){
@@ -383,7 +379,7 @@ let totalSeconds=300,remainingSeconds=0,intervalId=null,paused=false,dragging=fa
 let showDigits=false,dialMax=60,timerColor='#d9534f';
 let bgTintEnabled=false; const TINT_ALPHA=0.35;
 
-let nowMs = 0; // for pulse
+let nowMs = 0;
 
 /* ---------- Special features ---------- */
 let specialMode='none';
@@ -452,8 +448,6 @@ function getCenter(size){
   }
   return { cx: baseCx, cy };
 }
-
-/* --- Auto-fit utility --- */
 function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
   const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
@@ -462,7 +456,7 @@ function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   return (isFinite(s) && s>0) ? s : 1;
 }
 
-/* Drag helpers for dial */
+/* Drag helpers */
 function getSecondsFromEvent(e){
   const r=canvas.getBoundingClientRect(),
         x=(e.touches?e.touches[0].clientX:e.clientX)-r.left,
@@ -508,7 +502,7 @@ function getActiveIndex(uiSeconds, denom, count){
 function colorForIndex(i,N){ return quadrantColors[ N===2 ? (i===0?0:3) : i ]; }
 function getAnglesForCount(N){ return (N===2) ? [0, Math.PI] : [-Math.PI/4, Math.PI/4, 3*Math.PI/4, -3*Math.PI/4]; }
 
-/* Draw ---------------------------------------------------- */
+/* Draw */
 function draw(){
   const size=Math.min(canvas.width,canvas.height)*0.9;
   const {cx,cy} = getCenter(size);
@@ -519,16 +513,13 @@ function draw(){
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Outer circle
   ctx.strokeStyle='#000';ctx.lineWidth=borderW;
   ctx.beginPath();ctx.arc(cx,cy,outerR,0,Math.PI*2);ctx.stroke();
 
-  // Preview vs running seconds
   const uiSeconds = (remainingSeconds>0) ? remainingSeconds : Math.max(1, Math.round((dialMax*60)));
   const denom = dialMax*60;
   const angle = (uiSeconds/denom) * Math.PI * 2;
 
-  // Wedge & background sectors
   if(specialMode==='radial' || specialMode==='stacked'){
     ctx.save();
     ctx.beginPath();ctx.moveTo(cx,cy);
@@ -544,8 +535,8 @@ function draw(){
     };
 
     if(N===2){
-      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));      // Left
-      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));     // Right
+      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));
+      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));
     }else{
       for(let i=0;i<4;i++){
         const start = -Math.PI/2 - i*Math.PI/2;
@@ -564,7 +555,6 @@ function draw(){
     ctx.closePath();ctx.fill();
   }
 
-  // Ticks & numbers
   const cfg=dialConfigs[dialMax];
   for(let i=0;i<cfg.ticks;i++){
     const ang=-Math.PI/2-(i/cfg.ticks)*Math.PI*2,
@@ -597,7 +587,6 @@ function draw(){
 /* Page tint */
 function updatePageTint(uiSeconds, denom){
   if(!bgTintEnabled){ document.body.style.backgroundColor=''; return; }
-
   if(specialMode==='none' || specialMode==='taskreward'){
     document.body.style.backgroundColor = hexToRGBA(timerColor, TINT_ALPHA);
     return;
@@ -608,11 +597,14 @@ function updatePageTint(uiSeconds, denom){
   document.body.style.backgroundColor = hexToRGBA(col, TINT_ALPHA);
 }
 
-/* ---- RADIAL ---- */
-function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
+/* ---- RADIAL (dial-safe placement) ---- */
+function drawRadial(size, cx, cy, numbersR, uiSeconds, denom){
   const basePx = size * LAYOUT.imgBase;
   const radialOffset = (IMG_COUNT===2 ? RADIAL_RADIUS_OFFSET_2 : LAYOUT.radial.radiusOffset);
   const imgR   = numbersR + size * radialOffset;
+
+  const dialClearance = size * (isIOS ? 0.016 : 0.030);
+  const outerR = size * 0.4;
   const hShiftPx_4 = size * H_SHIFT;
   const hShiftPx_2 = size * H_SHIFT_2;
   const vTopPx   = size * V_OFFSET_TOP;
@@ -635,16 +627,27 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
     const ang=angles[i];
     let dx=0, dy=0;
     if (N===2){
-      const dxSign = (i===0) ? 1 : -1; // right, left
-      dx = dxSign * H_SHIFT_2;
+      dx = (i===0 ? 1 : -1) * hShiftPx_2;
     } else {
-      const dxSign = (i===0 || i===1) ? 1 : -1;
-      dx = dxSign * H_SHIFT;
+      dx = ((i===0 || i===1) ? 1 : -1) * hShiftPx_4;
       dy = (i===0 || i===3) ? vTopPx : vBotPx;
     }
 
-    const cxI = cx + Math.cos(ang)*imgR + dx;
-    const cyI = cy + Math.sin(ang)*imgR + dy;
+    let cxI = cx + Math.cos(ang)*imgR + dx;
+    let cyI = cy + Math.sin(ang)*imgR + dy;
+
+    let vx = cxI - cx, vy = cyI - cy;
+    let len = Math.hypot(vx, vy) || 1;
+    let ux = vx / len, uy = vy / len;
+
+    const extent = Math.abs(ux)*(w/2) + Math.abs(uy)*(h/2);
+    const minLen = (outerR + dialClearance) + extent;
+
+    if (len < minLen){
+      const add = minLen - len;
+      cxI += ux * add;
+      cyI += uy * add;
+    }
 
     const fitS = fitScaleForCenteredRect(cxI, cyI, w, h);
     w *= fitS; h *= fitS;
@@ -655,7 +658,8 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
     ctx.save();
     if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
     ctx.drawImage(im, x, y, w, h);
-    ctx.strokeStyle=colorForIndex(i, (N===2?2:4));ctx.lineWidth=size*0.006;
+    ctx.strokeStyle = colorForIndex(i, (N===2?2:4));
+    ctx.lineWidth = size*0.006;
     ctx.strokeRect(x, y, w, h);
     ctx.restore();
   }
@@ -695,10 +699,12 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
     }
 
     let {w: w0, h: h0} = computeContainSize(im, basePx * scale);
+
     const cxI = xCenter;
     const cyI = y + h0/2;
     let fitS = fitScaleForCenteredRect(cxI, cyI, w0, h0);
     if (!isIOS) fitS = Math.max(fitS, MIN_STACKED_FIT);
+
     w0 *= fitS; 
     h0 *= fitS;
 
@@ -815,7 +821,7 @@ function startTimerAtFullDial(){
 }
 const pauseTimer=()=>{ paused=!paused; setPauseLabel(paused); };
 
-/* Drag & resize for dial */
+/* Drag & resize */
 function startDrag(e){
   if(!insideDial(e))return;
   clearInterval(intervalId);paused=false;
@@ -828,7 +834,14 @@ function resizeCanvas(){ canvas.width=innerWidth; canvas.height=innerHeight; dra
 
 /* Fullscreen helpers */
 function requestFS(){
-  (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
+  try{
+    const el = document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(fn){
+      const p = fn.call(el);
+      if (p && p.catch) p.catch(()=>{});
+    }
+  }catch(_){}
 }
 function exitFS(){
   (document.exitFullscreen||document.webkitExitFullscreen)?.call(document);
@@ -1002,11 +1015,7 @@ okColorBtn.addEventListener('click', ()=>{
 /* Image size/count + tint */
 document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); });
 document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); });
-
-document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{
-  bgTintEnabled = e.target.checked;
-  draw();
-});
+document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{ bgTintEnabled = e.target.checked; draw(); });
 
 /* Alarm sound */
 let selectedSound = '1', audioPreview = null;
@@ -1043,7 +1052,7 @@ if(!supportsDirPicker){
 let repoHandle = null;
 let uploadedFiles = [];
 
-/* IndexedDB for repo handle (desktop) */
+/* IndexedDB */
 const DB_NAME='timer-handles', STORE='handles';
 function withHandleStore(mode, fn){
   return new Promise((res, rej)=>{
@@ -1082,34 +1091,23 @@ function getRepoHandle(){
   });
 }
 
-/* ---------- Picker Modal ---------- */
+/* Picker Modal */
 const pickerModal = document.getElementById('pickerModal');
 const pickerGrid  = document.getElementById('pickerGrid');
 const pickerTitle = document.getElementById('pickerTitle');
 const pickerSub   = document.getElementById('pickerSub');
 const closePickerBtn = document.getElementById('closePickerBtn');
 const switchSourceBtn = document.getElementById('switchSourceBtn');
-const tapModeBtn = document.getElementById('tapModeBtn');
 const autoFillBtn = document.getElementById('autoFillBtn');
 const assignBtn = document.getElementById('assignBtn');
 const clearSlotsBtn = document.getElementById('clearSlotsBtn');
 const openManifestBtn = document.getElementById('openManifestBtn');
+const touchModeBtn = document.getElementById('touchModeBtn');
 const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
 
 let lastGridItems = [];
 
-/* ---- tap mode button text ---- */
-function updateTapBtn(){
-  const lang = getLang();
-  tapModeBtn.textContent = tapSelectEnabled
-    ? (lang==='fr' ? tapModeBtn.dataset.frOn  : tapModeBtn.dataset.enOn)
-    : (lang==='fr' ? tapModeBtn.dataset.frOff : tapModeBtn.dataset.enOff);
-  // visual hint: highlight active slot only when tap-selection is enabled
-  selectedSlots.forEach((s,idx)=> s.classList.toggle('active', tapSelectEnabled && idx===activeSlotIdx));
-}
-updateTapBtn();
-
-/* Drag & drop inside slots (reorder) + tap select when enabled */
+/* Slots drag/drop + touch tap */
 let dragFromIdx = null;
 selectedSlots.forEach(slot=>{
   slot.addEventListener('dragstart', e=>{
@@ -1133,8 +1131,12 @@ selectedSlots.forEach(slot=>{
   });
   slot.addEventListener('dragend', ()=>{ dragFromIdx=null; selectedSlots.forEach(s=>s.classList.remove('dragover')); });
 
-  // Tap to focus a slot ONLY when tap mode is enabled
-  slot.addEventListener('click', ()=> { if(tapSelectEnabled) setActiveSlot(parseInt(slot.dataset.idx,10)); });
+  slot.addEventListener('click', ()=>{
+    if(!touchSelectMode) return;
+    const idx = parseInt(slot.dataset.idx,10);
+    setSlotSrc(idx, null);
+    nextFillSlot = idx;
+  });
 });
 function swapSlotImages(a,b){
   const srcA = selectedSlots[a].querySelector('img')?.src || null;
@@ -1147,61 +1149,8 @@ function setSlotSrc(idx, src){
   slot.setAttribute('draggable','true');
 }
 
-/* --- Touch-friendly slot selection + tap-to-assign --- */
-let activeSlotIdx = 0;
-function setActiveSlot(i){
-  activeSlotIdx = i;
-  selectedSlots.forEach((s, idx) => s.classList.toggle('active', tapSelectEnabled && idx === i));
-}
-function nextEmptySlot(){
-  const idx = selectedSlots.findIndex(s => !s.querySelector('img'));
-  return (idx === -1) ? ((activeSlotIdx + 1) % 4) : idx;
-}
-setActiveSlot(0);
-
-/* Helpers to wire thumbnail interactions */
-function setThumbTapHandler(card, url){
-  // remove previous
-  if(card._tapHandler){ card.removeEventListener('click', card._tapHandler); card._tapHandler=null; }
-  if(tapSelectEnabled){
-    const handler = ()=>{ setSlotSrc(activeSlotIdx, url); setActiveSlot(nextEmptySlot()); };
-    card._tapHandler = handler;
-    card.addEventListener('click', handler);
-  }
-}
-function attachThumbInteractions(card, url){
-  // Drag & drop (keep on desktop; disable on iOS)
-  if (!isIOS) {
-    card.draggable = true;
-    card.addEventListener('dragstart', (e)=>{
-      card.classList.add('dragging');
-      e.dataTransfer.effectAllowed='copy';
-      e.dataTransfer.setData('text/plain', url);
-    });
-    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
-  } else {
-    card.draggable = false;
-  }
-  setThumbTapHandler(card, url);
-}
-function rewireThumbTapHandlers(){
-  document.querySelectorAll('#pickerGrid .thumb').forEach(card=>{
-    const img = card.querySelector('img');
-    if(!img) return;
-    const url = img.getAttribute('src');
-    setThumbTapHandler(card, url);
-  });
-}
-
-/* Handle tap-mode toggle click */
-tapModeBtn.addEventListener('click', ()=>{
-  tapSelectEnabled = !tapSelectEnabled;
-  updateTapBtn();
-  rewireThumbTapHandlers();
-});
-
 /* Modal helpers */
-function openPickerModal(){ pickerModal.style.display='flex'; updateTapBtn(); }
+function openPickerModal(){ pickerModal.style.display='flex'; }
 function closePickerModal(){
   pickerModal.style.display='none';
   pickerGrid.innerHTML='';
@@ -1210,15 +1159,13 @@ function closePickerModal(){
   ensureReturnToFullscreen();
 }
 
-/* Choose / load repository (desktop) */
+/* Choose / load repository */
 async function chooseRepository(){
   try{
     const handle = await window.showDirectoryPicker();
     repoHandle = handle;
     const lang = getLang();
-    if (repoStatus) {
-      repoStatus.textContent = (lang==='fr' ? `Dossier : ${handle.name}` : `Repository: ${handle.name}`);
-    }
+    if (repoStatus) repoStatus.textContent = (lang==='fr' ? `Dossier : ${handle.name}` : `Repository: ${handle.name}`);
     await saveRepoHandle(handle);
     if (pickerModal.style.display !== 'flex') openPickerModal();
     await populateFromRepo();
@@ -1226,8 +1173,8 @@ async function chooseRepository(){
   }catch(e){ return false; }
 }
 
-/* Upload fallback (iPad) */
-uploadInput.addEventListener('change', ()=>{
+/* Upload fallback */
+document.getElementById('uploadInput').addEventListener('change', ()=>{
   for (const it of uploadedFiles){ if(it.url) URL.revokeObjectURL(it.url); }
   uploadedFiles = [];
   for (const file of Array.from(uploadInput.files||[])){
@@ -1242,7 +1189,7 @@ uploadInput.addEventListener('change', ()=>{
   populateFromUploads();
 });
 
-/* Iterate image files */
+/* Iteration */
 async function* iterImages(dirHandle){
   for await (const entry of dirHandle.values()){
     if(entry.kind !== 'file') continue;
@@ -1251,7 +1198,7 @@ async function* iterImages(dirHandle){
   }
 }
 
-/* Populate grid from repo */
+/* Populate sources */
 async function populateFromRepo(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
   pickerSub.textContent = repoHandle ? `(${repoHandle.name})` : '';
@@ -1269,9 +1216,11 @@ async function populateFromRepo(){
     lastGridItems.push({ name: entry.name, url, file });
 
     const card = document.createElement('div');
-    card.className='thumb';
+    card.className='thumb'; card.draggable = true;
     card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
-    attachThumbInteractions(card, url);
+    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    card.addEventListener('click', ()=> handleGridTap(url));
     frag.appendChild(card);
   }
   if(!frag.childNodes.length){
@@ -1280,8 +1229,6 @@ async function populateFromRepo(){
     pickerGrid.appendChild(p);
   }else{ pickerGrid.appendChild(frag); }
 }
-
-/* Populate grid from uploads (iPad) */
 function populateFromUploads(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
   pickerSub.textContent = (getLang()==='fr' ? '(importées)' : '(uploaded)');
@@ -1296,15 +1243,15 @@ function populateFromUploads(){
   for (const it of uploadedFiles){
     lastGridItems.push({ name: it.name, url: it.url, file: it.file });
     const card = document.createElement('div');
-    card.className='thumb';
+    card.className='thumb'; card.draggable = true;
     card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
-    attachThumbInteractions(card, it.url);
+    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', it.url); });
+    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    card.addEventListener('click', ()=> handleGridTap(it.url));
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
 }
-
-/* Populate grid from manifest */
 function populateFromManifest(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
   pickerSub.textContent = (getLang()==='fr' ? '(depuis la bibliothèque)' : '(from manifest)');
@@ -1320,9 +1267,11 @@ function populateFromManifest(){
     const url = it.file; const name = it.name || it.file.split('/').pop();
     lastGridItems.push({name,url});
     const card = document.createElement('div');
-    card.className='thumb';
+    card.className='thumb'; card.draggable = true;
     card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
-    attachThumbInteractions(card, url);
+    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    card.addEventListener('click', ()=> handleGridTap(url));
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
@@ -1363,6 +1312,28 @@ function assignFromSlots(){
 /* Clear slots */
 function clearSlots(){ for(let i=0;i<4;i++) setSlotSrc(i, null); }
 
+/* Touch-select mode */
+let touchSelectMode = isIOS;
+let nextFillSlot = 0;
+function getFirstEmptySlot(){
+  for(let i=0;i<4;i++){ if(!selectedSlots[i].querySelector('img')) return i; }
+  return -1;
+}
+function handleGridTap(url){
+  if(!touchSelectMode) return;
+  let idx = getFirstEmptySlot();
+  if(idx === -1){ idx = nextFillSlot; }
+  setSlotSrc(idx, url);
+  nextFillSlot = (idx + 1) % 4;
+}
+function updateTouchModeBtn(){
+  const lang = getLang();
+  const on  = (lang==='fr') ? touchModeBtn.dataset.frOn  : touchModeBtn.dataset.enOn;
+  const off = (lang==='fr') ? touchModeBtn.dataset.frOff : touchModeBtn.dataset.enOff;
+  touchModeBtn.textContent = touchSelectMode ? on : off;
+}
+updateTouchModeBtn();
+
 /* Openers */
 setRepoBtn.addEventListener('click', async ()=>{
   if(supportsDirPicker){
@@ -1394,8 +1365,9 @@ switchSourceBtn.addEventListener('click', async ()=>{
 autoFillBtn.addEventListener('click', autoFillTop4);
 assignBtn.addEventListener('click', assignFromSlots);
 clearSlotsBtn.addEventListener('click', clearSlots);
+touchModeBtn.addEventListener('click', ()=>{ touchSelectMode = !touchSelectMode; updateTouchModeBtn(); });
 
-/* Try restore repo on boot (desktop) */
+/* Try restore repo on boot */
 (async ()=>{
   if (navigator.storage?.persist) { try{ await navigator.storage.persist(); }catch(e){} }
   if(!supportsDirPicker) return;
@@ -1405,20 +1377,27 @@ clearSlotsBtn.addEventListener('click', clearSlots);
     if(perm === 'granted'){
       repoHandle = saved;
       const lang = getLang();
-      if (repoStatus) {
-        repoStatus.textContent = (lang==='fr' ? `Dossier : ${repoHandle.name}` : `Repository: ${repoHandle.name}`);
-      }
+      if (repoStatus) repoStatus.textContent = (lang==='fr' ? `Dossier : ${repoHandle.name}` : `Repository: ${repoHandle.name}`);
     }
   }
 })();
 
-/* Boot */
-enterBtn.addEventListener('click',()=>{
-  if(!document.fullscreenElement){ requestFS(); }
+/* ---------- START BUTTON: robust for iPad ---------- */
+let started = false;
+function startFromOverlay(){
+  if (started) return;
+  started = true;
+  requestFS();                 // try fullscreen, but don't block start
   overlay.style.display='none';
   resizeCanvas();
   startTimerAtFullDial();
-});
+}
+// Fire on click, pointerup, or touchend (covers iPad Safari quirks)
+enterBtn.addEventListener('click', (e)=>{ e.preventDefault(); startFromOverlay(); });
+enterBtn.addEventListener('pointerup', (e)=>{ e.preventDefault(); startFromOverlay(); });
+enterBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); startFromOverlay(); }, {passive:false});
+
+/* Canvas interactions */
 canvas.addEventListener('mousedown',startDrag);
 canvas.addEventListener('touchstart',startDrag,{passive:false});
 window.addEventListener('mousemove',dragMove,{passive:false});
@@ -1440,7 +1419,6 @@ document.getElementById('colorPicker').value = timerColor;
 resizeCanvas();
 </script>
 
-<!-- Translation Script for Static Elements -->
 <script src="../../js/translationonly.js"></script>
 </body>
 </html>
