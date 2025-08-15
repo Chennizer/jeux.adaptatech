@@ -11,8 +11,8 @@ function startFeuArtificeGame() {
     const initialCirclesInput = document.getElementById('initial-circles-input');
     let initialCircleCount = parseInt(initialCirclesInput.value);
 
-    // Hide control panel and show the game
-    document.getElementById('control-panel').style.display = 'none';
+    // Hide overlay and show the game
+    eyegazeSettings.hideOverlay();
     document.body.classList.add('hide-cursor'); // Hide the cursor
     isPlaying = true;
 
@@ -68,6 +68,7 @@ function createExplosion(x, y) {
 
 function playExplosionSound() {
     const explosionSound = document.getElementById('explosionSound');
+    explosionSound.volume = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
     explosionSound.currentTime = 0;
     explosionSound.play();
 }
@@ -108,7 +109,7 @@ function createTrailCircle() {
 
 // Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('#control-panel-start-button');
+    const startButton = document.querySelector('#startButton');
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
     }
