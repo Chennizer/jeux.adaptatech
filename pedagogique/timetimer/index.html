@@ -113,7 +113,7 @@
   .modal .selected{border-top:1px solid #222; padding:.55rem .8rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
   .slot{
     width:80px;height:80px;border:2px dashed #2a2a2a;border-radius:10px;display:flex;align-items:center;justify-content:center;position:relative;
-    background:#0e0e0e; overflow:hidden;
+    background:#0e0e0e; overflow:hidden; cursor:pointer;
   }
   .slot img{max-width:100%;max-height:100%;pointer-events:none;}
   .slot .badge{
@@ -125,6 +125,7 @@
   .slot[data-idx="2"]{border-color:#4cd964;}
   .slot[data-idx="3"]{border-color:#66a5ff;}
   .slot.dragover{outline:2px solid #00bfff; outline-offset:2px;}
+  .slot.active{outline:2px solid #00bfff; outline-offset:2px;} /* iPad: show current slot */
 
   .modal footer{padding:.6rem .8rem;border-top:1px solid #222;display:flex;gap:.5rem;justify-content:flex-end;}
   .hidden{display:none !important;}
@@ -134,7 +135,6 @@
   .chips{display:flex;gap:.4rem;flex-wrap:wrap}
   .chip{width:24px;height:24px;border-radius:6px;border:1px solid #333;cursor:pointer;}
   .rgblines{display:flex;flex-direction:column;gap:.5rem}
-  .rgblines label{display:grid;grid-template-columns:16px 1fr 42px;align-items:center;gap:.5rem;font-size:12px;}
   .rgblines input[type=range]{width:100%;}
   .hexline{display:flex;gap:.4rem;align-items:center}
   .hexline input{flex:1; border-radius:6px;border:1px solid #2b2b2b;background:#0f0f0f;color:#fff;padding:.35em .5em}
@@ -264,10 +264,10 @@
       <div id="pickerGrid" class="grid" aria-live="polite"></div>
 
       <div class="selected">
-        <div class="slot" data-idx="0" draggable="true"><span class="badge">1</span></div>
-        <div class="slot" data-idx="1" draggable="true"><span class="badge">2</span></div>
-        <div class="slot" data-idx="2" draggable="true"><span class="badge">3</span></div>
-        <div class="slot" data-idx="3" draggable="true"><span class="badge">4</span></div>
+        <div class="slot" data-idx="0"><span class="badge">1</span></div>
+        <div class="slot" data-idx="1"><span class="badge">2</span></div>
+        <div class="slot" data-idx="2"><span class="badge">3</span></div>
+        <div class="slot" data-idx="3"><span class="badge">4</span></div>
       </div>
 
       <footer>
@@ -666,7 +666,7 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   }
 }
 
-/* ---- STACKED (uniform column scale + pulse inside lanes) ---- */
+/* ---- STACKED ---- */
 function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const basePx   = size * LAYOUT.imgBase;
   const spacing  = size * LAYOUT.stacked.spacing;
@@ -690,7 +690,7 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const availH = canvas.height - 2*(size*STACK_V_MARGIN);
   let g = Math.min(1, (availH - spacing*(N-1)) / Math.max(1, sumH));
   if(!isFinite(g) || g <= 0) g = 1;
-  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT); // on desktop never shrink too much
+  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT); // desktop: never too tiny
 
   // 3) reserve vertical height and center the whole column
   let totalH = baseDims.reduce((a,d)=>a + d.h*g, 0) + spacing*(N-1);
@@ -725,7 +725,7 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   }
 }
 
-/* ---- TASK → REWARD (Left, 2 images, single-color timer) ---- */
+/* ---- TASK → REWARD ---- */
 function drawTaskReward(size,cx,cy,outerR){
   const basePx   = size * LAYOUT.imgBase;
   const spacing  = size * LAYOUT.stacked.spacing * TASKREWARD_SPACING_MULT;
@@ -1118,39 +1118,60 @@ const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
 
 let lastGridItems = [];
 
-/* Drag & drop inside slots (reorder) */
-let dragFromIdx = null;
-selectedSlots.forEach(slot=>{
-  slot.addEventListener('dragstart', e=>{
-    dragFromIdx = parseInt(slot.dataset.idx,10);
-    e.dataTransfer.effectAllowed='move';
-    e.dataTransfer.setData('text/x-slot', String(dragFromIdx));
+/* ===== iPad selection cursor & helpers ===== */
+let nextSlot = 0;
+function setCurrentSlot(i){
+  nextSlot = ((i % 4) + 4) % 4;
+  selectedSlots.forEach((s,idx)=>{
+    if(idx===nextSlot) s.classList.add('active'); else s.classList.remove('active');
   });
-  slot.addEventListener('dragover', e=>{ e.preventDefault(); slot.classList.add('dragover'); });
-  slot.addEventListener('dragleave', ()=> slot.classList.remove('dragover'));
-  slot.addEventListener('drop', e=>{
-    e.preventDefault(); slot.classList.remove('dragover');
-    const toIdx = parseInt(slot.dataset.idx,10);
-
-    const gridUrl = e.dataTransfer.getData('text/plain');
-    if(gridUrl){ setSlotSrc(toIdx, gridUrl); return; }
-
-    const fromStr = e.dataTransfer.getData('text/x-slot');
-    const fromIdx = fromStr ? parseInt(fromStr,10) : dragFromIdx;
-    if(Number.isInteger(fromIdx) && fromIdx!==toIdx){ swapSlotImages(fromIdx, toIdx); }
-    dragFromIdx=null;
-  });
-  slot.addEventListener('dragend', ()=>{ dragFromIdx=null; selectedSlots.forEach(s=>s.classList.remove('dragover')); });
-});
-function swapSlotImages(a,b){
-  const srcA = selectedSlots[a].querySelector('img')?.src || null;
-  const srcB = selectedSlots[b].querySelector('img')?.src || null;
-  setSlotSrc(a, srcB); setSlotSrc(b, srcA);
 }
 function setSlotSrc(idx, src){
   const slot = selectedSlots[idx];
   slot.innerHTML = `<span class="badge">${idx+1}</span>` + (src ? `<img src="${src}" alt="" draggable="false" />` : '');
-  slot.setAttribute('draggable','true');
+  if(!isIOS){ slot.setAttribute('draggable','true'); } else { slot.removeAttribute('draggable'); }
+}
+function placeInNextSlot(url){
+  setSlotSrc(nextSlot, url);
+  setCurrentSlot(nextSlot + 1); // auto-advance & wrap
+}
+
+/* Drag & drop inside slots (reorder) – desktop/Android only */
+if(!isIOS){
+  let dragFromIdx = null;
+  selectedSlots.forEach(slot=>{
+    slot.setAttribute('draggable','true');
+    slot.addEventListener('dragstart', e=>{
+      dragFromIdx = parseInt(slot.dataset.idx,10);
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/x-slot', String(dragFromIdx));
+    });
+    slot.addEventListener('dragover', e=>{ e.preventDefault(); slot.classList.add('dragover'); });
+    slot.addEventListener('dragleave', ()=> slot.classList.remove('dragover'));
+    slot.addEventListener('drop', e=>{
+      e.preventDefault(); slot.classList.remove('dragover');
+      const toIdx = parseInt(slot.dataset.idx,10);
+
+      const gridUrl = e.dataTransfer.getData('text/plain');
+      if(gridUrl){ setSlotSrc(toIdx, gridUrl); return; }
+
+      const fromStr = e.dataTransfer.getData('text/x-slot');
+      const fromIdx = fromStr ? parseInt(fromStr,10) : dragFromIdx;
+      if(Number.isInteger(fromIdx) && fromIdx!==toIdx){ swapSlotImages(fromIdx, toIdx); }
+      dragFromIdx=null;
+    });
+    slot.addEventListener('dragend', ()=>{ dragFromIdx=null; selectedSlots.forEach(s=>s.classList.remove('dragover')); });
+  });
+  function swapSlotImages(a,b){
+    const srcA = selectedSlots[a].querySelector('img')?.src || null;
+    const srcB = selectedSlots[b].querySelector('img')?.src || null;
+    setSlotSrc(a, srcB); setSlotSrc(b, srcA);
+  }
+}else{
+  // iPad: tap a slot to focus it (for corrections)
+  selectedSlots.forEach((slot)=>{
+    slot.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); setCurrentSlot(parseInt(slot.dataset.idx,10)); }, {passive:false});
+  });
 }
 
 /* Modal helpers */
@@ -1207,7 +1228,8 @@ async function* iterImages(dirHandle){
 /* Populate grid from repo */
 async function populateFromRepo(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
-  pickerSub.textContent = repoHandle ? `(${repoHandle.name})` : '';
+  const hint = isIOS ? (getLang()==='fr' ? ' — iPad : touchez des images pour remplir 1→4' : ' — iPad: tap images to fill 1→4') : '';
+  pickerSub.textContent = repoHandle ? `(${repoHandle.name})${hint}` : hint;
   switchSourceBtn.classList.remove('hidden');
   pickerGrid.innerHTML=''; lastGridItems = [];
   if(!repoHandle){
@@ -1222,10 +1244,18 @@ async function populateFromRepo(){
     lastGridItems.push({ name: entry.name, url, file });
 
     const card = document.createElement('div');
-    card.className='thumb'; card.draggable = true;
-    card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
-    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
-    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    card.className='thumb';
+    if(!isIOS){
+      card.draggable = true;
+      card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
+      card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+      card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    }else{
+      card.draggable = false;
+      card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
+      const tap = (e)=>{ e.preventDefault(); e.stopPropagation(); placeInNextSlot(url); };
+      ['click','pointerup','touchend'].forEach(t=> card.addEventListener(t, tap, {passive:false}));
+    }
     frag.appendChild(card);
   }
   if(!frag.childNodes.length){
@@ -1233,12 +1263,16 @@ async function populateFromRepo(){
     p.textContent = (getLang()==='fr' ? 'Aucune image dans ce dossier.' : 'No images in this folder.');
     pickerGrid.appendChild(p);
   }else{ pickerGrid.appendChild(frag); }
+
+  // Start at slot 1 on open
+  setCurrentSlot(0);
 }
 
-/* Populate grid from uploads (iPad) */
+/* Populate grid from uploads (iPad or desktop fallback) */
 function populateFromUploads(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
-  pickerSub.textContent = (getLang()==='fr' ? '(importées)' : '(uploaded)');
+  const hint = isIOS ? (getLang()==='fr' ? ' — iPad : touchez des images pour remplir 1→4' : ' — iPad: tap images to fill 1→4') : '';
+  pickerSub.textContent = (getLang()==='fr' ? '(importées)' : '(uploaded)') + hint;
   switchSourceBtn.classList.remove('hidden');
   pickerGrid.innerHTML=''; lastGridItems = [];
   if(!uploadedFiles.length){
@@ -1250,19 +1284,30 @@ function populateFromUploads(){
   for (const it of uploadedFiles){
     lastGridItems.push({ name: it.name, url: it.url, file: it.file });
     const card = document.createElement('div');
-    card.className='thumb'; card.draggable = true;
-    card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
-    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', it.url); });
-    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    card.className='thumb';
+    if(!isIOS){
+      card.draggable = true;
+      card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
+      card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', it.url); });
+      card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    }else{
+      card.draggable = false;
+      card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
+      const tap = (e)=>{ e.preventDefault(); e.stopPropagation(); placeInNextSlot(it.url); };
+      ['click','pointerup','touchend'].forEach(t=> card.addEventListener(t, tap, {passive:false}));
+    }
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
+
+  setCurrentSlot(0);
 }
 
 /* Populate grid from manifest */
 function populateFromManifest(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
-  pickerSub.textContent = (getLang()==='fr' ? '(depuis la bibliothèque)' : '(from manifest)');
+  const hint = isIOS ? (getLang()==='fr' ? ' — iPad : touchez des images pour remplir 1→4' : ' — iPad: tap images to fill 1→4') : '';
+  pickerSub.textContent = (getLang()==='fr' ? '(depuis la bibliothèque)' : '(from manifest)') + hint;
   switchSourceBtn.classList.add('hidden');
   pickerGrid.innerHTML=''; lastGridItems = [];
   if(!Array.isArray(window.PNG_ARRAY) || !window.PNG_ARRAY.length){
@@ -1275,25 +1320,30 @@ function populateFromManifest(){
     const url = it.file; const name = it.name || it.file.split('/').pop();
     lastGridItems.push({name,url});
     const card = document.createElement('div');
-    card.className='thumb'; card.draggable = true;
-    card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
-    card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
-    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    card.className='thumb';
+    if(!isIOS){
+      card.draggable = true;
+      card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
+      card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+      card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    }else{
+      card.draggable = false;
+      card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
+      const tap = (e)=>{ e.preventDefault(); e.stopPropagation(); placeInNextSlot(url); };
+      ['click','pointerup','touchend'].forEach(t=> card.addEventListener(t, tap, {passive:false}));
+    }
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
+
+  setCurrentSlot(0);
 }
 
 /* Auto-fill top 4 */
-function autoFillTop4(){ const top4 = lastGridItems.slice(0,4); for(let i=0;i<4;i++){ setSlotSrc(i, top4[i]?.url || null); } }
-
-/* Prefer radial when images chosen */
-function ensureRadialIfImagesChosen(){
-  const any = imgs.some(Boolean);
-  if(any && (specialMode === 'none')){
-    specialMode = 'radial';
-    const sel = document.getElementById('specialMode'); if(sel) sel.value = 'radial';
-  }
+function autoFillTop4(){
+  const top4 = lastGridItems.slice(0,4);
+  for(let i=0;i<4;i++){ setSlotSrc(i, top4[i]?.url || null); }
+  setCurrentSlot(0); // ready to correct slot 1 if needed
 }
 
 /* Assign selected slots into imgs[] */
@@ -1316,8 +1366,20 @@ function assignFromSlots(){
   });
 }
 
+/* Prefer radial when images chosen */
+function ensureRadialIfImagesChosen(){
+  const any = imgs.some(Boolean);
+  if(any && (specialMode === 'none')){
+    specialMode = 'radial';
+    const sel = document.getElementById('specialMode'); if(sel) sel.value = 'radial';
+  }
+}
+
 /* Clear slots */
-function clearSlots(){ for(let i=0;i<4;i++) setSlotSrc(i, null); }
+function clearSlots(){
+  for(let i=0;i<4;i++) setSlotSrc(i, null);
+  setCurrentSlot(0);
+}
 
 /* Openers */
 setRepoBtn.addEventListener('click', async ()=>{
