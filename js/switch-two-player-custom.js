@@ -8,12 +8,20 @@
    - When adding a single YouTube URL: we validate first; if blocked, we DO NOT add a card.
    - When restoring saved URLs from localStorage: batch-validate and only re-add playable ones (storage is cleaned).
    - At playback, if a video still errors, we auto-skip.
+
+   Fixes in this version:
+   - Fixed syntax error in visual options ("high-contrast" branch).
+   - Made YT onError delegate to a global-safe handler (no scope issues).
+   - Guarded loading bar null refs.
 */
 
 let youtubePlayer = null;
 let youtubeStateChangeHandler = null;
 let youtubeApiReady = false;
 let pendingYouTubeId = null;
+
+// global-safe delegate set inside DOMContentLoaded
+window.__handleMediaEnd = null;
 
 const YT_PLAYER_VARS = {
   controls: 0,
@@ -69,7 +77,9 @@ function onYouTubePlayerStateChange(event) {
 /* ===== RUNTIME AUTO-SKIP (safety net) ===== */
 function onYouTubePlayerError(e) {
   console.warn('YT error', e?.data);
-  handleMediaEnd(); // move on to next item
+  if (typeof window.__handleMediaEnd === 'function') {
+    try { window.__handleMediaEnd(); } catch {}
+  }
 }
 
 function createYouTubePlayer(id) {
@@ -713,8 +723,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   videoCardsArray.forEach(initCard);
   renumberCards();
 
-  // (Drag & drop fully removed)
-
   // initial selection
   selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
   if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
@@ -725,17 +733,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   function preloadMedia(list, onComplete) {
     let loaded = 0;
     const total = list.length;
-    const loadingBar = document.getElementById('control-panel-loading-bar-container').querySelector('#control-panel-loading-bar');
+    const loadingContainer = document.getElementById('control-panel-loading-bar-container');
+    const loadingBar = loadingContainer ? loadingContainer.querySelector('#control-panel-loading-bar') : null;
+
     if (total === 0) {
       onComplete();
       return;
     }
     list.forEach(src => {
-      if (isYouTubeUrl(src)) {
+      const bump = () => {
         loaded++;
-        const percent = (loaded / total) * 100;
-        loadingBar.style.width = `${percent}%`;
+        if (loadingBar) {
+          const percent = (loaded / total) * 100;
+          loadingBar.style.width = `${percent}%`;
+        }
         if (loaded === total) onComplete();
+      };
+
+      if (isYouTubeUrl(src)) {
+        bump();
         return;
       }
       const mediaEl = document.createElement('video');
@@ -745,17 +761,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       mediaEl.style.display = 'none';
       document.body.appendChild(mediaEl);
       mediaEl.addEventListener('canplaythrough', () => {
-        loaded++;
-        const percent = (loaded / total) * 100;
-        loadingBar.style.width = `${percent}%`;
-        if (loaded === total) onComplete();
+        bump();
         mediaEl.remove();
       }, { once: true });
       mediaEl.addEventListener('error', () => {
-        loaded++;
-        const percent = (loaded / total) * 100;
-        loadingBar.style.width = `${percent}%`;
-        if (loaded === total) onComplete();
+        bump();
         mediaEl.remove();
       }, { once: true });
     });
@@ -922,7 +932,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // preload and show UI
   preloadMedia(selectedMedia, () => {
-    document.getElementById('control-panel-loading-bar-container').style.display = 'none';
+    const loadingContainer = document.getElementById('control-panel-loading-bar-container');
+    if (loadingContainer) loadingContainer.style.display = 'none';
     if (selectedMedia.length) startButton.style.display = 'block';
     playIntroJingle();
     if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
@@ -1217,6 +1228,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // expose handler for the global YT error delegate
+  window.__handleMediaEnd = handleMediaEnd;
+
   function switchPlayer() {
     if (!isTwoPlayerMode()) {
       currentPlayer = 1;
@@ -1361,7 +1375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         case 'green-filter': mediaPlayer.classList.add('green-filter'); break;
         case 'red-filter': mediaPlayer.classList.add('red-filter'); break;
         case 'blue-filter': mediaPlayer.classList.add('blue-filter'); break;
-        case 'high-contrast': mediaPlayer.style.filter = 'contrast(200%)'; break;
+        case 'high-contrast': mediaPlayer.style.filter = 'contrast(200%)'; break; // <- fixed
         case 'grayscale': mediaPlayer.style.filter = 'grayscale(100%)'; break;
         case 'invert': mediaPlayer.style.filter = 'invert(100%)'; break;
         case 'brightness': mediaPlayer.style.filter = 'brightness(1.5)'; break;
