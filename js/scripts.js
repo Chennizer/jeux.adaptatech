@@ -7,8 +7,8 @@ function preloadVideos(zoneEffects, onComplete) {
     console.log("Starting video preloading...");
 
     // Show the loading bar
-    const loadingBar = document.getElementById('control-panel-loading-bar');
-    const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+    const loadingBar = document.getElementById('loading-bar');
+    const loadingBarContainer = document.getElementById('loading-bar-container');
     
     loadingBarContainer.style.display = 'block'; // Ensure the loading bar is visible
 
@@ -33,7 +33,7 @@ function preloadVideos(zoneEffects, onComplete) {
                 
                 setTimeout(() => {
                     loadingBarContainer.style.display = 'none'; // Hide the loading bar
-                    const startButton = document.getElementById('control-panel-start-button');
+                    const startButton = document.getElementById('startButton');
                     startButton.style.display = 'block'; // Show the start button
                 }, 500); // Brief delay to smooth the transition
             }
@@ -54,7 +54,7 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
 
     // Elements
     const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
-    const startButton = document.getElementById('control-panel-start-button');
+    const startButton = document.getElementById('startButton');
     const hoverCircle = document.getElementById('hover-circle');
     const mapContainer = document.getElementById('map-container');
     const overlay = document.getElementById('overlay');
@@ -71,8 +71,7 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         console.log("Videos preloaded. Game can start.");
     });
 
-    // Start the game when the start button is clicked
-    startButton.addEventListener('click', () => {
+    function startGame() {
         const dwellTimeValue = dwellTimeInput.value;
         if (dwellTimeValue && !isNaN(dwellTimeValue)) {
             dwellTime = parseInt(dwellTimeValue);
@@ -82,15 +81,14 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         }
 
         console.log("Game starting...");
-        document.getElementById('control-panel').style.display = 'none';
         mapContainer.style.display = 'block';
-        
+
         // Ensure the map is resized and interactive
         imageMapResize(); // Initialize the image map resizer
-        
+
         // Additional logging to confirm visibility changes
-        console.log("Control panel hidden, map container visible.");
-    });
+        console.log("Map container visible.");
+    }
 
     // Hover effect handling
     document.querySelectorAll('area').forEach(area => {
@@ -154,4 +152,6 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
             mapContainer.style.display = 'block';
         };
     }
+
+    return startGame;
 }

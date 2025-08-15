@@ -11,8 +11,6 @@ function startFeuArtificeGame() {
     const initialCirclesInput = document.getElementById('initial-circles-input');
     let initialCircleCount = parseInt(initialCirclesInput.value);
 
-    // Hide control panel and show the game
-    document.getElementById('control-panel').style.display = 'none';
     document.body.classList.add('hide-cursor'); // Hide the cursor
     isPlaying = true;
 
@@ -106,10 +104,3 @@ function createTrailCircle() {
     });
 }
 
-// Initialize the Feu d'artifice game if the start button is present
-document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('#control-panel-start-button');
-    if (startButton) {
-        startButton.addEventListener('click', startFeuArtificeGame);
-    }
-});
