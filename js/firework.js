@@ -4,11 +4,11 @@ function startFeuArtificeGame() {
     let isPlaying = false;
 
     // Get the user-specified interval
-    const intervalInput = document.getElementById('interval-input');
+    const intervalInput = document.getElementById('respawn-interval');
     let interval = parseInt(intervalInput.value) * 1000; // Convert seconds to milliseconds
 
     // Get the user-specified initial circle count
-    const initialCirclesInput = document.getElementById('initial-circles-input');
+    const initialCirclesInput = document.getElementById('initial-circles');
     let initialCircleCount = parseInt(initialCirclesInput.value);
 
     // Hide overlay and show the game
@@ -112,5 +112,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const startButton = document.querySelector('#startButton');
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
+    }
+
+    const intervalSlider = document.getElementById('respawn-interval');
+    const intervalVal = document.getElementById('respawn-interval-value');
+    if (intervalSlider && intervalVal) {
+        intervalSlider.addEventListener('input', e => {
+            intervalVal.textContent = e.target.value;
+        });
+    }
+
+    const initialSlider = document.getElementById('initial-circles');
+    const initialVal = document.getElementById('initial-circles-value');
+    if (initialSlider && initialVal) {
+        initialSlider.addEventListener('input', e => {
+            initialVal.textContent = e.target.value;
+        });
     }
 });
