@@ -129,7 +129,7 @@
   /* Color picker mini modal */
   .mini-body{padding:.75rem;display:flex;flex-direction:column;gap:.6rem;}
   .chips{display:flex;gap:.4rem;flex-wrap:wrap}
-  .chip{width:24px;height:24px;border:1px solid #333;border-radius:6px;cursor:pointer;}
+  .chip{width:24px;height:24px;border-radius:6px;border:1px solid #333;cursor:pointer;}
   .rgblines{display:flex;flex-direction:column;gap:.5rem}
   .rgblines label{display:grid;grid-template-columns:16px 1fr 42px;align-items:center;gap:.5rem;font-size:12px;}
   .rgblines input[type=range]{width:100%;}
@@ -254,14 +254,6 @@
             data-fr="Remplir 1–4" data-en="Auto-fill 1–4">Remplir 1–4</button>
           <button id="switchSourceBtn" class="btn secondary hidden"
             data-fr="Changer de dossier" data-en="Change Folder">Changer de dossier</button>
-
-          <!-- Touch select mode toggle -->
-          <button id="touchModeBtn" class="btn ghost"
-            data-fr-on="Sélection tactile : Activée" data-en-on="Touch select: On"
-            data-fr-off="Sélection tactile : Désactivée" data-en-off="Touch select: Off">
-            Sélection tactile : Désactivée
-          </button>
-
           <button id="closePickerBtn" class="btn secondary" data-fr="Fermer" data-en="Close">Fermer</button>
         </div>
       </header>
@@ -327,32 +319,39 @@
 /* ===========================================================
    CONSTANTS YOU CAN TWEAK
    =========================================================== */
-const H_SHIFT = 0.26;
-const H_SHIFT_2 = 0.12;
-const V_OFFSET_TOP = 0.16;
-const V_OFFSET_BOTTOM = -0.16;
-const SHIFT_RIGHT_STACKED = 0.18;
-const INACTIVE_ALPHA = 0.45;
-const IDLE_CLOSE_MS = 10000;
-const MIN_STACKED_FIT = 0.55;
+const H_SHIFT = 0.26;             // horizontal nudge (4-image radial)
+const H_SHIFT_2 = 0.12;           // horizontal nudge (2-image radial)
+const V_OFFSET_TOP = 0.16;        // vertical offset for NE & NW (4-image radial)
+const V_OFFSET_BOTTOM = -0.16;    // vertical offset for SE & SW (4-image radial)
+const SHIFT_RIGHT_STACKED = 0.18; // move dial center right in stacked/taskreward modes
+const INACTIVE_ALPHA = 0.45;      // dim inactive images
+const IDLE_CLOSE_MS = 10000;      // auto-close panels after 10s idle
+const MIN_STACKED_FIT = 0.55;     // desktop minimum column fit
+const STACK_V_MARGIN = 0.06;      // top/bottom breathing space for stacked column
 
-const PULSE_PERIOD = 1800;
-const PULSE_AMPLITUDE = 0.04;
+// Pulse: active image subtle breathing (radial/stacked only)
+const PULSE_PERIOD = 1800;        // ms
+const PULSE_AMPLITUDE = 0.04;     // +/- 4%
 
+// Radial distance from number ring
 const RADIAL_RADIUS_OFFSET_4 = 0.12;
-const RADIAL_RADIUS_OFFSET_2 = 0.06;
+const RADIAL_RADIUS_OFFSET_2 = 0.06; // 2-image: closer to center
 
-const TASKREWARD_SPACING_MULT = 3.5;
+// Task→Reward spacing multiplier (relative to stacked spacing)
+const TASKREWARD_SPACING_MULT = 3.5; // farther apart
 
 /* ===========================================================
-   LAYOUT
+   LAYOUT (size slider only)
    =========================================================== */
 const LAYOUT = {
   imgBase: 0.30,
-  activeScale: 1.33,
+  activeScale: 1.33, // ~+33%
   radial: { radiusOffset: RADIAL_RADIUS_OFFSET_4 },
   stacked:{ spacing: 0.025, marginLeft: 0.06 }
 };
+/* ===========================================================
+   END CONFIG
+   =========================================================== */
 
 /* ---------- iOS detection ---------- */
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -379,12 +378,12 @@ let totalSeconds=300,remainingSeconds=0,intervalId=null,paused=false,dragging=fa
 let showDigits=false,dialMax=60,timerColor='#d9534f';
 let bgTintEnabled=false; const TINT_ALPHA=0.35;
 
-let nowMs = 0;
+let nowMs = 0; // for pulse
 
 /* ---------- Special features ---------- */
 let specialMode='none';
-let IMG_COUNT = 4;
-const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff'];
+let IMG_COUNT = 4; // 2 or 4
+const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff']; // r,y,g,b
 const imgs=[null,null,null,null];
 
 /* Optional placeholders */
@@ -448,6 +447,8 @@ function getCenter(size){
   }
   return { cx: baseCx, cy };
 }
+
+/* --- Auto-fit utility (for radial & taskreward) --- */
 function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
   const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
@@ -456,7 +457,7 @@ function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   return (isFinite(s) && s>0) ? s : 1;
 }
 
-/* Drag helpers */
+/* Drag helpers for dial (uses shifted center) */
 function getSecondsFromEvent(e){
   const r=canvas.getBoundingClientRect(),
         x=(e.touches?e.touches[0].clientX:e.clientX)-r.left,
@@ -492,11 +493,11 @@ function getActiveIndex(uiSeconds, denom, count){
   if(count===4){
     const qLen = denom/4;
     const qIdx = Math.floor((t-1)/qLen);
-    return 3 - qIdx;
+    return 3 - qIdx; // NE,SE,SW,NW mapping
   }else{
     const hLen = denom/2;
     const hIdx = Math.floor((t-1)/hLen);
-    return 1 - hIdx;
+    return 1 - hIdx; // 0=Right,1=Left
   }
 }
 function colorForIndex(i,N){ return quadrantColors[ N===2 ? (i===0?0:3) : i ]; }
@@ -513,13 +514,19 @@ function draw(){
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
+  // Outer circle
   ctx.strokeStyle='#000';ctx.lineWidth=borderW;
   ctx.beginPath();ctx.arc(cx,cy,outerR,0,Math.PI*2);ctx.stroke();
 
-  const uiSeconds = (remainingSeconds>0) ? remainingSeconds : Math.max(1, Math.round((dialMax*60)));
+  // Preview vs running seconds
+  const uiSeconds = (remainingSeconds>0)
+    ? remainingSeconds
+    : Math.max(1, Math.round((dialMax*60))); // preview full dial
+
   const denom = dialMax*60;
   const angle = (uiSeconds/denom) * Math.PI * 2;
 
+  // Wedge & background sectors
   if(specialMode==='radial' || specialMode==='stacked'){
     ctx.save();
     ctx.beginPath();ctx.moveTo(cx,cy);
@@ -535,8 +542,9 @@ function draw(){
     };
 
     if(N===2){
-      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));
-      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));
+      // Left (blue), Right (red) with anti-clockwise arcs
+      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));      // Left
+      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));     // Right
     }else{
       for(let i=0;i<4;i++){
         const start = -Math.PI/2 - i*Math.PI/2;
@@ -549,12 +557,14 @@ function draw(){
     }
     ctx.restore();
   }else{
+    // 'none' and 'taskreward' => single-color wedge
     ctx.fillStyle=timerColor;
     ctx.beginPath();ctx.moveTo(cx,cy);
     ctx.arc(cx,cy,wedgeR,-Math.PI/2,-Math.PI/2-angle,true);
     ctx.closePath();ctx.fill();
   }
 
+  // Ticks & numbers
   const cfg=dialConfigs[dialMax];
   for(let i=0;i<cfg.ticks;i++){
     const ang=-Math.PI/2-(i/cfg.ticks)*Math.PI*2,
@@ -587,6 +597,7 @@ function draw(){
 /* Page tint */
 function updatePageTint(uiSeconds, denom){
   if(!bgTintEnabled){ document.body.style.backgroundColor=''; return; }
+
   if(specialMode==='none' || specialMode==='taskreward'){
     document.body.style.backgroundColor = hexToRGBA(timerColor, TINT_ALPHA);
     return;
@@ -597,14 +608,11 @@ function updatePageTint(uiSeconds, denom){
   document.body.style.backgroundColor = hexToRGBA(col, TINT_ALPHA);
 }
 
-/* ---- RADIAL (dial-safe placement) ---- */
-function drawRadial(size, cx, cy, numbersR, uiSeconds, denom){
+/* ---- RADIAL ---- */
+function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   const basePx = size * LAYOUT.imgBase;
   const radialOffset = (IMG_COUNT===2 ? RADIAL_RADIUS_OFFSET_2 : LAYOUT.radial.radiusOffset);
   const imgR   = numbersR + size * radialOffset;
-
-  const dialClearance = size * (isIOS ? 0.016 : 0.030);
-  const outerR = size * 0.4;
   const hShiftPx_4 = size * H_SHIFT;
   const hShiftPx_2 = size * H_SHIFT_2;
   const vTopPx   = size * V_OFFSET_TOP;
@@ -627,28 +635,19 @@ function drawRadial(size, cx, cy, numbersR, uiSeconds, denom){
     const ang=angles[i];
     let dx=0, dy=0;
     if (N===2){
-      dx = (i===0 ? 1 : -1) * hShiftPx_2;
+      const dxSign = (i===0) ? 1 : -1; // right, left
+      dx = dxSign * hShiftPx_2;
     } else {
-      dx = ((i===0 || i===1) ? 1 : -1) * hShiftPx_4;
+      const dxSign = (i===0 || i===1) ? 1 : -1; // east = +, west = -
+      dx = dxSign * hShiftPx_4;
       dy = (i===0 || i===3) ? vTopPx : vBotPx;
     }
 
-    let cxI = cx + Math.cos(ang)*imgR + dx;
-    let cyI = cy + Math.sin(ang)*imgR + dy;
+    // Center of this image
+    const cxI = cx + Math.cos(ang)*imgR + dx;
+    const cyI = cy + Math.sin(ang)*imgR + dy;
 
-    let vx = cxI - cx, vy = cyI - cy;
-    let len = Math.hypot(vx, vy) || 1;
-    let ux = vx / len, uy = vy / len;
-
-    const extent = Math.abs(ux)*(w/2) + Math.abs(uy)*(h/2);
-    const minLen = (outerR + dialClearance) + extent;
-
-    if (len < minLen){
-      const add = minLen - len;
-      cxI += ux * add;
-      cyI += uy * add;
-    }
-
+    // Auto-fit to canvas if needed
     const fitS = fitScaleForCenteredRect(cxI, cyI, w, h);
     w *= fitS; h *= fitS;
 
@@ -658,14 +657,13 @@ function drawRadial(size, cx, cy, numbersR, uiSeconds, denom){
     ctx.save();
     if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
     ctx.drawImage(im, x, y, w, h);
-    ctx.strokeStyle = colorForIndex(i, (N===2?2:4));
-    ctx.lineWidth = size*0.006;
+    ctx.strokeStyle=colorForIndex(i, (N===2?2:4));ctx.lineWidth=size*0.006;
     ctx.strokeRect(x, y, w, h);
     ctx.restore();
   }
 }
 
-/* ---- STACKED ---- */
+/* ---- STACKED (uniform column scale + pulse inside lanes) ---- */
 function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const basePx   = size * LAYOUT.imgBase;
   const spacing  = size * LAYOUT.stacked.spacing;
@@ -675,53 +673,56 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const N = IMG_COUNT;
   const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
 
-  const baseHeights = [];
-  for(let i=0;i<N;i++){
+  // 1) measure base (no pulse) dims per image
+  const baseDims = Array.from({length:N}, (_,i)=>{
     const im = imgs[i];
-    if(!im){ baseHeights[i] = basePx; continue; }
-    const s = (i===active) ? LAYOUT.activeScale : 1;
-    baseHeights[i] = computeContainSize(im, basePx * s).h;
-  }
+    if(!im) return {w:basePx, h:basePx, has:false};
+    const s  = (i===active) ? LAYOUT.activeScale : 1;
+    const d  = computeContainSize(im, basePx * s);
+    return {w:d.w, h:d.h, has:true, im};
+  });
 
-  let totalH = spacing * (N-1);
-  for(let i=0;i<N;i++) totalH += baseHeights[i];
+  // 2) compute a single uniform scale to keep full column onscreen
+  const sumH   = baseDims.reduce((a,d)=>a+(d.h||basePx), 0);
+  const availH = canvas.height - 2*(size*STACK_V_MARGIN);
+  let g = Math.min(1, (availH - spacing*(N-1)) / Math.max(1, sumH));
+  if(!isFinite(g) || g <= 0) g = 1;
+  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT); // on desktop never shrink too much
+
+  // 3) reserve vertical height and center the whole column
+  let totalH = baseDims.reduce((a,d)=>a + d.h*g, 0) + spacing*(N-1);
   let y = cy - totalH/2;
 
+  // 4) draw items; pulse animates inside their reserved lanes
   for(let i=0;i<N;i++){
-    const im = imgs[i];
+    const d = baseDims[i];
     const isActive = (i===active);
-    const pulse = isActive ? (1 + PULSE_AMPLITUDE * Math.sin((nowMs % PULSE_PERIOD)/PULSE_PERIOD * 2*Math.PI)) : 1;
-    const scale = (isActive ? LAYOUT.activeScale : 1) * pulse;
 
-    if(!im){
-      y += baseHeights[i] + spacing; 
-      continue;
+    const pulse = isActive ? (1 + PULSE_AMPLITUDE *
+                     Math.sin((nowMs % PULSE_PERIOD)/PULSE_PERIOD * 2*Math.PI)) : 1;
+
+    const reservedH = d.h * g;
+    const drawH     = d.h * g * pulse;
+    const drawW     = d.w * g * pulse;
+
+    const x = xCenter - drawW/2;
+    const yDraw = y + (reservedH - drawH)/2;
+
+    if(d.has){
+      ctx.save();
+      if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
+      ctx.drawImage(d.im, x, yDraw, drawW, drawH);
+      ctx.strokeStyle = colorForIndex(i, (N===2?2:4));
+      ctx.lineWidth   = size*0.006;
+      ctx.strokeRect(x, yDraw, drawW, drawH);
+      ctx.restore();
     }
 
-    let {w: w0, h: h0} = computeContainSize(im, basePx * scale);
-
-    const cxI = xCenter;
-    const cyI = y + h0/2;
-    let fitS = fitScaleForCenteredRect(cxI, cyI, w0, h0);
-    if (!isIOS) fitS = Math.max(fitS, MIN_STACKED_FIT);
-
-    w0 *= fitS; 
-    h0 *= fitS;
-
-    const x = xCenter - w0/2;
-
-    ctx.save();
-    if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
-    ctx.drawImage(im, x, y, w0, h0);
-    ctx.strokeStyle=colorForIndex(i, (N===2?2:4));ctx.lineWidth=size*0.006;
-    ctx.strokeRect(x, y, w0, h0);
-    ctx.restore();
-
-    y += baseHeights[i] + spacing;
+    y += reservedH + spacing;
   }
 }
 
-/* ---- TASK → REWARD ---- */
+/* ---- TASK → REWARD (Left, 2 images, single-color timer) ---- */
 function drawTaskReward(size,cx,cy,outerR){
   const basePx   = size * LAYOUT.imgBase;
   const spacing  = size * LAYOUT.stacked.spacing * TASKREWARD_SPACING_MULT;
@@ -738,15 +739,21 @@ function drawTaskReward(size,cx,cy,outerR){
   let yTop = cy - totalH0/2;
   let yBot = yTop + tSize.h + spacing;
 
+  // Fit each one independently
   if(task){
-    const s = fitScaleForCenteredRect(xCenter, yTop + tSize.h/2, tSize.w, tSize.h);
+    const cxI = xCenter;
+    const cyI = yTop + tSize.h/2;
+    const s = fitScaleForCenteredRect(cxI, cyI, tSize.w, tSize.h);
     tSize = { w: tSize.w*s, h: tSize.h*s };
   }
   if(reward){
-    const s = fitScaleForCenteredRect(xCenter, yBot + rSize.h/2, rSize.w, rSize.h);
+    const cxI = xCenter;
+    const cyI = yBot + rSize.h/2;
+    const s = fitScaleForCenteredRect(cxI, cyI, rSize.w, rSize.h);
     rSize = { w: rSize.w*s, h: rSize.h*s };
   }
 
+  // Recompute layout with fitted sizes
   const totalH = tSize.h + spacing + rSize.h;
   yTop = cy - totalH/2;
   yBot = yTop + tSize.h + spacing;
@@ -759,6 +766,7 @@ function drawTaskReward(size,cx,cy,outerR){
   if(task) ctx.drawImage(task, tx, ty, tSize.w, tSize.h);
   if(reward) ctx.drawImage(reward, rx, ry, rSize.w, rSize.h);
 
+  // timer-colored border around task
   if(task){
     ctx.save();
     ctx.strokeStyle = timerColor;
@@ -767,6 +775,7 @@ function drawTaskReward(size,cx,cy,outerR){
     ctx.restore();
   }
 
+  // arrow (down)
   if(task && reward){
     const startX = xCenter;
     const startY = ty + tSize.h + Math.min(spacing*0.25, size*0.04);
@@ -810,6 +819,7 @@ function startTimerFromDrag(){
   clearInterval(intervalId);intervalId=setInterval(tick,1000);
   draw();
 }
+/* Start full dial when pressing Démarrer */
 function startTimerAtFullDial(){
   totalSeconds = dialMax * 60;
   remainingSeconds = totalSeconds;
@@ -821,7 +831,7 @@ function startTimerAtFullDial(){
 }
 const pauseTimer=()=>{ paused=!paused; setPauseLabel(paused); };
 
-/* Drag & resize */
+/* Drag & resize for dial */
 function startDrag(e){
   if(!insideDial(e))return;
   clearInterval(intervalId);paused=false;
@@ -834,14 +844,7 @@ function resizeCanvas(){ canvas.width=innerWidth; canvas.height=innerHeight; dra
 
 /* Fullscreen helpers */
 function requestFS(){
-  try{
-    const el = document.documentElement;
-    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
-    if(fn){
-      const p = fn.call(el);
-      if (p && p.catch) p.catch(()=>{});
-    }
-  }catch(_){}
+  (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
 }
 function exitFS(){
   (document.exitFullscreen||document.webkitExitFullscreen)?.call(document);
@@ -902,6 +905,7 @@ document.getElementById('pauseBtn').addEventListener('click',pauseTimer);
 document.getElementById('fsBtn').addEventListener('click',toggleFS);
 document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw();});
 document.getElementById('dialSelect').addEventListener('change',e=>{
+  // Change dial, stop any running timer without beeping
   dialMax=parseInt(e.target.value,10);
   clearInterval(intervalId); intervalId=null;
   remainingSeconds=0; draw();
@@ -936,6 +940,7 @@ if(!isIOS){
   colorPicker.classList.remove('hidden');
   colorPicker.addEventListener('input',e=>{ applyTimerColor(e.target.value); });
 }else{
+  // iOS: hide native input, show proxy & modal
   colorPicker.classList.add('hidden');
   colorProxy.classList.remove('hidden');
   colorProxy.style.background = timerColor;
@@ -1015,7 +1020,11 @@ okColorBtn.addEventListener('click', ()=>{
 /* Image size/count + tint */
 document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); });
 document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); });
-document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{ bgTintEnabled = e.target.checked; draw(); });
+
+document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{
+  bgTintEnabled = e.target.checked;
+  draw();
+});
 
 /* Alarm sound */
 let selectedSound = '1', audioPreview = null;
@@ -1035,7 +1044,7 @@ function playAlarm(){
   }catch(_){}
 }
 
-/* ---------- File Source Handling ---------- */
+/* ---------- File Source Handling (Repo or Upload Fallback) ---------- */
 const supportsDirPicker = 'showDirectoryPicker' in window;
 const setRepoBtn = document.getElementById('setRepoBtn');
 const repoStatus = document.getElementById('repoStatus');
@@ -1050,9 +1059,9 @@ if(!supportsDirPicker){
 }
 
 let repoHandle = null;
-let uploadedFiles = [];
+let uploadedFiles = []; // fallback files [{name, file, url}]
 
-/* IndexedDB */
+/* IndexedDB for repo handle (desktop) */
 const DB_NAME='timer-handles', STORE='handles';
 function withHandleStore(mode, fn){
   return new Promise((res, rej)=>{
@@ -1091,7 +1100,7 @@ function getRepoHandle(){
   });
 }
 
-/* Picker Modal */
+/* ---------- Picker Modal (shared) ---------- */
 const pickerModal = document.getElementById('pickerModal');
 const pickerGrid  = document.getElementById('pickerGrid');
 const pickerTitle = document.getElementById('pickerTitle');
@@ -1102,12 +1111,11 @@ const autoFillBtn = document.getElementById('autoFillBtn');
 const assignBtn = document.getElementById('assignBtn');
 const clearSlotsBtn = document.getElementById('clearSlotsBtn');
 const openManifestBtn = document.getElementById('openManifestBtn');
-const touchModeBtn = document.getElementById('touchModeBtn');
 const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
 
 let lastGridItems = [];
 
-/* Slots drag/drop + touch tap */
+/* Drag & drop inside slots (reorder) */
 let dragFromIdx = null;
 selectedSlots.forEach(slot=>{
   slot.addEventListener('dragstart', e=>{
@@ -1130,13 +1138,6 @@ selectedSlots.forEach(slot=>{
     dragFromIdx=null;
   });
   slot.addEventListener('dragend', ()=>{ dragFromIdx=null; selectedSlots.forEach(s=>s.classList.remove('dragover')); });
-
-  slot.addEventListener('click', ()=>{
-    if(!touchSelectMode) return;
-    const idx = parseInt(slot.dataset.idx,10);
-    setSlotSrc(idx, null);
-    nextFillSlot = idx;
-  });
 });
 function swapSlotImages(a,b){
   const srcA = selectedSlots[a].querySelector('img')?.src || null;
@@ -1159,13 +1160,15 @@ function closePickerModal(){
   ensureReturnToFullscreen();
 }
 
-/* Choose / load repository */
+/* Choose / load repository (desktop) */
 async function chooseRepository(){
   try{
     const handle = await window.showDirectoryPicker();
     repoHandle = handle;
     const lang = getLang();
-    if (repoStatus) repoStatus.textContent = (lang==='fr' ? `Dossier : ${handle.name}` : `Repository: ${handle.name}`);
+    if (repoStatus) {
+      repoStatus.textContent = (lang==='fr' ? `Dossier : ${handle.name}` : `Repository: ${handle.name}`);
+    }
     await saveRepoHandle(handle);
     if (pickerModal.style.display !== 'flex') openPickerModal();
     await populateFromRepo();
@@ -1173,8 +1176,8 @@ async function chooseRepository(){
   }catch(e){ return false; }
 }
 
-/* Upload fallback */
-document.getElementById('uploadInput').addEventListener('change', ()=>{
+/* Upload fallback (iPad) */
+uploadInput.addEventListener('change', ()=>{
   for (const it of uploadedFiles){ if(it.url) URL.revokeObjectURL(it.url); }
   uploadedFiles = [];
   for (const file of Array.from(uploadInput.files||[])){
@@ -1189,7 +1192,7 @@ document.getElementById('uploadInput').addEventListener('change', ()=>{
   populateFromUploads();
 });
 
-/* Iteration */
+/* Iterate image files */
 async function* iterImages(dirHandle){
   for await (const entry of dirHandle.values()){
     if(entry.kind !== 'file') continue;
@@ -1198,7 +1201,7 @@ async function* iterImages(dirHandle){
   }
 }
 
-/* Populate sources */
+/* Populate grid from repo */
 async function populateFromRepo(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
   pickerSub.textContent = repoHandle ? `(${repoHandle.name})` : '';
@@ -1220,7 +1223,6 @@ async function populateFromRepo(){
     card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
     card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
     card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
-    card.addEventListener('click', ()=> handleGridTap(url));
     frag.appendChild(card);
   }
   if(!frag.childNodes.length){
@@ -1229,6 +1231,8 @@ async function populateFromRepo(){
     pickerGrid.appendChild(p);
   }else{ pickerGrid.appendChild(frag); }
 }
+
+/* Populate grid from uploads (iPad) */
 function populateFromUploads(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
   pickerSub.textContent = (getLang()==='fr' ? '(importées)' : '(uploaded)');
@@ -1247,11 +1251,12 @@ function populateFromUploads(){
     card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
     card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', it.url); });
     card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
-    card.addEventListener('click', ()=> handleGridTap(it.url));
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
 }
+
+/* Populate grid from manifest */
 function populateFromManifest(){
   pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
   pickerSub.textContent = (getLang()==='fr' ? '(depuis la bibliothèque)' : '(from manifest)');
@@ -1271,7 +1276,6 @@ function populateFromManifest(){
     card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
     card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
     card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
-    card.addEventListener('click', ()=> handleGridTap(url));
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
@@ -1312,28 +1316,6 @@ function assignFromSlots(){
 /* Clear slots */
 function clearSlots(){ for(let i=0;i<4;i++) setSlotSrc(i, null); }
 
-/* Touch-select mode */
-let touchSelectMode = isIOS;
-let nextFillSlot = 0;
-function getFirstEmptySlot(){
-  for(let i=0;i<4;i++){ if(!selectedSlots[i].querySelector('img')) return i; }
-  return -1;
-}
-function handleGridTap(url){
-  if(!touchSelectMode) return;
-  let idx = getFirstEmptySlot();
-  if(idx === -1){ idx = nextFillSlot; }
-  setSlotSrc(idx, url);
-  nextFillSlot = (idx + 1) % 4;
-}
-function updateTouchModeBtn(){
-  const lang = getLang();
-  const on  = (lang==='fr') ? touchModeBtn.dataset.frOn  : touchModeBtn.dataset.enOn;
-  const off = (lang==='fr') ? touchModeBtn.dataset.frOff : touchModeBtn.dataset.enOff;
-  touchModeBtn.textContent = touchSelectMode ? on : off;
-}
-updateTouchModeBtn();
-
 /* Openers */
 setRepoBtn.addEventListener('click', async ()=>{
   if(supportsDirPicker){
@@ -1365,9 +1347,8 @@ switchSourceBtn.addEventListener('click', async ()=>{
 autoFillBtn.addEventListener('click', autoFillTop4);
 assignBtn.addEventListener('click', assignFromSlots);
 clearSlotsBtn.addEventListener('click', clearSlots);
-touchModeBtn.addEventListener('click', ()=>{ touchSelectMode = !touchSelectMode; updateTouchModeBtn(); });
 
-/* Try restore repo on boot */
+/* Try restore repo on boot (desktop) */
 (async ()=>{
   if (navigator.storage?.persist) { try{ await navigator.storage.persist(); }catch(e){} }
   if(!supportsDirPicker) return;
@@ -1377,80 +1358,20 @@ touchModeBtn.addEventListener('click', ()=>{ touchSelectMode = !touchSelectMode;
     if(perm === 'granted'){
       repoHandle = saved;
       const lang = getLang();
-      if (repoStatus) repoStatus.textContent = (lang==='fr' ? `Dossier : ${repoHandle.name}` : `Repository: ${repoHandle.name}`);
+      if (repoStatus) {
+        repoStatus.textContent = (lang==='fr' ? `Dossier : ${repoHandle.name}` : `Repository: ${repoHandle.name}`);
+      }
     }
   }
 })();
 
-/* ---------- START BUTTON: document-level delegation (iPad-safe) ---------- */
-let started = false;
-
-function startFromOverlay() {
-  if (started) return;
-  started = true;
-
-  // 1) Hide overlay so timer is visible
-  overlay.style.display = 'none';
-
-  // 2) Start timer immediately (keeps user-gesture context alive for audio later)
+/* Boot */
+enterBtn.addEventListener('click',()=>{
+  if(!document.fullscreenElement){ requestFS(); }
+  overlay.style.display='none';
   resizeCanvas();
   startTimerAtFullDial();
-
-  // 3) Try fullscreen after; never block start
-  setTimeout(() => {
-    try {
-      const el = document.documentElement;
-      const fn = el.requestFullscreen || el.webkitRequestFullscreen;
-      if (fn) {
-        const p = fn.call(el);
-        if (p && p.catch) p.catch(()=>{});
-      }
-    } catch (_) {}
-  }, 0);
-}
-
-/* Delegate to document so it survives translation scripts replacing the button */
-function isStartBtnTarget(t){
-  // matches the current or any future translated start button
-  return !!(t && (t.id === 'enterBtn' || t.closest && t.closest('#enterBtn')));
-}
-
-document.addEventListener('click', function(e){
-  if (isStartBtnTarget(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-    startFromOverlay();
-  }
-}, {capture:true, passive:false});
-
-document.addEventListener('pointerdown', function(e){
-  if (isStartBtnTarget(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-    startFromOverlay();
-  }
-}, {capture:true, passive:false});
-
-document.addEventListener('touchstart', function(e){
-  if (isStartBtnTarget(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-    startFromOverlay();
-  }
-}, {capture:true, passive:false});
-
-document.addEventListener('keydown', function(e){
-  if (!started && (e.key === 'Enter' || e.key === ' ')) {
-    const active = document.activeElement;
-    if (isStartBtnTarget(active)) {
-      e.preventDefault();
-      e.stopPropagation();
-      startFromOverlay();
-    }
-  }
-}, {capture:true});
-
-/* Canvas interactions */
+});
 canvas.addEventListener('mousedown',startDrag);
 canvas.addEventListener('touchstart',startDrag,{passive:false});
 window.addEventListener('mousemove',dragMove,{passive:false});
@@ -1466,12 +1387,14 @@ requestAnimationFrame(rafLoop);
 /* Defaults */
 dialMax = 60;
 remainingSeconds = 0;
-setPauseLabel(false);
+setPauseLabel(false); // initialize Pause/Resume
+// Seed swatch visuals
 document.getElementById('colorProxy').style.background = timerColor;
 document.getElementById('colorPicker').value = timerColor;
 resizeCanvas();
 </script>
 
+<!-- Translation Script for Static Elements -->
 <script src="../../js/translationonly.js"></script>
 </body>
 </html>
