@@ -1382,21 +1382,21 @@ touchModeBtn.addEventListener('click', ()=>{ touchSelectMode = !touchSelectMode;
   }
 })();
 
-/* ---------- START BUTTON: robust for iPad ---------- */
+/* ---------- START BUTTON: document-level delegation (iPad-safe) ---------- */
 let started = false;
 
 function startFromOverlay() {
   if (started) return;
   started = true;
 
-  // 1) Hide overlay immediately so the timer is visible no matter what
+  // 1) Hide overlay so timer is visible
   overlay.style.display = 'none';
 
-  // 2) Start timer & draw right away
+  // 2) Start timer immediately (keeps user-gesture context alive for audio later)
   resizeCanvas();
   startTimerAtFullDial();
 
-  // 3) Try fullscreen after a tick so it can't block the above
+  // 3) Try fullscreen after; never block start
   setTimeout(() => {
     try {
       const el = document.documentElement;
@@ -1409,15 +1409,46 @@ function startFromOverlay() {
   }, 0);
 }
 
-// Fire on multiple input types (some iOS builds miss click/touchend)
-const startOpts = { once: true, passive: false };
-enterBtn.addEventListener('click',      (e)=>{ e.preventDefault(); startFromOverlay(); }, startOpts);
-enterBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); startFromOverlay(); }, startOpts);
-enterBtn.addEventListener('pointerdown',(e)=>{ e.preventDefault(); startFromOverlay(); }, startOpts);
-enterBtn.addEventListener('keydown',    (e)=>{
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startFromOverlay(); }
-}, startOpts);
+/* Delegate to document so it survives translation scripts replacing the button */
+function isStartBtnTarget(t){
+  // matches the current or any future translated start button
+  return !!(t && (t.id === 'enterBtn' || t.closest && t.closest('#enterBtn')));
+}
 
+document.addEventListener('click', function(e){
+  if (isStartBtnTarget(e.target)) {
+    e.preventDefault();
+    e.stopPropagation();
+    startFromOverlay();
+  }
+}, {capture:true, passive:false});
+
+document.addEventListener('pointerdown', function(e){
+  if (isStartBtnTarget(e.target)) {
+    e.preventDefault();
+    e.stopPropagation();
+    startFromOverlay();
+  }
+}, {capture:true, passive:false});
+
+document.addEventListener('touchstart', function(e){
+  if (isStartBtnTarget(e.target)) {
+    e.preventDefault();
+    e.stopPropagation();
+    startFromOverlay();
+  }
+}, {capture:true, passive:false});
+
+document.addEventListener('keydown', function(e){
+  if (!started && (e.key === 'Enter' || e.key === ' ')) {
+    const active = document.activeElement;
+    if (isStartBtnTarget(active)) {
+      e.preventDefault();
+      e.stopPropagation();
+      startFromOverlay();
+    }
+  }
+}, {capture:true});
 
 /* Canvas interactions */
 canvas.addEventListener('mousedown',startDrag);
