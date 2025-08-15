@@ -32,9 +32,9 @@ function preloadVideos(zoneEffects, onComplete) {
                 onComplete(); // Callback to enable game start when all videos are loaded
                 
                 setTimeout(() => {
-                    loadingBarContainer.style.display = 'none'; // Hide the loading bar
-                    const startButton = document.getElementById('control-panel-start-button');
-                    startButton.style.display = 'block'; // Show the start button
+                      loadingBarContainer.style.display = 'none'; // Hide the loading bar
+                      const startButton = document.getElementById('startButton');
+                      startButton.style.display = 'block'; // Show the start button
                 }, 500); // Brief delay to smooth the transition
             }
         });
@@ -54,13 +54,14 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
 
     // Elements
     const dwellTimeInput = document.querySelector(dwellTimeInputSelector);
-    const startButton = document.getElementById('control-panel-start-button');
+    const startButton = document.getElementById('startButton');
     const hoverCircle = document.getElementById('hover-circle');
     const mapContainer = document.getElementById('map-container');
     const overlay = document.getElementById('overlay');
     const videoContainer = document.getElementById('video-container');
     const endVideo = document.getElementById('end-video');
     const videoSource = document.getElementById('video-source');
+    const icon = document.getElementById('settings-icon');
 
     // Initially hide the start button until videos are preloaded
     startButton.style.display = 'none';
@@ -82,14 +83,15 @@ function setupInteractiveMapGame({ dwellTimeInputSelector, zoneEffects }) {
         }
 
         console.log("Game starting...");
-        document.getElementById('control-panel').style.display = 'none';
+        document.getElementById('promptOverlay').remove();
         mapContainer.style.display = 'block';
-        
+        if (icon) icon.style.display = 'flex';
+
         // Ensure the map is resized and interactive
         imageMapResize(); // Initialize the image map resizer
-        
+
         // Additional logging to confirm visibility changes
-        console.log("Control panel hidden, map container visible.");
+        console.log("Prompt overlay removed, map container visible.");
     });
 
     // Hover effect handling

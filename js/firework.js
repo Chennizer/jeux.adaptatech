@@ -11,9 +11,12 @@ function startFeuArtificeGame() {
     const initialCirclesInput = document.getElementById('initial-circles-input');
     let initialCircleCount = parseInt(initialCirclesInput.value);
 
-    // Hide control panel and show the game
-    document.getElementById('control-panel').style.display = 'none';
+    // Hide the prompt overlay and show the game
+    const overlay = document.getElementById('promptOverlay');
+    if (overlay) overlay.remove();
     document.body.classList.add('hide-cursor'); // Hide the cursor
+    const icon = document.getElementById('settings-icon');
+    if (icon) icon.style.display = 'flex';
     isPlaying = true;
 
     // Spawn the initial circles
@@ -108,7 +111,7 @@ function createTrailCircle() {
 
 // Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('#control-panel-start-button');
+    const startButton = document.querySelector('#startButton');
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
     }
