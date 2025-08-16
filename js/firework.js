@@ -3,28 +3,22 @@ function startFeuArtificeGame() {
     let mouseY = window.innerHeight / 2;
     let isPlaying = false;
 
-    // Get the user-specified interval
     const intervalInput = document.getElementById('interval-input');
-    let interval = parseInt(intervalInput.value) * 1000; // Convert seconds to milliseconds
+    let interval = parseInt(intervalInput.value) * 1000;
 
-    // Get the user-specified initial circle count
     const initialCirclesInput = document.getElementById('initial-circles-input');
     let initialCircleCount = parseInt(initialCirclesInput.value);
 
-    // Hide control panel and show the game
-    document.getElementById('control-panel').style.display = 'none';
-    document.body.classList.add('hide-cursor'); // Hide the cursor
+    eyegazeSettings.hideOverlay();
+    document.body.classList.add('hide-cursor');
     isPlaying = true;
 
-    // Spawn the initial circles
     for (let i = 0; i < initialCircleCount; i++) {
         createTrailCircle();
     }
 
-    // Start the game logic with the specified interval
     setInterval(createTrailCircle, interval);
 
-    // Request animation frame loop for continuous trail generation
     function generateTrail() {
         if (isPlaying) {
             createTrail(mouseX, mouseY);
@@ -33,7 +27,6 @@ function startFeuArtificeGame() {
     }
     requestAnimationFrame(generateTrail);
 
-    // Track mouse movement to update position
     document.addEventListener('mousemove', (e) => {
         mouseX = e.clientX;
         mouseY = e.clientY;
@@ -46,13 +39,13 @@ function createExplosion(x, y) {
     explosion.style.left = `${x}px`;
     explosion.style.top = `${y}px`;
 
-    for (let i = 0; i < 50; i++) { // Increase the number of particles
+    for (let i = 0; i < 50; i++) {
         const particle = document.createElement('div');
         particle.classList.add('particle');
         particle.style.backgroundColor = getRandomColor();
 
         const angle = Math.random() * 360;
-        const distance = Math.random() * 300 + 100; // Farther distance
+        const distance = Math.random() * 300 + 100;
         particle.style.setProperty('--x', `${Math.cos(angle) * distance}px`);
         particle.style.setProperty('--y', `${Math.sin(angle) * distance}px`);
 
@@ -68,6 +61,7 @@ function createExplosion(x, y) {
 
 function playExplosionSound() {
     const explosionSound = document.getElementById('explosionSound');
+    explosionSound.volume = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
     explosionSound.currentTime = 0;
     explosionSound.play();
 }
@@ -75,8 +69,8 @@ function playExplosionSound() {
 function createTrail(x, y) {
     const trail = document.createElement('div');
     trail.classList.add('trail');
-    trail.style.left = `${x - 10}px`; // Center the trail
-    trail.style.top = `${y - 10}px`; // Center the trail
+    trail.style.left = `${x - 10}px`;
+    trail.style.top = `${y - 10}px`;
 
     document.body.appendChild(trail);
 
@@ -106,9 +100,27 @@ function createTrailCircle() {
     });
 }
 
-// Initialize the Feu d'artifice game if the start button is present
 document.addEventListener('DOMContentLoaded', () => {
-    const startButton = document.querySelector('#control-panel-start-button');
+    const startButton = document.querySelector('#startButton');
+    const intervalInput = document.getElementById('interval-input');
+    const intervalVal = document.getElementById('intervalVal');
+    const initialCirclesInput = document.getElementById('initial-circles-input');
+    const initialCirclesVal = document.getElementById('initialCirclesVal');
+
+    if (intervalInput && intervalVal) {
+        intervalVal.textContent = intervalInput.value;
+        intervalInput.addEventListener('input', () => {
+            intervalVal.textContent = intervalInput.value;
+        });
+    }
+
+    if (initialCirclesInput && initialCirclesVal) {
+        initialCirclesVal.textContent = initialCirclesInput.value;
+        initialCirclesInput.addEventListener('input', () => {
+            initialCirclesVal.textContent = initialCirclesInput.value;
+        });
+    }
+
     if (startButton) {
         startButton.addEventListener('click', startFeuArtificeGame);
     }
