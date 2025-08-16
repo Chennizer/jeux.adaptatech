@@ -13,7 +13,7 @@
   /* Overlay + canvas */
   #overlay{
     position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-    background:#fff;z-index:9999; /* high so it's always tappable */
+    background:#fff;z-index:9999;
     pointer-events:auto;
     -webkit-user-select:none; user-select:none;
     -webkit-touch-callout:none;
@@ -125,7 +125,7 @@
   .slot[data-idx="2"]{border-color:#4cd964;}
   .slot[data-idx="3"]{border-color:#66a5ff;}
   .slot.dragover{outline:2px solid #00bfff; outline-offset:2px;}
-  .slot.active{outline:2px solid #00bfff; outline-offset:2px;} /* current slot highlight */
+  .slot.active{outline:2px solid #00bfff; outline-offset:2px;}
 
   .modal footer{padding:.6rem .8rem;border-top:1px solid #222;display:flex;gap:.5rem;justify-content:flex-end;}
   .hidden{display:none !important;}
@@ -214,7 +214,7 @@
 
     <div class="formline">
       <span data-fr="Taille des images" data-en="Image size">Taille des images</span>
-      <input type="range" id="imgSizeRange" min="0.16" max="0.48" step="0.01" value="0.22">
+      <input type="range" id="imgSizeRange" min="0.16" max="0.6" step="0.01" value="0.22">
     </div>
 
     <div class="formline">
@@ -240,9 +240,8 @@
     </div>
   </div>
 
-  <!-- Hidden upload fallbacks -->
-  <input id="uploadInput" type="file" accept="image/*" multiple style="display:none;" /> <!-- existing fallback -->
-  <!-- New: separate iPad sources -->
+  <!-- Hidden upload fallbacks (used on iPad only) -->
+  <input id="uploadInput" type="file" accept="image/*" multiple style="display:none;" />
   <input id="uploadLibraryInput" type="file" accept="image/*" multiple style="display:none;" />
   <input id="uploadPhotoInput" type="file" accept="image/*" capture="environment" style="display:none;" />
 
@@ -259,6 +258,7 @@
             title="Fill slots 1–4"
             data-fr="Remplir 1–4" data-en="Auto-fill 1–4">Remplir 1–4</button>
 
+          <!-- These two buttons will be hidden on desktop/Android -->
           <button id="pickLibraryBtn" class="btn secondary"
             data-fr="📚 Photothèque" data-en="📚 Library">📚 Photothèque</button>
 
@@ -343,7 +343,7 @@ const IDLE_CLOSE_MS = 10000;      // auto-close panels after 10s idle
 const MIN_STACKED_FIT = 0.55;     // desktop minimum column fit
 const STACK_V_MARGIN = 0.06;      // top/bottom breathing space for stacked column
 
-// Pulse: active image subtle breathing (radial/stacked only)
+// Pulse
 const PULSE_PERIOD = 1800;        // ms
 const PULSE_AMPLITUDE = 0.04;     // +/- 4%
 
@@ -351,15 +351,15 @@ const PULSE_AMPLITUDE = 0.04;     // +/- 4%
 const RADIAL_RADIUS_OFFSET_4 = 0.12;
 const RADIAL_RADIUS_OFFSET_2 = 0.06; // 2-image: closer to center
 
-// Task→Reward spacing multiplier (relative to stacked spacing)
-const TASKREWARD_SPACING_MULT = 3.5; // farther apart
+// Task→Reward spacing multiplier
+const TASKREWARD_SPACING_MULT = 3.5;
 
 /* ===========================================================
-   LAYOUT (size slider only)
+   LAYOUT (image size etc.)
    =========================================================== */
 const LAYOUT = {
-  imgBase: 0.30,
-  activeScale: 1.33, // ~+33%
+  imgBase: 0.30,     // bumped only on iPad at runtime
+  activeScale: 1.33,
   radial: { radiusOffset: RADIAL_RADIUS_OFFSET_4 },
   stacked:{ spacing: 0.025, marginLeft: 0.06 }
 };
@@ -371,7 +371,49 @@ const LAYOUT = {
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-/* ---------- tiny helper: single 'tap' without double-firing ---------- */
+/* If not iPad/iOS, hide iPad-only buttons to keep desktop unchanged */
+if(!isIOS){
+  document.addEventListener('DOMContentLoaded', ()=>{
+    document.getElementById('pickLibraryBtn')?.classList.add('hidden');
+    document.getElementById('pickPhotoBtn')?.classList.add('hidden');
+  });
+}
+
+/* ---------- fullscreen resilience helpers (iPad only) ---------- */
+function requestFS(){
+  (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
+}
+function exitFS(){
+  (document.exitFullscreen||document.webkitExitFullscreen)?.call(document);
+}
+function ensureReturnToFullscreen(){
+  if(!isIOS) return;                             // iPad-only
+  if(overlay.style.display!=='none') return;     // only after user started
+  if(!document.fullscreenElement){
+    try{ requestFS(); }catch(_){}
+  }
+  setTimeout(resizeCanvas,120);
+}
+// Lightly schedule a re-check (used after UI actions that often break FS)
+function tryKeepFullscreen(delay=350){
+  if(!isIOS) return;                             // iPad-only
+  setTimeout(ensureReturnToFullscreen, delay);
+}
+
+/* ---------- i18n helpers ---------- */
+function getLang(){
+  const l = document.documentElement.getAttribute('lang') || 'fr';
+  return l.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+}
+function setPauseLabel(paused){
+  const btn = document.getElementById('pauseBtn');
+  const lang = getLang();
+  const label = paused ? (lang==='fr' ? btn.dataset.frResume : btn.dataset.enResume)
+                       : (lang==='fr' ? btn.dataset.frPause  : btn.dataset.enPause);
+  btn.textContent = label || (paused ? 'Resume' : 'Pause');
+}
+
+/* ---------- simple single-tap helper ---------- */
 const supportsPointer = 'onpointerup' in window;
 function addTap(el, handler){
   if(supportsPointer){
@@ -386,19 +428,6 @@ function addTap(el, handler){
       handler(e);
     }, {passive:false});
   }
-}
-
-/* ---------- i18n helpers ---------- */
-function getLang(){
-  const l = document.documentElement.getAttribute('lang') || 'fr';
-  return l.toLowerCase().startsWith('fr') ? 'fr' : 'en';
-}
-function setPauseLabel(paused){
-  const btn = document.getElementById('pauseBtn');
-  const lang = getLang();
-  const label = paused ? (lang==='fr' ? btn.dataset.frResume : btn.dataset.enResume)
-                       : (lang==='fr' ? btn.dataset.frPause  : btn.dataset.enPause);
-  btn.textContent = label || (paused ? 'Resume' : 'Pause');
 }
 
 /* ---------- Canvas & state ---------- */
@@ -479,7 +508,7 @@ function getCenter(size){
   return { cx: baseCx, cy };
 }
 
-/* --- Auto-fit utility (for radial & taskreward) --- */
+/* --- Auto-fit utility --- */
 function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
   const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
@@ -488,7 +517,7 @@ function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   return (isFinite(s) && s>0) ? s : 1;
 }
 
-/* Drag helpers for dial (uses shifted center) */
+/* Drag helpers for dial */
 function getSecondsFromEvent(e){
   const r=canvas.getBoundingClientRect(),
         x=(e.touches?e.touches[0].clientX:e.clientX)-r.left,
@@ -573,7 +602,6 @@ function draw(){
     };
 
     if(N===2){
-      // Left (blue), Right (red)
       fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));
       fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));
     }else{
@@ -674,11 +702,9 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
       dy = (i===0 || i===3) ? vTopPx : vBotPx;
     }
 
-    // Center of this image
     const cxI = cx + Math.cos(ang)*imgR + dx;
     const cyI = cy + Math.sin(ang)*imgR + dy;
 
-    // Auto-fit to canvas if needed
     const fitS = fitScaleForCenteredRect(cxI, cyI, w, h);
     w *= fitS; h *= fitS;
 
@@ -704,7 +730,6 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const N = IMG_COUNT;
   const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
 
-  // 1) measure base (no pulse) dims per image
   const baseDims = Array.from({length:N}, (_,i)=>{
     const im = imgs[i];
     if(!im) return {w:basePx, h:basePx, has:false};
@@ -713,18 +738,15 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
     return {w:d.w, h:d.h, has:true, im};
   });
 
-  // 2) compute a single uniform scale to keep full column onscreen
   const sumH   = baseDims.reduce((a,d)=>a+(d.h||basePx), 0);
   const availH = canvas.height - 2*(size*STACK_V_MARGIN);
   let g = Math.min(1, (availH - spacing*(N-1)) / Math.max(1, sumH));
   if(!isFinite(g) || g <= 0) g = 1;
-  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT); // desktop: never too tiny
+  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT); // desktop safeguard unchanged
 
-  // 3) reserve vertical height and center the whole column
   let totalH = baseDims.reduce((a,d)=>a + d.h*g, 0) + spacing*(N-1);
   let y = cy - totalH/2;
 
-  // 4) draw items; pulse animates inside their reserved lanes
   for(let i=0;i<N;i++){
     const d = baseDims[i];
     const isActive = (i===active);
@@ -770,7 +792,6 @@ function drawTaskReward(size,cx,cy,outerR){
   let yTop = cy - totalH0/2;
   let yBot = yTop + tSize.h + spacing;
 
-  // Fit each one independently
   if(task){
     const cxI = xCenter;
     const cyI = yTop + tSize.h/2;
@@ -784,7 +805,6 @@ function drawTaskReward(size,cx,cy,outerR){
     rSize = { w: rSize.w*s, h: rSize.h*s };
   }
 
-  // Recompute layout with fitted sizes
   const totalH = tSize.h + spacing + rSize.h;
   yTop = cy - totalH/2;
   yBot = yTop + tSize.h + spacing;
@@ -797,7 +817,6 @@ function drawTaskReward(size,cx,cy,outerR){
   if(task) ctx.drawImage(task, tx, ty, tSize.w, tSize.h);
   if(reward) ctx.drawImage(reward, rx, ry, rSize.w, rSize.h);
 
-  // timer-colored border around task
   if(task){
     ctx.save();
     ctx.strokeStyle = timerColor;
@@ -806,7 +825,6 @@ function drawTaskReward(size,cx,cy,outerR){
     ctx.restore();
   }
 
-  // arrow (down)
   if(task && reward){
     const startX = xCenter;
     const startY = ty + tSize.h + Math.min(spacing*0.25, size*0.04);
@@ -850,7 +868,6 @@ function startTimerFromDrag(){
   clearInterval(intervalId);intervalId=setInterval(tick,1000);
   draw();
 }
-/* Start full dial when pressing Démarrer */
 function startTimerAtFullDial(){
   totalSeconds = dialMax * 60;
   remainingSeconds = totalSeconds;
@@ -872,25 +889,6 @@ function startDrag(e){
 const dragMove=e=>{ if(!dragging)return; e.preventDefault(); updateDrag(e); };
 const endDrag=()=>{ if(!dragging)return; dragging=false; startTimerFromDrag(); };
 function resizeCanvas(){ canvas.width=innerWidth; canvas.height=innerHeight; draw(); }
-
-/* Fullscreen helpers */
-function requestFS(){
-  (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
-}
-function exitFS(){
-  (document.exitFullscreen||document.webkitExitFullscreen)?.call(document);
-}
-function ensureReturnToFullscreen(){
-  if(overlay.style.display==='none' && !document.fullscreenElement){
-    requestFS();
-    setTimeout(resizeCanvas,120);
-  }
-}
-function toggleFS(){
-  if(!document.fullscreenElement){ requestFS(); }
-  else{ exitFS(); }
-  setTimeout(resizeCanvas,120);
-}
 
 /* Panel toggles + auto-close on idle */
 const menuBtn=document.getElementById('menuBtn'),menu=document.querySelector('.controls');
@@ -918,6 +916,7 @@ addTap(menuBtn, (e)=>{
   menu.classList.toggle('show');
   specialMenu.classList.remove('show'); stopIdle('special');
   if(open) startIdle('menu'); else stopIdle('menu');
+  tryKeepFullscreen(300); // iPad only
 });
 addTap(specialBtn, (e)=>{
   e.stopPropagation();
@@ -925,6 +924,7 @@ addTap(specialBtn, (e)=>{
   specialMenu.classList.toggle('show');
   menu.classList.remove('show'); stopIdle('menu');
   if(open) startIdle('special'); else stopIdle('special');
+  tryKeepFullscreen(300); // iPad only
 });
 document.addEventListener('click',e=>{
   if(!menu.contains(e.target)&&!menuBtn.contains(e.target)){ menu.classList.remove('show'); stopIdle('menu'); }
@@ -932,15 +932,16 @@ document.addEventListener('click',e=>{
 });
 
 /* Inputs */
-document.getElementById('pauseBtn').addEventListener('click',pauseTimer);
-document.getElementById('fsBtn').addEventListener('click',toggleFS);
-document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw();});
+document.getElementById('pauseBtn').addEventListener('click',()=>{ pauseTimer(); tryKeepFullscreen(200); });
+document.getElementById('fsBtn').addEventListener('click',()=>{ if(!document.fullscreenElement){ requestFS(); }else{ exitFS(); } setTimeout(resizeCanvas,120); });
+
+document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw(); tryKeepFullscreen(200);});
 document.getElementById('dialSelect').addEventListener('change',e=>{
-  // Change dial, stop any running timer without beeping
   dialMax=parseInt(e.target.value,10);
   clearInterval(intervalId); intervalId=null;
   remainingSeconds=0; draw();
   setPauseLabel(false);
+  tryKeepFullscreen(200);
 });
 
 /* Special mode */
@@ -952,6 +953,7 @@ specialModeSelect.addEventListener('change',e=>{
   } else {
     draw();
   }
+  tryKeepFullscreen(200);
 });
 
 /* Color handling (desktop + iOS fallback) */
@@ -971,11 +973,11 @@ if(!isIOS){
   colorPicker.classList.remove('hidden');
   colorPicker.addEventListener('input',e=>{ applyTimerColor(e.target.value); });
 }else{
-  // iOS: hide native input, show proxy & modal
+  // iPad: hide native input, use mini modal
   colorPicker.classList.add('hidden');
   colorProxy.classList.remove('hidden');
   colorProxy.style.background = timerColor;
-  addTap(colorProxy, openColorModal);
+  addTap(colorProxy, ()=>{ openColorModal(); tryKeepFullscreen(200); });
 }
 
 /* Simple color modal logic (iOS) */
@@ -1048,12 +1050,14 @@ okColorBtn.addEventListener('click', ()=>{
 });
 
 /* Image size/count + tint */
-document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); });
-document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); });
+const imgSizeRange = document.getElementById('imgSizeRange');
+document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); tryKeepFullscreen(150); });
+document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); tryKeepFullscreen(150); });
 
 document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{
   bgTintEnabled = e.target.checked;
   draw();
+  tryKeepFullscreen(150);
 });
 
 /* Alarm sound */
@@ -1066,6 +1070,7 @@ document.getElementById('alarmSelect').addEventListener('change',(e)=>{
     const a = new Audio(soundPath(selectedSound));
     audioPreview = a; a.volume=1; a.play().catch(()=>{});
   }catch(_){}
+  tryKeepFullscreen(300);
 });
 function playAlarm(){
   try{
@@ -1074,14 +1079,13 @@ function playAlarm(){
   }catch(_){}
 }
 
-/* ---------- File Source Handling (Repo or Upload Fallback) ---------- */
+/* ---------- File Source Handling ---------- */
 const supportsDirPicker = 'showDirectoryPicker' in window;
 const setRepoBtn = document.getElementById('setRepoBtn');
 const repoStatus = document.getElementById('repoStatus');
 const repoLabel  = document.getElementById('repoLabel');
 const uploadInput = document.getElementById('uploadInput');
 
-/* Keep old fallback text if no directory picker (mostly iPad) */
 if(!supportsDirPicker){
   const lang = getLang();
   setRepoBtn.textContent = (lang==='fr' ? '⬆️ Importer des images' : '⬆️ Upload images');
@@ -1091,7 +1095,7 @@ if(!supportsDirPicker){
 
 let repoHandle = null;
 
-/* IndexedDB for repo handle (desktop) */
+/* IndexedDB for repo handle (desktop keeps original behavior) */
 const DB_NAME='timer-handles', STORE='handles';
 function withHandleStore(mode, fn){
   return new Promise((res, rej)=>{
@@ -1143,16 +1147,14 @@ const clearSlotsBtn = document.getElementById('clearSlotsBtn');
 const openManifestBtn = document.getElementById('openManifestBtn');
 const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
 
-/* New modal source buttons */
 const pickLibraryBtn = document.getElementById('pickLibraryBtn');
 const pickPhotoBtn   = document.getElementById('pickPhotoBtn');
 const uploadLibraryInput = document.getElementById('uploadLibraryInput');
 const uploadPhotoInput   = document.getElementById('uploadPhotoInput');
 
-/* All items currently shown in the grid (URLs are unique keys) */
 let gridItems = []; // [{name, url, file?}]
 
-/* ===== iPad selection cursor & helpers ===== */
+/* iPad slot cursor */
 let nextSlot = 0;
 function setCurrentSlot(i){
   nextSlot = ((i % 4) + 4) % 4;
@@ -1167,10 +1169,10 @@ function setSlotSrc(idx, src){
 }
 function placeInNextSlot(url){
   setSlotSrc(nextSlot, url);
-  setCurrentSlot(nextSlot + 1); // auto-advance & wrap
+  setCurrentSlot(nextSlot + 1);
 }
 
-/* Drag & drop inside slots (reorder) – desktop/Android only */
+/* Drag & drop inside slots (desktop unchanged) */
 if(!isIOS){
   let dragFromIdx = null;
   selectedSlots.forEach(slot=>{
@@ -1191,35 +1193,33 @@ if(!isIOS){
 
       const fromStr = e.dataTransfer.getData('text/x-slot');
       const fromIdx = fromStr ? parseInt(fromStr,10) : dragFromIdx;
-      if(Number.isInteger(fromIdx) && fromIdx!==toIdx){ swapSlotImages(fromIdx, toIdx); }
+      if(Number.isInteger(fromIdx) && fromIdx!==toIdx){
+        const srcA = selectedSlots[fromIdx].querySelector('img')?.src || null;
+        const srcB = selectedSlots[toIdx].querySelector('img')?.src || null;
+        setSlotSrc(fromIdx, srcB); setSlotSrc(toIdx, srcA);
+      }
       dragFromIdx=null;
     });
     slot.addEventListener('dragend', ()=>{ dragFromIdx=null; selectedSlots.forEach(s=>s.classList.remove('dragover')); });
   });
-  function swapSlotImages(a,b){
-    const srcA = selectedSlots[a].querySelector('img')?.src || null;
-    const srcB = selectedSlots[b].querySelector('img')?.src || null;
-    setSlotSrc(a, srcB); setSlotSrc(b, srcA);
-  }
 }else{
-  // iPad: tap a slot to focus it (for corrections)
+  // iPad: tap to choose slot
   selectedSlots.forEach((slot)=>{
-    addTap(slot, ()=>{ setCurrentSlot(parseInt(slot.dataset.idx,10)); });
+    addTap(slot, ()=>{ setCurrentSlot(parseInt(slot.dataset.idx,10)); tryKeepFullscreen(200); });
   });
 }
 
 /* Modal helpers */
-function openPickerModal(){ pickerModal.style.display='flex'; }
+function openPickerModal(){ pickerModal.style.display='flex'; tryKeepFullscreen(200); }
 function closePickerModal(){
   pickerModal.style.display='none';
   pickerGrid.innerHTML='';
-  // Revoke any blob URLs we created
   for(const it of gridItems){ if(it.file && it.url) try{ URL.revokeObjectURL(it.url); }catch(_){} }
   gridItems = [];
   ensureReturnToFullscreen();
 }
 
-/* Choose / load repository (desktop) */
+/* Choose repo (desktop behavior maintained) */
 async function chooseRepository(){
   try{
     const handle = await window.showDirectoryPicker();
@@ -1235,9 +1235,8 @@ async function chooseRepository(){
   }catch(e){ return false; }
 }
 
-/* Old general upload fallback (kept as-is) */
+/* Old general upload fallback (mobile) */
 uploadInput.addEventListener('change', ()=>{
-  // Clear and replace grid with these uploads
   pickerGrid.innerHTML=''; gridItems = [];
   appendFilesToGrid(uploadInput.files);
   const lang = getLang();
@@ -1246,9 +1245,10 @@ uploadInput.addEventListener('change', ()=>{
   pickerSub.textContent = (lang==='fr' ? '(importées)' : '(uploaded)') + (isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '');
   switchSourceBtn.classList.remove('hidden');
   setCurrentSlot(0);
+  tryKeepFullscreen(400);
 });
 
-/* New: append uploaded files (library/camera) ADDITIVELY */
+/* Add files ADDITIVELY to grid */
 function appendFilesToGrid(fileList){
   if(!fileList || !fileList.length) return;
   const frag = document.createDocumentFragment();
@@ -1256,7 +1256,6 @@ function appendFilesToGrid(fileList){
   for (const file of Array.from(fileList)){
     if(!file.type.startsWith('image/')) continue;
     const url = URL.createObjectURL(file);
-    // de-dupe by URL (simple)
     gridItems.push({ name:file.name, file, url });
 
     const card = document.createElement('div');
@@ -1269,42 +1268,30 @@ function appendFilesToGrid(fileList){
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      addTap(card, ()=>{ placeInNextSlot(url); });
+      addTap(card, ()=>{ placeInNextSlot(url); tryKeepFullscreen(250); });
     }
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
 }
 
-/* iPad modal buttons */
-addTap(pickLibraryBtn, ()=>{
-  uploadLibraryInput.value = ''; // reset so same file can be chosen twice
-  uploadLibraryInput.click();
-});
-uploadLibraryInput.addEventListener('change', ()=>{
-  appendFilesToGrid(uploadLibraryInput.files);
-  setCurrentSlot(nextSlot); // keep cursor position
-});
+/* iPad modal buttons (hidden on desktop) */
+addTap(pickLibraryBtn, ()=>{ if(!isIOS) return; uploadLibraryInput.value = ''; uploadLibraryInput.click(); tryKeepFullscreen(200); });
+uploadLibraryInput.addEventListener('change', ()=>{ if(!isIOS) return; appendFilesToGrid(uploadLibraryInput.files); setCurrentSlot(nextSlot); tryKeepFullscreen(400); });
 
-addTap(pickPhotoBtn, ()=>{
-  uploadPhotoInput.value = '';
-  uploadPhotoInput.click();
-});
-uploadPhotoInput.addEventListener('change', ()=>{
-  appendFilesToGrid(uploadPhotoInput.files);
-  setCurrentSlot(nextSlot);
-});
+addTap(pickPhotoBtn, ()=>{ if(!isIOS) return; uploadPhotoInput.value = ''; uploadPhotoInput.click(); tryKeepFullscreen(200); });
+uploadPhotoInput.addEventListener('change', ()=>{ if(!isIOS) return; appendFilesToGrid(uploadPhotoInput.files); setCurrentSlot(nextSlot); tryKeepFullscreen(400); });
 
 /* Iterate image files */
 async function* iterImages(dirHandle){
   for await (const entry of dirHandle.values()){
     if(entry.kind !== 'file') continue;
-    if(!/\\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(entry.name)) continue;
+    if(!/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(entry.name)) continue;
     yield entry;
   }
 }
 
-/* Populate grid from repo (REPLACES list) */
+/* Populate grid from repo */
 async function populateFromRepo(){
   const lang = getLang();
   pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des images' : 'Select images');
@@ -1333,7 +1320,7 @@ async function populateFromRepo(){
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      addTap(card, ()=>{ placeInNextSlot(url); });
+      addTap(card, ()=>{ placeInNextSlot(url); tryKeepFullscreen(250); });
     }
     frag.appendChild(card);
   }
@@ -1343,11 +1330,11 @@ async function populateFromRepo(){
     pickerGrid.appendChild(p);
   }else{ pickerGrid.appendChild(frag); }
 
-  // Start at slot 1 on open
   setCurrentSlot(0);
+  tryKeepFullscreen(300);
 }
 
-/* Populate grid from manifest (REPLACES list) */
+/* Populate grid from manifest */
 function populateFromManifest(){
   const lang = getLang();
   pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des images' : 'Select images');
@@ -1373,13 +1360,14 @@ function populateFromManifest(){
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      addTap(card, ()=>{ placeInNextSlot(url); });
+      addTap(card, ()=>{ placeInNextSlot(url); tryKeepFullscreen(250); });
     }
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
 
   setCurrentSlot(0);
+  tryKeepFullscreen(300);
 }
 
 /* Auto-fill top 4 */
@@ -1387,6 +1375,7 @@ function autoFillTop4(){
   const top4 = gridItems.slice(0,4);
   for(let i=0;i<4;i++){ setSlotSrc(i, top4[i]?.url || null); }
   setCurrentSlot(0);
+  tryKeepFullscreen(200);
 }
 
 /* Prefer radial when images chosen */
@@ -1422,6 +1411,7 @@ function assignFromSlots(){
 function clearSlots(){
   for(let i=0;i<4;i++) setSlotSrc(i, null);
   setCurrentSlot(0);
+  tryKeepFullscreen(150);
 }
 
 /* Openers */
@@ -1436,6 +1426,7 @@ setRepoBtn.addEventListener('click', async ()=>{
   }else{
     uploadInput.click();
   }
+  tryKeepFullscreen(300);
 });
 addTap(openManifestBtn, ()=>{ openPickerModal(); populateFromManifest(); });
 
@@ -1451,12 +1442,13 @@ addTap(switchSourceBtn, async ()=>{
   }else{
     uploadInput.click();
   }
+  tryKeepFullscreen(300);
 });
 addTap(autoFillBtn, autoFillTop4);
 addTap(assignBtn, assignFromSlots);
 addTap(clearSlotsBtn, clearSlots);
 
-/* Try restore repo on boot (desktop) */
+/* Try restore repo on boot (desktop path intact) */
 (async ()=>{
   if (navigator.storage?.persist) { try{ await navigator.storage.persist(); }catch(e){} }
   if(!supportsDirPicker) return;
@@ -1473,16 +1465,37 @@ addTap(clearSlotsBtn, clearSlots);
   }
 })();
 
-/* ====== START BUTTON: single-tap, no double-firing ====== */
-function startApp(e){
-  try{ requestFS(); }catch(_){}       // iOS may ignore; fine
+/* ====== START/OVERLAY BEHAVIOR ====== */
+function startApp(){
+  try{ requestFS(); }catch(_){}       // iPad may ignore; fine
   overlay.style.display='none';
   resizeCanvas();
   startTimerAtFullDial();
 }
-addTap(enterBtn, startApp);
-// Avoid global click closure eating the tap
+addTap(enterBtn, ()=>{ startApp(); });
+
 overlay.addEventListener('click', e => { e.stopPropagation(); }, {passive:false});
+
+/* Startup:
+   - Desktop/Android: keep existing behavior (auto-start already in your current build).
+   - iPad: adjust defaults and require tap (unchanged for desktop). */
+window.addEventListener('DOMContentLoaded', ()=>{
+  if(isIOS){
+    // Bigger default images on iPad (esp. radial)
+    LAYOUT.imgBase = 0.42;               // iPad-only default
+    document.getElementById('imgSizeRange').value = String(LAYOUT.imgBase);
+  }
+  draw();
+
+  // NOTE: We do NOT change desktop startup here (as requested).
+});
+
+/* Reassert fullscreen after common lifecycle changes (iPad only) */
+if(isIOS){
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') tryKeepFullscreen(200); });
+  window.addEventListener('focus', ()=>{ tryKeepFullscreen(200); });
+  document.addEventListener('fullscreenchange', ()=>{ if(!document.fullscreenElement) tryKeepFullscreen(300); });
+}
 
 /* Drag & input bindings */
 canvas.addEventListener('mousedown',startDrag);
@@ -1500,8 +1513,7 @@ requestAnimationFrame(rafLoop);
 /* Defaults */
 dialMax = 60;
 remainingSeconds = 0;
-setPauseLabel(false); // initialize Pause/Resume
-// Seed swatch visuals
+setPauseLabel(false);
 document.getElementById('colorProxy').style.background = timerColor;
 document.getElementById('colorPicker').value = timerColor;
 resizeCanvas();

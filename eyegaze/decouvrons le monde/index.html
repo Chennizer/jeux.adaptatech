@@ -1,99 +1,335 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Explorons le monde</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Explorons le monde</title>
 
+  <link rel="stylesheet" href="../../css/eyegaze-menu.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
 
-    <link rel="stylesheet" href="../../css/eyegaze-menu.css">
-    <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    /* --- Critical visibility & stacking fixes --- */
+    html, body { margin:0; height:100%; background:#000; }
+    /* Keep your body flex, but the map gets explicit dimensions + stacking */
+    .map-container{
+      position:relative;
+      display:block;             /* visible even before Start; modal covers it */
+      width:100vw;               /* full viewport width so the image has a width to scale from */
+      max-width:100%;
+      margin:0 auto;
+      z-index:5;                 /* below modal(>=1000), above page background */
+      overflow:hidden;
+      background:#111;           /* helps debug if image is missing */
+    }
+    .world-map{
+      display:block;
+      width:100vw;               /* fill viewport width */
+      max-width:100%;            /* never exceed container */
+      height:auto;               /* keep aspect ratio */
+      user-select:none;
+      -webkit-user-drag:none;
+      object-fit:contain;        /* safe fit if container is larger than image */
+    }
+    .dwell-circle{
+      position:absolute; pointer-events:none; display:none;
+      border:3px solid rgba(0,200,255,.95); border-radius:50%;
+      width:20px; height:20px; transform:translate(-50%,-50%);
+      box-shadow:0 0 12px rgba(0,200,255,.7), inset 0 0 8px rgba(0,200,255,.5);
+      z-index:6;
+    }
+
+    /* Modal as overlay on top (your styles keep z-index:1000) */
+    .modal{ position:fixed; inset:0; background:rgba(0,0,0,.85);
+      display:flex; align-items:center; justify-content:center; z-index:1000; }
+
+    #control-panel-options{
+      background:#fff; color:#000; border:4px solid #008080; border-radius:8px;
+      padding:20px; width:90%; max-width:740px; text-align:center;
+      display:flex; flex-direction:column; align-items:center;
+      box-shadow:0 4px 10px rgba(0,0,0,.3);
+    }
+    #options-title-bar{
+      position:absolute; top:80px; left:50%; transform:translateX(-50%);
+      width:600px; background:#009688; color:#fff; padding:15px 30px; border-radius:10px;
+      text-align:center; z-index:1010; box-shadow:0 4px 8px rgba(0,0,0,.3);
+    }
+    #options-title-bar h2{ margin:0; font-size:1.6rem; color:#fff; }
+
+    .button{ background:#009688; color:#fff; border:none; padding:10px 20px; border-radius:10px; cursor:pointer; }
+    .button:hover{ background:#00796B; }
+
+    .styled-slider{
+      -webkit-appearance:none; width:60%; margin:8px 0; background:transparent;
+    }
+    .styled-slider::-webkit-slider-runnable-track{ height:8px; background:#009688; border-radius:5px; }
+    .styled-slider::-webkit-slider-thumb{
+      -webkit-appearance:none; height:20px; width:20px; border-radius:50%; background:#00796B; border:2px solid #004D40; margin-top:-6px; cursor:pointer;
+    }
+    .styled-slider::-moz-range-track{ height:8px; background:#009688; border-radius:5px; }
+    .styled-slider::-moz-range-thumb{ height:20px; width:20px; border-radius:50%; background:#00796B; border:2px solid #004D40; cursor:pointer; }
+
+    .overlay{ position:fixed; inset:0; background:#000; display:none; z-index:10; }
+    .video-container{ position:fixed; inset:0; display:none; place-items:center; z-index:15; background:#000; }
+    .video-container video{ max-width:92vw; max-height:92vh; outline:none; background:#000; }
+
+    .control-panel-loading-bar-container{ display:none; height:8px; background:#eee; border-radius:999px; overflow:hidden; width:100%; max-width:480px; margin:8px auto 0; }
+    .control-panel-loading-bar{ height:100%; width:0%; background:#0a7; transition:width .25s ease; }
+
+    /* Small status in dev; safe to leave */
+    #statusStrip{
+      position:fixed; left:10px; bottom:10px; z-index:30; background:#222; color:#ddd;
+      padding:8px 12px; border-radius:10px; font-size:13px; box-shadow:0 6px 22px rgba(0,0,0,.5);
+      display:flex; gap:8px; align-items:center;
+    }
+    #statusDot{ width:10px; height:10px; border-radius:50%; background:#666; }
+    #statusStrip.good #statusDot{ background:#19c37d; }
+    #statusStrip.bad  #statusDot{ background:#f15151; }
+    #statusMsg code{ color:#9bd; }
+  </style>
 </head>
 <body class="interactive-map">
 
-    <div id="game-options" class="modal" style="display:flex;">
-        <div id="control-panel-options">
-            <div id="options-title-bar">
-                <h2 id="options-main-title">Explorons le monde</h2>
-            </div>
-            <div id="control-panel-loading-bar-container" class="control-panel-loading-bar-container">
-                <div id="control-panel-loading-bar" class="control-panel-loading-bar"></div>
-            </div>
-            <div id="mode-divider"></div>
-            <div id="options-inline-container">
-                <div class="options-column">
-                    <div class="option-item">
-                        <label class="teal-label">
-                            <input type="checkbox" id="muteSFX">
-                            <span>Désactiver les sons</span>
-                        </label>
-                    </div>
-                    <div class="option-item">
-                        <label for="sfxVol" class="teal-label">
-                            <span>Volume des sons: </span>
-                            <span id="sfxVolVal">50</span>
-                        </label>
-                        <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
-                    </div>
-                </div>
-                <div class="options-column"></div>
-                <div class="options-column">
-                    <div class="option-item">
-                        <label for="dwellTimeSlider" class="teal-label">
-                            <span>Temps de fixation: </span>
-                            <span id="dwellTimeVal">1500</span> ms
-                        </label>
-                        <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500">
-                    </div>
-                </div>
-            </div>
-            <div id="mode-divider"></div>
-            <button id="startButton" class="button">Commencer</button>
+  <!-- OPTIONS / CONTROL PANEL -->
+  <div id="game-options" class="modal" style="display:flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title">Explorons le monde</h2>
+      </div>
+
+      <div id="control-panel-loading-bar-container" class="control-panel-loading-bar-container" aria-hidden="true">
+        <div id="control-panel-loading-bar" class="control-panel-loading-bar"></div>
+      </div>
+
+      <div id="mode-divider" style="width:100%;height:2px;background:#009688;margin:20px 0;"></div>
+
+      <div id="options-inline-container" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%;margin-top:20px;">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label" style="display:inline-flex;align-items:center;gap:.5em;color:#333;">
+              <input type="checkbox" id="muteSFX">
+              <span>Désactiver les sons</span>
+            </label>
+          </div>
+          <div class="option-item">
+            <label for="sfxVol" class="teal-label" style="display:flex;justify-content:space-between;width:60%;color:#333;">
+              <span>Volume des sons :</span>
+              <span id="sfxVolVal">50</span>
+            </label>
+            <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50" />
+          </div>
         </div>
+
+        <div class="options-column"></div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTimeSlider" class="teal-label" style="display:flex;justify-content:space-between;width:60%;color:#333;">
+              <span>Temps de fixation :</span>
+              <span><span id="dwellTimeVal">1500</span> ms</span>
+            </label>
+            <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500" />
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider" style="width:100%;height:2px;background:#009688;margin:20px 0;"></div>
+
+      <button id="startButton" class="button">Commencer</button>
     </div>
+  </div>
 
-    <div class="map-container" id="map-container">
-        <img src="../../images/worldmap.jpg" usemap="#image-map" alt="World Map" class="world-map">
-        <div id="hover-circle" class="dwell-circle"></div>
-    </div>
+  <!-- MAP (visible; modal sits on top until Start) -->
+  <div class="map-container" id="map-container">
+    <img id="worldMap" src="../../images/worldmap.jpg" usemap="#image-map" alt="World Map" class="world-map"/>
+    <div id="hover-circle" class="dwell-circle"></div>
+  </div>
 
-    <div class="overlay" id="overlay"></div>
+  <div class="overlay" id="overlay" aria-hidden="true"></div>
 
-    <div id="animation-container" class="animation-container">
-        <img id="zone-animation" src="" alt="Zone Animation" class="zone-animation">
-    </div>
+  <!-- VIDEO -->
+  <div id="video-container" class="video-container">
+    <video id="end-video" playsinline controls>
+      <source id="video-source" src="" type="video/mp4">
+      Votre navigateur ne prend pas en charge la balise vidéo.
+    </video>
+  </div>
 
-    <div id="video-container" class="video-container">
-        <video id="end-video" controls>
-            <source id="video-source" src="" type="video/mp4">
-            Votre navigateur ne prend pas en charge la balise vidéo.
-        </video>
-    </div>
+  <!-- AREAS -->
+  <map name="image-map">
+    <area alt="north-america" title="Amérique du Nord" href="#" coords="442,530,369,480,260,419,191,256,42,214,167,71,476,34,857,24" shape="poly">
+    <area alt="south-america" title="Amérique du Sud" href="#" coords="437,545,450,686,528,940,583,986,650,806,712,647,644,560,522,487" shape="poly">
+    <area alt="africa"         title="Afrique"          href="#" coords="835,346,778,509,907,589,993,854,1161,774,1181,636,1154,582,1198,491,1064,362,949,322" shape="poly">
+    <area alt="europe"         title="Europe"           href="#" coords="1273,63,983,25,818,241,834,339,912,316,1041,343,1103,297,1163,314,1236,221" shape="poly">
+    <area alt="asia"           title="Asie"             href="#" coords="1899,137,1476,49,1271,83,1242,226,1175,316,1081,314,1085,375,1203,491,1326,535,1436,599,1521,657,1604,599" shape="poly">
+    <area alt="oceania"        title="Océanie"          href="#" coords="1743,608,1617,586,1522,718,1476,752,1482,857,1561,844,1607,928,1712,976,1783,905" shape="poly">
+  </map>
 
-    <map name="image-map">
-        <area target="" alt="north-america" title="Amérique du Nord" href="#" coords="442,530,369,480,260,419,191,256,42,214,167,71,476,34,857,24" shape="poly">
-        <area target="" alt="south-america" title="Amérique du Sud" href="#" coords="437,545,450,686,528,940,583,986,650,806,712,647,644,560,522,487" shape="poly">
-        <area target="" alt="africa" title="Afrique" href="#" coords="835,346,778,509,907,589,993,854,1161,774,1181,636,1154,582,1198,491,1064,362,949,322" shape="poly">
-        <area target="" alt="europe" title="Europe" href="#" coords="1273,63,983,25,818,241,834,339,912,316,1041,343,1103,297,1163,314,1236,221" shape="poly">
-        <area target="" alt="asia" title="Asie" href="#" coords="1899,137,1476,49,1271,83,1242,226,1175,316,1081,314,1085,375,1203,491,1326,535,1436,599,1521,657,1604,599" shape="poly">
-        <area target="" alt="oceania" title="Océanie" href="#" coords="1743,608,1617,586,1522,718,1476,752,1482,857,1561,844,1607,928,1712,976,1783,905" shape="poly">
-    </map>
+  <!-- Status (dev aid) -->
+  <div id="statusStrip"><div id="statusDot"></div><div id="statusMsg">Initialisation…</div></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/image-map-resizer/1.0.10/js/imageMapResizer.min.js"></script>
-    <script src="../../js/eyegaze-menu.js"></script>
-    <script src="../../js/scripts.js"></script>
+  <!-- Libs + your commons -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/image-map-resizer/1.0.10/js/imageMapResizer.min.js"></script>
+  <script src="../../js/eyegaze-menu.js"></script>
 
-    <script>
-        setupInteractiveMapGame({
-            zoneEffects: {
-                'north-america': { video: '../../videos/north-america.mp4' },
-                'south-america': { video: '../../videos/south-america.mp4' },
-                'africa': { video: '../../videos/africa.mp4' },
-                'europe': { video: '../../videos/europe.mp4' },
-                'asia': { video: '../../videos/asia.mp4' },
-                'oceania': { video: '../../videos/oceania.mp4' }
-            }
-        });
-    </script>
+
+  <script>
+  // Status helpers (safe in prod)
+  const statusStrip = document.getElementById('statusStrip');
+  const statusMsg   = document.getElementById('statusMsg');
+  function setStatus(ok, text){
+    statusStrip.classList.toggle('good', !!ok);
+    statusStrip.classList.toggle('bad',  !ok);
+    statusMsg.innerHTML = text;
+  }
+
+  // --- Videos preload (non-blocking) ---
+  const ZONE_VIDEOS = {
+    'north-america': 'https://bucket.adaptatech.org/north-america.mp4',
+    'south-america': 'https://bucket.adaptatech.org/south-america.mp4',
+    'africa':        'https://bucket.adaptatech.org/africa.mp4',
+    'europe':        'https://bucket.adaptatech.org/europe.mp4',
+    'asia':          'https://bucket.adaptatech.org/asia.mp4',
+    'oceania':       'https://bucket.adaptatech.org/oceania.mp4'
+  };
+
+  (function preloadVideos(){
+    const bar = document.getElementById('control-panel-loading-bar');
+    const barC = document.getElementById('control-panel-loading-bar-container');
+    barC.style.display = 'block';
+    const keys = Object.keys(ZONE_VIDEOS);
+    let done = 0;
+    const mark = () => {
+      done++;
+      bar.style.width = Math.round(done / keys.length * 100) + '%';
+      if (done >= keys.length) setTimeout(() => barC.style.display = 'none', 400);
+    };
+    keys.forEach(k=>{
+      const v = document.createElement('video');
+      v.preload = 'auto'; v.muted = true; v.playsInline = true;
+      v.src = ZONE_VIDEOS[k]; v.style.display='none';
+      document.body.appendChild(v);
+      v.addEventListener('canplaythrough', mark, { once:true });
+      v.addEventListener('loadeddata', mark, { once:true });
+      v.addEventListener('error', mark, { once:true });
+    });
+  })();
+
+  (function main(){
+    const startButton   = document.getElementById('startButton');
+    const mapContainer  = document.getElementById('map-container');
+    const worldMap      = document.getElementById('worldMap');
+    const hoverCircle   = document.getElementById('hover-circle');
+    const overlay       = document.getElementById('overlay');
+    const videoContainer= document.getElementById('video-container');
+    const endVideo      = document.getElementById('end-video');
+    const videoSource   = document.getElementById('video-source');
+
+    // Show Start immediately
+    startButton.style.display = 'inline-block';
+
+    worldMap.addEventListener('load', () => {
+      setStatus(true, `Carte chargée: <code>${worldMap.currentSrc}</code> (${worldMap.naturalWidth}×${worldMap.naturalHeight})`);
+    });
+    worldMap.addEventListener('error', () => {
+      setStatus(false, `ERREUR chargement image: <code>${worldMap.currentSrc || worldMap.src}</code>`);
+    });
+
+    startButton.addEventListener('click', () => {
+      if (window.eyegazeSettings && typeof eyegazeSettings.hideOverlay === 'function') {
+        eyegazeSettings.hideOverlay();
+      } else {
+        const modal = document.getElementById('game-options');
+        if (modal) modal.style.display = 'none';
+      }
+
+      // ensure the image map overlays match the displayed image
+      const safeResize = () => { if (typeof imageMapResize === 'function') { try { imageMapResize(); } catch(e){ console.warn('imageMapResize error', e); } } };
+      if (worldMap.complete && worldMap.naturalWidth > 0) safeResize();
+      worldMap.addEventListener('load', safeResize);
+      requestAnimationFrame(safeResize);
+      window.addEventListener('resize', safeResize);
+    });
+
+    // Robust hover -> dwell using elementFromPoint
+    let dwellTimer = null;
+    let currentZone = null;
+
+    function beginDwell(zone) {
+      const dwell = Number(window.eyegazeSettings?.dwellTime ?? 1500);
+      hoverCircle.style.display = 'block';
+      hoverCircle.style.width = '20px';
+      hoverCircle.style.height = '20px';
+      hoverCircle.style.transition = 'none';
+      requestAnimationFrame(() => {
+        hoverCircle.style.transition = `width ${dwell}ms ease, height ${dwell}ms ease`;
+        hoverCircle.style.width = '110px';
+        hoverCircle.style.height = '110px';
+      });
+      clearTimeout(dwellTimer);
+      dwellTimer = setTimeout(() => {
+        hoverCircle.style.display = 'none';
+        triggerZone(zone);
+      }, dwell);
+    }
+
+    function cancelDwell() {
+      clearTimeout(dwellTimer);
+      dwellTimer = null;
+      hoverCircle.style.display = 'none';
+      currentZone = null;
+    }
+
+    function handlePointerMove(ev) {
+      const rect = mapContainer.getBoundingClientRect();
+      const x = ev.clientX, y = ev.clientY;
+      hoverCircle.style.left = (x - rect.left) + 'px';
+      hoverCircle.style.top  = (y - rect.top)  + 'px';
+
+      const el = document.elementFromPoint(x, y);
+      const area = el && el.tagName === 'AREA' ? el : (el?.closest && el.closest('area'));
+      const zone = area ? area.getAttribute('alt')?.toLowerCase() : null;
+
+      if (!zone) { cancelDwell(); return; }
+      if (zone !== currentZone) {
+        currentZone = zone;
+        beginDwell(zone);
+      }
+    }
+
+    mapContainer.addEventListener('pointermove', handlePointerMove);
+    mapContainer.addEventListener('pointerleave', cancelDwell);
+    mapContainer.addEventListener('mousemove', handlePointerMove);
+    mapContainer.addEventListener('mouseleave', cancelDwell);
+
+    document.querySelectorAll('area').forEach(a => a.addEventListener('click', e => e.preventDefault()));
+
+    function triggerZone(zone) {
+      const src = {
+        'north-america': 'https://bucket.adaptatech.org/north-america.mp4',
+        'south-america': 'https://bucket.adaptatech.org/south-america.mp4',
+        'africa':        'https://bucket.adaptatech.org/africa.mp4',
+        'europe':        'https://bucket.adaptatech.org/europe.mp4',
+        'asia':          'https://bucket.adaptatech.org/asia.mp4',
+        'oceania':       'https://bucket.adaptatech.org/oceania.mp4'
+      }[zone];
+      if (!src) return;
+
+      overlay.style.display = 'block';
+      mapContainer.style.display = 'block';   /* stays in DOM, just covered */
+      document.getElementById('video-source').src = src;
+      document.getElementById('video-container').style.display = 'grid';
+      endVideo.load();
+      endVideo.play().catch(() => {
+        endVideo.muted = true;
+        endVideo.play().catch(()=>{ /* user can tap */ });
+      });
+      endVideo.onended = () => {
+        document.getElementById('video-container').style.display = 'none';
+        overlay.style.display = 'none';
+      };
+    }
+  })();
+  </script>
 </body>
 </html>
