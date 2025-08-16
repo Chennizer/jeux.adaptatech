@@ -13,7 +13,7 @@
   /* Overlay + canvas */
   #overlay{
     position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
-    background:#fff;z-index:9999; /* raised above all UI */
+    background:#fff;z-index:9999; /* high so it's always tappable */
     pointer-events:auto;
     -webkit-user-select:none; user-select:none;
     -webkit-touch-callout:none;
@@ -89,12 +89,12 @@
     position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:2500;
   }
   .modal{
-    background:#111;color:#eee; width:min(760px,94vw); max-height:86vh;
+    background:#111;color:#eee; width:min(820px,94vw); max-height:86vh;
     border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.45); display:flex; flex-direction:column; overflow:hidden;
     border:1px solid #2a2a2a;
   }
   .modal header{
-    padding:.6rem .8rem;border-bottom:1px solid #222;display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+    padding:.6rem .8rem;border-bottom:1px solid #222;display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;
   }
   .modal header .title{display:flex;align-items:center;gap:.5rem;font-weight:600;}
   .modal header .title small{opacity:.8;font-weight:400;}
@@ -125,7 +125,7 @@
   .slot[data-idx="2"]{border-color:#4cd964;}
   .slot[data-idx="3"]{border-color:#66a5ff;}
   .slot.dragover{outline:2px solid #00bfff; outline-offset:2px;}
-  .slot.active{outline:2px solid #00bfff; outline-offset:2px;} /* iPad: show current slot */
+  .slot.active{outline:2px solid #00bfff; outline-offset:2px;} /* current slot highlight */
 
   .modal footer{padding:.6rem .8rem;border-top:1px solid #222;display:flex;gap:.5rem;justify-content:flex-end;}
   .hidden{display:none !important;}
@@ -240,8 +240,11 @@
     </div>
   </div>
 
-  <!-- Hidden upload fallback for iPad -->
-  <input id="uploadInput" type="file" accept="image/*" multiple style="display:none;" />
+  <!-- Hidden upload fallbacks -->
+  <input id="uploadInput" type="file" accept="image/*" multiple style="display:none;" /> <!-- existing fallback -->
+  <!-- New: separate iPad sources -->
+  <input id="uploadLibraryInput" type="file" accept="image/*" multiple style="display:none;" />
+  <input id="uploadPhotoInput" type="file" accept="image/*" capture="environment" style="display:none;" />
 
   <!-- Shared Picker Modal -->
   <div id="pickerModal" class="modal-backdrop">
@@ -251,12 +254,20 @@
           <span id="pickerTitle" data-fr="Sélectionner des images" data-en="Select images">Sélectionner des images</span>
           <small id="pickerSub"></small>
         </div>
-        <div style="display:flex;gap:.5rem;">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
           <button id="autoFillBtn" class="btn ghost"
             title="Fill slots 1–4"
             data-fr="Remplir 1–4" data-en="Auto-fill 1–4">Remplir 1–4</button>
+
+          <button id="pickLibraryBtn" class="btn secondary"
+            data-fr="📚 Photothèque" data-en="📚 Library">📚 Photothèque</button>
+
+          <button id="pickPhotoBtn" class="btn secondary"
+            data-fr="📷 Photo" data-en="📷 Camera">📷 Photo</button>
+
           <button id="switchSourceBtn" class="btn secondary hidden"
             data-fr="Changer de dossier" data-en="Change Folder">Changer de dossier</button>
+
           <button id="closePickerBtn" class="btn secondary" data-fr="Fermer" data-en="Close">Fermer</button>
         </div>
       </header>
@@ -359,6 +370,23 @@ const LAYOUT = {
 /* ---------- iOS detection ---------- */
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+/* ---------- tiny helper: single 'tap' without double-firing ---------- */
+const supportsPointer = 'onpointerup' in window;
+function addTap(el, handler){
+  if(supportsPointer){
+    el.addEventListener('pointerup', (e)=>{
+      if(e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      handler(e);
+    }, {passive:false});
+  }else{
+    el.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      handler(e);
+    }, {passive:false});
+  }
+}
 
 /* ---------- i18n helpers ---------- */
 function getLang(){
@@ -545,9 +573,9 @@ function draw(){
     };
 
     if(N===2){
-      // Left (blue), Right (red) with anti-clockwise arcs
-      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));      // Left
-      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));     // Right
+      // Left (blue), Right (red)
+      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));
+      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));
     }else{
       for(let i=0;i<4;i++){
         const start = -Math.PI/2 - i*Math.PI/2;
@@ -884,14 +912,14 @@ function attachIdleSources(el, panel){
 attachIdleSources(menu,'menu');
 attachIdleSources(specialMenu,'special');
 
-menuBtn.addEventListener('click',e=>{
+addTap(menuBtn, (e)=>{
   e.stopPropagation();
   const open = !menu.classList.contains('show');
   menu.classList.toggle('show');
   specialMenu.classList.remove('show'); stopIdle('special');
   if(open) startIdle('menu'); else stopIdle('menu');
 });
-specialBtn.addEventListener('click',e=>{
+addTap(specialBtn, (e)=>{
   e.stopPropagation();
   const open = !specialMenu.classList.contains('show');
   specialMenu.classList.toggle('show');
@@ -947,8 +975,7 @@ if(!isIOS){
   colorPicker.classList.add('hidden');
   colorProxy.classList.remove('hidden');
   colorProxy.style.background = timerColor;
-  colorProxy.addEventListener('click', openColorModal);
-  colorProxy.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openColorModal(); }});
+  addTap(colorProxy, openColorModal);
 }
 
 /* Simple color modal logic (iOS) */
@@ -1054,6 +1081,7 @@ const repoStatus = document.getElementById('repoStatus');
 const repoLabel  = document.getElementById('repoLabel');
 const uploadInput = document.getElementById('uploadInput');
 
+/* Keep old fallback text if no directory picker (mostly iPad) */
 if(!supportsDirPicker){
   const lang = getLang();
   setRepoBtn.textContent = (lang==='fr' ? '⬆️ Importer des images' : '⬆️ Upload images');
@@ -1062,7 +1090,6 @@ if(!supportsDirPicker){
 }
 
 let repoHandle = null;
-let uploadedFiles = []; // fallback files [{name, file, url}]
 
 /* IndexedDB for repo handle (desktop) */
 const DB_NAME='timer-handles', STORE='handles';
@@ -1116,7 +1143,14 @@ const clearSlotsBtn = document.getElementById('clearSlotsBtn');
 const openManifestBtn = document.getElementById('openManifestBtn');
 const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
 
-let lastGridItems = [];
+/* New modal source buttons */
+const pickLibraryBtn = document.getElementById('pickLibraryBtn');
+const pickPhotoBtn   = document.getElementById('pickPhotoBtn');
+const uploadLibraryInput = document.getElementById('uploadLibraryInput');
+const uploadPhotoInput   = document.getElementById('uploadPhotoInput');
+
+/* All items currently shown in the grid (URLs are unique keys) */
+let gridItems = []; // [{name, url, file?}]
 
 /* ===== iPad selection cursor & helpers ===== */
 let nextSlot = 0;
@@ -1170,7 +1204,7 @@ if(!isIOS){
 }else{
   // iPad: tap a slot to focus it (for corrections)
   selectedSlots.forEach((slot)=>{
-    slot.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); setCurrentSlot(parseInt(slot.dataset.idx,10)); }, {passive:false});
+    addTap(slot, ()=>{ setCurrentSlot(parseInt(slot.dataset.idx,10)); });
   });
 }
 
@@ -1179,8 +1213,9 @@ function openPickerModal(){ pickerModal.style.display='flex'; }
 function closePickerModal(){
   pickerModal.style.display='none';
   pickerGrid.innerHTML='';
-  for(const it of lastGridItems){ if(it.file && it.url) URL.revokeObjectURL(it.url); }
-  lastGridItems = [];
+  // Revoke any blob URLs we created
+  for(const it of gridItems){ if(it.file && it.url) try{ URL.revokeObjectURL(it.url); }catch(_){} }
+  gridItems = [];
   ensureReturnToFullscreen();
 }
 
@@ -1200,67 +1235,111 @@ async function chooseRepository(){
   }catch(e){ return false; }
 }
 
-/* Upload fallback (iPad) */
+/* Old general upload fallback (kept as-is) */
 uploadInput.addEventListener('change', ()=>{
-  for (const it of uploadedFiles){ if(it.url) URL.revokeObjectURL(it.url); }
-  uploadedFiles = [];
-  for (const file of Array.from(uploadInput.files||[])){
-    if(!file.type.startsWith('image/')) continue;
-    uploadedFiles.push({ name:file.name, file, url:URL.createObjectURL(file) });
-  }
+  // Clear and replace grid with these uploads
+  pickerGrid.innerHTML=''; gridItems = [];
+  appendFilesToGrid(uploadInput.files);
   const lang = getLang();
-  repoStatus.textContent = uploadedFiles.length
-    ? (lang==='fr' ? `${uploadedFiles.length} image(s) importée(s)` : `${uploadedFiles.length} image(s) uploaded`)
-    : (lang==='fr' ? 'Aucune image importée' : 'No images uploaded');
   if (pickerModal.style.display !== 'flex') openPickerModal();
-  populateFromUploads();
+  pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des images' : 'Select images');
+  pickerSub.textContent = (lang==='fr' ? '(importées)' : '(uploaded)') + (isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '');
+  switchSourceBtn.classList.remove('hidden');
+  setCurrentSlot(0);
+});
+
+/* New: append uploaded files (library/camera) ADDITIVELY */
+function appendFilesToGrid(fileList){
+  if(!fileList || !fileList.length) return;
+  const frag = document.createDocumentFragment();
+
+  for (const file of Array.from(fileList)){
+    if(!file.type.startsWith('image/')) continue;
+    const url = URL.createObjectURL(file);
+    // de-dupe by URL (simple)
+    gridItems.push({ name:file.name, file, url });
+
+    const card = document.createElement('div');
+    card.className='thumb';
+    card.innerHTML = `<img src="${url}" alt="${file.name}"><span>${file.name}</span>`;
+
+    if(!isIOS){
+      card.draggable = true;
+      card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+      card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+    }else{
+      card.draggable = false;
+      addTap(card, ()=>{ placeInNextSlot(url); });
+    }
+    frag.appendChild(card);
+  }
+  pickerGrid.appendChild(frag);
+}
+
+/* iPad modal buttons */
+addTap(pickLibraryBtn, ()=>{
+  uploadLibraryInput.value = ''; // reset so same file can be chosen twice
+  uploadLibraryInput.click();
+});
+uploadLibraryInput.addEventListener('change', ()=>{
+  appendFilesToGrid(uploadLibraryInput.files);
+  setCurrentSlot(nextSlot); // keep cursor position
+});
+
+addTap(pickPhotoBtn, ()=>{
+  uploadPhotoInput.value = '';
+  uploadPhotoInput.click();
+});
+uploadPhotoInput.addEventListener('change', ()=>{
+  appendFilesToGrid(uploadPhotoInput.files);
+  setCurrentSlot(nextSlot);
 });
 
 /* Iterate image files */
 async function* iterImages(dirHandle){
   for await (const entry of dirHandle.values()){
     if(entry.kind !== 'file') continue;
-    if(!/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(entry.name)) continue;
+    if(!/\\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(entry.name)) continue;
     yield entry;
   }
 }
 
-/* Populate grid from repo */
+/* Populate grid from repo (REPLACES list) */
 async function populateFromRepo(){
-  pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
-  const hint = isIOS ? (getLang()==='fr' ? ' — iPad : touchez des images pour remplir 1→4' : ' — iPad: tap images to fill 1→4') : '';
+  const lang = getLang();
+  pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des images' : 'Select images');
+  const hint = isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '';
   pickerSub.textContent = repoHandle ? `(${repoHandle.name})${hint}` : hint;
   switchSourceBtn.classList.remove('hidden');
-  pickerGrid.innerHTML=''; lastGridItems = [];
+  pickerGrid.innerHTML=''; gridItems = [];
   if(!repoHandle){
     const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
-    p.textContent = (getLang()==='fr' ? 'Aucun dossier sélectionné. Cliquez « Changer de dossier ».' : 'No folder selected. Click “Change Folder”.');
+    p.textContent = (lang==='fr' ? 'Aucun dossier sélectionné. Cliquez « Changer de dossier ».' : 'No folder selected. Click “Change Folder”.');
     pickerGrid.appendChild(p); return;
   }
   const frag = document.createDocumentFragment();
   for await (const entry of iterImages(repoHandle)){
     const file = await entry.getFile();
     const url = URL.createObjectURL(file);
-    lastGridItems.push({ name: entry.name, url, file });
+    gridItems.push({ name: entry.name, url, file });
 
     const card = document.createElement('div');
     card.className='thumb';
+    card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
+
     if(!isIOS){
       card.draggable = true;
-      card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
       card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      card.innerHTML = `<img src="${url}" alt="${entry.name}"><span>${entry.name}</span>`;
-      const tap = (e)=>{ e.preventDefault(); e.stopPropagation(); placeInNextSlot(url); };
-      ['click','pointerup','touchend'].forEach(t=> card.addEventListener(t, tap, {passive:false}));
+      addTap(card, ()=>{ placeInNextSlot(url); });
     }
     frag.appendChild(card);
   }
   if(!frag.childNodes.length){
     const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
-    p.textContent = (getLang()==='fr' ? 'Aucune image dans ce dossier.' : 'No images in this folder.');
+    p.textContent = (lang==='fr' ? 'Aucune image dans ce dossier.' : 'No images in this folder.');
     pickerGrid.appendChild(p);
   }else{ pickerGrid.appendChild(frag); }
 
@@ -1268,69 +1347,33 @@ async function populateFromRepo(){
   setCurrentSlot(0);
 }
 
-/* Populate grid from uploads (iPad or desktop fallback) */
-function populateFromUploads(){
-  pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
-  const hint = isIOS ? (getLang()==='fr' ? ' — iPad : touchez des images pour remplir 1→4' : ' — iPad: tap images to fill 1→4') : '';
-  pickerSub.textContent = (getLang()==='fr' ? '(importées)' : '(uploaded)') + hint;
-  switchSourceBtn.classList.remove('hidden');
-  pickerGrid.innerHTML=''; lastGridItems = [];
-  if(!uploadedFiles.length){
-    const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
-    p.textContent = (getLang()==='fr' ? 'Aucune image importée.' : 'No images uploaded.');
-    pickerGrid.appendChild(p); return;
-  }
-  const frag = document.createDocumentFragment();
-  for (const it of uploadedFiles){
-    lastGridItems.push({ name: it.name, url: it.url, file: it.file });
-    const card = document.createElement('div');
-    card.className='thumb';
-    if(!isIOS){
-      card.draggable = true;
-      card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
-      card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', it.url); });
-      card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
-    }else{
-      card.draggable = false;
-      card.innerHTML = `<img src="${it.url}" alt="${it.name}"><span>${it.name}</span>`;
-      const tap = (e)=>{ e.preventDefault(); e.stopPropagation(); placeInNextSlot(it.url); };
-      ['click','pointerup','touchend'].forEach(t=> card.addEventListener(t, tap, {passive:false}));
-    }
-    frag.appendChild(card);
-  }
-  pickerGrid.appendChild(frag);
-
-  setCurrentSlot(0);
-}
-
-/* Populate grid from manifest */
+/* Populate grid from manifest (REPLACES list) */
 function populateFromManifest(){
-  pickerTitle.textContent = (getLang()==='fr' ? 'Sélectionner des images' : 'Select images');
-  const hint = isIOS ? (getLang()==='fr' ? ' — iPad : touchez des images pour remplir 1→4' : ' — iPad: tap images to fill 1→4') : '';
-  pickerSub.textContent = (getLang()==='fr' ? '(depuis la bibliothèque)' : '(from manifest)') + hint;
+  const lang = getLang();
+  pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des images' : 'Select images');
+  const hint = isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '';
+  pickerSub.textContent = (lang==='fr' ? '(depuis la bibliothèque)' : '(from manifest)') + hint;
   switchSourceBtn.classList.add('hidden');
-  pickerGrid.innerHTML=''; lastGridItems = [];
+  pickerGrid.innerHTML=''; gridItems = [];
   if(!Array.isArray(window.PNG_ARRAY) || !window.PNG_ARRAY.length){
     const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
-    p.textContent = (getLang()==='fr' ? 'Aucun élément dans la bibliothèque CVI.' : 'No items in CVI library.');
+    p.textContent = (lang==='fr' ? 'Aucun élément dans la bibliothèque CVI.' : 'No items in CVI library.');
     pickerGrid.appendChild(p); return;
   }
   const frag = document.createDocumentFragment();
   for (const it of window.PNG_ARRAY){
     const url = it.file; const name = it.name || it.file.split('/').pop();
-    lastGridItems.push({name,url});
+    gridItems.push({name,url});
     const card = document.createElement('div');
     card.className='thumb';
+    card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
     if(!isIOS){
       card.draggable = true;
-      card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
       card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
-      const tap = (e)=>{ e.preventDefault(); e.stopPropagation(); placeInNextSlot(url); };
-      ['click','pointerup','touchend'].forEach(t=> card.addEventListener(t, tap, {passive:false}));
+      addTap(card, ()=>{ placeInNextSlot(url); });
     }
     frag.appendChild(card);
   }
@@ -1341,9 +1384,18 @@ function populateFromManifest(){
 
 /* Auto-fill top 4 */
 function autoFillTop4(){
-  const top4 = lastGridItems.slice(0,4);
+  const top4 = gridItems.slice(0,4);
   for(let i=0;i<4;i++){ setSlotSrc(i, top4[i]?.url || null); }
-  setCurrentSlot(0); // ready to correct slot 1 if needed
+  setCurrentSlot(0);
+}
+
+/* Prefer radial when images chosen */
+function ensureRadialIfImagesChosen(){
+  const any = imgs.some(Boolean);
+  if(any && (specialMode === 'none')){
+    specialMode = 'radial';
+    const sel = document.getElementById('specialMode'); if(sel) sel.value = 'radial';
+  }
 }
 
 /* Assign selected slots into imgs[] */
@@ -1366,15 +1418,6 @@ function assignFromSlots(){
   });
 }
 
-/* Prefer radial when images chosen */
-function ensureRadialIfImagesChosen(){
-  const any = imgs.some(Boolean);
-  if(any && (specialMode === 'none')){
-    specialMode = 'radial';
-    const sel = document.getElementById('specialMode'); if(sel) sel.value = 'radial';
-  }
-}
-
 /* Clear slots */
 function clearSlots(){
   for(let i=0;i<4;i++) setSlotSrc(i, null);
@@ -1394,11 +1437,11 @@ setRepoBtn.addEventListener('click', async ()=>{
     uploadInput.click();
   }
 });
-openManifestBtn.addEventListener('click', ()=>{ openPickerModal(); populateFromManifest(); });
+addTap(openManifestBtn, ()=>{ openPickerModal(); populateFromManifest(); });
 
 /* Modal controls */
-closePickerBtn.addEventListener('click', closePickerModal);
-switchSourceBtn.addEventListener('click', async ()=>{
+addTap(closePickerBtn, closePickerModal);
+addTap(switchSourceBtn, async ()=>{
   if(supportsDirPicker){
     const ok = await chooseRepository();
     if(ok){
@@ -1409,9 +1452,9 @@ switchSourceBtn.addEventListener('click', async ()=>{
     uploadInput.click();
   }
 });
-autoFillBtn.addEventListener('click', autoFillTop4);
-assignBtn.addEventListener('click', assignFromSlots);
-clearSlotsBtn.addEventListener('click', clearSlots);
+addTap(autoFillBtn, autoFillTop4);
+addTap(assignBtn, assignFromSlots);
+addTap(clearSlotsBtn, clearSlots);
 
 /* Try restore repo on boot (desktop) */
 (async ()=>{
@@ -1430,19 +1473,15 @@ clearSlotsBtn.addEventListener('click', clearSlots);
   }
 })();
 
-/* ====== START BUTTON: robust iOS-friendly handling ====== */
+/* ====== START BUTTON: single-tap, no double-firing ====== */
 function startApp(e){
-  if(e){ e.preventDefault(); e.stopPropagation(); }
   try{ requestFS(); }catch(_){}       // iOS may ignore; fine
   overlay.style.display='none';
   resizeCanvas();
   startTimerAtFullDial();
 }
-// Fire on multiple event types (covers iOS quirks)
-['pointerup','touchend','click'].forEach(type=>{
-  enterBtn.addEventListener(type, startApp, {passive:false});
-});
-// Don’t let global document click handlers consume this
+addTap(enterBtn, startApp);
+// Avoid global click closure eating the tap
 overlay.addEventListener('click', e => { e.stopPropagation(); }, {passive:false});
 
 /* Drag & input bindings */
