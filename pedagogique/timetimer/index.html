@@ -304,7 +304,7 @@
           <div class="chip" data-col="#ffd93d" style="background:#ffd93d"></div>
           <div class="chip" data-col="#4cd964" style="background:#4cd964"></div>
           <div class="chip" data-col="#66a5ff" style="background:#66a5ff"></div>
-          <div class="chip" data-col="#b36bff" style="background:#b36bff"></div>
+          <div class="chip" data-col="#b36bff" style="background:#b36b5f"></div>
           <div class="chip" data-col="#000000" style="background:#000"></div>
           <div class="chip" data-col="#ffffff" style="background:#fff;border-color:#888"></div>
         </div>
@@ -363,11 +363,16 @@ const RADIAL_RADIUS_OFFSET_2 = 0.06;
 // Task→Reward spacing multiplier
 const TASKREWARD_SPACING_MULT = 3.5;
 
+/* ==== iPad-only tunables (your two requests) ==== */
+const IOS_IMGBASE_DEFAULT = 0.52;   // smaller default image size on iPad (was 0.58)
+const IOS_FS_FIT_PAD      = 0.008;  // tighter pad when fitting in fullscreen (closer to edges)
+const IOS_FS_OVERFLOW     = 1.06;   // allow ~6% overspill beyond the safe fit
+
 /* ===========================================================
    LAYOUT (image size etc.)
    =========================================================== */
 const LAYOUT = {
-  imgBase: 0.30,     // will be bumped on iPad
+  imgBase: 0.30,     // desktop default; iPad overrides at startup
   activeScale: 1.33,
   radial: { radiusOffset: RADIAL_RADIUS_OFFSET_4 },
   stacked:{ spacing: 0.025, marginLeft: 0.06 }
@@ -510,12 +515,16 @@ function getCenter(size){
   return { cx: baseCx, cy };
 }
 
-/* Auto-fit utility */
-function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
+/* Auto-fit utility
+   padFrac: fraction of canvas used as padding to keep elements inside
+   overflowBoost: >1 allows slight overspill vs the strict "fit" (used on iPad FS)
+*/
+function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02, overflowBoost = 1){
   const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
   const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
   const maxH = Math.max(1, Math.min(2*(cyR - pad), 2*(canvas.height - pad - cyR)));
-  const s = Math.min(1, maxW / w, maxH / h);
+  const fit = Math.min(maxW / w, maxH / h);        // strict fit (<=1 if needs shrinking)
+  const s = Math.min(1, fit * overflowBoost);      // allow a little larger than strict fit
   return (isFinite(s) && s>0) ? s : 1;
 }
 
@@ -673,15 +682,15 @@ function updatePageTint(uiSeconds, denom){
 function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   const iosFS = isIOS && !!document.fullscreenElement;
 
-  // Bring images closer to the dial in iPad fullscreen so they don't hit edges
-  const radialOffset4 = iosFS ? 0.05 : (isIOS ? 0.08 : LAYOUT.radial.radiusOffset);
-  const radialOffset2 = iosFS ? 0.03 : (isIOS ? 0.04 : RADIAL_RADIUS_OFFSET_2);
+  // Slightly farther from the dial on iPad FS so they can bleed outward a bit
+  const radialOffset4 = iosFS ? 0.07 : (isIOS ? 0.08 : LAYOUT.radial.radiusOffset);
+  const radialOffset2 = iosFS ? 0.05 : (isIOS ? 0.04 : RADIAL_RADIUS_OFFSET_2);
 
   const basePx = size * LAYOUT.imgBase;
   const radialOffset = (IMG_COUNT===2 ? radialOffset2 : radialOffset4);
   const imgR   = numbersR + size * radialOffset;
 
-  // Soften horizontal/vertical nudges a bit only while fullscreen on iPad
+  // Soft nudges while fullscreen on iPad
   const hShiftPx_4 = size * (iosFS ? 0.18 : H_SHIFT);
   const hShiftPx_2 = size * (iosFS ? 0.09 : H_SHIFT_2);
   const vTopPx     = size * (iosFS ? 0.12 : V_OFFSET_TOP);
@@ -715,8 +724,12 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
     const cxI = cx + Math.cos(ang)*imgR + dx;
     const cyI = cy + Math.sin(ang)*imgR + dy;
 
-    // While fullscreen on iPad, make edge padding a bit smaller to avoid over-shrinking
-    const fitS = fitScaleForCenteredRect(cxI, cyI, w, h, iosFS ? 0.01 : 0.02);
+    // iPad FS: allow small overspill and tighter padding near screen edges
+    const fitS = fitScaleForCenteredRect(
+      cxI, cyI, w, h,
+      iosFS ? IOS_FS_FIT_PAD : 0.02,
+      iosFS ? IOS_FS_OVERFLOW : 1
+    );
     w *= fitS; h *= fitS;
 
     const x = cxI - w/2;
@@ -948,7 +961,6 @@ document.getElementById('fsBtn').addEventListener('click',()=>{ if(!document.ful
 
 document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw(); tryKeepFullscreen(200);});
 document.getElementById('dialSelect').addEventListener('change',e=>{
-  // Desktop/default behavior; iPad uses custom picker below
   dialMax=parseInt(e.target.value,10);
   clearInterval(intervalId); intervalId=null;
   remainingSeconds=0; draw();
@@ -965,9 +977,9 @@ specialModeSelect.addEventListener('change',e=>{
   } else {
     draw();
   }
-  // iPad: if they switch to radial and images look small, bump size once
-  if(isIOS && specialMode==='radial' && LAYOUT.imgBase < 0.5){
-    LAYOUT.imgBase = 0.51;
+  // iPad: keep a reasonable lower bound only
+  if(isIOS && specialMode==='radial' && LAYOUT.imgBase < 0.45){
+    LAYOUT.imgBase = IOS_IMGBASE_DEFAULT;
     const r = document.getElementById('imgSizeRange');
     r.value = String(LAYOUT.imgBase);
   }
@@ -1018,7 +1030,7 @@ function hexToRgbObj(hex){
 }
 function rgbToHex(r,g,b){
   const h = (x)=>x.toString(16).padStart(2,'0');
-  return '#'+h(r)+h(b);
+  return '#'+h(r)+h(g)+h(b);
 }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function syncRGBtoUI(rgb){
@@ -1544,13 +1556,13 @@ overlay.addEventListener('click', e => { e.stopPropagation(); }, {passive:false}
 /* Startup adjustments */
 window.addEventListener('DOMContentLoaded', ()=>{
   if(isIOS){
-    // iPad: bigger default images, higher slider ceiling
-    LAYOUT.imgBase = 0.58;
+    // iPad: smaller default images now, and bigger ceiling still available
+    LAYOUT.imgBase = IOS_IMGBASE_DEFAULT;
     const r = document.getElementById('imgSizeRange');
     r.max = '0.95';
     r.value = String(LAYOUT.imgBase);
 
-    // Replace selects with custom pickers (no fullscreen exit)
+    // Replace selects with custom pickers (keeps fullscreen)
     createSelectProxy(
       document.getElementById('dialSelect'),
       document.getElementById('dialProxy'),
