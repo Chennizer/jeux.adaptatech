@@ -35,25 +35,25 @@
     .row input[type="color"]{ width:42px; height:32px; border:none; background:transparent; padding:0; }
     .row input[type="range"]{ flex:1; }
     .inline{ display:flex; align-items:center; justify-content:space-between; background:#eefaf8; border:1px solid #bfe7e1; padding:.55rem .7rem; border-radius:6px; }
-    .export-btn{ display:inline-block; padding:10px 16px; margin:4px; font-size:1rem; background:var(--accent); color:#fff; border:none; border-radius:4px; cursor:pointer; }
-    .export-btn.alt{ background:#fff; color:var(--accent); border:2px solid var(--accent); }
+    .export-btn{ display:inline-block; padding:10px 16px; margin:4px; font-size:1rem; background:#009688; color:#fff; border:none; border-radius:4px; cursor:pointer; }
+    .export-btn.alt{ background:#fff; color:#009688; border:2px solid #009688; }
     .muted{ color:#666; font-size:.9rem; }
 
     /* Right preview area */
     #content{ flex:1; display:flex; justify-content:center; align-items:center; background:#f3f4f6; }
     #previewCanvas{ width:min(72vmin,860px); height:min(72vmin,860px); background:#fff; border:1px solid var(--line); border-radius:10px; }
 
-    /* Floating toolbar (matches style language) */
+    /* Floating toolbar */
     #toolbar{
       position:fixed; right:20px; bottom:20px; display:flex; gap:10px; flex-wrap:wrap;
       background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px; box-shadow:0 8px 24px rgba(0,0,0,.08);
     }
 
-    /* Modal (same style family as your modals) */
+    /* Modal */
     .modal{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); justify-content:center; align-items:flex-start; padding-top:5%; opacity:0; transition:opacity .25s ease; z-index:2000; pointer-events:none; }
     .modal.show{ display:flex; opacity:1; pointer-events:auto; }
-    .modal-content{ background:#fff; color:#000; border:2px solid var(--accent); border-radius:6px; padding:16px; width:min(1100px,92vw); max-height:80vh; overflow:auto; }
-    .modal-content h3{ margin-top:0; color:var(--accent); }
+    .modal-content{ background:#fff; color:#000; border:2px solid #009688; border-radius:6px; padding:16px; width:min(1100px,92vw); max-height:80vh; overflow:auto; }
+    .modal-content h3{ margin-top:0; color:#009688; }
 
     /* Gallery grid */
     .gm-toolbar{ display:flex; gap:.5rem; align-items:center; margin-bottom:.6rem; }
@@ -64,7 +64,7 @@
     .gm-item:hover{ box-shadow:0 1px 4px rgba(0,0,0,.2); }
     .gm-footer{ margin-top:10px; display:flex; align-items:center; gap:10px; color:#444; }
 
-    /* Advanced panel is shown/hidden by JS; styling comes from your global CSS */
+    /* Advanced panel is shown/hidden by JS */
     #advPanel{ display:none; }
   </style>
 </head>
@@ -83,15 +83,19 @@
           <button id="uploadBtn" class="export-btn alt">Upload…</button>
         </div>
         <div class="muted">Folder: <code>../../images/pictos/</code></div>
+        <div id="restoreNote" class="muted" style="display:none;"></div>
       </div>
 
-      <!-- QUICK: Simple caption (black ~64px) -->
+      <!-- QUICK: Captions (Top & Bottom; black ~64px) -->
       <div class="group">
-        <h3>Caption</h3>
+        <h3>Captions</h3>
         <div class="row">
-          <input id="labelText" type="text" placeholder="Optional text (black, ~64px)">
+          <input id="topLabelText" type="text" placeholder="Top text (black, ~64px)">
         </div>
-        <div class="muted">Advanced lets you change size, color, banner, etc.</div>
+        <div class="row">
+          <input id="labelText" type="text" placeholder="Bottom text (black, ~64px)">
+        </div>
+        <div class="muted">Advanced lets you change size, color, banner, etc. (applies to both captions)</div>
       </div>
 
       <!-- QUICK: Export -->
@@ -105,10 +109,11 @@
         </div>
         <div class="row" style="justify-content:center;">
           <button id="downloadBtn" class="export-btn">Download PNG</button>
+          <button id="clearSavedBtn" class="export-btn alt" title="Remove saved options from this browser">Clear saved options</button>
         </div>
       </div>
 
-      <!-- ADVANCED TOGGLE (exact style/structure as your other page) -->
+      <!-- ADVANCED TOGGLE (same structure/style as your other page) -->
       <div class="toggle-container" style="margin-top:30px">
         <label class="teal-label">
           <input type="checkbox" id="toggleAdvanced">
@@ -163,7 +168,7 @@
           </div>
         </div>
 
-        <!-- Text (full controls) -->
+        <!-- Text (full controls; apply to both top & bottom) -->
         <div class="group">
           <h3>Text options</h3>
           <div class="row">
@@ -183,8 +188,8 @@
     <main id="content">
       <canvas id="previewCanvas" width="1024" height="1024" aria-label="Preview"></canvas>
       <div id="toolbar">
-        <button id="fitBtn"   class="export-btn alt" title="Fit preview">Fit</button>
-        <button id="clearBtn" class="export-btn alt" title="Clear image">Clear</button>
+        <!-- Fit button removed -->
+        <button id="clearBtn" class="export-btn alt" title="Clear image and text">Clear</button>
       </div>
     </main>
   </div>
@@ -214,12 +219,15 @@
     const ctx = cvs.getContext('2d');
 
     // Quick controls
-    const labelText = document.getElementById('labelText'); // simple caption (black ~64px by default)
+    const topLabelText = document.getElementById('topLabelText');
+    const bottomLabelText = document.getElementById('labelText');
     const sizePx = document.getElementById('sizePx');
     const sizePxVal = document.getElementById('sizePxVal');
     const downloadBtn = document.getElementById('downloadBtn');
+    const clearSavedBtn = document.getElementById('clearSavedBtn');
+    const restoreNote = document.getElementById('restoreNote');
 
-    // Advanced toggle + panel (styled like your other page)
+    // Advanced toggle + panel
     const toggleAdvanced = document.getElementById('toggleAdvanced');
     const advPanel = document.getElementById('advPanel');
 
@@ -243,7 +251,6 @@
     const labelBandPadPct = document.getElementById('labelBandPadPct');
 
     // Buttons
-    const fitBtn = document.getElementById('fitBtn');
     const clearBtn = document.getElementById('clearBtn');
     const openGalleryBtn = document.getElementById('openGalleryBtn');
     const uploadBtn = document.getElementById('uploadBtn');
@@ -265,17 +272,135 @@
     let manifest = null;
     let gridItems = [];
 
-    // ===== Advanced toggle like your “text options” =====
+    // ===== LocalStorage helpers =====
+    const LS_KEY = 'pictosCustomizer:v1';
+    let currentImageMeta = { type:'none' }; // {type:'gallery'|'local'|'none', src?, name?}
+
     function applyQuickDefaults(){
-      // Black 64px when Advanced is OFF
+      // Black 64px when Advanced is OFF (applies to both captions)
       labelSize.value = 64;
       labelColor.value = '#000000';
-      // Keep banner ON + white by default (looks nice)
+      // Keep banner ON + white by default
       labelBandOn.checked = true;
       labelBandColor.value = '#ffffff';
       labelBandPadPct.value = 6;
     }
-    // Start hidden and with quick defaults
+
+    function readUIState(){
+      return {
+        advOpen: !!toggleAdvanced.checked,
+        exportSize: parseInt(sizePx.value,10),
+
+        quick: {
+          topText: topLabelText.value || '',
+          bottomText: bottomLabelText.value || ''
+        },
+
+        text: {
+          size: parseInt(labelSize.value,10),
+          color: labelColor.value,
+          bandOn: !!labelBandOn.checked,
+          bandColor: labelBandColor.value,
+          bandPadPct: parseFloat(labelBandPadPct.value)
+        },
+
+        bg: {
+          transparent: !!bgTransparent.checked,
+          color: bgColor.value,
+          shape: bgShape.value,
+          cornerPct: parseFloat(cornerPct.value),
+          paddingPct: parseFloat(paddingPct.value),
+          strokeOn: !!strokeOn.checked,
+          strokeColor: strokeColor.value,
+          strokePct: parseFloat(strokePct.value),
+          shadowOn: !!shadowOn.checked
+        },
+
+        icon: {
+          tintPct: parseFloat(tintPct.value),
+          tintColor: tintColor.value,
+          scalePct: parseFloat(iconScalePct.value)
+        },
+
+        image: currentImageMeta
+      };
+    }
+
+    function writeUIState(s){
+      if (!s) return;
+      toggleAdvanced.checked = !!s.advOpen;
+      advPanel.style.display = toggleAdvanced.checked ? 'block' : 'none';
+
+      if (Number.isFinite(s.exportSize)) {
+        sizePx.value = s.exportSize;
+        exportSize = s.exportSize;
+        sizePxVal.textContent = s.exportSize;
+      }
+
+      if (s.quick){
+        topLabelText.value = s.quick.topText ?? '';
+        bottomLabelText.value = s.quick.bottomText ?? '';
+      }
+
+      if (s.text){
+        labelSize.value = Number.isFinite(s.text.size) ? s.text.size : 64;
+        labelColor.value = s.text.color || '#000000';
+        labelBandOn.checked = !!s.text.bandOn;
+        labelBandColor.value = s.text.bandColor || '#ffffff';
+        labelBandPadPct.value = Number.isFinite(s.text.bandPadPct) ? s.text.bandPadPct : 6;
+      } else {
+        applyQuickDefaults();
+      }
+
+      if (s.bg){
+        bgTransparent.checked = !!s.bg.transparent;
+        bgColor.value = s.bg.color || '#ffffff';
+        bgShape.value = s.bg.shape || 'rounded';
+        cornerPct.value = Number.isFinite(s.bg.cornerPct) ? s.bg.cornerPct : 22;
+        paddingPct.value = Number.isFinite(s.bg.paddingPct) ? s.bg.paddingPct : 10;
+        strokeOn.checked = !!s.bg.strokeOn;
+        strokeColor.value = s.bg.strokeColor || '#000000';
+        strokePct.value = Number.isFinite(s.bg.strokePct) ? s.bg.strokePct : 2;
+        shadowOn.checked = !!s.bg.shadowOn;
+      }
+
+      if (s.icon){
+        tintPct.value = Number.isFinite(s.icon.tintPct) ? s.icon.tintPct : 0;
+        tintColor.value = s.icon.tintColor || '#000000';
+        iconScalePct.value = Number.isFinite(s.icon.scalePct) ? s.icon.scalePct : 100;
+      }
+
+      currentImageMeta = s.image || { type:'none' };
+    }
+
+    function saveState(){
+      try{
+        const state = readUIState();
+        localStorage.setItem(LS_KEY, JSON.stringify(state));
+      }catch(e){ /* ignore */ }
+    }
+
+    function loadState(){
+      try{
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      }catch(e){
+        return null;
+      }
+    }
+
+    function clearSaved(){
+      localStorage.removeItem(LS_KEY);
+      restoreNote.style.display = 'none';
+    }
+
+    function debounce(fn, ms){
+      let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
+    }
+    const saveStateDebounced = debounce(saveState, 200);
+
+    // ===== Advanced toggle =====
     advPanel.style.display = 'none';
     applyQuickDefaults();
 
@@ -283,6 +408,7 @@
       advPanel.style.display = toggleAdvanced.checked ? 'block' : 'none';
       if (!toggleAdvanced.checked) applyQuickDefaults();
       render(cvs.width);
+      saveStateDebounced();
     });
 
     // ===== Drawing helpers =====
@@ -306,7 +432,20 @@
         roundRectPath(ctx,x,y,w,h,rr);
       }
     }
-    function drawLabel(ctx,text,px,color,bandOn,bandColor,bandPad,box){
+    function labelBandHeight(ctx, text, px, bandPad, box){
+      if(!text) return 0;
+      ctx.save();
+      ctx.font=`600 ${px}px Arial, sans-serif`;
+      const m=ctx.measureText(text);
+      const ascent=m.actualBoundingBoxAscent||px*.8;
+      const descent=m.actualBoundingBoxDescent||px*.2;
+      const textH=ascent+descent;
+      const pad=box.w*bandPad;
+      const bandH=textH+pad*2;
+      ctx.restore();
+      return bandH;
+    }
+    function drawLabelAt(ctx, position, text, px, color, bandOn, bandColor, bandPad, box){
       if(!text) return 0;
       ctx.save();
       ctx.font=`600 ${px}px Arial, sans-serif`;
@@ -320,11 +459,16 @@
 
       if(bandOn){
         ctx.fillStyle=bandColor;
-        roundRectPath(ctx, box.x, box.y+box.h-bandH, box.w, bandH, Math.min(16, bandH*0.3));
+        if(position==='top'){
+          roundRectPath(ctx, box.x, box.y, box.w, bandH, Math.min(16, bandH*0.3));
+        } else {
+          roundRectPath(ctx, box.x, box.y+box.h-bandH, box.w, bandH, Math.min(16, bandH*0.3));
+        }
         ctx.fill();
       }
       ctx.fillStyle=color;
-      ctx.fillText(text, box.x+box.w/2, box.y+box.h-bandH/2);
+      const cy = (position==='top') ? (box.y + bandH/2) : (box.y + box.h - bandH/2);
+      ctx.fillText(text, box.x+box.w/2, cy);
       ctx.restore();
       return bandH;
     }
@@ -345,7 +489,8 @@
       ctx.clearRect(0,0,size,size);
 
       // Read values (Quick + Advanced)
-      const textStr = labelText.value.trim();
+      const topText = topLabelText.value.trim();
+      const bottomText = bottomLabelText.value.trim();
       const labelPx = parseInt(labelSize.value||64,10);
       const labelCol = labelColor.value || '#000000';
 
@@ -377,21 +522,18 @@
         if(shadow && shape!=='none') ctx.restore();
       }
 
-      // Reserve label area (so icon doesn't overlap)
-      let reservedBottom = 0;
-      if(textStr){
-        const tmp=document.createElement('canvas');
-        const tctx=tmp.getContext('2d');
-        reservedBottom = drawLabel(tctx, textStr, labelPx, labelCol, bandOn, bandCol, bandPadPct, box);
-      }
+      // Reserve top & bottom label areas so icon doesn't overlap
+      const reservedTop = labelBandHeight(ctx, topText, labelPx, bandPadPct, box);
+      const reservedBottom = labelBandHeight(ctx, bottomText, labelPx, bandPadPct, box);
 
-      // Icon
+      // Icon area
       const inner = {
         x: box.x + size*padPct,
-        y: box.y + size*padPct,
+        y: box.y + size*padPct + reservedTop,
         w: box.w - size*padPct*2,
-        h: box.h - size*padPct*2 - reservedBottom
+        h: box.h - size*padPct*2 - reservedTop - reservedBottom
       };
+
       if(img){
         const scale = parseFloat(iconScalePct.value)/100;
         const asp = img.width/img.height;
@@ -414,12 +556,12 @@
         ctx.restore();
       }
 
-      // Draw label
-      if(textStr){
-        drawLabel(ctx, textStr, labelPx, labelCol, bandOn, bandCol, bandPadPct, box);
-      }
+      // Draw labels (top then bottom)
+      if(topText){ drawLabelAt(ctx, 'top', topText, labelPx, labelCol, bandOn, bandCol, bandPadPct, box); }
+      if(bottomText){ drawLabelAt(ctx, 'bottom', bottomText, labelPx, labelCol, bandOn, bandCol, bandPadPct, box); }
     }
 
+    // Keep auto-fit on resize (no Fit button)
     function fitPreview(){
       const s=Math.min(window.innerWidth-360, window.innerHeight-100);
       const size=Math.max(256, Math.min(1024, Math.floor(s)));
@@ -428,10 +570,21 @@
     window.addEventListener('resize', fitPreview);
 
     // Bindings: Quick
-    sizePx.addEventListener('input',()=>{ exportSize=parseInt(sizePx.value,10); sizePxVal.textContent=exportSize; render(cvs.width); });
-    labelText.addEventListener('input', ()=> render(cvs.width));
-    clearBtn.addEventListener('click', ()=>{ img=null; render(); });
-    fitBtn.addEventListener('click', fitPreview);
+    sizePx.addEventListener('input',()=>{ exportSize=parseInt(sizePx.value,10); sizePxVal.textContent=exportSize; render(cvs.width); saveStateDebounced(); });
+    topLabelText.addEventListener('input', ()=>{ render(cvs.width); saveStateDebounced(); });
+    bottomLabelText.addEventListener('input', ()=>{ render(cvs.width); saveStateDebounced(); });
+
+    // Clear now clears the image AND both captions
+    clearBtn.addEventListener('click', ()=>{
+      img = null;
+      currentImageMeta = { type:'none' };
+      topLabelText.value = '';
+      bottomLabelText.value = '';
+      render();
+      saveStateDebounced();
+    });
+
+    clearSavedBtn.addEventListener('click', ()=>{ clearSaved(); alert('Saved options cleared for this browser.'); });
 
     downloadBtn.addEventListener('click', ()=>{
       const off=document.createElement('canvas');
@@ -442,42 +595,33 @@
       octx.drawImage(cvs,0,0,exportSize,exportSize);
       render(prev); // restore preview
       off.toBlob(blob=>{
-        const name=(labelText.value.trim()||'pictogram').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');
+        const baseName = (bottomLabelText.value.trim() || topLabelText.value.trim() || 'pictogram')
+          .toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');
         const a=document.createElement('a');
-        a.download=`${name}-${exportSize}.png`;
+        a.download=`${baseName}-${exportSize}.png`;
         a.href=URL.createObjectURL(blob); a.click();
         setTimeout(()=>URL.revokeObjectURL(a.href),800);
       },'image/png');
     });
 
-    // Bindings: Advanced (all inputs re-render)
+    // Bindings: Advanced (all inputs re-render + save)
     [
       bgTransparent,bgShape,bgColor,cornerPct,paddingPct,
       strokeOn,strokeColor,strokePct,shadowOn,
       tintPct,tintColor,iconScalePct,
       labelSize,labelColor,labelBandOn,labelBandColor,labelBandPadPct
-    ].forEach(el=>el.addEventListener('input', ()=>render(cvs.width)));
-
-    // Upload local
-    uploadBtn.onclick=()=>uploadInput.click();
-    uploadInput.onchange=e=>{
-      const f=e.target.files?.[0]; if(!f) return;
-      const url=URL.createObjectURL(f);
-      const im=new Image();
-      im.onload=()=>{ img=im; render(); URL.revokeObjectURL(url); };
-      im.src=url;
-    };
+    ].forEach(el=>el.addEventListener('input', ()=>{ render(cvs.width); saveStateDebounced(); }));
 
     // ===== Folder gallery modal =====
     function showModal(){ galleryModal.classList.add('show'); }
     function hideModal(){ galleryModal.classList.remove('show'); }
 
-    openGalleryBtn.onclick=()=>{ showModal(); buildGrid(); };
+    openGalleryBtn.onclick=()=>{ showModal(); buildGrid(true); };
     gmClose.onclick=hideModal;
-    gmReload.onclick=async()=>{ manifest=null; await buildGrid(); };
+    gmReload.onclick=async()=>{ manifest=null; await buildGrid(false); };
     gmSize.oninput=()=>document.querySelector('.gm-grid').style.setProperty('--cell', gmSize.value+'px');
     gmSearch.oninput=()=>filterGrid(gmSearch.value.trim().toLowerCase());
-    document.addEventListener('keydown',e=>{ if(e.key.toLowerCase()==='g'){ showModal(); buildGrid(); } });
+    document.addEventListener('keydown',e=>{ if(e.key.toLowerCase()==='g'){ showModal(); buildGrid(false); } });
 
     async function fetchManifest(){
       const res=await fetch('../../images/pictos/index.json',{cache:'no-store'});
@@ -486,7 +630,8 @@
       if(!data || !Array.isArray(data.files)) throw new Error('Invalid manifest format');
       return data;
     }
-    async function buildGrid(){
+
+    async function buildGrid(alsoTryRestore){
       gmStatus.textContent='Loading…'; gmGrid.innerHTML='';
       try{
         manifest = manifest || await fetchManifest();
@@ -494,6 +639,15 @@
         gridItems = manifest.files.map(fn=>({name:fn, src:base+fn}));
         gmStatus.textContent=`Found ${gridItems.length} file(s).`;
         renderGrid(gridItems);
+
+        if (alsoTryRestore && currentImageMeta?.type === 'gallery' && currentImageMeta.src){
+          const hit = gridItems.find(it => it.src === currentImageMeta.src);
+          if (hit){
+            const imageEl=new Image(); imageEl.crossOrigin='anonymous';
+            imageEl.onload=()=>{ img=imageEl; render(); hideModal(); };
+            imageEl.src=hit.src;
+          }
+        }
       }catch(err){
         gmStatus.innerHTML=`<span style="color:#b00">Could not load manifest: ${String(err)}</span><br><small>Ensure <code>index.json</code> exists.</small>`;
       }
@@ -505,7 +659,13 @@
         const im=document.createElement('img'); im.loading='lazy'; im.alt=item.name; im.src=item.src; cell.appendChild(im);
         cell.onclick=()=>{
           const imageEl=new Image(); imageEl.crossOrigin='anonymous';
-          imageEl.onload=()=>{ img=imageEl; render(); hideModal(); };
+          imageEl.onload=()=>{
+            img=imageEl;
+            currentImageMeta = { type:'gallery', src:item.src, name:item.name };
+            render();
+            saveStateDebounced();
+            hideModal();
+          };
           imageEl.src=item.src;
         };
         gmGrid.appendChild(cell);
@@ -517,19 +677,47 @@
       renderGrid(arr);
     }
 
-    // ===== Defaults =====
-    sizePxVal.textContent=sizePx.value;
-    // Background defaults
-    bgShape.value='rounded'; cornerPct.value=22; paddingPct.value=10;
+    // Upload local (remember name only)
+    uploadBtn.onclick=()=>uploadInput.click();
+    uploadInput.onchange=e=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      const url=URL.createObjectURL(f);
+      const im=new Image();
+      im.onload=()=>{
+        img=im;
+        currentImageMeta = { type:'local', name:f.name };
+        render();
+        saveStateDebounced();
+        URL.revokeObjectURL(url);
+      };
+      im.src=url;
+    };
 
-    // First paint
-    fitPreview();
+    // ===== Restore saved options on load =====
+    (function init(){
+      const saved = loadState();
+      if (saved){
+        writeUIState(saved);
+        restoreNote.style.display = 'block';
+        restoreNote.textContent = 'Restored previous options' + (saved.image?.type==='local' ? ` (local image “${saved.image.name}” needs reloading)` : saved.image?.type==='gallery' ? ` (reloading ${saved.image.name||'image'} from folder)` : '');
+      } else {
+        applyQuickDefaults();
+      }
+      // If we have a saved gallery image, try lazy-loading it without opening modal
+      if (saved?.image?.type === 'gallery' && saved.image.src){
+        const imageEl=new Image(); imageEl.crossOrigin='anonymous';
+        imageEl.onload=()=>{ img=imageEl; render(); };
+        imageEl.onerror=()=>{ render(); };
+        imageEl.src=saved.image.src;
+      } else {
+        render(); // initial paint
+      }
+      fitPreview();
+    })();
 
-    // Optional translation hook if present on your site
     if (typeof translateAll === 'function') { translateAll(); }
   </script>
 
-  <!-- Optional: include your translation helper if used on the site -->
   <script src="../../js/translationonly.js"></script>
 </body>
 </html>

@@ -95,7 +95,7 @@
     canvas.height = Math.floor(H * dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
     GH = Math.max(60, Math.round(H * 0.12));
-    PIPE_W = Math.max(28, Math.round(W * 0.035));
+    PIPE_W = Math.max(28, Math.round(W * 0.035)); // keep narrow on resize
     rescaleConfig();
     bird.r = Math.max(10, Math.round(14 * (H / 640)));
     bird.x = Math.round(W * 0.25);
@@ -244,7 +244,7 @@
     }catch(e){ /* ignore if blocked */ }
   }
 
-  // ======= Reset & Start logic (fixes "doesn't reset on death") =======
+  // ======= Reset & Start logic (resets on death) =======
   function resetGameState(){
     rescaleConfig();
     score = 0; scoreEl.textContent = '0';
@@ -381,47 +381,139 @@
     }
   }
 
-  // ======= Mario-style pipes (narrower, with caps/rims) =======
+  // ======= Pipe drawing helpers & improved style =======
+  function roundRectPath(x, y, w, h, r){
+    const rr = Math.min(r, h/2, w/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.lineTo(x+w-rr, y);
+    ctx.quadraticCurveTo(x+w, y, x+w, y+rr);
+    ctx.lineTo(x+w, y+h-rr);
+    ctx.quadraticCurveTo(x+w, y+h, x+w-rr, y+h);
+    ctx.lineTo(x+rr, y+h);
+    ctx.quadraticCurveTo(x, y+h, x, y+h-rr);
+    ctx.lineTo(x, y+rr);
+    ctx.quadraticCurveTo(x, y, x+rr, y);
+    ctx.closePath();
+  }
+
+  // Improved Mario-style pipe with beveled rim & side shading
   function drawPipe(x, topH, w=PIPE_W, gap=cfg.gap) {
     const bottomY = topH + gap;
-    const capH = Math.max(10, Math.round(w * 0.35)); // rim height
-    const over = Math.max(6,  Math.round(w * 0.18)); // cap overhang
+    const capH = Math.max(10, Math.round(w * 0.36)); // rim height
+    const over = Math.max(6,  Math.round(w * 0.22)); // cap overhang
+    const bevelW = Math.max(3, Math.round(w * 0.10)); // left/right bevel width
 
+    // Cylindrical body gradient (richer)
     const bodyGrad = ctx.createLinearGradient(x,0,x+w,0);
-    bodyGrad.addColorStop(0.00, '#096b22');
-    bodyGrad.addColorStop(0.25, '#17a23a');
-    bodyGrad.addColorStop(0.50, '#29d14f');
-    bodyGrad.addColorStop(0.75, '#17a23a');
-    bodyGrad.addColorStop(1.00, '#096b22');
+    bodyGrad.addColorStop(0.00, '#064f18');
+    bodyGrad.addColorStop(0.16, '#0f8a2d');
+    bodyGrad.addColorStop(0.50, '#39e15e'); // bright core
+    bodyGrad.addColorStop(0.84, '#0f8a2d');
+    bodyGrad.addColorStop(1.00, '#064f18');
 
-    ctx.fillStyle = bodyGrad; ctx.fillRect(x, 0, w, topH);
-    ctx.fillStyle = bodyGrad; ctx.fillRect(x, bottomY, w, H-bottomY);
+    // TOP body
+    ctx.fillStyle = bodyGrad;
+    ctx.fillRect(x, 0, w, topH);
 
-    // body highlights
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    const sheenW = Math.max(2, Math.round(w*0.12));
-    const sheenX = x + Math.round(w*0.22);
-    ctx.fillRect(sheenX, 0, sheenW, topH);
-    ctx.fillRect(sheenX, bottomY, sheenW, H-bottomY);
+    // BOTTOM body
+    ctx.fillStyle = bodyGrad;
+    ctx.fillRect(x, bottomY, w, H - bottomY);
 
-    // edges
-    ctx.fillStyle = 'rgba(0,0,0,0.20)';
-    ctx.fillRect(x, 0, 2, topH); ctx.fillRect(x+w-2, 0, 2, topH);
-    ctx.fillRect(x, bottomY, 2, H-bottomY); ctx.fillRect(x+w-2, bottomY, 2, H-bottomY);
+    // Body specular stripes (subtle)
+    const stripeX1 = x + Math.round(w * 0.24);
+    const stripeX2 = x + Math.round(w * 0.70);
+    const stripeG1 = ctx.createLinearGradient(stripeX1-2,0,stripeX1+2,0);
+    stripeG1.addColorStop(0,'rgba(255,255,255,0)');
+    stripeG1.addColorStop(0.5,'rgba(255,255,255,0.22)');
+    stripeG1.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle = stripeG1;
+    ctx.fillRect(stripeX1-2, 0, 4, topH);
+    ctx.fillRect(stripeX1-2, bottomY, 4, H - bottomY);
 
-    // caps
-    function drawCap(cx, cy, cw, ch, facingDown){
-      const gradCap = ctx.createLinearGradient(cx, cy, cx, cy+ch);
-      if (facingDown){ gradCap.addColorStop(0, '#62e86e'); gradCap.addColorStop(1, '#1fbf43'); }
-      else           { gradCap.addColorStop(0, '#1fbf43'); gradCap.addColorStop(1, '#62e86e'); }
-      ctx.fillStyle = gradCap; ctx.fillRect(cx, cy, cw, ch);
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(cx, cy, cw, 2); ctx.fillRect(cx, cy+ch-2, cw, 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.10)';
-      ctx.fillRect(cx+3, cy+Math.round(ch*0.25), cw-6, 2);
+    const stripeG2 = ctx.createLinearGradient(stripeX2-1,0,stripeX2+1,0);
+    stripeG2.addColorStop(0,'rgba(255,255,255,0)');
+    stripeG2.addColorStop(0.5,'rgba(255,255,255,0.12)');
+    stripeG2.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle = stripeG2;
+    ctx.fillRect(stripeX2-1, 0, 2, topH);
+    ctx.fillRect(stripeX2-1, bottomY, 2, H - bottomY);
+
+    // Joint ambient occlusion where body meets the rims
+    function jointAO(y){
+      const g = ctx.createLinearGradient(0, y-8, 0, y+8);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(0.45, 'rgba(0,0,0,0.22)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x- over, y-8, w + over*2, 16);
     }
-    drawCap(x - over, topH - capH, w + over*2, capH, true);
-    drawCap(x - over, bottomY,      w + over*2, capH, false);
+    jointAO(topH);
+    jointAO(bottomY);
+
+    // RIM drawing (rounded rectangle with bevelled sides, gloss & inner shadow)
+    function drawRim(cx, cy, cw, ch, facingDown){
+      // Base rounded rim
+      let base = ctx.createLinearGradient(cx, cy, cx, cy+ch);
+      if (facingDown){
+        // top is brighter (the underside catching light)
+        base.addColorStop(0.00, '#6df279');
+        base.addColorStop(0.45, '#2bd24f');
+        base.addColorStop(1.00, '#18a83a');
+      } else {
+        base.addColorStop(0.00, '#18a83a');
+        base.addColorStop(0.55, '#2bd24f');
+        base.addColorStop(1.00, '#6df279');
+      }
+      ctx.fillStyle = base;
+      roundRectPath(cx, cy, cw, ch, Math.round(ch*0.35));
+      ctx.fill();
+
+      // Side bevels (left/right)
+      function sideBevel(bx){
+        const sg = ctx.createLinearGradient(bx, cy, bx+bevelW, cy);
+        sg.addColorStop(0, 'rgba(0,0,0,0.45)');
+        sg.addColorStop(0.6, 'rgba(0,0,0,0.0)');
+        ctx.fillStyle = sg;
+        roundRectPath(bx, cy+1, bevelW, ch-2, Math.round((ch-2)*0.33));
+        ctx.fill();
+      }
+      sideBevel(cx);                   // left bevel (dark -> clear)
+      ctx.save();                      // right bevel (mirror)
+      ctx.translate(cx+cw,0); ctx.scale(-1,1);
+      sideBevel(0);
+      ctx.restore();
+
+      // Gloss band across rim face
+      const gloss = ctx.createLinearGradient(cx, cy, cx, cy+ch);
+      gloss.addColorStop(0.15,'rgba(255,255,255,0.30)');
+      gloss.addColorStop(0.35,'rgba(255,255,255,0.10)');
+      gloss.addColorStop(0.65,'rgba(255,255,255,0.05)');
+      gloss.addColorStop(1.00,'rgba(255,255,255,0.00)');
+      ctx.fillStyle = gloss;
+      roundRectPath(cx+2, cy+1, cw-4, Math.max(2, ch-2), Math.max(1, Math.round((ch-2)*0.28)));
+      ctx.fill();
+
+      // Thin edge lines for crispness
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(cx, cy, cw, 1);                  // top edge
+      ctx.fillRect(cx, cy+ch-1, cw, 1);             // bottom edge
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(cx+3, cy+Math.round(ch*0.28), cw-6, 1); // highlight line
+
+      // Inner shadow at the meeting with body (gives depth)
+      const inner = facingDown
+        ? ctx.createLinearGradient(cx, cy+ch-4, cx, cy+ch+6)
+        : ctx.createLinearGradient(cx, cy-6, cx, cy+4);
+      inner.addColorStop(0, 'rgba(0,0,0,0.35)');
+      inner.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = inner;
+      ctx.fillRect(cx, facingDown ? (cy+ch-4) : (cy-6), cw, 10);
+    }
+
+    // Draw the two rims
+    drawRim(x - over, topH - capH, w + over*2, capH, /*facingDown=*/true);
+    drawRim(x - over, bottomY,      w + over*2, capH, /*facingDown=*/false);
   }
 
   // ======= Bird drawing (sprite first, vector fallback) =======
@@ -440,6 +532,7 @@
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
+    // (shadow removed)
     ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
     ctx.restore();
   }
