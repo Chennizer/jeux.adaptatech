@@ -380,7 +380,7 @@ const LAYOUT = {
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-/* ---------- fullscreen resilience helpers (iPad only) ---------- */
+/* ---------- fullscreen helpers ---------- */
 function requestFS(){
   (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
 }
@@ -395,7 +395,6 @@ function ensureReturnToFullscreen(){
   }
   setTimeout(resizeCanvas,120);
 }
-// Less aggressive than before: we WON'T try to re-enter while a picker/modal is open.
 let iosModalOpen = false;
 function tryKeepFullscreen(delay=350){
   if(!isIOS || iosModalOpen) return;
@@ -415,7 +414,7 @@ function setPauseLabel(paused){
   btn.textContent = label || (paused ? 'Resume' : 'Pause');
 }
 
-/* ---------- simple single-tap helper ---------- */
+/* ---------- single-tap helper ---------- */
 const supportsPointer = 'onpointerup' in window;
 function addTap(el, handler){
   if(!el) return;
@@ -446,7 +445,7 @@ let nowMs = 0; // for pulse
 /* ---------- Special features ---------- */
 let specialMode='none';
 let IMG_COUNT = 4; // 2 or 4
-const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff']; // r,y,g,b
+const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff'];
 const imgs=[null,null,null,null];
 
 /* Optional placeholders */
@@ -511,7 +510,7 @@ function getCenter(size){
   return { cx: baseCx, cy };
 }
 
-/* --- Auto-fit utility --- */
+/* Auto-fit utility */
 function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02){
   const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
   const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
@@ -670,19 +669,23 @@ function updatePageTint(uiSeconds, denom){
   document.body.style.backgroundColor = hexToRGBA(col, TINT_ALPHA);
 }
 
-/* ---- RADIAL ---- */
+/* ---- RADIAL (iPad fullscreen tweaked) ---- */
 function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
-  // Bigger + closer on iPad so they don't get shrunk by edge fitting
-  const radialOffset4 = isIOS ? 0.08 : LAYOUT.radial.radiusOffset;
-  const radialOffset2 = isIOS ? 0.04 : RADIAL_RADIUS_OFFSET_2;
+  const iosFS = isIOS && !!document.fullscreenElement;
+
+  // Bring images closer to the dial in iPad fullscreen so they don't hit edges
+  const radialOffset4 = iosFS ? 0.05 : (isIOS ? 0.08 : LAYOUT.radial.radiusOffset);
+  const radialOffset2 = iosFS ? 0.03 : (isIOS ? 0.04 : RADIAL_RADIUS_OFFSET_2);
 
   const basePx = size * LAYOUT.imgBase;
   const radialOffset = (IMG_COUNT===2 ? radialOffset2 : radialOffset4);
   const imgR   = numbersR + size * radialOffset;
-  const hShiftPx_4 = size * H_SHIFT;
-  const hShiftPx_2 = size * H_SHIFT_2;
-  const vTopPx   = size * V_OFFSET_TOP;
-  const vBotPx   = size * V_OFFSET_BOTTOM;
+
+  // Soften horizontal/vertical nudges a bit only while fullscreen on iPad
+  const hShiftPx_4 = size * (iosFS ? 0.18 : H_SHIFT);
+  const hShiftPx_2 = size * (iosFS ? 0.09 : H_SHIFT_2);
+  const vTopPx     = size * (iosFS ? 0.12 : V_OFFSET_TOP);
+  const vBotPx     = size * (iosFS ? -0.12 : V_OFFSET_BOTTOM);
 
   const N = IMG_COUNT;
   const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
@@ -712,7 +715,8 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
     const cxI = cx + Math.cos(ang)*imgR + dx;
     const cyI = cy + Math.sin(ang)*imgR + dy;
 
-    const fitS = fitScaleForCenteredRect(cxI, cyI, w, h);
+    // While fullscreen on iPad, make edge padding a bit smaller to avoid over-shrinking
+    const fitS = fitScaleForCenteredRect(cxI, cyI, w, h, iosFS ? 0.01 : 0.02);
     w *= fitS; h *= fitS;
 
     const x = cxI - w/2;
@@ -1096,11 +1100,9 @@ function closeListModal(){
 /* Build an iPad proxy for a <select> */
 function createSelectProxy(selectEl, proxyBtn, title){
   if(!isIOS) return;
-  // Hide the native select; show proxy
   selectEl.classList.add('hidden');
   proxyBtn.classList.remove('hidden');
 
-  // Initialize label
   const curr = selectEl.options[selectEl.selectedIndex];
   proxyBtn.textContent = curr ? curr.textContent : title;
 
@@ -1111,7 +1113,6 @@ function createSelectProxy(selectEl, proxyBtn, title){
       selected: opt.selected
     }));
     openListModal(title, items, (val, label)=>{
-      // Update underlying select & fire its change handler
       selectEl.value = val;
       proxyBtn.textContent = label;
       selectEl.dispatchEvent(new Event('change', {bubbles:true}));
@@ -1165,7 +1166,7 @@ if(!supportsDirPicker){
 
 let repoHandle = null;
 
-/* IndexedDB for repo handle (desktop path intact) */
+/* IndexedDB for repo handle */
 const DB_NAME='timer-handles', STORE='handles';
 function withHandleStore(mode, fn){
   return new Promise((res, rej)=>{
@@ -1222,7 +1223,7 @@ const pickPhotoBtn   = document.getElementById('pickPhotoBtn');
 const uploadLibraryInput = document.getElementById('uploadLibraryInput');
 const uploadPhotoInput   = document.getElementById('uploadPhotoInput');
 
-let gridItems = []; // [{name, url, file?}]
+let gridItems = [];
 
 /* iPad slot cursor */
 let nextSlot = 0;
@@ -1290,7 +1291,7 @@ function closePickerModal(){
   ensureReturnToFullscreen();
 }
 
-/* Choose repo (desktop behavior maintained) */
+/* Choose repo */
 async function chooseRepository(){
   try{
     const handle = await window.showDirectoryPicker();
@@ -1306,7 +1307,7 @@ async function chooseRepository(){
   }catch(e){ return false; }
 }
 
-/* Old general upload fallback (mobile) */
+/* General upload fallback (mobile) */
 uploadInput.addEventListener('change', ()=>{
   pickerGrid.innerHTML=''; gridItems = [];
   appendFilesToGrid(uploadInput.files);
@@ -1345,7 +1346,7 @@ function appendFilesToGrid(fileList){
   pickerGrid.appendChild(frag);
 }
 
-/* iPad modal buttons (hidden on desktop) */
+/* iPad modal buttons */
 addTap(pickLibraryBtn, ()=>{ if(!isIOS) return; uploadLibraryInput.value = ''; uploadLibraryInput.click(); });
 uploadLibraryInput.addEventListener('change', ()=>{ if(!isIOS) return; appendFilesToGrid(uploadLibraryInput.files); setCurrentSlot(nextSlot); });
 
@@ -1544,7 +1545,7 @@ overlay.addEventListener('click', e => { e.stopPropagation(); }, {passive:false}
 window.addEventListener('DOMContentLoaded', ()=>{
   if(isIOS){
     // iPad: bigger default images, higher slider ceiling
-    LAYOUT.imgBase = 0.58;                     // bigger by default
+    LAYOUT.imgBase = 0.58;
     const r = document.getElementById('imgSizeRange');
     r.max = '0.95';
     r.value = String(LAYOUT.imgBase);
@@ -1576,7 +1577,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   draw();
 });
 
-/* Reassert fullscreen after common lifecycle changes (iPad only) */
+/* Reassert fullscreen after lifecycle changes (iPad only) */
 if(isIOS){
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') tryKeepFullscreen(200); });
   window.addEventListener('focus', ()=>{ tryKeepFullscreen(200); });
