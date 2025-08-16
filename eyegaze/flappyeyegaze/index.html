@@ -3,21 +3,19 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Flappy-ish (All Generated)</title>
+<title>Flappy-ish — Fullscreen, Mouse-Follow</title>
 <style>
-  :root { --bg:#0d1b2a; --fg:#e0fbfc; --accent:#ffd166; --accent2:#06d6a0; --danger:#ef476f; }
+  :root { --fg:#e0fbfc; }
   *{ box-sizing:border-box; }
-  html,body{ margin:0; height:100%; background:#0b1522; color:var(--fg); font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-  #wrap { position:fixed; inset:0; display:grid; place-items:center; background:radial-gradient(1200px 800px at 50% 20%, #16324f 0%, #0e2034 45%, #0b1522 100%); }
-  canvas { width:min(100vw, 68vh); aspect-ratio:9/16; height:auto; display:block; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.05); background:#87ceeb; }
+  html,body { margin:0; height:100%; background:#0b1522; color:var(--fg); font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+  #wrap { position:fixed; inset:0; display:grid; place-items:center; background:radial-gradient(1400px 900px at 50% 20%, #16324f 0%, #0e2034 45%, #0b1522 100%); }
+  canvas { width:100vw; height:100vh; display:block; background:#87ceeb; }
   .hud {
     position:absolute; inset:0; pointer-events:none; display:flex; align-items:flex-start; justify-content:space-between; padding:12px 14px;
     font-weight:700; text-shadow:0 2px 0 rgba(0,0,0,.25);
   }
   .badge{ pointer-events:none; background:rgba(0,0,0,.35); padding:.35rem .6rem; border-radius:999px; font-size:14px; }
-  #centerOverlay {
-    position:absolute; inset:0; display:grid; place-items:center; pointer-events:none;
-  }
+  #centerOverlay { position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
   .panel {
     pointer-events:auto;
     background:rgba(9,14,22,.78);
@@ -25,17 +23,16 @@
     border:1px solid rgba(255,255,255,.08);
     border-radius:18px;
     padding:18px 18px 14px;
-    width:min(92vw, 420px);
+    width:min(92vw, 520px);
     text-align:center;
     box-shadow: 0 20px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.05);
   }
-  .title{ font-size:24px; font-weight:800; margin:4px 0 8px; letter-spacing:.2px; }
+  .title{ font-size:26px; font-weight:800; margin:4px 0 8px; letter-spacing:.2px; }
   .subtitle{ font-size:14px; opacity:.85; margin:0 0 10px; }
   .row{ display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap; margin:10px 0 6px; }
   .chip{
     padding:.45rem .8rem; border-radius:999px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); cursor:pointer; user-select:none;
-    transition:transform .08s ease, background .2s;
-    font-weight:700; font-size:14px;
+    transition:transform .08s ease, background .2s; font-weight:700; font-size:14px;
   }
   .chip[data-active="true"]{ background:linear-gradient(180deg, #1b2b45, #15243b); border-color:rgba(255,255,255,.2); box-shadow: inset 0 0 0 1px rgba(255,255,255,.04); }
   .cta{
@@ -53,7 +50,7 @@
 </head>
 <body>
 <div id="wrap">
-  <canvas id="game" width="360" height="640" aria-label="Flappy style game"></canvas>
+  <canvas id="game" aria-label="Flappy style game"></canvas>
 
   <div class="hud">
     <div class="badge">Score: <span id="score">0</span></div>
@@ -63,42 +60,48 @@
   <div id="centerOverlay" aria-live="polite">
     <div class="panel" id="menuPanel">
       <div class="title">Flappy-ish</div>
-      <div class="subtitle">Click / tap / press <b>Space</b> to flap. Avoid the pipes.</div>
+      <div class="subtitle">Move your <b>mouse / finger</b> up & down to fly. Avoid the pipes.</div>
       <div class="row" role="group" aria-label="Difficulty">
         <div class="chip" data-diff="easy"   data-active="true">Easy</div>
         <div class="chip" data-diff="normal">Normal</div>
         <div class="chip" data-diff="hard">Hard</div>
       </div>
       <button class="cta" id="startBtn">Start</button>
-      <div class="hint">Pause: <span class="kbd">P</span> &nbsp; Restart: <span class="kbd">R</span></div>
+      <div class="hint">Pause: <span class="kbd">P</span> &nbsp; Restart: <span class="kbd">R</span> &nbsp; Start: <span class="kbd">Space/Enter/Click</span></div>
     </div>
   </div>
 
   <div class="footer">
-    <div class="kbd">Space / Click / Tap = Flap</div>
+    <div class="kbd">Steer with mouse/finger</div>
   </div>
 </div>
 
 <script>
 (() => {
-  // ======= Virtual canvas & sizing =======
-  const W = 360, H = 640; // virtual units (9:16)
+  // ======= Canvas sizing (fullscreen) =======
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  let scale = 1, ox = 0, oy = 0;
+
+  let W = window.innerWidth;
+  let H = window.innerHeight;
+  let GH = Math.max(60, Math.round(H * 0.12)); // ground height
+  let PIPE_W = Math.round(56 * (W / 360));     // scale with width
+  let dpr = 1;
 
   function fit() {
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const targetW = Math.min(vw, vh * (9/16));
-    const cssW = targetW, cssH = targetW * 16/9;
-    canvas.style.width = cssW + 'px';
-    canvas.style.height = cssH + 'px';
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = window.innerWidth; H = window.innerHeight;
+    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     canvas.width = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
-    scale = (canvas.width / W);
-    ox = 0; oy = 0;
-    ctx.setTransform(scale,0,0,scale,ox,oy);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    GH = Math.max(60, Math.round(H * 0.12));
+    PIPE_W = Math.max(40, Math.round(56 * (W / 360)));
+    // re-scale config and some actor sizes
+    rescaleConfig();
+    bird.r = Math.max(10, Math.round(14 * (H / 640)));
+    bird.x = Math.round(W * 0.25);
+    // clamp target to new bounds
+    setTargetY(targetY);
   }
   window.addEventListener('resize', fit, { passive:true });
 
@@ -114,6 +117,7 @@
     chips.forEach(c => c.dataset.active = 'false');
     ch.dataset.active = 'true';
     difficulty = ch.dataset.diff;
+    rescaleConfig();
   }));
 
   // ======= Audio (generated) =======
@@ -143,10 +147,9 @@
     o.stop(t0 + dur + 0.02);
   }
   function scoreChime(){ beep(850, .07, 'square', .5); setTimeout(()=>beep(1100,.06,'square',.45), 30); }
-  function flapSfx(){ beep(650, .05, 'triangle', .45); }
   function hitSfx(){ beep(200, .18, 'sawtooth', .35); setTimeout(()=>beep(120,.22,'sawtooth',.3), 40); }
 
-  // ======= RNG helper =======
+  // ======= Helpers =======
   const rand = (a,b)=>a + Math.random()*(b-a);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
@@ -154,63 +157,64 @@
   const State = { READY:0, PLAYING:1, PAUSED:2, DEAD:3 };
   let state = State.READY;
   let score = 0, best = parseInt(localStorage.getItem('flappy-best')||'0',10);
-
   bestEl.textContent = best;
 
-  // Difficulty presets
-  const presets = {
-    easy:   { gap: 190, speed: 2.1, spawn: 1.5, gravity: 1100, flap: -300 },
-    normal: { gap: 170, speed: 2.45, spawn: 1.35, gravity: 1200, flap: -320 },
-    hard:   { gap: 150, speed: 2.9, spawn: 1.2, gravity: 1250, flap: -330 }
+  // Difficulty presets (base at 360x640 portrait; we rescale)
+  const presetsBase = {
+    easy:   { gap: 190, speed: 2.1, spawn: 1.5 },
+    normal: { gap: 170, speed: 2.45, spawn: 1.35 },
+    hard:   { gap: 150, speed: 2.9, spawn: 1.20 }
   };
-  let cfg = presets[difficulty];
+  let cfg = { gap: 220, speed: 3, spawn: 1.4 };
 
-  // Bird
-  const bird = {
-    x: W*0.28, y: H*0.45, vy: 0, r: 14, angle: 0,
-    wingPhase: 0
-  };
+  function rescaleConfig() {
+    const base = presetsBase[difficulty];
+    // scale gaps by height; speed by width (so it feels similar across sizes)
+    cfg = {
+      gap: Math.round(base.gap * (H / 640)),
+      speed: base.speed * (W / 360),
+      spawn: base.spawn
+    };
+  }
+
+  // Bird (mouse-follow control)
+  const bird = { x: Math.round(W*0.25), y: Math.round(H*0.45), r: 14, angle: 0, wingPhase: 0 };
+  let targetY = bird.y;
+  function setTargetY(y){ targetY = clamp(y, bird.r+5, H - GH - bird.r - 5); }
 
   // Pipes
   const pipes = [];
-  const PIPE_W = 56;
   let pipeTimer = 0;
 
-  // Clouds (background parallax)
+  // Clouds
   const clouds = [];
   function makeCloud() {
     const y = rand(20, H*0.55);
     const s = rand(0.6, 1.4);
-    const w = rand(60, 120)*s;
-    const h = rand(18, 34)*s;
-    clouds.push({ x: W + w, y, w, h, speed: rand(8, 16)*s });
+    const w = rand(100, 200)*s;
+    const h = rand(24, 42)*s;
+    clouds.push({ x: W + w, y, w, h, speed: rand(12, 22)*s });
   }
-  for(let i=0;i<6;i++){ makeCloud(); }
+  for(let i=0;i<8;i++) makeCloud();
 
   // Ground strips
   let groundOffset = 0;
 
-  // Input
-  function flap() {
+  // ======= Input (start / steer) =======
+  function startOrResume(){
     ensureAudio();
     if (state === State.DEAD) { restart(); return; }
-    if (state === State.PAUSED) return;
-    if (state === State.READY) {
-      state = State.PLAYING;
-      hideMenu();
-    }
-    flapSfx();
-    bird.vy = cfg.flap;
-  }
-  function pauseToggle(){
-    if (state === State.PLAYING){ state = State.PAUSED; showMenu('Paused'); }
-    else if (state === State.PAUSED){ state = State.PLAYING; hideMenu(); }
+    if (state === State.PAUSED) { state = State.PLAYING; hideMenu(); return; }
+    if (state === State.READY) { state = State.PLAYING; hideMenu(); }
   }
   function restart(){
-    cfg = presets[difficulty];
+    rescaleConfig();
     score = 0; scoreEl.textContent = '0';
-    bird.x = W*0.28; bird.y = H*0.45; bird.vy = 0; bird.angle = 0; bird.wingPhase = 0;
-    pipes.length = 0; pipeTimer = 0;
+    pipes.length = 0; pipeTimer = 0; groundOffset = 0;
+    bird.x = Math.round(W*0.25);
+    bird.y = Math.round(H*0.45);
+    targetY = bird.y;
+    bird.angle = 0; bird.wingPhase = 0;
     state = State.READY;
     showMenu('Flappy-ish');
   }
@@ -227,12 +231,17 @@
 
   // Events
   window.addEventListener('keydown', e=>{
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter'){ e.preventDefault(); flap(); }
-    else if (e.key === 'p' || e.key === 'P'){ pauseToggle(); }
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter'){ e.preventDefault(); startOrResume(); }
+    else if (e.key === 'p' || e.key === 'P'){ 
+      if (state === State.PLAYING){ state = State.PAUSED; showMenu('Paused'); }
+      else if (state === State.PAUSED){ state = State.PLAYING; hideMenu(); }
+    }
     else if (e.key === 'r' || e.key === 'R'){ restart(); }
   });
-  window.addEventListener('mousedown', flap);
-  window.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, { passive:false });
+  window.addEventListener('mousedown', (e)=>{ setTargetY(e.clientY); startOrResume(); });
+  window.addEventListener('mousemove', (e)=>{ setTargetY(e.clientY); }, { passive:true });
+  window.addEventListener('touchstart', (e)=>{ if (e.touches[0]) { setTargetY(e.touches[0].clientY); startOrResume(); } }, { passive:true });
+  window.addEventListener('touchmove', (e)=>{ if (e.touches[0]) setTargetY(e.touches[0].clientY); }, { passive:true });
 
   startBtn.addEventListener('click', () => { ensureAudio(); hideMenu(); state = State.PLAYING; });
 
@@ -248,7 +257,7 @@
   function drawSun() {
     ctx.save();
     ctx.globalAlpha = 0.35;
-    const cx = W*0.12, cy = H*0.18, r = 42;
+    const cx = W*0.12, cy = H*0.18, r = Math.max(40, Math.min(W,H)*0.05);
     const g = ctx.createRadialGradient(cx,cy,8, cx,cy,r*2.2);
     g.addColorStop(0, 'rgba(255,255,200,.95)');
     g.addColorStop(1, 'rgba(255,255,200,0)');
@@ -279,7 +288,6 @@
     ctx.closePath(); ctx.fill();
   }
   function drawGround() {
-    const GH = 52;
     const y0 = H - GH;
     const g = ctx.createLinearGradient(0,y0,0,H);
     g.addColorStop(0,'#3b7f3b'); g.addColorStop(1,'#2c5f2c');
@@ -289,15 +297,15 @@
     ctx.save();
     ctx.beginPath(); ctx.rect(0,y0, W, GH);
     ctx.clip();
-    const stripeW = 16;
+    const stripeW = Math.max(14, Math.round(0.018 * W));
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     for(let x=-((groundOffset)%stripeW)-stripeW; x<W+stripeW; x+=stripeW){
-      ctx.fillRect(x, y0, 8, GH);
+      ctx.fillRect(x, y0, Math.round(stripeW/2), GH);
     }
     ctx.restore();
   }
 
-  function drawPipe(x, topH, w=PIPE_W, gap=160) {
+  function drawPipe(x, topH, w=PIPE_W, gap=cfg.gap) {
     const bottomY = topH + gap;
     const grad = ctx.createLinearGradient(x,0,x+w,0);
     grad.addColorStop(0, '#2bb673');
@@ -328,7 +336,6 @@
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
 
-    // body
     const bodyR = b.r;
     const bodyGrad = ctx.createRadialGradient(0,0, bodyR*0.2, 0,0, bodyR*1.1);
     bodyGrad.addColorStop(0, '#ffd166');
@@ -340,7 +347,7 @@
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.beginPath(); ctx.ellipse(0, bodyR*0.2, bodyR*0.9, bodyR*0.7, 0, 0, Math.PI*2); ctx.fill();
 
-    // wing (animated)
+    // wing
     ctx.save();
     const wingA = Math.sin(b.wingPhase)*0.6 - 0.2;
     ctx.rotate(wingA);
@@ -351,7 +358,7 @@
     ctx.fill();
     ctx.restore();
 
-    // eye (white fill, black pupil)
+    // eye + pupil
     ctx.fillStyle = '#ffffff';
     ctx.beginPath(); ctx.arc(bodyR*0.35, -bodyR*0.25, bodyR*0.28, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#111';
@@ -383,19 +390,19 @@
 
   // ======= Loop =======
   let last = performance.now();
-  fit();
+  fit(); // initial sizing
 
   function step(now){
-    const dt = Math.min(0.033, (now - last)/1000); // clamp to 33ms
+    const dt = Math.min(0.033, (now - last)/1000);
     last = now;
-    update(dt, now);   // <-- pass the current time to update
+    update(dt, now);   // pass `now` to avoid scope issues
     draw();
     requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
 
   function update(dt, now){
-    // small ambient wing even when idle
+    // wing animation
     bird.wingPhase += (state === State.PLAYING ? 14 : 10)*dt;
 
     // Background motion
@@ -404,32 +411,36 @@
     // Clouds
     for (const c of clouds){ c.x -= c.speed*dt; }
     while (clouds.length && clouds[0].x + clouds[0].w < -10) clouds.shift();
-    if (clouds.length < 6 && Math.random() < 0.02) makeCloud();
+    if (clouds.length < 8 && Math.random() < 0.02) makeCloud();
 
     if (state === State.PAUSED || state === State.READY || state === State.DEAD){
       if (state === State.READY){
-        // idle bob — use the supplied `now`
+        // idle bob
         bird.y += Math.sin(now*0.004)*0.3;
         bird.angle = Math.sin(now*0.004)*0.05;
       }
       return;
     }
 
-    // Playing
-    bird.vy += cfg.gravity * dt; // pixels/sec^2
-    bird.y  += bird.vy * dt;
-    // Angle depends on vertical speed
-    bird.angle = clamp(bird.vy / 500, -0.35, 0.6);
+    // PLAYING — mouse/finger follow (smooth)
+    const followSpeed = 8; // larger = snappier
+    const t = clamp(followSpeed * dt, 0, 1);
+    const dy = targetY - bird.y;
+    bird.y += dy * t;
+    bird.angle = clamp(dy * 0.0025, -0.6, 0.6);
+
+    // keep inside bounds
+    bird.y = clamp(bird.y, bird.r+5, H - GH - bird.r - 5);
 
     // Spawn pipes
     pipeTimer -= dt;
     if (pipeTimer <= 0){
       const gap = cfg.gap;
       const margin = 30;
-      const minY = margin + 30, maxY = H - margin - 30;
-      const center = rand(minY + gap/2, maxY - gap/2);
+      const minY = margin + 30, maxY = H - margin - 30 - GH;
+      const center = rand(minY + gap/2, Math.max(minY + gap/2, maxY - gap/2));
       pipes.push({ x: W + 8, topH: center - gap/2, w: PIPE_W, gap, scored:false });
-      if (pipes.length > 10) pipes.shift();
+      if (pipes.length > 12) pipes.shift();
       pipeTimer = cfg.spawn;
     }
 
@@ -443,17 +454,15 @@
         scoreChime();
       }
     }
-    // Remove off-screen pipes
     while (pipes.length && pipes[0].x + pipes[0].w < -10) pipes.shift();
 
     // Collisions with pipes or bounds
-    const GH = 52;
     const hitTop = bird.y - bird.r < 0;
     const hitGround = bird.y + bird.r > H - GH;
     let hitPipe = false;
     for (const p of pipes){
       if (circleRectCollide(bird.x, bird.y, bird.r, p.x, 0, p.w, p.topH) ||
-          circleRectCollide(bird.x, bird.y, bird.r, p.x, p.topH + p.gap, p.w, H - (p.topH + p.gap))){
+          circleRectCollide(bird.x, bird.y, bird.r, p.x, p.topH + p.gap, p.w, H - GH - (p.topH + p.gap))){
         hitPipe = true; break;
       }
     }
@@ -468,7 +477,6 @@
   }
 
   function draw(){
-    // BG
     drawSky();
     drawSun();
 
@@ -484,20 +492,19 @@
     // Ground
     drawGround();
 
-    // Score pulse when READY
+    // READY hint
     if (state === State.READY){
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.18)';
       ctx.font = '700 18px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Tap / Click / Space to start', W/2, H*0.62);
+      ctx.fillText('Click / Tap / Space to start — steer with mouse/finger', W/2, H*0.62);
       ctx.restore();
     }
 
     if (state === State.DEAD){
-      // red vignette
       ctx.save();
-      const g = ctx.createRadialGradient(W/2,H/2, 50, W/2,H/2, W*0.9);
+      const g = ctx.createRadialGradient(W/2,H/2, 50, W/2,H/2, Math.max(W,H)*0.6);
       g.addColorStop(0, 'rgba(239,71,111,0)');
       g.addColorStop(1, 'rgba(239,71,111,0.25)');
       ctx.fillStyle = g;
