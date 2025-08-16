@@ -14,6 +14,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const introJingle = document.getElementById('intro-jingle');
     const visualOptionsSelect = document.getElementById('special-options-select');
     const videoContainer = document.getElementById('video-container');
+
+    // Default to interval mode with a 30-second interval
+    playModeSelect.value = 'interval';
+    intervalLabel.style.display = 'inline-block';
+    intervalTimeInput.style.display = 'inline-block';
+    intervalTimeInput.value = 30;
   
     let mediaPlayer = null;
     if (mediaType === 'video') {
@@ -70,9 +76,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let controlsEnabled = false;
     let playedMedia = [];
     let currentMediaIndex = 0;
-    let mode = 'pressBetween';
+    let mode = 'interval';
     let intervalID = null;
-    let intervalTime = 5;
+    let intervalTime = 30;
     let pausedAtTime = 0;
     let currentPlayer = 1;
   
