@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title data-fr="Personnaliseur de pictogrammes" data-en="Pictogram Customizer">Personnaliseur de pictogrammes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+  <!-- Ton thème commun -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <style>
+    /* Compléments légers au thème pour la grille/galerie */
+    :root {
+      --panel-bg: rgba(0,0,0,0.85);
+      --teal: #008080;
+      --sky: #00bfff;
+    }
+
+    /* Zone principale */
+    #stage {
+      position: fixed; inset: 0;
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      grid-template-areas: "canvas tray";
+      gap: 0;
+      background:#000;
+    }
+    #stage.compact { grid-template-columns: 1fr; }
+
+    /* Canvas d'aperçu */
+    #previewWrap {
+      grid-area: canvas;
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      overflow:hidden;
+    }
+    #preview {
+      max-width: 92vw; max-height: 92vh;
+      width: 70vmin; height: 70vmin; /* carré responsive */
+      background: transparent;
+      image-rendering: crisp-edges;
+      image-rendering: pixelated;
+    }
+
+    /* Panneau latéral (mini-galerie & chargement) */
+    #tray {
+      grid-area: tray;
+      background: var(--panel-bg);
+      color:#fff;
+      padding:12px;
+      overflow-y:auto;
+      border-left: 1px solid rgba(255,255,255,0.08);
+    }
+    #tray h3 { margin: 6px 0 10px; color: var(--sky); font-weight:500; font-size:16px; }
+    #tray .row { display:flex; gap:8px; align-items:center; margin:8px 0; }
+    #tray .row input[type="text"] { flex:1; padding:8px 10px; border-radius:6px; border:1px solid #0a6; background:#012; color:#cfe; }
+    #tray .thumbs { display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; }
+    #tray .thumb {
+      width:100%; aspect-ratio:1/1; background:#111; border:1px solid #223; border-radius:8px;
+      display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer;
+      transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    #tray .thumb img { width:100%; height:100%; object-fit:contain; }
+    #tray .thumb.active { border-color:#0ad; box-shadow:0 0 0 2px rgba(0,173,255,.35) inset; transform: translateY(-2px); }
+
+    /* Barre flottante d’actions export */
+    #actionsBar{
+      position: fixed; left: 16px; bottom: 16px; z-index: 1050;
+      display:flex; gap:10px; flex-wrap:wrap;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px; padding:10px;
+    }
+    .btn {
+      background: rgba(0,0,0,0.75);
+      color:#fff; border:1px solid #0a6; border-radius:8px;
+      padding:8px 12px; cursor:pointer; font-size:14px;
+      transition: background .2s ease, transform .1s ease;
+    }
+    .btn:hover { background: rgba(0,0,0,0.9); }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { border-color:#00bfff; }
+
+    /* Aide drag & drop */
+    #dropHint{
+      position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+      color:#9cf; background:rgba(0,64,96,0.35); border:2px dashed #0af; border-radius:16px;
+      pointer-events:none; font-size:20px; text-align:center; padding:20px;
+    }
+    #previewWrap.dragover #dropHint { display:flex; }
+
+    /* Ajuste le menu coulissant pour ce contexte (contenus) */
+    #menu .group{ border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px; margin:10px 0; }
+    #menu .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+    #menu .row input[type="number"]{ width:90px; padding:6px 8px; border-radius:6px; border:1px solid #0a6; background:#012; color:#cfe; }
+    #menu .row input[type="color"]{ width:36px; height:28px; border:none; background:transparent; padding:0; }
+    #menu .row .grow{ flex:1; }
+    #menu small{ opacity:.8; }
+
+    /* Masquer le panneau latéral sur petit écran */
+    @media (max-width: 1100px){
+      #stage { grid-template-columns: 1fr; }
+      #tray { display:none; }
+      #stage.compact { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body class="game">
+  <!-- Bouton d’infos (reprend tes styles) -->
+  <button id="infoButton" aria-label="Informations">ℹ️</button>
+
+  <!-- Plein écran (reprend tes styles) -->
+  <button id="fullscreen-btn" title="Plein écran (iPad compatible)">⛶ Plein écran</button>
+
+  <!-- Icône pour le menu coulissant (reprend tes styles) -->
+  <div id="settings-icon" title="Paramètres">⚙️</div>
+
+  <!-- Menu coulissant (paramètres de rendu) -->
+  <div id="menu" aria-label="Paramètres">
+    <h2>Pictogramme</h2>
+
+    <div class="group">
+      <h3>Export</h3>
+      <div class="row">
+        <label class="grow">Taille (px)
+          <input type="range" id="sizePx" min="128" max="2048" step="128" value="512">
+        </label>
+        <span id="sizePxVal">512</span>
+      </div>
+      <label class="inline">
+        <span>Fond transparent</span>
+        <input type="checkbox" id="bgTransparent" checked>
+      </label>
+    </div>
+
+    <div class="group">
+      <h3>Fond / Forme</h3>
+      <div class="row">
+        <label class="grow">Forme
+          <select id="bgShape">
+            <option value="none">Aucune</option>
+            <option value="rounded">Carré arrondi</option>
+            <option value="circle">Cercle</option>
+            <option value="roundedRect">Rectangle arrondi</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="grow">Couleur du fond
+          <input type="color" id="bgColor" value="#ffffff">
+        </label>
+        <label class="grow">Coins (rayon %)
+          <input type="range" id="cornerPct" min="0" max="50" value="20">
+        </label>
+      </div>
+      <div class="row">
+        <label class="grow">Marge interne (%)
+          <input type="range" id="paddingPct" min="0" max="40" value="10">
+        </label>
+      </div>
+      <div class="row">
+        <label class="inline"><span>Bordure</span><input type="checkbox" id="strokeOn"></label>
+      </div>
+      <div class="row">
+        <label>Couleur <input type="color" id="strokeColor" value="#000000"></label>
+        <label class="grow">Épaisseur (%)
+          <input type="range" id="strokePct" min="0" max="8" value="2">
+        </label>
+      </div>
+      <label class="inline"><span>Ombre</span><input type="checkbox" id="shadowOn"></label>
+    </div>
+
+    <div class="group">
+      <h3>Icône</h3>
+      <div class="row">
+        <label class="grow">Teinte (désactivée à 0%)
+          <input type="range" id="tintPct" min="0" max="100" value="0">
+        </label>
+        <input type="color" id="tintColor" value="#000000" title="Couleur de teinte">
+      </div>
+      <div class="row">
+        <label class="grow">Échelle icône (%)
+          <input type="range" id="iconScalePct" min="40" max="110" value="100">
+        </label>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Étiquette</h3>
+      <div class="row"><input class="grow" type="text" id="labelText" placeholder="Texte (optionnel)"></div>
+      <div class="row">
+        <label class="grow">Taille (px)
+          <input type="number" id="labelSize" min="8" max="240" value="64">
+        </label>
+        <label>Couleur <input type="color" id="labelColor" value="#000000"></label>
+      </div>
+      <div class="row">
+        <label class="inline"><span>Bannière derrière le texte</span><input type="checkbox" id="labelBandOn"></label>
+      </div>
+      <div class="row">
+        <label>Fond bannière <input type="color" id="labelBandColor" value="#ffffff"></label>
+        <label class="grow">Marge bannière (%)
+          <input type="range" id="labelBandPadPct" min="0" max="20" value="6">
+        </label>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Aide</h3>
+      <p><small>Astuce : dépose une image sur la zone principale ou utilise le volet “Galerie”. Appuie sur <b>M</b> pour ouvrir/fermer les paramètres.</small></p>
+    </div>
+  </div>
+
+  <!-- Overlay de départ (reprend tes styles) -->
+  <div id="promptOverlay" style="display:flex;">
+    <p>Personnalise des pictogrammes : choisis une image, règle la forme/couleur/texte et exporte en PNG.</p>
+    <div id="modeSelect" style="width:min(680px,90vw)">
+      <label><input type="radio" name="startMode" value="default" checked> <span>Démarrer</span></label>
+    </div>
+    <button id="startButton">Commencer</button>
+  </div>
+
+  <!-- Modal d’infos (reprend tes styles) -->
+  <div id="infoModal" role="dialog" aria-modal="true" aria-label="Informations">
+    <h3>À propos</h3>
+    <p>Outil de création de pictogrammes (fond/forme/bordure/teinte/étiquette). Export PNG haute résolution. Compatible plein écran iPad.</p>
+    <button id="closeModal">OK</button>
+  </div>
+
+  <!-- Scène -->
+  <div id="stage" class="compact">
+    <div id="previewWrap">
+      <canvas id="preview" width="1024" height="1024"></canvas>
+      <div id="dropHint">Dépose une image ici<br><small>(PNG/JPG/SVG* rasterisé)</small></div>
+    </div>
+    <aside id="tray">
+      <h3>Charger une image</h3>
+      <div class="row">
+        <input type="file" id="fileInput" accept="image/*">
+        <button class="btn" id="clearBtn" title="Effacer l’image">Effacer</button>
+      </div>
+      <div class="row">
+        <input type="text" id="pathInput" placeholder="../../images/pictos/nom.png">
+        <button class="btn" id="loadPathBtn">Charger</button>
+      </div>
+      <p><small>Astuce : tes images sont à <code>../../images/pictos/</code>. Entre juste le nom de fichier si tu veux.</small></p>
+      <h3>Galerie (session)</h3>
+      <div class="thumbs" id="thumbs"></div>
+    </aside>
+  </div>
+
+  <!-- Barre d’actions -->
+  <div id="actionsBar">
+    <button class="btn" id="centerCanvasBtn" title="Ajuster l’aperçu">Ajuster aperçu</button>
+    <button class="btn primary" id="exportPngBtn" title="Exporter en PNG">Exporter PNG</button>
+  </div>
+
+  <script>
+    // ===== Utilitaires plein écran (iPad friendly) =====
+    async function requestFullscreen(elem){
+      try{
+        if (elem.requestFullscreen) await elem.requestFullscreen();
+        else if (elem.webkitRequestFullscreen) await elem.webkitRequestFullscreen();
+        else if (elem.msRequestFullscreen) await elem.msRequestFullscreen();
+      }catch(e){}
+    }
+    function exitFullscreen(){
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
+    }
+
+    // ===== Sélecteurs =====
+    const overlay = document.getElementById('promptOverlay');
+    const startBtn = document.getElementById('startButton');
+    const infoBtn = document.getElementById('infoButton');
+    const infoModal = document.getElementById('infoModal');
+    const closeModal = document.getElementById('closeModal');
+    const settingsIcon = document.getElementById('settings-icon');
+    const menu = document.getElementById('menu');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+    const sizePx = document.getElementById('sizePx');
+    const sizePxVal = document.getElementById('sizePxVal');
+    const bgTransparent = document.getElementById('bgTransparent');
+    const bgShape = document.getElementById('bgShape');
+    const bgColor = document.getElementById('bgColor');
+    const cornerPct = document.getElementById('cornerPct');
+    const paddingPct = document.getElementById('paddingPct');
+    const strokeOn = document.getElementById('strokeOn');
+    const strokeColor = document.getElementById('strokeColor');
+    const strokePct = document.getElementById('strokePct');
+    const shadowOn = document.getElementById('shadowOn');
+    const tintPct = document.getElementById('tintPct');
+    const tintColor = document.getElementById('tintColor');
+    const iconScalePct = document.getElementById('iconScalePct');
+    const labelText = document.getElementById('labelText');
+    const labelSize = document.getElementById('labelSize');
+    const labelColor = document.getElementById('labelColor');
+    const labelBandOn = document.getElementById('labelBandOn');
+    const labelBandColor = document.getElementById('labelBandColor');
+    const labelBandPadPct = document.getElementById('labelBandPadPct');
+
+    const stage = document.getElementById('stage');
+    const previewWrap = document.getElementById('previewWrap');
+    const dropHint = document.getElementById('dropHint');
+    const previewCanvas = document.getElementById('preview');
+    const pctx = previewCanvas.getContext('2d');
+
+    const fileInput = document.getElementById('fileInput');
+    const pathInput = document.getElementById('pathInput');
+    const loadPathBtn = document.getElementById('loadPathBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const thumbs = document.getElementById('thumbs');
+
+    const centerCanvasBtn = document.getElementById('centerCanvasBtn');
+    const exportPngBtn = document.getElementById('exportPngBtn');
+
+    // ===== État =====
+    let img = null;                 // Image active
+    const gallery = [];             // {src, img}
+    let exportSize = parseInt(sizePx.value,10);
+    const off = document.createElement('canvas');
+    const octx = off.getContext('2d');
+
+    // ===== Helpers dessin =====
+    function roundRectPath(ctx, x, y, w, h, r){
+      const rr = Math.max(0, Math.min(r, Math.min(w,h) / 2));
+      ctx.beginPath();
+      ctx.moveTo(x+rr, y);
+      ctx.arcTo(x+w, y, x+w, y+h, rr);
+      ctx.arcTo(x+w, y+h, x, y+h, rr);
+      ctx.arcTo(x, y+h, x, y, rr);
+      ctx.arcTo(x, y, x+w, y, rr);
+      ctx.closePath();
+    }
+    function drawShape(ctx, shape, x, y, w, h, radiusPct){
+      if (shape === 'none') return;
+      if (shape === 'circle'){
+        const cx = x + w/2, cy = y + h/2, r = Math.min(w,h)/2;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.closePath();
+      } else if (shape === 'rounded' || shape === 'roundedRect'){
+        const rr = (Math.min(w,h) * (radiusPct/100));
+        roundRectPath(ctx, x, y, w, h, rr);
+      }
+    }
+    function drawLabel(ctx, text, sizePx, color, bandOn, bandColor, bandPad, box){
+      if (!text) return 0;
+      ctx.save();
+      ctx.font = `600 ${sizePx}px Roboto, system-ui, -apple-system, Segoe UI, Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const metrics = ctx.measureText(text);
+      const ascent = metrics.actualBoundingBoxAscent || sizePx * 0.8;
+      const descent = metrics.actualBoundingBoxDescent || sizePx * 0.2;
+      const textH = ascent + descent;
+      const pad = box.w * bandPad;
+      const bandH = textH + pad*2;
+
+      if (bandOn){
+        ctx.fillStyle = bandColor;
+        roundRectPath(ctx, box.x, box.y + box.h - bandH, box.w, bandH, Math.min(16, bandH*0.3));
+        ctx.fill();
+      }
+      ctx.fillStyle = color;
+      ctx.fillText(text, box.x + box.w/2, box.y + box.h - bandH/2);
+      ctx.restore();
+      return bandH; // hauteur utilisée
+    }
+
+    // Teinte simple par “source-atop”
+    function drawTinted(ctx, image, dx, dy, dw, dh, color, alpha){
+      ctx.save();
+      ctx.drawImage(image, dx, dy, dw, dh);
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.fillRect(dx, dy, dw, dh);
+      ctx.restore();
+    }
+
+    // ===== Rendu principal (offscreen pour export propre) =====
+    function renderTo(canvas, ctx, size, forPreview=false){
+      const padPct = parseFloat(paddingPct.value)/100;
+      const corner = parseFloat(cornerPct.value);
+      const strokeEnabled = strokeOn.checked;
+      const strokeW = (parseFloat(strokePct.value)/100) * size;
+      const bgCol = bgColor.value;
+      const shape = bgShape.value;
+      const transparentBg = bgTransparent.checked;
+      const shadow = shadowOn.checked;
+
+      const label = labelText.value.trim();
+      const labelPx = parseInt(labelSize.value,10);
+      const labelCol = labelColor.value;
+      const bandOn = labelBandOn.checked;
+      const bandCol = labelBandColor.value;
+      const bandPadPct = parseFloat(labelBandPadPct.value)/100;
+
+      // reset
+      canvas.width = size; canvas.height = size;
+      ctx.clearRect(0,0,size,size);
+
+      // boîte intérieure
+      const box = { x: 0, y: 0, w: size, h: size };
+
+      // Fond
+      if (!transparentBg && shape !== 'none'){
+        if (shadow){
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,0.35)';
+          ctx.shadowBlur = Math.max(2, size*0.02);
+          ctx.shadowOffsetY = size*0.01;
+        }
+        ctx.fillStyle = bgCol;
+        drawShape(ctx, shape, box.x, box.y, box.w, box.h, corner);
+        ctx.fill();
+        if (shadow){ ctx.restore(); }
+      } else if (!transparentBg && shape === 'none'){
+        // Pas de forme => fond plein
+        ctx.fillStyle = bgCol;
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+      }
+
+      // Étiquette (réserve l’espace en bas si bannière)
+      let reservedBottom = 0;
+      if (label){
+        // On dessine la bannière + texte ensuite, mais on calcule l'espace réservé
+        // en fonction de la taille de police + marge
+        const tmp = document.createElement('canvas');
+        const tctx = tmp.getContext('2d');
+        reservedBottom = drawLabel(tctx, label, labelPx, labelCol, bandOn, bandCol, bandPadPct, box); // pour obtenir la même hauteur
+      }
+
+      // Aire disponible pour l’icône
+      const inner = {
+        x: box.x + size*padPct,
+        y: box.y + size*padPct,
+        w: box.w - size*padPct*2,
+        h: box.h - size*padPct*2 - reservedBottom
+      };
+
+      // Icône (fit)
+      if (img){
+        const scalePct = parseFloat(iconScalePct.value)/100;
+        const aspect = img.width / img.height;
+        let dw = inner.w * scalePct;
+        let dh = dw / aspect;
+        if (dh > inner.h * scalePct){
+          dh = inner.h * scalePct;
+          dw = dh * aspect;
+        }
+        const dx = inner.x + (inner.w - dw)/2;
+        const dy = inner.y + (inner.h - dh)/2;
+
+        const tintAlpha = parseFloat(tintPct.value)/100;
+        if (tintAlpha > 0.001){
+          drawTinted(ctx, img, dx, dy, dw, dh, tintColor.value, tintAlpha);
+        } else {
+          ctx.drawImage(img, dx, dy, dw, dh);
+        }
+      }
+
+      // Bordure
+      if (strokeEnabled && (shape !== 'none')){
+        ctx.save();
+        ctx.lineWidth = Math.max(1, strokeW);
+        ctx.strokeStyle = strokeColor.value;
+        drawShape(ctx, shape, box.x + ctx.lineWidth/2, box.y + ctx.lineWidth/2, box.w - ctx.lineWidth, box.h - ctx.lineWidth, corner);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Dessiner enfin la bannière + texte (par dessus)
+      if (label){
+        drawLabel(ctx, label, labelPx, labelCol, bandOn, bandCol, bandPadPct, box);
+      }
+
+      // Repère (aperçu uniquement)
+      if (forPreview){
+        // rien de flashy, garder sobre
+      }
+    }
+
+    function renderPreview(){
+      const size = Math.min(previewCanvas.width, previewCanvas.height);
+      renderTo(previewCanvas, pctx, size, true);
+    }
+
+    function rerender(){
+      exportSize = parseInt(sizePx.value,10);
+      sizePxVal.textContent = exportSize;
+      renderPreview();
+    }
+
+    // ===== Gestion images =====
+    function addToGallery(src, imageEl){
+      gallery.unshift({src, img: imageEl});
+      const div = document.createElement('div');
+      div.className = 'thumb active';
+      const im = document.createElement('img');
+      im.src = imageEl.src;
+      div.appendChild(im);
+      // deactivate others
+      [...thumbs.children].forEach(c => c.classList.remove('active'));
+      thumbs.prepend(div);
+      div.addEventListener('click', () => {
+        [...thumbs.children].forEach(c => c.classList.remove('active'));
+        div.classList.add('active');
+        setImage(imageEl);
+      });
+    }
+
+    function setImage(imageEl){
+      img = imageEl;
+      rerender();
+    }
+
+    function loadFromPath(path){
+      return new Promise((resolve, reject)=>{
+        const imageEl = new Image();
+        imageEl.crossOrigin = 'anonymous';
+        imageEl.onload = ()=> resolve(imageEl);
+        imageEl.onerror = reject;
+        imageEl.src = path;
+      });
+    }
+
+    // ===== Événements UI =====
+    startBtn.addEventListener('click', async ()=>{
+      overlay.style.display = 'none';
+      settingsIcon.style.display = 'flex';
+      // Sur iPad, demander plein écran tôt pour minimiser les sorties FS involontaires
+      await requestFullscreen(document.documentElement);
+    });
+
+    infoBtn.addEventListener('click', ()=> infoModal.style.display='block');
+    closeModal.addEventListener('click', ()=> infoModal.style.display='none');
+
+    settingsIcon.addEventListener('click', ()=>{
+      menu.classList.toggle('show');
+    });
+    document.addEventListener('keydown', (e)=>{
+      if (e.key.toLowerCase() === 'm'){
+        menu.classList.toggle('show');
+      }
+    });
+
+    fullscreenBtn.addEventListener('click', async ()=>{
+      if (!document.fullscreenElement && !document.webkitFullscreenElement){
+        await requestFullscreen(document.documentElement);
+      } else {
+        exitFullscreen();
+      }
+    });
+
+    // Contrôles => re-render
+    [
+      sizePx, bgTransparent, bgShape, bgColor, cornerPct, paddingPct,
+      strokeOn, strokeColor, strokePct, shadowOn,
+      tintPct, tintColor, iconScalePct,
+      labelText, labelSize, labelColor, labelBandOn, labelBandColor, labelBandPadPct
+    ].forEach(el => el.addEventListener('input', rerender));
+
+    // Charger fichiers
+    fileInput.addEventListener('change', async (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const imageEl = new Image();
+      imageEl.onload = ()=>{
+        setImage(imageEl);
+        addToGallery(file.name, imageEl);
+        URL.revokeObjectURL(url);
+      };
+      imageEl.src = url;
+    });
+
+    // Charger via chemin
+    loadPathBtn.addEventListener('click', async ()=>{
+      const name = pathInput.value.trim();
+      if (!name) return;
+      const path = name.startsWith('../') || name.startsWith('./') || name.startsWith('/') ? name : ('../../images/pictos/' + name);
+      try{
+        const imageEl = await loadFromPath(path);
+        setImage(imageEl);
+        addToGallery(path, imageEl);
+      }catch(e){
+        alert("Impossible de charger l’image : " + path);
+      }
+    });
+
+    clearBtn.addEventListener('click', ()=>{
+      img = null; rerender();
+    });
+
+    // Drag & Drop
+    ['dragenter','dragover'].forEach(ev=>{
+      previewWrap.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); previewWrap.classList.add('dragover'); });
+    });
+    ['dragleave','drop'].forEach(ev=>{
+      previewWrap.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); previewWrap.classList.remove('dragover'); });
+    });
+    previewWrap.addEventListener('drop', (e)=>{
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) return;
+      const url = URL.createObjectURL(file);
+      const imageEl = new Image();
+      imageEl.onload = ()=>{
+        setImage(imageEl);
+        addToGallery(file.name, imageEl);
+        URL.revokeObjectURL(url);
+      };
+      imageEl.src = url;
+    });
+
+    // Ajuster l’aperçu
+    function fitPreview(){
+      // carré basé sur la fenêtre
+      const s = Math.min(window.innerWidth, window.innerHeight) * 0.9;
+      previewCanvas.width = previewCanvas.height = Math.max(256, Math.min(2048, Math.floor(s)));
+      renderPreview();
+    }
+    window.addEventListener('resize', fitPreview);
+    centerCanvasBtn.addEventListener('click', fitPreview);
+
+    // Export PNG
+    exportPngBtn.addEventListener('click', ()=>{
+      const size = exportSize;
+      off.width = off.height = size;
+      renderTo(off, octx, size, false);
+      off.toBlob((blob)=>{
+        const a = document.createElement('a');
+        const label = labelText.value.trim();
+        const base = (label || 'pictogramme').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');
+        a.download = `${base || 'pictogramme'}-${size}.png`;
+        a.href = URL.createObjectURL(blob);
+        a.click();
+        setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+      }, 'image/png');
+    });
+
+    // Initial
+    fitPreview();
+    sizePxVal.textContent = sizePx.value;
+
+    // Petites valeurs par défaut pour un rendu “propre”
+    bgShape.value = 'rounded';
+    cornerPct.value = 22;
+    paddingPct.value = 10;
+    strokeOn.checked = false;
+    labelBandOn.checked = true;
+    labelBandColor.value = '#ffffff';
+    labelBandPadPct.value = 6;
+    rerender();
+  </script>
+</body>
+</html>
