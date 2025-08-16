@@ -74,6 +74,7 @@
   .btn.secondary:hover{background:#1d1d1d;}
   .btn.ghost{background:transparent;border:1px solid #2a2a2a;}
   .btn.ghost:hover{background:#1a1a1a;}
+  .btn.full{width:100%;justify-content:space-between}
 
   /* Floating toggles */
   #menuBtn,#specialBtn{
@@ -130,14 +131,8 @@
   .modal footer{padding:.6rem .8rem;border-top:1px solid #222;display:flex;gap:.5rem;justify-content:flex-end;}
   .hidden{display:none !important;}
 
-  /* Color picker mini modal */
-  .mini-body{padding:.75rem;display:flex;flex-direction:column;gap:.6rem;}
-  .chips{display:flex;gap:.4rem;flex-wrap:wrap}
-  .chip{width:24px;height:24px;border-radius:6px;border:1px solid #333;cursor:pointer;}
-  .rgblines{display:flex;flex-direction:column;gap:.5rem}
-  .rgblines input[type=range]{width:100%;}
-  .hexline{display:flex;gap:.4rem;align-items:center}
-  .hexline input{flex:1; border-radius:6px;border:1px solid #2b2b2b;background:#0f0f0f;color:#fff;padding:.35em .5em}
+  /* Simple list modal (iPad select replacement) */
+  .list-body{padding:.6rem .8rem;display:flex;flex-direction:column;gap:.5rem;overflow:auto}
 </style>
 </head>
 <body>
@@ -161,6 +156,8 @@
         <option value="1">1 min</option>
         <option value="120">120 min</option>
       </select>
+      <!-- iPad will see a proxy button here -->
+      <button id="dialProxy" class="btn ghost hidden"></button>
     </label>
 
     <div class="inline">
@@ -175,8 +172,7 @@
 
       <!-- Desktop/Android -->
       <input type="color" id="colorPicker" class="swatch" value="#d9534f" aria-label="Select colour">
-
-      <!-- iOS fallback proxy (hidden by default, shown on iOS) -->
+      <!-- iOS fallback proxy -->
       <button id="colorProxy" type="button" class="swatch-proxy hidden" aria-label="Select colour"></button>
     </label>
 
@@ -188,6 +184,7 @@
         <option value="3" data-fr="TimeTimer 3" data-en="TimeTimer 3">TimeTimer 3</option>
         <option value="4" data-fr="TimeTimer 4" data-en="TimeTimer 4">TimeTimer 4</option>
       </select>
+      <button id="alarmProxy" class="btn ghost hidden"></button>
     </label>
 
     <div class="inline">
@@ -210,6 +207,7 @@
         <option value="stacked" data-fr="Pile d’images à gauche" data-en="Images Stacked Left">Pile d’images à gauche</option>
         <option value="taskreward" data-fr="Tâche → Récompense (gauche)" data-en="Task → Reward (Left)">Tâche → Récompense (gauche)</option>
       </select>
+      <button id="modeProxy" class="btn ghost hidden"></button>
     </label>
 
     <div class="formline">
@@ -258,7 +256,7 @@
             title="Fill slots 1–4"
             data-fr="Remplir 1–4" data-en="Auto-fill 1–4">Remplir 1–4</button>
 
-          <!-- These two buttons will be hidden on desktop/Android -->
+          <!-- iPad-only convenience buttons -->
           <button id="pickLibraryBtn" class="btn secondary"
             data-fr="📚 Photothèque" data-en="📚 Library">📚 Photothèque</button>
 
@@ -326,6 +324,17 @@
     </div>
   </div>
 
+  <!-- Generic List Modal (iPad: select replacement) -->
+  <div id="listModal" class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true">
+      <header>
+        <div class="title"><span id="listTitle">Choisir</span></div>
+        <div><button id="closeListBtn" class="btn secondary" data-fr="Fermer" data-en="Close">Fermer</button></div>
+      </header>
+      <div id="listBody" class="list-body"></div>
+    </div>
+  </div>
+
   <!-- Manifest array -->
   <script src="../../js/cviPngArray.js"></script>
 
@@ -347,9 +356,9 @@ const STACK_V_MARGIN = 0.06;      // top/bottom breathing space for stacked colu
 const PULSE_PERIOD = 1800;        // ms
 const PULSE_AMPLITUDE = 0.04;     // +/- 4%
 
-// Radial distance from number ring
+// Radial distance from number ring (desktop defaults)
 const RADIAL_RADIUS_OFFSET_4 = 0.12;
-const RADIAL_RADIUS_OFFSET_2 = 0.06; // 2-image: closer to center
+const RADIAL_RADIUS_OFFSET_2 = 0.06;
 
 // Task→Reward spacing multiplier
 const TASKREWARD_SPACING_MULT = 3.5;
@@ -358,7 +367,7 @@ const TASKREWARD_SPACING_MULT = 3.5;
    LAYOUT (image size etc.)
    =========================================================== */
 const LAYOUT = {
-  imgBase: 0.30,     // bumped only on iPad at runtime
+  imgBase: 0.30,     // will be bumped on iPad
   activeScale: 1.33,
   radial: { radiusOffset: RADIAL_RADIUS_OFFSET_4 },
   stacked:{ spacing: 0.025, marginLeft: 0.06 }
@@ -371,14 +380,6 @@ const LAYOUT = {
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-/* If not iPad/iOS, hide iPad-only buttons to keep desktop unchanged */
-if(!isIOS){
-  document.addEventListener('DOMContentLoaded', ()=>{
-    document.getElementById('pickLibraryBtn')?.classList.add('hidden');
-    document.getElementById('pickPhotoBtn')?.classList.add('hidden');
-  });
-}
-
 /* ---------- fullscreen resilience helpers (iPad only) ---------- */
 function requestFS(){
   (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
@@ -387,16 +388,17 @@ function exitFS(){
   (document.exitFullscreen||document.webkitExitFullscreen)?.call(document);
 }
 function ensureReturnToFullscreen(){
-  if(!isIOS) return;                             // iPad-only
-  if(overlay.style.display!=='none') return;     // only after user started
+  if(!isIOS) return;
+  if(overlay.style.display!=='none') return;
   if(!document.fullscreenElement){
     try{ requestFS(); }catch(_){}
   }
   setTimeout(resizeCanvas,120);
 }
-// Lightly schedule a re-check (used after UI actions that often break FS)
+// Less aggressive than before: we WON'T try to re-enter while a picker/modal is open.
+let iosModalOpen = false;
 function tryKeepFullscreen(delay=350){
-  if(!isIOS) return;                             // iPad-only
+  if(!isIOS || iosModalOpen) return;
   setTimeout(ensureReturnToFullscreen, delay);
 }
 
@@ -416,6 +418,7 @@ function setPauseLabel(paused){
 /* ---------- simple single-tap helper ---------- */
 const supportsPointer = 'onpointerup' in window;
 function addTap(el, handler){
+  if(!el) return;
   if(supportsPointer){
     el.addEventListener('pointerup', (e)=>{
       if(e.pointerType === 'mouse' && e.button !== 0) return;
@@ -581,7 +584,7 @@ function draw(){
   // Preview vs running seconds
   const uiSeconds = (remainingSeconds>0)
     ? remainingSeconds
-    : Math.max(1, Math.round((dialMax*60))); // preview full dial
+    : Math.max(1, Math.round((dialMax*60)));
 
   const denom = dialMax*60;
   const angle = (uiSeconds/denom) * Math.PI * 2;
@@ -669,8 +672,12 @@ function updatePageTint(uiSeconds, denom){
 
 /* ---- RADIAL ---- */
 function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
+  // Bigger + closer on iPad so they don't get shrunk by edge fitting
+  const radialOffset4 = isIOS ? 0.08 : LAYOUT.radial.radiusOffset;
+  const radialOffset2 = isIOS ? 0.04 : RADIAL_RADIUS_OFFSET_2;
+
   const basePx = size * LAYOUT.imgBase;
-  const radialOffset = (IMG_COUNT===2 ? RADIAL_RADIUS_OFFSET_2 : LAYOUT.radial.radiusOffset);
+  const radialOffset = (IMG_COUNT===2 ? radialOffset2 : radialOffset4);
   const imgR   = numbersR + size * radialOffset;
   const hShiftPx_4 = size * H_SHIFT;
   const hShiftPx_2 = size * H_SHIFT_2;
@@ -742,7 +749,7 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const availH = canvas.height - 2*(size*STACK_V_MARGIN);
   let g = Math.min(1, (availH - spacing*(N-1)) / Math.max(1, sumH));
   if(!isFinite(g) || g <= 0) g = 1;
-  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT); // desktop safeguard unchanged
+  if(!isIOS) g = Math.max(g, MIN_STACKED_FIT);
 
   let totalH = baseDims.reduce((a,d)=>a + d.h*g, 0) + spacing*(N-1);
   let y = cy - totalH/2;
@@ -916,7 +923,7 @@ addTap(menuBtn, (e)=>{
   menu.classList.toggle('show');
   specialMenu.classList.remove('show'); stopIdle('special');
   if(open) startIdle('menu'); else stopIdle('menu');
-  tryKeepFullscreen(300); // iPad only
+  tryKeepFullscreen(300);
 });
 addTap(specialBtn, (e)=>{
   e.stopPropagation();
@@ -924,19 +931,20 @@ addTap(specialBtn, (e)=>{
   specialMenu.classList.toggle('show');
   menu.classList.remove('show'); stopIdle('menu');
   if(open) startIdle('special'); else stopIdle('special');
-  tryKeepFullscreen(300); // iPad only
+  tryKeepFullscreen(300);
 });
 document.addEventListener('click',e=>{
   if(!menu.contains(e.target)&&!menuBtn.contains(e.target)){ menu.classList.remove('show'); stopIdle('menu'); }
   if(!specialMenu.contains(e.target)&&!specialBtn.contains(e.target)){ specialMenu.classList.remove('show'); stopIdle('special'); }
 });
 
-/* Inputs */
+/* Inputs (common) */
 document.getElementById('pauseBtn').addEventListener('click',()=>{ pauseTimer(); tryKeepFullscreen(200); });
 document.getElementById('fsBtn').addEventListener('click',()=>{ if(!document.fullscreenElement){ requestFS(); }else{ exitFS(); } setTimeout(resizeCanvas,120); });
 
 document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw(); tryKeepFullscreen(200);});
 document.getElementById('dialSelect').addEventListener('change',e=>{
+  // Desktop/default behavior; iPad uses custom picker below
   dialMax=parseInt(e.target.value,10);
   clearInterval(intervalId); intervalId=null;
   remainingSeconds=0; draw();
@@ -952,6 +960,12 @@ specialModeSelect.addEventListener('change',e=>{
     loadLastImagesIfEmpty(()=>draw());
   } else {
     draw();
+  }
+  // iPad: if they switch to radial and images look small, bump size once
+  if(isIOS && specialMode==='radial' && LAYOUT.imgBase < 0.5){
+    LAYOUT.imgBase = 0.58;
+    const r = document.getElementById('imgSizeRange');
+    r.value = String(LAYOUT.imgBase);
   }
   tryKeepFullscreen(200);
 });
@@ -977,7 +991,7 @@ if(!isIOS){
   colorPicker.classList.add('hidden');
   colorProxy.classList.remove('hidden');
   colorProxy.style.background = timerColor;
-  addTap(colorProxy, ()=>{ openColorModal(); tryKeepFullscreen(200); });
+  addTap(colorProxy, ()=>{ openColorModal(); });
 }
 
 /* Simple color modal logic (iOS) */
@@ -1000,7 +1014,7 @@ function hexToRgbObj(hex){
 }
 function rgbToHex(r,g,b){
   const h = (x)=>x.toString(16).padStart(2,'0');
-  return '#'+h(r)+h(g)+h(b);
+  return '#'+h(r)+h(b);
 }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function syncRGBtoUI(rgb){
@@ -1016,12 +1030,14 @@ function syncUItoColor(){
   hexInput.value = rgbToHex(r,g,b).slice(1);
 }
 function openColorModal(){
+  iosModalOpen = true;
   const rgb = hexToRgbObj(timerColor);
   syncRGBtoUI(rgb);
   colorModal.style.display='flex';
 }
 function closeColorModal(){
   colorModal.style.display='none';
+  iosModalOpen = false;
   ensureReturnToFullscreen();
 }
 [rRange,gRange,bRange].forEach(el=>{
@@ -1048,6 +1064,60 @@ okColorBtn.addEventListener('click', ()=>{
   applyTimerColor(hex);
   closeColorModal();
 });
+
+/* --------- iPad select replacement: generic list modal ---------- */
+const listModal = document.getElementById('listModal');
+const listTitle = document.getElementById('listTitle');
+const listBody  = document.getElementById('listBody');
+const closeListBtn = document.getElementById('closeListBtn');
+
+function openListModal(title, items, onPick){
+  iosModalOpen = true;
+  listTitle.textContent = title;
+  listBody.innerHTML = '';
+  for(const it of items){
+    const btn = document.createElement('button');
+    btn.className = 'btn ghost full';
+    btn.innerHTML = `<span>${it.label}</span>${it.selected ? '<span>✓</span>' : '<span>&nbsp;</span>'}`;
+    btn.addEventListener('click', ()=>{
+      onPick(it.value, it.label);
+      closeListModal();
+    });
+    listBody.appendChild(btn);
+  }
+  listModal.style.display = 'flex';
+}
+function closeListModal(){
+  listModal.style.display = 'none';
+  iosModalOpen = false;
+  ensureReturnToFullscreen();
+}
+
+/* Build an iPad proxy for a <select> */
+function createSelectProxy(selectEl, proxyBtn, title){
+  if(!isIOS) return;
+  // Hide the native select; show proxy
+  selectEl.classList.add('hidden');
+  proxyBtn.classList.remove('hidden');
+
+  // Initialize label
+  const curr = selectEl.options[selectEl.selectedIndex];
+  proxyBtn.textContent = curr ? curr.textContent : title;
+
+  addTap(proxyBtn, ()=>{
+    const items = Array.from(selectEl.options).map(opt=>({
+      value: opt.value,
+      label: opt.textContent,
+      selected: opt.selected
+    }));
+    openListModal(title, items, (val, label)=>{
+      // Update underlying select & fire its change handler
+      selectEl.value = val;
+      proxyBtn.textContent = label;
+      selectEl.dispatchEvent(new Event('change', {bubbles:true}));
+    });
+  });
+}
 
 /* Image size/count + tint */
 const imgSizeRange = document.getElementById('imgSizeRange');
@@ -1095,7 +1165,7 @@ if(!supportsDirPicker){
 
 let repoHandle = null;
 
-/* IndexedDB for repo handle (desktop keeps original behavior) */
+/* IndexedDB for repo handle (desktop path intact) */
 const DB_NAME='timer-handles', STORE='handles';
 function withHandleStore(mode, fn){
   return new Promise((res, rej)=>{
@@ -1205,14 +1275,15 @@ if(!isIOS){
 }else{
   // iPad: tap to choose slot
   selectedSlots.forEach((slot)=>{
-    addTap(slot, ()=>{ setCurrentSlot(parseInt(slot.dataset.idx,10)); tryKeepFullscreen(200); });
+    addTap(slot, ()=>{ setCurrentSlot(parseInt(slot.dataset.idx,10)); });
   });
 }
 
 /* Modal helpers */
-function openPickerModal(){ pickerModal.style.display='flex'; tryKeepFullscreen(200); }
+function openPickerModal(){ iosModalOpen = true; pickerModal.style.display='flex'; }
 function closePickerModal(){
   pickerModal.style.display='none';
+  iosModalOpen = false;
   pickerGrid.innerHTML='';
   for(const it of gridItems){ if(it.file && it.url) try{ URL.revokeObjectURL(it.url); }catch(_){} }
   gridItems = [];
@@ -1245,7 +1316,6 @@ uploadInput.addEventListener('change', ()=>{
   pickerSub.textContent = (lang==='fr' ? '(importées)' : '(uploaded)') + (isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '');
   switchSourceBtn.classList.remove('hidden');
   setCurrentSlot(0);
-  tryKeepFullscreen(400);
 });
 
 /* Add files ADDITIVELY to grid */
@@ -1268,7 +1338,7 @@ function appendFilesToGrid(fileList){
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      addTap(card, ()=>{ placeInNextSlot(url); tryKeepFullscreen(250); });
+      addTap(card, ()=>{ placeInNextSlot(url); });
     }
     frag.appendChild(card);
   }
@@ -1276,11 +1346,11 @@ function appendFilesToGrid(fileList){
 }
 
 /* iPad modal buttons (hidden on desktop) */
-addTap(pickLibraryBtn, ()=>{ if(!isIOS) return; uploadLibraryInput.value = ''; uploadLibraryInput.click(); tryKeepFullscreen(200); });
-uploadLibraryInput.addEventListener('change', ()=>{ if(!isIOS) return; appendFilesToGrid(uploadLibraryInput.files); setCurrentSlot(nextSlot); tryKeepFullscreen(400); });
+addTap(pickLibraryBtn, ()=>{ if(!isIOS) return; uploadLibraryInput.value = ''; uploadLibraryInput.click(); });
+uploadLibraryInput.addEventListener('change', ()=>{ if(!isIOS) return; appendFilesToGrid(uploadLibraryInput.files); setCurrentSlot(nextSlot); });
 
-addTap(pickPhotoBtn, ()=>{ if(!isIOS) return; uploadPhotoInput.value = ''; uploadPhotoInput.click(); tryKeepFullscreen(200); });
-uploadPhotoInput.addEventListener('change', ()=>{ if(!isIOS) return; appendFilesToGrid(uploadPhotoInput.files); setCurrentSlot(nextSlot); tryKeepFullscreen(400); });
+addTap(pickPhotoBtn, ()=>{ if(!isIOS) return; uploadPhotoInput.value = ''; uploadPhotoInput.click(); });
+uploadPhotoInput.addEventListener('change', ()=>{ if(!isIOS) return; appendFilesToGrid(uploadPhotoInput.files); setCurrentSlot(nextSlot); });
 
 /* Iterate image files */
 async function* iterImages(dirHandle){
@@ -1320,7 +1390,7 @@ async function populateFromRepo(){
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      addTap(card, ()=>{ placeInNextSlot(url); tryKeepFullscreen(250); });
+      addTap(card, ()=>{ placeInNextSlot(url); });
     }
     frag.appendChild(card);
   }
@@ -1331,7 +1401,6 @@ async function populateFromRepo(){
   }else{ pickerGrid.appendChild(frag); }
 
   setCurrentSlot(0);
-  tryKeepFullscreen(300);
 }
 
 /* Populate grid from manifest */
@@ -1360,14 +1429,13 @@ function populateFromManifest(){
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     }else{
       card.draggable = false;
-      addTap(card, ()=>{ placeInNextSlot(url); tryKeepFullscreen(250); });
+      addTap(card, ()=>{ placeInNextSlot(url); });
     }
     frag.appendChild(card);
   }
   pickerGrid.appendChild(frag);
 
   setCurrentSlot(0);
-  tryKeepFullscreen(300);
 }
 
 /* Auto-fill top 4 */
@@ -1375,7 +1443,6 @@ function autoFillTop4(){
   const top4 = gridItems.slice(0,4);
   for(let i=0;i<4;i++){ setSlotSrc(i, top4[i]?.url || null); }
   setCurrentSlot(0);
-  tryKeepFullscreen(200);
 }
 
 /* Prefer radial when images chosen */
@@ -1411,7 +1478,6 @@ function assignFromSlots(){
 function clearSlots(){
   for(let i=0;i<4;i++) setSlotSrc(i, null);
   setCurrentSlot(0);
-  tryKeepFullscreen(150);
 }
 
 /* Openers */
@@ -1426,7 +1492,6 @@ setRepoBtn.addEventListener('click', async ()=>{
   }else{
     uploadInput.click();
   }
-  tryKeepFullscreen(300);
 });
 addTap(openManifestBtn, ()=>{ openPickerModal(); populateFromManifest(); });
 
@@ -1442,7 +1507,6 @@ addTap(switchSourceBtn, async ()=>{
   }else{
     uploadInput.click();
   }
-  tryKeepFullscreen(300);
 });
 addTap(autoFillBtn, autoFillTop4);
 addTap(assignBtn, assignFromSlots);
@@ -1476,18 +1540,40 @@ addTap(enterBtn, ()=>{ startApp(); });
 
 overlay.addEventListener('click', e => { e.stopPropagation(); }, {passive:false});
 
-/* Startup:
-   - Desktop/Android: keep existing behavior (auto-start already in your current build).
-   - iPad: adjust defaults and require tap (unchanged for desktop). */
+/* Startup adjustments */
 window.addEventListener('DOMContentLoaded', ()=>{
   if(isIOS){
-    // Bigger default images on iPad (esp. radial)
-    LAYOUT.imgBase = 0.42;               // iPad-only default
-    document.getElementById('imgSizeRange').value = String(LAYOUT.imgBase);
+    // iPad: bigger default images, higher slider ceiling
+    LAYOUT.imgBase = 0.58;                     // bigger by default
+    const r = document.getElementById('imgSizeRange');
+    r.max = '0.95';
+    r.value = String(LAYOUT.imgBase);
+
+    // Replace selects with custom pickers (no fullscreen exit)
+    createSelectProxy(
+      document.getElementById('dialSelect'),
+      document.getElementById('dialProxy'),
+      getLang()==='fr' ? 'Cadran' : 'Dial'
+    );
+    createSelectProxy(
+      document.getElementById('specialMode'),
+      document.getElementById('modeProxy'),
+      getLang()==='fr' ? 'Mode' : 'Mode'
+    );
+    createSelectProxy(
+      document.getElementById('alarmSelect'),
+      document.getElementById('alarmProxy'),
+      getLang()==='fr' ? 'Son d’alarme' : 'Alarm sound'
+    );
+  }else{
+    // Hide iPad-only buttons on desktop
+    document.getElementById('pickLibraryBtn')?.classList.add('hidden');
+    document.getElementById('pickPhotoBtn')?.classList.add('hidden');
+    document.getElementById('dialProxy')?.classList.add('hidden');
+    document.getElementById('modeProxy')?.classList.add('hidden');
+    document.getElementById('alarmProxy')?.classList.add('hidden');
   }
   draw();
-
-  // NOTE: We do NOT change desktop startup here (as requested).
 });
 
 /* Reassert fullscreen after common lifecycle changes (iPad only) */
