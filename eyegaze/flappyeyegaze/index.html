@@ -134,15 +134,13 @@
     const t0 = AC.currentTime + 0.001;
     const o = AC.createOscillator();
     const g = AC.createGain();
-    o.type = type;
-    o.frequency.value = freq;
+    o.type = type; o.frequency.value = freq;
     g.gain.value = 0;
     g.gain.setValueAtTime(0, t0);
     g.gain.linearRampToValueAtTime(vol, t0 + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     o.connect(g); g.connect(masterGain);
-    o.start(t0);
-    o.stop(t0 + dur + 0.02);
+    o.start(t0); o.stop(t0 + dur + 0.02);
   }
   function scoreChime(){ beep(850, .07, 'square', .5); setTimeout(()=>beep(1100,.06,'square',.45), 30); }
   function hitSfx(){ beep(200, .18, 'sawtooth', .35); setTimeout(()=>beep(120,.22,'sawtooth',.3), 40); }
@@ -157,19 +155,19 @@
   let score = 0, best = parseInt(localStorage.getItem('flappy-best')||'0',10);
   bestEl.textContent = best;
 
-  // Difficulty presets (base)
+  // ======= Difficulty presets (now with fixed speeds per mode) =======
   const presetsBase = {
-    easy:   { gap: 190, speed: 1.1, spawn: 1.5 },
-    normal: { gap: 170, speed: 2.45, spawn: 1.35 },
-    hard:   { gap: 150, speed: 2.9, spawn: 1.20 }
+    easy:   { gap: 240, speed: 1.0,  spawn: 2.2 },  // slow & forgiving
+    normal: { gap: 170, speed: 2.4,  spawn: 1.35 }, // moderate
+    hard:   { gap: 140, speed: 3.6,  spawn: 1.10 }  // fast & tight
   };
   let cfg = { gap: 220, speed: 3, spawn: 1.4 };
 
   function rescaleConfig() {
     const base = presetsBase[difficulty];
     cfg = {
-      gap: Math.round(base.gap * (H / 640)),
-      speed: base.speed * (W / 360),
+      gap:   Math.round(base.gap * (H / 640)), // keep gap responsive to height
+      speed: base.speed,                       // DO NOT scale by width
       spawn: base.spawn
     };
   }
@@ -362,8 +360,8 @@
   // ======= Mario-style pipes (narrower, with caps/rims) =======
   function drawPipe(x, topH, w=PIPE_W, gap=cfg.gap) {
     const bottomY = topH + gap;
-    const capH = Math.max(10, Math.round(w * 0.35));      // rim height
-    const over = Math.max(6,  Math.round(w * 0.18));      // cap overhang beyond body
+    const capH = Math.max(10, Math.round(w * 0.35)); // rim height
+    const over = Math.max(6,  Math.round(w * 0.18)); // cap overhang
 
     const bodyGrad = ctx.createLinearGradient(x,0,x+w,0);
     bodyGrad.addColorStop(0.00, '#096b22');
@@ -372,42 +370,29 @@
     bodyGrad.addColorStop(0.75, '#17a23a');
     bodyGrad.addColorStop(1.00, '#096b22');
 
-    // TOP pipe body
-    ctx.fillStyle = bodyGrad;
-    ctx.fillRect(x, 0, w, topH);
-    // BOTTOM pipe body
-    ctx.fillStyle = bodyGrad;
-    ctx.fillRect(x, bottomY, w, H-bottomY);
+    ctx.fillStyle = bodyGrad; ctx.fillRect(x, 0, w, topH);
+    ctx.fillStyle = bodyGrad; ctx.fillRect(x, bottomY, w, H-bottomY);
 
-    // Highlights on body
+    // body highlights
     ctx.fillStyle = 'rgba(255,255,255,0.18)';
     const sheenW = Math.max(2, Math.round(w*0.12));
     const sheenX = x + Math.round(w*0.22);
     ctx.fillRect(sheenX, 0, sheenW, topH);
     ctx.fillRect(sheenX, bottomY, sheenW, H-bottomY);
 
-    // Edge shadows
+    // edges
     ctx.fillStyle = 'rgba(0,0,0,0.20)';
-    ctx.fillRect(x, 0, 2, topH);
-    ctx.fillRect(x+w-2, 0, 2, topH);
-    ctx.fillRect(x, bottomY, 2, H-bottomY);
-    ctx.fillRect(x+w-2, bottomY, 2, H-bottomY);
+    ctx.fillRect(x, 0, 2, topH); ctx.fillRect(x+w-2, 0, 2, topH);
+    ctx.fillRect(x, bottomY, 2, H-bottomY); ctx.fillRect(x+w-2, bottomY, 2, H-bottomY);
 
-    // CAPS (rims)
+    // caps
     function drawCap(cx, cy, cw, ch, facingDown){
       const gradCap = ctx.createLinearGradient(cx, cy, cx, cy+ch);
-      if (facingDown){
-        gradCap.addColorStop(0, '#62e86e');
-        gradCap.addColorStop(1, '#1fbf43');
-      } else {
-        gradCap.addColorStop(0, '#1fbf43');
-        gradCap.addColorStop(1, '#62e86e');
-      }
-      ctx.fillStyle = gradCap;
-      ctx.fillRect(cx, cy, cw, ch);
+      if (facingDown){ gradCap.addColorStop(0, '#62e86e'); gradCap.addColorStop(1, '#1fbf43'); }
+      else           { gradCap.addColorStop(0, '#1fbf43'); gradCap.addColorStop(1, '#62e86e'); }
+      ctx.fillStyle = gradCap; ctx.fillRect(cx, cy, cw, ch);
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(cx, cy, cw, 2);
-      ctx.fillRect(cx, cy+ch-2, cw, 2);
+      ctx.fillRect(cx, cy, cw, 2); ctx.fillRect(cx, cy+ch-2, cw, 2);
       ctx.fillStyle = 'rgba(255,255,255,0.10)';
       ctx.fillRect(cx+3, cy+Math.round(ch*0.25), cw-6, 2);
     }
@@ -417,13 +402,12 @@
 
   // ======= Bird drawing (sprite first, vector fallback) =======
   function drawBirdSprite(b) {
-    // Choose animation frame: mid shows twice as often (cycle 4 steps)
-    // Order in spriteFrames: [up, mid, down]
-    const cycle = [1, 0, 1, 2]; // mid, up, mid, down
+    // frames: [up, mid, down] — cycle: mid, up, mid, down
+    const cycle = [1, 0, 1, 2];
     const idx = cycle[Math.floor((b.wingPhase * 1) % 4)];
     const img = spriteFrames[idx] || spriteFrames[1] || spriteFrames[0];
 
-    // Scale so sprite height ~= 2 * r (you set this big; kept as-is)
+    // scale so sprite height ~= 2 * r (intentional big scale)
     const desiredH = b.r * 6;
     const scale = desiredH / img.naturalHeight;
     const dw = img.naturalWidth * scale;
@@ -432,37 +416,30 @@
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
-
-    // (shadow removed as requested)
-
+    // (shadow removed)
     ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
     ctx.restore();
   }
 
   function drawBirdVector(b) {
-    // (fallback) simple vector bird
+    // fallback vector bird
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
 
     const bodyR = b.r;
     const bodyGrad = ctx.createRadialGradient(0,0, bodyR*0.2, 0,0, bodyR*1.1);
-    bodyGrad.addColorStop(0, '#ffd166');
-    bodyGrad.addColorStop(1, '#f4a261');
-    ctx.fillStyle = bodyGrad;
-    ctx.beginPath(); ctx.arc(0,0, bodyR, 0, Math.PI*2); ctx.fill();
+    bodyGrad.addColorStop(0, '#ffd166'); bodyGrad.addColorStop(1, '#f4a261');
+    ctx.fillStyle = bodyGrad; ctx.beginPath(); ctx.arc(0,0, bodyR, 0, Math.PI*2); ctx.fill();
 
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.beginPath(); ctx.ellipse(0, bodyR*0.2, bodyR*0.9, bodyR*0.7, 0, 0, Math.PI*2); ctx.fill();
 
     ctx.save();
     const wingA = Math.sin(b.wingPhase)*0.6 - 0.2;
-    ctx.rotate(wingA);
-    ctx.translate(-bodyR*0.1, 0);
+    ctx.rotate(wingA); ctx.translate(-bodyR*0.1, 0);
     ctx.fillStyle = '#f77f00';
-    ctx.beginPath();
-    ctx.ellipse(-bodyR*0.1, 0, bodyR*0.7, bodyR*0.45, 0, 0, Math.PI*2);
-    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-bodyR*0.1, 0, bodyR*0.7, bodyR*0.45, 0, 0, Math.PI*2); ctx.fill();
     ctx.restore();
 
     ctx.fillStyle = '#ffffff';
@@ -471,16 +448,13 @@
     ctx.beginPath(); ctx.arc(bodyR*0.45, -bodyR*0.25, bodyR*0.12, 0, Math.PI*2); ctx.fill();
 
     ctx.fillStyle = '#ff7f00';
-    ctx.beginPath();
-    ctx.moveTo(bodyR*0.9, 0);
+    ctx.beginPath(); ctx.moveTo(bodyR*0.9, 0);
     ctx.lineTo(bodyR*1.4, -bodyR*0.1);
     ctx.lineTo(bodyR*0.9, -bodyR*0.25);
     ctx.closePath(); ctx.fill();
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.arc(0,0, bodyR, 0, Math.PI*2); ctx.stroke();
-
     ctx.restore();
   }
 
@@ -514,7 +488,7 @@
     // wing animation
     bird.wingPhase += (state === State.PLAYING ? 14 : 10)*dt;
 
-    // Background motion (ground parallax notably slower to reduce dizziness)
+    // Background motion (ground parallax slow to reduce dizziness)
     groundOffset += (cfg.speed * 60) * dt * 0.18;
 
     // Clouds
