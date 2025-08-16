@@ -5,33 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Explorons le monde</title>
 
+  <!-- Keep only common CSS for the MENU -->
   <link rel="stylesheet" href="../../css/eyegaze-menu.css">
   <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
 
+  <!-- Everything game-related is styled here -->
   <style>
-    /* --- Critical visibility & stacking fixes --- */
-    html, body { margin:0; height:100%; background:#000; }
-    /* Keep your body flex, but the map gets explicit dimensions + stacking */
-    .map-container{
-      position:relative;
-      display:block;             /* visible even before Start; modal covers it */
-      width:100vw;               /* full viewport width so the image has a width to scale from */
-      max-width:100%;
-      margin:0 auto;
-      z-index:5;                 /* below modal(>=1000), above page background */
-      overflow:hidden;
-      background:#111;           /* helps debug if image is missing */
+    /* ===== GAME SCOPE (resists global CSS) ===== */
+    #game-root { position: relative; z-index: 1; }
+    #game-stage {
+      position: relative;
+      width: 100vw;           /* concrete width so image has a basis */
+      max-width: 100%;
+      margin: 0 auto;
+      overflow: hidden;
+      background: #111;
+      z-index: 5;             /* sits under the modal (z:1000) but above page bg */
     }
-    .world-map{
-      display:block;
-      width:100vw;               /* fill viewport width */
-      max-width:100%;            /* never exceed container */
-      height:auto;               /* keep aspect ratio */
-      user-select:none;
-      -webkit-user-drag:none;
-      object-fit:contain;        /* safe fit if container is larger than image */
+    #worldMap {
+      display: block;
+      width: 100vw;           /* fill viewport width */
+      max-width: 100%;
+      height: auto;
+      object-fit: contain;
+      user-select: none;
+      -webkit-user-drag: none;
     }
-    .dwell-circle{
+    #hover-circle{
       position:absolute; pointer-events:none; display:none;
       border:3px solid rgba(0,200,255,.95); border-radius:50%;
       width:20px; height:20px; transform:translate(-50%,-50%);
@@ -39,46 +39,17 @@
       z-index:6;
     }
 
-    /* Modal as overlay on top (your styles keep z-index:1000) */
-    .modal{ position:fixed; inset:0; background:rgba(0,0,0,.85);
-      display:flex; align-items:center; justify-content:center; z-index:1000; }
+    /* Overlays used during play */
+    #video-overlay{ position:fixed; inset:0; background:#000; display:none; place-items:center; z-index:101; }
+    #video-overlay video{ max-width:92vw; max-height:92vh; background:#000; outline:none; }
 
-    #control-panel-options{
-      background:#fff; color:#000; border:4px solid #008080; border-radius:8px;
-      padding:20px; width:90%; max-width:740px; text-align:center;
-      display:flex; flex-direction:column; align-items:center;
-      box-shadow:0 4px 10px rgba(0,0,0,.3);
-    }
-    #options-title-bar{
-      position:absolute; top:80px; left:50%; transform:translateX(-50%);
-      width:600px; background:#009688; color:#fff; padding:15px 30px; border-radius:10px;
-      text-align:center; z-index:1010; box-shadow:0 4px 8px rgba(0,0,0,.3);
-    }
-    #options-title-bar h2{ margin:0; font-size:1.6rem; color:#fff; }
+    /* Minimal progress bar for preloading (non-blocking) */
+    #preload-bar-wrap{ display:none; height:8px; background:#eee; border-radius:999px; overflow:hidden; width:100%; max-width:480px; margin:8px auto 0; }
+    #preload-bar{ height:100%; width:0%; background:#0a7; transition:width .25s ease; }
 
-    .button{ background:#009688; color:#fff; border:none; padding:10px 20px; border-radius:10px; cursor:pointer; }
-    .button:hover{ background:#00796B; }
-
-    .styled-slider{
-      -webkit-appearance:none; width:60%; margin:8px 0; background:transparent;
-    }
-    .styled-slider::-webkit-slider-runnable-track{ height:8px; background:#009688; border-radius:5px; }
-    .styled-slider::-webkit-slider-thumb{
-      -webkit-appearance:none; height:20px; width:20px; border-radius:50%; background:#00796B; border:2px solid #004D40; margin-top:-6px; cursor:pointer;
-    }
-    .styled-slider::-moz-range-track{ height:8px; background:#009688; border-radius:5px; }
-    .styled-slider::-moz-range-thumb{ height:20px; width:20px; border-radius:50%; background:#00796B; border:2px solid #004D40; cursor:pointer; }
-
-    .overlay{ position:fixed; inset:0; background:#000; display:none; z-index:10; }
-    .video-container{ position:fixed; inset:0; display:none; place-items:center; z-index:15; background:#000; }
-    .video-container video{ max-width:92vw; max-height:92vh; outline:none; background:#000; }
-
-    .control-panel-loading-bar-container{ display:none; height:8px; background:#eee; border-radius:999px; overflow:hidden; width:100%; max-width:480px; margin:8px auto 0; }
-    .control-panel-loading-bar{ height:100%; width:0%; background:#0a7; transition:width .25s ease; }
-
-    /* Small status in dev; safe to leave */
+    /* Dev status strip (remove later if desired) */
     #statusStrip{
-      position:fixed; left:10px; bottom:10px; z-index:30; background:#222; color:#ddd;
+      position:fixed; left:10px; bottom:10px; z-index:2000; background:#222; color:#ddd;
       padding:8px 12px; border-radius:10px; font-size:13px; box-shadow:0 6px 22px rgba(0,0,0,.5);
       display:flex; gap:8px; align-items:center;
     }
@@ -86,19 +57,23 @@
     #statusStrip.good #statusDot{ background:#19c37d; }
     #statusStrip.bad  #statusDot{ background:#f15151; }
     #statusMsg code{ color:#9bd; }
+
+    /* Ensure the menu modal looks correct (leave details to your common CSS) */
+    #game-options.modal{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:1000; }
+    #control-panel-options{ max-width:740px; width:90%; }
   </style>
 </head>
-<body class="interactive-map">
+<body>
 
-  <!-- OPTIONS / CONTROL PANEL -->
+  <!-- ===== MENU (uses common CSS) ===== -->
   <div id="game-options" class="modal" style="display:flex;">
     <div id="control-panel-options">
       <div id="options-title-bar">
         <h2 id="options-main-title">Explorons le monde</h2>
       </div>
 
-      <div id="control-panel-loading-bar-container" class="control-panel-loading-bar-container" aria-hidden="true">
-        <div id="control-panel-loading-bar" class="control-panel-loading-bar"></div>
+      <div id="preload-bar-wrap" aria-hidden="true">
+        <div id="preload-bar"></div>
       </div>
 
       <div id="mode-divider" style="width:100%;height:2px;background:#009688;margin:20px 0;"></div>
@@ -139,42 +114,39 @@
     </div>
   </div>
 
-  <!-- MAP (visible; modal sits on top until Start) -->
-  <div class="map-container" id="map-container">
-    <img id="worldMap" src="../../images/worldmap.jpg" usemap="#image-map" alt="World Map" class="world-map"/>
-    <div id="hover-circle" class="dwell-circle"></div>
+  <!-- ===== GAME ROOT ===== -->
+  <div id="game-root">
+    <div id="game-stage">
+      <img id="worldMap" src="../../images/worldmap.jpg" alt="World Map" />
+      <div id="hover-circle"></div>
+      <!-- We still include <map>/<area> to keep your data, but we will parse it ourselves -->
+      <map name="image-map">
+        <area alt="north-america" title="Amérique du Nord" href="#" coords="442,530,369,480,260,419,191,256,42,214,167,71,476,34,857,24" shape="poly">
+        <area alt="south-america" title="Amérique du Sud" href="#" coords="437,545,450,686,528,940,583,986,650,806,712,647,644,560,522,487" shape="poly">
+        <area alt="africa"         title="Afrique"          href="#" coords="835,346,778,509,907,589,993,854,1161,774,1181,636,1154,582,1198,491,1064,362,949,322" shape="poly">
+        <area alt="europe"         title="Europe"           href="#" coords="1273,63,983,25,818,241,834,339,912,316,1041,343,1103,297,1163,314,1236,221" shape="poly">
+        <area alt="asia"           title="Asie"             href="#" coords="1899,137,1476,49,1271,83,1242,226,1175,316,1081,314,1085,375,1203,491,1326,535,1436,599,1521,657,1604,599" shape="poly">
+        <area alt="oceania"        title="Océanie"          href="#" coords="1743,608,1617,586,1522,718,1476,752,1482,857,1561,844,1607,928,1712,976,1783,905" shape="poly">
+      </map>
+    </div>
   </div>
 
-  <div class="overlay" id="overlay" aria-hidden="true"></div>
-
-  <!-- VIDEO -->
-  <div id="video-container" class="video-container">
+  <!-- Video overlay -->
+  <div id="video-overlay" style="display:none;">
     <video id="end-video" playsinline controls>
       <source id="video-source" src="" type="video/mp4">
       Votre navigateur ne prend pas en charge la balise vidéo.
     </video>
   </div>
 
-  <!-- AREAS -->
-  <map name="image-map">
-    <area alt="north-america" title="Amérique du Nord" href="#" coords="442,530,369,480,260,419,191,256,42,214,167,71,476,34,857,24" shape="poly">
-    <area alt="south-america" title="Amérique du Sud" href="#" coords="437,545,450,686,528,940,583,986,650,806,712,647,644,560,522,487" shape="poly">
-    <area alt="africa"         title="Afrique"          href="#" coords="835,346,778,509,907,589,993,854,1161,774,1181,636,1154,582,1198,491,1064,362,949,322" shape="poly">
-    <area alt="europe"         title="Europe"           href="#" coords="1273,63,983,25,818,241,834,339,912,316,1041,343,1103,297,1163,314,1236,221" shape="poly">
-    <area alt="asia"           title="Asie"             href="#" coords="1899,137,1476,49,1271,83,1242,226,1175,316,1081,314,1085,375,1203,491,1326,535,1436,599,1521,657,1604,599" shape="poly">
-    <area alt="oceania"        title="Océanie"          href="#" coords="1743,608,1617,586,1522,718,1476,752,1482,857,1561,844,1607,928,1712,976,1783,905" shape="poly">
-  </map>
-
-  <!-- Status (dev aid) -->
+  <!-- Tiny status for dev -->
   <div id="statusStrip"><div id="statusDot"></div><div id="statusMsg">Initialisation…</div></div>
 
-  <!-- Libs + your commons -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/image-map-resizer/1.0.10/js/imageMapResizer.min.js"></script>
+  <!-- Keep only your eyegaze menu JS; avoid other commons to reduce surprises -->
   <script src="../../js/eyegaze-menu.js"></script>
 
-
   <script>
-  // Status helpers (safe in prod)
+  /* ===================== UTIL ===================== */
   const statusStrip = document.getElementById('statusStrip');
   const statusMsg   = document.getElementById('statusMsg');
   function setStatus(ok, text){
@@ -183,7 +155,29 @@
     statusMsg.innerHTML = text;
   }
 
-  // --- Videos preload (non-blocking) ---
+  // Simple PIP (ray casting) for polygon; handles rect/circle too
+  function pointInPolygon(x, y, poly){
+    let inside = false;
+    for (let i = 0, j = poly.length - 2; i < poly.length; i += 2) {
+      const xi = poly[i], yi = poly[i+1];
+      const xj = poly[j], yj = poly[j+1];
+      const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
+      if (intersect) inside = !inside;
+      j = i;
+    }
+    return inside;
+  }
+  function pointInRect(x,y, [x1,y1,x2,y2]){
+    const minx = Math.min(x1,x2), maxx = Math.max(x1,x2);
+    const miny = Math.min(y1,y2), maxy = Math.max(y1,y2);
+    return x >= minx && x <= maxx && y >= miny && y <= maxy;
+  }
+  function pointInCircle(x,y,[cx,cy,r]){
+    const dx = x - cx, dy = y - cy;
+    return dx*dx + dy*dy <= r*r;
+  }
+
+  // Videos per zone
   const ZONE_VIDEOS = {
     'north-america': 'https://bucket.adaptatech.org/north-america.mp4',
     'south-america': 'https://bucket.adaptatech.org/south-america.mp4',
@@ -193,16 +187,17 @@
     'oceania':       'https://bucket.adaptatech.org/oceania.mp4'
   };
 
+  // Non-blocking preload with a slim bar
   (function preloadVideos(){
-    const bar = document.getElementById('control-panel-loading-bar');
-    const barC = document.getElementById('control-panel-loading-bar-container');
-    barC.style.display = 'block';
+    const wrap = document.getElementById('preload-bar-wrap');
+    const bar  = document.getElementById('preload-bar');
+    wrap.style.display = 'block';
     const keys = Object.keys(ZONE_VIDEOS);
     let done = 0;
     const mark = () => {
       done++;
       bar.style.width = Math.round(done / keys.length * 100) + '%';
-      if (done >= keys.length) setTimeout(() => barC.style.display = 'none', 400);
+      if (done >= keys.length) setTimeout(() => wrap.style.display = 'none', 400);
     };
     keys.forEach(k=>{
       const v = document.createElement('video');
@@ -215,57 +210,80 @@
     });
   })();
 
+  /* ===================== MAIN ===================== */
   (function main(){
-    const startButton   = document.getElementById('startButton');
-    const mapContainer  = document.getElementById('map-container');
+    const startBtn      = document.getElementById('startButton');
     const worldMap      = document.getElementById('worldMap');
+    const stage         = document.getElementById('game-stage');
     const hoverCircle   = document.getElementById('hover-circle');
-    const overlay       = document.getElementById('overlay');
-    const videoContainer= document.getElementById('video-container');
+    const videoOverlay  = document.getElementById('video-overlay');
     const endVideo      = document.getElementById('end-video');
     const videoSource   = document.getElementById('video-source');
 
     // Show Start immediately
-    startButton.style.display = 'inline-block';
+    startBtn.style.display = 'inline-block';
 
     worldMap.addEventListener('load', () => {
       setStatus(true, `Carte chargée: <code>${worldMap.currentSrc}</code> (${worldMap.naturalWidth}×${worldMap.naturalHeight})`);
     });
     worldMap.addEventListener('error', () => {
-      setStatus(false, `ERREUR chargement image: <code>${worldMap.currentSrc || worldMap.src}</code>`);
+      setStatus(false, `ERREUR image: <code>${worldMap.currentSrc || worldMap.src}</code>`);
     });
 
-    startButton.addEventListener('click', () => {
-      if (window.eyegazeSettings && typeof eyegazeSettings.hideOverlay === 'function') {
-        eyegazeSettings.hideOverlay();
-      } else {
-        const modal = document.getElementById('game-options');
-        if (modal) modal.style.display = 'none';
+    // Parse areas into geometry (once)
+    const areaDefs = Array.from(document.querySelectorAll('map[name="image-map"] area')).map(a => {
+      return {
+        zone: (a.getAttribute('alt') || '').toLowerCase(),
+        shape: (a.getAttribute('shape') || 'poly').toLowerCase(),
+        coords: (a.getAttribute('coords') || '').split(',').map(n=>parseFloat(n))
+      };
+    });
+
+    function zoneAtClientPoint(clientX, clientY){
+      const rect = worldMap.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+
+      // Convert pointer to image NATURAL coordinate space
+      const sx = worldMap.naturalWidth  / rect.width;
+      const sy = worldMap.naturalHeight / rect.height;
+      const x = (clientX - rect.left) * sx;
+      const y = (clientY - rect.top)  * sy;
+
+      for (const a of areaDefs) {
+        if (!a.zone) continue;
+        if (a.shape === 'poly' && a.coords.length >= 6) {
+          if (pointInPolygon(x, y, a.coords)) return a.zone;
+        } else if (a.shape === 'rect' && a.coords.length === 4) {
+          if (pointInRect(x, y, a.coords)) return a.zone;
+        } else if (a.shape === 'circle' && a.coords.length === 3) {
+          if (pointInCircle(x, y, a.coords)) return a.zone;
+        }
       }
+      return null;
+    }
 
-      // ensure the image map overlays match the displayed image
-      const safeResize = () => { if (typeof imageMapResize === 'function') { try { imageMapResize(); } catch(e){ console.warn('imageMapResize error', e); } } };
-      if (worldMap.complete && worldMap.naturalWidth > 0) safeResize();
-      worldMap.addEventListener('load', safeResize);
-      requestAnimationFrame(safeResize);
-      window.addEventListener('resize', safeResize);
-    });
-
-    // Robust hover -> dwell using elementFromPoint
+    // Dwell logic
     let dwellTimer = null;
     let currentZone = null;
 
-    function beginDwell(zone) {
+    function beginDwell(zone, clientX, clientY) {
       const dwell = Number(window.eyegazeSettings?.dwellTime ?? 1500);
+
+      // position visual
+      const rect = stage.getBoundingClientRect();
+      hoverCircle.style.left = (clientX - rect.left) + 'px';
+      hoverCircle.style.top  = (clientY - rect.top)  + 'px';
       hoverCircle.style.display = 'block';
       hoverCircle.style.width = '20px';
       hoverCircle.style.height = '20px';
       hoverCircle.style.transition = 'none';
+
       requestAnimationFrame(() => {
         hoverCircle.style.transition = `width ${dwell}ms ease, height ${dwell}ms ease`;
         hoverCircle.style.width = '110px';
         hoverCircle.style.height = '110px';
       });
+
       clearTimeout(dwellTimer);
       dwellTimer = setTimeout(() => {
         hoverCircle.style.display = 'none';
@@ -273,62 +291,77 @@
       }, dwell);
     }
 
-    function cancelDwell() {
+    function cancelDwell(){
       clearTimeout(dwellTimer);
       dwellTimer = null;
       hoverCircle.style.display = 'none';
       currentZone = null;
     }
 
-    function handlePointerMove(ev) {
-      const rect = mapContainer.getBoundingClientRect();
-      const x = ev.clientX, y = ev.clientY;
-      hoverCircle.style.left = (x - rect.left) + 'px';
-      hoverCircle.style.top  = (y - rect.top)  + 'px';
+    function handleMove(ev){
+      const clientX = ev.clientX ?? (ev.touches && ev.touches[0]?.clientX);
+      const clientY = ev.clientY ?? (ev.touches && ev.touches[0]?.clientY);
+      if (clientX == null || clientY == null) return;
 
-      const el = document.elementFromPoint(x, y);
-      const area = el && el.tagName === 'AREA' ? el : (el?.closest && el.closest('area'));
-      const zone = area ? area.getAttribute('alt')?.toLowerCase() : null;
+      const z = zoneAtClientPoint(clientX, clientY);
+      if (!z) { cancelDwell(); return; }
 
-      if (!zone) { cancelDwell(); return; }
-      if (zone !== currentZone) {
-        currentZone = zone;
-        beginDwell(zone);
+      if (z !== currentZone) {
+        currentZone = z;
+        beginDwell(z, clientX, clientY);
+      } else {
+        // keep the circle centered while dwelling
+        const rect = stage.getBoundingClientRect();
+        hoverCircle.style.left = (clientX - rect.left) + 'px';
+        hoverCircle.style.top  = (clientY - rect.top)  + 'px';
       }
     }
 
-    mapContainer.addEventListener('pointermove', handlePointerMove);
-    mapContainer.addEventListener('pointerleave', cancelDwell);
-    mapContainer.addEventListener('mousemove', handlePointerMove);
-    mapContainer.addEventListener('mouseleave', cancelDwell);
+    // Attach to the image/stage
+    stage.addEventListener('pointermove', handleMove, { passive:true });
+    stage.addEventListener('mousemove', handleMove, { passive:true });
+    stage.addEventListener('touchmove', handleMove, { passive:true });
+    stage.addEventListener('pointerleave', cancelDwell);
+    stage.addEventListener('mouseleave',  cancelDwell);
+    stage.addEventListener('touchend',    cancelDwell);
 
+    // Prevent accidental navigation if areas are clicked
     document.querySelectorAll('area').forEach(a => a.addEventListener('click', e => e.preventDefault()));
 
+    // Start button hides the menu overlay
+    startBtn.addEventListener('click', () => {
+      if (window.eyegazeSettings && typeof eyegazeSettings.hideOverlay === 'function') {
+        eyegazeSettings.hideOverlay();
+      } else {
+        const modal = document.getElementById('game-options');
+        if (modal) modal.style.display = 'none';
+      }
+      setStatus(true, 'Jeu prêt.');
+    });
+
+    // Play video for a zone
     function triggerZone(zone) {
-      const src = {
-        'north-america': 'https://bucket.adaptatech.org/north-america.mp4',
-        'south-america': 'https://bucket.adaptatech.org/south-america.mp4',
-        'africa':        'https://bucket.adaptatech.org/africa.mp4',
-        'europe':        'https://bucket.adaptatech.org/europe.mp4',
-        'asia':          'https://bucket.adaptatech.org/asia.mp4',
-        'oceania':       'https://bucket.adaptatech.org/oceania.mp4'
-      }[zone];
+      const src = ZONE_VIDEOS[zone];
       if (!src) return;
 
-      overlay.style.display = 'block';
-      mapContainer.style.display = 'block';   /* stays in DOM, just covered */
       document.getElementById('video-source').src = src;
-      document.getElementById('video-container').style.display = 'grid';
+      videoOverlay.style.display = 'grid';
       endVideo.load();
       endVideo.play().catch(() => {
         endVideo.muted = true;
         endVideo.play().catch(()=>{ /* user can tap */ });
       });
+
       endVideo.onended = () => {
-        document.getElementById('video-container').style.display = 'none';
-        overlay.style.display = 'none';
+        videoOverlay.style.display = 'none';
       };
     }
+
+    // Initialize dwell slider from eyegazeSettings (your common JS already does this too)
+    document.getElementById('dwellTimeSlider')?.addEventListener('input', (e)=>{
+      const v = parseInt(e.target.value, 10);
+      document.getElementById('dwellTimeVal').textContent = v;
+    });
   })();
   </script>
 </body>
