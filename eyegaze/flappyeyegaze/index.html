@@ -60,14 +60,14 @@
   <div id="centerOverlay" aria-live="polite">
     <div class="panel" id="menuPanel">
       <div class="title">Flappy-ish</div>
-      <div class="subtitle">Move your <b>mouse / finger</b> up & down to fly. Starts in <b>fullscreen</b>.</div>
+      <div class="subtitle">Pick a difficulty, then press <b>Start</b>. Steer with your <b>mouse/finger</b> (fullscreen on start).</div>
       <div class="row" role="group" aria-label="Difficulty">
         <div class="chip" data-diff="easy"   data-active="true">Easy</div>
         <div class="chip" data-diff="normal">Normal</div>
         <div class="chip" data-diff="hard">Hard</div>
       </div>
       <button class="cta" id="startBtn">Start</button>
-      <div class="hint">Pause: <span class="kbd">P</span> &nbsp; Restart: <span class="kbd">R</span> &nbsp; Start: <span class="kbd">Space/Enter/Click</span></div>
+      <div class="hint">Pause: <span class="kbd">P</span> &nbsp; Restart: <span class="kbd">R</span> &nbsp; Start: <span class="kbd">Space/Enter or click Start</span></div>
     </div>
   </div>
 
@@ -95,7 +95,7 @@
     canvas.height = Math.floor(H * dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
     GH = Math.max(60, Math.round(H * 0.12));
-    PIPE_W = Math.max(28, Math.round(W * 0.035)); // keep narrow on resize
+    PIPE_W = Math.max(28, Math.round(W * 0.035));
     rescaleConfig();
     bird.r = Math.max(10, Math.round(14 * (H / 640)));
     bird.x = Math.round(W * 0.25);
@@ -111,11 +111,13 @@
   const chips = Array.from(document.querySelectorAll('.chip'));
 
   let difficulty = 'easy';
-  chips.forEach(ch => ch.addEventListener('click', () => {
+  chips.forEach(ch => ch.addEventListener('click', (e) => {
+    // Toggle only; do NOT start the game
     chips.forEach(c => c.dataset.active = 'false');
     ch.dataset.active = 'true';
     difficulty = ch.dataset.diff;
     rescaleConfig();
+    e.stopPropagation();
   }));
 
   // ======= Audio (generated) =======
@@ -155,21 +157,26 @@
   let score = 0, best = parseInt(localStorage.getItem('flappy-best')||'0',10);
   bestEl.textContent = best;
 
-  // ======= Difficulty presets (now with fixed speeds per mode) =======
+  // ======= Difficulty presets (fixed speeds per mode) =======
   const presetsBase = {
-    easy:   { gap: 240, speed: 1.0,  spawn: 2.2 },  // slow & forgiving
-    normal: { gap: 170, speed: 2.4,  spawn: 1.35 }, // moderate
-    hard:   { gap: 140, speed: 3.6,  spawn: 1.10 }  // fast & tight
+    easy:   { gap: 240, speed: 1.0 },  // slow & forgiving
+    normal: { gap: 170, speed: 2.4 },  // moderate
+    hard:   { gap: 140, speed: 3.6 }   // fast & tight
   };
-  let cfg = { gap: 220, speed: 3, spawn: 1.4 };
+
+  // Desired on-screen spacing between pipes (as a fraction of width)
+  const SPACING_FACTOR = { easy: 0.42, normal: 0.33, hard: 0.27 };
+
+  let cfg = { gap: 220, speed: 2.4, spawn: 1.5 }; // spawn computed from spacing
 
   function rescaleConfig() {
     const base = presetsBase[difficulty];
-    cfg = {
-      gap:   Math.round(base.gap * (H / 640)), // keep gap responsive to height
-      speed: base.speed,                       // DO NOT scale by width
-      spawn: base.spawn
-    };
+    cfg.gap   = Math.round(base.gap * (H / 640)); // responsive gap
+    cfg.speed = base.speed;                       // fixed per mode
+    // compute spawn seconds so density stays consistent for each mode
+    const spacingPx = Math.max(200, Math.round(W * SPACING_FACTOR[difficulty]));
+    const vx = cfg.speed * 60; // px/s
+    cfg.spawn = spacingPx / vx; // seconds between pipe pairs
   }
 
   // Bird (mouse-follow control)
@@ -237,15 +244,8 @@
     }catch(e){ /* ignore if blocked */ }
   }
 
-  // ======= Input (start / steer) =======
-  function startOrResume(){
-    ensureAudio();
-    goFullscreen();
-    if (state === State.DEAD) { restart(); return; }
-    if (state === State.PAUSED) { state = State.PLAYING; hideMenu(); return; }
-    if (state === State.READY) { state = State.PLAYING; hideMenu(); }
-  }
-  function restart(){
+  // ======= Reset & Start logic (fixes "doesn't reset on death") =======
+  function resetGameState(){
     rescaleConfig();
     score = 0; scoreEl.textContent = '0';
     pipes.length = 0; pipeTimer = 0; groundOffset = 0;
@@ -253,8 +253,23 @@
     bird.y = Math.round(H*0.45);
     targetY = bird.y;
     bird.angle = 0; bird.wingPhase = 0;
+  }
+
+  function restart(){
+    resetGameState();
     state = State.READY;
     showMenu('Flappy-ish');
+  }
+
+  async function startGame(){
+    ensureAudio();
+    await goFullscreen();
+    if (state === State.DEAD) {
+      // Full reset when starting from Game Over
+      resetGameState();
+    }
+    state = State.PLAYING;
+    hideMenu();
   }
 
   // UI helpers
@@ -269,19 +284,28 @@
 
   // Events
   window.addEventListener('keydown', e=>{
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter'){ e.preventDefault(); startOrResume(); }
-    else if (e.key === 'p' || e.key === 'P'){ 
+    if (e.key === 'p' || e.key === 'P'){ 
       if (state === State.PLAYING){ state = State.PAUSED; showMenu('Paused'); }
       else if (state === State.PAUSED){ state = State.PLAYING; hideMenu(); }
+    } else if (e.key === 'r' || e.key === 'R'){
+      restart();
+    } else if (e.code === 'Space' || e.code === 'Enter'){
+      // allow starting from READY, PAUSED, or DEAD
+      if (state === State.READY || state === State.PAUSED || state === State.DEAD){
+        e.preventDefault();
+        startGame();
+      }
     }
-    else if (e.key === 'r' || e.key === 'R'){ restart(); }
   });
-  window.addEventListener('mousedown', (e)=>{ setTargetY(e.clientY); startOrResume(); });
+
+  // Mouse/touch: only steer when playing
+  window.addEventListener('mousedown', (e)=>{ if (state === State.PLAYING) setTargetY(e.clientY); });
   window.addEventListener('mousemove', (e)=>{ setTargetY(e.clientY); }, { passive:true });
-  window.addEventListener('touchstart', (e)=>{ if (e.touches[0]) { setTargetY(e.touches[0].clientY); startOrResume(); } }, { passive:true });
+  window.addEventListener('touchstart', (e)=>{ if (state === State.PLAYING && e.touches[0]) setTargetY(e.touches[0].clientY); }, { passive:true });
   window.addEventListener('touchmove', (e)=>{ if (e.touches[0]) setTargetY(e.touches[0].clientY); }, { passive:true });
 
-  startBtn.addEventListener('click', async () => { ensureAudio(); await goFullscreen(); hideMenu(); state = State.PLAYING; });
+  // Start button
+  startBtn.addEventListener('click', () => { startGame(); });
 
   // ======= Drawing helpers (procedural assets) =======
   function drawSky() {
@@ -407,7 +431,7 @@
     const idx = cycle[Math.floor((b.wingPhase * 1) % 4)];
     const img = spriteFrames[idx] || spriteFrames[1] || spriteFrames[0];
 
-    // scale so sprite height ~= 2 * r (intentional big scale)
+    // scale so sprite height ~= 2 * r (intentionally big)
     const desiredH = b.r * 6;
     const scale = desiredH / img.naturalHeight;
     const dw = img.naturalWidth * scale;
@@ -416,7 +440,6 @@
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
-    // (shadow removed)
     ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
     ctx.restore();
   }
@@ -515,7 +538,7 @@
     // keep inside bounds
     bird.y = clamp(bird.y, bird.r+5, H - GH - bird.r - 5);
 
-    // Spawn pipes
+    // Spawn pipes with spacing-derived timer
     pipeTimer -= dt;
     if (pipeTimer <= 0){
       const gap = cfg.gap;
@@ -524,7 +547,7 @@
       const center = rand(minY + gap/2, Math.max(minY + gap/2, maxY - gap/2));
       pipes.push({ x: W + 8, topH: center - gap/2, w: PIPE_W, gap, scored:false });
       if (pipes.length > 12) pipes.shift();
-      pipeTimer = cfg.spawn;
+      pipeTimer = cfg.spawn; // seconds computed from spacing and speed
     }
 
     // Move pipes and check scoring
@@ -539,7 +562,7 @@
     }
     while (pipes.length && pipes[0].x + pipes[0].w < -10) pipes.shift();
 
-    // Collisions (caps overhang is visual only; collision uses body width)
+    // Collisions
     const hitTop = bird.y - bird.r < 0;
     const hitGround = bird.y + bird.r > H - GH;
     let hitPipe = false;
@@ -581,7 +604,7 @@
       ctx.fillStyle = 'rgba(0,0,0,0.18)';
       ctx.font = '700 18px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Click / Tap / Space to start — will enter fullscreen; steer with mouse/finger', W/2, H*0.62);
+      ctx.fillText('Select a difficulty, then press Start (or Space/Enter).', W/2, H*0.62);
       ctx.restore();
     }
 
