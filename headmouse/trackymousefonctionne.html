@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TrackyMouse – Modal + Game</title>
+
+<!-- p5.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+
+<style>
+  html,body{margin:0;height:100%;background:#222;cursor:none;font-family:sans-serif}
+
+  /* écran de démarrage */
+  #start-screen{position:fixed;inset:0;background:#000;
+    display:flex;align-items:center;justify-content:center;z-index:99999}
+  #start-btn{font:700 2rem/1.2 sans-serif;color:#fff;background:#444;
+    border:2px solid #888;border-radius:12px;padding:.8em 2em;cursor:pointer}
+  #start-btn:hover{background:#666}
+
+  /* bouton menu */
+  #menu-btn{position:fixed;top:16px;left:16px;z-index:9000;
+    font-size:2rem;color:#eee;background:none;border:none;cursor:pointer;
+    padding:.1em .3em;border-radius:6px}
+  #menu-btn:hover{background:#444}
+
+  /* pointeur visuel */
+  .head-pointer{position:fixed;width:36px;height:36px;border-radius:50%;
+    background:rgba(255,200,0,.85);box-shadow:0 0 10px 4px #ffc800;
+    transform:translate(-50%,-50%);pointer-events:none;z-index:10000}
+
+  /* modal TrackyMouse */
+  #tracky-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);
+    display:none;align-items:center;justify-content:center;z-index:8000}
+  #tracky-content{position:relative}
+  #close-modal{position:absolute;top:-42px;right:-42px;font-size:2rem;
+    background:none;border:none;color:#eee;cursor:pointer}
+
+  /* TrackyMouse : même look sombre que le reste */
+  .tracky-mouse-ui{display:flex;flex-direction:column;align-items:center;gap:1rem;color:#e4e4e4}
+  .tracky-mouse-canvas-container{width:320px!important;max-width:100%;
+    border:2px solid #444;border-radius:12px;overflow:hidden;box-shadow:0 0 12px #000a}
+  .tracky-mouse-canvas-container video,
+  .tracky-mouse-canvas-container canvas{width:100%!important;height:auto!important;display:block}
+  .tracky-mouse-controls{width:320px;display:flex;flex-direction:column;gap:.6rem;
+    background:#111;padding:1rem 1.2rem;border-radius:12px;box-shadow:0 0 10px #0006}
+  .tracky-mouse-start-stop-button{align-self:flex-start;padding:.3rem 1rem;font-weight:600;
+    border-radius:6px;border:1px solid #888;background:#333;color:#eee;cursor:pointer}
+  .tracky-mouse-start-stop-button:hover{background:#555}
+  .tracky-mouse-desktop-app-download-message{display:none!important}
+
+  /* → Décommentez pour masquer complètement les contrôles Tracky Mouse
+  .tracky-mouse-controls{display:none!important}
+  */
+
+  /* score */
+  #score-box{position:fixed;top:16px;right:16px;font:700 1.2rem sans-serif;
+    color:#fff;background:#000a;padding:.4em .8em;border-radius:8px;z-index:9000}
+</style>
+</head>
+<body>
+
+<!-- Écran de démarrage -->
+<div id="start-screen"><button id="start-btn">Démarrer</button></div>
+
+<!-- Score -->
+<div id="score-box" style="display:none">Score : 0</div>
+
+<!-- Bouton menu -->
+<button id="menu-btn" title="Menu" style="display:none">☰</button>
+
+<!-- Modal TrackyMouse -->
+<div id="tracky-modal">
+  <div id="tracky-content">
+    <button id="close-modal" aria-label="Fermer">✕</button>
+    <div id="tracky-root"></div>
+  </div>
+</div>
+
+<!-- Librairie TrackyMouse -->
+<script src="../../lib/tracky-mouse.js"></script>
+<script>
+/* ========= VARIABLES ========= */
+let pointerX = innerWidth / 2,
+    pointerY = innerHeight / 2,
+    score    = 0;
+
+/* Curseur jaune permanent */
+const dot = Object.assign(document.createElement('div'), { className:'head-pointer' });
+document.body.appendChild(dot);
+
+/* Accès rapide aux éléments DOM */
+const startScreen = document.getElementById('start-screen');
+const startBtn    = document.getElementById('start-btn');
+const scoreBox    = document.getElementById('score-box');
+const menuBtn     = document.getElementById('menu-btn');
+const modal       = document.getElementById('tracky-modal');
+const trackyRoot  = document.getElementById('tracky-root');
+
+/* ========= LANCEMENT ========= */
+async function start () {
+  /* Plein-écran */
+  if (!document.fullscreenElement) {
+    try { await document.documentElement.requestFullscreen(); } catch {}
+  }
+
+  /* Affichage interface */
+  startScreen.style.display = 'none';
+  menuBtn.style.display     = 'block';
+  scoreBox.style.display    = 'block';
+
+  /* Tracky Mouse */
+  TrackyMouse.dependenciesRoot = "";           // adapte si nécessaire
+  await TrackyMouse.loadDependencies();
+  TrackyMouse.init(trackyRoot);
+  TrackyMouse.useCamera();
+
+  /* Utiliser “Démarrer” comme proxy : activation immédiate */
+  waitForInternalButton(btn => btn.click());
+
+  /* Màj du pointeur */
+  TrackyMouse.onPointerMove = (x, y) => {
+    pointerX = x; pointerY = y;
+    dot.style.left = x + 'px';
+    dot.style.top  = y + 'px';
+  };
+}
+
+/* Petit utilitaire : attend que TrackyMouse ait injecté son bouton */
+function waitForInternalButton (callback) {
+  const tryActivate = () => {
+    const btn = trackyRoot.querySelector('.tracky-mouse-start-stop-button');
+    if (btn) { callback(btn); }
+    else     { requestAnimationFrame(tryActivate); }
+  };
+  tryActivate();
+}
+
+/* ========= MODAL ========= */
+function toggleModal () {
+  modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
+}
+
+/* ========= p5 : Jeu “Pop la bulle” ========= */
+new p5(p => {
+  let target = { x:0, y:0, r:40, c:'#00b7ff' };
+
+  p.setup = () => {
+    p.createCanvas(innerWidth, innerHeight)
+      .style('z-index','0').position(0,0);
+    spawn();
+  };
+
+  p.windowResized = () => p.resizeCanvas(innerWidth, innerHeight);
+
+  function spawn () {
+    target.x = p.random(60, p.width  - 60);
+    target.y = p.random(60, p.height - 60);
+    target.r = p.random(30, 60);
+    target.c = p.color(p.random(80,255), p.random(80,255), p.random(80,255));
+  }
+
+  p.draw = () => {
+    p.clear();
+    p.noStroke(); p.fill(target.c);
+    p.circle(target.x, target.y, target.r * 2);
+
+    if (p.dist(pointerX, pointerY, target.x, target.y) < target.r) {
+      score++; scoreBox.textContent = 'Score : ' + score;
+      spawn();
+    }
+  };
+});
+
+/* ========= ÉVÉNEMENTS ========= */
+startBtn.addEventListener('click', start);
+menuBtn .addEventListener('click', toggleModal);
+document.getElementById('close-modal').addEventListener('click', toggleModal);
+</script>
+</body> 
+</html>

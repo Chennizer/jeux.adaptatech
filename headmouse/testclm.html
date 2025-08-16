@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Head-tracking “plug-and-play”</title>
+
+  <!-- clmtrackr (≈ 80 kB, MIT) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/clmtrackr/1.1.2/clmtrackr.min.js"
+          crossorigin="anonymous"></script>
+
+  <style>
+    html,body { margin:0; height:100%; overflow:hidden; background:#000; }
+
+    /* Canvas logique 640×480, agrandi visuellement sur tout l’écran */
+    canvas    { position:fixed; top:0; left:0; pointer-events:none; }
+
+    /* Affichage miniature de la webcam */
+    #webcam {
+      position:fixed;
+      top:16px; left:16px;            /* coin supérieur gauche */
+      width:220px; height:165px;      /* ~¼ de la taille originale (4:3) */
+      object-fit:cover;
+      border:2px solid #fff;
+      border-radius:14px;
+      box-shadow:0 0 18px #000a;
+      z-index:2;                      /* au-dessus du canvas */
+    }
+  </style>
+</head>
+<body>
+  <!-- Webcam (visible maintenant) -->
+  <video id="webcam" width="640" height="480" autoplay muted playsinline></video>
+
+  <!-- Canvas debug 640×480 que l’on va scale() – aucun CSS width/height -->
+  <canvas id="overlay" width="640" height="480"></canvas>
+
+  <script>
+  (async () => {
+    /* ---------- Webcam ---------- */
+    const video   = document.getElementById('webcam');
+    const overlay = document.getElementById('overlay');
+    const ctx     = overlay.getContext('2d');
+
+    video.srcObject = await navigator.mediaDevices.getUserMedia({
+      video:{ width:640, height:480, facingMode:'user' }, audio:false
+    });
+    await new Promise(r => video.onloadedmetadata = r);
+    await video.play();
+
+    /* ---------- Canvas plein écran via ctx.scale ---------- */
+    function fitCanvas(){
+      overlay.width  = window.innerWidth;
+      overlay.height = window.innerHeight;
+      ctx.setTransform(1,0,0,1,0,0);                     // reset
+      ctx.scale(overlay.width / 640, overlay.height / 480);
+    }
+    fitCanvas();
+    window.addEventListener('resize', fitCanvas);
+
+    /* ---------- clmtrackr ---------- */
+    const tracker = new clm.tracker();
+    tracker.init();
+    tracker.start(video);
+
+    /* ---------- Paramètres dwell-click ---------- */
+    const DWELL_RADIUS = 60;   // px (affiché à l’écran)
+    const DWELL_MS     = 800;
+
+    let anchor  = null;
+    let dwellT0 = 0;
+
+    /* ---------- Boucle principale ---------- */
+    function loop(){
+      requestAnimationFrame(loop);
+
+      const pos = tracker.getCurrentPosition();
+      if(!pos){ ctx.clearRect(0,0,640,480); return; }
+
+      /* 1. Coord. du nez (point 62) en espace logique 640×480 */
+      const [nx, ny] = pos[62];
+
+      /* 2. Dessin (après scale, cela couvre tout l’écran) */
+      ctx.clearRect(0,0,640,480);
+      ctx.beginPath();
+      ctx.arc(nx, ny, DWELL_RADIUS / (overlay.width / 640), 0, Math.PI*2);
+      ctx.lineWidth   = 4 / (overlay.width / 640);
+      ctx.strokeStyle = 'red';
+      ctx.stroke();
+
+      /* 3. Conversion vers pixels écran pour event & click */
+      const viewX = nx * (overlay.width  / 640);
+      const viewY = ny * (overlay.height / 480);
+
+      /* 3a. Évènement headtrackingEvent (facultatif) */
+      document.dispatchEvent(new CustomEvent('headtrackingEvent', {
+        detail:{ x:viewX, y:viewY, z:0 }
+      }));
+
+      /* 4. Dwell-time */
+      const now = performance.now();
+      if(anchor && Math.hypot(nx - anchor.x, ny - anchor.y) < (DWELL_RADIUS / (overlay.width / 640))){
+        if(now - dwellT0 > DWELL_MS){
+          const el = document.elementFromPoint(viewX, viewY);
+          if(el) el.click();
+          dwellT0 = now + 1e9;            // bloque jusqu’au mouvement
+        }
+      }else{
+        anchor  = {x:nx, y:ny};
+        dwellT0 = now;
+      }
+    }
+    loop();
+  })();
+  </script>
+</body>
+</html>

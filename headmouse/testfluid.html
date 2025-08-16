@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Geometric Color Explosions — Tonemapped (Space)</title>
+<style>
+  html,body{height:100%;margin:0;background:#000}
+  canvas{width:100%;height:100%;display:block}
+  .hint{position:fixed;left:16px;top:16px;color:#cfe9ff;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:rgba(10,20,30,.45);border:1px solid rgba(255,255,255,.08);padding:8px 10px;border-radius:10px;backdrop-filter:blur(6px)}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="hint">Press <b>Space</b> for a random colorful explosion • <b>P</b> pause</div>
+
+<script>
+(()=>{
+// ====== GL2 + setup ======
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', {alpha:false, antialias:false, depth:false, stencil:false});
+if(!gl){ alert('WebGL2 required'); return; }
+const extCBF = gl.getExtension('EXT_color_buffer_float'); // prefer float FBO, fallback to 8-bit
+
+function resize(){
+  const dpr = Math.max(1, window.devicePixelRatio||1);
+  const w = Math.floor((canvas.clientWidth||innerWidth)*dpr);
+  const h = Math.floor((canvas.clientHeight||innerHeight)*dpr);
+  if(canvas.width!==w || canvas.height!==h){ canvas.width=w; canvas.height=h; gl.viewport(0,0,w,h); initTargets(w,h); }
+}
+addEventListener('resize', resize, {passive:true}); resize();
+
+// ====== render targets ======
+let srcTex=null, srcFbo=null;
+let accTexA=null, accTexB=null, accFbo=null, accRead=null, accWrite=null;
+function makeTex(w,h, filter=gl.LINEAR){
+  const t=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const internal = extCBF ? gl.RGBA16F : gl.RGBA8;
+  const type     = extCBF ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+  gl.texImage2D(gl.TEXTURE_2D,0,internal, w,h,0,gl.RGBA,type,null);
+  return t;
+}
+function makeFbo(tex){
+  const f=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return f;
+}
+function initTargets(w,h){
+  // src buffer (this frame contributions)
+  srcTex  = makeTex(w,h);
+  srcFbo  = makeFbo(srcTex);
+  // accumulation ping-pong
+  accTexA = makeTex(w,h);
+  accTexB = makeTex(w,h);
+  accRead = accTexA; accWrite = accTexB; accFbo = makeFbo(accWrite);
+  // clear
+  gl.bindFramebuffer(gl.FRAMEBUFFER, srcFbo); gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, accFbo); gl.clear(gl.COLOR_BUFFER_BIT);
+  swapAccum(); // ensure both are cleared
+  gl.bindFramebuffer(gl.FRAMEBUFFER, accFbo); gl.clear(gl.COLOR_BUFFER_BIT);
+}
+function swapAccum(){
+  [accRead, accWrite] = [accWrite, accRead];
+  gl.bindFramebuffer(gl.FRAMEBUFFER, accFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, accWrite, 0);
+}
+
+// ====== shaders ======
+function makeProgram(vsSrc, fsSrc){
+  const vs=gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs,vsSrc); gl.compileShader(vs);
+  if(!gl.getShaderParameter(vs,gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(vs);
+  const fs=gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs,fsSrc); gl.compileShader(fs);
+  if(!gl.getShaderParameter(fs,gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(fs);
+  const p=gl.createProgram(); gl.attachShader(p,vs); gl.attachShader(p,fs); gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw gl.getProgramInfoLog(p);
+  return p;
+}
+
+// Instanced ribbons (geometric tapered lines)
+const vsRibbon = `#version 300 es
+in vec2 aCorner;          // -1/-1, 1/-1, -1/1, 1/1
+in vec2 aCenterPx;        // instance center (px)
+in vec2 aVelPx;           // instance velocity (px/s)
+in float aHue;            // 0..1
+in float aLife;           // 1..0
+in float aWidthPx;        // ribbon width (px)
+
+uniform vec2 uViewport;   // canvas size (px)
+
+out float vHue;
+out float vLife;
+out float vAspect;
+out vec2  vLocal;         // local coords (x scaled by aspect, y in [-1,1])
+
+void main(){
+  vec2 t = normalize(aVelPx + vec2(1e-6,0.0));
+  vec2 n = vec2(-t.y, t.x);
+
+  float speed = length(aVelPx);
+  float lenPx = aWidthPx * (1.0 + speed * 0.04);
+  lenPx = clamp(lenPx, aWidthPx*1.6, aWidthPx*16.0);
+
+  float aspect = lenPx / aWidthPx;
+  vAspect = aspect;
+  vLocal  = vec2(aCorner.x * aspect, aCorner.y);
+
+  vec2 posPx = aCenterPx + t*(aCorner.x*lenPx) + n*(aCorner.y*aWidthPx);
+  vec2 ndc   = (posPx / uViewport) * 2.0 - 1.0;
+
+  gl_Position = vec4(ndc, 0.0, 1.0);
+  vHue  = aHue;
+  vLife = aLife;
+}`;
+const fsRibbon = `#version 300 es
+precision highp float;
+in float vHue; in float vLife; in float vAspect; in vec2 vLocal;
+out vec4 frag;
+
+// hsv->rgb (s=v=1)
+vec3 hsv2rgb(float h){
+  float r = abs(h*6.0 - 3.0) - 1.0;
+  float g = 2.0 - abs(h*6.0 - 2.0);
+  float b = 2.0 - abs(h*6.0 - 4.0);
+  return clamp(vec3(r,g,b), 0.0, 1.0);
+}
+
+void main(){
+  float aaX = fwidth(vLocal.x) * 1.2;
+  float aaY = fwidth(vLocal.y) * 1.2;
+
+  float xMask = smoothstep(0.0, aaX, vAspect - abs(vLocal.x));
+  float headU = clamp(vLocal.x / vAspect, -1.0, 1.0);
+  float halfY = mix(1.0, 0.22, smoothstep(-0.2, 1.0, headU));
+  float yMask = smoothstep(0.0, aaY, halfY - abs(vLocal.y));
+
+  float mask = xMask * yMask;
+  float headBoost = mix(1.0, 1.35, smoothstep(-0.2, 1.0, headU));
+  float intensity = headBoost * vLife;   // 0..~1
+
+  // Keep per-frame energy modest; composite pass will tonemap stacks
+  vec3 rgb = hsv2rgb(vHue) * (intensity * 0.75);
+  frag = vec4(rgb * mask, 1.0); // alpha unused in src buffer
+}`;
+
+// Composite previous accumulation + this frame with tonemap
+const vsTri = `#version 300 es
+in vec2 aPos; void main(){ gl_Position = vec4(aPos,0.0,1.0); }`;
+const fsComposite = `#version 300 es
+precision highp float;
+out vec4 frag;
+uniform sampler2D uAccum;      // previous frame (RGB)
+uniform sampler2D uSrc;        // this frame ribbons (RGB)
+uniform vec2 uResolution;
+uniform float uFade;           // 0..1 per-frame decay
+uniform float uExposure;       // tonemap exposure
+uniform float uGain;           // scale for src
+
+void main(){
+  vec2 uv = gl_FragCoord.xy / uResolution;
+  vec3 accum = texture(uAccum, uv).rgb;
+  vec3 src   = texture(uSrc,   uv).rgb;
+
+  // decay previous frame, add this frame's energy
+  vec3 sum = accum * (1.0 - uFade) + src * uGain;
+
+  // soft clip / filmic-ish (channel-wise)
+  vec3 tone = 1.0 - exp(-sum * uExposure);
+
+  frag = vec4(tone, 1.0);
+}`;
+
+// Present (gamma to screen)
+const fsPresent = `#version 300 es
+precision highp float;
+out vec4 frag;
+uniform sampler2D uTex; uniform vec2 uResolution;
+void main(){
+  vec2 uv = gl_FragCoord.xy / uResolution;
+  vec3 c = texture(uTex, uv).rgb;
+  c = pow(c, vec3(1.0/2.2)); // display gamma
+  frag = vec4(c,1.0);
+}`;
+
+// Programs
+const progRibbon    = makeProgram(vsRibbon, fsRibbon);
+const progComposite = makeProgram(vsTri,    fsComposite);
+const progPresent   = makeProgram(vsTri,    fsPresent);
+
+// Fullscreen triangle
+const triBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, triBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const triLocA = gl.getAttribLocation(progComposite, 'aPos');
+const triLocB = gl.getAttribLocation(progPresent,   'aPos');
+
+// ====== instance geometry & buffers ======
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+
+const MAX=60000, SPAWN=45000;
+const center=new Float32Array(MAX*2), vel=new Float32Array(MAX*2), hue=new Float32Array(MAX), life=new Float32Array(MAX), width=new Float32Array(MAX), ttl=new Float32Array(MAX);
+let count=0;
+
+function makeVbo(size, usage){ const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,size,usage); return b; }
+const bufCenter=makeVbo(center.byteLength, gl.DYNAMIC_DRAW);
+const bufVel   =makeVbo(vel.byteLength,    gl.DYNAMIC_DRAW);
+const bufHue   =makeVbo(hue.byteLength,    gl.STREAM_DRAW);
+const bufLife  =makeVbo(life.byteLength,   gl.DYNAMIC_DRAW);
+const bufWidth =makeVbo(width.byteLength,  gl.STREAM_DRAW);
+
+const aCorner   = gl.getAttribLocation(progRibbon,'aCorner');
+const aCenterPx = gl.getAttribLocation(progRibbon,'aCenterPx');
+const aVelPx    = gl.getAttribLocation(progRibbon,'aVelPx');
+const aHue      = gl.getAttribLocation(progRibbon,'aHue');
+const aLife     = gl.getAttribLocation(progRibbon,'aLife');
+const aWidthPx  = gl.getAttribLocation(progRibbon,'aWidthPx');
+const uViewport = gl.getUniformLocation(progRibbon,'uViewport');
+
+function bindRibbonAttribs(){
+  gl.useProgram(progRibbon);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+  gl.enableVertexAttribArray(aCorner);
+  gl.vertexAttribPointer(aCorner, 2, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribDivisor(aCorner, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufCenter);
+  gl.enableVertexAttribArray(aCenterPx);
+  gl.vertexAttribPointer(aCenterPx, 2, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribDivisor(aCenterPx, 1);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufVel);
+  gl.enableVertexAttribArray(aVelPx);
+  gl.vertexAttribPointer(aVelPx, 2, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribDivisor(aVelPx, 1);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufHue);
+  gl.enableVertexAttribArray(aHue);
+  gl.vertexAttribPointer(aHue, 1, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribDivisor(aHue, 1);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufLife);
+  gl.enableVertexAttribArray(aLife);
+  gl.vertexAttribPointer(aLife, 1, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribDivisor(aLife, 1);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufWidth);
+  gl.enableVertexAttribArray(aWidthPx);
+  gl.vertexAttribPointer(aWidthPx, 1, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribDivisor(aWidthPx, 1);
+
+  gl.uniform2f(uViewport, canvas.width, canvas.height);
+}
+
+function randNorm(){ const u=Math.random(), v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+
+function spawnExplosion(){
+  const W=canvas.width, H=canvas.height, smin=Math.min(W,H);
+  const cx=(Math.random()*0.7+0.15)*W, cy=(Math.random()*0.7+0.15)*H;
+  const baseHue=Math.random(), hueSpread=0.22;
+
+  const N=Math.min(SPAWN,MAX); count=N;
+  const baseSpeed=0.55*smin, speedVar=0.40*smin;
+  const minTTL=1.8, maxTTL=3.2;
+  const minW=3.0, maxW=9.0;
+
+  for(let i=0;i<N;i++){
+    const a=Math.random()*Math.PI*2, s=Math.abs(randNorm())*speedVar + baseSpeed;
+    vel[i*2  ] = Math.cos(a)*s;
+    vel[i*2+1] = Math.sin(a)*s + 0.08*smin;
+    center[i*2  ] = cx + (Math.random()-0.5)*6.0;
+    center[i*2+1] = cy + (Math.random()-0.5)*6.0;
+    ttl[i]  = minTTL + Math.random()*(maxTTL-minTTL);
+    life[i] = 1.0;
+    let h = baseHue + (Math.random()*2-1)*hueSpread; h=(h%1+1)%1;
+    hue[i]=h;
+    width[i]=minW + Math.random()*(maxW-minW);
+  }
+
+  // upload
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufHue);   gl.bufferSubData(gl.ARRAY_BUFFER, 0, hue.subarray(0,N));
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufWidth); gl.bufferSubData(gl.ARRAY_BUFFER, 0, width.subarray(0,N));
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufCenter);gl.bufferSubData(gl.ARRAY_BUFFER, 0, center.subarray(0,N*2));
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufVel);   gl.bufferSubData(gl.ARRAY_BUFFER, 0, vel.subarray(0,N*2));
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufLife);  gl.bufferSubData(gl.ARRAY_BUFFER, 0, life.subarray(0,N));
+
+  // outward kick
+  blast.active=true; blast.cx=cx; blast.cy=cy; blast.t=0.0;
+}
+const blast={active:false, cx:0, cy:0, t:0, dur:0.25, force:1800.0};
+
+// ====== sim & render ======
+gl.disable(gl.DEPTH_TEST);
+
+let running=true;
+addEventListener('keydown', e=>{
+  if(e.code==='Space'){ spawnExplosion(); e.preventDefault(); }
+  if(e.key==='p'||e.key==='P'){ running=!running; }
+});
+
+let last=performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.033,(now-last)*0.001); last=now;
+
+  // update sim
+  if(running && count){
+    const drag=0.972, gy=-60.0;
+    if(blast.active){
+      const k=1.0 - Math.min(1.0, blast.t/blast.dur), F=blast.force*k;
+      for(let i=0;i<count;i++){
+        const dx=center[i*2]-blast.cx, dy=center[i*2+1]-blast.cy, r=Math.hypot(dx,dy)+1e-5;
+        vel[i*2]+= (dx/r)*F*dt; vel[i*2+1]+= (dy/r)*F*dt;
+      }
+      blast.t+=dt; if(blast.t>=blast.dur) blast.active=false;
+    }
+    for(let i=0;i<count;i++){
+      center[i*2]+=vel[i*2]*dt; center[i*2+1]+=vel[i*2+1]*dt;
+      vel[i*2]*=drag; vel[i*2+1]=vel[i*2+1]*drag + gy*dt;
+      life[i]=Math.max(0.0, life[i]-dt/ttl[i]);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufCenter); gl.bufferSubData(gl.ARRAY_BUFFER, 0, center.subarray(0,count*2));
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufLife);   gl.bufferSubData(gl.ARRAY_BUFFER, 0, life.subarray(0,count));
+  }
+
+  // ---- pass 1: render ribbons into src (additive) ----
+  gl.bindFramebuffer(gl.FRAMEBUFFER, srcFbo);
+  gl.viewport(0,0,canvas.width, canvas.height);
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  if(count){
+    gl.useProgram(progRibbon);
+    gl.uniform2f(uViewport, canvas.width, canvas.height);
+    bindRibbonAttribs();
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE); // accumulate energy this frame
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
+    gl.disable(gl.BLEND);
+  }
+
+  // ---- pass 2: composite (fade + tonemap) into accWrite ----
+  gl.bindFramebuffer(gl.FRAMEBUFFER, accFbo);
+  gl.useProgram(progComposite);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, accRead);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  gl.uniform1i(gl.getUniformLocation(progComposite,'uAccum'), 0);
+  gl.uniform1i(gl.getUniformLocation(progComposite,'uSrc'),   1);
+  gl.uniform2f(gl.getUniformLocation(progComposite,'uResolution'), canvas.width, canvas.height);
+  gl.uniform1f(gl.getUniformLocation(progComposite,'uFade'),     running ? 0.06 : 0.0); // trail decay
+  gl.uniform1f(gl.getUniformLocation(progComposite,'uExposure'), 1.6); // tone strength
+  gl.uniform1f(gl.getUniformLocation(progComposite,'uGain'),     1.0); // src weight
+  gl.bindBuffer(gl.ARRAY_BUFFER, triBuf);
+  gl.enableVertexAttribArray(triLocA);
+  gl.vertexAttribPointer(triLocA, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  swapAccum();
+
+  // ---- pass 3: present to screen (gamma) ----
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.useProgram(progPresent);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, accRead);
+  gl.uniform1i(gl.getUniformLocation(progPresent,'uTex'), 0);
+  gl.uniform2f(gl.getUniformLocation(progPresent,'uResolution'), canvas.width, canvas.height);
+  gl.bindBuffer(gl.ARRAY_BUFFER, triBuf);
+  gl.enableVertexAttribArray(triLocB);
+  gl.vertexAttribPointer(triLocB, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+spawnExplosion();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

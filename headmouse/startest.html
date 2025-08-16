@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tactile Stars (head control)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- TrackyMouse -->
+  <script src="../../lib/tracky-mouse.js"></script>
+
+  <!-- p5.js -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+
+  <style>
+    html,body{margin:0;padding:0;overflow:hidden;background:#000;font-family:sans-serif;touch-action:none}
+    canvas{display:block}
+
+    /* GPU transform, no glow */
+    .head-pointer{
+      position:fixed;width:36px;height:36px;border-radius:50%;
+      background:#ff0000cc;will-change:transform;pointer-events:none;z-index:10000;left:0;top:0;
+    }
+
+    #loadingOverlay,#startOverlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.9);color:#fff;z-index:9999;flex-direction:column;font-size:20px}
+    #startOverlay{display:none}
+    #startButton{margin-top:20px;padding:18px 38px;font-size:24px;background:#0077be;color:#fff;border:none;border-radius:10px;cursor:pointer}
+
+    .menu-icon{position:fixed;top:10px;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;cursor:pointer;z-index:10001}
+    #settings-icon{right:10px}
+    #camera-icon{right:60px;display:none}
+
+    .side-panel{position:fixed;top:60px;right:-300px;width:270px;background:rgba(0,0,0,.85);color:#fff;padding:15px;border-radius:5px;max-height:calc(100vh - 80px);overflow:auto;opacity:0;transition:right .3s,opacity .3s;z-index:10002}
+    .side-panel.show{right:10px;opacity:1}
+    .side-panel h2{margin:0 0 10px;text-align:center;color:#00bfff;font-size:20px}
+    .side-panel label{display:flex;flex-direction:column;margin:8px 0;font-size:13px}
+    .side-panel input[type=range],.side-panel select,.side-panel input[type=color]{margin-top:5px}
+
+    #explosionCounter{position:fixed;bottom:10px;right:10px;color:#fff;font-size:16px;z-index:10001}
+
+    /* TrackyMouse UI */
+    #trackyRoot .tracky-mouse-canvas-container,
+    #trackyRoot .tracky-mouse-controls{width:100%!important;max-width:100%!important}
+    #trackyRoot .tracky-mouse-canvas-container video,
+    #trackyRoot .tracky-mouse-canvas-container canvas{width:100%!important;height:auto!important}
+    #trackyRoot .tracky-mouse-canvas-container~*{display:none!important}
+    #camMenu:not(.show) #trackyRoot .tracky-mouse-canvas-container{display:none!important}
+    #startEnabled,#start-enabled,#mirrorEnabled,#mirror-enabled{display:none!important}
+  </style>
+</head>
+<body>
+  <div class="head-pointer" id="headDot"></div>
+
+  <div id="loadingOverlay">Loading…</div>
+  <div id="startOverlay">
+    <p>Look at a star to pop it</p>
+    <button id="startButton">Start</button>
+  </div>
+
+  <div id="settings-icon" class="menu-icon" title="Options">⚙️</div>
+  <div id="camera-icon"   class="menu-icon" title="Camera">📷</div>
+
+  <div id="menu" class="side-panel">
+    <h2>Options</h2>
+    <h3>Graphics</h3>
+    <label><span>Size</span><span id="sizeValue">100</span>
+      <input type="range" id="sizeSlider" min="50" max="700" value="100">
+    </label>
+    <label><span>Quantity</span><span id="numberValue">8</span>
+      <input type="range" id="numberSlider" min="1" max="100" value="8">
+    </label>
+    <label><span>Speed</span><span id="speedValue">5</span>
+      <input type="range" id="speedSlider" min="0" max="30" value="5">
+    </label>
+    <label><span>Color</span>
+      <select id="colorSelector">
+        <option value="cold">Cool</option>
+        <option value="hot">Warm</option>
+        <option value="yellow">Yellow</option>
+        <option value="white">White</option>
+      </select>
+    </label>
+    <label><span>Trail</span><input type="checkbox" id="trailToggle"></label>
+  </div>
+
+  <div id="camMenu" class="side-panel">
+    <h2>Camera & Pointer</h2>
+    <label><span>Pointer color</span>
+      <input type="color" id="pointerColor" value="#ff0000">
+    </label>
+    <div id="trackyRoot"></div>
+  </div>
+
+  <div id="explosionCounter">0</div>
+
+<script>
+/* ---------- constants ---------- */
+const STARFIELD_COUNT_BASE = 16;   // cheaper baseline
+const PARTICLES_PER_HIT = 25;
+const TARGET_FPS = 60;
+const BASE_DT = 1000/60;
+
+/* ---------- state ---------- */
+let starSize=100, numberOfStars=8, starSpeed=5;
+let starColorOption='cold', showTrail=false;
+let shapes=[],particles=[],starfield=[],started=false;
+let explosionCount=0;
+
+/* pointer (smoothed) */
+let pointerTx=innerWidth/2, pointerTy=innerHeight/2; // target
+let pointerX =pointerTx,    pointerY =pointerTy;     // smoothed
+const POINTER_SMOOTH = 0.45; // 0..1 (higher = snappier)
+
+/* cached DOM */
+const $ = id => document.getElementById(id);
+const headDot = $('headDot');
+const explosionCounterEl = $('explosionCounter');
+
+/* perf/adaptive */
+let starfieldEnabled = true;
+let perfAvg = 16.7, lagAccum = 0, coolAccum = 0;
+
+/* ---------- utils ---------- */
+let halfW = window.innerWidth/2, halfH = window.innerHeight/2;
+function updateHalves(){ halfW = window.innerWidth/2; halfH = window.innerHeight/2; }
+
+/* HSB(0-360,0-100,0-100) -> [r,g,b] (0-255) */
+function hsbToRgb(h,s,b){
+  s/=100; b/=100;
+  const k = n => (n + h/60) % 6;
+  const f = n => b - b*s*Math.max(Math.min(k(n), 4 - k(n), 1), 0);
+  return [Math.round(255*f(5)), Math.round(255*f(3)), Math.round(255*f(1))];
+}
+function randomStarRGB(){
+  let h,s,b;
+  switch(starColorOption){
+    case 'cold':   h=random(160,260); s=random(50,100); b=random(70,100); break;
+    case 'hot':    h=random(0,60);    s=random(50,100); b=random(70,100); break;
+    case 'yellow': h=random(50,60);   s=random(80,100); b=random(80,100); break;
+    case 'white':  h=0; s=0; b=100; break;
+    default:       h=random(160,260); s=random(50,100); b=random(70,100);
+  }
+  return hsbToRgb(h,s,b);
+}
+
+/* ---------- p5 ---------- */
+function setup(){
+  pixelDensity(1);
+  frameRate(TARGET_FPS);
+
+  $('loadingOverlay').remove();
+  $('startOverlay').style.display='flex';
+
+  createCanvas(windowWidth,windowHeight);
+  document.querySelector('canvas').style.display='none';
+
+  updateHalves();
+  for(let i=0;i<STARFIELD_COUNT_BASE;i++) starfield.push(new Star());
+
+  /* UI */
+  $('startButton').onclick = startGame;
+  $('settings-icon').onclick = () => $('menu').classList.toggle('show');
+  $('camera-icon').onclick   = () => $('camMenu').classList.toggle('show');
+
+  $('sizeSlider').oninput   = e=>{starSize=+e.value;      $('sizeValue').textContent=e.value;  refreshStars();}
+  $('numberSlider').oninput = e=>{numberOfStars=+e.value; $('numberValue').textContent=e.value; refreshStars();}
+  $('speedSlider').oninput  = e=>{starSpeed=+e.value;     $('speedValue').textContent=e.value;  refreshStars();}
+  $('colorSelector').onchange = e=>{starColorOption=e.value; refreshStars();}
+  $('trailToggle').onchange   = e=> showTrail = e.checked;
+
+  /* pointer color */
+  const setDot = c => { headDot.style.background = c; };
+  setDot($('pointerColor').value);
+  $('pointerColor').oninput = e => setDot(e.value);
+
+  /* rAF painter for the head pointer (just mirrors smoothed pointerX/Y) */
+  function paintDot(){
+    headDot.style.transform = `translate3d(${pointerX}px, ${pointerY}px, 0) translate(-50%,-50%)`;
+    requestAnimationFrame(paintDot);
+  }
+  requestAnimationFrame(paintDot);
+
+  /* expose lightweight setter for TrackyMouse callback */
+  window.__updatePointerTarget = (x,y)=>{ pointerTx = x; pointerTy = y; };
+}
+function windowResized(){ resizeCanvas(windowWidth,windowHeight); updateHalves(); }
+
+/* ---------- start ---------- */
+async function startGame(){
+  $('startOverlay').remove();
+  $('settings-icon').style.display='flex';
+  $('camera-icon').style.display='flex';
+  document.querySelector('canvas').style.display='block';
+  document.documentElement.requestFullscreen?.();
+
+  refreshStars(); started=true;
+
+  TrackyMouse.dependenciesRoot = "";
+  await TrackyMouse.loadDependencies();
+  TrackyMouse.init($('trackyRoot'));
+
+  // Smoother pointer but still light
+  TrackyMouse.useCamera({
+    video:{ width:{ideal:320}, height:{ideal:240}, frameRate:{ideal:15, max:15} },
+    audio:false
+  });
+  if('processingScale' in TrackyMouse) TrackyMouse.processingScale = 0.5;
+
+  TrackyMouse.onPointerMove = (x,y) => { window.__updatePointerTarget(x,y); };
+
+  requestAnimationFrame(function autoBtn(){
+    const b=document.querySelector('#trackyRoot .tracky-mouse-start-stop-button');
+    if(b) b.click(); else requestAnimationFrame(autoBtn);
+  });
+
+  setTimeout(()=>{
+    document.querySelectorAll('#trackyRoot label').forEach(l=>{
+      const t=l.textContent.toLowerCase();
+      if(t.includes('start')||t.includes('mirror')) l.remove();
+    });
+  },600);
+}
+
+/* ---------- loop (time-based + pointer smoothing) ---------- */
+function draw(){
+  if(!started){ background(0); return; }
+
+  const dt = Math.min(50, deltaTime); // clamp spikes
+  const k  = dt / BASE_DT;
+
+  // perf tracking for simple adaptive fallback
+  perfAvg = perfAvg*0.9 + dt*0.1;
+  if(perfAvg > 25){ lagAccum += dt; coolAccum = 0; } else { coolAccum += dt; lagAccum = 0; }
+  if(lagAccum > 1000 && starfieldEnabled){ starfieldEnabled = false; }           // disable starfield if laggy for 1s
+  if(coolAccum > 2000 && !starfieldEnabled){ starfieldEnabled = true; }          // re-enable after 2s of good frames
+
+  // background / trail
+  showTrail ? background(0,45) : background(0);
+
+  // pointer smoothing (reduces jitter without adding CPU)
+  const a = 1 - Math.pow(1-POINTER_SMOOTH, k); // framerate-compensated smoothing
+  pointerX += (pointerTx - pointerX) * a;
+  pointerY += (pointerTy - pointerY) * a;
+
+  // starfield
+  if(starfieldEnabled){
+    for(let i=0;i<starfield.length;i++){ starfield[i].u(k); starfield[i].d(); }
+  }
+
+  // stars
+  for(let i=0;i<shapes.length;i++){ shapes[i].u(k); shapes[i].d(); }
+
+  // hit test: early-exit on first hit
+  for(let i=0;i<shapes.length;i++){
+    if(shapes[i].hit(pointerX,pointerY)){ shapes[i].boom(); break; }
+  }
+
+  // particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.u(k); p.d();
+    if(p.dead()) particles.splice(i,1);
+  }
+}
+function refreshStars(){
+  shapes.length = 0;
+  for(let i=0;i<numberOfStars;i++) shapes.push(new FloatingStar());
+}
+
+/* ---------- classes ---------- */
+class Star{
+  constructor(){ this.r(); }
+  r(){
+    this.x = random(-width, width);
+    this.y = random(-height, height);
+    this.z = random(width);
+  }
+  u(k){ (this.z -= 1.5 * k) < 1 && this.r(); }
+  d(){
+    noStroke(); fill(255);
+    // project (cheap math; no map())
+    const sx = this.x / this.z, sy = this.y / this.z;
+    const px = halfW + halfW * sx;
+    const py = halfH + halfH * sy;
+    const sz = 5 * (1 - this.z / width);
+    ellipse(px, py, sz, sz);
+  }
+}
+
+class FloatingStar{
+  constructor(){ this.reset(); }
+  reset(){
+    this.x=random(width); this.y=random(height);
+    this.vx=(random(-1,1))*starSpeed; this.vy=(random(-1,1))*starSpeed;
+    this.size=starSize; const [r,g,b]=randomStarRGB(); this.r=r; this.g=g; this.b=b;
+    this.a=0; this.in=true; this.out=false;
+  }
+  u(k){
+    this.x += this.vx * k;
+    this.y += this.vy * k;
+
+    const s = this.size;
+    if(this.x>width+s)  this.x=-s;
+    if(this.x<-s)       this.x=width+s;
+    if(this.y>height+s) this.y=-s;
+    if(this.y<-s)       this.y=height+s;
+
+    if(this.out){ if((this.a-=8*k)<=0) this.reset(); }
+    else if(this.in){ if((this.a+=8*k)>=255) this.in=false; }
+  }
+  d(){ noStroke(); fill(this.r,this.g,this.b,this.a); ellipse(this.x,this.y,this.size,this.size); }
+  hit(px,py){
+    const dx = px - this.x, dy = py - this.y;
+    const r = this.size * 0.5;
+    return dx*dx + dy*dy <= r*r;
+  }
+  boom(){
+    if(this.in||this.out) return;
+    explosionCount++;
+    explosionCounterEl.textContent = explosionCount;
+    this.out=true;
+    for(let i=0;i<PARTICLES_PER_HIT;i++) particles.push(new Particle(this.x,this.y));
+  }
+}
+
+class Particle{
+  constructor(x,y){
+    this.x=x; this.y=y;
+    this.vx=random(-4,4); this.vy=random(-4,4);
+    this.life=180; this.size=random(4,10);
+    const [r,g,b]=randomStarRGB(); this.r=r; this.g=g; this.b=b;
+  }
+  u(k){ this.x+=this.vx*k; this.y+=this.vy*k; this.life-=3*k; }
+  d(){
+    noStroke();
+    const a = Math.max(0, Math.min(255, (this.life/180)*255));
+    fill(this.r,this.g,this.b,a);
+    ellipse(this.x,this.y,this.size,this.size);
+  }
+  dead(){ return this.life<=0; }
+}
+
+/* ---------- pointer hookup ---------- */
+window.__updatePointerTarget = window.__updatePointerTarget || ((x,y)=>{ pointerTx=x; pointerTy=y; });
+</script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TrackyMouse – Cause & Effect (face present • auto-reset + 0×0 guard)</title>
+
+<!-- p5.js for the visual feedback -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+
+<style>
+  html,body{margin:0;height:100%;background:#000;cursor:none;font-family:sans-serif}
+
+  /* start screen ---------------------------------------------------------- */
+  #start-screen{position:fixed;inset:0;background:#000;
+    display:flex;align-items:center;justify-content:center;z-index:9999}
+  #start-btn{font:700 2rem/1.2 sans-serif;color:#fff;background:#444;
+    border:2px solid #888;border-radius:12px;padding:.8em 2em;cursor:pointer}
+  #start-btn:hover{background:#666}
+
+  /* menu button ----------------------------------------------------------- */
+  #menu-btn{position:fixed;top:16px;left:16px;z-index:9000;
+    font-size:2rem;color:#eee;background:none;border:none;cursor:pointer;
+    padding:.1em .3em;border-radius:6px}
+  #menu-btn:hover{background:#444}
+
+  /* modal ----------------------------------------------------------------- */
+  #tracky-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);
+    display:none;align-items:center;justify-content:center;z-index:8000}
+  #tracky-content{position:relative}
+  #close-modal{position:absolute;top:-42px;right:-42px;font-size:2rem;
+    background:none;border:none;color:#eee;cursor:pointer}
+
+  /* TrackyMouse UI (same visuals as before) ------------------------------ */
+  .tracky-mouse-ui{display:flex;flex-direction:column;align-items:center;gap:1rem;color:#e4e4e4}
+  .tracky-mouse-canvas-container{width:320px!important;max-width:100%;
+    border:2px solid #444;border-radius:12px;overflow:hidden;box-shadow:0 0 12px #000a}
+  .tracky-mouse-canvas-container video,
+  .tracky-mouse-canvas-container canvas{width:100%!important;height:auto!important;display:block}
+  .tracky-mouse-controls{width:320px;display:flex;flex-direction:column;gap:.6rem;
+    background:#111;padding:1rem 1.2rem;border-radius:12px;box-shadow:0 0 10px #0006}
+  .tracky-mouse-start-stop-button{align-self:flex-start;padding:.3rem 1rem;font-weight:600;
+    border-radius:6px;border:1px solid #888;background:#333;color:#eee;cursor:pointer}
+  .tracky-mouse-start-stop-button:hover{background:#555}
+  .tracky-mouse-desktop-app-download-message{display:none!important}
+
+  /* counter --------------------------------------------------------------- */
+  #score-box{position:fixed;top:16px;right:16px;font:700 1.2rem sans-serif;
+    color:#fff;background:#000a;padding:.4em .8em;border-radius:8px;z-index:9000}
+</style>
+</head>
+<body>
+
+<!-- start screen -->
+<div id="start-screen"><button id="start-btn">Démarrer</button></div>
+
+<!-- activation counter -->
+<div id="score-box" style="display:none">Activations : 0</div>
+
+<!-- menu button -->
+<button id="menu-btn" title="Menu" style="display:none">☰</button>
+
+<!-- TrackyMouse modal -->
+<div id="tracky-modal">
+  <div id="tracky-content">
+    <button id="close-modal" aria-label="Fermer">✕</button>
+    <div id="tracky-root"></div>
+  </div>
+</div>
+
+<!-- TrackyMouse library (local copy) -->
+<script src="tracky-mouse.js"></script>
+<script>
+/* =======================================================================
+   Parameters & state
+   =====================================================================*/
+const POINT_THRESHOLD = 20;   // tracked points ≥ this ⇒ face present
+const CHECK_INTERVAL  = 100;  // ms between presence checks
+const HEALTH_CHECK    = 500;  // ms between NaN / size-0 guards
+
+let facePresent = false;
+let score       = 0;
+
+/* =======================================================================
+   Start sequence
+   =====================================================================*/
+async function start(){
+  /* Fullscreen ---------------------------------------------------------- */
+  if(!document.fullscreenElement){
+    try{ await document.documentElement.requestFullscreen(); }catch{}
+  }
+
+  /* UI ------------------------------------------------------------------ */
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('menu-btn').style.display     = 'block';
+  document.getElementById('score-box').style.display    = 'block';
+
+  /* TrackyMouse --------------------------------------------------------- */
+  TrackyMouse.dependenciesRoot = "";
+  await TrackyMouse.loadDependencies();
+  TrackyMouse.init(document.getElementById('tracky-root'));
+
+  /* Démarrage de la caméra + attente des métadonnées vidéo -------------- */
+  await TrackyMouse.useCamera();
+  await new Promise(res=>{
+    const v = TrackyMouse.video;
+    if (v.readyState >= 1 && v.videoWidth) return res();
+    v.addEventListener('loadedmetadata', res, {once:true});
+  });
+
+  /* API ≥ 0.8 : onFaceFound -------------------------------------------- */
+  if ('onFaceFound' in TrackyMouse){
+    TrackyMouse.onFaceFound = triggerEffect;
+  }
+
+  /* Presence polling (universal) ---------------------------------------- */
+  setInterval(() => {
+    const pts = TrackyMouse?.opticalFlowTracker?.trackedPoints || [];
+    const presentNow = pts.length >= POINT_THRESHOLD;
+    if (presentNow && !facePresent){ triggerEffect(); }
+    facePresent = presentNow;
+  }, CHECK_INTERVAL);
+
+  /* Health / NaN / canvas-0 guard --------------------------------------- */
+  setInterval(() => {
+    const t   = TrackyMouse?.tracker;
+    const cvs = TrackyMouse?.canvas;
+    if (!t || !cvs) return;
+
+    /* Guard 1 : canvas 0×0 → saute frame + reset */
+    if (!cvs.width || !cvs.height){
+      console.warn('Canvas 0×0 – resetting tracker');
+      safeResetTracker();
+      return;
+    }
+
+    /* Guard 2 : NaNs dans les points suivis */
+    const pts = TrackyMouse.opticalFlowTracker.trackedPoints;
+    if (pts.length && (Number.isNaN(pts[0].x) || Number.isNaN(pts[0].y))){
+      console.warn('NaNs – resetting tracker');
+      safeResetTracker();
+    }
+  }, HEALTH_CHECK);
+}
+
+/* Reset helper ---------------------------------------------------------- */
+function safeResetTracker(){
+  const t = TrackyMouse?.tracker;
+  const v = TrackyMouse?.video;
+  if (!t || !v) return;
+
+  /* Attendre que la vidéo ait une taille valide */
+  if (!v.videoWidth || !v.videoHeight){
+      return setTimeout(safeResetTracker, 100);
+  }
+  try{
+    t.reset();
+    /* laisser un cycle au navigateur pour actualiser le canvas */
+    setTimeout(()=>{ try{ t.start(v); }catch(e){} }, 30);
+  }catch(e){ console.error(e); }
+}
+
+/* =======================================================================
+   Visual effect (p5.js)
+   =====================================================================*/
+const sketch = p => {
+  const bursts = [];
+
+  p.setup = () => {
+    p.createCanvas(window.innerWidth, window.innerHeight)
+     .style('z-index','0').position(0,0);
+    p.colorMode(p.HSB, 360,100,100,100);
+    p.noStroke();
+  };
+
+  p.windowResized = () => {
+    p.resizeCanvas(window.innerWidth, window.innerHeight);
+  };
+
+  p.draw = () => {
+    p.clear();
+
+    /* subtle tint when face present */
+    if (facePresent){
+      p.background(120, 20, 10, 20);
+    }
+
+    /* animate bursts */
+    for (let i = bursts.length-1; i >= 0; i--){
+      const b = bursts[i];
+      b.age++;
+      const alpha = p.map(b.age, 0, b.life, 100, 0);
+      const r = p.map(b.age, 0, b.life, 0, b.maxR);
+      p.fill(b.h, 80, 100, alpha);
+      p.circle(b.x, b.y, r*2);
+      if (b.age > b.life) bursts.splice(i,1);
+    }
+  };
+
+  /* Make triggerEffect global */
+  window.triggerEffect = () => {
+    score++;
+    document.getElementById('score-box').textContent = 'Activations : '+score;
+
+    bursts.push({
+      x: p.random(100, p.width-100),
+      y: p.random(100, p.height-100),
+      maxR: p.random(60, 120),
+      h:  p.random(360),
+      age: 0,
+      life: 40          // frames
+    });
+  };
+};
+new p5(sketch);
+
+/* =======================================================================
+   Modal handling
+   =====================================================================*/
+const modal   = document.getElementById('tracky-modal');
+const menuBtn = document.getElementById('menu-btn');
+function toggleModal(){
+  modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
+}
+
+/* =======================================================================
+   Global error guard
+   =====================================================================*/
+window.addEventListener('error', e => {
+  if (e.message &&
+      (e.message.includes('NaNs') ||
+       e.message.includes('getImageData') && e.message.includes('long'))){
+    console.warn('Global tracker error – resetting');
+    safeResetTracker();
+  }
+});
+
+/* =======================================================================
+   Event listeners
+   =====================================================================*/
+document.getElementById('start-btn').addEventListener('click', start);
+menuBtn.addEventListener('click', toggleModal);
+document.getElementById('close-modal').addEventListener('click', toggleModal);
+</script>
+</body>
+</html>
