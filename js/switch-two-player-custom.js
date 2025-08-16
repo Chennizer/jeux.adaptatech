@@ -358,6 +358,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const closeModal = document.getElementById('close-modal');
   const okButton = document.getElementById('ok-button');
   const videoSelectionDiv = document.getElementById('video-selection');
+
+  // Default to interval mode with a 30-second interval
+  playModeSelect.value = 'interval';
+  intervalLabel.style.display = 'inline-block';
+  intervalTimeInput.style.display = 'inline-block';
+  intervalTimeInput.value = 30;
   const localVideoList = document.getElementById('local-video-list');
   const urlVideoList = document.getElementById('url-video-list');
   const addVideoFileButton = document.getElementById('add-video-file-button');
@@ -453,9 +459,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   let controlsEnabled = false;
   let playedMedia = [];
   let currentMediaIndex = 0;
-  let mode = 'pressBetween';
+  let mode = 'interval';
   let intervalID = null;
-  let intervalTime = 5;
+  let intervalTime = 30;
   let pausedAtTime = 0;
   let currentPlayer = 1;
   let player1Name = '';
