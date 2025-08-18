@@ -42,6 +42,9 @@
       video.style.width = canvas.style.width = vw + 'px';
       video.style.height = canvas.style.height = vh + 'px';
 
+      let smoothX = vw/2, smoothY = vh/2;
+      const SMOOTH = 0.2;
+
       /* ---------------------------------------------------------------
          4.  TFJS backend + model
       ----------------------------------------------------------------*/
@@ -56,8 +59,23 @@
       /* ---------------------------------------------------------------
          5.  Helpers
       ----------------------------------------------------------------*/
-      const L=[468,469,470,471], R=[473,474,475,476];         // iris indices
-      const mid = (a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+      const LEFT = { iris:[468,469,470,471], corners:[33,133], lids:[159,145] };
+      const RIGHT = { iris:[473,474,475,476], corners:[263,362], lids:[386,374] };
+
+      function eyeGaze(eye, mesh){
+        const iris = eye.iris.map(i => mesh[i]);
+        const center = iris.reduce((s,p)=>({x:s.x+p.x,y:s.y+p.y}),{x:0,y:0});
+        center.x /= iris.length; center.y /= iris.length;
+
+        const [c1,c2] = eye.corners.map(i=>mesh[i]);
+        const [top,bottom] = eye.lids.map(i=>mesh[i]);
+        const hMin = Math.min(c1.x, c2.x), hMax = Math.max(c1.x, c2.x);
+        const vMin = Math.min(top.y, bottom.y), vMax = Math.max(top.y, bottom.y);
+        return {
+          x:(center.x-hMin)/(hMax-hMin),
+          y:(center.y-vMin)/(vMax-vMin)
+        };
+      }
 
       /* ---------------------------------------------------------------
          6.  Render loop
@@ -75,30 +93,25 @@
             ctx.fill();
           }
 
-          const l = L.map(i=>[mesh[i].x, mesh[i].y]),
-                r = R.map(i=>[mesh[i].x, mesh[i].y]);
-
-          const lC = l.reduce((s,p)=>[s[0]+p[0],s[1]+p[1]],[0,0]).map(v=>v/l.length);
-          const rC = r.reduce((s,p)=>[s[0]+p[0],s[1]+p[1]],[0,0]).map(v=>v/r.length);
-          const gaze = mid(lC, rC);
-
-          const xs = mesh.map(p=>p.x), ys = mesh.map(p=>p.y);
-          const minX = Math.min(...xs), maxX = Math.max(...xs);
-          const minY = Math.min(...ys), maxY = Math.max(...ys);
-          const normX = (gaze[0]-minX)/(maxX-minX);
-          const normY = (gaze[1]-minY)/(maxY-minY);
-          const screenX = normX*vw, screenY = normY*vh;
+          const l = eyeGaze(LEFT, mesh);
+          const r = eyeGaze(RIGHT, mesh);
+          const normX = (l.x + r.x)/2;
+          const normY = (l.y + r.y)/2;
+          const screenX = normX * vw;
+          const screenY = normY * vh;
+          smoothX += SMOOTH * (screenX - smoothX);
+          smoothY += SMOOTH * (screenY - smoothY);
 
           ctx.strokeStyle = '#ffd700';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.moveTo(screenX-20, screenY);
-          ctx.lineTo(screenX+20, screenY);
-          ctx.moveTo(screenX, screenY-20);
-          ctx.lineTo(screenX, screenY+20);
+          ctx.moveTo(smoothX-20, smoothY);
+          ctx.lineTo(smoothX+20, smoothY);
+          ctx.moveTo(smoothX, smoothY-20);
+          ctx.lineTo(smoothX, smoothY+20);
           ctx.stroke();
           ctx.beginPath();
-          ctx.arc(screenX, screenY, 4, 0, Math.PI*2);
+          ctx.arc(smoothX, smoothY, 4, 0, Math.PI*2);
           ctx.fillStyle = '#ffd700';
           ctx.fill();
         }
