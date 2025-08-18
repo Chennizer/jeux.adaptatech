@@ -13,6 +13,9 @@
    - Fixed syntax error in visual options ("high-contrast" branch).
    - Made YT onError delegate to a global-safe handler (no scope issues).
    - Guarded loading bar null refs.
+
+   NEW (minimal):
+   - Persist DOM order for local file list (by filename) and ensure URL list order is saved after any change.
 */
 
 let youtubePlayer = null;
@@ -469,8 +472,55 @@ document.addEventListener('DOMContentLoaded', async () => {
   let lastSelectionSignature = '';
   let shuffleEnabled = false; // optional toggle if you add it to miscOptions
   const YT_STORAGE_KEY = 'customYoutubeUrls';
+  const LOCAL_ORDER_KEY = 'customLocalOrderV1'; // <— NEW: persist local order by filename
   const isCustomPage = !!(addVideoInput || addVideoUrlInput);
   let manualOrder = false;
+
+  // ===== Order persistence helpers (NEW, minimal) =====
+  function getCardName(card) {
+    return (card.querySelector('.video-filename')?.textContent || '').trim();
+  }
+
+  function saveLocalOrder() {
+    if (!localVideoList) return;
+    const names = Array.from(localVideoList.querySelectorAll('.video-card')).map(getCardName).filter(Boolean);
+    try { localStorage.setItem(LOCAL_ORDER_KEY, JSON.stringify(names)); } catch {}
+  }
+
+  function applyLocalOrder() {
+    if (!localVideoList) return;
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem(LOCAL_ORDER_KEY) || '[]'); } catch { saved = []; }
+    if (!Array.isArray(saved) || !saved.length) return;
+
+    // Build buckets by name (support duplicates)
+    const byName = new Map();
+    Array.from(localVideoList.querySelectorAll('.video-card')).forEach(card => {
+      const name = getCardName(card);
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push(card);
+    });
+
+    // Rebuild in saved order
+    const frag = document.createDocumentFragment();
+    saved.forEach(name => {
+      const arr = byName.get(name);
+      if (arr && arr.length) {
+        const card = arr.shift();
+        frag.appendChild(card);
+      }
+    });
+    // Append any leftovers (new files or names not in saved array)
+    byName.forEach(arr => arr.forEach(card => frag.appendChild(card)));
+
+    localVideoList.appendChild(frag);
+  }
+
+  function saveYoutubeUrls() {
+    if (!urlVideoList) return;
+    const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
+    try { localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls)); } catch {}
+  }
 
   function isCurrentlyPlaying() {
     const ytPlaying = (typeof YT !== 'undefined' && youtubePlayer && youtubePlayer.getPlayerState && youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING);
@@ -527,6 +577,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         b.textContent = String(idx + 1);
       });
     });
+    // persist after any renumber
+    saveLocalOrder();
+    if (urlVideoList) saveYoutubeUrls();
   }
 
   // Reorder helpers — UP / DOWN buttons
@@ -539,7 +592,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       manualOrder = true;
       renumberCards();
       updateSelectedMedia();
-      if (parent === urlVideoList) saveYoutubeUrls();
     }
   }
   function moveCardDown(card) {
@@ -551,7 +603,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       manualOrder = true;
       renumberCards();
       updateSelectedMedia();
-      if (parent === urlVideoList) saveYoutubeUrls();
     }
   }
   function ensureOrderButtons(card) {
@@ -629,19 +680,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         card.remove();
         updateSelectedMedia();
         renumberCards();
-        if (parent === urlVideoList) saveYoutubeUrls();
       });
       card.appendChild(rm);
     }
   }
 
   // ===== SAVE/RESTORE URL LISTS =====
-  function saveYoutubeUrls() {
-    if (!urlVideoList) return;
-    const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
-    localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
-  }
-
   async function loadStoredYoutubeUrls() {
     if (!urlVideoList) return;
     const saved = localStorage.getItem(YT_STORAGE_KEY);
@@ -727,6 +771,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize any pre-existing cards (if present in DOM at load)
   let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
   videoCardsArray.forEach(initCard);
+
+  // --- re-apply saved local order after cards exist (NEW) ---
+  applyLocalOrder();
   renumberCards();
 
   // initial selection
@@ -806,6 +853,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         initCard(card);
       }
       addVideoInput.value = '';
+      // after adding, re-save order (new items appended at end)
+      saveLocalOrder();
       updateSelectedMedia();
       renumberCards();
     });
@@ -900,6 +949,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     startButton.style.display = selectedMedia.length ? 'block' : 'none';
+    // persist both lists after any selection change
+    saveLocalOrder();
     if (urlVideoList) saveYoutubeUrls();
 
     const sig = selectionSignature(selectedMedia);
@@ -1586,6 +1637,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       container.appendChild(card);
       initCard(card);
     }
+    // Re-apply any saved local order after populating from folder
+    applyLocalOrder();
     updateSelectedMedia();
     renumberCards();
   }
