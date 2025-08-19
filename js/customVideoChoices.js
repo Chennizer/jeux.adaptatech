@@ -11,8 +11,16 @@ async function makeThumbnailFromVideo(file) {
     video.src = url;
 
     const clean = () => { URL.revokeObjectURL(url); };
+    let settled = false;
+    const finish = (thumb) => {
+      if (!settled) {
+        settled = true;
+        resolve(thumb);
+      }
+      clean();
+    };
 
-    video.addEventListener('loadedmetadata', () => {
+    const capture = () => {
       try {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -23,19 +31,23 @@ async function makeThumbnailFromVideo(file) {
         const scale = Math.min(cw / w, ch / h);
         const dw = w * scale, dh = h * scale;
         const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
-        video.currentTime = Math.min(10, Math.max(0, video.duration - 0.1));
-        video.addEventListener('seeked', () => {
-          ctx.drawImage(video, dx, dy, dw, dh);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
-          clean();
-        }, { once: true });
+        ctx.drawImage(video, dx, dy, dw, dh);
+        finish(canvas.toDataURL('image/jpeg', 0.85));
       } catch {
-        resolve('');
-        clean();
+        finish('');
       }
+    };
+
+    video.addEventListener('loadeddata', capture, { once: true });
+    video.addEventListener('error', () => finish(''), { once: true });
+    video.addEventListener('loadedmetadata', () => {
+      try {
+        const target = Math.min(1, Math.max(0, video.duration - 0.1));
+        video.currentTime = target;
+      } catch {}
     }, { once: true });
 
-    video.addEventListener('error', () => { resolve(''); clean(); }, { once: true });
+    setTimeout(() => finish(''), 3000);
   });
 }
 

@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
   const tilePickerModal = document.getElementById('tile-picker-modal');
   const tilePickerGrid = document.getElementById('tile-picker-grid');
+  const tilePickerPanel = tilePickerModal ? tilePickerModal.querySelector('#control-panel-options') : null;
   const tileCountDisplay = document.getElementById('tile-count-display');
   const startGameButton = document.getElementById('start-game-button');
   const categorySelect = document.getElementById('categorySelect');
@@ -241,13 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function populateTilePickerGrid() {
     tilePickerGrid.innerHTML = '';
     const inCat = document.createElement('div');
-    inCat.style.display = 'flex';
-    inCat.style.flexWrap = 'wrap';
-    inCat.style.gap = '10px';
     const outCat = document.createElement('div');
-    outCat.style.display = 'flex';
-    outCat.style.flexWrap = 'wrap';
-    outCat.style.gap = '10px';
 
     mediaChoices.forEach((choice, idx) => {
       const matches = currentCategory === 'all' ||
@@ -279,15 +274,49 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    tilePickerGrid.appendChild(inCat);
+    const tileSize = 100;
+    const gap = 10;
+    let inWidth = 0;
+    let outWidth = 0;
+
+    if (inCat.childNodes.length) {
+      const cols = Math.ceil(Math.sqrt(inCat.childNodes.length));
+      inWidth = cols * tileSize + (cols - 1) * gap;
+      Object.assign(inCat.style, {
+        display: 'grid',
+        gridTemplateColumns: `repeat(${cols}, ${tileSize}px)`,
+        gap: `${gap}px`,
+        width: `${inWidth}px`,
+        margin: '10px auto'
+      });
+      tilePickerGrid.appendChild(inCat);
+    }
+
     if (outCat.childNodes.length) {
-      const sep = document.createElement('div');
-      sep.style.width = '100%';
-      sep.style.height = '2px';
-      sep.style.backgroundColor = '#ccc';
-      sep.style.margin = '10px 0';
-      tilePickerGrid.appendChild(sep);
+      if (inCat.childNodes.length) {
+        const sep = document.createElement('div');
+        sep.style.width = '100%';
+        sep.style.height = '2px';
+        sep.style.backgroundColor = '#ccc';
+        sep.style.margin = '10px 0';
+        tilePickerGrid.appendChild(sep);
+      }
+      const cols = Math.ceil(Math.sqrt(outCat.childNodes.length));
+      outWidth = cols * tileSize + (cols - 1) * gap;
+      Object.assign(outCat.style, {
+        display: 'grid',
+        gridTemplateColumns: `repeat(${cols}, ${tileSize}px)`,
+        gap: `${gap}px`,
+        width: `${outWidth}px`,
+        margin: '10px auto'
+      });
       tilePickerGrid.appendChild(outCat);
+    }
+
+    const maxWidth = Math.max(inWidth, outWidth);
+    if (tilePickerPanel) {
+      const panelWidth = Math.max(360, maxWidth + 40);
+      tilePickerPanel.style.width = `${panelWidth}px`;
     }
   }
 
