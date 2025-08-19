@@ -2,6 +2,7 @@
    Ordering fixes:
    - Sequential by default (DOM order). Set shuffleEnabled=true if you want random.
    - Resets internal playback order whenever the selected set or its order changes.
+   - Local videos: **per-set order persistence** (no cross-contamination between different folders/sets).
 
    Embedding/VEVO handling:
    - During playlist import: we validate with videos?part=status and import ONLY embeddable, public/unlisted items.
@@ -13,9 +14,6 @@
    - Fixed syntax error in visual options ("high-contrast" branch).
    - Made YT onError delegate to a global-safe handler (no scope issues).
    - Guarded loading bar null refs.
-
-   NEW (minimal):
-   - Persist DOM order for local file list (by filename) and ensure URL list order is saved after any change.
 */
 
 let youtubePlayer = null;
@@ -220,10 +218,11 @@ function createIndexBadge() {
 }
 
 /* Build a video-card DOM node (thumb + caption), then let initCard() wire it */
-async function buildVideoCardElement({ src, name }) {
+async function buildVideoCardElement({ src, name, key }) {
   const card = document.createElement('div');
   card.className = 'video-card';
   card.dataset.src = src;
+  if (key) card.dataset.key = key;           // stable key for local items
 
   const badge = createIndexBadge();
 
@@ -472,55 +471,85 @@ document.addEventListener('DOMContentLoaded', async () => {
   let lastSelectionSignature = '';
   let shuffleEnabled = false; // optional toggle if you add it to miscOptions
   const YT_STORAGE_KEY = 'customYoutubeUrls';
-  const LOCAL_ORDER_KEY = 'customLocalOrderV1'; // <— NEW: persist local order by filename
-  const isCustomPage = !!(addVideoInput || addVideoUrlInput);
-  let manualOrder = false;
 
-  // ===== Order persistence helpers (NEW, minimal) =====
-  function getCardName(card) {
-    return (card.querySelector('.video-filename')?.textContent || '').trim();
+  // ---------- Local order persistence (PER-SET) ----------
+  const LOCAL_ORDERS_KEY = 'customLocalVideoOrders'; // map: signature -> [ordered keys]
+
+  function getLocalOrderMap() {
+    try { return JSON.parse(localStorage.getItem(LOCAL_ORDERS_KEY) || '{}'); }
+    catch { return {}; }
+  }
+  function setLocalOrderMap(map) {
+    try { localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(map)); } catch {}
   }
 
-  function saveLocalOrder() {
-    if (!localVideoList) return;
-    const names = Array.from(localVideoList.querySelectorAll('.video-card')).map(getCardName).filter(Boolean);
-    try { localStorage.setItem(LOCAL_ORDER_KEY, JSON.stringify(names)); } catch {}
+  // stable key for local files (works across reloads for folder picker / file input)
+  function makeLocalKey(name, size, lastModified) {
+    return `${name}::${size ?? '0'}::${lastModified ?? '0'}`;
   }
 
-  function applyLocalOrder() {
+  // Current local keys present in DOM (order-agnostic)
+  function currentLocalKeys() {
+    if (!localVideoList) return [];
+    return Array.from(localVideoList.querySelectorAll('.video-card'))
+      .map(c => c.dataset.key || c.dataset.src);
+  }
+
+  // Signature of the set = sorted unique keys joined; ensures we only apply order to the same set
+  function currentSetSignature() {
+    const keys = currentLocalKeys();
+    if (!keys.length) return '';
+    const uniq = Array.from(new Set(keys)).sort();
+    return uniq.join('||');
+  }
+
+  function getLocalOrderFromDOM() {
+    if (!localVideoList) return [];
+    return Array.from(localVideoList.querySelectorAll('.video-card'))
+      .map(c => c.dataset.key || c.dataset.src);
+  }
+
+  function saveLocalOrderForCurrentSet() {
     if (!localVideoList) return;
-    let saved;
-    try { saved = JSON.parse(localStorage.getItem(LOCAL_ORDER_KEY) || '[]'); } catch { saved = []; }
+    const sig = currentSetSignature();
+    if (!sig) return;
+    const map = getLocalOrderMap();
+    map[sig] = getLocalOrderFromDOM();
+    setLocalOrderMap(map);
+  }
+
+  function loadLocalOrderForCurrentSet() {
+    if (!localVideoList) return;
+    const sig = currentSetSignature();
+    if (!sig) return;
+    const map = getLocalOrderMap();
+    const saved = map[sig];
     if (!Array.isArray(saved) || !saved.length) return;
 
-    // Build buckets by name (support duplicates)
-    const byName = new Map();
-    Array.from(localVideoList.querySelectorAll('.video-card')).forEach(card => {
-      const name = getCardName(card);
-      if (!byName.has(name)) byName.set(name, []);
-      byName.get(name).push(card);
-    });
+    // Map current cards by key (fallback to src)
+    const currentCards = new Map(
+      Array.from(localVideoList.querySelectorAll('.video-card'))
+        .map(card => [(card.dataset.key || card.dataset.src), card])
+    );
 
-    // Rebuild in saved order
     const frag = document.createDocumentFragment();
-    saved.forEach(name => {
-      const arr = byName.get(name);
-      if (arr && arr.length) {
-        const card = arr.shift();
+    saved.forEach(k => {
+      const card = currentCards.get(k);
+      if (card) {
         frag.appendChild(card);
+        currentCards.delete(k);
       }
     });
-    // Append any leftovers (new files or names not in saved array)
-    byName.forEach(arr => arr.forEach(card => frag.appendChild(card)));
+    // Append any leftovers (new items not in saved list) in their current order
+    currentCards.forEach(card => frag.appendChild(card));
 
+    localVideoList.innerHTML = '';
     localVideoList.appendChild(frag);
+    renumberCards();
   }
 
-  function saveYoutubeUrls() {
-    if (!urlVideoList) return;
-    const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
-    try { localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls)); } catch {}
-  }
+  const isCustomPage = !!(addVideoInput || addVideoUrlInput);
+  let manualOrder = false;
 
   function isCurrentlyPlaying() {
     const ytPlaying = (typeof YT !== 'undefined' && youtubePlayer && youtubePlayer.getPlayerState && youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING);
@@ -577,9 +606,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         b.textContent = String(idx + 1);
       });
     });
-    // persist after any renumber
-    saveLocalOrder();
-    if (urlVideoList) saveYoutubeUrls();
   }
 
   // Reorder helpers — UP / DOWN buttons
@@ -592,6 +618,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       manualOrder = true;
       renumberCards();
       updateSelectedMedia();
+      if (parent === urlVideoList) saveYoutubeUrls();
+      if (parent === localVideoList) saveLocalOrderForCurrentSet();
     }
   }
   function moveCardDown(card) {
@@ -603,6 +631,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       manualOrder = true;
       renumberCards();
       updateSelectedMedia();
+      if (parent === urlVideoList) saveYoutubeUrls();
+      if (parent === localVideoList) saveLocalOrderForCurrentSet();
     }
   }
   function ensureOrderButtons(card) {
@@ -680,12 +710,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         card.remove();
         updateSelectedMedia();
         renumberCards();
+        if (parent === urlVideoList) saveYoutubeUrls();
+        if (parent === localVideoList) saveLocalOrderForCurrentSet();
       });
       card.appendChild(rm);
     }
   }
 
-  // ===== SAVE/RESTORE URL LISTS =====
+  // ===== SAVE/RESTORE URL LISTS (YouTube / external URLs) =====
+  function saveYoutubeUrls() {
+    if (!urlVideoList) return;
+    const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
+    localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
+  }
+
   async function loadStoredYoutubeUrls() {
     if (!urlVideoList) return;
     const saved = localStorage.getItem(YT_STORAGE_KEY);
@@ -694,56 +732,61 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const urls = JSON.parse(saved);
       const apiKey = window.YT_API_KEY;
-      const ytUrls = urls.filter(u => isYouTubeUrl(u));
-      const otherUrls = urls.filter(u => !isYouTubeUrl(u));
 
-      // Add non-YouTube URLs immediately
-      for (const url of otherUrls) {
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.dataset.src = url;
-        card.appendChild(createIndexBadge());
-        card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
-        urlVideoList.appendChild(card);
-        initCard(card);
-        fetchVideoTitle(url).then(title => {
-          const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-          if (textNode) textNode.nodeValue = title;
-        });
-      }
+      // Batch-collect ids in order and validate once
+      const ytEntries = urls
+        .map(u => ({ url: u, id: isYouTubeUrl(u) ? getYouTubeId(u) : null }));
 
-      // Validate YouTube URLs (only add playable ones)
-      let okSet = new Set();
-      if (ytUrls.length && apiKey) {
-        const ids = ytUrls.map(u => getYouTubeId(u)).filter(Boolean);
-        const { ok } = await validateEmbeddableIds(apiKey, ids);
-        okSet = new Set(ok);
-      }
-
-      const okUrls = [];
-      for (const url of ytUrls) {
-        const id = getYouTubeId(url);
-        if (apiKey) {
-          if (!id || !okSet.has(id)) continue; // skip blocked/unplayable
+      let okSet = null;
+      const idList = ytEntries.map(e => e.id).filter(Boolean);
+      if (apiKey && idList.length) {
+        try {
+          const { ok } = await validateEmbeddableIds(apiKey, idList);
+          okSet = new Set(ok);
+        } catch {
+          okSet = null; // fail-open
         }
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.dataset.src = url;
-        card.appendChild(createIndexBadge());
-        card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
-        urlVideoList.appendChild(card);
-        initCard(card);
-        fetchVideoTitle(url).then(title => {
-          const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-          if (textNode) textNode.nodeValue = title;
-        });
-        okUrls.push(url);
       }
 
-      // Clean storage to only keep currently valid ones
-      const cleaned = [...otherUrls, ...okUrls];
-      localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(cleaned));
+      const keptUrls = [];
+      for (const { url, id } of ytEntries) {
+        const isYT = !!id;
+        if (!isYT) {
+          // Non-YouTube URL
+          const card = document.createElement('div');
+          card.className = 'video-card';
+          card.dataset.src = url;
+          card.appendChild(createIndexBadge());
+          card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
+          urlVideoList.appendChild(card);
+          initCard(card);
+          fetchVideoTitle(url).then(title => {
+            const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+            if (textNode) textNode.nodeValue = title;
+          });
+          keptUrls.push(url);
+          continue;
+        }
 
+        const playable = !apiKey || !id || okSet === null || okSet.has(id);
+        if (playable) {
+          const card = document.createElement('div');
+          card.className = 'video-card';
+          card.dataset.src = url;
+          card.appendChild(createIndexBadge());
+          card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
+          urlVideoList.appendChild(card);
+          initCard(card);
+          fetchVideoTitle(url).then(title => {
+            const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+            if (textNode) textNode.nodeValue = title;
+          });
+          keptUrls.push(url);
+        }
+      }
+
+      // Clean storage to only playable/kept items (order preserved)
+      localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(keptUrls));
       renumberCards();
     } catch (e) {
       console.error('Failed to parse saved YouTube URLs', e);
@@ -771,10 +814,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize any pre-existing cards (if present in DOM at load)
   let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
   videoCardsArray.forEach(initCard);
-
-  // --- re-apply saved local order after cards exist (NEW) ---
-  applyLocalOrder();
   renumberCards();
+
+  // Apply saved local order on startup (after cards exist)
+  loadLocalOrderForCurrentSet();
 
   // initial selection
   selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
@@ -798,7 +841,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         loaded++;
         if (loadingBar) {
           const percent = (loaded / total) * 100;
-          loadingBar.style.width = `${percent}%`;
+          if (loadingBar) loadingBar.style.width = `${percent}%`;
         }
         if (loaded === total) onComplete();
       };
@@ -841,22 +884,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Local file uploads with thumbnails
-  if (addVideoFileButton && addVideoInput) {
+  if (addVideoFileButton && addVideoInput && localVideoList) {
     addVideoFileButton.addEventListener('click', () => addVideoInput.click());
     addVideoInput.addEventListener('change', async () => {
       const files = Array.from(addVideoInput.files);
       for (const file of files) {
-        const src = URL.createObjectURL(file);
-        const card = await buildVideoCardElement({ src, name: file.name });
-        const container = localVideoList || videoSelectionDiv;
-        container.appendChild(card);
+        const src = URL.createObjectURL(file); // transient across reloads; key keeps order stable within session
+        const key = makeLocalKey(file.name, file.size, file.lastModified);
+        const card = await buildVideoCardElement({ src, name: file.name, key });
+        localVideoList.appendChild(card);
         initCard(card);
       }
       addVideoInput.value = '';
-      // after adding, re-save order (new items appended at end)
-      saveLocalOrder();
       updateSelectedMedia();
       renumberCards();
+      saveLocalOrderForCurrentSet(); // persist order after adding
     });
   }
 
@@ -949,9 +991,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     startButton.style.display = selectedMedia.length ? 'block' : 'none';
-    // persist both lists after any selection change
-    saveLocalOrder();
     if (urlVideoList) saveYoutubeUrls();
+    if (localVideoList) saveLocalOrderForCurrentSet();
 
     const sig = selectionSignature(selectedMedia);
     if (sig !== lastSelectionSignature) {
@@ -1432,7 +1473,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         case 'green-filter': mediaPlayer.classList.add('green-filter'); break;
         case 'red-filter': mediaPlayer.classList.add('red-filter'); break;
         case 'blue-filter': mediaPlayer.classList.add('blue-filter'); break;
-        case 'high-contrast': mediaPlayer.style.filter = 'contrast(200%)'; break; // <- fixed
+        case 'high-contrast': mediaPlayer.style.filter = 'contrast(200%)'; break; // fixed
         case 'grayscale': mediaPlayer.style.filter = 'grayscale(100%)'; break;
         case 'invert': mediaPlayer.style.filter = 'invert(100%)'; break;
         case 'brightness': mediaPlayer.style.filter = 'brightness(1.5)'; break;
@@ -1628,19 +1669,60 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   /* Folder picker integration */
   let repoHandle = null;
+
+  // NEW: fully deterministic population using saved order pre-sort
   async function populateFromRepo(handle) {
+    // 1) collect entries and file metadata
+    const items = [];
     for await (const entry of iterVideos(handle)) {
       const file = await entry.getFile();
-      const src = URL.createObjectURL(file);
-      const card = await buildVideoCardElement({ src, name: entry.name });
-      const container = localVideoList || videoSelectionDiv;
-      container.appendChild(card);
-      initCard(card);
+      const key = makeLocalKey(entry.name, file.size, file.lastModified);
+      items.push({ entry, file, key, name: entry.name });
     }
-    // Re-apply any saved local order after populating from folder
-    applyLocalOrder();
+    if (!items.length) {
+      updateSelectedMedia();
+      renumberCards();
+      return;
+    }
+
+    // 2) compute set signature BEFORE rendering
+    const sig = items.map(i => i.key).sort().join('||');
+    const map = getLocalOrderMap();
+    const saved = Array.isArray(map[sig]) ? map[sig] : null;
+
+    // 3) build a rank map from saved order (if any)
+    const rank = new Map();
+    if (saved) saved.forEach((k, i) => rank.set(k, i));
+
+    // 4) sort items: saved order first, then newcomers alphabetically by name
+    items.sort((a, b) => {
+      const ra = rank.has(a.key), rb = rank.has(b.key);
+      if (ra && rb) return rank.get(a.key) - rank.get(b.key);
+      if (ra && !rb) return -1;
+      if (!ra && rb) return 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+
+    // 5) render cards in final order (no flicker reordering after)
+    const container = localVideoList || videoSelectionDiv;
+    const frag = document.createDocumentFragment();
+    for (const it of items) {
+      const src = URL.createObjectURL(it.file);
+      const card = await buildVideoCardElement({ src, name: it.name, key: it.key });
+      initCard(card);
+      frag.appendChild(card);
+    }
+    container.innerHTML = '';
+    container.appendChild(frag);
+
+    // 6) finalize selection + numbering
     updateSelectedMedia();
     renumberCards();
+
+    // 7) persist current order (so newcomers get appended consistently next time)
+    const keysInDom = Array.from(container.querySelectorAll('.video-card')).map(c => c.dataset.key || c.dataset.src);
+    map[sig] = keysInDom;
+    setLocalOrderMap(map);
   }
 
   async function chooseFolder() {
