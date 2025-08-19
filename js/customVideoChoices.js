@@ -8,46 +8,40 @@ async function makeThumbnailFromVideo(file) {
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = 'anonymous';
     video.src = url;
 
-    const clean = () => { URL.revokeObjectURL(url); };
-    let settled = false;
-    const finish = (thumb) => {
-      if (!settled) {
-        settled = true;
-        resolve(thumb);
-      }
-      clean();
-    };
+    const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
 
-    const capture = () => {
+    video.addEventListener('loadedmetadata', () => {
       try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const t = Math.min(10, Math.max(0, (video.duration || 0) - 0.1));
+        video.currentTime = t;
+      } catch {}
+    }, { once: true });
+
+    video.addEventListener('seeked', () => {
+      try {
         const w = video.videoWidth || 640;
         const h = video.videoHeight || 360;
         const cw = 640, ch = 360;
+        const canvas = document.createElement('canvas');
         canvas.width = cw; canvas.height = ch;
+        const ctx = canvas.getContext('2d');
         const scale = Math.min(cw / w, ch / h);
         const dw = w * scale, dh = h * scale;
         const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
         ctx.drawImage(video, dx, dy, dw, dh);
-        finish(canvas.toDataURL('image/jpeg', 0.85));
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
       } catch {
-        finish('');
+        resolve('');
       }
-    };
-
-    video.addEventListener('loadeddata', capture, { once: true });
-    video.addEventListener('error', () => finish(''), { once: true });
-    video.addEventListener('loadedmetadata', () => {
-      try {
-        const target = Math.min(1, Math.max(0, video.duration - 0.1));
-        video.currentTime = target;
-      } catch {}
+      cleanup();
     }, { once: true });
 
-    setTimeout(() => finish(''), 3000);
+    video.addEventListener('error', () => { cleanup(); resolve(''); }, { once: true });
+    setTimeout(() => { cleanup(); resolve(''); }, 3000);
   });
 }
 
