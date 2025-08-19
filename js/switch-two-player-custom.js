@@ -5,7 +5,7 @@
    - Local videos: **per-set order persistence** (no cross-contamination between different folders/sets).
 
    Embedding/VEVO handling:
-   - During playlist import: we validate with videos?part=status and import ONLY embeddable, public/unlisted items.
+   - During playlist import: we validate with videos?part=status,snippet and import ONLY embeddable, public/unlisted items (also fetch title + best thumbnail).
    - When adding a single YouTube URL: we validate first; if blocked, we DO NOT add a card.
    - When restoring saved URLs from localStorage: batch-validate and only re-add playable ones (storage is cleaned).
    - At playback, if a video still errors, we auto-skip.
@@ -14,6 +14,11 @@
    - Fixed syntax error in visual options ("high-contrast" branch).
    - Made YT onError delegate to a global-safe handler (no scope issues).
    - Guarded loading bar null refs.
+
+   New in this version:
+   - YouTube thumbnails:
+     • Playlist import: use API to fetch title + best thumbnail.
+     • Single URLs / restored URLs: use lightweight no-API fallback (ytimg) with multi-resolution fallback chain.
 */
 
 let youtubePlayer = null;
@@ -46,6 +51,32 @@ function getYouTubeId(url) {
   const match = url.match(/(?:v=|\/)([A-Za-z0-9_-]{11})/);
   return match ? match[1] : null;
 }
+
+// ---------- NEW: YouTube thumbnail helpers (no-API fallback) ----------
+function getYouTubeThumbCandidates(id) {
+  return [
+    `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/sddefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/default.jpg`,
+  ];
+}
+function setYouTubeThumbWithFallback(imgEl, videoId) {
+  const candidates = getYouTubeThumbCandidates(videoId);
+  let i = 0;
+  function tryNext() {
+    if (i >= candidates.length) return;
+    const url = candidates[i++];
+    const testImg = new Image();
+    testImg.onload = () => { imgEl.src = url; };
+    testImg.onerror = tryNext;
+    testImg.src = url;
+  }
+  tryNext();
+}
+
+// ---------------------------------------------------------
 
 function extractFileNameFromUrl(url) {
   try {
@@ -217,7 +248,7 @@ function createIndexBadge() {
   return b;
 }
 
-/* Build a video-card DOM node (thumb + caption), then let initCard() wire it */
+/* Build a video-card DOM node (thumb + caption) for local files, then init it */
 async function buildVideoCardElement({ src, name, key }) {
   const card = document.createElement('div');
   card.className = 'video-card';
@@ -289,16 +320,20 @@ async function fetchPlaylistVideoIds(apiKey, playlistId) {
   return ids;
 }
 
-/* Validate embeddability for a set of IDs */
+/* Validate embeddability for a set of IDs AND fetch title + best thumbnail (snippet) */
 async function validateEmbeddableIds(apiKey, ids) {
   const embeddable = new Set();
-  const blocked = new Map(); // id -> reason
+  const blocked = new Map();       // id -> reason
+  const thumbs = new Map();        // id -> bestThumbUrl
+  const titles = new Map();        // id -> title
+
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50);
     const u = new URL("https://www.googleapis.com/youtube/v3/videos");
-    u.searchParams.set("part", "status");
+    u.searchParams.set("part", "status,snippet");
     u.searchParams.set("id", chunk.join(","));
     u.searchParams.set("key", apiKey);
+
     const r = await fetch(u.toString());
     const t = await r.text();
     if (!r.ok) {
@@ -313,13 +348,18 @@ async function validateEmbeddableIds(apiKey, ids) {
       const pubOrUnlisted = (s.privacyStatus === 'public' || s.privacyStatus === 'unlisted');
       if (emb && pubOrUnlisted) {
         embeddable.add(item.id);
+        const sn = item.snippet || {};
+        titles.set(item.id, sn.title || '');
+        const th = sn.thumbnails || {};
+        const best = th.maxres?.url || th.standard?.url || th.high?.url || th.medium?.url || th.default?.url || '';
+        if (best) thumbs.set(item.id, best);
       } else {
         let reason = !pubOrUnlisted ? 'private' : 'embedding disabled';
         blocked.set(item.id, reason);
       }
     });
   }
-  return { ok: Array.from(embeddable), blocked };
+  return { ok: Array.from(embeddable), blocked, thumbs, titles };
 }
 
 /* Validate a single YouTube URL before adding */
@@ -724,6 +764,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
   }
 
+  // ---------- UPDATED: loadStoredYoutubeUrls uses addYoutubeUrlCard (thumbnails + title) ----------
   async function loadStoredYoutubeUrls() {
     if (!urlVideoList) return;
     const saved = localStorage.getItem(YT_STORAGE_KEY);
@@ -734,8 +775,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const apiKey = window.YT_API_KEY;
 
       // Batch-collect ids in order and validate once
-      const ytEntries = urls
-        .map(u => ({ url: u, id: isYouTubeUrl(u) ? getYouTubeId(u) : null }));
+      const ytEntries = urls.map(u => ({ url: u, id: isYouTubeUrl(u) ? getYouTubeId(u) : null }));
 
       let okSet = null;
       const idList = ytEntries.map(e => e.id).filter(Boolean);
@@ -752,35 +792,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       for (const { url, id } of ytEntries) {
         const isYT = !!id;
         if (!isYT) {
-          // Non-YouTube URL
+          // Non-YouTube URL: simple card + title async
           const card = document.createElement('div');
           card.className = 'video-card';
           card.dataset.src = url;
           card.appendChild(createIndexBadge());
-          card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
+          const cap = document.createElement('div');
+          cap.className = 'video-name video-filename';
+          cap.textContent = extractFileNameFromUrl(url);
+          cap.title = cap.textContent;
+          card.appendChild(cap);
           urlVideoList.appendChild(card);
           initCard(card);
-          fetchVideoTitle(url).then(title => {
-            const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-            if (textNode) textNode.nodeValue = title;
-          });
+          fetchVideoTitle(url).then(title => { cap.textContent = title; cap.title = title; });
           keptUrls.push(url);
           continue;
         }
 
         const playable = !apiKey || !id || okSet === null || okSet.has(id);
         if (playable) {
-          const card = document.createElement('div');
-          card.className = 'video-card';
-          card.dataset.src = url;
-          card.appendChild(createIndexBadge());
-          card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
-          urlVideoList.appendChild(card);
-          initCard(card);
-          fetchVideoTitle(url).then(title => {
-            const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-            if (textNode) textNode.nodeValue = title;
-          });
+          await addYoutubeUrlCard(url); // will fetch title (noembed) + thumbnail (ytimg fallback)
           keptUrls.push(url);
         }
       }
@@ -793,19 +824,49 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // add card helper (use only AFTER validation)
-  async function addYoutubeUrlCard(url) {
+  // ---------- UPDATED: generalized addYoutubeUrlCard with optional {thumbUrl, title} ----------
+  async function addYoutubeUrlCard(url, opts = {}) {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.dataset.src = url;
-    card.appendChild(createIndexBadge());
-    card.appendChild(document.createTextNode(extractFileNameFromUrl(url)));
+
+    const badge = createIndexBadge();
+    const img = document.createElement('img');
+    img.className = 'thumb';
+    img.alt = 'thumbnail';
+    img.style.width = '100%';
+    img.style.display = 'block';
+
+    const cap = document.createElement('div');
+    cap.className = 'video-name video-filename';
+    const initialTitle = opts.title || extractFileNameFromUrl(url);
+    cap.textContent = initialTitle;
+    cap.title = initialTitle;
+
+    card.append(badge, img, cap);
     (urlVideoList || videoSelectionDiv).appendChild(card);
     initCard(card);
-    fetchVideoTitle(url).then(title => {
-      const textNode = Array.from(card.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-      if (textNode) textNode.nodeValue = title;
-    });
+
+    // Titre via noembed (non bloquant) si pas fourni
+    if (!opts.title) {
+      fetchVideoTitle(url).then(title => {
+        cap.textContent = title;
+        cap.title = title;
+      }).catch(()=>{});
+    }
+
+    // Miniature
+    const id = getYouTubeId(url);
+    if (id) {
+      if (opts.thumbUrl) {
+        img.src = opts.thumbUrl; // URL de l'API déjà validée
+      } else {
+        setYouTubeThumbWithFallback(img, id); // fallback sans API
+      }
+    } else {
+      // URL non YouTube : pas de miniature ici
+      img.remove();
+    }
   }
 
   // Load saved URLs (with validation)
@@ -927,7 +988,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // YouTube playlist import (validate & add)
+  // YouTube playlist import (validate & add) — UPDATED to include snippet (thumbs + titles)
   if (ytPlaylistBtn && ytPlaylistInput) {
     ytPlaylistBtn.addEventListener('click', async () => {
       const url = ytPlaylistInput.value.trim();
@@ -946,10 +1007,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!ids.length) {
           ytPlaylistStatus.textContent = "Aucune vidéo trouvée dans cette playlist.";
         } else {
-          const { ok, blocked } = await validateEmbeddableIds(apiKey, ids);
+          const { ok, blocked, thumbs, titles } = await validateEmbeddableIds(apiKey, ids);
           let added = 0, refused = 0;
           for (const id of ok) {
-            await addYoutubeUrlCard(`https://www.youtube.com/watch?v=${id}`);
+            const urlItem = `https://www.youtube.com/watch?v=${id}`;
+            await addYoutubeUrlCard(urlItem, {
+              thumbUrl: thumbs.get(id) || null,
+              title: titles.get(id) || null
+            });
             added++;
           }
           refused = blocked.size;
