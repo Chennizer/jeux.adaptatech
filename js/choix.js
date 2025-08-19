@@ -289,7 +289,26 @@ document.addEventListener('DOMContentLoaded', () => {
       tilePickerGrid.appendChild(sep);
       tilePickerGrid.appendChild(outCat);
     }
+
+    const inWidth = layoutTileSection(inCat);
+    const outWidth = layoutTileSection(outCat);
+    const base = Math.max(inWidth, outWidth, 200);
+    tilePickerGrid.style.width = base + 'px';
   }
+
+  function layoutTileSection(section) {
+    const count = section.childElementCount;
+    if (!count) return 0;
+    const cols = Math.ceil(Math.sqrt(count));
+    const tileSize = 100;
+    const gap = 10;
+    const width = cols * tileSize + (cols - 1) * gap;
+    section.style.width = width + 'px';
+    return width;
+  }
+
+  // Expose for external scripts (e.g., custom video importer)
+  window.populateTilePickerGrid = populateTilePickerGrid;
 
   function updateStartButtonState() {
     startGameButton.disabled = selectedTileIndices.length !== desiredTileCount;
@@ -482,11 +501,11 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSelectedIndex = (currentSelectedIndex - 1 + total) % total;
       updateSelection();
     } else if (e.key === 'ArrowUp') {
-      const cols = Math.floor(Math.sqrt(total)) || 1;
+      const cols = Math.ceil(Math.sqrt(total)) || 1;
       currentSelectedIndex = (currentSelectedIndex - cols + total) % total;
       updateSelection();
     } else if (e.key === 'ArrowDown') {
-      const cols = Math.floor(Math.sqrt(total)) || 1;
+      const cols = Math.ceil(Math.sqrt(total)) || 1;
       currentSelectedIndex = (currentSelectedIndex + cols) % total;
       updateSelection();
     } else if (e.key === ' ' && mode !== 'flashcard') {
