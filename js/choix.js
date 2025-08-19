@@ -1,3 +1,39 @@
+// YouTube player helpers
+let youtubePlayer = null;
+let youtubeApiReady = false;
+let pendingYouTubeId = null;
+function isYouTubeUrl(url) {
+  return /youtu(?:\.be|be\.com)/.test(url);
+}
+function getYouTubeId(url) {
+  const match = url.match(/(?:v=|\/)([A-Za-z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+function onYouTubePlayerReady() {
+  const iframe = youtubePlayer.getIframe();
+  if (iframe) iframe.style.pointerEvents = 'none';
+}
+function onYouTubePlayerStateChange(e) {
+  if (e.data === YT.PlayerState.ENDED && window.__choixHandleVideoEnd) {
+    window.__choixHandleVideoEnd();
+  }
+}
+function createYouTubePlayer(id) {
+  youtubePlayer = new YT.Player('youtube-player', {
+    host: 'https://www.youtube-nocookie.com',
+    videoId: id || undefined,
+    playerVars: { controls:0, disablekb:1, fs:0, modestbranding:1, rel:0, playsinline:1 },
+    events: { onReady: onYouTubePlayerReady, onStateChange: onYouTubePlayerStateChange }
+  });
+}
+function onYouTubeIframeAPIReady() {
+  youtubeApiReady = true;
+  if (pendingYouTubeId) {
+    createYouTubePlayer(pendingYouTubeId);
+    pendingYouTubeId = null;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const gameOptionsModal = document.getElementById('game-options');
   const tileCountInput = document.getElementById('tile-count');
@@ -21,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
   const tilePickerModal = document.getElementById('tile-picker-modal');
   const tilePickerGrid = document.getElementById('tile-picker-grid');
+  const tilePickerPanel = tilePickerModal ? tilePickerModal.querySelector('#control-panel-options') : null;
   const tileCountDisplay = document.getElementById('tile-count-display');
   const startGameButton = document.getElementById('start-game-button');
   const categorySelect = document.getElementById('categorySelect');
@@ -28,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
   const videoSource = document.getElementById('video-source');
+  const youtubeDiv = document.getElementById('youtube-player');
 
   // Hide the preview-equals-scan option until relevant
   previewEqualsScanContainer.style.display = 'none';
@@ -40,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedTileIndices = [];
   let currentSelectedIndex = 0;
   let videoPlaying = false;
+  let currentVideoUrl = '';
   let autoScanInterval = null;
   let scanningActive = false;
   let flashcardTimer = null;
@@ -241,13 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function populateTilePickerGrid() {
     tilePickerGrid.innerHTML = '';
     const inCat = document.createElement('div');
-    inCat.style.display = 'flex';
-    inCat.style.flexWrap = 'wrap';
-    inCat.style.gap = '10px';
     const outCat = document.createElement('div');
-    outCat.style.display = 'flex';
-    outCat.style.flexWrap = 'wrap';
-    outCat.style.gap = '10px';
 
     mediaChoices.forEach((choice, idx) => {
       const matches = currentCategory === 'all' ||
@@ -279,17 +312,54 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    tilePickerGrid.appendChild(inCat);
+    const tileSize = 100;
+    const gap = 10;
+    let inWidth = 0;
+    let outWidth = 0;
+
+    if (inCat.childNodes.length) {
+      const cols = Math.ceil(Math.sqrt(inCat.childNodes.length));
+      inWidth = cols * tileSize + (cols - 1) * gap;
+      Object.assign(inCat.style, {
+        display: 'grid',
+        gridTemplateColumns: `repeat(${cols}, ${tileSize}px)`,
+        gap: `${gap}px`,
+        width: `${inWidth}px`,
+        margin: '10px auto'
+      });
+      tilePickerGrid.appendChild(inCat);
+    }
+
     if (outCat.childNodes.length) {
-      const sep = document.createElement('div');
-      sep.style.width = '100%';
-      sep.style.height = '2px';
-      sep.style.backgroundColor = '#ccc';
-      sep.style.margin = '10px 0';
-      tilePickerGrid.appendChild(sep);
+      if (inCat.childNodes.length) {
+        const sep = document.createElement('div');
+        sep.style.width = '100%';
+        sep.style.height = '2px';
+        sep.style.backgroundColor = '#ccc';
+        sep.style.margin = '10px 0';
+        tilePickerGrid.appendChild(sep);
+      }
+      const cols = Math.ceil(Math.sqrt(outCat.childNodes.length));
+      outWidth = cols * tileSize + (cols - 1) * gap;
+      Object.assign(outCat.style, {
+        display: 'grid',
+        gridTemplateColumns: `repeat(${cols}, ${tileSize}px)`,
+        gap: `${gap}px`,
+        width: `${outWidth}px`,
+        margin: '10px auto'
+      });
       tilePickerGrid.appendChild(outCat);
     }
+
+    const maxWidth = Math.max(inWidth, outWidth);
+    if (tilePickerPanel) {
+      const panelWidth = Math.max(360, maxWidth + 40);
+      tilePickerPanel.style.width = `${panelWidth}px`;
+    }
   }
+
+  // Expose for external scripts (e.g., custom video importer)
+  window.populateTilePickerGrid = populateTilePickerGrid;
 
   function updateStartButtonState() {
     startGameButton.disabled = selectedTileIndices.length !== desiredTileCount;
@@ -410,8 +480,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resetToChoicesScreen() {
     stopPreview();
-    videoPlayer.pause();
-    videoPlayer.currentTime = 0;
+    if (isYouTubeUrl(currentVideoUrl)) {
+      if (enableResumeVideoCheckbox.checked && youtubePlayer) {
+        videoResumePositions[currentVideoUrl] = youtubePlayer.getCurrentTime();
+      } else {
+        delete videoResumePositions[currentVideoUrl];
+      }
+      if (youtubePlayer) youtubePlayer.stopVideo();
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+    } else {
+      if (enableResumeVideoCheckbox.checked) {
+        videoResumePositions[currentVideoUrl] = videoPlayer.currentTime;
+      } else {
+        delete videoResumePositions[currentVideoUrl];
+      }
+      videoPlayer.pause();
+      videoPlayer.currentTime = 0;
+    }
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
     if (autoScanInterval) clearInterval(autoScanInterval);
     scanningActive = false;
@@ -496,46 +581,81 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function playVideo(videoUrl) {
+    currentVideoUrl = videoUrl;
     pauseGameActivity();
     tileContainer.style.display = 'none';
     tilePickerModal.style.display = 'none';
     gameOptionsModal.style.display = 'none';
     videoContainer.style.display = 'flex';
-    videoSource.src = videoUrl;
-    videoPlayer.removeAttribute('controls');
-    videoPlayer.load();
-    videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+    videoPlaying = true;
+
+    if (isYouTubeUrl(videoUrl)) {
+      videoSource.src = '';
+      videoPlayer.pause();
+      videoPlayer.style.display = 'none';
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      const id = getYouTubeId(videoUrl);
+      const startTime = enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] ? videoResumePositions[videoUrl] : 0;
+      const loadVideo = () => {
+        if (youtubePlayer) {
+          youtubePlayer.loadVideoById(id, startTime);
+        } else {
+          pendingYouTubeId = id;
+        }
+      };
+      if (youtubeApiReady) {
+        if (!youtubePlayer) createYouTubePlayer(id);
+        loadVideo();
+      } else {
+        pendingYouTubeId = id;
       }
-      videoPlayer.play();
-    };
+    } else {
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+      videoPlayer.style.display = 'block';
+      videoSource.src = videoUrl;
+      videoPlayer.removeAttribute('controls');
+      videoPlayer.load();
+      videoPlayer.onloadedmetadata = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+          videoPlayer.currentTime = videoResumePositions[videoUrl];
+        }
+        videoPlayer.play();
+      };
+    }
+
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(() => {});
     } else if (videoContainer.webkitRequestFullscreen) {
       videoContainer.webkitRequestFullscreen();
     }
+
     if (enableTimeLimitCheckbox.checked) {
       const limit = parseInt(timeLimitInput.value, 10) || 60;
       if (videoTimeLimitTimeout) clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
           if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            const t = isYouTubeUrl(videoUrl) && youtubePlayer ? youtubePlayer.getCurrentTime() : videoPlayer.currentTime;
+            videoResumePositions[videoUrl] = t;
           } else {
             delete videoResumePositions[videoUrl];
           }
-          videoPlayer.pause();
+          if (isYouTubeUrl(videoUrl) && youtubePlayer) {
+            youtubePlayer.pauseVideo();
+          } else {
+            videoPlayer.pause();
+          }
           resetToChoicesScreen();
         }
       }, limit * 1000);
     }
   }
 
-  videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[videoSource.src];
+  function handleVideoEnd() {
+    delete videoResumePositions[currentVideoUrl];
     videoPlaying = false;
     videoContainer.style.display = 'none';
+    if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mode === 'flashcard') {
       currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
       renderFlashcard();
@@ -543,7 +663,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     resumeGameActivity();
     tileContainer.style.display = 'flex';
-  });
+    currentVideoUrl = '';
+  }
+
+  videoPlayer.addEventListener('ended', handleVideoEnd);
+  window.__choixHandleVideoEnd = handleVideoEnd;
 
   chooseTilesButton.addEventListener('click', () => {
     desiredTileCount = (mode === 'thisOrThat') ? 2 : (parseInt(tileCountInput.value, 10) || 0);
