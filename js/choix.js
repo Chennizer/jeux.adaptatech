@@ -291,6 +291,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Expose for external scripts (e.g., custom video importer)
+  window.populateTilePickerGrid = populateTilePickerGrid;
+
   function updateStartButtonState() {
     startGameButton.disabled = selectedTileIndices.length !== desiredTileCount;
   }
