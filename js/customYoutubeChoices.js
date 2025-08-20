@@ -131,7 +131,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const addUrlInput = document.getElementById('add-video-url-input');
   const playlistBtn = document.getElementById('yt-playlist-import-button');
   const playlistInput = document.getElementById('yt-playlist-url-input');
-  const playlistStatus = document.getElementById('yt-playlist-status');
   const clearButton = document.getElementById('clear-videos-button');
 
   await loadStoredYoutubeUrls();
@@ -153,25 +152,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       const url = playlistInput.value.trim();
       const pid = getPlaylistIdFromUrl(url);
       const apiKey = window.YT_API_KEY;
-      playlistStatus.textContent = '';
-      if (!url) { playlistStatus.textContent = 'Veuillez entrer une URL de playlist.'; return; }
-      if (!pid) { playlistStatus.textContent = "URL invalide: impossible d'extraire l'identifiant de playlist."; return; }
-      if (!apiKey) { playlistStatus.textContent = 'Clé API absente (window.YT_API_KEY).'; return; }
+      if (!url) { alert('Veuillez entrer une URL de playlist.'); return; }
+      if (!pid) { alert("URL invalide: impossible d'extraire l'identifiant de playlist."); return; }
+      if (!apiKey) { alert('Clé API absente (window.YT_API_KEY).'); return; }
       playlistBtn.disabled = true;
-      playlistStatus.textContent = 'Import en cours…';
       try {
         const ids = await fetchPlaylistVideoIds(apiKey, pid);
         const ok = await validateEmbeddableIds(apiKey, ids);
-        let added = 0;
         for (const id of ok) {
           await addVideoById(id);
-          added++;
         }
-        playlistStatus.textContent = `Import terminé: ${added} ajouté(s).`;
         if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
       } catch (err) {
         console.error(err);
-        playlistStatus.textContent = 'Import échoué: ' + (err?.message || 'erreur');
+        alert('Import échoué: ' + (err?.message || 'erreur'));
       } finally {
         playlistBtn.disabled = false;
       }
