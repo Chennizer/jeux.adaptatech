@@ -107,8 +107,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function stopPreview() {
     if (currentPreview) {
-      currentPreview.pause();
-      currentPreview.currentTime = 0;
+      if (currentPreview === 'youtube') {
+        try { youtubePlayer.stopVideo(); } catch {}
+        if (!videoPlaying) {
+          videoContainer.style.display = 'none';
+          videoContainer.style.visibility = 'visible';
+          if (youtubeDiv) youtubeDiv.style.display = 'none';
+        }
+      } else {
+        currentPreview.pause();
+        currentPreview.currentTime = 0;
+      }
       currentPreview = null;
     }
     if (previewTimeout) {
@@ -449,7 +458,43 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!selectedTileIndices.length) return;
     const mediaIdx = selectedTileIndices[idx];
     const videoFile = mediaChoices[mediaIdx].video;
-    if (videoFile) {
+    if (!videoFile) return;
+    // Handle YouTube previews separately
+    if (isYouTubeUrl(videoFile)) {
+      const id = getYouTubeId(videoFile);
+      if (!id) return;
+      if (videoContainer) {
+        videoContainer.style.visibility = 'hidden';
+        videoContainer.style.display = 'block';
+      }
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      const startPreview = () => {
+        try {
+          youtubePlayer.seekTo(0, true);
+          youtubePlayer.playVideo();
+        } catch {}
+      };
+      if (!youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          host: 'https://www.youtube-nocookie.com',
+          videoId: id,
+          width: 0,
+          height: 0,
+          playerVars: { controls: 0, disablekb: 1, rel: 0, modestbranding: 1 },
+          events: { onReady: startPreview }
+        });
+      } else {
+        youtubePlayer.loadVideoById(id);
+        startPreview();
+      }
+      currentPreview = 'youtube';
+      let ms = 10000;
+      if (previewEqualsScanCheckbox.checked) {
+        const scanMs = (parseInt(scanDelayInput.value, 10) || 3) * 1000;
+        ms = Math.max(scanMs - 500, 0);
+      }
+      previewTimeout = setTimeout(stopPreview, ms);
+    } else {
       currentPreview = new Audio(videoFile);
       currentPreview.play().catch(console.error);
       // default 10s, or (scanTime - 500ms) if checked
