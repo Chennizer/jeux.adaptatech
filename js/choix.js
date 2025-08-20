@@ -29,6 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
   const videoSource = document.getElementById('video-source');
+  const youtubeDiv = document.getElementById('youtube-player');
+  let youtubePlayer = null;
+  let youtubePreviewPlayer = null;
+  let currentVideoUrl = null;
 
   // Hide the preview-equals-scan option until relevant
   previewEqualsScanContainer.style.display = 'none';
@@ -53,6 +57,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let videoTimeLimitTimeout = null;
   let videoResumePositions = {};
   let currentCategory = "all";
+
+  function isYouTubeUrl(url) {
+    return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/)|(youtu\.be\/))/.test(url);
+  }
+
+  function getYouTubeId(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtu.be')) {
+        return u.pathname.slice(1);
+      }
+      const id = u.searchParams.get('v');
+      if (id) return id;
+      const m = url.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
 
   // Inactivity timer helpers
   function clearInactivityTimer() {
@@ -85,9 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function stopPreview() {
     if (currentPreview) {
-      currentPreview.pause();
-      currentPreview.currentTime = 0;
+      if (typeof currentPreview.pause === 'function') {
+        currentPreview.pause();
+        currentPreview.currentTime = 0;
+      }
       currentPreview = null;
+    }
+    if (youtubePreviewPlayer && youtubePreviewPlayer.stopVideo) {
+      try { youtubePreviewPlayer.stopVideo(); } catch {}
     }
     if (previewTimeout) {
       clearTimeout(previewTimeout);
@@ -428,20 +456,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const mediaIdx = selectedTileIndices[idx];
     const videoFile = mediaChoices[mediaIdx].video;
     if (videoFile) {
-      currentPreview = new Audio(videoFile);
-      currentPreview.play().catch(console.error);
       // default 10s, or (scanTime - 500ms) if checked
       let ms = 10000;
       if (previewEqualsScanCheckbox.checked) {
         const scanMs = (parseInt(scanDelayInput.value, 10) || 3) * 1000;
         ms = Math.max(scanMs - 500, 0);
       }
-      previewTimeout = setTimeout(stopPreview, ms);
+      if (isYouTubeUrl(videoFile)) {
+        const id = getYouTubeId(videoFile);
+        if (!id || !window.YT || !YT.Player) return;
+        const startPreview = () => {
+          try { youtubePreviewPlayer.unMute(); } catch {}
+          youtubePreviewPlayer.playVideo();
+          previewTimeout = setTimeout(stopPreview, ms);
+        };
+        const divId = 'youtube-preview';
+        if (!youtubePreviewPlayer) {
+          let div = document.getElementById(divId);
+          if (!div) {
+            div = document.createElement('div');
+            div.id = divId;
+            div.style.display = 'none';
+            document.body.appendChild(div);
+          }
+          youtubePreviewPlayer = new YT.Player(divId, {
+            videoId: id,
+            playerVars: { controls: 0 },
+            events: { onReady: startPreview }
+          });
+        } else {
+          youtubePreviewPlayer.loadVideoById(id);
+          startPreview();
+        }
+        currentPreview = youtubePreviewPlayer;
+      } else {
+        currentPreview = new Audio(videoFile);
+        currentPreview.play().catch(console.error);
+        previewTimeout = setTimeout(stopPreview, ms);
+      }
     }
   }
 
   function resetToChoicesScreen() {
     stopPreview();
+    if (currentVideoUrl && isYouTubeUrl(currentVideoUrl) && youtubePlayer) {
+      try { youtubePlayer.stopVideo(); } catch {}
+    }
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
@@ -463,6 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
       autoScanInterval = setInterval(cycleToNextTile, d * 1000);
       scanningActive = true;
     }
+    currentVideoUrl = null;
   }
 
   document.addEventListener('keydown', e => {
@@ -533,15 +594,56 @@ document.addEventListener('DOMContentLoaded', () => {
     tilePickerModal.style.display = 'none';
     gameOptionsModal.style.display = 'none';
     videoContainer.style.display = 'flex';
-    videoSource.src = videoUrl;
-    videoPlayer.removeAttribute('controls');
-    videoPlayer.load();
-    videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+    currentVideoUrl = videoUrl;
+    if (isYouTubeUrl(videoUrl)) {
+      videoPlayer.style.display = 'none';
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      const id = getYouTubeId(videoUrl);
+      const startPlayback = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
+          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
+        }
+        youtubePlayer.playVideo();
+      };
+      const onReady = () => { startPlayback(); };
+      const onStateChange = (e) => {
+        if (e.data === YT.PlayerState.ENDED) {
+          delete videoResumePositions[videoUrl];
+          videoPlaying = false;
+          videoContainer.style.display = 'none';
+          if (mode === 'flashcard') {
+            currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
+            renderFlashcard();
+            startFlashcardTimer();
+          }
+          resumeGameActivity();
+          tileContainer.style.display = 'flex';
+        }
+      };
+      if (!youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          host: 'https://www.youtube-nocookie.com',
+          videoId: id,
+          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
+          events: { onReady, onStateChange }
+        });
+      } else {
+        youtubePlayer.loadVideoById(id);
+        startPlayback();
       }
-      videoPlayer.play();
-    };
+    } else {
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+      videoPlayer.style.display = 'block';
+      videoSource.src = videoUrl;
+      videoPlayer.removeAttribute('controls');
+      videoPlayer.load();
+      videoPlayer.onloadedmetadata = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+          videoPlayer.currentTime = videoResumePositions[videoUrl];
+        }
+        videoPlayer.play();
+      };
+    }
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(() => {});
     } else if (videoContainer.webkitRequestFullscreen) {
@@ -553,19 +655,28 @@ document.addEventListener('DOMContentLoaded', () => {
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
           if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
+              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+            } else {
+              videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            }
           } else {
             delete videoResumePositions[videoUrl];
           }
-          videoPlayer.pause();
+          if (isYouTubeUrl(videoUrl) && youtubePlayer) {
+            youtubePlayer.pauseVideo();
+          } else {
+            videoPlayer.pause();
+          }
           resetToChoicesScreen();
         }
       }, limit * 1000);
     }
+    videoPlaying = true;
   }
 
   videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[videoSource.src];
+    delete videoResumePositions[currentVideoUrl || videoSource.src];
     videoPlaying = false;
     videoContainer.style.display = 'none';
     if (mode === 'flashcard') {
@@ -575,6 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     resumeGameActivity();
     tileContainer.style.display = 'flex';
+    currentVideoUrl = null;
   });
 
   chooseTilesButton.addEventListener('click', () => {
