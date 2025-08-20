@@ -1,5 +1,6 @@
 // Builds mediaChoices from YouTube URLs or playlists
 const mediaChoices = [];
+const YT_STORAGE_KEY = 'choiceYoutubeUrls';
 
 function isYouTubeUrl(url) {
   return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/\S+)|(youtu\.be\/\S+))$/.test(url);
@@ -101,14 +102,39 @@ async function addVideoById(id) {
     video: url,
     category: 'custom'
   });
+  saveYoutubeUrls();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function saveYoutubeUrls() {
+  try {
+    const urls = mediaChoices.map(m => m.video);
+    localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
+  } catch {}
+}
+
+async function loadStoredYoutubeUrls() {
+  const saved = localStorage.getItem(YT_STORAGE_KEY);
+  if (!saved) return;
+  try {
+    const urls = JSON.parse(saved);
+    for (const url of urls) {
+      const id = getYouTubeId(url);
+      if (id) await addVideoById(id);
+    }
+  } catch (e) {
+    console.error('Failed to load stored YouTube URLs', e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   const addUrlBtn = document.getElementById('add-video-url-button');
   const addUrlInput = document.getElementById('add-video-url-input');
   const playlistBtn = document.getElementById('yt-playlist-import-button');
   const playlistInput = document.getElementById('yt-playlist-url-input');
   const playlistStatus = document.getElementById('yt-playlist-status');
+
+  await loadStoredYoutubeUrls();
+  if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
 
   if (addUrlBtn && addUrlInput) {
     addUrlBtn.addEventListener('click', async () => {

@@ -1,5 +1,6 @@
 // Builds mediaChoices from local video files
 const mediaChoices = [];
+const LOCAL_VIDEOS_STORAGE_KEY = 'choiceLocalVideos';
 
 // Generate a thumbnail for a given video File
 async function makeThumbnailFromVideo(file) {
@@ -45,32 +46,75 @@ async function makeThumbnailFromVideo(file) {
   });
 }
 
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 async function addFiles(files) {
   for (const file of files) {
     if (!/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(file.name)) continue;
-    const src = URL.createObjectURL(file);
+    const dataUrl = await readFileAsDataURL(file);
     const thumb = await makeThumbnailFromVideo(file);
     const audio = document.createElement('audio');
-    audio.src = src;
+    audio.src = dataUrl;
     audio.preload = 'auto';
     audio.load();
     mediaChoices.push({
       name: file.name,
       image: thumb,
-      video: src,
+      video: dataUrl,
       audioElement: audio,
       category: 'custom'
     });
   }
+  saveLocalVideos();
   if (typeof populateTilePickerGrid === 'function') {
     populateTilePickerGrid();
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function saveLocalVideos() {
+  try {
+    const data = mediaChoices.map(({ name, image, video }) => ({ name, image, video }));
+    localStorage.setItem(LOCAL_VIDEOS_STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+async function loadLocalVideos() {
+  const saved = localStorage.getItem(LOCAL_VIDEOS_STORAGE_KEY);
+  if (!saved) return;
+  try {
+    const arr = JSON.parse(saved);
+    for (const item of arr) {
+      const audio = document.createElement('audio');
+      audio.src = item.video;
+      audio.preload = 'auto';
+      audio.load();
+      mediaChoices.push({
+        name: item.name,
+        image: item.image,
+        video: item.video,
+        audioElement: audio,
+        category: 'custom'
+      });
+    }
+  } catch (e) {
+    console.error('Failed to load local videos', e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   const addVideoButton = document.getElementById('add-video-file-button');
   const addVideoInput = document.getElementById('add-video-input');
   const pickFolderButton = document.getElementById('pick-video-folder-button');
+
+  await loadLocalVideos();
+  if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
 
   if (addVideoButton && addVideoInput) {
     addVideoButton.addEventListener('click', () => addVideoInput.click());
