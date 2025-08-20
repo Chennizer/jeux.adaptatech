@@ -32,6 +32,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const youtubeDiv = document.getElementById('youtube-player');
   let youtubePlayer = null;
   let currentVideoUrl = null;
+  const cycleSfx = new Audio("../../sounds/woosh.mp3");
+  cycleSfx.preload = 'auto';
+  cycleSfx.load();
 
   // Hide the preview-equals-scan option until relevant
   previewEqualsScanContainer.style.display = 'none';
@@ -133,7 +136,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function playCycleSound() {
     if (enableCycleSoundCheckbox.checked) {
-      new Audio("../../sounds/woosh.mp3").play().catch(console.error);
+      try {
+        cycleSfx.currentTime = 0;
+        cycleSfx.play();
+      } catch (e) {
+        console.error(e);
+      }
     }
   }
 
@@ -495,8 +503,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       previewTimeout = setTimeout(stopPreview, ms);
     } else {
-      currentPreview = new Audio(videoFile);
-      currentPreview.play().catch(console.error);
+      const choice = mediaChoices[mediaIdx];
+      let audioEl = choice.audioElement;
+      if (!audioEl) {
+        const src = choice.audio || choice.video;
+        audioEl = new Audio(src);
+        audioEl.preload = 'auto';
+        audioEl.load();
+        choice.audioElement = audioEl;
+      }
+      currentPreview = audioEl;
+      try {
+        currentPreview.currentTime = 0;
+        currentPreview.play();
+      } catch (e) {
+        console.error(e);
+      }
       // default 10s, or (scanTime - 500ms) if checked
       let ms = 10000;
       if (previewEqualsScanCheckbox.checked) {

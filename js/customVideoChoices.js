@@ -50,10 +50,15 @@ async function addFiles(files) {
     if (!/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(file.name)) continue;
     const src = URL.createObjectURL(file);
     const thumb = await makeThumbnailFromVideo(file);
+    const audio = document.createElement('audio');
+    audio.src = src;
+    audio.preload = 'auto';
+    audio.load();
     mediaChoices.push({
       name: file.name,
       image: thumb,
       video: src,
+      audioElement: audio,
       category: 'custom'
     });
   }
