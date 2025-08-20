@@ -108,10 +108,20 @@ async function loadLocalVideos() {
   }
 }
 
+function clearAllLocalVideos() {
+  mediaChoices.length = 0;
+  try {
+    localStorage.removeItem(LOCAL_VIDEOS_STORAGE_KEY);
+  } catch {}
+  if (typeof window.resetTileSelections === 'function') window.resetTileSelections();
+  if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const addVideoButton = document.getElementById('add-video-file-button');
   const addVideoInput = document.getElementById('add-video-input');
   const pickFolderButton = document.getElementById('pick-video-folder-button');
+  const clearButton = document.getElementById('clear-all-button');
 
   await loadLocalVideos();
   if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
@@ -140,5 +150,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   } else if (pickFolderButton) {
     pickFolderButton.style.display = 'none';
+  }
+
+  if (clearButton) {
+    clearButton.addEventListener('click', () => {
+      clearAllLocalVideos();
+    });
   }
 });

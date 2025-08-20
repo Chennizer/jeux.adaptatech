@@ -126,12 +126,22 @@ async function loadStoredYoutubeUrls() {
   }
 }
 
+function clearAllYoutubeVideos() {
+  mediaChoices.length = 0;
+  try {
+    localStorage.removeItem(YT_STORAGE_KEY);
+  } catch {}
+  if (typeof window.resetTileSelections === 'function') window.resetTileSelections();
+  if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const addUrlBtn = document.getElementById('add-video-url-button');
   const addUrlInput = document.getElementById('add-video-url-input');
   const playlistBtn = document.getElementById('yt-playlist-import-button');
   const playlistInput = document.getElementById('yt-playlist-url-input');
   const playlistStatus = document.getElementById('yt-playlist-status');
+  const clearBtn = document.getElementById('clear-all-button');
 
   await loadStoredYoutubeUrls();
   if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
@@ -174,6 +184,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       } finally {
         playlistBtn.disabled = false;
       }
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      clearAllYoutubeVideos();
     });
   }
 });
