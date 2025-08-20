@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     addUrlBtn.addEventListener('click', async () => {
       const url = addUrlInput.value.trim();
       const id = getYouTubeId(url);
-      if (!id) { alert('URL YouTube invalide'); return; }
+      if (!id) { console.error('URL YouTube invalide'); return; }
       await addVideoById(id);
       addUrlInput.value = '';
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
@@ -152,9 +152,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const url = playlistInput.value.trim();
       const pid = getPlaylistIdFromUrl(url);
       const apiKey = window.YT_API_KEY;
-      if (!url) { alert('Veuillez entrer une URL de playlist.'); return; }
-      if (!pid) { alert("URL invalide: impossible d'extraire l'identifiant de playlist."); return; }
-      if (!apiKey) { alert('Clé API absente (window.YT_API_KEY).'); return; }
+      if (!url) { console.error('Veuillez entrer une URL de playlist.'); return; }
+      if (!pid) { console.error("URL invalide: impossible d'extraire l'identifiant de playlist."); return; }
+      if (!apiKey) { console.error('Clé API absente (window.YT_API_KEY).'); return; }
       playlistBtn.disabled = true;
       try {
         const ids = await fetchPlaylistVideoIds(apiKey, pid);
@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
       } catch (err) {
         console.error(err);
-        alert('Import échoué: ' + (err?.message || 'erreur'));
+        console.error('Import échoué: ' + (err?.message || 'erreur'));
       } finally {
         playlistBtn.disabled = false;
       }
