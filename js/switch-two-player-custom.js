@@ -441,6 +441,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const visualOptionsSelect = document.getElementById('special-options-select');
   const videoContainer = document.getElementById('video-container');
   const youtubeDiv = document.getElementById('youtube-player');
+  const tileContainer = document.getElementById('tile-container');
 
   const spacePrompt = document.getElementById('space-prompt');
   const textPrompt = document.getElementById('text-prompt');
@@ -1393,6 +1394,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const src = selectedMedia[currentMediaIndex];
     if (!src) return;
 
+    if (tileContainer) tileContainer.style.display = 'none';
+
     if (isYouTubeUrl(src)) {
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       if (mediaPlayer) mediaPlayer.style.display = 'none';
@@ -1451,8 +1454,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function handleMediaEnd() {
+    if (youtubePlayer && youtubePlayer.stopVideo) {
+      try { youtubePlayer.stopVideo(); } catch {}
+    }
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mediaPlayer) mediaPlayer.style.display = 'none';
+    if (tileContainer) tileContainer.style.display = 'flex';
     if (mode === 'pressBetween') {
       if (playedMedia.length < selectedMedia.length) {
         currentMediaIndex = getNextMediaIndex();
