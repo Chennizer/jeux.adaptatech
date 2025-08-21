@@ -357,8 +357,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const maxWidth = Math.max(inWidth, outWidth);
     if (tilePickerPanel) {
+
       const minPanelWidth = ytImportControls ? 700 : 360;
       const panelWidth = Math.max(minPanelWidth, maxWidth + 40);
+
       tilePickerPanel.style.width = `${panelWidth}px`;
     }
   }

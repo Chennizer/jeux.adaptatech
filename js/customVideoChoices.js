@@ -1,5 +1,6 @@
 // Builds mediaChoices from local video files
 const mediaChoices = [];
+
 const LOCAL_VIDEOS_STORAGE_KEY = 'choiceLocalVideos';
 
 // Generate a thumbnail for a given video File
@@ -46,6 +47,7 @@ async function makeThumbnailFromVideo(file) {
   });
 }
 
+
 function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -73,10 +75,12 @@ async function addFiles(files) {
     });
   }
   saveLocalVideos();
+
   if (typeof populateTilePickerGrid === 'function') {
     populateTilePickerGrid();
   }
 }
+
 
 function saveLocalVideos() {
   try {
@@ -117,6 +121,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadLocalVideos();
   if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
 
+
   if (addVideoButton && addVideoInput) {
     addVideoButton.addEventListener('click', () => addVideoInput.click());
     addVideoInput.addEventListener('change', async () => {
@@ -143,6 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     pickFolderButton.style.display = 'none';
   }
 
+
   if (clearButton) {
     clearButton.addEventListener('click', () => {
       mediaChoices.length = 0;
@@ -150,4 +156,5 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
     });
   }
+
 });
