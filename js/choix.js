@@ -29,6 +29,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
   const videoSource = document.getElementById('video-source');
+  const youtubeDiv = document.getElementById('youtube-player');
+  const ytImportControls = document.getElementById('yt-import-controls');
+  let youtubePlayer = null;
+  let currentVideoUrl = null;
+  const cycleSfx = new Audio("../../sounds/woosh.mp3");
+  cycleSfx.preload = 'auto';
+  cycleSfx.load();
 
   // Hide the preview-equals-scan option until relevant
   previewEqualsScanContainer.style.display = 'none';
@@ -53,6 +60,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let videoTimeLimitTimeout = null;
   let videoResumePositions = {};
   let currentCategory = "all";
+
+  function isYouTubeUrl(url) {
+    return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/)|(youtu\.be\/))/.test(url);
+  }
+
+  function getYouTubeId(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtu.be')) {
+        return u.pathname.slice(1);
+      }
+      const id = u.searchParams.get('v');
+      if (id) return id;
+      const m = url.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
 
   // Inactivity timer helpers
   function clearInactivityTimer() {
@@ -85,8 +111,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function stopPreview() {
     if (currentPreview) {
-      currentPreview.pause();
-      currentPreview.currentTime = 0;
+      if (currentPreview === 'youtube') {
+        try { youtubePlayer.stopVideo(); } catch {}
+        if (!videoPlaying) {
+          videoContainer.style.display = 'none';
+          videoContainer.style.visibility = 'visible';
+          if (youtubeDiv) youtubeDiv.style.display = 'none';
+        }
+      } else {
+        currentPreview.pause();
+        currentPreview.currentTime = 0;
+      }
       currentPreview = null;
     }
     if (previewTimeout) {
@@ -102,7 +137,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function playCycleSound() {
     if (enableCycleSoundCheckbox.checked) {
-      new Audio("../../sounds/woosh.mp3").play().catch(console.error);
+      try {
+        cycleSfx.currentTime = 0;
+        cycleSfx.play();
+      } catch (e) {
+        console.error(e);
+      }
     }
   }
 
@@ -240,6 +280,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Tile picker
   function populateTilePickerGrid() {
+    selectedTileIndices = selectedTileIndices.filter(i => i < mediaChoices.length);
+    updateStartButtonState();
     tilePickerGrid.innerHTML = '';
     const inCat = document.createElement('div');
     const outCat = document.createElement('div');
@@ -315,7 +357,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const maxWidth = Math.max(inWidth, outWidth);
     if (tilePickerPanel) {
-      const panelWidth = Math.max(360, maxWidth + 40);
+
+      const minPanelWidth = ytImportControls ? 700 : 360;
+      const panelWidth = Math.max(minPanelWidth, maxWidth + 40);
+
       tilePickerPanel.style.width = `${panelWidth}px`;
     }
   }
@@ -427,9 +472,59 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!selectedTileIndices.length) return;
     const mediaIdx = selectedTileIndices[idx];
     const videoFile = mediaChoices[mediaIdx].video;
-    if (videoFile) {
-      currentPreview = new Audio(videoFile);
-      currentPreview.play().catch(console.error);
+    if (!videoFile) return;
+    // Handle YouTube previews separately
+    if (isYouTubeUrl(videoFile)) {
+      const id = getYouTubeId(videoFile);
+      if (!id) return;
+      if (videoContainer) {
+        videoContainer.style.visibility = 'hidden';
+        videoContainer.style.display = 'block';
+      }
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      const startPreview = () => {
+        try {
+          youtubePlayer.seekTo(0, true);
+          youtubePlayer.playVideo();
+        } catch {}
+      };
+      if (!youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          host: 'https://www.youtube-nocookie.com',
+          videoId: id,
+          width: 0,
+          height: 0,
+          playerVars: { controls: 0, disablekb: 1, rel: 0, modestbranding: 1 },
+          events: { onReady: startPreview }
+        });
+      } else {
+        youtubePlayer.loadVideoById(id);
+        startPreview();
+      }
+      currentPreview = 'youtube';
+      let ms = 10000;
+      if (previewEqualsScanCheckbox.checked) {
+        const scanMs = (parseInt(scanDelayInput.value, 10) || 3) * 1000;
+        ms = Math.max(scanMs - 500, 0);
+      }
+      previewTimeout = setTimeout(stopPreview, ms);
+    } else {
+      const choice = mediaChoices[mediaIdx];
+      let audioEl = choice.audioElement;
+      if (!audioEl) {
+        const src = choice.audio || choice.video;
+        audioEl = new Audio(src);
+        audioEl.preload = 'auto';
+        audioEl.load();
+        choice.audioElement = audioEl;
+      }
+      currentPreview = audioEl;
+      try {
+        currentPreview.currentTime = 0;
+        currentPreview.play();
+      } catch (e) {
+        console.error(e);
+      }
       // default 10s, or (scanTime - 500ms) if checked
       let ms = 10000;
       if (previewEqualsScanCheckbox.checked) {
@@ -442,6 +537,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resetToChoicesScreen() {
     stopPreview();
+    if (currentVideoUrl && isYouTubeUrl(currentVideoUrl) && youtubePlayer) {
+      try { youtubePlayer.stopVideo(); } catch {}
+    }
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
@@ -463,6 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
       autoScanInterval = setInterval(cycleToNextTile, d * 1000);
       scanningActive = true;
     }
+    currentVideoUrl = null;
   }
 
   document.addEventListener('keydown', e => {
@@ -533,15 +632,56 @@ document.addEventListener('DOMContentLoaded', () => {
     tilePickerModal.style.display = 'none';
     gameOptionsModal.style.display = 'none';
     videoContainer.style.display = 'flex';
-    videoSource.src = videoUrl;
-    videoPlayer.removeAttribute('controls');
-    videoPlayer.load();
-    videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+    currentVideoUrl = videoUrl;
+    if (isYouTubeUrl(videoUrl)) {
+      videoPlayer.style.display = 'none';
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      const id = getYouTubeId(videoUrl);
+      const startPlayback = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
+          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
+        }
+        youtubePlayer.playVideo();
+      };
+      const onReady = () => { startPlayback(); };
+      const onStateChange = (e) => {
+        if (e.data === YT.PlayerState.ENDED) {
+          delete videoResumePositions[videoUrl];
+          videoPlaying = false;
+          videoContainer.style.display = 'none';
+          if (mode === 'flashcard') {
+            currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
+            renderFlashcard();
+            startFlashcardTimer();
+          }
+          resumeGameActivity();
+          tileContainer.style.display = 'flex';
+        }
+      };
+      if (!youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          host: 'https://www.youtube-nocookie.com',
+          videoId: id,
+          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
+          events: { onReady, onStateChange }
+        });
+      } else {
+        youtubePlayer.loadVideoById(id);
+        startPlayback();
       }
-      videoPlayer.play();
-    };
+    } else {
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+      videoPlayer.style.display = 'block';
+      videoSource.src = videoUrl;
+      videoPlayer.removeAttribute('controls');
+      videoPlayer.load();
+      videoPlayer.onloadedmetadata = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+          videoPlayer.currentTime = videoResumePositions[videoUrl];
+        }
+        videoPlayer.play();
+      };
+    }
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(() => {});
     } else if (videoContainer.webkitRequestFullscreen) {
@@ -553,19 +693,28 @@ document.addEventListener('DOMContentLoaded', () => {
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
           if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
+              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+            } else {
+              videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            }
           } else {
             delete videoResumePositions[videoUrl];
           }
-          videoPlayer.pause();
+          if (isYouTubeUrl(videoUrl) && youtubePlayer) {
+            youtubePlayer.pauseVideo();
+          } else {
+            videoPlayer.pause();
+          }
           resetToChoicesScreen();
         }
       }, limit * 1000);
     }
+    videoPlaying = true;
   }
 
   videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[videoSource.src];
+    delete videoResumePositions[currentVideoUrl || videoSource.src];
     videoPlaying = false;
     videoContainer.style.display = 'none';
     if (mode === 'flashcard') {
@@ -575,6 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     resumeGameActivity();
     tileContainer.style.display = 'flex';
+    currentVideoUrl = null;
   });
 
   chooseTilesButton.addEventListener('click', () => {
@@ -590,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.documentElement.webkitRequestFullscreen();
     }
     currentCategory = 'all';
-    categorySelect.value = 'all';
+    if (categorySelect) categorySelect.value = 'all';
     populateTilePickerGrid();
   });
 
@@ -634,10 +784,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  categorySelect.addEventListener('change', e => {
-    currentCategory = e.target.value;
-    populateTilePickerGrid();
-  });
+  if (categorySelect) {
+    categorySelect.addEventListener('change', e => {
+      currentCategory = e.target.value;
+      populateTilePickerGrid();
+    });
+  }
 
   // Disable keyboard input until game starts
   inputEnabled = false;
