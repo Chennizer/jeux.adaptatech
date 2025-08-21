@@ -1455,10 +1455,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function handleMediaEnd() {
     if (youtubePlayer && youtubePlayer.stopVideo) {
-      try { youtubePlayer.stopVideo(); } catch {}
+      try {
+        youtubePlayer.stopVideo();
+        if (youtubePlayer.clearVideo) youtubePlayer.clearVideo();
+      } catch {}
     }
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mediaPlayer) mediaPlayer.style.display = 'none';
+    if (videoContainer) videoContainer.style.display = 'none';
     if (tileContainer) tileContainer.style.display = 'flex';
     if (mode === 'pressBetween') {
       if (playedMedia.length < selectedMedia.length) {
