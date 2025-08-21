@@ -51,7 +51,7 @@
     .modal.show{ display:flex; opacity:1; pointer-events:auto; }
     .modal-content{ background:#fff; color:#000; border:2px solid #009688; border-radius:6px; padding:16px; width:min(1100px,92vw); max-height:80vh; overflow:auto; }
 
-    .gm-toolbar{ display:flex; gap:.5rem; align-items:center; margin-bottom:.6rem; }
+    .gm-toolbar{ display:flex; gap:.5rem; align-items:center; margin-bottom:.6rem; flex-wrap:wrap; }
     .gm-grid{ --cell:120px; display:grid; grid-template-columns:repeat(auto-fill,minmax(var(--cell),1fr)); gap:10px; }
     .gm-item{ border:1px solid var(--line); border-radius:8px; background:#fff; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; cursor:pointer; }
     .gm-item img{ width:100%; height:100%; object-fit:contain; }
@@ -97,7 +97,6 @@
         <div class="group">
           <h3>Background / Shape</h3>
 
-          <!-- SAME markup pattern as the Advanced toggle (checkbox then label text) -->
           <div class="row inline">
             <label class="teal-label">
               <input id="bgTransparent" type="checkbox">
@@ -175,8 +174,8 @@
           </div>
 
           <div class="row">
-            <label style="flex:1">Top offset (%) <input id="topOffsetPct" type="range" min="-10" max="60" value="6"></label>
-            <label style="flex:1">Bottom offset (%) <input id="bottomOffsetPct" type="range" min="-10" max="60" value="6"></label>
+            <label style="flex:1">Top offset (%) <input id="topOffsetPct" type="range" min="-10" max="60" value="-4"></label>
+            <label style="flex:1">Bottom offset (%) <input id="bottomOffsetPct" type="range" min="-10" max="60" value="-4"></label>
           </div>
         </div>
 
@@ -208,6 +207,9 @@
     <div class="modal-content" role="dialog" aria-modal="true" aria-label="Folder gallery">
       <h3>Folder gallery</h3>
       <div class="gm-toolbar">
+        <label style="min-width:220px;">Category
+          <select id="gmCategory"></select>
+        </label>
         <input id="gmSearch" type="text" placeholder="Filter…">
         <label>Thumb size <input id="gmSize" type="range" min="90" max="220" value="120"></label>
         <button id="gmClose" class="export-btn">Close</button>
@@ -266,6 +268,7 @@
     const gmSearch       = document.getElementById('gmSearch');
     const gmSize         = document.getElementById('gmSize');
     const gmClose        = document.getElementById('gmClose');
+    const gmCategory     = document.getElementById('gmCategory');
 
     // State
     let img = null;
@@ -273,9 +276,30 @@
     let manifest = null;
     let gridItems = [];
     const LS_KEY = 'pictosCustomizer:v2';
+    const LS_CAT = 'pictosCustomizer:lastCategory';
     let currentImageMeta = { type:'none' };
+    let categoryIndex = []; // [{key:'animaux', label:'animaux', files:[...]}]
+    let currentCategoryKey = null; // null = "All"
 
-    // Helpers
+    // ===== Defaults for a complete reset =====
+    const DEFAULTS = {
+      advOpen: false,
+      exportSize: 512,
+      quick: { topText:'', bottomText:'' },
+      text: {
+        size: 64, color:'#000000', bandOn:true, bandColor:'#ffffff',
+        bandPadPct: 6, topOffsetPct: -4, bottomOffsetPct: -4,
+      },
+      bg: {
+        transparent: false, color:'#ffffff', shape:'rounded',
+        cornerPct: 22, paddingPct: 10, strokeOn:false,
+        strokeColor:'#000000', strokePct: 2, shadowOn:false
+      },
+      icon: { tintPct:0, tintColor:'#000000', scalePct:100 },
+      image: { type:'none' }
+    };
+
+    // ===== Helpers (drawing) =====
     function roundRectPath(ctx,x,y,w,h,r){
       const rr=Math.max(0,Math.min(r,Math.min(w,h)/2));
       ctx.beginPath();
@@ -355,7 +379,7 @@
       const padPctVal   = parseFloat(paddingPct.value)/100;
       const corner      = parseFloat(cornerPct.value);
       const shape       = bgShape.value;
-      const transparent = bgTransparent.checked;   // default: false (white background)
+      const transparent = bgTransparent.checked;
       const strokeEnabled = strokeOn.checked;
       const strokeW     = (parseFloat(strokePct.value)/100) * size;
       const shadow      = shadowOn.checked;
@@ -369,13 +393,11 @@
 
       const box = {x:0,y:0,w:size,h:size};
 
-      // --- Background ---
+      // Background
       if(!transparent){
-        // Always paint the whole canvas first so export is not transparent
         ctx.fillStyle = bgColor.value || '#ffffff';
         ctx.fillRect(box.x, box.y, box.w, box.h);
 
-        // Optional shadow around the shape
         if(shadow && shape!=='none'){
           ctx.save();
           ctx.shadowColor='rgba(0,0,0,0.35)';
@@ -388,7 +410,7 @@
         }
       }
 
-      // Frame (inside padding and border thickness)
+      // Frame (inside padding and border)
       const padPx = size * padPctVal;
       const strokeInset = (strokeEnabled && shape!=='none') ? Math.max(1, strokeW*0.5) : 0;
       const frame = {
@@ -411,11 +433,10 @@
       const hTop = labelBandHeight(ctx, topText, labelPx, bandPad);
       const hBot = labelBandHeight(ctx, bottomText, labelPx, bandPad);
 
-      // 1) Place captions at fixed offsets from the frame edges
+      // Place captions
       let topY = frame.y + topOffset;
       let botY = frame.y + frame.h - bottomOffset - hBot;
 
-      // Keep order (if offsets too large, they just meet)
       if (topY + hTop > botY) {
         const mid = frame.y + frame.h/2;
         topY = mid - hTop;
@@ -425,7 +446,7 @@
       if (topText)   drawLabelAtY(ctx, topText,   labelPx, labelCol, bandOn, bandCol, bandPad, frame.x, topY, frame.w);
       if (bottomText)drawLabelAtY(ctx, bottomText,labelPx, labelCol, bandOn, bandCol, bandPad, frame.x, botY, frame.w);
 
-      // 2) Image: centered in the remaining vertical slot
+      // Image in remaining slot
       const slotTop = topText ? topY + hTop : frame.y;
       const slotBot = bottomText ? botY : frame.y + frame.h;
       const slotH   = Math.max(0, slotBot - slotTop);
@@ -441,9 +462,9 @@
         drawTinted(ctx, img, dx, dy, dw, dh, tintColor.value, a);
       }
 
-      ctx.restore(); // end clip
+      ctx.restore();
 
-      // Border on top
+      // Border
       if(strokeEnabled && shape!=='none'){
         ctx.save();
         ctx.lineWidth = Math.max(1, strokeW);
@@ -531,6 +552,7 @@
 
       currentImageMeta = s.image || { type:'none' };
     }
+
     function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(readState())); }catch(e){} }
     function load(){ try{ const raw=localStorage.getItem(LS_KEY); return raw?JSON.parse(raw):null; }catch(e){ return null; } }
     const debounce=(fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
@@ -547,7 +569,6 @@
     }
     window.addEventListener('resize', fitPreview);
 
-    // Inputs that trigger re-render
     [
       sizePx, topLabelText, bottomLabelText,
       bgTransparent,bgShape,bgColor,cornerPct,paddingPct,
@@ -557,70 +578,149 @@
       topOffsetPct,bottomOffsetPct
     ].forEach(el=>el && el.addEventListener('input', ()=>{ if (sizePx===el){ exportSize=parseInt(sizePx.value,10); sizePxVal.textContent=exportSize; } render(cvs.width); saveDebounced(); }));
 
-    // Clear
+    // Clear (image + texts only)
     clearBtn.addEventListener('click', ()=>{
       img = null; currentImageMeta = { type:'none' };
       topLabelText.value = ''; bottomLabelText.value = '';
       render(); saveDebounced();
     });
 
-    // Download
-    downloadBtn.addEventListener('click', ()=>{
-      const off=document.createElement('canvas');
-      const octx=off.getContext('2d');
-      off.width=off.height=exportSize;
-      const prev=cvs.width;
-      render(exportSize);
-      octx.drawImage(cvs,0,0,exportSize,exportSize);
-      render(prev);
-      off.toBlob(blob=>{
-        const baseName = (bottomLabelText.value.trim() || topLabelText.value.trim() || 'pictogram')
-          .toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');
-        const a=document.createElement('a');
-        a.download=`${baseName}-${exportSize}.png`;
-        a.href=URL.createObjectURL(blob); a.click();
-        setTimeout(()=>URL.revokeObjectURL(a.href),800);
-      },'image/png');
+    // ----- TRUE full reset -----
+    function resetToDefaults(){
+      toggleAdvanced.checked = DEFAULTS.advOpen;
+      advPanel.style.display = DEFAULTS.advOpen ? 'block' : 'none';
+
+      if (sizePx){ sizePx.value = DEFAULTS.exportSize; sizePxVal.textContent = DEFAULTS.exportSize; }
+      exportSize = DEFAULTS.exportSize;
+
+      topLabelText.value = DEFAULTS.quick.topText;
+      bottomLabelText.value = DEFAULTS.quick.bottomText;
+
+      // Text
+      labelSize.value       = DEFAULTS.text.size;
+      labelColor.value      = DEFAULTS.text.color;
+      labelBandOn.checked   = DEFAULTS.text.bandOn;
+      labelBandColor.value  = DEFAULTS.text.bandColor;
+      labelBandPadPct.value = DEFAULTS.text.bandPadPct;
+      topOffsetPct.value    = DEFAULTS.text.topOffsetPct;
+      bottomOffsetPct.value = DEFAULTS.text.bottomOffsetPct;
+
+      // Background
+      bgTransparent.checked = DEFAULTS.bg.transparent;
+      bgColor.value         = DEFAULTS.bg.color;
+      bgShape.value         = DEFAULTS.bg.shape;
+      cornerPct.value       = DEFAULTS.bg.cornerPct;
+      paddingPct.value      = DEFAULTS.bg.paddingPct;
+      strokeOn.checked      = DEFAULTS.bg.strokeOn;
+      strokeColor.value     = DEFAULTS.bg.strokeColor;
+      strokePct.value       = DEFAULTS.bg.strokePct;
+      shadowOn.checked      = DEFAULTS.bg.shadowOn;
+
+      // Icon
+      tintPct.value         = DEFAULTS.icon.tintPct;
+      tintColor.value       = DEFAULTS.icon.tintColor;
+      iconScalePct.value    = DEFAULTS.icon.scalePct;
+
+      // Image + category
+      img = null;
+      currentImageMeta = { type:'none' };
+      currentCategoryKey = null;
+      if (gmCategory) gmCategory.value = '';
+
+      try{
+        localStorage.removeItem(LS_KEY);
+        localStorage.removeItem(LS_CAT);
+      }catch(e){}
+
+      render(cvs.width);
+    }
+
+    if (clearSavedBtn) clearSavedBtn.addEventListener('click', ()=>{
+      resetToDefaults();
+      alert('All options reset to defaults.');
     });
 
-    if (clearSavedBtn) clearSavedBtn.addEventListener('click', ()=>{ localStorage.removeItem(LS_KEY); alert('Saved options cleared.'); });
-
-    // ===== Gallery (simplified) =====
+    // ===== Gallery with categories =====
     function showModal(){ galleryModal.classList.add('show'); }
     function hideModal(){ galleryModal.classList.remove('show'); }
-    openGalleryBtn.onclick = ()=>{ showModal(); buildGrid(false); };
+    openGalleryBtn.onclick = ()=>{ showModal(); ensureManifestAndUI(true); };
     gmClose.onclick=hideModal;
 
     gmSize.oninput=()=>document.querySelector('.gm-grid').style.setProperty('--cell', gmSize.value+'px');
-    gmSearch.oninput=()=>filterGrid(gmSearch.value.trim().toLowerCase());
+    gmSearch.oninput=()=>applyFiltersAndRender();
+
+    gmCategory.addEventListener('change', ()=>{
+      currentCategoryKey = gmCategory.value || null;
+      try{ localStorage.setItem(LS_CAT, currentCategoryKey ?? ''); }catch(e){}
+      applyFiltersAndRender();
+    });
+
+    // Pretty labels
+    const pretty = (s)=> String(s).replaceAll('_',' ');
 
     async function fetchManifest(){
       const res=await fetch('../../images/pictos/index.json',{cache:'no-store'});
       if(!res.ok) throw new Error(res.status+' '+res.statusText);
       const data=await res.json();
-      if(!data || !Array.isArray(data.files)) throw new Error('Invalid manifest format');
-      return data;
+      const base = data.base || '../../images/pictos/';
+      let cats = [];
+      if (data.categories && typeof data.categories === 'object'){
+        cats = Object.entries(data.categories).map(([key,arr])=>({
+          key, label: pretty(key), files:Array.isArray(arr)?arr:[]
+        }));
+      } else if (Array.isArray(data.files)) {
+        cats = [{ key:'__all', label:'All', files:data.files }];
+      } else {
+        throw new Error('Invalid manifest format');
+      }
+      return { base, categories: cats };
     }
-    async function buildGrid(alsoTryRestore){
-      try{
-        manifest = manifest || await fetchManifest();
-        const base = manifest.base || '../../images/pictos/';
-        gridItems = manifest.files.map(fn=>({name:fn, src:base+fn}));
-        renderGrid(gridItems);
 
-        if (alsoTryRestore && currentImageMeta?.type === 'gallery' && currentImageMeta.src){
-          const hit = gridItems.find(it => it.src === currentImageMeta.src);
-          if (hit){
-            const imageEl=new Image(); imageEl.crossOrigin='anonymous';
-            imageEl.onload=()=>{ img=imageEl; render(); hideModal(); };
-            imageEl.src=hit.src;
-          }
-        }
-      }catch(err){
-        console.error('Could not load manifest:', err);
+    function populateCategorySelect(){
+      const hasMultiple = categoryIndex.length > 1 || (categoryIndex.length === 1 && categoryIndex[0].key !== '__all');
+      const options = [];
+      if (hasMultiple){
+        options.push(new Option('All', '', false, false));
+      }
+      categoryIndex.forEach(c=>{
+        const label = `${c.label} (${c.files.length})`;
+        options.push(new Option(label, c.key, false, false));
+      });
+      gmCategory.innerHTML = '';
+      options.forEach(o=>gmCategory.add(o));
+
+      const savedCat = (localStorage.getItem(LS_CAT) || '').trim();
+      if (savedCat && categoryIndex.some(c=>c.key===savedCat)){
+        gmCategory.value = savedCat;
+        currentCategoryKey = savedCat;
+      } else {
+        gmCategory.value = '';
+        currentCategoryKey = null;
       }
     }
+
+    function allFilesInCurrentScope(){
+      if (!manifest) return [];
+      if (!currentCategoryKey){
+        const set = new Set();
+        categoryIndex.forEach(c => c.files.forEach(f=>set.add(f)));
+        return Array.from(set);
+      }
+      const cat = categoryIndex.find(c=>c.key===currentCategoryKey);
+      return cat ? cat.files.slice() : [];
+    }
+
+    function applyFiltersAndRender(){
+      const files = allFilesInCurrentScope();
+      const base = manifest.base;
+      const q = gmSearch.value.trim().toLowerCase();
+      let list = files.map(fn=>({name:fn, src:base+fn}));
+      if (q) list = list.filter(it=>it.name.toLowerCase().includes(q));
+      renderGrid(list);
+    }
+
     function renderGrid(list){
+      gridItems = list;
       gmGrid.innerHTML='';
       list.forEach(item=>{
         const cell=document.createElement('button'); cell.className='gm-item'; cell.title=item.name;
@@ -633,9 +733,29 @@
         gmGrid.appendChild(cell);
       });
     }
-    function filterGrid(q){
-      const arr=q ? gridItems.filter(it=>it.name.toLowerCase().includes(q)) : gridItems;
-      renderGrid(arr);
+
+    async function ensureManifestAndUI(alsoTryRestore){
+      try{
+        if (!manifest){
+          const data = await fetchManifest();
+          manifest = { base: data.base };
+          categoryIndex = data.categories;
+          populateCategorySelect();
+        }
+        applyFiltersAndRender();
+
+        if (alsoTryRestore && currentImageMeta?.type === 'gallery' && currentImageMeta.src){
+          const hit = gridItems.find(it => it.src === currentImageMeta.src);
+          if (hit){
+            const imageEl=new Image(); imageEl.crossOrigin='anonymous';
+            imageEl.onload=()=>{ img=imageEl; render(); hideModal(); };
+            imageEl.src=hit.src;
+          }
+        }
+      }catch(err){
+        console.error('Could not load manifest:', err);
+        gmGrid.innerHTML = '<div style="padding:12px;color:#b00020;">Failed to load gallery manifest.</div>';
+      }
     }
 
     // Upload local
@@ -648,13 +768,58 @@
       im.src=url;
     };
 
+    // ===== Download PNG (restored) =====
+    function triggerDownloadFromBlob(blob, baseName){
+      const a=document.createElement('a');
+      a.download=`${baseName}-${exportSize}.png`;
+      a.href=URL.createObjectURL(blob);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    }
+
+    function fallbackDataURL(baseName){
+      const dataURL = cvs.toDataURL('image/png');
+      const a=document.createElement('a');
+      a.download=`${baseName}-${exportSize}.png`;
+      a.href=dataURL;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    downloadBtn.addEventListener('click', ()=>{
+      // Render at export size on the main canvas, grab PNG, then restore preview size
+      const prev = cvs.width;
+      const baseName = (bottomLabelText.value.trim() || topLabelText.value.trim() || 'pictogram')
+        .toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');
+
+      render(exportSize);
+
+      if (cvs.toBlob){
+        cvs.toBlob(blob=>{
+          if (blob){ triggerDownloadFromBlob(blob, baseName); }
+          else { fallbackDataURL(baseName); }
+          // Restore preview
+          render(prev);
+        }, 'image/png');
+      } else {
+        // Fallback for older Safari/iOS
+        fallbackDataURL(baseName);
+        render(prev);
+      }
+    });
+
     // ===== Init =====
     (function init(){
       const saved = load();
       if (saved) writeState(saved);
-      else {
-        // default background color already #fff, bgTransparent unchecked => white export by default
-      }
+      else writeState(DEFAULTS);
+
+      const savedCat = (localStorage.getItem(LS_CAT) || '').trim();
+      if (savedCat) currentCategoryKey = savedCat;
+
       if (saved?.image?.type === 'gallery' && saved.image.src){
         const imageEl=new Image(); imageEl.crossOrigin='anonymous';
         imageEl.onload=()=>{ img=imageEl; render(); };

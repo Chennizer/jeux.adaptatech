@@ -19,6 +19,9 @@
    - YouTube thumbnails:
      • Playlist import: use API to fetch title + best thumbnail.
      • Single URLs / restored URLs: use lightweight no-API fallback (ytimg) with multi-resolution fallback chain.
+   - Local removals persist across refresh:
+     • When you remove a local card (×), we remember its stable key in LOCAL_HIDDEN_KEY and filter it out when repopulating from a saved folder.
+     • "Clear everything" now also deletes the saved folder handle and clears hidden/exclusions.
 */
 
 let youtubePlayer = null;
@@ -387,6 +390,15 @@ async function validateSingleYouTubeUrl(url, apiKey) {
 
 /* ----------------------- MAIN APP ----------------------- */
 
+// Guard to let typing in inputs/textareas/contentEditable bypass global hotkeys
+function isTypingTarget(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return !el.readOnly && !el.disabled;
+  return false;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // ---- DOM refs (unique) ----
   const mediaType = document.body.getAttribute('data-media-type');
@@ -417,7 +429,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistInput = document.getElementById('yt-playlist-url-input');
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
-
+  const clearAllButton = document.getElementById('clear-all-button');
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
@@ -523,6 +535,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(map)); } catch {}
   }
 
+  // --- NEW: persist locally-hidden videos (by stable key) ---
+  const LOCAL_HIDDEN_KEY = 'customLocalHidden'; // JSON array of keys
+
+  function getHiddenSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(LOCAL_HIDDEN_KEY) || '[]')); }
+    catch { return new Set(); }
+  }
+  function setHiddenSet(set) {
+    try { localStorage.setItem(LOCAL_HIDDEN_KEY, JSON.stringify([...set])); } catch {}
+  }
+  function addHiddenKey(k) {
+    if (!k) return;
+    const s = getHiddenSet();
+    s.add(k);
+    setHiddenSet(s);
+  }
+  function clearHidden() {
+    try { localStorage.removeItem(LOCAL_HIDDEN_KEY); } catch {}
+  }
+
   // stable key for local files (works across reloads for folder picker / file input)
   function makeLocalKey(name, size, lastModified) {
     return `${name}::${size ?? '0'}::${lastModified ?? '0'}`;
@@ -549,6 +581,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       .map(c => c.dataset.key || c.dataset.src);
   }
 
+  // --- NEW: forget saved folder handle helper (used by Clear All) ---
+  async function deleteRepoHandle() {
+    try {
+      const db = await idbOpenFS();
+      await new Promise((res, rej) => {
+        const tx = db.transaction(FS_STORE, 'readwrite');
+        tx.objectStore(FS_STORE).delete('video-repo');
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      });
+    } catch {}
+    try { localStorage.removeItem('hasVideoRepo'); } catch {}
+  }
+
   function saveLocalOrderForCurrentSet() {
     if (!localVideoList) return;
     const sig = currentSetSignature();
@@ -557,6 +602,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     map[sig] = getLocalOrderFromDOM();
     setLocalOrderMap(map);
   }
+
+  // --- UPDATED: clear all is now async and clears folder handle + hidden set ---
+  async function handleClearAll() {
+    if (!confirm('Tout effacer ? Cela supprime toutes les cartes et les URLs sauvegardées.')) return;
+
+    // Remove cards from both lists (if present)
+    if (urlVideoList) urlVideoList.innerHTML = '';
+    if (localVideoList) localVideoList.innerHTML = '';
+
+    // Clear persisted data
+    try { localStorage.removeItem(YT_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(LOCAL_ORDERS_KEY); } catch {}
+    clearHidden();              // NEW: forget hidden exclusions
+    await deleteRepoHandle();   // NEW: forget saved folder handle
+
+    // Reset selection / numbering / UI
+    selectedMedia = [];
+    playedMedia = [];
+    currentMediaIndex = 0;
+    lastSelectionSignature = '';
+
+    updateSelectedMedia();
+    renumberCards();
+
+    if (startButton) startButton.style.display = 'none';
+    if (ytPlaylistStatus) ytPlaylistStatus.textContent = '';
+
+    document.dispatchEvent(new CustomEvent('video-list-cleared'));
+  }
+
+  if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
 
   function loadLocalOrderForCurrentSet() {
     if (!localVideoList) return;
@@ -747,6 +823,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       rm.addEventListener('click', (e) => {
         e.stopPropagation();
         const parent = card.parentElement;
+
+        // NEW: if this is a local item, remember it as hidden so it won't repopulate after refresh
+        if (parent === localVideoList) {
+          const k = card.dataset.key || null;
+          if (k) addHiddenKey(k);
+        }
+
         card.remove();
         updateSelectedMedia();
         renumberCards();
@@ -801,7 +884,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           cap.className = 'video-name video-filename';
           cap.textContent = extractFileNameFromUrl(url);
           cap.title = cap.textContent;
-          card.appendChild(cap);
           urlVideoList.appendChild(card);
           initCard(card);
           fetchVideoTitle(url).then(title => { cap.textContent = title; cap.title = title; });
@@ -847,7 +929,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     (urlVideoList || videoSelectionDiv).appendChild(card);
     initCard(card);
 
-    // Titre via noembed (non bloquant) si pas fourni
+    // Title via noembed (non-blocking) if not provided
     if (!opts.title) {
       fetchVideoTitle(url).then(title => {
         cap.textContent = title;
@@ -855,16 +937,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       }).catch(()=>{});
     }
 
-    // Miniature
+    // Thumbnail
     const id = getYouTubeId(url);
     if (id) {
       if (opts.thumbUrl) {
-        img.src = opts.thumbUrl; // URL de l'API déjà validée
+        img.src = opts.thumbUrl; // already validated by API
       } else {
-        setYouTubeThumbWithFallback(img, id); // fallback sans API
+        setYouTubeThumbWithFallback(img, id); // fallback without API
       }
     } else {
-      // URL non YouTube : pas de miniature ici
+      // Non-YouTube URL: no thumbnail here
       img.remove();
     }
   }
@@ -1260,7 +1342,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     controlsEnabled = false;
   }
 
+  // SPACE (P1) + Backspace handler call — guard typing targets
   document.addEventListener('keydown', e => {
+    if (isTypingTarget(e.target)) return;
     if (preventInput) return;
     if (currentPlayer === 1 && controlsEnabled && promptCurrentlyVisible && e.code === 'Space') {
       e.preventDefault();
@@ -1269,7 +1353,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     handleEnterPause(e);
   });
 
+  // ENTER (P2) — guard typing targets
   document.addEventListener('keydown', e => {
+    if (isTypingTarget(e.target)) return;
     if (preventInput) return;
     if (!isTwoPlayerMode()) return;
     if (currentPlayer === 2 && controlsEnabled && promptCurrentlyVisible && e.code === 'Enter') {
@@ -1558,6 +1644,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startMediaPlayback();
   }
   function handleEnterPause(e) {
+    if (isTypingTarget(e.target)) return; // <-- guard inputs
     if (miscOptionsState['enter-pause-option'] && e.code === 'Backspace') {
       e.preventDefault();
       pauseActivityAndShowPrompt();
@@ -1735,7 +1822,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* Folder picker integration */
   let repoHandle = null;
 
-  // NEW: fully deterministic population using saved order pre-sort
+  // NEW: fully deterministic population using saved order pre-sort + hidden filter
   async function populateFromRepo(handle) {
     // 1) collect entries and file metadata
     const items = [];
@@ -1744,14 +1831,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       const key = makeLocalKey(entry.name, file.size, file.lastModified);
       items.push({ entry, file, key, name: entry.name });
     }
-    if (!items.length) {
+
+    // NEW: drop items the user has hidden previously
+    const hidden = getHiddenSet();
+    const visibleItems = items.filter(it => !hidden.has(it.key));
+
+    if (!visibleItems.length) {
+      (localVideoList || videoSelectionDiv).innerHTML = '';
       updateSelectedMedia();
       renumberCards();
       return;
     }
 
-    // 2) compute set signature BEFORE rendering
-    const sig = items.map(i => i.key).sort().join('||');
+    // 2) compute set signature BEFORE rendering (on visible set)
+    const sig = visibleItems.map(i => i.key).sort().join('||');
     const map = getLocalOrderMap();
     const saved = Array.isArray(map[sig]) ? map[sig] : null;
 
@@ -1760,7 +1853,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (saved) saved.forEach((k, i) => rank.set(k, i));
 
     // 4) sort items: saved order first, then newcomers alphabetically by name
-    items.sort((a, b) => {
+    visibleItems.sort((a, b) => {
       const ra = rank.has(a.key), rb = rank.has(b.key);
       if (ra && rb) return rank.get(a.key) - rank.get(b.key);
       if (ra && !rb) return -1;
@@ -1771,7 +1864,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 5) render cards in final order (no flicker reordering after)
     const container = localVideoList || videoSelectionDiv;
     const frag = document.createDocumentFragment();
-    for (const it of items) {
+    for (const it of visibleItems) {
       const src = URL.createObjectURL(it.file);
       const card = await buildVideoCardElement({ src, name: it.name, key: it.key });
       initCard(card);

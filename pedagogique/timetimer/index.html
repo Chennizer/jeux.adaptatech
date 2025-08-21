@@ -249,8 +249,8 @@
          data-fr="Aucun dossier sélectionné" data-en="No repository selected">Aucun dossier sélectionné</div>
 
     <div class="row">
-      <span data-fr="Bibliothèque CVI" data-en="CVI Library">Bibliothèque CVI</span>
-      <button class="btn" id="openManifestBtn" data-fr="🖼️ Ouvrir la bibliothèque CVI" data-en="🖼️ Open CVI Library">🖼️ Ouvrir la bibliothèque CVI</button>
+      <span data-fr="Bibliothèque de pictogrammes" data-en="Pictogram Library">Bibliothèque de pictogrammes</span>
+      <button class="btn" id="openPictosBtn" data-fr="🖼️ Ouvrir les pictogrammes" data-en="🖼️ Open Pictograms">🖼️ Ouvrir les pictogrammes</button>
     </div>
   </div>
 
@@ -350,9 +350,6 @@
       <div id="listBody" class="list-body"></div>
     </div>
   </div>
-
-  <!-- Manifest array -->
-  <script src="../../js/cviPngArray.js"></script>
 
 <script>
 /* ===========================================================
@@ -1256,8 +1253,7 @@ const closePickerBtn = document.getElementById('closePickerBtn');
 const switchSourceBtn = document.getElementById('switchSourceBtn');
 const autoFillBtn = document.getElementById('autoFillBtn');
 const assignBtn = document.getElementById('assignBtn');
-const clearSlotsBtn = document.getElementById('clearSlotsBtn');
-const openManifestBtn = document.getElementById('openManifestBtn');
+const openPictosBtn = document.getElementById('openPictosBtn');
 const selectedSlots = Array.from(document.querySelectorAll('.selected .slot'));
 
 const pickLibraryBtn = document.getElementById('pickLibraryBtn');
@@ -1446,37 +1442,82 @@ async function populateFromRepo(){
   setCurrentSlot(0);
 }
 
-/* Populate grid from manifest */
-function populateFromManifest(){
+/* Populate grid from pictogram index.json */
+async function populateFromPictos(){
   const lang = getLang();
-  pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des images' : 'Select images');
+  pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des pictogrammes' : 'Select pictograms');
   const hint = isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '';
-  pickerSub.textContent = (lang==='fr' ? '(depuis la bibliothèque)' : '(from manifest)') + hint;
+  pickerSub.textContent = '(../../images/pictos/)' + hint;
   switchSourceBtn.classList.add('hidden');
   pickerGrid.innerHTML=''; gridItems = [];
-  if(!Array.isArray(window.PNG_ARRAY) || !window.PNG_ARRAY.length){
-    const p = document.createElement('div'); p.style.padding='10px'; p.style.opacity='.85';
-    p.textContent = (lang==='fr' ? 'Aucun élément dans la bibliothèque CVI.' : 'No items in CVI library.');
-    pickerGrid.appendChild(p); return;
-  }
-  const frag = document.createDocumentFragment();
-  for (const it of window.PNG_ARRAY){
-    const url = it.file; const name = it.name || it.file.split('/').pop();
-    gridItems.push({name,url});
-    const card = document.createElement('div');
-    card.className='thumb';
-    card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
-    if(!isIOS){
-      card.draggable = true;
-      card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
-      card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
-    }else{
-      card.draggable = false;
-      addTap(card, ()=>{ placeInNextSlot(url); });
+
+  try{
+    const resp = await fetch('../../images/pictos/index.json', { cache:'no-store' });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const data = await resp.json();
+
+    // Expected shapes:
+    // 1) { base:"../../images/pictos/", categories:{ Fruits:["apple.png",...], ... } }
+    // 2) { base:"../../images/pictos/", files:["a.png","b.png",...] }
+    // 3) { files:["a.png",...]} (fallback base inferred)
+
+    let base = (typeof data.base === 'string' ? data.base : '../../images/pictos/');
+    if(!base.endsWith('/')) base += '/';
+
+    const makeCard = (url, name)=>{
+      const card = document.createElement('div');
+      card.className='thumb';
+      card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
+      if(!isIOS){
+        card.draggable = true;
+        card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
+        card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+      }else{
+        card.draggable = false;
+        addTap(card, ()=>{ placeInNextSlot(url); });
+      }
+      return card;
+    };
+
+    const frag = document.createDocumentFragment();
+
+    if (data && data.categories && typeof data.categories === 'object'){
+      for (const [cat, files] of Object.entries(data.categories)){
+        const hdr = document.createElement('div');
+        hdr.textContent = cat;
+        hdr.style.cssText = 'grid-column:1/-1;font-weight:700;opacity:.9;padding:.25rem 0;';
+        frag.appendChild(hdr);
+
+        (files||[]).forEach(f=>{
+          const url = f.startsWith('http') || f.startsWith('/') ? f : (base + f);
+          const name = f.split('/').pop();
+          gridItems.push({name,url});
+          frag.appendChild(makeCard(url, name));
+        });
+      }
+    } else if (Array.isArray(data?.files)){
+      (data.files).forEach(f=>{
+        const url = f.startsWith('http') || f.startsWith('/') ? f : (base + f);
+        const name = f.split('/').pop();
+        gridItems.push({name,url});
+        frag.appendChild(makeCard(url, name));
+      });
+    } else {
+      const p=document.createElement('div');
+      p.style.padding='10px'; p.style.opacity='.85';
+      p.textContent = (lang==='fr' ? 'index.json est vide ou invalide.' : 'index.json is empty or invalid.');
+      pickerGrid.appendChild(p);
+      setCurrentSlot(0);
+      return;
     }
-    frag.appendChild(card);
+
+    pickerGrid.appendChild(frag);
+  }catch(err){
+    const p=document.createElement('div');
+    p.textContent = (lang==='fr' ? 'Impossible de charger ../../images/pictos/index.json' : 'Could not load ../../images/pictos/index.json');
+    p.style.padding='10px'; p.style.opacity='.85';
+    pickerGrid.appendChild(p);
   }
-  pickerGrid.appendChild(frag);
 
   setCurrentSlot(0);
 }
@@ -1536,7 +1577,7 @@ setRepoBtn.addEventListener('click', async ()=>{
     uploadInput.click();
   }
 });
-addTap(openManifestBtn, ()=>{ openPickerModal(); populateFromManifest(); });
+addTap(openPictosBtn, ()=>{ openPickerModal(); populateFromPictos(); });
 
 /* Modal controls */
 addTap(closePickerBtn, closePickerModal);
