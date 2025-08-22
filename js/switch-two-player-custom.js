@@ -28,6 +28,7 @@ let youtubePlayer = null;
 let youtubeStateChangeHandler = null;
 let youtubeApiReady = false;
 let pendingYouTubeId = null;
+let youtubePollInterval = null;
 
 // global-safe delegate set inside DOMContentLoaded
 window.__handleMediaEnd = null;
@@ -128,8 +129,8 @@ function createYouTubePlayer(id) {
       onError: onYouTubePlayerError,
     },
   });
-  const container = document.getElementById('youtube-player');
-  if (container) container.style.pointerEvents = 'none';
+  youtubeDiv = document.getElementById('youtube-player');
+  if (youtubeDiv) youtubeDiv.style.pointerEvents = 'none';
 }
 
 function onYouTubeIframeAPIReady() {
@@ -440,7 +441,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const introJingle = document.getElementById('intro-jingle');
   const visualOptionsSelect = document.getElementById('special-options-select');
   const videoContainer = document.getElementById('video-container');
-  const youtubeDiv = document.getElementById('youtube-player');
+  let youtubeDiv = document.getElementById('youtube-player');
+  const tileContainer = document.getElementById('tile-container');
 
   const spacePrompt = document.getElementById('space-prompt');
   const textPrompt = document.getElementById('text-prompt');
@@ -492,8 +494,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (youtubeDiv) {
     youtubeStateChangeHandler = (event) => {
-      if (event.data === YT.PlayerState.ENDED) {
-        handleMediaEnd();
+      if (event.data === YT.PlayerState.PLAYING) {
+        if (youtubePollInterval) clearInterval(youtubePollInterval);
+        youtubePollInterval = setInterval(() => {
+          if (!youtubePlayer || typeof youtubePlayer.getDuration !== 'function') return;
+          const duration = youtubePlayer.getDuration();
+          const current = youtubePlayer.getCurrentTime();
+          if (duration - current <= 0.5) {
+            clearInterval(youtubePollInterval);
+            youtubePollInterval = null;
+            handleMediaEnd();
+          }
+        }, 250);
+      } else {
+        if (youtubePollInterval) {
+          clearInterval(youtubePollInterval);
+          youtubePollInterval = null;
+        }
+        if (event.data === YT.PlayerState.ENDED) {
+          handleMediaEnd();
+        }
       }
     };
     if (window.YT && typeof YT.Player !== 'undefined') {
@@ -1393,8 +1413,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const src = selectedMedia[currentMediaIndex];
     if (!src) return;
 
+    if (tileContainer) tileContainer.style.display = 'none';
+
     if (isYouTubeUrl(src)) {
-      if (youtubeDiv) youtubeDiv.style.display = 'block';
       if (mediaPlayer) mediaPlayer.style.display = 'none';
       const id = getYouTubeId(src);
       if (youtubeApiReady) {
@@ -1408,6 +1429,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else {
         pendingYouTubeId = id;
       }
+      youtubeDiv = document.getElementById('youtube-player');
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
     } else if (mediaPlayer) {
       if (youtubeDiv) youtubeDiv.style.display = 'none';
       mediaPlayer.style.display = 'block';
@@ -1451,8 +1474,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function handleMediaEnd() {
+    if (youtubePollInterval) {
+      clearInterval(youtubePollInterval);
+      youtubePollInterval = null;
+    }
+    if (youtubePlayer && youtubePlayer.stopVideo) {
+      try {
+        youtubePlayer.stopVideo();
+        if (youtubePlayer.clearVideo) youtubePlayer.clearVideo();
+        if (youtubePlayer.destroy) youtubePlayer.destroy();
+      } catch {}
+      youtubePlayer = null;
+      youtubeDiv = document.getElementById('youtube-player');
+    }
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mediaPlayer) mediaPlayer.style.display = 'none';
+    if (videoContainer) videoContainer.style.display = 'none';
+    if (tileContainer) tileContainer.style.display = 'flex';
     if (mode === 'pressBetween') {
       if (playedMedia.length < selectedMedia.length) {
         currentMediaIndex = getNextMediaIndex();
