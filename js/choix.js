@@ -667,6 +667,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       } else {
         youtubePlayer.loadVideoById(id);
+        // Ensure we react when the video ends even if the player was
+        // previously created for a preview (which has no state change
+        // handler by default).
+        try {
+          youtubePlayer.addEventListener('onStateChange', onStateChange);
+        } catch {}
         startPlayback();
       }
     } else {
