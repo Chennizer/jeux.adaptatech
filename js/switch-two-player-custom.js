@@ -26,6 +26,7 @@
 
 let youtubePlayer = null;
 let youtubeStateChangeHandler = null;
+let youtubeProgressInterval = null;
 let youtubeApiReady = false;
 let pendingYouTubeId = null;
 
@@ -493,8 +494,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (youtubeDiv) {
     youtubeStateChangeHandler = (event) => {
-      if (event.data === YT.PlayerState.ENDED) {
+      if (event.data === YT.PlayerState.PLAYING) {
+        if (youtubeProgressInterval) clearInterval(youtubeProgressInterval);
+        youtubeProgressInterval = setInterval(() => {
+          if (!youtubePlayer) return;
+          try {
+            const dur = youtubePlayer.getDuration();
+            const t = youtubePlayer.getCurrentTime();
+            if (dur && t && dur - t <= 0.5) {
+              clearInterval(youtubeProgressInterval);
+              handleMediaEnd();
+            }
+          } catch {}
+        }, 200);
+      } else if (event.data === YT.PlayerState.ENDED) {
+        if (youtubeProgressInterval) clearInterval(youtubeProgressInterval);
         handleMediaEnd();
+      } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.BUFFERING) {
+        if (youtubeProgressInterval) clearInterval(youtubeProgressInterval);
       }
     };
     if (window.YT && typeof YT.Player !== 'undefined') {
@@ -1454,11 +1471,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function handleMediaEnd() {
+    if (youtubeProgressInterval) clearInterval(youtubeProgressInterval);
     if (youtubePlayer && youtubePlayer.stopVideo) {
       try {
         youtubePlayer.stopVideo();
         if (youtubePlayer.clearVideo) youtubePlayer.clearVideo();
+        if (youtubePlayer.destroy) youtubePlayer.destroy();
       } catch {}
+      youtubePlayer = null;
     }
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mediaPlayer) mediaPlayer.style.display = 'none';
