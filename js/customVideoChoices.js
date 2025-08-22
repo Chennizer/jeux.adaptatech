@@ -3,6 +3,58 @@ const mediaChoices = [];
 
 const LOCAL_VIDEOS_STORAGE_KEY = 'choiceLocalVideos';
 
+// Persistent directory handle storage (mirrors switch/custom-videos-local)
+const FS_DB_NAME = 'choice-video-handles';
+const FS_STORE = 'handles';
+const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
+
+function idbOpenFS() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(FS_DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(FS_STORE);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function saveRepoHandle(handle) {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).put(handle, 'video-repo');
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch {}
+}
+
+async function loadRepoHandle() {
+  try {
+    const db = await idbOpenFS();
+    return new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readonly');
+      const g = tx.objectStore(FS_STORE).get('video-repo');
+      g.onsuccess = () => res(g.result || null);
+      g.onerror = () => res(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function clearRepoHandle() {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).delete('video-repo');
+      tx.oncomplete = res;
+      tx.onerror = () => res();
+    });
+  } catch {}
+}
+
 // Generate a thumbnail for a given video File
 async function makeThumbnailFromVideo(file) {
   return new Promise((resolve) => {
@@ -112,19 +164,51 @@ async function loadLocalVideos() {
   }
 }
 
+async function addFolderToChoices(dirHandle) {
+  mediaChoices.length = 0;
+  try { localStorage.removeItem(LOCAL_VIDEOS_STORAGE_KEY); } catch {}
+  const files = [];
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind !== 'file') continue;
+    if (!VIDEO_RX.test(entry.name)) continue;
+    const file = await entry.getFile();
+    files.push(file);
+  }
+  if (files.length) await addFiles(files);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const addVideoButton = document.getElementById('add-video-file-button');
   const addVideoInput = document.getElementById('add-video-input');
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   const clearButton = document.getElementById('clear-videos-button');
 
-  await loadLocalVideos();
-  if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+  let restoredFromFolder = false;
+  if (pickFolderButton && window.showDirectoryPicker) {
+    try {
+      if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
+      const saved = await loadRepoHandle();
+      if (saved) {
+        const perm = await saved.requestPermission?.({ mode: 'read' });
+        if (perm === 'granted') {
+          await addFolderToChoices(saved);
+          restoredFromFolder = true;
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
+  if (!restoredFromFolder) {
+    await loadLocalVideos();
+    if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+  }
 
   if (addVideoButton && addVideoInput) {
     addVideoButton.addEventListener('click', () => addVideoInput.click());
     addVideoInput.addEventListener('change', async () => {
+      await clearRepoHandle();
       await addFiles(addVideoInput.files);
       addVideoInput.value = '';
     });
@@ -134,12 +218,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     pickFolderButton.addEventListener('click', async () => {
       try {
         const dirHandle = await window.showDirectoryPicker();
-        for await (const entry of dirHandle.values()) {
-          if (entry.kind === 'file') {
-            const file = await entry.getFile();
-            await addFiles([file]);
-          }
-        }
+        await saveRepoHandle(dirHandle);
+        await addFolderToChoices(dirHandle);
       } catch (err) {
         console.error(err);
       }
@@ -148,13 +228,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     pickFolderButton.style.display = 'none';
   }
 
-
   if (clearButton) {
-    clearButton.addEventListener('click', () => {
+    clearButton.addEventListener('click', async () => {
       mediaChoices.length = 0;
       try { localStorage.removeItem(LOCAL_VIDEOS_STORAGE_KEY); } catch {}
+      await clearRepoHandle();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
     });
   }
-
 });
