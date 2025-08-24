@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chasse aux lettres</title>
+    <link rel="stylesheet" href="../../css/games.css">
+    <link rel="stylesheet" href="../../css/eyegaze-menu.css">
+    <style>
+        .letter-grid {
+            display: none;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            justify-items: center;
+        }
+        .letter-cell {
+            width: 200px;
+            height: 200px;
+            background-color: #222;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 6rem;
+            cursor: none;
+        }
+        .letter-cell.correct {
+            background-color: #2e7d32;
+        }
+        #prompt {
+            position: absolute;
+            top: 10%;
+            font-size: 2rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div id="menu-placeholder"></div>
+<h2 id="prompt"></h2>
+<div class="letter-grid"></div>
+<div id="hover-circle" class="dwell-circle"></div>
+
+<script src="../../js/eyegaze-menu.js"></script>
+<script src="../../js/eyegazeMenuLoader.js"></script>
+<script>
+loadEyegazeMenu({
+    title: "Chasse aux lettres",
+    customOptions: `
+        <div class="option-item">
+            <label for="letterSet" class="teal-label">Lettres à afficher:</label>
+            <input id="letterSet" type="text" value="ABCD" style="width:100px;">
+        </div>
+    `
+}).then(() => {
+    initEyegazeMenu();
+    let letters = [];
+    let targetLetter;
+    let hoverTimeout;
+    let audioContext;
+
+    function startGame() {
+        if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+        } else if (document.documentElement.webkitRequestFullscreen) {
+            document.documentElement.webkitRequestFullscreen();
+        } else if (document.documentElement.msRequestFullscreen) {
+            document.documentElement.msRequestFullscreen();
+        }
+
+        const inputVal = document.getElementById('letterSet').value.toUpperCase().replace(/[^A-Z]/g,'');
+        letters = inputVal.split('');
+        buildGrid();
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        document.querySelector('.letter-grid').style.display = 'grid';
+        document.getElementById('prompt').style.display = 'block';
+        nextRound();
+        eyegazeSettings.hideOverlay();
+    }
+
+    document.getElementById('startButton').addEventListener('click', startGame);
+
+    function buildGrid() {
+        const grid = document.querySelector('.letter-grid');
+        grid.innerHTML = '';
+        const cols = Math.ceil(Math.sqrt(letters.length));
+        grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        letters.forEach(letter => {
+            const cell = document.createElement('div');
+            cell.className = 'letter-cell';
+            cell.textContent = letter;
+            cell.addEventListener('mouseover', () => startHover(cell));
+            cell.addEventListener('mouseout', stopHover);
+            grid.appendChild(cell);
+        });
+    }
+
+    function nextRound() {
+        targetLetter = letters[Math.floor(Math.random() * letters.length)];
+        document.getElementById('prompt').textContent = `Trouve la lettre ${targetLetter}`;
+    }
+
+    const hoverCircle = document.getElementById('hover-circle');
+
+    function startHover(element) {
+        const hoverTime = eyegazeSettings.dwellTime;
+        hoverCircle.style.transition = 'none';
+        hoverCircle.style.width = '20px';
+        hoverCircle.style.height = '20px';
+        hoverCircle.style.display = 'block';
+        document.addEventListener('mousemove', moveCircle);
+
+        setTimeout(() => {
+            hoverCircle.style.transition = `width ${hoverTime}ms ease, height ${hoverTime}ms ease`;
+            hoverCircle.style.width = '100px';
+            hoverCircle.style.height = '100px';
+        }, 0);
+
+        hoverTimeout = setTimeout(() => {
+            handleSelection(element);
+            hoverCircle.style.display = 'none';
+        }, hoverTime);
+    }
+
+    function stopHover() {
+        clearTimeout(hoverTimeout);
+        hoverCircle.style.display = 'none';
+    }
+
+    function moveCircle(event) {
+        hoverCircle.style.left = `${event.clientX - hoverCircle.offsetWidth / 2}px`;
+        hoverCircle.style.top = `${event.clientY - hoverCircle.offsetHeight / 2}px`;
+    }
+
+    function handleSelection(el) {
+        const letter = el.textContent;
+        if (letter === targetLetter) {
+            el.classList.add('correct');
+            playBeep();
+            setTimeout(() => {
+                el.classList.remove('correct');
+                nextRound();
+            }, 1000);
+        }
+    }
+
+    function playBeep() {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 440;
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        const vol = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
+        gain.gain.value = vol;
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.5);
+    }
+});
+</script>
+</body>
+</html>
