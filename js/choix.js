@@ -740,17 +740,19 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStartButtonState();
     gameOptionsModal.style.display = 'none';
     tilePickerModal.style.display = 'flex';
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else if (document.documentElement.webkitRequestFullscreen) {
-      document.documentElement.webkitRequestFullscreen();
-    }
     currentCategory = 'all';
     if (categorySelect) categorySelect.value = 'all';
     populateTilePickerGrid();
   });
 
   startGameButton.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) {
+        try { req.call(el); } catch {}
+      }
+    }
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';
     Object.assign(loadingScreen.style, {
