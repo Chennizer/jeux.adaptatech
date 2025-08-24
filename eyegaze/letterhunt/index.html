@@ -7,6 +7,22 @@
     <link rel="stylesheet" href="../../css/games.css">
     <link rel="stylesheet" href="../../css/eyegaze-menu.css">
     <style>
+        body.light {
+            background-color: #fff;
+            color: #000;
+        }
+        body.dark {
+            background-color: #000;
+            color: #fff;
+        }
+        body.light .letter-cell {
+            background-color: #eee;
+            color: #000;
+        }
+        body.dark .letter-cell {
+            background-color: #222;
+            color: #fff;
+        }
         .letter-grid {
             display: none;
             grid-template-columns: repeat(2, 1fr);
@@ -19,7 +35,6 @@
         .letter-cell {
             width: 200px;
             height: 200px;
-            background-color: #222;
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -38,11 +53,13 @@
         }
     </style>
 </head>
-<body>
+<body class="light">
 <div id="menu-placeholder"></div>
 <h2 id="prompt"></h2>
 <div class="letter-grid"></div>
 <div id="hover-circle" class="dwell-circle"></div>
+<audio id="correctSound" src="../../sounds/victory.mp3"></audio>
+<audio id="wrongSound" src="../../sounds/error.mp3"></audio>
 
 <script src="../../js/eyegaze-menu.js"></script>
 <script src="../../js/eyegazeMenuLoader.js"></script>
@@ -50,6 +67,13 @@
 loadEyegazeMenu({
     title: "Chasse aux lettres",
     customOptions: `
+        <div class="option-item">
+            <label for="themeSelect" class="teal-label">Thème :</label>
+            <select id="themeSelect">
+                <option value="light" selected>Clair</option>
+                <option value="dark">Sombre</option>
+            </select>
+        </div>
         <div class="option-item">
             <label for="letterSet" class="teal-label">Lettres à afficher:</label>
             <input id="letterSet" type="text" value="ABCD" style="width:100px;">
@@ -60,7 +84,16 @@ loadEyegazeMenu({
     let letters = [];
     let targetLetter;
     let hoverTimeout;
-    let audioContext;
+    const correctAudio = document.getElementById('correctSound');
+    const wrongAudio = document.getElementById('wrongSound');
+    const themeSelect = document.getElementById('themeSelect');
+
+    function applyTheme(theme) {
+        document.body.classList.remove('light', 'dark');
+        document.body.classList.add(theme);
+    }
+    themeSelect.addEventListener('change', e => applyTheme(e.target.value));
+    applyTheme(themeSelect.value);
 
     function startGame() {
         if (document.documentElement.requestFullscreen) {
@@ -74,7 +107,6 @@ loadEyegazeMenu({
         const inputVal = document.getElementById('letterSet').value.toUpperCase().replace(/[^A-Z]/g,'');
         letters = inputVal.split('');
         buildGrid();
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
         document.querySelector('.letter-grid').style.display = 'grid';
         document.getElementById('prompt').style.display = 'block';
         nextRound();
@@ -139,25 +171,20 @@ loadEyegazeMenu({
         const letter = el.textContent;
         if (letter === targetLetter) {
             el.classList.add('correct');
-            playBeep();
+            playSound(correctAudio);
             setTimeout(() => {
                 el.classList.remove('correct');
                 nextRound();
             }, 1000);
+        } else {
+            playSound(wrongAudio);
         }
     }
 
-    function playBeep() {
-        const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 440;
-        osc.connect(gain);
-        gain.connect(audioContext.destination);
-        const vol = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
-        gain.gain.value = vol;
-        osc.start();
-        osc.stop(audioContext.currentTime + 0.5);
+    function playSound(audio) {
+        audio.volume = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
+        audio.currentTime = 0;
+        audio.play();
     }
 });
 </script>
