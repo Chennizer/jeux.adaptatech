@@ -7,8 +7,7 @@ window.eyegazeSettings = {
     if (overlay) overlay.style.display = 'none';
   }
 };
-
-document.addEventListener('DOMContentLoaded', () => {
+function initEyegazeMenu() {
   const dwellSlider = document.getElementById('dwellTimeSlider');
   const dwellVal = document.getElementById('dwellTimeVal');
   const muteSFX = document.getElementById('muteSFX');
@@ -42,4 +41,4 @@ document.addEventListener('DOMContentLoaded', () => {
       sfxVal.textContent = val;
     });
   }
-});
+}
