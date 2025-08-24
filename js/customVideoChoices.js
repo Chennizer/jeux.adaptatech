@@ -1,8 +1,6 @@
 // Builds mediaChoices from local video files
 const mediaChoices = [];
 
-const LOCAL_VIDEOS_STORAGE_KEY = 'choiceLocalVideos';
-
 // Persistent directory handle storage (mirrors switch/custom-videos-local)
 const FS_DB_NAME = 'choice-video-handles';
 const FS_STORE = 'handles';
@@ -99,82 +97,42 @@ async function makeThumbnailFromVideo(file) {
   });
 }
 
-
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 async function addFiles(files) {
   for (const file of files) {
-    if (!/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(file.name)) continue;
-    const dataUrl = await readFileAsDataURL(file);
+    if (!VIDEO_RX.test(file.name)) continue;
+    const src = URL.createObjectURL(file);
     const thumb = await makeThumbnailFromVideo(file);
     const audio = document.createElement('audio');
-    audio.src = dataUrl;
+    audio.src = src;
     audio.preload = 'auto';
     audio.load();
     mediaChoices.push({
       name: file.name,
       image: thumb,
-      video: dataUrl,
+      video: src,
       audioElement: audio,
       category: 'custom'
     });
   }
-  saveLocalVideos();
 
   if (typeof populateTilePickerGrid === 'function') {
     populateTilePickerGrid();
   }
 }
 
-
-function saveLocalVideos() {
-  try {
-    const data = mediaChoices.map(({ name, image, video }) => ({ name, image, video }));
-    localStorage.setItem(LOCAL_VIDEOS_STORAGE_KEY, JSON.stringify(data));
-  } catch {}
-}
-
-async function loadLocalVideos() {
-  const saved = localStorage.getItem(LOCAL_VIDEOS_STORAGE_KEY);
-  if (!saved) return;
-  try {
-    const arr = JSON.parse(saved);
-    for (const item of arr) {
-      const audio = document.createElement('audio');
-      audio.src = item.video;
-      audio.preload = 'auto';
-      audio.load();
-      mediaChoices.push({
-        name: item.name,
-        image: item.image,
-        video: item.video,
-        audioElement: audio,
-        category: 'custom'
-      });
-    }
-  } catch (e) {
-    console.error('Failed to load local videos', e);
-  }
-}
-
 async function addFolderToChoices(dirHandle) {
+  // clear existing object URLs
+  for (const item of mediaChoices) {
+    try { URL.revokeObjectURL(item.video); } catch {}
+  }
   mediaChoices.length = 0;
-  try { localStorage.removeItem(LOCAL_VIDEOS_STORAGE_KEY); } catch {}
-  const files = [];
+
   for await (const entry of dirHandle.values()) {
     if (entry.kind !== 'file') continue;
     if (!VIDEO_RX.test(entry.name)) continue;
     const file = await entry.getFile();
-    files.push(file);
+    await addFiles([file]);
   }
-  if (files.length) await addFiles(files);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -183,7 +141,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   const clearButton = document.getElementById('clear-videos-button');
 
-  let restoredFromFolder = false;
   if (pickFolderButton && window.showDirectoryPicker) {
     try {
       if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
@@ -195,17 +152,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (perm === 'granted') {
           await addFolderToChoices(saved);
-          restoredFromFolder = true;
         }
       }
     } catch (err) {
       console.error(err);
     }
-  }
-
-  if (!restoredFromFolder) {
-    await loadLocalVideos();
-    if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
   }
 
   if (addVideoButton && addVideoInput) {
@@ -233,8 +184,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (clearButton) {
     clearButton.addEventListener('click', async () => {
+      for (const item of mediaChoices) {
+        try { URL.revokeObjectURL(item.video); } catch {}
+      }
       mediaChoices.length = 0;
-      try { localStorage.removeItem(LOCAL_VIDEOS_STORAGE_KEY); } catch {}
       await clearRepoHandle();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
     });
