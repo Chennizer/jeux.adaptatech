@@ -5,6 +5,7 @@ const mediaChoices = [];
 const FS_DB_NAME = 'choice-video-handles';
 const FS_STORE = 'handles';
 const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
+const FILES_KEY = 'video-files';
 
 function idbOpenFS() {
   return new Promise((res, rej) => {
@@ -47,6 +48,44 @@ async function clearRepoHandle() {
     await new Promise((res) => {
       const tx = db.transaction(FS_STORE, 'readwrite');
       tx.objectStore(FS_STORE).delete('video-repo');
+      tx.oncomplete = res;
+      tx.onerror = () => res();
+    });
+  } catch {}
+}
+
+async function saveFileHandles(handles) {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).put(handles, FILES_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch {}
+}
+
+async function loadFileHandles() {
+  try {
+    const db = await idbOpenFS();
+    return new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readonly');
+      const g = tx.objectStore(FS_STORE).get(FILES_KEY);
+      g.onsuccess = () => res(g.result || []);
+      g.onerror = () => res([]);
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function clearFileHandles() {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).delete(FILES_KEY);
       tx.oncomplete = res;
       tx.onerror = () => res();
     });
@@ -119,10 +158,9 @@ async function addFiles(files) {
       audioElement: audio,
       category: 'custom'
     });
-  }
-
-  if (typeof populateTilePickerGrid === 'function') {
-    populateTilePickerGrid();
+    if (typeof populateTilePickerGrid === 'function') {
+      populateTilePickerGrid();
+    }
   }
 }
 
@@ -163,14 +201,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  if (!restoredFromFolder && typeof populateTilePickerGrid === 'function') {
+  let restoredFromFiles = false;
+  if (!restoredFromFolder) {
+    try {
+      const savedFiles = await loadFileHandles();
+      for (const handle of savedFiles) {
+        let perm = await handle.queryPermission?.({ mode: 'read' });
+        if (perm !== 'granted') {
+          perm = await handle.requestPermission?.({ mode: 'read' });
+        }
+        if (perm === 'granted') {
+          const file = await handle.getFile();
+          await addFiles([file]);
+          restoredFromFiles = true;
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  if (!restoredFromFolder && !restoredFromFiles && typeof populateTilePickerGrid === 'function') {
     populateTilePickerGrid();
   }
 
-  if (addVideoButton && addVideoInput) {
-    addVideoButton.addEventListener('click', () => addVideoInput.click());
+  if (addVideoButton) {
+    addVideoButton.addEventListener('click', async () => {
+      if (window.showOpenFilePicker) {
+        try {
+          const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [{ description: 'Videos', accept: { 'video/*': ['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.m4v'] } }]
+          });
+          await clearRepoHandle();
+          await saveFileHandles(handles);
+          for (const h of handles) {
+            try { const f = await h.getFile(); await addFiles([f]); } catch {}
+          }
+        } catch (err) { console.error(err); }
+      } else if (addVideoInput) {
+        addVideoInput.click();
+      }
+    });
+  }
+
+  if (addVideoInput) {
     addVideoInput.addEventListener('change', async () => {
       await clearRepoHandle();
+      await clearFileHandles();
       await addFiles(addVideoInput.files);
       addVideoInput.value = '';
     });
@@ -181,6 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const dirHandle = await window.showDirectoryPicker();
         await saveRepoHandle(dirHandle);
+        await clearFileHandles();
         await addFolderToChoices(dirHandle);
       } catch (err) {
         console.error(err);
@@ -195,6 +274,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       revokeAllVideos();
       mediaChoices.length = 0;
       await clearRepoHandle();
+      await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
     });
   }
