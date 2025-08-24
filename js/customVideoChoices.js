@@ -181,10 +181,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   const clearButton = document.getElementById('clear-videos-button');
 
+  if (navigator.storage?.persist) {
+    try { await navigator.storage.persist(); } catch {}
+  }
+
   let restoredFromFolder = false;
   if (pickFolderButton && window.showDirectoryPicker) {
     try {
-      if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
       const saved = await loadRepoHandle();
       if (saved) {
         let perm = await saved.queryPermission?.({ mode: 'read' });
@@ -234,6 +237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             types: [{ description: 'Videos', accept: { 'video/*': ['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.m4v'] } }]
           });
           await clearRepoHandle();
+          await clearFileHandles();
           await saveFileHandles(handles);
           for (const h of handles) {
             try { const f = await h.getFile(); await addFiles([f]); } catch {}
