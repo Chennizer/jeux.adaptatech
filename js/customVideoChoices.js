@@ -165,16 +165,24 @@ async function loadLocalVideos() {
 }
 
 async function addFolderToChoices(dirHandle) {
-  mediaChoices.length = 0;
-  try { localStorage.removeItem(LOCAL_VIDEOS_STORAGE_KEY); } catch {}
-  const files = [];
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind !== 'file') continue;
-    if (!VIDEO_RX.test(entry.name)) continue;
-    const file = await entry.getFile();
-    files.push(file);
+  try {
+    const files = [];
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind !== 'file') continue;
+      if (!VIDEO_RX.test(entry.name)) continue;
+      const file = await entry.getFile();
+      files.push(file);
+    }
+    if (!files.length) return false;
+
+    mediaChoices.length = 0;
+    try { localStorage.removeItem(LOCAL_VIDEOS_STORAGE_KEY); } catch {}
+    await addFiles(files);
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
   }
-  if (files.length) await addFiles(files);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -189,10 +197,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
       const saved = await loadRepoHandle();
       if (saved) {
-        const perm = await saved.requestPermission?.({ mode: 'read' });
+        const perm = await saved.queryPermission?.({ mode: 'read' });
         if (perm === 'granted') {
-          await addFolderToChoices(saved);
-          restoredFromFolder = true;
+          const ok = await addFolderToChoices(saved);
+          if (ok) {
+            restoredFromFolder = true;
+          } else {
+            await clearRepoHandle();
+          }
         }
       }
     } catch (err) {
@@ -219,7 +231,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const dirHandle = await window.showDirectoryPicker();
         await saveRepoHandle(dirHandle);
-        await addFolderToChoices(dirHandle);
+        const ok = await addFolderToChoices(dirHandle);
+        if (!ok) await clearRepoHandle();
       } catch (err) {
         console.error(err);
       }
