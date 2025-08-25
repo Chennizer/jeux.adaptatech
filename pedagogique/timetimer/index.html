@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="../../css/otherswitch.css">
 
 <style>
-  html, body { background:#fff !important; margin:0; height:100%; }
+  html, body { background:#fff; margin:0; height:100%; }
 
   /* Overlay + canvas */
   #overlay{
@@ -231,10 +231,14 @@
       <input type="range" id="imgSizeRange" min="0.16" max="0.6" step="0.01" value="0.22">
     </div>
 
-    <div class="formline">
+    <label class="formline">
       <span data-fr="Nombre d’images" data-en="Image count">Nombre d’images</span>
-      <input type="range" id="imgCountRange" min="2" max="4" step="2" value="4">
-    </div>
+      <select id="imgCountSelect">
+        <option value="2">2</option>
+        <option value="4" selected>4</option>
+      </select>
+      <button id="imgCountProxy" class="btn ghost hidden"></button>
+    </label>
 
     <div class="inline">
       <span data-fr="Teinte de page" data-en="Page tint">Teinte de page</span>
@@ -407,7 +411,6 @@ function exitFS(){
   (document.exitFullscreen||document.webkitExitFullscreen)?.call(document);
 }
 function ensureReturnToFullscreen(){
-  if(!isIOS) return;
   if(overlay.style.display!=='none') return;
   if(!document.fullscreenElement){
     try{ requestFS(); }catch(_){}
@@ -467,16 +470,39 @@ let IMG_COUNT = 4; // 2 or 4
 const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff'];
 const imgs=[null,null,null,null];
 
-/* Optional placeholders */
-['../../images/loona/loonacochon.png','../../images/loona/loonapanda.png',
- '../../images/loona/loonachat.png','../../images/loona/loonaparesseux.png']
-.forEach((src,i)=>{const im=new Image();im.onload=()=>{imgs[i]=im;draw();};im.src=src;});
-
 /* Persist last selection */
 const LAST_KEY = 'timer-last-4';
 function saveLastImages(){
   const sources = imgs.map(im => im ? im.src : null);
   localStorage.setItem(LAST_KEY, JSON.stringify(sources));
+}
+async function loadRandomPictos(count, cb){
+  try{
+    const resp = await fetch('../../images/pictos/index.json',{cache:'no-store'});
+    if(!resp.ok) throw new Error('http');
+    const data = await resp.json();
+    let base;
+    if(typeof data.base === 'string' && data.base.trim()){
+      base = data.base;
+    }else{
+      base = resp.url.replace(/index\.json.*$/,'');
+    }
+    if(!base.endsWith('/')) base += '/';
+    let files=[];
+    if(Array.isArray(data.files)) files=data.files.slice();
+    else if(data.categories && typeof data.categories==='object'){
+      for(const arr of Object.values(data.categories)){ files=files.concat(arr); }
+    }
+    const loads=[];
+    for(let i=0;i<count && files.length;i++){
+      const f=files.splice(Math.floor(Math.random()*files.length),1)[0];
+      const url = f.startsWith('http')||f.startsWith('/')?f:(base+f);
+      loads.push(new Promise(res=>{ const im=new Image(); im.onload=()=>{imgs[i]=im;res();}; im.onerror=()=>res(); im.src=url; }));
+    }
+    await Promise.all(loads);
+  }catch(e){}
+  cb?.();
+  draw();
 }
 function loadLastImagesIfEmpty(cb){
   if (imgs.some(Boolean)) { cb?.(); return; }
@@ -496,7 +522,7 @@ function loadLastImagesIfEmpty(cb){
       return;
     }
   }catch(e){}
-  cb?.();
+  loadRandomPictos(IMG_COUNT, cb);
 }
 
 /* Dial configs */
@@ -977,9 +1003,7 @@ document.getElementById('fsBtn').addEventListener('click',()=>{ if(!document.ful
 document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw(); tryKeepFullscreen(200);});
 document.getElementById('dialSelect').addEventListener('change',e=>{
   dialMax=parseInt(e.target.value,10);
-  clearInterval(intervalId); intervalId=null;
-  remainingSeconds=0; draw();
-  setPauseLabel(false);
+  startTimerAtFullDial();
   tryKeepFullscreen(200);
 });
 
@@ -1162,7 +1186,7 @@ function createSelectProxy(selectEl, proxyBtn, title){
 /* Image size/count + tint */
 const imgSizeRange = document.getElementById('imgSizeRange');
 document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); tryKeepFullscreen(150); });
-document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); tryKeepFullscreen(150); });
+document.getElementById('imgCountSelect').addEventListener('change', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); tryKeepFullscreen(150); });
 
 document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{
   bgTintEnabled = e.target.checked;
@@ -1447,7 +1471,7 @@ async function populateFromPictos(){
   const lang = getLang();
   pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des pictogrammes' : 'Select pictograms');
   const hint = isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '';
-  pickerSub.textContent = '(../../images/pictos/)' + hint;
+  pickerSub.textContent = hint;
   switchSourceBtn.classList.add('hidden');
   pickerGrid.innerHTML=''; gridItems = [];
 
@@ -1457,17 +1481,24 @@ async function populateFromPictos(){
     const data = await resp.json();
 
     // Expected shapes:
-    // 1) { base:"../../images/pictos/", categories:{ Fruits:["apple.png",...], ... } }
-    // 2) { base:"../../images/pictos/", files:["a.png","b.png",...] }
+    // 1) { base:"" or "pictos/", categories:{ Fruits:["apple.png",...], ... } }
+    // 2) { base:"" or "pictos/", files:["a.png","b.png",...] }
     // 3) { files:["a.png",...]} (fallback base inferred)
 
-    let base = (typeof data.base === 'string' ? data.base : '../../images/pictos/');
+    let base;
+    if(typeof data.base === 'string' && data.base.trim()){
+      base = data.base;
+    }else{
+      base = resp.url.replace(/index\.json.*$/,'');
+    }
     if(!base.endsWith('/')) base += '/';
+    const baseName = base.replace(/\/$/, '').split('/').pop() + '/';
+    pickerSub.textContent = '(' + baseName + ')' + hint;
 
     const makeCard = (url, name)=>{
       const card = document.createElement('div');
       card.className='thumb';
-      card.innerHTML = `<img src="${url}" alt="${name}"><span>${name}</span>`;
+      card.innerHTML = `<img src="${url}" alt="${name}" loading="lazy"><span>${name}</span>`;
       if(!isIOS){
         card.draggable = true;
         card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain', url); });
@@ -1514,7 +1545,7 @@ async function populateFromPictos(){
     pickerGrid.appendChild(frag);
   }catch(err){
     const p=document.createElement('div');
-    p.textContent = (lang==='fr' ? 'Impossible de charger ../../images/pictos/index.json' : 'Could not load ../../images/pictos/index.json');
+    p.textContent = (lang==='fr' ? 'Impossible de charger pictos/index.json' : 'Could not load pictos/index.json');
     p.style.padding='10px'; p.style.opacity='.85';
     pickerGrid.appendChild(p);
   }
@@ -1649,6 +1680,11 @@ window.addEventListener('DOMContentLoaded', ()=>{
       document.getElementById('alarmProxy'),
       getLang()==='fr' ? 'Son d’alarme' : 'Alarm sound'
     );
+    createSelectProxy(
+      document.getElementById('imgCountSelect'),
+      document.getElementById('imgCountProxy'),
+      getLang()==='fr' ? 'Nombre d’images' : 'Image count'
+    );
   }else{
     // Hide iPad-only buttons on desktop
     document.getElementById('pickLibraryBtn')?.classList.add('hidden');
@@ -1656,6 +1692,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
     document.getElementById('dialProxy')?.classList.add('hidden');
     document.getElementById('modeProxy')?.classList.add('hidden');
     document.getElementById('alarmProxy')?.classList.add('hidden');
+    document.getElementById('imgCountProxy')?.classList.add('hidden');
   }
   draw();
 });
