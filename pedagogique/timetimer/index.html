@@ -231,10 +231,14 @@
       <input type="range" id="imgSizeRange" min="0.16" max="0.6" step="0.01" value="0.22">
     </div>
 
-    <div class="formline">
-      <span data-fr="Nombre d’images" data-en="Image count">Nombre d’images</span>
-      <input type="range" id="imgCountRange" min="2" max="4" step="2" value="4">
-    </div>
+      <div class="formline">
+        <span data-fr="Nombre d’images" data-en="Image count">Nombre d’images</span>
+        <select id="imgCountSelect">
+          <option value="2">2</option>
+          <option value="4" selected>4</option>
+        </select>
+        <button id="imgCountProxy" class="btn ghost hidden"></button>
+      </div>
 
     <div class="inline">
       <span data-fr="Teinte de page" data-en="Page tint">Teinte de page</span>
@@ -467,19 +471,14 @@ let IMG_COUNT = 4; // 2 or 4
 const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff'];
 const imgs=[null,null,null,null];
 
-/* Optional placeholders */
-['../../images/loona/loonacochon.png','../../images/loona/loonapanda.png',
- '../../images/loona/loonachat.png','../../images/loona/loonaparesseux.png']
-.forEach((src,i)=>{const im=new Image();im.onload=()=>{imgs[i]=im;draw();};im.src=src;});
-
 /* Persist last selection */
 const LAST_KEY = 'timer-last-4';
 function saveLastImages(){
   const sources = imgs.map(im => im ? im.src : null);
   localStorage.setItem(LAST_KEY, JSON.stringify(sources));
 }
-function loadLastImagesIfEmpty(cb){
-  if (imgs.some(Boolean)) { cb?.(); return; }
+async function loadLastImagesIfEmpty(){
+  if (imgs.some(Boolean)) return;
   try{
     const arr = JSON.parse(localStorage.getItem(LAST_KEY) || '[]');
     if(Array.isArray(arr) && arr.filter(Boolean).length){
@@ -492,11 +491,39 @@ function loadLastImagesIfEmpty(cb){
           im.src = src;
         });
       });
-      Promise.all(loads).then(()=>{ cb?.(); draw(); });
+      await Promise.all(loads);
       return;
     }
   }catch(e){}
-  cb?.();
+  await loadRandomFromLibrary();
+}
+
+async function loadRandomFromLibrary(){
+  try{
+    const resp = await fetchPictoIndex();
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const data = await resp.json();
+    const base = new URL(data.base || '.', resp.url).href;
+    let files = [];
+    if(Array.isArray(data?.files)) files = data.files;
+    else if(data && data.categories && typeof data.categories === 'object'){
+      for(const arr of Object.values(data.categories)){ files.push(...arr); }
+    }
+    files = files.filter(Boolean);
+    if(!files.length) return;
+    for(let i=0;i<4;i++){
+      const f = files[Math.floor(Math.random()*files.length)];
+      if(!f){ imgs[i]=null; continue; }
+      const url = f.startsWith('http') || f.startsWith('/') ? f : new URL(f, base).href;
+      await new Promise(res=>{
+        const im = new Image();
+        im.onload = ()=>{ imgs[i]=im; res(); };
+        im.onerror = ()=> res();
+        im.src = url;
+      });
+    }
+    saveLastImages();
+  }catch(_){ }
 }
 
 /* Dial configs */
@@ -680,16 +707,19 @@ function draw(){
 
 /* Page tint */
 function updatePageTint(uiSeconds, denom){
-  if(!bgTintEnabled){ document.body.style.backgroundColor=''; return; }
+  if(!bgTintEnabled){
+    document.body.style.setProperty('background', '#fff', 'important');
+    return;
+  }
 
   if(specialMode==='none' || specialMode==='taskreward'){
-    document.body.style.backgroundColor = hexToRGBA(timerColor, TINT_ALPHA);
+    document.body.style.setProperty('background', hexToRGBA(timerColor, TINT_ALPHA), 'important');
     return;
   }
   const N = IMG_COUNT;
   const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
   const col = colorForIndex(active, (N===2?2:4));
-  document.body.style.backgroundColor = hexToRGBA(col, TINT_ALPHA);
+  document.body.style.setProperty('background', hexToRGBA(col, TINT_ALPHA), 'important');
 }
 
 /* ---- RADIAL (iPad fullscreen tweaked) ---- */
@@ -976,19 +1006,18 @@ document.getElementById('fsBtn').addEventListener('click',()=>{ if(!document.ful
 
 document.getElementById('toggleDigits').addEventListener('change',e=>{showDigits=e.target.checked;draw(); tryKeepFullscreen(200);});
 document.getElementById('dialSelect').addEventListener('change',e=>{
-  dialMax=parseInt(e.target.value,10);
-  clearInterval(intervalId); intervalId=null;
-  remainingSeconds=0; draw();
-  setPauseLabel(false);
+  dialMax = parseInt(e.target.value,10);
+  startTimerAtFullDial();
   tryKeepFullscreen(200);
 });
 
 /* Special mode */
 const specialModeSelect=document.getElementById('specialMode');
-specialModeSelect.addEventListener('change',e=>{
+specialModeSelect.addEventListener('change',async e=>{
   specialMode=e.target.value;
   if(specialMode==='radial' || specialMode==='stacked' || specialMode==='taskreward'){
-    loadLastImagesIfEmpty(()=>draw());
+    await loadLastImagesIfEmpty();
+    draw();
   } else {
     draw();
   }
@@ -1162,7 +1191,7 @@ function createSelectProxy(selectEl, proxyBtn, title){
 /* Image size/count + tint */
 const imgSizeRange = document.getElementById('imgSizeRange');
 document.getElementById('imgSizeRange').addEventListener('input', (e)=>{ LAYOUT.imgBase = parseFloat(e.target.value); draw(); tryKeepFullscreen(150); });
-document.getElementById('imgCountRange').addEventListener('input', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); tryKeepFullscreen(150); });
+document.getElementById('imgCountSelect').addEventListener('change', (e)=>{ IMG_COUNT = parseInt(e.target.value,10); draw(); tryKeepFullscreen(150); });
 
 document.getElementById('bgTintToggleSpecial').addEventListener('change', (e)=>{
   bgTintEnabled = e.target.checked;
@@ -1326,7 +1355,7 @@ function closePickerModal(){
   pickerGrid.innerHTML='';
   for(const it of gridItems){ if(it.file && it.url) try{ URL.revokeObjectURL(it.url); }catch(_){} }
   gridItems = [];
-  ensureReturnToFullscreen();
+  tryKeepFullscreen(350);
 }
 
 /* Choose repo */
@@ -1442,27 +1471,35 @@ async function populateFromRepo(){
   setCurrentSlot(0);
 }
 
+/* Fetch pictogram index with local-first strategy */
+async function fetchPictoIndex(){
+  try{
+    const r = await fetch('pictos/index.json', {cache:'no-store'});
+    if(r.ok) return r;
+  }catch(_){ }
+  return fetch('/images/pictos/index.json', {cache:'no-store'});
+}
+
 /* Populate grid from pictogram index.json */
 async function populateFromPictos(){
   const lang = getLang();
   pickerTitle.textContent = (lang==='fr' ? 'Sélectionner des pictogrammes' : 'Select pictograms');
   const hint = isIOS ? (lang==='fr' ? ' — iPad : touchez pour remplir 1→4' : ' — iPad: tap to fill 1→4') : '';
-  pickerSub.textContent = '(../../images/pictos/)' + hint;
+  pickerSub.textContent = '(pictos/)' + hint;
   switchSourceBtn.classList.add('hidden');
   pickerGrid.innerHTML=''; gridItems = [];
 
   try{
-    const resp = await fetch('../../images/pictos/index.json', { cache:'no-store' });
+    const resp = await fetchPictoIndex();
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     const data = await resp.json();
 
     // Expected shapes:
-    // 1) { base:"../../images/pictos/", categories:{ Fruits:["apple.png",...], ... } }
-    // 2) { base:"../../images/pictos/", files:["a.png","b.png",...] }
+    // 1) { base:"./", categories:{ Fruits:["apple.png",...], ... } }
+    // 2) { base:"./", files:["a.png","b.png",...] }
     // 3) { files:["a.png",...]} (fallback base inferred)
 
-    let base = (typeof data.base === 'string' ? data.base : '../../images/pictos/');
-    if(!base.endsWith('/')) base += '/';
+    const base = new URL(data.base || '.', resp.url).href;
 
     const makeCard = (url, name)=>{
       const card = document.createElement('div');
@@ -1489,7 +1526,7 @@ async function populateFromPictos(){
         frag.appendChild(hdr);
 
         (files||[]).forEach(f=>{
-          const url = f.startsWith('http') || f.startsWith('/') ? f : (base + f);
+          const url = f.startsWith('http') || f.startsWith('/') ? f : new URL(f, base).href;
           const name = f.split('/').pop();
           gridItems.push({name,url});
           frag.appendChild(makeCard(url, name));
@@ -1497,7 +1534,7 @@ async function populateFromPictos(){
       }
     } else if (Array.isArray(data?.files)){
       (data.files).forEach(f=>{
-        const url = f.startsWith('http') || f.startsWith('/') ? f : (base + f);
+        const url = f.startsWith('http') || f.startsWith('/') ? f : new URL(f, base).href;
         const name = f.split('/').pop();
         gridItems.push({name,url});
         frag.appendChild(makeCard(url, name));
@@ -1514,7 +1551,7 @@ async function populateFromPictos(){
     pickerGrid.appendChild(frag);
   }catch(err){
     const p=document.createElement('div');
-    p.textContent = (lang==='fr' ? 'Impossible de charger ../../images/pictos/index.json' : 'Could not load ../../images/pictos/index.json');
+    p.textContent = (lang==='fr' ? 'Impossible de charger pictos/index.json' : 'Could not load pictos/index.json');
     p.style.padding='10px'; p.style.opacity='.85';
     pickerGrid.appendChild(p);
   }
@@ -1639,17 +1676,22 @@ window.addEventListener('DOMContentLoaded', ()=>{
       document.getElementById('dialProxy'),
       getLang()==='fr' ? 'Cadran' : 'Dial'
     );
-    createSelectProxy(
-      document.getElementById('specialMode'),
-      document.getElementById('modeProxy'),
-      getLang()==='fr' ? 'Mode' : 'Mode'
-    );
-    createSelectProxy(
-      document.getElementById('alarmSelect'),
-      document.getElementById('alarmProxy'),
-      getLang()==='fr' ? 'Son d’alarme' : 'Alarm sound'
-    );
-  }else{
+      createSelectProxy(
+        document.getElementById('specialMode'),
+        document.getElementById('modeProxy'),
+        getLang()==='fr' ? 'Mode' : 'Mode'
+      );
+      createSelectProxy(
+        document.getElementById('alarmSelect'),
+        document.getElementById('alarmProxy'),
+        getLang()==='fr' ? 'Son d’alarme' : 'Alarm sound'
+      );
+      createSelectProxy(
+        document.getElementById('imgCountSelect'),
+        document.getElementById('imgCountProxy'),
+        getLang()==='fr' ? 'Nombre d’images' : 'Image count'
+      );
+    }else{
     // Hide iPad-only buttons on desktop
     document.getElementById('pickLibraryBtn')?.classList.add('hidden');
     document.getElementById('pickPhotoBtn')?.classList.add('hidden');
