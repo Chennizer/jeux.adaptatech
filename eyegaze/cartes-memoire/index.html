@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartes mémoire - Contrôle oculaire</title>
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/eyegaze-menu.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      background-color: #f9fafb;
+      color: #000;
+    }
+    .game-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      width: 100%;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+    .game-grid {
+      display: grid;
+      gap: 10px;
+      justify-content: center;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      max-width: 800px;
+      width: 100%;
+    }
+    .card {
+      width: 120px;
+      height: 120px;
+      background-color: #fff;
+      border: 2px solid #ccc;
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .card-front,
+    .card-back {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      transition: opacity 0.4s ease;
+    }
+    .card-front {
+      background-color: #f0f0f0;
+      z-index: 2;
+    }
+    .card-back {
+      background-color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      z-index: 1;
+    }
+    .card-back img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .card.flipped .card-front {
+      opacity: 0;
+      z-index: 1;
+    }
+    .card.flipped .card-back {
+      opacity: 1;
+      z-index: 2;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-options" class="modal" style="display:flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title">Cartes mémoire</h2>
+      </div>
+      <div id="mode-divider"></div>
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label for="pairCount" class="teal-label">
+              <span>Nombre de paires:</span>
+            </label>
+            <select id="pairCount" class="styled-input-small">
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </div>
+          <div class="option-item">
+            <label for="categorySelect" class="teal-label">
+              <span>Catégorie d'images:</span>
+            </label>
+            <select id="categorySelect" class="styled-input-small"></select>
+          </div>
+        </div>
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label">
+              <input type="checkbox" id="muteSFX" />
+              <span>Désactiver les sons</span>
+            </label>
+          </div>
+          <div class="option-item">
+            <label for="sfxVol" class="teal-label">
+              <span>Volume des sons: </span>
+              <span id="sfxVolVal">50</span>
+            </label>
+            <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50" />
+          </div>
+        </div>
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTimeSlider" class="teal-label">
+              <span>Temps de fixation: </span>
+              <span id="dwellTimeVal">1500</span> ms
+            </label>
+            <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500" />
+          </div>
+        </div>
+      </div>
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button">Commencer</button>
+    </div>
+  </div>
+
+  <div class="game-container">
+    <div id="game-grid" class="game-grid"></div>
+  </div>
+
+  <div id="hover-circle" class="dwell-circle"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script>
+    let pictosData = {};
+    let hoverTimeout;
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+    let matches = 0;
+    let currentPairs = 0;
+
+    fetch("../../images/pictos/index.json")
+      .then(r => r.json())
+      .then(data => {
+        pictosData = data;
+        const catSelect = document.getElementById("categorySelect");
+        Object.keys(data.categories).forEach(key => {
+          const opt = document.createElement("option");
+          opt.value = key;
+          opt.textContent = key.replace(/_/g, ' ');
+          catSelect.appendChild(opt);
+        });
+      });
+
+    function startGame() {
+      const pairCount = parseInt(document.getElementById("pairCount").value, 10);
+      const category = document.getElementById("categorySelect").value;
+      const images = (pictosData.categories[category] || []).slice();
+      shuffle(images);
+      const selected = images.slice(0, pairCount).map(img => pictosData.base + img);
+      buildBoard(selected);
+      currentPairs = pairCount;
+      matches = 0;
+      eyegazeSettings.hideOverlay();
+    }
+
+    function buildBoard(images) {
+      const grid = document.getElementById("game-grid");
+      grid.innerHTML = "";
+      const cardsArray = [...images, ...images];
+      shuffle(cardsArray);
+      cardsArray.forEach(src => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.src = src;
+        const front = document.createElement("div");
+        front.className = "card-front";
+        const back = document.createElement("div");
+        back.className = "card-back";
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = "";
+        back.appendChild(img);
+        card.appendChild(front);
+        card.appendChild(back);
+        grid.appendChild(card);
+
+        card.addEventListener('click', () => flipCard(card));
+        card.addEventListener('mouseover', () => startHover(card));
+        card.addEventListener('mouseout', stopHover);
+      });
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function flipCard(card) {
+      if (lockBoard || card === firstCard || card.classList.contains('matched')) return;
+      card.classList.add('flipped');
+      if (!firstCard) {
+        firstCard = card;
+        return;
+      }
+      secondCard = card;
+      lockBoard = true;
+      const match = firstCard.dataset.src === secondCard.dataset.src;
+      if (match) {
+        setTimeout(() => {
+          firstCard.classList.add('matched');
+          secondCard.classList.add('matched');
+          resetBoard();
+          matches++;
+          if (matches === currentPairs) {
+            setTimeout(() => alert('Bravo!'), 300);
+          }
+        }, 400);
+      } else {
+        setTimeout(() => {
+          firstCard.classList.remove('flipped');
+          secondCard.classList.remove('flipped');
+          resetBoard();
+        }, 1000);
+      }
+    }
+
+    function resetBoard() {
+      [firstCard, secondCard] = [null, null];
+      lockBoard = false;
+    }
+
+    function startHover(element) {
+      const hoverTime = eyegazeSettings.dwellTime;
+      const hoverCircle = document.getElementById('hover-circle');
+      hoverCircle.style.transition = 'none';
+      hoverCircle.style.width = '20px';
+      hoverCircle.style.height = '20px';
+      hoverCircle.style.display = 'block';
+      document.addEventListener('mousemove', moveCircle);
+      setTimeout(() => {
+        hoverCircle.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
+        hoverCircle.style.width = '100px';
+        hoverCircle.style.height = '100px';
+      }, 0);
+      hoverTimeout = setTimeout(() => {
+        flipCard(element);
+        hoverCircle.style.display = 'none';
+        document.removeEventListener('mousemove', moveCircle);
+      }, hoverTime);
+    }
+
+    function stopHover() {
+      clearTimeout(hoverTimeout);
+      const hoverCircle = document.getElementById('hover-circle');
+      hoverCircle.style.display = 'none';
+      document.removeEventListener('mousemove', moveCircle);
+    }
+
+    function moveCircle(event) {
+      const hoverCircle = document.getElementById('hover-circle');
+      hoverCircle.style.left = `${event.clientX - hoverCircle.offsetWidth / 2}px`;
+      hoverCircle.style.top = `${event.clientY - hoverCircle.offsetHeight / 2}px`;
+    }
+
+    document.getElementById('startButton').addEventListener('click', startGame);
+  </script>
+</body>
+</html>
