@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartes mémoire</title>
+  <!-- Menu and common eyegaze styles -->
+  <link rel="stylesheet" href="../../css/eyegaze-menu.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body { margin:0; background:#000; display:block !important; }
+    #game-container { display:none; padding:20px; max-width:900px; margin:0 auto; }
+    #grid { display:grid; gap:10px; justify-content:center; }
+    .card { width:120px; height:120px; position:relative; cursor:pointer; }
+    .card-inner { position:absolute; inset:0; transition:transform 0.6s; transform-style:preserve-3d; }
+    .card.flipped .card-inner { transform:rotateY(180deg); }
+    .card-face { position:absolute; inset:0; backface-visibility:hidden; border:2px solid #ccc; border-radius:10px; background:#fff; display:flex; align-items:center; justify-content:center; }
+    .card-back { background:#3490dc; color:#fff; font-size:48px; }
+    .card-front { transform:rotateY(180deg); }
+    .card-front img { width:100%; height:100%; object-fit:contain; border-radius:8px; }
+    #win-message { display:none; text-align:center; color:#fff; font-size:24px; }
+  </style>
+</head>
+<body>
+  <!-- ===== MENU ===== -->
+  <div id="game-options" class="modal" style="display:flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title">Cartes mémoire</h2>
+      </div>
+      <div id="options-inline-container" style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;width:100%;margin-top:20px;">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label" style="display:inline-flex;align-items:center;gap:.5em;color:#333;">
+              <input type="checkbox" id="muteSFX">
+              <span>Désactiver les sons</span>
+            </label>
+          </div>
+          <div class="option-item">
+            <label for="sfxVol" class="teal-label">
+              <span>Volume des sons&nbsp;:</span>
+              <span id="sfxVolVal">50</span>
+            </label>
+            <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
+          </div>
+          <div class="option-item">
+            <label for="pairCount" class="teal-label">Nombre de paires :</label>
+            <input type="number" id="pairCount" min="2" max="6" value="2" />
+          </div>
+        </div>
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTimeSlider" class="teal-label">
+              <span>Temps de fixation&nbsp;:</span>
+              <span id="dwellTimeVal">1000</span> ms
+            </label>
+            <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1000">
+          </div>
+          <div class="option-item">
+            <label for="categorySelect" class="teal-label">Catégorie d'images :</label>
+            <select id="categorySelect"></select>
+          </div>
+        </div>
+      </div>
+      <button id="startButton" class="button">Commencer</button>
+    </div>
+  </div>
+
+  <!-- ===== GAME ===== -->
+  <div id="game-container">
+    <div id="grid"></div>
+    <div id="win-message">Bravo!</div>
+  </div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script>
+    const gridEl = document.getElementById('grid');
+    const gameContainer = document.getElementById('game-container');
+    const winMessage = document.getElementById('win-message');
+    const startBtn = document.getElementById('startButton');
+    const pairInput = document.getElementById('pairCount');
+    const categorySelect = document.getElementById('categorySelect');
+
+    // Populate categories from index.json
+    fetch('../../images/pictos/index.json').then(r=>r.json()).then(data=>{
+      const cats = data.categories; const base = data.base;
+      for(const key in cats){
+        const opt = document.createElement('option');
+        opt.value = key; opt.textContent = key;
+        categorySelect.appendChild(opt);
+      }
+      categorySelect.dataset.base = data.base;
+    });
+
+    function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+
+    let firstCard=null; let lock=false; let matched=0; let totalPairs=0;
+
+    function createCard(src){
+      const card = document.createElement('div');
+      card.className='card';
+      card.innerHTML=`<div class="card-inner"><div class="card-face card-back"></div><div class="card-face card-front"><img src="${src}" alt=""></div></div>`;
+      card.dataset.src=src;
+      applyDwell(card, ()=>flipCard(card));
+      return card;
+    }
+
+    function flipCard(card){
+      if(lock || card.classList.contains('flipped')) return;
+      card.classList.add('flipped');
+      if(!firstCard){ firstCard=card; return; }
+      lock=true;
+      if(firstCard.dataset.src===card.dataset.src){
+        matched++;
+        firstCard=null; lock=false;
+        if(matched===totalPairs){ winMessage.style.display='block'; }
+      } else {
+        setTimeout(()=>{
+          card.classList.remove('flipped');
+          firstCard.classList.remove('flipped');
+          firstCard=null; lock=false;
+        },1000);
+      }
+    }
+
+    function startGame(){
+      gridEl.innerHTML=''; winMessage.style.display='none'; matched=0; firstCard=null; lock=false;
+      const count = parseInt(pairInput.value);
+      totalPairs=count;
+      const category = categorySelect.value;
+      fetch('../../images/pictos/index.json').then(r=>r.json()).then(data=>{
+        const base = data.base; const imgs = data.categories[category];
+        const chosen = shuffle(imgs.slice()).slice(0,count);
+        const pairs = shuffle(chosen.concat(chosen.slice()));
+        const cols = Math.min(4, count*2);
+        gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        pairs.forEach(img=>{
+          const card = createCard(base+img);
+          gridEl.appendChild(card);
+        });
+        gameContainer.style.display='block';
+      });
+    }
+
+    startBtn.addEventListener('click', ()=>{eyegazeSettings.hideOverlay(); startGame();});
+
+    function applyDwell(el, cb){
+      let t; el.addEventListener('pointerenter',()=>{t=setTimeout(()=>cb(el), eyegazeSettings.dwellTime);});
+      el.addEventListener('pointerleave',()=>{clearTimeout(t);});
+    }
+  </script>
+</body>
+</html>
