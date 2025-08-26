@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartes mémoire - contrôle oculaire</title>
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/eyegaze-menu.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f9fafb;
+    }
+    #game {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      max-width: 640px;
+    }
+    .card {
+      width: 100px;
+      height: 100px;
+      position: relative;
+      cursor: pointer;
+    }
+    .card-front,
+    .card-back {
+      position: absolute;
+      inset: 0;
+      border: 2px solid #333;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.4s;
+      background: #fff;
+    }
+    .card-front {
+      background: #3490dc;
+    }
+    .card-front::after {
+      content: '?';
+      font-size: 2rem;
+      color: #fff;
+    }
+    .card-back {
+      opacity: 0;
+    }
+    .card.flipped .card-front {
+      opacity: 0;
+    }
+    .card.flipped .card-back {
+      opacity: 1;
+    }
+    .card-back img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-options" class="modal" style="display:flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title">Cartes mémoire</h2>
+      </div>
+      <div id="mode-divider"></div>
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label">
+              <input type="checkbox" id="muteSFX" />
+              <span>Désactiver les sons</span>
+            </label>
+          </div>
+          <div class="option-item">
+            <label for="sfxVol" class="teal-label">
+              <span>Volume des sons: </span>
+              <span id="sfxVolVal">50</span>
+            </label>
+            <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50" />
+          </div>
+        </div>
+        <div class="options-column">
+          <div class="option-item">
+            <label for="pairCount" class="teal-label">
+              <span>Nombre de paires: </span>
+              <span id="pairCountVal">4</span>
+            </label>
+            <input type="range" id="pairCount" class="styled-slider" min="2" max="6" value="4" />
+          </div>
+          <div class="option-item">
+            <label for="categorySelect" class="teal-label">
+              <span>Catégorie:</span>
+            </label>
+            <select id="categorySelect"></select>
+          </div>
+        </div>
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTimeSlider" class="teal-label">
+              <span>Temps de fixation: </span>
+              <span id="dwellTimeVal">1500</span> ms
+            </label>
+            <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500" />
+          </div>
+        </div>
+      </div>
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button">Commencer</button>
+    </div>
+  </div>
+
+  <div id="game" class="memory-container"></div>
+  <div id="hover-circle" class="dwell-circle"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script>
+    let pictosData;
+    let hoverTimeout;
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+    let matches = 0;
+    let totalPairs = 0;
+
+    const pairSlider = document.getElementById('pairCount');
+    const pairVal = document.getElementById('pairCountVal');
+    pairSlider.addEventListener('input', e => pairVal.textContent = e.target.value);
+
+    fetch('../../images/pictos/index.json')
+      .then(res => res.json())
+      .then(data => {
+        pictosData = data;
+        const sel = document.getElementById('categorySelect');
+        Object.keys(data.categories).forEach(cat => {
+          const opt = document.createElement('option');
+          opt.value = cat;
+          opt.textContent = cat;
+          sel.appendChild(opt);
+        });
+      });
+
+    document.getElementById('startButton').addEventListener('click', startGame);
+
+    function startGame() {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+      }
+      eyegazeSettings.hideOverlay();
+      const category = document.getElementById('categorySelect').value;
+      totalPairs = parseInt(pairSlider.value, 10);
+      buildGame(category, totalPairs);
+    }
+
+    function buildGame(category, numPairs) {
+      const base = pictosData.base;
+      const images = [...pictosData.categories[category]];
+      shuffle(images);
+      const chosen = images.slice(0, numPairs);
+      let deck = [];
+      chosen.forEach(img => {
+        const path = base + category + '/' + img;
+        deck.push(path, path);
+      });
+      shuffle(deck);
+      const board = document.getElementById('game');
+      board.innerHTML = '';
+      matches = 0;
+      deck.forEach(src => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.image = src;
+        const front = document.createElement('div');
+        front.className = 'card-front';
+        const back = document.createElement('div');
+        back.className = 'card-back';
+        const img = document.createElement('img');
+        img.src = src;
+        back.appendChild(img);
+        card.appendChild(front);
+        card.appendChild(back);
+        board.appendChild(card);
+        card.addEventListener('click', () => flipCard(card));
+        card.addEventListener('mouseover', e => startHover(e, card));
+        card.addEventListener('mouseout', stopHover);
+      });
+    }
+
+    function flipCard(card) {
+      if (lockBoard || card.classList.contains('flipped')) return;
+      card.classList.add('flipped');
+      playSound('flip');
+      if (!firstCard) {
+        firstCard = card;
+        return;
+      }
+      secondCard = card;
+      lockBoard = true;
+      if (firstCard.dataset.image === secondCard.dataset.image) {
+        matches++;
+        playSound('match');
+        resetPair();
+        if (matches === totalPairs) {
+          setTimeout(() => playSound('victory'), 300);
+        }
+      } else {
+        playSound('error');
+        setTimeout(() => {
+          firstCard.classList.remove('flipped');
+          secondCard.classList.remove('flipped');
+          resetPair();
+        }, 1000);
+      }
+    }
+
+    function resetPair() {
+      [firstCard, secondCard] = [null, null];
+      lockBoard = false;
+    }
+
+    function startHover(e, card) {
+      const hoverTime = eyegazeSettings.dwellTime;
+      const hoverCircle = document.getElementById('hover-circle');
+      hoverCircle.style.transition = 'none';
+      hoverCircle.style.width = '20px';
+      hoverCircle.style.height = '20px';
+      hoverCircle.style.display = 'block';
+      moveCircle(e);
+      setTimeout(() => {
+        hoverCircle.style.transition = `width ${hoverTime}ms ease, height ${hoverTime}ms ease`;
+        hoverCircle.style.width = '100px';
+        hoverCircle.style.height = '100px';
+      }, 0);
+      document.addEventListener('mousemove', moveCircle);
+      hoverTimeout = setTimeout(() => {
+        flipCard(card);
+        hoverCircle.style.display = 'none';
+      }, hoverTime);
+    }
+
+    function stopHover() {
+      clearTimeout(hoverTimeout);
+      const hoverCircle = document.getElementById('hover-circle');
+      hoverCircle.style.display = 'none';
+      document.removeEventListener('mousemove', moveCircle);
+    }
+
+    function moveCircle(event) {
+      const hoverCircle = document.getElementById('hover-circle');
+      hoverCircle.style.left = `${event.clientX - hoverCircle.offsetWidth / 2}px`;
+      hoverCircle.style.top = `${event.clientY - hoverCircle.offsetHeight / 2}px`;
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function playSound(type) {
+      if (eyegazeSettings.sfxMuted) return;
+      let src = '';
+      if (type === 'flip') src = '../../sounds/flip.mp3';
+      else if (type === 'match') src = '../../sounds/pageturn.mp3';
+      else if (type === 'victory') src = '../../sounds/victory.mp3';
+      else src = '../../sounds/error.mp3';
+      const audio = new Audio(src);
+      audio.volume = eyegazeSettings.sfxVolume / 100;
+      audio.play();
+    }
+  </script>
+</body>
+</html>
