@@ -589,7 +589,7 @@ function getSecondsFromEvent(e){
   const r=canvas.getBoundingClientRect(),
         x=(e.touches?e.touches[0].clientX:e.clientX)-r.left,
         y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
-  const size=Math.min(canvas.width,canvas.height)*0.9;
+  const size=Math.min(canvas.width,canvas.height)*(specialMode==='marker'?0.8:0.9);
   const {cx,cy} = getCenter(size);
   let ang=-Math.PI/2-Math.atan2(y-cy,x-cx);while(ang<0)ang+=Math.PI*2;
   const cfg=dialConfigs[dialMax],ratio=ang/(Math.PI*2);
@@ -604,7 +604,7 @@ function insideDial(e){
   const r=canvas.getBoundingClientRect(),
         x=(e.touches?e.touches[0].clientX:e.clientX)-r.left,
         y=(e.touches?e.touches[0].clientY:e.clientY)-r.top,
-        size=Math.min(canvas.width,canvas.height)*0.9;
+        size=Math.min(canvas.width,canvas.height)*(specialMode==='marker'?0.8:0.9);
   const {cx,cy} = getCenter(size);
   return Math.hypot(x-cx,y-cy)<=size*0.4;
 }
@@ -612,7 +612,7 @@ function angleFromEvent(e){
   const r = canvas.getBoundingClientRect();
   const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
   const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
-  const size = Math.min(canvas.width, canvas.height) * 0.9;
+  const size = Math.min(canvas.width, canvas.height) * (specialMode==='marker'?0.8:0.9);
   const { cx, cy } = getCenter(size);
   let ang = Math.atan2(y - cy, x - cx);
   if (ang < 0) ang += Math.PI * 2;
@@ -669,28 +669,27 @@ function drawMarker(size,cx,cy,outerR){
     const my=cy+Math.sin(markerAngle)*imgR - h/2;
     ctx.drawImage(markerImg,mx,my,w,h);
 
-    const sx=cx+Math.cos(markerAngle)*(imgR-m/2);
-    const sy=cy+Math.sin(markerAngle)*(imgR-m/2);
+    const sx=cx+Math.cos(markerAngle)*(imgR+m/2);
+    const sy=cy+Math.sin(markerAngle)*(imgR+m/2);
     const arrowLen=size*0.1;
-    const ex=sx-Math.cos(markerAngle)*arrowLen;
-    const ey=sy-Math.sin(markerAngle)*arrowLen;
+    const ex=sx+Math.cos(markerAngle)*arrowLen;
+    const ey=sy+Math.sin(markerAngle)*arrowLen;
     ctx.strokeStyle='#000';
     ctx.lineWidth=size*0.01;
     ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
     const ah=size*0.04;
     ctx.fillStyle='#000';
-    const inwardAngle = markerAngle + Math.PI;
     ctx.beginPath();
     ctx.moveTo(ex,ey);
-    ctx.lineTo(ex-Math.cos(inwardAngle-Math.PI/6)*ah, ey-Math.sin(inwardAngle-Math.PI/6)*ah);
-    ctx.lineTo(ex-Math.cos(inwardAngle+Math.PI/6)*ah, ey-Math.sin(inwardAngle+Math.PI/6)*ah);
+    ctx.lineTo(ex-Math.cos(markerAngle-Math.PI/6)*ah, ey-Math.sin(markerAngle-Math.PI/6)*ah);
+    ctx.lineTo(ex-Math.cos(markerAngle+Math.PI/6)*ah, ey-Math.sin(markerAngle+Math.PI/6)*ah);
     ctx.closePath();ctx.fill();
   }
 }
 
 /* Draw */
 function draw(){
-  const size=Math.min(canvas.width,canvas.height)*0.9;
+  const size=Math.min(canvas.width,canvas.height)*(specialMode==='marker'?0.8:0.9);
   const {cx,cy} = getCenter(size);
 
   const outerR=size*0.4,borderW=size*0.0067,wedgeR=outerR-borderW/2;
@@ -1024,9 +1023,15 @@ const pauseTimer=()=>{ paused=!paused; setPauseLabel(paused); };
 /* Drag & resize for dial */
 function startDrag(e){
   if(specialMode==='marker'){
-    e.preventDefault();
-    draggingMarker=true;
-    updateMarkerDrag(e);
+    if(insideDial(e)){
+      clearInterval(intervalId);paused=false;
+      setPauseLabel(false);
+      dragging=true;updateDrag(e);
+    }else{
+      e.preventDefault();
+      draggingMarker=true;
+      updateMarkerDrag(e);
+    }
     return;
   }
   if(!insideDial(e))return;
