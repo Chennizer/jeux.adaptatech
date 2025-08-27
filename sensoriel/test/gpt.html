@@ -1,275 +1,517 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>L’école donne des ailes — ailes détaillées (p5.js)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- p5.js -->
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+  <meta charset="utf-8" />
+  <title>Routine matinale — Démo Reveal.js (interactif)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- Reveal.js core + theme -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/theme/white.css" id="theme">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/highlight/monokai.css">
+
   <style>
-    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b0e17; color:#fff; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    #title{
-      position:fixed; top:48px; left:0; right:0; text-align:center; z-index:2;
-      color:rgba(255,255,255,.85); letter-spacing:.3px;
+    .reveal .slides { text-align: left; }
+    .reveal h1, .reveal h2 { color:#294936; }
+    .reveal a { color:#D36135; }
+    .badge { display:inline-block; padding:.25em .55em; border-radius:.5em; border:1px solid #623B5A; }
+    .note-tip { font-size: .8em; opacity:.8; }
+    .row{ display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 1rem; }
+    .row label{ font-weight:600; color:#294936; }
+    input[type="range"]{ width:260px; }
+    pre code{ font-size:.9em; }
+
+    /* Base grid for pictos */
+    .picto-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+      gap:1rem;
+      justify-items:center;
+      align-items:center;
     }
-    #title::before, #title::after{
-      content:""; display:inline-block; vertical-align:middle; width:min(18vw,200px); height:1px;
-      background:linear-gradient(90deg, transparent, rgba(255,255,255,.18)); margin:0 14px;
+    .picto{
+      width:110px; height:110px; display:flex; align-items:center; justify-content:center;
+      border-radius:16px; border:2px solid #e6eaef; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.06);
+      transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease, outline-color .15s ease;
+      outline:4px solid transparent; position:relative; overflow:hidden;
+      user-select: none;
+      touch-action: manipulation;
     }
-    #title::after{ transform:scaleX(-1); }
-    #hint{
-      position:fixed; left:12px; bottom:12px; z-index:2;
-      background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.18);
-      padding:8px 12px; border-radius:12px; font-size:14px; white-space:pre-line; backdrop-filter:blur(6px);
+    .picto img{ max-width:100%; max-height:100%; }
+
+    /* Selected */
+    .picto.selected{
+      outline-color:#ADF1D2; border-color:#294936; box-shadow:0 4px 14px rgba(0,0,0,.12), 0 0 0 4px rgba(173,241,210,.35) inset;
+      transform:translateY(-1px);
     }
-    #vignette{
-      position:fixed; inset:0; pointer-events:none; z-index:1;
-      background:
-        radial-gradient(1200px 60% at 50% 78%, rgba(255,255,255,.07) 0%, rgba(255,255,255,0) 60%),
-        radial-gradient(100% 100% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.35) 100%);
+
+    /* Activation effect */
+    @keyframes pulse {
+      0% { transform:scale(1); }
+      35%{ transform:scale(1.08); }
+      100%{ transform:scale(1); }
     }
+    .picto.activated{
+      animation:pulse .6s ease-out both;
+      border-color:#D36135;
+      box-shadow:0 6px 18px rgba(0,0,0,.16), 0 0 0 4px rgba(211,97,53,.25) inset;
+    }
+
+    /* Eye-gaze dwell ring */
+    .gaze .picto::after{
+      content:"";
+      position:absolute; inset:-2px;
+      border-radius:18px;
+      background:conic-gradient(#D36135 0deg, #D36135 0deg, transparent 0deg);
+      mix-blend-mode:normal; opacity:.18; pointer-events:none;
+      transition:opacity .12s ease;
+    }
+    .gaze .picto.dwell::after{ opacity:.35; }
+
+    /* Fullscreen toggle */
+    #fullscreenBtn{
+      position:fixed; top:10px; right:10px; z-index:9999;
+      background:#294936; color:#fff; border:none;
+      padding:.5em 1em; border-radius:8px; cursor:pointer;
+      box-shadow:0 2px 8px rgba(0,0,0,.2);
+    }
+    #fullscreenBtn:active{ transform:translateY(1px); }
+
+    /* Immersive game slide (hide UI) */
+    body.immersive .reveal .controls,
+    body.immersive .reveal .progress,
+    body.immersive .reveal .slide-number { display:none !important; }
+
+    #slide-game{ padding:0 !important; background:#000; }
+    #slide-game .frame-wrap{ position:relative; width:100%; height:100%; }
+    #gameFrame{ position:absolute; inset:0; width:100%; height:100%; border:0; background:#000; display:block; }
+    #slide-game .overlay-hint{
+      position:absolute; left:12px; bottom:12px; z-index:2;
+      background:rgba(0,0,0,.45); color:#fff; padding:.35em .6em; border-radius:8px; font-size:.9rem;
+    }
+
+    /* Drag & drop styling */
+    .reorder-row { display:flex; align-items:center; gap:.5rem; margin:.5rem 0 1rem; }
+    .reorder-row input[type="checkbox"] { transform: scale(1.2); }
+    .picto.draggable { cursor: grab; }
+    .picto.dragging { opacity: .6; cursor: grabbing; }
+    .picto.drop-target { outline: 4px dashed #ADF1D2; }
   </style>
 </head>
 <body>
-  <div id="vignette" aria-hidden="true"></div>
-  <div id="title">L’école donne des ailes</div>
-  <div id="hint">Espace = ouvrir les ailes · R = réinitialiser · F = plein écran</div>
+
+<!-- Fullscreen button -->
+<button id="fullscreenBtn" title="Plein écran (⛶)">⛶</button>
+
+<div class="reveal">
+  <div class="slides">
+    <!-- 1: Intro -->
+    <section data-background-color="#DFF3E4">
+      <h1>Routine matinale</h1>
+      <p class="note-tip">← → ↑ ↓ (navigation), <kbd>Esc</kbd> (plan), <kbd>S</kbd> (notes). Espace = interaction.</p>
+      <p class="badge">Reveal.js • Démo prête à l’emploi</p>
+      <aside class="notes">Tour de table, météo, rappel de l’horaire.</aside>
+    </section>
+
+    <!-- 2: Plan -->
+    <section>
+      <h2>Plan du jour</h2>
+      <ul>
+        <li class="fragment">Accueil &amp; météo</li>
+        <li class="fragment">Choix d’activités</li>
+        <li class="fragment">Pause sensorielle</li>
+        <li class="fragment">Ateliers</li>
+      </ul>
+    </section>
+
+    <!-- 3: Vertical group (Météo + Jeu) -->
+    <section>
+      <section>
+        <h2>Météo</h2>
+        <p>Demander à l’élève de sélectionner l’icône météo.</p>
+        <p class="note-tip">Appuyez sur <kbd>↓</kbd> pour descendre vers le jeu intégré.</p>
+      </section>
+
+      <!-- Full-slide game -->
+      <section id="slide-game">
+        <div class="frame-wrap">
+          <div class="overlay-hint" id="overlayHint">Astuce: ⛶ pour mode plein écran du navigateur</div>
+          <iframe id="gameFrame"
+                  src="../../games/space-activity/index.html"
+                  title="Activité intégrée"
+                  allow="autoplay; fullscreen; clipboard-read; clipboard-write; gamepad; accelerometer; gyroscope"
+                  allowfullscreen
+                  referrerpolicy="no-referrer"></iframe>
+        </div>
+      </section>
+    </section>
+
+    <!-- 4: Markdown -->
+    <section data-markdown>
+      <textarea data-template>
+### Option Markdown (FR/EN)
+
+- **FR** : Slide écrit en *Markdown* pour faciliter la rédaction.
+- **EN** : This slide uses *Markdown* for quick authoring.
+
+---
+#### Liste de contrôle
+- [ ] Préparer images
+- [ ] Importer horaires
+- [ ] Tester l’accès clavier/switch
+      </textarea>
+    </section>
+
+    <!-- 5: Code -->
+    <section>
+      <h2>Extrait de code</h2>
+      <pre><code class="language-js">
+// Exemple: initialiser une "scène" simple
+function startMorningRoutine() {
+  const steps = ["Météo", "Choix", "Pause", "Ateliers"];
+  steps.forEach((s, i) => console.log(`#${i+1}:`, s));
+}
+startMorningRoutine();
+      </code></pre>
+    </section>
+
+    <!-- 6: Buttons -->
+    <section>
+      <h2>Interaction rapide</h2>
+      <p>Boutons de démonstration.</p>
+      <button onclick="alert('Bonjour 👋')">Dire bonjour</button>
+      <button onclick="Reveal.next()">Slide suivant ➡️</button>
+    </section>
+
+    <!-- 7: Keyboard selection + drag & drop -->
+    <section id="slide-keyboard">
+      <h2>Pictogrammes — Sélection clavier</h2>
+      <p class="note-tip">
+        <kbd>Entrée</kbd> = suivant (⇧+Entrée = précédent) • <kbd>Espace</kbd> = activer •
+        🖱️ Cliquez pour activer • 🔀 Option ci-dessous pour réorganiser par glisser-déposer
+      </p>
+      <div class="reorder-row">
+        <input type="checkbox" id="toggleReorder">
+        <label for="toggleReorder">Activer le mode réorganisation (glisser-déposer)</label>
+      </div>
+      <div class="picto-grid" id="grid-keyboard"></div>
+    </section>
+
+    <!-- 8: Eye-gaze (hover/dwell) -->
+    <section id="slide-gaze">
+      <h2>Pictogrammes — Eye-gaze (survol)</h2>
+      <div class="row">
+        <label for="dwell">Temps de fixation (ms):</label>
+        <input id="dwell" type="range" min="400" max="3000" step="100" value="1200">
+        <span id="dwellVal">1200</span>
+      </div>
+      <p class="note-tip">Survolez une image : un court délai déclenche l’activation.</p>
+      <div class="picto-grid gaze" id="grid-gaze"></div>
+    </section>
+
+    <!-- 9: Static grid -->
+    <section>
+      <h2>Pictogrammes (aperçu)</h2>
+      <div class="picto-grid" id="grid-static"></div>
+    </section>
+
+    <!-- 10: End -->
+    <section data-background-color="#ADF1D2">
+      <h2>Merci!</h2>
+      <p>Docs Reveal.js : <a href="https://revealjs.com" target="_blank" rel="noreferrer">revealjs.com</a></p>
+      <p class="note-tip">Impression PDF : ajoutez <code>?print-pdf</code> à l’URL.</p>
+    </section>
+  </div>
+</div>
+
+<!-- Scripts: Reveal + Plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/markdown/markdown.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/markdown/marked.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/highlight/highlight.js"></script>
 
 <script>
-/* ==========================================================
-   Ailes seules, détaillées (texture de plumes)
-   - Silhouette retirée, aucune articulation visible
-   - ESPACE ouvre par paliers jusqu’aux bords
-   - Plumes: rachis + barbules + liserés, palette iridescente
-   ========================================================== */
+  // --- CONFIG / DATA ---
+  const PICTO_BASE = '../../images/pictos/';
+  // NOTE: We keep FILES mutable so reordering persists in-session.
+  let FILES = [
+    'angry.png','apple.png','assistivebike.png','assistiveswitches.png','balloon.png','banana.png',
+    'basketball.png','bear.png','beaver.png','bicycle.png','binsensory.png','binwater.png',
+    'blackroom.png','boat.png','book.png','book2.png','bowl.png','broccoli.png','brush.png','bus.png'
+  ];
 
-let cx, cy;
-let ouvertureCible = 0;      // 0..1
-let ouverture = 0;           // interpolation
-const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-// Géométrie & densité
-const margeBords   = 20;
-const epauleOffset = 68;     // ancrage invisible des ailes depuis le centre
-const N_PRIM = 18;           // primaires (grandes)
-const N_SECO = 14;           // secondaires (moyennes)
-const N_COVR = 12;           // couvertures (petites, près du corps)
-
-function setup(){
-  createCanvas(windowWidth, windowHeight);
-  frameRate(60);
-  colorMode(HSB, 360, 100, 100, 255);
-  cx = width/2; cy = height/2 + 20;
-
-  // Bloque le scroll quand on appuie sur Espace
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') e.preventDefault();
-  }, {passive:false});
-}
-
-function windowResized(){
-  resizeCanvas(windowWidth, windowHeight);
-  cx = width/2; cy = height/2 + 20;
-}
-
-function draw(){
-  drawFond();
-
-  // Animation douce de l’ouverture
-  ouverture = lerp(ouverture, ouvertureCible, reducedMotion ? 0.08 : 0.13);
-
-  // Ailes
-  drawWing(+1); // droite
-  drawWing(-1); // gauche
-}
-
-/* ----------------------- Entrées ----------------------- */
-function keyPressed(){
-  if (key === ' ' || keyCode === 32){
-    ouvertureCible = min(1, ouvertureCible + 0.12);
-  }
-  if (key === 'r' || key === 'R'){
-    ouvertureCible = 0; ouverture = 0;
-  }
-  if (key === 'f' || key === 'F'){
-    const el = document.documentElement;
-    const isFs = document.fullscreenElement != null;
-    if (!isFs) el.requestFullscreen?.(); else document.exitFullscreen?.();
-  }
-}
-
-/* -------------------- Arrière-plan -------------------- */
-function drawFond(){
-  // Dégradé vertical nuit bleutée (RGB pour éviter dérives HSB)
-  colorMode(RGB, 255);
-  noStroke();
-  for (let i=0;i<height;i+=3){
-    const k = i/height;
-    const r = lerp(21, 5, k);
-    const g = lerp(26, 8, k);
-    const b = lerp(54,18, k);
-    fill(r,g,b);
-    rect(0,i,width,3);
-  }
-  // Ligne décorative
-  stroke(255,255,255, 20);
-  line(0, height*0.22, width, height*0.22);
-  colorMode(HSB, 360, 100, 100, 255);
-}
-
-/* ------------------------- Ailes ------------------------- */
-function drawWing(side){
-  push();
-  translate(cx + side*epauleOffset, cy - 6);
-  scale(side, 1); // miroir pour la gauche
-
-  // Angle base (replié → ouvert)
-  const angleBase = radians( mapClamp(ouverture, 0,1, 74, 4) );
-  // Écart angulaire entre plumes
-  const ecart = mapClamp(ouverture, 0,1, 10, 44);
-
-  // Longueur maximale pour toucher le bord en ouverture totale
-  const LMAX = max(30, (width/2 - margeBords - epauleOffset));
-
-  // Halo doux derrière
-  push();
-  blendMode(ADD);
-  noStroke();
-  const haloA = 18 + 60*ouverture;
-  for (let i=0;i<3;i++){
-    fill(210, 40, 90, haloA/(i+1)); // bleu froid en HSB
-    const rr = map(ouverture, 0,1, 120, 220) + i*40;
-    ellipse(0, 0, rr*1.6, rr*1.0);
-  }
-  pop();
-
-  // ORDRE: primaires → secondaires → couvertures (pour donner de la profondeur)
-
-  // 1) Primaires (grandes)
-  for (let i=0; i<N_PRIM; i++){
-    const t = i/(N_PRIM-1 || 1);
-    const lenFinal = lerp(LMAX*0.52, LMAX, pow(t, 0.92));
-    const len = lerp(lenFinal*0.58, lenFinal, ouverture);
-    const ep  = lerp(24, 14, t);
-    const ang = -angleBase - radians(t*ecart);
-    const col = paletteIridescent(t, 0.95);   // HSB
-    featherDetailed(len, ep, ang, col, /*withRachis*/ true, /*barbules*/ true);
+  // Build grid into containerId (from FILES order)
+  function buildGrid(containerId){
+    const el = document.getElementById(containerId);
+    el.innerHTML = '';
+    FILES.forEach((name, i)=>{
+      const tile = document.createElement('div');
+      tile.className = 'picto';
+      tile.dataset.index = i; // index in FILES
+      const img = document.createElement('img');
+      img.alt = name.replace('.png','');
+      img.src = PICTO_BASE + name;
+      tile.appendChild(img);
+      el.appendChild(tile);
+    });
+    return el.querySelectorAll('.picto');
   }
 
-  // 2) Secondaires (moyennes)
-  for (let i=0; i<N_SECO; i++){
-    const t = i/(N_SECO-1 || 1);
-    const lenFinal = lerp(LMAX*0.36, LMAX*0.7, pow(t, 0.9));
-    const len = lerp(lenFinal*0.6, lenFinal, ouverture);
-    const ep  = lerp(26, 15, t);
-    const ang = -angleBase + radians(8) - radians(t*(ecart*0.72));
-    const col = paletteIridescent(t*0.85, 0.92);
-    featherDetailed(len, ep, ang, col, true, true);
+  // ====== Keyboard selection (Enter to move, Space to activate) + Mouse click ======
+  function makeKeyboardNavigable(gridId){
+    const container = document.getElementById(gridId);
+    let nodes = buildGrid(gridId);
+    if(!nodes.length) return;
+
+    let idx = 0;
+    const refreshNodes = ()=>{ nodes = container.querySelectorAll('.picto'); };
+
+    const select = i=>{
+      refreshNodes();
+      idx = (i + nodes.length) % nodes.length;
+      nodes.forEach(n=>n.classList.remove('selected'));
+      nodes[idx].classList.add('selected');
+      nodes[idx].scrollIntoView({block:'nearest', inline:'nearest'});
+    };
+    const activate = ()=>{
+      refreshNodes();
+      const n = nodes[idx];
+      if(!n) return;
+      n.classList.add('activated');
+      setTimeout(()=>n.classList.remove('activated'), 700);
+    };
+
+    // Mouse/touch: click = select + activate
+    nodes.forEach((node, i)=>{
+      node.addEventListener('click', ()=>{
+        select(i);
+        activate();
+      });
+    });
+
+    // Start with first selected
+    select(0);
+
+    const onKey = (e)=>{
+      if(Reveal.getCurrentSlide()?.id !== 'slide-keyboard') return; // only on this slide
+      if(e.key === 'Enter'){
+        e.preventDefault(); e.stopImmediatePropagation();
+        select(e.shiftKey ? idx-1 : idx+1);
+      } else if(e.key === ' ' || e.key === 'Spacebar'){
+        e.preventDefault(); e.stopImmediatePropagation();
+        activate();
+      }
+    };
+
+    window.addEventListener('keydown', onKey, { capture: true });
+
+    // ---- Drag & Drop (toggleable) ----
+    const toggle = document.getElementById('toggleReorder');
+
+    function enableDnD(){
+      refreshNodes();
+      nodes.forEach(n=>{
+        n.setAttribute('draggable','true');
+        n.classList.add('draggable');
+
+        n.addEventListener('dragstart', onDragStart);
+        n.addEventListener('dragenter', onDragEnter);
+        n.addEventListener('dragover', onDragOver);
+        n.addEventListener('dragleave', onDragLeave);
+        n.addEventListener('drop', onDrop);
+        n.addEventListener('dragend', onDragEnd);
+      });
+    }
+    function disableDnD(){
+      refreshNodes();
+      nodes.forEach(n=>{
+        n.removeAttribute('draggable');
+        n.classList.remove('draggable','dragging','drop-target');
+        n.removeEventListener('dragstart', onDragStart);
+        n.removeEventListener('dragenter', onDragEnter);
+        n.removeEventListener('dragover', onDragOver);
+        n.removeEventListener('dragleave', onDragLeave);
+        n.removeEventListener('drop', onDrop);
+        n.removeEventListener('dragend', onDragEnd);
+      });
+    }
+
+    let dragSrcIndex = null;
+
+    function onDragStart(e){
+      const tile = e.currentTarget;
+      dragSrcIndex = parseInt(tile.dataset.index, 10);
+      tile.classList.add('dragging');
+      // Improve dragging feedback image (if supported)
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragSrcIndex); } catch {}
+      }
+    }
+    function onDragEnter(e){
+      e.preventDefault();
+      e.currentTarget.classList.add('drop-target');
+    }
+    function onDragOver(e){
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    }
+    function onDragLeave(e){
+      e.currentTarget.classList.remove('drop-target');
+    }
+    function onDrop(e){
+      e.preventDefault();
+      const target = e.currentTarget;
+      target.classList.remove('drop-target');
+      const dropIndex = parseInt(target.dataset.index, 10);
+      if (isNaN(dragSrcIndex) || isNaN(dropIndex) || dragSrcIndex === dropIndex) return;
+
+      // Reorder FILES array
+      const moved = FILES.splice(dragSrcIndex, 1)[0];
+      FILES.splice(dropIndex, 0, moved);
+
+      // Rebuild grid in new order and keep selection on moved item
+      nodes = buildGrid(gridId);
+      // Rebind click handlers after rebuild
+      nodes.forEach((node, i)=>{
+        node.addEventListener('click', ()=>{ select(i); activate(); });
+      });
+      // Update selection index to new position of moved item
+      idx = dropIndex;
+      select(idx);
+      // Re-enable DnD if toggle is still on
+      if (toggle.checked) enableDnD();
+    }
+    function onDragEnd(e){
+      e.currentTarget.classList.remove('dragging');
+      container.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+      dragSrcIndex = null;
+    }
+
+    // Toggle handlers
+    toggle.addEventListener('change', ()=>{
+      if (toggle.checked) enableDnD(); else disableDnD();
+    });
+
+    // Clean up when leaving slide
+    const off = ()=>{
+      window.removeEventListener('keydown', onKey, { capture: true });
+      disableDnD();
+      Reveal.off('slidechanged', handler);
+    };
+    const handler = (evt)=>{
+      if(evt.previousSlide && evt.previousSlide.id === 'slide-keyboard'){ off(); }
+    };
+    Reveal.on('slidechanged', handler);
   }
 
-  // 3) Couvertures (petites près du corps)
-  for (let i=0; i<N_COVR; i++){
-    const t = i/(N_COVR-1 || 1);
-    const len = lerp(36, 94, t) * lerp(0.55, 1.0, ouverture);
-    const ep  = lerp(22, 12, t);
-    const ang = -angleBase - radians(t*(ecart*0.45));
-    const c1  = color(220, 18, 100, 235); // blanc froid
-    featherDetailed(len, ep, ang, c1, false, false);
+  // ====== Eye-gaze (hover dwell) ======
+  function makeGazeGrid(gridId, sliderId, labelId){
+    const nodes = buildGrid(gridId);
+    const dwellInput = document.getElementById(sliderId);
+    const dwellVal = document.getElementById(labelId);
+    let dwellMs = parseInt(dwellInput.value,10) || 1200;
+    dwellVal.textContent = dwellMs;
+
+    dwellInput.addEventListener('input', ()=>{
+      dwellMs = parseInt(dwellInput.value,10);
+      dwellVal.textContent = dwellMs;
+    });
+
+    nodes.forEach(tile=>{
+      let t = null;
+      const start = ()=>{
+        tile.classList.add('dwell');
+        t = setTimeout(()=>{
+          tile.classList.remove('dwell');
+          tile.classList.add('activated');
+          setTimeout(()=>tile.classList.remove('activated'), 700);
+        }, dwellMs);
+      };
+      const stop = ()=>{
+        tile.classList.remove('dwell');
+        if(t){ clearTimeout(t); t = null; }
+      };
+      tile.addEventListener('mouseenter', start);
+      tile.addEventListener('mouseleave', stop);
+      tile.addEventListener('click', ()=>{
+        tile.classList.add('activated');
+        setTimeout(()=>tile.classList.remove('activated'), 700);
+      });
+    });
   }
 
-  pop();
-}
+  // ====== Static preview ======
+  function buildStatic(){ buildGrid('grid-static'); }
 
-/* ---------- Plume détaillée (forme + texture) ---------- */
-function featherDetailed(len, ep, ang, col, withRachis=true, withBarbules=true){
-  push();
-  rotate(ang);
+  // ====== Reveal init (Space disabled for slide advance) ======
+  Reveal.initialize({
+    hash: true, slideNumber: true, controls: true, progress: true,
+    center: true, history: true, transition: 'slide',
+    width: 1280, height: 720,
+    keyboard: { 32: null }, // disable Space advancing slides
+    plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+  });
 
-  // Ombre douce sous la plume
-  noStroke();
-  fill(0,0,0, 30);
-  beginShape();
-  for (let j=0; j<=1.0; j+=0.12){
-    const w = ep * (1 - pow(j, 0.55));
-    const up = -w - scallop(j, ep)*0.18;   // bord supérieur dentelé très léger
-    vertex(len*j + 2, up + 2);
-  }
-  for (let j=1.0; j>=0; j-=0.12){
-    const w = ep * (1 - pow(j, 0.55));
-    const dn =  w + scallop(j, ep)*0.18;
-    vertex(len*j + 2, dn + 2);
-  }
-  endShape(CLOSE);
+  // Fullscreen toggle (manual)
+  document.getElementById("fullscreenBtn").addEventListener("click", ()=>{
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(()=>{});
+    } else {
+      document.exitFullscreen();
+    }
+  });
 
-  // Remplissage principal (corps de la plume)
-  fill(col);
-  beginShape();
-  for (let j=0; j<=1.0; j+=0.08){
-    const w = ep * (1 - pow(j, 0.55));
-    const up = -w - scallop(j, ep)*0.12;
-    vertex(len*j, up);
-  }
-  for (let j=1.0; j>=0; j-=0.08){
-    const w = ep * (1 - pow(j, 0.55));
-    const dn =  w + scallop(j, ep)*0.12;
-    vertex(len*j, dn);
-  }
-  endShape(CLOSE);
+  // Game slide immersive behavior
+  const gameFrame = document.getElementById('gameFrame');
+  const overlayHint = document.getElementById('overlayHint');
 
-  // Liseré léger sur le bord supérieur
-  stroke(0, 0, 100, 90); strokeWeight(1);
-  noFill();
-  beginShape();
-  for (let j=0; j<=1.0; j+=0.08){
-    const w = ep * (1 - pow(j, 0.55));
-    const up = -w - scallop(j, ep)*0.12;
-    vertex(len*j, up);
+  function enterGameMode(){
+    document.body.classList.add('immersive');
+    if (gameFrame) gameFrame.focus();
+    if (gameFrame && gameFrame.requestFullscreen) {
+      gameFrame.requestFullscreen().then(()=>{
+        if (overlayHint) overlayHint.style.display = 'none';
+      }).catch(()=>{
+        if (overlayHint) overlayHint.style.display = '';
+      });
+    }
   }
-  endShape();
-
-  if (withRachis){
-    // Rachis (axe central) légèrement plus clair
-    stroke(0, 0, 100, 70); strokeWeight(1.2);
-    line(0, 0, len*0.96, 0);
-  }
-
-  if (withBarbules){
-    // Petites barbules: fines lignes obliques alternées, de chaque côté
-    stroke(0, 0, 100, 35); strokeWeight(0.8);
-    const step = 0.09;
-    for (let j=0.1; j<=0.95; j+=step){
-      const w = ep * (1 - pow(j, 0.55));
-      const L = constrain(w*0.9, 4, 18);
-      // haut
-      line(len*j, 0, len*j + L*0.92, -L*0.35);
-      // bas
-      line(len*j, 0, len*j + L*0.92,  L*0.35);
+  function exitGameMode(){
+    document.body.classList.remove('immersive');
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(()=>{});
     }
   }
 
-  pop();
-}
+  Reveal.on('slidechanged', (evt)=>{
+    const now = evt.currentSlide, prev = evt.previousSlide;
+    if (now && now.id === 'slide-game') enterGameMode();
+    else if (prev && prev.id === 'slide-game') exitGameMode();
+  });
 
-/* --------------- Palette iridescente HSB --------------- */
-// Ambre → magenta → azur. alphaMix ∈ (0..1) multiplie l’alpha
-function paletteIridescent(t, alphaMix=1){
-  const A = color(35,  90, 100, 240*alphaMix); // ambre
-  const B = color(325, 80, 100, 240*alphaMix); // magenta
-  const C = color(205, 60, 100, 240*alphaMix); // azur
-  return (t < 0.5) ? lerpColor(A, B, t/0.5) : lerpColor(B, C, (t-0.5)/0.5);
-}
+  // On ready
+  Reveal.on('ready', () => {
+    if (window.hljs) { hljs.highlightAll(); }
+    buildStatic();
+    makeGazeGrid('grid-gaze','dwell','dwellVal');
 
-/* --------------------------- Utils --------------------------- */
-function scallop(j, ep){
-  // Petite ondulation du bord (aspect plume) — fixe (pas d’animation)
-  // j: 0..1 le long de la plume. épaisseur modère l’amplitude.
-  return sin(j*PI*3.0) * (ep*0.08) * (1 - j); // s’atténue vers la pointe
-}
+    // Attach keyboard/mouse + DnD grid when we first land on that slide
+    const tryAttachKeyboard = ()=>{
+      if(Reveal.getCurrentSlide()?.id === 'slide-keyboard'){
+        makeKeyboardNavigable('grid-keyboard');
+        Reveal.off('slidechanged', tryAttachKeyboard);
+      }
+    };
+    Reveal.on('slidechanged', tryAttachKeyboard);
+    if(Reveal.getCurrentSlide()?.id === 'slide-keyboard'){
+      makeKeyboardNavigable('grid-keyboard');
+    }
 
-function mapClamp(v, a, b, c, d){
-  const t = constrain((v-a)/(b-a), 0, 1);
-  return c + (d-c)*t;
-}
+    // If starting on game slide
+    if (Reveal.getCurrentSlide()?.id === 'slide-game') enterGameMode();
+  });
 </script>
 </body>
 </html>
