@@ -1,5 +1,5 @@
 async function loadEyegazeMenu(options = {}) {
-  const resp = await fetch('/game-menu.html');
+  const resp = await fetch('../../game-menu.html');
   const html = await resp.text();
   const placeholder = document.getElementById('menu-placeholder');
   if (placeholder) {
