@@ -302,6 +302,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Expose for customYoutubeChoices.js to refresh the grid after imports
+  window.populateTilePickerGrid = populateTilePickerGrid;
+
   function updateStartButtonState() {
     startGameButton.disabled = (selectedTileIndices.length !== desiredTileCount);
   }
