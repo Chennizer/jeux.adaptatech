@@ -236,6 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const tile = document.createElement('div');
     tile.classList.add('tile');
     tile.style.backgroundImage = `url(${choice.image})`;
+    tile.style.backgroundSize = 'contain';
+    tile.style.backgroundPosition = 'center';
+    tile.style.backgroundRepeat = 'no-repeat';
     const caption = document.createElement('div');
     caption.classList.add('caption');
     caption.textContent = choice.name;
@@ -280,6 +283,9 @@ document.addEventListener('DOMContentLoaded', () => {
         tileOption.classList.add('tile');
         tileOption.setAttribute('data-index', index);
         tileOption.style.backgroundImage = `url(${choice.image})`;
+        tileOption.style.backgroundSize = 'contain';
+        tileOption.style.backgroundPosition = 'center';
+        tileOption.style.backgroundRepeat = 'no-repeat';
         if (isSelected) {
           tileOption.classList.add('selected');
         }
