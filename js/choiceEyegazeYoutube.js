@@ -370,9 +370,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
-    if (document.exitFullscreen) {
-      document.exitFullscreen().catch(err => console.warn(err));
-    }
     if (videoTimeLimitTimeout) {
       clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = null;
@@ -384,6 +381,15 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = "none";
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     currentVideoUrl = null;
+    // Ensure we remain in fullscreen so the tile grid stays maximized
+    if (!document.fullscreenElement) {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(err => console.warn(err));
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      }
+    }
   }
 
   document.addEventListener('keydown', e => {
@@ -409,12 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.style.display = 'none';
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       const id = getYouTubeId(videoUrl);
-      const startPlayback = () => {
-        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
-          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
-        }
-        youtubePlayer.playVideo();
-      };
+      const resumePos = enableResumeVideoCheckbox.checked ? (videoResumePositions[videoUrl] || 0) : 0;
       const onStateChange = (e) => {
         if (e.data === YT.PlayerState.ENDED) {
           delete videoResumePositions[videoUrl];
@@ -425,13 +426,18 @@ document.addEventListener('DOMContentLoaded', () => {
         youtubePlayer = new YT.Player('youtube-player', {
           host: 'https://www.youtube-nocookie.com',
           videoId: id,
-          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
-          events: { onReady: startPlayback, onStateChange }
+          playerVars: { rel: 0, modestbranding: 1, controls: 0, start: resumePos },
+          events: {
+            onReady: () => {
+              try { youtubePlayer.playVideo(); } catch {}
+            },
+            onStateChange
+          }
         });
       } else {
-        youtubePlayer.loadVideoById(id);
+        youtubePlayer.loadVideoById({ videoId: id, startSeconds: resumePos });
         try { youtubePlayer.addEventListener('onStateChange', onStateChange); } catch {}
-        startPlayback();
+        try { youtubePlayer.playVideo(); } catch {}
       }
     } else {
       if (youtubeDiv) youtubeDiv.style.display = 'none';
