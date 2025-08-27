@@ -380,16 +380,21 @@ document.addEventListener('DOMContentLoaded', () => {
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
     if (youtubeDiv) youtubeDiv.style.display = 'none';
+    const key = currentVideoUrl ? (isYouTubeUrl(currentVideoUrl) ? getYouTubeId(currentVideoUrl) || currentVideoUrl : currentVideoUrl) : null;
+    if (key && !enableResumeVideoCheckbox.checked) {
+      delete videoResumePositions[key];
+    }
     currentVideoUrl = null;
-    // Ensure we remain in fullscreen so the tile grid stays maximized
-    if (!document.fullscreenElement) {
+    // Exit fullscreen and re-enter on the document element so tiles remain selectable
+    const exitPromise = document.fullscreenElement ? document.exitFullscreen() : Promise.resolve();
+    exitPromise.finally(() => {
       const elem = document.documentElement;
       if (elem.requestFullscreen) {
         elem.requestFullscreen().catch(err => console.warn(err));
       } else if (elem.webkitRequestFullscreen) {
         elem.webkitRequestFullscreen();
       }
-    }
+    });
   }
 
   document.addEventListener('keydown', e => {
@@ -415,10 +420,11 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.style.display = 'none';
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       const id = getYouTubeId(videoUrl);
-      const resumePos = enableResumeVideoCheckbox.checked ? (videoResumePositions[videoUrl] || 0) : 0;
+      const key = id || videoUrl;
+      const resumePos = enableResumeVideoCheckbox.checked ? (videoResumePositions[key] || 0) : 0;
       const onStateChange = (e) => {
         if (e.data === YT.PlayerState.ENDED) {
-          delete videoResumePositions[videoUrl];
+          delete videoResumePositions[key];
           resetToChoicesScreen();
         }
       };
@@ -426,17 +432,23 @@ document.addEventListener('DOMContentLoaded', () => {
         youtubePlayer = new YT.Player('youtube-player', {
           host: 'https://www.youtube-nocookie.com',
           videoId: id,
-          playerVars: { rel: 0, modestbranding: 1, controls: 0, start: resumePos },
+          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
           events: {
             onReady: () => {
+              if (resumePos) {
+                try { youtubePlayer.seekTo(resumePos, true); } catch {}
+              }
               try { youtubePlayer.playVideo(); } catch {}
             },
             onStateChange
           }
         });
       } else {
-        youtubePlayer.loadVideoById({ videoId: id, startSeconds: resumePos });
+        youtubePlayer.loadVideoById(id);
         try { youtubePlayer.addEventListener('onStateChange', onStateChange); } catch {}
+        if (resumePos) {
+          try { youtubePlayer.seekTo(resumePos, true); } catch {}
+        }
         try { youtubePlayer.playVideo(); } catch {}
       }
     } else {
@@ -446,8 +458,9 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.removeAttribute('controls');
       videoPlayer.load();
       videoPlayer.onloadedmetadata = () => {
-        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-          videoPlayer.currentTime = videoResumePositions[videoUrl];
+        const key = videoUrl;
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[key]) {
+          videoPlayer.currentTime = videoResumePositions[key];
         }
         videoPlayer.play();
       };
@@ -462,14 +475,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
+          const key = isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime ? (getYouTubeId(videoUrl) || videoUrl) : videoUrl;
           if (enableResumeVideoCheckbox.checked) {
             if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
-              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+              videoResumePositions[key] = youtubePlayer.getCurrentTime();
             } else {
-              videoResumePositions[videoUrl] = videoPlayer.currentTime;
+              videoResumePositions[key] = videoPlayer.currentTime;
             }
           } else {
-            delete videoResumePositions[videoUrl];
+            delete videoResumePositions[key];
           }
           if (isYouTubeUrl(videoUrl) && youtubePlayer) {
             youtubePlayer.pauseVideo();
@@ -483,7 +497,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[currentVideoUrl || videoSource.src];
+    const key = currentVideoUrl ? (isYouTubeUrl(currentVideoUrl) ? getYouTubeId(currentVideoUrl) || currentVideoUrl : currentVideoUrl) : (videoSource.src);
+    delete videoResumePositions[key];
     resetToChoicesScreen();
   });
 
