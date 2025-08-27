@@ -144,6 +144,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function ensureFullscreen() {
+    if (!document.fullscreenElement) {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      }
+    }
+  }
+
   // Preload videos
   function preloadVideos(videoUrls, loadingIndicator) {
     let loadedCount = 0;
@@ -381,31 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = "none";
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     currentVideoUrl = null;
-    const ensureFullscreen = () => {
-      if (!document.fullscreenElement) {
-        const el = document.documentElement;
-        if (el.requestFullscreen) {
-          el.requestFullscreen().catch(() => {});
-        } else if (el.webkitRequestFullscreen) {
-          el.webkitRequestFullscreen();
-        }
-      }
-    };
-    if (document.fullscreenElement) {
-      let p;
-      if (document.exitFullscreen) {
-        p = document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) {
-        p = document.webkitExitFullscreen();
-      }
-      if (p && p.then) {
-        p.catch(() => {}).then(() => setTimeout(ensureFullscreen, 200));
-      } else {
-        setTimeout(ensureFullscreen, 200);
-      }
-    } else {
-      ensureFullscreen();
-    }
+    ensureFullscreen();
   }
 
   document.addEventListener('keydown', e => {
@@ -470,11 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
         videoPlayer.play();
       };
     }
-    if (videoContainer.requestFullscreen) {
-      videoContainer.requestFullscreen().catch(err => console.error(err));
-    } else if (videoContainer.webkitRequestFullscreen) {
-      videoContainer.webkitRequestFullscreen();
-    }
+    ensureFullscreen();
     if (enableTimeLimitCheckbox.checked) {
       const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
       if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
@@ -515,19 +498,14 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStartButtonState();
     gameOptionsModal.style.display = "none";
     tilePickerModal.style.display = "flex";
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.warn("Fullscreen request failed:", err);
-      });
-    } else if (document.documentElement.webkitRequestFullscreen) {
-      document.documentElement.webkitRequestFullscreen();
-    }
+    ensureFullscreen();
     currentCategory = "all";
     categorySelect.value = "all";
     populateTilePickerGrid();
   });
 
   startGameButton.addEventListener('click', () => {
+    ensureFullscreen();
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';
     loadingScreen.style.position = 'fixed';
