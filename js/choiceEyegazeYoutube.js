@@ -381,12 +381,30 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = "none";
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     currentVideoUrl = null;
-    if (document.fullscreenElement) {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      } else if (document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
+    const ensureFullscreen = () => {
+      if (!document.fullscreenElement) {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          el.requestFullscreen().catch(() => {});
+        } else if (el.webkitRequestFullscreen) {
+          el.webkitRequestFullscreen();
+        }
       }
+    };
+    if (document.fullscreenElement) {
+      let p;
+      if (document.exitFullscreen) {
+        p = document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        p = document.webkitExitFullscreen();
+      }
+      if (p && p.then) {
+        p.catch(() => {}).then(() => setTimeout(ensureFullscreen, 200));
+      } else {
+        setTimeout(ensureFullscreen, 200);
+      }
+    } else {
+      ensureFullscreen();
     }
   }
 
@@ -413,12 +431,9 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.style.display = 'none';
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       const id = getYouTubeId(videoUrl);
-      const startPlayback = () => {
-        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
-          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
-        }
-        try { youtubePlayer.playVideo(); } catch {}
-      };
+      const startSeconds = (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl])
+        ? videoResumePositions[videoUrl]
+        : 0;
       const onStateChange = (e) => {
         if (e.data === YT.PlayerState.ENDED) {
           delete videoResumePositions[videoUrl];
@@ -429,13 +444,18 @@ document.addEventListener('DOMContentLoaded', () => {
         youtubePlayer = new YT.Player('youtube-player', {
           host: 'https://www.youtube-nocookie.com',
           videoId: id,
-          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
-          events: { onReady: startPlayback, onStateChange }
+          playerVars: { rel: 0, modestbranding: 1, controls: 0, start: startSeconds },
+          events: {
+            onReady: () => {
+              try { youtubePlayer.playVideo(); } catch {}
+            },
+            onStateChange
+          }
         });
       } else {
-        youtubePlayer.loadVideoById(id);
+        youtubePlayer.loadVideoById({ videoId: id, startSeconds });
         try { youtubePlayer.addEventListener('onStateChange', onStateChange); } catch {}
-        startPlayback();
+        try { youtubePlayer.playVideo(); } catch {}
       }
     } else {
       if (youtubeDiv) youtubeDiv.style.display = 'none';
