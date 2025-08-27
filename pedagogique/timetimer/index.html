@@ -222,6 +222,7 @@
         <option value="radial" data-fr="Images autour de l’horloge" data-en="Images Around Clock">Images autour de l’horloge</option>
         <option value="stacked" data-fr="Pile d’images à gauche" data-en="Images Stacked Left">Pile d’images à gauche</option>
         <option value="taskreward" data-fr="Tâche → Récompense (gauche)" data-en="Task → Reward (Left)">Tâche → Récompense (gauche)</option>
+        <option value="marker" data-fr="Marqueur" data-en="Marker">Marqueur</option>
       </select>
       <button id="modeProxy" class="btn ghost hidden"></button>
     </label>
@@ -457,7 +458,7 @@ function addTap(el, handler){
 const canvas=document.getElementById('timerCanvas'),ctx=canvas.getContext('2d');
 const overlay=document.getElementById('overlay'),enterBtn=document.getElementById('enterBtn');
 
-let totalSeconds=300,remainingSeconds=0,intervalId=null,paused=false,dragging=false;
+let totalSeconds=300,remainingSeconds=0,intervalId=null,paused=false,dragging=false,draggingMarker=false;
 let showDigits=false,dialMax=60,timerColor='#d9534f';
 let bgTintEnabled=false; const TINT_ALPHA=0.35;
 
@@ -468,6 +469,7 @@ let specialMode='none';
 let IMG_COUNT = 4; // 2 or 4
 const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff'];
 const imgs=[null,null,null,null];
+let markerImg=null, markerAngle=0;
 async function loadRandomPictos(count=IMG_COUNT){
   try{
     const resp = await fetch('../../images/pictos/index.json', { cache:'no-store' });
@@ -494,6 +496,7 @@ async function loadRandomPictos(count=IMG_COUNT){
 
 /* Persist last selection */
 const LAST_KEY = 'timer-last-4';
+const MARKER_KEY = 'timer-marker';
 function saveLastImages(){
   const sources = imgs.map(im => im ? im.src : null);
   localStorage.setItem(LAST_KEY, JSON.stringify(sources));
@@ -517,6 +520,25 @@ async function loadLastImagesIfEmpty(){
     }
   }catch(e){}
   await loadRandomPictos(IMG_COUNT);
+}
+
+function saveMarkerState(){
+  if(markerImg){
+    localStorage.setItem(MARKER_KEY, JSON.stringify({src: markerImg.src, angle: markerAngle}));
+  }
+}
+async function loadMarkerState(){
+  try{
+    const obj = JSON.parse(localStorage.getItem(MARKER_KEY) || '{}');
+    if(obj.src){
+      await new Promise(res=>{
+        const im=new Image();
+        im.onload=()=>{ markerImg=im; markerAngle=obj.angle||0; res(); };
+        im.onerror=res;
+        im.src=obj.src;
+      });
+    }
+  }catch(e){}
 }
 
 /* Dial configs */
@@ -586,6 +608,35 @@ function insideDial(e){
   const {cx,cy} = getCenter(size);
   return Math.hypot(x-cx,y-cy)<=size*0.4;
 }
+function angleFromEvent(e){
+  const r=canvas.getBoundingClientRect();
+  const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+  const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+  const size=Math.min(canvas.width,canvas.height)*0.9;
+  const {cx,cy} = getCenter(size);
+  let ang=-Math.PI/2-Math.atan2(y-cy,x-cx);
+  while(ang<0) ang+=Math.PI*2;
+  return ang;
+}
+function insideMarker(e){
+  if(!markerImg) return false;
+  const r=canvas.getBoundingClientRect();
+  const px=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+  const py=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+  const size=Math.min(canvas.width,canvas.height)*0.9;
+  const {cx,cy}=getCenter(size);
+  const outerR=size*0.4;
+  const basePx=size*LAYOUT.imgBase;
+  const {w,h}=computeContainSize(markerImg, basePx);
+  const imgR=outerR+size*0.05;
+  const mx=cx+Math.cos(markerAngle)*imgR - w/2;
+  const my=cy+Math.sin(markerAngle)*imgR - h/2;
+  return px>=mx && px<=mx+w && py>=my && py<=my+h;
+}
+function updateMarkerDrag(e){
+  markerAngle=angleFromEvent(e);
+  draw();
+}
 function updateDrag(e){
   const s=Math.max(1,Math.min(dialMax*60,getSecondsFromEvent(e)));
   totalSeconds=remainingSeconds=s;
@@ -607,6 +658,44 @@ function getActiveIndex(uiSeconds, denom, count){
 }
 function colorForIndex(i,N){ return quadrantColors[ N===2 ? (i===0?0:3) : i ]; }
 function getAnglesForCount(N){ return (N===2) ? [0, Math.PI] : [-Math.PI/4, Math.PI/4, 3*Math.PI/4, -3*Math.PI/4]; }
+
+function drawMarker(size,cx,cy,outerR){
+  const borderW=size*0.0067;
+  const wedgeR=outerR-borderW/2;
+  const denom=dialMax*60;
+  const uiSeconds=(remainingSeconds>0)?remainingSeconds:Math.max(1, Math.round(dialMax*60));
+  const angle=(uiSeconds/denom)*Math.PI*2;
+
+  ctx.save();
+  ctx.globalCompositeOperation='destination-over';
+  ctx.fillStyle=timerColor;
+  ctx.beginPath();ctx.moveTo(cx,cy);
+  ctx.arc(cx,cy,wedgeR,-Math.PI/2,-Math.PI/2-angle,true);
+  ctx.closePath();ctx.fill();
+  ctx.restore();
+
+  if(markerImg){
+    const basePx=size*LAYOUT.imgBase;
+    const {w,h}=computeContainSize(markerImg, basePx);
+    const imgR=outerR+size*0.05;
+    const mx=cx+Math.cos(markerAngle)*imgR - w/2;
+    const my=cy+Math.sin(markerAngle)*imgR - h/2;
+    ctx.drawImage(markerImg,mx,my,w,h);
+
+    const ax=cx+Math.cos(markerAngle)*outerR;
+    const ay=cy+Math.sin(markerAngle)*outerR;
+    ctx.strokeStyle='#000';
+    ctx.lineWidth=size*0.01;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(ax,ay);ctx.stroke();
+    const ah=size*0.04;
+    ctx.fillStyle='#000';
+    ctx.beginPath();
+    ctx.moveTo(ax,ay);
+    ctx.lineTo(ax-Math.cos(markerAngle-Math.PI/6)*ah, ay-Math.sin(markerAngle-Math.PI/6)*ah);
+    ctx.lineTo(ax-Math.cos(markerAngle+Math.PI/6)*ah, ay-Math.sin(markerAngle+Math.PI/6)*ah);
+    ctx.closePath();ctx.fill();
+  }
+}
 
 /* Draw */
 function draw(){
@@ -660,6 +749,8 @@ function draw(){
       }
     }
     ctx.restore();
+  }else if(specialMode==='marker'){
+    // wedge drawn in drawMarker after ticks
   }else{
     // 'none' and 'taskreward' => single-color wedge
     ctx.fillStyle=timerColor;
@@ -694,6 +785,7 @@ function draw(){
   if(specialMode==='radial')      drawRadial(size,cx,cy,numbersR,uiSeconds,denom);
   if(specialMode==='stacked')     drawStacked(size,cx,cy,outerR,uiSeconds,denom);
   if(specialMode==='taskreward')  drawTaskReward(size,cx,cy,outerR);
+  if(specialMode==='marker')      drawMarker(size,cx,cy,outerR);
 
   updatePageTint(uiSeconds, denom);
 }
@@ -702,7 +794,7 @@ function draw(){
 function updatePageTint(uiSeconds, denom){
   if(!bgTintEnabled){ document.body.style.backgroundColor=''; return; }
 
-  if(specialMode==='none' || specialMode==='taskreward'){
+  if(specialMode==='none' || specialMode==='taskreward' || specialMode==='marker'){
     document.body.style.backgroundColor = hexToRGBA(timerColor, TINT_ALPHA);
     return;
   }
@@ -940,13 +1032,22 @@ const pauseTimer=()=>{ paused=!paused; setPauseLabel(paused); };
 
 /* Drag & resize for dial */
 function startDrag(e){
+  if(specialMode==='marker' && insideMarker(e)){
+    draggingMarker=true;updateMarkerDrag(e);return;
+  }
   if(!insideDial(e))return;
   clearInterval(intervalId);paused=false;
   setPauseLabel(false);
   dragging=true;updateDrag(e);
 }
-const dragMove=e=>{ if(!dragging)return; e.preventDefault(); updateDrag(e); };
-const endDrag=()=>{ if(!dragging)return; dragging=false; startTimerFromDrag(); };
+const dragMove=e=>{
+  if(draggingMarker){ e.preventDefault(); updateMarkerDrag(e); return; }
+  if(!dragging)return; e.preventDefault(); updateDrag(e);
+};
+const endDrag=()=>{
+  if(draggingMarker){ draggingMarker=false; saveMarkerState(); return; }
+  if(!dragging)return; dragging=false; startTimerFromDrag();
+};
 function resizeCanvas(){ canvas.width=innerWidth; canvas.height=innerHeight; draw(); }
 
 /* Panel toggles + auto-close on idle */
@@ -1007,10 +1108,17 @@ specialModeSelect.addEventListener('change',async e=>{
   specialMode=e.target.value;
   if(specialMode==='radial' || specialMode==='stacked' || specialMode==='taskreward'){
     await loadLastImagesIfEmpty();
-    draw();
-  } else {
-    draw();
+  } else if(specialMode==='marker'){
+    await loadMarkerState();
   }
+
+  const hideMulti = (specialMode==='marker');
+  const imgCountLine = document.getElementById('imgCountSelect').parentElement;
+  imgCountLine.classList.toggle('hidden', hideMulti);
+  if(typeof autoFillBtn!=='undefined') autoFillBtn.classList.toggle('hidden', hideMulti);
+  if(typeof selectedSlots!=='undefined') selectedSlots.forEach((s,i)=>{ if(i>0) s.classList.toggle('hidden', hideMulti); });
+
+  draw();
   // iPad: always reset to conservative start size for radial so pulse won't be clamped
   if (isIOS && specialMode === 'radial') {
     LAYOUT.imgBase = IOS_IMGBASE_DEFAULT;
@@ -1029,7 +1137,7 @@ function applyTimerColor(hex){
   timerColor = hex;
   if(!isIOS){ colorPicker.value = hex; }
   colorProxy.style.background = hex;
-  if(specialMode==='none' || specialMode==='taskreward'){ draw(); }
+  if(specialMode==='none' || specialMode==='taskreward' || specialMode==='marker'){ draw(); }
   if(bgTintEnabled){
     updatePageTint(remainingSeconds>0?remainingSeconds:(dialMax*60), dialMax*60);
   }
@@ -1552,6 +1660,14 @@ function ensureRadialIfImagesChosen(){
 
 /* Assign selected slots into imgs[] */
 function assignFromSlots(){
+  if(specialMode==='marker'){
+    const src = selectedSlots[0].querySelector('img')?.src || null;
+    if(!src){ markerImg=null; saveMarkerState(); draw(); closePickerModal(); return; }
+    const im=new Image();
+    im.onload=()=>{ markerImg=im; saveMarkerState(); draw(); closePickerModal(); };
+    im.src=src;
+    return;
+  }
   const toLoad = [];
   for(let i=0;i<4;i++){
     const src = selectedSlots[i].querySelector('img')?.src || null;
@@ -1572,6 +1688,11 @@ function assignFromSlots(){
 
 /* Clear slots */
 function clearSlots(){
+  if(specialMode==='marker'){
+    setSlotSrc(0,null);
+    setCurrentSlot(0);
+    return;
+  }
   for(let i=0;i<4;i++) setSlotSrc(i, null);
   setCurrentSlot(0);
 }
@@ -1637,7 +1758,7 @@ addTap(enterBtn, ()=>{ startApp(); });
 overlay.addEventListener('click', e => { e.stopPropagation(); }, {passive:false});
 
 /* Startup adjustments */
-window.addEventListener('DOMContentLoaded', ()=>{
+window.addEventListener('DOMContentLoaded', async ()=>{
   if(isIOS){
     // iPad: smaller default images now, and bigger ceiling still available
     LAYOUT.imgBase = IOS_IMGBASE_DEFAULT;
@@ -1669,6 +1790,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
     document.getElementById('modeProxy')?.classList.add('hidden');
     document.getElementById('alarmProxy')?.classList.add('hidden');
   }
+  await loadMarkerState();
   draw();
 });
 
