@@ -73,6 +73,8 @@
     }
     .card.flipped .card-front { opacity: 0; }
     .card.flipped .card-back { opacity: 1; }
+
+    /* Dwell overlay used on each card */
     .dwell-fill {
       position: absolute;
       background-color: rgba(255, 0, 0, 0.5);
@@ -84,6 +86,12 @@
       pointer-events: none;
     }
 
+    /* When frozen, pause any eyegaze overlay animations (best-effort) */
+    .eyegaze-frozen #eyegaze-overlay *,
+    .eyegaze-frozen .dwell-fill {
+      animation-play-state: paused !important;
+      transition: none !important;
+    }
   </style>
 </head>
 <body>
@@ -158,6 +166,7 @@
 <script src="../../js/eyegaze-menu.js"></script>
 <script>
 let pictosData;
+
 fetch('../../images/pictos/index.json')
   .then(r => r.json())
   .then(data => {
@@ -179,17 +188,22 @@ const sizeSlider = document.getElementById('sizeSlider');
 const sizeVal = document.getElementById('sizeVal');
 sizeSlider.addEventListener('input', () => sizeVal.textContent = parseFloat(sizeSlider.value).toFixed(1));
 
-document.getElementById('startButton').addEventListener('click', startGame);
-
 const themeSelect = document.getElementById('themeSelect');
+document.getElementById('startButton').addEventListener('click', startGame);
 
 let firstCard = null;
 let secondCard = null;
 let lockBoard = false;
 let matchesFound = 0;
+
+/* Persist across rounds */
 let currentPairs = 0;
 let cardSizeMultiplier = 1;
 let currentTheme = 'light';
+let currentCategory = null;
+
+/* NEW: block starting new hovers while frozen */
+let controlsLocked = false;
 
 function startGame() {
   // Request fullscreen
@@ -200,26 +214,34 @@ function startGame() {
   } else if (document.documentElement.msRequestFullscreen) {
     document.documentElement.msRequestFullscreen();
   }
+
   eyegazeSettings.hideOverlay();
   document.querySelector('.game-container').style.display = 'flex';
-  const category = document.getElementById('categorySelect').value;
+
+  currentCategory = document.getElementById('categorySelect').value;
   currentPairs = parseInt(pairCount.value);
   cardSizeMultiplier = parseFloat(sizeSlider.value);
   currentTheme = themeSelect.value;
-  const bg = currentTheme === 'dark' ? '#000' : '#fff';
-  const fg = currentTheme === 'dark' ? '#fff' : '#000';
+
+  applyTheme(currentTheme);
+
+  const images = getImages(currentCategory, currentPairs);
+  setupBoard(images);
+}
+
+function applyTheme(theme) {
+  const bg = theme === 'dark' ? '#000' : '#fff';
+  const fg = theme === 'dark' ? '#fff' : '#000';
   document.body.style.backgroundColor = bg;
   document.body.style.color = fg;
   const container = document.querySelector('.game-container');
   container.style.backgroundColor = bg;
   container.style.color = fg;
-  const images = getImages(category, currentPairs);
-  setupBoard(images);
 }
 
 function getImages(category, pairs) {
   const base = pictosData.base;
-  const imgs = pictosData.categories[category];
+  const imgs = pictosData.categories[category].slice(); // avoid mutating source
   const shuffled = imgs.sort(() => 0.5 - Math.random());
   const selected = shuffled.slice(0, pairs);
   const doubled = [...selected, ...selected].map(img => base + img);
@@ -233,6 +255,8 @@ function setupBoard(images) {
   firstCard = null;
   secondCard = null;
   lockBoard = false;
+  controlsLocked = false; // ensure unlocked when new board
+  unfreezeEyegaze();      // safety
 
   const total = images.length;
   const columns = Math.ceil(Math.sqrt(total));
@@ -259,6 +283,7 @@ function setupBoard(images) {
     card.addEventListener('mouseover', () => startHover(card));
     card.addEventListener('mouseout', stopHover);
   });
+
   adjustCardSizes();
 }
 
@@ -281,7 +306,7 @@ function adjustCardSizes() {
 window.addEventListener('resize', adjustCardSizes);
 
 function flipCard(card) {
-  if (lockBoard || card === firstCard) return;
+  if (lockBoard || controlsLocked || card === firstCard) return;
   card.classList.add('flipped', 'selected');
   playSound('flip');
   if (!firstCard) {
@@ -295,21 +320,46 @@ function flipCard(card) {
 function checkForMatch() {
   const isMatch = firstCard.dataset.image === secondCard.dataset.image;
   if (isMatch) {
-    disableCards();
-    matchesFound++;
-    if (matchesFound === currentPairs) {
-      playSound('victory');
-    }
-  } else {
-    lockBoard = true;
+    disableCards(); // disables clicking on these two
+    freezeEyegaze();
+    controlsLocked = true;
+
+    // 🔹 play "victory" (or a match sound) after 1400ms
+    setTimeout(() => playSound('victory'), 1400);
+
+    // 🔹 keep frozen for 3000ms total
     setTimeout(() => {
-      firstCard.classList.remove('flipped','selected');
-      secondCard.classList.remove('flipped','selected');
       resetBoard();
-      playSound('error');
-    }, 1000);
+      controlsLocked = false;
+      unfreezeEyegaze();
+
+      matchesFound++;
+      if (matchesFound === currentPairs) {
+        // all pairs done, generate next set
+        setTimeout(startNewSet, 500);
+      }
+    }, 3000);
+
+  } else {
+    freezeEyegaze();
+    controlsLocked = true;
+    stopHover();
+
+    // 🔹 play error after 1400ms
+    setTimeout(() => playSound('error'), 1400);
+
+    // 🔹 flip back and reenable after 3000ms
+    setTimeout(() => {
+      if (firstCard) firstCard.classList.remove('flipped','selected');
+      if (secondCard) secondCard.classList.remove('flipped','selected');
+      resetBoard();
+      controlsLocked = false;
+      unfreezeEyegaze();
+    }, 3000);
   }
 }
+
+
 
 function disableCards() {
   firstCard.style.pointerEvents = 'none';
@@ -322,9 +372,39 @@ function resetBoard() {
   lockBoard = false;
 }
 
+/* Generate a fresh round with identical settings (category, pair count, size, theme). */
+function startNewSet() {
+  applyTheme(currentTheme);
+  const images = getImages(currentCategory, currentPairs);
+  setupBoard(images);
+}
+
+/* ====== Eyegaze freeze helpers (best-effort, works even if eyegaze-menu.js lacks an API) ====== */
+function freezeEyegaze() {
+  // Add a CSS hook to pause animations/transitions of overlays
+  document.documentElement.classList.add('eyegaze-frozen');
+  // If your eyegaze-menu.js exposes a pause/freeze API, call it too:
+  try {
+    if (window.eyegazeSettings?.pauseInput) eyegazeSettings.pauseInput(true);
+    if (window.eyegazeSettings?.freezeOverlay) eyegazeSettings.freezeOverlay(true);
+  } catch (e) {}
+}
+
+function unfreezeEyegaze() {
+  document.documentElement.classList.remove('eyegaze-frozen');
+  try {
+    if (window.eyegazeSettings?.pauseInput) eyegazeSettings.pauseInput(false);
+    if (window.eyegazeSettings?.freezeOverlay) eyegazeSettings.freezeOverlay(false);
+  } catch (e) {}
+}
+
+/* ====== Dwell hover handling ====== */
 let hoverTimeout;
 let currentOverlay;
+
 function startHover(card) {
+  if (controlsLocked) return; // block new hovers during freeze
+
   const hoverTime = eyegazeSettings.dwellTime;
   stopHover();
   currentOverlay = document.createElement('div');
