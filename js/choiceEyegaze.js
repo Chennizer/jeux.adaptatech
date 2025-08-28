@@ -38,6 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const youtubeDiv        = document.getElementById('youtube-player');
+  let youtubePlayer       = null;
+  let currentVideoUrl     = null;
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -139,6 +142,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       })
     );
+  }
+
+  function isYouTubeUrl(url) {
+    return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/)|(youtu\.be\/))/.test(url);
+  }
+
+  function getYouTubeId(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtu.be')) {
+        return u.pathname.slice(1);
+      }
+      const id = u.searchParams.get('v');
+      if (id) return id;
+      const m = url.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
   }
 
   /* ----------------------------------------------------------------
@@ -326,6 +348,10 @@ document.addEventListener('DOMContentLoaded', () => {
      ---------------------------------------------------------------- */
   function resetToChoicesScreen() {
     stopPreview();
+    if (currentVideoUrl && isYouTubeUrl(currentVideoUrl) && youtubePlayer) {
+      try { youtubePlayer.stopVideo(); } catch {}
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+    }
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
     if (document.exitFullscreen) {
@@ -340,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    currentVideoUrl = null;
   }
 
   document.addEventListener('keydown', e => {
@@ -355,39 +382,87 @@ document.addEventListener('DOMContentLoaded', () => {
      ---------------------------------------------------------------- */
   function playVideo(videoUrl) {
     stopPreview();
+    currentVideoUrl = videoUrl;
     videoPlaying = true;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "flex";
-    videoSource.src = videoUrl;
-    videoPlayer.removeAttribute('controls');
-    videoPlayer.load();
-    videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+
+    if (isYouTubeUrl(videoUrl)) {
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      videoPlayer.pause();
+      videoSource.src = '';
+      const id = getYouTubeId(videoUrl);
+      if (!youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          host: 'https://www.youtube-nocookie.com',
+          videoId: id,
+          events: { 'onStateChange': onYouTubeStateChange }
+        });
+      } else {
+        youtubePlayer.loadVideoById(id);
       }
-      videoPlayer.play();
-    };
-    if (videoContainer.requestFullscreen) {
-      videoContainer.requestFullscreen().catch(err => console.error(err));
-    } else if (videoContainer.webkitRequestFullscreen) {
-      videoContainer.webkitRequestFullscreen();
-    }
-    if (enableTimeLimitCheckbox.checked) {
-      const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
-      if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
-      videoTimeLimitTimeout = setTimeout(() => {
-        if (videoPlaying) {
-          if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
-          } else {
-            delete videoResumePositions[videoUrl];
+      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
+        youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
+      }
+      if (videoContainer.requestFullscreen) {
+        videoContainer.requestFullscreen().catch(err => console.error(err));
+      } else if (videoContainer.webkitRequestFullscreen) {
+        videoContainer.webkitRequestFullscreen();
+      }
+      if (enableTimeLimitCheckbox.checked) {
+        const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
+        if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
+        videoTimeLimitTimeout = setTimeout(() => {
+          if (videoPlaying) {
+            if (enableResumeVideoCheckbox.checked && youtubePlayer && youtubePlayer.getCurrentTime) {
+              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+            } else {
+              delete videoResumePositions[videoUrl];
+            }
+            resetToChoicesScreen();
           }
-          videoPlayer.pause();
-          resetToChoicesScreen();
+        }, limitSeconds * 1000);
+      }
+    } else {
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+      videoSource.src = videoUrl;
+      videoPlayer.removeAttribute('controls');
+      videoPlayer.load();
+      videoPlayer.onloadedmetadata = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+          videoPlayer.currentTime = videoResumePositions[videoUrl];
         }
-      }, limitSeconds * 1000);
+        videoPlayer.play();
+      };
+      if (videoContainer.requestFullscreen) {
+        videoContainer.requestFullscreen().catch(err => console.error(err));
+      } else if (videoContainer.webkitRequestFullscreen) {
+        videoContainer.webkitRequestFullscreen();
+      }
+      if (enableTimeLimitCheckbox.checked) {
+        const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
+        if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
+        videoTimeLimitTimeout = setTimeout(() => {
+          if (videoPlaying) {
+            if (enableResumeVideoCheckbox.checked) {
+              videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            } else {
+              delete videoResumePositions[videoUrl];
+            }
+            videoPlayer.pause();
+            resetToChoicesScreen();
+          }
+        }, limitSeconds * 1000);
+      }
+    }
+  }
+
+  function onYouTubeStateChange(event) {
+    if (event.data === YT.PlayerState.ENDED) {
+      delete videoResumePositions[currentVideoUrl];
+      resetToChoicesScreen();
     }
   }
 
