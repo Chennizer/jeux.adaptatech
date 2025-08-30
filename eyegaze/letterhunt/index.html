@@ -57,22 +57,27 @@
       color: #fff !important;
     }
 
-    /* Prompt: pushed lower + emphasis span */
+    /* Prompt styling (two lines: instruction + letter) */
     #prompt {
-      font-size: 2rem;
-      display: none;             /* shown after Start */
-      margin: 5vh 0 10px;        /* push down ~5% viewport height */
       text-align: center;
+      margin: 5vh 0;
+      display: none; /* shown after Start */
+    }
+    #prompt .prompt-text {
+      font-size: 2rem;
+      font-weight: 500;
+      color: #444;
     }
     #prompt .target-letter {
-      font-size: 4rem;           /* bigger focus letter */
+      display: block;
+      font-size: 6rem;
       font-weight: bold;
-      color: #009688;            /* teal accent */
-      text-shadow: 0 1px 0 rgba(0,0,0,0.05);
-      margin-left: 10px;
+      color: #009688;
+      margin-top: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.15);
     }
 
-    /* Dwell overlay like memory game (fills the tile while dwelling) */
+    /* Dwell overlay */
     .dwell-fill {
       position: absolute;
       background-color: rgba(255, 0, 0, 0.5);
@@ -82,27 +87,27 @@
       height: 0;
       transform: translate(-50%, -50%);
       pointer-events: none;
-      border-radius: 8px; /* slight rounding to match tiles */
+      border-radius: 8px;
     }
 
-    /* Freeze helper (kept for parity/future use) */
+    /* Freeze helper */
     .eyegaze-frozen #eyegaze-overlay *,
     .eyegaze-frozen .dwell-fill {
       animation-play-state: paused !important;
       transition: none !important;
     }
 
-    /* Clean styled input: black text, white bg, thin teal border */
+    /* Styled input */
     .styled-input {
       width: 100%;
       max-width: 160px;
       padding: 10px 14px;
-      font-size: 18px;              /* matches .teal-label / .styled-select */
+      font-size: 18px;
       font-weight: bold;
-      color: #000;                   /* black text */
-      border: 2px solid #009688;     /* thin teal border */
+      color: #000;
+      border: 2px solid #009688;
       border-radius: 8px;
-      background-color: #fff;        /* white background */
+      background-color: #fff;
       text-align: center;
       box-shadow: none;
       transition: border-color .2s, box-shadow .2s;
@@ -116,7 +121,7 @@
 </head>
 <body>
 
-<!-- Options modal (same structure/classes as your other games) -->
+<!-- Options modal -->
 <div id="game-options" class="modal">
   <div id="options-title-bar">
     <h2 id="options-main-title">Chasse aux lettres</h2>
@@ -143,23 +148,15 @@
         </div>
       </div>
 
-      <!-- Column 2: Letters & dwell -->
+      <!-- Column 2: Letters -->
       <div class="options-column">
         <div class="option-item">
           <label for="letterSet" class="teal-label label-block">Lettres à afficher</label>
           <input id="letterSet" type="text" value="ABCD" maxlength="26" class="styled-input">
         </div>
-
-        <div class="option-item">
-          <label for="dwellTimeSlider" class="teal-label">
-            <span>Temps de fixation: </span>
-            <span id="dwellTimeVal">1500</span> ms
-          </label>
-          <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500">
-        </div>
       </div>
 
-      <!-- Column 3: Theme -->
+      <!-- Column 3: Theme & dwell -->
       <div class="options-column">
         <div class="option-item">
           <label for="themeSelect" class="teal-label label-block">Mode</label>
@@ -167,6 +164,13 @@
             <option value="light" selected>Clair</option>
             <option value="dark">Sombre</option>
           </select>
+        </div>
+        <div class="option-item">
+          <label for="dwellTimeSlider" class="teal-label">
+            <span>Temps de fixation: </span>
+            <span id="dwellTimeVal">1500</span> ms
+          </label>
+          <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500">
         </div>
       </div>
     </div>
@@ -178,7 +182,10 @@
 
 <!-- Game area -->
 <div class="game-container">
-  <h2 id="prompt"></h2>
+  <h2 id="prompt">
+    <span class="prompt-text">Trouve la lettre</span><br>
+    <span class="target-letter"></span>
+  </h2>
   <div class="letter-grid"></div>
 </div>
 
@@ -190,9 +197,6 @@
 <script src="../../js/eyegaze-menu.js"></script>
 
 <script>
-/* =========================
-   Shared option bindings
-   ========================= */
 const muteSFX      = document.getElementById('muteSFX');
 const sfxVol       = document.getElementById('sfxVol');
 const sfxVolVal    = document.getElementById('sfxVolVal');
@@ -204,7 +208,6 @@ const startButton  = document.getElementById('startButton');
 sfxVol.addEventListener('input', () => sfxVolVal.textContent = sfxVol.value);
 dwellSlider.addEventListener('input', () => dwellTimeVal.textContent = dwellSlider.value);
 
-/* If eyegaze-menu.js exposes a global settings object, sync it with UI */
 function syncEyegazeSettingsFromUI() {
   try {
     if (window.eyegazeSettings) {
@@ -215,9 +218,6 @@ function syncEyegazeSettingsFromUI() {
   } catch(e) {}
 }
 
-/* =========================
-   Game logic
-   ========================= */
 let letters = [];
 let targetLetter;
 let hoverTimeout;
@@ -232,30 +232,17 @@ function applyTheme(theme) {
 }
 
 function startGame() {
-  // Request fullscreen
   if (document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen();
-  } else if (document.documentElement.webkitRequestFullscreen) {
-    document.documentElement.webkitRequestFullscreen();
-  } else if (document.documentElement.msRequestFullscreen) {
-    document.documentElement.msRequestFullscreen();
   }
-
-  // Sync options into eyegazeSettings
   syncEyegazeSettingsFromUI();
-
   selectedTheme = themeSelect.value;
   applyTheme(selectedTheme);
 
-  // Parse letters
   const inputVal = document.getElementById('letterSet').value.toUpperCase().replace(/[^A-Z]/g,'');
   letters = inputVal.split('');
-  if (letters.length === 0) {
-    // Fallback to ABCD if empty after sanitization
-    letters = ['A','B','C','D'];
-  }
+  if (letters.length === 0) letters = ['A','B','C','D'];
 
-  // Show game container & grid
   document.querySelector('.game-container').style.display = 'flex';
   document.querySelector('.letter-grid').style.display = 'grid';
   document.getElementById('prompt').style.display = 'block';
@@ -263,7 +250,6 @@ function startGame() {
   buildGrid();
   nextRound();
 
-  // Hide any eyegaze overlay from the menu, if available
   try { if (window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); } catch(e) {}
 }
 
@@ -272,7 +258,6 @@ startButton.addEventListener('click', startGame);
 function buildGrid() {
   const grid = document.querySelector('.letter-grid');
   grid.innerHTML = '';
-
   const cols = Math.ceil(Math.sqrt(letters.length));
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
@@ -290,23 +275,17 @@ function buildGrid() {
 
 function nextRound() {
   targetLetter = letters[Math.floor(Math.random() * letters.length)];
-  // Emphasize the target letter
-  document.getElementById('prompt').innerHTML =
-    `Trouve la lettre <span class="target-letter">${targetLetter}</span>`;
+  document.querySelector("#prompt .target-letter").textContent = targetLetter;
 }
 
-/* ====== Dwell hover handling (tile overlay) ====== */
 let currentOverlay;
-
 function startHover(tile) {
   const hoverTime = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
-
-  stopHover(); // clean any previous overlay
+  stopHover();
   currentOverlay = document.createElement('div');
   currentOverlay.className = 'dwell-fill';
   tile.appendChild(currentOverlay);
 
-  // Animate growth to fully cover the tile
   requestAnimationFrame(() => {
     currentOverlay.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
     currentOverlay.style.width = '0';
@@ -326,9 +305,6 @@ function startHover(tile) {
 function stopHover() {
   clearTimeout(hoverTimeout);
   if (currentOverlay) {
-    currentOverlay.style.transition = '';
-    currentOverlay.style.width = '0';
-    currentOverlay.style.height = '0';
     if (currentOverlay.parentElement) {
       currentOverlay.parentElement.removeChild(currentOverlay);
     }
@@ -352,8 +328,6 @@ function handleSelection(el) {
 
 function playSound(audioEl) {
   const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
-
-  // Use eyegazeSettings.sfxVolume if it’s a number; otherwise fallback to the UI slider or 50.
   const sfxSetting = window.eyegazeSettings?.sfxVolume;
   const uiVol = parseInt(sfxVol.value, 10);
   const volPercent = (typeof sfxSetting === 'number')
@@ -361,10 +335,7 @@ function playSound(audioEl) {
     : (isNaN(uiVol) ? 50 : uiVol);
 
   audioEl.volume = muted ? 0 : Math.max(0, Math.min(1, volPercent / 100));
-  try {
-    audioEl.currentTime = 0;
-    audioEl.play();
-  } catch(e) {}
+  try { audioEl.currentTime = 0; audioEl.play(); } catch(e) {}
 }
 </script>
 </body>

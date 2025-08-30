@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Contrôleur vidéo (WS)</title>
+<body style="font:16px system-ui; padding:20px; max-width:800px; margin:auto;">
+  <h1>Contrôleur vidéo</h1>
+  <p>Room: <code id="room">—</code> · Statut: <strong id="status">Connecting…</strong></p>
+
+  <section id="incoming" style="margin:16px 0; padding:12px; border:1px solid #ddd; border-radius:8px;">
+    <div style="opacity:.7; margin-bottom:6px;">Dernier message</div>
+    <pre id="last" style="white-space:pre-wrap; background:#f7f7f8; padding:10px; border-radius:6px; margin:0; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:13px;">(rien)</pre>
+  </section>
+
+  <section id="chooser" style="display:none; margin-top:20px;">
+    <h2 id="promptTitle">Choisir une vidéo à lancer</h2>
+    <p id="promptNote" style="opacity:.8"></p>
+    <div id="options" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:12px;"></div>
+  </section>
+
+  <hr style="margin:24px 0">
+  <details>
+    <summary>Outils manuels</summary>
+    <div style="margin-top:10px;">
+      <input id="manualUrl" placeholder="https://exemple/video.mp4" size="60" style="font:inherit; padding:6px;">
+      <button id="sendManual">▶️ Lancer cette vidéo</button>
+    </div>
+  </details>
+
+<script>
+  const qs = new URL(location.href).searchParams;
+  const room = qs.get('room') || 'test';
+  document.getElementById('room').textContent = room;
+
+  const WS_URL = `wss://ws-relay.gui98789.workers.dev/ws/${encodeURIComponent(room)}`;
+  const ws = new WebSocket(WS_URL);
+  const status = document.getElementById("status");
+  const last = document.getElementById("last");
+  const chooser = document.getElementById("chooser");
+  const optionsWrap = document.getElementById("options");
+  const promptTitle = document.getElementById("promptTitle");
+  const promptNote = document.getElementById("promptNote");
+
+  ws.onopen  = () => { status.textContent = "Connected"; ws.send(JSON.stringify({type:'hello', role:'controller'})); };
+  ws.onclose = () => { status.textContent = "Closed"; };
+  ws.onerror = () => { status.textContent = "Error"; };
+
+  function renderJSON(o){ try { return JSON.stringify(o, null, 2); } catch { return String(o); } }
+
+  ws.onmessage = (e)=>{
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { last.textContent = e.data; return; }
+    last.textContent = renderJSON(msg);
+
+    if (msg.type === 'request_video'){
+      chooser.style.display = '';
+      optionsWrap.innerHTML = '';
+      promptTitle.textContent = msg.deckTitle ? `Choisir une vidéo — ${msg.deckTitle}` : 'Choisir une vidéo à lancer';
+      promptNote.textContent = msg.note || '';
+
+      const options = Array.isArray(msg.options) && msg.options.length ? msg.options : [
+        {title:'Option 1', url:'https://bucket.adaptatech.org/amyliz-slipperyfish.mp4'},
+        {title:'Option 2', url:'https://bucket.adaptatech.org/africa.mp4'}
+      ];
+
+      for (const opt of options){
+        const btn = document.createElement('button');
+        btn.textContent = `▶️ ${opt.title}`;
+        btn.style.cssText = 'padding:12px; font:16px system-ui; cursor:pointer; border-radius:10px; border:1px solid #d0d0d0; background:#fff;';
+        btn.onclick = ()=> {
+          ws.send(JSON.stringify({ type:'play_video', url: opt.url, title: opt.title, from:'controller' }));
+        };
+        optionsWrap.appendChild(btn);
+      }
+    }
+  };
+
+  // Manual tool
+  document.getElementById('sendManual').onclick = ()=>{
+    const u = document.getElementById('manualUrl').value.trim();
+    if (!u) return;
+    ws.send(JSON.stringify({ type:'play_video', url: u, title:'Manuel', from:'controller' }));
+  };
+</script>
+</body>
