@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const youtubeDiv        = document.getElementById('youtube-player');
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -56,6 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let videoResumePositions  = {};
 
   let currentCategory       = 'all';
+  let youtubePlayer         = null;
+  let currentVideoUrl       = null;
 
   // Global variable for fixation delay (in ms), default 2000ms
   let fixationDelay = 2000;
@@ -114,12 +117,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function isYouTubeUrl(url) {
+    return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/)|(youtu\.be\/))/.test(url);
+  }
+
+  function getYouTubeId(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtu.be')) {
+        return u.pathname.slice(1);
+      }
+      const id = u.searchParams.get('v');
+      if (id) return id;
+      const m = url.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
   // Preload videos
   function preloadVideos(videoUrls, loadingIndicator) {
     let loadedCount = 0;
     const totalCount = videoUrls.length;
     return Promise.all(
       videoUrls.map(url => {
+        if (isYouTubeUrl(url)) {
+          loadedCount++;
+          loadingIndicator.textContent = `Chargement... (${loadedCount} / ${totalCount})`;
+          return Promise.resolve(url);
+        }
         return new Promise(resolve => {
           const tempVideo = document.createElement('video');
           tempVideo.preload = 'auto';
@@ -326,6 +353,9 @@ document.addEventListener('DOMContentLoaded', () => {
      ---------------------------------------------------------------- */
   function resetToChoicesScreen() {
     stopPreview();
+    if (youtubePlayer) {
+      try { youtubePlayer.stopVideo(); } catch {}
+    }
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
     if (document.exitFullscreen) {
@@ -340,6 +370,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    if (youtubeDiv) youtubeDiv.style.display = 'none';
+    videoPlayer.style.display = 'block';
+    currentVideoUrl = null;
   }
 
   document.addEventListener('keydown', e => {
@@ -356,19 +389,52 @@ document.addEventListener('DOMContentLoaded', () => {
   function playVideo(videoUrl) {
     stopPreview();
     videoPlaying = true;
+    currentVideoUrl = videoUrl;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "flex";
-    videoSource.src = videoUrl;
-    videoPlayer.removeAttribute('controls');
-    videoPlayer.load();
-    videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+    if (isYouTubeUrl(videoUrl)) {
+      videoPlayer.style.display = 'none';
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      const id = getYouTubeId(videoUrl);
+      const startPlayback = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
+          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
+        }
+        youtubePlayer.playVideo();
+      };
+      const onStateChange = (e) => {
+        if (e.data === YT.PlayerState.ENDED) {
+          delete videoResumePositions[videoUrl];
+          resetToChoicesScreen();
+        }
+      };
+      if (!youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          host: 'https://www.youtube-nocookie.com',
+          videoId: id,
+          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
+          events: { onReady: startPlayback, onStateChange }
+        });
+      } else {
+        youtubePlayer.loadVideoById(id);
+        try { youtubePlayer.addEventListener('onStateChange', onStateChange); } catch {}
+        startPlayback();
       }
-      videoPlayer.play();
-    };
+    } else {
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+      videoPlayer.style.display = 'block';
+      videoSource.src = videoUrl;
+      videoPlayer.removeAttribute('controls');
+      videoPlayer.load();
+      videoPlayer.onloadedmetadata = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+          videoPlayer.currentTime = videoResumePositions[videoUrl];
+        }
+        videoPlayer.play();
+      };
+    }
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(err => console.error(err));
     } else if (videoContainer.webkitRequestFullscreen) {
@@ -380,11 +446,19 @@ document.addEventListener('DOMContentLoaded', () => {
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
           if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
+              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+            } else {
+              videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            }
           } else {
             delete videoResumePositions[videoUrl];
           }
-          videoPlayer.pause();
+          if (isYouTubeUrl(videoUrl) && youtubePlayer) {
+            youtubePlayer.pauseVideo();
+          } else {
+            videoPlayer.pause();
+          }
           resetToChoicesScreen();
         }
       }, limitSeconds * 1000);
@@ -392,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[videoSource.src];
+    delete videoResumePositions[currentVideoUrl || videoSource.src];
     resetToChoicesScreen();
   });
 
