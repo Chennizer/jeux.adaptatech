@@ -21,6 +21,11 @@
     input[type="range"]{ width:260px; }
     pre code{ font-size:.9em; }
 
+    /* Titles: centered, slides start near top */
+    .reveal h1, .reveal h2{ text-align:center; margin:0 0 .7em; }
+    .reveal .slides section{ padding-top:24px; }
+
+    /* Pictos */
     .picto-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:1rem; justify-items:center; align-items:center; }
     .picto{
       width:110px; height:110px; display:flex; align-items:center; justify-content:center;
@@ -30,7 +35,6 @@
       user-select: none; touch-action: manipulation;
     }
     .picto img{ max-width:100%; max-height:100%; }
-
     .picto.selected{ outline-color:#ADF1D2; border-color:#294936; box-shadow:0 4px 14px rgba(0,0,0,.12), 0 0 0 4px rgba(173,241,210,.35) inset; transform:translateY(-1px); }
     @keyframes pulse { 0% { transform:scale(1); } 35%{ transform:scale(1.08); } 100%{ transform:scale(1); } }
     .picto.activated{ animation:pulse .6s ease-out both; border-color:#D36135; box-shadow:0 6px 18px rgba(0,0,0,.16), 0 0 0 4px rgba(211,97,53,.25) inset; }
@@ -42,22 +46,21 @@
     }
     .gaze .picto.dwell::after{ opacity:.35; }
 
+    /* Fullscreen & deck start */
     #fullscreenBtn{
       position:fixed; top:10px; right:10px; z-index:9999;
       background:#294936; color:#fff; border:none; padding:.5em 1em; border-radius:8px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.2);
     }
     #fullscreenBtn:active{ transform:translateY(1px); }
-
     .start-deck-btn{
       margin-top: 1rem; background:#294936; color:#fff; border:none;
       padding:.6em 1em; border-radius:10px; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.2); font-size:1rem;
     }
-    .start-deck-btn:active{ transform:translateY(1px); }
 
+    /* Immersive game */
     body.immersive .reveal .controls,
     body.immersive .reveal .progress,
     body.immersive .reveal .slide-number { display:none !important; }
-
     #slide-game{ padding:0 !important; background:#000; }
     #slide-game .frame-wrap{ position:relative; width:100%; height:100%; }
     #gameFrame{ position:absolute; inset:0; width:100%; height:100%; border:0; background:#000; display:block; }
@@ -66,7 +69,7 @@
       background:rgba(0,0,0,.45); color:#fff; padding:.35em .6em; border-radius:8px; font-size:.9rem;
     }
 
-    /* Branching (remote) */
+    /* Branching (videos) */
     #branch-root .branch-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:1rem; margin-top:1rem; }
     .branch-card{
       display:flex; align-items:center; justify-content:center; gap:.6rem;
@@ -78,14 +81,50 @@
     .branch-card:hover{ transform:translateY(-1px); border-color:#ADF1D2; box-shadow:0 4px 14px rgba(0,0,0,.12); }
     .waiting-remote{ font-size:.95rem; opacity:.8; margin-top:.75rem; }
 
-    /* Video children */
     .vid-slide{ padding:0 !important; background:#000; }
     .vid-wrap{ position:relative; width:100%; height:100%; background:#000; }
     .vid{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
+
     .vid-overlay{
       position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
       background:rgba(0,0,0,0.55); color:#fff; padding:.6rem 1rem; border-radius:10px;
-      font-size:1rem; display:none; z-index:2;
+      font-size:1rem; display:none; z-index:2; cursor:pointer;
+    }
+
+    /* Fixed overlay portal for reliable rendering */
+    #playerPortal {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 10000;
+      display: none;
+    }
+    #playerPortal video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .reorder-row { display:flex; align-items:center; gap:.5rem; margin:.5rem 0 1rem; }
+    .reorder-row input[type="checkbox"] { transform: scale(1.2); }
+
+    /* Persistent logo (top-right) */
+    .reveal .slides::after{
+      content:"";
+      position:fixed;
+      top:0px;
+      right:-10px;
+      width:140px;
+      height:140px;
+      background-image:url("../../images/owlval.png");
+      background-size:contain;
+      background-repeat:no-repeat;
+      background-position:center;
+      z-index:9998;
+      pointer-events:none;
     }
   </style>
 </head>
@@ -93,10 +132,13 @@
 
 <button id="fullscreenBtn" title="Plein écran (⛶)">⛶</button>
 
+<!-- Portal overlay lives outside Reveal transforms -->
+<div id="playerPortal" aria-hidden="true"></div>
+
 <div class="reveal">
   <div class="slides">
     <!-- 1: Intro -->
-    <section data-background-color="#DFF3E4">
+    <section data-background-color="#DFF3E4" style="padding-top:64px">
       <h1>Routine matinale</h1>
       <p class="note-tip">← → ↑ ↓ (navigation), <kbd>Esc</kbd> (plan), <kbd>S</kbd> (notes). Espace = interaction.</p>
       <p class="badge">Reveal.js • Démo prête à l’emploi</p>
@@ -115,14 +157,41 @@
       </ul>
     </section>
 
-    <!-- 3: Vertical group (Météo + Jeu) -->
+    <!-- 3: Vertical group (Météo + Choix + Jeu) -->
     <section>
+      <!-- 3.1 Intro + ask controller -->
       <section>
         <h2>Météo</h2>
         <p>Demander à l’élève de sélectionner l’icône météo.</p>
-        <p class="note-tip">Appuyez sur <kbd>↓</kbd> pour descendre vers le jeu intégré.</p>
+        <p class="note-tip">Appuyez sur <kbd>↓</kbd> pour descendre vers les options météo.</p>
+        <button id="askWeatherBtn" class="start-deck-btn">📡 Demander la météo (contrôleur)</button>
       </section>
 
+      <!-- 3.2 → Sun -->
+      <section id="weather-sun">
+        <h2>☀️ Il fait soleil</h2>
+        <p>Prévoyez chapeau et lunettes de soleil 😎</p>
+      </section>
+
+      <!-- 3.3 → Cloud -->
+      <section id="weather-cloud">
+        <h2>☁️ Ciel nuageux</h2>
+        <p>Temps gris, mais parfait pour une promenade rapide.</p>
+      </section>
+
+      <!-- 3.4 → Rain -->
+      <section id="weather-rain">
+        <h2>🌧️ Il pleut</h2>
+        <p>Parapluie conseillé !</p>
+      </section>
+
+      <!-- 3.5 → Snow -->
+      <section id="weather-snow">
+        <h2>❄️ Il neige</h2>
+        <p>On s’habille chaudement, bottes et gants !</p>
+      </section>
+
+      <!-- 3.6 Game -->
       <section id="slide-game">
         <div class="frame-wrap">
           <div class="overlay-hint" id="overlayHint">Astuce: ⛶ pour mode plein écran du navigateur</div>
@@ -138,32 +207,27 @@
 
     <!-- 4: Branching group with two videos under it -->
     <section id="branch-group">
-      <!-- parent (branching UI) -->
       <section id="branch-root">
         <h2>Choisis une activité vidéo</h2>
         <p class="note-tip">Option 1 ou 2 ci-dessous, ou demander au contrôleur distant.</p>
-
         <div class="branch-grid">
           <button class="branch-card" id="localOpt1">🎵 Slippery Fish (local)</button>
           <button class="branch-card" id="localOpt2">🥁 Africa (local)</button>
           <button id="askRemoteBtn" class="branch-card">📡 Demander au contrôleur</button>
         </div>
-
         <div id="remoteStatus" class="waiting-remote" aria-live="polite"></div>
       </section>
 
-      <!-- child 1: video 1 -->
       <section id="video1" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay1" class="vid-overlay">Cliquez pour lancer en plein écran</div>
+          <div id="overlay1" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
           <video id="vid1" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
 
-      <!-- child 2: video 2 -->
       <section id="video2" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay2" class="vid-overlay">Cliquez pour lancer en plein écran</div>
+          <div id="overlay2" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
           <video id="vid2" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
@@ -253,7 +317,8 @@ startMorningRoutine();
   /* ========= Reveal init ========= */
   Reveal.initialize({
     hash: true, slideNumber: true, controls: true, progress: true,
-    center: true, history: true, transition: 'slide',
+    center: false,                 // layout from top (so titles appear near top)
+    history: true, transition: 'slide',
     width: 1280, height: 720,
     keyboard: { 32: null }, // disable Space advancing slides
     plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
@@ -269,7 +334,7 @@ startMorningRoutine();
     else document.exitFullscreen().catch(()=>{});
   });
 
-  /* ========= Pictos / gaze / keyboard (unchanged helper bits) ========= */
+  /* ========= Pictos / gaze / keyboard (helpers) ========= */
   const PICTO_BASE='../../images/pictos/';
   let FILES=['angry.png','apple.png','assistivebike.png','assistiveswitches.png','balloon.png','banana.png','basketball.png','bear.png','beaver.png','bicycle.png','binsensory.png','binwater.png','blackroom.png','boat.png','book.png','book2.png','bowl.png','broccoli.png','brush.png','bus.png'];
 
@@ -361,7 +426,7 @@ startMorningRoutine();
     else if(prev && prev.id==='slide-game') exitGameMode();
   });
 
-  /* ========= Video logic (vertical under branch) ========= */
+  /* ========= Video logic with portal ========= */
   const remoteStatus = document.getElementById('remoteStatus');
   const askRemoteBtn  = document.getElementById('askRemoteBtn');
   const localOpt1Btn  = document.getElementById('localOpt1');
@@ -375,19 +440,39 @@ startMorningRoutine();
     v1: document.getElementById('overlay1'),
     v2: document.getElementById('overlay2')
   };
+  overlays.v1.textContent = 'Cliquez pour lancer en plein écran — appuyez sur Q pour quitter';
+  overlays.v2.textContent = 'Cliquez pour lancer en plein écran — appuyez sur Q pour quitter';
+
+  const portal = document.getElementById('playerPortal');
+  const placeholders = {
+    v1: videoElems.v1.parentElement,
+    v2: videoElems.v2.parentElement
+  };
 
   let inputsLocked=false;
   let currentVidKey=null;
-  let stickRAF=null;           // <= NEW: frame loop to keep us on (h,v)
+  let stickRAF=null;
   let stickTarget=null;
 
   const blockKeys=new Set([' ','Spacebar','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','PageUp','PageDown','Home','End','Escape','Tab']);
-  function onKeyCapture(e){ if(inputsLocked && blockKeys.has(e.key)){ e.preventDefault(); e.stopImmediatePropagation(); } }
+
+  function onKeyCapture(e){
+    if (!inputsLocked) return;
+    if (e.key === 'q' || e.key === 'Q'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      stopCurrentVideoAndReturn(branchHIndex());
+      return;
+    }
+    if (blockKeys.has(e.key)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  }
   function onWheelCapture(e){ if(inputsLocked){ e.preventDefault(); e.stopImmediatePropagation(); } }
   function onTouchMoveCapture(e){ if(inputsLocked){ e.preventDefault(); e.stopImmediatePropagation(); } }
   function onPointerDownCapture(e){
     if (!inputsLocked) return;
-    // allow interaction ONLY with <video> or the overlay over it
     if (e.target.closest('video') || e.target.closest('.vid-overlay')) return;
     e.preventDefault(); e.stopImmediatePropagation();
   }
@@ -425,7 +510,6 @@ startMorningRoutine();
     return (url.includes('africa')) ? 'v2' : 'v1';
   }
 
-  // === NEW: hard stick to (h,v) while locked ===
   function startStickToSlide(h, v){
     stickTarget = {h, v};
     const tick = ()=>{
@@ -445,7 +529,26 @@ startMorningRoutine();
     stickTarget = null;
   }
 
-  async function playVideoUnderBranch(key, url){
+  function usePortal(key){
+    const vid = videoElems[key];
+    if (!portal.contains(vid)){
+      portal.appendChild(vid);
+    }
+    portal.style.display = 'block';
+    portal.setAttribute('aria-hidden','false');
+  }
+
+  function restoreFromPortal(key){
+    const vid = videoElems[key];
+    const wrap = placeholders[key];
+    if (wrap && !wrap.contains(vid)){
+      wrap.appendChild(vid);
+    }
+    portal.style.display = 'none';
+    portal.setAttribute('aria-hidden','true');
+  }
+
+  async function playVideoUnderBranch(key, url, {forcePortal=false}={}){
     const h = branchHIndex();
     if(h < 0) return;
 
@@ -454,76 +557,121 @@ startMorningRoutine();
     try { other.pause(); } catch {}
 
     vid.src = url || KNOWN_VIDEOS[key];
-    vid.load();
+    vid.currentTime = 0;
 
     lockDeckInputs();
 
     const vIndex = (key === 'v1') ? 1 : 2; // 0 = branch-root, 1/2 = videos
     Reveal.slide(h, vIndex);
-
-    // Start “stick” immediately after navigating
     startStickToSlide(h, vIndex);
 
     await new Promise(r => requestAnimationFrame(r));
+    try { vid.load(); } catch {}
 
-    const overlay = overlays[key];
     currentVidKey = key;
 
-    const tryPlay = async ()=>{
-      try { await enterFullscreen(vid); await vid.play(); if(overlay) overlay.style.display='none'; }
-      catch {
-        if(overlay){ overlay.textContent='Cliquez pour lancer la vidéo en plein écran'; overlay.style.display='block'; }
-        const onFirstPointer = async ()=>{
-          vid.removeEventListener('pointerup', onFirstPointer);
-          if(overlay) overlay.style.display='none';
-          try { await enterFullscreen(vid); } catch {}
-          try { await vid.play(); } catch {}
-        };
-        vid.addEventListener('pointerup', onFirstPointer, { once:true });
+    const overlay = overlays[key];
+
+    const tryNative = async ()=>{
+      try {
+        await enterFullscreen(vid);
+        await vid.play();
+        if(overlay) overlay.style.display='none';
+        return true;
+      } catch {
+        return false;
       }
     };
-    tryPlay();
+
+    const startInPortal = async ()=>{
+      usePortal(key);
+      await new Promise(r => setTimeout(r, 0));
+      try { await vid.play(); } catch {}
+    };
+
+    if (forcePortal) {
+      await startInPortal();
+    } else {
+      const ok = await tryNative();
+      if (!ok){
+        if (overlay){
+          overlay.textContent = 'Cliquez pour lancer la vidéo (plein écran) — appuyez sur Q pour quitter';
+          overlay.style.display = 'block';
+        }
+        const onFirstPointer = async ()=>{
+          overlay?.removeEventListener('pointerup', onFirstPointer);
+          vid.removeEventListener('pointerup', onFirstPointer);
+          if (!(await tryNative())) {
+            await startInPortal();
+            if (overlay) overlay.style.display='none';
+          }
+        };
+        overlay?.addEventListener('pointerup', onFirstPointer, { once:true });
+        vid.addEventListener('pointerup', onFirstPointer, { once:true });
+
+        setTimeout(async ()=>{
+          if (inputsLocked && currentVidKey === key && !document.fullscreenElement) {
+            await startInPortal();
+            if (overlay) overlay.style.display='none';
+          }
+        }, 100);
+      }
+    }
   }
 
-  async function stopCurrentVideoAndReturn(){
-    const key = currentVidKey;
-    if(!key) return;
-    const vid = videoElems[key];
-    try { vid.pause(); } catch {}
-    await exitFullscreenIfOwned(vid);
-    unlockDeckInputs();
+  async function stopCurrentVideoAndReturn(targetH = branchHIndex()){
+    stopStickToSlide();
+
+    if(currentVidKey){
+      const vid = videoElems[currentVidKey];
+      try { await exitFullscreenIfOwned(vid); } catch {}
+      try { vid.pause(); } catch {}
+      try { vid.removeAttribute('src'); } catch {}
+      try { vid.src = ''; vid.load(); vid.currentTime = 0; } catch {}
+      restoreFromPortal(currentVidKey);
+    }
+
+    if (typeof targetH === 'number' && targetH >= 0){
+      Reveal.slide(targetH, 0);
+    } else {
+      const h = branchHIndex();
+      if (h >= 0) Reveal.slide(h, 0);
+    }
+
     currentVidKey = null;
-    Reveal.up(); // back to branch root
+    unlockDeckInputs();
+    const s = document.getElementById('remoteStatus');
+    if(s) s.textContent = '';
   }
 
-  // End handlers
-  videoElems.v1.addEventListener('ended', stopCurrentVideoAndReturn);
-  videoElems.v2.addEventListener('ended', stopCurrentVideoAndReturn);
-
-  // If paused during lock (accidental), resume
+  videoElems.v1.addEventListener('ended', ()=> stopCurrentVideoAndReturn(branchHIndex()));
+  videoElems.v2.addEventListener('ended', ()=> stopCurrentVideoAndReturn(branchHIndex()));
   videoElems.v1.addEventListener('pause', ()=>{ if(inputsLocked && !videoElems.v1.ended) videoElems.v1.play().catch(()=>{}); });
-  videoElems.v2.addEventListener('pause', ()=>{ if(inputsLocked && !videoElems.v2.ended) videoElems.v2.play().catch(()=>{}); });
-
-  // If fullscreen is lost mid-play, nudge back (or show overlay)
+videoElems.v2.addEventListener('pause', () => {
+  if (inputsLocked && !videoElems.v2.ended) videoElems.v2.play().catch(() => {});
+});
   document.addEventListener('fullscreenchange', async ()=>{
     if(!inputsLocked || !currentVidKey) return;
     const vid = videoElems[currentVidKey];
     const overlay = overlays[currentVidKey];
     if(!document.fullscreenElement && !vid.ended){
       try { await enterFullscreen(vid); if(overlay) overlay.style.display='none'; }
-      catch { if(overlay){ overlay.textContent='Cliquez pour reprendre le plein écran'; overlay.style.display='block'; } }
+      catch { usePortal(currentVidKey); if(overlay){ overlay.textContent='Cliquez pour reprendre — Q pour quitter'; overlay.style.display='none'; } }
     }
   });
 
-  // Local buttons
-  localOpt1Btn.addEventListener('click', ()=> playVideoUnderBranch('v1', KNOWN_VIDEOS.v1));
-  localOpt2Btn.addEventListener('click', ()=> playVideoUnderBranch('v2', KNOWN_VIDEOS.v2));
+  localOpt1Btn.addEventListener('click', ()=> playVideoUnderBranch('v1', KNOWN_VIDEOS.v1, {forcePortal:false}));
+  localOpt2Btn.addEventListener('click', ()=> playVideoUnderBranch('v2', KNOWN_VIDEOS.v2, {forcePortal:false}));
 
   /* ========= WebSocket wiring ========= */
   const WS = new WebSocket(WS_URL);
-  WS.onopen = ()=>{ remoteStatus.textContent = 'Connecté au canal ' + room; WS.send(JSON.stringify({type:'hello', role:'slides', deckTitle})); };
-  WS.onclose = ()=>{ remoteStatus.textContent = 'WebSocket fermé'; };
-  WS.onerror = ()=>{ remoteStatus.textContent = 'Erreur WebSocket'; };
+  WS.onopen = ()=>{
+    const s = document.getElementById('remoteStatus');
+    if(s) s.textContent = 'Connecté au canal ' + room;
+    WS.send(JSON.stringify({type:'hello', role:'slides', deckTitle}));
+  };
+  WS.onclose = ()=>{ const s = document.getElementById('remoteStatus'); if(s) s.textContent = 'WebSocket fermé'; };
+  WS.onerror = ()=>{ const s = document.getElementById('remoteStatus'); if(s) s.textContent = 'Erreur WebSocket'; };
 
   function wsSend(obj){
     const payload = JSON.stringify(obj);
@@ -531,28 +679,103 @@ startMorningRoutine();
     else WS.addEventListener('open', ()=> WS.send(payload), { once:true });
   }
 
-  askRemoteBtn.addEventListener('click', ()=>{
-    wsSend({
-      type: 'request_video',
-      from: 'slides',
-      deckTitle,
-      options: [
-        { title:'Slippery Fish', url: KNOWN_VIDEOS.v1 },
-        { title:'Africa',        url: KNOWN_VIDEOS.v2 }
-      ],
-      note: 'Veuillez choisir une vidéo à lancer.'
+  // Ask controller for video (thumb paths fixed to ../../images/…)
+  const askRemoteEl = document.getElementById('askRemoteBtn');
+  if (askRemoteEl){
+    askRemoteEl.addEventListener('click', ()=>{
+      wsSend({
+        type: 'request_video',
+        from: 'slides',
+        deckTitle,
+        options: [
+          { title:'Slippery Fish', url: KNOWN_VIDEOS.v1, thumb: '../../images/binou.png' },
+          { title:'Africa',        url: KNOWN_VIDEOS.v2, thumb: '../../images/africa-image.png' }
+        ],
+        note: 'Veuillez choisir une vidéo à lancer.'
+      });
+      const s = document.getElementById('remoteStatus');
+      if(s) s.textContent = 'Demande envoyée. En attente du choix distant…';
     });
-    remoteStatus.textContent = 'Demande envoyée. En attente du choix distant…';
-  });
+  }
+
+  /* ----- Weather flow: request & navigate ----- */
+  function weatherColumnIndex() {
+    const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
+    const sun = document.getElementById('weather-sun');
+    if (!sun) return -1;
+    return sections.findIndex(s => s.contains(sun));
+  }
+  const WEATHER_V = { sun:1, cloud:2, rain:3, snow:4 };
+
+  const askWeatherBtn = document.getElementById('askWeatherBtn');
+  if (askWeatherBtn) {
+    askWeatherBtn.addEventListener('click', () => {
+      const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
+      const sun = document.getElementById('weather-sun');
+      const weatherH = sun ? sections.findIndex(s => s.contains(sun)) : 0;
+
+      wsSend({
+        type: 'request_weather', // protocol expected by controller
+        from: 'slides',
+        deckTitle,
+        options: [
+          { title:'Soleil', key:'sun',   thumb:'../../images/sun.png',   goto:{h:weatherH, v:1} },
+          { title:'Nuages', key:'cloud', thumb:'../../images/cloud.png', goto:{h:weatherH, v:2} },
+          { title:'Pluie',  key:'rain',  thumb:'../../images/rain.png',  goto:{h:weatherH, v:3} },
+          { title:'Neige',  key:'snow',  thumb:'../../images/snow.png',  goto:{h:weatherH, v:4} }
+        ],
+        note: 'Choisir la météo'
+      });
+
+      if (weatherH >= 0) Reveal.slide(weatherH, 0);
+    });
+  }
 
   WS.onmessage = (e)=>{
     let msg; try { msg = JSON.parse(e.data); } catch { return; }
+
     if (msg.type === 'play_video' && msg.url){
-      remoteStatus.textContent = 'Commande reçue : lecture…';
+      const s = document.getElementById('remoteStatus');
+      if(s) s.textContent = 'Commande reçue : lecture…';
       const key = whichFromUrl(msg.url);
-      playVideoUnderBranch(key, msg.url);
+      playVideoUnderBranch(key, msg.url, {forcePortal:true});
+      return;
+    }
+    if (msg.type === 'stop_video'){
+      stopCurrentVideoAndReturn(branchHIndex());
+      return;
+    }
+
+    // Weather choice from controller
+    if (msg.type === 'weather_choice') {
+      let target = msg.goto;
+      if (!target && msg.key) {
+        const h = weatherColumnIndex();
+        const map = { sun:1, cloud:2, rain:3, snow:4 };
+        target = { h, v: map[String(msg.key).toLowerCase()] ?? 0 };
+      }
+      if (target && Number.isInteger(target.h) && Number.isInteger(target.v)) {
+        Reveal.slide(target.h, target.v);
+      }
+      return;
     }
   };
+
+  /* ========= Global Q handler: go to column root (h,0) ========= */
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'q' || e.key === 'Q'){
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const { h } = Reveal.getIndices();
+      if (inputsLocked && currentVidKey){
+        stopCurrentVideoAndReturn(h);
+      } else {
+        Reveal.slide(h, 0);
+      }
+    }
+  }, { capture:true });
 
   /* ========= Ready ========= */
   Reveal.on('ready', () => {

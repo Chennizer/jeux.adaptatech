@@ -55,6 +55,10 @@
     .gm-grid{ --cell:120px; display:grid; grid-template-columns:repeat(auto-fill,minmax(var(--cell),1fr)); gap:10px; }
     .gm-item{ border:1px solid var(--line); border-radius:8px; background:#fff; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; cursor:pointer; }
     .gm-item img{ width:100%; height:100%; object-fit:contain; }
+
+    /* NEW: visual highlight when current image is found */
+    .gm-item.is-selected { outline: 3px solid var(--accent); outline-offset: 2px; }
+
     #advPanel{ display:none; }
 
     /* Simple language toggle (optional; translationonly.js may also inject one) */
@@ -740,7 +744,8 @@
     // ===== Gallery with categories =====
     function showModal(){ galleryModal.classList.add('show'); }
     function hideModal(){ galleryModal.classList.remove('show'); }
-    openGalleryBtn.onclick = ()=>{ showModal(); ensureManifestAndUI(true); };
+    // CHANGED: do NOT auto-restore (no auto-close flash)
+    openGalleryBtn.onclick = ()=>{ showModal(); ensureManifestAndUI(false); };
     gmClose.onclick=hideModal;
 
     gmSize.oninput=()=>document.querySelector('.gm-grid').style.setProperty('--cell', gmSize.value+'px');
@@ -848,12 +853,17 @@
         }
         applyFiltersAndRender();
 
+        // CHANGED: if we attempt a restore, only highlight and scroll to the current image; DO NOT close the modal
         if (alsoTryRestore && currentImageMeta?.type === 'gallery' && currentImageMeta.src){
-          const hit = gridItems.find(it => it.src === currentImageMeta.src);
-          if (hit){
-            const imageEl=new Image(); imageEl.crossOrigin='anonymous';
-            imageEl.onload=()=>{ img=imageEl; render(); hideModal(); };
-            imageEl.src=hit.src;
+          const idx = gridItems.findIndex(it => it.src === currentImageMeta.src);
+          if (idx >= 0){
+            requestAnimationFrame(()=>{
+              const cell = gmGrid.children[idx];
+              if (cell){
+                cell.classList.add('is-selected');
+                cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+              }
+            });
           }
         }
       }catch(err){

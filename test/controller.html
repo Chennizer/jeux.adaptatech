@@ -1,83 +1,288 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Contrôleur vidéo (WS)</title>
-<body style="font:16px system-ui; padding:20px; max-width:800px; margin:auto;">
-  <h1>Contrôleur vidéo</h1>
-  <p>Room: <code id="room">—</code> · Statut: <strong id="status">Connecting…</strong></p>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <section id="incoming" style="margin:16px 0; padding:12px; border:1px solid #ddd; border-radius:8px;">
-    <div style="opacity:.7; margin-bottom:6px;">Dernier message</div>
-    <pre id="last" style="white-space:pre-wrap; background:#f7f7f8; padding:10px; border-radius:6px; margin:0; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:13px;">(rien)</pre>
-  </section>
+<style>
+  /* Reset & base */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+  body { background: #000; color: #fff; font: 16px system-ui; user-select: none; }
 
-  <section id="chooser" style="display:none; margin-top:20px;">
-    <h2 id="promptTitle">Choisir une vidéo à lancer</h2>
-    <p id="promptNote" style="opacity:.8"></p>
-    <div id="options" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:12px;"></div>
-  </section>
+  /* Start overlay */
+  #startOverlay { position: fixed; inset: 0; display: grid; place-items: center; background:#000; z-index: 10; }
+  #startBtn { appearance: none; border: 0; border-radius: 14px; cursor: pointer; padding: 14px 22px; font: 600 18px system-ui; color: #fff; background: #294936; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+  #startBtn:active { transform: translateY(1px); opacity: .95; }
 
-  <hr style="margin:24px 0">
-  <details>
-    <summary>Outils manuels</summary>
-    <div style="margin-top:10px;">
-      <input id="manualUrl" placeholder="https://exemple/video.mp4" size="60" style="font:inherit; padding:6px;">
-      <button id="sendManual">▶️ Lancer cette vidéo</button>
-    </div>
-  </details>
+  /* Connection indicator */
+  #controllerIndicator{ position:fixed; top:10px; left:10px; width:12px; height:12px; border-radius:50%; background:#bdbdbd; box-shadow:0 0 0 2px #000, 0 0 6px rgba(0,0,0,.25); z-index: 20; pointer-events:none; }
+  #controllerIndicator.on{ background:#18c36e; }
+  #controllerIndicator.pulse{ animation:ci-ping 900ms ease-out 1; }
+  @keyframes ci-ping{ 0%{box-shadow:0 0 0 2px #000,0 0 12px rgba(24,195,110,.9);} 70%{box-shadow:0 0 0 2px #000,0 0 0 rgba(24,195,110,0);} 100%{box-shadow:0 0 0 2px #000,0 0 0 rgba(24,195,110,0);} }
+
+  /* Choice grid */
+  #chooser { position: fixed; inset: 0; display: none; background:#000; z-index: 5; display: grid; justify-items: center; align-content: center; gap: 16px; padding: 16px; width: min(95vw, 1600px); margin: 0 auto; grid-template-columns: repeat(auto-fit, minmax(min(36vmin, 320px), 1fr)); --card-size: 22vh; }
+  #chooser.count-1 { grid-template-columns: 1fr; --card-size: 34vh; }
+  #chooser.count-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); --card-size: 30vh; }
+  #chooser.count-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); --card-size: 26vh; }
+  #chooser.count-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); --card-size: 24vh; }
+
+  .card { width: var(--card-size); aspect-ratio: 1 / 1; background:#fff; border: 2px solid #ccc; border-radius: 12px; cursor: pointer; position: relative; overflow: hidden; transition: transform .15s ease, background-color .2s, box-shadow .2s, border-color .2s; display: flex; align-items: center; justify-content: center; }
+  @media (hover:hover) and (pointer:fine){ .card:hover { background:#e2e8f0; transform: translateY(-2px); box-shadow:0 8px 22px rgba(0,0,0,.45); } }
+  .card:active { transform: scale(.985); }
+  .card img{ width: 100%; height: 100%; object-fit: contain; padding: 8%; background:#fff; }
+
+  @media (max-width: 680px) { #chooser { grid-template-columns: 1fr !important; gap: 14px; padding: 12px; --card-size: 38vh; } }
+</style>
+
+<div id="startOverlay"><button id="startBtn">Start</button></div>
+<span id="controllerIndicator" title="Contrôleur : déconnecté" aria-label="État du contrôleur"></span>
+<div id="chooser" aria-hidden="true"></div>
 
 <script>
+  /* ---------- Fullscreen ---------- */
+  async function enterFullscreen(){ try{ if(!document.fullscreenElement && document.documentElement.requestFullscreen){ await document.documentElement.requestFullscreen(); } }catch{} }
+  const startOverlay = document.getElementById('startOverlay');
+  document.getElementById('startBtn').addEventListener('click', async ()=>{ await enterFullscreen(); startOverlay.style.display='none'; });
+  window.addEventListener('keydown', (e)=>{ if(e.key==='f'||e.key==='F'){ e.preventDefault(); enterFullscreen(); }});
+
+  /* ---------- Indicator ---------- */
+  const ind = document.getElementById('controllerIndicator');
+  const setIndicator = (state)=>{ if(!ind) return; ind.classList.toggle('on', state==='on'); ind.title = state==='on' ? 'Contrôleur : connecté' : 'Contrôleur : déconnecté'; };
+  const pulseIndicator = ()=>{ if(!ind) return; ind.classList.add('pulse'); setTimeout(()=> ind.classList.remove('pulse'), 900); };
+
+  /* ---------- Image base + normalization with auto-retry ---------- */
+  const PATH = location.pathname;
+  const PREFIX_MATCH = PATH.match(/^\/(jeux\.adaptatech|jeuxadaptes)\//);
+  const PRIMARY_PREFIX = PREFIX_MATCH ? `/${PREFIX_MATCH[1]}/` : '/';
+  const IMG_BASE = `${PRIMARY_PREFIX}images/`;
+  const ALT_PREFIXES = Array.from(new Set([
+    PRIMARY_PREFIX,
+    '/jeuxadaptes/',
+    '/jeux.adaptatech/',
+    '/'
+  ])).map(p => p.endsWith('/') ? p : p + '/');
+
+  function normalizeThumb(thumb, keyIfWeather){
+    if (thumb && (/^https?:\/\//i.test(thumb) || /^data:/i.test(thumb))) return thumb;
+    if (thumb && thumb.startsWith(IMG_BASE)) return thumb;
+    if (thumb && thumb.startsWith('/images/')) return thumb.replace('/images/', IMG_BASE);
+    if (thumb) { const name = thumb.split('/').pop(); return IMG_BASE + name; }
+    if (keyIfWeather) return IMG_BASE + keyIfWeather + '.png';
+    return null;
+  }
+
+  function makeImg(srcCandidate, title){
+    const img = document.createElement('img');
+    img.alt = title || '';
+    let tried = 0;
+
+    const candidates = [];
+    if (srcCandidate && /^https?:\/\//i.test(srcCandidate)) {
+      candidates.push(srcCandidate);
+    } else {
+      const filename = (srcCandidate || '').split('/').pop();
+      ALT_PREFIXES.forEach(pref => candidates.push(`${pref}images/${filename}`));
+    }
+
+    function tryNext(){
+      if (tried >= candidates.length) return;
+      img.src = candidates[tried++];
+    }
+
+    img.addEventListener('error', tryNext);
+    tryNext();
+    return img;
+  }
+
+  /* ---------- UI (chooser) ---------- */
+  const chooser = document.getElementById('chooser');
+  let locked = false;
+  let currentMode = 'video';
+
+  function hideChooser(){ chooser.style.display = 'none'; chooser.setAttribute('aria-hidden','true'); chooser.innerHTML = ''; chooser.classList.remove('count-1','count-2','count-3','count-4'); }
+  function applyLayoutClass(count){
+    chooser.classList.remove('count-1','count-2','count-3','count-4');
+    if (count===1) chooser.classList.add('count-1');
+    else if (count===2) chooser.classList.add('count-2');
+    else if (count===3) chooser.classList.add('count-3');
+    else if (count===4) chooser.classList.add('count-4');
+  }
+
+  function showChooserFor(options, mode){
+    if (locked) return;
+    currentMode = mode || 'video';
+
+    const opts = options.slice(0, 12);
+    chooser.innerHTML = '';
+    applyLayoutClass(opts.length);
+    chooser.style.display = 'grid';
+    chooser.setAttribute('aria-hidden','false');
+
+    const fallbacks = currentMode==='weather'
+      ? [IMG_BASE+'sun.png', IMG_BASE+'cloud.png', IMG_BASE+'rain.png', IMG_BASE+'snow.png']
+      : [IMG_BASE+'africa-image.png', IMG_BASE+'binou.png'];
+
+    opts.forEach((opt, i)=>{
+      const card = document.createElement('div');
+      card.className = 'card'; card.role='button'; card.tabIndex=0;
+      const title = opt.title || `Choix ${i+1}`;
+      card.setAttribute('aria-label', title);
+
+      const key = (currentMode==='weather' ? (opt.key || opt.id || '').toLowerCase() : null);
+      const normalized = normalizeThumb(opt.thumb, key) || fallbacks[i % fallbacks.length];
+
+      const img = makeImg(normalized, title);
+      card.appendChild(img);
+
+      const send = ()=>{
+        if (locked) return;
+        locked = true; hideChooser();
+        try {
+          if (currentMode === 'weather') {
+            // UPDATED: emit weather_choice with key (+ optional goto)
+            window.__ws && window.__ws.send(JSON.stringify({
+              type: 'weather_choice',
+              key: key || '',
+              title,
+              goto: opt.goto || undefined,
+              from: 'controller'
+            }));
+          } else {
+            window.__ws && window.__ws.send(JSON.stringify({
+              type: 'play_video',
+              url: opt.url,
+              title,
+              from: 'controller'
+            }));
+          }
+          pulseIndicator();
+        } catch { locked = false; }
+      };
+
+      card.addEventListener('click', send);
+      card.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); send(); }});
+
+      chooser.appendChild(card);
+    });
+  }
+
+  /* ---------- WebSocket with heartbeat + debounced reconnect ---------- */
   const qs = new URL(location.href).searchParams;
   const room = qs.get('room') || 'test';
-  document.getElementById('room').textContent = room;
-
   const WS_URL = `wss://ws-relay.gui98789.workers.dev/ws/${encodeURIComponent(room)}`;
-  const ws = new WebSocket(WS_URL);
-  const status = document.getElementById("status");
-  const last = document.getElementById("last");
-  const chooser = document.getElementById("chooser");
-  const optionsWrap = document.getElementById("options");
-  const promptTitle = document.getElementById("promptTitle");
-  const promptNote = document.getElementById("promptNote");
 
-  ws.onopen  = () => { status.textContent = "Connected"; ws.send(JSON.stringify({type:'hello', role:'controller'})); };
-  ws.onclose = () => { status.textContent = "Closed"; };
-  ws.onerror = () => { status.textContent = "Error"; };
+  let ws = null;
+  let hbInterval = null;
+  let watchdogInterval = null;
+  let lastActivity = 0;
+  let backoffMs = 1000;
+  const backoffMax = 15000;
+  let reconnectTimer = null;
+  let connecting = false;
 
-  function renderJSON(o){ try { return JSON.stringify(o, null, 2); } catch { return String(o); } }
+  function clearTimers(){
+    if (hbInterval) { clearInterval(hbInterval); hbInterval = null; }
+    if (watchdogInterval){ clearInterval(watchdogInterval); watchdogInterval = null; }
+    if (reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
 
-  ws.onmessage = (e)=>{
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { last.textContent = e.data; return; }
-    last.textContent = renderJSON(msg);
+  function scheduleReconnect(){
+    if (connecting) return;
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(()=>{ reconnectTimer = null; connect(); }, backoffMs);
+    backoffMs = Math.min(backoffMs * 2, backoffMax);
+    console.warn('[controller] WS closed; reconnect in', backoffMs/2, 'ms');
+  }
 
-    if (msg.type === 'request_video'){
-      chooser.style.display = '';
-      optionsWrap.innerHTML = '';
-      promptTitle.textContent = msg.deckTitle ? `Choisir une vidéo — ${msg.deckTitle}` : 'Choisir une vidéo à lancer';
-      promptNote.textContent = msg.note || '';
+  function connect(){
+    if (connecting) return;
+    connecting = true;
 
-      const options = Array.isArray(msg.options) && msg.options.length ? msg.options : [
-        {title:'Option 1', url:'https://bucket.adaptatech.org/amyliz-slipperyfish.mp4'},
-        {title:'Option 2', url:'https://bucket.adaptatech.org/africa.mp4'}
-      ];
-
-      for (const opt of options){
-        const btn = document.createElement('button');
-        btn.textContent = `▶️ ${opt.title}`;
-        btn.style.cssText = 'padding:12px; font:16px system-ui; cursor:pointer; border-radius:10px; border:1px solid #d0d0d0; background:#fff;';
-        btn.onclick = ()=> {
-          ws.send(JSON.stringify({ type:'play_video', url: opt.url, title: opt.title, from:'controller' }));
-        };
-        optionsWrap.appendChild(btn);
-      }
+    try{
+      ws = new WebSocket(WS_URL);
+      window.__ws = ws;
+    }catch(e){
+      connecting = false;
+      scheduleReconnect();
+      return;
     }
-  };
 
-  // Manual tool
-  document.getElementById('sendManual').onclick = ()=>{
-    const u = document.getElementById('manualUrl').value.trim();
-    if (!u) return;
-    ws.send(JSON.stringify({ type:'play_video', url: u, title:'Manuel', from:'controller' }));
-  };
+    ws.onopen = () => {
+      connecting = false;
+      setIndicator('on'); pulseIndicator();
+      locked = false;
+      lastActivity = Date.now();
+
+      try{ ws.send(JSON.stringify({type:'hello', role:'controller'})); lastActivity = Date.now(); }catch{}
+
+      clearTimers();
+
+      hbInterval = setInterval(()=>{ 
+        try{ ws.readyState===1 && ws.send(JSON.stringify({type:'ping'})); lastActivity = Date.now(); }catch{} 
+      }, 20000);
+
+      watchdogInterval = setInterval(()=>{
+        if (Date.now() - lastActivity > 60000){
+          console.warn('[controller] WS idle >60s, reconnecting…');
+          try{ ws.close(); }catch{}
+        }
+      }, 5000);
+
+      backoffMs = 1000;
+    };
+
+    ws.onmessage = (e)=>{
+      pulseIndicator();
+      lastActivity = Date.now();
+      let msg; try{ msg = JSON.parse(e.data); }catch{ return; }
+      if (msg.type === 'pong' || msg.type === 'ping') return;
+
+      if (msg.type === 'request_video'){
+        locked = false;
+        const options = Array.isArray(msg.options) && msg.options.length
+          ? msg.options
+          : [
+              { title:'Africa', url:'https://bucket.adaptatech.org/africa.mp4', thumb: IMG_BASE+'africa-image.png' },
+              { title:'Binou',  url:'https://bucket.adaptatech.org/amyliz-slipperyfish.mp4', thumb: IMG_BASE+'binou.png' }
+            ];
+        showChooserFor(options, 'video');
+        return;
+      }
+
+      if (msg.type === 'request_weather' || (msg.type === 'request_choice' && msg.group === 'weather')){
+        locked = false;
+        const options = Array.isArray(msg.options) && msg.options.length
+          ? msg.options
+          : [
+              { title:'Soleil', key:'sun',   thumb: IMG_BASE+'sun.png'   },
+              { title:'Nuages', key:'cloud', thumb: IMG_BASE+'cloud.png' },
+              { title:'Pluie',  key:'rain',  thumb: IMG_BASE+'rain.png'  },
+              { title:'Neige',  key:'snow',  thumb: IMG_BASE+'snow.png'  }
+            ];
+        showChooserFor(options, 'weather');
+        return;
+      }
+
+      if (msg.type === 'stop_video' || msg.type === 'stop_weather'){
+        hideChooser(); locked = false; return;
+      }
+    };
+
+    ws.onerror = () => { setIndicator('off'); };
+    ws.onclose = () => {
+      setIndicator('off');
+      hideChooser();
+      clearTimers();
+      connecting = false;
+      scheduleReconnect();
+    };
+  }
+
+  window.addEventListener('online', ()=>{ if(!ws || ws.readyState !== 1) connect(); });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && (!ws || ws.readyState !== 1)) connect(); });
+
+  connect();
+
+  console.log('[controller] PATH=', location.pathname, 'PRIMARY_PREFIX=', PRIMARY_PREFIX, 'IMG_BASE=', IMG_BASE, 'WS_URL=', WS_URL);
 </script>
-</body>
