@@ -689,7 +689,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   
     function loadConfig() {
-      const userLang = localStorage.getItem('siteLanguage') || 'fr';
+      const userLang = localStorage.getItem('siteLanguage') || 'en';
       spacePromptImages.forEach((p) => {
         const card = document.createElement('div');
         card.className = 'image-card';
@@ -786,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
           wrapper.id = 'timed-seconds-wrapper';
           wrapper.style.display = 'none';
           const numericLabelText = { fr: "Temps pour appuyer sur la switch (s)", en: "Time to press the switch (s)" };
-          const userLang = localStorage.getItem('siteLanguage') || 'fr';
+          const userLang = localStorage.getItem('siteLanguage') || 'en';
           const numericLabel = document.createElement('label');
           numericLabel.textContent = numericLabelText[userLang];
           numericLabel.style.color = 'black';
