@@ -1679,7 +1679,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Populate config-driven UI
   function loadConfig() {
-    const userLang = localStorage.getItem('siteLanguage') || 'fr';
+    const userLang = localStorage.getItem('siteLanguage') || 'en';
     // images for both players
     spacePromptImages.forEach((p) => {
       const card = document.createElement('div');
@@ -1777,7 +1777,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         wrapper.id = 'timed-seconds-wrapper';
         wrapper.style.display = 'none';
         const numericLabelText = { fr: "Temps pour appuyer sur la switch (s)", en: "Time to press the switch (s)" };
-        const userLang2 = localStorage.getItem('siteLanguage') || 'fr';
+        const userLang2 = localStorage.getItem('siteLanguage') || 'en';
         const numericLabel = document.createElement('label');
         numericLabel.textContent = numericLabelText[userLang2];
         numericLabel.style.color = 'black';

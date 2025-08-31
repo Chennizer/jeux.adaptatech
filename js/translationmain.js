@@ -1,7 +1,8 @@
 
 // Update every element with data-fr attribute based on the stored language.
 function updateLanguage() {
-  var lang = localStorage.getItem('siteLanguage') || 'fr';
+  var lang = localStorage.getItem('siteLanguage') || 'en';
+  document.documentElement.lang = lang;
   document.querySelectorAll('[data-fr]').forEach(function(el) {
     el.innerHTML = el.getAttribute('data-' + lang);
   });
@@ -12,7 +13,7 @@ function updateLanguage() {
 }
 // Toggle language between French and English.
 function toggleLanguage() {
-  var current = localStorage.getItem('siteLanguage') || 'fr';
+  var current = localStorage.getItem('siteLanguage') || 'en';
   var newLang = (current === 'fr') ? 'en' : 'fr';
   localStorage.setItem('siteLanguage', newLang);
   updateLanguage();
