@@ -1,6 +1,6 @@
 // translateStatic.js
 document.addEventListener('DOMContentLoaded', () => {
-  const userLang = localStorage.getItem('siteLanguage') || 'fr';
+  const userLang = localStorage.getItem('siteLanguage') || 'en';
   // For each element that has data-fr (or data-en),
   // set its .innerHTML to the correct language attribute.
   document.querySelectorAll('[data-fr]').forEach(el => {
