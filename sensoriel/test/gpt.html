@@ -46,12 +46,23 @@
     }
     .gaze .picto.dwell::after{ opacity:.35; }
 
-    /* Fullscreen & deck start */
+    /* Fixed controls */
     #fullscreenBtn{
       position:fixed; top:10px; right:10px; z-index:9999;
       background:#294936; color:#fff; border:none; padding:.5em 1em; border-radius:8px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.2);
     }
     #fullscreenBtn:active{ transform:translateY(1px); }
+
+    /* BIG contextual request image (top-left) */
+    #remoteBtn{
+      position:fixed; top:10px; left:10px; z-index:9999;
+      width:140px; height:140px; cursor:pointer;
+      background:transparent; border:none; padding:0; box-shadow:none; object-fit:contain;
+      display:none; /* shown only when relevant */
+      user-select:none;
+    }
+    #remoteBtn:active{ transform:translateY(1px); }
+
     .start-deck-btn{
       margin-top: 1rem; background:#294936; color:#fff; border:none;
       padding:.6em 1em; border-radius:10px; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.2); font-size:1rem;
@@ -111,26 +122,20 @@
     .reorder-row { display:flex; align-items:center; gap:.5rem; margin:.5rem 0 1rem; }
     .reorder-row input[type="checkbox"] { transform: scale(1.2); }
 
-    /* Persistent logo (top-right) */
+    /* Persistent logo (top-right of slides area) */
     .reveal .slides::after{
       content:"";
-      position:fixed;
-      top:0px;
-      right:-10px;
-      width:140px;
-      height:140px;
+      position:fixed; top:0px; right:-10px; width:140px; height:140px;
       background-image:url("../../images/owlval.png");
-      background-size:contain;
-      background-repeat:no-repeat;
-      background-position:center;
-      z-index:9998;
-      pointer-events:none;
+      background-size:contain; background-repeat:no-repeat; background-position:center;
+      z-index:9998; pointer-events:none;
     }
   </style>
 </head>
 <body>
 
 <button id="fullscreenBtn" title="Plein écran (⛶)">⛶</button>
+<img id="remoteBtn" alt="Action distante" title="" />
 
 <!-- Portal overlay lives outside Reveal transforms -->
 <div id="playerPortal" aria-hidden="true"></div>
@@ -159,12 +164,11 @@
 
     <!-- 3: Vertical group (Météo + Choix + Jeu) -->
     <section>
-      <!-- 3.1 Intro + ask controller -->
+      <!-- 3.1 Intro (use global image button) -->
       <section>
         <h2>Météo</h2>
         <p>Demander à l’élève de sélectionner l’icône météo.</p>
         <p class="note-tip">Appuyez sur <kbd>↓</kbd> pour descendre vers les options météo.</p>
-        <button id="askWeatherBtn" class="start-deck-btn">📡 Demander la météo (contrôleur)</button>
       </section>
 
       <!-- 3.2 → Sun -->
@@ -209,11 +213,10 @@
     <section id="branch-group">
       <section id="branch-root">
         <h2>Choisis une activité vidéo</h2>
-        <p class="note-tip">Option 1 ou 2 ci-dessous, ou demander au contrôleur distant.</p>
+        <p class="note-tip">Utilisez le bouton image (haut-gauche) pour demander au contrôleur.</p>
         <div class="branch-grid">
           <button class="branch-card" id="localOpt1">🎵 Slippery Fish (local)</button>
           <button class="branch-card" id="localOpt2">🥁 Africa (local)</button>
-          <button id="askRemoteBtn" class="branch-card">📡 Demander au contrôleur</button>
         </div>
         <div id="remoteStatus" class="waiting-remote" aria-live="polite"></div>
       </section>
@@ -317,10 +320,9 @@ startMorningRoutine();
   /* ========= Reveal init ========= */
   Reveal.initialize({
     hash: true, slideNumber: true, controls: true, progress: true,
-    center: false,                 // layout from top (so titles appear near top)
-    history: true, transition: 'slide',
+    center: false, history: true, transition: 'slide',
     width: 1280, height: 720,
-    keyboard: { 32: null }, // disable Space advancing slides
+    keyboard: { 32: null },
     plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
   });
 
@@ -424,11 +426,11 @@ startMorningRoutine();
     const now=evt.currentSlide, prev=evt.previousSlide;
     if(now && now.id==='slide-game') enterGameMode();
     else if(prev && prev.id==='slide-game') exitGameMode();
+    updateRemoteBtnVisibility();
   });
 
   /* ========= Video logic with portal ========= */
   const remoteStatus = document.getElementById('remoteStatus');
-  const askRemoteBtn  = document.getElementById('askRemoteBtn');
   const localOpt1Btn  = document.getElementById('localOpt1');
   const localOpt2Btn  = document.getElementById('localOpt2');
 
@@ -464,10 +466,7 @@ startMorningRoutine();
       stopCurrentVideoAndReturn(branchHIndex());
       return;
     }
-    if (blockKeys.has(e.key)) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    }
+    if (blockKeys.has(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); }
   }
   function onWheelCapture(e){ if(inputsLocked){ e.preventDefault(); e.stopImmediatePropagation(); } }
   function onTouchMoveCapture(e){ if(inputsLocked){ e.preventDefault(); e.stopImmediatePropagation(); } }
@@ -485,6 +484,7 @@ startMorningRoutine();
     window.addEventListener('wheel', onWheelCapture, {capture:true, passive:false});
     window.addEventListener('touchmove', onTouchMoveCapture, {capture:true, passive:false});
     window.addEventListener('pointerdown', onPointerDownCapture, true);
+    updateRemoteBtnVisibility();
   }
   function unlockDeckInputs(){
     inputsLocked=false;
@@ -495,6 +495,7 @@ startMorningRoutine();
     window.removeEventListener('touchmove', onTouchMoveCapture, true);
     window.removeEventListener('pointerdown', onPointerDownCapture, true);
     stopStickToSlide();
+    updateRemoteBtnVisibility();
   }
 
   function branchHIndex(){
@@ -531,19 +532,14 @@ startMorningRoutine();
 
   function usePortal(key){
     const vid = videoElems[key];
-    if (!portal.contains(vid)){
-      portal.appendChild(vid);
-    }
+    if (!portal.contains(vid)){ portal.appendChild(vid); }
     portal.style.display = 'block';
     portal.setAttribute('aria-hidden','false');
   }
-
   function restoreFromPortal(key){
     const vid = videoElems[key];
     const wrap = placeholders[key];
-    if (wrap && !wrap.contains(vid)){
-      wrap.appendChild(vid);
-    }
+    if (wrap && !wrap.contains(vid)){ wrap.appendChild(vid); }
     portal.style.display = 'none';
     portal.setAttribute('aria-hidden','true');
   }
@@ -555,7 +551,6 @@ startMorningRoutine();
     const vid = videoElems[key];
     const other = videoElems[key === 'v1' ? 'v2' : 'v1'];
     try { other.pause(); } catch {}
-
     vid.src = url || KNOWN_VIDEOS[key];
     vid.currentTime = 0;
 
@@ -578,9 +573,7 @@ startMorningRoutine();
         await vid.play();
         if(overlay) overlay.style.display='none';
         return true;
-      } catch {
-        return false;
-      }
+      } catch { return false; }
     };
 
     const startInPortal = async ()=>{
@@ -631,12 +624,8 @@ startMorningRoutine();
       restoreFromPortal(currentVidKey);
     }
 
-    if (typeof targetH === 'number' && targetH >= 0){
-      Reveal.slide(targetH, 0);
-    } else {
-      const h = branchHIndex();
-      if (h >= 0) Reveal.slide(h, 0);
-    }
+    if (typeof targetH === 'number' && targetH >= 0){ Reveal.slide(targetH, 0); }
+    else { const h = branchHIndex(); if (h >= 0) Reveal.slide(h, 0); }
 
     currentVidKey = null;
     unlockDeckInputs();
@@ -647,9 +636,8 @@ startMorningRoutine();
   videoElems.v1.addEventListener('ended', ()=> stopCurrentVideoAndReturn(branchHIndex()));
   videoElems.v2.addEventListener('ended', ()=> stopCurrentVideoAndReturn(branchHIndex()));
   videoElems.v1.addEventListener('pause', ()=>{ if(inputsLocked && !videoElems.v1.ended) videoElems.v1.play().catch(()=>{}); });
-videoElems.v2.addEventListener('pause', () => {
-  if (inputsLocked && !videoElems.v2.ended) videoElems.v2.play().catch(() => {});
-});
+  videoElems.v2.addEventListener('pause', ()=>{ if (inputsLocked && !videoElems.v2.ended) videoElems.v2.play().catch(()=>{}); });
+
   document.addEventListener('fullscreenchange', async ()=>{
     if(!inputsLocked || !currentVidKey) return;
     const vid = videoElems[currentVidKey];
@@ -663,126 +651,242 @@ videoElems.v2.addEventListener('pause', () => {
   localOpt1Btn.addEventListener('click', ()=> playVideoUnderBranch('v1', KNOWN_VIDEOS.v1, {forcePortal:false}));
   localOpt2Btn.addEventListener('click', ()=> playVideoUnderBranch('v2', KNOWN_VIDEOS.v2, {forcePortal:false}));
 
-  /* ========= WebSocket wiring ========= */
-  const WS = new WebSocket(WS_URL);
-  WS.onopen = ()=>{
+  /* ========= WebSocket wiring (robust + pending resend) ========= */
+  let WS = null;
+  let hbInterval = null;
+  let watchdogInterval = null;
+  let lastActivity = 0;
+  let backoffMs = 1000;
+  const backoffMax = 15000;
+  let reconnectTimer = null;
+  let connecting = false;
+
+  // Remember last pending remote request
+  let lastPending = null; // { kind:'video'|'weather', msg:{...} }
+
+  function setRemoteStatus(txt){
     const s = document.getElementById('remoteStatus');
-    if(s) s.textContent = 'Connecté au canal ' + room;
-    WS.send(JSON.stringify({type:'hello', role:'slides', deckTitle}));
-  };
-  WS.onclose = ()=>{ const s = document.getElementById('remoteStatus'); if(s) s.textContent = 'WebSocket fermé'; };
-  WS.onerror = ()=>{ const s = document.getElementById('remoteStatus'); if(s) s.textContent = 'Erreur WebSocket'; };
+    if (s) s.textContent = txt || '';
+  }
+
+  function clearWsTimers(){
+    if (hbInterval) { clearInterval(hbInterval); hbInterval = null; }
+    if (watchdogInterval) { clearInterval(watchdogInterval); watchdogInterval = null; }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+
+  function scheduleReconnect(){
+    if (connecting) return;
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(()=>{ reconnectTimer = null; connectWS(); }, backoffMs);
+    backoffMs = Math.min(backoffMs * 2, backoffMax);
+    console.warn('[slides] WS closed; reconnect in', backoffMs/2, 'ms');
+  }
 
   function wsSend(obj){
     const payload = JSON.stringify(obj);
-    if (WS.readyState === WebSocket.OPEN) WS.send(payload);
-    else WS.addEventListener('open', ()=> WS.send(payload), { once:true });
+    if (WS && WS.readyState === WebSocket.OPEN) WS.send(payload);
+    else if (WS) WS.addEventListener('open', ()=> WS.send(payload), { once:true });
   }
 
-  // Ask controller for video (thumb paths fixed to ../../images/…)
-  const askRemoteEl = document.getElementById('askRemoteBtn');
-  if (askRemoteEl){
-    askRemoteEl.addEventListener('click', ()=>{
-      wsSend({
-        type: 'request_video',
-        from: 'slides',
-        deckTitle,
-        options: [
-          { title:'Slippery Fish', url: KNOWN_VIDEOS.v1, thumb: '../../images/binou.png' },
-          { title:'Africa',        url: KNOWN_VIDEOS.v2, thumb: '../../images/africa-image.png' }
-        ],
-        note: 'Veuillez choisir une vidéo à lancer.'
-      });
-      const s = document.getElementById('remoteStatus');
-      if(s) s.textContent = 'Demande envoyée. En attente du choix distant…';
-    });
+  function connectWS(){
+    if (connecting) return;
+    connecting = true;
+
+    try { WS = new WebSocket(WS_URL); }
+    catch { connecting = false; scheduleReconnect(); return; }
+
+    WS.onopen = ()=>{
+      connecting = false;
+      lastActivity = Date.now();
+      clearWsTimers();
+
+      setRemoteStatus('Connecté au canal ' + room);
+      wsSend({ type:'hello', role:'slides', deckTitle });
+
+      hbInterval = setInterval(()=>{
+        try { WS.readyState===1 && WS.send(JSON.stringify({ type:'ping' })); lastActivity = Date.now(); } catch {}
+      }, 20000);
+
+      // resend pending after reconnect
+      if (lastPending) setTimeout(()=> wsSend(lastPending.msg), 200);
+
+      backoffMs = 1000;
+    };
+
+    WS.onmessage = (e)=>{
+      lastActivity = Date.now();
+      let msg; try { msg = JSON.parse(e.data); } catch { return; }
+
+      if (msg.type === 'ping') { try { WS.send(JSON.stringify({ type:'pong' })); } catch {} return; }
+      if (msg.type === 'pong') return;
+
+      // controller hello → resend pending
+      if (msg.type === 'hello' && msg.role === 'controller' && lastPending) {
+        setTimeout(()=> wsSend(lastPending.msg), 50);
+        return;
+      }
+
+      if (msg.type === 'play_video' && msg.url){
+        setRemoteStatus('Commande reçue : lecture…');
+        const key = whichFromUrl(msg.url);
+        playVideoUnderBranch(key, msg.url, { forcePortal:true });
+        return;
+      }
+      if (msg.type === 'stop_video'){
+        stopCurrentVideoAndReturn(branchHIndex());
+        return;
+      }
+
+      if (msg.type === 'weather_choice') {
+        // navigate based on provided goto or key
+        let target = msg.goto;
+        if (!target && msg.key) {
+          const h = weatherColumnIndex();
+          const map = { sun:1, cloud:2, rain:3, snow:4 };
+          target = { h, v: map[String(msg.key).toLowerCase()] ?? 0 };
+        }
+        if (target && Number.isInteger(target.h) && Number.isInteger(target.v)) {
+          Reveal.slide(target.h, target.v);
+        }
+        if (lastPending?.kind === 'weather') lastPending = null;
+        return;
+      }
+    };
+
+    WS.onerror = ()=> setRemoteStatus('Erreur WebSocket');
+    WS.onclose = ()=>{ clearWsTimers(); setRemoteStatus('WebSocket fermé'); connecting = false; scheduleReconnect(); };
+
+    watchdogInterval = setInterval(()=>{
+      if (Date.now() - lastActivity > 60000) { try { WS.close(); } catch {} }
+    }, 5000);
   }
 
-  /* ----- Weather flow: request & navigate ----- */
+  connectWS();
+  window.addEventListener('online', ()=>{ if(!WS || WS.readyState !== 1) connectWS(); });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && (!WS || WS.readyState !== 1)) connectWS(); });
+
+  /* ----- Weather helpers ----- */
   function weatherColumnIndex() {
     const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
     const sun = document.getElementById('weather-sun');
     if (!sun) return -1;
     return sections.findIndex(s => s.contains(sun));
   }
-  const WEATHER_V = { sun:1, cloud:2, rain:3, snow:4 };
 
-  const askWeatherBtn = document.getElementById('askWeatherBtn');
-  if (askWeatherBtn) {
-    askWeatherBtn.addEventListener('click', () => {
-      const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
-      const sun = document.getElementById('weather-sun');
-      const weatherH = sun ? sections.findIndex(s => s.contains(sun)) : 0;
+  /* ----- Contextual remote request image (only where relevant) ----- */
+  const remoteBtn = document.getElementById('remoteBtn');
 
-      wsSend({
-        type: 'request_weather', // protocol expected by controller
-        from: 'slides',
-        deckTitle,
-        options: [
-          { title:'Soleil', key:'sun',   thumb:'../../images/sun.png',   goto:{h:weatherH, v:1} },
-          { title:'Nuages', key:'cloud', thumb:'../../images/cloud.png', goto:{h:weatherH, v:2} },
-          { title:'Pluie',  key:'rain',  thumb:'../../images/rain.png',  goto:{h:weatherH, v:3} },
-          { title:'Neige',  key:'snow',  thumb:'../../images/snow.png',  goto:{h:weatherH, v:4} }
-        ],
-        note: 'Choisir la météo'
-      });
+  // load ../../images/ch.(png|svg|jpg|jpeg) with graceful fallback
+  (function setRemoteBtnSrc(){
+    const candidates = ['../../images/ch.png','../../images/ch.svg','../../images/ch.jpg','../../images/ch.jpeg'];
+    let i = 0;
+    remoteBtn.onerror = ()=>{ if (++i < candidates.length) remoteBtn.src = candidates[i]; };
+    remoteBtn.src = candidates[0];
+  })();
 
-      if (weatherH >= 0) Reveal.slide(weatherH, 0);
-    });
+  function sendVideoRequest(){
+    const msg = {
+      type: 'request_video',
+      from: 'slides',
+      deckTitle,
+      options: [
+        { title:'Slippery Fish', url: KNOWN_VIDEOS.v1, thumb: '../../images/binou.png' },
+        { title:'Africa',        url: KNOWN_VIDEOS.v2, thumb: '../../images/africa-image.png' }
+      ],
+      note: 'Veuillez choisir une vidéo à lancer.'
+    };
+    lastPending = { kind:'video', msg };
+    wsSend(msg);
+    setRemoteStatus('Demande envoyée. En attente du choix distant…');
   }
 
-  WS.onmessage = (e)=>{
-    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+  function sendWeatherRequest(){
+    const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
+    const sun = document.getElementById('weather-sun');
+    const weatherH = sun ? sections.findIndex(s => s.contains(sun)) : 0;
 
-    if (msg.type === 'play_video' && msg.url){
-      const s = document.getElementById('remoteStatus');
-      if(s) s.textContent = 'Commande reçue : lecture…';
-      const key = whichFromUrl(msg.url);
-      playVideoUnderBranch(key, msg.url, {forcePortal:true});
+    const msg = {
+      type: 'request_weather',
+      from: 'slides',
+      deckTitle,
+      options: [
+        { title:'Soleil', key:'sun',   thumb:'../../images/sun.png',   goto:{h:weatherH, v:1} },
+        { title:'Nuages', key:'cloud', thumb:'../../images/cloud.png', goto:{h:weatherH, v:2} },
+        { title:'Pluie',  key:'rain',  thumb:'../../images/rain.png',  goto:{h:weatherH, v:3} },
+        { title:'Neige',  key:'snow',  thumb:'../../images/snow.png',  goto:{h:weatherH, v:4} }
+      ],
+      note: 'Choisir la météo'
+    };
+    lastPending = { kind:'weather', msg };
+    wsSend(msg);
+    if (weatherH >= 0) Reveal.slide(weatherH, 0);
+  }
+
+  function updateRemoteBtnVisibility(){
+    const idx = Reveal.getIndices();
+    const weatherH = weatherColumnIndex();
+    const branchH  = branchHIndex();
+
+    // Hide while video controls are locked
+    if (inputsLocked) { remoteBtn.style.display = 'none'; return; }
+
+    // Show on any weather slide
+    if (idx.h === weatherH && weatherH >= 0) {
+      remoteBtn.style.display = 'block';
+      remoteBtn.title = 'Demander la météo (contrôleur)';
       return;
     }
-    if (msg.type === 'stop_video'){
-      stopCurrentVideoAndReturn(branchHIndex());
+
+    // Show only on branch root (video chooser)
+    if (idx.h === branchH && idx.v === 0 && branchH >= 0) {
+      remoteBtn.style.display = 'block';
+      remoteBtn.title = 'Demander une vidéo (contrôleur)';
       return;
     }
 
-    // Weather choice from controller
-    if (msg.type === 'weather_choice') {
-      let target = msg.goto;
-      if (!target && msg.key) {
-        const h = weatherColumnIndex();
-        const map = { sun:1, cloud:2, rain:3, snow:4 };
-        target = { h, v: map[String(msg.key).toLowerCase()] ?? 0 };
-      }
-      if (target && Number.isInteger(target.h) && Number.isInteger(target.v)) {
-        Reveal.slide(target.h, target.v);
-      }
-      return;
-    }
-  };
+    remoteBtn.style.display = 'none';
+  }
 
-  /* ========= Global Q handler: go to column root (h,0) ========= */
-  window.addEventListener('keydown', (e)=>{
-    if (e.key === 'q' || e.key === 'Q'){
-      const t = e.target;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const { h } = Reveal.getIndices();
-      if (inputsLocked && currentVidKey){
-        stopCurrentVideoAndReturn(h);
-      } else {
-        Reveal.slide(h, 0);
-      }
-    }
-  }, { capture:true });
+  remoteBtn.addEventListener('click', ()=>{
+    const idx = Reveal.getIndices();
+    const weatherH = weatherColumnIndex();
+    const branchH  = branchHIndex();
+    if (idx.h === weatherH && weatherH >= 0) sendWeatherRequest();
+    else if (idx.h === branchH && idx.v === 0 && branchH >= 0) sendVideoRequest();
+  });
 
   /* ========= Ready ========= */
   Reveal.on('ready', () => {
     if (window.hljs) { hljs.highlightAll(); }
     buildStatic();
     makeGazeGrid('grid-gaze','dwell','dwellVal');
+    updateRemoteBtnVisibility();
   });
+
+  /* ========= Global "Q" → go to top of current stack ========= */
+  (function enableQToStackTop(){
+    const isTyping = (el) =>
+      el && (el.closest && el.closest('input, textarea, select, [contenteditable="true"]'));
+
+    window.addEventListener('keydown', (e) => {
+      // During video playback, the capture handler owns Q
+      if (typeof inputsLocked !== 'undefined' && inputsLocked) return;
+
+      if (e.key === 'q' || e.key === 'Q') {
+        // Avoid interfering with typing or overview
+        if (isTyping(e.target)) return;
+        if (Reveal.isOverview && Reveal.isOverview()) return;
+
+        const idx = Reveal.getIndices && Reveal.getIndices();
+        if (idx && Number.isInteger(idx.h)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          Reveal.slide(idx.h, 0); // e.g., 4.3 → 4.1
+        }
+      }
+    }, false);
+  })();
 </script>
 </body>
 </html>

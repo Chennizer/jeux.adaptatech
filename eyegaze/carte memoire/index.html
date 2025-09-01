@@ -27,14 +27,21 @@
       justify-content: center;
       padding: 10px;
     }
+
+    /* GRID: le seul espacement visible est le gap */
     .game-grid {
       display: grid;
-      gap: 10px;
+      gap: 16px;                 /* sera écrasé par JS */
       width: 100%;
       height: 100%;
-      justify-items: center;
-      align-items: center;
+      place-content: center;     /* centre le bloc de cartes */
+      justify-items: stretch;
+      align-items: stretch;
+
+      /* pour que le padding soit pris en compte dans la largeur totale */
+      box-sizing: border-box;
     }
+
     .card {
       background-color: #ffffff;
       border: 2px solid #cccccc;
@@ -45,48 +52,39 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
-    }
-    .card-front, .card-back {
-      position: absolute;
+
+      /* taille contrôlée par la cellule de grille */
       width: 100%;
       height: 100%;
-      top: 0;
-      left: 0;
+      aspect-ratio: 1 / 1; /* filet de sécurité */
+    }
+
+    .card-front, .card-back {
+      position: absolute;
+      inset: 0;
       border-radius: 10px;
       transition: opacity 0.6s ease;
     }
-    .card-front {
-      background-color: #f0f0f0;
-      opacity: 1;
-    }
-    .card-back {
+    .card-front { background-color: #f0f0f0; opacity: 1; }
+    .card-back  {
       background-color: #ffffff;
       opacity: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
     }
-    .card-back img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
+    .card-back img { width: 100%; height: 100%; object-fit: contain; }
     .card.flipped .card-front { opacity: 0; }
-    .card.flipped .card-back { opacity: 1; }
+    .card.flipped .card-back  { opacity: 1; }
 
-    /* Dwell overlay used on each card */
+    /* Dwell overlay */
     .dwell-fill {
       position: absolute;
       background-color: rgba(255, 0, 0, 0.5);
-      top: 50%;
-      left: 50%;
-      width: 0;
-      height: 0;
+      top: 50%; left: 50%;
+      width: 0; height: 0;
       transform: translate(-50%, -50%);
       pointer-events: none;
     }
 
-    /* When frozen, pause any eyegaze overlay animations (best-effort) */
     .eyegaze-frozen #eyegaze-overlay *,
     .eyegaze-frozen .dwell-fill {
       animation-play-state: paused !important;
@@ -117,11 +115,13 @@
           <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
         </div>
       </div>
+
       <div class="options-column">
         <div class="option-item">
           <label for="categorySelect" class="teal-label label-block">Catégorie</label>
           <select id="categorySelect" class="styled-select"></select>
         </div>
+
         <div class="option-item">
           <label for="pairCount" class="teal-label">
             <span>Nombre de paires: </span>
@@ -129,14 +129,17 @@
           </label>
           <input type="range" id="pairCount" class="styled-slider" min="2" max="6" value="2">
         </div>
+
+        <!-- Slider unique taille + espace -->
         <div class="option-item">
-          <label for="sizeSlider" class="teal-label">
-            <span>Taille des cartes: </span>
-            <span id="sizeVal">1.0</span>x
+          <label for="layoutScale" class="teal-label">
+            <span>Mise en page (taille + espaces): </span>
+            <span id="layoutScaleVal">1.00</span>x
           </label>
-          <input type="range" id="sizeSlider" class="styled-slider" min="0.8" max="1.2" step="0.1" value="1">
+          <input type="range" id="layoutScale" class="styled-slider" min="0.8" max="1.4" step="0.05" value="1.0">
         </div>
       </div>
+
       <div class="options-column">
         <div class="option-item">
           <label for="dwellTimeSlider" class="teal-label">
@@ -154,6 +157,7 @@
         </div>
       </div>
     </div>
+
     <div id="mode-divider"></div>
     <button id="startButton" class="button">Commencer</button>
   </div>
@@ -180,15 +184,22 @@ fetch('../../images/pictos/index.json')
     }
   });
 
-const pairCount = document.getElementById('pairCount');
-const pairCountVal = document.getElementById('pairCountVal');
+const pairCount     = document.getElementById('pairCount');
+const pairCountVal  = document.getElementById('pairCountVal');
 pairCount.addEventListener('input', () => pairCountVal.textContent = pairCount.value);
 
-const sizeSlider = document.getElementById('sizeSlider');
-const sizeVal = document.getElementById('sizeVal');
-sizeSlider.addEventListener('input', () => sizeVal.textContent = parseFloat(sizeSlider.value).toFixed(1));
+const layoutScaleEl = document.getElementById('layoutScale');
+const layoutScaleVal= document.getElementById('layoutScaleVal');
+layoutScaleEl.addEventListener('input', () => {
+  layoutScaleVal.textContent = parseFloat(layoutScaleEl.value).toFixed(2);
+  if (document.querySelector('.game-container').style.display === 'flex') {
+    layoutScale = parseFloat(layoutScaleEl.value);
+    cardSizeMultiplier = layoutScale;
+    adjustCardSizes();
+  }
+});
 
-const themeSelect = document.getElementById('themeSelect');
+const themeSelect   = document.getElementById('themeSelect');
 document.getElementById('startButton').addEventListener('click', startGame);
 
 let firstCard = null;
@@ -196,17 +207,24 @@ let secondCard = null;
 let lockBoard = false;
 let matchesFound = 0;
 
-/* Persist across rounds */
+/* Persistant entre manches */
 let currentPairs = 0;
 let cardSizeMultiplier = 1;
 let currentTheme = 'light';
 let currentCategory = null;
 
-/* NEW: block starting new hovers while frozen */
+/* Slider unique : échelle mise en page */
+let layoutScale = 1.0;
+
+/* Bloque les nouveaux survols pendant un gel */
 let controlsLocked = false;
 
+/* Base gap (inverse de la taille) + marge minimale aux bords */
+const BASE_GAP = 100; // px (base pour calcul du gap)
+const EDGE_PAD = 10;  // px (marge minimale au bord de l'écran)
+
 function startGame() {
-  // Request fullscreen
+  // Plein écran
   if (document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen();
   } else if (document.documentElement.webkitRequestFullscreen) {
@@ -218,10 +236,11 @@ function startGame() {
   eyegazeSettings.hideOverlay();
   document.querySelector('.game-container').style.display = 'flex';
 
-  currentCategory = document.getElementById('categorySelect').value;
-  currentPairs = parseInt(pairCount.value);
-  cardSizeMultiplier = parseFloat(sizeSlider.value);
-  currentTheme = themeSelect.value;
+  currentCategory    = document.getElementById('categorySelect').value;
+  currentPairs       = parseInt(pairCount.value);
+  layoutScale        = parseFloat(layoutScaleEl.value);
+  cardSizeMultiplier = layoutScale;     // taille = échelle
+  currentTheme       = themeSelect.value;
 
   applyTheme(currentTheme);
 
@@ -241,10 +260,10 @@ function applyTheme(theme) {
 
 function getImages(category, pairs) {
   const base = pictosData.base;
-  const imgs = pictosData.categories[category].slice(); // avoid mutating source
+  const imgs = pictosData.categories[category].slice();
   const shuffled = imgs.sort(() => 0.5 - Math.random());
   const selected = shuffled.slice(0, pairs);
-  const doubled = [...selected, ...selected].map(img => base + img);
+  const doubled  = [...selected, ...selected].map(img => base + img);
   return doubled.sort(() => 0.5 - Math.random());
 }
 
@@ -255,12 +274,15 @@ function setupBoard(images) {
   firstCard = null;
   secondCard = null;
   lockBoard = false;
-  controlsLocked = false; // ensure unlocked when new board
-  unfreezeEyegaze();      // safety
+  controlsLocked = false;
+  unfreezeEyegaze();
 
-  const total = images.length;
+  // applique la marge de bord minimale
+  grid.style.padding = EDGE_PAD + 'px';
+
+  const total   = images.length;
   const columns = Math.ceil(Math.sqrt(total));
-  grid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+  grid.dataset.columns = String(columns);
 
   images.forEach(src => {
     const card = document.createElement('div');
@@ -287,20 +309,43 @@ function setupBoard(images) {
   adjustCardSizes();
 }
 
+/* Taille + gap pilotés par la même échelle, gap inverse de la taille + marge bord */
 function adjustCardSizes() {
   const grid = document.getElementById('game-grid');
   const cards = grid.querySelectorAll('.card');
-  const columns = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-  const rows = Math.ceil(cards.length / columns);
-  const containerWidth = grid.offsetWidth;
-  const containerHeight = grid.offsetHeight;
-  const maxCardWidth = containerWidth / columns - 15;
-  const maxCardHeight = containerHeight / rows - 15;
-  const baseSize = Math.min(maxCardWidth, maxCardHeight) * 0.9;
-  const size = Math.min(baseSize * cardSizeMultiplier, maxCardWidth, maxCardHeight);
+  if (!cards.length) return;
+
+  const columns = parseInt(grid.dataset.columns || '2', 10);
+  const rows    = Math.ceil(cards.length / columns);
+
+  // gap inversement proportionnel à la taille
+  const GAP = Math.round(BASE_GAP / layoutScale);
+  grid.style.gap = GAP + 'px';
+
+  // dimensions du conteneur
+  const containerW = grid.clientWidth;
+  const containerH = grid.clientHeight || grid.parentElement.clientHeight;
+
+  // tenir compte du EDGE_PAD appliqué en padding (2 côtés)
+  const contentW = Math.max(0, containerW - 2 * EDGE_PAD);
+  const contentH = Math.max(0, containerH - 2 * EDGE_PAD);
+
+  // tenir compte du gap demandé dans la zone de contenu
+  const maxCellW = (contentW - (columns - 1) * GAP) / columns;
+  const maxCellH = (contentH - (rows    - 1) * GAP) / rows;
+
+  // taille de carte proportionnelle à l’échelle
+  const baseSize = Math.min(maxCellW, maxCellH) * 0.9;
+  const size = Math.min(baseSize * cardSizeMultiplier, maxCellW, maxCellH);
+
+  // pistes de grille = taille de carte => aucun “vide” parasite
+  const track = Math.floor(size) + 'px';
+  grid.style.gridTemplateColumns = `repeat(${columns}, ${track})`;
+  grid.style.gridAutoRows        = track;
+
   cards.forEach(card => {
-    card.style.width = size + 'px';
-    card.style.height = size + 'px';
+    card.style.width  = '100%';
+    card.style.height = '100%';
   });
 }
 window.addEventListener('resize', adjustCardSizes);
@@ -309,10 +354,7 @@ function flipCard(card) {
   if (lockBoard || controlsLocked || card === firstCard) return;
   card.classList.add('flipped', 'selected');
   playSound('flip');
-  if (!firstCard) {
-    firstCard = card;
-    return;
-  }
+  if (!firstCard) { firstCard = card; return; }
   secondCard = card;
   checkForMatch();
 }
@@ -320,14 +362,12 @@ function flipCard(card) {
 function checkForMatch() {
   const isMatch = firstCard.dataset.image === secondCard.dataset.image;
   if (isMatch) {
-    disableCards(); // disables clicking on these two
+    disableCards();
     freezeEyegaze();
     controlsLocked = true;
 
-    // 🔹 play "victory" (or a match sound) after 1400ms
     setTimeout(() => playSound('victory'), 1400);
 
-    // 🔹 keep frozen for 3000ms total
     setTimeout(() => {
       resetBoard();
       controlsLocked = false;
@@ -335,7 +375,6 @@ function checkForMatch() {
 
       matchesFound++;
       if (matchesFound === currentPairs) {
-        // all pairs done, generate next set
         setTimeout(startNewSet, 500);
       }
     }, 3000);
@@ -345,12 +384,10 @@ function checkForMatch() {
     controlsLocked = true;
     stopHover();
 
-    // 🔹 play error after 1400ms
     setTimeout(() => playSound('error'), 1400);
 
-    // 🔹 flip back and reenable after 3000ms
     setTimeout(() => {
-      if (firstCard) firstCard.classList.remove('flipped','selected');
+      if (firstCard)  firstCard.classList.remove('flipped','selected');
       if (secondCard) secondCard.classList.remove('flipped','selected');
       resetBoard();
       controlsLocked = false;
@@ -358,8 +395,6 @@ function checkForMatch() {
     }, 3000);
   }
 }
-
-
 
 function disableCards() {
   firstCard.style.pointerEvents = 'none';
@@ -372,38 +407,36 @@ function resetBoard() {
   lockBoard = false;
 }
 
-/* Generate a fresh round with identical settings (category, pair count, size, theme). */
+/* Nouvelle manche avec mêmes réglages */
 function startNewSet() {
   applyTheme(currentTheme);
   const images = getImages(currentCategory, currentPairs);
   setupBoard(images);
 }
 
-/* ====== Eyegaze freeze helpers (best-effort, works even if eyegaze-menu.js lacks an API) ====== */
+/* ====== Gel oculométrie ====== */
 function freezeEyegaze() {
-  // Add a CSS hook to pause animations/transitions of overlays
   document.documentElement.classList.add('eyegaze-frozen');
-  // If your eyegaze-menu.js exposes a pause/freeze API, call it too:
   try {
-    if (window.eyegazeSettings?.pauseInput) eyegazeSettings.pauseInput(true);
-    if (window.eyegazeSettings?.freezeOverlay) eyegazeSettings.freezeOverlay(true);
+    if (window.eyegazeSettings?.pauseInput)   eyegazeSettings.pauseInput(true);
+    if (window.eyegazeSettings?.freezeOverlay)eyegazeSettings.freezeOverlay(true);
   } catch (e) {}
 }
 
 function unfreezeEyegaze() {
   document.documentElement.classList.remove('eyegaze-frozen');
   try {
-    if (window.eyegazeSettings?.pauseInput) eyegazeSettings.pauseInput(false);
-    if (window.eyegazeSettings?.freezeOverlay) eyegazeSettings.freezeOverlay(false);
+    if (window.eyegazeSettings?.pauseInput)   eyegazeSettings.pauseInput(false);
+    if (window.eyegazeSettings?.freezeOverlay)eyegazeSettings.freezeOverlay(false);
   } catch (e) {}
 }
 
-/* ====== Dwell hover handling ====== */
+/* ====== Dwell ====== */
 let hoverTimeout;
 let currentOverlay;
 
 function startHover(card) {
-  if (controlsLocked) return; // block new hovers during freeze
+  if (controlsLocked) return;
 
   const hoverTime = eyegazeSettings.dwellTime;
   stopHover();
@@ -441,8 +474,8 @@ function stopHover() {
 function playSound(name) {
   const volume = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
   let src;
-  if (name === 'flip') src = '../../sounds/flip.mp3';
-  else if (name === 'error') src = '../../sounds/error.mp3';
+  if (name === 'flip')    src = '../../sounds/flip.mp3';
+  else if (name === 'error')   src = '../../sounds/error.mp3';
   else if (name === 'victory') src = '../../sounds/victory.mp3';
   if (!src) return;
   const audio = new Audio(src);
