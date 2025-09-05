@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Gaze Playground — Sensory Lab (Upgraded Harp, Big Bubbles & Vitrail)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{height:100%;margin:0;background:#000;overflow:hidden}
+  #hud{
+    position:fixed;left:12px;bottom:12px;z-index:3;
+    font:14px/1.2 system-ui,Segoe UI,Roboto,Arial;color:#fff;
+    background:rgba(0,0,0,.35);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.15);border-radius:14px;
+    padding:10px 12px;user-select:none
+  }
+  #hud select,#hud input[type=range]{appearance:none;background:rgba(255,255,255,.08);
+    color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:4px 8px}
+  #hud .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  #hud kbd{padding:2px 6px;border:1px solid #888;border-bottom-width:2px;border-radius:6px}
+  #a11y{position:fixed;right:12px;bottom:12px;z-index:3;color:#9ad3ff;font:12px system-ui}
+  canvas{display:block;position:fixed;inset:0}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" aria-live="polite">
+  <div class="row">
+    <label>Scène</label>
+    <select id="mode">
+      <!-- Originals -->
+      <option value="aurora">Aurora</option>
+      <option value="ripples">Ondes</option>
+      <option value="fireworks">Feux</option>
+      <option value="kaleido">Kaleido</option>
+      <option value="fireflies">Lucioles</option>
+      <option value="confetti">Confetti</option>
+      <option value="nebula">Nébuleuse</option>
+      <option value="jelly">Gelée</option>
+      <!-- Added 7 (last 3 removed) -->
+      <option value="snow">Neige-Boule</option>
+      <option value="sand">Sable Arc-en-Ciel</option>
+      <option value="magnet">Essaim Magnétique</option>
+      <option value="glass">Vitrail</option>
+      <option value="streamers">Rubans de Soie</option>
+      <option value="laserharp">Harpe Laser</option>
+      <option value="bubblepop">Bulle-Pop</option>
+    </select>
+    <label>Intensité</label>
+    <input id="intensity" type="range" min="0" max="100" value="70">
+    <label>Taille</label>
+    <input id="size" type="range" min="10" max="200" value="80">
+    <label>Traînée</label>
+    <input id="trail" type="range" min="0" max="100" value="70">
+  </div>
+  <div style="margin-top:6px;opacity:.85">
+    <span><kbd>Espace</kbd> pause</span> •
+    <span><kbd>Entrée</kbd> scène suivante</span> •
+    <span><kbd>C</kbd> effacer</span>
+  </div>
+</div>
+<div id="a11y" aria-hidden="true"></div>
+
+<script>
+/* =========================================================
+   Gaze Playground — vanilla Canvas + WebAudio
+   Originals: aurora, ripples, fireworks, kaleido, fireflies,
+              confetti, nebula, jelly
+   Added: snow, sand, magnet, glass, streamers, laserharp, bubblepop
+   (Removed: lava, feathers, runes)
+   ========================================================= */
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d', { alpha: false });
+let W = innerWidth, H = innerHeight;
+cvs.width = W; cvs.height = H;
+addEventListener('resize', ()=>{
+  W=innerWidth; H=innerHeight; cvs.width=W; cvs.height=H;
+  resizeGlass(); resizeLaser();
+});
+
+const ui = {
+  mode: document.getElementById('mode'),
+  intensity: document.getElementById('intensity'),
+  size: document.getElementById('size'),
+  trail: document.getElementById('trail'),
+};
+const a11y = document.getElementById('a11y');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduceMotion) { ui.trail.value = 20; ui.intensity.value = 40; }
+
+let paused = false;
+let mouse = { x: W/2, y: H/2, vx: 0, vy: 0, speed: 0 };
+let last = { x: mouse.x, y: mouse.y, t: performance.now() };
+let lastMoveT = performance.now();
+let dwellMs = 0;
+let now = performance.now();
+
+const clamp = (v, a, b)=> Math.min(b, Math.max(a, v));
+function lerp(a,b,t){ return a + (b-a)*t; }
+
+// -------- Mouse / Gaze tracking
+addEventListener('mousemove', (e)=>{
+  const t = performance.now();
+  const dt = (t - last.t) / 1000;
+  const nx = e.clientX, ny = e.clientY;
+  mouse.vx = (nx - last.x) / (dt||1);
+  mouse.vy = (ny - last.y) / (dt||1);
+  mouse.speed = Math.hypot(mouse.vx, mouse.vy);
+  mouse.x = nx; mouse.y = ny; last.x = nx; last.y = ny; last.t = t;
+  lastMoveT = t;
+});
+addEventListener('touchmove', (e)=>{
+  const t = performance.now();
+  const dt = (t - last.t) / 1000;
+  const touch = e.touches[0]; if (!touch) return;
+  const nx = touch.clientX, ny = touch.clientY;
+  mouse.vx = (nx - last.x) / (dt||1);
+  mouse.vy = (ny - last.y) / (dt||1);
+  mouse.speed = Math.hypot(mouse.vx, mouse.vy);
+  mouse.x = nx; mouse.y = ny; last.x = nx; last.y = ny; last.t = t;
+  lastMoveT = t;
+}, {passive:true});
+
+// -------- Keyboard
+addEventListener('keydown', (e)=>{
+  if (e.key === ' ') { paused = !paused; e.preventDefault(); }
+  if (e.key === 'Enter') cycleMode();
+  if (e.key === 'c' || e.key === 'C') clearToBlack(true);
+});
+function cycleMode(){
+  const opts = Array.from(ui.mode.options).map(o=>o.value);
+  const idx = (opts.indexOf(ui.mode.value)+1)%opts.length;
+  ui.mode.value = opts[idx];
+}
+
+// -------- Web Audio (gentle chimes on dwell)
+let ac=null;
+function ping(f=440, len=0.25, gain=0.06){
+  try{
+    if(!ac) ac = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.value = gain;
+    o.connect(g).connect(ac.destination);
+    const t = ac.currentTime;
+    o.start(t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+len);
+    o.stop(t+len+0.02);
+  }catch(e){ /* ignore if blocked */ }
+}
+
+// -------- Shared helpers
+function clearToBlack(hard=false){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = hard ? '#000' : `rgba(0,0,0,${mapTrail()})`;
+  ctx.fillRect(0,0,W,H);
+}
+function mapTrail(){ return clamp( (100-ui.trail.value)/100 * 0.9 + 0.05 , 0.02, 0.95 ); }
+function mapIntensity(){ return Number(ui.intensity.value)/100; }
+function mapSize(){ return Number(ui.size.value); }
+function dwellFactor(){ return clamp(dwellMs/1200, 0, 1); }
+let lastDwellStage = 0;
+function dwellJustCrossed(ms){
+  const stage = dwellMs >= ms ? 1 : 0;
+  const crossed = stage > lastDwellStage;
+  lastDwellStage = stage;
+  return crossed;
+}
+
+// =========================================================
+// Originals
+// =========================================================
+let hueBase = 0;
+// Aurora
+function renderAurora(dt){
+  hueBase = (hueBase + 24*dt) % 360;
+  const s = mapSize()* (0.9 + dwellFactor()*0.9);
+  const str = clamp(0.06 + mapIntensity()*0.35, 0.06, 0.6);
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,0,${mapTrail()})`; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  const steps = reduceMotion ? 2 : 5;
+  for (let i=0;i<steps;i++){
+    const offX = mouse.vx * 0.01 * i, offY = mouse.vy * 0.01 * i;
+    const g = ctx.createRadialGradient(mouse.x+offX, mouse.y+offY, s*0.1, mouse.x+offX, mouse.y+offY, s);
+    const h = (hueBase + i*25) % 360;
+    g.addColorStop(0, `hsla(${h},85%,65%,${0.22*str})`);
+    g.addColorStop(1, `hsla(${(h+60)%360},85%,45%,0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.x+offX, mouse.y+offY, s, 0, Math.PI*2); ctx.fill();
+  }
+  if (dwellMs>400){
+    const pulse = 1 + 0.15*Math.sin(performance.now()*0.005);
+    ctx.globalCompositeOperation='screen';
+    ctx.strokeStyle = `hsla(${(hueBase+120)%360},90%,75%,0.35)`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, s*0.6*pulse, 0, Math.PI*2); ctx.stroke();
+  }
+}
+// Ripples
+const ripples = [];
+const leaves = Array.from({length:40}, ()=>({ x: Math.random()*W, y: Math.random()*H, r: 3+Math.random()*5, t: Math.random()*1000 }));
+function emitRipple(x,y, r0=2){ ripples.push({x,y, r:r0, a:1}); }
+function renderRipples(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,8,${mapTrail()*1.2})`; ctx.fillRect(0,0,W,H);
+  const speedN = clamp(mouse.speed/1200, 0, 1);
+  if (speedN>0.25 && Math.random()<0.5) emitRipple(mouse.x, mouse.y, 2+speedN*6);
+  if (dwellMs>500 && Math.random()<0.12) emitRipple(mouse.x, mouse.y, 6 + mapSize()*0.15);
+  ripples.forEach(r=>{
+    r.r += 60*dt; r.a *= (1 - 0.8*dt);
+    ctx.strokeStyle = `hsla(${(200 + r.r*0.2)%360},80%,70%,${r.a*0.6})`;
+    ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI*2); ctx.stroke();
+  });
+  for (let i=ripples.length-1;i>=0;i--) if (ripples[i].a<0.02) ripples.splice(i,1);
+  ctx.globalCompositeOperation='lighter';
+  leaves.forEach(L=>{
+    L.t += dt; const dx = mouse.x - L.x, dy = mouse.y - L.y;
+    L.x += Math.cos(L.t*0.6)*10*dt + dx*0.02*mapIntensity();
+    L.y += Math.sin(L.t*0.8)*8*dt + dy*0.02*mapIntensity();
+    if (L.x<-10) L.x=W+10; if (L.x>W+10) L.x=-10;
+    if (L.y<-10) L.y=H+10; if (L.y>H+10) L.y=-10;
+    ctx.fillStyle = `hsla(${(180+dx*0.02)%360},70%,60%,0.6)`; ctx.beginPath(); ctx.arc(L.x, L.y, L.r, 0, Math.PI*2); ctx.fill();
+  });
+}
+// Fireworks
+const sparks = [];
+function emitSpark(x,y, n=40, power=3){
+  for (let i=0;i<n;i++){
+    const a = Math.random()*Math.PI*2, s = (0.8+Math.random()*0.6)*power;
+    sparks.push({x,y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 60+Math.random()*40, h:(hueBase+Math.random()*50)%360});
+  }
+}
+function renderFireworks(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,0,${mapTrail()})`; ctx.fillRect(0,0,W,H);
+  const sN = clamp(mouse.speed/1400, 0, 1);
+  if (sN>0.35 && Math.random()<0.5) emitSpark(mouse.x, mouse.y, 18, 2.5);
+  if (dwellJustCrossed(600)){ ping(400+Math.random()*300, 0.25, 0.06); emitSpark(mouse.x, mouse.y, 120, 4.2); }
+  ctx.globalCompositeOperation='lighter';
+  for (let i=sparks.length-1;i>=0;i--){
+    const p = sparks[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.985; p.vy = p.vy*0.985 + 0.02; p.life -= 1;
+    const a = clamp(p.life/80, 0, 1); ctx.fillStyle = `hsla(${p.h},90%,60%,${0.7*a})`;
+    ctx.beginPath(); ctx.arc(p.x,p.y, 2.2+ (1-a)*2.2, 0, Math.PI*2); ctx.fill();
+    if (p.life<=0) sparks.splice(i,1);
+  }
+}
+// Kaleido (simple, non-blowout)
+let kaleidoAngle = 0;
+function renderKaleido(dt){
+  const segs = 8, r = mapSize()*0.8; kaleidoAngle += dt*0.4;
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,0,${mapTrail()*0.6})`; ctx.fillRect(0,0,W,H);
+  const cx = W/2, cy = H/2, dx = mouse.x - cx, dy = mouse.y - cy;
+  const baseHue = (performance.now()*0.02) % 360, w = 7 + mapIntensity()*18;
+  ctx.globalCompositeOperation='lighter'; ctx.lineCap='round'; ctx.lineJoin='round';
+  for (let i=0;i<segs;i++){
+    const a = (i/segs)*Math.PI*2 + kaleidoAngle;
+    const x = cx + (dx*Math.cos(a) - dy*Math.sin(a));
+    const y = cy + (dx*Math.sin(a) + dy*Math.cos(a));
+    const h = (baseHue + i*(360/segs))%360;
+    ctx.strokeStyle = `hsla(${h},85%,65%,0.5)`; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(lerp(cx,x,0.55), lerp(cy,y,0.55)); ctx.lineTo(x, y); ctx.stroke();
+    ctx.fillStyle = `hsla(${(h+40)%360},85%,60%,0.25)`; ctx.beginPath(); ctx.arc(x,y, r*0.28, 0, Math.PI*2); ctx.fill();
+  }
+  if (dwellMs>600){
+    const s = r*(1 + 0.12*Math.sin(performance.now()*0.006));
+    ctx.strokeStyle=`hsla(${(baseHue+120)%360},90%,75%,0.35)`; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(cx,cy,s,0,Math.PI*2); ctx.stroke();
+  }
+}
+// Fireflies
+const fireflies = Array.from({length:50},()=>({ x: Math.random()*W, y: Math.random()*H, vx:(Math.random()-0.5)*0.6, vy:(Math.random()-0.5)*0.6, glow: Math.random()*0.6 }));
+function renderFireflies(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,0,${mapTrail()*0.9})`; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  const attract = 15*mapIntensity();
+  fireflies.forEach(f=>{
+    f.vx += (Math.random()-0.5)*0.05; f.vy += (Math.random()-0.5)*0.05;
+    f.vx += (mouse.x - f.x)/W * attract*dt; f.vy += (mouse.y - f.y)/H * attract*dt;
+    f.vx = clamp(f.vx, -1.2, 1.2); f.vy = clamp(f.vy, -1.2, 1.2);
+    f.x += f.vx; f.y += f.vy;
+    if (f.x<-10) f.x=W+10; if (f.x>W+10) f.x=-10; if (f.y<-10) f.y=H+10; if (f.y>H+10) f.y=-10;
+    const d = Math.hypot(mouse.x-f.x, mouse.y-f.y), charge = clamp(1 - d/220, 0, 1);
+    f.glow = clamp(f.glow + (charge*1.6 - 0.4)*dt, 0.1, 1.4);
+    const h = (200 + f.glow*100)%360, r = 2 + f.glow*4 + mapSize()*0.05;
+    ctx.fillStyle = `hsla(${h},90%,65%,${0.6*f.glow})`; ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI*2); ctx.fill();
+  });
+  if (dwellJustCrossed(800)){ ping(660,0.15,0.045); fireflies.forEach(f=> f.glow = Math.max(f.glow, 1.2)); }
+}
+// Confetti
+const confettis = Array.from({length:220},()=>resetPiece({}));
+function resetPiece(p){ p.x=Math.random()*W; p.y=Math.random()*H; p.vx=(Math.random()-0.5)*0.7; p.vy=Math.random()*0.6+0.2; p.size=2+Math.random()*4; p.h=Math.random()*360; p.spin=(Math.random()-0.5)*0.15; return p; }
+function renderConfetti(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,0,${mapTrail()*0.85})`; ctx.fillRect(0,0,W,H);
+  const windX = clamp(mouse.vx/400, -1.5, 1.5) * (0.5 + mapIntensity());
+  const windY = 0.15 + (dwellMs>600 ? 0.25 : 0);
+  ctx.globalCompositeOperation='lighter';
+  confettis.forEach(p=>{
+    const dx = mouse.x - p.x, dy = mouse.y - p.y, pull = 0.02*mapIntensity();
+    p.vx += windX*dt + dx*pull*dt; p.vy += windY*dt + dy*pull*dt;
+    p.x += p.vx; p.y += p.vy; p.h += p.spin;
+    ctx.fillStyle = `hsla(${(p.h)%360},90%,60%,0.8)`; ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
+    if (p.x<-20||p.x>W+20||p.y<-20||p.y>H+20) resetPiece(p);
+  });
+  if (dwellJustCrossed(700)){
+    ping(550,0.12,0.04);
+    for(let i=0;i<50;i++){ const q=resetPiece({}); q.x=mouse.x; q.y=mouse.y; q.vx=(Math.random()-0.5)*3.2; q.vy=Math.random()*-1.8; confettis.push(q); }
+    if (confettis.length>400) confettis.splice(0, confettis.length-400);
+  }
+}
+// Nebula
+let nebulaHue = 0;
+function renderNebula(dt){
+  nebulaHue = (nebulaHue + 18*dt) % 360;
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,0,${mapTrail()*0.7})`; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  const layers = 3 + Math.floor(mapIntensity()*3);
+  for (let i=0;i<layers;i++){
+    const s = mapSize()*(0.8 + i*0.35), h = (nebulaHue + i*40) % 360;
+    const g = ctx.createRadialGradient(mouse.x, mouse.y, s*0.1, mouse.x, mouse.y, s);
+    g.addColorStop(0, `hsla(${h},85%,60%,0.18)`); g.addColorStop(0.6, `hsla(${(h+30)%360},85%,50%,0.08)`); g.addColorStop(1, `hsla(${(h+60)%360},85%,45%,0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, s, 0, Math.PI*2); ctx.fill();
+  }
+  if (dwellMs>650){
+    ctx.globalCompositeOperation='screen'; ctx.strokeStyle = `hsla(${(nebulaHue+150)%360},90%,75%,0.4)`; ctx.lineWidth = 1.5;
+    const m = 6; for (let i=0;i<m;i++){ const a=(i/m)*Math.PI*2 + performance.now()*0.0015, r=mapSize()*1.1;
+      ctx.beginPath(); ctx.arc(mouse.x + Math.cos(a)*r, mouse.y + Math.sin(a)*r, r*0.15, 0, Math.PI*2); ctx.stroke(); }
+  }
+}
+// Jelly
+const blobs = Array.from({length:6}, ()=>({ x: W*(0.2+0.6*Math.random()), y: H*(0.2+0.6*Math.random()), r: 40+Math.random()*80, hue: Math.random()*360, vx:0, vy:0 }));
+function renderJelly(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = `rgba(0,0,0,${mapTrail()*0.9})`; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter'; const pull = 30*mapIntensity();
+  blobs.forEach(b=>{
+    const dx = mouse.x - b.x, dy = mouse.y - b.y;
+    b.vx += dx * pull * 0.0002; b.vy += dy * pull * 0.0002;
+    b.vx *= 0.985; b.vy = b.vy*0.985 + 0.02; b.x += b.vx; b.y += b.vy;
+    const squish = clamp(1 + (Math.hypot(b.vx, b.vy))*0.03, 1, 1.6) * (1 + dwellFactor()*0.2);
+    const rx = b.r * squish * (mapSize()/80), ry = b.r * (2 - squish) * (mapSize()/80);
+    const h = (b.hue + performance.now()*0.02)%360;
+    const g = ctx.createRadialGradient(b.x, b.y, Math.min(rx,ry)*0.3, b.x, b.y, Math.max(rx,ry));
+    g.addColorStop(0, `hsla(${h},85%,70%,0.55)`); g.addColorStop(1, `hsla(${(h+60)%360},85%,45%,0.0)`); ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(b.x, b.y, rx, ry, Math.atan2(b.vy, b.vx), 0, Math.PI*2); ctx.fill();
+  });
+  if (dwellJustCrossed(900)){ ping(330,0.12,0.05); blobs.forEach(b=>{ b.vx*=0.6; b.vy*=-0.8; }); }
+}
+
+// =========================================================
+// Added 7
+// =========================================================
+
+// 1) Snow Globe
+const flakes = Array.from({length:350},()=>({x:Math.random()*W,y:Math.random()*H,z:Math.random()*1,vx:0,vy:0,h:Math.random()*360}));
+function renderSnow(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(0,0,10,${mapTrail()*0.9})`; ctx.fillRect(0,0,W,H);
+  const wind = clamp(mouse.vx/800, -1, 1) * (0.5+mapIntensity());
+  flakes.forEach(f=>{
+    const dx = mouse.x - f.x, dy = mouse.y - f.y, r2 = dx*dx+dy*dy, pull = 2000/(r2+2000);
+    f.vx += wind*dt + (-dy)*0.0008 + dx*pull*0.0006;
+    f.vy += 0.05 + dy*pull*0.0006 + (dwellMs>700?0.1:0);
+    f.x += f.vx*(0.6+f.z*0.6); f.y += f.vy*(0.6+f.z*0.6);
+    if (f.y>H+5){ f.y=-5; f.x=Math.random()*W; f.vx=0; f.vy=0; }
+    if (f.x<-5) f.x=W+5; if (f.x>W+5) f.x=-5;
+    ctx.fillStyle=`hsla(${(200+f.h)%360},90%,${60+f.z*30}%,${0.7-f.z*0.5})`;
+    ctx.beginPath(); ctx.arc(f.x,f.y, 1.2+f.z*2.2, 0, Math.PI*2); ctx.fill();
+  });
+  if (dwellJustCrossed(800)) ping(880,0.2,0.045);
+}
+
+// 2) Rainbow Sand
+const grains = Array.from({length:900},()=>({x:Math.random()*W,y:Math.random()*H,vx:0,vy:0,h:Math.random()*360}));
+function renderSand(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(0,0,0,${mapTrail()*0.95})`; ctx.fillRect(0,0,W,H);
+  const flow = 40 + mapIntensity()*160, angle = Math.atan2(mouse.vy, mouse.vx);
+  grains.forEach(g=>{
+    if (Math.random()<0.015*(0.5+mapIntensity())){ g.x = mouse.x + Math.cos(angle)*2; g.y = mouse.y + Math.sin(angle)*2; g.vx = mouse.vx*0.02; g.vy = mouse.vy*0.02; g.h=(g.h+8)%360; }
+    g.vy += 0.15;
+    g.vx += (mouse.x - g.x)*0.00002*flow;
+    g.x += g.vx; g.y += g.vy; g.vx*=0.99; g.vy*=0.99;
+    if (g.y>H){ g.y=H; g.vy*=-0.3; g.vx*=0.8; }
+    if (g.x<0) {g.x=0; g.vx*=-0.5;} if (g.x>W){g.x=W; g.vx*=-0.5;}
+    ctx.fillStyle=`hsla(${g.h},90%,60%,0.8)`; ctx.fillRect(g.x, g.y, 1.4, 1.4);
+  });
+  if (dwellJustCrossed(700)) ping(660,0.12,0.04);
+}
+
+// 3) Magnetic Swarm
+const pins = Array.from({length:240},()=>({x:Math.random()*W,y:Math.random()*H, vx:0, vy:0}));
+function renderMagnet(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(0,0,0,${mapTrail()*0.9})`; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  pins.forEach(p=>{
+    const dx = mouse.x - p.x, dy = mouse.y - p.y, d = Math.hypot(dx,dy)+0.0001;
+    const force = (dwellMs>600?-1:1) * 80/(d*d);
+    p.vx += dx*force; p.vy += dy*force;
+    p.vx*=0.95; p.vy*=0.95; p.x += p.vx; p.y += p.vy;
+    const nx = p.vy, ny = -p.vx;
+    const len = 6+mapSize()*0.12;
+    const h = (200 + d*0.3)%360;
+    ctx.strokeStyle=`hsla(${h},90%,65%,0.5)`; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(p.x-nx, p.y-ny); ctx.lineTo(p.x+nx, p.y+ny); ctx.stroke();
+  });
+}
+
+// 4) Stained Glass (BIGGER EFFECT + BLOOM + RAYS)
+let glassCells=[], glassCols=20, glassRows=12;
+function resizeGlass(){ glassCells = []; const cw=W/glassCols, ch=H/glassRows;
+  for(let y=0;y<glassRows;y++)for(let x=0;x<glassCols;x++){ glassCells.push({x:x*cw,y:y*ch,w:cw,h:ch,hue:Math.random()*360}); } }
+resizeGlass();
+function renderGlass(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(0,0,0,${mapTrail()*0.92})`;
+  ctx.fillRect(0,0,W,H);
+
+  const Lx=mouse.x, Ly=mouse.y;
+  const intensity = mapIntensity();
+  const radius = 220 + mapSize()*1.4;
+
+  glassCells.forEach(c=>{
+    const cx=c.x+c.w/2, cy=c.y+c.h/2;
+    const d = Math.hypot(Lx-cx, Ly-cy);
+    const n = clamp(1 - (d/radius), 0, 1);
+    const curve = Math.pow(n, 1.2 + 1.5*intensity);
+    const L = 18 + curve* (82 * (0.6 + 0.8*intensity));
+    ctx.fillStyle=`hsla(${c.hue},85%,${L}%,${0.95})`;
+    ctx.fillRect(c.x+1, c.y+1, c.w-2, c.h-2);
+  });
+
+  // Bloom disk
+  ctx.globalCompositeOperation='screen';
+  const bloomR = radius * (0.65 + 0.45*intensity);
+  const g = ctx.createRadialGradient(Lx, Ly, bloomR*0.15, Lx, Ly, bloomR);
+  g.addColorStop(0, `hsla(${(performance.now()*0.02)%360},90%,75%,${0.25+0.25*intensity})`);
+  g.addColorStop(1, `hsla(0,0%,0%,0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(Lx, Ly, bloomR, 0, Math.PI*2); ctx.fill();
+
+  // God rays
+  const rays = 12, rayLen = bloomR*1.2, t = performance.now()*0.0006;
+  ctx.globalAlpha = 0.35 + 0.25*intensity;
+  for(let i=0;i<rays;i++){
+    const a = t + (i/rays)*Math.PI*2;
+    const x2 = Lx + Math.cos(a)*rayLen, y2 = Ly + Math.sin(a)*rayLen;
+    const grd = ctx.createLinearGradient(Lx, Ly, x2, y2);
+    grd.addColorStop(0, `hsla(${(200+i*12)%360},95%,80%,0.30)`);
+    grd.addColorStop(1, `hsla(0,0%,0%,0)`);
+    ctx.strokeStyle = grd; ctx.lineWidth = 2 + mapSize()*0.04;
+    ctx.beginPath(); ctx.moveTo(Lx, Ly); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Dwell shimmer
+  if (dwellJustCrossed(800)){
+    ping(990,0.15,0.05);
+    for(let s=0; s<40; s++){
+      const idx = (Math.random()*glassCells.length)|0;
+      const c = glassCells[idx];
+      const cx=c.x+c.w/2, cy=c.y+c.h/2;
+      if (Math.hypot(Lx-cx, Ly-cy) < radius*0.7){
+        c.hue = (c.hue + 60 + Math.random()*60) % 360;
+        ctx.globalCompositeOperation='screen';
+        ctx.strokeStyle=`hsla(${(c.hue+20)%360},95%,85%,0.8)`;
+        ctx.lineWidth=1.5;
+        ctx.strokeRect(c.x+0.5, c.y+0.5, c.w-1, c.h-1);
+        ctx.globalCompositeOperation='source-over';
+      }
+    }
+  }
+}
+
+// 5) Silk Streamers (1D cloth)
+const ropes = Array.from({length:4},(_,i)=>makeRope(40, (i+1)/(5)*H));
+function makeRope(n, y){
+  const pts=[]; for(let i=0;i<n;i++) pts.push({x:i*(W/(n-1)), y:y, px:i*(W/(n-1)), py:y});
+  return {pts, color:Math.random()*360};
+}
+function verlet(p){ const x=p.x, y=p.y; p.x += (p.x - p.px); p.y += (p.y - p.py) + 0.15; p.px=x; p.py=y; }
+function constrain(rope){
+  const segLen = W/(rope.pts.length-1);
+  for(let k=0;k<2;k++){
+    for(let i=0;i<rope.pts.length-1;i++){
+      const a=rope.pts[i], b=rope.pts[i+1], dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy)||1, diff=(d-segLen)/d;
+      const off=0.5*diff; a.x += dx*off; a.y += dy*off; b.x -= dx*off; b.y -= dy*off;
+    }
+    rope.pts[0].x = lerp(rope.pts[0].x, 0, 0.3); rope.pts[0].y = lerp(rope.pts[0].y, 0, 0.3);
+    rope.pts.at(-1).x = lerp(rope.pts.at(-1).x, W, 0.3); rope.pts.at(-1).y = lerp(rope.pts.at(-1).y, H, 0.3);
+  }
+}
+function renderStreamers(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(0,0,0,${mapTrail()*0.9})`; ctx.fillRect(0,0,W,H);
+  const windX = mouse.vx*0.02*(0.5+mapIntensity()), windY = mouse.vy*0.01;
+  ropes.forEach(r=>{
+    r.pts.forEach(p=>{
+      p.x += windX + (mouse.x-p.x)*0.0005*mapIntensity();
+      p.y += windY + (mouse.y-p.y)*0.0004*mapIntensity();
+      verlet(p);
+    });
+    constrain(r);
+    ctx.globalCompositeOperation='lighter';
+    ctx.strokeStyle=`hsla(${r.color},90%,65%,0.6)`; ctx.lineWidth=8+mapSize()*0.06;
+    ctx.beginPath(); ctx.moveTo(r.pts[0].x,r.pts[0].y);
+    for(let i=1;i<r.pts.length;i++) ctx.lineTo(r.pts[i].x,r.pts[i].y);
+    ctx.stroke();
+  });
+  if (dwellJustCrossed(900)) ping(523,0.12,0.05);
+}
+
+// 6) Laser Harp — upgraded: expressive audio + visuals
+let laserCols = 11;                          // more strings = richer gliss
+const laserGap = ()=> W/(laserCols+1);
+
+// per-beam state (energy, last pluck y, ripple timers)
+let harpBeams = Array.from({length: laserCols}, ()=>({
+  energy: 0, rippleT: 0, rippleY: H/2, hue: 180+Math.random()*60
+}));
+
+// simple audio chain with soft echo
+function harpEnsureAudio(){
+  if (!ac) ac = new (window.AudioContext||window.webkitAudioContext)();
+  if (!harpEnsureAudio.master){
+    const master = ac.createGain(); master.gain.value = 0.18;
+    const delay = ac.createDelay(); delay.delayTime.value = 0.18;
+    const fb = ac.createGain(); fb.gain.value = 0.35;       // echo feedback
+    delay.connect(fb).connect(delay);                       // feedback loop
+    delay.connect(master);
+    master.connect(ac.destination);
+    harpEnsureAudio.master = master;
+    harpEnsureAudio.delay = delay;
+  }
+}
+
+// note mapping (pentatonic over 2 octaves)
+function harpNote(index){
+  const pent = [0,2,4,7,9]; // C major pentatonic
+  const base = 220;
+  const scaleIndex = index % pent.length;
+  const octave = Math.floor(index / pent.length);
+  const semis = pent[scaleIndex] + 12*octave;
+  return base * Math.pow(2, semis/12);
+}
+
+function harpPluck(i, y, velocity=1){
+  harpEnsureAudio();
+  const f = harpNote(i);
+  const det = (Math.random()*14-7);
+  const t = ac.currentTime;
+
+  const o1 = ac.createOscillator(); o1.type='sine';     o1.frequency.value=f;
+  const o2 = ac.createOscillator(); o2.type='triangle'; o2.frequency.value=f; o2.detune.value = det;
+
+  const g  = ac.createGain();
+  const lp = ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 2200 + 1800*velocity;
+
+  // ADSR
+  const A=0.005, D=0.08, S=0.25*velocity, R=0.35+0.25*(1-velocity);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.9*velocity, t+A);
+  g.gain.exponentialRampToValueAtTime(Math.max(S,0.08), t+A+D);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+A+D+R);
+
+  o1.connect(g); o2.connect(g);
+  g.connect(lp); lp.connect(harpEnsureAudio.delay); lp.connect(harpEnsureAudio.master);
+
+  o1.start(t); o2.start(t);
+  o1.stop(t+A+D+R+0.02); o2.stop(t+A+D+R+0.02);
+
+  // visual kick
+  const b = harpBeams[i];
+  b.energy = Math.min(1, b.energy + 0.55*velocity);
+  b.rippleT = 0;
+  b.rippleY = y;
+
+  // bright splash particles using existing `sparks`
+  for(let k=0;k<10;k++){
+    sparks.push({
+      x: (i+1)*laserGap(), y,
+      vx: (Math.random()-0.5)*2.2, vy: (Math.random()-0.5)*2.2,
+      life: 24+Math.random()*16,
+      h: (b.hue+20+Math.random()*30)%360
+    });
+  }
+}
+
+function resizeLaser(){
+  if (harpBeams.length!==laserCols){
+    const old = harpBeams;
+    harpBeams = Array.from({length: laserCols}, (_,i)=> old[i] || {energy:0,rippleT:0,rippleY:H/2,hue:180+Math.random()*60});
+  }
+}
+
+// upgraded renderer
+function renderLaser(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(0,0,0,${mapTrail()*0.82})`;
+  ctx.fillRect(0,0,W,H);
+
+  const gap=laserGap();
+  const lineBase = 2 + mapSize()*0.04;
+
+  // detect pluck (slide speed OR dwell hold)
+  for(let i=0;i<laserCols;i++){
+    const x = (i+1)*gap;
+    const distX = Math.abs(mouse.x-x);
+    const near = distX < 24 + lineBase*1.5;
+    const velocity = clamp(mouse.speed/1400, 0.05, 1);
+    const dwellHit = near && dwellMs>640 && Math.abs(mouse.vx)<60;
+
+    if ((near && velocity>0.25) || dwellHit){
+      harpPluck(i, mouse.y, dwellHit? 0.9 : velocity);
+      lastMoveT = performance.now(); // debounce & feel
+    }
+  }
+
+  // draw beams with energy glow, inner string shimmer, ripples
+  for(let i=0;i<laserCols;i++){
+    const x = (i+1)*gap;
+    const b = harpBeams[i];
+    b.energy *= Math.pow(0.82, dt*60);
+    b.rippleT += dt;
+
+    ctx.globalCompositeOperation='screen';
+    const e = b.energy;
+    const w = lineBase*(1 + 1.2*e);
+    const hue = (b.hue + 40*e) % 360;
+
+    const grad = ctx.createLinearGradient(x, 0, x, H);
+    grad.addColorStop(0.0, `hsla(${(hue+10)%360},95%,75%,${0.14+0.08*e})`);
+    grad.addColorStop(0.5, `hsla(${hue},95%,70%,${0.28+0.18*e})`);
+    grad.addColorStop(1.0, `hsla(${(hue+20)%360},95%,75%,${0.14+0.08*e})`);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+
+    // inner flicker “string”
+    ctx.strokeStyle = `hsla(${(hue+200)%360},100%,85%,${0.55+0.35*e})`;
+    ctx.lineWidth = Math.max(1, w*0.25);
+    const waveAmp = (6 + mapSize()*0.02) * e;
+    const waveFreq = 0.018 + 0.03*mapIntensity();
+    ctx.beginPath();
+    for(let y=0;y<=H;y+=8){
+      const off = Math.sin((y + performance.now()*0.5)*waveFreq) * waveAmp;
+      ctx.lineTo(x+off, y);
+    }
+    ctx.stroke();
+
+    // traveling ripple
+    if (e>0.02){
+      const speed = 420 + 380*mapIntensity();
+      const r = Math.max(8, (b.rippleT*speed) % (H*1.2));
+      ctx.strokeStyle = `hsla(${(hue+60)%360},95%,80%,${0.35*e})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, b.rippleY, r*(0.12+0.12*e), 0, Math.PI*2);
+      ctx.stroke();
+    }
+  }
+}
+
+// 7) Bubble Pop (BIGGER EFFECT)
+const bubbles = Array.from({length:70},()=>({x:Math.random()*W,y:H+Math.random()*200,r:8+Math.random()*22,vx:(Math.random()-0.5)*0.2,vy:-(0.4+Math.random()*0.6),charge:0,h:Math.random()*360}));
+function renderBubblePop(dt){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(0,0,0,${mapTrail()*0.9})`;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.globalCompositeOperation='lighter';
+  for(let i=bubbles.length-1;i>=0;i--){
+    const b=bubbles[i];
+    if (b.cool===undefined) b.cool=0;
+    if (b.phase===undefined) b.phase=0;
+    if (b.maxCharge===undefined) b.maxCharge=2.0;
+
+    const d = Math.hypot(mouse.x-b.x, mouse.y-b.y);
+    const near = clamp(1 - d/160, 0, 1);
+
+    const baseGrow = (near*2.2 - 0.18)*dt;
+    const dwellBoost = (dwellMs>600 ? 0.8*near*dt : 0);
+    b.charge = clamp((b.charge||0) + baseGrow + dwellBoost, 0, b.maxCharge);
+
+    b.phase += dt*(0.8 + b.charge*0.6);
+    const pulse = 1 + 0.04*Math.sin(b.phase*2.7);
+
+    const growth = 1 + Math.pow(b.charge, 1.25) * 2.6; // up to ~3–4x
+    const R = b.r * growth * pulse;
+
+    // halo
+    const g = ctx.createRadialGradient(b.x, b.y, R*0.4, b.x, b.y, R*1.2);
+    g.addColorStop(0, `hsla(${b.h},90%,70%,${0.10+0.25*near})`);
+    g.addColorStop(1, `hsla(${(b.h+60)%360},90%,45%,0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x,b.y,R*1.1,0,Math.PI*2); ctx.fill();
+
+    // body + highlight
+    ctx.fillStyle=`hsla(${b.h},90%,70%,${0.22+0.5*near})`;
+    ctx.beginPath(); ctx.arc(b.x,b.y,R,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=`hsla(${(b.h+40)%360},90%,85%,0.9)`;
+    ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.arc(b.x - R*0.35, b.y - R*0.35, R*0.32, 0, Math.PI*2); ctx.stroke();
+
+    // drift & attraction
+    b.x += b.vx + (mouse.x-b.x)*0.00035*mapIntensity();
+    b.y += b.vy - (mouse.y-b.y)*0.00025*mapIntensity();
+
+    // recycle
+    if (b.y<-R-20){ b.y=H+40; b.x=Math.random()*W; b.vx=(Math.random()-0.5)*0.2; b.vy=-(0.4+Math.random()*0.6); b.charge=0; b.cool=0; }
+
+    // pop
+    const canPop = (b.cool<=0) && (b.charge>=1.7) && (near>0.6);
+    if (canPop){
+      ping(740,0.12,0.06);
+      for(let k=0;k<22;k++){
+        sparks.push({
+          x:b.x, y:b.y,
+          vx:Math.cos(k*Math.PI/11)*(2.2+Math.random()*1.6),
+          vy:Math.sin(k*Math.PI/11)*(2.2+Math.random()*1.6),
+          life:40+Math.random()*20,
+          h:(b.h+Math.random()*50)%360
+        });
+      }
+      for(let d2=0; d2<8; d2++){
+        sparks.push({x:b.x,y:b.y,vx:(Math.random()-0.5)*4.5,vy:(Math.random()-0.5)*4.5,life:28,h:(b.h+20)%360});
+      }
+      ctx.globalCompositeOperation='screen';
+      ctx.strokeStyle=`hsla(${(b.h+20)%360},95%,80%,0.8)`;
+      ctx.lineWidth=2.2;
+      ctx.beginPath(); ctx.arc(b.x,b.y,R*1.1,0,Math.PI*2); ctx.stroke();
+
+      b.charge = 0.15;
+      b.cool = 0.25;
+    }
+    if (b.cool>0) b.cool -= dt;
+  }
+}
+
+// =========================================================
+// Main Loop
+// =========================================================
+function tick(t){
+  const dt = clamp((t - now)/1000, 0, 0.05);
+  now = t; dwellMs = t - lastMoveT;
+
+  if (!paused){
+    switch (ui.mode.value){
+      // originals
+      case 'aurora':    renderAurora(dt);     break;
+      case 'ripples':   renderRipples(dt);    break;
+      case 'fireworks': renderFireworks(dt);  break;
+      case 'kaleido':   renderKaleido(dt);    break;
+      case 'fireflies': renderFireflies(dt);  break;
+      case 'confetti':  renderConfetti(dt);   break;
+      case 'nebula':    renderNebula(dt);     break;
+      case 'jelly':     renderJelly(dt);      break;
+      // added 7
+      case 'snow':      renderSnow(dt);       break;
+      case 'sand':      renderSand(dt);       break;
+      case 'magnet':    renderMagnet(dt);     break;
+      case 'glass':     renderGlass(dt);      break;
+      case 'streamers': renderStreamers(dt);  break;
+      case 'laserharp': renderLaser(dt);      break;
+      case 'bubblepop': renderBubblePop(dt);  break;
+    }
+  }
+  a11y.textContent = `dwell: ${Math.round(dwellMs)} ms`;
+  requestAnimationFrame(tick);
+}
+clearToBlack(true);
+requestAnimationFrame(tick);
+
+// tap to 'unmute' audio on mobile if needed
+cvs.addEventListener('pointerdown', ()=>{ ping(523,0.08,0.03); });
+
+// friendly chime on first long dwell
+let greeted=false;
+setInterval(()=>{ if (!greeted && dwellMs>700){ ping(660,0.15,0.05); greeted=true; } }, 200);
+</script>
+</body>
+</html>

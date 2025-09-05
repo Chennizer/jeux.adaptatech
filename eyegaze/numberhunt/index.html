@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chasse aux lettres</title>
+  <title>Chasse aux nombres</title>
 
   <!-- Shared styles -->
   <link rel="stylesheet" href="../../css/games.css">
@@ -42,6 +42,10 @@
       transition: opacity 500ms ease, margin-bottom 120ms ease;
       margin-bottom: 16px;       /* will be reduced dynamically */
       opacity: 1;
+
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
     .top-strip.fade-out { opacity: 0; }
     .top-strip.hidden{ display: none !important; }
@@ -105,20 +109,15 @@
       display: none;
       opacity: 1;
       transition: opacity 500ms ease;
+      flex: 1;
     }
-    #prompt .prompt-text { font-size: 1.3rem; font-weight: 600; color: #2b2b2b; line-height: 1.1; }
+    #prompt .prompt-text { font-size: 1.3rem; font-weight: 600; color: #ffffff; line-height: 1.1; }
     body.dark #prompt .prompt-text { color: #e5e5e5; }
     #prompt .target-letter {
-      display: block; font-size: 3.6rem; font-weight: 800; color: #009688; margin-top: 4px;
+      display: block; font-size: 6rem; font-weight: 800; color: #ffffff; margin-top: 4px;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.12); line-height: 1;
     }
     body.dark #prompt .target-letter { text-shadow: none; }
-
-    body.light .top-strip #prompt .prompt-text,
-    body.light .top-strip #prompt .target-letter{
-      color: #fff;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    }
 
     /* Fade-out for other tiles */
     .letter-cell.dim {
@@ -141,7 +140,7 @@
     /* Inputs */
     .styled-input {
       width: 100%;
-      max-width: 160px;
+      max-width: 200px;
       padding: 10px 14px;
       font-size: 18px;
       font-weight: bold;
@@ -151,6 +150,7 @@
       background-color: #fff;
       text-align: center;
       transition: border-color .2s, box-shadow .2s;
+      letter-spacing: 2px;
     }
     .styled-input:focus {
       border-color: #14b8a6;
@@ -189,7 +189,7 @@
       justify-content: center;
     }
 
-    /* LOCK STATE + READY POP */
+    /* Lock state + ready cue (pop) */
     .letter-grid.grid-locked { pointer-events: none; }
     .letter-grid.grid-locked .letter-cell {
       opacity: .35;
@@ -199,9 +199,11 @@
     @keyframes readyPop { 0% { transform: scale(.98); } 100% { transform: scale(1); } }
     .letter-grid.ready-pop .letter-cell { animation: readyPop 220ms ease; }
 
-    /* Reduced-motion: wrong flash only (sans mouvement) */
+    /* Reduced motion fallback for wrong feedback: quick red flash without movement */
     @media (prefers-reduced-motion: reduce) {
-      .letter-cell.wrong-flash { box-shadow: inset 0 0 0 3px rgba(198,40,40,.5); }
+      .letter-cell.wrong-flash {
+        box-shadow: inset 0 0 0 3px rgba(198,40,40,.5);
+      }
     }
   </style>
 </head>
@@ -210,7 +212,7 @@
 <!-- Options modal -->
 <div id="game-options" class="modal">
   <div id="options-title-bar">
-    <h2 id="options-main-title">Chasse aux lettres</h2>
+    <h2 id="options-main-title">Chasse aux nombres</h2>
   </div>
 
   <div id="control-panel-options">
@@ -242,11 +244,11 @@
         </div>
       </div>
 
-      <!-- Column 2: Letters + layout scale -->
+      <!-- Column 2: Numbers + theme -->
       <div class="options-column">
         <div class="option-item">
-          <label for="letterSet" class="teal-label label-block">Lettres à afficher</label>
-          <input id="letterSet" type="text" value="ABCD" maxlength="9" class="styled-input">
+          <label for="numberSet" class="teal-label label-block">Nombres à afficher</label>
+          <input id="numberSet" type="text" value="0123456789" maxlength="12" class="styled-input" inputmode="numeric" aria-label="Nombres à afficher (0-9)">
         </div>
         <div class="option-item">
           <label for="themeSelect" class="teal-label label-block">Mode</label>
@@ -257,7 +259,7 @@
         </div>
       </div>
 
-      <!-- Column 3: Theme & dwell -->
+      <!-- Column 3: Dwell + layout scale -->
       <div class="options-column">
         <div class="option-item">
           <label for="dwellTimeSlider" class="teal-label">
@@ -287,7 +289,7 @@
   <!-- Instruction strip -->
   <div id="topStrip" class="top-strip">
     <h2 id="prompt">
-      <span class="prompt-text">Trouve la lettre</span><br>
+      <span class="prompt-text">Trouve le nombre</span><br>
       <span class="target-letter"></span>
     </h2>
   </div>
@@ -324,7 +326,9 @@ const layoutScaleVal= document.getElementById('layoutScaleVal');
 /* =========================
    Local storage keys
    ========================= */
-const LS_KEYS = { ttsEnabled: 'chasselettres:ttsEnabled' };
+const LS_KEYS = {
+  ttsEnabled: 'chassenombres:ttsEnabled'
+};
 
 /* Prefill persisted settings */
 (function initPersistedControls(){
@@ -348,12 +352,12 @@ layoutScaleEl.addEventListener('input', () => {
   }
 });
 
-/* Input sanitation: max 9 letters (A–Z) */
-const letterInput = document.getElementById('letterSet');
-letterInput.addEventListener('input', () => {
-  let v = letterInput.value.toUpperCase().replace(/[^A-Z]/g, '');
-  if (v.length > 9) v = v.slice(0, 9);
-  letterInput.value = v;
+/* Enforce only digits and cap length (up to 12 for future-proofing) */
+const numberInput = document.getElementById('numberSet');
+numberInput.addEventListener('input', () => {
+  let v = numberInput.value.replace(/[^0-9]/g, '');
+  if (v.length > 12) v = v.slice(0, 12);
+  numberInput.value = v;
 });
 
 /* Sync eyegaze settings if present */
@@ -371,15 +375,13 @@ function syncEyegazeSettingsFromUI() {
 /* =========================
    Game state
    ========================= */
-let letters = [];
-let targetLetter;
+let numbers = [];
+let targetNumber;
 let hoverTimeout;
 let selectedTheme = 'light';
 
-/* Track tile under pointer so dwell can auto-start after unlock */
+/* Track tile under pointer & last pointer position for auto-dwell on unlock */
 let hoveredTile = null;
-
-/* Track last pointer position for elementFromPoint on unlock */
 let lastPointer = { x: null, y: null };
 window.addEventListener('pointermove', (e) => {
   lastPointer.x = e.clientX;
@@ -394,7 +396,7 @@ const MIN_TILE = 64;     // px minimal square for visibility
 const GAP_MIN  = 80;     // px
 const GAP_MAX  = 120;    // px
 
-/* Lockout timing + readiness flag (like the number game) */
+/* Lockout timing + readiness flag */
 const READY_DELAY_MS = 3000; // delay before selection is allowed (ms)
 let isReady = false;
 
@@ -450,13 +452,13 @@ function speakNoCancel(text) {
   speechSynthesis.speak(makeUtterance(text));
 }
 
-function speakPromptWithGap(letter) {
+function speakPromptWithGap(nStr) {
   const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
-  if (!enabled || !letter) return;
+  if (!enabled || !nStr) return;
 
   try { speechSynthesis.cancel(); } catch(e) {}
 
-  const text = 'Trouve la lettre';
+  const text = 'Trouve le nombre';
   const first = makeUtterance(text);
 
   let handedOff = false;
@@ -467,20 +469,20 @@ function speakPromptWithGap(letter) {
     const approxLen = ev.charLength || (tail.split(/\s+/)[0] || '').length;
     const word = text.substr(start, approxLen).trim().toLowerCase();
 
-    if (!handedOff && (word === 'lettre' || tail.trim().toLowerCase() === 'lettre')) {
+    if (!handedOff && (word === 'nombre' || tail.trim().toLowerCase() === 'nombre')) {
       handedOff = true;
-      setTimeout(() => { try { speechSynthesis.cancel(); } catch(e) {} speakNoCancel(letter); }, TIMING.boundaryTailMs);
+      setTimeout(() => { try { speechSynthesis.cancel(); } catch(e) {} speakNoCancel(nStr); }, TIMING.boundaryTailMs);
     }
   };
 
-  first.onend = () => { if (!handedOff) setTimeout(() => speakNoCancel(letter), TIMING.ttsGap); };
+  first.onend = () => { if (!handedOff) setTimeout(() => speakNoCancel(nStr), TIMING.ttsGap); };
 
   speechSynthesis.speak(first);
 }
 
 function speakPromptIfEnabled() {
-  if (!targetLetter) return;
-  speakPromptWithGap(targetLetter);
+  if (!targetNumber) return;
+  speakPromptWithGap(targetNumber);
 }
 
 if ('speechSynthesis' in window) {
@@ -506,8 +508,7 @@ function unlockGrid() {
     grid.classList.add('ready-pop');
     setTimeout(() => grid.classList.remove('ready-pop'), 260);
   }
-  // If pointer already rests on a tile, (re)start dwell now.
-  // If we missed mouseover due to pointer-events:none, detect via elementFromPoint.
+  // Auto-start dwell if pointer already rests on a tile.
   if (!hoveredTile && lastPointer.x !== null && lastPointer.y !== null) {
     const el = document.elementFromPoint(lastPointer.x, lastPointer.y);
     const tile = el && (el.closest ? el.closest('.letter-cell') : null);
@@ -535,10 +536,11 @@ function startGame() {
   selectedTheme = themeSelect.value;
   applyTheme(selectedTheme);
 
-  // Parse letters (cap to 9 for max 3x3 layout)
-  const inputVal = document.getElementById('letterSet').value.toUpperCase().replace(/[^A-Z]/g,'');
-  letters = inputVal.split('').slice(0, 9);
-  if (letters.length === 0) letters = ['A','B','C','D'];
+  // Parse numbers (default to 0-9). Keep unique order.
+  const raw = document.getElementById('numberSet').value.replace(/[^0-9]/g,'');
+  const seen = new Set();
+  numbers = Array.from(raw).filter(d => { if (seen.has(d)) return false; seen.add(d); return true; });
+  if (numbers.length === 0) numbers = Array.from('0123456789');
 
   // Read layout scale
   layoutScale = parseFloat(layoutScaleEl.value) || 1.0;
@@ -566,22 +568,23 @@ function buildGrid() {
   const grid = document.querySelector('.letter-grid');
   grid.innerHTML = '';
 
-  const total = letters.length;
-  const columns = Math.min(3, Math.ceil(Math.sqrt(total))); // never exceed 3 columns
+  const total = numbers.length;
+  // Allow up to 4 columns so 10 tiles fit comfortably (e.g., 4x3)
+  const columns = Math.min(4, Math.ceil(Math.sqrt(total)));
   grid.dataset.columns = String(columns);
 
   // edge padding minimal
   grid.style.padding = EDGE_PAD + 'px';
 
-  letters.forEach(letter => {
+  numbers.forEach(n => {
     const cell = document.createElement('div');
     cell.className = 'letter-cell';
-    cell.innerHTML = `<span class="cell-char">${letter}</span>`;
+    cell.innerHTML = `<span class="cell-char">${n}</span>`;
 
-    // Track hovered tile & start/stop dwell
+    // Track hovered tile & start/stop dwell; auto-begin if already ready
     cell.addEventListener('mouseover', () => {
       hoveredTile = cell;
-      if (isReady) startHover(cell); // auto-begin dwell if already ready
+      if (isReady) startHover(cell);
     });
     cell.addEventListener('mouseout', () => {
       if (hoveredTile === cell) hoveredTile = null;
@@ -595,7 +598,7 @@ function buildGrid() {
 }
 window.addEventListener('resize', adjustGridSizes);
 
-/* Robust fit-to-viewport sizing for up to 3x3 */
+/* Robust fit-to-viewport sizing up to 4 columns */
 function adjustGridSizes() {
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -603,7 +606,7 @@ function adjustGridSizes() {
   const cells = grid.querySelectorAll('.letter-cell');
   if (!cells.length) return;
 
-  const columns = parseInt(grid.dataset.columns || '2', 10);
+  const columns = parseInt(grid.dataset.columns || '3', 10);
   const rows    = Math.ceil(cells.length / columns);
 
   // container dims: use grid-outer as height reference (below the strip)
@@ -615,7 +618,7 @@ function adjustGridSizes() {
   const contentH = Math.max(0, containerH - 2 * EDGE_PAD);
   const contentMin = Math.min(contentW, contentH);
 
-  // Gap scales with viewport, but is clamped and inversely affected by layoutScale
+  // Gap scales with viewport, clamped and inversely affected by layoutScale
   let GAP = Math.round((contentMin * 0.02) / Math.max(0.8, layoutScale));
   GAP = clamp(GAP, GAP_MIN, GAP_MAX);
   grid.style.gap = GAP + 'px';
@@ -626,21 +629,21 @@ function adjustGridSizes() {
   const candidate = Math.floor(Math.min(maxByW, maxByH));
 
   // Apply layoutScale to allow shrinking (or fill if >1)
-  const size = Math.max(MIN_TILE, Math.min(candidate, Math.floor(candidate * layoutScale)));
+  const size = clamp(Math.floor(candidate * layoutScale), MIN_TILE, candidate);
 
   // Grid tracks
   const track = size + 'px';
   grid.style.gridTemplateColumns = `repeat(${columns}, ${track})`;
   grid.style.gridAutoRows        = track;
 
-  // Scale letter font to tile size (slightly bigger for readability)
+  // Scale font to tile size
   const fontPx = Math.max(24, Math.floor(size * 0.55));
   cells.forEach(c => { c.style.fontSize = fontPx + 'px'; });
 
   // Compact breathing room below the instruction strip (small cap so it never pushes tiles offscreen)
   const strip = document.getElementById('topStrip');
   if (strip && strip.style.display !== 'none') {
-    const stripGap = Math.max(10, Math.min(22, Math.round(size * 0.12))); // <= ~22px cap
+    const stripGap = clamp(Math.round(size * 0.12), 10, 22); // <= ~22px cap
     strip.style.marginBottom = stripGap + 'px';
   }
 }
@@ -649,8 +652,8 @@ function nextRound() {
   const strip = document.getElementById('topStrip');
   strip.classList.remove('hidden','fade-out');
 
-  targetLetter = letters[Math.floor(Math.random() * letters.length)];
-  document.querySelector("#prompt .target-letter").textContent = targetLetter;
+  targetNumber = numbers[Math.floor(Math.random() * numbers.length)];
+  document.querySelector("#prompt .target-letter").textContent = targetNumber;
 
   // Lock grid while the prompt is spoken / for a short time
   lockGrid();
@@ -709,13 +712,14 @@ const TIMING = {
 
 /* ====== WRONG feedback helper (JS-driven shake) ====== */
 function wrongFeedback(el){
-  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduce) {
+  // Reduced-motion users: no physical motion, just a flash
+  const prefersReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (prefersReduce) {
     el.classList.add('wrong-flash');
     setTimeout(() => el.classList.remove('wrong-flash'), 250);
-    return;
-  }
-  if (el.animate) {
+  } else if (el.animate) {
+    // Use WAAPI so it can't be canceled by element's transition on transform
     el.animate(
       [
         { transform: 'translateX(0)' },
@@ -729,27 +733,46 @@ function wrongFeedback(el){
       ],
       { duration: 420, easing: 'ease' }
     );
-    const prev = el.style.boxShadow;
+    // Red flash border using box-shadow via inline style (no class race)
+    const prevShadow = el.style.boxShadow;
     el.style.boxShadow = 'inset 0 0 0 3px rgba(198,40,40,.45)';
-    setTimeout(() => { el.style.boxShadow = prev || ''; }, 420);
+    setTimeout(() => { el.style.boxShadow = prevShadow || ''; }, 420);
+  } else {
+    // Very old browsers: quick inline-transform shim
+    const prev = el.style.transform;
+    el.style.transition = 'none';
+    let i = 0;
+    const seq = [0,-10,10,-7,7,-4,4,0];
+    const tick = () => {
+      el.style.transform = `translateX(${seq[i]}px)`;
+      if (++i < seq.length) setTimeout(tick, 52);
+      else {
+        el.style.transform = prev || '';
+        el.style.transition = '';
+      }
+    };
+    tick();
   }
+
+  // Optional small vibration if available (phones/tablets)
   try { if (navigator.vibrate) navigator.vibrate(60); } catch(e){}
 }
 
-/* ====== Correct selection choreography ====== */
+/* ====== Correct / wrong selection choreography ====== */
 function handleSelection(el) {
-  const letter = el.textContent.trim();
+  const nStr = el.textContent.trim();
 
-  /* WRONG: shake + sound, allow retry */
-  if (letter !== targetLetter) {
+  /* WRONG: shake + sound, then allow retry */
+  if (nStr !== targetNumber) {
     playSound(wrongAudio);
     wrongFeedback(el);
     return;
   }
 
+  /* CORRECT flow */
   const grid  = document.querySelector('.letter-grid');
   const strip = document.getElementById('topStrip');
-  const foundLetter = letter;
+  const found = nStr;
 
   // Freeze the tile's on-screen position *before* any layout changes
   const startRect = el.getBoundingClientRect();
@@ -776,9 +799,9 @@ function handleSelection(el) {
 
     // STEP 2: Glide to center & grow (original hidden during flight)
     glideTileToCenter(el, TIMING.glide, TIMING.grow, {bgColor, textColor}, startRect).then((clone) => {
-      // Re-read found letter while big tile is centered (if TTS enabled)
+      // Re-read number while big tile is centered (if TTS enabled)
       const ttsOn = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
-      if (ttsOn && foundLetter) speak(foundLetter);
+      if (ttsOn && found) speak(found);
 
       setTimeout(() => {
         if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
@@ -786,10 +809,10 @@ function handleSelection(el) {
         el.style.opacity = '';
         el.style.backgroundColor = '';
         el.style.color = '';
-        el.style.pointerEvents = '';   /* re-enable tile for next rounds */
+        el.style.pointerEvents = '';
         grid.classList.remove('no-input');
 
-        // Collapse strip after animation
+        // Now that the animation is over, collapse the strip
         strip.classList.add('hidden');
         strip.classList.remove('fade-out');
 
@@ -801,7 +824,7 @@ function handleSelection(el) {
 }
 
 /* Glide & grow animation — pixel-anchored, using frozen startRect
-   GROWTH IS NOW CLAMPED TO FIT VIEWPORT (like the numbers game) */
+   GROWTH IS NOW CLAMPED TO FIT VIEWPORT */
 function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, startRect) {
   return new Promise(resolve => {
     const r  = startRect || tile.getBoundingClientRect();
@@ -849,14 +872,14 @@ function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, sta
     let targetScale = Math.min(2, maxScaleW, maxScaleH); // never exceed 2x
     targetScale = Math.max(1, targetScale);              // don't shrink below 1
 
-    // Make grow duration proportional to growth amount (snappier when small growth)
+    // Optional: make grow duration proportional to growth amount
     const growthFactor = Math.max(0, targetScale - 1);
-    const adjustedGrowMs = Math.round(growMs * (0.4 + 0.6 * Math.min(1, growthFactor)));
+    const adjustedGrowMs = Math.round(growMs * (0.4 + 0.6 * Math.min(1, growthFactor))); // shorter if little growth
 
     // Ensure first keyframe uses initial style (layout flush)
     void clone.getBoundingClientRect();
 
-    // 1) Glide
+    // 1) Glide to center
     const a1 = clone.animate(
       [
         { transform: 'translate3d(0px, 0px, 0) scale(1)' },
@@ -866,7 +889,7 @@ function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, sta
     );
 
     a1.onfinish = () => {
-      // 2) Grow in place — clamped
+      // 2) Grow in place — but only as much as fits the viewport
       const a2 = clone.animate(
         [
           { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1)` },
