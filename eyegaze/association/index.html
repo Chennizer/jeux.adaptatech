@@ -27,16 +27,16 @@
       box-sizing: border-box;
     }
 
-    /* --- TOP STRIP: white card, capped height, keeps room for grid --- */
+    /* --- TOP STRIP: white card, capped height, slimmer width --- */
     .top-strip{
-      width: min(920px, 92vw);
+      width: min(720px, 88vw);
       margin-top: 8px;
       padding: 14px 16px;
       border-radius: 14px;
       border: 2px solid rgba(0,0,0,0.12);
       box-shadow: 0 6px 20px rgba(0,0,0,0.06);
-      transition: opacity 500ms ease, margin-bottom 120ms ease;
-      margin-bottom: 16px;
+      transition: opacity 500ms ease;
+      margin-bottom: 16px;       /* constant gap */
       opacity: 1;
 
       display: none;                 /* shown after Start */
@@ -45,21 +45,21 @@
       --top-cap: clamp(140px, 26vh, 320px);
       max-height: var(--top-cap);
 
-      background: #ffffff;           /* always white */
+      background: #ffffff;
     }
     .top-strip.fade-out { opacity: 0; }
     .top-strip.hidden{ display: none !important; }
     body.dark .top-strip{
       border-color: rgba(255,255,255,0.18);
       box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-      background: #ffffff;           /* white card also in dark mode */
+      background: #ffffff;
     }
 
     /* Content inside: row (text | image) side-by-side */
     .top-center{
       width: 100%;
       height: 100%;
-      max-width: 860px;
+      max-width: 820px;
       display: flex;
       flex-direction: row;
       align-items: center;
@@ -67,16 +67,15 @@
       gap: 16px;
       margin: 0 auto;
     }
-    /* stack on small screens */
     @media (max-width: 520px){
       .top-center{ flex-direction: column; }
     }
 
-    /* Prompt block (small text, dark on white) */
+    /* Prompt block — bigger text, dark on white */
     #prompt{ margin:0; display:none; opacity:1; transition: opacity 500ms ease; }
     #prompt .prompt-text{
-      font-size: clamp(1rem, 1.4vw, 1.15rem);
-      font-weight: 700;
+      font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+      font-weight: 800;
       color: #0f172a; /* slate-900 */
       line-height: 1.25;
       letter-spacing: .2px;
@@ -86,8 +85,8 @@
     /* Target image fits inside cap */
     .target-image{
       flex: 0 0 auto;
-      width: min(36vmin, 320px);
-      max-width: 320px;
+      width: min(36vmin, 300px);
+      max-width: 300px;
       max-height: calc(var(--top-cap) - 24px);
       object-fit: contain;
       background: transparent;
@@ -167,33 +166,6 @@
       transform: translate(-50%, -50%);
       pointer-events: none;
       border-radius: 8px;
-    }
-
-    /* Input stylés (options) */
-    .styled-input {
-      width: 100%;
-      max-width: 220px;
-      padding: 10px 14px;
-      font-size: 18px;
-      font-weight: bold;
-      color: #000;
-      border: 2px solid #009688;
-      border-radius: 8px;
-      background-color: #fff;
-      text-align: center;
-      transition: border-color .2s, box-shadow .2s;
-      letter-spacing: 1px;
-    }
-    .styled-input:focus {
-      border-color: #14b8a6;
-      box-shadow: 0 0 0 3px rgba(0,150,136,0.15);
-      outline: none;
-    }
-
-    /* État correct (flash rouge bref) */
-    .letter-cell.correct {
-      color: #fff;
-      background-color: #c62828;
     }
 
     /* Clone volant (glide & grow) */
@@ -326,7 +298,7 @@
   <!-- Bande d’instruction / cible : white card, side-by-side -->
   <div id="topStrip" class="top-strip">
     <div class="top-center">
-      <h2 id="prompt"><span class="prompt-text" id="promptText">Trouve « … »</span></h2>
+      <h2 id="prompt"><span class="prompt-text" id="promptText">Trouve …</span></h2>
       <img id="targetImage" class="target-image" alt="">
     </div>
   </div>
@@ -432,8 +404,26 @@ function applyTheme(theme) {
 }
 
 /* =========================
-   TTS helpers
+   FR phrase joiner (handles elision: l’ + word => l’ours)
    ========================= */
+function joinFr(article, word){
+  const a = (article || '').trim();
+  const w = (word || '').trim();
+  if (!a) return w;
+  if (!w) return a;
+  // If article ends with apostrophe-like char, concatenate with NO space
+  const endsWithApo = /[’'ʼ]$/.test(a);
+  return endsWithApo ? (a + w) : (a + ' ' + w);
+}
+
+/* =========================
+   TTS — ultra-low gap strategy
+   ========================= */
+
+/* Set to 0 for “one breath” (single utterance). If > 0, we queue two utterances
+   immediately so the engine uses its minimal internal gap. */
+let TTS_TROUVE_GAP_MS = 0;
+
 let preferredVoice = null;
 
 function choosePreferredVoice() {
@@ -465,58 +455,56 @@ function makeUtterance(text) {
   u.volume = volume;
   return u;
 }
-function speak(text) {
+
+/* Ensure voices are ready once */
+function voicesReady() {
+  return new Promise((resolve) => {
+    const ss = window.speechSynthesis;
+    if (!ss) return resolve();
+    const v = ss.getVoices();
+    if (v && v.length) return resolve();
+    const onChange = () => { ss.removeEventListener('voiceschanged', onChange); resolve(); };
+    ss.addEventListener('voiceschanged', onChange);
+  });
+}
+
+/* Speak either as a single utterance (gap 0) or queue two utterances immediately. */
+async function speakSequence(texts, gapMs = 0) {
   if (!('speechSynthesis' in window)) return;
   try { speechSynthesis.cancel(); } catch(e) {}
-  speechSynthesis.speak(makeUtterance(text));
+  await voicesReady();
+  choosePreferredVoice();
+
+  if (gapMs <= 0 && texts.length === 2) {
+    const u = makeUtterance(`${texts[0]} ${texts[1]}`);
+    speechSynthesis.speak(u);
+    return;
+  }
+  texts.forEach((t) => {
+    const u = makeUtterance(t);
+    speechSynthesis.speak(u);
+  });
 }
-function speakNoCancel(text) {
-  if (!('speechSynthesis' in window)) return;
-  speechSynthesis.speak(makeUtterance(text));
+
+if ('speechSynthesis' in window) {
+  speechSynthesis.addEventListener('voiceschanged', choosePreferredVoice);
+  choosePreferredVoice();
 }
 
 const TIMING = {
-  holdRed: 900,
   glide: 3800,
   grow: 2600,
-  pauseAfterGrow: 2400,
-  ttsGap: 300,
-  boundaryTailMs: 160
+  pauseAfterGrow: 2400
 };
 
 function speakPromptForItem(item){
   const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
   if (!enabled || !item) return;
 
-  const article = (item.label?.fr?.article || '').trim();
-  const word    = (item.label?.fr?.word || '').trim();
-  const phrase  = [article, word].filter(Boolean).join(' ');
-  const text1   = 'Trouve';
-  const text2   = phrase;
+  const phrase  = joinFr(item.label?.fr?.article, item.label?.fr?.word);
 
-  try { speechSynthesis.cancel(); } catch(e) {}
-
-  const first = makeUtterance(text1);
-  let handed = false;
-
-  first.onboundary = (ev) => {
-    const start = ev.charIndex ?? 0;
-    const tail = text1.slice(start);
-    const approxLen = ev.charLength || (tail.split(/\s+/)[0] || '').length;
-    const wordB = text1.substr(start, approxLen).trim().toLowerCase();
-    if (!handed && (wordB === 'trouve' || tail.trim().toLowerCase() === 'trouve')) {
-      handed = true;
-      setTimeout(() => { try { speechSynthesis.cancel(); } catch(e){} speakNoCancel(text2); }, TIMING.boundaryTailMs);
-    }
-  };
-  first.onend = () => { if (!handed) setTimeout(() => speakNoCancel(text2), TIMING.ttsGap); };
-
-  speechSynthesis.speak(first);
-}
-
-if ('speechSynthesis' in window) {
-  speechSynthesis.addEventListener('voiceschanged', choosePreferredVoice);
-  choosePreferredVoice();
+  // Zero-gap (single utterance) by default; set TTS_TROUVE_GAP_MS > 0 to queue
+  speakSequence(['Trouve', phrase], TTS_TROUVE_GAP_MS);
 }
 
 /* =========================
@@ -542,7 +530,6 @@ function unlockGrid() {
    Démarrage
    ========================= */
 function startGame() {
-  // Plein écran
   if (document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen();
   } else if (document.documentElement.webkitRequestFullscreen) {
@@ -558,7 +545,6 @@ function startGame() {
 
   currentCategory = document.getElementById('categorySelect').value;
 
-  // Construire le pool pour la catégorie choisie
   if (!pictosData || !pictosData.categories[currentCategory]) {
     alert('Catégorie non disponible.');
     return;
@@ -568,7 +554,6 @@ function startGame() {
     return { file: entry.file, label: entry.label, srcAbs: base + entry.file };
   });
 
-  // Afficher l’aire de jeu
   document.querySelector('.game-container').style.display = 'flex';
   document.getElementById('topStrip').style.display = 'block';
   document.getElementById('prompt').style.display = 'block';
@@ -576,7 +561,7 @@ function startGame() {
   const grid = document.getElementById('imageGrid');
   grid.style.display = 'grid';
 
-  buildGridSkeleton(); // prépare la grille vide pour sizing
+  buildGridSkeleton();
   nextRound();
 
   try { if (window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); } catch(e) {}
@@ -618,23 +603,26 @@ function buildGridSkeleton(){
 }
 
 window.addEventListener('resize', adjustGridSizes);
-/* ensure grid recalculates when target image loads or device rotates */
 document.getElementById('targetImage').addEventListener('load', adjustGridSizes);
 window.addEventListener('orientationchange', adjustGridSizes);
 
+/* Robust viewport-based sizing that respects the top strip cap */
 function adjustGridSizes() {
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   const grid = document.getElementById('imageGrid');
+  const outer = grid.parentElement;
   const cells = grid.querySelectorAll('.letter-cell');
-  if (!cells.length) return;
+  if (!cells.length || !outer) return;
 
   const columns = parseInt(grid.dataset.columns || '3', 10);
   const rows    = Math.ceil(cells.length / columns);
 
-  const outer = grid.parentElement; // .grid-outer
   const containerW = grid.clientWidth;
-  const containerH = outer ? outer.clientHeight : grid.clientHeight;
+
+  // Compute height available below the top strip without feedback loop
+  const outerRect = outer.getBoundingClientRect();
+  const containerH = Math.max(0, window.innerHeight - outerRect.top - 8);
 
   const contentW = Math.max(0, containerW - 2 * EDGE_PAD);
   const contentH = Math.max(0, containerH - 2 * EDGE_PAD);
@@ -644,21 +632,16 @@ function adjustGridSizes() {
   GAP = clamp(GAP, GAP_MIN, GAP_MAX);
   grid.style.gap = GAP + 'px';
 
-  const maxByW = (contentW - (columns - 1) * GAP) / columns;
-  const maxByH = (contentH - (rows    - 1) * GAP) / rows;
-  const candidate = Math.floor(Math.min(maxByW, maxByH));
-  const size = clamp(Math.floor(candidate * layoutScale), MIN_TILE, candidate);
+  const sizeByW = (contentW - (columns - 1) * GAP) / columns;
+  const SAFETY = 8;
+  const sizeByH = ((contentH - (rows - 1) * GAP) / rows) - SAFETY;
+
+  const candidate = Math.floor(Math.min(sizeByW, sizeByH));
+  const size = Math.max(MIN_TILE, Math.min(candidate, Math.floor(candidate * layoutScale)));
 
   const track = size + 'px';
   grid.style.gridTemplateColumns = `repeat(${columns}, ${track})`;
   grid.style.gridAutoRows        = track;
-
-  /* Ajuste l’espace sous la bande du haut (respire sans pousser hors écran) */
-  const strip = document.getElementById('topStrip');
-  if (strip && strip.style.display !== 'none') {
-    const stripGap = clamp(Math.round(size * 0.12), 10, 22);
-    strip.style.marginBottom = stripGap + 'px';
-  }
 }
 
 /* =========================
@@ -668,14 +651,11 @@ function nextRound(){
   const strip = document.getElementById('topStrip');
   strip.classList.remove('hidden','fade-out');
 
-  // Choisir la cible
   targetItem = pickRandom(pool);
 
-  // Construire les distracteurs
   const total = getDesiredChoicesCount();
   const distractors = pickNDistinct(pool.filter(x => x.file !== targetItem.file), total - 1);
 
-  // Mélanger et injecter dans la grille
   const all = shuffle([targetItem, ...distractors]);
   const grid = document.getElementById('imageGrid');
   grid.classList.remove('no-input');
@@ -700,22 +680,17 @@ function nextRound(){
     grid.appendChild(cell);
   });
 
-  // Mettre le prompt et l’image cible
   const promptText = document.getElementById('promptText');
   const targetImage = document.getElementById('targetImage');
-  const a = (targetItem.label?.fr?.article || '').trim();
-  const w = (targetItem.label?.fr?.word || '').trim();
-  const phrase = [a,w].filter(Boolean).join(' ');
-  promptText.textContent = `Trouve « ${phrase} »`;
+  const phrase = joinFr(targetItem.label?.fr?.article, targetItem.label?.fr?.word);
+  promptText.textContent = `Trouve ${phrase}`;
   targetImage.src = targetItem.srcAbs;
-  targetImage.alt = w;
+  targetImage.alt = phrase;
 
-  // Verrou, TTS, sizing
   lockGrid();
   speakPromptForItem(targetItem);
   adjustGridSizes();
 
-  // Déverrouillage après délai fixe (prévisible)
   setTimeout(unlockGrid, 3000);
 }
 
@@ -765,36 +740,27 @@ function handleSelection(tile, item){
   const grid  = document.getElementById('imageGrid');
   const strip = document.getElementById('topStrip');
 
-  // Figer la position initiale
   const startRect = tile.getBoundingClientRect();
 
-  // Son + lock + fade autres
   playSound(correctAudio);
   grid.classList.add('no-input');
   grid.querySelectorAll('.letter-cell').forEach(cell => { if (cell !== tile) cell.classList.add('dim'); });
-
-  // Fade du bandeau (sans collapse)
   strip.classList.add('fade-out');
 
-  // Flash rouge bref
-  tile.classList.add('correct');
-  setTimeout(() => {
-    tile.classList.remove('correct');
+  // Direct glide/grow (no red flash staying on the tile)
+  const dark = getComputedStyle(document.body).backgroundColor === 'rgb(0, 0, 0)';
+  const bgColor = dark ? '#222' : '#fff';
+  const textColor = dark ? '#fff' : '#000';
+  tile.style.backgroundColor = bgColor;
+  tile.style.color = textColor;
 
-    // Stabiliser couleurs avant clone
-    const dark = getComputedStyle(document.body).backgroundColor === 'rgb(0, 0, 0)';
-    const bgColor = dark ? '#222' : '#fff';
-    const textColor = dark ? '#fff' : '#000';
-    tile.style.backgroundColor = bgColor;
-    tile.style.color = textColor;
-
-    glideTileToCenter(tile, TIMING.glide, TIMING.grow, {bgColor, textColor}, startRect).then((clone) => {
-      // Redire le mot pendant la grande image
+  requestAnimationFrame(() => {
+    glideTileToCenter(tile, 3800, 2600, {bgColor, textColor}, startRect).then((clone) => {
       const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
       if (enabled) {
-        const a = (item.label?.fr?.article || '').trim();
-        const w = (item.label?.fr?.word || '').trim();
-        speak(`${[a,w].filter(Boolean).join(' ')}`);
+        const phrase = joinFr(item.label?.fr?.article, item.label?.fr?.word);
+        // Speak the noun phrase after the success animation (single utterance)
+        speakSequence([phrase], 0);
       }
 
       setTimeout(() => {
@@ -811,8 +777,7 @@ function handleSelection(tile, item){
         nextRound();
       }, TIMING.pauseAfterGrow);
     });
-
-  }, TIMING.holdRed);
+  });
 }
 
 /* Animation glide & grow */
@@ -844,7 +809,6 @@ function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, sta
 
     document.body.appendChild(clone);
 
-    // Cacher l’original pendant le vol
     tile.style.opacity = '0';
     tile.style.pointerEvents = 'none';
 
@@ -914,7 +878,7 @@ function getDesiredChoicesCount(){
   const wanted = parseInt(choicesCountEl.value, 10) || 8;
   if (!pictosData || !pictosData.categories || !currentCategory) return wanted;
   const available = pictosData.categories[currentCategory]?.length || wanted;
-  return Math.max(3, Math.min(wanted, available)); // au moins 3, pas plus que disponible
+  return Math.max(3, Math.min(wanted, available));
 }
 </script>
 </body>

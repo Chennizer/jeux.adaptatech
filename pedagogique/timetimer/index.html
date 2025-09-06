@@ -223,6 +223,7 @@
         <option value="stacked" data-fr="Pile d’images à gauche" data-en="Images Stacked Left">Pile d’images à gauche</option>
         <option value="taskreward" data-fr="Tâche → Récompense (gauche)" data-en="Task → Reward (Left)">Tâche → Récompense (gauche)</option>
         <option value="marker" data-fr="Marqueur" data-en="Marker">Marqueur</option>
+        <option value="quadrants" data-fr="Quartiers (dans l’horloge)" data-en="Quadrants (inside clock)">Quartiers (dans l’horloge)</option>
       </select>
       <button id="modeProxy" class="btn ghost hidden"></button>
     </label>
@@ -232,7 +233,7 @@
       <input type="range" id="imgSizeRange" min="0.16" max="0.6" step="0.01" value="0.22">
     </div>
 
-    <div class="formline">
+    <div class="formline" id="imgCountLine">
       <span data-fr="Nombre d’images" data-en="Image count">Nombre d’images</span>
       <select id="imgCountSelect">
         <option value="2">2</option>
@@ -381,10 +382,10 @@ const RADIAL_RADIUS_OFFSET_2 = 0.06;
 const TASKREWARD_SPACING_MULT = 3.5;
 
 /* ==== iPad-only tunables (fixed start size + visible pulse) ==== */
-const IOS_IMGBASE_DEFAULT = 0.28;   // ~1/6 from the left of the slider range (0.16→0.90)
-const IOS_FS_FIT_PAD      = 0.006;  // slightly tighter padding on iPad FS
-const IOS_FS_OVERFLOW     = 1.02;   // small base overflow
-const IOS_FS_OVERFLOW_ACTIVE = 1.10; // extra headroom for the active image to show pulse
+const IOS_IMGBASE_DEFAULT = 0.28;
+const IOS_FS_FIT_PAD      = 0.006;
+const IOS_FS_OVERFLOW     = 1.02;
+const IOS_FS_OVERFLOW_ACTIVE = 1.10;
 
 /* ===========================================================
    LAYOUT (image size etc.)
@@ -395,6 +396,13 @@ const LAYOUT = {
   radial: { radiusOffset: RADIAL_RADIUS_OFFSET_4 },
   stacked:{ spacing: 0.025, marginLeft: 0.06 }
 };
+
+/* ---- NEW: Quadrants inside — push images toward center & nudge Y ----
+   Separate pushes for 4-image vs 2-image modes.
+*/
+const QUAD_CENTER_PUSH_4 = 0.72; // 4 images: farther out
+const QUAD_CENTER_PUSH_2 = 0.60; // 2 images: a bit closer to center (REQUESTED CHANGE)
+const QUAD_Y_NUDGE       = 0.04; // fraction of 'size' to pull top down & bottom up
 /* ===========================================================
    END CONFIG
    =========================================================== */
@@ -466,7 +474,7 @@ let nowMs = 0; // for pulse
 
 /* ---------- Special features ---------- */
 let specialMode='none';
-let IMG_COUNT = 4; // 2 or 4
+let IMG_COUNT = 4; // 2 or 4 (applies to quadrants & stacked too)
 const quadrantColors=['#ff6b6b','#ffd93d','#4cd964','#66a5ff'];
 const imgs=[null,null,null,null];
 let markerImg=null, markerAngle=0;
@@ -571,16 +579,13 @@ function getCenter(size){
   return { cx: baseCx, cy };
 }
 
-/* Auto-fit utility
-   padFrac: fraction of canvas used as padding to keep elements inside
-   overflowBoost: >1 allows slight overspill vs the strict "fit" (used on iPad FS)
-*/
+/* Auto-fit utility */
 function fitScaleForCenteredRect(cxR, cyR, w, h, padFrac = 0.02, overflowBoost = 1){
   const pad = Math.max(6, Math.min(canvas.width, canvas.height) * padFrac);
   const maxW = Math.max(1, Math.min(2*(cxR - pad), 2*(canvas.width - pad - cxR)));
   const maxH = Math.max(1, Math.min(2*(cyR - pad), 2*(canvas.height - pad - cyR)));
-  const fit = Math.min(maxW / w, maxH / h);        // strict fit (<=1 if needs shrinking)
-  const s = Math.min(1, fit * overflowBoost);      // allow a little larger than strict fit
+  const fit = Math.min(maxW / w, maxH / h);
+  const s = Math.min(1, fit * overflowBoost);
   return (isFinite(s) && s>0) ? s : 1;
 }
 
@@ -628,7 +633,7 @@ function updateDrag(e){
   draw();
 }
 
-/* 2 or 4 active index */
+/* Active index for 2 or 4 segments */
 function getActiveIndex(uiSeconds, denom, count){
   const t = Math.max(1, uiSeconds);
   if(count===4){
@@ -643,6 +648,14 @@ function getActiveIndex(uiSeconds, denom, count){
 }
 function colorForIndex(i,N){ return quadrantColors[ N===2 ? (i===0?0:3) : i ]; }
 function getAnglesForCount(N){ return (N===2) ? [0, Math.PI] : [-Math.PI/4, Math.PI/4, 3*Math.PI/4, -3*Math.PI/4]; }
+
+/* Generic per-segment fade (within its own segment window, 1→0) */
+function segmentFadeAlpha(i, uiSeconds, denom, count){
+  const len = denom / count;
+  const lower = (count===4) ? (3 - i) * len : (1 - i) * len;
+  const ratio = (uiSeconds - lower)/len;
+  return Math.max(0, Math.min(1, ratio));
+}
 
 function drawMarker(size,cx,cy,outerR){
   const borderW=size*0.0067;
@@ -711,24 +724,25 @@ function draw(){
   const angle = (uiSeconds/denom) * Math.PI * 2;
 
   // Wedge & background sectors
-  if(specialMode==='radial' || specialMode==='stacked'){
+  if(specialMode==='radial' || specialMode==='stacked' || specialMode==='quadrants'){
     ctx.save();
     ctx.beginPath();ctx.moveTo(cx,cy);
     ctx.arc(cx,cy,wedgeR,-Math.PI/2,-Math.PI/2-angle,true);
     ctx.closePath();ctx.clip();
 
-    const N = IMG_COUNT;
-    const fillSector = (start,end,color)=>{
-      ctx.fillStyle=color;
+    if((specialMode==='radial' || specialMode==='stacked' || specialMode==='quadrants') && IMG_COUNT===2){
+      // Two sections (right & left halves)
+      ctx.fillStyle = colorForIndex(1,2);
       ctx.beginPath(); ctx.moveTo(cx,cy);
-      ctx.arc(cx,cy,wedgeR,start,end,true);
+      ctx.arc(cx,cy,wedgeR,-Math.PI/2,  Math.PI/2, true);
       ctx.closePath(); ctx.fill();
-    };
 
-    if(N===2){
-      fillSector(-Math.PI/2,  Math.PI/2,  colorForIndex(1,2));
-      fillSector( Math.PI/2,  3*Math.PI/2, colorForIndex(0,2));
-    }else{
+      ctx.fillStyle = colorForIndex(0,2);
+      ctx.beginPath(); ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,wedgeR, Math.PI/2,  3*Math.PI/2, true);
+      ctx.closePath(); ctx.fill();
+    } else {
+      // 4 quarters
       for(let i=0;i<4;i++){
         const start = -Math.PI/2 - i*Math.PI/2;
         const end   = -Math.PI/2 - (i+1)*Math.PI/2;
@@ -776,6 +790,7 @@ function draw(){
   if(specialMode==='stacked')     drawStacked(size,cx,cy,outerR,uiSeconds,denom);
   if(specialMode==='taskreward')  drawTaskReward(size,cx,cy,outerR);
   if(specialMode==='marker')      drawMarker(size,cx,cy,outerR);
+  if(specialMode==='quadrants')   drawQuadrants(size,cx,cy,outerR,uiSeconds,denom);
 
   updatePageTint(uiSeconds, denom);
 }
@@ -788,9 +803,10 @@ function updatePageTint(uiSeconds, denom){
     document.body.style.backgroundColor = hexToRGBA(timerColor, TINT_ALPHA);
     return;
   }
-  const N = IMG_COUNT;
-  const active = getActiveIndex(uiSeconds, denom, (N===2?2:4));
-  const col = colorForIndex(active, (N===2?2:4));
+
+  const N = (IMG_COUNT===2 ? 2 : 4);
+  const active = getActiveIndex(uiSeconds, denom, N);
+  const col = colorForIndex(active, N);
   document.body.style.backgroundColor = hexToRGBA(col, TINT_ALPHA);
 }
 
@@ -798,7 +814,6 @@ function updatePageTint(uiSeconds, denom){
 function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   const iosFS = isIOS && !!document.fullscreenElement;
 
-  // Slightly farther from the dial on iPad FS so they can bleed outward a bit
   const radialOffset4 = iosFS ? 0.07 : (isIOS ? 0.08 : LAYOUT.radial.radiusOffset);
   const radialOffset2 = iosFS ? 0.05 : (isIOS ? 0.04 : RADIAL_RADIUS_OFFSET_2);
 
@@ -806,7 +821,6 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
   const radialOffset = (IMG_COUNT===2 ? radialOffset2 : radialOffset4);
   const imgR   = numbersR + size * radialOffset;
 
-  // Soft nudges while fullscreen on iPad
   const hShiftPx_4 = size * (iosFS ? 0.18 : H_SHIFT);
   const hShiftPx_2 = size * (iosFS ? 0.09 : H_SHIFT_2);
   const vTopPx     = size * (iosFS ? 0.12 : V_OFFSET_TOP);
@@ -840,7 +854,6 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
     const cxI = cx + Math.cos(ang)*imgR + dx;
     const cyI = cy + Math.sin(ang)*imgR + dy;
 
-    // iPad FS: allow small overspill and tighter padding near screen edges
     const overflow = iosFS ? (isActive ? IOS_FS_OVERFLOW_ACTIVE : IOS_FS_OVERFLOW) : 1;
     const fitS = fitScaleForCenteredRect(
       cxI, cyI, w, h,
@@ -855,13 +868,14 @@ function drawRadial(size,cx,cy,numbersR,uiSeconds,denom){
     ctx.save();
     if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
     ctx.drawImage(im, x, y, w, h);
+    // keep borders in radial
     ctx.strokeStyle=colorForIndex(i, (N===2?2:4));ctx.lineWidth=size*0.006;
     ctx.strokeRect(x, y, w, h);
     ctx.restore();
   }
 }
 
-/* ---- STACKED ---- */
+/* ---- STACKED (supports 2 or 4 images) ---- */
 function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
   const basePx   = size * LAYOUT.imgBase;
   const spacing  = size * LAYOUT.stacked.spacing;
@@ -906,6 +920,7 @@ function drawStacked(size,cx,cy,outerR,uiSeconds,denom){
       ctx.save();
       if(!isActive) ctx.globalAlpha = 1 - INACTIVE_ALPHA;
       ctx.drawImage(d.im, x, yDraw, drawW, drawH);
+      // keep borders in stacked
       ctx.strokeStyle = colorForIndex(i, (N===2?2:4));
       ctx.lineWidth   = size*0.006;
       ctx.strokeRect(x, yDraw, drawW, drawH);
@@ -937,13 +952,13 @@ function drawTaskReward(size,cx,cy,outerR){
     const cxI = xCenter;
     const cyI = yTop + tSize.h/2;
     const s = fitScaleForCenteredRect(cxI, cyI, tSize.w, tSize.h);
-    tSize = { w: tSize.w*s, h: tSize.h*s };
+    tSize = { w: tSize.w*s, h: tSize.h*s};
   }
   if(reward){
     const cxI = xCenter;
     const cyI = yBot + rSize.h/2;
     const s = fitScaleForCenteredRect(cxI, cyI, rSize.w, rSize.h);
-    rSize = { w: rSize.w*s, h: rSize.h*s };
+    rSize = { w: rSize.w*s, h: rSize.h*s};
   }
 
   const totalH = tSize.h + spacing + rSize.h;
@@ -989,6 +1004,70 @@ function drawTaskReward(size,cx,cy,outerR){
     ctx.lineTo(endX + head*0.7, endY - head*0.6);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* ---- QUADRANTS (inside clock) — supports 2 or 4, NO BORDERS, Y-nudge
+       REQUESTED CHANGE: in 2-image mode, place images closer to center.
+---- */
+function drawQuadrants(size, cx, cy, outerR, uiSeconds, denom){
+  const borderW = size*0.0067;
+  const wedgeR  = outerR - borderW*1.4;
+  const innerR  = wedgeR * 0.92;
+
+  const N = (IMG_COUNT===2 ? 2 : 4);
+  const angles  = (N===2) ? [0, Math.PI] : [-Math.PI/4, Math.PI/4, 3*Math.PI/4, -3*Math.PI/4];
+
+  // >>> HERE: choose center push based on N (2 images closer to center)
+  const centerR = innerR * (N===2 ? QUAD_CENTER_PUSH_2 : QUAD_CENTER_PUSH_4);
+
+  // Max square inside quarter/half circle
+  const side    = innerR / Math.SQRT2 * 0.94;
+  const target  = side;
+
+  const activeIdx = getActiveIndex(uiSeconds, denom, N);
+
+  for (let i=0;i<N;i++){
+    const im = imgs[i];
+    if (!im) continue;
+
+    const fade = segmentFadeAlpha(i, uiSeconds, denom, N); // 1→0 within its segment
+    if (fade <= 0) continue;
+
+    let {w,h} = computeContainSize(im, target);
+
+    // base center by angle
+    const baseX = cx + Math.cos(angles[i]) * centerR;
+    const baseY = cy + Math.sin(angles[i]) * centerR;
+
+    // Y nudge only relevant for the 4-image layout (top down / bottom up)
+    let yNudge = 0;
+    if (N === 4){
+      if (i===0 || i===3) yNudge =  size * QUAD_Y_NUDGE;  // NE, NW (top) -> push down
+      else                yNudge = -size * QUAD_Y_NUDGE;  // SE, SW (bottom) -> push up
+    }
+
+    const x = baseX;
+    const y = baseY + yNudge;
+
+    const fitS = fitScaleForCenteredRect(x, y, w, h, 0.02, 1);
+    w *= fitS; h *= fitS;
+
+    const isActive = (i === activeIdx);
+
+    ctx.save();
+    // grey out inactive images
+    if (!isActive) {
+      ctx.globalAlpha = 1 - INACTIVE_ALPHA;
+      ctx.filter = 'grayscale(100%)';
+    }
+    // apply the per-segment fade (1→0 as time leaves that segment)
+    ctx.globalAlpha *= fade;
+
+    // draw image — NO stroke/border in inside-clock mode
+    ctx.drawImage(im, x - w/2, y - h/2, w, h);
+
     ctx.restore();
   }
 }
@@ -1105,20 +1184,20 @@ document.getElementById('dialSelect').addEventListener('change',e=>{
 const specialModeSelect=document.getElementById('specialMode');
 specialModeSelect.addEventListener('change',async e=>{
   specialMode=e.target.value;
-  if(specialMode==='radial' || specialMode==='stacked' || specialMode==='taskreward'){
+  if(specialMode==='radial' || specialMode==='stacked' || specialMode==='taskreward' || specialMode==='quadrants'){
     await loadLastImagesIfEmpty();
   } else if(specialMode==='marker'){
     await loadMarkerState();
   }
 
   const hideMulti = (specialMode==='marker');
-  const imgCountLine = document.getElementById('imgCountSelect').parentElement;
+  const imgCountLine = document.getElementById('imgCountLine');
   imgCountLine.classList.toggle('hidden', hideMulti);
   if(typeof autoFillBtn!=='undefined') autoFillBtn.classList.toggle('hidden', hideMulti);
   if(typeof selectedSlots!=='undefined') selectedSlots.forEach((s,i)=>{ if(i>0) s.classList.toggle('hidden', hideMulti); });
 
   draw();
-  // iPad: always reset to conservative start size for radial so pulse won't be clamped
+  // iPad: reset conservative start size for radial so pulse won't be clamped
   if (isIOS && specialMode === 'radial') {
     LAYOUT.imgBase = IOS_IMGBASE_DEFAULT;
     const r = document.getElementById('imgSizeRange');
@@ -1132,11 +1211,12 @@ specialModeSelect.addEventListener('change',async e=>{
 /* Color handling (desktop + iOS fallback) */
 const colorPicker=document.getElementById('colorPicker');
 const colorProxy=document.getElementById('colorProxy');
+function rgbToHex(r,g,b){ const h = (x)=>x.toString(16).padStart(2,'0'); return '#'+h(r)+h(g)+h(b); }
 function applyTimerColor(hex){
   timerColor = hex;
   if(!isIOS){ colorPicker.value = hex; }
   colorProxy.style.background = hex;
-  if(specialMode==='none' || specialMode==='taskreward' || specialMode==='marker'){ draw(); }
+  if(specialMode==='none' || specialMode==='taskreward' || specialMode==='marker' || specialMode==='quadrants'){ draw(); }
   if(bgTintEnabled){
     updatePageTint(remainingSeconds>0?remainingSeconds:(dialMax*60), dialMax*60);
   }
@@ -1171,10 +1251,6 @@ function hexToRgbObj(hex){
   const n = parseInt(m[1],16);
   return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
 }
-function rgbToHex(r,g,b){
-  const h = (x)=>x.toString(16).padStart(2,'0');
-  return '#'+h(r)+h(g)+h(b);
-}
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function syncRGBtoUI(rgb){
   rRange.value = rgb.r; gRange.value = rgb.g; bRange.value = rgb.b;
@@ -1199,9 +1275,7 @@ function closeColorModal(){
   iosModalOpen = false;
   ensureReturnToFullscreen();
 }
-[rRange,gRange,bRange].forEach(el=>{
-  el.addEventListener('input', ()=>{ syncUItoColor(); });
-});
+[rRange,gRange,bRange].forEach(el=>{ el.addEventListener('input', ()=>{ syncUItoColor(); }); });
 hexInput.addEventListener('input', ()=>{
   const h = '#'+hexInput.value.replace(/[^0-9a-f]/ig,'').slice(0,6);
   const rgb = hexToRgbObj(h.length===7?h:'#d9534f');
@@ -1216,10 +1290,10 @@ document.querySelectorAll('#colorModal .chip').forEach(ch=>{
 });
 closeColorBtn.addEventListener('click', closeColorModal);
 okColorBtn.addEventListener('click', ()=>{
-  const r = parseInt(rRange.value,10)||217;
-  const g = parseInt(gRange.value,10)||83;
-  const b = parseInt(bRange.value,10)||79;
-  const hex = rgbToHex(clamp(r,0,255), clamp(g,0,255));
+  const r = clamp(parseInt(rRange.value,10)||217,0,255);
+  const g = clamp(parseInt(gRange.value,10)||83,0,255);
+  const b = clamp(parseInt(bRange.value,10)||79,0,255);
+  const hex = rgbToHex(r,g,b);
   applyTimerColor(hex);
   closeColorModal();
 });
@@ -1756,7 +1830,7 @@ addTap(enterBtn, ()=>{ startApp(); });
 
 overlay.addEventListener('click', e => { e.stopPropagation(); }, {passive:false});
 
-/* Startup adjustments */
+ /* Startup adjustments */
 window.addEventListener('DOMContentLoaded', async ()=>{
   if(isIOS){
     // iPad: smaller default images now, and bigger ceiling still available
