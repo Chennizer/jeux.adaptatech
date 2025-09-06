@@ -164,7 +164,7 @@
     if (typeof resizeGlass === 'function') resizeGlass();
     if (typeof resizeLaser === 'function') resizeLaser();
     if (typeof caSandOnResize === 'function') caSandOnResize();
-    if (typeof auroraResize === 'function') auroraResize(); /* NEW: resize hook for Aurora */
+    if (typeof auroraResize === 'function') auroraResize();
   });
 
   let menuOpen = true;
@@ -241,17 +241,16 @@
   }
 
   /* =========================
-     AURORA — vibrant ribbons + stars (IMPROVED)
+     AURORA — vibrant ribbons + stars (IMPROVED, no vertical rays, stronger pointer follow)
      ========================= */
   const AUR = {
     t: 0,
     hueBase: 140,
     stars: [],
-    ribbons: [],
-    cols: 28, // ray columns
+    ribbons: []
   };
 
-  // simple smooth 1D fbm using layered sines (fast, no lib)
+  // fast smooth pseudo-noise
   function fbm(x, t=0){
     let v=0, a=0.5, f=1.0;
     for(let i=0;i<4;i++){
@@ -262,20 +261,18 @@
   }
 
   function auroraInit(){
-    // stars
-    const n = Math.floor((W*H)/18000); // density scales with screen
-    AUR.stars = Array.from({length:n}, ()=>({
+    const n = Math.floor((W*H)/18000);
+    AUR.stars = Array.from({length:n}, () => ({
       x: Math.random()*W,
       y: Math.random()*H,
-      z: Math.random()*1,   // depth for parallax
+      z: Math.random(),   // depth/parallax
       a: 0.15 + Math.random()*0.5
     }));
 
-    // layered ribbons, back-to-front
     AUR.ribbons = [
-      { amp: 70, thick: 42, hue: (AUR.hueBase+40)%360, speed: 0.5, alpha:0.10, warp:0.75, offsetY: 0.58, jitter: 0.5 },
-      { amp: 95, thick: 58, hue: (AUR.hueBase+0)%360,  speed: 0.7, alpha:0.16, warp:1.00, offsetY: 0.52, jitter: 0.9 },
-      { amp:120, thick: 64, hue: (AUR.hueBase-40+360)%360, speed: 0.9, alpha:0.20, warp:1.15, offsetY: 0.46, jitter: 1.2 },
+      { amp: 70,  thick: 42, hue: (AUR.hueBase+40)%360, speed: 0.5, alpha:0.10, warp:0.75, offsetY: 0.60, jitter: 0.5 },
+      { amp: 100, thick: 58, hue: (AUR.hueBase+0)%360,  speed: 0.7, alpha:0.16, warp:1.00, offsetY: 0.52, jitter: 0.9 },
+      { amp: 130, thick: 66, hue: (AUR.hueBase-40+360)%360, speed: 0.9, alpha:0.22, warp:1.15, offsetY: 0.44, jitter: 1.2 },
     ];
   }
   function auroraResize(){ auroraInit(); }
@@ -284,49 +281,53 @@
   function drawStars(dt){
     ctx.globalCompositeOperation = 'screen';
     for (const s of AUR.stars){
-      // tiny parallax drift based on mouse velocity
-      s.x += mouse.vx * 0.00002 * (0.3 + s.z);
+      s.x += mouse.vx * 0.000015 * (0.3 + s.z);
       if (s.x < -5) s.x = W+5; if (s.x > W+5) s.x = -5;
+
+      const px = s.x - (mouse.x - W*0.5) * 0.04 * s.z;
+      const py = s.y - (mouse.y - H*0.5) * 0.02 * s.z;
       const r = 0.6 + s.z*1.4;
+
       ctx.fillStyle = `hsla(200,100%,${70+25*s.z}%,${s.a})`;
-      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
     }
   }
 
   function drawCurtainRibbon(rib, t, intensity){
-    // Responsive amplitude & thickness
-    const amp   = rib.amp   * (0.8 + 0.7*intensity) * (1 + dwellFactor()*0.25);
-    const thick = rib.thick * (0.8 + 0.6*intensity);
+    const followY = 0.18 + 0.22*intensity;
+    const baseY = H * rib.offsetY + (mouse.y - H*0.5) * followY;
 
-    const baseY = H * rib.offsetY + (mouse.y - H*0.5) * 0.05; // slight follow
-    const step = 12; // horizontal sampling
+    const step = 10;
     const upper = [];
     const lower = [];
 
-    // Build a soft, closed ribbon polygon following a noisy curve
     for (let x=0; x<=W; x+=step){
-      const u = x/W;
-      const n = fbm(u*6*rib.warp + rib.jitter*0.6, t*rib.speed);
-      const y = baseY + n * amp + Math.sin(u*3 + t*0.3)*amp*0.05;
+      const u = x / W;
+      const phaseShift = (mouse.x/W - 0.5) * 1.2;
 
-      // thickness subtly breathes with noise
-      const localThick = thick * (0.85 + 0.25*Math.abs(n));
-      upper.push([x, y - localThick]);
-      lower.push([x, y + localThick]);
+      const n = fbm(u*6*rib.warp + rib.jitter*0.6 + phaseShift, t*rib.speed);
+      const amp = rib.amp * (0.8 + 0.7*intensity) * (1 + dwellFactor()*0.25);
+
+      const dx = (x - mouse.x);
+      const prox = Math.max(0, 1 - Math.abs(dx) / (W*0.6));
+      const bend = - (dx / W) * amp * 0.55 * prox * (0.6 + intensity);
+
+      const y = baseY + n*amp + Math.sin(u*3 + t*0.3)*amp*0.05 + bend;
+
+      const thick = rib.thick * (0.85 + 0.6*intensity) * (0.9 + 0.25*Math.abs(n));
+      upper.push([x, y - thick]);
+      lower.push([x, y + thick]);
     }
 
-    // color gradient across ribbon width
     const hue = (rib.hue + 20*Math.sin(t*0.15))%360;
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = `hsla(${hue}, 95%, 60%, ${rib.alpha})`;
 
     ctx.beginPath();
-    // upper edge
     for (let i=0;i<upper.length;i++){
       const [x,y]=upper[i];
       if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
-    // lower edge (reverse)
     for (let i=lower.length-1;i>=0;i--){
       const [x,y]=lower[i];
       ctx.lineTo(x,y);
@@ -334,83 +335,48 @@
     ctx.closePath();
     ctx.fill();
 
-    // soft glow along centerline (screen)
     ctx.globalCompositeOperation = 'screen';
-    const g = ctx.createLinearGradient(0, baseY-amp*0.2, 0, baseY+amp*0.2);
-    g.addColorStop(0, `hsla(${(hue+60)%360},95%,75%,0)`);
-    g.addColorStop(0.5, `hsla(${hue},95%,75%,0.25)`);
-    g.addColorStop(1, `hsla(${(hue+300)%360},95%,75%,0)`);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0.25, `hsla(${(hue+60)%360},95%,75%,0)`);
+    g.addColorStop(0.50, `hsla(${hue},95%,75%,0.28)`);
+    g.addColorStop(0.75, `hsla(${(hue+300)%360},95%,75%,0)`);
     ctx.fillStyle = g;
+
     ctx.beginPath();
     for (let i=0;i<upper.length;i++){
       const [x,y]=upper[i];
-      ctx.lineTo(x,y + (thick*0.55)); // shift down to center glow strip
+      ctx.lineTo(x, y + 0.55*(lower[i][1]-upper[i][1]));
     }
     for (let i=lower.length-1;i>=0;i--){
       const [x,y]=lower[i];
-      ctx.lineTo(x,y - (thick*0.55));
+      ctx.lineTo(x, y - 0.55*(y - upper[i][1]));
     }
     ctx.closePath();
     ctx.fill();
-  }
-
-  function drawVerticalRays(t, intensity){
-    // faint columns that sway; stronger near the pointer
-    const cols = AUR.cols;
-    const nearX = mouse.x / W;
-    for (let i=0;i<cols;i++){
-      const u = (i+0.5)/cols;
-      // proximity modulation
-      const prox = Math.max(0, 1 - Math.abs(u - nearX)*2.2);
-      const n = fbm(u*8 + t*0.2, t*0.4);
-      const alpha = (0.06 + 0.18*prox) * (0.5 + 0.5*intensity) * Math.max(0, 1 - Math.abs(n)*0.6);
-      if (alpha < 0.01) continue;
-
-      const x = u*W + Math.sin((u*8 + t*0.8))*18;
-      const h = (AUR.hueBase + 120*Math.sin(u*2 + t*0.3))%360;
-
-      const grad = ctx.createLinearGradient(x, 0, x, H);
-      grad.addColorStop(0.0, `hsla(${(h+10)%360},100%,60%,0)`);
-      grad.addColorStop(0.5, `hsla(${h},100%,60%,${alpha})`);
-      grad.addColorStop(1.0, `hsla(${(h+350)%360},100%,60%,0)`);
-
-      ctx.globalCompositeOperation='screen';
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 2 + 10*prox*(0.6 + 0.6*intensity);
-      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
-    }
   }
 
   function renderAurora(dt){
     AUR.t += dt;
     AUR.hueBase = (AUR.hueBase + 12*dt) % 360;
 
-    // background clear with slight trail for dreamy blending
     ctx.globalCompositeOperation='source-over';
     const isLight = document.body.classList.contains('light');
     const fade = isLight ? `rgba(255,255,255,${mapTrail()*0.9})` : `rgba(0,0,0,${mapTrail()*0.9})`;
     ctx.fillStyle = fade; ctx.fillRect(0,0,W,H);
 
     const intensity = mapIntensity();
-
-    // subtle starfield (behind ribbons)
     drawStars(dt);
 
-    // back-to-front curtains
     for (let i=0;i<AUR.ribbons.length;i++){
       const rib = AUR.ribbons[i];
       rib.hue = (rib.hue + 6*dt) % 360;
       drawCurtainRibbon(rib, AUR.t + i*0.12, intensity);
     }
 
-    // vertical rays (after ribbons, adds sparkle)
-    drawVerticalRays(AUR.t, intensity);
-
-    // pulses when dwelling
     if (dwellMs>500){
       ctx.globalCompositeOperation='screen';
-      const r = 120 + 260*intensity;
-      const g = ctx.createRadialGradient(mouse.x, mouse.y, r*0.1, mouse.x, mouse.y, r);
+      const r = 140 + 300*intensity;
+      const g = ctx.createRadialGradient(mouse.x, mouse.y, r*0.08, mouse.x, mouse.y, r);
       g.addColorStop(0, `hsla(${(AUR.hueBase+90)%360},100%,75%,0.20)`);
       g.addColorStop(1, `hsla(0,0%,0%,0)`);
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, r, 0, Math.PI*2); ctx.fill();
@@ -418,34 +384,121 @@
   }
 
   /* =========================
-     Other scenes
+     Other scenes (incl. ONDES / RIPPLES rework)
      ========================= */
-  // Keep a global hueBase to drive color shifts in some scenes (e.g., fireworks)
   let hueBase = 0;
 
+  // --- ONDES: luminous water rings with dispersion, wakes & caustic sparkles ---
   const ripples = [];
-  const leaves = Array.from({length:40}, ()=>({ x: Math.random()*W, y: Math.random()*H, r: 3+Math.random()*5, t: Math.random()*1000 }));
-  function emitRipple(x,y, r0=2){ ripples.push({x,y, r:r0, a:1}); }
+  const foam = []; // tiny sparkles riding wave crests
+
+  function emitRipple(x, y, power=1){
+    const sp = 52 + 38*mapIntensity();      // base wave speed
+    const amp = 0.55 + power*0.9;           // visual intensity
+    ripples.push({
+      x, y,
+      r: 0,
+      vr: sp * (0.9 + Math.random()*0.2),
+      amp,
+      width: 6 + mapSize()*0.06 + power*3,
+      life: 1.0,
+      hue: (hueBase + Math.random()*30)|0
+    });
+
+    // sprinkle some foam on crest
+    for (let i=0;i<10+power*12;i++){
+      const a = Math.random()*Math.PI*2;
+      const s = 0.8 + Math.random()*1.8;
+      foam.push({
+        x, y,
+        vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+        life: 0.8 + Math.random()*0.8,
+        h: (ripples.at(-1).hue + 20 + Math.random()*40)%360
+      });
+    }
+  }
+
   function renderRipples(dt){
-    clearToBg(false);
+    // watery background with depth-tinted gradient following pointer
+    ctx.globalCompositeOperation='source-over';
+    const isLight = document.body.classList.contains('light');
+    const trail = mapTrail();
+    ctx.fillStyle = isLight
+      ? `rgba(255,255,255,${trail})`
+      : `rgba(0,0,0,${trail})`;
+    ctx.fillRect(0,0,W,H);
+
+    // subtle ambient water tint
+    const bg = ctx.createRadialGradient(mouse.x, mouse.y, 10, mouse.x, mouse.y, Math.max(W,H));
+    const seaHue = (200 + 20*Math.sin(performance.now()*0.0006))%360;
+    bg.addColorStop(0, `hsla(${seaHue}, 60%, ${isLight?94:8}%, ${isLight?0.35:0.25})`);
+    bg.addColorStop(1, `hsla(${(seaHue+40)%360}, 70%, ${isLight?98:6}%, 0)`);
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+
     const speedN = clamp(mouse.speed/1200, 0, 1);
-    if (speedN>0.25 && Math.random()<0.5) emitRipple(mouse.x, mouse.y, 2+speedN*6);
-    if (dwellMs>500 && Math.random()<0.12) emitRipple(mouse.x, mouse.y, 6 + mapSize()*0.15);
-    ripples.forEach(r=>{
-      r.r += 60*dt; r.a *= (1 - 0.8*dt);
-      ctx.strokeStyle = `hsla(${(200 + r.r*0.2)%360},80%,70%,${r.a*0.6})`;
-      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI*2); ctx.stroke();
-    });
-    for (let i=ripples.length-1;i>=0;i--) if (ripples[i]?.a < 0.02) ripples.splice(i,1);
+    // emit small wakes while moving
+    if (speedN>0.12){
+      if (Math.random() < 0.6){
+        emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.6);
+      }
+    }
+    // occasional bigger pulse while dwelling
+    if (dwellJustCrossed(600)){
+      playPing(520,0.16,0.05);
+      for (let i=0;i<4;i++) emitRipple(mouse.x, mouse.y, 1.4);
+    }
+
+    // update + draw ripples
     ctx.globalCompositeOperation='lighter';
-    leaves.forEach(L=>{
-      L.t += dt; const dx = mouse.x - L.x, dy = mouse.y - L.y;
-      L.x += Math.cos(L.t*0.6)*10*dt + dx*0.02*mapIntensity();
-      L.y += Math.sin(L.t*0.8)*8*dt + dy*0.02*mapIntensity();
-      if (L.x<-10) L.x=W+10; if (L.x>W+10) L.x=-10;
-      if (L.y<-10) L.y=H+10; if (L.y>H+10) L.y=-10;
-      ctx.fillStyle = `hsla(${(180+dx*0.02)%360},70%,60%,0.6)`; ctx.beginPath(); ctx.arc(L.x, L.y, L.r, 0, Math.PI*2); ctx.fill();
-    });
+    for (let i=ripples.length-1;i>=0;i--){
+      const r = ripples[i];
+      r.r += r.vr*dt;
+      r.life *= Math.pow(0.985 - 0.2*dt, 1 + 0.6*mapIntensity());
+      const a = clamp(r.life * (0.75 + 0.35*mapIntensity()), 0, 1);
+      if (a < 0.02 || r.r > Math.hypot(W,H)) { ripples.splice(i,1); continue; }
+
+      // chromatic dispersion: three slightly offset strokes
+      const w = r.width * (0.8 + 0.6*a);
+      const baseHue = (r.hue + r.r*0.18) % 360;
+      const radii = [r.r*0.98, r.r, r.r*1.02];
+      const hues  = [ (baseHue+220)%360, baseHue, (baseHue+60)%360 ];
+      const alphas= [ a*0.35, a*0.55, a*0.35 ];
+
+      for (let k=0;k<3;k++){
+        ctx.strokeStyle = `hsla(${hues[k]}, 95%, 65%, ${alphas[k]})`;
+        ctx.lineWidth = Math.max(1.2, w * (k===1?1:0.7));
+        ctx.beginPath(); ctx.arc(r.x, r.y, Math.max(0.1, radii[k]), 0, Math.PI*2); ctx.stroke();
+      }
+
+      // soft inner glow for a caustic feel
+      const g = ctx.createRadialGradient(r.x, r.y, r.r*0.85, r.x, r.y, r.r*1.2);
+      g.addColorStop(0, `hsla(${(baseHue+20)%360}, 95%, 80%, 0.0)`);
+      g.addColorStop(0.8, `hsla(${(baseHue)%360}, 95%, 75%, ${0.18*a})`);
+      g.addColorStop(1, `hsla(${(baseHue+300)%360}, 95%, 70%, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(r.x, r.y, r.r*1.2, 0, Math.PI*2); ctx.fill();
+    }
+
+    // foam sparkles riding waves
+    for (let i=foam.length-1;i>=0;i--){
+      const f=foam[i];
+      f.x += f.vx; f.y += f.vy;
+      f.life -= dt*(0.7+0.5*mapIntensity());
+      if (f.life<=0 || f.x<-10 || f.x>W+10 || f.y<-10 || f.y>H+10){ foam.splice(i,1); continue; }
+      const a = clamp(f.life, 0, 1);
+      ctx.fillStyle = `hsla(${f.h}, 100%, 80%, ${0.25 + 0.65*a})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 1.2 + 1.8*a, 0, Math.PI*2); ctx.fill();
+    }
+
+    // shimmering highlight at pointer when resting
+    if (dwellMs>700){
+      const rr = 18 + mapSize()*0.08;
+      const gg = ctx.createRadialGradient(mouse.x, mouse.y, rr*0.2, mouse.x, mouse.y, rr);
+      gg.addColorStop(0, `hsla(${(seaHue+140)%360}, 100%, 85%, 0.35)`);
+      gg.addColorStop(1, `hsla(0,0%,0%,0)`);
+      ctx.globalCompositeOperation='screen';
+      ctx.fillStyle=gg; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, rr, 0, Math.PI*2); ctx.fill();
+    }
   }
 
   const sparks = [];
@@ -590,14 +643,14 @@
   }
 
   /* =========================
-     SAND (cellular automaton) — pointer-only spawn (no background rain)
+     SAND (cellular automaton) — pointer-only spawn
      ========================= */
   const SAND_CELL = (()=> {
     const state = {
       cellSize: 3,
       cols: 0,
       rows: 0,
-      grid: null,          // Int16Array storing hue (0..359) or -1 for empty
+      grid: null,
       palette: [],
       lastHueBase: 0
     };
@@ -619,7 +672,6 @@
     function caSandReset(){ allocGrid(); }
     function caSandOnResize(){ allocGrid(); }
 
-    // Emit N grains around (px,py) in pixels — pointer-controlled only
     function caEmitSand(px, py, n){
       const cs = state.cellSize;
       const cx = Math.floor(px / cs);
@@ -636,7 +688,6 @@
       }
     }
 
-    // One simulation pass (bottom-up)
     function caStep(windBias){
       const C = state.cols;
       const R = state.rows;
@@ -694,13 +745,11 @@
       const cs = state.cellSize;
       const C = state.cols, R = state.rows;
 
-      // background
       const isLight = document.body.classList.contains('light');
       ctx.globalCompositeOperation='source-over';
       ctx.fillStyle = isLight ? '#ffffff' : '#000000';
       ctx.fillRect(0,0,W,H);
 
-      // draw cells (batch horizontal runs)
       for (let y=0; y<R; y++){
         let x=0;
         while (x<C){
@@ -722,7 +771,6 @@
       const dwellBoost = dwellMs>600 ? 4 : 0;
       const toSpawn = baseRate + dwellBoost;
 
-      // Only spawn where the user points (no ambient rain)
       caEmitSand(mouse.x, mouse.y, toSpawn + Math.floor(mouse.speed/250));
 
       const windBias = clamp(mouse.vx/1000, -1, 1);
@@ -741,7 +789,6 @@
     };
   })();
 
-  // wire resize/reset for sand
   function caSandOnResize(){ SAND_CELL.caSandOnResize(); }
   (function(){ SAND_CELL.caSandReset(); })();
 
@@ -1054,7 +1101,6 @@
     now = t;
     dwellMs = t - lastMoveT;
 
-    // keep hueBase cycling globally for scenes that use it (e.g., fireworks)
     hueBase = (hueBase + 24*dt) % 360;
 
     if (menuOpen || paused){
@@ -1071,7 +1117,7 @@
       case 'nebula':    renderNebula(dt);     break;
       case 'jelly':     renderJelly(dt);      break;
       case 'snow':      renderSnow(dt);       break;
-      case 'sand':      SAND_CELL.caRender(dt); break;  /* pointer-only sand */
+      case 'sand':      SAND_CELL.caRender(dt); break;
       case 'magnet':    renderMagnet(dt);     break;
       case 'glass':     renderGlass(dt);      break;
       case 'streamers': renderStreamers(dt);  break;
