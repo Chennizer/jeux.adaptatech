@@ -241,265 +241,152 @@
   }
 
   /* =========================
-     AURORA — vibrant ribbons + stars (IMPROVED, no vertical rays, stronger pointer follow)
+     AURORA (unchanged)
      ========================= */
-  const AUR = {
-    t: 0,
-    hueBase: 140,
-    stars: [],
-    ribbons: []
-  };
-
-  // fast smooth pseudo-noise
-  function fbm(x, t=0){
-    let v=0, a=0.5, f=1.0;
-    for(let i=0;i<4;i++){
-      v += a * Math.sin(x*f + t*(0.35 + i*0.07) + i*1.3);
-      a *= 0.5; f *= 1.8;
-    }
-    return v;
-  }
-
+  const AUR = { t:0, hueBase:140, stars:[], ribbons:[] };
+  function fbm(x, t=0){ let v=0,a=0.5,f=1.0; for(let i=0;i<4;i++){ v+=a*Math.sin(x*f+t*(0.35+i*0.07)+i*1.3); a*=0.5; f*=1.8; } return v; }
   function auroraInit(){
     const n = Math.floor((W*H)/18000);
-    AUR.stars = Array.from({length:n}, () => ({
-      x: Math.random()*W,
-      y: Math.random()*H,
-      z: Math.random(),   // depth/parallax
-      a: 0.15 + Math.random()*0.5
-    }));
-
+    AUR.stars = Array.from({length:n}, () => ({ x:Math.random()*W, y:Math.random()*H, z:Math.random(), a:0.15+Math.random()*0.5 }));
     AUR.ribbons = [
-      { amp: 70,  thick: 42, hue: (AUR.hueBase+40)%360, speed: 0.5, alpha:0.10, warp:0.75, offsetY: 0.60, jitter: 0.5 },
-      { amp: 100, thick: 58, hue: (AUR.hueBase+0)%360,  speed: 0.7, alpha:0.16, warp:1.00, offsetY: 0.52, jitter: 0.9 },
-      { amp: 130, thick: 66, hue: (AUR.hueBase-40+360)%360, speed: 0.9, alpha:0.22, warp:1.15, offsetY: 0.44, jitter: 1.2 },
+      { amp:70,  thick:42, hue:(AUR.hueBase+40)%360, speed:0.5, alpha:0.10, warp:0.75, offsetY:0.60, jitter:0.5 },
+      { amp:100, thick:58, hue:(AUR.hueBase+0)%360,  speed:0.7, alpha:0.16, warp:1.00, offsetY:0.52, jitter:0.9 },
+      { amp:130, thick:66, hue:(AUR.hueBase-40+360)%360, speed:0.9, alpha:0.22, warp:1.15, offsetY:0.44, jitter:1.2 },
     ];
   }
   function auroraResize(){ auroraInit(); }
   auroraInit();
-
   function drawStars(dt){
     ctx.globalCompositeOperation = 'screen';
     for (const s of AUR.stars){
       s.x += mouse.vx * 0.000015 * (0.3 + s.z);
       if (s.x < -5) s.x = W+5; if (s.x > W+5) s.x = -5;
-
       const px = s.x - (mouse.x - W*0.5) * 0.04 * s.z;
       const py = s.y - (mouse.y - H*0.5) * 0.02 * s.z;
       const r = 0.6 + s.z*1.4;
-
       ctx.fillStyle = `hsla(200,100%,${70+25*s.z}%,${s.a})`;
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
     }
   }
-
   function drawCurtainRibbon(rib, t, intensity){
     const followY = 0.18 + 0.22*intensity;
     const baseY = H * rib.offsetY + (mouse.y - H*0.5) * followY;
-
-    const step = 10;
-    const upper = [];
-    const lower = [];
-
+    const step = 10; const upper=[]; const lower=[];
     for (let x=0; x<=W; x+=step){
       const u = x / W;
       const phaseShift = (mouse.x/W - 0.5) * 1.2;
-
       const n = fbm(u*6*rib.warp + rib.jitter*0.6 + phaseShift, t*rib.speed);
       const amp = rib.amp * (0.8 + 0.7*intensity) * (1 + dwellFactor()*0.25);
-
       const dx = (x - mouse.x);
       const prox = Math.max(0, 1 - Math.abs(dx) / (W*0.6));
       const bend = - (dx / W) * amp * 0.55 * prox * (0.6 + intensity);
-
       const y = baseY + n*amp + Math.sin(u*3 + t*0.3)*amp*0.05 + bend;
-
       const thick = rib.thick * (0.85 + 0.6*intensity) * (0.9 + 0.25*Math.abs(n));
-      upper.push([x, y - thick]);
-      lower.push([x, y + thick]);
+      upper.push([x, y - thick]); lower.push([x, y + thick]);
     }
-
     const hue = (rib.hue + 20*Math.sin(t*0.15))%360;
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = `hsla(${hue}, 95%, 60%, ${rib.alpha})`;
-
-    ctx.beginPath();
-    for (let i=0;i<upper.length;i++){
-      const [x,y]=upper[i];
-      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-    }
-    for (let i=lower.length-1;i>=0;i--){
-      const [x,y]=lower[i];
-      ctx.lineTo(x,y);
-    }
-    ctx.closePath();
-    ctx.fill();
-
+    ctx.beginPath(); for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+    for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x,y); }
+    ctx.closePath(); ctx.fill();
     ctx.globalCompositeOperation = 'screen';
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0.25, `hsla(${(hue+60)%360},95%,75%,0)`);
-    g.addColorStop(0.50, `hsla(${hue},95%,75%,0.28)`);
-    g.addColorStop(0.75, `hsla(${(hue+300)%360},95%,75%,0)`);
+    g.addColorStop(0.25, `hsla(${(hue+60)%360},95%,75%,0)`); g.addColorStop(0.50, `hsla(${hue},95%,75%,0.28)`); g.addColorStop(0.75, `hsla(${(hue+300)%360},95%,75%,0)`);
     ctx.fillStyle = g;
-
     ctx.beginPath();
-    for (let i=0;i<upper.length;i++){
-      const [x,y]=upper[i];
-      ctx.lineTo(x, y + 0.55*(lower[i][1]-upper[i][1]));
-    }
-    for (let i=lower.length-1;i>=0;i--){
-      const [x,y]=lower[i];
-      ctx.lineTo(x, y - 0.55*(y - upper[i][1]));
-    }
-    ctx.closePath();
-    ctx.fill();
+    for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; ctx.lineTo(x, y + 0.55*(lower[i][1]-upper[i][1])); }
+    for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x, y - 0.55*(y - upper[i][1])); }
+    ctx.closePath(); ctx.fill();
   }
-
   function renderAurora(dt){
-    AUR.t += dt;
-    AUR.hueBase = (AUR.hueBase + 12*dt) % 360;
-
+    AUR.t += dt; AUR.hueBase = (AUR.hueBase + 12*dt) % 360;
     ctx.globalCompositeOperation='source-over';
     const isLight = document.body.classList.contains('light');
     const fade = isLight ? `rgba(255,255,255,${mapTrail()*0.9})` : `rgba(0,0,0,${mapTrail()*0.9})`;
     ctx.fillStyle = fade; ctx.fillRect(0,0,W,H);
-
-    const intensity = mapIntensity();
-    drawStars(dt);
-
-    for (let i=0;i<AUR.ribbons.length;i++){
-      const rib = AUR.ribbons[i];
-      rib.hue = (rib.hue + 6*dt) % 360;
-      drawCurtainRibbon(rib, AUR.t + i*0.12, intensity);
-    }
-
+    const intensity = mapIntensity(); drawStars(dt);
+    for (let i=0;i<AUR.ribbons.length;i++){ const rib=AUR.ribbons[i]; rib.hue=(rib.hue+6*dt)%360; drawCurtainRibbon(rib, AUR.t + i*0.12, intensity); }
     if (dwellMs>500){
       ctx.globalCompositeOperation='screen';
       const r = 140 + 300*intensity;
       const g = ctx.createRadialGradient(mouse.x, mouse.y, r*0.08, mouse.x, mouse.y, r);
-      g.addColorStop(0, `hsla(${(AUR.hueBase+90)%360},100%,75%,0.20)`);
-      g.addColorStop(1, `hsla(0,0%,0%,0)`);
+      g.addColorStop(0, `hsla(${(AUR.hueBase+90)%360},100%,75%,0.20)`); g.addColorStop(1, `hsla(0,0%,0%,0)`);
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, r, 0, Math.PI*2); ctx.fill();
     }
   }
 
   /* =========================
-     Other scenes (incl. ONDES / RIPPLES rework)
+     ONDES — circles only, saturated blues
      ========================= */
-  let hueBase = 0;
-
-  // --- ONDES: luminous water rings with dispersion, wakes & caustic sparkles ---
   const ripples = [];
-  const foam = []; // tiny sparkles riding wave crests
-
   function emitRipple(x, y, power=1){
-    const sp = 52 + 38*mapIntensity();      // base wave speed
-    const amp = 0.55 + power*0.9;           // visual intensity
+    const sp = 52 + 38*mapIntensity();
+    const hue = 205 + Math.random()*20; // 205–225: saturated ocean blues
     ripples.push({
       x, y,
       r: 0,
       vr: sp * (0.9 + Math.random()*0.2),
-      amp,
       width: 6 + mapSize()*0.06 + power*3,
       life: 1.0,
-      hue: (hueBase + Math.random()*30)|0
+      hue,
+      sat: 95,
+      light: 55 + power*5
     });
-
-    // sprinkle some foam on crest
-    for (let i=0;i<10+power*12;i++){
-      const a = Math.random()*Math.PI*2;
-      const s = 0.8 + Math.random()*1.8;
-      foam.push({
-        x, y,
-        vx: Math.cos(a)*s, vy: Math.sin(a)*s,
-        life: 0.8 + Math.random()*0.8,
-        h: (ripples.at(-1).hue + 20 + Math.random()*40)%360
-      });
-    }
   }
-
   function renderRipples(dt){
-    // watery background with depth-tinted gradient following pointer
+    // Deep blue fade so stacking stays blue (no whitening)
+    const baseHue = 210;
+    const baseSat = 70;
+    const baseLight = document.body.classList.contains('light') ? 18 : 8;
     ctx.globalCompositeOperation='source-over';
-    const isLight = document.body.classList.contains('light');
-    const trail = mapTrail();
-    ctx.fillStyle = isLight
-      ? `rgba(255,255,255,${trail})`
-      : `rgba(0,0,0,${trail})`;
+    ctx.fillStyle = `hsla(${baseHue}, ${baseSat}%, ${baseLight}%, ${mapTrail()})`;
     ctx.fillRect(0,0,W,H);
 
-    // subtle ambient water tint
-    const bg = ctx.createRadialGradient(mouse.x, mouse.y, 10, mouse.x, mouse.y, Math.max(W,H));
-    const seaHue = (200 + 20*Math.sin(performance.now()*0.0006))%360;
-    bg.addColorStop(0, `hsla(${seaHue}, 60%, ${isLight?94:8}%, ${isLight?0.35:0.25})`);
-    bg.addColorStop(1, `hsla(${(seaHue+40)%360}, 70%, ${isLight?98:6}%, 0)`);
-    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
-
     const speedN = clamp(mouse.speed/1200, 0, 1);
-    // emit small wakes while moving
+
+    // Small wakes while moving
     if (speedN>0.12){
       if (Math.random() < 0.6){
         emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.6);
       }
     }
-    // occasional bigger pulse while dwelling
-    if (dwellJustCrossed(600)){
+
+    // Occasional bigger pulse on dwell
+    if (dwellJustCrossed(650)){
       playPing(520,0.16,0.05);
-      for (let i=0;i<4;i++) emitRipple(mouse.x, mouse.y, 1.4);
+      for (let i=0;i<3;i++) emitRipple(mouse.x, mouse.y, 1.2);
     }
 
-    // update + draw ripples
-    ctx.globalCompositeOperation='lighter';
+    // Draw only rings (no glow/background meshes/halos)
+    ctx.globalCompositeOperation='source-over';
     for (let i=ripples.length-1;i>=0;i--){
       const r = ripples[i];
       r.r += r.vr*dt;
       r.life *= Math.pow(0.985 - 0.2*dt, 1 + 0.6*mapIntensity());
-      const a = clamp(r.life * (0.75 + 0.35*mapIntensity()), 0, 1);
+      const a = clamp(r.life * (0.9), 0, 1);
       if (a < 0.02 || r.r > Math.hypot(W,H)) { ripples.splice(i,1); continue; }
 
-      // chromatic dispersion: three slightly offset strokes
       const w = r.width * (0.8 + 0.6*a);
-      const baseHue = (r.hue + r.r*0.18) % 360;
-      const radii = [r.r*0.98, r.r, r.r*1.02];
-      const hues  = [ (baseHue+220)%360, baseHue, (baseHue+60)%360 ];
-      const alphas= [ a*0.35, a*0.55, a*0.35 ];
+
+      // three concentric strokes within blue range, moderate alpha to avoid white
+      const hues  = [ r.hue-8, r.hue, r.hue+10 ];
+      const alphas= [ a*0.22,  a*0.38, a*0.22 ];
 
       for (let k=0;k<3;k++){
-        ctx.strokeStyle = `hsla(${hues[k]}, 95%, 65%, ${alphas[k]})`;
+        ctx.strokeStyle = `hsla(${hues[k]}, ${r.sat}%, ${r.light}%, ${alphas[k]})`;
         ctx.lineWidth = Math.max(1.2, w * (k===1?1:0.7));
-        ctx.beginPath(); ctx.arc(r.x, r.y, Math.max(0.1, radii[k]), 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, Math.max(0.1, r.r * (k===0?0.985 : (k===2?1.015:1.0))), 0, Math.PI*2);
+        ctx.stroke();
       }
-
-      // soft inner glow for a caustic feel
-      const g = ctx.createRadialGradient(r.x, r.y, r.r*0.85, r.x, r.y, r.r*1.2);
-      g.addColorStop(0, `hsla(${(baseHue+20)%360}, 95%, 80%, 0.0)`);
-      g.addColorStop(0.8, `hsla(${(baseHue)%360}, 95%, 75%, ${0.18*a})`);
-      g.addColorStop(1, `hsla(${(baseHue+300)%360}, 95%, 70%, 0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(r.x, r.y, r.r*1.2, 0, Math.PI*2); ctx.fill();
-    }
-
-    // foam sparkles riding waves
-    for (let i=foam.length-1;i>=0;i--){
-      const f=foam[i];
-      f.x += f.vx; f.y += f.vy;
-      f.life -= dt*(0.7+0.5*mapIntensity());
-      if (f.life<=0 || f.x<-10 || f.x>W+10 || f.y<-10 || f.y>H+10){ foam.splice(i,1); continue; }
-      const a = clamp(f.life, 0, 1);
-      ctx.fillStyle = `hsla(${f.h}, 100%, 80%, ${0.25 + 0.65*a})`;
-      ctx.beginPath(); ctx.arc(f.x, f.y, 1.2 + 1.8*a, 0, Math.PI*2); ctx.fill();
-    }
-
-    // shimmering highlight at pointer when resting
-    if (dwellMs>700){
-      const rr = 18 + mapSize()*0.08;
-      const gg = ctx.createRadialGradient(mouse.x, mouse.y, rr*0.2, mouse.x, mouse.y, rr);
-      gg.addColorStop(0, `hsla(${(seaHue+140)%360}, 100%, 85%, 0.35)`);
-      gg.addColorStop(1, `hsla(0,0%,0%,0)`);
-      ctx.globalCompositeOperation='screen';
-      ctx.fillStyle=gg; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, rr, 0, Math.PI*2); ctx.fill();
     }
   }
+
+  /* =========================
+     Other scenes (unchanged)
+     ========================= */
+  let hueBase = 0;
 
   const sparks = [];
   function emitSpark(x,y, n=40, power=3){
@@ -643,35 +530,22 @@
   }
 
   /* =========================
-     SAND (cellular automaton) — pointer-only spawn
+     SAND (unchanged)
      ========================= */
   const SAND_CELL = (()=> {
-    const state = {
-      cellSize: 3,
-      cols: 0,
-      rows: 0,
-      grid: null,
-      palette: [],
-      lastHueBase: 0
-    };
-
+    const state = { cellSize:3, cols:0, rows:0, grid:null, palette:[], lastHueBase:0 };
     function allocGrid(){
       state.cols = Math.floor(W / state.cellSize);
       state.rows = Math.floor(H / state.cellSize);
       state.grid = new Int16Array(state.cols * state.rows);
       state.grid.fill(-1);
       state.palette = new Array(360);
-      for (let h=0; h<360; h++){
-        state.palette[h] = `hsla(${h},95%,60%,1)`;
-      }
+      for (let h=0; h<360; h++){ state.palette[h] = `hsla(${h},95%,60%,1)`; }
     }
-
     function idx(x,y){ return y*state.cols + x; }
     function inBounds(x,y){ return (x>=0 && x<state.cols && y>=0 && y<state.rows); }
-
     function caSandReset(){ allocGrid(); }
     function caSandOnResize(){ allocGrid(); }
-
     function caEmitSand(px, py, n){
       const cs = state.cellSize;
       const cx = Math.floor(px / cs);
@@ -687,69 +561,46 @@
         }
       }
     }
-
     function caStep(windBias){
-      const C = state.cols;
-      const R = state.rows;
+      const C = state.cols; const R = state.rows;
       const leftFirst = windBias < 0 ? true : windBias > 0 ? false : (Math.random() < 0.5);
-
       for (let y=R-2; y>=0; y--){
         const xStartLeft = (Math.random() < 0.5);
         if (xStartLeft){
           for (let x=0; x<C; x++){
-            const i = y*C + x;
-            const hue = state.grid[i];
-            if (hue === -1) continue;
-
+            const i = y*C + x; const hue = state.grid[i]; if (hue === -1) continue;
             const iD = i + C;
-            if (state.grid[iD] === -1){
-              state.grid[i] = -1; state.grid[iD] = hue; continue;
-            }
-
+            if (state.grid[iD] === -1){ state.grid[i] = -1; state.grid[iD] = hue; continue; }
             const tryDiag = leftFirst ? [-1,1] : [1,-1];
             for (let k=0;k<2;k++){
               const nx = x + tryDiag[k], ny = y + 1;
               if (nx<0 || nx>=C) continue;
               const ii = ny*C + nx;
-              if (state.grid[ii] === -1){
-                state.grid[i] = -1; state.grid[ii] = hue; break;
-              }
+              if (state.grid[ii] === -1){ state.grid[i] = -1; state.grid[ii] = hue; break; }
             }
           }
         } else {
           for (let x=C-1; x>=0; x--){
-            const i = y*C + x;
-            const hue = state.grid[i];
-            if (hue === -1) continue;
-
+            const i = y*C + x; const hue = state.grid[i]; if (hue === -1) continue;
             const iD = i + C;
-            if (state.grid[iD] === -1){
-              state.grid[i] = -1; state.grid[iD] = hue; continue;
-            }
-
+            if (state.grid[iD] === -1){ state.grid[i] = -1; state.grid[iD] = hue; continue; }
             const tryDiag = leftFirst ? [-1,1] : [1,-1];
             for (let k=0;k<2;k++){
               const nx = x + tryDiag[k], ny = y + 1;
               if (nx<0 || nx>=C) continue;
               const ii = ny*C + nx;
-              if (state.grid[ii] === -1){
-                state.grid[i] = -1; state.grid[ii] = hue; break;
-              }
+              if (state.grid[ii] === -1){ state.grid[i] = -1; state.grid[ii] = hue; break; }
             }
           }
         }
       }
     }
-
     function caDraw(){
-      const cs = state.cellSize;
-      const C = state.cols, R = state.rows;
-
+      const cs = state.cellSize; const C = state.cols, R = state.rows;
       const isLight = document.body.classList.contains('light');
       ctx.globalCompositeOperation='source-over';
       ctx.fillStyle = isLight ? '#ffffff' : '#000000';
       ctx.fillRect(0,0,W,H);
-
       for (let y=0; y<R; y++){
         let x=0;
         while (x<C){
@@ -763,37 +614,24 @@
         }
       }
     }
-
     function caRender(dt){
       state.lastHueBase = (state.lastHueBase + 60*dt) % 360;
-
       const baseRate = 4 + Math.floor(12 * mapIntensity());
       const dwellBoost = dwellMs>600 ? 4 : 0;
       const toSpawn = baseRate + dwellBoost;
-
       caEmitSand(mouse.x, mouse.y, toSpawn + Math.floor(mouse.speed/250));
-
       const windBias = clamp(mouse.vx/1000, -1, 1);
       const subSteps = 2;
       for (let s=0; s<subSteps; s++) caStep(windBias);
-
       caDraw();
-
       if (dwellJustCrossed(700)) playPing(700,0.12,0.05);
     }
-
-    return {
-      caSandReset,
-      caSandOnResize,
-      caRender
-    };
+    return { caSandReset, caSandOnResize, caRender };
   })();
-
-  function caSandOnResize(){ SAND_CELL.caSandOnResize(); }
-  (function(){ SAND_CELL.caSandReset(); })();
+  function caSandOnResize(){ SAND_CELL.caSandOnResize(); } (function(){ SAND_CELL.caSandReset(); })();
 
   /* =========================
-     Magnet, Glass, Streamers, Laser, BubblePop
+     Magnet, Glass, Streamers, Laser, BubblePop (unchanged)
      ========================= */
   const pins = Array.from({length:240},()=>({x:Math.random()*W,y:Math.random()*H, vx:0, vy:0}));
   function renderMagnet(dt){
@@ -1126,7 +964,11 @@
     }
     requestAnimationFrame(tick);
   }
-  clearToBg(true);
+  // Start on a clean frame
+  (function seedBlueBg(){
+    ctx.fillStyle = 'hsl(210, 70%, 8%)';
+    ctx.fillRect(0,0,W,H);
+  })();
   requestAnimationFrame(tick);
 
   startButton.addEventListener('click', () => {
