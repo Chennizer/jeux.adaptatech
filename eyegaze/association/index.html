@@ -3,23 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trouve l’image — Pictos</title>
+  <title class="translate"
+          data-fr="Trouve l’image — Pictos"
+          data-en="Find the image — Icons">Trouve l’image — Pictos</title>
 
-  <!-- Styles partagés -->
+  <!-- Shared styles -->
   <link rel="stylesheet" href="../../css/games.css">
   <link rel="stylesheet" href="../../css/choiceeyegaze.css">
 
   <style>
-    /* Thèmes */
+    /* Lang toggle button */
+    #langToggle {
+      position: fixed;
+      top: 10px; right: 10px;
+      z-index: 99999;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 10px; border: 2px solid #009688;
+      background: #fff; color: #009688; font-weight: 700; cursor: pointer;
+      user-select: none;
+    }
+    body.dark #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    /* Themes */
     body.light { background-color: #fff; color: #000; }
     body.dark  { background-color: #000; color: #fff; }
 
-    /* Conteneur du jeu */
+    /* Game container */
     .game-container {
       width: 100%;
       max-width: 100vw;
       height: 100%;
-      display: none;             /* affiché après Start */
+      display: none;             /* shown after Start */
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
@@ -27,7 +41,7 @@
       box-sizing: border-box;
     }
 
-    /* --- TOP STRIP: white card, capped height, slimmer width --- */
+    /* Top strip card */
     .top-strip{
       width: min(720px, 88vw);
       margin-top: 8px;
@@ -36,10 +50,10 @@
       border: 2px solid rgba(0,0,0,0.12);
       box-shadow: 0 6px 20px rgba(0,0,0,0.06);
       transition: opacity 500ms ease;
-      margin-bottom: 16px;       /* constant gap */
+      margin-bottom: 16px;
       opacity: 1;
 
-      display: none;                 /* shown after Start */
+      display: none;
       flex: 0 0 auto;
       overflow: hidden;
       --top-cap: clamp(140px, 26vh, 320px);
@@ -55,7 +69,6 @@
       background: #ffffff;
     }
 
-    /* Content inside: row (text | image) side-by-side */
     .top-center{
       width: 100%;
       height: 100%;
@@ -71,18 +84,16 @@
       .top-center{ flex-direction: column; }
     }
 
-    /* Prompt block — bigger text, dark on white */
     #prompt{ margin:0; display:none; opacity:1; transition: opacity 500ms ease; }
     #prompt .prompt-text{
       font-size: clamp(1.25rem, 2.2vw, 1.6rem);
       font-weight: 800;
-      color: #0f172a; /* slate-900 */
+      color: #0f172a;
       line-height: 1.25;
       letter-spacing: .2px;
       text-wrap: balance;
     }
 
-    /* Target image fits inside cap */
     .target-image{
       flex: 0 0 auto;
       width: min(36vmin, 300px);
@@ -96,7 +107,6 @@
       -webkit-user-drag: none;
     }
 
-    /* Zone centrale qui contient la grille */
     .grid-outer{
       flex: 1;
       display: flex;
@@ -106,7 +116,6 @@
       max-width: 100vw;
     }
 
-    /* Grille d’images */
     .letter-grid {
       display: none;
       width: 100%;
@@ -119,14 +128,13 @@
     }
     .letter-grid.no-input { pointer-events: none; }
 
-    /* Tuiles image */
     .letter-cell {
       position: relative;
       border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: none; /* pour oculométrie */
+      cursor: none; /* eyegaze */
       border: 2px solid rgba(0,0,0,0.15);
       overflow: hidden;
       transform: translateZ(0);
@@ -137,7 +145,7 @@
       width: 100%;
       height: 100%;
       opacity: 1;
-      transition: opacity 500ms ease, transform 500ms ease, filter 500ms ease, background-color 300ms ease;
+      transition: opacity 500ms ease, transform 500ms ease, filter 500ms ease, background-color 300ms ease, box-shadow 250ms ease;
     }
     body.dark .letter-cell { background-color: #222; color: #fff; }
 
@@ -150,14 +158,12 @@
       -webkit-user-drag: none;
     }
 
-    /* Estompe les autres cases lors d’un succès */
     .letter-cell.dim {
       opacity: 0;
       transform: scale(0.92);
       filter: blur(1px);
     }
 
-    /* Remplissage de dwell */
     .dwell-fill {
       position: absolute;
       background-color: rgba(255, 0, 0, 0.5);
@@ -168,7 +174,6 @@
       border-radius: 8px;
     }
 
-    /* Clone volant (glide & grow) */
     .flying-tile {
       position: fixed;
       left: 0; top: 0;
@@ -193,7 +198,6 @@
       justify-content: center;
     }
 
-    /* Verrou + pop prêt */
     .letter-grid.grid-locked { pointer-events: none; }
     .letter-grid.grid-locked .letter-cell {
       opacity: .35;
@@ -205,100 +209,113 @@
       100% { transform: scale(1); }
     }
     .letter-grid.ready-pop .letter-cell { animation: readyPop 220ms ease; }
+
+    /* Reduced-motion wrong feedback */
+    @media (prefers-reduced-motion: reduce) {
+      .letter-cell.wrong-flash { box-shadow: inset 0 0 0 3px rgba(198,40,40,.5); }
+    }
   </style>
 </head>
 <body>
 
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
 <!-- Options -->
 <div id="game-options" class="modal">
   <div id="options-title-bar">
-    <h2 id="options-main-title">Trouve l’image — Pictos</h2>
+    <h2 id="options-main-title" class="translate"
+        data-fr="Trouve l’image — Pictos"
+        data-en="Find the image — Icons">Trouve l’image — Pictos</h2>
   </div>
 
   <div id="control-panel-options">
     <div id="mode-divider"></div>
 
     <div id="options-inline-container">
-      <!-- Colonne 1: Audio + TTS -->
+      <!-- Col 1: Audio + TTS -->
       <div class="options-column">
         <div class="option-item">
           <label class="teal-label">
             <input type="checkbox" id="muteSFX">
-            <span>Désactiver les sons</span>
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
           </label>
         </div>
 
-        <!-- TTS -->
         <div class="option-item">
           <label class="teal-label">
             <input type="checkbox" id="ttsEnabled">
-            <span>Lecture vocale</span>
+            <span class="translate" data-fr="Lecture vocale" data-en="Voice reading (TTS)">Lecture vocale</span>
           </label>
         </div>
         <div class="option-item">
           <label for="sfxVol" class="teal-label">
-            <span>Volume des sons: </span>
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
             <span id="sfxVolVal">50</span>
           </label>
           <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
         </div>
       </div>
 
-      <!-- Colonne 2: Catégorie + nb choix + thème -->
+      <!-- Col 2: Category + choices -->
       <div class="options-column">
         <div class="option-item">
-          <label for="categorySelect" class="teal-label label-block">Catégorie</label>
+          <label for="categorySelect" class="teal-label label-block translate"
+                 data-fr="Catégorie" data-en="Category">Catégorie</label>
           <select id="categorySelect" class="styled-select"></select>
         </div>
 
         <div class="option-item">
           <label for="choicesCount" class="teal-label">
-            <span>Nombre de choix: </span>
-            <span id="choicesCountVal">8</span>
+            <span class="translate" data-fr="Nombre de choix:" data-en="Number of choices:">Nombre de choix:</span>
+            <span id="choicesCountVal">2</span>
           </label>
-          <input type="range" id="choicesCount" class="styled-slider" min="3" max="12" step="1" value="8">
-        </div>
-
-        <div class="option-item">
-          <label for="themeSelect" class="teal-label label-block">Mode</label>
-          <select id="themeSelect" class="styled-select">
-            <option value="light" selected>Clair</option>
-            <option value="dark">Sombre</option>
-          </select>
+          <input type="range" id="choicesCount" class="styled-slider" min="1" max="9" step="1" value="2">
         </div>
       </div>
 
-      <!-- Colonne 3: Dwell + échelle -->
+      <!-- Col 3: Dwell + layout scale + theme -->
       <div class="options-column">
         <div class="option-item">
           <label for="dwellTimeSlider" class="teal-label">
-            <span>Temps de fixation: </span>
+            <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
             <span id="dwellTimeVal">1500</span> ms
           </label>
           <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500">
         </div>
         <div class="option-item">
           <label for="layoutScale" class="teal-label">
-            <span>Mise en page (taille):</span>
+            <span class="translate" data-fr="Mise en page (taille):" data-en="Layout scale:">Mise en page (taille):</span>
             <span id="layoutScaleVal"> 1.00</span>x
           </label>
           <input type="range" id="layoutScale" class="styled-slider" min="0.8" max="1.4" step="0.05" value="1.0">
+        </div>
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block translate"
+                 data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select">
+            <option value="light" selected class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+          </select>
         </div>
       </div>
     </div>
 
     <div id="mode-divider"></div>
-    <button id="startButton" class="button">Commencer</button>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
   </div>
 </div>
 
-<!-- Aire de jeu -->
+<!-- Game area -->
 <div class="game-container">
 
-  <!-- Bande d’instruction / cible : white card, side-by-side -->
   <div id="topStrip" class="top-strip">
     <div class="top-center">
-      <h2 id="prompt"><span class="prompt-text" id="promptText">Trouve …</span></h2>
+      <h2 id="prompt">
+        <span class="prompt-text">
+          <span id="promptLead" class="translate" data-fr="Trouve" data-en="Find">Trouve</span>
+          &nbsp;<span id="promptWord">…</span>
+        </span>
+      </h2>
       <img id="targetImage" class="target-image" alt="">
     </div>
   </div>
@@ -312,32 +329,99 @@
 <audio id="correctSound" src="../../sounds/victory.mp3"></audio>
 <audio id="wrongSound"   src="../../sounds/error.mp3"></audio>
 
-<!-- Eyegaze helpers -->
+<!-- Helpers -->
 <script src="../../js/eyegaze-menu.js"></script>
+<script src="../../js/translationmain.js"></script>
 
 <script>
+/* =========================================================
+   EARLY GLOBALS (avoid TDZ for pictosData)
+   ========================================================= */
+var pictosData = null; // declare first so setLang() can safely read/guard it
+
 /* =========================
-   Chargement des pictos
+   Language — storage as source of truth
+   ========================= */
+const LS_LANG_KEY = 'siteLanguage';
+const langToggle  = document.getElementById('langToggle');
+
+function getLang(){
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') return saved;
+  } catch(e){}
+  return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+}
+
+function setLang(lang){
+  const safe = (lang === 'en') ? 'en' : 'fr';
+  document.documentElement.lang = safe;
+  try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e){}
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr = el.getAttribute('data-fr');
+    const en = el.getAttribute('data-en');
+    if (safe === 'fr' && fr != null) el.textContent = fr;
+    if (safe === 'en' && en != null) el.textContent = en;
+  });
+  // Only repopulate categories if data is loaded
+  if (window.pictosData) {
+    populateCategoriesSelect(document.getElementById('categorySelect').value);
+  }
+}
+
+/* Normalize once on load */
+(function normalizeLangOnLoad(){
+  let initial = 'fr';
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') {
+      initial = saved;
+    } else {
+      initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      localStorage.setItem(LS_LANG_KEY, initial);
+    }
+  } catch(e){
+    initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+  }
+  setLang(initial);
+})();
+
+langToggle.addEventListener('click', ()=>{
+  setLang(getLang()==='fr' ? 'en' : 'fr');
+  choosePreferredVoice();
+});
+
+/* =========================
+   Load pictos (new JSON with {label, items})
    ========================= */
 const PICTOS_JSON_PATH = '../../images/pictos/newindex.json';
-let pictosData = null;
+
+function populateCategoriesSelect(preserveKey){
+  const select = document.getElementById('categorySelect');
+  if (!select || !pictosData) return;
+  const lang = getLang();
+  const prev = preserveKey || select.value;
+  select.innerHTML = '';
+  Object.entries(pictosData.categories).forEach(([key, obj])=>{
+    const opt = document.createElement('option');
+    opt.value = key;
+    const lbl = obj.label?.[lang] || obj.label?.fr || obj.label?.en || key;
+    opt.textContent = lbl;
+    select.appendChild(opt);
+  });
+  if (prev && pictosData.categories[prev]) select.value = prev;
+}
 
 fetch(PICTOS_JSON_PATH)
   .then(r => r.json())
   .then(data => {
     pictosData = data;
-    const select = document.getElementById('categorySelect');
-    select.innerHTML = '';
-    Object.keys(data.categories).forEach(cat => {
-      const opt = document.createElement('option');
-      opt.value = cat; opt.textContent = cat;
-      select.appendChild(opt);
-    });
+    populateCategoriesSelect();
   })
   .catch(err => console.error('Erreur JSON pictos:', err));
 
 /* =========================
-   Bindings & options
+   UI bindings
    ========================= */
 const muteSFX      = document.getElementById('muteSFX');
 const sfxVol       = document.getElementById('sfxVol');
@@ -353,8 +437,8 @@ const choicesCountVal= document.getElementById('choicesCountVal');
 const layoutScaleEl = document.getElementById('layoutScale');
 const layoutScaleVal= document.getElementById('layoutScaleVal');
 
-initEyegazeMenu();
 sfxVol.addEventListener('input', () => sfxVolVal.textContent = sfxVol.value);
+dwellSlider.addEventListener('input', () => dwellTimeVal.textContent = dwellSlider.value);
 choicesCountEl.addEventListener('input', () => choicesCountVal.textContent = choicesCountEl.value);
 layoutScaleEl.addEventListener('input', () => {
   layoutScaleVal.textContent = parseFloat(layoutScaleEl.value).toFixed(2);
@@ -365,7 +449,7 @@ layoutScaleEl.addEventListener('input', () => {
 });
 
 /* =========================
-   Local storage (TTS)
+   Persist TTS
    ========================= */
 const LS_KEYS = { ttsEnabled: 'trouveimage:ttsEnabled' };
 (function initPersistedControls(){
@@ -379,13 +463,22 @@ ttsEnabled.addEventListener('change', () => {
 });
 
 /* =========================
-   État du jeu
+   Game state
    ========================= */
 let currentCategory = null;
 let pool = [];
 let targetItem = null;
 let isReady = false;
 let layoutScale = 1.0;
+
+/* pointer-in-tile unlock */
+let hoveredTile = null;
+let lastPointer = { x: null, y: null };
+window.addEventListener('pointermove', (e) => {
+  lastPointer.x = e.clientX;
+  lastPointer.y = e.clientY;
+});
+const cellItemMap = new WeakMap();
 
 const EDGE_PAD = 10;
 const MIN_TILE = 96;
@@ -395,52 +488,66 @@ const GAP_MAX  = 120;
 const correctAudio = document.getElementById('correctSound');
 const wrongAudio   = document.getElementById('wrongSound');
 
-/* =========================
-   Thème
-   ========================= */
+/* Theme */
 function applyTheme(theme) {
   document.body.classList.remove('light','dark');
   document.body.classList.add(theme);
 }
 
 /* =========================
-   FR phrase joiner (handles elision: l’ + word => l’ours)
+   Label helpers (FR elision + EN join)
    ========================= */
 function joinFr(article, word){
   const a = (article || '').trim();
   const w = (word || '').trim();
   if (!a) return w;
   if (!w) return a;
-  // If article ends with apostrophe-like char, concatenate with NO space
   const endsWithApo = /[’'ʼ]$/.test(a);
   return endsWithApo ? (a + w) : (a + ' ' + w);
 }
+function joinEn(article, word){
+  const a = (article || '').trim();
+  const w = (word || '').trim();
+  return [a, w].filter(Boolean).join(' ');
+}
+function labelFor(item, lang){
+  const lab = (lang === 'en') ? item.label?.en : item.label?.fr;
+  if (!lab) return '';
+  return (lang === 'en')
+    ? joinEn(lab.article, lab.word)
+    : joinFr(lab.article, lab.word);
+}
 
 /* =========================
-   TTS — ultra-low gap strategy
+   TTS
    ========================= */
-
-/* Set to 0 for “one breath” (single utterance). If > 0, we queue two utterances
-   immediately so the engine uses its minimal internal gap. */
-let TTS_TROUVE_GAP_MS = 0;
+let TTS_TROUVE_GAP_MS = 0; // 0ms => say as one utterance
 
 let preferredVoice = null;
-
 function choosePreferredVoice() {
   const ss = window.speechSynthesis;
   if (!ss || !ss.getVoices) return;
   const voices = ss.getVoices() || [];
   if (!voices.length) return;
 
+  const lang = getLang();
   const by = (fn) => voices.find(fn);
-  preferredVoice =
-    by(v => /sylvie/i.test(v.name || '') && /^fr[-_]?CA/i.test(v.lang || '')) ||
-    by(v => /^fr[-_]?CA/i.test(v.lang || '')) ||
-    by(v => /^fr[-_]?FR/i.test(v.lang || '')) ||
-    by(v => (v.lang || '').toLowerCase().startsWith('fr')) ||
-    voices[0];
+  if (lang === 'fr') {
+    preferredVoice =
+      by(v => /sylvie/i.test(v.name || '') && /^fr[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^fr[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^fr[-_]?FR/i.test(v.lang || '')) ||
+      by(v => (v.lang || '').toLowerCase().startsWith('fr')) ||
+      voices[0];
+  } else {
+    preferredVoice =
+      by(v => /^en[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^en[-_]?US/i.test(v.lang || '')) ||
+      by(v => /^en[-_]?GB/i.test(v.lang || '')) ||
+      by(v => (v.lang || '').toLowerCase().startsWith('en')) ||
+      voices[0];
+  }
 }
-
 function makeUtterance(text) {
   const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
   const sfxSetting = window.eyegazeSettings?.sfxVolume;
@@ -449,14 +556,12 @@ function makeUtterance(text) {
   const volume = muted ? 0 : Math.max(0, Math.min(1, volPercent / 100));
 
   const u = new SpeechSynthesisUtterance(text);
-  if (preferredVoice) { u.voice = preferredVoice; u.lang = preferredVoice.lang || 'fr-CA'; }
-  else { u.lang = 'fr-CA'; }
+  if (preferredVoice) { u.voice = preferredVoice; u.lang = preferredVoice.lang || (getLang()==='fr'?'fr-CA':'en-US'); }
+  else { u.lang = (getLang()==='fr'?'fr-CA':'en-US'); }
   u.rate = 1.0;
   u.volume = volume;
   return u;
 }
-
-/* Ensure voices are ready once */
 function voicesReady() {
   return new Promise((resolve) => {
     const ss = window.speechSynthesis;
@@ -467,8 +572,6 @@ function voicesReady() {
     ss.addEventListener('voiceschanged', onChange);
   });
 }
-
-/* Speak either as a single utterance (gap 0) or queue two utterances immediately. */
 async function speakSequence(texts, gapMs = 0) {
   if (!('speechSynthesis' in window)) return;
   try { speechSynthesis.cancel(); } catch(e) {}
@@ -485,7 +588,6 @@ async function speakSequence(texts, gapMs = 0) {
     speechSynthesis.speak(u);
   });
 }
-
 if ('speechSynthesis' in window) {
   speechSynthesis.addEventListener('voiceschanged', choosePreferredVoice);
   choosePreferredVoice();
@@ -501,21 +603,21 @@ function speakPromptForItem(item){
   const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
   if (!enabled || !item) return;
 
-  const phrase  = joinFr(item.label?.fr?.article, item.label?.fr?.word);
-
-  // Zero-gap (single utterance) by default; set TTS_TROUVE_GAP_MS > 0 to queue
-  speakSequence(['Trouve', phrase], TTS_TROUVE_GAP_MS);
+  const lang = getLang();
+  const lead = (lang === 'fr') ? 'Trouve' : 'Find';
+  const noun = labelFor(item, lang);
+  speakSequence([lead, noun], TTS_TROUVE_GAP_MS);
 }
 
 /* =========================
-   Verrou / déverrouillage
+   Lock / unlock
    ========================= */
 function lockGrid() {
   const grid = document.getElementById('imageGrid');
   isReady = false;
+  stopHover();
   if (grid) grid.classList.add('grid-locked');
 }
-
 function unlockGrid() {
   const grid = document.getElementById('imageGrid');
   isReady = true;
@@ -524,10 +626,19 @@ function unlockGrid() {
     grid.classList.add('ready-pop');
     setTimeout(() => grid.classList.remove('ready-pop'), 260);
   }
+  if (lastPointer.x !== null && lastPointer.y !== null) {
+    const el = document.elementFromPoint(lastPointer.x, lastPointer.y);
+    const tile = el && (el.closest ? el.closest('.letter-cell') : null);
+    if (tile) {
+      hoveredTile = tile;
+      const item = cellItemMap.get(tile);
+      if (item) startHover(tile, item);
+    }
+  }
 }
 
 /* =========================
-   Démarrage
+   Start
    ========================= */
 function startGame() {
   if (document.documentElement.requestFullscreen) {
@@ -538,6 +649,8 @@ function startGame() {
     document.documentElement.msRequestFullscreen();
   }
 
+  langToggle.style.display = 'none';
+
   syncEyegazeSettingsFromUI();
 
   applyTheme(themeSelect.value);
@@ -546,11 +659,12 @@ function startGame() {
   currentCategory = document.getElementById('categorySelect').value;
 
   if (!pictosData || !pictosData.categories[currentCategory]) {
-    alert('Catégorie non disponible.');
+    alert(getLang()==='fr' ? 'Catégorie non disponible.' : 'Category not available.');
     return;
   }
   const base = pictosData.base || '';
-  pool = pictosData.categories[currentCategory].map(entry => {
+  const items = pictosData.categories[currentCategory].items || [];
+  pool = items.map(entry => {
     return { file: entry.file, label: entry.label, srcAbs: base + entry.file };
   });
 
@@ -570,7 +684,7 @@ function startGame() {
 startButton.addEventListener('click', startGame);
 
 /* =========================
-   Eyegaze settings sync
+   Eyegaze sync
    ========================= */
 function syncEyegazeSettingsFromUI() {
   try {
@@ -584,13 +698,13 @@ function syncEyegazeSettingsFromUI() {
 }
 
 /* =========================
-   Construction / sizing
+   Grid build / sizing
    ========================= */
 function buildGridSkeleton(){
   const grid = document.getElementById('imageGrid');
   grid.innerHTML = '';
   const total = getDesiredChoicesCount();
-  const columns = Math.min(4, Math.ceil(Math.sqrt(total)));
+  const columns = Math.min(3, Math.ceil(Math.sqrt(total))); // up to 3x3
   grid.dataset.columns = String(columns);
   grid.style.padding = EDGE_PAD + 'px';
 
@@ -606,7 +720,6 @@ window.addEventListener('resize', adjustGridSizes);
 document.getElementById('targetImage').addEventListener('load', adjustGridSizes);
 window.addEventListener('orientationchange', adjustGridSizes);
 
-/* Robust viewport-based sizing that respects the top strip cap */
 function adjustGridSizes() {
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -620,7 +733,7 @@ function adjustGridSizes() {
 
   const containerW = grid.clientWidth;
 
-  // Compute height available below the top strip without feedback loop
+  // Height available below the strip, stable
   const outerRect = outer.getBoundingClientRect();
   const containerH = Math.max(0, window.innerHeight - outerRect.top - 8);
 
@@ -645,7 +758,7 @@ function adjustGridSizes() {
 }
 
 /* =========================
-   Manche suivante
+   Round
    ========================= */
 function nextRound(){
   const strip = document.getElementById('topStrip');
@@ -661,31 +774,45 @@ function nextRound(){
   grid.classList.remove('no-input');
   grid.innerHTML = '';
 
-  const columns = Math.min(4, Math.ceil(Math.sqrt(total)));
+  const columns = Math.min(3, Math.ceil(Math.sqrt(total)));
   grid.dataset.columns = String(columns);
   grid.style.padding = EDGE_PAD + 'px';
+
+  cellItemMap.clear?.();
+
+  const lang = getLang();
 
   all.forEach(item => {
     const cell = document.createElement('div');
     cell.className = 'letter-cell';
+
     const img = document.createElement('img');
     img.src = item.srcAbs;
-    img.alt = (item.label?.fr?.word || '').trim();
+    img.alt = labelFor(item, lang);
     img.className = 'cell-img';
     cell.appendChild(img);
 
-    cell.addEventListener('mouseover', () => startHover(cell, item));
-    cell.addEventListener('mouseout', stopHover);
+    cellItemMap.set(cell, item);
+
+    cell.addEventListener('pointerenter', () => {
+      hoveredTile = cell;
+      if (isReady) startHover(cell, item);
+    });
+    cell.addEventListener('pointerleave', () => {
+      if (hoveredTile === cell) hoveredTile = null;
+      stopHover();
+    });
 
     grid.appendChild(cell);
   });
 
-  const promptText = document.getElementById('promptText');
+  // Prompt text
+  const promptWord = document.getElementById('promptWord');
+  promptWord.textContent = labelFor(targetItem, lang);
+
   const targetImage = document.getElementById('targetImage');
-  const phrase = joinFr(targetItem.label?.fr?.article, targetItem.label?.fr?.word);
-  promptText.textContent = `Trouve ${phrase}`;
   targetImage.src = targetItem.srcAbs;
-  targetImage.alt = phrase;
+  targetImage.alt = labelFor(targetItem, lang);
 
   lockGrid();
   speakPromptForItem(targetItem);
@@ -695,7 +822,7 @@ function nextRound(){
 }
 
 /* =========================
-   Dwell hover & sélection
+   Dwell
    ========================= */
 let currentOverlay;
 let hoverTimeout;
@@ -732,10 +859,57 @@ function stopHover() {
   currentOverlay = null;
 }
 
-/* Sélection */
+/* =========================
+   WRONG feedback (shake / flash / vibrate)
+   ========================= */
+function wrongFeedback(el){
+  const prefersReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (prefersReduce) {
+    el.classList.add('wrong-flash');
+    setTimeout(() => el.classList.remove('wrong-flash'), 250);
+  } else if (el.animate) {
+    el.animate(
+      [
+        { transform: 'translateX(0)' },
+        { transform: 'translateX(-10px)' },
+        { transform: 'translateX(10px)' },
+        { transform: 'translateX(-7px)' },
+        { transform: 'translateX(7px)' },
+        { transform: 'translateX(-4px)' },
+        { transform: 'translateX(4px)' },
+        { transform: 'translateX(0)' }
+      ],
+      { duration: 420, easing: 'ease' }
+    );
+    const prevShadow = el.style.boxShadow;
+    el.style.boxShadow = 'inset 0 0 0 3px rgba(198,40,40,.45)';
+    setTimeout(() => { el.style.boxShadow = prevShadow || ''; }, 420);
+  } else {
+    const prev = el.style.transform;
+    el.style.transition = 'none';
+    let i = 0;
+    const seq = [0,-10,10,-7,7,-4,4,0];
+    const tick = () => {
+      el.style.transform = `translateX(${seq[i]}px)`;
+      if (++i < seq.length) setTimeout(tick, 52);
+      else { el.style.transform = prev || ''; el.style.transition = ''; }
+    };
+    tick();
+  }
+  try { if (navigator.vibrate) navigator.vibrate(60); } catch(e){}
+}
+
+/* =========================
+   Selection
+   ========================= */
 function handleSelection(tile, item){
   const isCorrect = (item.file === (targetItem && targetItem.file));
-  if (!isCorrect) { playSound(wrongAudio); return; }
+  if (!isCorrect) {
+    playSound(wrongAudio);
+    wrongFeedback(tile);          // error animation
+    return;
+  }
 
   const grid  = document.getElementById('imageGrid');
   const strip = document.getElementById('topStrip');
@@ -747,7 +921,7 @@ function handleSelection(tile, item){
   grid.querySelectorAll('.letter-cell').forEach(cell => { if (cell !== tile) cell.classList.add('dim'); });
   strip.classList.add('fade-out');
 
-  // Direct glide/grow (no red flash staying on the tile)
+  // No lingering red; glide immediately with safe scaling
   const dark = getComputedStyle(document.body).backgroundColor === 'rgb(0, 0, 0)';
   const bgColor = dark ? '#222' : '#fff';
   const textColor = dark ? '#fff' : '#000';
@@ -755,12 +929,11 @@ function handleSelection(tile, item){
   tile.style.color = textColor;
 
   requestAnimationFrame(() => {
-    glideTileToCenter(tile, 3800, 2600, {bgColor, textColor}, startRect).then((clone) => {
+    glideTileToCenter(tile, TIMING.glide, TIMING.grow, {bgColor, textColor}, startRect).then((clone) => {
       const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
       if (enabled) {
-        const phrase = joinFr(item.label?.fr?.article, item.label?.fr?.word);
-        // Speak the noun phrase after the success animation (single utterance)
-        speakSequence([phrase], 0);
+        const noun = labelFor(item, getLang());
+        speakSequence([noun], 0);
       }
 
       setTimeout(() => {
@@ -780,7 +953,9 @@ function handleSelection(tile, item){
   });
 }
 
-/* Animation glide & grow */
+/* =========================
+   Glide & grow — clamped to viewport
+   ========================= */
 function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, startRect) {
   return new Promise(resolve => {
     const r  = startRect || tile.getBoundingClientRect();
@@ -817,6 +992,15 @@ function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, sta
     const dx = centerX - (r.left + r.width  / 2);
     const dy = centerY - (r.top  + r.height / 2);
 
+    const margin = Math.max(16, Math.min(48, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.04)));
+    const maxScaleW = (window.innerWidth  - margin * 2) / r.width;
+    const maxScaleH = (window.innerHeight - margin * 2) / r.height;
+    let targetScale = Math.min(2, maxScaleW, maxScaleH);
+    targetScale = Math.max(1, targetScale);
+
+    const growthFactor = Math.max(0, targetScale - 1);
+    const adjustedGrowMs = Math.round(growMs * (0.45 + 0.55 * Math.min(1, growthFactor)));
+
     void clone.getBoundingClientRect();
 
     const a1 = clone.animate(
@@ -831,16 +1015,16 @@ function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, sta
       const a2 = clone.animate(
         [
           { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1)` },
-          { transform: `translate3d(${dx}px, ${dy}px, 0) scale(2)` }
+          { transform: `translate3d(${dx}px, ${dy}px, 0) scale(${targetScale})` }
         ],
-        { duration: growMs, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'forwards' }
+        { duration: adjustedGrowMs, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'forwards' }
       );
       a2.onfinish = () => resolve(clone);
     };
   });
 }
 
-/* Sons */
+/* Sounds */
 function playSound(audioEl) {
   const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
   const sfxSetting = window.eyegazeSettings?.sfxVolume;
@@ -853,9 +1037,7 @@ function playSound(audioEl) {
   setTimeout(() => { try { audioEl.pause(); audioEl.currentTime = 0; } catch(e){} }, 2000);
 }
 
-/* =========================
-   Utilitaires
-   ========================= */
+/* Utils */
 function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 function shuffle(a){
   const arr = a.slice();
@@ -875,11 +1057,14 @@ function pickNDistinct(arr, n){
   return out;
 }
 function getDesiredChoicesCount(){
-  const wanted = parseInt(choicesCountEl.value, 10) || 8;
-  if (!pictosData || !pictosData.categories || !currentCategory) return wanted;
-  const available = pictosData.categories[currentCategory]?.length || wanted;
-  return Math.max(3, Math.min(wanted, available));
+  const wanted = parseInt(choicesCountEl.value, 10) || 6;
+  if (!pictosData || !pictosData.categories || !currentCategory) return Math.max(1, Math.min(9, wanted));
+  const available = (pictosData.categories[currentCategory]?.items || []).length || wanted;
+  return Math.max(1, Math.min(9, Math.min(wanted, available)));
 }
+
+/* Init voices on load */
+window.addEventListener('load', choosePreferredVoice);
 </script>
 </body>
 </html>

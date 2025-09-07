@@ -68,7 +68,7 @@
             <select id="sceneSelect" class="styled-select">
               <option value="aurora">Aurora</option>
               <option value="ripples">Ondes</option>
-              <option value="fireworks">Feux d’artifice</option>
+              <option value="fireworks" selected>Feux d’artifice</option>
               <option value="kaleido">Kaleido</option>
               <option value="fireflies">Lucioles</option>
               <option value="confetti">Confetti</option>
@@ -79,7 +79,7 @@
               <option value="magnet">Essaim Magnétique</option>
               <option value="glass">Vitrail</option>
               <option value="streamers">Rubans de Soie</option>
-              <option value="laserharp" selected>Harpe Laser</option>
+              <option value="laserharp">Harpe Laser</option>
               <option value="bubblepop">Bulle-Pop</option>
             </select>
           </div>
@@ -120,9 +120,6 @@
   <script src="../../js/eyegaze-menu.js"></script>
 
   <script>
-  /* =========================
-     UI + base
-     ========================= */
   const startButton = document.getElementById('startButton');
   const themeSel  = document.getElementById('themeSelect');
   const sceneSel  = document.getElementById('sceneSelect');
@@ -221,9 +218,24 @@
 
   const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
   const lerp=(a,b,t)=>a+(b-a)*t;
-  const mapTrail=()=> clamp( (100-ui.trail.value)/100 * 0.9 + 0.05 , 0.02, 0.95 );
-  const mapIntensity=()=> Number(ui.intensity.value)/100;
-  const mapSize=()=> Number(ui.size.value);
+
+  const mapTrail = ()=> {
+    const t = Number(ui.trail.value)/100;
+    const shaped = Math.pow(1 - t, 2.2);
+    return clamp(0.01 + shaped*0.98, 0.01, 0.99);
+  };
+  const mapIntensity = ()=> {
+    const t = Number(ui.intensity.value)/100;
+    return clamp(Math.pow(t, 1.6), 0, 1);
+  };
+  const mapSize = ()=> {
+    const s = Number(ui.size.value);
+    const t = (s - 10) / 190;
+    const shaped = Math.pow(t, 1.35);
+    return 8 + shaped * 420;
+  };
+  const sizeNorm = ()=> clamp((Number(ui.size.value)-10)/190, 0, 1);
+
   const dwellFactor=()=> clamp(dwellMs/1200,0,1);
   let lastDwellStage=0;
   function dwellJustCrossed(ms){
@@ -240,9 +252,6 @@
     ctx.fillRect(0,0,W,H);
   }
 
-  /* =========================
-     AURORA (unchanged)
-     ========================= */
   const AUR = { t:0, hueBase:140, stars:[], ribbons:[] };
   function fbm(x, t=0){ let v=0,a=0.5,f=1.0; for(let i=0;i<4;i++){ v+=a*Math.sin(x*f+t*(0.35+i*0.07)+i*1.3); a*=0.5; f*=1.8; } return v; }
   function auroraInit(){
@@ -288,7 +297,7 @@
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = `hsla(${hue}, 95%, 60%, ${rib.alpha})`;
     ctx.beginPath(); for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
-    for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x,y); }
+    for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x, y); }
     ctx.closePath(); ctx.fill();
     ctx.globalCompositeOperation = 'screen';
     const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -316,98 +325,225 @@
     }
   }
 
-  /* =========================
-     ONDES — circles only, saturated blues
-     ========================= */
   const ripples = [];
+  const halos = [];
+  let rippleCooldown = 0;
+  let waterT = 0;
+
   function emitRipple(x, y, power=1){
-    const sp = 52 + 38*mapIntensity();
-    const hue = 205 + Math.random()*20; // 205–225: saturated ocean blues
+    const sp   = 54 + 42*mapIntensity();
+    const hue  = 198 + Math.random()*22;
+    const sat  = 92;
+    const lite = 50 + power*4;
     ripples.push({
-      x, y,
-      r: 0,
-      vr: sp * (0.9 + Math.random()*0.2),
-      width: 6 + mapSize()*0.06 + power*3,
-      life: 1.0,
-      hue,
-      sat: 95,
-      light: 55 + power*5
+      x, y, r:0,
+      vr: sp * (0.9 + Math.random()*0.22),
+      width: 5.5 + mapSize()*0.06 + power*2.5,
+      life: 1.0, hue, sat, lite,
+      phase: Math.random()*Math.PI*2
+    });
+  }
+  function emitHalo(x, y, strength=1){
+    const hue = 200 + Math.random()*16;
+    halos.push({
+      x, y, r:24,
+      vr: (160 + 280*mapIntensity()) * (0.7 + 0.6*Math.random()),
+      a: 0.28 * strength, hue
     });
   }
   function renderRipples(dt){
-    // Deep blue fade so stacking stays blue (no whitening)
-    const baseHue = 210;
-    const baseSat = 70;
+    waterT += dt;
+
+    const baseHue = 210, baseSat = 70;
     const baseLight = document.body.classList.contains('light') ? 18 : 8;
     ctx.globalCompositeOperation='source-over';
     ctx.fillStyle = `hsla(${baseHue}, ${baseSat}%, ${baseLight}%, ${mapTrail()})`;
     ctx.fillRect(0,0,W,H);
 
+    const tideR = (420 + mapSize()*1.2) * (1 + 0.05*Math.sin(waterT*0.7));
+    const tide = ctx.createRadialGradient(mouse.x, mouse.y, tideR*0.25, mouse.x, mouse.y, tideR);
+    tide.addColorStop(0, `hsla(${205}, 60%, 30%, ${0.06 + 0.04*Math.sin(waterT*1.1)})`);
+    tide.addColorStop(1, `hsla(${205}, 60%, 20%, 0)`);
+    ctx.globalCompositeOperation='screen';
+    ctx.fillStyle = tide;
+    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, tideR, 0, Math.PI*2); ctx.fill();
+
     const speedN = clamp(mouse.speed/1200, 0, 1);
-
-    // Small wakes while moving
-    if (speedN>0.12){
-      if (Math.random() < 0.6){
-        emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.6);
-      }
+    rippleCooldown = Math.max(0, rippleCooldown - dt);
+    if (speedN > 0.10 && rippleCooldown <= 0){
+      emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.55);
+      rippleCooldown = 0.04 + (0.10*(1-mapIntensity()));
     }
-
-    // Occasional bigger pulse on dwell
     if (dwellJustCrossed(650)){
       playPing(520,0.16,0.05);
-      for (let i=0;i<3;i++) emitRipple(mouse.x, mouse.y, 1.2);
+      for (let i=0;i<2;i++) emitRipple(mouse.x, mouse.y, 1.1);
+      emitHalo(mouse.x, mouse.y, 0.9);
     }
 
-    // Draw only rings (no glow/background meshes/halos)
-    ctx.globalCompositeOperation='source-over';
+    for (let i=halos.length-1;i>=0;i--){
+      const h = halos[i];
+      h.r  += h.vr*dt;
+      h.a  *= Math.pow(0.975 - 0.15*dt, 1.0);
+      if (h.a < 0.02 || h.r > Math.max(W,H)*1.2){ halos.splice(i,1); continue; }
+      const g = ctx.createRadialGradient(h.x, h.y, h.r*0.15, h.x, h.y, h.r);
+      g.addColorStop(0.0, `hsla(${h.hue}, 90%, 65%, ${0.10*h.a})`);
+      g.addColorStop(0.6, `hsla(${h.hue+8}, 90%, 55%, ${0.08*h.a})`);
+      g.addColorStop(1.0, `hsla(${h.hue+30}, 90%, 45%, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill();
+    }
+
     for (let i=ripples.length-1;i>=0;i--){
       const r = ripples[i];
-      r.r += r.vr*dt;
-      r.life *= Math.pow(0.985 - 0.2*dt, 1 + 0.6*mapIntensity());
-      const a = clamp(r.life * (0.9), 0, 1);
-      if (a < 0.02 || r.r > Math.hypot(W,H)) { ripples.splice(i,1); continue; }
+      r.r    += r.vr*dt;
+      r.life *= Math.pow(0.985 - 0.20*dt, 1 + 0.6*mapIntensity());
+      const alive = clamp(r.life, 0, 1);
+      if (alive < 0.02 || r.r > Math.hypot(W,H)){ ripples.splice(i,1); continue; }
 
-      const w = r.width * (0.8 + 0.6*a);
+      r.phase += dt*(0.8 + 0.6*mapIntensity());
+      const shimmer = 1 + 0.18*Math.sin(r.phase) + 0.08*Math.sin(waterT*1.7 + i*0.6);
+      const w = (r.width * (0.75 + 0.45*alive)) * shimmer;
 
-      // three concentric strokes within blue range, moderate alpha to avoid white
-      const hues  = [ r.hue-8, r.hue, r.hue+10 ];
-      const alphas= [ a*0.22,  a*0.38, a*0.22 ];
+      ctx.globalCompositeOperation = 'screen';
+      const glowR1 = r.r*0.90, glowR2 = r.r*1.20;
+      const g1 = ctx.createRadialGradient(r.x, r.y, glowR1*0.45, r.x, r.y, glowR1);
+      g1.addColorStop(0, `hsla(${r.hue}, ${r.sat}%, ${r.lite+8}%, ${0.08*alive})`);
+      g1.addColorStop(1, `hsla(${r.hue+10}, ${r.sat}%, ${r.lite-6}%, 0)`);
+      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(r.x, r.y, glowR1, 0, Math.PI*2); ctx.fill();
+
+      const g2 = ctx.createRadialGradient(r.x, r.y, glowR2*0.55, r.x, r.y, glowR2);
+      g2.addColorStop(0, `hsla(${r.hue+12}, ${r.sat}%, ${r.lite}%, ${0.06*alive})`);
+      g2.addColorStop(1, `hsla(${r.hue+28}, ${r.sat}%, ${r.lite-10}%, 0)`);
+      ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(r.x, r.y, glowR2, 0, Math.PI*2); ctx.fill();
+
+      ctx.globalCompositeOperation = 'lighter';
+      const hues   = [ r.hue-10, r.hue, r.hue+12 ];
+      const alphas = [ alive*0.20, alive*0.38, alive*0.20 ];
+      const radii  = [ r.r*0.985, r.r, r.r*1.015 ];
 
       for (let k=0;k<3;k++){
-        ctx.strokeStyle = `hsla(${hues[k]}, ${r.sat}%, ${r.light}%, ${alphas[k]})`;
-        ctx.lineWidth = Math.max(1.2, w * (k===1?1:0.7));
+        ctx.strokeStyle = `hsla(${hues[k]}, ${r.sat}%, ${r.lite}%, ${alphas[k]})`;
+        ctx.lineWidth   = Math.max(1.2, w * (k===1?1:0.7));
         ctx.beginPath();
-        ctx.arc(r.x, r.y, Math.max(0.1, r.r * (k===0?0.985 : (k===2?1.015:1.0))), 0, Math.PI*2);
+        ctx.arc(r.x, r.y, Math.max(0.1, radii[k]), 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      const echoAlpha = 0.13 * alive;
+      if (echoAlpha > 0.01){
+        ctx.strokeStyle = `hsla(${r.hue+6}, ${r.sat}%, ${r.lite-4}%, ${echoAlpha})`;
+        ctx.lineWidth   = Math.max(1, w*0.55);
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.r*0.55, 0, Math.PI*2);
         ctx.stroke();
       }
     }
   }
 
   /* =========================
-     Other scenes (unchanged)
+     FIREWORKS — size slider heavily impacts visuals
      ========================= */
-  let hueBase = 0;
+  const fwParts = [];
+  let fwHueBase = 0;
+  let fwMoveCooldown = 0;
+  let fwAutoCooldown = 0;
 
-  const sparks = [];
-  function emitSpark(x,y, n=40, power=3){
-    for (let i=0;i<n;i++){
-      const a = Math.random()*Math.PI*2, s = (0.8+Math.random()*0.6)*power;
-      sparks.push({x,y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 60+Math.random()*40, h:(hueBase+Math.random()*50)%360});
+  function fwSpawnBurst(x, y, power=1, style='peony'){
+    const sN = sizeNorm();
+    const sPow = Math.pow(sN, 1.15);
+    const base = 16 + Math.floor(28*mapIntensity());
+    const count = Math.floor(base * (0.5 + 2.7*sPow) * power);
+
+    for (let i=0;i<count;i++){
+      const a = Math.random()*Math.PI*2;
+      const speedBase = 1.8 + Math.random()*2.8;
+      const speed = speedBase * (0.7 + 1.6*sPow);
+      let vx = Math.cos(a)*speed, vy = Math.sin(a)*speed;
+
+      if (style==='ring'){
+        const ringR = (2.2 + Math.random()*1.2) * (0.8 + 1.4*sPow);
+        vx = Math.cos(a)*ringR; vy = Math.sin(a)*ringR;
+      } else if (style==='willow'){
+        const willowS = (1.3 + Math.random()*1.1) * (0.7 + 1.4*sPow);
+        vx = Math.cos(a)*willowS*0.85; vy = Math.sin(a)*willowS*0.6 - (0.8 + 0.6*sPow);
+      }
+
+      const hue = (fwHueBase + (Math.random()*40 - 20) + i)%360;
+      fwParts.push({
+        x, y, px:x, py:y,
+        vx, vy,
+        drag: 0.986,
+        gy: 0.02,
+        life: (0.6 + Math.random()*0.6) * (0.8 + 1.6*sPow),
+        age: 0,
+        size: (0.7 + Math.random()*1.2) * (0.8 + 2.6*sPow),
+        hue,
+        light: 60 + Math.random()*10,
+        sat: 95
+      });
     }
+    if (power > 1.1) playPing(420+Math.random()*280, 0.15, 0.05);
   }
+
   function renderFireworks(dt){
-    clearToBg(false);
-    const sN = clamp(mouse.speed/1400, 0, 1);
-    if (sN>0.35 && Math.random()<0.5) emitSpark(mouse.x, mouse.y, 18, 2.5);
-    if (dwellJustCrossed(600)){ playPing(400+Math.random()*300, 0.25, 0.06); emitSpark(mouse.x, mouse.y, 120, 4.2); }
-    ctx.globalCompositeOperation='lighter';
-    for (let i=sparks.length-1;i>=0;i--){
-      const p = sparks[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.985; p.vy = p.vy*0.985 + 0.02; p.life -= 1;
-      const a = clamp(p.life/80, 0, 1); ctx.fillStyle = `hsla(${p.h},90%,60%,${0.7*a})`;
-      ctx.beginPath(); ctx.arc(p.x,p.y, 2.2+ (1-a)*2.2, 0, Math.PI*2); ctx.fill();
-      if (p.life<=0) sparks.splice(i,1);
+    fwHueBase = (fwHueBase + 60*dt) % 360;
+
+    const isLight = document.body.classList.contains('light');
+    const fade = isLight ? `rgba(255,255,255,${mapTrail()*0.85})` : `rgba(0,0,0,${mapTrail()*0.82})`;
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle = fade; ctx.fillRect(0,0,W,H);
+
+    fwMoveCooldown = Math.max(0, fwMoveCooldown - dt);
+    fwAutoCooldown = Math.max(0, fwAutoCooldown - dt);
+    const speedN = clamp(mouse.speed/1200, 0, 1);
+    const sN = sizeNorm();
+
+    if (speedN > 0.25 && fwMoveCooldown === 0){
+      const pow = 0.8 + 0.8*speedN*mapIntensity();
+      const style = (Math.random() < 0.25) ? 'ring' : (Math.random()<0.15 ? 'willow' : 'peony');
+      fwSpawnBurst(mouse.x, mouse.y, pow, style);
+      fwMoveCooldown = (0.08 + 0.10*(1-mapIntensity())) * (0.85 + 0.3*(1-sN));
     }
+    if (dwellJustCrossed(600)){
+      fwSpawnBurst(mouse.x, mouse.y, 1.2 + 0.9*mapIntensity(), (Math.random()<0.3?'ring':'peony'));
+    }
+    if (fwAutoCooldown === 0 && Math.random() < 0.02*mapIntensity()*(0.7 + 0.8*sN)){
+      fwSpawnBurst(mouse.x + (Math.random()-0.5)*60, mouse.y + (Math.random()-0.5)*40, 0.9 + 0.6*sN, 'peony');
+      fwAutoCooldown = 0.25 * (0.9 + 0.6*(1-sN));
+    }
+
+    ctx.globalCompositeOperation='lighter';
+    ctx.lineCap='round';
+    for (let i=fwParts.length-1;i>=0;i--){
+      const p = fwParts[i];
+      p.age += dt;
+      if (p.age >= p.life){ fwParts.splice(i,1); continue; }
+
+      p.vx *= Math.pow(p.drag, dt*60);
+      p.vy = p.vy*Math.pow(p.drag, dt*60) + p.gy*(dt*60);
+      p.px = p.x; p.py = p.y;
+      p.x += p.vx*(dt*60);
+      p.y += p.vy*(dt*60);
+
+      const t = p.age / p.life;
+      const alpha = Math.max(0, (1 - t) * (0.65 - 0.25*t));
+
+      const strokeScale = 0.7 + 2.2*sN;
+      ctx.strokeStyle = `hsla(${p.hue}, ${p.sat}%, ${p.light}%, ${alpha})`;
+      ctx.lineWidth   = Math.max(1, (p.size * (1 - 0.5*t)) * strokeScale);
+      ctx.beginPath(); ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); ctx.stroke();
+
+      const glowAlpha = alpha * (0.6 + 0.8*sN);
+      ctx.fillStyle = `hsla(${(p.hue+10)%360}, ${p.sat}%, ${Math.min(90, p.light+15)}%, ${glowAlpha})`;
+      const glowR = Math.max(1, p.size * (0.6 + 2.0*sN));
+      ctx.beginPath(); ctx.arc(p.x, p.y, glowR*0.6, 0, Math.PI*2); ctx.fill();
+    }
+
+    const cap = Math.floor(900 + 1200*sizeNorm());
+    if (fwParts.length > cap) fwParts.splice(0, fwParts.length - cap);
   }
+
+  let hueBase = 0;
 
   let kaleidoAngle=0;
   function renderKaleido(dt){
@@ -451,27 +587,82 @@
     if (dwellJustCrossed(800)){ playPing(660,0.15,0.045); fireflies.forEach(f=> f.glow = Math.max(f.glow, 1.2)); }
   }
 
-  const confettis = Array.from({length:220},()=>resetPiece({}));
+  /* =========================
+     CONFETTI — calmer variant
+     ========================= */
+  const BASE_CONFETTI = 120;
+  let confettiBurstCooldown = 0;
+
   function resetPiece(p){
-    p.x=Math.random()*W; p.y=Math.random()*H; p.vx=(Math.random()-0.5)*0.7; p.vy=Math.random()*0.6+0.2;
-    p.size=2+Math.random()*4; p.h=Math.random()*360; p.spin=(Math.random()-0.5)*0.15; return p;
+    // Depth for subtle parallax/variation
+    p.z   = Math.random();                 // 0 (far) → 1 (near)
+    p.x   = Math.random()*W;
+    p.y   = Math.random()*H;
+    p.vx  = (Math.random()-0.5)*0.35 * (0.6 + 0.8*p.z);  // slower baseline drift
+    p.vy  = (Math.random()*0.30 + 0.08) * (0.6 + 0.8*p.z);
+    p.size= (1.5 + Math.random()*3) * (0.7 + 0.9*p.z);   // small, scaled by depth
+    p.h   = Math.random()*360;
+    p.spin= (Math.random()-0.5)*0.07;                    // gentler spin
+    return p;
   }
+
+  const confettis = Array.from({length:BASE_CONFETTI}, ()=>resetPiece({}));
+
   function renderConfetti(dt){
     clearToBg(false);
-    const windX = clamp(mouse.vx/400, -1.5, 1.5) * (0.5 + mapIntensity());
-    const windY = 0.15 + (dwellMs>600 ? 0.25 : 0);
+
+    // Softer ambient wind & pointer pull
+    const windX = clamp(mouse.vx/700, -0.9, 0.9) * (0.5 + 0.7*mapIntensity());
+    const windY = 0.08 + (dwellMs>700 ? 0.12 : 0);
+    const pull  = 0.006 * mapIntensity();               // reduced from 0.02
+
     ctx.globalCompositeOperation='lighter';
-    confettis.forEach(p=>{
-      const dx = mouse.x - p.x, dy = mouse.y - p.y, pull = 0.02*mapIntensity();
-      p.vx += windX*dt + dx*pull*dt; p.vy += windY*dt + dy*pull*dt;
-      p.x += p.vx; p.y += p.vy; p.h += p.spin;
-      ctx.fillStyle = `hsla(${(p.h)%360},90%,60%,0.8)`; ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
+
+    for (const p of confettis){
+      const dx = mouse.x - p.x, dy = mouse.y - p.y;
+
+      // Depth-scaled drift; near pieces react a bit more
+      const react = (0.4 + 0.9*p.z);
+      p.vx += (windX*dt + dx*pull*dt) * react;
+      p.vy += (windY*dt + dy*pull*dt) * react;
+
+      // Mild damping so nothing runs away
+      p.vx *= 0.995; p.vy *= 0.995;
+
+      p.x += p.vx;
+      p.y += p.vy;
+      p.h  = (p.h + p.spin*180) % 360;
+
+      // Softer alpha; far pieces are dimmer
+      const a = 0.28 + 0.30*p.z;                         // was ~0.8
+      ctx.fillStyle = `hsla(${p.h}, 90%, 60%, ${a})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+
+      // Wrap / respawn
       if (p.x<-20||p.x>W+20||p.y<-20||p.y>H+20) resetPiece(p);
-    });
-    if (dwellJustCrossed(700)){
-      playPing(550,0.12,0.04);
-      for(let i=0;i<50;i++){ const q=resetPiece({}); q.x=mouse.x; q.y=mouse.y; q.vx=(Math.random()-0.5)*3.2; q.vy=Math.random()*-1.8; confettis.push(q); }
-      if (confettis.length>400) confettis.splice(0, confettis.length-400);
+    }
+
+    // Gentle, infrequent bursts on dwell — fewer particles + cooldown
+    confettiBurstCooldown = Math.max(0, confettiBurstCooldown - dt);
+    if (dwellJustCrossed(750) && confettiBurstCooldown === 0){
+      playPing(540, 0.10, 0.035);
+      const inten = mapIntensity();
+      const burstCount = Math.floor(12 + 14*inten);      // was 50
+      for (let i=0;i<burstCount;i++){
+        const q = resetPiece({});
+        q.x = mouse.x; q.y = mouse.y;
+        // Modest impulse; scaled by depth so near pieces feel slightly stronger
+        const s = (Math.random()*1.4 + 0.6) * (0.8 + q.z*0.6);
+        const a = Math.random()*Math.PI*2;
+        q.vx = Math.cos(a)*s;
+        q.vy = Math.sin(a)*s*0.6 - Math.random()*0.6;
+        confettis.push(q);
+      }
+      // Cap population to avoid visual overload
+      const cap = Math.floor(180 + 80*inten);
+      if (confettis.length > cap) confettis.splice(0, confettis.length - cap);
+
+      confettiBurstCooldown = 0.7; // seconds
     }
   }
 
@@ -529,10 +720,7 @@
     if (dwellJustCrossed(800)) playPing(880,0.2,0.045);
   }
 
-  /* =========================
-     SAND (unchanged)
-     ========================= */
-  const SAND_CELL = (()=> {
+  const SAND_CELL = (()=>{
     const state = { cellSize:3, cols:0, rows:0, grid:null, palette:[], lastHueBase:0 };
     function allocGrid(){
       state.cols = Math.floor(W / state.cellSize);
@@ -630,9 +818,6 @@
   })();
   function caSandOnResize(){ SAND_CELL.caSandOnResize(); } (function(){ SAND_CELL.caSandReset(); })();
 
-  /* =========================
-     Magnet, Glass, Streamers, Laser, BubblePop (unchanged)
-     ========================= */
   const pins = Array.from({length:240},()=>({x:Math.random()*W,y:Math.random()*H, vx:0, vy:0}));
   function renderMagnet(dt){
     clearToBg(false);
@@ -931,9 +1116,6 @@
     }
   }
 
-  /* =========================
-     Boucle principale
-     ========================= */
   function tick(t){
     const dt = clamp((t - now)/1000, 0, 0.05);
     now = t;
@@ -964,7 +1146,6 @@
     }
     requestAnimationFrame(tick);
   }
-  // Start on a clean frame
   (function seedBlueBg(){
     ctx.fillStyle = 'hsl(210, 70%, 8%)';
     ctx.fillRect(0,0,W,H);
