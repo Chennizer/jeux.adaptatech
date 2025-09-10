@@ -387,70 +387,6 @@
     card.dataset.dwellActive = '0';
   }
 
-  function showChooserFor(options, mode){
-    if (locked) return;
-    currentMode = mode || 'video';
-
-    const opts = options.slice(0, 12);
-    chooser.innerHTML = '';
-    applyLayoutClass(opts.length);
-    chooser.style.display = 'grid';
-    chooser.setAttribute('aria-hidden','false');
-
-    const fallbacks = currentMode==='weather'
-      ? [IMG_BASE+'sun.png', IMG_BASE+'cloud.png', IMG_BASE+'rain.png', IMG_BASE+'snow.png']
-      : [IMG_BASE+'africa-image.png', IMG_BASE+'binou.png'];
-
-    opts.forEach((opt, i)=>{
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.setAttribute('role','button');
-      card.setAttribute('tabindex','-1');
-      const title = opt.title || `Choix ${i+1}`;
-      card.setAttribute('aria-label', title);
-
-      const key = (currentMode==='weather' ? (opt.key || opt.id || '').toLowerCase() : null);
-      const normalized = normalizeThumb(opt.thumb, key) || fallbacks[i % fallbacks.length];
-
-      const img = makeImg(normalized, title);
-      card.appendChild(img);
-
-      const send = ()=>{
-        if (locked) return;
-        locked = true; hideChooser();
-        try {
-          if (currentMode === 'weather') {
-            window.__ws && window.__ws.send(JSON.stringify({
-              type: 'weather_choice',
-              key: key || '',
-              title,
-              goto: opt.goto || undefined,
-              from: 'controller'
-            }));
-          } else {
-            window.__ws && window.__ws.send(JSON.stringify({
-              type: 'play_video',
-              url: opt.url,
-              title,
-              from: 'controller'
-            }));
-          }
-          pulseIndicator();
-        } catch { locked = false; }
-      };
-
-      const onEnter = ()=> { if(!locked) beginDwell(card, send); };
-      const onLeave = ()=> cancelDwell(card);
-
-      card.addEventListener('pointerenter', onEnter);
-      card.addEventListener('pointerleave', onLeave);
-      card.addEventListener('mouseenter', onEnter);
-      card.addEventListener('mouseleave', onLeave);
-
-      chooser.appendChild(card);
-    });
-  }
-
   /* ---------- WebSocket with heartbeat + debounced reconnect ---------- */
   const room = qs.get('room') || 'test';
   const WS_URL = `wss://ws-relay.gui98789.workers.dev/ws/${encodeURIComponent(room)}`;
@@ -617,4 +553,100 @@
 
   // Apply initial theme class to body
   document.body.classList.add('theme-' + readInitialTheme());
+
+  /* =========================
+     >>> Anti "pointeur figé" (12 px) <<<
+     ========================= */
+  let pointerState = { x: 0, y: 0, lastMove: 0 };
+  const MOTION_ARM_PX = 12;          // seuil de micro-mouvement pour "armer"
+  let needMotionArm = false;         // on exige un mouvement après affichage du chooser
+  let motionArmed   = false;         // devient true après >= 12 px
+  let armOrigin     = { x: 0, y: 0 };// position au moment d'afficher le chooser
+
+  window.addEventListener('pointermove', (e) => {
+    pointerState.x = e.clientX;
+    pointerState.y = e.clientY;
+    pointerState.lastMove = Date.now();
+
+    if (needMotionArm && !motionArmed) {
+      const dx = pointerState.x - armOrigin.x;
+      const dy = pointerState.y - armOrigin.y;
+      if ((dx*dx + dy*dy) >= (MOTION_ARM_PX * MOTION_ARM_PX)) {
+        motionArmed = true; // la sélection par dwell est autorisée
+      }
+    }
+  }, { passive: true });
+
+  /* ---------- showChooserFor (on arme le filtre ici) ---------- */
+  const _orig_showChooserFor = showChooserFor; // si déjà défini plus haut par hoisting
+  function showChooserFor(options, mode){
+    if (locked) return;
+    currentMode = mode || 'video';
+
+    // Armer l’anti-immobilité avant d’afficher
+    needMotionArm = true;
+    motionArmed = false;
+    armOrigin.x = pointerState.x;
+    armOrigin.y = pointerState.y;
+
+    const opts = options.slice(0, 12);
+    chooser.innerHTML = '';
+    applyLayoutClass(opts.length);
+    chooser.style.display = 'grid';
+    chooser.setAttribute('aria-hidden','false');
+
+    const fallbacks = currentMode==='weather'
+      ? [IMG_BASE+'sun.png', IMG_BASE+'cloud.png', IMG_BASE+'rain.png', IMG_BASE+'snow.png']
+      : [IMG_BASE+'africa-image.png', IMG_BASE+'binou.png'];
+
+    opts.forEach((opt, i)=>{
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.setAttribute('role','button');
+      card.setAttribute('tabindex','-1');
+      const title = opt.title || `Choix ${i+1}`;
+      card.setAttribute('aria-label', title);
+
+      const key = (currentMode==='weather' ? (opt.key || opt.id || '').toLowerCase() : null);
+      const normalized = normalizeThumb(opt.thumb, key) || fallbacks[i % fallbacks.length];
+
+      const img = makeImg(normalized, title);
+      card.appendChild(img);
+
+      const send = ()=>{
+        if (locked) return;
+        locked = true; hideChooser();
+        try {
+          if (currentMode === 'weather') {
+            window.__ws && window.__ws.send(JSON.stringify({
+              type: 'weather_choice',
+              key: key || '',
+              title,
+              goto: opt.goto || undefined,
+              from: 'controller'
+            }));
+          } else {
+            window.__ws && window.__ws.send(JSON.stringify({
+              type: 'play_video',
+              url: opt.url,
+              title,
+              from: 'controller'
+            }));
+          }
+          pulseIndicator();
+        } catch { locked = false; }
+      };
+
+      // >>> Seuil 12 px : ne pas démarrer le dwell tant que non armé
+      const onEnter = ()=> { if(!locked && motionArmed) beginDwell(card, send); };
+      const onLeave = ()=> cancelDwell(card);
+
+      card.addEventListener('pointerenter', onEnter);
+      card.addEventListener('pointerleave', onLeave);
+      card.addEventListener('mouseenter', onEnter);
+      card.addEventListener('mouseleave', onLeave);
+
+      chooser.appendChild(card);
+    });
+  }
 </script>

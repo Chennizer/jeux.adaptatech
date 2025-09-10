@@ -66,23 +66,43 @@ const rayPath     ='../../sounds/sun/sun1.mp3';
 let ambience, raySound, finishSound;
 let volMusic=.5, volSFX=.5;
 let isSFXMuted=false, isMusicMuted=false;
+
 /* === VISUEL ======================================================= */
 const MAX_RAYS=8;
 let rays=[], rayCount=0;
 let sunRadius, innerR, longLen, shortLen, strokeW;
 let basePulse=1, sunRot=0;
-/* animation finale */
-let finalStage=0, finalT=0, finalScale=1;
+
+/* finale pilotée par la durée réelle du morceau */
+let finalStage=0;              // 0=off, 1=en cours, 2=done
+let finalScale=1;
 let warmFlashAlpha=0;
 let screenFlashAlpha=0, FLASH_INITIAL=80, FLASH_STEP=FLASH_INITIAL/120;
+let finishStartMs=null;
+let finishDurMs=6000;          // fallback
+let finalProgress=0;           // 0..1
+
 let lastTap=-Infinity, tapDelay=2000;
-/* mode éclair */
 let rapidMode=false;
+
 /* décor */
 let clouds=[], balloon, birds=[];
 let balloonImg, birdImg;
-/* Buffer pour le ciel */
-let skyBuffer;
+let extraBalloons=[];          // ballons supplémentaires (finale)
+let balloonsReleased=false;
+
+/* confetti (boostés) */
+let confetti=[];
+let confettiMidBurstDone=false; // burst supplémentaire à ~50%
+const CONFETTI_COLS=[[255,210,100],[255,177,66],[255,235,150],[255,196,100],[255,225,120]];
+
+/* Buffers */
+let skyBuffer;                 // ciel
+let haloBuffer;                // halo autour du soleil
+
+/* gestion du refresh du ciel (3) */
+let lastSkyUpdateFrame = -999;
+
 /* ---------- preload ---------- */
 function preload(){
   ambience   = loadSound(ambiencePath);
@@ -91,6 +111,7 @@ function preload(){
   balloonImg = loadImage('../../images/sun/montgolfiere1.png');
   birdImg    = loadImage('../../images/sun/oiseau_vol.png');
 }
+
 /* ---------- setup ---------- */
 function setup(){
   createCanvas(windowWidth,windowHeight);
@@ -102,15 +123,12 @@ function setup(){
     width+random(50,150), random(height/4,height/2-50),
     random(0.5,0.6), 0.25, 'horizontal');
   for(let i=0;i<3;i++) birds.push(new Bird());
-  /* Générer le dégradé une seule fois */
-  skyBuffer = createGraphics(width, height);
-  for (let y = 0; y < height; y++) {
-    const t = y / height;
-    skyBuffer.stroke(90 + 40 * t, 169 + 40 * t, 230 + 10 * t);
-    skyBuffer.line(0, y, width, y);
-  }
+
+  buildSkyBuffer(0);           // ciel initial (froid)
   computeSizes();
+  buildHaloBuffer();           // halo pré-calculé (compact)
 }
+
 /* ---------- responsive sizes ---------- */
 function computeSizes(){
   const base=min(width,height)*0.15;
@@ -120,31 +138,101 @@ function computeSizes(){
   shortLen =base*2;
   strokeW  =base*0.08;
 }
+
 /* ---------- draw ---------- */
 function draw(){
   if(!gameStarted){background(0);return;}
-  image(skyBuffer, 0, 0); // dégradé ultra-rapide
-  drawSun();
+
+  // (3) Warm sky drift
+  if(finalStage===1){
+    if(frameCount - lastSkyUpdateFrame >= 6){
+      buildSkyBuffer(finalProgress);
+      lastSkyUpdateFrame = frameCount;
+    }
+  }
+  image(skyBuffer, 0, 0);
+
+  // éléments derrière le soleil
   birds.forEach(b=>{b.update();b.draw();});
-  balloon.update(); balloon.draw();
   clouds.forEach(c=>{c.update();c.draw();});
+
+  // halo + vignette (1)
+  drawHaloAndVignette();
+
+  // soleil et rayons (2)
+  drawSun();
+
+  // >>> Ballons devant le soleil <<<
+  balloon.update(); balloon.draw();
+  extraBalloons.forEach(b=>{b.update();b.draw();});
+
+  // confetti (7) — boostés
+  updateAndDrawConfetti();
+
   if(warmFlashAlpha>1){
     noStroke(); fill(255,200,80,warmFlashAlpha);
     rect(0,0,width,height);
   }
+
   basePulse=1+0.05*sin(frameCount*0.03);
   if(rayCount===MAX_RAYS) handleFinalAnim();
+
   sunRot+=0.003;
+
   if(screenFlashAlpha>0){
     screenFlashAlpha=max(0,screenFlashAlpha-FLASH_STEP);
     noStroke(); fill(255,180,50,screenFlashAlpha);
     rect(0,0,width,height);
   }
-  // Quand la fin est terminée, reset auto SANS ramener le menu
+
   if (gameOver) {
     setTimeout(()=>{resetScene(); gameOver=false;}, 100);
   }
 }
+
+/* ---------- halo + vignette ---------- */
+function buildHaloBuffer(){
+  const sz = floor(min(width,height)*0.6); // compact
+  haloBuffer = createGraphics(sz, sz);
+  const g = haloBuffer;
+  g.noStroke();
+  const cx = sz/2, cy = sz/2, maxR = sz/2;
+  for(let i=0;i<80;i++){
+    const t = i/79;
+    const a = 80*(1-t)*(1-t);
+    g.fill(255, 220, 120, a);
+    const r = maxR * t;
+    g.ellipse(cx, cy, r*2, r*2);
+  }
+}
+
+function drawHaloAndVignette(){
+  const breathe = finalStage===1 ? (0.98 + 0.04 * sin(frameCount*0.03)) : (0.995 + 0.01*sin(frameCount*0.02));
+  const tightness = 2.2;
+  const s = (sunRadius * tightness) / (haloBuffer.width/2);
+  const haloScale = s * breathe * (finalStage===1 ? lerp(1.0, 1.25, easeInOutCubic(constrain(finalProgress,0,1))) : 1.0);
+
+  push();
+  translate(width/2, height/2);
+  scale(haloScale);
+  imageMode(CENTER);
+  image(haloBuffer, 0, 0);
+  pop();
+
+  // Vignette douce
+  const vigStrength = finalStage===1 ? 70 : 30;
+  const rings = 10;
+  for(let i=0;i<rings;i++){
+    const t = i/(rings-1);
+    const alpha = vigStrength * (t*t);
+    noFill(); stroke(0,0,0, alpha);
+    strokeWeight( max(width,height) * 0.02 );
+    ellipse(width/2, height/2, width*(1+ t*0.6), height*(1+ t*0.6));
+  }
+  noStroke();
+}
+
+/* ---------- Soleil + rayons + shimmer ---------- */
 function drawSun(){
   push();
   translate(width/2,height/2);
@@ -153,17 +241,25 @@ function drawSun(){
   noStroke();
   fill(255,180,50);
   ellipse(0,0,sunRadius*2,sunRadius*2);
+
   stroke(255,210,100);
   strokeWeight(strokeW);
   for(const r of rays){
-    r.currLen=lerp(r.currLen,r.targetLen,0.02);
-    r.alpha  =lerp(r.alpha,255,0.1);
-    stroke(255,210,100,r.alpha);
-    line(innerR*cos(r.angle),innerR*sin(r.angle),
-         r.currLen*cos(r.angle),r.currLen*sin(r.angle));
+    const n1 = noise(r.seed, frameCount*0.01);
+    const n2 = noise(r.seed+1000, frameCount*0.015);
+    const angOff = radians(-3 + 6*n1);           // ±3°
+    const lenJit = -3 + 6*n2;                    // ±3 px
+    const a = r.angle + angOff;
+    const tgt = r.targetLen + lenJit;
+
+    r.currLen=lerp(r.currLen, tgt, 0.06);
+    r.alpha  =lerp(r.alpha,255,0.12);
+    stroke(255,210,100, r.alpha);
+    line(innerR*cos(a),innerR*sin(a), r.currLen*cos(a),r.currLen*sin(a));
   }
   pop();
 }
+
 /* ---------- décor ---------- */
 class Cloud{
   constructor(x,y,w,h,s){this.x=x;this.y=y;this.w=w;this.h=h;this.s=s;}
@@ -241,28 +337,160 @@ class Bird{
     pop();
   }
 }
-/* ---------- animation finale ---------- */
-function handleFinalAnim(){
-  if(finalStage===0){finalStage=1;finalT=0;startFinishSound();}
-  else if(finalStage===1){
-    finalScale=map(finalT,0,60,1,1.6);
-    warmFlashAlpha=map(finalT,0,60,0,150);
-    if(finalT>=60){finalStage=2;finalT=0;}
-  }else if(finalStage===2){
-    finalScale=1.6;
-    if(finalT<120) warmFlashAlpha=map(finalT,0,120,150,0);
-    if(finalT>=120){finalStage=3;finalT=0;}
-  }else if(finalStage===3){
-    finalScale=map(finalT,0,60,1.6,1);
-    if(finalT>=60){finalStage=4;gameOver=true;}
+
+/* ---------- Confetti (PLUS APPARENTS) ---------- */
+function spawnConfetti(){
+  // Beaucoup plus: 50–80 pièces
+  const n = floor(random(50,80));
+  // Reset si trop de confetti en cours (sécurité perf)
+  if(confetti.length > 240) confetti.length = 160;
+
+  for(let i=0;i<n;i++){
+    const angle = random(TWO_PI);
+    const radius = min(width,height)*0.10; // burst un peu plus large
+    const x = width/2 + cos(angle)*radius*random(0.15,1);
+    const y = height/2 + sin(angle)*radius*random(0.15,1);
+
+    // vitesse initiale plus marquée mais douce
+    const sp = random(1.8,3.2);
+    const vx = (x - width/2) * 0.018 + random(-0.8,0.8);
+    const vy = (y - height/2) * 0.018 - sp;
+
+    const col = random(CONFETTI_COLS);
+    const rot = random(TWO_PI);
+    const rotSp = random(-0.06,0.06);
+
+    // Durée PLUS LONGUE: 600–960 frames (~10–16s à 60fps)
+    const maxLife = floor(random(600,960));
+
+    // Plus gros: 14–28 px
+    const size = random(14,28);
+
+    const shape = random([ 'rect', 'tri' ]);
+
+    confetti.push({
+      x, y, vx, vy,
+      ax: 0, ay: 0.055,    // gravité douce (plus petit => reste plus longtemps)
+      col, rot, rotSp,
+      life: maxLife, maxLife,
+      shape, size
+    });
   }
-  finalT++;
 }
+
+function updateAndDrawConfetti(){
+  if(confetti.length===0) return;
+
+  for(let i=confetti.length-1;i>=0;i--){
+    const p = confetti[i];
+    // physique
+    p.vx += p.ax; p.vy += p.ay;
+    p.x  += p.vx; p.y  += p.vy;
+    // friction légère (conserve la dérive)
+    p.vx *= 0.995; 
+    p.vy *= 0.997;
+    p.rot += p.rotSp;
+    p.life -= 1;
+
+    // Alpha: plein au début, baisse lentement (courbe ease)
+    const t = constrain(p.life / p.maxLife, 0, 1);
+    const alpha = 255 * (t*t); // ralentit la disparition
+
+    fill(p.col[0], p.col[1], p.col[2], alpha);
+    noStroke();
+    push(); translate(p.x, p.y); rotate(p.rot);
+    if(p.shape==='rect'){
+      rectMode(CENTER);
+      rect(0,0,p.size, p.size*0.6);
+    }else{
+      triangle(-p.size*0.6, p.size*0.5, p.size*0.6, p.size*0.5, 0, -p.size*0.6);
+    }
+    pop();
+
+    // nettoyage
+    if(p.life<=0 || p.y>height+80) confetti.splice(i,1);
+  }
+}
+
+/* ---------- animation finale (durée = durée du morceau) ---------- */
+function handleFinalAnim(){
+  // démarrage
+  if(finalStage===0){
+    finalStage=1;
+    startFinishSound();
+    finishStartMs = millis();
+    const dur = (finishSound && finishSound.duration && isFinite(finishSound.duration()))
+                ? finishSound.duration()*1000 : null;
+    finishDurMs = dur && dur>0 ? dur : 6000;
+    finalProgress = 0;
+
+    // confetti + lâcher de ballons
+    spawnConfetti();
+    confettiMidBurstDone=false;
+    if(!balloonsReleased){
+      releaseExtraBalloons();
+      balloonsReleased=true;
+    }
+  }
+
+  if(finalStage===1){
+    // progression 0..1 pendant toute la durée du morceau
+    const elapsed = millis() - (finishStartMs ?? millis());
+    finalProgress = constrain(elapsed / finishDurMs, 0, 1);
+
+    // Burst supplémentaire à mi-parcours pour "encore plus visible"
+    if(!confettiMidBurstDone && finalProgress >= 0.48){
+      spawnConfetti();
+      confettiMidBurstDone = true;
+    }
+
+    // Phases : 0–0.2 agrandit, 0.2–0.8 maintient, 0.8–1.0 rétrécit
+    const growEnd=0.20, shrinkStart=0.80;
+
+    if(finalProgress < growEnd){
+      const t = finalProgress / growEnd;
+      finalScale = lerp(1.0, 1.6, t);
+      warmFlashAlpha = lerp(0, 150, t);
+    } else if (finalProgress < shrinkStart){
+      finalScale = 1.6;
+      const t = (finalProgress - growEnd) / (shrinkStart - growEnd);
+      warmFlashAlpha = lerp(150, 0, t);
+    } else {
+      const t = (finalProgress - shrinkStart) / (1 - shrinkStart);
+      finalScale = lerp(1.6, 1.0, t);
+      warmFlashAlpha = 0;
+    }
+
+    const musicEnded = finishSound && !finishSound.isPlaying();
+    if (finalProgress >= 1 || musicEnded){
+      finalStage = 2;
+      gameOver = true;
+    }
+  }
+}
+
 function startFinishSound(){
-  ambience?.fade(volMusic,0.2);
-  finishSound.setVolume(volMusic);
+  ambience?.fade(volMusic,0.2); // atténue l'ambiance
+  finishSound.setVolume(isMusicMuted?0:volMusic);
   finishSound.play();
 }
+
+/* ---------- Lâcher de ballons (finale) ---------- */
+function releaseExtraBalloons(){
+  extraBalloons.length = 0;
+  const n = floor(random(4,7));
+  for(let i=0;i<n;i++){
+    const b = new Balloon(random(60,width-60), height + random(40,200), random(1.1,1.9), random(0.18,0.28), 'vertical');
+    b.delayStart = millis() + i*random(250,700);
+    const baseUpdate = b.update.bind(b);
+    b.update = function(){
+      if(millis() < this.delayStart) return;
+      baseUpdate();
+    }
+    extraBalloons.push(b);
+  }
+}
+
 /* ---------- interaction ---------- */
 function addAllRays(){
   for(let i=0;i<MAX_RAYS;i++){
@@ -270,7 +498,8 @@ function addAllRays(){
       angle: i*TWO_PI/MAX_RAYS,
       currLen: innerR,
       targetLen: (i%2 ? shortLen : longLen),
-      alpha: 0
+      alpha: 0,
+      seed: random(10000)         // shimmer seed
     });
   }
   rayCount=MAX_RAYS;
@@ -282,13 +511,13 @@ function addSingleRay(){
     angle: i*TWO_PI/MAX_RAYS,
     currLen: innerR,
     targetLen: (i%2 ? shortLen : longLen),
-    alpha: 0
+    alpha: 0,
+    seed: random(10000)           // shimmer seed
   });
   rayCount++;
   screenFlashAlpha=FLASH_INITIAL;
 }
 function trigger(){
-  // Bloque input si animation finale ou game over
   if(!gameStarted||gameOver||(finalStage>0 && !gameOver)) return;
   if(millis()-lastTap<tapDelay) return;
   lastTap=millis();
@@ -297,7 +526,6 @@ function trigger(){
   }else if(!rapidMode && rayCount<MAX_RAYS){
     addSingleRay();
   }
-  /* son de rayon : joué à chaque appui */
   if(!isSFXMuted && raySound){
     raySound.setVolume(volSFX);
     raySound.isLoaded()
@@ -307,27 +535,36 @@ function trigger(){
 }
 function keyPressed(){
   if(key===' '&&gameStarted) trigger();
+  if(keyCode===ENTER && gameStarted && (finalStage===0 || gameOver)){
+    resetScene();
+  }
 }
-// Mouse input is now ignored
 
-/* ---------- reset/retour au début ---------- */
+/* ---------- reset ---------- */
 function resetScene(){
-  rays=[];rayCount=0;finalStage=0;finalT=0;finalScale=1;
-  warmFlashAlpha=0;screenFlashAlpha=0;
+  rays=[];rayCount=0;
+  finalStage=0;finalScale=1;warmFlashAlpha=0;
+  screenFlashAlpha=0;finishStartMs=null;
+  finalProgress=0;
+  balloonsReleased=false;
+  extraBalloons.length=0;
+  confetti.length=0;
+  confettiMidBurstDone=false;
+
+  buildSkyBuffer(0);
+  lastSkyUpdateFrame = -999;
+
   balloon.mode='horizontal';balloon.v=random(0.5,0.6);
-  // gameOver reste false, permet de recommencer directement
 }
 
 /* ---------- UI : options et menu ---------- */
 window.addEventListener('load',()=>{
-  // Mode overlay
   const ov=document.getElementById('modeOverlay'),
         btnN=document.getElementById('btnNormal'),
         btnR=document.getElementById('btnRapid');
   btnN.onclick=()=>{rapidMode=false;startGame();};
   btnR.onclick=()=>{rapidMode=true; startGame();};
 
-  // Menu options
   const ico=document.getElementById('settings-icon'),
         menu=document.getElementById('menu'),
         muteM=document.getElementById('muteMusic'),
@@ -338,7 +575,9 @@ window.addEventListener('load',()=>{
         valS=document.getElementById('sfxVolVal'),
         slider=document.getElementById('tapDelaySlider'),
         valT=document.getElementById('tapDelayVal');
+
   slider.oninput=e=>{tapDelay=e.target.value;valT.textContent=e.target.value;};
+
   volM.oninput=e=>{
     volMusic=e.target.value/100; valM.textContent=e.target.value;
     if(!isMusicMuted) ambience?.setVolume(volMusic);
@@ -366,35 +605,57 @@ window.addEventListener('load',()=>{
      document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
     resizeCanvas(windowWidth,windowHeight);
     computeSizes();
-    skyBuffer = createGraphics(width, height);
-    for (let y = 0; y < height; y++) {
-      const t = y / height;
-      skyBuffer.stroke(90 + 40 * t, 169 + 40 * t, 230 + 10 * t);
-      skyBuffer.line(0, y, width, y);
-    }
+    buildSkyBuffer(0);   // ciel base
+    buildHaloBuffer();   // halo recalé si dimension change
     ambience.setLoop(true);
     ambience.setVolume(isMusicMuted?0:volMusic);
     ambience.play();
   }
+
   ico.onclick=()=>{if(gameStarted) menu.classList.toggle('show');};
   document.onclick=e=>{
     if(!menu.contains(e.target)&&!ico.contains(e.target)) menu.classList.remove('show');};
 });
+
+/* ---------- Sky buffer (3) ---------- */
+function buildSkyBuffer(pWarm){
+  // pWarm : 0 = froid; 1 = chaud
+  if(!skyBuffer || skyBuffer.width!==width || skyBuffer.height!==height){
+    skyBuffer = createGraphics(width, height);
+  }
+  const g = skyBuffer;
+  const coldTop = [90,169,230];
+  const coldBot = [130,209,240];
+  const warmTop = [120,185,235];
+  const warmBot = [255,220,160];
+  const top = lerpRGB(coldTop, warmTop, easeInOutCubic(constrain(pWarm,0,1)));
+  const bot = lerpRGB(coldBot, warmBot, easeInOutCubic(constrain(pWarm,0,1)));
+
+  for (let y = 0; y < height; y++) {
+    const t = y / height;
+    const c = [
+      floor( lerp(top[0], bot[0], t) ),
+      floor( lerp(top[1], bot[1], t) ),
+      floor( lerp(top[2], bot[2], t) )
+    ];
+    g.stroke(c[0], c[1], c[2]);
+    g.line(0, y, width, y);
+  }
+}
 
 /* ---------- Resize ---------- */
 function windowResized(){
   if(gameStarted){
     resizeCanvas(windowWidth,windowHeight);
     computeSizes();
-    // Refaire le buffer du ciel si resize
-    skyBuffer = createGraphics(width, height);
-    for (let y = 0; y < height; y++) {
-      const t = y / height;
-      skyBuffer.stroke(90 + 40 * t, 169 + 40 * t, 230 + 10 * t);
-      skyBuffer.line(0, y, width, y);
-    }
+    buildSkyBuffer(finalStage===1 ? finalProgress : 0);
+    buildHaloBuffer();
   }
 }
+
+/* ---------- Utils ---------- */
+function lerpRGB(a,b,t){ return [ lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t) ]; }
+function easeInOutCubic(x){ return x<0.5 ? 4*x*x*x : 1 - pow(-2*x+2,3)/2; }
 </script>
 </body>
 </html>

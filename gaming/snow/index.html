@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<title>Météo — Neige (Jeu Switch)</title>
+
+<!-- p5.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#9fb6c6;}
+  canvas{display:block;position:fixed;inset:0;}
+  #modeOverlay{
+    position:fixed;inset:0;display:flex;flex-direction:column;gap:18px;
+    align-items:center;justify-content:center;background:#000;color:#fff;z-index:10000;
+    text-align:center;padding:20px;
+  }
+  #modeOverlay h2{margin:0 0 8px 0;font-weight:600}
+  #modeOverlay p{margin:0;opacity:.85}
+  #modeOverlay button{
+    padding:12px 22px;border:none;border-radius:8px;cursor:pointer;
+    background:#ffd250;color:#000;font-size:18px;
+  }
+  #modeOverlay button:hover{background:#ffb930}
+  #hud{
+    position:fixed;left:14px;top:14px;z-index:9999;color:#073b5b;
+    font:600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    text-shadow:0 1px 0 rgba(255,255,255,.6);
+    background:rgba(255,255,255,.65); padding:6px 10px; border-radius:8px;
+  }
+  #settings-icon{
+    position:fixed;top:14px;right:14px;width:40px;height:40px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    background:rgba(0,0,0,.7);color:#fff;font-size:20px;z-index:10001;
+    transition:transform .2s ease, background .2s ease; visibility:hidden;
+  }
+  #settings-icon:hover{transform:rotate(90deg);background:rgba(0,0,0,.85)}
+  #menu{
+    position:fixed;top:60px;right:-340px;width:300px;max-height:calc(100vh - 80px);
+    overflow:auto;background:rgba(0,0,0,.86);color:#fff;border-radius:10px;
+    padding:12px 14px;z-index:10000;transition:right .25s ease, opacity .25s ease; opacity:.0;
+  }
+  #menu.show{right:12px;opacity:1}
+  #menu h2{margin:.2rem 0 .6rem 0;font-size:20px;color:#7dd3fc;text-align:center}
+  #menu h3{margin:1rem 0 .4rem 0;font-size:15px;color:#93c5fd}
+  #menu label{display:block;margin:.5rem 0;font-size:13px}
+  #menu input[type="range"]{width:100%}
+  #menu .inline{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  #menu .val{display:inline-block;min-width:2ch;padding:0 6px;border-radius:6px;background:rgba(255,255,255,.1)}
+  #hint{
+    position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+    background:rgba(255,255,255,.75); color:#043552; padding:6px 10px; border-radius:8px;
+    font:500 13px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; z-index:9999;
+  }
+</style>
+</head>
+<body>
+
+<!-- Mode selection -->
+<div id="modeOverlay">
+  <h2>Choisis ton mode&nbsp;:</h2>
+  <button id="btnNormal">Mode normal (5–6 clics)</button>
+  <button id="btnRapid">Mode éclair (1 clic)</button>
+  <p>Espace = neige · Entrée = rejouer</p>
+</div>
+
+<!-- HUD -->
+<div id="hud" style="display:none;">
+  <div><strong>Accumulation</strong> : <span id="accTxt">0%</span></div>
+  <div id="pressTxt">Appuis : 0</div>
+</div>
+
+<!-- Settings icon + menu -->
+<div id="settings-icon" title="Options">⚙️</div>
+<div id="menu">
+  <h2>Options</h2>
+  <h3>Audio</h3>
+  <label class="inline">
+    <span>Désactiver la musique</span>
+    <input type="checkbox" id="muteMusic">
+  </label>
+  <label>
+    <span>Volume musique : <span class="val" id="musicVolVal">50</span></span><br>
+    <input type="range" id="musicVol" min="0" max="100" value="50">
+  </label>
+  <label class="inline">
+    <span>Désactiver les effets</span>
+    <input type="checkbox" id="muteSFX">
+  </label>
+  <label>
+    <span>Volume effets : <span class="val" id="sfxVolVal">70</span></span><br>
+    <input type="range" id="sfxVol" min="0" max="100" value="70">
+  </label>
+
+  <h3>Jeu</h3>
+  <label>
+    <span>Appuis requis (mode normal) : <span class="val" id="reqVal">6</span></span><br>
+    <input type="range" id="requiredPresses" min="5" max="6" step="1" value="6">
+  </label>
+  <label>
+    <span>Délai entre appuis (ms) : <span class="val" id="delayVal">1200</span></span><br>
+    <input type="range" id="tapDelay" min="400" max="2500" step="100" value="1200">
+  </label>
+</div>
+
+<div id="hint" style="display:none;">Astuce : Espace = neige · Entrée = rejouer · Touche F = plein écran</div>
+
+<script>
+/* =========================
+   Placeholder sound paths (same as sun game)
+   ========================= */
+const ambiencePath='../../sounds/sun/sunnyday.mp3';
+const pressPath   ='../../sounds/sun/sun1.mp3';
+const finishPath  ='../../sounds/sun/fanfare.mp3';
+
+/* =========================
+   State & settings
+   ========================= */
+let gameStarted=false, rapidMode=false, finished=false;
+let lastTap=-Infinity, tapDelay=1200;
+let requiredPresses=6;
+let presses=0;
+
+/* Accumulation model */
+let progress=0;               // on-screen 0..1
+let targetProgress=0;         // clamp/finish
+let accumulationBudget=0;     // remaining amount to add
+
+/* Audio */
+let ambience, pressSFX, finishSFX;
+let isMusicMuted=false, isSFXMuted=false, volMusic=0.5, volSFX=0.7;
+
+/* Visuals */
+let clouds=[];
+let flakesBack=[], stormFlakes=[];
+let sunRot=0, glarePulse=0;
+let sparkles=[];
+let w=0, h=0;
+
+/* Background snow — smaller & sparser */
+const BACK_DENSITY_BASE = 0.00006;
+const BACK_SZ_MIN = 0.9, BACK_SZ_MAX = 2.2;
+const BACK_VY_MIN = 0.25, BACK_VY_MAX = 0.65;
+const BACK_ALPHA  = 120;
+
+/* === Pulsed Storm Controller (exact duration) ===
+   Each press → TWO pulses, each lasts ACCUM_DUR_MS exactly.
+   Storm flakes spawned during a pulse receive a dieAt timestamp (the latest
+   end among currently active pulses) so they disappear right when pulses end.
+*/
+const ACCUM_DUR_MS   = 2400;   // set 2000–3000 to taste
+const PULSE_DELAY_MS = 600;    // delay for second batch
+
+// pulses: [{start,end,amount}] where amount is accumulation portion (0..1)
+let pulses = [];
+
+const STORM_SPAWN_K = 0.00055; // spawn factor per frame * activeLevel
+
+/* Ground / accumulation */
+const MAX_SNOW_DEPTH_FRAC = 0.62;
+const groundNoiseSeed = Math.floor(Math.random()*10000);
+
+function preload(){
+  try{ ambience = loadSound(ambiencePath); }catch(e){}
+  try{ pressSFX = loadSound(pressPath); }catch(e){}
+  try{ finishSFX= loadSound(finishPath);}catch(e){}
+}
+
+function setup(){
+  createCanvas(windowWidth, windowHeight);
+  w=width; h=height;
+
+  for(let i=0;i<6;i++){
+    clouds.push(new Cloud(random(w), random(h*0.05, h*0.45),
+      random(120,260), random(50,120), random(0.3,1.2)));
+  }
+  rebuildBackgroundFlakes();
+
+  // UI
+  const btnN=document.getElementById('btnNormal');
+  const btnR=document.getElementById('btnRapid');
+  btnN.onclick=()=>{ rapidMode=false; startGame(); };
+  btnR.onclick=()=>{ rapidMode=true;  startGame(); };
+
+  const ico=document.getElementById('settings-icon');
+  const menu=document.getElementById('menu');
+  const muteM=document.getElementById('muteMusic');
+  const volM =document.getElementById('musicVol');
+  const valM =document.getElementById('musicVolVal');
+  const muteS=document.getElementById('muteSFX');
+  const volS =document.getElementById('sfxVol');
+  const valS =document.getElementById('sfxVolVal');
+  const req  =document.getElementById('requiredPresses');
+  const reqV =document.getElementById('reqVal');
+  const delay=document.getElementById('tapDelay');
+  const delayV=document.getElementById('delayVal');
+
+  ico.onclick=()=>{ if(gameStarted) menu.classList.toggle('show'); };
+  document.addEventListener('click', (e)=>{
+    if(!menu.contains(e.target) && !ico.contains(e.target)) menu.classList.remove('show');
+  });
+
+  muteM.onchange=e=>{
+    isMusicMuted = e.target.checked;
+    ambience?.setVolume(isMusicMuted?0:volMusic);
+    finishSFX?.setVolume(isMusicMuted?0:volMusic);
+  };
+  volM.oninput=e=>{
+    volMusic=e.target.value/100; valM.textContent=e.target.value;
+    if(!isMusicMuted) ambience?.setVolume(volMusic);
+    if(!isMusicMuted) finishSFX?.setVolume(volMusic);
+  };
+  muteS.onchange=e=>{
+    isSFXMuted = e.target.checked;
+  };
+  volS.oninput=e=>{
+    volSFX=e.target.value/100; valS.textContent=e.target.value;
+  };
+  req.oninput=e=>{
+    requiredPresses = parseInt(e.target.value,10);
+    reqV.textContent = requiredPresses;
+    updateHud();
+  };
+  delay.oninput=e=>{
+    tapDelay = parseInt(e.target.value,10);
+    delayV.textContent = tapDelay;
+  };
+
+  document.getElementById('settings-icon').style.visibility='hidden';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('hint').style.display='none';
+  document.getElementById('modeOverlay').style.display='';
+}
+
+function startGame(){
+  document.getElementById('modeOverlay')?.remove();
+  gameStarted=true; finished=false;
+  document.getElementById('settings-icon').style.visibility='visible';
+  document.getElementById('hud').style.display='block';
+  document.getElementById('hint').style.display='block';
+
+  // fullscreen attempt
+  (document.documentElement.requestFullscreen ||
+   document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
+
+  presses=0; progress=0; targetProgress=0; accumulationBudget=0; sparkles.length=0;
+  pulses.length=0;
+  rebuildBackgroundFlakes();
+
+  ambience?.setLoop(true);
+  ambience?.setVolume(isMusicMuted?0:volMusic);
+  try{ ambience?.play(); }catch(e){}
+
+  updateHud();
+}
+
+function draw(){
+  if(!gameStarted){ background(0); return; }
+
+  drawSnowySky();
+  drawSun();
+  for(const c of clouds){ c.update(); c.draw(); }
+
+  // === Handle pulses ===
+  const now = millis();
+  // Remove expired pulses
+  for(let i=pulses.length-1;i>=0;i--){
+    if(now >= pulses[i].end) pulses.splice(i,1);
+  }
+
+  let activeLevel = 0;        // affects spawn density
+  let totalConsumePerSec = 0; // affects accumulation consumption
+
+  let latestEnd = -Infinity;
+  for(const p of pulses){
+    if(now >= p.start && now < p.end){
+      const durSec = (p.end - p.start)/1000;
+      totalConsumePerSec += p.amount / durSec;
+
+      const t = (now - p.start) / (p.end - p.start); // 0..1
+      const env = 0.5 - 0.5*Math.cos(Math.PI * 2 * constrain(t,0,1)); // lively twin-hump
+      activeLevel += 0.8 + 0.6*env;
+
+      if(p.end > latestEnd) latestEnd = p.end; // latest active pulse end time
+    }
+  }
+
+  // Consume accumulation only while pulses are active
+  const dt = deltaTime/1000;
+  if(totalConsumePerSec > 0 && accumulationBudget > 0 && !finished){
+    const consume = Math.min(accumulationBudget, totalConsumePerSec * dt);
+    accumulationBudget -= consume;
+    targetProgress = Math.min(1, targetProgress + consume);
+  }
+
+  // Static ground with smooth lerp
+  progress = lerp(progress, targetProgress, 0.12);
+  drawSnowGround(progress);
+
+  // Background flakes (small, sparse)
+  for(const f of flakesBack){ f.update(); f.draw(); }
+
+  // Storm flakes spawn ONLY while pulses are active
+  if(activeLevel > 0){
+    const spawnCount = Math.floor(w*h*STORM_SPAWN_K * activeLevel);
+    const cap = 1800;
+    for(let i=0;i<spawnCount && stormFlakes.length<cap;i++){
+      stormFlakes.push(new StormFlake(latestEnd)); // ← pass dieAt so it ends with pulses
+    }
+  }
+
+  // Update/draw storm flakes; they self-kill at dieAt or on ground fade
+  for(let i=stormFlakes.length-1;i>=0;i--){
+    const s = stormFlakes[i];
+    s.update(); s.draw();
+    if(s.dead) stormFlakes.splice(i,1);
+  }
+
+  // Finish sparkles
+  if(!finished && targetProgress>=1){
+    finished=true;
+    if(!isMusicMuted && finishSFX){ finishSFX.setVolume(volMusic); try{ finishSFX.play(); }catch(e){} }
+    for(let i=0;i<140;i++){
+      sparkles.push(new Sparkle(
+        random(w*0.05, w*0.95),
+        groundYAt(random(w), 1) - random(0, 60),
+        true
+      ));
+    }
+  }
+  if(finished){
+    if(random()<0.3) sparkles.push(new Sparkle(random(w), groundYAt(random(w), progress)-random(0,30)));
+    for(let i=sparkles.length-1;i>=0;i--){
+      sparkles[i].update(); sparkles[i].draw();
+      if(sparkles[i].dead) sparkles.splice(i,1);
+    }
+  }
+
+  sunRot += 0.003;
+  glarePulse = 0.98 + 0.04 * sin(frameCount*0.03);
+}
+
+/* =========================
+   Input
+   ========================= */
+function keyPressed(){
+  if(key===' ' && gameStarted) trigger();
+  if(keyCode===ENTER && gameStarted){
+    presses=0; progress=0; targetProgress=0; accumulationBudget=0;
+    finished=false; sparkles.length=0; pulses.length=0; stormFlakes.length=0;
+    rebuildBackgroundFlakes(); updateHud();
+  }
+  if(key.toLowerCase()==='f'){
+    if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }
+}
+function mousePressed(){ if(gameStarted) trigger(); return false; }
+function touchStarted(){ if(gameStarted) trigger(); return false; }
+
+function trigger(){
+  if(finished) return;
+  if(millis()-lastTap < tapDelay) return;
+  lastTap = millis();
+
+  // Budget per press
+  const inc = rapidMode ? 1 : (1/requiredPresses);
+  const amountPerPulse = inc/2;
+
+  // Add to remaining budget (consumed during pulses)
+  accumulationBudget = Math.min(1 - targetProgress, accumulationBudget + inc);
+
+  // SFX
+  if(!isSFXMuted && pressSFX){ pressSFX.setVolume(volSFX); try{ pressSFX.play(); }catch(e){} }
+
+  // Schedule the two pulses (strict duration)
+  const now = millis();
+  pulses.push({ start: now,                 end: now + ACCUM_DUR_MS,                 amount: amountPerPulse });
+  pulses.push({ start: now + PULSE_DELAY_MS, end: now + PULSE_DELAY_MS + ACCUM_DUR_MS, amount: amountPerPulse });
+
+  // Slightly scale background with projected fill for feel
+  rebuildBackgroundFlakes();
+
+  presses++;
+  updateHud();
+}
+
+/* =========================
+   HUD
+   ========================= */
+function updateHud(){
+  const acc=document.getElementById('accTxt');
+  const pr = document.getElementById('pressTxt');
+  const projected = Math.min(1, targetProgress + accumulationBudget);
+  const pct = Math.round(projected*100);
+  acc.textContent = `${pct}%`;
+  pr.textContent  = rapidMode ? `Mode éclair` : `Appuis : ${presses} / ${requiredPresses}`;
+}
+
+/* =========================
+   Background snow & Visual helpers
+   ========================= */
+function rebuildBackgroundFlakes(){
+  const accumFactor = 1 + 0.5*Math.min(1, targetProgress + accumulationBudget*0.5);
+  const backTarget  = Math.floor(w*h*BACK_DENSITY_BASE * accumFactor);
+  while(flakesBack.length < backTarget) flakesBack.push(new FlakeBack(true));
+  while(flakesBack.length > backTarget) flakesBack.pop();
+}
+
+function drawSnowySky(){
+  // Greyer sky; greys out a bit more if any pulse is active
+  const anyActive = pulses.some(p=>millis()>=p.start && millis()<p.end);
+  const tGrey = anyActive ? 0.35 : 0.25;
+  const topBase = [150,175,195];
+  const botBase = [205,215,225];
+  const topStorm= [168,170,176];
+  const botStorm= [208,210,215];
+
+  for(let y=0;y<h;y++){
+    const gy = y/h;
+    const top = [
+      lerp(topBase[0], topStorm[0], tGrey),
+      lerp(topBase[1], topStorm[1], tGrey),
+      lerp(topBase[2], topStorm[2], tGrey)
+    ];
+    const bot = [
+      lerp(botBase[0], botStorm[0], tGrey),
+      lerp(botBase[1], botStorm[1], tGrey),
+      lerp(botBase[2], botStorm[2], tGrey)
+    ];
+    const r = lerp(top[0], bot[0], gy);
+    const g = lerp(top[1], bot[1], gy);
+    const b = lerp(top[2], bot[2], gy);
+    stroke(r,g,b); line(0,y,w,y);
+  }
+}
+
+function drawSun(){
+  push();
+  translate(w*0.82, h*0.18);
+  rotate(sunRot);
+  const R = Math.min(w,h)*0.08;
+  noStroke();
+  for(let i=80;i>=1;i--){
+    const t = i/80;
+    fill(255, 220, 120, 8 * t);
+    const r = R * (1 + 2.2*(1-t)*glarePulse);
+    ellipse(0,0,r*2,r*2);
+  }
+  fill(255,190,60);
+  ellipse(0,0,R*2,R*2);
+  pop();
+}
+
+function drawSnowGround(p){ // p: 0..1
+  const maxDepth = h * MAX_SNOW_DEPTH_FRAC;
+  const depth = p * maxDepth;
+
+  noStroke();
+  fill(240, 248, 255, 235);
+  beginShape();
+  vertex(0, h);
+  const samples = 80;
+  for(let i=0;i<=samples;i++){
+    const x = map(i,0,samples,0,w);
+    const y = groundYAt(x, p);
+    vertex(x, y);
+  }
+  vertex(w, h);
+  endShape(CLOSE);
+
+  const band = 10 + 20*p;
+  for(let i=0;i<band;i++){
+    const a = map(i,0,band-1, 70, 0);
+    stroke(255,255,255,a);
+    noFill();
+    beginShape();
+    for(let j=0;j<=samples;j++){
+      const x = map(j,0,samples,0,w);
+      const y = groundYAt(x, p) - i*0.7;
+      vertex(x,y);
+    }
+    endShape();
+  }
+}
+
+function groundYAt(x, p){
+  const maxDepth = h * MAX_SNOW_DEPTH_FRAC;
+  const depth = p * maxDepth;
+  const baseY = h - depth;
+
+  const nx = x*0.003;
+  const und = map(noise(nx, groundNoiseSeed), 0, 1, -18*(0.4+p), 18*(0.4+p));
+  const side = Math.abs((x/w)-0.5);
+  const drift = lerp(0, 14*(0.5+p), Math.pow(side,2));
+  return baseY + und + drift;
+}
+
+/* =========================
+   Entities
+   ========================= */
+class Cloud{
+  constructor(x,y,w,h,s){ this.x=x; this.y=y; this.w=w; this.h=h; this.s=s; this.o=random(150,210); }
+  update(){
+    this.x -= this.s;
+    if(this.x + this.w < -40){
+      this.x = width + random(20,120);
+      this.y = random(height*0.05, height*0.45);
+      this.w = random(120,260);
+      this.h = random(50,120);
+      this.s = random(0.3,1.2);
+      this.o = random(150,210);
+    }
+  }
+  draw(){
+    noStroke();
+    fill(255,255,255,this.o);
+    ellipse(this.x, this.y, this.w, this.h);
+    ellipse(this.x-this.w*0.45, this.y+this.h*0.05, this.w*0.7, this.h*0.7);
+    ellipse(this.x+this.w*0.45, this.y+this.h*0.05, this.w*0.7, this.h*0.7);
+  }
+}
+
+class FlakeBack{
+  constructor(fromTop=false){ this.reset(fromTop); }
+  reset(fromTop=false){
+    this.x = random(w);
+    this.y = fromTop ? random(-h*0.6, -10) : random(-h, h);
+    this.sz = random(BACK_SZ_MIN, BACK_SZ_MAX);
+    this.vy = random(BACK_VY_MIN, BACK_VY_MAX);
+    this.alpha = BACK_ALPHA;
+    this.phase = random(TWO_PI);
+  }
+  update(){
+    this.x += 0.3*sin(frameCount*0.02 + this.phase) * 0.9;
+    this.y += this.vy;
+    if(this.x < -10) this.x = w+10;
+    if(this.x > w+10) this.x = -10;
+    const gy = groundYAt(this.x, progress);
+    if(this.y >= gy - this.sz*0.3) this.reset(true);
+    if(this.y > h + 20) this.reset(true);
+  }
+  draw(){
+    noStroke();
+    fill(255,255,255, this.alpha);
+    circle(this.x, this.y, this.sz);
+  }
+}
+
+class StormFlake{
+  // Big, fast flakes that auto-expire exactly at dieAt (pulse end)
+  constructor(dieAt){
+    this.x = random(-20, w+20);
+    this.y = random(-h*0.6, -10);
+    this.sz = random(6, 14);
+    const vyMin = max(3, h/120), vyMax = max(6, h/90);
+    this.vy = random(vyMin, vyMax);
+    this.vx = random(-1.2, 1.2);
+    this.alpha = 255;
+    this.life = 300;
+    this.phase = random(TWO_PI);
+    this.dead = false;
+    this.g = random(0.02, 0.05);
+    this.dieAt = dieAt ?? (millis()+1500); // safety
+  }
+  update(){
+    const now = millis();
+    const tLeft = this.dieAt - now;
+    if(tLeft <= 0){ this.dead = true; return; }
+    if(tLeft < 180){ // soft fade in last ~180ms of pulse
+      const a = 255 * (tLeft/180);
+      this.alpha = min(this.alpha, a);
+    }
+
+    this.vy += this.g;
+    this.x += this.vx + 0.6*sin(frameCount*0.03 + this.phase);
+    this.y += this.vy;
+    this.life--;
+
+    const gy = groundYAt(this.x, progress);
+    if(this.y >= gy - this.sz*0.25){
+      this.y = gy - this.sz*0.25;
+      this.alpha -= 25;
+      if(this.alpha<=0) this.dead = true;
+    }
+
+    if(this.y > h+40 || this.life<=0) this.dead = true;
+  }
+  draw(){
+    noStroke();
+    fill(255,255,255, this.alpha);
+    circle(this.x, this.y, this.sz);
+  }
+}
+
+class Sparkle{
+  constructor(x,y,burst=false){
+    this.x=x; this.y=y;
+    this.vx = burst ? random(-1.2,1.2) : random(-0.5,0.5);
+    this.vy = burst ? random(-2.5,-0.6) : random(-1.2,-0.3);
+    this.life = burst ? random(80,140) : random(60,100);
+    this.maxLife=this.life;
+    this.sz = random(2,4);
+    this.dead=false;
+  }
+  update(){
+    this.vy += 0.035; this.x += this.vx; this.y += this.vy;
+    this.life--; if(this.life<=0 || this.y>h+40) this.dead=true;
+  }
+  draw(){
+    const t = constrain(this.life/this.maxLife,0,1);
+    const a = 255 * (t*t);
+    noStroke(); fill(255,255,255,a);
+    rectMode(CENTER);
+    push(); translate(this.x, this.y); rotate(frameCount*0.2);
+    rect(0,0,this.sz, this.sz);
+    pop();
+  }
+}
+
+/* =========================
+   Resize & Utils
+   ========================= */
+function windowResized(){
+  resizeCanvas(windowWidth, windowHeight);
+  w=width; h=height;
+  rebuildBackgroundFlakes();
+}
+
+function drawSnowGround(p){
+  const maxDepth = h * MAX_SNOW_DEPTH_FRAC;
+  const depth = p * maxDepth;
+
+  noStroke();
+  fill(240, 248, 255, 235);
+  beginShape();
+  vertex(0, h);
+  const samples = 80;
+  for(let i=0;i<=samples;i++){
+    const x = map(i,0,samples,0,w);
+    const y = groundYAt(x, p);
+    vertex(x, y);
+  }
+  vertex(w, h);
+  endShape(CLOSE);
+
+  const band = 10 + 20*p;
+  for(let i=0;i<band;i++){
+    const a = map(i,0,band-1, 70, 0);
+    stroke(255,255,255,a);
+    noFill();
+    beginShape();
+    for(let j=0;j<=samples;j++){
+      const x = map(j,0,samples,0,w);
+      const y = groundYAt(x, p) - i*0.7;
+      vertex(x,y);
+    }
+    endShape();
+  }
+}
+
+function groundYAt(x, p){
+  const maxDepth = h * MAX_SNOW_DEPTH_FRAC;
+  const depth = p * maxDepth;
+  const baseY = h - depth;
+
+  const nx = x*0.003;
+  const und = map(noise(nx, groundNoiseSeed), 0, 1, -18*(0.4+p), 18*(0.4+p));
+  const side = Math.abs((x/w)-0.5);
+  const drift = lerp(0, 14*(0.5+p), Math.pow(side,2));
+  return baseY + und + drift;
+}
+
+function drawSnowySky(){
+  const anyActive = pulses.some(p=>millis()>=p.start && millis()<p.end);
+  const tGrey = anyActive ? 0.35 : 0.25;
+  const topBase = [150,175,195];
+  const botBase = [205,215,225];
+  const topStorm= [168,170,176];
+  const botStorm= [208,210,215];
+
+  for(let y=0;y<h;y++){
+    const gy = y/h;
+    const top = [
+      lerp(topBase[0], topStorm[0], tGrey),
+      lerp(topBase[1], topStorm[1], tGrey),
+      lerp(topBase[2], topStorm[2], tGrey)
+    ];
+    const bot = [
+      lerp(botBase[0], botStorm[0], tGrey),
+      lerp(botBase[1], botStorm[1], tGrey),
+      lerp(botBase[2], botStorm[2], tGrey)
+    ];
+    const r = lerp(top[0], bot[0], gy);
+    const g = lerp(top[1], bot[1], gy);
+    const b = lerp(top[2], bot[2], gy);
+    stroke(r,g,b); line(0,y,w,y);
+  }
+}
+
+function easeInOutCubic(x){ return x<0.5 ? 4*x*x*x : 1 - pow(-2*x+2,3)/2; }
+</script>
+</body>
+</html>

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title class="translate" data-fr="Xylophone géant" data-en="Giant Xylophone">Xylophone géant</title>
+
+  <!-- Shared styles used across your eyegaze games -->
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <style>
+    /* ===== Only game-specific visuals (no menu duplication) ===== */
+    :root{
+      --c1:#FF595E; --c2:#FF924C; --c3:#FFCA3A; --c4:#8AC926;
+      --c5:#1982C4; --c6:#6A4C93; --c7:#B5179E; --c8:#2EC4B6;
+      --gap:3rem;
+      --side-pad:6rem; /* space so extreme bars aren't glued to edges */
+    }
+    body.light { background-color:#fff; color:#000; }
+    body.dark  { background-color:#000; color:#fff; }
+
+    /* Keep the MENU background dark even when "Light" is selected */
+    body.menu-open { background:#000 !important; color:#fff; }
+    body.menu-open #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    /* EN/FR toggle (menu only) – same as Number Hunt */
+    #langToggle{
+      position:fixed; top:10px; right:10px; z-index:99999;
+      display:inline-flex; align-items:center; gap:6px;
+      padding:6px 10px; border-radius:10px; border:2px solid #009688;
+      background:#fff; color:#009688; font-weight:700; cursor:pointer; user-select:none;
+    }
+    body.dark #langToggle{ background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    /* Game container (hidden until Start) – same behavior */
+    .game-container{
+      width:100%; max-width:100vw; height:100%;
+      display:none; flex-direction:column; align-items:center; justify-content:center; padding:10px; box-sizing:border-box;
+    }
+
+    /* Xylophone row — bars are centered vertically and horizontally */
+    #xylophone{
+      display:flex; flex-wrap:nowrap; justify-content:center; align-items:center;
+      width:100%; gap:var(--gap); padding:0 var(--side-pad);
+      min-height:86vh; box-sizing:border-box;
+    }
+
+    /* Bars */
+    .bar{
+      position:relative;
+      width:calc((100% - 7 * var(--gap)) / 8);
+      min-width:70px; flex:0 0 auto;
+      border-radius:1rem;
+      display:flex; align-items:flex-end; justify-content:center; /* label near bottom */
+      outline:none; transform-origin:center bottom; user-select:none;
+      height:50vh; /* base; overridden per bar below */
+      border:2px solid rgba(0,0,0,0.12);   /* light default */
+      overflow:hidden; cursor:none; /* eyegaze UX */
+      transition:filter .15s ease, transform .06s ease;
+    }
+    body.dark .bar{ border-color:rgba(255,255,255,0.12); }
+    .bar:active{ transform:scale(.98); }
+
+    /* Suspension dots */
+    .bar::before,.bar::after{
+      content:""; position:absolute; left:50%; transform:translateX(-50%);
+      width:25%; aspect-ratio:1; background:#333; border-radius:50%;
+      box-shadow:0 0 2px rgba(0,0,0,.5); opacity:.9;
+    }
+    .bar::before{ top:8%; } .bar::after{ bottom:8%; }
+
+    /* Flash pulse */
+    @keyframes flash{
+      0%{filter:brightness(3) drop-shadow(0 0 10px #fff8)}
+      50%{filter:brightness(2) drop-shadow(0 0 6px #fff6)}
+      100%{filter:brightness(1) drop-shadow(0 0 0 #0000)}
+    }
+    .bar.flash{ animation:flash .22s ease-out; }
+
+    /* Colors + stepped heights */
+    #b1{ background:var(--c1); height:40vh; }
+    #b2{ background:var(--c2); height:45vh; }
+    #b3{ background:var(--c3); height:50vh; }
+    #b4{ background:var(--c4); height:55vh; }
+    #b5{ background:var(--c5); height:60vh; }
+    #b6{ background:var(--c6); height:65vh; }
+    #b7{ background:var(--c7); height:70vh; }
+    #b8{ background:var(--c8); height:75vh; }
+
+    /* Dwell-fill overlay */
+    .dwell-fill{
+      position:absolute; top:50%; left:50%; width:0; height:0; transform:translate(-50%,-50%);
+      background:rgba(255,0,0,0.5); border-radius:12px; pointer-events:none;
+    }
+
+    /* Note label */
+    .bar .note-label{
+      position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+      padding:4px 8px; border-radius:10px; font-weight:800;
+      background:rgba(255,255,255,0.85); color:#111; mix-blend-mode:screen;
+    }
+    body.dark .bar .note-label{ background:rgba(0,0,0,0.6); color:#fff; mix-blend-mode:normal; }
+
+    /* Responsive side padding */
+    @media (max-width: 900px){
+      :root{ --side-pad: 3rem; }
+    }
+    @media (max-width: 600px){
+      :root{ --side-pad: 2rem; --gap: 1.2rem; }
+    }
+  </style>
+</head>
+<body class="light menu-open">
+<!-- ^^^^^ default Light theme for the game, but "menu-open" forces black bg while menu is visible -->
+
+<!-- Language toggle -->
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+<!-- ===== Options modal — SAME structure/IDs/classes as Number Hunt ===== -->
+<div id="game-options" class="modal">
+  <div id="options-title-bar">
+    <h2 id="options-main-title" class="translate" data-fr="Xylophone géant" data-en="Giant Xylophone">Xylophone géant</h2>
+  </div>
+
+  <div id="control-panel-options">
+    <div id="mode-divider"></div>
+
+    <div id="options-inline-container">
+      <!-- Column 1 (checkbox + volume) -->
+      <div class="options-column">
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="muteSFX">
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="ttsEnabled" checked>
+            <span class="translate" data-fr="Lecture vocale (TTS)" data-en="Voice reading (TTS)">Lecture vocale (TTS)</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label for="sfxVol" class="teal-label">
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
+            <span id="sfxVolVal">100</span>
+          </label>
+          <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="100">
+        </div>
+      </div>
+
+      <!-- Column 2 (theme + note duration) -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block translate" data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select">
+            <option value="light" selected class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+          </select>
+        </div>
+
+        <div class="option-item">
+          <label class="teal-label">
+            <span class="translate" data-fr="Durée de la note (s)" data-en="Note length (s)">Durée de la note (s)</span>
+            <span id="timeVal">1.0s</span>
+          </label>
+          <input type="range" id="timeSlider" class="styled-slider" min="0.1" max="5" step="0.1" value="1">
+        </div>
+      </div>
+
+      <!-- Column 3 (dwell + size) -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="dwellTimeSlider" class="teal-label">
+            <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
+            <span id="dwellTimeVal">1500</span> ms
+          </label>
+          <!-- Keep the requested 50 ms minimum but identical styling -->
+          <input type="range" id="dwellTimeSlider" class="styled-slider" min="50" max="5000" step="50" value="1500">
+        </div>
+
+        <div class="option-item">
+          <label for="layoutScale" class="teal-label">
+            <span class="translate" data-fr="Taille :" data-en="Size:">Taille :</span>
+            <span id="layoutScaleVal">1.00</span>
+          </label>
+          <!-- limit to 0.8 – 1.2 like requested -->
+          <input type="range" id="layoutScale" class="styled-slider" min="0.8" max="1.2" step="0.05" value="1.0">
+        </div>
+      </div>
+    </div>
+
+    <div id="mode-divider"></div>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+</div>
+
+<!-- ===== Game ===== -->
+<div class="game-container">
+  <div id="xylophone" role="group" aria-label="Xylophone">
+    <div id="b1" class="bar" aria-label="Do"><span class="note-label">Do</span></div>
+    <div id="b2" class="bar" aria-label="Ré"><span class="note-label">Ré</span></div>
+    <div id="b3" class="bar" aria-label="Mi"><span class="note-label">Mi</span></div>
+    <div id="b4" class="bar" aria-label="Fa"><span class="note-label">Fa</span></div>
+    <div id="b5" class="bar" aria-label="Sol"><span class="note-label">Sol</span></div>
+    <div id="b6" class="bar" aria-label="La"><span class="note-label">La</span></div>
+    <div id="b7" class="bar" aria-label="Si"><span class="note-label">Si</span></div>
+    <div id="b8" class="bar" aria-label="Do"><span class="note-label">Do</span></div>
+  </div>
+</div>
+
+<audio id="correctSound" src="../../sounds/victory.mp3"></audio>
+<audio id="wrongSound"   src="../../sounds/error.mp3"></audio>
+
+<script src="../../js/eyegaze-menu.js"></script>
+<script src="../../js/translationmain.js"></script>
+
+<script>
+/* =========================
+   Define note-name arrays FIRST so setLang -> updateNoteLabels can use them
+   ========================= */
+const noteNamesFR=['Do','Ré','Mi','Fa','Sol','La','Si','Do'];
+const noteNamesEN=['C','D','E','F','G','A','B','C'];
+
+/* Translate visible note labels with current language (no dependency on later variables) */
+function updateNoteLabels(){
+  const isFR = (document.documentElement.lang === 'fr');
+  const names = isFR ? noteNamesFR : noteNamesEN;
+  document.querySelectorAll('#xylophone .bar').forEach((bar, i)=>{
+    const label = bar.querySelector('.note-label');
+    if(label) label.textContent = names[i] || '';
+    bar.setAttribute('aria-label', names[i] || '');
+  });
+}
+
+/* =========================
+   Language — storage as source of truth (same as Number Hunt)
+   ========================= */
+const LS_LANG_KEY='siteLanguage';
+const langToggle=document.getElementById('langToggle');
+
+function getLang(){
+  try { const saved=localStorage.getItem(LS_LANG_KEY); if(saved==='en'||saved==='fr') return saved; } catch(e){}
+  return (document.documentElement.lang==='en')?'en':'fr';
+}
+function setLang(lang){
+  const safe=(lang==='en')?'en':'fr';
+  document.documentElement.lang=safe;
+  try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e){}
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr=el.getAttribute('data-fr'), en=el.getAttribute('data-en');
+    if(safe==='fr' && fr!=null) el.textContent=fr;
+    if(safe==='en' && en!=null) el.textContent=en;
+  });
+  updateNoteLabels(); // safe now
+}
+(function normalizeLangOnLoad(){
+  let initial='fr';
+  try{
+    const saved=localStorage.getItem(LS_LANG_KEY);
+    if(saved==='en'||saved==='fr') initial=saved;
+    else{
+      initial=(document.documentElement.lang==='en')?'en':'fr';
+      localStorage.setItem(LS_LANG_KEY, initial);
+    }
+  }catch(e){ initial=(document.documentElement.lang==='en')?'en':'fr'; }
+  setLang(initial);
+})();
+langToggle.addEventListener('click', ()=>{
+  setLang(getLang()==='fr' ? 'en' : 'fr');
+  choosePreferredVoice();
+});
+
+/* =========================
+   Controls & UI — identical bindings
+   ========================= */
+const muteSFX       = document.getElementById('muteSFX');
+const sfxVol        = document.getElementById('sfxVol');
+const sfxVolVal     = document.getElementById('sfxVolVal');
+const dwellSlider   = document.getElementById('dwellTimeSlider');
+const dwellTimeVal  = document.getElementById('dwellTimeVal');
+const themeSelect   = document.getElementById('themeSelect');
+const startButton   = document.getElementById('startButton');
+const ttsEnabled    = document.getElementById('ttsEnabled');
+const layoutScaleEl = document.getElementById('layoutScale');
+const layoutScaleVal= document.getElementById('layoutScaleVal');
+const timeSlider    = document.getElementById('timeSlider');
+const timeVal       = document.getElementById('timeVal');
+
+const LS_KEYS = { ttsEnabled: 'xylophone:ttsEnabled' };
+
+(function initPersistedControls(){
+  try {
+    const en = localStorage.getItem(LS_KEYS.ttsEnabled);
+    if (en === null) {
+      ttsEnabled.checked = true;
+      localStorage.setItem(LS_KEYS.ttsEnabled, 'true');
+    } else {
+      ttsEnabled.checked = (en === 'true');
+    }
+  } catch(e) {
+    ttsEnabled.checked = true;
+  }
+})();
+initEyegazeMenu?.();
+
+sfxVol.addEventListener('input', ()=> sfxVolVal.textContent = sfxVol.value);
+timeSlider.addEventListener('input', ()=> timeVal.textContent = `${parseFloat(timeSlider.value).toFixed(1)}s`);
+dwellSlider.addEventListener('input', ()=> dwellTimeVal.textContent = dwellSlider.value);
+ttsEnabled.addEventListener('change', ()=> {
+  try { localStorage.setItem(LS_KEYS.ttsEnabled, String(ttsEnabled.checked)); } catch(e){}
+});
+layoutScaleEl.addEventListener('input', ()=>{
+  layoutScaleVal.textContent = parseFloat(layoutScaleEl.value).toFixed(2);
+  if (document.querySelector('.game-container').style.display === 'flex') applyLayoutScale();
+});
+
+/* =========================
+   Synth
+   ========================= */
+const ctx=new (window.AudioContext||window.webkitAudioContext)();
+const freqs=[261.63,293.66,329.63,349.23,392.00,440.00,493.88,523.25];
+const master=ctx.createGain(); master.gain.value=1; master.connect(ctx.destination);
+
+function createReverb(d=1.6,decay=2.5){
+  const len=ctx.sampleRate*d, buf=ctx.createBuffer(2,len,ctx.sampleRate);
+  for(let ch=0; ch<2; ch++){
+    const data=buf.getChannelData(ch);
+    for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);
+  }
+  const con=ctx.createConvolver(); con.buffer=buf; return con;
+}
+const wet=ctx.createGain(); wet.gain.value=.35; wet.connect(createReverb()).connect(master);
+
+let timeScale=1;
+function playNote(i){
+  const f0=freqs[i];
+  const partials=[
+    {r:1,    g:1.00, d:1.00},
+    {r:3.99, g:.55,  d:.90},
+    {r:9.00, g:.30,  d:.75},
+    {r:14.4, g:.22,  d:.60},
+    {r:19.2, g:.12,  d:.45}
+  ];
+  const dry=ctx.createGain(); dry.gain.value=.9;
+  dry.connect(master); dry.connect(wet);
+  partials.forEach(p=>{
+    const osc=ctx.createOscillator(), g=ctx.createGain();
+    osc.type='sine'; osc.frequency.value=f0*p.r;
+    const dur=Math.max(0.06, p.d*timeScale);
+    g.gain.setValueAtTime(0,ctx.currentTime);
+    g.gain.linearRampToValueAtTime(p.g, ctx.currentTime+.008);
+    g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime+dur);
+    osc.connect(g).connect(dry);
+    osc.start(); osc.stop(ctx.currentTime+dur);
+  });
+}
+
+/* =========================
+   TTS (optional)
+   ========================= */
+let preferredVoice=null;
+function choosePreferredVoice(){
+  const ss=window.speechSynthesis; if(!ss||!ss.getVoices) return;
+  const voices=ss.getVoices()||[]; if(!voices.length) return;
+  const lang=getLang(); const by=fn=>voices.find(fn);
+  preferredVoice=(lang==='fr')
+    ? (by(v=>/sylvie/i.test(v.name||'')&&/^fr[-_]?CA/i.test(v.lang||''))||
+       by(v=>/^fr[-_]?CA/i.test(v.lang||''))||
+       by(v=>/^fr[-_]?FR/i.test(v.lang||''))||
+       by(v=>(v.lang||'').toLowerCase().startsWith('fr'))||
+       voices[0])
+    : (by(v=>/^en[-_]?CA/i.test(v.lang||''))||
+       by(v=>/^en[-_]?US/i.test(v.lang||''))||
+       by(v=>/^en[-_]?GB/i.test(v.lang||''))||
+       by(v=>(v.lang||'').toLowerCase().startsWith('en'))||
+       voices[0]);
+}
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  const uiVol=parseInt(sfxVol.value,10);
+  const volume=Math.max(0,Math.min(1,(isNaN(uiVol)?50:uiVol)/100));
+  const u=new SpeechSynthesisUtterance(text);
+  if(preferredVoice){ u.voice=preferredVoice; u.lang=preferredVoice.lang || (getLang()==='fr'?'fr-CA':'en-US'); }
+  else { u.lang=(getLang()==='fr'?'fr-CA':'en-US'); }
+  u.rate=1.0; u.volume=volume;
+  try{ speechSynthesis.cancel(); }catch(e){}
+  speechSynthesis.speak(u);
+}
+if('speechSynthesis' in window){ speechSynthesis.addEventListener('voiceschanged', choosePreferredVoice); choosePreferredVoice(); }
+
+/* =========================
+   Eyegaze dwell activation
+   ========================= */
+let currentOverlay=null, hoverTimeout=null, activeHoverBar=null;
+function getDwellMs(){
+  try{
+    if(window.eyegazeSettings && typeof eyegazeSettings.dwellTime==='number')
+      return Math.max(50, eyegazeSettings.dwellTime);
+  }catch(e){}
+  const ui=parseInt(dwellSlider.value,10);
+  return Math.max(50, isNaN(ui)?1500:ui);
+}
+function startHover(bar){
+  if(activeHoverBar===bar && currentOverlay) return;
+  stopHover();
+  activeHoverBar=bar;
+  currentOverlay=document.createElement('div');
+  currentOverlay.className='dwell-fill';
+  bar.appendChild(currentOverlay);
+
+  const dwellMs=getDwellMs();
+  requestAnimationFrame(()=>{
+    currentOverlay.style.transition=`width ${dwellMs}ms linear, height ${dwellMs}ms linear`;
+    currentOverlay.style.width='0'; currentOverlay.style.height='0';
+    requestAnimationFrame(()=>{
+      currentOverlay.style.width='100%';
+      currentOverlay.style.height='100%';
+    });
+  });
+
+  hoverTimeout=setTimeout(()=>{ triggerBar(bar); stopHover(); }, dwellMs);
+}
+function stopHover(){
+  clearTimeout(hoverTimeout);
+  if(currentOverlay && currentOverlay.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
+  currentOverlay=null; activeHoverBar=null;
+}
+
+/* =========================
+   Interaction wiring
+   ========================= */
+const bars=[...document.querySelectorAll('.bar')];
+let flashOn=true;
+
+function triggerBar(bar){
+  const i=bars.indexOf(bar); if(i<0) return;
+  if(flashOn) bar.classList.add('flash');
+  playNote(i);
+  setTimeout(()=>bar.classList.remove('flash'),220);
+  if(ttsEnabled.checked){
+    const name=(getLang()==='fr')?noteNamesFR[i]:noteNamesEN[i];
+    speak(name);
+  }
+}
+
+bars.forEach(bar=>{
+  bar.addEventListener('pointerenter', ()=> startHover(bar));
+  bar.addEventListener('pointerleave', stopHover);
+  bar.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    if(ctx.state==='suspended') ctx.resume();
+    triggerBar(bar);
+  });
+});
+
+/* =========================
+   Layout scaling (0.8–1.2)
+   ========================= */
+function applyTheme(theme){
+  document.body.classList.remove('light','dark');
+  document.body.classList.add(theme);
+}
+function applyLayoutScale(){
+  const scale=Math.max(0.8, Math.min(1.2, parseFloat(layoutScaleEl.value)||1.0));
+  const base=[40,45,50,55,60,65,70,75];
+  const heights=base.map(v=>Math.max(24,Math.min(90, Math.round(v*scale))));
+  ['#b1','#b2','#b3','#b4','#b5','#b6','#b7','#b8'].forEach((sel,idx)=>{
+    const el=document.querySelector(sel); if(el) el.style.height=heights[idx]+'vh';
+  });
+}
+layoutScaleEl.addEventListener('input', ()=>{
+  layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
+  if(document.querySelector('.game-container').style.display==='flex') applyLayoutScale();
+});
+
+/* =========================
+   Start flow (matches Number Hunt behavior)
+   ========================= */
+function syncEyegazeSettingsFromUI(){
+  try{
+    if(window.eyegazeSettings){
+      eyegazeSettings.sfxMuted=!!muteSFX.checked;
+      eyegazeSettings.sfxVolume=parseInt(sfxVol.value,10)||100;
+      eyegazeSettings.dwellTime=parseInt(dwellSlider.value,10)||1500;
+      eyegazeSettings.ttsEnabled=!!ttsEnabled.checked;
+    }
+  }catch(e){}
+}
+
+function startGame(){
+  // Request fullscreen like other games
+  const root=document.documentElement;
+  (root.requestFullscreen||root.webkitRequestFullscreen||root.msRequestFullscreen||function(){}).call(root);
+
+  // Only show translate on main menu
+  langToggle.style.display='none';
+
+  syncEyegazeSettingsFromUI();
+
+  // Theme + audio + timing
+  applyTheme(themeSelect.value || 'light');
+  master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol.value,10)||100)/100));
+  timeScale=parseFloat(timeSlider.value)||1.0;
+
+  // Hide menu-open state so body uses selected theme during gameplay
+  document.body.classList.remove('menu-open');
+
+  // Show game
+  document.querySelector('.game-container').style.display='flex';
+  document.getElementById('game-options').style.display='none';
+
+  if(ctx.state==='suspended') ctx.resume();
+  choosePreferredVoice();
+  updateNoteLabels();
+  applyLayoutScale();
+
+  try{ if(window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); }catch(e){}
+}
+startButton.addEventListener('click', startGame);
+
+/* Live updates */
+sfxVol.addEventListener('input', ()=>{ master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol.value,10)||100)/100)); });
+themeSelect.addEventListener('change', ()=> applyTheme(themeSelect.value));
+window.addEventListener('resize', applyLayoutScale);
+
+/* Init UI numbers */
+(function initUI(){
+  sfxVolVal.textContent=sfxVol.value;
+  timeVal.textContent=`${parseFloat(timeSlider.value).toFixed(1)}s`;
+  dwellTimeVal.textContent=dwellSlider.value;
+  layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
+  updateNoteLabels(); // ensure labels match initial language on load (menu visible)
+})();
+</script>
+</body>
+</html>
