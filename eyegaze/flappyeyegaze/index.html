@@ -33,6 +33,7 @@
     .footer { position:absolute; bottom:8px; left:0; right:0; display:flex; gap:8px; justify-content:center; pointer-events:none; }
     .kbd{ pointer-events:none; font-size:12px; padding:.2rem .45rem; border:1px solid rgba(255,255,255,.18); border-bottom-width:2px; background:rgba(255,255,255,.06); border-radius:6px; }
 
+    /* Match buttons/controls typography for instruction text */
     .small-note{
       font-family: var(--ui-font);
       font-weight: 700;
@@ -40,6 +41,7 @@
       line-height: 1.25;
     }
 
+    /* Bird selector scroller */
     .bird-scroll {
       display:flex; gap:10px; overflow-x:auto; padding:4px 2px;
       scroll-snap-type: x mandatory;
@@ -64,10 +66,9 @@
 </head>
 <body>
 
-<!-- EN/FR toggle (shown only on main menu; hidden after Start) -->
 <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
 
-<!-- Options modal (shared style) -->
+<!-- Options modal -->
 <div id="game-options" class="modal">
   <div id="options-title-bar">
     <h2 id="options-main-title" class="translate" data-fr="Flappy-ish" data-en="Flappy-ish">Flappy-ish</h2>
@@ -117,7 +118,7 @@
             </div>
             <div class="bird-chip" role="option" aria-selected="false" data-bird="owl">
               <span class="bird-emoji">🦉</span>
-              <span class="translate" data-fr="Chouette (Nuit + tuyaux)" data-en="Owl (Night + pipes)">Chouette (Nuit + tuyaux)</span>
+              <span class="translate" data-fr="Chouette (Nuit + sapins)" data-en="Owl (Night + firs)">Chouette (Nuit + sapins)</span>
             </div>
             <div class="bird-chip" role="option" aria-selected="false" data-bird="parrot">
               <span class="bird-emoji">🦜</span>
@@ -307,14 +308,15 @@
     hard:   { gap: 140, speed: 3.6 }
   };
   const SPACING_FACTOR = { easy: 0.42, normal: 0.33, hard: 0.27 };
-  // Smaller than before but still bigger than pipes
-  const FLOWER_GAP_MULT = { easy: 1.25, normal: 1.35, hard: 1.50 };
+
+  // Flowers: slightly larger than pipes (but smaller than last time per your request)
+  const FLOWER_GAP_MULT = { easy: 1.30, normal: 1.38, hard: 1.50 };
 
   let cfg = { gap: 220, speed: 2.4, spawn: 1.5 };
 
   function rescaleConfig() {
     const base = presetsBase[difficulty];
-    cfg.gap   = Math.round(base.gap * (H / 640)); // responsive gap baseline
+    cfg.gap   = Math.round(base.gap * (H / 640));
     cfg.speed = base.speed;
     const spacingPx = Math.max(200, Math.round(W * SPACING_FACTOR[difficulty]));
     const vx = cfg.speed * 60; // px/s
@@ -349,7 +351,7 @@
       ],
       cycle: [0, 1, 2],
       scaleH: 6.5,
-      theme: 'night-pipes'
+      theme: 'night-firs'   // <- trees instead of pipes
     },
     parrot: {
       bases: [
@@ -402,16 +404,17 @@
     }
   }
 
-  // Preload default
   loadSpriteSet('classic');
 
   // Obstacles
   const pipes = [];
   let pipeTimer = 0;
 
-  // Flower tunnels (for sunny-flowers theme)
   const flowerTunnels = [];
   let flowerTimer = 0;
+
+  const firTunnels = [];
+  let firTimer = 0;
 
   // Clouds & stars
   const clouds = [];
@@ -463,6 +466,7 @@
     score = 0; scoreEl.textContent = '0';
     pipes.length = 0; pipeTimer = 0;
     flowerTunnels.length = 0; flowerTimer = 0;
+    firTunnels.length = 0; firTimer = 0;
     groundOffset = 0;
     bird.x = Math.round(W*0.25);
     bird.y = Math.round(H*0.45);
@@ -480,9 +484,7 @@
     await goFullscreen();
     try { document.getElementById('game-options').style.display = 'none'; } catch(e){}
     langToggle.style.display = 'none';
-
     await loadSpriteSet(birdSet);
-
     if (state === State.DEAD) resetGameState();
     state = State.PLAYING;
   }
@@ -512,42 +514,36 @@
   startButton.addEventListener('click', startGame);
 
   /* =========================
-     Drawing helpers: Skies
+     Skies
      ========================= */
   function drawSkyDay() {
     const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0, '#78c6ff');
     g.addColorStop(0.6, '#8ed0ff');
     g.addColorStop(1, '#b1e1ff');
-    ctx.fillStyle = g;
-    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
   }
-  function drawSunStandalone() {
+  function drawSun() {
     ctx.save();
-    ctx.globalAlpha = 0.35;
-    const cx = W*0.12, cy = H*0.18, r = Math.max(40, Math.min(W,H)*0.05);
-    const g = ctx.createRadialGradient(cx,cy,8, cx,cy,r*2.2);
-    g.addColorStop(0, 'rgba(255,255,200,.95)');
-    g.addColorStop(1, 'rgba(255,255,200,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx,cy,r*2.2,0,Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#ffe66d';
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    const cx = W*0.12, cy = H*0.16, r = Math.max(48, Math.min(W,H)*0.06);
+    const glow = ctx.createRadialGradient(cx,cy,6, cx,cy,r*2.4);
+    glow.addColorStop(0, 'rgba(255,230,170,.95)');
+    glow.addColorStop(1, 'rgba(255,230,170,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx,cy,r*2.4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
   function drawSkyNight() {
-    // Sky
     const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0, '#0b1020');
     g.addColorStop(1, '#081331');
     ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
 
-    // Stars
+    // Twinkling stars
     ctx.save();
     for (const s of stars) {
       const tw = (Math.sin(performance.now()/600 + s.tw)+1)/2;
-      ctx.globalAlpha = 0.35 + 0.65*tw;
+      ctx.globalAlpha = 0.4 + 0.6*tw;
       ctx.beginPath();
       ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2);
       ctx.fillStyle = '#ffffff';
@@ -555,39 +551,24 @@
     }
     ctx.restore();
 
-    // FULL MOON with soft glow
-    const mx = W*0.15, my = H*0.22;
-    const r  = Math.max(36, Math.min(W,H)*0.055);
-
-    const glow = ctx.createRadialGradient(mx, my, r*0.4, mx, my, r*2.4);
-    glow.addColorStop(0, 'rgba(255,245,200,0.85)');
-    glow.addColorStop(1, 'rgba(255,245,200,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(mx, my, r*2.4, 0, Math.PI*2); ctx.fill();
-
-    const moonGrad = ctx.createRadialGradient(mx - r*0.25, my - r*0.25, r*0.2, mx, my, r);
-    moonGrad.addColorStop(0, '#fff7d6');
-    moonGrad.addColorStop(1, '#f3e9b6');
-    ctx.fillStyle = moonGrad;
-    ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI*2); ctx.fill();
+    // Full bright moon (no masking)
+    const mx = W*0.16, my = H*0.18;
+    ctx.save();
+    const mr = Math.max(28, Math.min(W,H)*0.05);
+    const mglow = ctx.createRadialGradient(mx,my,4, mx,my,mr*2.2);
+    mglow.addColorStop(0,'rgba(255,255,230,0.85)');
+    mglow.addColorStop(1,'rgba(255,255,230,0)');
+    ctx.fillStyle = mglow; ctx.beginPath(); ctx.arc(mx,my,mr*2.2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#f6f1d5'; ctx.beginPath(); ctx.arc(mx,my,mr,0,Math.PI*2); ctx.fill();
+    ctx.restore();
   }
   function drawSkySunny() {
-    // Warm sky gradient with integrated sun (so we won't draw an extra one later)
     const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0, '#7fd3ff');
     g.addColorStop(0.6, '#9fe0ff');
     g.addColorStop(1, '#c7ecff');
     ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-
-    // brighter sun
-    ctx.save();
-    const cx = W*0.12, cy = H*0.16, r = Math.max(48, Math.min(W,H)*0.06);
-    const glow = ctx.createRadialGradient(cx,cy,6, cx,cy,r*2.5);
-    glow.addColorStop(0, 'rgba(255,230,170,.95)');
-    glow.addColorStop(1, 'rgba(255,230,170,0)');
-    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx,cy,r*2.5,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-    ctx.restore();
+    drawSun();
   }
 
   /* =========================
@@ -617,7 +598,7 @@
   }
 
   /* =========================
-     Pipes (day/night modes)
+     Pipes (day mode)
      ========================= */
   function drawPipe(x, topH, w=PIPE_W, gap=cfg.gap) {
     const bottomY = topH + gap;
@@ -721,7 +702,7 @@
   }
 
   /* =========================
-     Flowers (sunny-flowers theme)
+     Flowers (sunny theme)
      ========================= */
   function makeTunnelStyle(){
     const petals = ['#ff5e7e','#ff9f1c','#ffd166','#06d6a0','#7b5cff','#ff66c4','#ff7f50'];
@@ -768,7 +749,6 @@
     grad.addColorStop(0, '#2e7d32');
     grad.addColorStop(1, '#1b5e20');
     ctx.fillStyle = grad;
-
     ctx.fillRect(x - stemW/2, top ? yBase - height : yBase, stemW, height);
 
     ctx.fillStyle = style.leaf;
@@ -798,31 +778,188 @@
     const topStemHeight    = topH;
     const bottomStemHeight = H - GH - bottomY;
 
-    const stemWTop = drawStemAndLeaves(x + Math.floor(t.w/2), topStemHeight, topStemHeight, style, true);
-    const stemWBot = drawStemAndLeaves(x + Math.floor(t.w/2), bottomY, bottomStemHeight, style, false);
+    const cx = x + Math.floor(t.w/2);
+
+    const stemWTop = drawStemAndLeaves(cx, topStemHeight, topStemHeight, style, true);
+    const stemWBot = drawStemAndLeaves(cx, bottomY, bottomStemHeight, style, false);
 
     const headSize = Math.max(28, PIPE_W * 1.2);
 
-    // Top (upside-down)
-    ctx.save();
-    ctx.translate(x + t.w/2, topStemHeight);
-    ctx.scale(1, -1);
-    drawFlowerHead(headSize, style);
-    ctx.restore();
-
-    // Bottom (upright)
-    ctx.save();
-    ctx.translate(x + t.w/2, bottomY);
-    drawFlowerHead(headSize, style);
-    ctx.restore();
+    ctx.save(); ctx.translate(cx, topStemHeight); ctx.scale(1, -1); drawFlowerHead(headSize, style); ctx.restore();
+    ctx.save(); ctx.translate(cx, bottomY); drawFlowerHead(headSize, style); ctx.restore();
 
     t._hit = {
-      stemTop:    {x: x + t.w/2 - stemWTop/2, y: 0, w: stemWTop, h: topStemHeight},
-      stemBottom: {x: x + t.w/2 - stemWBot/2, y: bottomY, w: stemWBot, h: H - GH - bottomY},
-      headTop:    {cx: x + t.w/2, cy: topStemHeight, r: headSize*0.46},
-      headBottom: {cx: x + t.w/2, cy: bottomY,      r: headSize*0.46}
+      stemTop:    {x: cx - stemWTop/2, y: 0, w: stemWTop, h: topStemHeight},
+      stemBottom: {x: cx - stemWBot/2, y: bottomY, w: stemWBot, h: H - GH - bottomY},
+      headTop:    {cx, cy: topStemHeight, r: headSize*0.46},
+      headBottom: {cx, cy: bottomY,      r: headSize*0.46}
     };
   }
+
+/* =========================
+   TREES (owl/night mode) – stacked-triangle firs
+   ========================= */
+function makeFirStyle(){
+  return {
+    trunk1: '#6d4c41',
+    trunk2: '#5d3e33',
+    foliage: '#2e7d32',
+    foliageShade: '#236328',
+    highlight: 'rgba(255,255,255,0.08)'
+  };
+}
+
+/* Build stacked-triangle geometry + hitboxes at current x */
+function buildFirHitboxes(t){
+  const xCenter = t.x + t.w/2;
+  const bottomY = t.topH + t.gap;
+
+  const topStemH    = Math.max(0, t.topH);
+  const bottomStemH = Math.max(0, (H - GH) - bottomY);
+
+  // ---- proportions (bigger than trunk, proper fir silhouette) ----
+  const trunkW = Math.max(16, Math.round(PIPE_W * 0.9));   // trunk
+  const tierH  = Math.max(12, Math.round(PIPE_W * 0.6));   // height of each triangle
+  const padY   = Math.max(4,  Math.round(PIPE_W * 0.12));  // vertical spacing between tiers
+  const crownMargin = Math.max(10, Math.round(PIPE_W*0.25)); // small top/bottom margin not covered by foliage
+
+  // Base/top widths for tiers (WIDE at the bottom near the gap)
+  const baseTierW = Math.max(trunkW*2.8, Math.round(PIPE_W*2.8));
+  const topTierW  = Math.max(trunkW*1.6, Math.round(PIPE_W*1.6));
+
+  // helper to compute tiers stack
+  function makeTierStack(isTop, stemH, edgeY){
+    const usable = Math.max(0, stemH - crownMargin);     // foliage should fill most of length
+    const pitch  = tierH + padY;
+    const count  = Math.max(3, Math.floor(usable / pitch));
+
+    const tiers = [];
+    if (count <= 0) return {tiers, trunk: null};
+
+    // starting y at far edge from the gap (so the widest tiers sit near the gap)
+    const start = isTop ? (edgeY - stemH + crownMargin) : (edgeY + stemH - crownMargin);
+
+    for (let i = 0; i < count; i++){
+      const tNorm = i / Math.max(1, (count-1));                 // 0..1
+      const w = Math.round(topTierW + (1 - tNorm) * (baseTierW - topTierW)); // BIG near gap
+
+      const apexY = isTop ? (start + i * pitch) : (start - i * pitch); // apex toward the gap
+      const rectY = isTop ? (apexY - tierH) : apexY;
+
+      tiers.push({
+        x: Math.round(xCenter - w/2),
+        y: Math.round(rectY),
+        w, h: tierH,
+        apexY,
+        inverted: isTop
+      });
+    }
+
+    const trunk = {
+      x: Math.round(xCenter - trunkW/2),
+      y: isTop ? 0 : edgeY,
+      w: trunkW,
+      h: isTop ? stemH : ((H - GH) - edgeY)
+    };
+
+    return { tiers, trunk };
+  }
+
+  const top   = makeTierStack(true,  topStemH, t.topH);
+  const bot   = makeTierStack(false, bottomStemH, bottomY);
+
+  t._hit = {
+    topTrunk:    top.trunk,
+    bottomTrunk: bot.trunk,
+    tiersTop:    top.tiers,
+    tiersBot:    bot.tiers
+  };
+}
+
+/* Draw trunk with subtle grooves */
+function drawTrunkRect(r, style){
+  if (!r) return;
+  const grad = ctx.createLinearGradient(r.x, 0, r.x+r.w, 0);
+  grad.addColorStop(0, style.trunk2);
+  grad.addColorStop(0.5, style.trunk1);
+  grad.addColorStop(1, style.trunk2);
+  ctx.fillStyle = grad;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  for(let i=1;i<4;i++){
+    const gx = r.x + Math.round((i/4)*r.w);
+    ctx.fillRect(gx, r.y, 1, r.h);
+  }
+}
+
+/* Draw a single stacked-triangle tier */
+function drawTier(tier, style){
+  const {x, y, w, h, apexY, inverted} = tier;
+  const xCenter = x + w/2;
+
+  ctx.save();
+  ctx.translate(xCenter, apexY);
+  if (inverted) ctx.scale(1, -1);
+
+  // shadow (right face) to add a bit of depth
+  ctx.fillStyle = style.foliageShade;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);        // apex
+  ctx.lineTo(w/2,  h);
+  ctx.lineTo(0,    h);
+  ctx.closePath();
+  ctx.fill();
+
+  // main face
+  ctx.fillStyle = style.foliage;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);        // apex
+  ctx.lineTo(-w/2, h);
+  ctx.lineTo(w/2,  h);
+  ctx.closePath();
+  ctx.fill();
+
+  // thin highlight near the left side
+  ctx.fillStyle = style.highlight;
+  ctx.beginPath();
+  ctx.moveTo(-w*0.22, h*0.38);
+  ctx.lineTo(-w*0.05, h*0.15);
+  ctx.lineTo(-w*0.05, h*0.32);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* Draw a full fir tunnel (always rebuild so geometry follows x) */
+function drawFirTunnel(t){
+  buildFirHitboxes(t);
+  const style = t.style || makeFirStyle();
+
+  drawTrunkRect(t._hit.topTrunk, style);
+  drawTrunkRect(t._hit.bottomTrunk, style);
+
+  for (const tier of t._hit.tiersTop) drawTier(tier, style);
+  for (const tier of t._hit.tiersBot) drawTier(tier, style);
+}
+
+/* Collision against trunks + tier bounding rects */
+function collideFirTunnel(t, cx, cy, cr){
+  buildFirHitboxes(t);
+
+  // trunks
+  for (const r of [t._hit.topTrunk, t._hit.bottomTrunk]){
+    if (!r) continue;
+    if (circleRectCollide(cx, cy, cr, r.x, r.y, r.w, r.h)) return true;
+  }
+  // tiers (use their bounding boxes)
+  const tiers = t._hit.tiersTop.concat(t._hit.tiersBot);
+  for (const r of tiers){
+    if (circleRectCollide(cx, cy, cr, r.x, r.y, r.w, r.h)) return true;
+  }
+  return false;
+}
 
   /* =========================
      Bird drawing
@@ -944,22 +1081,16 @@
     bird.y = clamp(bird.y, bird.r+5, H - GH - bird.r - 5);
 
     if (currentTheme === 'sunny-flowers'){
-      // FLOWER TUNNELS
       flowerTimer -= dt;
       if (flowerTimer <= 0){
-        const baseGap = cfg.gap;
-        const gap = Math.round(baseGap * (FLOWER_GAP_MULT[difficulty] || 1.35));
-
+        const gap = Math.round(cfg.gap * (FLOWER_GAP_MULT[difficulty] || 1.35));
         const margin = 30;
         const minY = margin + 30, maxY = H - margin - 30 - GH;
         const center = rand(minY + gap/2, Math.max(minY + gap/2, maxY - gap/2));
-        const topH = center - gap/2;
-        const w = PIPE_W;
-
         flowerTunnels.push({
           x: W + 8,
-          topH,
-          w,
+          topH: center - gap/2,
+          w: PIPE_W,
           gap,
           scored: false,
           style: makeTunnelStyle()
@@ -971,16 +1102,39 @@
       for (const f of flowerTunnels){
         f.x -= (cfg.speed * 60) * dt;
         if (!f.scored && f.x + f.w < bird.x - bird.r){
-          f.scored = true;
-          score++;
-          scoreEl.textContent = score;
-          scoreChime();
+          f.scored = true; score++; scoreEl.textContent = score; scoreChime();
         }
       }
       while (flowerTunnels.length && flowerTunnels[0].x + flowerTunnels[0].w < -10) flowerTunnels.shift();
 
+    } else if (currentTheme === 'night-firs'){
+      firTimer -= dt;
+      if (firTimer <= 0){
+        const gap = cfg.gap;
+        const margin = 30;
+        const minY = margin + 30, maxY = H - margin - 30 - GH;
+        const center = rand(minY + gap/2, Math.max(minY + gap/2, maxY - gap/2));
+        firTunnels.push({
+          x: W + 8,
+          topH: center - gap/2,
+          w: PIPE_W,
+          gap,
+          scored:false,
+          style: makeFirStyle()
+        });
+        if (firTunnels.length > 12) firTunnels.shift();
+        firTimer = cfg.spawn;
+      }
+
+      for (const t of firTunnels){
+        t.x -= (cfg.speed * 60) * dt;
+        if (!t.scored && t.x + t.w < bird.x - bird.r){
+          t.scored = true; score++; scoreEl.textContent = score; scoreChime();
+        }
+      }
+      while (firTunnels.length && firTunnels[0].x + firTunnels[0].w < -10) firTunnels.shift();
+
     } else {
-      // PIPES
       pipeTimer -= dt;
       if (pipeTimer <= 0){
         const gap = cfg.gap;
@@ -995,10 +1149,7 @@
       for (const p of pipes){
         p.x -= (cfg.speed * 60) * dt;
         if (!p.scored && p.x + p.w < bird.x - bird.r){
-          p.scored = true;
-          score++;
-          scoreEl.textContent = score;
-          scoreChime();
+          p.scored = true; score++; scoreEl.textContent = score; scoreChime();
         }
       }
       while (pipes.length && pipes[0].x + pipes[0].w < -10) pipes.shift();
@@ -1015,11 +1166,12 @@
           const headSize = Math.max(28, PIPE_W*1.2);
           const stemW = Math.max(12, Math.round(PIPE_W*0.55));
           const bottomY = f.topH + f.gap;
+          const cx = f.x + f.w/2;
           f._hit = {
-            stemTop:    {x: f.x + f.w/2 - stemW/2, y: 0, w: stemW, h: f.topH},
-            stemBottom: {x: f.x + f.w/2 - stemW/2, y: bottomY, w: stemW, h: H - GH - bottomY},
-            headTop:    {cx: f.x + f.w/2, cy: f.topH, r: headSize*0.46},
-            headBottom: {cx: f.x + f.w/2, cy: bottomY, r: headSize*0.46}
+            stemTop:    {x: cx - stemW/2, y: 0, w: stemW, h: f.topH},
+            stemBottom: {x: cx - stemW/2, y: bottomY, w: stemW, h: H - GH - bottomY},
+            headTop:    {cx, cy: f.topH, r: headSize*0.46},
+            headBottom: {cx, cy: bottomY, r: headSize*0.46}
           };
         }
         const h = f._hit;
@@ -1029,6 +1181,10 @@
              circleCircleCollide(bird.x, bird.y, bird.r, h.headBottom.cx, h.headBottom.cy, h.headBottom.r) ){
           hitObstacle = true; break;
         }
+      }
+    } else if (currentTheme === 'night-firs'){
+      for (const t of firTunnels){
+        if (collideFirTunnel(t, bird.x, bird.y, bird.r)){ hitObstacle = true; break; }
       }
     } else {
       for (const p of pipes){
@@ -1053,34 +1209,25 @@
   }
 
   function draw(){
-    // SKY by theme
-    if (currentTheme === 'night-pipes') drawSkyNight();
+    if (currentTheme === 'night-firs') drawSkyNight();
     else if (currentTheme === 'sunny-flowers') drawSkySunny();
-    else drawSkyDay();
+    else { drawSkyDay(); drawSun(); }
 
-    // Extra sun overlay ONLY for day-pipes (avoid double sun in parrot mode)
-    if (currentTheme === 'day-pipes') drawSunStandalone();
-
-    // clouds on day/sunny
-    if (currentTheme !== 'night-pipes') {
+    if (currentTheme !== 'night-firs') {
       ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      for (const c of clouds) {
-        roundedCloud(c);
-      }
+      for (const c of clouds) roundedCloud(c);
       ctx.restore();
     }
 
-    // Obstacles
     if (currentTheme === 'sunny-flowers'){
       for (const f of flowerTunnels) drawFlowerTunnel(f);
+    } else if (currentTheme === 'night-firs'){
+      for (const t of firTunnels) drawFirTunnel(t);
     } else {
       for (const p of pipes) drawPipe(p.x, p.topH, p.w, p.gap);
     }
 
-    // Bird
     drawBird(bird);
-
-    // Ground
     drawGround();
 
     if (state === State.DEAD){

@@ -150,14 +150,276 @@
   }
   themeSel.addEventListener('change', applyTheme);
   applyTheme();
+  sceneSel.addEventListener('change', () => {
+  MUSIC.setScene(sceneSel.value);
+  // (optional) clearToBg(true); // if you want a hard clear on scene switch
+    });
 
   const cvs = document.getElementById('c');
   const ctx = cvs.getContext('2d', { alpha:false });
   let W = innerWidth, H = innerHeight;
   cvs.width = W; cvs.height = H;
 
+  // ---- Dead border + idle pause state ----
+  let borderPx = Math.max(1, Math.round(innerWidth * 0.01)); // ~1vw
+  let edgeEnteredAt = null; 
+  function updateBorder(){ borderPx = Math.max(1, Math.round(innerWidth * 0.01)); }
+  function inActiveArea(x, y){
+    return x >= borderPx && x <= (W - borderPx) && y >= borderPx && y <= (H - borderPx);
+  }
+function recomputePaused(){
+  const t = performance.now();
+
+  // Idle pause: 5s of no movement anywhere
+  const idle = (t - lastMoveT) >= 5000;
+
+  // Edge logic with 3s grace
+  const atEdge = !inActiveArea(mouse.x, mouse.y);
+
+  if (atEdge) {
+    // just entered the edge zone? start the grace timer
+    if (edgeEnteredAt === null) edgeEnteredAt = t;
+  } else {
+    // left the edge zone — clear the grace timer
+    edgeEnteredAt = null;
+  }
+
+  const edgeGraceElapsed = edgeEnteredAt !== null && (t - edgeEnteredAt) >= 3000; // 3s
+
+  // Pause if idle OR if we've been at the edge for >= 3s
+  const newPaused = idle || edgeGraceElapsed;
+
+  if (newPaused !== paused){
+    paused = newPaused;
+    // Optional: clearToBg(true);
+  }
+}
+/* =========================
+   GLOBAL MUSIC — per-scene playlists, shuffle, loop, crossfade
+   ========================= */
+const MUSIC = (function(){
+  // --- config: declare playlists per scene (fill as you add songs)
+  // If tracks need extensions, include them (e.g., ".mp3").
+  const PLAYLISTS = {
+    aurora: [
+      "../../songs/space/space1.mp3",
+      "../../songs/space/spacebest1.mp3",
+      "../../songs/space/spacebest4.mp3",
+    ],
+    // add more scenes when ready:
+    // ripples: ["../../songs/water/w1.mp3","../../songs/water/w2.mp3"],
+    // laserharp: [...],
+  };
+
+  // master behavior
+  const CFG = {
+    crossfadeSec: 0.6,
+    sceneXfadeSec: 0.8,
+    baseMusicScale: 0.7,     // music <= SFX
+    mutePauseThreshold: 0.003,
+  };
+
+  // internal state
+  let primed = false;
+  let wanted = true     // global desire (we'll compute sceneHasPlaylist && scene == current && !paused)
+  let scene = null;
+  let sceneHasPlaylist = false;
+
+  // two-tag crossfader
+  const ch = [
+    { el: null, gain: 0, list: [], order: [], i: 0, name:"A" },
+    { el: null, gain: 0, list: [], order: [], i: 0, name:"B" },
+  ];
+  let active = 0; // index of currently audible channel
+  let pendingXfade = 0; // seconds left in current crossfade
+
+  function makeAudio(){
+    const a = new Audio();
+    a.loop = false;
+    a.preload = "auto";
+    a.crossOrigin = "anonymous";
+    a.volume = 0;
+    return a;
+  }
+
+  function ensure(){
+    if (!ch[0].el) ch[0].el = makeAudio();
+    if (!ch[1].el) ch[1].el = makeAudio();
+  }
+
+  function shuffle(arr){
+    for (let i=arr.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
+    return arr;
+  }
+
+  function buildOrder(list){
+    return shuffle(Array.from({length:list.length}, (_,i)=>i));
+  }
+
+  function currentChannel(){ return ch[active]; }
+  function idleChannel(){ return ch[1-active]; }
+
+  function setPlaylistForBoth(list){
+    ch[0].list = list;
+    ch[0].order = buildOrder(list);
+    ch[0].i = 0;
+
+    ch[1].list = list;
+    ch[1].order = buildOrder(list);
+    ch[1].i = 0;
+  }
+
+  function nextIdx(c){
+    if (!c.list.length) return 0;
+    c.i = (c.i + 1) % c.order.length;
+    return c.i;
+  }
+
+  function pickSrc(c){
+    if (!c.list.length) return "";
+    const k = c.order[c.i] ?? 0;
+    return c.list[k];
+  }
+
+  function loadInto(c){
+    if (!c.list.length) return;
+    const src = pickSrc(c);
+    c.el.src = src;
+    // play() only if we’re wanted; otherwise will auto-start during tick when volume ramps > 0
+    const p = c.el.play();
+    if (p && p.catch){ /* ignore autoplay errors; tick() will retry when primed/wanted */ }
+    c.el.onended = ()=>{ nextIdx(c); loadInto(c); };
+    c.el.onerror = ()=>{ nextIdx(c); loadInto(c); };
+  }
+
+  function prime(){ primed = true; ensure(); }
+
+  function setScene(name){
+    scene = name;
+    const list = PLAYLISTS[name] || [];
+    sceneHasPlaylist = list.length > 0;
+
+    ensure();
+
+    // If no playlist, stop desire; if yes, prepare both channels
+    if (!sceneHasPlaylist){
+      wanted = false;
+      // fade out quickly; tick() will mute/pause
+      return;
+    }
+
+    setPlaylistForBoth(list);
+
+    // start new playback on idle channel, then crossfade
+    const idle = idleChannel();
+    nextIdx(idle); // de-sync from active a bit
+    loadInto(idle);
+    pendingXfade = CFG.sceneXfadeSec;
+  }
+
+  // External toggle if you want to disable music globally (rarely needed)
+  function want(on){ wanted = !!on; }
+
+  // The main tick: called each frame
+  function tick(dt){
+    if (!primed) return;
+
+    ensure();
+
+    // Determine if music should be audible now
+    const sceneWants = !!scene && sceneHasPlaylist && (ui.mode.value === scene);
+
+    const shouldPlay = sceneWants && !paused && wanted !== false; // wanted defaults true unless explicitly turned off
+
+    // Calculate base target volume from SFX slider + mute
+    const sfx = currentSfxGain();        // 0..1
+    const targetBase = shouldPlay ? Math.min(1, sfx * CFG.baseMusicScale) : 0;
+
+    // crossfade logic (also used for automatic track changes)
+    if (pendingXfade > 0){
+      const step = Math.min(pendingXfade, dt);
+      pendingXfade -= step;
+      // ramp active down, idle up
+      const a = currentChannel();
+      const b = idleChannel();
+      const t = 1 - (pendingXfade / (sceneWants ? CFG.sceneXfadeSec : CFG.crossfadeSec));
+      a.gain = (1 - t) * targetBase;
+      b.gain = t * targetBase;
+
+      // start idle playback if needed
+      if (shouldPlay && b.el.paused && targetBase > 0){
+        const p = b.el.play(); if (p && p.catch){ /* ignore */ }
+      }
+
+      // volumes
+      a.el.volume = a.gain;
+      b.el.volume = b.gain;
+
+      if (pendingXfade <= 0){
+        // swap actives
+        active = 1 - active;
+        // pause the now-idle channel if we’re near silent
+        const id = idleChannel();
+        id.gain = 0; id.el.volume = 0;
+        if (!sceneWants || targetBase === 0) id.el.pause();
+      }
+    } else {
+      // steady-state: maintain volume toward target
+      const a = currentChannel();
+      const b = idleChannel();
+
+      // bring active toward target
+      a.gain = lerp(a.gain, targetBase, 1 - Math.pow(0.08, dt*60));
+      a.el.volume = a.gain;
+
+      // keep idle silent
+      b.gain = lerp(b.gain, 0, 1 - Math.pow(0.08, dt*60));
+      b.el.volume = b.gain;
+
+      // start playing if needed
+      if (shouldPlay && a.el.paused && targetBase > 0){
+        const p = a.el.play(); if (p && p.catch){ /* ignore */ }
+      }
+      // pause when fully muted
+      if (!shouldPlay && a.el.volume < CFG.mutePauseThreshold && !a.el.paused) a.el.pause();
+    }
+
+    // If an active track is about to end, pre-roll next on idle and start crossfade
+    const a = currentChannel();
+    if (shouldPlay && a.el.duration && !isNaN(a.el.duration)){
+      const remain = a.el.duration - a.el.currentTime;
+      if (remain < Math.max(0.25, CFG.crossfadeSec * 0.9) && pendingXfade <= 0){
+        const b = idleChannel();
+        // prepare different next track on idle channel
+        nextIdx(b);
+        loadInto(b);
+        pendingXfade = CFG.crossfadeSec;
+      }
+    }
+  }
+
+  // Keep volume in sync with UI changes
+  sfxVol.addEventListener('input', ()=>{/* target computed in tick */});
+  muteSFX.addEventListener('change', ()=>{/* target computed in tick */});
+
+  return {
+    prime,
+    setScene,
+    want,        // optional global override
+    tick,
+    // for convenience, to add/modify playlists at runtime:
+    setPlaylist(sceneName, tracksArray){
+      PLAYLISTS[sceneName] = tracksArray.slice();
+      if (scene === sceneName){
+        setScene(sceneName); // rebuild if currently on scene
+      }
+    }
+  };
+})();
+
   addEventListener('resize', ()=>{
     W=innerWidth; H=innerHeight; cvs.width=W; cvs.height=H;
+    updateBorder();
     if (typeof resizeGlass === 'function') resizeGlass();
     if (typeof resizeLaser === 'function') resizeLaser();
     if (typeof caSandOnResize === 'function') caSandOnResize();
@@ -218,6 +480,7 @@
     mouse.speed=Math.hypot(mouse.vx,mouse.vy);
     mouse.x=nx; mouse.y=ny; last.x=nx; last.y=ny; last.t=t;
     lastMoveT = t;
+    recomputePaused();
   }, {passive:true});
 
   addEventListener('touchmove', (e)=>{
@@ -228,6 +491,7 @@
     mouse.speed=Math.hypot(mouse.vx,mouse.vy);
     mouse.x=nx; mouse.y=ny; last.x=nx; last.y=ny; last.t=t;
     lastMoveT = t;
+    recomputePaused();
   }, {passive:true});
 
   addEventListener('pointerdown', ()=>{ mouse.down=true; lastMoveT = performance.now(); playPing(700,0.08,0.05); });
@@ -277,202 +541,352 @@
     ctx.fillRect(0,0,W,H);
   }
 
-  /* =========================
-     AURORA
-     ========================= */
-  const AUR = { t:0, hueBase:140, stars:[], ribbons:[] };
-  function fbm(x, t=0){ let v=0,a=0.5,f=1.0; for(let i=0;i<4;i++){ v+=a*Math.sin(x*f+t*(0.35+i*0.07)+i*1.3); a*=0.5; f*=1.8; } return v; }
-  function auroraInit(){
-    const n = Math.floor((W*H)/18000);
-    AUR.stars = Array.from({length:n}, () => ({ x:Math.random()*W, y:Math.random()*H, z:Math.random(), a:0.25+Math.random()*0.5 }));
-    AUR.ribbons = [
-      { amp:70,  thick:42, hue:(AUR.hueBase+40)%360, speed:0.5, alpha:0.10, warp:0.75, offsetY:0.60, jitter:0.5 },
-      { amp:100, thick:58, hue:(AUR.hueBase+0)%360,  speed:0.7, alpha:0.16, warp:1.00, offsetY:0.52, jitter:0.9 },
-      { amp:130, thick:66, hue:(AUR.hueBase-40+360)%360, speed:0.9, alpha:0.22, warp:1.15, offsetY:0.44, jitter:1.2 },
-    ];
-  }
-  function auroraResize(){ auroraInit(); }
-  auroraInit();
+/* =========================
+   AURORA (snappier, no halo)
+   ========================= */
 
-  function drawStars(dt, boost=1){
-    ctx.globalCompositeOperation = 'screen';
-    for (const s of AUR.stars){
-      s.x += mouse.vx * 0.000015 * (0.3 + s.z);
-      if (s.x < -5) s.x = W+5; if (s.x > W+5) s.x = -5;
-      const px = s.x - (mouse.x - W*0.5) * 0.04 * s.z;
-      const py = s.y - (mouse.y - H*0.5) * 0.02 * s.z;
-      const r = 0.6 + s.z*1.4;
-      const alpha = (s.a) * boost;
-      ctx.fillStyle = `hsla(200,100%,${70+25*s.z}%,${alpha})`;
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
-    }
+// Quick quality hint (safe if you don't have perfScale/frameMsAvg)
+function _auroraQuality(){
+  const ps  = (typeof perfScale   !== 'undefined') ? perfScale   : 1;
+  const fma = (typeof frameMsAvg  !== 'undefined') ? frameMsAvg  : 16;
+  const qFromFps  = clamp(1 - Math.max(0, (fma - 16)/16)*0.5, 0.6, 1);
+  return Math.min(ps, qFromFps);
+}
+
+// Compact FBM (4 octaves)
+function fbm(x, t=0){
+  let v=0, a=0.5, f=1.0;
+  for (let i=0;i<4;i++){ v += a*Math.sin(x*f+t*(0.35+i*0.07)+i*1.3); a*=0.5; f*=1.8; }
+  return v;
+}
+
+const AUR = { t:0, hueBase:140, stars:[], ribbons:[] };
+
+function auroraInit(){
+  const q = _auroraQuality();
+
+  // Slightly fewer stars for perf; quicker parallax later
+  const n = Math.floor((W*H) * (1/26000) * (0.7 + 0.6*q));
+  AUR.stars = Array.from({length:n}, () => ({
+    x:Math.random()*W, y:Math.random()*H, z:Math.random(), a:0.22+Math.random()*0.45
+  }));
+
+  // 2–3 ribbons; base params a bit leaner
+  const ribs = (q > 0.8 ? 3 : 2);
+  AUR.ribbons.length = 0;
+  for (let i=0;i<ribs;i++){
+    AUR.ribbons.push({
+      amp:   70 + i*24,                  // ↓ a touch for stability at high follow
+      thick: 46 + i*10,
+      hue:   (AUR.hueBase + (i===0?40:i===1?0:-40)+360)%360,
+      speed: 0.55 + i*0.18,
+      alpha: 0.12 + i*0.06,
+      warp:  0.90 + i*0.12,
+      offsetY: 0.60 - i*0.08,
+      jitter: 0.8 + i*0.25
+    });
+  }
+}
+function auroraResize(){ auroraInit(); }
+auroraInit();
+
+// Stars — stronger pointer parallax & slight velocity skew
+function drawStars(dt, boost=1){
+  ctx.globalCompositeOperation = 'screen';
+  const parX = (mouse.x - W*0.5) * 0.06;   // ↑ follow
+  const parY = (mouse.y - H*0.5) * 0.03;
+  const velSkewX = mouse.vx * 0.00005;
+  for (let i=0;i<AUR.stars.length;i++){
+    const s = AUR.stars[i];
+    s.x += (mouse.vx*0.000015 + velSkewX) * (0.3 + s.z);
+    if (s.x < -5) s.x = W+5; if (s.x > W+5) s.x = -5;
+    const px = s.x - parX * s.z;
+    const py = s.y - parY * s.z;
+    const r = 0.6 + s.z*1.4;
+    ctx.fillStyle = `hsla(200,100%,${68+26*s.z}%,${s.a*boost})`;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+// Ribbons — much stronger pointer influence (pos + vel) and tighter sampling near cursor
+function drawCurtainRibbon(rib, t, intensity){
+  const q = _auroraQuality();
+
+  // Follow the pointer more aggressively
+  const followY = 0.26 + 0.30*intensity;      // ↑ vertical chase
+  const baseY   = H * rib.offsetY + (mouse.y - H*0.5) * followY;
+
+  // Adapt step; denser near cursor for “stickiness”
+  const baseStep = Math.max(10, Math.round(W / (90 + 140*q)));
+  const cx = mouse.x;
+  const upper=[]; const lower=[];
+
+  // Bend & phase sensitivity
+  const phaseShift = (mouse.x/W - 0.5) * 1.8;  // ↑ phase follow
+  const velPullX   = mouse.vx * 0.025;         // velocity drags the curtain
+  const velBend    = clamp(mouse.vx/800, -1.2, 1.2);
+
+  for (let x=0; x<=W; ){
+    // locally refine near cursor (cheaper than full dense mesh)
+    const near = Math.max(0, 1 - Math.abs(x - cx) / (W*0.35));
+    const step = Math.max(8, baseStep * (1 - 0.55*near));
+    const u = x / W;
+
+    const n = fbm(u*6*rib.warp + rib.jitter*0.6 + phaseShift, t*rib.speed);
+    const amp = rib.amp * (0.9 + 0.8*intensity) * (1 + dwellFactor()*0.12);
+
+    // Proximity bend now stronger and sharper
+    const dx = (x - cx);
+    const prox = Math.max(0, 1 - Math.abs(dx) / (W*0.55));
+    const proxShaped = prox*prox; // sharper
+    const bend = ( - (dx / W) * amp * 0.75 * proxShaped * (0.7 + intensity) ) + velBend * 22 * prox;
+
+    const y = baseY + n*amp + Math.sin(u*3 + t*0.3)*amp*0.05 + bend;
+    const thick = rib.thick * (0.9 + 0.7*intensity) * (0.9 + 0.25*Math.abs(n));
+
+    // Velocity skews the ribbon laterally for “catch-up”
+    const skew = velPullX * (0.15 + 0.6*proxShaped);
+    const xx = x + skew;
+
+    upper.push([xx, y - thick]);
+    lower.push([xx, y + thick]);
+
+    x += step;
   }
 
-  function drawCurtainRibbon(rib, t, intensity){
-    const followY = 0.18 + 0.22*intensity;
-    const baseY = H * rib.offsetY + (mouse.y - H*0.5) * followY;
-    const step = 10; const upper=[]; const lower=[];
-    for (let x=0; x<=W; x+=step){
-      const u = x / W;
-      const phaseShift = (mouse.x/W - 0.5) * 1.2;
-      const n = fbm(u*6*rib.warp + rib.jitter*0.6 + phaseShift, t*rib.speed);
-      const amp = rib.amp * (0.8 + 0.7*intensity) * (1 + dwellFactor()*0.25);
-      const dx = (x - mouse.x);
-      const prox = Math.max(0, 1 - Math.abs(dx) / (W*0.6));
-      const bend = - (dx / W) * amp * 0.55 * prox * (0.6 + intensity);
-      const y = baseY + n*amp + Math.sin(u*3 + t*0.3)*amp*0.05 + bend;
-      const thick = rib.thick * (0.85 + 0.6*intensity) * (0.9 + 0.25*Math.abs(n));
-      upper.push([x, y - thick]); lower.push([x, y + thick]);
-    }
-    const hue = (rib.hue + 20*Math.sin(t*0.15))%360;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `hsla(${hue}, 95%, 60%, ${rib.alpha})`;
-    ctx.beginPath(); for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
-    for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x, y); }
-    ctx.closePath(); ctx.fill();
-    ctx.globalCompositeOperation = 'screen';
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0.25, `hsla(${(hue+60)%360},95%,75%,0)`); g.addColorStop(0.50, `hsla(${hue},95%,75%,0.28)`); g.addColorStop(0.75, `hsla(${(hue+300)%360},95%,75%,0)`);
+  const hue = (rib.hue + 20*Math.sin(t*0.15))%360;
+  const alpha = rib.alpha * (0.95 + 0.3*intensity) * q;
+
+  // Body
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `hsla(${hue}, 95%, 60%, ${alpha})`;
+  ctx.beginPath();
+  for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+  for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x, y); }
+  ctx.closePath(); ctx.fill();
+
+  // Inner wash (single pass)
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 0.22 * q;
+  ctx.beginPath();
+  for (let i=0;i<upper.length;i++){
+    const [x,yU]=upper[i]; const yL = lower[i][1];
+    ctx.lineTo(x, yU + 0.58*(yL - yU));
+  }
+  for (let i=lower.length-1;i>=0;i--){
+    const [x,yL]=lower[i]; const yU = upper[i][1];
+    ctx.lineTo(x, yL - 0.58*(yL - yU));
+  }
+  ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function renderAurora(dt){
+  const q = _auroraQuality();
+  AUR.t += dt; AUR.hueBase = (AUR.hueBase + 12*dt) % 360;
+
+  // Cheap fade
+  ctx.globalCompositeOperation='source-over';
+  ctx.globalAlpha = mapTrail()*0.9;
+  ctx.fillStyle = document.body.classList.contains('light') ? '#fff' : '#000';
+  ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha = 1;
+
+  const intensity = mapIntensity();
+  drawStars(dt, 0.95 + 0.4*intensity);
+
+  for (let i=0;i<AUR.ribbons.length;i++){
+    const rib=AUR.ribbons[i]; rib.hue=(rib.hue+6*dt)%360;
+    drawCurtainRibbon(rib, AUR.t + i*0.12, intensity);
+  }
+
+  // NOTE: Removed big dwell halo around the pointer
+}
+/* =========================
+/* =========================
+   RIPPLES — subtle ambient background + farther, richer rings
+   Notes:
+   - Background stays independent of the pointer (slow drifting blobs).
+   - Rings/halos now travel farther, live longer, and glow a bit stronger.
+   - Hook: call ripplesResize() on window resize and renderRipples(dt) in the scene.
+========================= */
+
+/* ---------- Rings / Halos ---------- */
+const ripples = [];
+const halos   = [];
+let rippleCooldown = 0;
+let waterT = 0;
+
+function emitRipple(x, y, power=1){
+  // Travel farther: boost radial speed & base width with size slider
+  const sN   = sizeNorm();
+  const sp   = (54 + 42*mapIntensity()) * (1.15 + 0.35*sN);
+  const hue  = 198 + Math.random()*22;
+  const sat  = 92;
+  const lite = 50 + power*4;
+  ripples.push({
+    x, y, r:0,
+    vr: sp * (0.9 + Math.random()*0.22),
+    width: 5.5 + mapSize()*0.06 + power*2.5 + (0.6 + 0.8*sN),
+    life: 1.0, hue, sat, lite,
+    phase: Math.random()*Math.PI*2
+  });
+}
+function emitHalo(x, y, strength=1){
+  const hue = 200 + Math.random()*16;
+  halos.push({
+    x, y, r:24,
+    vr: (160 + 280*mapIntensity()) * (0.7 + 0.6*Math.random()),
+    a: 0.28 * strength, hue
+  });
+}
+
+/* ---------- Minimal ambient background (independent of pointer) ---------- */
+const AMBIENT = { blobs: [], t: 0 };
+
+function ripplesResize(){
+  const isLight = document.body.classList.contains('light');
+  const baseR = Math.max(W, H) * (isLight ? 0.9 : 1.1); // larger in dark mode
+
+  AMBIENT.blobs = [
+    makeBlob(baseR,       195, isLight ? 62 : 36, 0.065, 0.045, 0.00),
+    makeBlob(baseR * 1.15,208, isLight ? 58 : 32, 0.052, 0.038, 2.10),
+    makeBlob(baseR * 1.30,188, isLight ? 66 : 40, 0.040, 0.032, 4.20),
+  ];
+
+  function makeBlob(r, hue, lite, fx, fy, seed){
+    return {
+      r, hue, lite,
+      alpha: isLight ? 0.035 : 0.028,
+      ax: fx, ay: fy,
+      phx: seed + Math.random()*0.5,
+      phy: seed + Math.random()*0.5,
+      cx: W*0.5,
+      cy: H*0.5
+    };
+  }
+}
+ripplesResize();
+
+function drawAmbientBackground(dt){
+  AMBIENT.t += dt;
+
+  // theme-aware soft clear honoring Trail slider
+  ctx.globalCompositeOperation='source-over';
+  const isLight = document.body.classList.contains('light');
+  ctx.fillStyle = isLight
+    ? `rgba(255,255,255,${mapTrail()})`
+    : `rgba(0,0,0,${mapTrail()})`;
+  ctx.fillRect(0,0,W,H);
+
+  // faint drifting blobs
+  ctx.globalCompositeOperation = 'screen';
+  for (let i=0;i<AMBIENT.blobs.length;i++){
+    const b = AMBIENT.blobs[i];
+    const x = b.cx + Math.sin(AMBIENT.t*b.ax + b.phx) * (W*0.18);
+    const y = b.cy + Math.sin(AMBIENT.t*b.ay + b.phy) * (H*0.16);
+    const pulse = 1 + 0.03*Math.sin((AMBIENT.t + i)*0.35);
+    const R = b.r * pulse;
+    const L = b.lite + 4*Math.sin((AMBIENT.t + i*0.7)*0.25);
+
+    const g = ctx.createRadialGradient(x, y, R*0.25, x, y, R);
+    g.addColorStop(0.0, `hsla(${b.hue|0}, 70%, ${Math.min(95, L+4)|0}%, ${b.alpha})`);
+    g.addColorStop(0.65, `hsla(${(b.hue+10)|0}, 70%, ${L|0}%, ${b.alpha*0.6})`);
+    g.addColorStop(1.0, `hsla(${(b.hue+24)|0}, 70%, ${Math.max(0, L-10)|0}%, 0)`);
     ctx.fillStyle = g;
-    ctx.beginPath();
-    for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; ctx.lineTo(x, y + 0.55*(lower[i][1]-upper[i][1])); }
-    for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x, y - 0.55*(y - upper[i][1])); }
-    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.fill();
   }
-  function renderAurora(dt){
-    AUR.t += dt; AUR.hueBase = (AUR.hueBase + 12*dt) % 360;
-    ctx.globalCompositeOperation='source-over';
-    const isLight = document.body.classList.contains('light');
-    const fade = isLight ? `rgba(255,255,255,${mapTrail()*0.9})` : `rgba(0,0,0,${mapTrail()*0.9})`;
-    ctx.fillStyle = fade; ctx.fillRect(0,0,W,H);
-    const intensity = mapIntensity(); drawStars(dt);
-    for (let i=0;i<AUR.ribbons.length;i++){ const rib=AUR.ribbons[i]; rib.hue=(rib.hue+6*dt)%360; drawCurtainRibbon(rib, AUR.t + i*0.12, intensity); }
-    if (dwellMs>500){
-      ctx.globalCompositeOperation='screen';
-      const r = 140 + 300*intensity;
-      const g = ctx.createRadialGradient(mouse.x, mouse.y, r*0.08, mouse.x, mouse.y, r);
-      g.addColorStop(0, `hsla(${(AUR.hueBase+90)%360},100%,75%,0.20)`); g.addColorStop(1, `hsla(0,0%,0%,0)`);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, r, 0, Math.PI*2); ctx.fill();
-    }
+}
+
+/* ---------- Full render ---------- */
+function renderRipples(dt){
+  waterT += dt;
+
+  // Optional movement/dwell emission
+  const speedN = clamp(mouse.speed/1200, 0, 1);
+  rippleCooldown = Math.max(0, rippleCooldown - dt);
+  if (speedN > 0.10 && rippleCooldown <= 0){
+    emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.55);
+    rippleCooldown = 0.04 + (0.10*(1-mapIntensity()));
+  }
+  if (dwellJustCrossed(650)){
+    playPing(520,0.16,0.05);
+    for (let i=0;i<2;i++) emitRipple(mouse.x, mouse.y, 1.1);
+    emitHalo(mouse.x, mouse.y, 0.9);
   }
 
-  /* =========================
-     RIPPLES
-     ========================= */
-  const ripples = [];
-  const halos = [];
-  let rippleCooldown = 0;
-  let waterT = 0;
+  // 1) Subtle, independent background
+  drawAmbientBackground(dt);
 
-  function emitRipple(x, y, power=1){
-    const sp   = 54 + 42*mapIntensity();
-    const hue  = 198 + Math.random()*22;
-    const sat  = 92;
-    const lite = 50 + power*4;
-    ripples.push({
-      x, y, r:0,
-      vr: sp * (0.9 + Math.random()*0.22),
-      width: 5.5 + mapSize()*0.06 + power*2.5,
-      life: 1.0, hue, sat, lite,
-      phase: Math.random()*Math.PI*2
-    });
+  // 2) Halos
+  for (let i=halos.length-1;i>=0;i--){
+    const h = halos[i];
+    h.r  += h.vr*dt;
+    h.a  *= Math.pow(0.975 - 0.15*dt, 1.0);
+    if (h.a < 0.02 || h.r > Math.max(W,H)*1.2){ halos.splice(i,1); continue; }
+    const g = ctx.createRadialGradient(h.x, h.y, h.r*0.15, h.x, h.y, h.r);
+    g.addColorStop(0.0, `hsla(${h.hue}, 90%, 65%, ${0.10*h.a})`);
+    g.addColorStop(0.6, `hsla(${h.hue+8}, 90%, 55%, ${0.08*h.a})`);
+    g.addColorStop(1.0, `hsla(${h.hue+30}, 90%, 45%, 0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill();
   }
-  function emitHalo(x, y, strength=1){
-    const hue = 200 + Math.random()*16;
-    halos.push({
-      x, y, r:24,
-      vr: (160 + 280*mapIntensity()) * (0.7 + 0.6*Math.random()),
-      a: 0.28 * strength, hue
-    });
-  }
-  function renderRipples(dt){
-    waterT += dt;
 
-    const baseHue = 210, baseSat = 70;
-    const baseLight = document.body.classList.contains('light') ? 18 : 8;
-    ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle = `hsla(${baseHue}, ${baseSat}%, ${baseLight}%, ${mapTrail()})`;
-    ctx.fillRect(0,0,W,H);
+  // 3) Rings (travel farther + more effect)
+  for (let i=ripples.length-1;i>=0;i--){
+    const r = ripples[i];
 
-    const tideR = (420 + mapSize()*1.2) * (1 + 0.05*Math.sin(waterT*0.7));
-    const tide = ctx.createRadialGradient(mouse.x, mouse.y, tideR*0.25, mouse.x, mouse.y, tideR);
-    tide.addColorStop(0, `hsla(205, 60%, 30%, ${0.06 + 0.04*Math.sin(waterT*1.1)})`);
-    tide.addColorStop(1, `hsla(205, 60%, 20%, 0)`);
-    ctx.globalCompositeOperation='screen';
-    ctx.fillStyle = tide;
-    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, tideR, 0, Math.PI*2); ctx.fill();
+    r.r    += r.vr*dt;
+    // Slower decay so they persist longer (was 0.985 - 0.20*dt)
+    r.life *= Math.pow(0.990 - 0.16*dt, 1 + 0.6*mapIntensity());
 
-    const speedN = clamp(mouse.speed/1200, 0, 1);
-    rippleCooldown = Math.max(0, rippleCooldown - dt);
-    if (speedN > 0.10 && rippleCooldown <= 0){
-      emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.55);
-      rippleCooldown = 0.04 + (0.10*(1-mapIntensity()));
-    }
-    if (dwellJustCrossed(650)){
-      playPing(520,0.16,0.05);
-      for (let i=0;i<2;i++) emitRipple(mouse.x, mouse.y, 1.1);
-      emitHalo(mouse.x, mouse.y, 0.9);
-    }
+    const alive = clamp(r.life, 0, 1);
+    // Let them travel beyond screen diagonal before culling
+    if (alive < 0.02 || r.r > Math.hypot(W,H)*1.5){ ripples.splice(i,1); continue; }
 
-    for (let i=halos.length-1;i>=0;i--){
-      const h = halos[i];
-      h.r  += h.vr*dt;
-      h.a  *= Math.pow(0.975 - 0.15*dt, 1.0);
-      if (h.a < 0.02 || h.r > Math.max(W,H)*1.2){ halos.splice(i,1); continue; }
-      const g = ctx.createRadialGradient(h.x, h.y, h.r*0.15, h.x, h.y, h.r);
-      g.addColorStop(0.0, `hsla(${h.hue}, 90%, 65%, ${0.10*h.a})`);
-      g.addColorStop(0.6, `hsla(${h.hue+8}, 90%, 55%, ${0.08*h.a})`);
-      g.addColorStop(1.0, `hsla(${h.hue+30}, 90%, 45%, 0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill();
+    r.phase += dt*(0.8 + 0.6*mapIntensity());
+    const shimmer = 1 + 0.18*Math.sin(r.phase) + 0.08*Math.sin(waterT*1.7 + i*0.6);
+    // Slightly stronger width as rings age to keep visibility
+    const w = (r.width * (0.78 + 0.55*alive)) * shimmer;
+
+    // Outer glow (wider radii than before)
+    ctx.globalCompositeOperation = 'screen';
+    const glowR1 = r.r*1.00, glowR2 = r.r*1.35;
+    const g1 = ctx.createRadialGradient(r.x, r.y, glowR1*0.45, r.x, r.y, glowR1);
+    g1.addColorStop(0, `hsla(${r.hue}, ${r.sat}%, ${r.lite+8}%, ${0.09*alive})`);
+    g1.addColorStop(1, `hsla(${r.hue+10}, ${r.sat}%, ${r.lite-6}%, 0)`);
+    ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(r.x, r.y, glowR1, 0, Math.PI*2); ctx.fill();
+
+    const g2 = ctx.createRadialGradient(r.x, r.y, glowR2*0.55, r.x, r.y, glowR2);
+    g2.addColorStop(0, `hsla(${r.hue+12}, ${r.sat}%, ${r.lite}%, ${0.07*alive})`);
+    g2.addColorStop(1, `hsla(${r.hue+28}, ${r.sat}%, ${r.lite-10}%, 0)`);
+    ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(r.x, r.y, glowR2, 0, Math.PI*2); ctx.fill();
+
+    // Main bright rings
+    ctx.globalCompositeOperation='lighter';
+    const hues   = [ r.hue-10, r.hue, r.hue+12 ];
+    const alphas = [ alive*0.22, alive*0.46, alive*0.22 ]; // a bit stronger
+    const radii  = [ r.r*0.988, r.r, r.r*1.012 ];
+
+    for (let k=0;k<3;k++){
+      ctx.strokeStyle = `hsla(${hues[k]}, ${r.sat}%, ${r.lite}%, ${alphas[k]})`;
+      ctx.lineWidth   = Math.max(1.2, w * (k===1?1.05:0.75));
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, Math.max(0.1, radii[k]), 0, Math.PI*2);
+      ctx.stroke();
     }
 
-    for (let i=ripples.length-1;i>=0;i--){
-      const r = ripples[i];
-      r.r    += r.vr*dt;
-      r.life *= Math.pow(0.985 - 0.20*dt, 1 + 0.6*mapIntensity());
-      const alive = clamp(r.life, 0, 1);
-      if (alive < 0.02 || r.r > Math.hypot(W,H)){ ripples.splice(i,1); continue; }
-
-      r.phase += dt*(0.8 + 0.6*mapIntensity());
-      const shimmer = 1 + 0.18*Math.sin(r.phase) + 0.08*Math.sin(waterT*1.7 + i*0.6);
-      const w = (r.width * (0.75 + 0.45*alive)) * shimmer;
-
-      ctx.globalCompositeOperation = 'screen';
-      const glowR1 = r.r*0.90, glowR2 = r.r*1.20;
-      const g1 = ctx.createRadialGradient(r.x, r.y, glowR1*0.45, r.x, r.y, glowR1);
-      g1.addColorStop(0, `hsla(${r.hue}, ${r.sat}%, ${r.lite+8}%, ${0.08*alive})`);
-      g1.addColorStop(1, `hsla(${r.hue+10}, ${r.sat}%, ${r.lite-6}%, 0)`);
-      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(r.x, r.y, glowR1, 0, Math.PI*2); ctx.fill();
-
-      const g2 = ctx.createRadialGradient(r.x, r.y, glowR2*0.55, r.x, r.y, glowR2);
-      g2.addColorStop(0, `hsla(${r.hue+12}, ${r.sat}%, ${r.lite}%, ${0.06*alive})`);
-      g2.addColorStop(1, `hsla(${r.hue+28}, ${r.sat}%, ${r.lite-10}%, 0)`);
-      ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(r.x, r.y, glowR2, 0, Math.PI*2); ctx.fill();
-
-      ctx.globalCompositeOperation='lighter';
-      const hues   = [ r.hue-10, r.hue, r.hue+12 ];
-      const alphas = [ alive*0.20, alive*0.38, alive*0.20 ];
-      const radii  = [ r.r*0.985, r.r, r.r*1.015 ];
-
-      for (let k=0;k<3;k++){
-        ctx.strokeStyle = `hsla(${hues[k]}, ${r.sat}%, ${r.lite}%, ${alphas[k]})`;
-        ctx.lineWidth   = Math.max(1.2, w * (k===1?1:0.7));
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, Math.max(0.1, radii[k]), 0, Math.PI*2);
-        ctx.stroke();
-      }
-
-      const echoAlpha = 0.13 * alive;
-      if (echoAlpha > 0.01){
-        ctx.strokeStyle = `hsla(${r.hue+6}, ${r.sat}%, ${r.lite-4}%, ${echoAlpha})`;
-        ctx.lineWidth   = Math.max(1, w*0.55);
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, r.r*0.55, 0, Math.PI*2);
-        ctx.stroke();
-      }
+    // Echo ring (more visible and farther in)
+    const echoAlpha = 0.18 * alive;
+    if (echoAlpha > 0.01){
+      ctx.strokeStyle = `hsla(${r.hue+6}, ${r.sat}%, ${r.lite-4}%, ${echoAlpha})`;
+      ctx.lineWidth   = Math.max(1, w*0.60);
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.r*0.65, 0, Math.PI*2);
+      ctx.stroke();
     }
   }
+}
 
   /* =========================
      FIREWORKS
@@ -1380,164 +1794,395 @@
   }
 
   /* =========================
-     STREAMERS — Rubans de Soie (CHANGED: falling + swirling)
+     STREAMERS — Rubans de Soie
+     Hundreds of small saturated ribbons + natural wind/rustle + GAZE WOOSH
      ========================= */
 
-  // Old rope helpers (kept but unused)
-  function makeRope(n, y){
-    n = Math.max(2, n|0);
-    const pts=[]; const step=(W-1)/(n-1); const sag=H*0.06;
-    for(let i=0;i<n;i++){
-      const x=i*step; const t=(n===1)?0:i/(n-1); const yy=y + (1 - Math.cos(Math.PI*t))*0.5*sag;
-      pts.push({x, y:yy, px:x, py:yy});
-    }
-    return { pts, color: Math.random()*360 };
-  }
-  const ropes = Array.from({length:4},(_,i)=>makeRope(40,(i+1)/(5)*H));
-  function verlet(p){ const x=p.x,y=p.y; p.x += (p.x-p.px); p.y += (p.y-p.py) + 0.15; p.px=x; p.py=y; }
-  function constrain(rope){
-    const segLen=W/(rope.pts.length-1);
-    for(let k=0;k<2;k++){
-      for(let i=0;i<rope.pts.length-1;i++){
-        const a=rope.pts[i], b=rope.pts[i+1], dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy)||1, diff=(d-segLen)/d;
-        const off=0.5*diff; a.x += dx*off; a.y += dy*off; b.x -= dx*off; b.y -= dy*off;
-      }
-      rope.pts[0].x = lerp(rope.pts[0].x, 0, 0.3); rope.pts[0].y = lerp(rope.pts[0].y, 0, 0.3);
-      rope.pts.at(-1).x = lerp(rope.pts.at(-1).x, W, 0.3); rope.pts.at(-1).y = lerp(rope.pts.at(-1).y, H, 0.3);
-    }
-  }
+  const RIB2 = { list: [], t: 0 };
 
-  // New falling ribbons
-  const RIB = { list: [], t: 0 };
-
-  function spawnRibbon(){
-    const sN = sizeNorm();
-    const intensity = mapIntensity();
-    const x = Math.random()*W;
-    const y = -Math.random()*H*0.8 - 80;
-    const vy = 18 + 22*(0.4 + 0.6*(1-intensity));  // slow fall
-    const amp = 28 + 42*(0.3 + sN);                // horizontal sway
-    const freq = 0.0045 + Math.random()*0.0025;
-    const wobble = 0.9 + Math.random()*0.6;
-    const hue = (Math.random()*360)|0;
-    const width = 8 + 22*sN;
-    return { x, y, vy, amp, freq, wobble, hue, phase: Math.random()*Math.PI*2, width };
-  }
+  const RCFG = {
+    segsMin: 5,
+    segsMax: 8,
+    widthMin: 3.0,
+    widthMax: 7.0,
+    gravity: 380,          // px/s^2
+    airDrag: 0.0022,
+    friction: 0.996,
+    restLen: 12,           // base segment length
+    swayAmp: 22,
+    swayHzMin: 0.15,
+    swayHzMax: 0.35,
+    windAmp: 36,
+    gazeRBase: 95,
+    gazeDamp: 0.77,
+    gazePull: 16,
+    respawnPad: 60
+  };
 
   function ribbonsInit(){
-    RIB.list.length = 0;
-    const baseCount = 5 + Math.floor(3 * sizeNorm());
-    for (let i=0;i<baseCount;i++) RIB.list.push(spawnRibbon());
+    RIB2.list.length = 0;
+    const n = Math.floor(140 + 260 * sizeNorm()); // hundreds; scales with Taille
+    for (let i=0;i<n;i++) RIB2.list.push(spawnRibbonSmall());
   }
 
-  function ribbonsResize(){ RIB.list.forEach(r=>{ r.x = clamp(r.x, 0, W); }); }
-  ribbonsInit();
+  function ribbonsResize(){
+    for (const r of RIB2.list){
+      for (const p of r.pts){
+        p.x = clamp(p.x, -50, W+50);
+        p.y = clamp(p.y, -H-100, H+100);
+      }
+    }
+  }
 
-  let ribbonSoundCooldown = 0;
+  function spawnRibbonSmall(){
+    const segs = Math.floor(RCFG.segsMin + Math.random()*(RCFG.segsMax-RCFG.segsMin+1));
+    const scl  = 0.85 + 0.7*sizeNorm();
+    const rest = RCFG.restLen * scl;
+    const x0   = Math.random()*W;
+    const y0   = -Math.random()*H*0.5 - 20;
+
+    const pts = [];
+    for (let i=0;i<segs;i++){
+      const x = x0 + (Math.random()-0.5)*2;
+      const y = y0 - i*rest*0.92;
+      pts.push({ x, y, px:x, py:y });
+    }
+    return {
+      pts,
+      rest,
+      width: lerp(RCFG.widthMin, RCFG.widthMax, Math.random()) * (0.8 + 0.6*sizeNorm()),
+      hue: (Math.random()*360)|0,
+      sat: 92 + Math.random()*6,
+      light: 52 + Math.random()*6,
+      swayHz: lerp(RCFG.swayHzMin, RCFG.swayHzMax, Math.random()),
+      swayPhase: Math.random()*Math.PI*2,
+      swayAmp: RCFG.swayAmp * (0.7 + 0.8*Math.random()),
+      wind: (Math.random()-0.5)*RCFG.windAmp,
+      _sndT: 0 // per-ribbon sound cooldown timestamp
+    };
+  }
+
+  function stepRibbonSmall(r, dt){
+    const pts = r.pts, N = pts.length;
+    const g   = RCFG.gravity;
+    const fr  = Math.pow(RCFG.friction, dt*60);
+    const intensity = mapIntensity();
+
+    const t = RIB2.t + r.swayPhase;
+    const sway = Math.sin(t*2*Math.PI*r.swayHz) * r.swayAmp * (0.7 + 0.9*intensity);
+
+    const gazeR  = (RCFG.gazeRBase * (0.8 + 0.7*sizeNorm())) * (0.8 + 0.9*intensity);
+    const gazeR2 = gazeR*gazeR;
+
+    for (let i=0;i<N;i++){
+      const p = pts[i];
+      let vx = (p.x - p.px);
+      let vy = (p.y - p.py);
+
+      const w = (1 - i/(N-1));
+      vy += g * dt*dt;
+      vx += (sway * w + r.wind*0.25) * dt;
+
+      const sp2 = vx*vx + vy*vy;
+      if (sp2 > 0){
+        const drag = 1 - Math.min(0.4, RCFG.airDrag * sp2);
+        vx *= drag; vy *= drag;
+      }
+
+      const dx = mouse.x - p.x, dy = mouse.y - p.y, d2 = dx*dx + dy*dy;
+      if (d2 < gazeR2){
+        const n = 1 - (d2 / gazeR2);
+        vx *= RCFG.gazeDamp; vy *= RCFG.gazeDamp;
+        vx += dx * (RCFG.gazePull * n) * dt*dt;
+        vy += dy * (RCFG.gazePull * n) * dt*dt;
+      }
+
+      p.px = p.x; p.py = p.y;
+      p.x += vx * fr; p.y += vy * fr;
+    }
+
+    for (let it=0; it<2; it++){
+      for (let i=0;i<N-1;i++){
+        const a = pts[i], b = pts[i+1];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d = Math.hypot(dx,dy) || 1;
+        const diff = (d - r.rest) / d;
+        const corr = 0.5 * diff;
+        a.x += dx * corr; a.y += dy * corr;
+        b.x -= dx * corr; b.y -= dy * corr;
+      }
+    }
+
+    let below = 0;
+    for (let i=0;i<N;i++){ if (pts[i].y > H + RCFG.respawnPad) below++; }
+    if (below === N){
+      const x0 = Math.random()*W, y0 = -20 - Math.random()*H*0.4;
+      for (let i=0;i<N;i++){
+        const x = x0 + (Math.random()-0.5)*2;
+        const y = y0 - i*r.rest*0.9;
+        pts[i].x=x; pts[i].y=y; pts[i].px=x; pts[i].py=y;
+      }
+      r.swayPhase = Math.random()*Math.PI*2;
+      r.wind = (Math.random()-0.5)*RCFG.windAmp;
+      r._sndT = performance.now();
+    }
+  }
+
+  function drawRibbonSmall(r){
+    const pts = r.pts, N = r.pts.length;
+    if (N<2) return;
+
+    const hue = r.hue, sat = r.sat|0, L = r.light|0;
+    const w   = r.width;
+
+    // saturated body
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${L}%, 0.92)`;
+    ctx.lineWidth   = w;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i=1;i<N;i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+
+    // soft highlight (subtle, not white bars)
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `hsla(${(hue+30)%360}, 95%, 70%, 0.25)`;
+    ctx.lineWidth   = Math.max(1, w*0.35);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i=1;i<N;i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+  }
+
+  // --- Sound system -------------------------------------------------------
+
+  const RIBSND = {
+    inited: false,
+    master: null,
+    // one shared noise source feeding two chains:
+    // 1) ambient wind, 2) gaze-woosh
+    wind:  { gain: null, bp: null, hp: null, target: 0, cur: 0 },
+    woosh: { gain: null, bp: null, hp: null, target: 0, cur: 0 },
+    src: null,
+    rustleLimiter: { active: 0, max: 6 },
+    lastDwellBoost: 0,
+    cooldownMs: 90
+  };
+
+  function ribbonsSoundEnsure(){
+    if (menuOpen) return;
+    ensureAC();
+    if (RIBSND.inited){
+      RIBSND.master.gain.value = 0.28 * currentSfxGain();
+      return;
+    }
+
+    // Master
+    const master = ac.createGain();
+    master.gain.value = 0.28 * currentSfxGain();
+    master.connect(ac.destination);
+    RIBSND.master = master;
+
+    // Looping noise buffer
+    const noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for (let i=0;i<data.length;i++) data[i] = (Math.random()*2 - 1) * 0.6;
+    const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    RIBSND.src = src;
+
+    // Chain 1: ambient wind
+    const hp1 = ac.createBiquadFilter(); hp1.type='highpass'; hp1.frequency.value = 120; hp1.Q.value = 0.7;
+    const bp1 = ac.createBiquadFilter(); bp1.type='bandpass'; bp1.frequency.value = 900; bp1.Q.value  = 0.8;
+    const g1  = ac.createGain(); g1.gain.value = 0.0;
+
+    // Chain 2: gaze-woosh (brighter, more “air”)
+    const hp2 = ac.createBiquadFilter(); hp2.type='highpass'; hp2.frequency.value = 320; hp2.Q.value = 0.8;
+    const bp2 = ac.createBiquadFilter(); bp2.type='bandpass'; bp2.frequency.value = 1400; bp2.Q.value = 0.9;
+    const g2  = ac.createGain(); g2.gain.value = 0.0;
+
+    // Connect both chains from the same noise source
+    src.connect(hp1).connect(bp1).connect(g1).connect(master);
+    src.connect(hp2).connect(bp2).connect(g2).connect(master);
+    src.start();
+
+    RIBSND.wind  = { gain:g1, bp:bp1, hp:hp1, target:0.0, cur:0.0 };
+    RIBSND.woosh = { gain:g2, bp:bp2, hp:hp2, target:0.0, cur:0.0 };
+    RIBSND.inited = true;
+  }
+
+  // brief rustle burst on strong local bend / speed (kept subtle)
+  function ribbonsPlayRustle(screenX=0.5, vel=0.6){
+    if (menuOpen) return;
+    if (RIBSND.rustleLimiter.active >= RIBSND.rustleLimiter.max) return;
+    const mscale = currentSfxGain();
+    if (mscale <= 0) return;
+
+    ribbonsSoundEnsure();
+
+    const t = ac.currentTime;
+    const dur = 0.18 + 0.10*Math.random();
+    const frames = Math.max(1, Math.floor(ac.sampleRate * dur));
+    const buf = ac.createBuffer(1, frames, ac.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let i=0;i<frames;i++){
+      const n = (Math.random()*2-1);
+      ch[i] = (i>0 ? 0.98*ch[i-1] + 0.02*n : n) * 0.9;
+    }
+    const src = ac.createBufferSource(); src.buffer = buf;
+
+    const hp = ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 800 + 500*Math.random();
+    const bp = ac.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 1.2;
+    const g  = ac.createGain();
+    const pan = (ac.createStereoPanner ? ac.createStereoPanner() : null);
+
+    const peak = 0.08 + 0.22*vel;            // dialed down so woosh leads
+    const A=0.008, D=0.08, R=0.16;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak*mscale, t+A);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak*0.25*mscale), t+A+D);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+A+D+R);
+
+    const f0 = 1500 + 700*Math.random();
+    bp.frequency.setValueAtTime(f0, t);
+    bp.frequency.linearRampToValueAtTime(f0 * (0.8 + 0.4*Math.random()), t + dur*0.6);
+
+    src.connect(hp).connect(bp).connect(g);
+    if (pan) { g.connect(pan); pan.pan.value = clamp(screenX*2-1, -1, 1); pan.connect(RIBSND.master); }
+    else { g.connect(RIBSND.master); }
+
+    src.start(t);
+    src.stop(t + dur + 0.05);
+
+    RIBSND.rustleLimiter.active++;
+    src.onended = ()=>{ RIBSND.rustleLimiter.active = Math.max(0, RIBSND.rustleLimiter.active - 1); };
+  }
+
+  function ribbonsWindSet(target){
+    if (!RIBSND.inited) return;
+    RIBSND.wind.target = clamp(target, 0, 1);
+  }
+  function ribbonsWooshSet(target){
+    if (!RIBSND.inited) return;
+    RIBSND.woosh.target = clamp(target, 0, 1);
+  }
+  function ribbonsSoundTick(dt){
+    if (!RIBSND.inited) return;
+
+    // Smooth follow (same for wind & woosh)
+    const follow = (cur, tgt) => lerp(cur, tgt, 1 - Math.pow(0.12, dt*60));
+
+    // Ambient wind (field activity)
+    RIBSND.wind.cur = follow(RIBSND.wind.cur, RIBSND.wind.target);
+    RIBSND.wind.gain.gain.setTargetAtTime(0.08 * RIBSND.wind.cur * currentSfxGain(), ac.currentTime, 0.05);
+    const windF = 850 + 500*RIBSND.wind.cur;
+    RIBSND.wind.bp.frequency.setTargetAtTime(windF, ac.currentTime, 0.12);
+
+    // Gaze woosh (captured ribbons)
+    RIBSND.woosh.cur = follow(RIBSND.woosh.cur, RIBSND.woosh.target);
+    // louder & brighter than wind; quick attack, slower release feel
+    RIBSND.woosh.gain.gain.setTargetAtTime(0.16 * RIBSND.woosh.cur * currentSfxGain(), ac.currentTime, 0.03);
+    const wooshF = 1200 + 1800*RIBSND.woosh.cur;
+    RIBSND.woosh.bp.frequency.setTargetAtTime(wooshF, ac.currentTime, 0.06);
+    RIBSND.woosh.hp.frequency.setTargetAtTime(300 + 400*RIBSND.woosh.cur, ac.currentTime, 0.06);
+  }
+
+  // --- Render loop (visuals + sound hooks) -------------------------------
+
+  let ribDwellPulse = 1.0;
 
   function renderStreamers(dt){
-    // Background trail
+    // background trail respecting theme
     ctx.globalCompositeOperation='source-over';
     ctx.fillStyle = document.body.classList.contains('light')
       ? `rgba(255,255,255,${mapTrail()})`
       : `rgba(0,0,0,${mapTrail()})`;
     ctx.fillRect(0,0,W,H);
 
-    const intensity = mapIntensity();
-    const sN = sizeNorm();
-    const t = (RIB.t += dt);
+    RIB2.t += dt * (0.6 + 0.8*mapIntensity());
+    ribbonsSoundEnsure();
 
-    const influenceR = 120 + 160*intensity;   // pointer influence radius
-    const swirlK = 0.9 + 1.6*intensity;       // tangential swirl multiplier
+    // (Removed beep) — gentle visual pulse only
+    if (dwellJustCrossed(750)){
+      ribDwellPulse = 1.08;
+      if (RIBSND.inited) RIBSND.lastDwellBoost = 0.6; // nudges ambient wind
+    }
+    ribDwellPulse = lerp(ribDwellPulse, 1.0, 0.06);
 
-    ctx.lineCap='round';
-    ctx.lineJoin='round';
+    let activity = 0;
+    let captured = 0;
 
-    ribbonSoundCooldown = Math.max(0, ribbonSoundCooldown - dt);
+    const nowMs = performance.now();
+    const gazeR  = (RCFG.gazeRBase * (0.8 + 0.7*sizeNorm())) * (0.8 + 0.9*mapIntensity());
+    const gazeR2 = gazeR * gazeR;
 
-    for (let i=0;i<RIB.list.length;i++){
-      const r = RIB.list[i];
+    for (const r of RIB2.list){
+      const orig = r.swayAmp;
+      r.swayAmp = orig * ribDwellPulse;
 
-      // fall down
-      r.y += r.vy * dt;
+      // head position before step (for speed measure)
+      const h0 = r.pts[0]; const hx0 = h0.x, hy0 = h0.y;
 
-      // recycle after leaving screen
-      if (r.y > H + 160){ RIB.list[i] = spawnRibbon(); continue; }
+      stepRibbonSmall(r, dt);
+      drawRibbonSmall(r);
 
-      // build vertical polyline
-      const segs = 46;
-      const span = H + 260;
-      const y0 = r.y - 200;
+      // motion & curvature
+      const hx1 = r.pts[0].x, hy1 = r.pts[0].y;
+      const hvx = (hx1 - hx0) / (dt || 1/60);
+      const hvy = (hy1 - hy0) / (dt || 1/60);
+      const hsp = Math.hypot(hvx, hvy);
 
-      const pts = new Array(segs+1);
-      for (let k=0;k<=segs;k++){
-        const y = y0 + (k/segs)*span;
+      const mid = (r.pts.length/2 | 0);
+      const a = r.pts[Math.max(0, mid-1)], b = r.pts[mid], c = r.pts[Math.min(r.pts.length-1, mid+1)];
+      const abx = b.x - a.x, aby = b.y - a.y;
+      const bcx = c.x - b.x, bcy = c.y - b.y;
+      const curv = Math.abs(abx*bcy - aby*bcx) / ((Math.hypot(abx,aby)*Math.hypot(bcx,bcy)) || 1);
 
-        // base sway (two sine layers for silkiness)
-        const sway = Math.sin(y*r.freq + r.phase + t*r.wobble)*r.amp
-                   + Math.sin(y*r.freq*2.3 + t*1.8 + r.phase*0.7)*r.amp*0.18;
+      activity += clamp(hsp/300, 0, 1) * 0.4 + clamp(curv*3, 0, 1) * 0.6;
 
-        let x = r.x + sway;
+      // captured by gaze? (use middle point)
+      const dx = mouse.x - b.x, dy = mouse.y - b.y, d2 = dx*dx + dy*dy;
+      const inGaze = d2 < gazeR2;
+      if (inGaze) captured++;
 
-        // pointer interaction: swirl around cursor + slight attraction
-        const dx = mouse.x - x;
-        const dy = mouse.y - y;
-        const d  = Math.hypot(dx, dy);
-        if (d < influenceR){
-          const n = 1 - (d/influenceR);
-          const inv = 1/(d+0.0001);
-          const tx = -dy * inv;  // tangential unit vector
-          const ty =  dx * inv;
-          const curl = swirlK * n * (mouse.down?1.4:1.0);
-          const pull = 0.25 * n * (0.5 + intensity);
-          x += tx * 90 * curl + dx * pull * 0.25;
-          const yswirl = ty * 90 * curl + dy * pull * 0.12;
-          pts[k] = [x, y + yswirl];
-        } else {
-          pts[k] = [x, y];
+      // optional subtle rustle (kept low, not beepy)
+      if (RIBSND.inited && (nowMs - r._sndT >= RIBSND.cooldownMs)){
+        const bendHit = curv > 0.22;
+        const speedHit = hsp > 260;
+        if (bendHit || speedHit || (inGaze && curv>0.12)){
+          const screenX = clamp(b.x / W, 0, 1);
+          const vel = clamp( (hsp/700) + (curv*0.6), 0.12, 0.8 );
+          ribbonsPlayRustle(screenX, vel);
+          r._sndT = nowMs;
         }
       }
 
-      // draw ribbon
-      const thickness = 10 + 22*sN;
-      const g = ctx.createLinearGradient(pts[0][0], pts[0][1], pts.at(-1)[0], pts.at(-1)[1]);
-      g.addColorStop(0, `hsla(${(r.hue+20)%360},90%,68%,0.55)`);
-      g.addColorStop(1, `hsla(${(r.hue+240)%360},90%,68%,0.55)`);
-
-      ctx.globalCompositeOperation='lighter';
-      ctx.strokeStyle = g;
-      ctx.lineWidth = thickness;
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (let k=1;k<pts.length;k++) ctx.lineTo(pts[k][0], pts[k][1]);
-      ctx.stroke();
-
-      ctx.strokeStyle = `hsla(${(r.hue+40)%360},100%,90%,0.35)`;
-      ctx.lineWidth = Math.max(2, thickness*0.42);
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (let k=1;k<pts.length;k++) ctx.lineTo(pts[k][0], pts[k][1]);
-      ctx.stroke();
-
-      // whoosh ping when strongly bent near pointer (throttled)
-      const nearIdx = Math.floor(segs * clamp((mouse.y - y0) / span, 0, 1));
-      const bend = Math.abs(pts[nearIdx][0] - r.x);
-      if (ribbonSoundCooldown===0 && bend > r.amp*0.9 && currentSfxGain()>0){
-        playPing(320 + i*35, 0.10, 0.03);
-        ribbonSoundCooldown = 0.25;
-      }
+      r.swayAmp = orig;
     }
 
-    // dwell pulse to all ribbons
-    if (dwellJustCrossed(800)){
-      for (const r of RIB.list){
-        r.phase += Math.PI*0.5;
-        r.amp *= (1.05 + 0.15*mapIntensity());
-        setTimeout(()=>{ r.amp *= 0.92; }, 200);
-      }
-      playPing(540, 0.14, 0.035);
+    // Ambient wind loudness from global activity
+    const field = clamp(activity / Math.max(1, RIB2.list.length), 0, 1);
+    let windTarget = 0.15 + field * (0.75 * (0.4 + 0.8*mapIntensity()));
+    if (RIBSND.lastDwellBoost > 0){
+      windTarget += RIBSND.lastDwellBoost * 0.15;
+      RIBSND.lastDwellBoost = Math.max(0, RIBSND.lastDwellBoost - dt*1.8);
     }
+    ribbonsWindSet(windTarget);
+
+    // GAZE WOOSH: grows with #captured ribbons (nonlinear for feel)
+    const capNormBase = 40 * (0.7 + 0.6*sizeNorm()); // how many ribbons to “fill” woosh
+    const wooshTarget = Math.sqrt( clamp(captured / Math.max(1, capNormBase), 0, 1) );
+    ribbonsWooshSet(wooshTarget);
+
+    ribbonsSoundTick(dt);
   }
+
+  // Initialize ribbons
+  ribbonsInit();
+
+
+
 
   /* =========================
      HARPE LASER (unchanged)
@@ -1755,10 +2400,13 @@
     }
   }
 
-  function tick(t){
+   function tick(t){
     const dt = clamp((t - now)/1000, 0, 0.05);
     now = t;
     dwellMs = t - lastMoveT;
+    MUSIC.tick(dt);
+
+    recomputePaused();
 
     if (menuOpen || paused){
       return requestAnimationFrame(tick);
@@ -1789,6 +2437,7 @@
     ctx.fillRect(0,0,W,H);
   })();
 
+  updateBorder();
   snowResize();
   requestAnimationFrame(tick);
 
@@ -1801,6 +2450,8 @@
     document.getElementById('game-options').style.display = 'none';
     cvs.style.display = 'block';
     menuOpen = false;
+    MUSIC.prime();                 // <-- NEW
+    MUSIC.setScene(sceneSel.value); 
 
     cvs.addEventListener('pointerdown', ()=>{ playPing(523,0.08,0.03); }, {once:true});
   });
