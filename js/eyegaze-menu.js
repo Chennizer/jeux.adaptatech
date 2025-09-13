@@ -2,6 +2,7 @@ window.eyegazeSettings = {
   dwellTime: parseInt(localStorage.getItem('eyegazeDwellTime')) || 1500,
   sfxMuted: false,
   sfxVolume: 50,
+  showPointer: false,
   hideOverlay: function() {
     const overlay = document.getElementById('game-options');
     if (overlay) overlay.style.display = 'none';
@@ -13,6 +14,7 @@ function initEyegazeMenu() {
   const muteSFX = document.getElementById('muteSFX');
   const sfxSlider = document.getElementById('sfxVol');
   const sfxVal = document.getElementById('sfxVolVal');
+  const showPointer = document.getElementById('showPointer');
 
   if (dwellSlider && dwellVal) {
     const initial = eyegazeSettings.dwellTime;
@@ -39,6 +41,13 @@ function initEyegazeMenu() {
       const val = parseInt(e.target.value);
       eyegazeSettings.sfxVolume = val;
       sfxVal.textContent = val;
+    });
+  }
+
+  if (showPointer) {
+    showPointer.checked = !!eyegazeSettings.showPointer;
+    showPointer.addEventListener('change', e => {
+      eyegazeSettings.showPointer = e.target.checked;
     });
   }
 }
