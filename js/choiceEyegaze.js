@@ -414,7 +414,9 @@ document.addEventListener('DOMContentLoaded', () => {
       document.documentElement.webkitRequestFullscreen();
     }
     currentCategory = "all";
-    categorySelect.value = "all";
+    if (categorySelect) {
+      categorySelect.value = "all";
+    }
     populateTilePickerGrid();
   });
 
@@ -453,8 +455,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  categorySelect.addEventListener('change', e => {
-    currentCategory = e.target.value;
-    populateTilePickerGrid();
-  });
+  if (categorySelect) {
+    categorySelect.addEventListener('change', e => {
+      currentCategory = e.target.value;
+      populateTilePickerGrid();
+    });
+  }
 });
