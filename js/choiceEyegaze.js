@@ -272,6 +272,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Expose for external scripts (e.g. customVideoChoices.js)
+  window.populateTilePickerGrid = populateTilePickerGrid;
+
   function updateStartButtonState() {
     startGameButton.disabled = (selectedTileIndices.length !== desiredTileCount);
   }
@@ -460,5 +463,10 @@ document.addEventListener('DOMContentLoaded', () => {
       currentCategory = e.target.value;
       populateTilePickerGrid();
     });
+  }
+
+  // Populate grid if choices already exist (e.g., restored from IndexedDB)
+  if (Array.isArray(mediaChoices) && mediaChoices.length > 0) {
+    populateTilePickerGrid();
   }
 });
