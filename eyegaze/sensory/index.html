@@ -81,6 +81,7 @@
               <option value="streamers">Rubans de Soie</option>
               <option value="laserharp">Harpe Laser</option>
               <option value="bubblepop">Bulle-Pop</option>
+              <option value="galaxy">Galaxie</option>
             </select>
           </div>
         </div>
@@ -150,10 +151,11 @@
   }
   themeSel.addEventListener('change', applyTheme);
   applyTheme();
+
   sceneSel.addEventListener('change', () => {
-  MUSIC.setScene(sceneSel.value);
-  // (optional) clearToBg(true); // if you want a hard clear on scene switch
-    });
+    MUSIC.setScene(sceneSel.value);
+    // (optional) clearToBg(true);
+  });
 
   const cvs = document.getElementById('c');
   const ctx = cvs.getContext('2d', { alpha:false });
@@ -167,255 +169,186 @@
   function inActiveArea(x, y){
     return x >= borderPx && x <= (W - borderPx) && y >= borderPx && y <= (H - borderPx);
   }
-function recomputePaused(){
-  const t = performance.now();
+  function recomputePaused(){
+    const t = performance.now();
 
-  // Idle pause: 5s of no movement anywhere
-  const idle = (t - lastMoveT) >= 5000;
+    // Idle pause: 5s of no movement anywhere
+    const idle = (t - lastMoveT) >= 5000;
 
-  // Edge logic with 3s grace
-  const atEdge = !inActiveArea(mouse.x, mouse.y);
+    // Edge logic with 3s grace
+    const atEdge = !inActiveArea(mouse.x, mouse.y);
 
-  if (atEdge) {
-    // just entered the edge zone? start the grace timer
-    if (edgeEnteredAt === null) edgeEnteredAt = t;
-  } else {
-    // left the edge zone — clear the grace timer
-    edgeEnteredAt = null;
-  }
-
-  const edgeGraceElapsed = edgeEnteredAt !== null && (t - edgeEnteredAt) >= 3000; // 3s
-
-  // Pause if idle OR if we've been at the edge for >= 3s
-  const newPaused = idle || edgeGraceElapsed;
-
-  if (newPaused !== paused){
-    paused = newPaused;
-    // Optional: clearToBg(true);
-  }
-}
-/* =========================
-   GLOBAL MUSIC — per-scene playlists, shuffle, loop, crossfade
-   ========================= */
-const MUSIC = (function(){
-  // --- config: declare playlists per scene (fill as you add songs)
-  // If tracks need extensions, include them (e.g., ".mp3").
-  const PLAYLISTS = {
-    aurora: [
-      "../../songs/space/space1.mp3",
-      "../../songs/space/spacebest1.mp3",
-      "../../songs/space/spacebest4.mp3",
-    ],
-    // add more scenes when ready:
-    // ripples: ["../../songs/water/w1.mp3","../../songs/water/w2.mp3"],
-    // laserharp: [...],
-  };
-
-  // master behavior
-  const CFG = {
-    crossfadeSec: 0.6,
-    sceneXfadeSec: 0.8,
-    baseMusicScale: 0.7,     // music <= SFX
-    mutePauseThreshold: 0.003,
-  };
-
-  // internal state
-  let primed = false;
-  let wanted = true     // global desire (we'll compute sceneHasPlaylist && scene == current && !paused)
-  let scene = null;
-  let sceneHasPlaylist = false;
-
-  // two-tag crossfader
-  const ch = [
-    { el: null, gain: 0, list: [], order: [], i: 0, name:"A" },
-    { el: null, gain: 0, list: [], order: [], i: 0, name:"B" },
-  ];
-  let active = 0; // index of currently audible channel
-  let pendingXfade = 0; // seconds left in current crossfade
-
-  function makeAudio(){
-    const a = new Audio();
-    a.loop = false;
-    a.preload = "auto";
-    a.crossOrigin = "anonymous";
-    a.volume = 0;
-    return a;
-  }
-
-  function ensure(){
-    if (!ch[0].el) ch[0].el = makeAudio();
-    if (!ch[1].el) ch[1].el = makeAudio();
-  }
-
-  function shuffle(arr){
-    for (let i=arr.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
-    return arr;
-  }
-
-  function buildOrder(list){
-    return shuffle(Array.from({length:list.length}, (_,i)=>i));
-  }
-
-  function currentChannel(){ return ch[active]; }
-  function idleChannel(){ return ch[1-active]; }
-
-  function setPlaylistForBoth(list){
-    ch[0].list = list;
-    ch[0].order = buildOrder(list);
-    ch[0].i = 0;
-
-    ch[1].list = list;
-    ch[1].order = buildOrder(list);
-    ch[1].i = 0;
-  }
-
-  function nextIdx(c){
-    if (!c.list.length) return 0;
-    c.i = (c.i + 1) % c.order.length;
-    return c.i;
-  }
-
-  function pickSrc(c){
-    if (!c.list.length) return "";
-    const k = c.order[c.i] ?? 0;
-    return c.list[k];
-  }
-
-  function loadInto(c){
-    if (!c.list.length) return;
-    const src = pickSrc(c);
-    c.el.src = src;
-    // play() only if we’re wanted; otherwise will auto-start during tick when volume ramps > 0
-    const p = c.el.play();
-    if (p && p.catch){ /* ignore autoplay errors; tick() will retry when primed/wanted */ }
-    c.el.onended = ()=>{ nextIdx(c); loadInto(c); };
-    c.el.onerror = ()=>{ nextIdx(c); loadInto(c); };
-  }
-
-  function prime(){ primed = true; ensure(); }
-
-  function setScene(name){
-    scene = name;
-    const list = PLAYLISTS[name] || [];
-    sceneHasPlaylist = list.length > 0;
-
-    ensure();
-
-    // If no playlist, stop desire; if yes, prepare both channels
-    if (!sceneHasPlaylist){
-      wanted = false;
-      // fade out quickly; tick() will mute/pause
-      return;
-    }
-
-    setPlaylistForBoth(list);
-
-    // start new playback on idle channel, then crossfade
-    const idle = idleChannel();
-    nextIdx(idle); // de-sync from active a bit
-    loadInto(idle);
-    pendingXfade = CFG.sceneXfadeSec;
-  }
-
-  // External toggle if you want to disable music globally (rarely needed)
-  function want(on){ wanted = !!on; }
-
-  // The main tick: called each frame
-  function tick(dt){
-    if (!primed) return;
-
-    ensure();
-
-    // Determine if music should be audible now
-    const sceneWants = !!scene && sceneHasPlaylist && (ui.mode.value === scene);
-
-    const shouldPlay = sceneWants && !paused && wanted !== false; // wanted defaults true unless explicitly turned off
-
-    // Calculate base target volume from SFX slider + mute
-    const sfx = currentSfxGain();        // 0..1
-    const targetBase = shouldPlay ? Math.min(1, sfx * CFG.baseMusicScale) : 0;
-
-    // crossfade logic (also used for automatic track changes)
-    if (pendingXfade > 0){
-      const step = Math.min(pendingXfade, dt);
-      pendingXfade -= step;
-      // ramp active down, idle up
-      const a = currentChannel();
-      const b = idleChannel();
-      const t = 1 - (pendingXfade / (sceneWants ? CFG.sceneXfadeSec : CFG.crossfadeSec));
-      a.gain = (1 - t) * targetBase;
-      b.gain = t * targetBase;
-
-      // start idle playback if needed
-      if (shouldPlay && b.el.paused && targetBase > 0){
-        const p = b.el.play(); if (p && p.catch){ /* ignore */ }
-      }
-
-      // volumes
-      a.el.volume = a.gain;
-      b.el.volume = b.gain;
-
-      if (pendingXfade <= 0){
-        // swap actives
-        active = 1 - active;
-        // pause the now-idle channel if we’re near silent
-        const id = idleChannel();
-        id.gain = 0; id.el.volume = 0;
-        if (!sceneWants || targetBase === 0) id.el.pause();
-      }
+    if (atEdge) {
+      if (edgeEnteredAt === null) edgeEnteredAt = t;
     } else {
-      // steady-state: maintain volume toward target
-      const a = currentChannel();
-      const b = idleChannel();
-
-      // bring active toward target
-      a.gain = lerp(a.gain, targetBase, 1 - Math.pow(0.08, dt*60));
-      a.el.volume = a.gain;
-
-      // keep idle silent
-      b.gain = lerp(b.gain, 0, 1 - Math.pow(0.08, dt*60));
-      b.el.volume = b.gain;
-
-      // start playing if needed
-      if (shouldPlay && a.el.paused && targetBase > 0){
-        const p = a.el.play(); if (p && p.catch){ /* ignore */ }
-      }
-      // pause when fully muted
-      if (!shouldPlay && a.el.volume < CFG.mutePauseThreshold && !a.el.paused) a.el.pause();
+      edgeEnteredAt = null;
     }
 
-    // If an active track is about to end, pre-roll next on idle and start crossfade
-    const a = currentChannel();
-    if (shouldPlay && a.el.duration && !isNaN(a.el.duration)){
-      const remain = a.el.duration - a.el.currentTime;
-      if (remain < Math.max(0.25, CFG.crossfadeSec * 0.9) && pendingXfade <= 0){
-        const b = idleChannel();
-        // prepare different next track on idle channel
-        nextIdx(b);
-        loadInto(b);
-        pendingXfade = CFG.crossfadeSec;
+    const edgeGraceElapsed = edgeEnteredAt !== null && (t - edgeEnteredAt) >= 3000; // 3s
+
+    const newPaused = idle || edgeGraceElapsed;
+
+    if (newPaused !== paused){
+      paused = newPaused;
+      // Optional: clearToBg(true);
+
+      // NEW: hard-silence Kaleido bed immediately on pause
+      if (paused && typeof KALEIDO_SND !== 'undefined' && KALEIDO_SND.silenceNow){
+        KALEIDO_SND.silenceNow();
       }
     }
   }
 
-  // Keep volume in sync with UI changes
-  sfxVol.addEventListener('input', ()=>{/* target computed in tick */});
-  muteSFX.addEventListener('change', ()=>{/* target computed in tick */});
+  /* =========================
+     GLOBAL MUSIC — per-scene playlists, shuffle, loop, crossfade
+     ========================= */
+  const MUSIC = (function(){
+    const PLAYLISTS = {
+      aurora: [
+        "../../songs/space/space1.mp3",
+        "../../songs/space/spacebest1.mp3",
+        "../../songs/space/spacebest4.mp3",
+      ],
+      ripples: [
+        "../../songs/space/space1.mp3",
+        "../../songs/space/spacebest1.mp3",
+        "../../songs/space/spacebest4.mp3",
+      ],
+        snow: [
+    "../../songs/winter/wintersong2.mp3"
+  ],
+    };
 
-  return {
-    prime,
-    setScene,
-    want,        // optional global override
-    tick,
-    // for convenience, to add/modify playlists at runtime:
-    setPlaylist(sceneName, tracksArray){
-      PLAYLISTS[sceneName] = tracksArray.slice();
-      if (scene === sceneName){
-        setScene(sceneName); // rebuild if currently on scene
+    const CFG = {
+      crossfadeSec: 0.6,
+      sceneXfadeSec: 0.8,
+      baseMusicScale: 0.7,
+      mutePauseThreshold: 0.003,
+    };
+
+    let primed = false;
+    let wanted = true;
+    let scene = null;
+    let sceneHasPlaylist = false;
+
+    const ch = [
+      { el: null, gain: 0, list: [], order: [], i: 0, name:"A" },
+      { el: null, gain: 0, list: [], order: [], i: 0, name:"B" },
+    ];
+    let active = 0;
+    let pendingXfade = 0;
+
+    function makeAudio(){
+      const a = new Audio();
+      a.loop = false;
+      a.preload = "auto";
+      a.crossOrigin = "anonymous";
+      a.volume = 0;
+      return a;
+    }
+    function ensure(){
+      if (!ch[0].el) ch[0].el = makeAudio();
+      if (!ch[1].el) ch[1].el = makeAudio();
+    }
+    function shuffle(arr){
+      for (let i=arr.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
+      return arr;
+    }
+    function buildOrder(list){ return shuffle(Array.from({length:list.length}, (_,i)=>i)); }
+    function currentChannel(){ return ch[active]; }
+    function idleChannel(){ return ch[1-active]; }
+    function setPlaylistForBoth(list){
+      ch[0].list = list; ch[0].order = buildOrder(list); ch[0].i = 0;
+      ch[1].list = list; ch[1].order = buildOrder(list); ch[1].i = 0;
+    }
+    function nextIdx(c){ if (!c.list.length) return 0; c.i = (c.i + 1) % c.order.length; return c.i; }
+    function pickSrc(c){ if (!c.list.length) return ""; const k = c.order[c.i] ?? 0; return c.list[k]; }
+    function loadInto(c){
+      if (!c.list.length) return;
+      const src = pickSrc(c);
+      c.el.src = src;
+      const p = c.el.play();
+      if (p && p.catch){ /* ignore autoplay errors */ }
+      c.el.onended = ()=>{ nextIdx(c); loadInto(c); };
+      c.el.onerror = ()=>{ nextIdx(c); loadInto(c); };
+    }
+    function prime(){ primed = true; ensure(); }
+    function setScene(name){
+      scene = name;
+      const list = PLAYLISTS[name] || [];
+      sceneHasPlaylist = list.length > 0;
+
+      ensure();
+
+      if (!sceneHasPlaylist){
+        wanted = false;
+        return;
+      }
+
+      setPlaylistForBoth(list);
+
+      const idle = idleChannel();
+      nextIdx(idle);
+      loadInto(idle);
+      pendingXfade = CFG.sceneXfadeSec;
+    }
+    function want(on){ wanted = !!on; }
+    function tick(dt){
+      if (!primed) return;
+      ensure();
+
+      const sceneWants = !!scene && sceneHasPlaylist && (ui.mode.value === scene);
+      const shouldPlay = sceneWants && !paused && wanted !== false;
+
+      const sfx = currentSfxGain();
+      const targetBase = shouldPlay ? Math.min(1, sfx * CFG.baseMusicScale) : 0;
+
+      if (pendingXfade > 0){
+        const step = Math.min(pendingXfade, dt); pendingXfade -= step;
+        const a = currentChannel(); const b = idleChannel();
+        const t = 1 - (pendingXfade / (sceneWants ? CFG.sceneXfadeSec : CFG.crossfadeSec));
+        a.gain = (1 - t) * targetBase; b.gain = t * targetBase;
+
+        if (shouldPlay && b.el.paused && targetBase > 0){ const p = b.el.play(); if (p && p.catch){ /* ignore */ } }
+        a.el.volume = a.gain; b.el.volume = b.gain;
+
+        if (pendingXfade <= 0){
+          active = 1 - active;
+          const id = idleChannel();
+          id.gain = 0; id.el.volume = 0;
+          if (!sceneWants || targetBase === 0) id.el.pause();
+        }
+      } else {
+        const a = currentChannel(); const b = idleChannel();
+        a.gain = lerp(a.gain, targetBase, 1 - Math.pow(0.08, dt*60));
+        a.el.volume = a.gain;
+        b.gain = lerp(b.gain, 0, 1 - Math.pow(0.08, dt*60));
+        b.el.volume = b.gain;
+
+        if (shouldPlay && a.el.paused && targetBase > 0){ const p = a.el.play(); if (p && p.catch){ /* ignore */ } }
+        if (!shouldPlay && a.el.volume < CFG.mutePauseThreshold && !a.el.paused) a.el.pause();
+      }
+
+      const a = currentChannel();
+      if (shouldPlay && a.el.duration && !isNaN(a.el.duration)){
+        const remain = a.el.duration - a.el.currentTime;
+        if (remain < Math.max(0.25, CFG.crossfadeSec * 0.9) && pendingXfade <= 0){
+          const b = idleChannel();
+          nextIdx(b); loadInto(b);
+          pendingXfade = CFG.crossfadeSec;
+        }
       }
     }
-  };
-})();
+    sfxVol.addEventListener('input', ()=>{});
+    muteSFX.addEventListener('change', ()=>{});
+    return {
+      prime, setScene, want, tick,
+      setPlaylist(sceneName, tracksArray){
+        PLAYLISTS[sceneName] = tracksArray.slice();
+        if (scene === sceneName){ setScene(sceneName); }
+      }
+    };
+  })();
 
   addEventListener('resize', ()=>{
     W=innerWidth; H=innerHeight; cvs.width=W; cvs.height=H;
@@ -427,6 +360,7 @@ const MUSIC = (function(){
     if (typeof snowResize === 'function') snowResize();
     if (typeof magnetResize === 'function') magnetResize();
     if (typeof ribbonsResize === 'function') ribbonsResize();
+    if (typeof KALEIDO_SND !== 'undefined') KALEIDO_SND.onResize();   // keep maxR updated
   });
 
   let menuOpen = true;
@@ -439,6 +373,48 @@ const MUSIC = (function(){
     const vol = (parseInt(sfxVol.value,10)||50)/100;
     return (muteSFX.checked?0:1) * vol;
   }
+
+  /* ===== Firework SFX (MP3-based, lazy-loaded) ===== */
+  const FW_SFX_FILES = ["../../sounds/fireworks.mp3"]; 
+  const FireworkSFX = (() => {
+    let ready = false;
+    let pending = null;
+    let buffers = [];
+    async function load(urls){
+      if (ready || pending) return pending;
+      ensureAC();
+      const arr = Array.isArray(urls) ? urls : [urls];
+      pending = Promise.all(arr.map(async (u) => {
+        const res = await fetch(u);
+        const ab  = await res.arrayBuffer();
+        return ac.decodeAudioData(ab);
+      }))
+      .then(bs => { buffers = bs; ready = true; })
+      .catch(err => { console.warn("SFX load failed:", err); pending = null; });
+      return pending;
+    }
+    function play(x = W/2, y = H/2, power = 1){
+      if (!ready || menuOpen) return;
+      const master = currentSfxGain();
+      if (master <= 0) return;
+      const b = buffers[(Math.random()*buffers.length)|0];
+      const src = ac.createBufferSource();
+      src.buffer = b;
+      src.playbackRate.value = 0.98 + Math.random()*0.04;
+      const g = ac.createGain();
+      g.gain.value = 0.32 * master * Math.min(1.6, 0.8 + power);
+      const p = (ac.createStereoPanner ? ac.createStereoPanner() : null);
+      if (p){
+        p.pan.value = (x / W) * 2 - 1;
+        src.connect(g).connect(p).connect(ac.destination);
+      } else {
+        src.connect(g).connect(ac.destination);
+      }
+      src.start();
+    }
+    return { load, play, isReady: () => ready };
+  })();
+  FireworkSFX.load(FW_SFX_FILES);
 
   function playPing(f=440, len=0.2, gain=0.05){
     if (menuOpen) return;
@@ -515,15 +491,11 @@ const MUSIC = (function(){
     const shaped = Math.pow(t, 1.35);
     return 8 + shaped * 420;
   };
+  const mapSizeJelly = () => {
+  const t = clamp((Number(ui.size.value) - 10) / 190, 0, 1); // 0..1
+  return 45 + t * 100; // 45..145 (≈95 at mid)
+};
   const sizeNorm = ()=> clamp((Number(ui.size.value)-10)/190, 0, 1);
-
-  function mapSizeJelly(){
-    const s = Number(ui.size.value);
-    const sEff = 10 + (s - 10) * (50/90);
-    const t = (sEff - 10) / 190;
-    const shaped = Math.pow(t, 1.35);
-    return 8 + shaped * 420;
-  }
 
   const dwellFactor=()=> clamp(dwellMs/1200,0,1);
   let lastDwellStage=0;
@@ -541,352 +513,294 @@ const MUSIC = (function(){
     ctx.fillRect(0,0,W,H);
   }
 
-/* =========================
-   AURORA (snappier, no halo)
-   ========================= */
+  /* =========================
+     AURORA (snappier, no halo)
+     ========================= */
+  function _auroraQuality(){
+    const ps  = (typeof perfScale   !== 'undefined') ? perfScale   : 1;
+    const fma = (typeof frameMsAvg  !== 'undefined') ? frameMsAvg  : 16;
+    const qFromFps  = clamp(1 - Math.max(0, (fma - 16)/16)*0.5, 0.6, 1);
+    return Math.min(ps, qFromFps);
+  }
+  function fbm(x, t=0){
+    let v=0, a=0.5, f=1.0;
+    for (let i=0;i<4;i++){ v += a*Math.sin(x*f+t*(0.35+i*0.07)+i*1.3); a*=0.5; f*=1.8; }
+    return v;
+  }
+  const AUR = { t:0, hueBase:140, stars:[], ribbons:[] };
+  function auroraInit(){
+    const q = _auroraQuality();
+    const n = Math.floor((W*H) * (1/26000) * (0.7 + 0.6*q));
+    AUR.stars = Array.from({length:n}, () => ({
+      x:Math.random()*W, y:Math.random()*H, z:Math.random(), a:0.22+Math.random()*0.45
+    }));
+    const ribs = (q > 0.8 ? 3 : 2);
+    AUR.ribbons.length = 0;
+    for (let i=0;i<ribs;i++){
+      AUR.ribbons.push({
+        amp:   70 + i*24,
+        thick: 46 + i*10,
+        hue:   (AUR.hueBase + (i===0?40:i===1?0:-40)+360)%360,
+        speed: 0.55 + i*0.18,
+        alpha: 0.12 + i*0.06,
+        warp:  0.90 + i*0.12,
+        offsetY: 0.60 - i*0.08,
+        jitter: 0.8 + i*0.25
+      });
+    }
+  }
+  function auroraResize(){ auroraInit(); }
+  auroraInit();
 
-// Quick quality hint (safe if you don't have perfScale/frameMsAvg)
-function _auroraQuality(){
-  const ps  = (typeof perfScale   !== 'undefined') ? perfScale   : 1;
-  const fma = (typeof frameMsAvg  !== 'undefined') ? frameMsAvg  : 16;
-  const qFromFps  = clamp(1 - Math.max(0, (fma - 16)/16)*0.5, 0.6, 1);
-  return Math.min(ps, qFromFps);
-}
+  function drawStars(dt, boost=1){
+    ctx.globalCompositeOperation = 'screen';
+    const parX = (mouse.x - W*0.5) * 0.06;
+    const parY = (mouse.y - H*0.5) * 0.03;
+    const velSkewX = mouse.vx * 0.00005;
+    for (let i=0;i<AUR.stars.length;i++){
+      const s = AUR.stars[i];
+      s.x += (mouse.vx*0.000015 + velSkewX) * (0.3 + s.z);
+      if (s.x < -5) s.x = W+5; if (s.x > W+5) s.x = -5;
+      const px = s.x - parX * s.z;
+      const py = s.y - parY * s.z;
+      const r = 0.6 + s.z*1.4;
+      ctx.fillStyle = `hsla(200,100%,${68+26*s.z}%,${s.a*boost})`;
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  function drawCurtainRibbon(rib, t, intensity){
+    const q = _auroraQuality();
+    const followY = 0.26 + 0.30*intensity;
+    const baseY   = H * rib.offsetY + (mouse.y - H*0.5) * followY;
+    const baseStep = Math.max(10, Math.round(W / (90 + 140*q)));
+    const cx = mouse.x;
+    const upper=[]; const lower=[];
+    const phaseShift = (mouse.x/W - 0.5) * 1.8;
+    const velPullX   = mouse.vx * 0.025;
+    const velBend    = clamp(mouse.vx/800, -1.2, 1.2);
 
-// Compact FBM (4 octaves)
-function fbm(x, t=0){
-  let v=0, a=0.5, f=1.0;
-  for (let i=0;i<4;i++){ v += a*Math.sin(x*f+t*(0.35+i*0.07)+i*1.3); a*=0.5; f*=1.8; }
-  return v;
-}
+    for (let x=0; x<=W; ){
+      const near = Math.max(0, 1 - Math.abs(x - cx) / (W*0.35));
+      const step = Math.max(8, baseStep * (1 - 0.55*near));
+      const u = x / W;
 
-const AUR = { t:0, hueBase:140, stars:[], ribbons:[] };
+      const n = fbm(u*6*rib.warp + rib.jitter*0.6 + phaseShift, t*rib.speed);
+      const amp = rib.amp * (0.9 + 0.8*intensity) * (1 + dwellFactor()*0.12);
 
-function auroraInit(){
-  const q = _auroraQuality();
+      const dx = (x - cx);
+      const prox = Math.max(0, 1 - Math.abs(dx) / (W*0.55));
+      const proxShaped = prox*prox;
+      const bend = ( - (dx / W) * amp * 0.75 * proxShaped * (0.7 + intensity) ) + velBend * 22 * prox;
 
-  // Slightly fewer stars for perf; quicker parallax later
-  const n = Math.floor((W*H) * (1/26000) * (0.7 + 0.6*q));
-  AUR.stars = Array.from({length:n}, () => ({
-    x:Math.random()*W, y:Math.random()*H, z:Math.random(), a:0.22+Math.random()*0.45
-  }));
+      const y = baseY + n*amp + Math.sin(u*3 + t*0.3)*amp*0.05 + bend;
+      const thick = rib.thick * (0.9 + 0.7*intensity) * (0.9 + 0.25*Math.abs(n));
 
-  // 2–3 ribbons; base params a bit leaner
-  const ribs = (q > 0.8 ? 3 : 2);
-  AUR.ribbons.length = 0;
-  for (let i=0;i<ribs;i++){
-    AUR.ribbons.push({
-      amp:   70 + i*24,                  // ↓ a touch for stability at high follow
-      thick: 46 + i*10,
-      hue:   (AUR.hueBase + (i===0?40:i===1?0:-40)+360)%360,
-      speed: 0.55 + i*0.18,
-      alpha: 0.12 + i*0.06,
-      warp:  0.90 + i*0.12,
-      offsetY: 0.60 - i*0.08,
-      jitter: 0.8 + i*0.25
+      const skew = velPullX * (0.15 + 0.6*proxShaped);
+      const xx = x + skew;
+
+      upper.push([xx, y - thick]);
+      lower.push([xx, y + thick]);
+
+      x += step;
+    }
+
+    const hue = (rib.hue + 20*Math.sin(t*0.15))%360;
+    const alpha = rib.alpha * (0.95 + 0.3*intensity) * q;
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `hsla(${hue}, 95%, 60%, ${alpha})`;
+    ctx.beginPath();
+    for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+    for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x, y); }
+    ctx.closePath(); ctx.fill();
+
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.22 * q;
+    ctx.beginPath();
+    for (let i=0;i<upper.length;i++){
+      const [x,yU]=upper[i]; const yL = lower[i][1];
+      ctx.lineTo(x, yU + 0.58*(yL - yU));
+    }
+    for (let i=lower.length-1;i>=0;i--){
+      const [x,yL]=lower[i]; const yU = upper[i][1];
+      ctx.lineTo(x, yL - 0.58*(yL - yU));
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  function renderAurora(dt){
+    const q = _auroraQuality();
+    AUR.t += dt; AUR.hueBase = (AUR.hueBase + 12*dt) % 360;
+
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha = mapTrail()*0.9;
+    ctx.fillStyle = document.body.classList.contains('light') ? '#fff' : '#000';
+    ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha = 1;
+
+    const intensity = mapIntensity();
+    drawStars(dt, 0.95 + 0.4*intensity);
+
+    for (let i=0;i<AUR.ribbons.length;i++){
+      const rib=AUR.ribbons[i]; rib.hue=(rib.hue+6*dt)%360;
+      drawCurtainRibbon(rib, AUR.t + i*0.12, intensity);
+    }
+  }
+  const ripples = [];
+  const halos   = [];
+  let rippleCooldown = 0;
+  let waterT = 0;
+
+  function emitRipple(x, y, power=1){
+    const sN   = sizeNorm();
+    const sp   = (54 + 42*mapIntensity()) * (1.15 + 0.35*sN);
+    const hue  = 198 + Math.random()*22;
+    const sat  = 92;
+    const lite = 50 + power*4;
+    ripples.push({
+      x, y, r:0,
+      vr: sp * (0.9 + Math.random()*0.22),
+      width: 5.5 + mapSize()*0.06 + power*2.5 + (0.6 + 0.8*sN),
+      life: 1.0, hue, sat, lite,
+      phase: Math.random()*Math.PI*2
     });
   }
-}
-function auroraResize(){ auroraInit(); }
-auroraInit();
-
-// Stars — stronger pointer parallax & slight velocity skew
-function drawStars(dt, boost=1){
-  ctx.globalCompositeOperation = 'screen';
-  const parX = (mouse.x - W*0.5) * 0.06;   // ↑ follow
-  const parY = (mouse.y - H*0.5) * 0.03;
-  const velSkewX = mouse.vx * 0.00005;
-  for (let i=0;i<AUR.stars.length;i++){
-    const s = AUR.stars[i];
-    s.x += (mouse.vx*0.000015 + velSkewX) * (0.3 + s.z);
-    if (s.x < -5) s.x = W+5; if (s.x > W+5) s.x = -5;
-    const px = s.x - parX * s.z;
-    const py = s.y - parY * s.z;
-    const r = 0.6 + s.z*1.4;
-    ctx.fillStyle = `hsla(200,100%,${68+26*s.z}%,${s.a*boost})`;
-    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
-  }
-}
-
-// Ribbons — much stronger pointer influence (pos + vel) and tighter sampling near cursor
-function drawCurtainRibbon(rib, t, intensity){
-  const q = _auroraQuality();
-
-  // Follow the pointer more aggressively
-  const followY = 0.26 + 0.30*intensity;      // ↑ vertical chase
-  const baseY   = H * rib.offsetY + (mouse.y - H*0.5) * followY;
-
-  // Adapt step; denser near cursor for “stickiness”
-  const baseStep = Math.max(10, Math.round(W / (90 + 140*q)));
-  const cx = mouse.x;
-  const upper=[]; const lower=[];
-
-  // Bend & phase sensitivity
-  const phaseShift = (mouse.x/W - 0.5) * 1.8;  // ↑ phase follow
-  const velPullX   = mouse.vx * 0.025;         // velocity drags the curtain
-  const velBend    = clamp(mouse.vx/800, -1.2, 1.2);
-
-  for (let x=0; x<=W; ){
-    // locally refine near cursor (cheaper than full dense mesh)
-    const near = Math.max(0, 1 - Math.abs(x - cx) / (W*0.35));
-    const step = Math.max(8, baseStep * (1 - 0.55*near));
-    const u = x / W;
-
-    const n = fbm(u*6*rib.warp + rib.jitter*0.6 + phaseShift, t*rib.speed);
-    const amp = rib.amp * (0.9 + 0.8*intensity) * (1 + dwellFactor()*0.12);
-
-    // Proximity bend now stronger and sharper
-    const dx = (x - cx);
-    const prox = Math.max(0, 1 - Math.abs(dx) / (W*0.55));
-    const proxShaped = prox*prox; // sharper
-    const bend = ( - (dx / W) * amp * 0.75 * proxShaped * (0.7 + intensity) ) + velBend * 22 * prox;
-
-    const y = baseY + n*amp + Math.sin(u*3 + t*0.3)*amp*0.05 + bend;
-    const thick = rib.thick * (0.9 + 0.7*intensity) * (0.9 + 0.25*Math.abs(n));
-
-    // Velocity skews the ribbon laterally for “catch-up”
-    const skew = velPullX * (0.15 + 0.6*proxShaped);
-    const xx = x + skew;
-
-    upper.push([xx, y - thick]);
-    lower.push([xx, y + thick]);
-
-    x += step;
+  function emitHalo(x, y, strength=1){
+    const hue = 200 + Math.random()*16;
+    halos.push({
+      x, y, r:24,
+      vr: (160 + 280*mapIntensity()) * (0.7 + 0.6*Math.random() ),
+      a: 0.28 * strength, hue
+    });
   }
 
-  const hue = (rib.hue + 20*Math.sin(t*0.15))%360;
-  const alpha = rib.alpha * (0.95 + 0.3*intensity) * q;
+  const AMBIENT = { blobs: [], t: 0 };
 
-  // Body
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = `hsla(${hue}, 95%, 60%, ${alpha})`;
-  ctx.beginPath();
-  for (let i=0;i<upper.length;i++){ const [x,y]=upper[i]; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
-  for (let i=lower.length-1;i>=0;i--){ const [x,y]=lower[i]; ctx.lineTo(x, y); }
-  ctx.closePath(); ctx.fill();
+  function ripplesResize(){
+    const isLight = document.body.classList.contains('light');
+    const baseR = Math.max(W, H) * (isLight ? 0.9 : 1.1);
 
-  // Inner wash (single pass)
-  ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = 0.22 * q;
-  ctx.beginPath();
-  for (let i=0;i<upper.length;i++){
-    const [x,yU]=upper[i]; const yL = lower[i][1];
-    ctx.lineTo(x, yU + 0.58*(yL - yU));
+    AMBIENT.blobs = [
+      makeBlob(baseR,       195, isLight ? 62 : 36, 0.065, 0.045, 0.00),
+      makeBlob(baseR * 1.15,208, isLight ? 58 : 32, 0.052, 0.038, 2.10),
+      makeBlob(baseR * 1.30,188, isLight ? 66 : 40, 0.040, 0.032, 4.20),
+    ];
+
+    function makeBlob(r, hue, lite, fx, fy, seed){
+      return {
+        r, hue, lite,
+        alpha: isLight ? 0.035 : 0.028,
+        ax: fx, ay: fy,
+        phx: seed + Math.random()*0.5,
+        phy: seed + Math.random()*0.5,
+        cx: W*0.5,
+        cy: H*0.5
+      };
+    }
   }
-  for (let i=lower.length-1;i>=0;i--){
-    const [x,yL]=lower[i]; const yU = upper[i][1];
-    ctx.lineTo(x, yL - 0.58*(yL - yU));
-  }
-  ctx.closePath(); ctx.fill();
-  ctx.globalAlpha = 1;
-}
+  ripplesResize();
 
-function renderAurora(dt){
-  const q = _auroraQuality();
-  AUR.t += dt; AUR.hueBase = (AUR.hueBase + 12*dt) % 360;
+  function drawAmbientBackground(dt){
+    AMBIENT.t += dt;
+    ctx.globalCompositeOperation='source-over';
+    const isLight = document.body.classList.contains('light');
+    ctx.fillStyle = isLight
+      ? `rgba(255,255,255,${mapTrail()})`
+      : `rgba(0,0,0,${mapTrail()})`;
+    ctx.fillRect(0,0,W,H);
 
-  // Cheap fade
-  ctx.globalCompositeOperation='source-over';
-  ctx.globalAlpha = mapTrail()*0.9;
-  ctx.fillStyle = document.body.classList.contains('light') ? '#fff' : '#000';
-  ctx.fillRect(0,0,W,H);
-  ctx.globalAlpha = 1;
-
-  const intensity = mapIntensity();
-  drawStars(dt, 0.95 + 0.4*intensity);
-
-  for (let i=0;i<AUR.ribbons.length;i++){
-    const rib=AUR.ribbons[i]; rib.hue=(rib.hue+6*dt)%360;
-    drawCurtainRibbon(rib, AUR.t + i*0.12, intensity);
-  }
-
-  // NOTE: Removed big dwell halo around the pointer
-}
-/* =========================
-/* =========================
-   RIPPLES — subtle ambient background + farther, richer rings
-   Notes:
-   - Background stays independent of the pointer (slow drifting blobs).
-   - Rings/halos now travel farther, live longer, and glow a bit stronger.
-   - Hook: call ripplesResize() on window resize and renderRipples(dt) in the scene.
-========================= */
-
-/* ---------- Rings / Halos ---------- */
-const ripples = [];
-const halos   = [];
-let rippleCooldown = 0;
-let waterT = 0;
-
-function emitRipple(x, y, power=1){
-  // Travel farther: boost radial speed & base width with size slider
-  const sN   = sizeNorm();
-  const sp   = (54 + 42*mapIntensity()) * (1.15 + 0.35*sN);
-  const hue  = 198 + Math.random()*22;
-  const sat  = 92;
-  const lite = 50 + power*4;
-  ripples.push({
-    x, y, r:0,
-    vr: sp * (0.9 + Math.random()*0.22),
-    width: 5.5 + mapSize()*0.06 + power*2.5 + (0.6 + 0.8*sN),
-    life: 1.0, hue, sat, lite,
-    phase: Math.random()*Math.PI*2
-  });
-}
-function emitHalo(x, y, strength=1){
-  const hue = 200 + Math.random()*16;
-  halos.push({
-    x, y, r:24,
-    vr: (160 + 280*mapIntensity()) * (0.7 + 0.6*Math.random()),
-    a: 0.28 * strength, hue
-  });
-}
-
-/* ---------- Minimal ambient background (independent of pointer) ---------- */
-const AMBIENT = { blobs: [], t: 0 };
-
-function ripplesResize(){
-  const isLight = document.body.classList.contains('light');
-  const baseR = Math.max(W, H) * (isLight ? 0.9 : 1.1); // larger in dark mode
-
-  AMBIENT.blobs = [
-    makeBlob(baseR,       195, isLight ? 62 : 36, 0.065, 0.045, 0.00),
-    makeBlob(baseR * 1.15,208, isLight ? 58 : 32, 0.052, 0.038, 2.10),
-    makeBlob(baseR * 1.30,188, isLight ? 66 : 40, 0.040, 0.032, 4.20),
-  ];
-
-  function makeBlob(r, hue, lite, fx, fy, seed){
-    return {
-      r, hue, lite,
-      alpha: isLight ? 0.035 : 0.028,
-      ax: fx, ay: fy,
-      phx: seed + Math.random()*0.5,
-      phy: seed + Math.random()*0.5,
-      cx: W*0.5,
-      cy: H*0.5
-    };
-  }
-}
-ripplesResize();
-
-function drawAmbientBackground(dt){
-  AMBIENT.t += dt;
-
-  // theme-aware soft clear honoring Trail slider
-  ctx.globalCompositeOperation='source-over';
-  const isLight = document.body.classList.contains('light');
-  ctx.fillStyle = isLight
-    ? `rgba(255,255,255,${mapTrail()})`
-    : `rgba(0,0,0,${mapTrail()})`;
-  ctx.fillRect(0,0,W,H);
-
-  // faint drifting blobs
-  ctx.globalCompositeOperation = 'screen';
-  for (let i=0;i<AMBIENT.blobs.length;i++){
-    const b = AMBIENT.blobs[i];
-    const x = b.cx + Math.sin(AMBIENT.t*b.ax + b.phx) * (W*0.18);
-    const y = b.cy + Math.sin(AMBIENT.t*b.ay + b.phy) * (H*0.16);
-    const pulse = 1 + 0.03*Math.sin((AMBIENT.t + i)*0.35);
-    const R = b.r * pulse;
-    const L = b.lite + 4*Math.sin((AMBIENT.t + i*0.7)*0.25);
-
-    const g = ctx.createRadialGradient(x, y, R*0.25, x, y, R);
-    g.addColorStop(0.0, `hsla(${b.hue|0}, 70%, ${Math.min(95, L+4)|0}%, ${b.alpha})`);
-    g.addColorStop(0.65, `hsla(${(b.hue+10)|0}, 70%, ${L|0}%, ${b.alpha*0.6})`);
-    g.addColorStop(1.0, `hsla(${(b.hue+24)|0}, 70%, ${Math.max(0, L-10)|0}%, 0)`);
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.fill();
-  }
-}
-
-/* ---------- Full render ---------- */
-function renderRipples(dt){
-  waterT += dt;
-
-  // Optional movement/dwell emission
-  const speedN = clamp(mouse.speed/1200, 0, 1);
-  rippleCooldown = Math.max(0, rippleCooldown - dt);
-  if (speedN > 0.10 && rippleCooldown <= 0){
-    emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.55);
-    rippleCooldown = 0.04 + (0.10*(1-mapIntensity()));
-  }
-  if (dwellJustCrossed(650)){
-    playPing(520,0.16,0.05);
-    for (let i=0;i<2;i++) emitRipple(mouse.x, mouse.y, 1.1);
-    emitHalo(mouse.x, mouse.y, 0.9);
-  }
-
-  // 1) Subtle, independent background
-  drawAmbientBackground(dt);
-
-  // 2) Halos
-  for (let i=halos.length-1;i>=0;i--){
-    const h = halos[i];
-    h.r  += h.vr*dt;
-    h.a  *= Math.pow(0.975 - 0.15*dt, 1.0);
-    if (h.a < 0.02 || h.r > Math.max(W,H)*1.2){ halos.splice(i,1); continue; }
-    const g = ctx.createRadialGradient(h.x, h.y, h.r*0.15, h.x, h.y, h.r);
-    g.addColorStop(0.0, `hsla(${h.hue}, 90%, 65%, ${0.10*h.a})`);
-    g.addColorStop(0.6, `hsla(${h.hue+8}, 90%, 55%, ${0.08*h.a})`);
-    g.addColorStop(1.0, `hsla(${h.hue+30}, 90%, 45%, 0)`);
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill();
-  }
-
-  // 3) Rings (travel farther + more effect)
-  for (let i=ripples.length-1;i>=0;i--){
-    const r = ripples[i];
-
-    r.r    += r.vr*dt;
-    // Slower decay so they persist longer (was 0.985 - 0.20*dt)
-    r.life *= Math.pow(0.990 - 0.16*dt, 1 + 0.6*mapIntensity());
-
-    const alive = clamp(r.life, 0, 1);
-    // Let them travel beyond screen diagonal before culling
-    if (alive < 0.02 || r.r > Math.hypot(W,H)*1.5){ ripples.splice(i,1); continue; }
-
-    r.phase += dt*(0.8 + 0.6*mapIntensity());
-    const shimmer = 1 + 0.18*Math.sin(r.phase) + 0.08*Math.sin(waterT*1.7 + i*0.6);
-    // Slightly stronger width as rings age to keep visibility
-    const w = (r.width * (0.78 + 0.55*alive)) * shimmer;
-
-    // Outer glow (wider radii than before)
     ctx.globalCompositeOperation = 'screen';
-    const glowR1 = r.r*1.00, glowR2 = r.r*1.35;
-    const g1 = ctx.createRadialGradient(r.x, r.y, glowR1*0.45, r.x, r.y, glowR1);
-    g1.addColorStop(0, `hsla(${r.hue}, ${r.sat}%, ${r.lite+8}%, ${0.09*alive})`);
-    g1.addColorStop(1, `hsla(${r.hue+10}, ${r.sat}%, ${r.lite-6}%, 0)`);
-    ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(r.x, r.y, glowR1, 0, Math.PI*2); ctx.fill();
+    for (let i=0;i<AMBIENT.blobs.length;i++){
+      const b = AMBIENT.blobs[i];
+      const x = b.cx + Math.sin(AMBIENT.t*b.ax + b.phx) * (W*0.18);
+      const y = b.cy + Math.sin(AMBIENT.t*b.ay + b.phy) * (H*0.16);
+      const pulse = 1 + 0.03*Math.sin((AMBIENT.t + i)*0.35);
+      const R = b.r * pulse;
+      const L = b.lite + 4*Math.sin((AMBIENT.t + i*0.7)*0.25);
 
-    const g2 = ctx.createRadialGradient(r.x, r.y, glowR2*0.55, r.x, r.y, glowR2);
-    g2.addColorStop(0, `hsla(${r.hue+12}, ${r.sat}%, ${r.lite}%, ${0.07*alive})`);
-    g2.addColorStop(1, `hsla(${r.hue+28}, ${r.sat}%, ${r.lite-10}%, 0)`);
-    ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(r.x, r.y, glowR2, 0, Math.PI*2); ctx.fill();
-
-    // Main bright rings
-    ctx.globalCompositeOperation='lighter';
-    const hues   = [ r.hue-10, r.hue, r.hue+12 ];
-    const alphas = [ alive*0.22, alive*0.46, alive*0.22 ]; // a bit stronger
-    const radii  = [ r.r*0.988, r.r, r.r*1.012 ];
-
-    for (let k=0;k<3;k++){
-      ctx.strokeStyle = `hsla(${hues[k]}, ${r.sat}%, ${r.lite}%, ${alphas[k]})`;
-      ctx.lineWidth   = Math.max(1.2, w * (k===1?1.05:0.75));
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, Math.max(0.1, radii[k]), 0, Math.PI*2);
-      ctx.stroke();
-    }
-
-    // Echo ring (more visible and farther in)
-    const echoAlpha = 0.18 * alive;
-    if (echoAlpha > 0.01){
-      ctx.strokeStyle = `hsla(${r.hue+6}, ${r.sat}%, ${r.lite-4}%, ${echoAlpha})`;
-      ctx.lineWidth   = Math.max(1, w*0.60);
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, r.r*0.65, 0, Math.PI*2);
-      ctx.stroke();
+      const g = ctx.createRadialGradient(x, y, R*0.25, x, y, R);
+      g.addColorStop(0.0, `hsla(${b.hue|0}, 70%, ${Math.min(95, L+4)|0}%, ${b.alpha})`);
+      g.addColorStop(0.65, `hsla(${(b.hue+10)|0}, 70%, ${L|0}%, ${b.alpha*0.6})`);
+      g.addColorStop(1.0, `hsla(${(b.hue+24)|0}, 70%, ${Math.max(0, L-10)|0}%, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.fill();
     }
   }
-}
+
+  function renderRipples(dt){
+    waterT += dt;
+    const speedN = clamp(mouse.speed/1200, 0, 1);
+    rippleCooldown = Math.max(0, rippleCooldown - dt);
+    if (speedN > 0.10 && rippleCooldown <= 0){
+      emitRipple(mouse.x, mouse.y, 0.25 + speedN*0.55);
+      rippleCooldown = 0.04 + (0.10*(1-mapIntensity()));
+    }
+    if (dwellJustCrossed(650)){
+      playPing(520,0.16,0.05);
+      for (let i=0;i<2;i++) emitRipple(mouse.x, mouse.y, 1.1);
+      emitHalo(mouse.x, mouse.y, 0.9);
+    }
+
+    drawAmbientBackground(dt);
+
+    for (let i=halos.length-1;i>=0;i--){
+      const h = halos[i];
+      h.r  += h.vr*dt;
+      h.a  *= Math.pow(0.975 - 0.15*dt, 1.0);
+      if (h.a < 0.02 || h.r > Math.max(W,H)*1.2){ halos.splice(i,1); continue; }
+      const g = ctx.createRadialGradient(h.x, h.y, h.r*0.15, h.x, h.y, h.r);
+      g.addColorStop(0.0, `hsla(${h.hue}, 90%, 65%, ${0.10*h.a})`);
+      g.addColorStop(0.6, `hsla(${h.hue+8}, 90%, 55%, ${0.08*h.a})`);
+      g.addColorStop(1.0, `hsla(${h.hue+30}, 90%, 45%, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill();
+    }
+
+    for (let i=ripples.length-1;i>=0;i--){
+      const r = ripples[i];
+      r.r    += r.vr*dt;
+      r.life *= Math.pow(0.990 - 0.16*dt, 1 + 0.6*mapIntensity());
+      const alive = clamp(r.life, 0, 1);
+      if (alive < 0.02 || r.r > Math.hypot(W,H)*1.5){ ripples.splice(i,1); continue; }
+      r.phase += dt*(0.8 + 0.6*mapIntensity());
+      const shimmer = 1 + 0.18*Math.sin(r.phase) + 0.08*Math.sin(waterT*1.7 + i*0.6);
+      const w = (r.width * (0.78 + 0.55*alive)) * shimmer;
+
+      ctx.globalCompositeOperation = 'screen';
+      const glowR1 = r.r*1.00, glowR2 = r.r*1.35;
+      const g1 = ctx.createRadialGradient(r.x, r.y, glowR1*0.45, r.x, r.y, glowR1);
+      g1.addColorStop(0, `hsla(${r.hue}, ${r.sat}%, ${r.lite+8}%, ${0.09*alive})`);
+      g1.addColorStop(1, `hsla(${r.hue+10}, ${r.sat}%, ${r.lite-6}%, 0)`);
+      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(r.x, r.y, glowR1, 0, Math.PI*2); ctx.fill();
+
+      const g2 = ctx.createRadialGradient(r.x, r.y, glowR2*0.55, r.x, r.y, glowR2);
+      g2.addColorStop(0, `hsla(${r.hue+12}, ${r.sat}%, ${r.lite}%, ${0.07*alive})`);
+      g2.addColorStop(1, `hsla(${r.hue+28}, ${r.sat}%, ${r.lite-10}%, 0)`);
+      ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(r.x, r.y, glowR2, 0, Math.PI*2); ctx.fill();
+
+      ctx.globalCompositeOperation='lighter';
+      const hues   = [ r.hue-10, r.hue, r.hue+12 ];
+      const alphas = [ alive*0.22, alive*0.46, alive*0.22 ];
+      const radii  = [ r.r*0.988, r.r, r.r*1.012 ];
+
+      for (let k=0;k<3;k++){
+        ctx.strokeStyle = `hsla(${hues[k]}, ${r.sat}%, ${r.lite}%, ${alphas[k]})`;
+        ctx.lineWidth   = Math.max(1.2, w * (k===1?1.05:0.75));
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, Math.max(0.1, radii[k]), 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      const echoAlpha = 0.18 * alive;
+      if (echoAlpha > 0.01){
+        ctx.strokeStyle = `hsla(${r.hue+6}, ${r.sat}%, ${r.lite-4}%, ${echoAlpha})`;
+        ctx.lineWidth   = Math.max(1, w*0.60);
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.r*0.65, 0, Math.PI*2);
+        ctx.stroke();
+      }
+    }
+  }
 
   /* =========================
      FIREWORKS
@@ -897,6 +811,7 @@ function renderRipples(dt){
   let fwAutoCooldown = 0;
 
   function fwSpawnBurst(x, y, power=1, style='peony'){
+    FireworkSFX.play(x, y, power);  
     const sN = sizeNorm();
     const sPow = Math.pow(sN, 1.15);
     const base = 16 + Math.floor(28*mapIntensity());
@@ -991,12 +906,103 @@ function renderRipples(dt){
     if (fwParts.length > cap) fwParts.splice(0, fwParts.length - cap);
   }
 
-  /* =========================
-     KALEIDO
-     ========================= */
+  /* ======================================================================
+     KALEIDO — with reactive sound bed that grows with center distance
+     ====================================================================== */
+
+  /* ===== Kaleido sound — grows with distance from center ===== */
+  const KALEIDO_SND = (() => {
+    let inited = false;
+    let maxR = 1;
+    let N = null;
+
+    function onResize(){
+      maxR = Math.hypot(W * 0.5, H * 0.5) || 1;
+    }
+    onResize();
+
+    function shouldPlay(){
+      return !menuOpen && !paused && ui.mode.value === 'kaleido';
+    }
+
+    function ensure(){
+      if (inited || menuOpen) return;
+      ensureAC();
+
+      const master = ac.createGain();
+      master.gain.value = 0;
+      master.connect(ac.destination);
+
+      const pan = (ac.createStereoPanner ? ac.createStereoPanner() : null);
+      const lp  = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600; lp.Q.value = 0.7;
+
+      const o1 = ac.createOscillator(); o1.type = 'sine';
+      const o2 = ac.createOscillator(); o2.type = 'triangle';
+      const mix = ac.createGain(); mix.gain.value = 1;
+
+      o1.connect(mix);
+      o2.connect(mix);
+
+      if (pan) { mix.connect(pan); pan.connect(lp); }
+      else { mix.connect(lp); }
+      lp.connect(master);
+
+      const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 4;
+      const lfoGain = ac.createGain(); lfoGain.gain.value = 8;
+      lfo.connect(lfoGain);
+      lfoGain.connect(o1.detune);
+      lfoGain.connect(o2.detune);
+
+      const t = ac.currentTime;
+      o1.start(t); o2.start(t); lfo.start(t);
+
+      N = { master, pan, lp, o1, o2 };
+      inited = true;
+    }
+
+    function tick(dt){
+      ensure();
+      if (!inited) return;
+
+      const play = shouldPlay();
+      const d = Math.hypot(mouse.x - W*0.5, mouse.y - H*0.5);
+      const n = clamp(d / maxR, 0, 1);
+
+      const sfx = currentSfxGain();
+      const targetGain = play ? (0.02 + 0.38 * Math.pow(n, 1.2)) * sfx : 0;
+      const targetFreq = 170 + 900 * Math.pow(n, 0.9);
+      const targetLPF  = 1000 + 2200 * n;
+
+      try {
+        N.master.gain.setTargetAtTime(targetGain, ac.currentTime, 0.05);
+        N.o1.frequency.setTargetAtTime(targetFreq, ac.currentTime, 0.05);
+        N.o2.frequency.setTargetAtTime(targetFreq * 2, ac.currentTime, 0.05);
+        N.lp.frequency.setTargetAtTime(targetLPF, ac.currentTime, 0.08);
+        if (N.pan) {
+          const panX = (mouse.x / W) * 2 - 1;
+          N.pan.pan.setTargetAtTime(panX * 0.6, ac.currentTime, 0.05);
+        }
+      } catch(e) {}
+    }
+
+    // NEW: immediate silence helper (used when paused toggles on)
+    function silenceNow(){
+      if (!inited || !ac) return;
+      try{
+        N.master.gain.cancelScheduledValues(ac.currentTime);
+        N.master.gain.setValueAtTime(0, ac.currentTime);
+      }catch(e){}
+    }
+
+    return { tick, onResize, silenceNow };
+  })();
+
+  // Visuals
   let hueBase = 0;
   let kaleidoAngle=0;
   function renderKaleido(dt){
+    KALEIDO_SND.tick(dt); // drive the reactive audio; will be 0 when paused
+
     const segs=8, r=mapSize()*0.8; kaleidoAngle += dt*0.4;
     clearToBg(false);
     const cx=W/2, cy=H/2, dx=mouse.x-cx, dy=mouse.y-cy;
@@ -1018,29 +1024,212 @@ function renderRipples(dt){
     }
   }
 
-  /* =========================
-     FIREFLIES
-     ========================= */
-  const fireflies = Array.from({length:50},()=>({ x: Math.random()*W, y: Math.random()*H, vx:(Math.random()-0.5)*0.6, vy:(Math.random()-0.5)*0.6, glow: Math.random()*0.6 }));
-  function renderFireflies(dt){
-    clearToBg(false);
-    ctx.globalCompositeOperation='lighter';
-    const attract = 15*mapIntensity();
-    fireflies.forEach(f=>{
-      f.vx += (Math.random()-0.5)*0.05; f.vy += (Math.random()-0.5)*0.05;
-      f.vx += (mouse.x - f.x)/W * attract*dt; f.vy += (mouse.y - f.y)/H * attract*dt;
-      f.vx = clamp(f.vx, -1.2, 1.2); f.vy = clamp(f.vy, -1.2, 1.2);
-      f.x += f.vx; f.y += f.vy;
-      if (f.x<-10) f.x=W+10; if (f.x>W+10) f.x=-10; if (f.y<-10) f.y=H+10; if (f.y>H+10) f.y=-10;
-      const d = Math.hypot(mouse.x-f.x, mouse.y-f.y), charge = clamp(1 - d/220, 0, 1);
-      f.glow = clamp(f.glow + (charge*1.6 - 0.4)*dt, 0.1, 1.4);
-      const h = (200 + f.glow*100)%360, r = 2 + f.glow*4 + mapSize()*0.05;
-      ctx.fillStyle = `hsla(${h},90%,65%,${0.6*f.glow})`; ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI*2); ctx.fill();
+/* =========================
+   FIREFLIES — Lucioles v2 (bigger, wrap-safe trails, toned-down glow)
+   More numerous, wider spread, light the screen — now larger, subtler glow, and music
+   ========================= */
+
+// Register scene music (adds/refreshes playlist for this scene)
+if (typeof MUSIC !== 'undefined' && MUSIC.setPlaylist) {
+  MUSIC.setPlaylist('fireflies', [
+    "../../songs/space/spacebest1.mp3",
+    "../../songs/space/spacebest4.mp3",
+  ]);
+}
+
+// state
+const FIREFLIES = { list: [], t: 0 };
+
+// (Re)create the swarm sized by the "Taille" slider
+function firefliesInit(){
+  FIREFLIES.list.length = 0;
+
+  // Count scales with size; keep it reasonable for perf
+  const n = Math.floor(120 + 420 * sizeNorm()); // up to ~540
+  for (let i=0; i<n; i++){
+    const z   = 0.6 + Math.random()*0.9;          // "depth" (size/speed scaler)
+    const ang = Math.random()*Math.PI*2;
+    const rad = Math.sqrt(Math.random()) * Math.hypot(W, H) * 0.55; // spread them wide
+    const cx  = W*0.5 + Math.cos(ang)*rad;
+    const cy  = H*0.5 + Math.sin(ang)*rad;
+
+    FIREFLIES.list.push({
+      x: cx, y: cy, px: cx, py: cy,
+      // slower starting motion
+      vx: (Math.random()-0.5)*0.3, vy:(Math.random()-0.5)*0.3,
+      z,
+      hue: 170 + Math.random()*80,           // cyan→lime range
+      glow: 0.2 + Math.random()*0.4,
+      phase: Math.random()*Math.PI*2,
     });
-    if (dwellJustCrossed(800)){ playPing(660,0.15,0.045); fireflies.forEach(f=> f.glow = Math.max(f.glow, 1.2)); }
+  }
+}
+// call once on load
+firefliesInit();
+
+// helpful wrap with generous padding to keep them spread
+// RETURNS true if we wrapped, so we can kill the trail that frame
+function flyWrap(f){
+  const pad = 80;
+  let wrapped = false;
+  if (f.x < -pad){ f.x = W + pad; wrapped = true; }
+  if (f.x > W + pad){ f.x = -pad; wrapped = true; }
+  if (f.y < -pad){ f.y = H + pad; wrapped = true; }
+  if (f.y > H + pad){ f.y = -pad; wrapped = true; }
+  if (wrapped){ f.px = f.x; f.py = f.y; } // reset trail to avoid full-screen line
+  return wrapped;
+}
+
+// Draw one firefly with bloom that lights the screen around it (subtle)
+function drawFirefly(f, coreR, bloomR, alphaCore, alphaBloom){
+  // Soft, reduced bloom
+  ctx.globalCompositeOperation = 'screen';
+  const g = ctx.createRadialGradient(f.x, f.y, coreR*0.25, f.x, f.y, bloomR);
+  g.addColorStop(0.0, `hsla(${f.hue|0}, 90%, 62%, ${alphaBloom})`);
+  g.addColorStop(0.6, `hsla(${(f.hue+16)|0}, 85%, 54%, ${alphaBloom*0.5})`);
+  g.addColorStop(1.0, `hsla(${(f.hue+56)|0}, 80%, 44%, 0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(f.x, f.y, bloomR, 0, Math.PI*2); ctx.fill();
+
+  // Core (dimmed)
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `hsla(${f.hue|0}, 100%, 68%, ${alphaCore})`;
+  ctx.beginPath(); ctx.arc(f.x, f.y, coreR, 0, Math.PI*2); ctx.fill();
+
+  // Tiny highlight
+  ctx.globalCompositeOperation = 'screen';
+  ctx.strokeStyle = `hsla(${(f.hue+36)|0}, 100%, 88%, ${0.55*alphaCore})`;
+  ctx.lineWidth = Math.max(0.7, coreR*0.3);
+  ctx.beginPath(); ctx.arc(f.x - coreR*0.32, f.y - coreR*0.32, coreR*0.30, 0, Math.PI*2); ctx.stroke();
+}
+
+function renderFireflies(dt){
+  const intensity = mapIntensity();
+  const sN        = sizeNorm();
+  FIREFLIES.t    += dt;
+
+  // Theme-aware fade
+  clearToBg(false);
+
+  // --- physics (slow + extra wander when not near the gaze) ---
+  const baseWander = 0.10 + 0.12*intensity;      // base random meander
+  const attractK   =  6  + 32*intensity;         // softer pointer attraction
+  const repelK     = 12  + 22*intensity;         // gentle separation
+  const maxSpeed   = 10  + 24*intensity;         // low top speed (floaty)
+  const damp       = Math.pow(0.975, dt*60);     // strong damping
+  const stepPx     = 38;                         // slower integration
+
+  const limit = (vx, vy, m)=>{
+    const s = Math.hypot(vx, vy);
+    return (s > m && s>0) ? [vx*m/s, vy*m/s] : [vx, vy];
+  };
+
+  const N = FIREFLIES.list.length;
+  for (let i=0; i<N; i++){
+    const f = FIREFLIES.list[i];
+
+    // previous pos for trail
+    f.px = f.x; f.py = f.y;
+
+    // distance / nearness to pointer
+    const pullR = 220 + 380*sN;
+    const dx = mouse.x - f.x, dy = mouse.y - f.y;
+    const d  = Math.hypot(dx, dy);
+    const near = clamp(1 - (d / (180 + 260*sN)), 0, 1);
+
+    // more wander when far from gaze
+    const wanderLocal = baseWander * (1 + 0.9*(1 - near));
+
+    // wander (depth-scaled)
+    f.vx += (Math.random()-0.5) * wanderLocal * (1/f.z);
+    f.vy += (Math.random()-0.5) * wanderLocal * (1/f.z);
+
+    // pointer attraction (soft radius that grows with size)
+    if (d < pullR){
+      const t = 1 - d/pullR;
+      f.vx += dx * (attractK * (0.25 + 0.75*t)) * dt / (f.z*320);
+      f.vy += dy * (attractK * (0.25 + 0.75*t)) * dt / (f.z*320);
+    }
+
+    // mild two-neighbour repulsion (O(n), not n^2)
+    const j1 = (i + 13) % N;
+    const j2 = (i + 97) % N;
+    for (const j of [j1, j2]){
+      const g = FIREFLIES.list[j];
+      const rx = f.x - g.x, ry = f.y - g.y;
+      const rd2 = rx*rx + ry*ry + 0.0001;
+      const r2  = 140 + 260*sN;
+      if (rd2 < r2){
+        const inv = 1/Math.sqrt(rd2);
+        const w   = (1 - rd2/r2);
+        f.vx += (rx*inv) * (repelK * w) * dt / (f.z*120);
+        f.vy += (ry*inv) * (repelK * w) * dt / (f.z*120);
+      }
+    }
+
+    // gentle center bias
+    const cdx = (W*0.5 - f.x), cdy = (H*0.5 - f.y);
+    f.vx += cdx * 0.000015;
+    f.vy += cdy * 0.000015;
+
+    // limit & integrate (slower)
+    [f.vx, f.vy] = limit(f.vx, f.vy, maxSpeed*(1/f.z));
+    f.vx *= damp; f.vy *= damp;
+    f.x  += f.vx * dt * stepPx;
+    f.y  += f.vy * dt * stepPx;
+
+    // wrap; if it teleported a long way (edge wrap or browser hitch), nuke the trail
+    const wrapped = flyWrap(f);
+    if (!wrapped){
+      const hopX = Math.abs(f.x - f.px);
+      const hopY = Math.abs(f.y - f.py);
+      if (hopX > W*0.45 || hopY > H*0.45){ f.px = f.x; f.py = f.y; }
+    }
+
+    // photophore — MUCH subtler glow overall
+    f.phase += dt * (0.6 + 1.4*intensity);
+    const twinkle = 0.5 + 0.5*Math.sin(f.phase + f.x*0.01 + f.y*0.01);
+    const baseGlow = 0.18 + 0.22*twinkle;                         // ↓ base
+    f.glow = clamp(baseGlow + near*(0.45 + 0.40*intensity), 0.08, 1.4); // ↓ cap & contribution
   }
 
-  /* =========================
+  // Visuals (bloom + subtle trails)
+  ctx.lineCap = 'round';
+  for (let i=0; i<N; i++){
+    const f = FIREFLIES.list[i];
+
+    // trail (softer alpha to match reduced glow)
+    ctx.globalCompositeOperation = 'screen';
+    ctx.strokeStyle = `hsla(${(f.hue+30)|0}, 90%, 72%, ${0.06 + 0.10*intensity})`;
+    const trailW = Math.max(1, (1.0 + 1.4*intensity) * (1/f.z));
+    ctx.lineWidth = trailW;
+    ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(f.x, f.y); ctx.stroke();
+
+    // BIGGER FIREFLIES — keep size, but dim brightness
+    const sizeBoost = 1.55; // tweak to taste
+    const coreR  = sizeBoost * (2.3 + 4.2*f.glow) * (1.0/f.z);
+    const bloomR = sizeBoost * coreR * (5.0 + 6.0*intensity); // ↓ bloom radius
+
+    // light up screen around each firefly (subtle)
+    const aCore  = clamp(0.18 + 0.24*intensity, 0, 0.5);          // ↓ core alpha
+    const aBloom = clamp(0.03 + 0.08*intensity, 0, 0.25)          // ↓ bloom alpha
+                  * clamp(f.glow/3.5, 0.3, 0.9);
+
+    drawFirefly(f, coreR, bloomR, aCore, aBloom);
+  }
+
+  // Delight: on dwell, brief global sparkle & pitch (kept soft)
+  if (dwellJustCrossed(800)){
+    playPing(660, 0.10, 0.035);
+    for (let k=0; k<FIREFLIES.list.length; k+=Math.floor(3+6*(1-intensity))){
+      const f = FIREFLIES.list[k];
+      f.glow = Math.max(f.glow, 1.0);
+      f.hue  = (f.hue + 10) % 360;
+    }
+  }
+}
+
+/* =========================
      CONFETTI
      ========================= */
   const confettis = Array.from({length:220},()=>resetPiece({}));
@@ -1070,33 +1259,447 @@ function renderRipples(dt){
   /* =========================
      NÉBULEUSE
      ========================= */
-  let nebulaHue = 0;
-  function renderNebula(dt){
-    nebulaHue = (nebulaHue + 18*dt) % 360;
-    clearToBg(false);
-    if (!AUR.stars || AUR.stars.length === 0) auroraInit();
-    drawStars(dt, 1.35);
-    ctx.globalCompositeOperation='lighter';
-    const layers = 3 + Math.floor(mapIntensity()*3);
-    for (let i=0;i<layers;i++){
-      const s = mapSize()*(0.8 + i*0.35), h = (nebulaHue + i*40) % 360;
-      const g = ctx.createRadialGradient(mouse.x, mouse.y, s*0.1, mouse.x, mouse.y, s);
-      g.addColorStop(0, `hsla(${h},85%,60%,0.18)`);
-      g.addColorStop(0.6, `hsla(${(h+30)%360},85%,50%,0.08)`);
-      g.addColorStop(1, `hsla(${(h+60)%360},85%,45%,0)`);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, s, 0, Math.PI*2); ctx.fill();
-    }
-    if (dwellMs>650){
-      ctx.globalCompositeOperation='screen';
-      ctx.strokeStyle = `hsla(${(nebulaHue+150)%360},90%,75%,0.4)`;
-      ctx.lineWidth = 1.5;
-      const m = 6;
-      for (let i=0;i<m;i++){
-        const a=(i/m)*Math.PI*2 + performance.now()*0.0015, r=mapSize()*1.1;
-        ctx.beginPath(); ctx.arc(mouse.x + Math.cos(a)*r, mouse.y + Math.sin(a)*r, r*0.15, 0, Math.PI*2); ctx.stroke();
+ /* =========================
+   NÉBULEUSE v2 — parallax dust + flow gas + comets
+   Adds scene music via MUSIC.setPlaylist('nebula', [...])
+   ========================= */
+
+// Register scene music (placeholders)
+if (typeof MUSIC !== 'undefined' && MUSIC.setPlaylist) {
+  MUSIC.setPlaylist('nebula', [
+    "../../songs/space/spacebest1.mp3",
+    "../../songs/space/spacebest4.mp3",
+  ]);
+}
+
+const NEB = {
+  inited: false,
+  t: 0,
+  dust: [],     // little stars/dust with parallax drift
+  comets: [],   // fast streaks when the pointer darts
+  hue: 0
+};
+
+function nebulaInit(){
+  NEB.inited = true;
+  NEB.dust.length = 0;
+  NEB.comets.length = 0;
+
+  // number of dust motes scales with Taille
+  const n = Math.floor(140 + 420 * sizeNorm());
+  for (let i=0;i<n;i++){
+    const z = 0.25 + Math.random()*0.95; // depth: 0.25..1.2
+    NEB.dust.push({
+      x: Math.random()*W,
+      y: Math.random()*H,
+      z,
+      a: 0.18 + Math.random()*0.45,
+      r: 0.6 + z*1.6,
+      tw: Math.random()*Math.PI*2
+    });
+  }
+}
+
+function spawnComet(x, y, vx, vy){
+  // keep it light
+  if (NEB.comets.length > 80) NEB.comets.splice(0, NEB.comets.length - 80);
+  NEB.comets.push({
+    x, y, vx, vy,
+    life: 0.35 + Math.random()*0.25,
+    age: 0,
+    hue: (NEB.hue + 20 + Math.random()*40) % 360
+  });
+}
+
+function renderNebula(dt){
+  if (!NEB.inited) nebulaInit();
+
+  const intensity = mapIntensity();
+  const sN = sizeNorm();
+
+  NEB.t   += dt;
+  NEB.hue  = (NEB.hue + 12*dt) % 360;
+
+  // Background (respect trail)
+  clearToBg(false);
+
+  // Star field (reuse Aurora stars as backdrop)
+  if (!AUR.stars || AUR.stars.length === 0) auroraInit();
+  drawStars(dt, 1.15 + 0.35*intensity);
+
+  // ---------- Parallax dust ----------
+  ctx.globalCompositeOperation = 'screen';
+  const parX = (mouse.x - W*0.5) * 0.06;
+  const parY = (mouse.y - H*0.5) * 0.04;
+  for (let i=0;i<NEB.dust.length;i++){
+    const d = NEB.dust[i];
+    // gentle flow using tiny fbm-like wobble (fbm() exists in your file)
+    d.tw += dt * (0.4 + 0.8*d.z);
+    const driftX = Math.sin(d.tw*0.7 + d.z*5) * 0.08;
+    const driftY = Math.cos(d.tw*0.6 + d.z*7) * 0.06;
+    d.x += driftX; d.y += driftY;
+    if (d.x < -6) d.x = W+6; else if (d.x > W+6) d.x = -6;
+    if (d.y < -6) d.y = H+6; else if (d.y > H+6) d.y = -6;
+
+    const px = d.x - parX * d.z;
+    const py = d.y - parY * d.z;
+    const twinkle = 0.6 + 0.4*Math.sin(d.tw*1.6 + d.z*10);
+    ctx.fillStyle = `hsla(${(NEB.hue+170)%360}, 90%, ${60+25*d.z}%, ${(d.a*twinkle)*(0.8+0.6*intensity)})`;
+    ctx.beginPath(); ctx.arc(px, py, d.r, 0, Math.PI*2); ctx.fill();
+  }
+
+  // ---------- Gas layers (flow field + chromatic fringe) ----------
+  ctx.globalCompositeOperation='lighter';
+  const layers = 3 + Math.floor(intensity*3);
+  const baseS = mapSize() * (0.9 + 0.2*Math.sin(NEB.t*0.4));
+  for (let i=0;i<layers;i++){
+    // swirl around the pointer with subtle noise offset
+    const u = i / Math.max(1, layers-1);
+    const amp = (0.14 + 0.42*u) * (1 + 0.6*intensity);
+    const nx = fbm((mouse.x*0.002 + u*1.3), NEB.t*0.35 + i*0.7);
+    const ny = fbm((mouse.y*0.002 - u*1.1), NEB.t*0.32 + i*0.9);
+    const offX = (nx-0.5) * baseS * amp;
+    const offY = (ny-0.5) * baseS * amp * 0.8;
+
+    const s  = baseS * (0.7 + i*0.36);
+    const cx = mouse.x + offX;
+    const cy = mouse.y + offY;
+
+    // slight chromatic fringing = 3 passes with offset hues
+    const H0 = (NEB.hue + i*28) % 360;
+    const a0 = 0.12 + 0.10*intensity;
+    const pass = (dh, shrink, extraAlpha)=>{
+      const g = ctx.createRadialGradient(cx, cy, s*0.08, cx, cy, s*shrink);
+      g.addColorStop(0.00, `hsla(${(H0+dh)%360}, 90%, 58%, ${a0*0.9*extraAlpha})`);
+      g.addColorStop(0.55, `hsla(${(H0+dh+25)%360}, 85%, 50%, ${a0*0.35*extraAlpha})`);
+      g.addColorStop(1.00, `hsla(${(H0+dh+60)%360}, 80%, 40%, 0)`);
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(cx, cy, s*shrink, 0, Math.PI*2); ctx.fill();
+    };
+    pass(0,   1.05, 1.00);
+    pass(14,  0.98, 0.85);
+    pass(-14, 0.92, 0.75);
+  }
+
+  // ---------- Speed-based comets ----------
+  const spN = clamp(mouse.speed/1400, 0, 1);
+  if (spN > 0.55){
+    // spawn along motion vector (a little behind the cursor)
+    const ang = Math.atan2(mouse.vy||0.001, mouse.vx||0.001);
+    const dist = 18 + 44*spN;
+    const cx = mouse.x - Math.cos(ang)*dist;
+    const cy = mouse.y - Math.sin(ang)*dist;
+    spawnComet(cx, cy, -Math.cos(ang)*220*spN, -Math.sin(ang)*220*spN);
+  }
+
+  // draw & advance comets
+  ctx.globalCompositeOperation = 'screen';
+  for (let i=NEB.comets.length-1; i>=0; i--){
+    const c = NEB.comets[i];
+    c.age += dt;
+    if (c.age >= c.life){ NEB.comets.splice(i,1); continue; }
+    const t = c.age / c.life;
+    const fade = (1 - t);
+    const len  = (18 + 120*fade) * (0.7 + 0.6*intensity);
+    // tail line
+    ctx.strokeStyle = `hsla(${c.hue}, 95%, 70%, ${0.35*fade})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x - c.vx*dt*len*0.07, c.y - c.vy*dt*len*0.07);
+    ctx.stroke();
+    // head glow
+    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 10+20*fade);
+    g.addColorStop(0, `hsla(${(c.hue+10)%360}, 95%, 75%, ${0.5*fade})`);
+    g.addColorStop(1, `hsla(${(c.hue+40)%360}, 90%, 55%, 0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 12, 0, Math.PI*2); ctx.fill();
+
+    c.x += c.vx * dt; c.y += c.vy * dt;
+  }
+
+  // ---------- Dwell pulse ----------
+  if (dwellMs > 700){
+    ctx.globalCompositeOperation='screen';
+    const r = mapSize()*(0.85 + 0.18*Math.sin(performance.now()*0.006));
+    ctx.strokeStyle = `hsla(${(NEB.hue+150)%360}, 90%, 75%, ${0.28 + 0.18*intensity})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, r, 0, Math.PI*2); ctx.stroke();
+  }
+}
+
+/* =========================
+   GALAXY — center-dwell pulse + shockwave
+   ========================= */
+
+// Scene music
+if (typeof MUSIC !== 'undefined' && MUSIC.setPlaylist) {
+  MUSIC.setPlaylist('galaxy', [
+    "../../songs/space/spacevortex1.mp3",
+    "../../songs/space/spacevortex5.mp3",
+  ]);
+}
+
+const GAL = {
+  inited: false,
+  t: 0,
+  armStars: [],
+  halo: [],
+  dust: [],
+  hue: 220,
+  rot: 0,
+  // center-dwell effect
+  centerT: 0,
+  pulse: 0,
+  rings: [],
+  cool: 0
+};
+
+function galaxyInit(){
+  GAL.inited = true;
+  GAL.armStars.length = 0;
+  GAL.halo.length = 0;
+  GAL.dust.length = 0;
+
+  const sN = sizeNorm();
+  const intensity = mapIntensity();
+
+  const arms = 3 + Math.floor(1*intensity);                 // 3–4 arms
+  const starCount = Math.floor(1200 + 2600 * sN);            // ↑ more stars
+  const haloCount = Math.floor(480 + 1100 * sN);             // ↑ more halo
+  const rMax = Math.min(W, H) * (0.62 + 0.25*sN);            // ↑ larger radius
+
+  // Log spiral r = a * e^(bθ) — fairly loose for a diffuse look
+  const a = 6;
+  const b = 0.14 + 0.08*intensity;
+
+  // Arm stars
+  for (let i=0; i<starCount; i++){
+    const arm = (i % arms);
+    const theta = (Math.random()*Math.PI*6) + (arm * (2*Math.PI/arms));
+    let r = a * Math.exp(b * theta);
+    r += (Math.random()-0.5) * (38 + r*0.18); // widen a bit more
+
+    const rr = Math.min(r, rMax * (0.85 + Math.random()*0.15));
+    const x = Math.cos(theta) * rr;
+    const y = Math.sin(theta) * rr;
+
+    const z = 0.6 + Math.random()*0.7; // depth
+    const hueJit = (Math.random()*26 - 13);
+    const L = 58 + Math.random()*28;
+
+    GAL.armStars.push({
+      x, y, z,
+      s: 0.9 + 1.5*z,                         // ↑ per-star size
+      a: 0.22 + Math.random()*0.55,
+      h: (GAL.hue + hueJit) % 360,
+      l: L,
+      tw: Math.random()*Math.PI*2
+    });
+  }
+
+  // Diffuse halo
+  for (let i=0; i<haloCount; i++){
+    const u = Math.random(), v = Math.random();
+    const r = Math.sqrt(u) * rMax * (0.3 + 0.7*v);
+    const th = Math.random()*Math.PI*2;
+    const x = Math.cos(th)*r, y=Math.sin(th)*r;
+    const z = 0.5 + Math.random()*1.0;
+    GAL.halo.push({
+      x, y, z,
+      s: 0.7 + 1.2*z,                         // ↑ halo speck size
+      a: 0.10 + Math.random()*0.25,
+      h: (GAL.hue + 150 + Math.random()*40) % 360,
+      l: 52 + Math.random()*30,
+      tw: Math.random()*Math.PI*2
+    });
+  }
+
+  // Background dust
+  const dustN = Math.floor(160 + 520*sN);
+  for (let i=0; i<dustN; i++){
+    GAL.dust.push({
+      x: Math.random()*W,
+      y: Math.random()*H,
+      z: 0.3 + Math.random()*1.2,
+      r: 0.6 + Math.random()*1.6,
+      a: 0.10 + Math.random()*0.30,
+      tw: Math.random()*Math.PI*2
+    });
+  }
+}
+
+function galaxyResize(){}
+
+function renderGalaxy(dt){
+  if (!GAL.inited) galaxyInit();
+
+  const intensity = mapIntensity();
+  const sN = sizeNorm();
+  GAL.t += dt;
+  GAL.hue = (GAL.hue + 6*dt) % 360;
+
+  clearToBg(false);
+
+  // ---- BACKGROUND DUST ----
+  ctx.globalCompositeOperation = 'screen';
+  const parX = (mouse.x - W*0.5) * 0.04;
+  const parY = (mouse.y - H*0.5) * 0.03;
+  for (let i=0;i<GAL.dust.length;i++){
+    const d = GAL.dust[i];
+    d.tw += dt * (0.3 + 0.7*d.z);
+    d.x += Math.sin(d.tw*0.7 + d.z*9) * 0.06;
+    d.y += Math.cos(d.tw*0.6 + d.z*7) * 0.05;
+    if (d.x < -6) d.x = W+6; else if (d.x > W+6) d.x = -6;
+    if (d.y < -6) d.y = H+6; else if (d.y > H+6) d.y = -6;
+
+    const px = d.x - parX*d.z, py = d.y - parY*d.z;
+    const tw = 0.6 + 0.4*Math.sin(d.tw*1.5 + d.z*8);
+    ctx.fillStyle = `hsla(${(GAL.hue+160)%360}, 85%, ${58+26*d.z}%, ${(d.a*tw)*(0.7+0.6*intensity)})`;
+    ctx.beginPath(); ctx.arc(px, py, d.r, 0, Math.PI*2); ctx.fill();
+  }
+
+  // ---- CORE GLOW ----
+  const cx=W*0.5, cy=H*0.5;
+  const coreR = 60 + mapSize()*0.28;
+  ctx.globalCompositeOperation='lighter';
+  const gCore = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+  gCore.addColorStop(0, `hsla(${(GAL.hue+10)%360}, 90%, 76%, ${0.26 + 0.25*GAL.pulse})`); // brighter when pulsing
+  gCore.addColorStop(1, `hsla(${(GAL.hue+60)%360}, 80%, 50%, 0)`);
+  ctx.fillStyle = gCore; ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI*2); ctx.fill();
+
+  // ---- CENTER DWELL detection ------------------------------------------
+  const dC = Math.hypot(mouse.x-cx, mouse.y-cy);
+  const centerR = coreR * 1.15;
+  if (dC < centerR) GAL.centerT += dt; else GAL.centerT = Math.max(0, GAL.centerT - dt*0.8);
+  GAL.cool = Math.max(0, GAL.cool - dt);
+
+  if (GAL.centerT >= 1.2 && GAL.cool === 0){
+    GAL.centerT = 0;
+    GAL.pulse = 1;                          // kick the pulse
+    GAL.cool  = 1.0;                        // short cooldown
+    GAL.rings.push({ t:0, hue:(GAL.hue+100)%360 });  // shockwave
+    // soft ping (optional)
+    if (typeof playPing === 'function') playPing(520, 0.16, 0.04);
+  }
+
+  // ---- SPIN (faster near center) + pulse boost + GAZE VECTORS ----------
+  const maxC = Math.hypot(W*0.5, H*0.5);
+  const centerN = clamp(1 - dC / maxC, 0, 1);     // 0 at edge, 1 at center
+  const baseSpin = 0.022 + 0.20*intensity;        // edge speed
+  const spin = baseSpin * (1 + centerN);          // up to ~2× at center
+  const rotBoost = 1 + 0.6*GAL.pulse;             // brief extra spin on pulse
+  GAL.rot = (GAL.rot + spin*rotBoost*dt) % (Math.PI*2);
+
+  const gx = mouse.x - cx, gy = mouse.y - cy;
+  const gLen = Math.hypot(gx, gy) || 1;
+  const gDirX = gx/gLen, gDirY = gy/gLen;
+  const gazeN = clamp(gLen / Math.hypot(W*0.5, H*0.5), 0, 1);
+
+  const shearAmt = (0.16 + 0.32*intensity) * gazeN;
+  const lensAmt  = 0.012 + 0.028*intensity;
+  const vortexBase = (0.06 + 0.22*intensity);
+  const pullBase   = (0.02 + 0.10*intensity);
+
+  // warm shift helper toward ~30° (amber)
+  const warmHue = 30;
+  const hueLerp = (h, t)=> (h + ((warmHue - h + 540)%360 - 180)*t);
+
+  function drawCloud(list, sizeBoostBase){
+    for (let i=0;i<list.length;i++){
+      const s = list[i];
+
+      // depth-weighted rotation
+      const cos = Math.cos(GAL.rot * (0.7 + 0.4/s.z));
+      const sin = Math.sin(GAL.rot * (0.7 + 0.4/s.z));
+      let lx = s.x*cos - s.y*sin;
+      let ly = s.x*sin + s.y*cos;
+
+      // shear toward gaze + tiny lens distortion
+      const along = lx*gDirX + ly*gDirY;
+      lx += gDirX * along * shearAmt;
+      ly += gDirY * along * shearAmt;
+      lx += (lx*gx + ly*gy) * lensAmt * 0.001;
+
+      let px = cx + lx;
+      let py = cy + ly;
+
+      // local pointer influence: vortex + radial pull
+      const dx = mouse.x - px, dy = mouse.y - py;
+      const dd = Math.hypot(dx,dy) || 1;
+      const near = clamp(1 - dd / (140 + 260*sizeNorm()), 0, 1);
+      if (near > 0){
+        const tx = -dy/dd, ty = dx/dd;
+        const v = vortexBase * Math.pow(near, 1.2);
+        const p = pullBase   * Math.pow(near, 1.1);
+        px += (tx * v + (dx/dd) * p) * (40 + 80*sN);
+        py += (ty * v + (dy/dd) * p) * (40 + 80*sN);
+      }
+
+      // twinkle
+      s.tw += dt*(0.6 + 0.8*s.z);
+      const tw = 0.65 + 0.35*Math.sin(s.tw + i*0.37);
+
+      // warm near-gaze + pulse lift near center
+      const centerNear = clamp(1 - Math.hypot(px-cx, py-cy) / (coreR*2.2), 0, 1);
+      const warmT = Math.pow(near, 1.25) * (0.55 + 0.35*intensity) + GAL.pulse*0.35*centerNear;
+
+      const hue = hueLerp(s.h, warmT);
+      const light = s.l + 10*warmT;
+      const satBoost = 1 + 0.10*warmT;
+
+      let alpha = (s.a*tw) * (0.75 + 0.7*intensity) * (1 + 0.9*near);
+      alpha *= (1 + 0.6 * GAL.pulse * centerNear);
+
+      let rad = Math.max(0.6, (sizeBoostBase * s.s) * (0.8 + 0.4*tw) * (1 + 0.9*near));
+      rad *= (1 + 0.18 * GAL.pulse * centerNear);
+
+      ctx.fillStyle = `hsla(${hue}, ${Math.min(100, 90*satBoost)}%, ${light}%, ${alpha})`;
+      ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI*2); ctx.fill();
+
+      if (intensity > 0.25){
+        ctx.strokeStyle = `hsla(${(hue+20)%360}, 95%, 70%, ${alpha*0.28})`;
+        ctx.lineWidth = Math.max(1, rad*0.7);
+        ctx.beginPath();
+        ctx.moveTo(px - sin*rad*1.6, py + cos*rad*1.6);
+        ctx.lineTo(px + sin*rad*0.5, py - cos*rad*0.5);
+        ctx.stroke();
       }
     }
   }
+
+  // Pointer glow — smaller & subtler color zone
+  ctx.globalCompositeOperation='screen';
+  const glowR = 70 + 150*sizeNorm();
+  const g = ctx.createRadialGradient(mouse.x, mouse.y, glowR*0.15, mouse.x, mouse.y, glowR);
+  g.addColorStop(0, `hsla(${(GAL.hue+100)%360}, 85%, 70%, ${0.08 + 0.08*intensity})`);
+  g.addColorStop(1, `hsla(${(GAL.hue+60)%360}, 80%, 50%, 0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, glowR, 0, Math.PI*2); ctx.fill();
+
+  // Draw clouds — ↑ size boost to make the galaxy visually larger
+  drawCloud(GAL.halo, 1.4 + 0.8*sizeNorm());
+  drawCloud(GAL.armStars, 1.6 + 1.0*sizeNorm());
+
+  // ---- Shockwave rings + pulse decay ------------------------------------
+  const maxR = Math.min(W, H) * 0.9;
+  ctx.globalCompositeOperation = 'screen';
+  for (let i=GAL.rings.length-1; i>=0; i--){
+    const r = GAL.rings[i];
+    r.t += dt;
+    const p = r.t / 0.9;                     // ring duration
+    if (p >= 1){ GAL.rings.splice(i,1); continue; }
+    const rr = Math.pow(p, 0.6) * maxR;
+    const a  = (1 - p) * (0.35 + 0.25*intensity);
+    ctx.strokeStyle = `hsla(${(r.hue+40)%360}, 95%, 75%, ${a})`;
+    ctx.lineWidth = 1.5 + 6*(1-p);
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI*2); ctx.stroke();
+  }
+
+  // decay the pulse
+  GAL.pulse = lerp(GAL.pulse, 0, 1 - Math.pow(0.04, dt*60));
+}
+
+
 
   /* =========================
      GELÉE
@@ -2428,6 +3031,8 @@ function renderRipples(dt){
       case 'streamers': renderStreamers(dt);  break;
       case 'laserharp': renderLaser(dt);      break;
       case 'bubblepop': renderBubblePop(dt);  break;
+      case 'galaxy':    renderGalaxy(dt);  break;
+
     }
     requestAnimationFrame(tick);
   }
