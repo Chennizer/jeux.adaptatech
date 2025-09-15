@@ -115,6 +115,7 @@
     .vid-slide{ padding:0 !important; background:#000; }
     .vid-wrap{ position:relative; width:100%; height:100%; background:#000; }
     .vid{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
+    #playerPortal video{ position:fixed; inset:0; width:100vw; height:100vh; object-fit:contain; background:#000; }
     .vid-overlay{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.55); color:#fff; padding:.6rem 1rem; border-radius:10px; font-size:1rem; display:none; z-index:2; cursor:pointer; }
 
     body.immersive .reveal .controls, body.immersive .reveal .progress, body.immersive .reveal .slide-number { display:none !important; }
@@ -232,7 +233,7 @@
 </head>
 <body>
 
-<div id="playerPortal" aria-hidden="true" style="position:fixed; inset:0; background:#000; z-index:10000; display:none;"></div>
+  <div id="playerPortal" aria-hidden="true" style="position:fixed; inset:0; width:100vw; height:100vh; background:#000; z-index:10000; display:none;"></div>
 
 <!-- Blackout overlay -->
 <div id="waitOverlay" aria-hidden="true" role="status">
@@ -428,13 +429,13 @@
 
       <section id="owl-video1" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay-ov1" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
+          <div id="overlay-ov1" class="vid-overlay">Cliquez pour lancer la vidéo — appuyez sur <b>Q</b> pour quitter</div>
           <video id="ov1" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
       <section id="owl-video2" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay-ov2" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
+          <div id="overlay-ov2" class="vid-overlay">Cliquez pour lancer la vidéo — appuyez sur <b>Q</b> pour quitter</div>
           <video id="ov2" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
@@ -464,25 +465,25 @@
 
       <section id="video1" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay1" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
+          <div id="overlay1" class="vid-overlay">Cliquez pour lancer la vidéo — appuyez sur <b>Q</b> pour quitter</div>
           <video id="vid1" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
       <section id="video2" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay2" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
+          <div id="overlay2" class="vid-overlay">Cliquez pour lancer la vidéo — appuyez sur <b>Q</b> pour quitter</div>
           <video id="vid2" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
       <section id="video3" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay3" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
+          <div id="overlay3" class="vid-overlay">Cliquez pour lancer la vidéo — appuyez sur <b>Q</b> pour quitter</div>
           <video id="vid3" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
       <section id="video4" class="vid-slide">
         <div class="vid-wrap">
-          <div id="overlay4" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div>
+          <div id="overlay4" class="vid-overlay">Cliquez pour lancer la vidéo — appuyez sur <b>Q</b> pour quitter</div>
           <video id="vid4" class="vid" preload="auto" playsinline></video>
         </div>
       </section>
@@ -651,7 +652,6 @@
     window.removeEventListener('pointerdown', onPointerDownCapture, true);
     stopStickToSlide();
   }
-  async function enterFullscreen(el){ try{ if(el?.requestFullscreen) await el.requestFullscreen(); }catch{} }
   async function exitFullscreenIfOwned(el){ try{ if(document.fullscreenElement===el) await document.exitFullscreen(); }catch{} }
   function startStickToSlide(h, v){
     stickTarget = {h, v};
@@ -739,31 +739,13 @@
 
     currentVidRef = { groupId, key, video: vid, holder: holders[key] };
     const overlay = overs[key];
+    if (overlay) overlay.style.display = 'none';
 
-    const tryNative = async ()=>{
-      try { await enterFullscreen(vid); try { if (vid.currentTime < 0.02) vid.currentTime = 0.02; } catch {} await vid.play(); if(overlay) overlay.style.display='none'; return true; }
-      catch { return false; }
-    };
-    const startInPortal = async ()=>{ usePortal(vid); await new Promise(r => setTimeout(r, 0)); try { await vid.play(); } catch {} };
-
-    const ok = await tryNative();
-    if (!ok){
-      if (overlay){
-        overlay.textContent = 'Cliquez pour lancer la vidéo (plein écran) — appuyez sur Q pour quitter';
-        overlay.style.display = 'block';
-      }
-      const onFirstPointer = async ()=>{
-        overlay?.removeEventListener('pointerup', onFirstPointer);
-        vid.removeEventListener('pointerup', onFirstPointer);
-        if (!(await tryNative())) { await startInPortal(); if (overlay) overlay.style.display='none'; }
-      };
-      overlay?.addEventListener('pointerup', onFirstPointer, { once:true });
-      vid.addEventListener('pointerup', onFirstPointer, { once:true });
-      setTimeout(async ()=>{
-        if (inputsLocked && currentVidRef && currentVidRef.video === vid && !document.fullscreenElement){
-          await startInPortal(); if (overlay) overlay.style.display='none';
-        }
-      }, 120);
+    usePortal(vid);
+    try {
+      await vid.play();
+    } catch (err) {
+      console.warn('Unable to start video playback in portal', err);
     }
   }
 
@@ -818,17 +800,6 @@
     if (!v) return;
     v.addEventListener('ended', () => stopCurrentVideoAndReturn());
     v.addEventListener('pause', () => { if (inputsLocked && !v.ended) v.play().catch(()=>{}); });
-  });
-
-  // Keep fullscreen if user escapes it unintentionally
-  document.addEventListener('fullscreenchange', async ()=>{
-    if(!inputsLocked || !currentVidRef) return;
-    const vid = currentVidRef.video;
-    const overlay = owlOverlays[currentVidRef.key] || overlays[currentVidRef.key];
-    if(!document.fullscreenElement && !vid.ended){
-      try { await enterFullscreen(vid); if(overlay) overlay.style.display='none'; }
-      catch { usePortal(vid); if(overlay){ overlay.textContent='Cliquez pour reprendre — Q pour quitter'; overlay.style.display='none'; } }
-    }
   });
 
   // ===== Blackout overlay helpers
