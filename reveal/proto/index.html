@@ -741,10 +741,23 @@
     const overlay = overs[key];
 
     const tryNative = async ()=>{
-      try { await enterFullscreen(vid); try { if (vid.currentTime < 0.02) vid.currentTime = 0.02; } catch {} await vid.play(); if(overlay) overlay.style.display='none'; return true; }
-      catch { return false; }
+      if (!navigator.userActivation?.isActive) return false;
+      if (document.fullscreenElement === document.documentElement) return false;
+      try {
+        await enterFullscreen(vid);
+        try { if (vid.currentTime < 0.02) vid.currentTime = 0.02; } catch {}
+        await vid.play();
+        if (overlay) overlay.style.display = 'none';
+        return true;
+      } catch {
+        return false;
+      }
     };
-    const startInPortal = async ()=>{ usePortal(vid); await new Promise(r => setTimeout(r, 0)); try { await vid.play(); } catch {} };
+    const startInPortal = async ()=>{
+      usePortal(vid);
+      await new Promise(r => setTimeout(r, 0));
+      try { await vid.play(); } catch {}
+    };
 
     const ok = await tryNative();
     if (!ok){
@@ -752,16 +765,21 @@
         overlay.textContent = 'Cliquez pour lancer la vidéo (plein écran) — appuyez sur Q pour quitter';
         overlay.style.display = 'block';
       }
+      await startInPortal();
       const onFirstPointer = async ()=>{
         overlay?.removeEventListener('pointerup', onFirstPointer);
         vid.removeEventListener('pointerup', onFirstPointer);
-        if (!(await tryNative())) { await startInPortal(); if (overlay) overlay.style.display='none'; }
+        if (!(await tryNative())) {
+          await startInPortal();
+        }
+        if (overlay) overlay.style.display = 'none';
       };
       overlay?.addEventListener('pointerup', onFirstPointer, { once:true });
       vid.addEventListener('pointerup', onFirstPointer, { once:true });
       setTimeout(async ()=>{
-        if (inputsLocked && currentVidRef && currentVidRef.video === vid && !document.fullscreenElement){
-          await startInPortal(); if (overlay) overlay.style.display='none';
+        if (inputsLocked && currentVidRef && currentVidRef.video === vid && document.fullscreenElement !== vid){
+          await startInPortal();
+          if (overlay) overlay.style.display='none';
         }
       }, 120);
     }
