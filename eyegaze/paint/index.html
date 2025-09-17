@@ -37,7 +37,7 @@
       --cursor-outline: clamp(1px, calc(2px * var(--ui-scale)), 3px);
 
       /* Palette constraints */
-      --swatch-min: 18px;
+      --swatch-min: 26px;
       --swatch-max: 96px;
       --palette-cols: 1;
 
@@ -68,9 +68,10 @@
       gap: clamp(12px, calc(14px * var(--ui-scale)), 18px);
       background: #fff; border-right: 1px solid #e6e6e6;
       box-shadow: 0 0 18px rgba(0,0,0,.05);
-      box-sizing: border-box;
+      color: #000;
     }
-    body.dark #sidebar{ background:#0b0b0b; border-right-color:#1e1e1e; }
+    /* Keep left menu white even in dark mode */
+    body.dark #sidebar{ background:#fff; border-right-color:#e6e6e6; color:#000; }
 
     #palette{
       flex: 1;
@@ -80,8 +81,8 @@
       justify-content: center;
       align-content: start;
       gap: var(--swatch-gap);
-      overflow: hidden;       /* no scrollbars */
-      box-sizing: border-box;
+      overflow: hidden;          /* no scrolling */
+      padding-inline: 8px;       /* breathing room on tiny widths */
     }
 
     .swatch{
@@ -93,10 +94,9 @@
       position: relative;
       flex: 0 0 auto;
       overflow: hidden; /* keep dwell clipped to the circle */
-      box-sizing: border-box;
     }
 
-    /* Internal selection ring that never clips */
+    /* Selection ring */
     .swatch.active{ transform: scale(1.03); }
     .swatch.active::before{
       content:"";
@@ -106,13 +106,14 @@
       border-radius: 50%;
       pointer-events:none;
       z-index: 2; /* above dwell */
-      box-sizing: border-box;
     }
-    body.dark .swatch.active::before{ border-color:#e5e5e5; }
-    body.dark .swatch{ border-color:#171717; }
+    /* In dark mode the sidebar is still white, so keep the dark ring for contrast */
+    body.dark .swatch.active::before{ border-color:#111; }
 
-    /* Dwell overlay (below ring) */
-    .swatch .dwell{
+    /* Dwell overlay (below ring) — shared by swatches + brush buttons + save */
+    .swatch .dwell,
+    .brushBtn .dwell,
+    #saveBtn .dwell{
       position: absolute;
       left: 50%; top: 50%;
       width: 100%; height: 100%;
@@ -127,7 +128,7 @@
 
     @keyframes dwellGrow{
       from { transform: translate(-50%, -50%) scale(0.08); }
-      to   { transform: translate(-50%, -50%) scale(1.02); } /* slight overshoot to ensure full cover */
+      to   { transform: translate(-50%, -50%) scale(1.02); } /* slight overshoot */
     }
 
     .flash::after{
@@ -156,15 +157,18 @@
       cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.1) inset;
       transition: transform .12s ease, background-color .12s ease;
       position: relative;
+      overflow: hidden; /* keep dwell clipped to the circle */
     }
     .brushBtn span{ display: block; border-radius: 50%; background: #333; }
     .brushBtn.small  span{ width: var(--brush-dot-s); height: var(--brush-dot-s); }
     .brushBtn.medium span{ width: var(--brush-dot-m); height: var(--brush-dot-m); }
     .brushBtn.large  span{ width: var(--brush-dot-l); height: var(--brush-dot-l); }
     .brushBtn.active{ border-color:#333; transform: scale(1.08); background:#ececec; }
-    body.dark .brushBtn{ background:#161616; border-color:#333; }
-    body.dark .brushBtn span{ background:#ddd; }
-    body.dark .brushBtn.active{ background:#1e1e1e; }
+
+    /* Ensure light look inside white sidebar even in dark mode */
+    body.dark #sidebar .brushBtn{ background:#f8f8f8; border-color:#aaa; }
+    body.dark #sidebar .brushBtn span{ background:#333; }
+    body.dark #sidebar .brushBtn.active{ background:#ececec; }
 
     #saveBtn{
       appearance: none; border: 1px solid #ddd; background: #fafafa;
@@ -173,10 +177,15 @@
       display: flex; align-items: center; justify-content: center;
       font: clamp(14px, calc(18px * var(--ui-scale)), 22px)/1 system-ui, Arial;
       margin-top: 2px;
+      align-self: center; /* centered in sidebar */
+      color:#000;
+      overflow: hidden; /* clip dwell overlay */
+      position: relative; /* anchor dwell overlay */
     }
     #saveBtn:hover{ background:#f2f2f2; }
-    body.dark #saveBtn{ background:#121212; border-color:#2a2a2a; color:#eaeaea; }
-    body.dark #saveBtn:hover{ background:#171717; }
+    /* Keep save button light in dark mode (since sidebar is white) */
+    body.dark #sidebar #saveBtn{ background:#fafafa; border-color:#ddd; color:#000; }
+    body.dark #sidebar #saveBtn:hover{ background:#f2f2f2; }
 
     #cursorPreview{
       position: fixed; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%;
@@ -203,10 +212,13 @@
       70%  { opacity: .25; transform: translate(-50%,-50%) scale(2.8); }
       100% { opacity: 0;  transform: translate(-50%,-50%) scale(3.2); }
     }
+
+    /* ——— Signature controls ——— */
+    #signatureRow { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+    #signatureText { display:none; max-width: 220px; }
   </style>
 </head>
-<!-- DEFAULT THEME = LIGHT -->
-<body class="light">
+<body class="dark">
 <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
 
 <!-- ===== Start Menu ===== -->
@@ -225,7 +237,7 @@
         <div class="option-item">
           <label class="teal-label">
             <input type="checkbox" id="muteSFX">
-            <span class="translate" data-fr="Désactiver les sons (SFX)" data-en="Disable sounds (SFX)">Désactiver les sons (SFX)</span>
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons (SFX)</span>
           </label>
         </div>
         <div class="option-item">
@@ -248,7 +260,7 @@
         </div>
       </div>
 
-      <!-- Column 3 (palette size) -->
+      <!-- Column 3 (palette size + signature) -->
       <div class="options-column">
         <div class="option-item">
           <label for="paletteSizeSelect" class="teal-label label-block translate"
@@ -258,6 +270,15 @@
             <option value="7"  selected class="translate" data-fr="7 couleurs"  data-en="7 colors">7 couleurs</option>
             <option value="13" class="translate" data-fr="13 couleurs" data-en="13 colors">13 couleurs</option>
           </select>
+        </div>
+
+        <!-- ✍️ Signature controls -->
+        <div class="option-item" id="signatureRow">
+          <label class="teal-label" for="signatureEnable" style="user-select:none;">
+            <input type="checkbox" id="signatureEnable">
+            <span class="translate" data-fr="Signature" data-en="Signature">Signature</span>
+          </label>
+          <input type="text" id="signatureText" class="styled-input" placeholder="Votre nom / Your name" />
         </div>
       </div>
     </div>
@@ -315,14 +336,20 @@ function setLang(lang){
 })();
 langToggle.addEventListener('click', ()=> setLang(getLang()==='fr'?'en':'fr'));
 
-/* === Theme & palette === */
+/* === Minimal menu controls === */
 const themeSelect   = document.getElementById('themeSelect');
 const paletteSizeSelect = document.getElementById('paletteSizeSelect');
-function isDark(){ return document.body.classList.contains('dark'); }
 function applyTheme(theme){
   document.body.classList.remove('light','dark');
   document.body.classList.add(theme==='dark'?'dark':'light');
 }
+
+/* Signature controls */
+const signatureEnable = document.getElementById('signatureEnable');
+const signatureTextInput = document.getElementById('signatureText');
+signatureEnable.addEventListener('change', ()=>{
+  signatureTextInput.style.display = signatureEnable.checked ? 'block' : 'none';
+});
 
 /* Persist / init palette size */
 (function initPaletteSize(){
@@ -366,11 +393,16 @@ async function enterFullscreen(){
 /* === Background music (auto-starts on begin) === */
 const MUSIC_TRACKS = [
   "../../songs/artgallery1.mp3",
-  "../../songs/artgallery2.mp3"
+  "../../songs/artgallery2.mp3",
+  "../../songs/artgallery3.mp3",
+  "../../songs/artgallery4.mp3"
 ];
-let musicIdx = 0;
+let musicIdx = Math.floor(Math.random() * MUSIC_TRACKS.length); // start from a random track
 let musicAudio = null;
+let MUSIC_ENABLED = true; // toggled by the SFX mute checkbox
+
 function playNextTrack(){
+  if (!MUSIC_ENABLED) return; // respect mute
   if (musicAudio){
     musicAudio.onended = null;
     try { musicAudio.pause(); } catch(e){}
@@ -380,21 +412,75 @@ function playNextTrack(){
   musicAudio.loop = false;
   musicAudio.play().catch(()=>{ /* ignore autoplay issues */ });
   musicAudio.onended = ()=>{
+    if (!MUSIC_ENABLED) return;
     musicIdx = (musicIdx + 1) % MUSIC_TRACKS.length;
     playNextTrack();
   };
 }
 
+/* Tie music to the SFX mute checkbox */
+const muteSFX = document.getElementById('muteSFX');
+function updateAudioMute(){
+  MUSIC_ENABLED = !muteSFX.checked;
+  if (!MUSIC_ENABLED){
+    if (musicAudio){
+      try { musicAudio.pause(); } catch(e){}
+    }
+  } else {
+    if (!musicAudio || musicAudio.paused){
+      playNextTrack();
+    }
+  }
+}
+muteSFX.addEventListener('change', updateAudioMute);
+
+/* ===== Signature state & helpers ===== */
+let SIG_ENABLED = false;
+let SIG_TEXT = "";
+function drawSignatureIfEnabled(){
+  if(!SIG_ENABLED || !SIG_TEXT) return;
+  const margin = 14;
+  const px = Math.max(18, Math.min(48, Math.round(innerWidth * 0.035)));
+  const text = SIG_TEXT.trim();
+  if(!text) return;
+
+  // Draw stylized signature bottom-right
+  ctx.save();
+  ctx.font = `${px}px "Brush Script MT", "Segoe Script", "Comic Sans MS", cursive`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = Math.max(1.5, px * 0.10);
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = Math.max(2, px * 0.2);
+
+  const x = innerWidth - margin;
+  const y = innerHeight - margin;
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
 startButton.addEventListener('click', async ()=>{
-  applyTheme(themeSelect.value);                  // apply chosen theme
+  applyTheme(themeSelect.value);
+  // Capture signature options at start
+  SIG_ENABLED = !!signatureEnable.checked;
+  SIG_TEXT = (signatureTextInput.value || '').trim();
+
   await enterFullscreen();
   gameOptions.style.display='none';
   langToggle.style.display='none';
   gameArea.style.display='block';
-  playNextTrack(); // user gesture allows playback
+
+  updateAudioMute(); // initial music state
+  playNextTrack();   // random start (no-op if muted)
+
   setTimeout(()=> {
-    resize({preserve:false});                    // create fresh canvas bg for theme
+    /* Do not preserve the initial dark snapshot so light mode is white */
+    resize({preserve:false});
     buildPalette(parseInt(paletteSizeSelect.value,10) || 7);
+    drawSignatureIfEnabled(); // draw once on fresh canvas
   }, 50);
 });
 
@@ -402,8 +488,10 @@ startButton.addEventListener('click', async ()=>{
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d',{alpha:false});
 
-/* Helper: theme-based canvas background */
-function canvasBgColor(){ return isDark() ? '#000000' : '#ffffff'; }
+/* Helper: background color per theme */
+function getCanvasBg(){
+  return document.body.classList.contains('dark') ? '#000000' : '#ffffff';
+}
 
 /* PRESERVING, HiDPI-safe resize */
 function resize({preserve=true}={}){
@@ -421,7 +509,9 @@ function resize({preserve=true}={}){
   canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
   ctx.setTransform(dpr,0,0,dpr,0,0);
 
-  ctx.fillStyle=canvasBgColor(); ctx.fillRect(0,0,cssW,cssH);
+  /* fill with theme-appropriate background */
+  ctx.fillStyle = getCanvasBg();
+  ctx.fillRect(0,0,cssW,cssH);
 
   if(snapshot){
     const prev=ctx.imageSmoothingEnabled;
@@ -429,6 +519,9 @@ function resize({preserve=true}={}){
     ctx.drawImage(snapshot,0,0,snapshot.width,snapshot.height,0,0,cssW,cssH);
     ctx.imageSmoothingEnabled=prev;
   }
+
+  // Re-apply signature overlay on layout changes (does not affect drawing)
+  drawSignatureIfEnabled();
 }
 addEventListener('resize',()=>{ resize({preserve:true}); layoutPalette(); },{passive:true});
 ['fullscreenchange','webkitfullscreenchange','msfullscreenchange']
@@ -446,7 +539,6 @@ const saveBtn  = document.getElementById('saveBtn');
 const sidebarW=()=>sidebar.getBoundingClientRect().width;
 
 /* Simple SFX volume */
-const muteSFX = document.getElementById('muteSFX');
 const sfxVol  = document.getElementById('sfxVol');
 const sfxVolVal = document.getElementById('sfxVolVal');
 sfxVol.addEventListener('input', ()=> sfxVolVal.textContent = sfxVol.value);
@@ -523,6 +615,7 @@ function pulseAt(x,y,color){
 
 /* ===== Dynamic palette building ===== */
 const PALETTE_13 = [
+  "#000000",
   "#FF6B6B", "#F94144",
   "#FFD166", "#F9C74F",
   "#06D6A0", "#90BE6D", "#43AA8B",
@@ -531,22 +624,21 @@ const PALETTE_13 = [
   "#FF9F1C"
 ];
 
-/* First swatch depends on theme: black on light, white on dark */
-function frontColor(){ return isDark() ? "#FFFFFF" : "#000000"; }
-
 function pickColors(n){
-  const tail = (n>=13) ? PALETTE_13.slice(0,12) : // we'll add front color first
-               (n===7 ? ["#FF6B6B","#FFD166","#06D6A0","#118AB2","#9B59B6","#FF9F1C"]
-                      : ["#FF6B6B","#06D6A0","#3A86FF"]);
-  const head = [frontColor()];
-  const list = head.concat(tail).slice(0,n);
-  return list;
+  if(n>=13) return PALETTE_13.slice(0,13);
+  if(n===7){
+    return ["#000000","#FF6B6B","#FFD166","#06D6A0","#118AB2","#9B59B6","#FF9F1C"];
+  }
+  if(n===4){
+    return ["#000000","#FF6B6B","#06D6A0","#3A86FF"];
+  }
+  return PALETTE_13.slice(0,n);
 }
 
 /* === Color selection === */
 function setColor(el, eventLike){
   document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('active',s===el));
-  currentColor = el?.dataset?.color || frontColor();
+  currentColor = el?.dataset?.color || "#000000";
   cursorEl.style.background = currentColor;
   const dw = el.querySelector('.dwell'); if (dw) dw.remove();
   flashEl(el);
@@ -563,7 +655,13 @@ function clearPalette(){
 
 function buildPalette(n){
   clearPalette();
-  const colors = pickColors(n);
+  let colors = pickColors(n);
+
+  /* In dark mode, replace the first (black) swatch with white */
+  if (document.body.classList.contains('dark') && colors.length > 0){
+    colors[0] = '#FFFFFF';
+  }
+
   colors.forEach(col=>{
     const btn = document.createElement('button');
     btn.className = 'swatch';
@@ -577,16 +675,16 @@ function buildPalette(n){
   layoutPalette();
 }
 
-/* ===== Dwell indicator (keyframed grow 0.08 → 1.02) ===== */
-const HOVER_DWELL_MS = 650;   // progressive & readable
-const HOVER_MOVE_PX  = 12;    // movement guard
+/* ===== Dwell indicator ===== */
+const HOVER_DWELL_MS = 650;
+const SAVE_DWELL_MS  = 2500; // long gaze to save
 
-function startDwellCircle(sw, durationMs){
-  let overlay = sw.querySelector('.dwell');
+function startDwellCircle(el, durationMs){
+  let overlay = el.querySelector('.dwell');
   if(!overlay){
     overlay = document.createElement('div');
     overlay.className = 'dwell';
-    sw.appendChild(overlay);
+    el.appendChild(overlay);
   }
   overlay.style.animation = 'none';
   overlay.style.transform = 'translate(-50%, -50%) scale(0.08)';
@@ -594,41 +692,28 @@ function startDwellCircle(sw, durationMs){
   overlay.style.animation = `dwellGrow ${durationMs}ms linear forwards`;
   return overlay;
 }
-function resetDwellCircle(sw){
-  const overlay = sw.querySelector('.dwell');
+function resetDwellCircle(el){
+  const overlay = el.querySelector('.dwell');
   if(overlay) overlay.remove();
 }
 
-/* ===== Swatch interactions with dwell + indicator ===== */
+/* ===== Swatch interactions with dwell + indicator =====
+   Do NOT reset the dwell while staying within the same swatch. */
 function wireSwatches(){
   const swatches = document.querySelectorAll('.swatch');
 
   swatches.forEach(s=>{
     let timer = null;
-    let enterX = 0, enterY = 0;
-
     const clearTimer = ()=>{ if(timer){ clearTimeout(timer); timer=null; } };
 
     s.addEventListener('mouseenter', (e)=>{
-      enterX = e.clientX; enterY = e.clientY;
       clearTimer();
       resetDwellCircle(s);
       startDwellCircle(s, HOVER_DWELL_MS);
       timer = setTimeout(()=>{ setColor(s, e); }, HOVER_DWELL_MS + 5);
     });
 
-    s.addEventListener('mousemove', (e)=>{
-      if(!timer) return;
-      const dx = e.clientX - enterX;
-      const dy = e.clientY - enterY;
-      if (Math.hypot(dx, dy) > HOVER_MOVE_PX){
-        enterX = e.clientX; enterY = e.clientY;
-        clearTimer();
-        resetDwellCircle(s);
-        startDwellCircle(s, HOVER_DWELL_MS);
-        timer = setTimeout(()=> setColor(s, e), HOVER_DWELL_MS + 5);
-      }
-    });
+    // No reset on mousemove
 
     s.addEventListener('mouseleave', ()=>{
       clearTimer();
@@ -641,7 +726,7 @@ function wireSwatches(){
   });
 }
 
-/* ===== Responsive palette layout (no scrolling) ===== */
+/* ===== Responsive palette layout ===== */
 function layoutPalette(){
   const n = paletteEl.children.length;
   if(!n) return;
@@ -655,69 +740,44 @@ function layoutPalette(){
   const reserve = brushBox.offsetHeight + saveBtn.offsetHeight + 24;
 
   const availH = Math.max(0, sidebar.clientHeight - padY - reserve);
-  const availW = Math.max(0, sidebar.clientWidth  - padX);
+  const availW = Math.max(0, sidebar.clientWidth - padX);
 
   const rootCS = getComputedStyle(document.documentElement);
   const uiScale = parseFloat(rootCS.getPropertyValue('--ui-scale')) || 1;
 
-  const minSize = 18;
-  const maxSize = 96;
+  let gap = Math.max(6, Math.min(14, Math.round(12 * uiScale)));
 
-  const gapCandidates = [
-    Math.max(6, Math.min(14, Math.round(12 * uiScale))),
-    10, 8, 6, 4
-  ];
+  const computeSize = (cols, minSize, maxSize) => {
+    const rows = Math.ceil(n / cols);
+    const sFromH = Math.floor((availH - (rows - 1) * gap) / rows);
+    const sFromW = Math.floor((availW - (cols - 1) * gap) / cols);
+    let s = Math.min(sFromH, sFromW);
+    if (!Number.isFinite(s)) s = minSize;
+    s = Math.max(minSize, Math.min(maxSize, s));
+    return { s, rows, cols };
+  };
 
-  let best = null;
+  const nIs13 = (n >= 13);
+  const minSize = nIs13 ? 24 : 28;
+  const maxSize = nIs13 ? 52 : 96;
 
-  for (const gap of gapCandidates){
-    for (let cols = 1; cols <= Math.min(4, n); cols++){
-      const rows = Math.ceil(n / cols);
-      const sFromH = Math.floor((availH - Math.max(0, rows - 1) * gap) / rows);
-      const sFromW = Math.floor((availW - Math.max(0, cols - 1) * gap) / cols);
-      let s = Math.min(sFromH, sFromW);
-      if (!Number.isFinite(s)) continue;
-      s = Math.max(minSize, Math.min(maxSize, s));
-      const totalH = rows * s + (rows - 1) * gap;
-      const totalW = cols * s + (cols - 1) * gap;
-      if (totalH <= availH + 0.5 && totalW <= availW + 0.5){
-        if (!best || s > best.size) best = { cols, size: s, gap };
-      }
-    }
-    if (best) break;
+  let layout = computeSize(1, minSize, maxSize);
+  if (layout.s <= minSize + 1 && n > 6) {
+    layout = computeSize(2, minSize, maxSize);
   }
 
-  if (!best){
-    const gap = 4;
-    let bestS = minSize, bestCols = Math.min(4, n);
-    for (let cols = 1; cols <= Math.min(4, n); cols++){
-      const rows = Math.ceil(n / cols);
-      const sFromH = Math.floor((availH - Math.max(0, rows - 1) * gap) / rows);
-      const sFromW = Math.floor((availW - Math.max(0, cols - 1) * gap) / cols);
-      let s = Math.min(sFromH, sFromW);
-      if (!Number.isFinite(s)) continue;
-      s = Math.max(12, Math.min(minSize, s));
-      const totalH = rows * s + (rows - 1) * gap;
-      const totalW = cols * s + (cols - 1) * gap;
-      if (totalH <= availH + 0.5 && totalW <= availW + 0.5 && s > bestS){
-        bestS = s; bestCols = cols;
-      }
-    }
-    best = { cols: bestCols, size: bestS, gap };
-  }
+  sidebar.style.setProperty('--palette-cols', layout.cols.toString());
+  sidebar.style.setProperty('--swatch-size', layout.s + 'px');
+  sidebar.style.setProperty('--swatch-gap',  gap + 'px');
 
-  sidebar.style.setProperty('--palette-cols', String(best.cols));
-  sidebar.style.setProperty('--swatch-size', best.size + 'px');
-  sidebar.style.setProperty('--swatch-gap',  best.gap + 'px');
-
-  const border  = Math.max(2, Math.round(best.size * 0.06));
-  const outline = Math.max(2, Math.round(best.size * 0.06));
+  const border  = Math.max(2, Math.round(layout.s * 0.06));
+  const outline = Math.max(2, Math.round(layout.s * 0.06));
   sidebar.style.setProperty('--swatch-border',  border + 'px');
   sidebar.style.setProperty('--swatch-outline', outline + 'px');
 }
 
-/* Brush sizes */
-const brushBtns=document.querySelectorAll('.brushBtn');
+/* ===== Brush sizes (with dwell hover like swatches) ===== */
+const brushBtns = document.querySelectorAll('.brushBtn');
 function setBrushSize(btn, eventLike){
   brushBtns.forEach(b=>b.classList.toggle('active',b===btn));
   sizeMode=btn.dataset.size;
@@ -731,27 +791,72 @@ function setBrushSizeByName(name){
   const btn=Array.from(brushBtns).find(b=>b.dataset.size===name) || brushBtns[1];
   setBrushSize(btn);
 }
+
+/* Add dwell-based selection to brush buttons — no reset while inside the same button */
 brushBtns.forEach(b=>{
-  b.addEventListener('mouseenter',(e)=>setBrushSize(b, e));
-  b.addEventListener('click',     (e)=>setBrushSize(b, e));
+  let timer = null;
+  const clearTimer = ()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+
+  b.addEventListener('mouseenter',(e)=>{
+    clearTimer();
+    resetDwellCircle(b);
+    startDwellCircle(b, HOVER_DWELL_MS);
+    timer = setTimeout(()=>{ setBrushSize(b, e); }, HOVER_DWELL_MS + 5);
+  });
+
+  b.addEventListener('mouseleave', ()=>{
+    clearTimer();
+    resetDwellCircle(b);
+  });
+
+  b.addEventListener('click',     (e)=>{ clearTimer(); resetDwellCircle(b); setBrushSize(b, e); });
+  b.addEventListener('touchstart',(e)=>{ clearTimer(); resetDwellCircle(b); setBrushSize(b, e.touches?.[0] || e); });
 });
 
-/* Save PNG */
-document.getElementById('saveBtn').addEventListener('click',()=>{
+/* ===== Save PNG helpers ===== */
+function doSave(){
+  drawSignatureIfEnabled();
   const link=document.createElement('a');
   link.href=canvas.toDataURL('image/png');
   link.download='eyegaze-art.png';
   link.click();
-});
+}
 
-/* Clear via Space (theme-aware) */
+/* Click to save (immediate) */
+document.getElementById('saveBtn').addEventListener('click', doSave);
+
+/* Long-dwell to save (2.5s) — no reset while staying on the button */
+(function wireSaveDwell(){
+  let timer = null;
+  const clearTimer = ()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+
+  saveBtn.addEventListener('mouseenter', ()=>{
+    clearTimer();
+    resetDwellCircle(saveBtn);
+    startDwellCircle(saveBtn, SAVE_DWELL_MS);
+    timer = setTimeout(()=>{ doSave(); resetDwellCircle(saveBtn); }, SAVE_DWELL_MS + 5);
+  });
+
+  // No mousemove handler: we do not reset while inside the button.
+
+  saveBtn.addEventListener('mouseleave', ()=>{
+    clearTimer();
+    resetDwellCircle(saveBtn);
+  });
+
+  // Touchstart: keep existing click behavior for instant save if tapped.
+})();
+  
+/* Clear via Space (not when UI focused) */
 addEventListener('keydown',e=>{
   if(e.code!=='Space') return;
   const t=e.target;
   const isUI=t && (t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA'||t.tagName==='BUTTON'||t.isContentEditable);
   if(isUI) return;
-  ctx.fillStyle=canvasBgColor(); ctx.fillRect(0,0,innerWidth,innerHeight);
+  ctx.fillStyle = getCanvasBg(); /* theme-appropriate clear */
+  ctx.fillRect(0,0,innerWidth,innerHeight);
   last=null; e.preventDefault();
+  drawSignatureIfEnabled(); // redraw signature after clear
 });
 </script>
 </body>
