@@ -7,6 +7,27 @@ const FS_STORE = 'handles';
 const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
 const FILES_KEY = 'video-files';
 
+function notifyEyegazeGuard(options) {
+  const tileContainer = document.getElementById('tile-container');
+  if (!tileContainer) {
+    return;
+  }
+
+  let isVisible = false;
+  try {
+    isVisible = window.getComputedStyle
+      ? getComputedStyle(tileContainer).display !== 'none'
+      : tileContainer.style.display !== 'none';
+  } catch {
+    isVisible = tileContainer.style.display !== 'none';
+  }
+
+  if (isVisible) {
+    const guardOptions = options ?? { clearSelection: true };
+    window.choiceEyegaze?.requirePointerMotionBeforeHover?.(guardOptions);
+  }
+}
+
 function idbOpenFS() {
   return new Promise((res, rej) => {
     const req = indexedDB.open(FS_DB_NAME, 1);
@@ -143,6 +164,7 @@ function revokeAllVideos() {
 }
 
 async function addFiles(files) {
+  let addedAny = false;
   for (const file of files) {
     if (!VIDEO_RX.test(file.name)) continue;
     const url = URL.createObjectURL(file);
@@ -158,9 +180,13 @@ async function addFiles(files) {
       audioElement: audio,
       category: 'custom'
     });
+    addedAny = true;
     if (typeof populateTilePickerGrid === 'function') {
       populateTilePickerGrid();
     }
+  }
+  if (addedAny) {
+    notifyEyegazeGuard();
   }
 }
 
@@ -280,6 +306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await clearRepoHandle();
       await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+      notifyEyegazeGuard({ clearSelection: true });
     });
   }
 });
