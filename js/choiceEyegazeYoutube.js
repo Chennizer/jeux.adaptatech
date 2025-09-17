@@ -84,6 +84,82 @@ document.addEventListener('DOMContentLoaded', () => {
   // Global variable for tile size in vh; default 40
   let tileSize = 40;
 
+  const tileChoiceMap = new WeakMap();
+  const POINTER_MOVE_THRESHOLD = 10;
+  let hoveredTile = null;
+  let hoveredChoice = null;
+  let hoverTimeoutId = null;
+  let requirePointerMotion = false;
+  let lastPointerPosition = null;
+  let pointerGuardAnchor = null;
+
+  function armPointerGuard() {
+    requirePointerMotion = true;
+    pointerGuardAnchor = lastPointerPosition ? { ...lastPointerPosition } : null;
+  }
+
+  function clearHoverState() {
+    if (hoverTimeoutId) {
+      clearTimeout(hoverTimeoutId);
+      hoverTimeoutId = null;
+    }
+    if (hoveredTile) {
+      hoveredTile.classList.remove('selected');
+      hoveredTile = null;
+    }
+    hoveredChoice = null;
+  }
+
+  function scheduleHoverCountdown() {
+    if (!hoveredTile || !hoveredChoice || videoPlaying) {
+      return;
+    }
+    if (hoverTimeoutId) {
+      clearTimeout(hoverTimeoutId);
+    }
+    hoverTimeoutId = setTimeout(() => {
+      if (!videoPlaying && hoveredTile && hoveredChoice) {
+        stopPreview();
+        playVideo(hoveredChoice.video);
+      }
+    }, fixationDelay);
+  }
+
+  function handleTileEnter(tile, choice, options = {}) {
+    const { playSound = true } = options;
+    if (videoPlaying) return;
+    const tileChanged = hoveredTile !== tile;
+
+    if (hoverTimeoutId) {
+      clearTimeout(hoverTimeoutId);
+      hoverTimeoutId = null;
+    }
+
+    if (tileChanged && hoveredTile) {
+      hoveredTile.classList.remove('selected');
+    }
+
+    hoveredTile = tile;
+    hoveredChoice = choice;
+    tile.classList.add('selected');
+
+    if (playSound && tileChanged) {
+      playCycleSound();
+    }
+
+    if (!requirePointerMotion) {
+      scheduleHoverCountdown();
+    }
+  }
+
+  function handleTileLeave(tile) {
+    if (hoveredTile === tile) {
+      clearHoverState();
+    } else {
+      tile.classList.remove('selected');
+    }
+  }
+
   /* ----------------------------------------------------------------
      (A) INACTIVITY TIMER LOGIC (optional)
      ---------------------------------------------------------------- */
@@ -255,27 +331,14 @@ document.addEventListener('DOMContentLoaded', () => {
     caption.textContent = choice.name;
     tile.appendChild(caption);
 
-    let hoverTimeout = null;
-    const hoverDelay = fixationDelay;
+    tileChoiceMap.set(tile, choice);
 
     tile.addEventListener('mouseenter', () => {
-      if (videoPlaying) return;
-      tile.classList.add('selected');
-      playCycleSound();
-      hoverTimeout = setTimeout(() => {
-        if (!videoPlaying) {
-          stopPreview();
-          playVideo(choice.video);
-        }
-      }, hoverDelay);
+      handleTileEnter(tile, choice);
     });
 
     tile.addEventListener('mouseleave', () => {
-      tile.classList.remove('selected');
-      if (hoverTimeout) {
-        clearTimeout(hoverTimeout);
-        hoverTimeout = null;
-      }
+      handleTileLeave(tile);
     });
 
     return tile;
@@ -386,6 +449,8 @@ document.addEventListener('DOMContentLoaded', () => {
       videoTimeLimitTimeout = null;
     }
     videoPlaying = false;
+    clearHoverState();
+    armPointerGuard();
     preventAutoPreview = true;
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
@@ -408,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
      ---------------------------------------------------------------- */
   function playVideo(videoUrl) {
     stopPreview();
+    clearHoverState();
     videoPlaying = true;
     currentVideoUrl = videoUrl;
     tileContainer.style.display = "none";
@@ -486,6 +552,66 @@ document.addEventListener('DOMContentLoaded', () => {
   videoPlayer.addEventListener('ended', () => {
     delete videoResumePositions[currentVideoUrl || videoSource.src];
     resetToChoicesScreen();
+  });
+
+  document.addEventListener('pointermove', event => {
+    const { clientX, clientY } = event;
+    const targetElement = event.target instanceof Element ? event.target : null;
+    const previousPosition = lastPointerPosition;
+    lastPointerPosition = { x: clientX, y: clientY };
+
+    let skipNormalHandling = false;
+
+    if (requirePointerMotion) {
+      if (!pointerGuardAnchor) {
+        pointerGuardAnchor = previousPosition
+          ? { ...previousPosition }
+          : { x: clientX, y: clientY };
+        if (!previousPosition) {
+          return;
+        }
+      }
+
+      const dx = clientX - pointerGuardAnchor.x;
+      const dy = clientY - pointerGuardAnchor.y;
+
+      if (Math.hypot(dx, dy) >= POINTER_MOVE_THRESHOLD) {
+        requirePointerMotion = false;
+        pointerGuardAnchor = null;
+
+        if (!hoveredTile) {
+          const tile = targetElement ? targetElement.closest('.tile') : null;
+          if (
+            tile &&
+            tileChoiceMap.has(tile) &&
+            tileContainer.contains(tile) &&
+            tileContainer.style.display !== 'none'
+          ) {
+            handleTileEnter(tile, tileChoiceMap.get(tile), { playSound: false });
+            skipNormalHandling = true;
+          }
+        }
+
+        if (hoveredTile && hoveredChoice) {
+          scheduleHoverCountdown();
+          skipNormalHandling = true;
+        }
+      } else {
+        return;
+      }
+    }
+
+    if (!skipNormalHandling && !videoPlaying) {
+      const tile = targetElement ? targetElement.closest('.tile') : null;
+      if (
+        tile &&
+        tileChoiceMap.has(tile) &&
+        tileContainer.contains(tile) &&
+        tile !== hoveredTile
+      ) {
+        handleTileEnter(tile, tileChoiceMap.get(tile));
+      }
+    }
   });
 
   /* ----------------------------------------------------------------
