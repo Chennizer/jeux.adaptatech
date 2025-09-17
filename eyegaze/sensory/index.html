@@ -1395,6 +1395,9 @@
   }
   const ripples = [];
   const halos   = [];
+  const RIPPLE_MAX = 110;
+  const RIPPLE_GRAD_STEP = 24;
+  const HALO_GRAD_STEP = 28;
   let rippleCooldown = 0;
   let waterT = 0;
 
@@ -1409,15 +1412,23 @@
       vr: sp * (0.9 + Math.random()*0.22),
       width: 5.5 + mapSize()*0.06 + power*2.5 + (0.6 + 0.8*sN),
       life: 1.0, hue, sat, lite,
-      phase: Math.random()*Math.PI*2
+      phase: Math.random()*Math.PI*2,
+      grad1: null, grad2: null,
+      gradR1: -1, gradR2: -1,
+      gradHue: (hue|0)
     });
+    if (ripples.length > RIPPLE_MAX){
+      ripples.splice(0, ripples.length - RIPPLE_MAX);
+    }
   }
   function emitHalo(x, y, strength=1){
     const hue = 200 + Math.random()*16;
     halos.push({
       x, y, r:24,
       vr: (160 + 280*mapIntensity()) * (0.7 + 0.6*Math.random() ),
-      a: 0.28 * strength, hue
+      a: 0.28 * strength, hue,
+      grad: null,
+      gradR: -1
     });
   }
 
@@ -1495,11 +1506,15 @@
       h.r  += h.vr*dt;
       h.a  *= Math.pow(0.975 - 0.15*dt, 1.0);
       if (h.a < 0.02 || h.r > Math.max(W,H)*1.2){ halos.splice(i,1); continue; }
-      const g = ctx.createRadialGradient(h.x, h.y, h.r*0.15, h.x, h.y, h.r);
-      g.addColorStop(0.0, `hsla(${h.hue}, 90%, 65%, ${0.10*h.a})`);
-      g.addColorStop(0.6, `hsla(${h.hue+8}, 90%, 55%, ${0.08*h.a})`);
-      g.addColorStop(1.0, `hsla(${h.hue+30}, 90%, 45%, 0)`);
-      ctx.fillStyle = g;
+      if (!h.grad || Math.abs(h.gradR - h.r) > HALO_GRAD_STEP){
+        const g = ctx.createRadialGradient(h.x, h.y, h.r*0.15, h.x, h.y, h.r);
+        g.addColorStop(0.0, `hsla(${h.hue}, 90%, 65%, ${0.10*h.a})`);
+        g.addColorStop(0.6, `hsla(${h.hue+8}, 90%, 55%, ${0.08*h.a})`);
+        g.addColorStop(1.0, `hsla(${h.hue+30}, 90%, 45%, 0)`);
+        h.grad = g;
+        h.gradR = h.r;
+      }
+      ctx.fillStyle = h.grad;
       ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill();
     }
 
@@ -1515,15 +1530,26 @@
 
       ctx.globalCompositeOperation = 'screen';
       const glowR1 = r.r*1.00, glowR2 = r.r*1.35;
-      const g1 = ctx.createRadialGradient(r.x, r.y, glowR1*0.45, r.x, r.y, glowR1);
-      g1.addColorStop(0, `hsla(${r.hue}, ${r.sat}%, ${r.lite+8}%, ${0.09*alive})`);
-      g1.addColorStop(1, `hsla(${r.hue+10}, ${r.sat}%, ${r.lite-6}%, 0)`);
-      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(r.x, r.y, glowR1, 0, Math.PI*2); ctx.fill();
+      if (!r.grad1 || Math.abs(r.gradR1 - glowR1) > RIPPLE_GRAD_STEP || r.gradHue !== (r.hue|0)){
+        const g1 = ctx.createRadialGradient(r.x, r.y, glowR1*0.45, r.x, r.y, glowR1);
+        g1.addColorStop(0, `hsla(${r.hue}, ${r.sat}%, ${r.lite+8}%, ${0.09*alive})`);
+        g1.addColorStop(1, `hsla(${r.hue+10}, ${r.sat}%, ${r.lite-6}%, 0)`);
+        r.grad1 = g1;
+        r.gradR1 = glowR1;
+        r.gradHue = r.hue|0;
+      }
+      ctx.fillStyle = r.grad1;
+      ctx.beginPath(); ctx.arc(r.x, r.y, glowR1, 0, Math.PI*2); ctx.fill();
 
-      const g2 = ctx.createRadialGradient(r.x, r.y, glowR2*0.55, r.x, r.y, glowR2);
-      g2.addColorStop(0, `hsla(${r.hue+12}, ${r.sat}%, ${r.lite}%, ${0.07*alive})`);
-      g2.addColorStop(1, `hsla(${r.hue+28}, ${r.sat}%, ${r.lite-10}%, 0)`);
-      ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(r.x, r.y, glowR2, 0, Math.PI*2); ctx.fill();
+      if (!r.grad2 || Math.abs(r.gradR2 - glowR2) > RIPPLE_GRAD_STEP || r.gradHue !== (r.hue|0)){
+        const g2 = ctx.createRadialGradient(r.x, r.y, glowR2*0.55, r.x, r.y, glowR2);
+        g2.addColorStop(0, `hsla(${r.hue+12}, ${r.sat}%, ${r.lite}%, ${0.07*alive})`);
+        g2.addColorStop(1, `hsla(${r.hue+28}, ${r.sat}%, ${r.lite-10}%, 0)`);
+        r.grad2 = g2;
+        r.gradR2 = glowR2;
+      }
+      ctx.fillStyle = r.grad2;
+      ctx.beginPath(); ctx.arc(r.x, r.y, glowR2, 0, Math.PI*2); ctx.fill();
 
       ctx.globalCompositeOperation='lighter';
       const hues   = [ r.hue-10, r.hue, r.hue+12 ];
@@ -1779,12 +1805,44 @@
 // state
 const FIREFLIES = { list: [], t: 0 };
 
+const FIREFLY_SPRITE_SIZE = 256;
+const FIREFLY_SPRITES = new Map();
+
+function getFireflySprite(hue){
+  const quant = ((Math.round(hue / 12) * 12) % 360 + 360) % 360;
+  const key = `${quant}`;
+  let sprite = FIREFLY_SPRITES.get(key);
+  if (!sprite){
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = FIREFLY_SPRITE_SIZE;
+    const gctx = canvas.getContext('2d');
+    const cx = FIREFLY_SPRITE_SIZE / 2;
+
+    const bloom = gctx.createRadialGradient(cx, cx, cx*0.10, cx, cx, cx*0.95);
+    bloom.addColorStop(0.0, `hsla(${quant}, 100%, 70%, 1)`);
+    bloom.addColorStop(0.55, `hsla(${(quant+16)%360}, 95%, 55%, 0.65)`);
+    bloom.addColorStop(1.0, `hsla(${(quant+56)%360}, 85%, 45%, 0)`);
+    gctx.fillStyle = bloom;
+    gctx.fillRect(0, 0, FIREFLY_SPRITE_SIZE, FIREFLY_SPRITE_SIZE);
+
+    const highlight = gctx.createRadialGradient(cx*0.68, cx*0.68, cx*0.06, cx*0.68, cx*0.68, cx*0.28);
+    highlight.addColorStop(0.0, `hsla(${(quant+36)%360}, 100%, 90%, 0.75)`);
+    highlight.addColorStop(1.0, `hsla(${(quant+36)%360}, 100%, 90%, 0)`);
+    gctx.fillStyle = highlight;
+    gctx.fillRect(0, 0, FIREFLY_SPRITE_SIZE, FIREFLY_SPRITE_SIZE);
+
+    sprite = { canvas, radius: FIREFLY_SPRITE_SIZE / 2 };
+    FIREFLY_SPRITES.set(key, sprite);
+  }
+  return sprite;
+}
+
 // (Re)create the swarm sized by the "Taille" slider
 function firefliesInit(){
   FIREFLIES.list.length = 0;
 
   // Count scales with size; keep it reasonable for perf
-  const n = Math.floor(120 + 420 * sizeNorm()); // up to ~540
+  const n = Math.floor(90 + 320 * sizeNorm()); // up to ~410
   for (let i=0; i<n; i++){
     const z   = 0.6 + Math.random()*0.9;          // "depth" (size/speed scaler)
     const ang = Math.random()*Math.PI*2;
@@ -1821,25 +1879,34 @@ function flyWrap(f){
 
 // Draw one firefly with bloom that lights the screen around it (subtle)
 function drawFirefly(f, coreR, bloomR, alphaCore, alphaBloom){
-  // Soft, reduced bloom
-  ctx.globalCompositeOperation = 'screen';
-  const g = ctx.createRadialGradient(f.x, f.y, coreR*0.25, f.x, f.y, bloomR);
-  g.addColorStop(0.0, `hsla(${f.hue|0}, 90%, 62%, ${alphaBloom})`);
-  g.addColorStop(0.6, `hsla(${(f.hue+16)|0}, 85%, 54%, ${alphaBloom*0.5})`);
-  g.addColorStop(1.0, `hsla(${(f.hue+56)|0}, 80%, 44%, 0)`);
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(f.x, f.y, bloomR, 0, Math.PI*2); ctx.fill();
+  const sprite = getFireflySprite(f.hue);
+  if (alphaBloom > 0.001){
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = alphaBloom;
+    ctx.translate(f.x, f.y);
+    const scale = bloomR / sprite.radius;
+    ctx.scale(scale, scale);
+    ctx.drawImage(sprite.canvas, -sprite.radius, -sprite.radius);
+    ctx.restore();
+  }
 
-  // Core (dimmed)
+  ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.fillStyle = `hsla(${f.hue|0}, 100%, 68%, ${alphaCore})`;
-  ctx.beginPath(); ctx.arc(f.x, f.y, coreR, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(f.x, f.y, coreR, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
 
-  // Tiny highlight
+  ctx.save();
   ctx.globalCompositeOperation = 'screen';
   ctx.strokeStyle = `hsla(${(f.hue+36)|0}, 100%, 88%, ${0.55*alphaCore})`;
   ctx.lineWidth = Math.max(0.7, coreR*0.3);
-  ctx.beginPath(); ctx.arc(f.x - coreR*0.32, f.y - coreR*0.32, coreR*0.30, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(f.x - coreR*0.32, f.y - coreR*0.32, coreR*0.30, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function renderFireflies(dt){
