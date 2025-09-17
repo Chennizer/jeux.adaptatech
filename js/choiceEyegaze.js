@@ -38,11 +38,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const youtubeDiv        = document.getElementById('youtube-player');
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
   let selectedTileIndices   = [];
   let desiredTileCount      = 0;
+
+  let youtubePlayer        = null;
+  let currentVideoUrl      = null;
 
   let currentPreview        = null;
   let previewTimeout        = null;
@@ -61,6 +65,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let fixationDelay = 2000;
   // Global variable for tile size in vh; default 40
   let tileSize = 40;
+
+  function isYouTubeUrl(url) {
+    return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/)|(youtu\.be\/))/.test(url);
+  }
+
+  function getYouTubeId(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtu.be')) {
+        return u.pathname.slice(1);
+      }
+      const id = u.searchParams.get('v');
+      if (id) return id;
+      const m = url.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
 
   /* ----------------------------------------------------------------
      (A) INACTIVITY TIMER LOGIC (optional)
@@ -329,8 +352,13 @@ document.addEventListener('DOMContentLoaded', () => {
      ---------------------------------------------------------------- */
   function resetToChoicesScreen() {
     stopPreview();
-    videoPlayer.pause();
-    videoPlayer.currentTime = 0;
+    if (isYouTubeUrl(currentVideoUrl) && youtubePlayer) {
+      try { youtubePlayer.stopVideo(); } catch {}
+    } else {
+      videoPlayer.pause();
+      videoPlayer.currentTime = 0;
+    }
+    currentVideoUrl = null;
     if (document.exitFullscreen) {
       document.exitFullscreen().catch(err => console.warn(err));
     }
@@ -343,6 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    if (youtubeDiv) youtubeDiv.style.display = "none";
   }
 
   document.addEventListener('keydown', e => {
@@ -363,15 +392,49 @@ document.addEventListener('DOMContentLoaded', () => {
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "flex";
-    videoSource.src = videoUrl;
-    videoPlayer.removeAttribute('controls');
-    videoPlayer.load();
-    videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+    currentVideoUrl = videoUrl;
+    if (isYouTubeUrl(videoUrl)) {
+      videoPlayer.style.display = 'none';
+      if (youtubeDiv) youtubeDiv.style.display = 'block';
+      const id = getYouTubeId(videoUrl);
+      const startPlayback = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
+          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
+        }
+        youtubePlayer.playVideo();
+      };
+      const onReady = () => { startPlayback(); };
+      const onStateChange = (e) => {
+        if (e.data === YT.PlayerState.ENDED) {
+          delete videoResumePositions[videoUrl];
+          resetToChoicesScreen();
+        }
+      };
+      if (!youtubePlayer) {
+        youtubePlayer = new YT.Player('youtube-player', {
+          host: 'https://www.youtube-nocookie.com',
+          videoId: id,
+          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
+          events: { onReady, onStateChange }
+        });
+      } else {
+        youtubePlayer.loadVideoById(id);
+        try { youtubePlayer.addEventListener('onStateChange', onStateChange); } catch {}
+        startPlayback();
       }
-      videoPlayer.play();
-    };
+    } else {
+      if (youtubeDiv) youtubeDiv.style.display = 'none';
+      videoPlayer.style.display = 'block';
+      videoSource.src = videoUrl;
+      videoPlayer.removeAttribute('controls');
+      videoPlayer.load();
+      videoPlayer.onloadedmetadata = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+          videoPlayer.currentTime = videoResumePositions[videoUrl];
+        }
+        videoPlayer.play();
+      };
+    }
     if (videoContainer.requestFullscreen) {
       videoContainer.requestFullscreen().catch(err => console.error(err));
     } else if (videoContainer.webkitRequestFullscreen) {
@@ -383,11 +446,19 @@ document.addEventListener('DOMContentLoaded', () => {
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
           if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
+              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+            } else {
+              videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            }
           } else {
             delete videoResumePositions[videoUrl];
           }
-          videoPlayer.pause();
+          if (isYouTubeUrl(videoUrl) && youtubePlayer) {
+            youtubePlayer.pauseVideo();
+          } else {
+            videoPlayer.pause();
+          }
           resetToChoicesScreen();
         }
       }, limitSeconds * 1000);
