@@ -203,7 +203,7 @@
     #selectPulse{
       position: fixed; left: 0; top: 0; pointer-events: none; z-index: 14;
       width: 22px; height: 22px; border-radius: 50%;
-      transform: translate(-50%,-50%) scale(1);
+      transform: translate(-50%, -50%) scale(1);
       opacity: 0; border: 4px solid transparent;
     }
     .pulse-show{ animation: pulseExpand 420ms ease-out; }
@@ -557,25 +557,41 @@ function playClick(){
 
 /* Inverse speed → width (slow = thicker) with size modes */
 function widthFromSpeed(speed){
-  let minW,maxW;
-  if(sizeMode==="small"){minW=2;maxW=20;}
-  else if(sizeMode==="medium"){minW=6;maxW=36;}
-  else{minW=12;maxW=52;}
-  const s=Math.min(speed/1.8,1);
-  const ease=k=>k*k*(3-2*k); const inv=1-ease(s);
-  return minW+(maxW-minW)*inv;
+  // Small unchanged; Medium & Large slightly reduced
+  let minW, maxW;
+  if (sizeMode === "small")      { minW = 1;  maxW = 10; }  // same
+  else if (sizeMode === "medium"){ minW = 10; maxW = 40; }  // was 12–52
+  else /* large */               { minW = 20; maxW = 80; }  // was 24–104
+
+  const s = Math.min(speed / 1.8, 1);
+  const ease = k => k*k*(3 - 2*k);
+  const inv = 1 - ease(s); // slower movement -> thicker line
+  return minW + (maxW - minW) * inv;
 }
 function stroke(a,b,w,color){
   ctx.strokeStyle=color; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=w;
   ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
 }
 function updateCursor(x,y,w){
-  if(x<sidebarW()){cursorEl.style.opacity=0;return;}
-  cursorEl.style.opacity=.65;
-  cursorEl.style.left=x+'px'; cursorEl.style.top=y+'px';
-  const d=Math.max(12,w); cursorEl.style.width=d+'px'; cursorEl.style.height=d+'px';
-  cursorEl.style.background=currentColor;
+  if (x < sidebarW()){ cursorEl.style.opacity = 0; return; }
+  cursorEl.style.opacity = .65;
+  cursorEl.style.left = x + 'px';
+  cursorEl.style.top  = y + 'px';
+
+  // Preview diameter nudged down for medium/large
+  const baseMin =
+    (sizeMode === 'small')  ? 4  :
+    (sizeMode === 'medium') ? 8  :
+                              10;
+
+  const d = Math.max(baseMin, w);
+  cursorEl.style.width  = d + 'px';
+  cursorEl.style.height = d + 'px';
+  cursorEl.style.background = currentColor;
 }
+
+
+
 
 /* Pointer drawing */
 function handleMove(x,y){
@@ -669,12 +685,18 @@ function buildPalette(n){
     btn.dataset.color = col;
     paletteEl.appendChild(btn);
   });
+
   wireSwatches();
-  const first = document.querySelector('.swatch');
-  if(first) setColor(first);
+
+  // 🔀 Pick a random starting color instead of the first swatch
+  const swatches = document.querySelectorAll('.swatch');
+  if (swatches.length){
+    const rnd = Math.floor(Math.random() * swatches.length);
+    setColor(swatches[rnd]);
+  }
+
   layoutPalette();
 }
-
 /* ===== Dwell indicator ===== */
 const HOVER_DWELL_MS = 650;
 const SAVE_DWELL_MS  = 2500; // long gaze to save
@@ -815,11 +837,35 @@ brushBtns.forEach(b=>{
 
 /* ===== Save PNG helpers ===== */
 function doSave(){
+  // Ensure signature is present on export
   drawSignatureIfEnabled();
-  const link=document.createElement('a');
-  link.href=canvas.toDataURL('image/png');
-  link.download='eyegaze-art.png';
-  link.click();
+
+  // Crop out the sidebar area from the left
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const sideCssW = sidebarW();                       // CSS pixels
+  const sx = Math.max(0, Math.min(canvas.width, Math.round(sideCssW * dpr))); // source x in device px
+  const sw = Math.max(0, canvas.width - sx);
+  const sh = canvas.height;
+
+  if (sw > 0 && sh > 0){
+    const off = document.createElement('canvas');
+    off.width  = sw;
+    off.height = sh;
+    const octx = off.getContext('2d');
+    // Copy only the drawable area (to the right of the sidebar)
+    octx.drawImage(canvas, sx, 0, sw, sh, 0, 0, sw, sh);
+
+    const link=document.createElement('a');
+    link.href=off.toDataURL('image/png');
+    link.download='eyegaze-art.png';
+    link.click();
+  } else {
+    // Fallback: save full canvas if something goes wrong
+    const link=document.createElement('a');
+    link.href=canvas.toDataURL('image/png');
+    link.download='eyegaze-art.png';
+    link.click();
+  }
 }
 
 /* Click to save (immediate) */
@@ -844,7 +890,7 @@ document.getElementById('saveBtn').addEventListener('click', doSave);
     resetDwellCircle(saveBtn);
   });
 
-  // Touchstart: keep existing click behavior for instant save if tapped.
+  // Touchstart: existing click behavior handles instant save if tapped.
 })();
   
 /* Clear via Space (not when UI focused) */

@@ -24,6 +24,10 @@
       background:rgba(255,255,255,.12); color:#0b1a18; font-variant-numeric:tabular-nums
     }
     body.light .value-badge{ background:rgba(0,0,0,.08); color:inherit; }
+    body.playing,
+    body.playing * {
+    cursor: none !important;
+    }
   </style>
 </head>
 <body class="dark">
@@ -74,21 +78,21 @@
           <div class="option-item">
             <label for="sceneSelect" class="teal-label label-block">Scène</label>
             <select id="sceneSelect" class="styled-select">
-              <option value="aurora">Aurora</option>
-              <option value="ripples">Ondes</option>
+              <option value="aurora">Aurore</option>
+              <option value="ripples">Eau</option>
               <option value="fireworks" selected>Feux d’artifice</option>
               <option value="kaleido">Kaleido</option>
               <option value="fireflies">Lucioles</option>
               <option value="confetti">Confetti</option>
               <option value="nebula">Nébuleuse</option>
-              <option value="jelly">Gelée</option>
-              <option value="snow">Neige-Boule</option>
-              <option value="sand">Sable Arc-en-ciel</option>
-              <option value="magnet">Essaim Magnétique</option>
+              <option value="jelly">Sphères</option>
+              <option value="snow">Neige</option>
+              <option value="sand">Sable</option>
+              <option value="magnet">Aimant</option>
               <option value="glass">Vitrail</option>
-              <option value="streamers">Rubans de Soie</option>
-              <option value="laserharp">Harpe Laser</option>
-              <option value="bubblepop">Bulle-Pop</option>
+              <option value="streamers">Soie</option>
+              <option value="laserharp">Laser</option>
+              <option value="bubblepop">Bulles</option>
               <option value="galaxy">Galaxie</option>
             </select>
           </div>
@@ -2650,396 +2654,394 @@ function renderMagnet(dt){
     }
   }
 
-  /* =========================
-     STREAMERS — Rubans de Soie
-     Hundreds of small saturated ribbons + natural wind/rustle + GAZE WOOSH
-     ========================= */
+/* =========================
+   STREAMERS — Rubans de Soie
+   Hundreds of small saturated ribbons + natural wind/rustle + GAZE WOOSH
+   ========================= */
 
-  const RIB2 = { list: [], t: 0 };
+const RIB2 = { list: [], t: 0 };
 
-  const RCFG = {
-    segsMin: 5,
-    segsMax: 8,
-    widthMin: 3.0,
-    widthMax: 7.0,
-    gravity: 380,          // px/s^2
-    airDrag: 0.0022,
-    friction: 0.996,
-    restLen: 12,           // base segment length
-    swayAmp: 22,
-    swayHzMin: 0.15,
-    swayHzMax: 0.35,
-    windAmp: 36,
-    gazeRBase: 95,
-    gazeDamp: 0.77,
-    gazePull: 16,
-    respawnPad: 60
+const RCFG = {
+  segsMin: 5,
+  segsMax: 8,
+  widthMin: 3.0,
+  widthMax: 7.0,
+  gravity: 380,          // px/s^2
+  airDrag: 0.0022,
+  friction: 0.996,
+  restLen: 12,           // base segment length
+  swayAmp: 22,
+  swayHzMin: 0.15,
+  swayHzMax: 0.35,
+  windAmp: 36,
+  // ↑ increase gaze reach by ~50% (95 -> 145)
+  gazeRBase: 145,
+  gazeDamp: 0.77,
+  gazePull: 16,
+  respawnPad: 60
+};
+
+function ribbonsInit(){
+  RIB2.list.length = 0;
+  const n = Math.floor(140 + 260 * sizeNorm()); // hundreds; scales with Taille
+  for (let i=0;i<n;i++) RIB2.list.push(spawnRibbonSmall());
+}
+
+function ribbonsResize(){
+  for (const r of RIB2.list){
+    for (const p of r.pts){
+      p.x = clamp(p.x, -50, W+50);
+      p.y = clamp(p.y, -H-100, H+100);
+    }
+  }
+}
+
+function spawnRibbonSmall(){
+  const segs = Math.floor(RCFG.segsMin + Math.random()*(RCFG.segsMax-RCFG.segsMin+1));
+  const scl  = 0.85 + 0.7*sizeNorm();
+  const rest = RCFG.restLen * scl;
+  const x0   = Math.random()*W;
+  const y0   = -Math.random()*H*0.5 - 20;
+
+  const pts = [];
+  for (let i=0;i<segs;i++){
+    const x = x0 + (Math.random()-0.5)*2;
+    const y = y0 - i*rest*0.92;
+    pts.push({ x, y, px:x, py:y });
+  }
+  return {
+    pts,
+    rest,
+    width: lerp(RCFG.widthMin, RCFG.widthMax, Math.random()) * (0.8 + 0.6*sizeNorm()),
+    hue: (Math.random()*360)|0,
+    sat: 92 + Math.random()*6,
+    light: 52 + Math.random()*6,
+    swayHz: lerp(RCFG.swayHzMin, RCFG.swayHzMax, Math.random()),
+    swayPhase: Math.random()*Math.PI*2,
+    swayAmp: RCFG.swayAmp * (0.7 + 0.8*Math.random()),
+    wind: (Math.random()-0.5)*RCFG.windAmp,
+    _sndT: 0 // per-ribbon sound cooldown timestamp
   };
+}
 
-  function ribbonsInit(){
-    RIB2.list.length = 0;
-    const n = Math.floor(140 + 260 * sizeNorm()); // hundreds; scales with Taille
-    for (let i=0;i<n;i++) RIB2.list.push(spawnRibbonSmall());
+function stepRibbonSmall(r, dt){
+  const pts = r.pts, N = pts.length;
+  const g   = RCFG.gravity;
+  const fr  = Math.pow(RCFG.friction, dt*60);
+  const intensity = mapIntensity();
+
+  const t = RIB2.t + r.swayPhase;
+  const sway = Math.sin(t*2*Math.PI*r.swayHz) * r.swayAmp * (0.7 + 0.9*intensity);
+
+  const gazeR  = (RCFG.gazeRBase * (0.8 + 0.7*sizeNorm())) * (0.8 + 0.9*intensity);
+  const gazeR2 = gazeR*gazeR;
+
+  for (let i=0;i<N;i++){
+    const p = pts[i];
+    let vx = (p.x - p.px);
+    let vy = (p.y - p.py);
+
+    const w = (1 - i/(N-1));
+    vy += g * dt*dt;
+    vx += (sway * w + r.wind*0.25) * dt;
+
+    const sp2 = vx*vx + vy*vy;
+    if (sp2 > 0){
+      const drag = 1 - Math.min(0.4, RCFG.airDrag * sp2);
+      vx *= drag; vy *= drag;
+    }
+
+    const dx = mouse.x - p.x, dy = mouse.y - p.y, d2 = dx*dx + dy*dy;
+    if (d2 < gazeR2){
+      const n = 1 - (d2 / gazeR2);
+      vx *= RCFG.gazeDamp; vy *= RCFG.gazeDamp;
+      vx += dx * (RCFG.gazePull * n) * dt*dt;
+      vy += dy * (RCFG.gazePull * n) * dt*dt;
+    }
+
+    p.px = p.x; p.py = p.y;
+    p.x += vx * fr; p.y += vy * fr;
   }
 
-  function ribbonsResize(){
-    for (const r of RIB2.list){
-      for (const p of r.pts){
-        p.x = clamp(p.x, -50, W+50);
-        p.y = clamp(p.y, -H-100, H+100);
-      }
+  for (let it=0; it<2; it++){
+    for (let i=0;i<N-1;i++){
+      const a = pts[i], b = pts[i+1];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d = Math.hypot(dx,dy) || 1;
+      const diff = (d - r.rest) / d;
+      const corr = 0.5 * diff;
+      a.x += dx * corr; a.y += dy * corr;
+      b.x -= dx * corr; b.y -= dy * corr;
     }
   }
 
-  function spawnRibbonSmall(){
-    const segs = Math.floor(RCFG.segsMin + Math.random()*(RCFG.segsMax-RCFG.segsMin+1));
-    const scl  = 0.85 + 0.7*sizeNorm();
-    const rest = RCFG.restLen * scl;
-    const x0   = Math.random()*W;
-    const y0   = -Math.random()*H*0.5 - 20;
-
-    const pts = [];
-    for (let i=0;i<segs;i++){
-      const x = x0 + (Math.random()-0.5)*2;
-      const y = y0 - i*rest*0.92;
-      pts.push({ x, y, px:x, py:y });
-    }
-    return {
-      pts,
-      rest,
-      width: lerp(RCFG.widthMin, RCFG.widthMax, Math.random()) * (0.8 + 0.6*sizeNorm()),
-      hue: (Math.random()*360)|0,
-      sat: 92 + Math.random()*6,
-      light: 52 + Math.random()*6,
-      swayHz: lerp(RCFG.swayHzMin, RCFG.swayHzMax, Math.random()),
-      swayPhase: Math.random()*Math.PI*2,
-      swayAmp: RCFG.swayAmp * (0.7 + 0.8*Math.random()),
-      wind: (Math.random()-0.5)*RCFG.windAmp,
-      _sndT: 0 // per-ribbon sound cooldown timestamp
-    };
-  }
-
-  function stepRibbonSmall(r, dt){
-    const pts = r.pts, N = pts.length;
-    const g   = RCFG.gravity;
-    const fr  = Math.pow(RCFG.friction, dt*60);
-    const intensity = mapIntensity();
-
-    const t = RIB2.t + r.swayPhase;
-    const sway = Math.sin(t*2*Math.PI*r.swayHz) * r.swayAmp * (0.7 + 0.9*intensity);
-
-    const gazeR  = (RCFG.gazeRBase * (0.8 + 0.7*sizeNorm())) * (0.8 + 0.9*intensity);
-    const gazeR2 = gazeR*gazeR;
-
+  let below = 0;
+  for (let i=0;i<N;i++){ if (pts[i].y > H + RCFG.respawnPad) below++; }
+  if (below === N){
+    const x0 = Math.random()*W, y0 = -20 - Math.random()*H*0.4;
     for (let i=0;i<N;i++){
-      const p = pts[i];
-      let vx = (p.x - p.px);
-      let vy = (p.y - p.py);
+      const x = x0 + (Math.random()-0.5)*2;
+      const y = y0 - i*r.rest*0.9;
+      pts[i].x=x; pts[i].y=y; pts[i].px=x; pts[i].py=y;
+    }
+    r.swayPhase = Math.random()*Math.PI*2;
+    r.wind = (Math.random()-0.5)*RCFG.windAmp;
+    r._sndT = performance.now();
+  }
+}
 
-      const w = (1 - i/(N-1));
-      vy += g * dt*dt;
-      vx += (sway * w + r.wind*0.25) * dt;
+function drawRibbonSmall(r){
+  const pts = r.pts, N = r.pts.length;
+  if (N<2) return;
 
-      const sp2 = vx*vx + vy*vy;
-      if (sp2 > 0){
-        const drag = 1 - Math.min(0.4, RCFG.airDrag * sp2);
-        vx *= drag; vy *= drag;
+  const hue = r.hue, sat = r.sat|0, L = r.light|0;
+  const w   = r.width;
+
+  // saturated body
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${L}%, 0.92)`;
+  ctx.lineWidth   = w;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i=1;i<N;i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+
+  // soft highlight (subtle, not white bars)
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `hsla(${(hue+30)%360}, 95%, 70%, 0.25)`;
+  ctx.lineWidth   = Math.max(1, w*0.35);
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i=1;i<N;i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+}
+
+// --- Sound system -------------------------------------------------------
+
+const RIBSND = {
+  inited: false,
+  master: null,
+  // one shared noise source feeding two chains:
+  // 1) ambient wind, 2) gaze-woosh
+  wind:  { gain: null, bp: null, hp: null, target: 0, cur: 0 },
+  woosh: { gain: null, bp: null, hp: null, target: 0, cur: 0 },
+  src: null,
+  rustleLimiter: { active: 0, max: 6 },
+  lastDwellBoost: 0,
+  cooldownMs: 90
+};
+
+function ribbonsSoundEnsure(){
+  if (menuOpen) return;
+  ensureAC();
+  if (RIBSND.inited){
+    RIBSND.master.gain.value = 0.28 * currentSfxGain();
+    return;
+  }
+
+  // Master
+  const master = ac.createGain();
+  master.gain.value = 0.28 * currentSfxGain();
+  master.connect(ac.destination);
+  RIBSND.master = master;
+
+  // Looping noise buffer
+  const noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i=0;i<data.length;i++) data[i] = (Math.random()*2 - 1) * 0.6;
+  const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  RIBSND.src = src;
+
+  // Chain 1: ambient wind
+  const hp1 = ac.createBiquadFilter(); hp1.type='highpass'; hp1.frequency.value = 120; hp1.Q.value = 0.7;
+  const bp1 = ac.createBiquadFilter(); bp1.type='bandpass'; bp1.frequency.value = 900; bp1.Q.value  = 0.8;
+  const g1  = ac.createGain(); g1.gain.value = 0.0;
+
+  // Chain 2: gaze-woosh (brighter, more “air”)
+  const hp2 = ac.createBiquadFilter(); hp2.type='highpass'; hp2.frequency.value = 320; hp2.Q.value = 0.8;
+  const bp2 = ac.createBiquadFilter(); bp2.type='bandpass'; bp2.frequency.value = 1400; bp2.Q.value = 0.9;
+  const g2  = ac.createGain(); g2.gain.value = 0.0;
+
+  // Connect both chains from the same noise source
+  src.connect(hp1).connect(bp1).connect(g1).connect(master);
+  src.connect(hp2).connect(bp2).connect(g2).connect(master);
+  src.start();
+
+  RIBSND.wind  = { gain:g1, bp:bp1, hp:hp1, target:0.0, cur:0.0 };
+  RIBSND.woosh = { gain:g2, bp:bp2, hp:hp2, target:0.0, cur:0.0 };
+  RIBSND.inited = true;
+}
+
+// brief rustle burst on strong local bend / speed (kept subtle)
+function ribbonsPlayRustle(screenX=0.5, vel=0.6){
+  if (menuOpen) return;
+  if (RIBSND.rustleLimiter.active >= RIBSND.rustleLimiter.max) return;
+  const mscale = currentSfxGain();
+  if (mscale <= 0) return;
+
+  ribbonsSoundEnsure();
+
+  const t = ac.currentTime;
+  const dur = 0.18 + 0.10*Math.random();
+  const frames = Math.max(1, Math.floor(ac.sampleRate * dur));
+  const buf = ac.createBuffer(1, frames, ac.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i=0;i<frames;i++){
+    const n = (Math.random()*2-1);
+    ch[i] = (i>0 ? 0.98*ch[i-1] + 0.02*n : n) * 0.9;
+  }
+  const src = ac.createBufferSource(); src.buffer = buf;
+
+  const hp = ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 800 + 500*Math.random();
+  const bp = ac.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 1.2;
+  const g  = ac.createGain();
+  const pan = (ac.createStereoPanner ? ac.createStereoPanner() : null);
+
+  const peak = 0.08 + 0.22*vel;            // dialed down so woosh leads
+  const A=0.008, D=0.08, R=0.16;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(peak*mscale, t+A);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak*0.25*mscale), t+A+D);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+A+D+R);
+
+  const f0 = 1500 + 700*Math.random();
+  bp.frequency.setValueAtTime(f0, t);
+  bp.frequency.linearRampToValueAtTime(f0 * (0.8 + 0.4*Math.random()), t + dur*0.6);
+
+  src.connect(hp).connect(bp).connect(g);
+  if (pan) { g.connect(pan); pan.pan.value = clamp(screenX*2-1, -1, 1); pan.connect(RIBSND.master); }
+  else { g.connect(RIBSND.master); }
+
+  src.start(t);
+  src.stop(t + dur + 0.05);
+
+  RIBSND.rustleLimiter.active++;
+  src.onended = ()=>{ RIBSND.rustleLimiter.active = Math.max(0, RIBSND.rustleLimiter.active - 1); };
+}
+
+function ribbonsWindSet(target){
+  if (!RIBSND.inited) return;
+  RIBSND.wind.target = clamp(target, 0, 1);
+}
+function ribbonsWooshSet(target){
+  if (!RIBSND.inited) return;
+  RIBSND.woosh.target = clamp(target, 0, 1);
+}
+function ribbonsSoundTick(dt){
+  if (!RIBSND.inited) return;
+
+  // Smooth follow (same for wind & woosh)
+  const follow = (cur, tgt) => lerp(cur, tgt, 1 - Math.pow(0.12, dt*60));
+
+  // Ambient wind (field activity)
+  RIBSND.wind.cur = follow(RIBSND.wind.cur, RIBSND.wind.target);
+  RIBSND.wind.gain.gain.setTargetAtTime(0.08 * RIBSND.wind.cur * currentSfxGain(), ac.currentTime, 0.05);
+  const windF = 850 + 500*RIBSND.wind.cur;
+  RIBSND.wind.bp.frequency.setTargetAtTime(windF, ac.currentTime, 0.12);
+
+  // Gaze woosh (captured ribbons)
+  RIBSND.woosh.cur = follow(RIBSND.woosh.cur, RIBSND.woosh.target);
+  // louder & brighter than wind; quick attack, slower release feel
+  RIBSND.woosh.gain.gain.setTargetAtTime(0.16 * RIBSND.woosh.cur * currentSfxGain(), ac.currentTime, 0.03);
+  const wooshF = 1200 + 1800*RIBSND.woosh.cur;
+  RIBSND.woosh.bp.frequency.setTargetAtTime(wooshF, ac.currentTime, 0.06);
+  RIBSND.woosh.hp.frequency.setTargetAtTime(300 + 400*RIBSND.woosh.cur, ac.currentTime, 0.06);
+}
+
+// --- Render loop (visuals + sound hooks) -------------------------------
+
+let ribDwellPulse = 1.0;
+
+function renderStreamers(dt){
+  // background trail respecting theme
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle = document.body.classList.contains('light')
+    ? `rgba(255,255,255,${mapTrail()})`
+    : `rgba(0,0,0,${mapTrail()})`;
+  ctx.fillRect(0,0,W,H);
+
+  RIB2.t += dt * (0.6 + 0.8*mapIntensity());
+  ribbonsSoundEnsure();
+
+  // (Removed beep) — gentle visual pulse only
+  if (dwellJustCrossed(750)){
+    ribDwellPulse = 1.08;
+    if (RIBSND.inited) RIBSND.lastDwellBoost = 0.6; // nudges ambient wind
+  }
+  ribDwellPulse = lerp(ribDwellPulse, 1.0, 0.06);
+
+  let activity = 0;
+  let captured = 0;
+
+  const nowMs = performance.now();
+  const gazeR  = (RCFG.gazeRBase * (0.8 + 0.7*sizeNorm())) * (0.8 + 0.9*mapIntensity());
+  const gazeR2 = gazeR * gazeR;
+
+  for (const r of RIB2.list){
+    const orig = r.swayAmp;
+    r.swayAmp = orig * ribDwellPulse;
+
+    // head position before step (for speed measure)
+    const h0 = r.pts[0]; const hx0 = h0.x, hy0 = h0.y;
+
+    stepRibbonSmall(r, dt);
+    drawRibbonSmall(r);
+
+    // motion & curvature
+    const hx1 = r.pts[0].x, hy1 = r.pts[0].y;
+    const hvx = (hx1 - hx0) / (dt || 1/60);
+    const hvy = (hy1 - hy0) / (dt || 1/60);
+    const hsp = Math.hypot(hvx, hvy);
+
+    const mid = (r.pts.length/2 | 0);
+    const a = r.pts[Math.max(0, mid-1)], b = r.pts[mid], c = r.pts[Math.min(r.pts.length-1, mid+1)];
+    const abx = b.x - a.x, aby = b.y - a.y;
+    const bcx = c.x - b.x, bcy = c.y - b.y;
+    const curv = Math.abs(abx*bcy - aby*bcx) / ((Math.hypot(abx,aby)*Math.hypot(bcx,bcy)) || 1);
+
+    activity += clamp(hsp/300, 0, 1) * 0.4 + clamp(curv*3, 0, 1) * 0.6;
+
+    // captured by gaze? (use middle point)
+    const dx = mouse.x - b.x, dy = mouse.y - b.y, d2 = dx*dx + dy*dy;
+    const inGaze = d2 < gazeR2;
+    if (inGaze) captured++;
+
+    // optional subtle rustle (kept low, not beepy)
+    if (RIBSND.inited && (nowMs - r._sndT >= RIBSND.cooldownMs)){
+      const bendHit = curv > 0.22;
+      const speedHit = hsp > 260;
+      if (bendHit || speedHit || (inGaze && curv>0.12)){
+        const screenX = clamp(b.x / W, 0, 1);
+        const vel = clamp( (hsp/700) + (curv*0.6), 0.12, 0.8 );
+        ribbonsPlayRustle(screenX, vel);
+        r._sndT = nowMs;
       }
-
-      const dx = mouse.x - p.x, dy = mouse.y - p.y, d2 = dx*dx + dy*dy;
-      if (d2 < gazeR2){
-        const n = 1 - (d2 / gazeR2);
-        vx *= RCFG.gazeDamp; vy *= RCFG.gazeDamp;
-        vx += dx * (RCFG.gazePull * n) * dt*dt;
-        vy += dy * (RCFG.gazePull * n) * dt*dt;
-      }
-
-      p.px = p.x; p.py = p.y;
-      p.x += vx * fr; p.y += vy * fr;
     }
 
-    for (let it=0; it<2; it++){
-      for (let i=0;i<N-1;i++){
-        const a = pts[i], b = pts[i+1];
-        let dx = b.x - a.x, dy = b.y - a.y;
-        let d = Math.hypot(dx,dy) || 1;
-        const diff = (d - r.rest) / d;
-        const corr = 0.5 * diff;
-        a.x += dx * corr; a.y += dy * corr;
-        b.x -= dx * corr; b.y -= dy * corr;
-      }
-    }
-
-    let below = 0;
-    for (let i=0;i<N;i++){ if (pts[i].y > H + RCFG.respawnPad) below++; }
-    if (below === N){
-      const x0 = Math.random()*W, y0 = -20 - Math.random()*H*0.4;
-      for (let i=0;i<N;i++){
-        const x = x0 + (Math.random()-0.5)*2;
-        const y = y0 - i*r.rest*0.9;
-        pts[i].x=x; pts[i].y=y; pts[i].px=x; pts[i].py=y;
-      }
-      r.swayPhase = Math.random()*Math.PI*2;
-      r.wind = (Math.random()-0.5)*RCFG.windAmp;
-      r._sndT = performance.now();
-    }
+    r.swayAmp = orig;
   }
 
-  function drawRibbonSmall(r){
-    const pts = r.pts, N = r.pts.length;
-    if (N<2) return;
-
-    const hue = r.hue, sat = r.sat|0, L = r.light|0;
-    const w   = r.width;
-
-    // saturated body
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${L}%, 0.92)`;
-    ctx.lineWidth   = w;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i=1;i<N;i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.stroke();
-
-    // soft highlight (subtle, not white bars)
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `hsla(${(hue+30)%360}, 95%, 70%, 0.25)`;
-    ctx.lineWidth   = Math.max(1, w*0.35);
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i=1;i<N;i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.stroke();
+  // Ambient wind loudness from global activity
+  const field = clamp(activity / Math.max(1, RIB2.list.length), 0, 1);
+  let windTarget = 0.15 + field * (0.75 * (0.4 + 0.8*mapIntensity()));
+  if (RIBSND.lastDwellBoost > 0){
+    windTarget += RIBSND.lastDwellBoost * 0.15;
+    RIBSND.lastDwellBoost = Math.max(0, RIBSND.lastDwellBoost - dt*1.8);
   }
+  ribbonsWindSet(windTarget);
 
-  // --- Sound system -------------------------------------------------------
+  // GAZE WOOSH: grows with #captured ribbons (nonlinear for feel)
+  const capNormBase = 40 * (0.7 + 0.6*sizeNorm()); // how many ribbons to “fill” woosh
+  const wooshTarget = Math.sqrt( clamp(captured / Math.max(1, capNormBase), 0, 1) );
+  ribbonsWooshSet(wooshTarget);
 
-  const RIBSND = {
-    inited: false,
-    master: null,
-    // one shared noise source feeding two chains:
-    // 1) ambient wind, 2) gaze-woosh
-    wind:  { gain: null, bp: null, hp: null, target: 0, cur: 0 },
-    woosh: { gain: null, bp: null, hp: null, target: 0, cur: 0 },
-    src: null,
-    rustleLimiter: { active: 0, max: 6 },
-    lastDwellBoost: 0,
-    cooldownMs: 90
-  };
+  ribbonsSoundTick(dt);
+}
 
-  function ribbonsSoundEnsure(){
-    if (menuOpen) return;
-    ensureAC();
-    if (RIBSND.inited){
-      RIBSND.master.gain.value = 0.28 * currentSfxGain();
-      return;
-    }
-
-    // Master
-    const master = ac.createGain();
-    master.gain.value = 0.28 * currentSfxGain();
-    master.connect(ac.destination);
-    RIBSND.master = master;
-
-    // Looping noise buffer
-    const noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
-    const data = noiseBuf.getChannelData(0);
-    for (let i=0;i<data.length;i++) data[i] = (Math.random()*2 - 1) * 0.6;
-    const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
-    RIBSND.src = src;
-
-    // Chain 1: ambient wind
-    const hp1 = ac.createBiquadFilter(); hp1.type='highpass'; hp1.frequency.value = 120; hp1.Q.value = 0.7;
-    const bp1 = ac.createBiquadFilter(); bp1.type='bandpass'; bp1.frequency.value = 900; bp1.Q.value  = 0.8;
-    const g1  = ac.createGain(); g1.gain.value = 0.0;
-
-    // Chain 2: gaze-woosh (brighter, more “air”)
-    const hp2 = ac.createBiquadFilter(); hp2.type='highpass'; hp2.frequency.value = 320; hp2.Q.value = 0.8;
-    const bp2 = ac.createBiquadFilter(); bp2.type='bandpass'; bp2.frequency.value = 1400; bp2.Q.value = 0.9;
-    const g2  = ac.createGain(); g2.gain.value = 0.0;
-
-    // Connect both chains from the same noise source
-    src.connect(hp1).connect(bp1).connect(g1).connect(master);
-    src.connect(hp2).connect(bp2).connect(g2).connect(master);
-    src.start();
-
-    RIBSND.wind  = { gain:g1, bp:bp1, hp:hp1, target:0.0, cur:0.0 };
-    RIBSND.woosh = { gain:g2, bp:bp2, hp:hp2, target:0.0, cur:0.0 };
-    RIBSND.inited = true;
-  }
-
-  // brief rustle burst on strong local bend / speed (kept subtle)
-  function ribbonsPlayRustle(screenX=0.5, vel=0.6){
-    if (menuOpen) return;
-    if (RIBSND.rustleLimiter.active >= RIBSND.rustleLimiter.max) return;
-    const mscale = currentSfxGain();
-    if (mscale <= 0) return;
-
-    ribbonsSoundEnsure();
-
-    const t = ac.currentTime;
-    const dur = 0.18 + 0.10*Math.random();
-    const frames = Math.max(1, Math.floor(ac.sampleRate * dur));
-    const buf = ac.createBuffer(1, frames, ac.sampleRate);
-    const ch = buf.getChannelData(0);
-    for (let i=0;i<frames;i++){
-      const n = (Math.random()*2-1);
-      ch[i] = (i>0 ? 0.98*ch[i-1] + 0.02*n : n) * 0.9;
-    }
-    const src = ac.createBufferSource(); src.buffer = buf;
-
-    const hp = ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 800 + 500*Math.random();
-    const bp = ac.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 1.2;
-    const g  = ac.createGain();
-    const pan = (ac.createStereoPanner ? ac.createStereoPanner() : null);
-
-    const peak = 0.08 + 0.22*vel;            // dialed down so woosh leads
-    const A=0.008, D=0.08, R=0.16;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(peak*mscale, t+A);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak*0.25*mscale), t+A+D);
-    g.gain.exponentialRampToValueAtTime(0.0001, t+A+D+R);
-
-    const f0 = 1500 + 700*Math.random();
-    bp.frequency.setValueAtTime(f0, t);
-    bp.frequency.linearRampToValueAtTime(f0 * (0.8 + 0.4*Math.random()), t + dur*0.6);
-
-    src.connect(hp).connect(bp).connect(g);
-    if (pan) { g.connect(pan); pan.pan.value = clamp(screenX*2-1, -1, 1); pan.connect(RIBSND.master); }
-    else { g.connect(RIBSND.master); }
-
-    src.start(t);
-    src.stop(t + dur + 0.05);
-
-    RIBSND.rustleLimiter.active++;
-    src.onended = ()=>{ RIBSND.rustleLimiter.active = Math.max(0, RIBSND.rustleLimiter.active - 1); };
-  }
-
-  function ribbonsWindSet(target){
-    if (!RIBSND.inited) return;
-    RIBSND.wind.target = clamp(target, 0, 1);
-  }
-  function ribbonsWooshSet(target){
-    if (!RIBSND.inited) return;
-    RIBSND.woosh.target = clamp(target, 0, 1);
-  }
-  function ribbonsSoundTick(dt){
-    if (!RIBSND.inited) return;
-
-    // Smooth follow (same for wind & woosh)
-    const follow = (cur, tgt) => lerp(cur, tgt, 1 - Math.pow(0.12, dt*60));
-
-    // Ambient wind (field activity)
-    RIBSND.wind.cur = follow(RIBSND.wind.cur, RIBSND.wind.target);
-    RIBSND.wind.gain.gain.setTargetAtTime(0.08 * RIBSND.wind.cur * currentSfxGain(), ac.currentTime, 0.05);
-    const windF = 850 + 500*RIBSND.wind.cur;
-    RIBSND.wind.bp.frequency.setTargetAtTime(windF, ac.currentTime, 0.12);
-
-    // Gaze woosh (captured ribbons)
-    RIBSND.woosh.cur = follow(RIBSND.woosh.cur, RIBSND.woosh.target);
-    // louder & brighter than wind; quick attack, slower release feel
-    RIBSND.woosh.gain.gain.setTargetAtTime(0.16 * RIBSND.woosh.cur * currentSfxGain(), ac.currentTime, 0.03);
-    const wooshF = 1200 + 1800*RIBSND.woosh.cur;
-    RIBSND.woosh.bp.frequency.setTargetAtTime(wooshF, ac.currentTime, 0.06);
-    RIBSND.woosh.hp.frequency.setTargetAtTime(300 + 400*RIBSND.woosh.cur, ac.currentTime, 0.06);
-  }
-
-  // --- Render loop (visuals + sound hooks) -------------------------------
-
-  let ribDwellPulse = 1.0;
-
-  function renderStreamers(dt){
-    // background trail respecting theme
-    ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle = document.body.classList.contains('light')
-      ? `rgba(255,255,255,${mapTrail()})`
-      : `rgba(0,0,0,${mapTrail()})`;
-    ctx.fillRect(0,0,W,H);
-
-    RIB2.t += dt * (0.6 + 0.8*mapIntensity());
-    ribbonsSoundEnsure();
-
-    // (Removed beep) — gentle visual pulse only
-    if (dwellJustCrossed(750)){
-      ribDwellPulse = 1.08;
-      if (RIBSND.inited) RIBSND.lastDwellBoost = 0.6; // nudges ambient wind
-    }
-    ribDwellPulse = lerp(ribDwellPulse, 1.0, 0.06);
-
-    let activity = 0;
-    let captured = 0;
-
-    const nowMs = performance.now();
-    const gazeR  = (RCFG.gazeRBase * (0.8 + 0.7*sizeNorm())) * (0.8 + 0.9*mapIntensity());
-    const gazeR2 = gazeR * gazeR;
-
-    for (const r of RIB2.list){
-      const orig = r.swayAmp;
-      r.swayAmp = orig * ribDwellPulse;
-
-      // head position before step (for speed measure)
-      const h0 = r.pts[0]; const hx0 = h0.x, hy0 = h0.y;
-
-      stepRibbonSmall(r, dt);
-      drawRibbonSmall(r);
-
-      // motion & curvature
-      const hx1 = r.pts[0].x, hy1 = r.pts[0].y;
-      const hvx = (hx1 - hx0) / (dt || 1/60);
-      const hvy = (hy1 - hy0) / (dt || 1/60);
-      const hsp = Math.hypot(hvx, hvy);
-
-      const mid = (r.pts.length/2 | 0);
-      const a = r.pts[Math.max(0, mid-1)], b = r.pts[mid], c = r.pts[Math.min(r.pts.length-1, mid+1)];
-      const abx = b.x - a.x, aby = b.y - a.y;
-      const bcx = c.x - b.x, bcy = c.y - b.y;
-      const curv = Math.abs(abx*bcy - aby*bcx) / ((Math.hypot(abx,aby)*Math.hypot(bcx,bcy)) || 1);
-
-      activity += clamp(hsp/300, 0, 1) * 0.4 + clamp(curv*3, 0, 1) * 0.6;
-
-      // captured by gaze? (use middle point)
-      const dx = mouse.x - b.x, dy = mouse.y - b.y, d2 = dx*dx + dy*dy;
-      const inGaze = d2 < gazeR2;
-      if (inGaze) captured++;
-
-      // optional subtle rustle (kept low, not beepy)
-      if (RIBSND.inited && (nowMs - r._sndT >= RIBSND.cooldownMs)){
-        const bendHit = curv > 0.22;
-        const speedHit = hsp > 260;
-        if (bendHit || speedHit || (inGaze && curv>0.12)){
-          const screenX = clamp(b.x / W, 0, 1);
-          const vel = clamp( (hsp/700) + (curv*0.6), 0.12, 0.8 );
-          ribbonsPlayRustle(screenX, vel);
-          r._sndT = nowMs;
-        }
-      }
-
-      r.swayAmp = orig;
-    }
-
-    // Ambient wind loudness from global activity
-    const field = clamp(activity / Math.max(1, RIB2.list.length), 0, 1);
-    let windTarget = 0.15 + field * (0.75 * (0.4 + 0.8*mapIntensity()));
-    if (RIBSND.lastDwellBoost > 0){
-      windTarget += RIBSND.lastDwellBoost * 0.15;
-      RIBSND.lastDwellBoost = Math.max(0, RIBSND.lastDwellBoost - dt*1.8);
-    }
-    ribbonsWindSet(windTarget);
-
-    // GAZE WOOSH: grows with #captured ribbons (nonlinear for feel)
-    const capNormBase = 40 * (0.7 + 0.6*sizeNorm()); // how many ribbons to “fill” woosh
-    const wooshTarget = Math.sqrt( clamp(captured / Math.max(1, capNormBase), 0, 1) );
-    ribbonsWooshSet(wooshTarget);
-
-    ribbonsSoundTick(dt);
-  }
-
-  // Initialize ribbons
-  ribbonsInit();
-
-
-
+// Initialize ribbons
+ribbonsInit();
 
   /* =========================
      HARPE LASER (unchanged)

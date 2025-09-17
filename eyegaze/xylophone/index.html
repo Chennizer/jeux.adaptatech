@@ -5,17 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title class="translate" data-fr="Xylophone géant" data-en="Giant Xylophone">Xylophone géant</title>
 
-  <!-- Shared styles used across your eyegaze games -->
   <link rel="stylesheet" href="../../css/games.css">
   <link rel="stylesheet" href="../../css/choiceeyegaze.css">
 
   <style>
-    /* ===== Only game-specific visuals (no menu duplication) ===== */
     :root{
       --c1:#FF595E; --c2:#FF924C; --c3:#FFCA3A; --c4:#8AC926;
       --c5:#1982C4; --c6:#6A4C93; --c7:#B5179E; --c8:#2EC4B6;
       --gap:3rem;
-      --side-pad:6rem; /* space so extreme bars aren't glued to edges */
+      --side-pad:6rem;
     }
     body.light { background-color:#fff; color:#000; }
     body.dark  { background-color:#000; color:#fff; }
@@ -24,7 +22,7 @@
     body.menu-open { background:#000 !important; color:#fff; }
     body.menu-open #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
 
-    /* EN/FR toggle (menu only) – same as Number Hunt */
+    /* EN/FR toggle */
     #langToggle{
       position:fixed; top:10px; right:10px; z-index:99999;
       display:inline-flex; align-items:center; gap:6px;
@@ -33,30 +31,32 @@
     }
     body.dark #langToggle{ background:#111; color:#14b8a6; border-color:#14b8a6; }
 
-    /* Game container (hidden until Start) – same behavior */
+    /* Hide native cursor when class is applied (we'll apply it only after Start) */
+    .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+
     .game-container{
       width:100%; max-width:100vw; height:100%;
-      display:none; flex-direction:column; align-items:center; justify-content:center; padding:10px; box-sizing:border-box;
+      display:none; flex-direction:column; align-items:center; justify-content:center;
+      padding:10px; box-sizing:border-box;
     }
 
-    /* Xylophone row — bars are centered vertically and horizontally */
     #xylophone{
       display:flex; flex-wrap:nowrap; justify-content:center; align-items:center;
       width:100%; gap:var(--gap); padding:0 var(--side-pad);
       min-height:86vh; box-sizing:border-box;
     }
 
-    /* Bars */
     .bar{
       position:relative;
       width:calc((100% - 7 * var(--gap)) / 8);
       min-width:70px; flex:0 0 auto;
       border-radius:1rem;
-      display:flex; align-items:flex-end; justify-content:center; /* label near bottom */
+      display:flex; align-items:flex-end; justify-content:center;
       outline:none; transform-origin:center bottom; user-select:none;
       height:50vh; /* base; overridden per bar below */
-      border:2px solid rgba(0,0,0,0.12);   /* light default */
-      overflow:hidden; cursor:none; /* eyegaze UX */
+      border:2px solid rgba(0,0,0,0.12);
+      overflow:hidden;
+      /* no cursor:none here; we'll hide via .hide-native-cursor after Start */
       transition:filter .15s ease, transform .06s ease;
     }
     body.dark .bar{ border-color:rgba(255,255,255,0.12); }
@@ -94,13 +94,29 @@
       background:rgba(255,0,0,0.5); border-radius:12px; pointer-events:none;
     }
 
-    /* Note label */
-    .bar .note-label{
-      position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
-      padding:4px 8px; border-radius:10px; font-weight:800;
-      background:rgba(255,255,255,0.85); color:#111; mix-blend-mode:screen;
+    /* ===== CUSTOM POINTER (CENTERED RED CIRCLE) ===== */
+    #gazePointer{
+      position:fixed; left:0; top:0;
+      width: var(--gp-size, 36px); height: var(--gp-size, 36px);
+      transform: translate(-50%,-50%); pointer-events:none; z-index:10000;
+      opacity:0; will-change: transform, opacity;
     }
-    body.dark .bar .note-label{ background:rgba(0,0,0,0.6); color:#fff; mix-blend-mode:normal; }
+    #gazePointer::before{
+      content:""; position:absolute; inset:0; border-radius:50%; background:#ff0000;
+    }
+    #gazePointer.gp-dwell::before{ animation: gpPulse 700ms ease-in-out infinite alternate; }
+    @keyframes gpPulse{ from{ transform: scale(1);} to{ transform: scale(1.06);} }
+    @media (prefers-reduced-motion: reduce){ #gazePointer.gp-dwell::before{ animation:none; } }
+
+    /* Compact pointer options UI */
+    .gp-compact { display:flex; flex-direction:column; gap:6px; }
+    .gp-summary { cursor:pointer; font-weight:600; padding:6px 0; opacity:.85; }
+    .gp-advanced { display:flex; flex-direction:column; gap:8px; padding:4px 0 2px; }
+    .gp-row { display:grid; grid-template-columns: 1fr minmax(140px, 1.4fr); align-items:center; gap:10px; }
+    .gp-label { white-space:nowrap; }
+    .gp-range { width:100%; }
+    details#gpDetails { border-left:3px solid rgba(0,150,136,.25); padding-left:10px; }
+    details#gpDetails[open] .gp-summary { opacity:1; }
 
     /* Responsive side padding */
     @media (max-width: 900px){
@@ -112,12 +128,10 @@
   </style>
 </head>
 <body class="light menu-open">
-<!-- ^^^^^ default Light theme for the game, but "menu-open" forces black bg while menu is visible -->
 
-<!-- Language toggle -->
 <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
 
-<!-- ===== Options modal — SAME structure/IDs/classes as Number Hunt ===== -->
+<!-- ===== Options modal ===== -->
 <div id="game-options" class="modal">
   <div id="options-title-bar">
     <h2 id="options-main-title" class="translate" data-fr="Xylophone géant" data-en="Giant Xylophone">Xylophone géant</h2>
@@ -127,19 +141,12 @@
     <div id="mode-divider"></div>
 
     <div id="options-inline-container">
-      <!-- Column 1 (checkbox + volume) -->
+      <!-- Column 1 -->
       <div class="options-column">
         <div class="option-item">
           <label class="teal-label">
             <input type="checkbox" id="muteSFX">
             <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
-          </label>
-        </div>
-
-        <div class="option-item">
-          <label class="teal-label">
-            <input type="checkbox" id="ttsEnabled" checked>
-            <span class="translate" data-fr="Lecture vocale (TTS)" data-en="Voice reading (TTS)">Lecture vocale (TTS)</span>
           </label>
         </div>
 
@@ -152,7 +159,7 @@
         </div>
       </div>
 
-      <!-- Column 2 (theme + note duration) -->
+      <!-- Column 2 -->
       <div class="options-column">
         <div class="option-item">
           <label for="themeSelect" class="teal-label label-block translate" data-fr="Mode" data-en="Theme">Mode</label>
@@ -171,25 +178,52 @@
         </div>
       </div>
 
-      <!-- Column 3 (dwell + size) -->
+      <!-- Column 3 -->
       <div class="options-column">
         <div class="option-item">
           <label for="dwellTimeSlider" class="teal-label">
             <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
             <span id="dwellTimeVal">1500</span> ms
           </label>
-          <!-- Keep the requested 50 ms minimum but identical styling -->
           <input type="range" id="dwellTimeSlider" class="styled-slider" min="50" max="5000" step="50" value="1500">
         </div>
 
-        <div class="option-item">
-          <label for="layoutScale" class="teal-label">
-            <span class="translate" data-fr="Taille :" data-en="Size:">Taille :</span>
-            <span id="layoutScaleVal">1.00</span>
+        <!-- ====== Custom red circle pointer (compact) ====== -->
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer">
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
           </label>
-          <!-- limit to 0.8 – 1.2 like requested -->
-          <input type="range" id="layoutScale" class="styled-slider" min="0.8" max="1.2" step="0.05" value="1.0">
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="120" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
         </div>
+        <!-- ================================================ -->
       </div>
     </div>
 
@@ -201,61 +235,45 @@
 <!-- ===== Game ===== -->
 <div class="game-container">
   <div id="xylophone" role="group" aria-label="Xylophone">
-    <div id="b1" class="bar" aria-label="Do"><span class="note-label">Do</span></div>
-    <div id="b2" class="bar" aria-label="Ré"><span class="note-label">Ré</span></div>
-    <div id="b3" class="bar" aria-label="Mi"><span class="note-label">Mi</span></div>
-    <div id="b4" class="bar" aria-label="Fa"><span class="note-label">Fa</span></div>
-    <div id="b5" class="bar" aria-label="Sol"><span class="note-label">Sol</span></div>
-    <div id="b6" class="bar" aria-label="La"><span class="note-label">La</span></div>
-    <div id="b7" class="bar" aria-label="Si"><span class="note-label">Si</span></div>
-    <div id="b8" class="bar" aria-label="Do"><span class="note-label">Do</span></div>
+    <div id="b1" class="bar" aria-label="Barre 1"></div>
+    <div id="b2" class="bar" aria-label="Barre 2"></div>
+    <div id="b3" class="bar" aria-label="Barre 3"></div>
+    <div id="b4" class="bar" aria-label="Barre 4"></div>
+    <div id="b5" class="bar" aria-label="Barre 5"></div>
+    <div id="b6" class="bar" aria-label="Barre 6"></div>
+    <div id="b7" class="bar" aria-label="Barre 7"></div>
+    <div id="b8" class="bar" aria-label="Barre 8"></div>
   </div>
 </div>
 
 <audio id="correctSound" src="../../sounds/victory.mp3"></audio>
 <audio id="wrongSound"   src="../../sounds/error.mp3"></audio>
 
+<!-- Custom gaze pointer node -->
+<div id="gazePointer" aria-hidden="true"></div>
+
 <script src="../../js/eyegaze-menu.js"></script>
 <script src="../../js/translationmain.js"></script>
 
 <script>
 /* =========================
-   Define note-name arrays FIRST so setLang -> updateNoteLabels can use them
-   ========================= */
-const noteNamesFR=['Do','Ré','Mi','Fa','Sol','La','Si','Do'];
-const noteNamesEN=['C','D','E','F','G','A','B','C'];
-
-/* Translate visible note labels with current language (no dependency on later variables) */
-function updateNoteLabels(){
-  const isFR = (document.documentElement.lang === 'fr');
-  const names = isFR ? noteNamesFR : noteNamesEN;
-  document.querySelectorAll('#xylophone .bar').forEach((bar, i)=>{
-    const label = bar.querySelector('.note-label');
-    if(label) label.textContent = names[i] || '';
-    bar.setAttribute('aria-label', names[i] || '');
-  });
-}
-
-/* =========================
-   Language — storage as source of truth (same as Number Hunt)
+   Language
    ========================= */
 const LS_LANG_KEY='siteLanguage';
 const langToggle=document.getElementById('langToggle');
-
 function getLang(){
-  try { const saved=localStorage.getItem(LS_LANG_KEY); if(saved==='en'||saved==='fr') return saved; } catch(e){}
+  try{const s=localStorage.getItem(LS_LANG_KEY); if(s==='en'||s==='fr') return s;}catch(e){}
   return (document.documentElement.lang==='en')?'en':'fr';
 }
 function setLang(lang){
   const safe=(lang==='en')?'en':'fr';
   document.documentElement.lang=safe;
-  try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e){}
+  try{localStorage.setItem(LS_LANG_KEY,safe);}catch(e){}
   document.querySelectorAll('.translate').forEach(el=>{
     const fr=el.getAttribute('data-fr'), en=el.getAttribute('data-en');
-    if(safe==='fr' && fr!=null) el.textContent=fr;
-    if(safe==='en' && en!=null) el.textContent=en;
+    if(safe==='fr'&&fr!=null) el.textContent=fr;
+    if(safe==='en'&&en!=null) el.textContent=en;
   });
-  updateNoteLabels(); // safe now
 }
 (function normalizeLangOnLoad(){
   let initial='fr';
@@ -269,13 +287,10 @@ function setLang(lang){
   }catch(e){ initial=(document.documentElement.lang==='en')?'en':'fr'; }
   setLang(initial);
 })();
-langToggle.addEventListener('click', ()=>{
-  setLang(getLang()==='fr' ? 'en' : 'fr');
-  choosePreferredVoice();
-});
+langToggle.addEventListener('click', ()=> setLang(getLang()==='fr'?'en':'fr'));
 
 /* =========================
-   Controls & UI — identical bindings
+   Controls & UI
    ========================= */
 const muteSFX       = document.getElementById('muteSFX');
 const sfxVol        = document.getElementById('sfxVol');
@@ -284,38 +299,27 @@ const dwellSlider   = document.getElementById('dwellTimeSlider');
 const dwellTimeVal  = document.getElementById('dwellTimeVal');
 const themeSelect   = document.getElementById('themeSelect');
 const startButton   = document.getElementById('startButton');
-const ttsEnabled    = document.getElementById('ttsEnabled');
 const layoutScaleEl = document.getElementById('layoutScale');
 const layoutScaleVal= document.getElementById('layoutScaleVal');
 const timeSlider    = document.getElementById('timeSlider');
 const timeVal       = document.getElementById('timeVal');
 
-const LS_KEYS = { ttsEnabled: 'xylophone:ttsEnabled' };
+/* Pointer controls */
+const showGazePointer = document.getElementById('showGazePointer');
+const gpDetails       = document.getElementById('gpDetails');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
 
-(function initPersistedControls(){
-  try {
-    const en = localStorage.getItem(LS_KEYS.ttsEnabled);
-    if (en === null) {
-      ttsEnabled.checked = true;
-      localStorage.setItem(LS_KEYS.ttsEnabled, 'true');
-    } else {
-      ttsEnabled.checked = (en === 'true');
-    }
-  } catch(e) {
-    ttsEnabled.checked = true;
-  }
-})();
+/* Init */
 initEyegazeMenu?.();
-
-sfxVol.addEventListener('input', ()=> sfxVolVal.textContent = sfxVol.value);
-timeSlider.addEventListener('input', ()=> timeVal.textContent = `${parseFloat(timeSlider.value).toFixed(1)}s`);
-dwellSlider.addEventListener('input', ()=> dwellTimeVal.textContent = dwellSlider.value);
-ttsEnabled.addEventListener('change', ()=> {
-  try { localStorage.setItem(LS_KEYS.ttsEnabled, String(ttsEnabled.checked)); } catch(e){}
-});
+sfxVol.addEventListener('input', ()=> sfxVolVal.textContent=sfxVol.value);
+timeSlider.addEventListener('input', ()=> timeVal.textContent=`${parseFloat(timeSlider.value).toFixed(1)}s`);
+dwellSlider.addEventListener('input', ()=> dwellTimeVal.textContent=dwellSlider.value);
 layoutScaleEl.addEventListener('input', ()=>{
-  layoutScaleVal.textContent = parseFloat(layoutScaleEl.value).toFixed(2);
-  if (document.querySelector('.game-container').style.display === 'flex') applyLayoutScale();
+  layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
+  if (document.querySelector('.game-container').style.display==='flex') applyLayoutScale();
 });
 
 /* =========================
@@ -360,39 +364,6 @@ function playNote(i){
 }
 
 /* =========================
-   TTS (optional)
-   ========================= */
-let preferredVoice=null;
-function choosePreferredVoice(){
-  const ss=window.speechSynthesis; if(!ss||!ss.getVoices) return;
-  const voices=ss.getVoices()||[]; if(!voices.length) return;
-  const lang=getLang(); const by=fn=>voices.find(fn);
-  preferredVoice=(lang==='fr')
-    ? (by(v=>/sylvie/i.test(v.name||'')&&/^fr[-_]?CA/i.test(v.lang||''))||
-       by(v=>/^fr[-_]?CA/i.test(v.lang||''))||
-       by(v=>/^fr[-_]?FR/i.test(v.lang||''))||
-       by(v=>(v.lang||'').toLowerCase().startsWith('fr'))||
-       voices[0])
-    : (by(v=>/^en[-_]?CA/i.test(v.lang||''))||
-       by(v=>/^en[-_]?US/i.test(v.lang||''))||
-       by(v=>/^en[-_]?GB/i.test(v.lang||''))||
-       by(v=>(v.lang||'').toLowerCase().startsWith('en'))||
-       voices[0]);
-}
-function speak(text){
-  if(!('speechSynthesis' in window)) return;
-  const uiVol=parseInt(sfxVol.value,10);
-  const volume=Math.max(0,Math.min(1,(isNaN(uiVol)?50:uiVol)/100));
-  const u=new SpeechSynthesisUtterance(text);
-  if(preferredVoice){ u.voice=preferredVoice; u.lang=preferredVoice.lang || (getLang()==='fr'?'fr-CA':'en-US'); }
-  else { u.lang=(getLang()==='fr'?'fr-CA':'en-US'); }
-  u.rate=1.0; u.volume=volume;
-  try{ speechSynthesis.cancel(); }catch(e){}
-  speechSynthesis.speak(u);
-}
-if('speechSynthesis' in window){ speechSynthesis.addEventListener('voiceschanged', choosePreferredVoice); choosePreferredVoice(); }
-
-/* =========================
    Eyegaze dwell activation
    ========================= */
 let currentOverlay=null, hoverTimeout=null, activeHoverBar=null;
@@ -435,18 +406,12 @@ function stopHover(){
    ========================= */
 const bars=[...document.querySelectorAll('.bar')];
 let flashOn=true;
-
 function triggerBar(bar){
   const i=bars.indexOf(bar); if(i<0) return;
   if(flashOn) bar.classList.add('flash');
   playNote(i);
   setTimeout(()=>bar.classList.remove('flash'),220);
-  if(ttsEnabled.checked){
-    const name=(getLang()==='fr')?noteNamesFR[i]:noteNamesEN[i];
-    speak(name);
-  }
 }
-
 bars.forEach(bar=>{
   bar.addEventListener('pointerenter', ()=> startHover(bar));
   bar.addEventListener('pointerleave', stopHover);
@@ -478,7 +443,7 @@ layoutScaleEl.addEventListener('input', ()=>{
 });
 
 /* =========================
-   Start flow (matches Number Hunt behavior)
+   Start flow
    ========================= */
 function syncEyegazeSettingsFromUI(){
   try{
@@ -486,37 +451,39 @@ function syncEyegazeSettingsFromUI(){
       eyegazeSettings.sfxMuted=!!muteSFX.checked;
       eyegazeSettings.sfxVolume=parseInt(sfxVol.value,10)||100;
       eyegazeSettings.dwellTime=parseInt(dwellSlider.value,10)||1500;
-      eyegazeSettings.ttsEnabled=!!ttsEnabled.checked;
+
+      /* pointer */
+      eyegazeSettings.showGazePointer  = !!showGazePointer.checked;
+      eyegazeSettings.gazePointerSize  = parseInt(gazeSize.value,10) || 36;
+      eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, (parseInt(gazeOpacity.value,10)||100)/100));
     }
   }catch(e){}
 }
 
 function startGame(){
-  // Request fullscreen like other games
+  // Fullscreen
   const root=document.documentElement;
   (root.requestFullscreen||root.webkitRequestFullscreen||root.msRequestFullscreen||function(){}).call(root);
 
-  // Only show translate on main menu
+  // Hide menu-open state & toggle language button
+  document.body.classList.remove('menu-open');
   langToggle.style.display='none';
-
-  syncEyegazeSettingsFromUI();
 
   // Theme + audio + timing
   applyTheme(themeSelect.value || 'light');
   master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol.value,10)||100)/100));
   timeScale=parseFloat(timeSlider.value)||1.0;
 
-  // Hide menu-open state so body uses selected theme during gameplay
-  document.body.classList.remove('menu-open');
-
   // Show game
   document.querySelector('.game-container').style.display='flex';
   document.getElementById('game-options').style.display='none';
 
   if(ctx.state==='suspended') ctx.resume();
-  choosePreferredVoice();
-  updateNoteLabels();
   applyLayoutScale();
+
+  syncEyegazeSettingsFromUI();
+  updateGazeStyles();
+  applyPointerToggle(); // hide native cursor only now (after Start)
 
   try{ if(window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); }catch(e){}
 }
@@ -524,7 +491,7 @@ startButton.addEventListener('click', startGame);
 
 /* Live updates */
 sfxVol.addEventListener('input', ()=>{ master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol.value,10)||100)/100)); });
-themeSelect.addEventListener('change', ()=> applyTheme(themeSelect.value));
+themeSelect.addEventListener('change', ()=> { applyTheme(themeSelect.value); applyPointerToggle(); });
 window.addEventListener('resize', applyLayoutScale);
 
 /* Init UI numbers */
@@ -533,8 +500,61 @@ window.addEventListener('resize', applyLayoutScale);
   timeVal.textContent=`${parseFloat(timeSlider.value).toFixed(1)}s`;
   dwellTimeVal.textContent=dwellSlider.value;
   layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
-  updateNoteLabels(); // ensure labels match initial language on load (menu visible)
 })();
+
+/* =========================
+   CUSTOM POINTER — logic
+   ========================= */
+const gazePointer = document.getElementById('gazePointer');
+
+function setPointerPos(x, y){
+  gazePointer.style.left = x + 'px';
+  gazePointer.style.top  = y + 'px';
+}
+
+let lastPointer = { x: null, y: null };
+const rawHandler  = (e) => { lastPointer.x=e.clientX; lastPointer.y=e.clientY; setPointerPos(e.clientX,e.clientY); };
+const moveHandler = (e) => { lastPointer.x=e.clientX; lastPointer.y=e.clientY; setPointerPos(e.clientX,e.clientY); };
+if ('onpointerrawupdate' in window) window.addEventListener('pointerrawupdate', rawHandler, {passive:true});
+window.addEventListener('pointermove', moveHandler, {passive:true});
+
+window.addEventListener('pointerleave', ()=>{
+  gazePointer._savedOpacity = gazePointer.style.opacity;
+  gazePointer.style.opacity = 0;
+});
+window.addEventListener('pointerenter', ()=>{
+  updateGazeStyles();
+  if (lastPointer.x != null && lastPointer.y != null) setPointerPos(lastPointer.x, lastPointer.y);
+});
+
+function updateGazeStyles(){
+  const size = (parseInt(gazeSize?.value,10) || 36);
+  const opct = Math.max(0, Math.min(1, (parseInt(gazeOpacity?.value,10) || 100) / 100));
+  if (gazeSizeVal)    gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct*100);
+  gazePointer.style.setProperty('--gp-size', size + 'px');
+
+  const gameShown = (document.querySelector('.game-container').style.display === 'flex');
+  gazePointer.style.opacity = (showGazePointer?.checked && gameShown) ? opct : 0;
+}
+
+function applyPointerToggle(){
+  const gameShown = (document.querySelector('.game-container').style.display === 'flex');
+  const enable = !!showGazePointer.checked && gameShown;
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  if (gpDetails) gpDetails.open = enable ? gpDetails.open : false;
+  updateGazeStyles();
+  if (enable && lastPointer.x != null && lastPointer.y != null) setPointerPos(lastPointer.x, lastPointer.y);
+}
+
+/* UI listeners for pointer controls */
+[showGazePointer, gazeSize, gazeOpacity].forEach(el=>{
+  if (el) el.addEventListener('input', ()=>{
+    syncEyegazeSettingsFromUI();
+    updateGazeStyles();
+    applyPointerToggle();
+  });
+});
 </script>
 </body>
 </html>
