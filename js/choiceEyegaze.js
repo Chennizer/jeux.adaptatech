@@ -70,8 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let requirePointerMotion = false;
   let lastPointerPosition = null;
   let pointerMotionOrigin = null;
+  let pendingHover = null;
 
-  function clearHoverState() {
+  function clearHoverState({ clearPending = true } = {}) {
     if (hoverTimeoutId) {
       clearTimeout(hoverTimeoutId);
       hoverTimeoutId = null;
@@ -81,13 +82,21 @@ document.addEventListener('DOMContentLoaded', () => {
       hoveredTile = null;
     }
     hoveredChoice = null;
+    if (clearPending) {
+      pendingHover = null;
+    }
   }
 
   function requirePointerMotionBeforeHover({ clearSelection = true } = {}) {
     if (clearSelection) {
       clearHoverState();
+    } else {
+      pendingHover = null;
     }
     requirePointerMotion = true;
+    if (tileContainer) {
+      tileContainer.classList.add('requires-pointer-motion');
+    }
     pointerMotionOrigin = lastPointerPosition
       ? { x: lastPointerPosition.x, y: lastPointerPosition.y }
       : null;
@@ -111,7 +120,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleTileEnter(tile, choice, options = {}) {
     const { playSound = true } = options;
     if (videoPlaying) return;
-    const tileChanged = hoveredTile !== tile;
+    const previousTile = hoveredTile || (pendingHover && pendingHover.tile) || null;
+    const tileChanged = previousTile !== tile;
 
     if (hoverTimeoutId) {
       clearTimeout(hoverTimeoutId);
@@ -120,19 +130,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (tileChanged && hoveredTile) {
       hoveredTile.classList.remove('selected');
+      hoveredTile = null;
+      hoveredChoice = null;
+    }
+
+    if (requirePointerMotion) {
+      pendingHover = { tile, choice, playSound: playSound && tileChanged };
+      return;
     }
 
     hoveredTile = tile;
     hoveredChoice = choice;
     tile.classList.add('selected');
+    pendingHover = null;
 
     if (playSound && tileChanged) {
       playCycleSound();
     }
 
-    if (!requirePointerMotion) {
-      scheduleHoverCountdown();
-    }
+    scheduleHoverCountdown();
   }
 
   function handleTileLeave(tile) {
@@ -140,6 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
       clearHoverState();
     } else {
       tile.classList.remove('selected');
+      if (pendingHover && pendingHover.tile === tile) {
+        pendingHover = null;
+      }
     }
   }
 
@@ -489,27 +508,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const dx = clientX - pointerMotionOrigin.x;
       const dy = clientY - pointerMotionOrigin.y;
 
-      if (Math.hypot(dx, dy) >= POINTER_MOVE_THRESHOLD) {
-        requirePointerMotion = false;
-        pointerMotionOrigin = null;
-
-        if (!hoveredTile) {
-          const tile = targetElement ? targetElement.closest('.tile') : null;
-          if (
-            tile &&
-            tileChoiceMap.has(tile) &&
-            tileContainer.contains(tile) &&
-            tileContainer.style.display !== 'none'
-          ) {
-            handleTileEnter(tile, tileChoiceMap.get(tile), { playSound: false });
-          }
-        }
-
-        if (hoveredTile && hoveredChoice) {
-          scheduleHoverCountdown();
-        }
+      if (Math.hypot(dx, dy) < POINTER_MOVE_THRESHOLD) {
+        return;
       }
-      return;
+
+      requirePointerMotion = false;
+      pointerMotionOrigin = null;
+      if (tileContainer) {
+        tileContainer.classList.remove('requires-pointer-motion');
+      }
+
+      if (pendingHover) {
+        const { tile, choice, playSound } = pendingHover;
+        pendingHover = null;
+        handleTileEnter(tile, choice, { playSound });
+        return;
+      }
     }
 
     if (!videoPlaying) {
@@ -518,6 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tile &&
         tileChoiceMap.has(tile) &&
         tileContainer.contains(tile) &&
+        tileContainer.style.display !== 'none' &&
         tile !== hoveredTile
       ) {
         handleTileEnter(tile, tileChoiceMap.get(tile));
