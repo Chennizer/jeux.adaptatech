@@ -272,6 +272,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Expose for external scripts (e.g. customVideoChoices.js)
+  window.populateTilePickerGrid = populateTilePickerGrid;
+
   function updateStartButtonState() {
     startGameButton.disabled = (selectedTileIndices.length !== desiredTileCount);
   }
@@ -414,7 +417,9 @@ document.addEventListener('DOMContentLoaded', () => {
       document.documentElement.webkitRequestFullscreen();
     }
     currentCategory = "all";
-    categorySelect.value = "all";
+    if (categorySelect) {
+      categorySelect.value = "all";
+    }
     populateTilePickerGrid();
   });
 
@@ -453,8 +458,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  categorySelect.addEventListener('change', e => {
-    currentCategory = e.target.value;
+  if (categorySelect) {
+    categorySelect.addEventListener('change', e => {
+      currentCategory = e.target.value;
+      populateTilePickerGrid();
+    });
+  }
+
+  // Populate grid if choices already exist (e.g., restored from IndexedDB)
+  if (Array.isArray(mediaChoices) && mediaChoices.length > 0) {
     populateTilePickerGrid();
-  });
+  }
 });
