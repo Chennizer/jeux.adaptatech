@@ -143,6 +143,7 @@ function revokeAllVideos() {
 }
 
 async function addFiles(files) {
+  let added = false;
   for (const file of files) {
     if (!VIDEO_RX.test(file.name)) continue;
     const url = URL.createObjectURL(file);
@@ -158,9 +159,17 @@ async function addFiles(files) {
       audioElement: audio,
       category: 'custom'
     });
+    added = true;
     if (typeof populateTilePickerGrid === 'function') {
       populateTilePickerGrid();
     }
+  }
+  if (
+    added &&
+    typeof window !== 'undefined' &&
+    typeof window.requireEyegazePointerMotion === 'function'
+  ) {
+    window.requireEyegazePointerMotion({ clearHover: true });
   }
 }
 
@@ -280,6 +289,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       await clearRepoHandle();
       await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+      if (
+        typeof window !== 'undefined' &&
+        typeof window.requireEyegazePointerMotion === 'function'
+      ) {
+        window.requireEyegazePointerMotion({ clearHover: true });
+      }
     });
   }
 });
