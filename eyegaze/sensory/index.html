@@ -635,7 +635,23 @@
     }
   }
 
+  function stopSceneAudio(sceneId) {
+    if (!sceneId) return;
+
+    if (sceneId === 'kaleido' && typeof KALEIDO_SND !== 'undefined' && KALEIDO_SND.silenceNow) {
+      KALEIDO_SND.silenceNow();
+    } else if (sceneId === 'laserharp' && typeof harpSilenceAll === 'function') {
+      harpSilenceAll();
+    } else if (sceneId === 'streamers' && typeof ribbonsSoundSilence === 'function') {
+      ribbonsSoundSilence();
+    }
+  }
+
   function setCurrentScene(sceneId, opts = {}) {
+    if (sceneId !== currentSceneId) {
+      stopSceneAudio(currentSceneId);
+    }
+
     currentSceneId = sceneId;
     if (!opts.fromSeries && sceneSel) {
       sceneSel.value = sceneId;
@@ -3726,6 +3742,31 @@ function ribbonsSoundTick(dt){
   RIBSND.woosh.hp.frequency.setTargetAtTime(300 + 400*RIBSND.woosh.cur, ac.currentTime, 0.06);
 }
 
+function ribbonsSoundSilence(){
+  if (!RIBSND.inited || !ac) return;
+
+  try {
+    const t = ac.currentTime;
+    RIBSND.wind.target = 0;
+    RIBSND.woosh.target = 0;
+
+    if (RIBSND.wind.gain) {
+      RIBSND.wind.gain.gain.cancelScheduledValues(t);
+      RIBSND.wind.gain.gain.setTargetAtTime(0, t, 0.05);
+    }
+
+    if (RIBSND.woosh.gain) {
+      RIBSND.woosh.gain.gain.cancelScheduledValues(t);
+      RIBSND.woosh.gain.gain.setTargetAtTime(0, t, 0.05);
+    }
+
+    if (RIBSND.master) {
+      RIBSND.master.gain.cancelScheduledValues(t);
+      RIBSND.master.gain.setTargetAtTime(0, t, 0.05);
+    }
+  } catch (err) {}
+}
+
 // --- Render loop (visuals + sound hooks) -------------------------------
 
 let ribDwellPulse = 1.0;
@@ -3898,6 +3939,38 @@ ribbonsInit();
       v.o1.stop(t+0.22); v.o2.stop(t+0.22);
     }catch(e){}
     beamVoice[i]=null;
+  }
+  function harpSilenceAll(){
+    const hasAC = !!ac;
+    const t = hasAC ? ac.currentTime : 0;
+
+    for (let i=0; i<beamVoice.length; i++){
+      const v = beamVoice[i];
+      if (!v) { beamHold[i] = false; continue; }
+
+      try {
+        if (hasAC){
+          v.g.gain.cancelScheduledValues(t);
+          v.g.gain.setValueAtTime(v.g.gain.value, t);
+          v.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+          v.o1.stop(t + 0.08);
+          v.o2.stop(t + 0.08);
+        } else {
+          v.o1.stop();
+          v.o2.stop();
+        }
+      } catch (err) {}
+
+      beamVoice[i] = null;
+      beamHold[i] = false;
+    }
+
+    if (hasAC && harpEnsureAudio.master){
+      try {
+        harpEnsureAudio.master.gain.cancelScheduledValues(t);
+        harpEnsureAudio.master.gain.setTargetAtTime(0, t, 0.05);
+      } catch (err) {}
+    }
   }
   function updateVoice(i){
     const v=beamVoice[i]; if(!v||!ac) return;
