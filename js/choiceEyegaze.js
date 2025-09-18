@@ -39,6 +39,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
 
+  const pointerCtrl = window.gazePointerCtrl || null;
+  const isPointerActive = () => {
+    const tilesVisible = tileContainer && tileContainer.style.display !== 'none';
+    const videoVisible = videoContainer && videoContainer.style.display !== 'none';
+    return !!(tilesVisible || videoVisible);
+  };
+  const refreshPointerState = () => { pointerCtrl?.applyToggle(); };
+  const setPointerDwell = (active) => { pointerCtrl?.setDwell(active); };
+
+  pointerCtrl?.setActiveCheck(isPointerActive);
+
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
   let selectedTileIndices   = [];
@@ -83,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     hoveredChoice = null;
     pendingGuardedHover = null;
+    setPointerDwell(false);
   }
 
   function requirePointerMotionBeforeHover({ clearSelection = true } = {}) {
@@ -97,21 +109,27 @@ document.addEventListener('DOMContentLoaded', () => {
     pointerMotionOrigin = lastPointerPosition
       ? { x: lastPointerPosition.x, y: lastPointerPosition.y }
       : null;
+    setPointerDwell(false);
   }
 
   function scheduleHoverCountdown() {
     if (!hoveredTile || !hoveredChoice || videoPlaying) {
+      setPointerDwell(false);
       return;
     }
     if (hoverTimeoutId) {
       clearTimeout(hoverTimeoutId);
+      hoverTimeoutId = null;
+      setPointerDwell(false);
     }
     hoverTimeoutId = setTimeout(() => {
       if (!videoPlaying && hoveredTile && hoveredChoice) {
         stopPreview();
         playVideo(hoveredChoice.video);
       }
+      setPointerDwell(false);
     }, fixationDelay);
+    setPointerDwell(true);
   }
 
   function handleTileEnter(tile, choice, options = {}) {
@@ -124,6 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hoverTimeoutId) {
         clearTimeout(hoverTimeoutId);
         hoverTimeoutId = null;
+        setPointerDwell(false);
       }
 
       if (hoveredTile) {
@@ -144,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hoverTimeoutId) {
       clearTimeout(hoverTimeoutId);
       hoverTimeoutId = null;
+      setPointerDwell(false);
     }
 
     if (tileChanged && hoveredTile) {
@@ -170,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       tile.classList.remove('selected');
     }
+    setPointerDwell(false);
   }
 
   /* ----------------------------------------------------------------
@@ -419,6 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tileContainer.style.alignItems = "center";
     }
     tileContainer.style.display = "flex";
+    refreshPointerState();
   }
 
   /* ----------------------------------------------------------------
@@ -442,6 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    refreshPointerState();
   }
 
   document.addEventListener('keydown', e => {
@@ -463,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "flex";
+    refreshPointerState();
     videoSource.src = videoUrl;
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
@@ -585,6 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
       categorySelect.value = "all";
     }
     populateTilePickerGrid();
+    refreshPointerState();
   });
 
   startGameButton.addEventListener('click', () => {
