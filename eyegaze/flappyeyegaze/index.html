@@ -784,6 +784,7 @@ function makeFirStyle(){
   };
 }
 // 1) Tronc plus mince (garde les rainures)
+// 1) Tronc plus mince (garde les rainures)
 function drawTrunkRect(r, style){
   const grad = ctx.createLinearGradient(r.x, 0, r.x + r.w, 0);
   grad.addColorStop(0, style.trunk2);
@@ -801,6 +802,7 @@ function drawTrunkRect(r, style){
 }
 
 // 2) Tiers géants couvrant toute la longueur, AVEC chevauchement
+// Bas = 2x le haut, pointe qui dépasse, et recouvrement du haut de tronc.
 function buildFirHitboxes(t){
   const xCenter = t.x + t.w/2;
   const bottomY = t.topH + t.gap;
@@ -809,67 +811,75 @@ function buildFirHitboxes(t){
   const topStemH    = Math.max(0, t.topH);
   const bottomStemH = Math.max(0, worldBottom - bottomY);
 
-  // >>> tronc aminci
+  // tronc mince (sera recouvert)
   const trunkW = Math.max(8, Math.round(PIPE_W * 0.55));
 
   // cône: étroit à la pointe, large vers l’ouverture
   const baseTierW = Math.max(trunkW*3.0, PIPE_W*3.2);
   const tipTierW  = Math.max(trunkW*1.05, PIPE_W*1.20);
 
-  // 4 ou 5 gros triangles
-  const TIERS = 5;                       // mets 4 si tu veux 4 étages
-  const OVERHANG = Math.max(10, PIPE_W*0.45);   // la pointe dépasse
+  // grands triangles + chevauchement
+  const TIERS_TOP    = 4;   // 4 grands étages en haut
+  const TIERS_BOTTOM = 5;   // 5 en bas (peut rester 4 si tu veux)
+  const OVERLAP      = Math.max(8, Math.round(PIPE_W * 0.28));
+  const OVERHANG     = Math.max(10, PIPE_W * 0.45);  // pointe qui dépasse
+  const GAP_COVER    = Math.max(6,  Math.round(PIPE_W * 0.18)); // mord dans l’ouverture pour cacher le haut du tronc
 
-  // chevauchement vertical entre étages (plus grand = plus “touffu”)
-  const OVERLAP = Math.max(8, Math.round(PIPE_W * 0.28)); 
+  // On force le ratio bas = 2x haut, sans dépasser la longueur dispo.
+  const availTop    = topStemH + OVERHANG;
+  const availBottom = bottomStemH + OVERHANG;
+  const topTarget   = Math.min(availTop, Math.max(0, (availBottom)/2)); // haut <= moitié du bas dispo
+  const botTarget   = Math.min(availBottom, topTarget * 2);             // bas = 2x haut (borné par dispo)
 
-  // utilitaire: calcule une hauteur de triangle telle que
-  // N*h - (N-1)*overlap = longueur à couvrir
-  function tierHeightToCover(totalLen){
-    return (totalLen + (TIERS-1)*OVERLAP) / TIERS;
-  }
+  // utilitaire: hauteur de triangle pour couvrir "total" avec chevauchement
+  function tierH(total, n){ return (total + (n-1)*OVERLAP) / n; }
 
   const tiersTop = [];
   const tiersBot = [];
 
-  function pushTier(list, apexY, tierH, w, inverted){
+  function pushTier(list, apexY, h, w, inverted){
     list.push({
       x: Math.round(xCenter - w/2),
-      y: Math.round(inverted ? (apexY - tierH) : apexY),
+      y: Math.round(inverted ? (apexY - h) : apexY),
       w: Math.round(w),
-      h: Math.round(tierH),
+      h: Math.round(h),
       apexY,
       inverted
     });
   }
 
-  // ----- PARTIE HAUTE (inversée) : même look mais pointe AU-DESSUS du tronc
-  if (topStemH > 0){
-    const total = topStemH + OVERHANG;           // tout couvrir + pointe
-    const tierH = tierHeightToCover(total);      // tient compte du chevauchement
-    const firstApex = t.topH - topStemH - OVERHANG; // point le plus haut
-    for (let i=0;i<TIERS;i++){
-      const tNorm = (i + 0.5) / TIERS;                       // 0..1
-      const w = tipTierW + tNorm * (baseTierW - tipTierW);   // s’élargit vers l’ouverture
-      const apexY = firstApex + i * (tierH - OVERLAP);       // chevauchement
-      pushTier(tiersTop, apexY, tierH, w, /*inverted*/ true);
-    }
-  }
-
-  // ----- PARTIE BASSE : même recette, vers le bas
-  if (bottomStemH > 0){
-    const total = bottomStemH + OVERHANG;
-    const tierH = tierHeightToCover(total);
-    const firstApex = bottomY;                               // part du bord du tronc
-    for (let i=0;i<TIERS;i++){
-      const tNorm = (i + 0.5) / TIERS;
+  // ----- PARTIE HAUTE (inversée) -----
+  if (topStemH > 0 && topTarget > 0){
+    const hTop = tierH(topTarget, TIERS_TOP);
+    // première pointe au-dessus du sommet + on finit en mordant légèrement l’ouverture
+    const firstApex = t.topH - topStemH - OVERHANG; // pointe la plus haute
+    for (let i=0;i<TIERS_TOP;i++){
+      // 0..1 : de la pointe vers la base (ouverture)
+      const tNorm = (i + 0.5) / TIERS_TOP;
       const w = tipTierW + tNorm * (baseTierW - tipTierW);
-      const apexY = firstApex + i * (tierH - OVERLAP);
-      pushTier(tiersBot, apexY, tierH, w, /*inverted*/ false);
+      // on avance vers l’ouverture, en chevauchant
+      let apexY = firstApex + i * (hTop - OVERLAP);
+      // le dernier étage mord un peu dans l’ouverture pour cacher le haut du tronc
+      if (i === TIERS_TOP - 1) apexY += GAP_COVER;
+      pushTier(tiersTop, apexY, hTop, w, /*inverted*/ true);
     }
   }
 
-  // zones de collision (tronc + rectangles sous les triangles)
+  // ----- PARTIE BASSE -----
+  if (bottomStemH > 0 && botTarget > 0){
+    const hBot = tierH(botTarget, TIERS_BOTTOM);
+    const firstApex = bottomY; // part du bord du tronc
+    for (let i=0;i<TIERS_BOTTOM;i++){
+      const tNorm = (i + 0.5) / TIERS_BOTTOM;
+      const w = tipTierW + tNorm * (baseTierW - tipTierW);
+      let apexY = firstApex + i * (hBot - OVERLAP);
+      // le tout premier étage mord dans l’ouverture pour masquer la "tête" du tronc
+      if (i === 0) apexY += Math.max(0, GAP_COVER - 2);
+      pushTier(tiersBot, apexY, hBot, w, /*inverted*/ false);
+    }
+  }
+
+  // Tronc (principalement pour collisions; visuellement, il sera masqué par les étages proches de l’ouverture)
   t._hit = {
     topTrunk:    { x: Math.round(xCenter - trunkW/2), y: 0,       w: trunkW, h: topStemH },
     bottomTrunk: { x: Math.round(xCenter - trunkW/2), y: bottomY, w: trunkW, h: bottomStemH },
@@ -877,6 +887,7 @@ function buildFirHitboxes(t){
     tiersBot
   };
 }
+
 
 // slightly narrower trunk with subtle grooves/shading
 function drawTrunkRect(r, style){

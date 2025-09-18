@@ -152,6 +152,32 @@
     @media (prefers-reduced-motion: reduce) {
       .letter-cell.wrong-flash { box-shadow: inset 0 0 0 3px rgba(198,40,40,.5); }
     }
+
+    /* ===== CUSTOM POINTER ===== */
+    /* Hide the native cursor only when class is applied (after Start if enabled) */
+    .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+
+    #gazePointer{
+      position:fixed; left:0; top:0;
+      width: var(--gp-size, 36px); height: var(--gp-size, 36px);
+      transform: translate(-50%,-50%); pointer-events:none; z-index:10000;
+      opacity:0; will-change: transform, opacity;
+    }
+    #gazePointer::before{
+      content:""; position:absolute; inset:0; border-radius:50%; background:#ff0000;
+    }
+    #gazePointer.gp-dwell::before{ animation: gpPulse 700ms ease-in-out infinite alternate; }
+    @keyframes gpPulse{ from{ transform: scale(1);} to{ transform: scale(1.06);} }
+
+    /* Compact pointer options UI */
+    .gp-compact { display:flex; flex-direction:column; gap:6px; }
+    .gp-summary { cursor:pointer; font-weight:600; padding:6px 0; opacity:.85; }
+    .gp-advanced { display:flex; flex-direction:column; gap:8px; padding:4px 0 2px; }
+    .gp-row { display:grid; grid-template-columns: 1fr minmax(140px, 1.4fr); align-items:center; gap:10px; }
+    .gp-label { white-space:nowrap; }
+    .gp-range { width:100%; }
+    details#gpDetails { border-left:3px solid rgba(0,150,136,.25); padding-left:10px; }
+    details#gpDetails[open] .gp-summary { opacity:1; }
   </style>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
 <script>
@@ -232,6 +258,43 @@
           </label>
           <input type="range" id="layoutScale" class="styled-slider" min="0.8" max="1.4" step="0.05" value="1.0">
         </div>
+
+        <!-- ====== Custom red circle pointer (compact) ====== -->
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked>
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="120" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
+        </div>
+        <!-- ================================================ -->
       </div>
     </div>
 
@@ -256,6 +319,9 @@
 
 <audio id="correctSound" src="../../sounds/victory.mp3"></audio>
 <audio id="wrongSound"   src="../../sounds/error.mp3"></audio>
+
+<!-- Custom gaze pointer node -->
+<div id="gazePointer" aria-hidden="true"></div>
 
 <script src="../../js/eyegaze-menu.js"></script>
 <script src="../../js/translationmain.js"></script>
@@ -287,7 +353,7 @@ function setLang(lang){
   });
 }
 
-/* Normalize DOM & storage once on load so first click isn't "undoing" a mismatch */
+/* Normalize DOM & storage once on load */
 (function normalizeLangOnLoad(){
   let initial = 'fr';
   try {
@@ -304,7 +370,6 @@ function setLang(lang){
   setLang(initial);
 })();
 
-/* Simple toggle (now both storage & DOM start aligned) */
 langToggle.addEventListener('click', ()=>{
   setLang(getLang()==='fr' ? 'en' : 'fr');
   choosePreferredVoice();
@@ -324,6 +389,17 @@ const ttsEnabled   = document.getElementById('ttsEnabled');
 const layoutScaleEl = document.getElementById('layoutScale');
 const layoutScaleVal= document.getElementById('layoutScaleVal');
 
+/* Pointer controls */
+const showGazePointer = document.getElementById('showGazePointer');
+const gpDetails       = document.getElementById('gpDetails');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
+
+/* Safe binder */
+const bind = (el, type, handler, opts) => { if (el) el.addEventListener(type, handler, opts || false); };
+
 const LS_KEYS = { ttsEnabled: 'chassenombres:ttsEnabled' };
 
 (function initPersistedControls(){
@@ -340,12 +416,12 @@ const LS_KEYS = { ttsEnabled: 'chassenombres:ttsEnabled' };
   }
 })();
 initEyegazeMenu();
-sfxVol.addEventListener('input', () => sfxVolVal.textContent = sfxVol.value);
-ttsEnabled.addEventListener('change', () => {
+bind(sfxVol, 'input', () => sfxVolVal.textContent = sfxVol.value);
+bind(ttsEnabled, 'change', () => {
   try { localStorage.setItem(LS_KEYS.ttsEnabled, String(ttsEnabled.checked)); } catch(e){}
 });
 
-layoutScaleEl.addEventListener('input', () => {
+bind(layoutScaleEl, 'input', () => {
   layoutScaleVal.textContent = parseFloat(layoutScaleEl.value).toFixed(2);
   if (document.querySelector('.game-container').style.display === 'flex') {
     layoutScale = parseFloat(layoutScaleEl.value);
@@ -355,7 +431,7 @@ layoutScaleEl.addEventListener('input', () => {
 
 /* Enforce only digits and cap length */
 const numberInput = document.getElementById('numberSet');
-numberInput.addEventListener('input', () => {
+bind(numberInput, 'input', () => {
   let v = numberInput.value.replace(/[^0-9]/g, '');
   if (v.length > 12) v = v.slice(0, 12);
   numberInput.value = v;
@@ -369,6 +445,11 @@ function syncEyegazeSettingsFromUI() {
       eyegazeSettings.sfxVolume = parseInt(sfxVol.value, 10) || 50;
       eyegazeSettings.dwellTime = parseInt(dwellSlider.value, 10) || 1500;
       eyegazeSettings.ttsEnabled= !!ttsEnabled.checked;
+
+      /* pointer */
+      eyegazeSettings.showGazePointer  = !!showGazePointer?.checked;
+      eyegazeSettings.gazePointerSize  = parseInt(gazeSize?.value,10) || 36;
+      eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, (parseInt(gazeOpacity?.value,10)||100)/100));
     }
   } catch(e) {}
 }
@@ -531,13 +612,8 @@ function unlockGrid() {
    ========================= */
 function startGame() {
   // Request fullscreen
-  if (document.documentElement.requestFullscreen) {
-    document.documentElement.requestFullscreen();
-  } else if (document.documentElement.webkitRequestFullscreen) {
-    document.documentElement.webkitRequestFullscreen();
-  } else if (document.documentElement.msRequestFullscreen) {
-    document.documentElement.msRequestFullscreen();
-  }
+  const root = document.documentElement;
+  (root.requestFullscreen||root.webkitRequestFullscreen||root.msRequestFullscreen||function(){}).call(root);
 
   // Only show translate button on main menu
   langToggle.style.display = 'none';
@@ -572,6 +648,10 @@ function startGame() {
   try { if (window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); } catch(e) {}
 
   choosePreferredVoice();
+
+  // Apply custom pointer AFTER game shows (hide native cursor conditionally)
+  updateGazeStyles();
+  applyPointerToggle();
 }
 startButton.addEventListener('click', startGame);
 
@@ -697,6 +777,9 @@ function startHover(tile) {
     });
   });
 
+  // Add a gentle pulse to the custom pointer during dwell (if visible)
+  if (gazePointer) gazePointer.classList.add('gp-dwell');
+
   hoverTimeout = setTimeout(() => {
     handleSelection(tile);
     stopHover();
@@ -708,6 +791,7 @@ function stopHover() {
   if (currentOverlay && currentOverlay.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
   currentOverlay = null;
   activeHoverTile = null;
+  if (gazePointer) gazePointer.classList.remove('gp-dwell');
 }
 
 /* ====== Timings (ms) ====== */
@@ -894,6 +978,58 @@ function playSound(audioEl) {
 
   setTimeout(() => { try { audioEl.pause(); audioEl.currentTime = 0; } catch(e){} }, 2000);
 }
+
+/* =========================
+   CUSTOM POINTER — logic (same pattern as Xylophone)
+   ========================= */
+const gazePointer = document.getElementById('gazePointer');
+
+function setPointerPos(x, y){
+  if (!gazePointer) return;
+  gazePointer.style.left = x + 'px';
+  gazePointer.style.top  = y + 'px';
+}
+
+let lastPointerGlobal = { x: null, y: null };
+const rawHandler  = (e) => { lastPointerGlobal.x=e.clientX; lastPointerGlobal.y=e.clientY; setPointerPos(e.clientX,e.clientY); };
+const moveHandler = (e) => { lastPointerGlobal.x=e.clientX; lastPointerGlobal.y=e.clientY; setPointerPos(e.clientX,e.clientY); };
+if ('onpointerrawupdate' in window) bind(window, 'pointerrawupdate', rawHandler, {passive:true});
+bind(window, 'pointermove',  moveHandler,  {passive:true});
+bind(window, 'pointerleave', ()=>{ if (gazePointer){ gazePointer._savedOpacity = gazePointer.style.opacity; gazePointer.style.opacity = 0; }});
+bind(window, 'pointerenter', ()=>{
+  updateGazeStyles();
+  if (lastPointerGlobal.x != null && lastPointerGlobal.y != null) setPointerPos(lastPointerGlobal.x, lastPointerGlobal.y);
+});
+
+function updateGazeStyles(){
+  if (!gazePointer) return;
+  const size = (parseInt(gazeSize?.value,10) || 36);
+  const opct = Math.max(0, Math.min(1, (parseInt(gazeOpacity?.value,10) || 100) / 100));
+  if (gazeSizeVal)    gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct*100);
+  gazePointer.style.setProperty('--gp-size', size + 'px');
+
+  const gameShown = (document.querySelector('.game-container')?.style.display === 'flex');
+  gazePointer.style.opacity = (showGazePointer?.checked && gameShown) ? opct : 0;
+}
+
+function applyPointerToggle(){
+  const gameShown = (document.querySelector('.game-container')?.style.display === 'flex');
+  const enable = !!showGazePointer?.checked && gameShown;
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  if (gpDetails) gpDetails.open = enable ? gpDetails.open : false;
+  updateGazeStyles();
+  if (enable && lastPointerGlobal.x != null && lastPointerGlobal.y != null) setPointerPos(lastPointerGlobal.x, lastPointerGlobal.y);
+}
+
+/* UI listeners for pointer controls */
+[showGazePointer, gazeSize, gazeOpacity].forEach(el=>{
+  bind(el, 'input', ()=>{
+    syncEyegazeSettingsFromUI();
+    updateGazeStyles();
+    applyPointerToggle();
+  });
+});
 
 /* Initialize voices on load with current language */
 window.addEventListener('load', choosePreferredVoice);

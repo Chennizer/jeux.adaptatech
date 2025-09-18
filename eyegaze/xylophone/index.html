@@ -31,7 +31,7 @@
     }
     body.dark #langToggle{ background:#111; color:#14b8a6; border-color:#14b8a6; }
 
-    /* Hide native cursor when class is applied (we'll apply it only after Start) */
+    /* Hide native cursor when class is applied (we add it only after Start if enabled) */
     .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
 
     .game-container{
@@ -56,7 +56,6 @@
       height:50vh; /* base; overridden per bar below */
       border:2px solid rgba(0,0,0,0.12);
       overflow:hidden;
-      /* no cursor:none here; we'll hide via .hide-native-cursor after Start */
       transition:filter .15s ease, transform .06s ease;
     }
     body.dark .bar{ border-color:rgba(255,255,255,0.12); }
@@ -129,6 +128,7 @@
 </head>
 <body class="light menu-open">
 
+<!-- Language toggle -->
 <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
 
 <!-- ===== Options modal ===== -->
@@ -183,15 +183,15 @@
         <div class="option-item">
           <label for="dwellTimeSlider" class="teal-label">
             <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
-            <span id="dwellTimeVal">1500</span> ms
+            <span id="dwellTimeVal">500</span> ms
           </label>
-          <input type="range" id="dwellTimeSlider" class="styled-slider" min="50" max="5000" step="50" value="1500">
+          <input type="range" id="dwellTimeSlider" class="styled-slider" min="50" max="5000" step="50" value="500">
         </div>
 
         <!-- ====== Custom red circle pointer (compact) ====== -->
         <div class="option-item gp-compact">
           <label class="teal-label">
-            <input type="checkbox" id="showGazePointer">
+            <input type="checkbox" id="showGazePointer" checked>
             <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
               Afficher le pointeur (cache la souris)
             </span>
@@ -312,15 +312,8 @@ const gazeSizeVal     = document.getElementById('gazeSizeVal');
 const gazeOpacity     = document.getElementById('gazeOpacity');
 const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
 
-/* Init */
-initEyegazeMenu?.();
-sfxVol.addEventListener('input', ()=> sfxVolVal.textContent=sfxVol.value);
-timeSlider.addEventListener('input', ()=> timeVal.textContent=`${parseFloat(timeSlider.value).toFixed(1)}s`);
-dwellSlider.addEventListener('input', ()=> dwellTimeVal.textContent=dwellSlider.value);
-layoutScaleEl.addEventListener('input', ()=>{
-  layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
-  if (document.querySelector('.game-container').style.display==='flex') applyLayoutScale();
-});
+/* ---- Safe binding helpers ---- */
+const bind = (el, type, handler, opts) => { if (el) el.addEventListener(type, handler, opts || false); };
 
 /* =========================
    Synth
@@ -413,9 +406,9 @@ function triggerBar(bar){
   setTimeout(()=>bar.classList.remove('flash'),220);
 }
 bars.forEach(bar=>{
-  bar.addEventListener('pointerenter', ()=> startHover(bar));
-  bar.addEventListener('pointerleave', stopHover);
-  bar.addEventListener('pointerdown', (e)=>{
+  bind(bar, 'pointerenter', ()=> startHover(bar));
+  bind(bar, 'pointerleave', stopHover);
+  bind(bar, 'pointerdown', (e)=>{
     e.preventDefault();
     if(ctx.state==='suspended') ctx.resume();
     triggerBar(bar);
@@ -430,17 +423,23 @@ function applyTheme(theme){
   document.body.classList.add(theme);
 }
 function applyLayoutScale(){
-  const scale=Math.max(0.8, Math.min(1.2, parseFloat(layoutScaleEl.value)||1.0));
+  const scale=Math.max(0.8, Math.min(1.2, parseFloat(layoutScaleEl?.value)||1.0));
   const base=[40,45,50,55,60,65,70,75];
   const heights=base.map(v=>Math.max(24,Math.min(90, Math.round(v*scale))));
   ['#b1','#b2','#b3','#b4','#b5','#b6','#b7','#b8'].forEach((sel,idx)=>{
     const el=document.querySelector(sel); if(el) el.style.height=heights[idx]+'vh';
   });
 }
-layoutScaleEl.addEventListener('input', ()=>{
+
+/* Bind UI safely */
+bind(sfxVol,      'input', ()=> sfxVolVal.textContent=sfxVol.value);
+bind(timeSlider,  'input', ()=> timeVal.textContent=`${parseFloat(timeSlider.value).toFixed(1)}s`);
+bind(dwellSlider, 'input', ()=> dwellTimeVal.textContent=dwellSlider.value);
+bind(layoutScaleEl,'input', ()=>{
   layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
   if(document.querySelector('.game-container').style.display==='flex') applyLayoutScale();
 });
+bind(themeSelect, 'change', ()=> { applyTheme(themeSelect.value); applyPointerToggle(); });
 
 /* =========================
    Start flow
@@ -448,14 +447,14 @@ layoutScaleEl.addEventListener('input', ()=>{
 function syncEyegazeSettingsFromUI(){
   try{
     if(window.eyegazeSettings){
-      eyegazeSettings.sfxMuted=!!muteSFX.checked;
-      eyegazeSettings.sfxVolume=parseInt(sfxVol.value,10)||100;
-      eyegazeSettings.dwellTime=parseInt(dwellSlider.value,10)||1500;
+      eyegazeSettings.sfxMuted=!!muteSFX?.checked;
+      eyegazeSettings.sfxVolume=parseInt(sfxVol?.value,10)||100;
+      eyegazeSettings.dwellTime=parseInt(dwellSlider?.value,10)||1500;
 
       /* pointer */
-      eyegazeSettings.showGazePointer  = !!showGazePointer.checked;
-      eyegazeSettings.gazePointerSize  = parseInt(gazeSize.value,10) || 36;
-      eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, (parseInt(gazeOpacity.value,10)||100)/100));
+      eyegazeSettings.showGazePointer  = !!showGazePointer?.checked;
+      eyegazeSettings.gazePointerSize  = parseInt(gazeSize?.value,10) || 36;
+      eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, (parseInt(gazeOpacity?.value,10)||100)/100));
     }
   }catch(e){}
 }
@@ -467,16 +466,18 @@ function startGame(){
 
   // Hide menu-open state & toggle language button
   document.body.classList.remove('menu-open');
-  langToggle.style.display='none';
+  if (langToggle) langToggle.style.display='none';
 
   // Theme + audio + timing
-  applyTheme(themeSelect.value || 'light');
-  master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol.value,10)||100)/100));
-  timeScale=parseFloat(timeSlider.value)||1.0;
+  applyTheme(themeSelect?.value || 'light');
+  master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol?.value,10)||100)/100));
+  timeScale=parseFloat(timeSlider?.value)||1.0;
 
   // Show game
-  document.querySelector('.game-container').style.display='flex';
-  document.getElementById('game-options').style.display='none';
+  const gc=document.querySelector('.game-container');
+  if (gc) gc.style.display='flex';
+  const go=document.getElementById('game-options');
+  if (go) go.style.display='none';
 
   if(ctx.state==='suspended') ctx.resume();
   applyLayoutScale();
@@ -487,19 +488,18 @@ function startGame(){
 
   try{ if(window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); }catch(e){}
 }
-startButton.addEventListener('click', startGame);
+bind(startButton, 'click', startGame);
 
 /* Live updates */
-sfxVol.addEventListener('input', ()=>{ master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol.value,10)||100)/100)); });
-themeSelect.addEventListener('change', ()=> { applyTheme(themeSelect.value); applyPointerToggle(); });
-window.addEventListener('resize', applyLayoutScale);
+bind(sfxVol, 'input', ()=>{ master.gain.value=Math.max(0, Math.min(1, (parseInt(sfxVol?.value,10)||100)/100)); });
+bind(window, 'resize', applyLayoutScale);
 
 /* Init UI numbers */
 (function initUI(){
-  sfxVolVal.textContent=sfxVol.value;
-  timeVal.textContent=`${parseFloat(timeSlider.value).toFixed(1)}s`;
-  dwellTimeVal.textContent=dwellSlider.value;
-  layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
+  if (sfxVolVal && sfxVol) sfxVolVal.textContent=sfxVol.value;
+  if (timeVal && timeSlider) timeVal.textContent=`${parseFloat(timeSlider.value).toFixed(1)}s`;
+  if (dwellTimeVal && dwellSlider) dwellTimeVal.textContent=dwellSlider.value;
+  if (layoutScaleVal && layoutScaleEl) layoutScaleVal.textContent=parseFloat(layoutScaleEl.value).toFixed(2);
 })();
 
 /* =========================
@@ -508,6 +508,7 @@ window.addEventListener('resize', applyLayoutScale);
 const gazePointer = document.getElementById('gazePointer');
 
 function setPointerPos(x, y){
+  if (!gazePointer) return;
   gazePointer.style.left = x + 'px';
   gazePointer.style.top  = y + 'px';
 }
@@ -515,41 +516,38 @@ function setPointerPos(x, y){
 let lastPointer = { x: null, y: null };
 const rawHandler  = (e) => { lastPointer.x=e.clientX; lastPointer.y=e.clientY; setPointerPos(e.clientX,e.clientY); };
 const moveHandler = (e) => { lastPointer.x=e.clientX; lastPointer.y=e.clientY; setPointerPos(e.clientX,e.clientY); };
-if ('onpointerrawupdate' in window) window.addEventListener('pointerrawupdate', rawHandler, {passive:true});
-window.addEventListener('pointermove', moveHandler, {passive:true});
-
-window.addEventListener('pointerleave', ()=>{
-  gazePointer._savedOpacity = gazePointer.style.opacity;
-  gazePointer.style.opacity = 0;
-});
-window.addEventListener('pointerenter', ()=>{
+if ('onpointerrawupdate' in window) bind(window, 'pointerrawupdate', rawHandler, {passive:true});
+bind(window, 'pointermove',  moveHandler,  {passive:true});
+bind(window, 'pointerleave', ()=>{ if (gazePointer){ gazePointer._savedOpacity = gazePointer.style.opacity; gazePointer.style.opacity = 0; }});
+bind(window, 'pointerenter', ()=>{
   updateGazeStyles();
   if (lastPointer.x != null && lastPointer.y != null) setPointerPos(lastPointer.x, lastPointer.y);
 });
 
 function updateGazeStyles(){
+  if (!gazePointer) return;
   const size = (parseInt(gazeSize?.value,10) || 36);
   const opct = Math.max(0, Math.min(1, (parseInt(gazeOpacity?.value,10) || 100) / 100));
   if (gazeSizeVal)    gazeSizeVal.textContent = size;
   if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct*100);
   gazePointer.style.setProperty('--gp-size', size + 'px');
 
-  const gameShown = (document.querySelector('.game-container').style.display === 'flex');
+  const gameShown = (document.querySelector('.game-container')?.style.display === 'flex');
   gazePointer.style.opacity = (showGazePointer?.checked && gameShown) ? opct : 0;
 }
 
 function applyPointerToggle(){
-  const gameShown = (document.querySelector('.game-container').style.display === 'flex');
-  const enable = !!showGazePointer.checked && gameShown;
+  const gameShown = (document.querySelector('.game-container')?.style.display === 'flex');
+  const enable = !!showGazePointer?.checked && gameShown;
   document.documentElement.classList.toggle('hide-native-cursor', enable);
   if (gpDetails) gpDetails.open = enable ? gpDetails.open : false;
   updateGazeStyles();
   if (enable && lastPointer.x != null && lastPointer.y != null) setPointerPos(lastPointer.x, lastPointer.y);
 }
 
-/* UI listeners for pointer controls */
+/* UI listeners for pointer controls (safe) */
 [showGazePointer, gazeSize, gazeOpacity].forEach(el=>{
-  if (el) el.addEventListener('input', ()=>{
+  bind(el, 'input', ()=>{
     syncEyegazeSettingsFromUI();
     updateGazeStyles();
     applyPointerToggle();

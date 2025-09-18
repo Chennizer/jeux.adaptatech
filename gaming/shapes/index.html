@@ -2,238 +2,494 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title 
     class="translate"
     data-fr="Jeu de Formes Concentriques" 
     data-en="Concentric Shapes Game">
     Jeu de Formes Concentriques
   </title>
-  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <!-- Shared site styles -->
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <!-- p5 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
   <script src="../../js/jingles.js"></script>
-</head>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-B45TJG4GBJ');
-</script>
-<body>
-  <!-- Prompt Overlay with translation markup -->
-  <div id="promptOverlay">
-    <button id="infoButton" title="More info" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
-    <p class="translate" data-fr="Appuyer et maintenir une switch pour activer<br>une animation de forme et de la musique" 
-       data-en="Press and hold a switch to activate<br>an animated shape and music">
-      Appuyer et maintenir une switch pour activer<br>une animation de forme et de la musique
-    </p>
-    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
-  </div>
-  
-  <!-- Info Modal with translation markup -->
-  <div id="infoModal">
-    <p class="translate" data-fr="Compétence: appuyer et maintenir<br>SENICT switch skills niveau 2<br>Switch Progression Roadmap niveau 11 à 13" 
-       data-en="Skill: press and hold<br>SENICT switch skills level 2<br>Switch Progression Roadmap levels 11 to 13">
-      Compétence: appuyer et maintenir<br>SENICT switch skills niveau 2<br>Switch Progression Roadmap niveau 11 à 13
-    </p>
-    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
-  </div>
-  
+
+  <style>
+    #langToggle{
+      position: fixed; top:10px; right:10px; z-index:99999;
+      display:inline-flex; align-items:center; gap:6px;
+      padding:6px 10px; border-radius:10px; border:2px solid #009688;
+      background:#fff; color:#009688; font-weight:700; cursor:pointer;
+      user-select:none;
+    }
+    body.dark #langToggle { background:#111; color:#00b3a4; border-color:#00b3a4; }
+    #p5-canvas-holder { position: fixed; inset: 0; z-index: 0; }
+    #promptOverlay, #infoModal { display:none !important; }
+
+    /* Columns alignment tweak */
+    #options-inline-container{ align-items: start; }
+  </style>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
   <script>
-    let started = false;
-    let canvas;
-    let musicFiles = [];
-    let currentMusic = null;
-    let releaseTime = null;
-    const fadeDuration = 1000;
-    let isGrowing = false;
-    let isFading = false;
-    let fadeStartTime = null;
-    let shapes = [];
-    let currentShapeType = "";
-    let centerPoint = {};
-    const gap = 12;
-    const growthDelay = 14;
-    const shapeFadeDuration = 1000;
-    const shapeTypes = ["circle", "square", "triangle", "pentagon", "hexagon"];
-    let colorList = ["#FF5733", "#33FF57", "#3357FF", "#F0F033", "#FF33F0", "#33FFF0", "#FF00FF", "#00FFFF", "#FFFF00", "#FF0000", "#00FF00", "#0000FF", "#FF1493", "#00BFFF", "#ADFF2F", "#FFD700"];
-    let currentColor = "#FFFFFF";
-    let restartCooldown = false;
-    
-    function preload() {
-      if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
-        for (let item of window.jingleLibraryArray) { 
-          musicFiles.push(loadSound(item.src)); 
-        }
-      } else { 
-        console.error("Jingle library not found!"); 
-      }
-    }
-    
-    function setup() {
-      canvas = createCanvas(windowWidth, windowHeight);
-      canvas.position(0, 0);
-      noFill();
-      strokeWeight(4);
-      ellipseMode(RADIUS);
-      rectMode(CENTER);
-      centerPoint = { x: width / 2, y: height / 2 };
-    }
-    
-    function draw() {
-      background(0);
-      if (!started) return;
-      
-      // Music fade-out handling
-      if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
-        let elapsedMusic = millis() - releaseTime;
-        let volFactor = pow(1 - (elapsedMusic / fadeDuration), 2);
-        currentMusic.setVolume(constrain(volFactor, 0, 1));
-        if (elapsedMusic >= fadeDuration) {
-          musicFiles.forEach(s => s.stop());
-          currentMusic = null;
-          releaseTime = null;
-        }
-      }
-      
-      // Handle growing shapes
-      if (isGrowing && frameCount % growthDelay === 0) {
-        let newRadius = shapes.length > 0 ? shapes[shapes.length - 1].radius + gap : gap * 2;
-        shapes.push({ type: currentShapeType, radius: newRadius });
-      }
-      
-      // Handle fading animation
-      let alphaVal = 255;
-      let scaleFactor = 1;
-      let rotationAngle = 0;
-      if (isFading) {
-        let elapsed = millis() - fadeStartTime;
-        let p = constrain(elapsed / shapeFadeDuration, 0, 1);
-        alphaVal = 255 * (1 - p * p);
-        scaleFactor = lerp(1, 0.5, p);
-        rotationAngle = lerp(0, PI / 4, p);
-        if (elapsed >= shapeFadeDuration) { 
-          shapes = []; 
-          isFading = false; 
-        }
-      }
-      
-      push();
-        translate(centerPoint.x, centerPoint.y);
-        rotate(rotationAngle);
-        scale(scaleFactor);
-        let fadedColor = color(currentColor);
-        fadedColor.setAlpha(alphaVal);
-        stroke(fadedColor);
-        for (let shape of shapes) {
-          if (shape.type === "circle") { 
-            ellipse(0, 0, shape.radius, shape.radius); 
-          }
-          else if (shape.type === "square") { 
-            rect(0, 0, shape.radius * 2, shape.radius * 2); 
-          }
-          else if (shape.type === "triangle") {
-            beginShape();
-              for (let i = 0; i < 3; i++) { 
-                let angle = TWO_PI / 3 * i - PI / 2; 
-                let x = shape.radius * cos(angle); 
-                let y = shape.radius * sin(angle); 
-                vertex(x, y); 
-              }
-            endShape(CLOSE);
-          }
-          else if (shape.type === "pentagon") {
-            beginShape();
-              for (let i = 0; i < 5; i++) { 
-                let angle = TWO_PI / 5 * i - PI / 2; 
-                let x = shape.radius * cos(angle); 
-                let y = shape.radius * sin(angle); 
-                vertex(x, y); 
-              }
-            endShape(CLOSE);
-          }
-          else if (shape.type === "hexagon") {
-            beginShape();
-              for (let i = 0; i < 6; i++) { 
-                let angle = TWO_PI / 6 * i - PI / 2; 
-                let x = shape.radius * cos(angle); 
-                let y = shape.radius * sin(angle); 
-                vertex(x, y); 
-              }
-            endShape(CLOSE);
-          }
-        }
-      pop();
-    }
-    
-    function keyPressed() {
-      if (!started || restartCooldown) return;
-      if (key === ' ' && !isGrowing) {
-        // Restart: stop any current music and reset fading if needed
-        musicFiles.forEach(s => s.stop());
-        getAudioContext().resume();
-        if (isFading) { 
-          isFading = false; 
-          shapes = []; 
-        }
-        isGrowing = true;
-        shapes = [];
-        // Randomize center point a bit and pick a random shape and color
-        centerPoint = { x: width / 2 + random(-300, 300), y: height / 2 + random(-300, 300) };
-        currentShapeType = random(shapeTypes);
-        currentColor = random(colorList);
-        if (musicFiles.length > 0) {
-          currentMusic = random(musicFiles);
-          if (currentMusic && currentMusic.isLoaded()) { 
-            currentMusic.setVolume(1); 
-            currentMusic.loop(); 
-          }
-        }
-      }
-    }
-    
-    function keyReleased() {
-      if (!started) return;
-      if (key === ' ' && isGrowing) {
-        isGrowing = false;
-        isFading = true;
-        fadeStartTime = millis();
-        if (currentMusic && currentMusic.isPlaying()) { 
-          releaseTime = millis(); 
-        }
-        restartCooldown = true;
-        setTimeout(() => { restartCooldown = false; }, fadeDuration + 50);
-      }
-    }
-    
-    function windowResized() { 
-      resizeCanvas(windowWidth, windowHeight); 
-    }
-    
-    function goFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => { 
-          console.error(`Erreur lors du passage en plein écran: ${err.message}`); 
-        });
-      }
-    }
-    
-    document.getElementById("startButton").addEventListener("click", function() { 
-      started = true; 
-      document.getElementById("promptOverlay").style.display = "none"; 
-      goFullscreen(); 
-    });
-    
-    document.getElementById("infoButton").addEventListener("click", function() { 
-      document.getElementById("infoModal").style.display = "block"; 
-    });
-    
-    document.getElementById("closeModal").addEventListener("click", function() { 
-      document.getElementById("infoModal").style.display = "none"; 
-    });
-    
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
   </script>
-  <script src="../../js/translationonly.js"></script>
+</head>
+<body class="dark">
+
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+<!-- Options modal -->
+<div id="game-options" class="modal" style="display:flex;">
+  <div id="options-title-bar">
+    <h2 id="options-main-title" class="translate"
+        data-fr="Formes concentriques"
+        data-en="Concentric shapes">Formes concentriques</h2>
+  </div>
+
+  <div id="control-panel-options">
+    <div id="mode-divider"></div>
+
+    <div id="options-inline-container">
+      <!-- LEFT COLUMN: Sounds -->
+      <div class="options-column">
+        
+        <div class="option-item">
+          <label for="sfxVol" class="teal-label">
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
+            <span id="sfxVolVal">100</span>
+          </label>
+          <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="100">
+        </div>
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="muteSFX">
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+          </label>
+        </div>
+
+      </div>
+
+      <!-- MIDDLE COLUMN: Mode / Theme -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block translate"
+                 data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select">
+            <option value="dark" selected class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+            <option value="light" class="translate" data-fr="Clair" data-en="Light">Clair</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: Explosion options -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="effectSelect" class="teal-label label-block translate"
+                 data-fr="Effet de fin" data-en="End effect">Effet de fin</label>
+          <select id="effectSelect" class="styled-select">
+            <option value="explosion" selected
+                    class="translate" data-fr="Boom!" data-en="Boom!">Explosion</option>
+            <option value="shrink"
+                    class="translate" data-fr="Classique" data-en="Classic">Réduction</option>
+          </select>
+        </div>
+
+        <div class="option-item">
+          <label for="intensityRange" class="teal-label">
+            <span class="translate" data-fr="Intensité explosion (base):" data-en="Explosion intensity (base):">Intensité explosion (base):</span>
+            <span id="intensityVal">2.20</span>
+          </label>
+          <input type="range" id="intensityRange" class="styled-slider" min="1.0" max="3.0" step="0.05" value="2.2">
+        </div>
+      </div>
+    </div>
+
+    <div id="mode-divider"></div>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+</div>
+
+<div id="p5-canvas-holder"></div>
+
+<script>
+/* ===== Translations ===== */
+const LS_LANG_KEY = 'siteLanguage';
+const langToggle  = document.getElementById('langToggle');
+function getLang(){ try{const s=localStorage.getItem(LS_LANG_KEY);if(s==='en'||s==='fr')return s;}catch(e){} return (document.documentElement.lang==='en')?'en':'fr'; }
+function setLang(lang){
+  const safe = (lang==='en')?'en':'fr';
+  document.documentElement.lang = safe;
+  try{ localStorage.setItem(LS_LANG_KEY, safe);}catch(e){}
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr=el.getAttribute('data-fr'); const en=el.getAttribute('data-en');
+    if(safe==='fr' && fr!=null) el.textContent=fr;
+    if(safe==='en' && en!=null) el.textContent=en;
+  });
+}
+(function(){ let initial='fr'; try{const s=localStorage.getItem(LS_LANG_KEY); initial=(s==='en'||s==='fr')?s:((document.documentElement.lang==='en')?'en':'fr'); localStorage.setItem(LS_LANG_KEY, initial);}catch(e){ initial=(document.documentElement.lang==='en')?'en':'fr'; } setLang(initial); })();
+langToggle.addEventListener('click', ()=> setLang(getLang()==='fr' ? 'en' : 'fr'));
+
+/* ===== Menu bindings ===== */
+const startBtn    = document.getElementById('startButton');
+const muteSFX     = document.getElementById('muteSFX');
+const sfxVol      = document.getElementById('sfxVol');
+const sfxVolVal   = document.getElementById('sfxVolVal');
+const effectSel   = document.getElementById('effectSelect');
+const themeSelect = document.getElementById('themeSelect');
+const intensityEl = document.getElementById('intensityRange');
+const intensityVal= document.getElementById('intensityVal');
+
+sfxVol.addEventListener('input', ()=> { sfxVolVal.textContent = sfxVol.value; });
+intensityEl.addEventListener('input', ()=> { intensityVal.textContent = (+intensityEl.value).toFixed(2); });
+
+startBtn.addEventListener('click', () => {
+  applyTheme(themeSelect.value);
+  document.getElementById('langToggle').style.display = 'none';
+  document.getElementById('game-options').style.display = 'none';
+  const rootEl = document.documentElement;
+  if (rootEl.requestFullscreen) rootEl.requestFullscreen().catch(()=>{});
+  else if (rootEl.webkitRequestFullscreen) rootEl.webkitRequestFullscreen();
+  started = true;
+});
+
+/* ===== Game (p5) ===== */
+let started=false;
+let canvas;
+let musicFiles=[],currentMusic=null,releaseTime=null;
+const fadeDuration=1000;
+let isGrowing=false;
+
+let shapes=[];
+let currentShapeType="",centerPoint={};
+let gap=8;             // smaller initial growth step
+const growthDelay=14;
+const shapeTypes=["circle","square","triangle","pentagon","hexagon"];
+let colorList=["#FF5733","#33FF57","#3357FF","#F0F033","#FF33F0","#33FFF0","#FF00FF","#00FFFF","#FFFF00","#FF0000","#00FF00","#0000FF","#FF1493","#00BFFF","#ADFF2F","#FFD700"];
+let currentColor="#FFFFFF";
+let restartCooldown=false;
+
+// Menu-controlled
+let effectMode='explosion';
+let explosionIntensity=2.2; // base (multiplied by hold-based multiplier)
+let pressStart=null;
+
+// Shrink effect
+let isFading=false,fadeStartTime=null;
+const shapeFadeDuration=1000;
+
+// Explosion system (intense)
+let isExploding=false,particles=[],shockwaves=[],flashAlpha=0,explosionStart=0;
+// NEW: center flash parameters (replaces full-screen rect)
+let explosionOrigin = {x:0,y:0};
+let flashRadius = 0;
+
+// SFX: random explosion files
+const explosionSfxPaths = [
+  '../../sounds/explosion1.mp3',
+  '../../sounds/explosion2.mp3',
+  '../../sounds/explosion3.mp3'
+];
+
+// Base parameters (slightly reduced max counts to fit the smaller visual scale)
+const BASE_particleCountMin=150;
+const BASE_particleCountMax=550;
+const BASE_speedMin=4.0;
+const BASE_speedMax=14.0;
+const BASE_particleSizeMin=4;
+const BASE_particleSizeMax=14;
+const BASE_friction=0.976;
+const BASE_gravity=0.14;
+let particleFriction=BASE_friction;
+let particleGravity=BASE_gravity;
+let screenShakeFrames=20,shakeRemaining=0,shakeMag=14;
+
+function preload(){
+  if(window.jingleLibraryArray){
+    for(let item of window.jingleLibraryArray){musicFiles.push(loadSound(item.src));}
+  }
+}
+
+function setup(){
+  const holder=document.getElementById('p5-canvas-holder');
+  canvas=createCanvas(windowWidth,windowHeight);
+  canvas.parent(holder);
+  noFill();strokeWeight(4);ellipseMode(RADIUS);rectMode(CENTER);
+  centerPoint={x:width/2,y:height/2};
+}
+
+function draw(){
+  effectMode=effectSel.value;
+  const baseIntensity=parseFloat(intensityEl.value)||2.2;
+  const currentIntensity=isExploding?explosionIntensity:baseIntensity;
+  particleFriction=1.0-(1.0-BASE_friction)*(0.75+0.25*currentIntensity);
+  particleGravity=BASE_gravity*currentIntensity;
+  shakeMag=10+Math.floor(5*currentIntensity);
+
+  let dx=0,dy=0;
+  if(shakeRemaining>0){dx=random(-shakeMag,shakeMag);dy=random(-shakeMag,shakeMag);shakeRemaining--;}
+  push();translate(dx,dy);background(getComputedStyle(document.body).backgroundColor||'#000');pop();
+
+  if(!started)return;
+
+  if(releaseTime!==null&&currentMusic&&currentMusic.isPlaying()){
+    let elapsedMusic=millis()-releaseTime;
+    let volFactor=pow(1-(elapsedMusic/fadeDuration),2);
+    currentMusic.setVolume(constrain(volFactor,0,1));
+    if(elapsedMusic>=fadeDuration){musicFiles.forEach(s=>s.stop());currentMusic=null;releaseTime=null;}
+  }
+
+  if(isGrowing && frameCount%growthDelay===0){
+    let newRadius=shapes.length>0?shapes[shapes.length-1].radius+gap:gap*2;
+    const maxR=min(width,height)*0.85/2; // smaller max
+    if(newRadius<maxR) shapes.push({type:currentShapeType,radius:newRadius});
+  }
+
+  push();
+  if(isGrowing&&!isExploding&&!isFading){
+    translate(centerPoint.x,centerPoint.y);
+    stroke(currentColor);
+    for(let s of shapes) drawShape(s.type,s.radius);
+  }
+
+  if(isFading){
+    let elapsed=millis()-fadeStartTime;
+    let p=constrain(elapsed/shapeFadeDuration,0,1);
+    let alphaVal=255*(1-p*p);
+    let scaleFactor=lerp(1,0.5,p);
+    let rotationAngle=lerp(0,PI/4,p);
+    push();
+      translate(centerPoint.x,centerPoint.y);
+      rotate(rotationAngle);
+      scale(scaleFactor);
+      let fadedColor=color(currentColor);fadedColor.setAlpha(alphaVal);
+      stroke(fadedColor);
+      for(let s of shapes) drawShape(s.type,s.radius);
+    pop();
+    if(elapsed>=shapeFadeDuration){shapes=[];isFading=false;}
+  }
+
+  if(isExploding){
+    // ======= FIXED FLASH: draw centered burst instead of full-screen rect =======
+    if (flashAlpha > 0) {
+      push();
+      blendMode(ADD);
+      noStroke();
+      const c = color(255, 255, 255, flashAlpha);
+      fill(c);
+      ellipse(explosionOrigin.x, explosionOrigin.y, flashRadius, flashRadius);
+      pop();
+      // grow a little while fading, feels like a shock flash
+      flashRadius *= 1.06;
+      flashAlpha = max(0, flashAlpha - (10 + 8*currentIntensity));
+    }
+
+    updateShockwaves();
+    push();
+    const tSince = millis() - explosionStart;
+    if (tSince < 180) blendMode(ADD);
+    updateAndDrawParticles();
+    pop();
+  }
+  pop();
+}
+
+function drawShape(type,r){
+  if(type==="circle") ellipse(0,0,r,r);
+  else if(type==="square") rect(0,0,r*2,r*2);
+  else{
+    const sides=type==="triangle"?3:type==="pentagon"?5:type==="hexagon"?6:3;
+    beginShape();
+    for(let i=0;i<sides;i++){
+      let angle=TWO_PI/sides*i-PI/2;
+      vertex(r*cos(angle),r*sin(angle));
+    }
+    endShape(CLOSE);
+  }
+}
+
+/* explosion SFX (random, under user volume) */
+function playExplosionSFX(){
+  try{
+    if (muteSFX.checked) return;
+    const vol = Math.max(0, Math.min(1, ((parseInt(sfxVol.value,10)||100)/100) * 0.75)); // 75% of slider
+    const path = explosionSfxPaths[Math.floor(Math.random()*explosionSfxPaths.length)];
+    const audio = new Audio(path);
+    audio.volume = vol;
+    audio.playbackRate = 0.96 + Math.random()*0.08; // slight pitch variety
+    audio.play().catch(()=>{});
+  } catch(e){}
+}
+
+/* piecewise hold-time -> multiplier mapping */
+function holdTimeToMultiplier(ms){
+  const t = Math.max(0, ms);
+  const t1 = 2500;   // ~2–3s: small
+  const t2 = 8000;   // ~7–8s: medium end
+  const tMax = 15000;
+
+  const smallMin = 0.60, smallMax = 1.00;
+  const medMin   = 1.00, medMax   = 2.00;
+  const bigMin   = 2.00, bigMax   = 3.20;
+
+  const ease = x => (x<0.5)? (2*x*x) : (1 - Math.pow(-2*x+2,2)/2);
+  const lerpN = (a,b,u)=> a + (b-a)*u;
+
+  if (t <= t1){
+    return lerpN(smallMin, smallMax, ease(t / t1));
+  } else if (t <= t2){
+    return lerpN(medMin, medMax, ease((t - t1) / (t2 - t1)));
+  } else {
+    return lerpN(bigMin, bigMax, ease(Math.min(1, (t - t2) / (tMax - t2))));
+  }
+}
+
+function triggerExplosion(){
+  isExploding=true;explosionStart=millis();particles=[];shockwaves=[];
+
+  // origin + flash parameters (centered)
+  const lastRadius=shapes.length>0?shapes[shapes.length-1].radius:80;
+  const ox=centerPoint.x+random(-3,3),oy=centerPoint.y+random(-3,3);
+  explosionOrigin = { x: ox, y: oy };
+  flashAlpha = 180 * min(1.0, explosionIntensity/2.2);
+  flashRadius = max(60, lastRadius * (0.8 + 0.4 * (explosionIntensity-1))); // start near shape size
+
+  // play SFX quietly under user setting
+  playExplosionSFX();
+
+  const baseCount=floor(map(lastRadius,40,400,BASE_particleCountMin,BASE_particleCountMax,true));
+  const count=floor(baseCount*explosionIntensity);
+  const spMin=BASE_speedMin*(0.9+0.6*explosionIntensity);
+  const spMax=BASE_speedMax*(0.9+0.6*explosionIntensity);
+  const szMin=BASE_particleSizeMin*(0.9+0.6*explosionIntensity);
+  const szMax=BASE_particleSizeMax*(0.9+0.6*explosionIntensity);
+
+  for(let i=0;i<count;i++){
+    const ang=random(TWO_PI);
+    const rr=randomGaussian(lastRadius*0.7,lastRadius*0.2);
+    const startR=constrain(rr,0,lastRadius);
+    const px=ox+cos(ang)*startR;
+    const py=oy+sin(ang)*startR;
+    const v=p5.Vector.fromAngle(ang).mult(random(spMin,spMax));
+    v.rotate(random(-0.22,0.22));
+    const sz=random(szMin,szMax);
+    particles.push({
+      x:px,y:py,vx:v.x,vy:v.y,size:sz,
+      col:color(currentColor),
+      born:millis(),
+      life:random(700,1200)*(0.9+0.4*explosionIntensity),
+      rot:random(TWO_PI),rotSpd:random(-0.25,0.25),
+      shape:random(["dot","line","shard"])
+    });
+  }
+
+  // shockwaves
+  shockwaves.push({x:ox,y:oy,r:max(15,lastRadius*0.55),w:5*explosionIntensity,alpha:200,growth:20*explosionIntensity,fade:6*explosionIntensity});
+  if (explosionIntensity > 1.7){
+    shockwaves.push({x:ox,y:oy,r:max(10,lastRadius*0.35),w:4*explosionIntensity,alpha:170,growth:26*explosionIntensity,fade:6*explosionIntensity});
+  }
+
+  // shake
+  shakeRemaining=floor(14+5*explosionIntensity);
+
+  // clear shapes
+  shapes=[];
+}
+
+function updateShockwaves(){
+  if(!shockwaves.length)return;
+  push();noFill();
+  for(let s of shockwaves){
+    const c=color(255,255,255,s.alpha);
+    stroke(c);strokeWeight(s.w);
+    ellipse(s.x,s.y,s.r,s.r);
+    s.r+=s.growth;s.alpha=max(0,s.alpha-s.fade);s.w=max(0.5,s.w*0.985);
+  }
+  shockwaves=shockwaves.filter(s=>s.alpha>1);
+  pop();
+}
+
+function updateAndDrawParticles(){
+  let alive=[];
+  for(let p of particles){
+    const age=millis()-p.born;
+    const t=constrain(age/p.life,0,1);
+    const fade=1-t;
+    const alpha=255*pow(fade,1.15);
+    p.vx*=particleFriction;p.vy*=particleFriction;p.vy+=particleGravity;
+    p.x+=p.vx;p.y+=p.vy;p.rot+=p.rotSpd;
+    const c=color(p.col);c.setAlpha(alpha);stroke(c);strokeWeight(Math.max(1,p.size*0.28));
+    if(p.shape==="dot") point(p.x,p.y);
+    else if(p.shape==="line"){
+      const len=p.size*2.2*(0.7+0.6*(1-t));
+      const dx=Math.cos(p.rot)*len*0.5,dy=Math.sin(p.rot)*len*0.5;
+      line(p.x-dx,p.y-dy,p.x+dx,p.y+dy);
+    }else{
+      push();translate(p.x,p.y);rotate(p.rot);
+      const len=p.size*1.3;line(-len*0.5,0,len*0.5,0);pop();
+    }
+    if(t<1) alive.push(p);
+  }
+  particles=alive;
+  if(!particles.length&&!shockwaves.length&&flashAlpha<=0) isExploding=false;
+}
+
+/* Input */
+function keyPressed(){
+  if(!started||restartCooldown)return;
+  if(key===' '&&!isGrowing&&!isExploding&&!isFading){
+    pressStart=millis();
+    musicFiles.forEach(s=>s.stop());getAudioContext().resume();
+    isGrowing=true;shapes=[];
+    centerPoint={x:width/2+random(-250,250),y:height/2+random(-180,180)};
+    currentShapeType=random(shapeTypes);currentColor=random(colorList);
+    if(musicFiles.length>0&&!muteSFX.checked){
+      currentMusic=random(musicFiles);
+      if(currentMusic&&currentMusic.isLoaded()){
+        currentMusic.setVolume((parseInt(sfxVol.value,10)||100)/100);
+        currentMusic.loop();
+      }
+    }
+  }
+}
+
+function keyReleased(){
+  if(!started)return;
+  if(key===' '&&isGrowing){
+    isGrowing=false;
+    if(currentMusic&&currentMusic.isPlaying()) releaseTime=millis();
+
+    // hold-based intensity curve (small <~3s, medium to ~8s, big after)
+    const holdTime=millis()-(pressStart??millis());
+    const holdMult = holdTimeToMultiplier(holdTime);
+    const baseFromSlider=parseFloat(intensityEl.value)||2.2;
+    explosionIntensity = baseFromSlider * holdMult;
+
+    if(effectSel.value==='explosion') triggerExplosion();
+    else {isFading=true;fadeStartTime=millis();}
+
+    restartCooldown=true;setTimeout(()=>{restartCooldown=false;},fadeDuration+80);
+  }
+}
+
+function windowResized(){resizeCanvas(windowWidth,windowHeight);}
+
+/* Theme */
+function applyTheme(theme){
+  const bg=theme==='dark'?'#000':'#fff';
+  const fg=theme==='dark'?'#fff':'#000';
+  document.body.style.backgroundColor=bg;
+  document.body.style.color=fg;
+  document.body.classList.toggle('dark',theme==='dark');
+}
+</script>
 </body>
 </html>
