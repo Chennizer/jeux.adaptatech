@@ -29,17 +29,67 @@
     cursor: none !important;
     }
 
+    #game-options #control-panel-options {
+      padding: 14px 20px 16px;
+    }
+    #control-panel-options #mode-divider {
+      margin: 12px 0;
+    }
+    #control-panel-options #options-inline-container {
+      margin-top: 12px;
+      gap: 18px;
+    }
+    #control-panel-options .option-item {
+      margin-bottom: 12px;
+    }
+    #control-panel-options .button {
+      margin: 6px 5px 8px;
+    }
+
     .series-option-block {
       display: grid;
-      row-gap: 8px;
-      justify-items: start;
+      row-gap: 12px;
+      justify-items: center;
+    }
+    .series-toggle-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .series-toggle-button {
+      background: #009688;
+      color: #ffffff;
+      border: 2px solid #00796B;
+      border-radius: 24px;
+      padding: 9px 22px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+      min-width: 140px;
+      text-align: center;
+    }
+    .series-toggle-button:hover,
+    .series-toggle-button:focus {
+      background: #00796B;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+      outline: none;
+    }
+    .series-toggle-button[aria-pressed="true"] {
+      background: #006b63;
+      border-color: #00524e;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.22);
     }
     .series-summary-row {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       flex-wrap: wrap;
-      margin-left: 26px;
+      margin-left: 0;
+      text-align: center;
     }
     .series-summary-text {
       font-size: 0.9rem;
@@ -378,10 +428,10 @@
           </div>
 
           <div class="option-item series-option-block">
-            <label class="teal-label">
-              <input type="checkbox" id="seriesToggle">
-              <span>Séries</span>
-            </label>
+            <div class="series-toggle-container">
+              <button type="button" id="seriesToggleButton" class="series-toggle-button" aria-pressed="false">Séries</button>
+              <input type="checkbox" id="seriesToggle" hidden>
+            </div>
             <div id="seriesSummaryRow" class="series-summary-row" hidden>
               <span id="seriesSummaryText" class="series-summary-text" aria-live="polite"></span>
               <button type="button" id="seriesConfigure" class="series-config-link">Configurer</button>
@@ -484,6 +534,7 @@
   const trailVal  = document.getElementById('trailVal');
 
   const seriesToggle     = document.getElementById('seriesToggle');
+  const seriesToggleButton = document.getElementById('seriesToggleButton');
   const seriesModal      = document.getElementById('seriesModal');
   const seriesModalPanel = seriesModal ? seriesModal.querySelector('.series-modal-panel') : null;
   const seriesModalClose = document.getElementById('seriesModalClose');
@@ -505,6 +556,17 @@
     duration: (parseInt(seriesDuration?.value, 10) || 60) * 1000,
   };
   const seriesState = { active: false, index: 0, timer: 0 };
+
+  function updateSeriesToggleUI(isEnabled) {
+    if (seriesToggleButton) {
+      seriesToggleButton.setAttribute('aria-pressed', isEnabled ? 'true' : 'false');
+    }
+    if (seriesToggle && seriesToggle.checked !== isEnabled) {
+      seriesToggle.checked = isEnabled;
+    }
+  }
+
+  updateSeriesToggleUI(seriesToggle?.checked ?? false);
 
   if (seriesSelected) {
     seriesSelected.dataset.empty = 'true';
@@ -816,6 +878,28 @@
     updateSeriesSummary();
   });
 
+  seriesToggleButton?.addEventListener('click', () => {
+    const newState = seriesToggle ? !seriesToggle.checked : seriesToggleButton.getAttribute('aria-pressed') !== 'true';
+    if (seriesToggle) {
+      seriesToggle.checked = newState;
+      seriesToggle.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      seriesConfig.enabled = newState;
+      if (sceneSel) sceneSel.disabled = seriesConfig.enabled;
+      if (seriesConfig.enabled) {
+        openSeriesModal();
+      } else {
+        closeSeriesModal();
+        seriesState.active = false;
+        seriesState.timer = 0;
+        seriesState.index = 0;
+        currentSceneId = sceneSel.value;
+      }
+      updateSeriesSummary();
+      updateSeriesToggleUI(seriesConfig.enabled);
+    }
+  });
+
   seriesToggle?.addEventListener('change', () => {
     seriesConfig.enabled = seriesToggle.checked;
     if (sceneSel) sceneSel.disabled = seriesConfig.enabled;
@@ -829,6 +913,7 @@
       currentSceneId = sceneSel.value;
     }
     updateSeriesSummary();
+    updateSeriesToggleUI(seriesConfig.enabled);
   });
 
   seriesConfigure?.addEventListener('click', () => {
@@ -850,7 +935,7 @@
     if (event.key === 'Escape' && isSeriesModalOpen()) {
       event.preventDefault();
       closeSeriesModal();
-      seriesToggle?.focus();
+      seriesToggleButton?.focus();
     }
   });
 
