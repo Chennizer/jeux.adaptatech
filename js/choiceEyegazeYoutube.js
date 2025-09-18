@@ -25,6 +25,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const tileSizeInput             = document.getElementById('tile-size');
   const tileSizeValue             = document.getElementById('tile-size-value');
 
+  // Gaze pointer controls
+  const showGazePointer           = document.getElementById('showGazePointer');
+  const gpDetails                 = document.getElementById('gpDetails');
+  const gazeSizeInput             = document.getElementById('gazeSize');
+  const gazeSizeValue             = document.getElementById('gazeSizeVal');
+  const gazeOpacityInput          = document.getElementById('gazeOpacity');
+  const gazeOpacityValue          = document.getElementById('gazeOpacityVal');
+  const gazePointer               = document.getElementById('gazePointer');
+
   // Tile Picker Modal
   const tilePickerModal   = document.getElementById('tile-picker-modal');
   const tilePickerGrid    = document.getElementById('tile-picker-grid');
@@ -94,6 +103,87 @@ document.addEventListener('DOMContentLoaded', () => {
   let pointerMotionOrigin = null;
   let pendingGuardedHover = null;
 
+  function isElementVisible(el) {
+    if (!el) return false;
+    if (el.hidden) return false;
+    if (typeof el.getAttribute === 'function' && el.getAttribute('aria-hidden') === 'true') return false;
+    if (el.style && el.style.display && el.style.display === 'none') return false;
+    if (window.getComputedStyle) {
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+    }
+    return true;
+  }
+
+  function pointerContextActive() {
+    if (!showGazePointer || !showGazePointer.checked) return false;
+    if (videoPlaying) return false;
+    return (
+      isElementVisible(gameOptionsModal) ||
+      isElementVisible(tilePickerModal) ||
+      isElementVisible(tileContainer)
+    );
+  }
+
+  function setPointerPos(x, y) {
+    if (!gazePointer) return;
+    gazePointer.style.left = `${x}px`;
+    gazePointer.style.top = `${y}px`;
+  }
+
+  function updateGazeStyles() {
+    if (!gazePointer) return;
+    const size = Math.min(100, Math.max(16, parseInt(gazeSizeInput?.value, 10) || 36));
+    const opct = Math.max(0, Math.min(1, (parseInt(gazeOpacityInput?.value, 10) || 60) / 100));
+    if (gazeSizeValue) gazeSizeValue.textContent = size;
+    if (gazeOpacityValue) gazeOpacityValue.textContent = Math.round(opct * 100);
+    gazePointer.style.setProperty('--gp-size', `${size}px`);
+    gazePointer.style.opacity = pointerContextActive() ? opct : 0;
+  }
+
+  function applyPointerToggle() {
+    const enable = pointerContextActive();
+    document.documentElement.classList.toggle('hide-native-cursor', enable);
+    if (!enable && gpDetails) gpDetails.open = false;
+    if (!enable && gazePointer) gazePointer.classList.remove('gp-dwell');
+    updateGazeStyles();
+    if (enable && lastPointerPosition) {
+      setPointerPos(lastPointerPosition.x, lastPointerPosition.y);
+    }
+  }
+
+  function syncPointerSettingsFromUI() {
+    try {
+      if (!window.eyegazeSettings) return;
+      eyegazeSettings.showGazePointer = !!showGazePointer?.checked;
+      const sizeVal = parseInt(gazeSizeInput?.value, 10);
+      eyegazeSettings.gazePointerSize = Number.isFinite(sizeVal) ? sizeVal : 36;
+      const opVal = parseInt(gazeOpacityInput?.value, 10);
+      const normalized = Number.isFinite(opVal) ? opVal : 60;
+      eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, normalized / 100));
+    } catch (e) {}
+  }
+
+  if ('onpointerrawupdate' in window) {
+    window.addEventListener('pointerrawupdate', event => {
+      if (!pointerContextActive()) return;
+      setPointerPos(event.clientX, event.clientY);
+    }, { passive: true });
+  }
+
+  window.addEventListener('pointerleave', () => {
+    if (!gazePointer) return;
+    gazePointer._savedOpacity = gazePointer.style.opacity;
+    gazePointer.style.opacity = 0;
+  });
+
+  window.addEventListener('pointerenter', () => {
+    updateGazeStyles();
+    if (lastPointerPosition) {
+      setPointerPos(lastPointerPosition.x, lastPointerPosition.y);
+    }
+  });
+
   function clearHoverState() {
     if (hoverTimeoutId) {
       clearTimeout(hoverTimeoutId);
@@ -105,6 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     hoveredChoice = null;
     pendingGuardedHover = null;
+    if (gazePointer) gazePointer.classList.remove('gp-dwell');
   }
 
   function requirePointerMotionBeforeHover({ clearSelection = true } = {}) {
@@ -119,20 +210,24 @@ document.addEventListener('DOMContentLoaded', () => {
     pointerMotionOrigin = lastPointerPosition
       ? { x: lastPointerPosition.x, y: lastPointerPosition.y }
       : null;
+    if (gazePointer) gazePointer.classList.remove('gp-dwell');
   }
 
   function scheduleHoverCountdown() {
     if (!hoveredTile || !hoveredChoice || videoPlaying) {
+      if (gazePointer) gazePointer.classList.remove('gp-dwell');
       return;
     }
     if (hoverTimeoutId) {
       clearTimeout(hoverTimeoutId);
     }
+    if (gazePointer) gazePointer.classList.add('gp-dwell');
     hoverTimeoutId = setTimeout(() => {
       if (!videoPlaying && hoveredTile && hoveredChoice) {
         stopPreview();
         playVideo(hoveredChoice.video);
       }
+      if (gazePointer) gazePointer.classList.remove('gp-dwell');
     }, fixationDelay);
   }
 
@@ -156,6 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
       hoveredChoice = null;
       tile.classList.remove('selected');
       pendingGuardedHover = { tile, choice, playSound: playSound && tileChanged };
+      if (gazePointer) gazePointer.classList.remove('gp-dwell');
       return;
     }
 
@@ -192,6 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       tile.classList.remove('selected');
     }
+    if (gazePointer) gazePointer.classList.remove('gp-dwell');
   }
 
   /* ----------------------------------------------------------------
@@ -350,6 +447,40 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  (function initPointerControls() {
+    try {
+      if (window.eyegazeSettings) {
+        if (showGazePointer && typeof eyegazeSettings.showGazePointer === 'boolean') {
+          showGazePointer.checked = eyegazeSettings.showGazePointer;
+        }
+        if (gazeSizeInput && typeof eyegazeSettings.gazePointerSize === 'number') {
+          const min = parseInt(gazeSizeInput.min, 10) || 16;
+          const max = parseInt(gazeSizeInput.max, 10) || 100;
+          const size = Math.round(eyegazeSettings.gazePointerSize);
+          gazeSizeInput.value = Math.min(max, Math.max(min, size));
+        }
+        if (gazeOpacityInput && typeof eyegazeSettings.gazePointerAlpha === 'number') {
+          const min = parseInt(gazeOpacityInput.min, 10) || 20;
+          const max = parseInt(gazeOpacityInput.max, 10) || 100;
+          const op = Math.round(eyegazeSettings.gazePointerAlpha * 100);
+          gazeOpacityInput.value = Math.min(max, Math.max(min, op));
+        }
+      }
+    } catch (e) {}
+    applyPointerToggle();
+    syncPointerSettingsFromUI();
+  })();
+
+  [showGazePointer, gazeSizeInput, gazeOpacityInput].forEach(el => {
+    if (!el) return;
+    const handler = () => {
+      syncPointerSettingsFromUI();
+      applyPointerToggle();
+    };
+    el.addEventListener('input', handler);
+    el.addEventListener('change', handler);
+  });
+
   /* ----------------------------------------------------------------
      Helper: Create a tile element for a given choice.
      ---------------------------------------------------------------- */
@@ -492,6 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     currentVideoUrl = null;
     ensureFullscreen();
+    applyPointerToggle();
   }
 
   document.addEventListener('keydown', e => {
@@ -509,6 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stopPreview();
     clearHoverState();
     videoPlaying = true;
+    if (gazePointer) gazePointer.classList.remove('gp-dwell');
     currentVideoUrl = videoUrl;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
@@ -581,6 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }, limitSeconds * 1000);
     }
+    applyPointerToggle();
   }
 
   videoPlayer.addEventListener('ended', () => {
@@ -593,6 +727,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const targetElement = event.target instanceof Element ? event.target : null;
     const previousPosition = lastPointerPosition;
     lastPointerPosition = { x: clientX, y: clientY };
+    if (pointerContextActive()) {
+      setPointerPos(clientX, clientY);
+    }
 
     if (requirePointerMotion) {
       if (!pointerMotionOrigin) {
@@ -666,6 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentCategory = "all";
     categorySelect.value = "all";
     populateTilePickerGrid();
+    applyPointerToggle();
   });
 
   startGameButton.addEventListener('click', () => {
@@ -701,6 +839,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tilePickerModal.style.display = "none";
       renderGameTiles();
       startInactivityTimer();
+      applyPointerToggle();
     });
   });
 
