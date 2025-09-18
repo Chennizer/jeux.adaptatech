@@ -103,6 +103,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let pointerMotionOrigin = null;
   let pendingGuardedHover = null;
 
+  function isElementShown(el) {
+    if (!el) return false;
+    const inline = el.style && typeof el.style.display === 'string' ? el.style.display : '';
+    if (inline) {
+      return inline !== 'none';
+    }
+    if (window.getComputedStyle) {
+      const computed = window.getComputedStyle(el);
+      return computed ? computed.display !== 'none' : false;
+    }
+    return true;
+  }
+
   function pointerSizeFromControls() {
     return parseInt(gazeSize?.value, 10) || 36;
   }
@@ -113,7 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function isPointerStageActive() {
-    return !!(gameOptionsModal && gameOptionsModal.style.display === 'none');
+    if (videoPlaying) return false;
+    if (isElementShown(gameOptionsModal)) return false;
+    if (isElementShown(tilePickerModal)) return false;
+    return isElementShown(tileContainer);
   }
 
   function setPointerPos(x, y) {
@@ -134,14 +150,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gazeSizeValueSpan) gazeSizeValueSpan.textContent = size;
     if (gazeOpacityValueSpan) gazeOpacityValueSpan.textContent = Math.round(opct * 100);
     gazePointer.style.setProperty('--gp-size', `${size}px`);
-    const enable = !!showGazePointer?.checked && isPointerStageActive();
-    document.documentElement.classList.toggle('hide-native-cursor', enable);
-    if (!enable) {
+    const pointerEnabled = !!showGazePointer?.checked;
+    const pointerVisible = pointerEnabled && isPointerStageActive();
+    const hideNativeCursor = pointerVisible || videoPlaying;
+    document.documentElement.classList.toggle('hide-native-cursor', hideNativeCursor);
+    if (!pointerVisible) {
       setPointerDwell(false);
       if (gpDetails) gpDetails.open = false;
     }
-    gazePointer.style.opacity = enable ? opct : 0;
-    if (enable && lastPointerPosition) {
+    gazePointer.style.opacity = pointerVisible ? opct : 0;
+    if (pointerVisible && lastPointerPosition) {
       setPointerPos(lastPointerPosition.x, lastPointerPosition.y);
     }
   }
