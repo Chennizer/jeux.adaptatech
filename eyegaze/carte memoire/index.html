@@ -180,6 +180,41 @@
             <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
           </select>
         </div>
+
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked>
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
 
@@ -191,6 +226,8 @@
 <div class="game-container">
   <div id="game-grid" class="game-grid"></div>
 </div>
+
+<div id="gazePointer" aria-hidden="true"></div>
 
 <script src="../../js/eyegaze-menu.js"></script>
 <script src="../../js/translationmain.js"></script>
@@ -296,8 +333,140 @@ muteSFX.addEventListener('change', () => {
   try { if (window.eyegazeSettings) eyegazeSettings.sfxMuted = !!muteSFX.checked; } catch(e){}
 });
 
-const themeSelect = document.getElementById('themeSelect');
+const themeSelect   = document.getElementById('themeSelect');
+const showGazePointer = document.getElementById('showGazePointer');
+const gpDetails       = document.getElementById('gpDetails');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
+const gazePointer     = document.getElementById('gazePointer');
+let lastPointer = { x: null, y: null };
 document.getElementById('startButton').addEventListener('click', startGame);
+
+function isElementVisible(el) {
+  if (!el) return false;
+  if (el.hidden) return false;
+  if (el.style && el.style.display === 'none') return false;
+  if (window.getComputedStyle) {
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+  }
+  return true;
+}
+
+function pointerContextActive() {
+  if (!showGazePointer || !showGazePointer.checked) return false;
+  const optionsVisible = isElementVisible(document.getElementById('game-options'));
+  const gameVisible    = isElementVisible(document.querySelector('.game-container'));
+  return optionsVisible || gameVisible;
+}
+
+function setPointerPos(x, y) {
+  if (!gazePointer) return;
+  gazePointer.style.left = `${x}px`;
+  gazePointer.style.top  = `${y}px`;
+}
+
+function updateGazeStyles() {
+  if (!gazePointer) return;
+  const size = Math.min(100, Math.max(16, parseInt(gazeSize?.value, 10) || 36));
+  const opct = Math.max(0, Math.min(1, (parseInt(gazeOpacity?.value, 10) || 60) / 100));
+  if (gazeSizeVal) gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct * 100);
+  gazePointer.style.setProperty('--gp-size', `${size}px`);
+  gazePointer.style.opacity = pointerContextActive() ? opct : 0;
+}
+
+function applyPointerToggle() {
+  const enable = pointerContextActive();
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  if (!enable && gpDetails) gpDetails.open = false;
+  if (!enable && gazePointer) gazePointer.classList.remove('gp-dwell');
+  updateGazeStyles();
+  if (enable && lastPointer.x != null && lastPointer.y != null) {
+    setPointerPos(lastPointer.x, lastPointer.y);
+  }
+}
+
+function syncPointerSettingsFromUI() {
+  try {
+    if (!window.eyegazeSettings) return;
+    eyegazeSettings.showGazePointer = !!showGazePointer?.checked;
+    const sizeVal = parseInt(gazeSize?.value, 10);
+    eyegazeSettings.gazePointerSize = Number.isFinite(sizeVal) ? sizeVal : 36;
+    const opVal = parseInt(gazeOpacity?.value, 10);
+    const normalized = Number.isFinite(opVal) ? opVal : 60;
+    eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, normalized / 100));
+  } catch (e) {}
+}
+
+(function initPointerControls(){
+  try {
+    if (window.eyegazeSettings) {
+      if (showGazePointer && typeof eyegazeSettings.showGazePointer === 'boolean') {
+        showGazePointer.checked = eyegazeSettings.showGazePointer;
+      }
+      if (gazeSize && typeof eyegazeSettings.gazePointerSize === 'number') {
+        const min = parseInt(gazeSize.min, 10) || 16;
+        const max = parseInt(gazeSize.max, 10) || 100;
+        const size = Math.round(eyegazeSettings.gazePointerSize);
+        gazeSize.value = Math.min(max, Math.max(min, size));
+      }
+      if (gazeOpacity && typeof eyegazeSettings.gazePointerAlpha === 'number') {
+        const min = parseInt(gazeOpacity.min, 10) || 20;
+        const max = parseInt(gazeOpacity.max, 10) || 100;
+        const op = Math.round(eyegazeSettings.gazePointerAlpha * 100);
+        gazeOpacity.value = Math.min(max, Math.max(min, op));
+      }
+    }
+  } catch (e) {}
+  applyPointerToggle();
+  syncPointerSettingsFromUI();
+})();
+
+[showGazePointer, gazeSize, gazeOpacity].forEach(el => {
+  if (!el) return;
+  const handler = () => {
+    syncPointerSettingsFromUI();
+    applyPointerToggle();
+  };
+  el.addEventListener('input', handler);
+  el.addEventListener('change', handler);
+});
+
+if (themeSelect) {
+  themeSelect.addEventListener('change', () => {
+    applyPointerToggle();
+  });
+}
+
+if ('onpointerrawupdate' in window) {
+  window.addEventListener('pointerrawupdate', event => {
+    if (!pointerContextActive()) return;
+    setPointerPos(event.clientX, event.clientY);
+  }, { passive: true });
+}
+
+window.addEventListener('pointermove', event => {
+  lastPointer = { x: event.clientX, y: event.clientY };
+  if (pointerContextActive()) {
+    setPointerPos(event.clientX, event.clientY);
+  }
+});
+
+window.addEventListener('pointerleave', () => {
+  if (!gazePointer) return;
+  gazePointer._savedOpacity = gazePointer.style.opacity;
+  gazePointer.style.opacity = 0;
+});
+
+window.addEventListener('pointerenter', () => {
+  updateGazeStyles();
+  if (lastPointer.x != null && lastPointer.y != null) {
+    setPointerPos(lastPointer.x, lastPointer.y);
+  }
+});
 
 (function initShared(){
   try {
@@ -361,6 +530,7 @@ function startGame() {
 
   const images = getImages(currentCategory, currentPairs);
   setupBoard(images);
+  applyPointerToggle();
 }
 
 function applyTheme(theme) {
@@ -557,6 +727,7 @@ function startHover(card) {
   currentOverlay = document.createElement('div');
   currentOverlay.className = 'dwell-fill';
   card.appendChild(currentOverlay);
+  if (gazePointer) gazePointer.classList.add('gp-dwell');
   requestAnimationFrame(() => {
     currentOverlay.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
     currentOverlay.style.width = '0';
@@ -581,6 +752,7 @@ function stopHover() {
     if (currentOverlay.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
     currentOverlay = null;
   }
+  if (gazePointer) gazePointer.classList.remove('gp-dwell');
 }
 
 function playSound(name) {
