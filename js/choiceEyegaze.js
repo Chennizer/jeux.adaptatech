@@ -39,6 +39,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
 
+  const sharedSettings = (window.eyegazeSettings = window.eyegazeSettings || {});
+
+  const showGazePointer   = document.getElementById('showGazePointer');
+  const gpDetails         = document.getElementById('gpDetails');
+  const gazeSizeInput     = document.getElementById('gazeSize');
+  const gazeSizeValue     = document.getElementById('gazeSizeVal');
+  const gazeOpacityInput  = document.getElementById('gazeOpacity');
+  const gazeOpacityValue  = document.getElementById('gazeOpacityVal');
+  const gazePointer       = document.getElementById('gazePointer');
+
+  if (typeof sharedSettings.showGazePointer === 'boolean' && showGazePointer) {
+    showGazePointer.checked = sharedSettings.showGazePointer;
+  }
+  if (typeof sharedSettings.gazePointerSize === 'number' && gazeSizeInput) {
+    gazeSizeInput.value = String(Math.round(sharedSettings.gazePointerSize));
+  }
+  if (typeof sharedSettings.gazePointerAlpha === 'number' && gazeOpacityInput) {
+    gazeOpacityInput.value = String(Math.round(sharedSettings.gazePointerAlpha * 100));
+  }
+
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
   let selectedTileIndices   = [];
@@ -62,6 +82,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Global variable for tile size in vh; default 40
   let tileSize = 40;
 
+  if (typeof sharedSettings.dwellTime === 'number') {
+    fixationDelay = sharedSettings.dwellTime;
+    if (fixationTimeInput) fixationTimeInput.value = String(sharedSettings.dwellTime);
+    if (fixationTimeValue) fixationTimeValue.textContent = sharedSettings.dwellTime;
+    document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
+  }
+
   const tileChoiceMap = new WeakMap();
   const POINTER_MOVE_THRESHOLD = 10;
   let hoveredTile = null;
@@ -71,6 +98,82 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastPointerPosition = null;
   let pointerMotionOrigin = null;
   let pendingGuardedHover = null;
+
+  function recordPointerPosition(x, y) {
+    lastPointerPosition = { x, y };
+    if (gazePointer) {
+      gazePointer.style.left = x + 'px';
+      gazePointer.style.top  = y + 'px';
+    }
+  }
+
+  function isInteractiveScreenActive() {
+    if (!showGazePointer) return false;
+    const tilePickerVisible = tilePickerModal && tilePickerModal.style.display !== 'none';
+    const tileContainerVisible = tileContainer && tileContainer.style.display !== 'none' && tileContainer.style.display !== '';
+    if (videoPlaying) return false;
+    return !!(tilePickerVisible || tileContainerVisible);
+  }
+
+  function updateGazeStyles() {
+    if (!gazePointer) return;
+    const size = parseInt(gazeSizeInput?.value, 10) || 36;
+    const opct = Math.max(0, Math.min(1, (parseInt(gazeOpacityInput?.value, 10) || 100) / 100));
+    if (gazeSizeValue) gazeSizeValue.textContent = size;
+    if (gazeOpacityValue) gazeOpacityValue.textContent = Math.round(opct * 100);
+    gazePointer.style.setProperty('--gp-size', size + 'px');
+    const shouldShow = !!showGazePointer?.checked && isInteractiveScreenActive();
+    gazePointer.style.opacity = shouldShow ? opct : 0;
+  }
+
+  function applyPointerToggle() {
+    const enable = !!showGazePointer?.checked && isInteractiveScreenActive();
+    document.documentElement.classList.toggle('hide-native-cursor', enable);
+    if (gpDetails && !enable) gpDetails.open = false;
+    updateGazeStyles();
+    if (enable && lastPointerPosition) {
+      recordPointerPosition(lastPointerPosition.x, lastPointerPosition.y);
+    }
+  }
+
+  function syncEyegazeSettingsFromUI() {
+    try {
+      sharedSettings.showGazePointer = !!showGazePointer?.checked;
+      sharedSettings.gazePointerSize = parseInt(gazeSizeInput?.value || '36', 10) || 36;
+      sharedSettings.gazePointerAlpha = Math.max(0, Math.min(1, (parseInt(gazeOpacityInput?.value || '100', 10) || 100) / 100));
+      if (fixationTimeInput) {
+        sharedSettings.dwellTime = parseInt(fixationTimeInput.value, 10) || fixationDelay;
+      }
+    } catch (err) {}
+  }
+
+  if ('onpointerrawupdate' in window) {
+    window.addEventListener('pointerrawupdate', event => {
+      recordPointerPosition(event.clientX, event.clientY);
+    }, { passive: true });
+  }
+
+  window.addEventListener('pointerleave', () => {
+    if (gazePointer) {
+      gazePointer._savedOpacity = gazePointer.style.opacity;
+      gazePointer.style.opacity = 0;
+    }
+  });
+
+  window.addEventListener('pointerenter', () => {
+    updateGazeStyles();
+    if (lastPointerPosition) {
+      recordPointerPosition(lastPointerPosition.x, lastPointerPosition.y);
+    }
+  });
+
+  [showGazePointer, gazeSizeInput, gazeOpacityInput].forEach(el => {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      applyPointerToggle();
+      syncEyegazeSettingsFromUI();
+    });
+  });
 
   function clearHoverState() {
     if (hoverTimeoutId) {
@@ -83,6 +186,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     hoveredChoice = null;
     pendingGuardedHover = null;
+    if (gazePointer) {
+      gazePointer.classList.remove('gp-dwell');
+    }
   }
 
   function requirePointerMotionBeforeHover({ clearSelection = true } = {}) {
@@ -101,10 +207,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function scheduleHoverCountdown() {
     if (!hoveredTile || !hoveredChoice || videoPlaying) {
+      if (gazePointer) {
+        gazePointer.classList.remove('gp-dwell');
+      }
       return;
     }
     if (hoverTimeoutId) {
       clearTimeout(hoverTimeoutId);
+    }
+    if (gazePointer) {
+      gazePointer.classList.add('gp-dwell');
     }
     hoverTimeoutId = setTimeout(() => {
       if (!videoPlaying && hoveredTile && hoveredChoice) {
@@ -294,6 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fixationDelay = parseInt(fixationTimeInput.value, 10);
       fixationTimeValue.textContent = fixationDelay;
       document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
+      syncEyegazeSettingsFromUI();
     });
   }
 
@@ -442,6 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    applyPointerToggle();
   }
 
   document.addEventListener('keydown', e => {
@@ -466,6 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoSource.src = videoUrl;
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
+    applyPointerToggle();
     videoPlayer.onloadedmetadata = () => {
       if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
         videoPlayer.currentTime = videoResumePositions[videoUrl];
@@ -502,8 +617,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('pointermove', event => {
     const { clientX, clientY } = event;
     const targetElement = event.target instanceof Element ? event.target : null;
-    const previousPosition = lastPointerPosition;
-    lastPointerPosition = { x: clientX, y: clientY };
+    const previousPosition = lastPointerPosition
+      ? { x: lastPointerPosition.x, y: lastPointerPosition.y }
+      : null;
+    recordPointerPosition(clientX, clientY);
 
     if (requirePointerMotion) {
       if (!pointerMotionOrigin) {
@@ -573,6 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStartButtonState();
     gameOptionsModal.style.display = "none";
     tilePickerModal.style.display = "flex";
+    applyPointerToggle();
     if (document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(err => {
         console.warn("Fullscreen request failed:", err);
@@ -619,6 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tilePickerModal.style.display = "none";
       renderGameTiles();
       startInactivityTimer();
+      applyPointerToggle();
     });
   });
 
@@ -634,6 +753,9 @@ document.addEventListener('DOMContentLoaded', () => {
     requirePointerMotionBeforeHover(options);
   };
   window.choiceEyegaze.isPointerMotionRequired = () => requirePointerMotion;
+
+  syncEyegazeSettingsFromUI();
+  applyPointerToggle();
 
   // Populate grid if choices already exist (e.g., restored from IndexedDB)
   if (Array.isArray(mediaChoices) && mediaChoices.length > 0) {
