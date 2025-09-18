@@ -75,6 +75,8 @@
     }
 
     #startButton {
+      position: relative;
+      overflow: hidden;
       background: linear-gradient(135deg, #34d399, #22d3ee);
       color: #022c22;
       border: none;
@@ -251,7 +253,8 @@
     }
 
     .checkpoint .dwell,
-    .hudButton .dwell {
+    .hudButton .dwell,
+    #startButton .dwell {
       position: absolute;
       left: 50%;
       top: 50%;
@@ -488,7 +491,7 @@
       </div>
 
       <div id="mode-divider"></div>
-      <button id="startButton" class="button translate" data-fr="Commencer l'aventure" data-en="Start the adventure">Commencer l'aventure</button>
+      <button type="button" id="startButton" class="button translate" data-fr="Commencer l'aventure" data-en="Start the adventure">Commencer l'aventure</button>
     </div>
   </div>
 
@@ -985,8 +988,16 @@
       updateProgressLabel();
     }
 
-    function wireHudButton(btn, handler) {
+    function wireDwellButton(btn, handler, dwellDuration = CONTROL_DWELL_MS) {
       let timer = null;
+      let lastInvoke = 0;
+
+      const resolveDuration = () => {
+        const raw = typeof dwellDuration === 'function' ? dwellDuration() : dwellDuration;
+        const ms = Number(raw);
+        return Number.isFinite(ms) && ms > 0 ? ms : CONTROL_DWELL_MS;
+      };
+
       const clearTimer = () => {
         if (timer) {
           clearTimeout(timer);
@@ -994,40 +1005,63 @@
         }
         resetDwellCircle(btn);
       };
+
+      const invoke = () => {
+        const now = Date.now();
+        if (now - lastInvoke < 250) {
+          return;
+        }
+        lastInvoke = now;
+        try {
+          const result = handler();
+          if (result && typeof result.catch === 'function') {
+            result.catch(() => {});
+          }
+        } catch (err) {}
+      };
+
       const begin = () => {
-        if (!state.pathDef) {
-          handler();
+        if (btn.disabled) {
           return;
         }
         clearTimer();
-        startDwellCircle(btn, CONTROL_DWELL_MS);
+        const dwellMs = resolveDuration();
+        startDwellCircle(btn, dwellMs);
         timer = setTimeout(() => {
           clearTimer();
-          handler();
-        }, CONTROL_DWELL_MS + 12);
+          invoke();
+        }, dwellMs + 12);
       };
+
+      const cancel = () => {
+        clearTimer();
+      };
+
       btn.addEventListener('mouseenter', begin);
-      btn.addEventListener('mouseleave', clearTimer);
+      btn.addEventListener('mouseleave', cancel);
       btn.addEventListener('touchstart', (ev) => {
         ev.preventDefault();
         begin();
       }, { passive: false });
-      btn.addEventListener('touchend', clearTimer);
-      btn.addEventListener('touchcancel', clearTimer);
+      btn.addEventListener('touchend', cancel);
+      btn.addEventListener('touchcancel', cancel);
       btn.addEventListener('click', (ev) => {
         ev.preventDefault();
-        handler();
+        clearTimer();
+        invoke();
       });
     }
 
-    startButton.addEventListener('click', async () => {
+    async function startExperience() {
       await enterFullscreen();
       initSessionFromOptions();
       gameOptions.style.display = 'none';
       langToggle.style.display = 'none';
       gameArea.style.display = 'block';
       updateProgressLabel();
-    });
+    }
+
+    wireDwellButton(startButton, startExperience);
 
     playAgainBtn.addEventListener('click', () => {
       if (!state.pathDef) return;
@@ -1035,13 +1069,13 @@
       resetTrailState(state.pathDef);
     });
 
-    wireHudButton(restartBtn, () => {
+    wireDwellButton(restartBtn, () => {
       if (!state.pathDef) return;
       hideCompletionBanner();
       resetTrailState(state.pathDef);
     });
 
-    wireHudButton(optionsBtn, () => {
+    wireDwellButton(optionsBtn, () => {
       showOptionsPanel();
     });
 
