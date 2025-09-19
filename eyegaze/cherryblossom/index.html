@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cherry Blossom Cut — Watercolor Grove</title>
+  <title>Cherry Blossom Cut — Silhouette Forest</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -48,7 +48,7 @@
     const IMG_SRC = "../../images/cherryblossom.png";
     const SLASH_SOUND = "../../sounds/blade.mp3";
 
-    // Larger blossoms, fewer on screen (your current tuning)
+    // Large blossoms, fewer on screen
     const SPAWN_EVERY_MS = 1400;
     const FALL_SPEED_MIN = 40;
     const FALL_SPEED_MAX = 95;
@@ -60,15 +60,13 @@
     const SHARD_FADE_TIME = 0.85;
     const MAX_FALLING = 5;
 
-    // Watercolor Grove (Concept 2)
-    // Layer order: far -> mid -> near
-    const GROVE_LAYERS = [
-      { speed: 0.06, alpha: 0.10, blobs: 10, hue: 345, sat: 0.38, light: 1.00, spreadY: 0.55 },
-      { speed: 0.10, alpha: 0.14, blobs: 9,  hue: 350, sat: 0.45, light: 0.98, spreadY: 0.60 },
-      { speed: 0.16, alpha: 0.18, blobs: 8,  hue: 350, sat: 0.55, light: 0.96, spreadY: 0.66 },
+    // Silhouette Forest (Concept 1)
+    // Two parallax layers of trees: far & near
+    const FOREST_LAYERS = [
+      { count: 6, speed: 0.05, trunkTint: "rgba(90,40,50,0.35)", canopyTint: "rgba(235,120,150,0.25)", trunkW: [16,28], trunkH: [0.28,0.36], canopyR: [50,110], yBand: [0.68,0.78] },
+      { count: 5, speed: 0.10, trunkTint: "rgba(70,30,40,0.55)",  canopyTint: "rgba(235,120,150,0.35)", trunkW: [22,34], trunkH: [0.34,0.44], canopyR: [60,130], yBand: [0.72,0.82] },
     ];
-    // Ground wash strength
-    const GROUND_ALPHA = 0.12;
+    const CANOPIES_PER_TREE = [3, 4]; // min, max circles per tree
 
     /* =======================
        SETUP
@@ -81,7 +79,7 @@
     window.addEventListener('resize', () => {
       W = canvas.width  = window.innerWidth;
       H = canvas.height = window.innerHeight;
-      buildGrove(); // rebuild offscreen layers on resize
+      buildForest();
     });
 
     const img = new Image();
@@ -109,83 +107,45 @@
     const blossoms = [];
     const shards = [];
     const rand = (a, b) => a + Math.random() * (b - a);
+    const randi = (a, b) => Math.floor(rand(a, b + 1));
     const nowSec = () => performance.now()/1000;
 
     /* =======================
-       WATERcolor GROVE (offscreen)
+       FOREST (generated)
     ======================= */
-    const grove = []; // [{canvas, ctx, offsetX, speed, alpha}]
-    function buildGrove() {
-      grove.length = 0;
+    // Each layer has trees; each tree has trunk rect + a few canopy circles.
+    const forest = []; // [{speed, offsetX, trees:[{x, trunkW, trunkH, yBase, canopies:[{x,y,r}]}]}]
 
-      for (const layer of GROVE_LAYERS) {
-        const off = document.createElement('canvas');
-        off.width = W;
-        off.height = H;
-        const octx = off.getContext('2d');
+    function buildForest() {
+      forest.length = 0;
 
-        // Draw soft ground wash first (only on nearest layer to minimize stacking)
-        if (grove.length === 0) {
-          // sky tint (ultra subtle warm)
-          const sky = octx.createLinearGradient(0, 0, 0, H);
-          sky.addColorStop(0, "rgba(255,245,248,1)");
-          sky.addColorStop(1, "rgba(255,255,255,1)");
-          octx.fillStyle = sky;
-          octx.fillRect(0, 0, W, H);
+      for (const layer of FOREST_LAYERS) {
+        const L = { speed: layer.speed, offsetX: rand(0, W), trees: [], trunkTint: layer.trunkTint, canopyTint: layer.canopyTint };
+        for (let i = 0; i < layer.count; i++) {
+          const x = rand(0, W);
+          const trunkW = rand(layer.trunkW[0], layer.trunkW[1]);
+          const trunkH = rand(layer.trunkH[0], layer.trunkH[1]) * H;
+          const yBase  = rand(layer.yBand[0], layer.yBand[1]) * H; // base where trunk stands
+          const canopies = [];
+          const cNum = randi(CANOPIES_PER_TREE[0], CANOPIES_PER_TREE[1]);
+
+          for (let c = 0; c < cNum; c++) {
+            const r = rand(layer.canopyR[0], layer.canopyR[1]);
+            // Cluster around the trunk top
+            const cx = x + rand(-r*0.6, r*0.6);
+            const cy = (yBase - trunkH) + rand(-r*0.2, r*0.3);
+            canopies.push({ x: cx, y: cy, r });
+          }
+
+          L.trees.push({ x, trunkW, trunkH, yBase, canopies });
         }
-
-        // Paint watercolor blossom canopies as overlapping radial gradients
-        // Y band for canopies (upper edge around spreadY*H, with variance)
-        for (let i = 0; i < layer.blobs; i++) {
-          const r = rand(W*0.08, W*0.18);                 // canopy radius
-          const x = rand(-r*0.4, W + r*0.4);              // allow slight overflow for organic edges
-          const y = rand(H*layer.spreadY, H*(layer.spreadY + 0.12));
-
-          // color stops: denser center, feathered edge
-          // Build a slightly saturated pink in sRGB
-          const hue = layer.hue; // ~350 (pink-red)
-          const c0 = `rgba(${Math.round(255)}, ${Math.round(160)}, ${Math.round(185)}, ${layer.alpha*1.2})`;
-          const c1 = `rgba(255,160,185,0.000)`;
-
-          const g = octx.createRadialGradient(x, y, r*0.15, x, y, r);
-          g.addColorStop(0.0, c0);
-          g.addColorStop(0.7, `rgba(255,175,195,${layer.alpha*0.55})`);
-          g.addColorStop(1.0, c1);
-
-          octx.globalCompositeOperation = "source-over";
-          octx.fillStyle = g;
-          octx.beginPath();
-          octx.arc(x, y, r, 0, Math.PI*2);
-          octx.fill();
-
-          // Edge bleed (watercolor rim) — faint, slightly larger, low alpha
-          octx.globalAlpha = layer.alpha * 0.35;
-          octx.beginPath();
-          octx.arc(x, y, r*1.06, 0, Math.PI*2);
-          octx.fill();
-          octx.globalAlpha = 1.0;
-        }
-
-        // Subtle ground plane wash (only once on top to avoid tint stacking)
-        if (grove.length === GROVE_LAYERS.length - 1) {
-          const gg = octx.createLinearGradient(0, H*0.65, 0, H);
-          gg.addColorStop(0, `rgba(255,170,190,${GROUND_ALPHA*0.5})`);
-          gg.addColorStop(1, `rgba(255,170,190,${GROUND_ALPHA})`);
-          octx.fillStyle = gg;
-          octx.fillRect(0, H*0.65, W, H*0.35);
-        }
-
-        grove.push({
-          canvas: off,
-          ctx: octx,
-          offsetX: rand(0, W),
-          speed: layer.speed,
-          alpha: 1.0
-        });
+        // Spread trees across width (sort by x for consistent gaps)
+        L.trees.sort((a,b)=>a.x-b.x);
+        forest.push(L);
       }
     }
 
-    buildGrove();
+    buildForest();
 
     /* =======================
        GAME ENTITIES
@@ -244,30 +204,68 @@
        BACKGROUND UPDATE/DRAW
     ======================= */
     function updateBackground(dt) {
-      // gentle horizontal parallax drift
-      for (const layer of grove) {
-        layer.offsetX = (layer.offsetX - layer.speed * 20 * dt) % W;
+      // horizontal parallax drift
+      for (const L of forest) {
+        L.offsetX = (L.offsetX - L.speed * 20 * dt) % W;
       }
     }
 
+    function drawForestLayer(L) {
+      ctx.save();
+      ctx.translate(-L.offsetX, 0);
+
+      // draw twice for seamless wrap
+      for (let wrap = 0; wrap < 2; wrap++) {
+        for (const t of L.trees) {
+          // trunk
+          ctx.fillStyle = L.trunkTint;
+          ctx.fillRect(t.x, t.yBase - t.trunkH, t.trunkW, t.trunkH);
+
+          // simple branches (two short diagonals) — very subtle
+          ctx.save();
+          ctx.strokeStyle = L.trunkTint;
+          ctx.lineWidth = Math.max(1, t.trunkW * 0.12);
+          ctx.beginPath();
+          // left branch
+          ctx.moveTo(t.x + t.trunkW*0.6, t.yBase - t.trunkH*0.65);
+          ctx.lineTo(t.x - t.trunkW*1.2, t.yBase - t.trunkH*0.78);
+          // right branch
+          ctx.moveTo(t.x + t.trunkW*0.6, t.yBase - t.trunkH*0.48);
+          ctx.lineTo(t.x + t.trunkW*2.0, t.yBase - t.trunkH*0.62);
+          ctx.stroke();
+          ctx.restore();
+
+          // canopy (flat circles)
+          ctx.fillStyle = L.canopyTint;
+          for (const c of t.canopies) {
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+            ctx.fill();
+          }
+        }
+        ctx.translate(W, 0);
+      }
+      ctx.restore();
+    }
+
     function drawBackground() {
-      // clear to subtle sky (the far layer already contains a sky fill, but we ensure white base)
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, W, H);
 
-      // draw grove layers back-to-front with seamless wrap
-      for (const layer of grove) {
-        ctx.save();
-        ctx.globalAlpha = layer.alpha;
-        ctx.translate(-layer.offsetX, 0);
-        ctx.drawImage(layer.canvas, 0, 0);
-        ctx.drawImage(layer.canvas, W, 0);
-        ctx.restore();
-      }
+      // slight bottom ground line (very soft)
+      const groundGrad = ctx.createLinearGradient(0, H*0.84, 0, H);
+      groundGrad.addColorStop(0, "rgba(0,0,0,0)");
+      groundGrad.addColorStop(1, "rgba(0,0,0,0.06)");
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, H*0.84, W, H*0.16);
 
-      // soft top vignette to frame petals (very subtle)
+      // draw far to near
+      drawForestLayer(forest[0]);
+      drawForestLayer(forest[1]);
+
+      // faint top vignette to frame petals
       const v = ctx.createLinearGradient(0, 0, 0, H*0.4);
-      v.addColorStop(0.0, "rgba(0,0,0,0.06)");
+      v.addColorStop(0.0, "rgba(0,0,0,0.05)");
       v.addColorStop(1.0, "rgba(0,0,0,0)");
       ctx.fillStyle = v;
       ctx.fillRect(0, 0, W, H*0.4);
