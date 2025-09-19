@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cherry Blossom Cut — Minimal Rising Sun</title>
+  <title>Cherry Blossom Cut — Watercolor Grove</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -18,7 +18,6 @@
       cursor: crosshair;
       background: #fff;
     }
-    /* Start overlay */
     #startOverlay {
       position: fixed; inset: 0;
       display: grid; place-items: center;
@@ -47,41 +46,57 @@
        CONFIG
     ======================= */
     const IMG_SRC = "../../images/cherryblossom.png";
+    const SLASH_SOUND = "../../sounds/blade.mp3";
 
-    // 3× bigger blossoms, ~3× fewer on screen
-    const SPAWN_EVERY_MS = 1400;               // slower spawn
+    // Larger blossoms, fewer on screen (your current tuning)
+    const SPAWN_EVERY_MS = 1400;
     const FALL_SPEED_MIN = 40;
     const FALL_SPEED_MAX = 95;
-    const BLOSSOM_SIZE_MIN = 72 * 3;           // was 72
-    const BLOSSOM_SIZE_MAX = 138 * 3;          // was 138
+    const BLOSSOM_SIZE_MIN = 72 * 3;
+    const BLOSSOM_SIZE_MAX = 138 * 3;
     const HOVER_CUT_RADIUS = 52;
     const SHARD_SPREAD_SPEED = 190;
     const SHARD_ROT_SPEED = 1.2;
     const SHARD_FADE_TIME = 0.85;
-    const MAX_FALLING = 5;                     // ~16/3
+    const MAX_FALLING = 5;
 
-    // Sun & rays (same color)
-    const MAIN_COLOR = "#d40000";
-    const RAY_COUNT = 10;
-    const RAY_ALPHA = 0.25;
+    // Watercolor Grove (Concept 2)
+    // Layer order: far -> mid -> near
+    const GROVE_LAYERS = [
+      { speed: 0.06, alpha: 0.10, blobs: 10, hue: 345, sat: 0.38, light: 1.00, spreadY: 0.55 },
+      { speed: 0.10, alpha: 0.14, blobs: 9,  hue: 350, sat: 0.45, light: 0.98, spreadY: 0.60 },
+      { speed: 0.16, alpha: 0.18, blobs: 8,  hue: 350, sat: 0.55, light: 0.96, spreadY: 0.66 },
+    ];
+    // Ground wash strength
+    const GROUND_ALPHA = 0.12;
 
-    // Rays length: from sun edge to only 1.5x–2x the sun radius
-    const RAY_LEN_MIN = 1.5;
-    const RAY_LEN_MAX = 2.0;
-
-    /* ======================= */
+    /* =======================
+       SETUP
+    ======================= */
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     let W = canvas.width  = window.innerWidth;
     let H = canvas.height = window.innerHeight;
+
     window.addEventListener('resize', () => {
       W = canvas.width  = window.innerWidth;
       H = canvas.height = window.innerHeight;
+      buildGrove(); // rebuild offscreen layers on resize
     });
 
     const img = new Image();
     img.src = IMG_SRC;
 
+    // preload slash sound
+    const slashAudio = new Audio(SLASH_SOUND);
+    slashAudio.volume = 0.6;
+    function playSlash() {
+      const s = slashAudio.cloneNode(true);
+      s.volume = slashAudio.volume;
+      s.play().catch(()=>{});
+    }
+
+    // pointer
     const pointer = { x: -9999, y: -9999, inside: false };
     canvas.addEventListener('pointermove', e => {
       const rect = canvas.getBoundingClientRect();
@@ -96,6 +111,85 @@
     const rand = (a, b) => a + Math.random() * (b - a);
     const nowSec = () => performance.now()/1000;
 
+    /* =======================
+       WATERcolor GROVE (offscreen)
+    ======================= */
+    const grove = []; // [{canvas, ctx, offsetX, speed, alpha}]
+    function buildGrove() {
+      grove.length = 0;
+
+      for (const layer of GROVE_LAYERS) {
+        const off = document.createElement('canvas');
+        off.width = W;
+        off.height = H;
+        const octx = off.getContext('2d');
+
+        // Draw soft ground wash first (only on nearest layer to minimize stacking)
+        if (grove.length === 0) {
+          // sky tint (ultra subtle warm)
+          const sky = octx.createLinearGradient(0, 0, 0, H);
+          sky.addColorStop(0, "rgba(255,245,248,1)");
+          sky.addColorStop(1, "rgba(255,255,255,1)");
+          octx.fillStyle = sky;
+          octx.fillRect(0, 0, W, H);
+        }
+
+        // Paint watercolor blossom canopies as overlapping radial gradients
+        // Y band for canopies (upper edge around spreadY*H, with variance)
+        for (let i = 0; i < layer.blobs; i++) {
+          const r = rand(W*0.08, W*0.18);                 // canopy radius
+          const x = rand(-r*0.4, W + r*0.4);              // allow slight overflow for organic edges
+          const y = rand(H*layer.spreadY, H*(layer.spreadY + 0.12));
+
+          // color stops: denser center, feathered edge
+          // Build a slightly saturated pink in sRGB
+          const hue = layer.hue; // ~350 (pink-red)
+          const c0 = `rgba(${Math.round(255)}, ${Math.round(160)}, ${Math.round(185)}, ${layer.alpha*1.2})`;
+          const c1 = `rgba(255,160,185,0.000)`;
+
+          const g = octx.createRadialGradient(x, y, r*0.15, x, y, r);
+          g.addColorStop(0.0, c0);
+          g.addColorStop(0.7, `rgba(255,175,195,${layer.alpha*0.55})`);
+          g.addColorStop(1.0, c1);
+
+          octx.globalCompositeOperation = "source-over";
+          octx.fillStyle = g;
+          octx.beginPath();
+          octx.arc(x, y, r, 0, Math.PI*2);
+          octx.fill();
+
+          // Edge bleed (watercolor rim) — faint, slightly larger, low alpha
+          octx.globalAlpha = layer.alpha * 0.35;
+          octx.beginPath();
+          octx.arc(x, y, r*1.06, 0, Math.PI*2);
+          octx.fill();
+          octx.globalAlpha = 1.0;
+        }
+
+        // Subtle ground plane wash (only once on top to avoid tint stacking)
+        if (grove.length === GROVE_LAYERS.length - 1) {
+          const gg = octx.createLinearGradient(0, H*0.65, 0, H);
+          gg.addColorStop(0, `rgba(255,170,190,${GROUND_ALPHA*0.5})`);
+          gg.addColorStop(1, `rgba(255,170,190,${GROUND_ALPHA})`);
+          octx.fillStyle = gg;
+          octx.fillRect(0, H*0.65, W, H*0.35);
+        }
+
+        grove.push({
+          canvas: off,
+          ctx: octx,
+          offsetX: rand(0, W),
+          speed: layer.speed,
+          alpha: 1.0
+        });
+      }
+    }
+
+    buildGrove();
+
+    /* =======================
+       GAME ENTITIES
+    ======================= */
     function spawnBlossom() {
       if (!img.complete) return;
       const size = rand(BLOSSOM_SIZE_MIN, BLOSSOM_SIZE_MAX);
@@ -115,6 +209,7 @@
     }
 
     function cutBlossom(b) {
+      playSlash();
       const leftRect  = { sx: 0, sy: 0, sw: img.width/2, sh: img.height };
       const rightRect = { sx: img.width/2, sy: 0, sw: img.width/2, sh: img.height };
       const tw = b.w, th = b.h, tBorn = nowSec();
@@ -129,17 +224,58 @@
       if (!started) return;
       const dt = Math.min(0.033, (tMs - lastT) / 1000);
       lastT = tMs;
+
+      // spawns
       spawnTimer += dt * 1000;
       if (spawnTimer > SPAWN_EVERY_MS && blossoms.length < MAX_FALLING) {
         spawnTimer = 0;
         spawnBlossom();
       }
+
+      updateBackground(dt);
       updateBlossoms(dt);
       updateShards(dt);
       render();
+
       requestAnimationFrame(tick);
     }
 
+    /* =======================
+       BACKGROUND UPDATE/DRAW
+    ======================= */
+    function updateBackground(dt) {
+      // gentle horizontal parallax drift
+      for (const layer of grove) {
+        layer.offsetX = (layer.offsetX - layer.speed * 20 * dt) % W;
+      }
+    }
+
+    function drawBackground() {
+      // clear to subtle sky (the far layer already contains a sky fill, but we ensure white base)
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, W, H);
+
+      // draw grove layers back-to-front with seamless wrap
+      for (const layer of grove) {
+        ctx.save();
+        ctx.globalAlpha = layer.alpha;
+        ctx.translate(-layer.offsetX, 0);
+        ctx.drawImage(layer.canvas, 0, 0);
+        ctx.drawImage(layer.canvas, W, 0);
+        ctx.restore();
+      }
+
+      // soft top vignette to frame petals (very subtle)
+      const v = ctx.createLinearGradient(0, 0, 0, H*0.4);
+      v.addColorStop(0.0, "rgba(0,0,0,0.06)");
+      v.addColorStop(1.0, "rgba(0,0,0,0)");
+      ctx.fillStyle = v;
+      ctx.fillRect(0, 0, W, H*0.4);
+    }
+
+    /* =======================
+       GAME RENDER/UPDATE
+    ======================= */
     function updateBlossoms(dt) {
       for (let i = blossoms.length-1; i>=0; i--) {
         const b = blossoms[i];
@@ -161,48 +297,14 @@
       }
     }
 
-    function drawBackground() {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0,0,W,H);
-
-      // Sun 3× smaller than original: r = 0.15 * min(W,H)
-      const cx = W/2, cy = H, r = Math.min(W,H)*0.15;
-
-      // Rays from sun edge; length between 1.5x and 2x radius
-      ctx.save();
-      ctx.globalAlpha = RAY_ALPHA;
-      ctx.fillStyle = MAIN_COLOR;
-      const step = Math.PI / RAY_COUNT;
-      for (let i=0; i<RAY_COUNT; i++) {
-        const aMid = -Math.PI + step/2 + i*step;
-        const a1 = aMid - step*0.4;
-        const a2 = aMid + step*0.4;
-        const factor = RAY_LEN_MIN + (i/(RAY_COUNT-1))*(RAY_LEN_MAX - RAY_LEN_MIN); // spread across range
-        const outerR = r * factor;
-
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a1)*r, cy + Math.sin(a1)*r);
-        ctx.lineTo(cx + Math.cos(a1)*outerR, cy + Math.sin(a1)*outerR);
-        ctx.lineTo(cx + Math.cos(a2)*outerR, cy + Math.sin(a2)*outerR);
-        ctx.lineTo(cx + Math.cos(a2)*r, cy + Math.sin(a2)*r);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-
-      // Sun core
-      ctx.fillStyle = MAIN_COLOR;
-      ctx.beginPath();
-      ctx.arc(cx,cy,r,Math.PI,2*Math.PI);
-      ctx.fill();
-    }
-
     function render() {
       drawBackground();
+      // Whole blossoms
       for (const b of blossoms) {
         ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle);
         ctx.drawImage(img,-b.w/2,-b.h/2,b.w,b.h); ctx.restore();
       }
+      // Shards
       const t = nowSec();
       for (const s of shards) {
         const alpha = Math.max(0,1-(t-s.born)/s.life);
@@ -213,7 +315,7 @@
       }
     }
 
-    // ---- Start button -> go fullscreen and start loop
+    /* ===== FULLSCREEN START ===== */
     const startOverlay = document.getElementById('startOverlay');
     const startBtn = document.getElementById('startBtn');
 
@@ -225,7 +327,7 @@
     }
 
     startBtn.addEventListener('click', async () => {
-      try { await enterFullscreen(); } catch(e) { /* ignore if blocked */ }
+      try { await enterFullscreen(); } catch(e) {}
       startOverlay.style.display = 'none';
       started = true;
       lastT = performance.now();
