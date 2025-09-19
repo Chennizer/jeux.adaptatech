@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cherry Blossom Cut — White Background</title>
+  <title>Cherry Blossom Cut — Minimal Rising Sun</title>
   <style>
     html, body {
       margin: 0; padding: 0;
       height: 100%;
       background: #fff;
       overflow: hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
     }
     #game {
       display: block;
@@ -17,9 +18,27 @@
       cursor: crosshair;
       background: #fff;
     }
+    /* Start overlay */
+    #startOverlay {
+      position: fixed; inset: 0;
+      display: grid; place-items: center;
+      background: rgba(255,255,255,0.9);
+      z-index: 10;
+    }
+    #startBtn {
+      padding: 14px 22px;
+      border: 2px solid #d40000; color: #d40000; background: #fff;
+      border-radius: 12px; font-size: 18px; font-weight: 700;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+      cursor: pointer;
+    }
+    #startBtn:active { transform: translateY(1px); }
   </style>
 </head>
 <body>
+  <div id="startOverlay">
+    <button id="startBtn">Start • Fullscreen</button>
+  </div>
   <canvas id="game"></canvas>
 
   <script>
@@ -28,22 +47,29 @@
        CONFIG
     ======================= */
     const IMG_SRC = "../../images/cherryblossom.png";
-    const SPAWN_EVERY_MS = 700;
+
+    // 3× bigger blossoms, ~3× fewer on screen
+    const SPAWN_EVERY_MS = 1400;               // slower spawn
     const FALL_SPEED_MIN = 40;
     const FALL_SPEED_MAX = 95;
-    const BLOSSOM_SIZE_MIN = 72;
-    const BLOSSOM_SIZE_MAX = 138;
+    const BLOSSOM_SIZE_MIN = 72 * 3;           // was 72
+    const BLOSSOM_SIZE_MAX = 138 * 3;          // was 138
     const HOVER_CUT_RADIUS = 52;
     const SHARD_SPREAD_SPEED = 190;
     const SHARD_ROT_SPEED = 1.2;
     const SHARD_FADE_TIME = 0.85;
-    const MAX_FALLING = 16;
+    const MAX_FALLING = 5;                     // ~16/3
 
-    const RAY_COLOR = "rgba(200,0,0,0.25)";
-    const SUN_COLOR = "#d40000";
-    const RAY_COUNT = 10;        // fewer rays for a calmer look
-    const RAY_ALPHA = 0.25;      // keep them subtle
+    // Sun & rays (same color)
+    const MAIN_COLOR = "#d40000";
+    const RAY_COUNT = 10;
+    const RAY_ALPHA = 0.25;
 
+    // Rays length: from sun edge to only 1.5x–2x the sun radius
+    const RAY_LEN_MIN = 1.5;
+    const RAY_LEN_MAX = 2.0;
+
+    /* ======================= */
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     let W = canvas.width  = window.innerWidth;
@@ -97,9 +123,10 @@
       b.cut = true;
     }
 
-    let lastT = performance.now(), spawnTimer = 0;
+    let lastT = performance.now(), spawnTimer = 0, started = false;
 
     function tick(tMs) {
+      if (!started) return;
       const dt = Math.min(0.033, (tMs - lastT) / 1000);
       lastT = tMs;
       spawnTimer += dt * 1000;
@@ -138,32 +165,33 @@
       ctx.fillStyle = "#fff";
       ctx.fillRect(0,0,W,H);
 
-      // Sun position
-      const cx = W/2, cy = H, r = Math.min(W,H)*0.45;
+      // Sun 3× smaller than original: r = 0.15 * min(W,H)
+      const cx = W/2, cy = H, r = Math.min(W,H)*0.15;
 
-      // Rays start from edge of sun
+      // Rays from sun edge; length between 1.5x and 2x radius
       ctx.save();
       ctx.globalAlpha = RAY_ALPHA;
-      ctx.fillStyle = RAY_COLOR;
+      ctx.fillStyle = MAIN_COLOR;
       const step = Math.PI / RAY_COUNT;
       for (let i=0; i<RAY_COUNT; i++) {
         const aMid = -Math.PI + step/2 + i*step;
         const a1 = aMid - step*0.4;
         const a2 = aMid + step*0.4;
-        const innerR = r;               // start from sun edge
-        const outerR = r + Math.max(W,H);
+        const factor = RAY_LEN_MIN + (i/(RAY_COUNT-1))*(RAY_LEN_MAX - RAY_LEN_MIN); // spread across range
+        const outerR = r * factor;
+
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a1)*innerR, cy + Math.sin(a1)*innerR);
+        ctx.moveTo(cx + Math.cos(a1)*r, cy + Math.sin(a1)*r);
         ctx.lineTo(cx + Math.cos(a1)*outerR, cy + Math.sin(a1)*outerR);
         ctx.lineTo(cx + Math.cos(a2)*outerR, cy + Math.sin(a2)*outerR);
-        ctx.lineTo(cx + Math.cos(a2)*innerR, cy + Math.sin(a2)*innerR);
+        ctx.lineTo(cx + Math.cos(a2)*r, cy + Math.sin(a2)*r);
         ctx.closePath();
         ctx.fill();
       }
       ctx.restore();
 
       // Sun core
-      ctx.fillStyle = SUN_COLOR;
+      ctx.fillStyle = MAIN_COLOR;
       ctx.beginPath();
       ctx.arc(cx,cy,r,Math.PI,2*Math.PI);
       ctx.fill();
@@ -185,7 +213,25 @@
       }
     }
 
-    img.onload = () => requestAnimationFrame(tick);
+    // ---- Start button -> go fullscreen and start loop
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
+
+    async function enterFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+    }
+
+    startBtn.addEventListener('click', async () => {
+      try { await enterFullscreen(); } catch(e) { /* ignore if blocked */ }
+      startOverlay.style.display = 'none';
+      started = true;
+      lastT = performance.now();
+      if (img.complete) requestAnimationFrame(tick);
+      else img.onload = () => requestAnimationFrame(tick);
+    });
   })();
   </script>
 </body>
