@@ -2148,14 +2148,14 @@ function renderFireflies(dt){
 }
 
 /* =========================
-   CONFETTI (with robust whoosh)
+   CONFETTI (woosh with shared + auto-resume audio)
    ========================= */
 
-// --- Audio (self-contained, but will reuse your app's ctx if present) ---
-let _cf_AC = null, _cf_MASTER = null, _cf_lastWhooshAt = 0, _cf_audioUnblocked = false;
+// --- AUDIO (reuse existing if present, aggressively resume) ---
+let _cf_AC = null, _cf_MASTER = null, _cf_lastWhooshAt = 0;
 
-// Try to reuse an existing context your app may already have:
 function _cf_findExistingCtx() {
+  // If your app already has a context (e.g., used by playPing), grab it
   return (
     window.AC ||
     window.audioCtx ||
@@ -2164,58 +2164,51 @@ function _cf_findExistingCtx() {
     null
   );
 }
-
 function _cf_ensureAudio() {
   if (_cf_AC) return;
   _cf_AC = _cf_findExistingCtx() || new (window.AudioContext || window.webkitAudioContext)();
-
-  // master gain (a bit louder so it's obvious)
-  _cf_MASTER = _cf_AC.createGain();
-  _cf_MASTER.gain.value = 0.85;
-  _cf_MASTER.connect(_cf_AC.destination);
-}
-
-// Unblock/resume on first user action
-function _cf_tryResume() {
-  _cf_ensureAudio();
-  if (_cf_AC.state === 'suspended' && _cf_AC.resume) {
-    _cf_AC.resume().catch(()=>{ /* ignore */ });
+  if (!_cf_MASTER) {
+    _cf_MASTER = _cf_AC.createGain();
+    _cf_MASTER.gain.value = 0.9; // louder so you can hear it clearly
+    _cf_MASTER.connect(_cf_AC.destination);
   }
 }
-function _cf_unblockOnce() {
-  if (_cf_audioUnblocked) return;
-  _cf_audioUnblocked = true;
-  _cf_tryResume();
+async function _cf_resume() {
+  _cf_ensureAudio();
+  if (_cf_AC.state === 'suspended' && _cf_AC.resume) {
+    try { await _cf_AC.resume(); } catch (e) { /* ignore */ }
+  }
 }
+function _cf_unlock() { _cf_resume(); }
 
-// Cover a lot of event types to be safe
-['pointerdown','mousedown','touchstart','keydown','click'].forEach(ev =>
-  window.addEventListener(ev, _cf_unblockOnce, { once: true, passive: true })
-);
+// Try many interaction hooks to satisfy autoplay policies
+['pointerdown','mousedown','touchstart','keydown','click','pointerup']
+  .forEach(ev => window.addEventListener(ev, _cf_unlock, { passive:true }));
+// Also retry when tab becomes visible again
+document.addEventListener('visibilitychange', () => { if (!document.hidden) _cf_resume(); });
+
+/* Quick debug: in console run DEBUG_WHOOSH() to test volume/unlock */
+window.DEBUG_WHOOSH = () => { _cf_playWhoosh({ gain: 0.9 }); console.log('[woosh] AC state:', _cf_AC?.state); };
 
 function _cf_playWhoosh(opts = {}) {
   _cf_ensureAudio();
-  _cf_tryResume(); // resume again right before playing
-
-  if (_cf_AC.state !== 'running') {
-    // If still not running, bail quietly
-    return;
-  }
+  // resume *right before* playing too
+  if (_cf_AC.state !== 'running') { _cf_resume(); }
+  if (_cf_AC.state !== 'running') { return; } // still blocked? bail quietly
 
   const {
-    dur = 0.5,     // total duration
-    base = 160,    // start cutoff
-    top  = 5200,   // end cutoff
-    gain = 0.55,   // loudness
-    pan  = 0       // -1..+1
+    dur = 0.5,
+    base = 160,
+    top  = 5200,
+    gain = 0.55,
+    pan  = 0
   } = opts;
 
   const now = _cf_AC.currentTime;
-  // avoid stacking too many whooshes
-  if (now - _cf_lastWhooshAt < 0.1) return;
+  if (now - _cf_lastWhooshAt < 0.1) return; // anti-stack
   _cf_lastWhooshAt = now;
 
-  // White noise source
+  // white noise buffer
   const len = Math.max(1, Math.ceil(_cf_AC.sampleRate * dur));
   const buf = _cf_AC.createBuffer(1, len, _cf_AC.sampleRate);
   const ch  = buf.getChannelData(0);
@@ -2224,21 +2217,20 @@ function _cf_playWhoosh(opts = {}) {
   const src = _cf_AC.createBufferSource();
   src.buffer = buf;
 
-  // Rising lowpass sweep = whoosh
+  // rising lowpass sweep (whoosh)
   const filt = _cf_AC.createBiquadFilter();
   filt.type = 'lowpass';
-  filt.frequency.setValueAtTime(Math.max(10, base), now);
-  // Use exponential for a natural airy rise
-  filt.frequency.exponentialRampToValueAtTime(Math.max(10, top), now + Math.max(0.001, dur * 0.9));
   filt.Q.value = 0.6;
+  filt.frequency.setValueAtTime(Math.max(10, base), now);
+  filt.frequency.exponentialRampToValueAtTime(Math.max(10, top), now + Math.max(0.001, dur * 0.9));
 
-  // Volume envelope
+  // envelope
   const g = _cf_AC.createGain();
   g.gain.setValueAtTime(0.0001, now);
-  g.gain.exponentialRampToValueAtTime(gain, now + 0.05);     // quick attack
-  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);    // release
+  g.gain.exponentialRampToValueAtTime(gain, now + 0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
-  // Pan if available
+  // pan if available
   const p = _cf_AC.createStereoPanner ? _cf_AC.createStereoPanner() : _cf_AC.createGain();
   if (p.pan) p.pan.value = pan;
 
@@ -2251,75 +2243,48 @@ function _cf_playWhoosh(opts = {}) {
   src.stop(now + dur + 0.02);
 }
 
-// --- Confetti particles ---
-const confettis = Array.from({ length: 220 }, () => resetPiece({}));
-
-function resetPiece(p) {
-  p.x = Math.random() * W;
-  p.y = Math.random() * H;
-  p.vx = (Math.random() - 0.5) * 0.7;
-  p.vy = Math.random() * 0.6 + 0.2;
-  p.size = 2 + Math.random() * 4;
-  p.h = Math.random() * 360;
-  p.spin = (Math.random() - 0.5) * 0.15;
-  return p;
+// --- CONFETTI ---
+const confettis = Array.from({length:220},()=>resetPiece({}));
+function resetPiece(p){
+  p.x=Math.random()*W; p.y=Math.random()*H; p.vx=(Math.random()-0.5)*0.7; p.vy=Math.random()*0.6+0.2;
+  p.size=2+Math.random()*4; p.h=Math.random()*360; p.spin=(Math.random()-0.5)*0.15; return p;
 }
-
-function renderConfetti(dt) {
+function renderConfetti(dt){
   clearToBg(false);
-
-  const windX = clamp(mouse.vx / 400, -1.5, 1.5) * (0.5 + mapIntensity());
-  const windY = 0.15 + (dwellMs > 600 ? 0.25 : 0);
-
-  ctx.globalCompositeOperation = 'lighter';
-
-  confettis.forEach(p => {
-    const dx = mouse.x - p.x, dy = mouse.y - p.y, pull = 0.02 * mapIntensity();
-    p.vx += windX * dt + dx * pull * dt;
-    p.vy += windY * dt + dy * pull * dt;
+  const windX = clamp(mouse.vx/400, -1.5, 1.5) * (0.5 + mapIntensity());
+  const windY = 0.15 + (dwellMs>600 ? 0.25 : 0);
+  ctx.globalCompositeOperation='lighter';
+  confettis.forEach(p=>{
+    const dx = mouse.x - p.x, dy = mouse.y - p.y, pull = 0.02*mapIntensity();
+    p.vx += windX*dt + dx*pull*dt; p.vy += windY*dt + dy*pull*dt;
     p.x += p.vx; p.y += p.vy; p.h += p.spin;
-
-    ctx.fillStyle = `hsla(${(p.h) % 360},90%,60%,0.8)`;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
-
-    if (p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) resetPiece(p);
+    ctx.fillStyle = `hsla(${(p.h)%360},90%,60%,0.8)`; ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
+    if (p.x<-20||p.x>W+20||p.y<-20||p.y>H+20) resetPiece(p);
   });
 
-  // Pop event: ping + whoosh + burst
-  if (dwellJustCrossed(700)) {
-    // your existing ping (if you have it)
-    if (typeof playPing === 'function') playPing(550, 0.12, 0.04);
+  if (dwellJustCrossed(700)){
+    if (typeof playPing === 'function') playPing(550,0.12,0.04);
 
-    // whoosh: louder with intensity, pan from mouse X
     const intensity = clamp(mapIntensity(), 0, 1);
-    const pan = (mouse.x / W) * 2 - 1; // -1 left .. +1 right
+    const pan = (mouse.x / W) * 2 - 1;
     _cf_playWhoosh({
       dur: 0.42 + 0.12 * intensity,
       base: 160,
       top: 4800 + 1800 * intensity,
-      gain: 0.5 + 0.3 * intensity,
+      gain: 0.55 + 0.3 * intensity,
       pan
     });
 
-    // particle burst
-    for (let i = 0; i < 50; i++) {
-      const q = resetPiece({});
-      q.x = mouse.x; q.y = mouse.y;
-      q.vx = (Math.random() - 0.5) * 3.2;
-      q.vy = Math.random() * -1.8;
-      confettis.push(q);
-    }
-    if (confettis.length > 400) confettis.splice(0, confettis.length - 400);
+    for(let i=0;i<50;i++){ const q=resetPiece({}); q.x=mouse.x; q.y=mouse.y; q.vx=(Math.random()-0.5)*3.2; q.vy=Math.random()*-1.8; confettis.push(q); }
+    if (confettis.length>400) confettis.splice(0, confettis.length-400);
   }
 }
+
 
   /* =========================
      NÉBULEUSE
      ========================= */
- /* =========================
-   NÉBULEUSE v2 — parallax dust + flow gas + comets
-   Adds scene music via MUSIC.setPlaylist('nebula', [...])
-   ========================= */
+
 
 const NEB = {
   inited: false,

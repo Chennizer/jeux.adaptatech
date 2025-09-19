@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cherry Blossom Cut — White Background</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      background: #fff;
+      overflow: hidden;
+    }
+    #game {
+      display: block;
+      width: 100vw; height: 100vh;
+      cursor: crosshair;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <script>
+  (() => {
+    /* =======================
+       CONFIG
+    ======================= */
+    const IMG_SRC = "../../images/cherryblossom.png";
+    const SPAWN_EVERY_MS = 700;
+    const FALL_SPEED_MIN = 40;
+    const FALL_SPEED_MAX = 95;
+    const BLOSSOM_SIZE_MIN = 72;
+    const BLOSSOM_SIZE_MAX = 138;
+    const HOVER_CUT_RADIUS = 52;
+    const SHARD_SPREAD_SPEED = 190;
+    const SHARD_ROT_SPEED = 1.2;
+    const SHARD_FADE_TIME = 0.85;
+    const MAX_FALLING = 16;
+
+    const RAY_COLOR = "rgba(200,0,0,0.25)";
+    const SUN_COLOR = "#d40000";
+    const RAY_COUNT = 10;        // fewer rays for a calmer look
+    const RAY_ALPHA = 0.25;      // keep them subtle
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width  = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+    window.addEventListener('resize', () => {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    });
+
+    const img = new Image();
+    img.src = IMG_SRC;
+
+    const pointer = { x: -9999, y: -9999, inside: false };
+    canvas.addEventListener('pointermove', e => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      pointer.y = (e.clientY - rect.top)  * (canvas.height / rect.height);
+      pointer.inside = true;
+    });
+    canvas.addEventListener('pointerleave', () => pointer.inside = false);
+
+    const blossoms = [];
+    const shards = [];
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const nowSec = () => performance.now()/1000;
+
+    function spawnBlossom() {
+      if (!img.complete) return;
+      const size = rand(BLOSSOM_SIZE_MIN, BLOSSOM_SIZE_MAX);
+      const aspect = img.width / img.height || 1;
+      const w = aspect >= 1 ? size*aspect : size;
+      const h = aspect >= 1 ? size : size/aspect;
+      blossoms.push({
+        x: rand(w * 0.5, W - w * 0.5),
+        y: -h - rand(0, 100),
+        w, h,
+        angle: rand(-Math.PI, Math.PI),
+        rot: rand(-0.5, 0.5),
+        vy: rand(FALL_SPEED_MIN, FALL_SPEED_MAX),
+        vx: rand(-12, 12),
+        cut: false
+      });
+    }
+
+    function cutBlossom(b) {
+      const leftRect  = { sx: 0, sy: 0, sw: img.width/2, sh: img.height };
+      const rightRect = { sx: img.width/2, sy: 0, sw: img.width/2, sh: img.height };
+      const tw = b.w, th = b.h, tBorn = nowSec();
+      shards.push({clip:leftRect,x:b.x-tw/4,y:b.y,w:tw/2,h:th,angle:b.angle,vx:-SHARD_SPREAD_SPEED*0.75,vy:-SHARD_SPREAD_SPEED*0.25,rot:-SHARD_ROT_SPEED,born:tBorn,life:SHARD_FADE_TIME});
+      shards.push({clip:rightRect,x:b.x+tw/4,y:b.y,w:tw/2,h:th,angle:b.angle,vx:SHARD_SPREAD_SPEED*0.75,vy:-SHARD_SPREAD_SPEED*0.25,rot:SHARD_ROT_SPEED,born:tBorn,life:SHARD_FADE_TIME});
+      b.cut = true;
+    }
+
+    let lastT = performance.now(), spawnTimer = 0;
+
+    function tick(tMs) {
+      const dt = Math.min(0.033, (tMs - lastT) / 1000);
+      lastT = tMs;
+      spawnTimer += dt * 1000;
+      if (spawnTimer > SPAWN_EVERY_MS && blossoms.length < MAX_FALLING) {
+        spawnTimer = 0;
+        spawnBlossom();
+      }
+      updateBlossoms(dt);
+      updateShards(dt);
+      render();
+      requestAnimationFrame(tick);
+    }
+
+    function updateBlossoms(dt) {
+      for (let i = blossoms.length-1; i>=0; i--) {
+        const b = blossoms[i];
+        b.y += b.vy * dt;
+        b.x += b.vx * dt;
+        b.angle += b.rot * dt;
+        const dx = pointer.x - b.x, dy = pointer.y - b.y;
+        if (pointer.inside && !b.cut && dx*dx+dy*dy<=HOVER_CUT_RADIUS*HOVER_CUT_RADIUS) cutBlossom(b);
+        if (b.cut || b.y - b.h/2 > H+40) blossoms.splice(i, 1);
+      }
+    }
+
+    function updateShards(dt) {
+      const t = nowSec();
+      for (let i = shards.length-1; i>=0; i--) {
+        const s = shards[i];
+        s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 420*dt; s.angle += s.rot * dt;
+        if (t - s.born > s.life) shards.splice(i, 1);
+      }
+    }
+
+    function drawBackground() {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0,0,W,H);
+
+      // Sun position
+      const cx = W/2, cy = H, r = Math.min(W,H)*0.45;
+
+      // Rays start from edge of sun
+      ctx.save();
+      ctx.globalAlpha = RAY_ALPHA;
+      ctx.fillStyle = RAY_COLOR;
+      const step = Math.PI / RAY_COUNT;
+      for (let i=0; i<RAY_COUNT; i++) {
+        const aMid = -Math.PI + step/2 + i*step;
+        const a1 = aMid - step*0.4;
+        const a2 = aMid + step*0.4;
+        const innerR = r;               // start from sun edge
+        const outerR = r + Math.max(W,H);
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a1)*innerR, cy + Math.sin(a1)*innerR);
+        ctx.lineTo(cx + Math.cos(a1)*outerR, cy + Math.sin(a1)*outerR);
+        ctx.lineTo(cx + Math.cos(a2)*outerR, cy + Math.sin(a2)*outerR);
+        ctx.lineTo(cx + Math.cos(a2)*innerR, cy + Math.sin(a2)*innerR);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Sun core
+      ctx.fillStyle = SUN_COLOR;
+      ctx.beginPath();
+      ctx.arc(cx,cy,r,Math.PI,2*Math.PI);
+      ctx.fill();
+    }
+
+    function render() {
+      drawBackground();
+      for (const b of blossoms) {
+        ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle);
+        ctx.drawImage(img,-b.w/2,-b.h/2,b.w,b.h); ctx.restore();
+      }
+      const t = nowSec();
+      for (const s of shards) {
+        const alpha = Math.max(0,1-(t-s.born)/s.life);
+        ctx.save(); ctx.globalAlpha = alpha;
+        ctx.translate(s.x,s.y); ctx.rotate(s.angle);
+        ctx.drawImage(img,s.clip.sx,s.clip.sy,s.clip.sw,s.clip.sh,-s.w/2,-s.h/2,s.w,s.h);
+        ctx.restore();
+      }
+    }
+
+    img.onload = () => requestAnimationFrame(tick);
+  })();
+  </script>
+</body>
+</html>
