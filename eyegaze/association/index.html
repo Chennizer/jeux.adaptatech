@@ -134,7 +134,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: none; /* eyegaze */
       border: 2px solid rgba(0,0,0,0.15);
       overflow: hidden;
       transform: translateZ(0);
@@ -304,6 +303,41 @@
             <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
           </select>
         </div>
+
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked>
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
 
@@ -331,6 +365,8 @@
     <div class="letter-grid" id="imageGrid"></div>
   </div>
 </div>
+
+<div id="gazePointer" aria-hidden="true"></div>
 
 <!-- Audio -->
 <audio id="correctSound" src="../../sounds/victory.mp3"></audio>
@@ -444,6 +480,14 @@ const choicesCountVal= document.getElementById('choicesCountVal');
 const layoutScaleEl = document.getElementById('layoutScale');
 const layoutScaleVal= document.getElementById('layoutScaleVal');
 
+const showGazePointer = document.getElementById('showGazePointer');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
+const gpDetails       = document.getElementById('gpDetails');
+const gazePointer     = document.getElementById('gazePointer');
+
 sfxVol.addEventListener('input', () => sfxVolVal.textContent = sfxVol.value);
 dwellSlider.addEventListener('input', () => dwellTimeVal.textContent = dwellSlider.value);
 choicesCountEl.addEventListener('input', () => choicesCountVal.textContent = choicesCountEl.value);
@@ -454,6 +498,51 @@ layoutScaleEl.addEventListener('input', () => {
     adjustGridSizes();
   }
 });
+
+(function initPointerControls(){
+  if (!gazePointer) return;
+
+  try {
+    const settings = window.eyegazeSettings;
+    if (settings) {
+      if (showGazePointer && typeof settings.showGazePointer === 'boolean') {
+        showGazePointer.checked = settings.showGazePointer;
+      }
+      if (gazeSize && typeof settings.gazePointerSize === 'number') {
+        const min = parseInt(gazeSize.min || '16', 10);
+        const max = parseInt(gazeSize.max || '100', 10);
+        const stored = Math.round(settings.gazePointerSize);
+        if (!Number.isNaN(stored)) {
+          gazeSize.value = Math.max(min, Math.min(max, stored));
+        }
+      }
+      if (gazeOpacity && typeof settings.gazePointerAlpha === 'number') {
+        const min = parseInt(gazeOpacity.min || '0', 10);
+        const max = parseInt(gazeOpacity.max || '100', 10);
+        const stored = Math.round(Math.max(0, Math.min(1, settings.gazePointerAlpha)) * 100);
+        gazeOpacity.value = Math.max(min || 0, Math.min(max || 100, stored));
+      }
+    }
+  } catch(e) {}
+
+  applyPointerToggle();
+  syncEyegazeSettingsFromUI();
+
+  if (showGazePointer) {
+    showGazePointer.addEventListener('change', () => {
+      applyPointerToggle();
+      syncEyegazeSettingsFromUI();
+    });
+  }
+
+  [gazeSize, gazeOpacity].forEach(ctrl => {
+    if (!ctrl) return;
+    ctrl.addEventListener('input', () => {
+      applyPointerToggle();
+      syncEyegazeSettingsFromUI();
+    });
+  });
+})();
 
 /* =========================
    Persist TTS
@@ -481,10 +570,81 @@ let layoutScale = 1.0;
 /* pointer-in-tile unlock */
 let hoveredTile = null;
 let lastPointer = { x: null, y: null };
-window.addEventListener('pointermove', (e) => {
-  lastPointer.x = e.clientX;
-  lastPointer.y = e.clientY;
-});
+let pointerRadius = 18;
+
+function pointerSizeFromControls() {
+  return parseInt(gazeSize?.value, 10) || 36;
+}
+
+function pointerOpacityFromControls() {
+  const raw = parseInt(gazeOpacity?.value, 10);
+  return Math.max(0, Math.min(1, (isNaN(raw) ? 100 : raw) / 100));
+}
+
+function setPointerPos(x, y) {
+  if (!gazePointer) return;
+  const radius = pointerRadius || Math.max(1, (pointerSizeFromControls() || 36) / 2);
+  const maxX = Math.max(radius, window.innerWidth - radius);
+  const maxY = Math.max(radius, window.innerHeight - radius);
+  const clampedX = Math.min(Math.max(x, radius), maxX);
+  const clampedY = Math.min(Math.max(y, radius), maxY);
+  gazePointer.style.left = `${clampedX}px`;
+  gazePointer.style.top = `${clampedY}px`;
+}
+
+function setPointerDwell(active) {
+  if (!gazePointer) return;
+  gazePointer.classList.toggle('gp-dwell', !!active);
+}
+
+function isGameActive() {
+  return document.querySelector('.game-container')?.style.display === 'flex';
+}
+
+function applyPointerToggle() {
+  if (!gazePointer) return;
+  const size = pointerSizeFromControls();
+  const opct = pointerOpacityFromControls();
+  pointerRadius = Math.max(1, size / 2);
+  if (gazeSizeVal) gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct * 100);
+  gazePointer.style.setProperty('--gp-size', `${size}px`);
+  const enable = !!showGazePointer?.checked && isGameActive();
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  if (!enable) {
+    setPointerDwell(false);
+    if (gpDetails) gpDetails.open = false;
+  }
+  gazePointer.style.opacity = enable ? opct : 0;
+  if (enable && lastPointer.x !== null && lastPointer.y !== null) {
+    setPointerPos(lastPointer.x, lastPointer.y);
+  }
+}
+
+if (gazePointer) {
+  const rawHandler = (event) => {
+    lastPointer.x = event.clientX;
+    lastPointer.y = event.clientY;
+    setPointerPos(event.clientX, event.clientY);
+  };
+
+  if ('onpointerrawupdate' in window) {
+    window.addEventListener('pointerrawupdate', rawHandler, { passive: true });
+  }
+  window.addEventListener('pointermove', rawHandler, { passive: true });
+
+  window.addEventListener('pointerleave', () => {
+    gazePointer._savedOpacity = gazePointer.style.opacity;
+    gazePointer.style.opacity = 0;
+  });
+
+  window.addEventListener('pointerenter', () => {
+    applyPointerToggle();
+    if (lastPointer.x !== null && lastPointer.y !== null) {
+      setPointerPos(lastPointer.x, lastPointer.y);
+    }
+  });
+}
 const cellItemMap = new WeakMap();
 
 const EDGE_PAD = 10;
@@ -687,6 +847,7 @@ function startGame() {
 
   try { if (window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); } catch(e) {}
   choosePreferredVoice();
+  applyPointerToggle();
 }
 startButton.addEventListener('click', startGame);
 
@@ -700,6 +861,9 @@ function syncEyegazeSettingsFromUI() {
       eyegazeSettings.sfxVolume = parseInt(sfxVol.value, 10) || 50;
       eyegazeSettings.dwellTime = parseInt(dwellSlider.value, 10) || 1500;
       eyegazeSettings.ttsEnabled= !!ttsEnabled.checked;
+      eyegazeSettings.showGazePointer  = !!showGazePointer?.checked;
+      eyegazeSettings.gazePointerSize  = pointerSizeFromControls();
+      eyegazeSettings.gazePointerAlpha = pointerOpacityFromControls();
     }
   } catch(e) {}
 }
@@ -840,6 +1004,7 @@ function startHover(tile, item) {
   const hoverTime = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
 
   stopHover();
+  setPointerDwell(true);
   currentOverlay = document.createElement('div');
   currentOverlay.className = 'dwell-fill';
   tile.appendChild(currentOverlay);
@@ -862,6 +1027,7 @@ function startHover(tile, item) {
 
 function stopHover() {
   clearTimeout(hoverTimeout);
+  setPointerDwell(false);
   if (currentOverlay && currentOverlay.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
   currentOverlay = null;
 }
