@@ -180,6 +180,41 @@
             <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
           </select>
         </div>
+
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked>
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
 
@@ -191,6 +226,8 @@
 <div class="game-container">
   <div id="game-grid" class="game-grid"></div>
 </div>
+
+<div id="gazePointer" aria-hidden="true"></div>
 
 <script src="../../js/eyegaze-menu.js"></script>
 <script src="../../js/translationmain.js"></script>
@@ -278,6 +315,14 @@ layoutScaleEl.addEventListener('input', () => {
   }
 });
 
+const showGazePointer = document.getElementById('showGazePointer');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
+const gpDetails       = document.getElementById('gpDetails');
+const gazePointer     = document.getElementById('gazePointer');
+
 const dwellSlider  = document.getElementById('dwellTimeSlider');
 const dwellTimeVal = document.getElementById('dwellTimeVal');
 dwellSlider.addEventListener('input', () => {
@@ -305,11 +350,29 @@ document.getElementById('startButton').addEventListener('click', startGame);
       if (typeof eyegazeSettings.dwellTime !== 'number') eyegazeSettings.dwellTime = 1500;
       if (typeof eyegazeSettings.sfxVolume !== 'number') eyegazeSettings.sfxVolume = 50;
       if (typeof eyegazeSettings.sfxMuted  !== 'boolean') eyegazeSettings.sfxMuted = false;
+      if (typeof eyegazeSettings.showGazePointer !== 'boolean') eyegazeSettings.showGazePointer = true;
+      if (typeof eyegazeSettings.gazePointerSize !== 'number') eyegazeSettings.gazePointerSize = 36;
+      if (typeof eyegazeSettings.gazePointerAlpha !== 'number') eyegazeSettings.gazePointerAlpha = 1;
       dwellSlider.value   = eyegazeSettings.dwellTime;
       dwellTimeVal.textContent = eyegazeSettings.dwellTime;
       sfxVol.value = eyegazeSettings.sfxVolume;
       sfxVolVal.textContent = eyegazeSettings.sfxVolume;
       muteSFX.checked = !!eyegazeSettings.sfxMuted;
+      if (showGazePointer) showGazePointer.checked = !!eyegazeSettings.showGazePointer;
+      if (gazeSize) {
+        const min = parseInt(gazeSize.min || '16', 10);
+        const max = parseInt(gazeSize.max || '100', 10);
+        const stored = Math.round(eyegazeSettings.gazePointerSize);
+        if (!Number.isNaN(stored)) {
+          gazeSize.value = Math.max(min, Math.min(max, stored));
+        }
+      }
+      if (gazeOpacity) {
+        const min = parseInt(gazeOpacity.min || '0', 10);
+        const max = parseInt(gazeOpacity.max || '100', 10);
+        const stored = Math.round(Math.max(0, Math.min(1, eyegazeSettings.gazePointerAlpha)) * 100);
+        gazeOpacity.value = Math.max(min || 0, Math.min(max || 100, stored));
+      }
     }
   } catch(e){}
 })();
@@ -332,8 +395,121 @@ let currentCategory = null;
 let layoutScale = 1.0;
 let controlsLocked = false;
 
+let pointerLastPosition = { x: null, y: null };
+
 const BASE_GAP = 100; // px
 const EDGE_PAD = 10;  // px
+
+function pointerSizeFromControls() {
+  return parseInt(gazeSize?.value, 10) || 36;
+}
+
+function pointerOpacityFromControls() {
+  const raw = parseInt(gazeOpacity?.value, 10);
+  return Math.max(0, Math.min(1, (isNaN(raw) ? 100 : raw) / 100));
+}
+
+function setPointerPos(x, y) {
+  if (!gazePointer) return;
+  gazePointer.style.left = `${x}px`;
+  gazePointer.style.top = `${y}px`;
+}
+
+function setPointerDwell(active) {
+  if (!gazePointer) return;
+  gazePointer.classList.toggle('gp-dwell', !!active);
+}
+
+function isGameActive() {
+  return document.querySelector('.game-container')?.style.display === 'flex';
+}
+
+function hasPointerCoordinates() {
+  return pointerLastPosition.x !== null && pointerLastPosition.y !== null;
+}
+
+function updatePointerVisibility({ pointerOpacity, skipPosition } = {}) {
+  if (!gazePointer) return;
+  const enable = !!showGazePointer?.checked && isGameActive();
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  if (!enable) {
+    setPointerDwell(false);
+    if (gpDetails) gpDetails.open = false;
+  }
+  const hasCoords = hasPointerCoordinates();
+  const opct = typeof pointerOpacity === 'number' ? pointerOpacity : pointerOpacityFromControls();
+  if (enable && hasCoords) {
+    gazePointer.style.opacity = opct;
+    if (!skipPosition) {
+      setPointerPos(pointerLastPosition.x, pointerLastPosition.y);
+    }
+  } else {
+    gazePointer.style.opacity = 0;
+  }
+}
+
+function applyPointerToggle() {
+  if (!gazePointer) return;
+  const size = pointerSizeFromControls();
+  const opct = pointerOpacityFromControls();
+  if (gazeSizeVal) gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct * 100);
+  gazePointer.style.setProperty('--gp-size', `${size}px`);
+  updatePointerVisibility({ pointerOpacity: opct });
+}
+
+if (gazePointer) {
+  const rawHandler = (event) => {
+    pointerLastPosition.x = event.clientX;
+    pointerLastPosition.y = event.clientY;
+    setPointerPos(event.clientX, event.clientY);
+    updatePointerVisibility({ skipPosition: true });
+  };
+
+  if ('onpointerrawupdate' in window) {
+    window.addEventListener('pointerrawupdate', rawHandler, { passive: true });
+  }
+  window.addEventListener('pointermove', rawHandler, { passive: true });
+
+  window.addEventListener('pointerleave', () => {
+    pointerLastPosition.x = null;
+    pointerLastPosition.y = null;
+    gazePointer._savedOpacity = gazePointer.style.opacity;
+    gazePointer.style.opacity = 0;
+    updatePointerVisibility({ skipPosition: true });
+  });
+
+  window.addEventListener('pointerenter', (event) => {
+    pointerLastPosition.x = event.clientX;
+    pointerLastPosition.y = event.clientY;
+    updatePointerVisibility();
+    if (hasPointerCoordinates()) {
+      setPointerPos(pointerLastPosition.x, pointerLastPosition.y);
+    }
+  });
+}
+
+if (showGazePointer) {
+  showGazePointer.addEventListener('change', () => {
+    try { if (window.eyegazeSettings) eyegazeSettings.showGazePointer = !!showGazePointer.checked; } catch(e){}
+    applyPointerToggle();
+  });
+}
+
+[gazeSize, gazeOpacity].forEach(ctrl => {
+  if (!ctrl) return;
+  ctrl.addEventListener('input', () => {
+    try {
+      if (window.eyegazeSettings) {
+        if (ctrl === gazeSize) eyegazeSettings.gazePointerSize = pointerSizeFromControls();
+        if (ctrl === gazeOpacity) eyegazeSettings.gazePointerAlpha = pointerOpacityFromControls();
+      }
+    } catch(e){}
+    applyPointerToggle();
+  });
+});
+
+applyPointerToggle();
 
 function startGame() {
   // Hide language toggle once the game starts (menu-only display)
@@ -350,6 +526,7 @@ function startGame() {
 
   try { if (eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); } catch(e){}
   document.querySelector('.game-container').style.display = 'flex';
+  applyPointerToggle();
 
   currentCategory    = document.getElementById('categorySelect').value;
   currentPairs       = parseInt(pairCount.value);
@@ -526,6 +703,7 @@ function startNewSet() {
   applyTheme(currentTheme);
   const images = getImages(currentCategory, currentPairs);
   setupBoard(images);
+  applyPointerToggle();
 }
 
 /* ====== Gel oculométrie ====== */
@@ -554,6 +732,7 @@ function startHover(card) {
 
   const hoverTime = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
   stopHover();
+  setPointerDwell(true);
   currentOverlay = document.createElement('div');
   currentOverlay.className = 'dwell-fill';
   card.appendChild(currentOverlay);
@@ -574,6 +753,7 @@ function startHover(card) {
 
 function stopHover() {
   clearTimeout(hoverTimeout);
+  setPointerDwell(false);
   if (currentOverlay) {
     currentOverlay.style.transition = '';
     currentOverlay.style.width = '0';
