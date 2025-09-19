@@ -820,6 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
     requirePointerMotionBeforeHover(options);
   };
   window.choiceEyegaze.isPointerMotionRequired = () => requirePointerMotion;
+  window.choiceEyegaze.ensureFullscreen = ensureFullscreen;
 
   // Populate grid if choices already exist (e.g., restored from IndexedDB)
   if (Array.isArray(mediaChoices) && mediaChoices.length > 0) {
