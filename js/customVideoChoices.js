@@ -187,18 +187,27 @@ async function addFiles(files) {
   }
   if (addedAny) {
     notifyEyegazeGuard();
+    window.choiceEyegaze?.ensureFullscreen?.();
   }
+  return addedAny;
 }
 
 async function addFolderToChoices(dirHandle) {
   revokeAllVideos();
   mediaChoices.length = 0;
+  let addedAny = false;
   for await (const entry of dirHandle.values()) {
     if (entry.kind !== 'file') continue;
     if (!VIDEO_RX.test(entry.name)) continue;
     const file = await entry.getFile();
-    await addFiles([file]);
+    if (await addFiles([file])) {
+      addedAny = true;
+    }
   }
+  if (!addedAny) {
+    window.choiceEyegaze?.ensureFullscreen?.();
+  }
+  return addedAny;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -265,10 +274,24 @@ document.addEventListener('DOMContentLoaded', async () => {
           await clearRepoHandle();
           await clearFileHandles();
           await saveFileHandles(handles);
+          let addedAny = false;
           for (const h of handles) {
-            try { const f = await h.getFile(); await addFiles([f]); } catch {}
+            try {
+              const f = await h.getFile();
+              if (await addFiles([f])) {
+                addedAny = true;
+              }
+            } catch (innerErr) {
+              console.error(innerErr);
+            }
           }
-        } catch (err) { console.error(err); }
+          if (!addedAny) {
+            window.choiceEyegaze?.ensureFullscreen?.();
+          }
+        } catch (err) {
+          console.error(err);
+          window.choiceEyegaze?.ensureFullscreen?.();
+        }
       } else if (addVideoInput) {
         addVideoInput.click();
       }
@@ -277,10 +300,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (addVideoInput) {
     addVideoInput.addEventListener('change', async () => {
-      await clearRepoHandle();
-      await clearFileHandles();
-      await addFiles(addVideoInput.files);
-      addVideoInput.value = '';
+      try {
+        await clearRepoHandle();
+        await clearFileHandles();
+        const addedAny = await addFiles(addVideoInput.files);
+        if (!addedAny) {
+          window.choiceEyegaze?.ensureFullscreen?.();
+        }
+      } catch (err) {
+        console.error(err);
+        window.choiceEyegaze?.ensureFullscreen?.();
+      } finally {
+        addVideoInput.value = '';
+      }
     });
   }
 
@@ -290,9 +322,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const dirHandle = await window.showDirectoryPicker();
         await saveRepoHandle(dirHandle);
         await clearFileHandles();
-        await addFolderToChoices(dirHandle);
+        const addedAny = await addFolderToChoices(dirHandle);
+        if (!addedAny) {
+          window.choiceEyegaze?.ensureFullscreen?.();
+        }
       } catch (err) {
         console.error(err);
+        window.choiceEyegaze?.ensureFullscreen?.();
       }
     });
   } else if (pickFolderButton) {
