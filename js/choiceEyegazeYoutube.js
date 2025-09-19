@@ -102,6 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastPointerPosition = null;
   let pointerMotionOrigin = null;
   let pendingGuardedHover = null;
+  let pointerRadius = 18;
 
   function isElementShown(el) {
     if (!el) return false;
@@ -134,8 +135,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setPointerPos(x, y) {
     if (!gazePointer) return;
-    gazePointer.style.left = `${x}px`;
-    gazePointer.style.top = `${y}px`;
+    const radius = pointerRadius || Math.max(1, (pointerSizeFromControls() || 36) / 2);
+    const maxX = Math.max(radius, window.innerWidth - radius);
+    const maxY = Math.max(radius, window.innerHeight - radius);
+    const clampedX = Math.min(Math.max(x, radius), maxX);
+    const clampedY = Math.min(Math.max(y, radius), maxY);
+    gazePointer.style.left = `${clampedX}px`;
+    gazePointer.style.top = `${clampedY}px`;
   }
 
   function setPointerDwell(active) {
@@ -147,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!gazePointer) return;
     const size = pointerSizeFromControls();
     const opct = pointerOpacityFromControls();
+    pointerRadius = Math.max(1, size / 2);
     if (gazeSizeValueSpan) gazeSizeValueSpan.textContent = size;
     if (gazeOpacityValueSpan) gazeOpacityValueSpan.textContent = Math.round(opct * 100);
     gazePointer.style.setProperty('--gp-size', `${size}px`);
