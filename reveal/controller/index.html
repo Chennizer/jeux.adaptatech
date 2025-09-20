@@ -205,6 +205,53 @@
     accent-color: var(--c-cyan);
   }
 
+  /* ===== Gaze pointer overlay ===== */
+  .hide-native-cursor,
+  .hide-native-cursor * {
+    cursor: none !important;
+  }
+
+  #gazePointerOverlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2147483647;
+    overflow: visible;
+  }
+
+  #gazePointer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--gp-size, 36px);
+    height: var(--gp-size, 36px);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+    will-change: transform, opacity;
+  }
+
+  #gazePointer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: #ff0000;
+  }
+
+  #gazePointer.gp-dwell::before {
+    animation: gpPulse 700ms ease-in-out infinite alternate;
+  }
+
+  @keyframes gpPulse {
+    from { transform: scale(1); }
+    to   { transform: scale(1.06); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #gazePointer.gp-dwell::before { animation: none; }
+  }
+
   /* Small screens */
   @media (max-width: 680px) {
     #chooser { --cols:1 !important; --rows:auto; grid-auto-rows: var(--card-size); }
@@ -246,11 +293,19 @@
   </div>
 </div>
 
+<div id="gazePointerOverlay" aria-hidden="true">
+  <div id="gazePointer"></div>
+</div>
+
 <script>
   /* ---------- Fullscreen ---------- */
   async function enterFullscreen(){ try{ if(!document.fullscreenElement && document.documentElement.requestFullscreen){ await document.documentElement.requestFullscreen(); } }catch{} }
   const startOverlay = document.getElementById('startOverlay');
-  document.getElementById('startBtn').addEventListener('click', async ()=>{ await enterFullscreen(); startOverlay.style.display='none'; });
+  document.getElementById('startBtn').addEventListener('click', async ()=>{
+    await enterFullscreen();
+    startOverlay.style.display='none';
+    activatePointer();
+  });
   window.addEventListener('keydown', (e)=>{ if(e.key==='f'||e.key==='F'){ e.preventDefault(); enterFullscreen(); }});
 
   /* ---------- Indicator ---------- */
@@ -341,6 +396,125 @@
   setDwell(readInitialDwell(), false);
   applyTheme(readInitialTheme(), false);
 
+  const DEFAULT_POINTER_ENABLED = true;
+  const DEFAULT_POINTER_SIZE = 36;
+  const DEFAULT_POINTER_ALPHA = 1;
+
+  const gazePointer = document.getElementById('gazePointer');
+  const pointerState = {
+    enabled: DEFAULT_POINTER_ENABLED,
+    size: DEFAULT_POINTER_SIZE,
+    alpha: DEFAULT_POINTER_ALPHA,
+    started: false,
+    showingChoices: false,
+  };
+  let pointerLastPosition = { x: null, y: null };
+
+  const clamp = (value, min, max) => {
+    if (!Number.isFinite(value)) return min;
+    return Math.min(max, Math.max(min, value));
+  };
+
+  const clampAlpha = (value) => {
+    if (!Number.isFinite(value)) return DEFAULT_POINTER_ALPHA;
+    return Math.min(1, Math.max(0, value));
+  };
+
+  function loadPointerSettings(){
+    pointerState.enabled = DEFAULT_POINTER_ENABLED;
+    pointerState.size = DEFAULT_POINTER_SIZE;
+    pointerState.alpha = DEFAULT_POINTER_ALPHA;
+
+    if (Number.isFinite(eyegazeSettings.gazePointerSize)){
+      pointerState.size = clamp(eyegazeSettings.gazePointerSize, 16, 120);
+    }
+    if (Number.isFinite(eyegazeSettings.gazePointerAlpha)){
+      pointerState.alpha = clampAlpha(eyegazeSettings.gazePointerAlpha);
+    }
+
+    // Force the custom pointer to be visible on this page with default values
+    pointerState.enabled = true;
+    pointerState.size = clamp(pointerState.size, 16, 120);
+    pointerState.alpha = clampAlpha(pointerState.alpha);
+
+    eyegazeSettings.showGazePointer = true;
+    eyegazeSettings.gazePointerSize = pointerState.size;
+    eyegazeSettings.gazePointerAlpha = pointerState.alpha;
+  }
+
+  function setPointerPos(x, y){
+    if (!gazePointer) return;
+    gazePointer.style.left = `${x}px`;
+    gazePointer.style.top  = `${y}px`;
+  }
+
+  function setPointerDwell(active){
+    if (!gazePointer) return;
+    if (!(pointerState.started && pointerState.enabled && pointerState.showingChoices)){
+      gazePointer.classList.remove('gp-dwell');
+      return;
+    }
+    gazePointer.classList.toggle('gp-dwell', !!active);
+  }
+
+  function applyPointerStyles(){
+    if (!gazePointer) return;
+    gazePointer.style.setProperty('--gp-size', `${pointerState.size}px`);
+    const hasPosition = pointerLastPosition.x !== null && pointerLastPosition.y !== null;
+    const visible = pointerState.started && pointerState.enabled && pointerState.showingChoices && hasPosition;
+    if (visible){
+      setPointerPos(pointerLastPosition.x, pointerLastPosition.y);
+    }
+    gazePointer.style.opacity = visible ? pointerState.alpha : 0;
+    document.documentElement.classList.toggle('hide-native-cursor', visible);
+    if (!visible){
+      gazePointer.classList.remove('gp-dwell');
+    }
+  }
+
+  function activatePointer(){
+    pointerState.started = true;
+    applyPointerStyles();
+  }
+
+  loadPointerSettings();
+  applyPointerStyles();
+
+  if (gazePointer){
+    const pointerMoveHandler = (event) => {
+      pointerLastPosition.x = event.clientX;
+      pointerLastPosition.y = event.clientY;
+      setPointerPos(event.clientX, event.clientY);
+      if (pointerState.started){
+        applyPointerStyles();
+      }
+    };
+
+    if ('onpointerrawupdate' in window){
+      window.addEventListener('pointerrawupdate', pointerMoveHandler, { passive: true });
+    }
+    window.addEventListener('pointermove', pointerMoveHandler, { passive: true });
+
+    window.addEventListener('pointerleave', () => {
+      if (!pointerState.started) return;
+      gazePointer.style.opacity = 0;
+      document.documentElement.classList.remove('hide-native-cursor');
+    });
+
+    window.addEventListener('pointerenter', (event) => {
+      if (event && typeof event.clientX === 'number' && typeof event.clientY === 'number'){
+        pointerLastPosition.x = event.clientX;
+        pointerLastPosition.y = event.clientY;
+        setPointerPos(event.clientX, event.clientY);
+      } else if (pointerLastPosition.x !== null && pointerLastPosition.y !== null) {
+        setPointerPos(pointerLastPosition.x, pointerLastPosition.y);
+      }
+      if (pointerState.started){
+        applyPointerStyles();
+      }
+    });
+  }
+
   /* ---------- UI (chooser) ---------- */
   const chooser = document.getElementById('chooser');
   let locked = false;
@@ -351,6 +525,8 @@
     chooser.setAttribute('aria-hidden','true');
     chooser.innerHTML = '';
     chooser.classList.remove('count-1','count-2','count-3','count-4');
+    pointerState.showingChoices = false;
+    applyPointerStyles();
   }
   function applyLayoutClass(count){
     chooser.classList.remove('count-1','count-2','count-3','count-4');
@@ -379,6 +555,8 @@
       });
     });
 
+    setPointerDwell(true);
+
     const t = setTimeout(()=>{
       cleanup();
       onComplete();
@@ -389,6 +567,7 @@
       if (overlay.parentElement){ overlay.parentElement.removeChild(overlay); }
       card.dataset.dwellActive = '0';
       card._dwell = null;
+      setPointerDwell(false);
     }
 
     card.dataset.dwellActive = '1';
@@ -406,6 +585,7 @@
       card._dwell = null;
     }
     card.dataset.dwellActive = '0';
+    setPointerDwell(false);
   }
 
   /* ---------- WebSocket with heartbeat + debounced reconnect ---------- */
@@ -558,6 +738,8 @@
   btnReset.addEventListener('click', ()=>{
     setDwell(DEFAULT_DWELL);
     applyTheme('dark'); // default preference – adjust if you prefer light
+    loadPointerSettings();
+    applyPointerStyles();
     openMenu(); // refresh displayed values
   });
 
@@ -578,20 +760,20 @@
   /* =========================
      >>> Anti "pointeur figé" (12 px) <<<
      ========================= */
-  let pointerState = { x: 0, y: 0, lastMove: 0 };
+  let pointerTracker = { x: 0, y: 0, lastMove: 0 };
   const MOTION_ARM_PX = 12;          // seuil de micro-mouvement pour "armer"
   let needMotionArm = false;         // on exige un mouvement après affichage du chooser
   let motionArmed   = false;         // devient true après >= 12 px
   let armOrigin     = { x: 0, y: 0 };// position au moment d'afficher le chooser
 
   window.addEventListener('pointermove', (e) => {
-    pointerState.x = e.clientX;
-    pointerState.y = e.clientY;
-    pointerState.lastMove = Date.now();
+    pointerTracker.x = e.clientX;
+    pointerTracker.y = e.clientY;
+    pointerTracker.lastMove = Date.now();
 
     if (needMotionArm && !motionArmed) {
-      const dx = pointerState.x - armOrigin.x;
-      const dy = pointerState.y - armOrigin.y;
+      const dx = pointerTracker.x - armOrigin.x;
+      const dy = pointerTracker.y - armOrigin.y;
       if ((dx*dx + dy*dy) >= (MOTION_ARM_PX * MOTION_ARM_PX)) {
         motionArmed = true; // la sélection par dwell est autorisée
       }
@@ -607,8 +789,8 @@
     // Armer l’anti-immobilité avant d’afficher
     needMotionArm = true;
     motionArmed = false;
-    armOrigin.x = pointerState.x;
-    armOrigin.y = pointerState.y;
+    armOrigin.x = pointerTracker.x;
+    armOrigin.y = pointerTracker.y;
 
     const opts = options.slice(0, 12);
     chooser.innerHTML = '';
@@ -669,5 +851,8 @@
 
       chooser.appendChild(card);
     });
+
+    pointerState.showingChoices = opts.length > 0;
+    applyPointerStyles();
   }
 </script>
