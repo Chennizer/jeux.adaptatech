@@ -280,26 +280,6 @@
   </div>
 
   <div class="row">
-    <label for="pointerToggle">Afficher le pointeur</label>
-    <input id="pointerToggle" type="checkbox" aria-describedby="pointerHelp">
-  </div>
-  <div class="row" id="pointerHelp" style="padding-top:0; font: 500 12px system-ui; opacity:.8;">
-    Affiche le pointeur rouge personnalisé et masque le curseur natif.
-  </div>
-
-  <div class="row">
-    <label for="pointerSize">Taille du pointeur</label>
-    <span class="value"><span id="pointerSizeVal">36</span> px</span>
-    <input id="pointerSize" type="range" min="16" max="120" step="1" value="36">
-  </div>
-
-  <div class="row">
-    <label for="pointerOpacity">Opacité du pointeur</label>
-    <span class="value"><span id="pointerOpacityVal">100</span>%</span>
-    <input id="pointerOpacity" type="range" min="10" max="100" step="1" value="100">
-  </div>
-
-  <div class="row">
     <label for="themeToggle">Mode sombre</label>
     <input id="themeToggle" type="checkbox" aria-describedby="themeHelp">
   </div>
@@ -321,7 +301,11 @@
   /* ---------- Fullscreen ---------- */
   async function enterFullscreen(){ try{ if(!document.fullscreenElement && document.documentElement.requestFullscreen){ await document.documentElement.requestFullscreen(); } }catch{} }
   const startOverlay = document.getElementById('startOverlay');
-  document.getElementById('startBtn').addEventListener('click', async ()=>{ await enterFullscreen(); startOverlay.style.display='none'; });
+  document.getElementById('startBtn').addEventListener('click', async ()=>{
+    await enterFullscreen();
+    startOverlay.style.display='none';
+    activatePointer();
+  });
   window.addEventListener('keydown', (e)=>{ if(e.key==='f'||e.key==='F'){ e.preventDefault(); enterFullscreen(); }});
 
   /* ---------- Indicator ---------- */
@@ -416,40 +400,45 @@
   const DEFAULT_POINTER_SIZE = 36;
   const DEFAULT_POINTER_ALPHA = 1;
 
-  const pointerToggle     = document.getElementById('pointerToggle');
-  const pointerSize       = document.getElementById('pointerSize');
-  const pointerSizeVal    = document.getElementById('pointerSizeVal');
-  const pointerOpacity    = document.getElementById('pointerOpacity');
-  const pointerOpacityVal = document.getElementById('pointerOpacityVal');
-  const gazePointer       = document.getElementById('gazePointer');
+  const gazePointer = document.getElementById('gazePointer');
+  const pointerState = {
+    enabled: DEFAULT_POINTER_ENABLED,
+    size: DEFAULT_POINTER_SIZE,
+    alpha: DEFAULT_POINTER_ALPHA,
+    started: false,
+  };
   let pointerLastPosition = { x: null, y: null };
 
-  function pointerSizeFromControls(){
-    if (pointerSize){
-      const raw = parseInt(pointerSize.value, 10);
-      const min = parseInt(pointerSize.min || '16', 10);
-      const max = parseInt(pointerSize.max || '120', 10);
-      if (!Number.isNaN(raw)) return Math.max(min, Math.min(max, raw));
-    }
-    if (typeof eyegazeSettings.gazePointerSize === 'number'){
-      const min = pointerSize ? parseInt(pointerSize.min || '16', 10) : 16;
-      const max = pointerSize ? parseInt(pointerSize.max || '120', 10) : 120;
-      return Math.max(min, Math.min(max, eyegazeSettings.gazePointerSize));
-    }
-    return DEFAULT_POINTER_SIZE;
-  }
+  const clamp = (value, min, max) => {
+    if (!Number.isFinite(value)) return min;
+    return Math.min(max, Math.max(min, value));
+  };
 
-  function pointerOpacityFromControls(){
-    if (pointerOpacity){
-      const raw = parseInt(pointerOpacity.value, 10);
-      const min = parseInt(pointerOpacity.min || '0', 10) || 0;
-      const max = parseInt(pointerOpacity.max || '100', 10) || 100;
-      if (!Number.isNaN(raw)) return Math.max(min, Math.min(max, raw)) / 100;
+  const clampAlpha = (value) => {
+    if (!Number.isFinite(value)) return DEFAULT_POINTER_ALPHA;
+    return Math.min(1, Math.max(0, value));
+  };
+
+  function loadPointerSettings(){
+    pointerState.enabled = DEFAULT_POINTER_ENABLED;
+    pointerState.size = DEFAULT_POINTER_SIZE;
+    pointerState.alpha = DEFAULT_POINTER_ALPHA;
+
+    if (Number.isFinite(eyegazeSettings.gazePointerSize)){
+      pointerState.size = clamp(eyegazeSettings.gazePointerSize, 16, 120);
     }
-    if (typeof eyegazeSettings.gazePointerAlpha === 'number'){
-      return Math.max(0, Math.min(1, eyegazeSettings.gazePointerAlpha));
+    if (Number.isFinite(eyegazeSettings.gazePointerAlpha)){
+      pointerState.alpha = clampAlpha(eyegazeSettings.gazePointerAlpha);
     }
-    return DEFAULT_POINTER_ALPHA;
+
+    // Force the custom pointer to be visible on this page with default values
+    pointerState.enabled = true;
+    pointerState.size = clamp(pointerState.size, 16, 120);
+    pointerState.alpha = clampAlpha(pointerState.alpha);
+
+    eyegazeSettings.showGazePointer = true;
+    eyegazeSettings.gazePointerSize = pointerState.size;
+    eyegazeSettings.gazePointerAlpha = pointerState.alpha;
   }
 
   function setPointerPos(x, y){
@@ -460,87 +449,44 @@
 
   function setPointerDwell(active){
     if (!gazePointer) return;
+    if (!(pointerState.started && pointerState.enabled)){
+      gazePointer.classList.remove('gp-dwell');
+      return;
+    }
     gazePointer.classList.toggle('gp-dwell', !!active);
-  }
-
-  function updatePointerLabels(sizePx, alpha){
-    if (pointerSizeVal) pointerSizeVal.textContent = Math.round(sizePx);
-    if (pointerOpacityVal) pointerOpacityVal.textContent = Math.round(alpha * 100);
   }
 
   function applyPointerStyles(){
     if (!gazePointer) return;
-    const sizePx = pointerSizeFromControls();
-    const alpha  = pointerOpacityFromControls();
-    updatePointerLabels(sizePx, alpha);
-    gazePointer.style.setProperty('--gp-size', `${sizePx}px`);
-    const enable = !!pointerToggle?.checked;
+    gazePointer.style.setProperty('--gp-size', `${pointerState.size}px`);
     const hasPosition = pointerLastPosition.x !== null && pointerLastPosition.y !== null;
-    document.documentElement.classList.toggle('hide-native-cursor', enable);
-    if (!enable) setPointerDwell(false);
-    gazePointer.style.opacity = enable && hasPosition ? alpha : 0;
-    if (enable && hasPosition){
+    const visible = pointerState.started && pointerState.enabled && hasPosition;
+    if (visible){
       setPointerPos(pointerLastPosition.x, pointerLastPosition.y);
     }
-  }
-
-  function syncPointerSettings(){
-    try{
-      if (pointerToggle) eyegazeSettings.showGazePointer = !!pointerToggle.checked;
-      if (pointerSize) eyegazeSettings.gazePointerSize = pointerSizeFromControls();
-      if (pointerOpacity) eyegazeSettings.gazePointerAlpha = pointerOpacityFromControls();
-    }catch(e){}
-  }
-
-  function ensurePointerDefaults(){
-    if (typeof eyegazeSettings.showGazePointer !== 'boolean') eyegazeSettings.showGazePointer = DEFAULT_POINTER_ENABLED;
-    if (typeof eyegazeSettings.gazePointerSize !== 'number') eyegazeSettings.gazePointerSize = DEFAULT_POINTER_SIZE;
-    if (typeof eyegazeSettings.gazePointerAlpha !== 'number') eyegazeSettings.gazePointerAlpha = DEFAULT_POINTER_ALPHA;
-  }
-
-  function refreshPointerControlsFromSettings(){
-    ensurePointerDefaults();
-
-    if (pointerToggle) pointerToggle.checked = !!eyegazeSettings.showGazePointer;
-
-    if (pointerSize){
-      const min = parseInt(pointerSize.min || '16', 10);
-      const max = parseInt(pointerSize.max || '120', 10);
-      let size = Math.round(eyegazeSettings.gazePointerSize);
-      if (Number.isNaN(size)) size = DEFAULT_POINTER_SIZE;
-      size = Math.max(min, Math.min(max, size));
-      pointerSize.value = size;
-      eyegazeSettings.gazePointerSize = size;
+    gazePointer.style.opacity = visible ? pointerState.alpha : 0;
+    document.documentElement.classList.toggle('hide-native-cursor', visible);
+    if (!visible){
+      gazePointer.classList.remove('gp-dwell');
     }
+  }
 
-    if (pointerOpacity){
-      const min = parseInt(pointerOpacity.min || '0', 10) || 0;
-      const max = parseInt(pointerOpacity.max || '100', 10) || 100;
-      let op = Math.round(Math.max(0, Math.min(1, eyegazeSettings.gazePointerAlpha)) * 100);
-      if (Number.isNaN(op)) op = Math.round(DEFAULT_POINTER_ALPHA * 100);
-      op = Math.max(min, Math.min(max, op));
-      pointerOpacity.value = op;
-      eyegazeSettings.gazePointerAlpha = op / 100;
-    }
-
+  function activatePointer(){
+    pointerState.started = true;
     applyPointerStyles();
-    syncPointerSettings();
   }
 
-  function resetPointerSettings(){
-    eyegazeSettings.showGazePointer = DEFAULT_POINTER_ENABLED;
-    eyegazeSettings.gazePointerSize = DEFAULT_POINTER_SIZE;
-    eyegazeSettings.gazePointerAlpha = DEFAULT_POINTER_ALPHA;
-    refreshPointerControlsFromSettings();
-  }
-
-  refreshPointerControlsFromSettings();
+  loadPointerSettings();
+  applyPointerStyles();
 
   if (gazePointer){
     const pointerMoveHandler = (event) => {
       pointerLastPosition.x = event.clientX;
       pointerLastPosition.y = event.clientY;
       setPointerPos(event.clientX, event.clientY);
+      if (pointerState.started){
+        applyPointerStyles();
+      }
     };
 
     if ('onpointerrawupdate' in window){
@@ -549,8 +495,9 @@
     window.addEventListener('pointermove', pointerMoveHandler, { passive: true });
 
     window.addEventListener('pointerleave', () => {
-      gazePointer._savedOpacity = gazePointer.style.opacity;
+      if (!pointerState.started) return;
       gazePointer.style.opacity = 0;
+      document.documentElement.classList.remove('hide-native-cursor');
     });
 
     window.addEventListener('pointerenter', (event) => {
@@ -561,24 +508,11 @@
       } else if (pointerLastPosition.x !== null && pointerLastPosition.y !== null) {
         setPointerPos(pointerLastPosition.x, pointerLastPosition.y);
       }
-      applyPointerStyles();
+      if (pointerState.started){
+        applyPointerStyles();
+      }
     });
   }
-
-  if (pointerToggle){
-    pointerToggle.addEventListener('change', () => {
-      syncPointerSettings();
-      applyPointerStyles();
-    });
-  }
-
-  [pointerSize, pointerOpacity].forEach((ctrl) => {
-    if (!ctrl) return;
-    ctrl.addEventListener('input', () => {
-      syncPointerSettings();
-      applyPointerStyles();
-    });
-  });
 
   /* ---------- UI (chooser) ---------- */
   const chooser = document.getElementById('chooser');
@@ -781,7 +715,6 @@
     dwellSlider.value = eyegazeSettings.dwellTime || DEFAULT_DWELL;
     dwellVal.textContent = dwellSlider.value;
     themeToggle.checked = document.body.classList.contains('theme-dark');
-    refreshPointerControlsFromSettings();
     menuMask.style.display = 'block';
     quickMenu.style.display = 'block';
     quickMenu.focus();
@@ -802,7 +735,8 @@
   btnReset.addEventListener('click', ()=>{
     setDwell(DEFAULT_DWELL);
     applyTheme('dark'); // default preference – adjust if you prefer light
-    resetPointerSettings();
+    loadPointerSettings();
+    applyPointerStyles();
     openMenu(); // refresh displayed values
   });
 
