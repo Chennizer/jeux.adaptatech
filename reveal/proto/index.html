@@ -26,6 +26,8 @@
       --tile-min: 160px; --tile-max: 520px;
 
       --bottom-ui: var(--ui-reserve);
+
+      --presence-photo-size: max(10vh, 84px);
     }
 
     *,*::before,*::after{ box-sizing:border-box; }
@@ -161,7 +163,7 @@
       background:#fff;
       box-shadow: var(--shadow);
       position: relative;
-      overflow: hidden;
+      overflow: auto;
       display: grid;
       place-items: start center;
     }
@@ -175,14 +177,15 @@
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 18vmin, 220px), 1fr));
       gap: var(--grid-gap);
-      transform-origin: top left;
-      will-change: transform;
       justify-self: center;
+      justify-items: center;
+      align-items: start;
     }
 
-    .draggable{ background: transparent; border: none; padding: 0; display:flex; align-items:center; justify-content:center; cursor: grab; border-radius: 14px; }
+    .draggable{ background: transparent; border: none; padding: 0; display:flex; align-items:center; justify-content:center; cursor: grab; border-radius: 14px; flex: 0 0 auto; }
     .draggable:active{ cursor: grabbing; }
     .draggable img{ width: 100%; height: auto; aspect-ratio: 1/1; object-fit: contain; display: block; border-radius: 14px; }
+    #drag-transfer .bin-grid .draggable:not(.photo-card){ width: min(100%, clamp(120px, 18vmin, 220px)); }
     .transfer-controls{ margin-bottom: clamp(8px, 1.6vmin, 16px); display:flex; gap:.6rem; align-items:center; justify-content:flex-end; }
     .btn{ border:1px solid var(--card-br); background:#f9fafb; padding:.5em .8em; border-radius:10px; cursor:pointer; font-weight:600; }
     .btn:hover{ background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.08); }
@@ -204,21 +207,19 @@
   justify-content:center;
   gap: 1.5rem;
 }
-/* --- Présences: bande de photos (10vh) --- */
-/* --- Présences: bande de photos — fixed single row (10vh) --- */
+/* --- Présences: bande de photos — hauteur fixe (10vh) --- */
 .photo-strip{
-  height: 10vh;                 /* fixed height */
-  min-height: 84px;             /* safety on tiny screens */
+  --strip-pad: clamp(4px, 0.8vmin, 12px);
   display: flex;
-  flex-wrap: nowrap;            /* always one line */
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;      /* center the 6 items */
+  justify-content: center;
   gap: clamp(10px, 2vmin, 18px);
+  padding: var(--strip-pad) clamp(10px, 2vmin, 18px);
+  min-height: calc(var(--presence-photo-size) + 2 * var(--strip-pad));
   margin-bottom: clamp(12px, 2vmin, 18px);
-  overflow: visible;            /* never clip images */
+  overflow: visible;
   border-radius: 16px;
-  /* optional subtle style */
-  /* border: 2px solid var(--card-br); box-shadow: var(--shadow); background:#fff; */
 }
 
 /* each photo is a draggable button */
@@ -227,17 +228,19 @@
   border: 2px solid var(--card-br);
   border-radius: 14px;
   box-shadow: var(--shadow);
-  height: 100%;                 /* fill the 10vh strip height */
-  aspect-ratio: 1/1;            /* keep square; width auto-scales */
+  height: var(--presence-photo-size);
+  width: var(--presence-photo-size);
+  aspect-ratio: 1/1;
   display: grid; place-items: center;
   padding: 0;
   cursor: grab;
+  flex: 0 0 auto;
 }
 .photo-card:active{ cursor: grabbing; }
 
 .photo-card img{
   height: 100%;
-  width: auto;                  /* width follows height/aspect */
+  width: 100%;
   display: block;
   object-fit: cover;
   border-radius: 12px;
@@ -663,15 +666,9 @@
         <!-- Bande de photos (≈10vh) -->
         <div id="photoStrip" class="photo-strip bin" aria-label="Photos des élèves (aperçu)"></div>
 
-        <div class="note-tip" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--grid-gap);align-items:end;margin-bottom:.5rem;">
-          <div style="display:flex;align-items:center;gap:.6rem;justify-content:center;">
-            <img src="https://placehold.co/48x48" alt="Maison" width="48" height="48" style="border-radius:8px;">
-            <span>À la maison</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:.6rem;justify-content:center;">
-            <img src="https://placehold.co/48x48" alt="École" width="48" height="48" style="border-radius:8px;">
-            <span>À l’école</span>
-          </div>
+        <div class="note-tip" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--grid-gap);align-items:center;justify-items:center;margin-bottom:.5rem;">
+          <span>À la maison</span>
+          <span>À l’école</span>
         </div>
 
         <div class="transfer-wrap">
@@ -1475,29 +1472,11 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
     if (e.currentSlide?.id === 'owl-root') stepSelectors.owl.refresh();
   });
 
-  // ===== Auto-scaling for drag bins (no scroll)
-  function computeScaleToFit(container, content){
-    if (!container || !content) return 1;
-    const prev = content.style.transform;
-    content.style.transform = 'none';
-    const cw = content.scrollWidth;
-    const ch = content.scrollHeight;
-    content.style.transform = prev;
-    if (cw === 0 || ch === 0) return 1;
-    const scaleW = container.clientWidth  / cw;
-    const scaleH = container.clientHeight / ch;
-    return Math.min(1, scaleW, scaleH);
-  }
-
+  // ===== Drag bins layout refresh (no scaling) =====
   function scaleBins(){
-    const left  = document.querySelector('#drag-transfer #bin-left');
-    const right = document.querySelector('#drag-transfer #bin-right');
-    [left, right].forEach(bin=>{
-      if (!bin) return;
-      const inner = bin.querySelector('.bin-grid');
+    document.querySelectorAll('#drag-transfer .bin-grid').forEach(inner=>{
       if (!inner) return;
-      const s = computeScaleToFit(bin, inner);
-      inner.style.transform = `scale(${s})`;
+      inner.style.removeProperty('transform');
     });
   }
 
@@ -1510,7 +1489,6 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
   Reveal.on('slidechanged', (e)=>{ if (e.currentSlide?.id === 'drag-transfer') scheduleScale(); });
   Reveal.on('ready', ()=>{ if (Reveal.getCurrentSlide()?.id === 'drag-transfer') scheduleScale(); });
   // --- Build photo strip (6 vignettes ≈10vh)
-// --- Build photo strip as a draggable bin (same behavior as the 2 boxes)
 // --- Build photo strip as simple flex row (no inner grid, no scaling)
 (function buildPhotoStrip(){
   const strip = document.getElementById('photoStrip');
@@ -1543,7 +1521,7 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
     });
     btn.addEventListener('dragend', ()=>{
       btn.classList.remove('dragging');
-      scheduleScale(); // still scales the two big bins only
+      scheduleScale(); // refresh big bin layout
     });
 
     // Click: send into LEFT bin first, then toggle L<->R on subsequent clicks
@@ -1575,7 +1553,7 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
 
 
 
-// Drag & transfer setup (top photo strip is its own flex bin; only the two big bins scale)
+// Drag & transfer setup (top photo strip is its own flex bin)
 let transferInitialized = false;
 function setupTransfer(){
   if (transferInitialized) return;
@@ -1668,7 +1646,7 @@ function setupTransfer(){
     scheduleScale();
   });
 
-  scheduleScale(); // scales only the two large bins
+  scheduleScale(); // ensure transforms cleared
   window.addEventListener('load', scheduleScale);
 }
 
