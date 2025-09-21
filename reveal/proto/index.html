@@ -250,6 +250,34 @@
 }
 .photo-card:active{ cursor: grabbing; }
 
+.photo-strip.presence-select-mode{
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--mint) 55%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent);
+}
+
+.photo-card.presence-selectable{
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--green) 60%, var(--card-br));
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--mint) 55%, transparent),
+    var(--shadow);
+  transform: translateY(-1px);
+}
+.photo-card.presence-selectable img{
+  filter: saturate(1.1);
+}
+
+.photo-card.presence-awaiting{
+  cursor: wait;
+  border-color: #d84315;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, #ffab91 70%, transparent),
+    0 10px 24px rgba(0,0,0,.18);
+}
+.photo-card.presence-awaiting img{
+  filter: saturate(1.05);
+}
+
 .photo-card img{
   width: 100%;
   height: 100%;
@@ -387,6 +415,10 @@
     .side-btn img{
       transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
       will-change: transform;
+    }
+    .side-btn.is-active img{
+      transform: translateY(-1px) scale(1.03);
+      filter: drop-shadow(0 6px 14px rgba(0,0,0,.16));
     }
     .side-btn:hover img{ transform: translateY(-1px) scale(1.03); filter: drop-shadow(0 6px 14px rgba(0,0,0,.12)); }
     .side-btn:active img{ transform: translateY(0) scale(0.97); filter: drop-shadow(0 2px 6px rgba(0,0,0,.10)); }
@@ -788,6 +820,9 @@
     </div>
     <aside class="shell-side">
       <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
+      <button id="remoteBtnPresence" class="side-btn" title="Demander (contrôleur)">
+        <img src="../../images/ch.png" alt="Contrôleur"/>
+      </button>
     </aside>
   </div>
 </section>
@@ -828,6 +863,8 @@
   ];
   // Option de secours si un fichier manque encore côté client
   const FALLBACK_PHOTO = (label)=> `https://placehold.co/240x240?text=${encodeURIComponent(label)}`;
+  const PRESENCE_HOME_THUMB   = '../../images/accueilval/maison.png';
+  const PRESENCE_SCHOOL_THUMB = '../../images/accueilval/ecole.png';
 
 
   // Directory for day-of-week images
@@ -1264,15 +1301,191 @@
   }
 
   // ===== WebSocket remote
-  const remoteBtnWeather = document.getElementById('remoteBtnWeather');
+  const remoteBtnWeather  = document.getElementById('remoteBtnWeather');
+  const remoteBtnPresence = document.getElementById('remoteBtnPresence');
   const remoteBtnVideos  = document.getElementById('remoteBtnVideos');
   const remoteBtnOwl     = document.getElementById('remoteBtnOwl');
   let WS=null, hbInterval=null, watchdogInterval=null, lastActivity=0, backoffMs=1000, reconnectTimer=null, connecting=false;
   let lastPending=null;
+  let pendingPresence=null;
   function setRemoteStatus(txt){ const remoteStatus = document.getElementById('remoteStatus'); if(remoteStatus) remoteStatus.textContent = txt || ''; }
   function clearWsTimers(){ if(hbInterval){clearInterval(hbInterval); hbInterval=null;} if(watchdogInterval){clearInterval(watchdogInterval); watchdogInterval=null;} if(reconnectTimer){clearTimeout(reconnectTimer); reconnectTimer=null;} }
   function scheduleReconnect(){ if(connecting) return; if(reconnectTimer) return; reconnectTimer=setTimeout(()=>{reconnectTimer=null;connectWS();}, backoffMs); backoffMs=Math.min(backoffMs*2,15000); }
   function wsSend(obj){ const payload=JSON.stringify(obj); if(WS && WS.readyState===1) WS.send(payload); else if(WS) WS.addEventListener('open', ()=> WS.send(payload), {once:true}); }
+
+  const presenceSelectState = { active:false, cards:[], keyHandler:null };
+
+  function isOnPresenceSlide(){
+    const cur = Reveal.getCurrentSlide?.();
+    return !!cur && cur.id === 'drag-transfer';
+  }
+
+  function escapeAttr(value){
+    if (typeof value === 'undefined' || value === null) return '';
+    if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(value));
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+  }
+
+  function updatePresenceButtonState(active){
+    if (!remoteBtnPresence) return;
+    remoteBtnPresence.setAttribute('aria-pressed', active ? 'true' : 'false');
+    remoteBtnPresence.classList.toggle('is-active', !!active);
+  }
+
+  function exitPresenceSelectMode(){
+    if (!presenceSelectState.active) return;
+    const strip = document.getElementById('photoStrip');
+    if (strip) strip.classList.remove('presence-select-mode');
+    presenceSelectState.cards.forEach(card => {
+      card.classList.remove('presence-selectable');
+      card.setAttribute('draggable','true');
+      card.draggable = true;
+      delete card.dataset.prevDraggable;
+      card.removeEventListener('click', onPresenceCardActivate);
+    });
+    presenceSelectState.cards = [];
+    if (presenceSelectState.keyHandler){
+      window.removeEventListener('keydown', presenceSelectState.keyHandler, true);
+      presenceSelectState.keyHandler = null;
+    }
+    presenceSelectState.active = false;
+    updatePresenceButtonState(false);
+  }
+
+  function presenceKeyHandler(e){
+    if (!presenceSelectState.active) return;
+    const key = (e.key || '').toLowerCase();
+    if (key === 'escape' || key === 'esc' || key === 'q'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      exitPresenceSelectMode();
+    }
+  }
+
+  function enterPresenceSelectMode(){
+    if (presenceSelectState.active) return;
+    if (lastPending?.kind === 'presence') return;
+    if (!isOnPresenceSlide()) return;
+    const strip = document.getElementById('photoStrip');
+    if (!strip) return;
+    const cards = Array.from(strip.querySelectorAll('.photo-card'));
+    if (!cards.length) return;
+
+    presenceSelectState.active = true;
+    presenceSelectState.cards = cards;
+    strip.classList.add('presence-select-mode');
+
+    cards.forEach(card => {
+      card.classList.add('presence-selectable');
+      card.dataset.prevDraggable = card.getAttribute('draggable') || '';
+      card.setAttribute('draggable','false');
+      card.draggable = false;
+      card.addEventListener('click', onPresenceCardActivate);
+    });
+
+    presenceSelectState.keyHandler = presenceKeyHandler;
+    window.addEventListener('keydown', presenceKeyHandler, true);
+    updatePresenceButtonState(true);
+  }
+
+  function sendPresenceRequest(card){
+    if (!card) return;
+    const studentId = card.dataset.name || card.dataset.studentId || '';
+    const label = card.dataset.student || card.getAttribute('aria-label') || 'Élève';
+    const imgEl = card.querySelector('img');
+    const image = imgEl ? (imgEl.currentSrc || imgEl.src || '') : '';
+    const msg = {
+      type: 'request_presence',
+      from: 'slides',
+      deckTitle,
+      studentId,
+      name: label,
+      image,
+      options: [
+        { title: 'À la maison', destination: 'home', thumb: PRESENCE_HOME_THUMB },
+        { title: 'À l’école', destination: 'school', thumb: PRESENCE_SCHOOL_THUMB }
+      ],
+      note: "en attente d'une réponse"
+    };
+
+    pendingPresence = {
+      element: card,
+      originParent: card.parentElement,
+      originNext: card.nextElementSibling
+    };
+
+    card.classList.add('presence-awaiting');
+    card.setAttribute('draggable','false');
+    card.draggable = false;
+
+    lastPending = { kind: 'presence', msg };
+    wsSend(msg);
+    showWait("en attente d'une réponse");
+  }
+
+  function onPresenceCardActivate(e){
+    if (!presenceSelectState.active) return;
+    const card = e.currentTarget;
+    if (!card || lastPending?.kind === 'presence') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    exitPresenceSelectMode();
+    sendPresenceRequest(card);
+  }
+
+  function binInner(side){
+    const base = document.getElementById(side === 'right' ? 'bin-right' : 'bin-left');
+    if (!base) return null;
+    return base.querySelector('.bin-grid') || base;
+  }
+
+  function handlePresenceChoice(msg){
+    hideWait();
+    const destination = String(msg.destination || '').toLowerCase();
+    const studentId = msg.studentId || (pendingPresence?.element?.dataset.name);
+    let card = null;
+    if (pendingPresence?.element && (!studentId || pendingPresence.element.dataset.name === studentId)){
+      card = pendingPresence.element;
+    }
+    if (!card && studentId){
+      const selector = `.photo-card[data-name="${escapeAttr(studentId)}"]`;
+      card = document.querySelector(selector);
+    }
+    if (!card){
+      if (lastPending?.kind === 'presence') lastPending = null;
+      pendingPresence = null;
+      return;
+    }
+
+    card.classList.remove('presence-awaiting');
+    card.setAttribute('draggable','true');
+    card.draggable = true;
+
+    const destKey = (destination === 'school' || destination === 'ecole' || destination === 'école') ? 'right' : 'left';
+    const target = binInner(destKey);
+    if (target) target.appendChild(card);
+    scheduleScale();
+
+    if (pendingPresence && pendingPresence.element === card) pendingPresence = null;
+    if (lastPending?.kind === 'presence') lastPending = null;
+  }
+
+  function cancelPendingPresence(){
+    if (pendingPresence?.element){
+      const { element, originParent, originNext } = pendingPresence;
+      element.classList.remove('presence-awaiting');
+      element.setAttribute('draggable','true');
+      element.draggable = true;
+      if (originParent && element.parentElement !== originParent){
+        originParent.insertBefore(element, originNext || null);
+      }
+      scheduleScale();
+    }
+    pendingPresence = null;
+    if (lastPending?.kind === 'presence') lastPending = null;
+    hideWait();
+    exitPresenceSelectMode();
+  }
   function connectWS(){
     if (connecting) return; connecting=true;
     try { WS = new WebSocket(WS_URL); } catch { connecting=false; scheduleReconnect(); return; }
@@ -1312,9 +1525,24 @@
         const map = { sun:1, cloud:2, rain:3, snow:4 }; const v = map[String(msg.key||'').toLowerCase()] ?? 0;
         Reveal.slide(h, v); if (lastPending?.kind==='weather') lastPending=null; return;
       }
+      if (msg.type==='presence_choice'){
+        handlePresenceChoice(msg);
+        return;
+      }
+      if (msg.type==='stop_presence'){
+        cancelPendingPresence();
+        return;
+      }
     };
     WS.onerror = ()=> setRemoteStatus('Erreur WebSocket');
-    WS.onclose  = ()=>{ clearWsTimers(); setRemoteStatus('WebSocket fermé'); connecting=false; scheduleReconnect(); };
+    WS.onclose  = ()=>{
+      clearWsTimers();
+      setRemoteStatus('WebSocket fermé');
+      cancelPendingPresence();
+      exitPresenceSelectMode();
+      connecting=false;
+      scheduleReconnect();
+    };
     watchdogInterval=setInterval(()=>{ if(Date.now()-lastActivity>60000){ try{ WS.close(); }catch{} } }, 5000);
   }
   connectWS();
@@ -1360,7 +1588,13 @@
     wsSend(msg);
     showWait("en attente d'une réponse");
   }
-  document.getElementById('remoteBtnWeather')?.addEventListener('click', sendWeatherRequest);
+  document.getElementById('remoteBtnWeather') ?.addEventListener('click', sendWeatherRequest);
+  remoteBtnPresence?.addEventListener('click', ()=>{
+    if (lastPending?.kind === 'presence') return;
+    if (presenceSelectState.active) exitPresenceSelectMode();
+    else enterPresenceSelectMode();
+  });
+  if (remoteBtnPresence) updatePresenceButtonState(false);
   document.getElementById('remoteBtnVideos') ?.addEventListener('click', sendVideoRequest);
   document.getElementById('remoteBtnOwl')    ?.addEventListener('click', sendOwlRequest);
 
@@ -1572,6 +1806,10 @@
     }
   });
 
+  Reveal.on('slidechanged', ()=>{
+    if (presenceSelectState.active && !isOnPresenceSlide()) exitPresenceSelectMode();
+  });
+
   // Refresh selectors when entering dynamic grids
   Reveal.on('slidechanged', (e)=>{
     if (e.currentSlide?.id === 'branch-root') stepSelectors.videos.refresh();
@@ -1606,8 +1844,10 @@
     const btn = document.createElement('button');
     btn.className = 'photo-card draggable';
     btn.setAttribute('draggable','true');
+    btn.draggable = true;
     btn.dataset.type = 'photo';
     btn.dataset.name = `student-${index}`;
+    btn.dataset.studentId = `student-${index}`;
     btn.dataset.student = label;
     btn.setAttribute('aria-label', label);
 
