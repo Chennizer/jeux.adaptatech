@@ -11,8 +11,9 @@
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#0b1220;}
   canvas{display:block;position:fixed;inset:0;}
+  /* overlay styles kept for compatibility, but overlay is not used in this auto-start build */
   #modeOverlay{
-    position:fixed;inset:0;display:flex;flex-direction:column;gap:18px;
+    position:fixed;inset:0;display:none;flex-direction:column;gap:18px;
     align-items:center;justify-content:center;background:#000;color:#fff;z-index:10000;
     text-align:center;padding:20px;
   }
@@ -46,13 +47,7 @@
 </head>
 <body>
 
-<!-- Mode selection -->
-<div id="modeOverlay">
-  <h2>Choisis ton mode&nbsp;:</h2>
-  <button id="btnNormal">Mode normal (5–6 clics)</button>
-  <button id="btnRapid">Mode éclair (1 clic)</button>
-  <p>Espace = neige · Entrée = rejouer</p>
-</div>
+<!-- (Overlay removed in this auto-start version) -->
 
 <!-- Settings icon + menu -->
 <div id="settings-icon" title="Options">⚙️</div>
@@ -95,7 +90,7 @@ const finishPath  ='../../sounds/snowsuccess.mp3'; // celebration sfx
 const firPath     ='../../images/pictos/fir.png';
 
 /* === State & settings === */
-let gameStarted=false, rapidMode=false, finished=false;
+let gameStarted=false, rapidMode=false, finished=false; // rapidMode stays false (default)
 let lastTap=-Infinity, tapDelay=1200;
 let requiredPresses=6;
 let presses=0;
@@ -129,7 +124,7 @@ let sunRot=0, glarePulse=1;
 let firImg=null;
 let forest=[]; // {x,y,w,h,depth,useImg}
 const TREE_SCALE = 1.5; // 1.5× larger trees
-const TREE_BASE_DROP = 30; // lowered so they sit deeper into the snow
+const TREE_BASE_DROP = 34; // lowered so they sit deeper into the snow
 
 /* Background snow */
 const BACK_DENSITY_BASE = 0.00010;
@@ -307,6 +302,11 @@ function safePlay(snd, volume=1){
   try{ snd.setVolume(volume); snd.play(); }catch(e){ console.warn('Audio play failed:', e); }
 }
 
+/* ——— Auto-audio helper ——— */
+function ensureAudioStarted(){
+  try{ getAudioContext().resume(); }catch(e){}
+}
+
 function preload(){
   try{ ambience = loadSound(ambiencePath, null, err=>console.warn('Ambience load error:', err)); }catch(e){}
   try{ pressSFX = loadSound(pressPath,  null, err=>console.warn('Press SFX load error:', err)); }catch(e){}
@@ -328,12 +328,7 @@ function setup(){
   seedStars();
   makeBands();
 
-  // UI
-  const btnN=document.getElementById('btnNormal');
-  const btnR=document.getElementById('btnRapid');
-  btnN.onclick=()=>{ rapidMode=false; startGame(); };
-  btnR.onclick=()=>{ rapidMode=true;  startGame(); };
-
+  // Settings menu
   const ico=document.getElementById('settings-icon');
   const menu=document.getElementById('menu');
   const muteM=document.getElementById('muteMusic');
@@ -364,20 +359,37 @@ function setup(){
   volS.oninput=e=>{ volSFX=e.target.value/100; valS.textContent=e.target.value; };
   req.oninput=e=>{ requiredPresses = parseInt(e.target.value,10); reqV.textContent = requiredPresses; };
   delay.oninput=e=>{ tapDelay = parseInt(e.target.value,10); delayV.textContent = tapDelay; };
+
+  // —— Auto start the game in default mode ——
+  ensureAudioStarted();
+  startGame();
+
+  // If autoplay blocked, resume audio on first interaction
+  const firstInteract = ()=>{
+    ensureAudioStarted();
+    if(ambience && ambience.isLoaded() && !ambience.isPlaying()){
+      ambience.setLoop(true);
+      ambience.setVolume(isMusicMuted?0:volMusic);
+      safePlay(ambience, isMusicMuted?0:volMusic);
+    }
+    window.removeEventListener('pointerdown', firstInteract);
+    window.removeEventListener('keydown', firstInteract);
+  };
+  window.addEventListener('pointerdown', firstInteract, {once:true});
+  window.addEventListener('keydown', firstInteract, {once:true});
 }
 
 function startGame(){
+  // No overlay in this build; keep call for safety (no-op)
   document.getElementById('modeOverlay')?.remove();
+
   gameStarted=true; finished=false; celebrating=false;
   document.getElementById('settings-icon').style.visibility='visible';
 
-  // reset celebration scheduling
-  completionArmed=false; celebrationScheduled=false;
-  if (celebrationTimeout){ clearTimeout(celebrationTimeout); celebrationTimeout=null; }
-
-  // Unlock WebAudio
+  // Unlock WebAudio (best effort)
   if (typeof userStartAudio === 'function') { userStartAudio(); }
 
+  // Fullscreen attempt (may be blocked)
   (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
 
   presses=0;
@@ -397,23 +409,24 @@ function startGame(){
   AUR.seed = Math.random()*10000;
   AUR.t = 0;
   makeBands();
+
+  // Reset any celebration scheduling
+  completionArmed=false; celebrationScheduled=false;
+  if (celebrationTimeout){ clearTimeout(celebrationTimeout); celebrationTimeout=null; }
 }
 
 /* Hard reset after celebration ends: fully clear snow & restart round */
 function hardResetGame(){
-  // stop celebration & any timers
   celebrating=false;
   finished=false;
   completionArmed=false;
   celebrationScheduled=false;
   if (celebrationTimeout){ clearTimeout(celebrationTimeout); celebrationTimeout=null; }
 
-  // restore ambience volume
   if(ambience && ambience.isLoaded()){
     ambience.setVolume(isMusicMuted?0:volMusic);
   }
 
-  // reset gameplay state (like a fresh round)
   presses=0;
   progress=INITIAL_SNOW;
   targetProgress=INITIAL_SNOW;

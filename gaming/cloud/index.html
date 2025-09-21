@@ -116,17 +116,54 @@
 
     /* === AUDIO & STATE === */
     const thunderPaths = [
-      '../../sounds/thunder/bolt1.mp3',
-      '../../sounds/thunder/bolt2.mp3',
-      '../../sounds/thunder/bolt3.mp3',
-      '../../sounds/thunder/bolt4.mp3'
+      '../../sounds/cloudswind.mp3'
     ];
     let thunderSounds = [], rainSound;
+
     let tapDelay = 2000, lastTap = -Infinity;
     let clouds = [];
     let baseSkyColor, greySkyColor;
-    let paused = false; // pour savoir si on est « en pause » hors slide
+    let paused = false; // pause depuis le parent
 
+    /* === ORBIT FINALE (clouds only) === */
+    const ORBIT_DURATION_MS = 7000;      // durée avant auto-advance
+    const ORBIT_ELLIPSE_Y   = 0.70;      // aplatissement vertical (0.6–0.9 joli)
+    const ORBIT_MIN_R_FRAC  = 0.12;      // rayon min en fraction du min(width,height)
+    const ORBIT_MAX_R_FRAC  = 0.42;      // rayon max idem
+    const ORBIT_SPEED_MIN   = 0.6;       // rad/s
+    const ORBIT_SPEED_MAX   = 1.0;       // rad/s
+
+    let orbitFinale = false;
+    let orbitStart  = 0;
+    let orbitCX = 0, orbitCY = 0;
+
+    function startOrbitFinale(){
+      if (orbitFinale) return;
+      orbitFinale = true;
+      orbitStart  = millis();
+
+      // centre d’orbite : légèrement au-dessus du centre écran (= plus naturel)
+      orbitCX = width * 0.5;
+      orbitCY = height * 0.45;
+
+      const Rmin = Math.min(width, height) * ORBIT_MIN_R_FRAC;
+      const Rmax = Math.min(width, height) * ORBIT_MAX_R_FRAC;
+
+      // préparer l’orbite de chaque nuage
+      clouds.forEach((c,i)=>{
+        c.stopped = true;
+        const dx = c.x - orbitCX;
+        const dy = c.baseY - orbitCY;
+        const r0 = Math.max(Rmin, Math.min(Rmax, Math.hypot(dx, dy)));
+        c.orbitR = r0 * random(0.9, 1.1);
+        c.orbitTheta0 = Math.atan2(dy, dx);
+        const dir = random() < 0.5 ? -1 : 1; // CW/CCW
+        c.orbitOmega = dir * random(ORBIT_SPEED_MIN, ORBIT_SPEED_MAX);
+        c.orbitEll  = ORBIT_ELLIPSE_Y * random(0.92, 1.08); // légère variation
+      });
+    }
+
+    /* === Cloud class === */
     class Cloud {
       constructor() {
         const count = clouds.length;
@@ -166,6 +203,9 @@
                 dy = random(-this.h*0.3,this.h*0.3);
           this.parts.push({dx,dy,pw,ph});
         }
+
+        // orbit params (définis au lancement de la finale)
+        this.orbitR = 0; this.orbitTheta0 = 0; this.orbitOmega = 0; this.orbitEll = 1;
       }
       update() {
         if (!this.stopped) {
@@ -175,33 +215,56 @@
             this.x = this.targetX;
             this.stopped = true;
           }
+        } else if (orbitFinale) {
+          const t = (millis() - orbitStart) / 1000;
+          const theta = this.orbitTheta0 + this.orbitOmega * t;
+          this.x     = orbitCX + this.orbitR * Math.cos(theta);
+          this.baseY = orbitCY + this.orbitR * this.orbitEll * Math.sin(theta);
         }
       }
       show() {
         noStroke();
         fill(this.col);
-        const fy = this.baseY + sin(frameCount*0.01+this.phase)*20;
+        const bob = orbitFinale ? 0.6 : 1.0; // bob plus discret en finale
+        const fy = this.baseY + Math.sin(frameCount*0.01 + this.phase) * 20 * bob;
         this.parts.forEach(p=>{ ellipse(this.x+p.dx, fy+p.dy, p.pw, p.ph); });
       }
     }
 
+    /* === p5 lifecycle === */
     function preload() {
       thunderSounds = thunderPaths.map(p=>loadSound(p));
-      rainSound     = loadSound('../../sounds/rain1.mp3');
+      rainSound     = loadSound('../../sounds/rain1.mp3'); // laissé pour compatibilité; pas utilisé par la finale
     }
     function setup() {
       createCanvas(windowWidth, windowHeight);
       baseSkyColor = color(135,206,235);
       greySkyColor = color(80,80,80);
     }
+
+    let lastMs = 0;
     function draw() {
-      const t = min(1, clouds.length / requiredPresses);
-      background(lerpColor(baseSkyColor, greySkyColor, t));
+      const now = millis();
+      const dt = lastMs ? (now - lastMs)/1000 : 0;
+      lastMs = now;
+
+      const t = Math.min(1, clouds.length / requiredPresses);
+      background(lerpColor(baseSkyColor, greySkyColor, orbitFinale ? 1 : t));
+
       clouds.forEach(c=>{ c.update(); c.show(); });
+
+      // Auto-advance à la fin de l’orbite
+      if (orbitFinale && (now - orbitStart) > ORBIT_DURATION_MS) {
+        orbitFinale = false;
+        if (parent && typeof parent.ADAPTATECH_exitAndNext === 'function') {
+          parent.ADAPTATECH_exitAndNext();
+        }
+      }
     }
+
     function keyPressed() {
       if (key === ' ') {
-        if (paused) return; // ignore si le deck nous a mis en pause
+        if (paused || orbitFinale) return; // pas d’input pendant la finale
         if (clouds.length >= requiredPresses) return;
 
         const now = millis();
@@ -209,21 +272,35 @@
         lastTap = now;
 
         clouds.push(new Cloud());
-        if (!isSFXMuted) {
+        if (!isSFXMuted && thunderSounds.length) {
           const sfx = random(thunderSounds);
           sfx.setVolume(volSFX);
           sfx.play();
         }
 
-        // Objectif atteint -> demander au parent d'avancer et restaurer FS sur le deck
+        // Objectif atteint -> lancer l’orbite des nuages
         if (clouds.length >= requiredPresses) {
-          if (parent && typeof parent.ADAPTATECH_exitAndNext === 'function') {
-            parent.ADAPTATECH_exitAndNext();
-          }
+          startOrbitFinale();
           return;
         }
       }
+
+      if (keyCode === ENTER) {
+        resetGame();
+      }
+
+      if (key.toLowerCase()==='f'){
+        if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      }
     }
+
+    function resetGame(){
+      lastTap = -Infinity;
+      clouds = [];
+      orbitFinale = false;
+    }
+
     function windowResized(){ resizeCanvas(windowWidth, windowHeight); }
 
     /* === STOP / RESUME depuis le parent (même origine) === */
@@ -257,15 +334,15 @@
     window.ADAPTATECH_game_onPause = function(){
       paused = true;
       pauseAllAudio();
-      noLoop(); // facultatif : geler le rendu
+      noLoop();
     };
     window.ADAPTATECH_game_onResume = function(){
       paused = false;
-      loop();  // relancer le rendu
+      loop();
       resumeAudio();
     };
 
-    /* === UI & menu & rain setup === */
+    /* === UI & menu === */
     let isMusicMuted=false, isSFXMuted=false;
     let volMusic=.5, volSFX=.5;
     window.addEventListener('load',()=>{
@@ -285,7 +362,7 @@
             infoModal = document.getElementById('infoModal'),
             closeModal= document.getElementById('closeModal');
 
-      slider.oninput = e=>{ tapDelay=e.target.value; valT.textContent=e.target.value; };
+      slider.oninput = e=>{ tapDelay = +e.target.value; valT.textContent=e.target.value; };
       volM.oninput   = e=>{ volMusic=e.target.value/100; valM.textContent=e.target.value;
                              if(!isMusicMuted && rainSound) rainSound.setVolume(volMusic); };
       volS.oninput   = e=>{ volSFX=e.target.value/100; valS.textContent=e.target.value;
@@ -306,7 +383,6 @@
         }
       });
 
-      // toggle menu via class
       icon.addEventListener('pointerup', e=>{
         e.stopPropagation();
         menu.classList.toggle('show');

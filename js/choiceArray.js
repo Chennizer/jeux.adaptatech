@@ -201,7 +201,28 @@ const mediaChoices = [
     video: "https://bucket.adaptatech.org/lonelyisland-throwitontheground.mp4",
     category: ["pop"]
   },
-
-
-
+    {
+    name: "Canada Wonderland — Bat",
+    image: "../../images/cwbat.jpg",
+    video: "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/cwbat.mp4",
+    category: ["parc","manège"]
+  },
+  {
+    name: "Canada Wonderland — Yukon Striker",
+    image: "../../images/cwyukon.jpg",
+    video: "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/CWyukon.mp4",
+    category: ["parc","manège"]
+  },
+  {
+    name: "Canada Wonderland — Leviathan",
+    image: "../../images/cwleviathan.jpg",
+    video: "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/CWleviathan.mp4",
+    category: ["parc","manège"]
+  },
+  {
+    name: "Canada Wonderland — Behemoth",
+    image: "../../images/CWbehemoth.jpg",
+    video: "https://pub-ebe1ee75180f48c7a854605097f0e10b.r2.dev/CWbehemoth.mp4",
+    category: ["parc","manège"]
+  },
 ];

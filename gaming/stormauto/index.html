@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title
+    class="translate"
+    data-fr="Orage : jeu switch"
+    data-en="Storm : switch game">
+    Orage : jeu switch
+  </title>
+
+  <!-- p5.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+
+  <!-- thème global (optional, keep for consistency) -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#0f0f1e;}
+    canvas{display:block;position:fixed;top:0;left:0;}
+  </style>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+
+<body>
+<script>
+/* === AUDIO ================================================== */
+const thunderPaths=[
+  '../../sounds/thunder/bolt1.mp3',
+  '../../sounds/thunder/bolt2.mp3',
+  '../../sounds/thunder/bolt3.mp3',
+  '../../sounds/thunder/bolt4.mp3'
+];
+let thunderSounds=[], rainSound;
+
+/* === VISUEL ================================================= */
+const cloudHeightPct=.15, groundHeightPct=.05;
+const drops=[], NUM_DROPS=400;
+
+/* === ÉTAT =================================================== */
+let tapDelay=2000, lastTap=-Infinity;
+let lightningActive=false, lightningStart=0, lightningDur=4000;
+let trunk=[], branches=[], boltX;
+
+/* === VOLUMES =============================================== */
+let isMusicMuted=false, isSFXMuted=false;
+let volMusic=.5, volSFX=.5;
+
+/* === p5 : PRELOAD ========================================== */
+function preload(){
+  thunderSounds=thunderPaths.map(p=>loadSound(p));
+  rainSound=loadSound('../../sounds/rain1.mp3');
+}
+
+/* === p5 : SETUP ============================================ */
+function setup(){
+  createCanvas(windowWidth, windowHeight);
+  noiseDetail(2,.5);
+  for(let i=0;i<NUM_DROPS;i++) drops.push(new Drop());
+}
+
+/* === p5 : DRAW ============================================= */
+function draw(){
+  background(15,15,30);
+
+  // pluie
+  fill(220,220,255,160); noStroke();
+  drops.forEach(d=>{d.fall(); if(d.y+d.len<groundY(d.x)) d.show();});
+
+  drawClouds();
+  drawGround();
+
+  // éclair
+  if(lightningActive){
+    drawLightning();
+    flashOverlay();
+    if(millis()-lightningStart>lightningDur) lightningActive=false;
+  }
+}
+
+/* === CLASSE GOUTTE ========================================= */
+class Drop{
+  constructor(){this.reset();}
+  reset(){this.x=random(width); this.y=random(-height,0);
+    this.len=random(20,35); this.speed=random(4,12); this.w=this.len*.3;}
+  fall(){this.y+=this.speed; if(this.y>height) this.reset();}
+  show(){
+    const {x,y,len,w}=this, b=y+len, c=y+len, h=w/2;
+    beginShape();
+      vertex(x,y);
+      bezierVertex(x-h,c,x-h,b-w*.2,x,b);
+      bezierVertex(x+h,b-w*.2,x+h,c,x,y);
+    endShape(CLOSE);
+  }
+}
+
+/* === SOL & NUAGES  ========================================= */
+function groundY(x){
+  const h=height*groundHeightPct, base=height-h;
+  return base-noise(x*.005)*h*.3;
+}
+function drawGround(){
+  fill(10,50,10); noStroke();
+  beginShape(); vertex(0,height);
+    for(let x=0;x<=width;x+=10) vertex(x,groundY(x));
+  vertex(width,height); endShape(CLOSE);
+
+  stroke(20,80,20,120); strokeWeight(2);
+  beginShape(); for(let x=0;x<=width;x+=10) vertex(x,groundY(x)); endShape();
+}
+
+/* trois couches : clair (bas) → moyen → foncé (haut) */
+function drawClouds(){
+  const base=height*cloudHeightPct;
+  const layers=[
+    {shade:170, offY:40, amp:base*0.45, scale:.006},
+    {shade:110, offY:15, amp:base*0.40, scale:.005},
+    {shade: 60, offY: 0, amp:base*0.35, scale:.004}
+  ];
+  layers.forEach(({shade,offY,amp,scale})=>{
+    fill(shade); noStroke();
+    beginShape();
+      vertex(-60, base+offY);
+      for(let x=-60;x<=width+60;x+=20){
+        const y=base+offY-noise(x*scale)*amp;
+        curveVertex(x,y);
+      }
+      vertex(width+60,base+offY); vertex(width+60,0); vertex(-60,0);
+    endShape(CLOSE);
+  });
+}
+
+/* === ÉCLAIR  =============================================== */
+function generateBolt(){
+  trunk=[]; branches=[];
+  const seg=12,startY=height*cloudHeightPct,
+        ground=height-height*groundHeightPct,
+        segLen=(ground-startY)/seg, maxX=width*.02;
+  let cx=boltX, cy=startY; trunk.push(createVector(cx,cy));
+  for(let i=1;i<=seg;i++){
+    let ny=startY+i*segLen, nx=cx+random(-maxX,maxX);
+    if(ny>=ground){trunk.push(createVector(nx,ground)); break;}
+    trunk.push(createVector(nx,ny)); cx=nx; cy=ny;
+  }
+  for(let i=1;i<trunk.length-1;i++) if(random()<.2){
+    let pts=[trunk[i].copy()], dir=random()<.5?-1:1, segL=segLen*.6;
+    for(let s=0;s<4;s++){
+      let nx=pts[pts.length-1].x+dir*random(maxX*.5,maxX),
+          ny=pts[pts.length-1].y+segL;
+      if(ny>=ground){pts.push(createVector(nx,ground)); break;}
+      pts.push(createVector(nx,ny));
+    }
+    branches.push(pts);
+  }
+}
+function drawLightning(){
+  const a=map(millis()-lightningStart,0,lightningDur,255,0);
+  const yellow=[255,235,120];
+  drawingContext.shadowBlur=30;
+  drawingContext.shadowColor=`rgba(${yellow[0]},${yellow[1]},${yellow[2]},.3)`;
+  strokeCap(SQUARE); strokeJoin(ROUND);
+
+  stroke(...yellow,a*.2); strokeWeight(40); noFill();
+  beginShape(); trunk.forEach(v=>vertex(v.x,v.y)); endShape();
+  branches.forEach(b=>{beginShape(); b.forEach(v=>vertex(v.x,v.y)); endShape();});
+
+  drawingContext.shadowBlur=0;
+  stroke(...yellow,a); strokeWeight(20);
+  beginShape(); trunk.forEach(v=>vertex(v.x,v.y)); endShape();
+  branches.forEach(b=>{beginShape(); b.forEach(v=>vertex(v.x,v.y)); endShape();});
+}
+function flashOverlay(){
+  const alpha=map(millis()-lightningStart,0,lightningDur,150,0);
+  fill(255,255,255,alpha); noStroke();
+  rect(0,0,width,height);
+}
+
+/* === BARRE D’ESPACE ======================================== */
+function keyPressed(){
+  if(key===' '){
+    ensureAudioStarted(); // démarre la pluie si nécessaire
+    const now=millis(); if(now-lastTap<tapDelay) return; lastTap=now;
+    boltX=random(width*.2,width*.8);
+    lightningActive=true; lightningStart=now; generateBolt();
+    if(!isSFXMuted) { const s = random(thunderSounds); s.setVolume(volSFX); s.play(); }
+  }
+}
+
+/* === AUDIO AUTO-START (sans bouton) ======================== */
+function startRain(){
+  if(!rainSound) return;
+  rainSound.setLoop(true);
+  rainSound.setVolume(isMusicMuted?0:volMusic);
+  if(!rainSound.isPlaying()) rainSound.play();
+}
+function ensureAudioStarted(){
+  try{ getAudioContext().resume(); }catch(e){}
+  if(rainSound?.isLoaded()) startRain();
+  else rainSound?.once('loaded', startRain);
+}
+
+/* === INIT SANS MENU / OVERLAY =============================== */
+window.addEventListener('load', ()=>{
+  // Ajuste le canvas à la fenêtre
+  const fitCanvas=()=>resizeCanvas(windowWidth, windowHeight);
+  fitCanvas(); window.addEventListener('resize', fitCanvas);
+
+  // Essaye de démarrer la pluie immédiatement (selon les règles d’autoplay)
+  ensureAudioStarted();
+
+  // Si l’autoplay est bloqué, démarre au premier geste utilisateur
+  const firstInteract = ()=>{
+    ensureAudioStarted();
+    window.removeEventListener('pointerdown', firstInteract);
+    window.removeEventListener('keydown', firstInteract);
+  };
+  window.addEventListener('pointerdown', firstInteract, {once:true});
+  window.addEventListener('keydown', firstInteract, {once:true});
+});
+</script>
+
+<!-- (traduction optional) -->
+<!-- <script src="../../js/translationonly.js"></script> -->
+</body>
+</html>

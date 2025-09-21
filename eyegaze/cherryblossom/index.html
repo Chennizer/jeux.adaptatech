@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cherry Blossom Cut — Silhouette Forest</title>
+  <title>Cherry Blossom Cut — Background Image + Katana Cursor (Mirrored)</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -15,7 +15,7 @@
     #game {
       display: block;
       width: 100vw; height: 100vh;
-      cursor: crosshair;
+      cursor: crosshair;          /* fallback if custom cursor is not ready */
       background: #fff;
     }
     #startOverlay {
@@ -45,10 +45,16 @@
     /* =======================
        CONFIG
     ======================= */
-    const IMG_SRC = "../../images/cherryblossom.png";
+    const IMG_SRC = "../../images/cherryblossom.png";       // petal image
+    const BG_SRC  = "../../images/cherryblossombg.png";     // background image
     const SLASH_SOUND = "../../sounds/blade.mp3";
+    const KATANA_SRC = "../../images/samurai/katana.png";   // custom cursor source
 
-    // Large blossoms, fewer on screen
+    // Cursor limits and hotspot (in ORIGINAL image pixels)
+    const CURSOR_MAX_PX = 124; // longest side; keeps browsers happy; aspect ratio preserved
+    const HOTSPOT_ORIG = { x: 12, y: 28 }; // adjust if your katana tip is elsewhere
+
+    // Larger blossoms, fewer on screen
     const SPAWN_EVERY_MS = 1400;
     const FALL_SPEED_MIN = 40;
     const FALL_SPEED_MAX = 95;
@@ -59,14 +65,6 @@
     const SHARD_ROT_SPEED = 1.2;
     const SHARD_FADE_TIME = 0.85;
     const MAX_FALLING = 5;
-
-    // Silhouette Forest (Concept 1)
-    // Two parallax layers of trees: far & near
-    const FOREST_LAYERS = [
-      { count: 6, speed: 0.05, trunkTint: "rgba(90,40,50,0.35)", canopyTint: "rgba(235,120,150,0.25)", trunkW: [16,28], trunkH: [0.28,0.36], canopyR: [50,110], yBand: [0.68,0.78] },
-      { count: 5, speed: 0.10, trunkTint: "rgba(70,30,40,0.55)",  canopyTint: "rgba(235,120,150,0.35)", trunkW: [22,34], trunkH: [0.34,0.44], canopyR: [60,130], yBand: [0.72,0.82] },
-    ];
-    const CANOPIES_PER_TREE = [3, 4]; // min, max circles per tree
 
     /* =======================
        SETUP
@@ -79,11 +77,11 @@
     window.addEventListener('resize', () => {
       W = canvas.width  = window.innerWidth;
       H = canvas.height = window.innerHeight;
-      buildForest();
     });
 
-    const img = new Image();
-    img.src = IMG_SRC;
+    // Images
+    const img = new Image(); img.src = IMG_SRC;
+    const bgImg = new Image(); bgImg.src = BG_SRC;
 
     // preload slash sound
     const slashAudio = new Audio(SLASH_SOUND);
@@ -94,58 +92,86 @@
       s.play().catch(()=>{});
     }
 
-    // pointer
-    const pointer = { x: -9999, y: -9999, inside: false };
+    // pointer + movement tracking for cursor flip
+    const pointer = { x: -9999, y: -9999, prevX: -9999, inside: false };
+    const MOVE_THRESH = 2; // px; prevents flicker when jittering
+    let cursorOrient = 'left'; // 'left' by default
+
     canvas.addEventListener('pointermove', e => {
       const rect = canvas.getBoundingClientRect();
-      pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-      pointer.y = (e.clientY - rect.top)  * (canvas.height / rect.height);
-      pointer.inside = true;
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top)  * (canvas.height / rect.height);
+      const dx = (pointer.prevX === -9999) ? 0 : (x - pointer.prevX);
+
+      pointer.x = x; pointer.y = y; pointer.inside = true;
+
+      // Flip cursor when moving right vs left
+      if (started && katanaReady) {
+        if (dx > MOVE_THRESH && cursorOrient !== 'right') {
+          cursorOrient = 'right';
+          applyKatanaCursor();
+        } else if (dx < -MOVE_THRESH && cursorOrient !== 'left') {
+          cursorOrient = 'left';
+          applyKatanaCursor();
+        }
+      }
+      pointer.prevX = x;
     });
     canvas.addEventListener('pointerleave', () => pointer.inside = false);
 
     const blossoms = [];
     const shards = [];
     const rand = (a, b) => a + Math.random() * (b - a);
-    const randi = (a, b) => Math.floor(rand(a, b + 1));
     const nowSec = () => performance.now()/1000;
 
     /* =======================
-       FOREST (generated)
+       KATANA CURSOR (left/right, aspect preserved)
     ======================= */
-    // Each layer has trees; each tree has trunk rect + a few canopy circles.
-    const forest = []; // [{speed, offsetX, trees:[{x, trunkW, trunkH, yBase, canopies:[{x,y,r}]}]}]
+    let katanaReady = false;
+    let katanaLeft = null;   // {url, hx, hy}
+    let katanaRight = null;  // {url, hx, hy}
 
-    function buildForest() {
-      forest.length = 0;
+    const katanaImg = new Image();
+    katanaImg.onload = () => {
+      const iw = katanaImg.width, ih = katanaImg.height;
+      const scale = Math.min(1, CURSOR_MAX_PX / Math.max(iw, ih)); // keeps aspect ratio
+      const dw = Math.round(iw * scale);
+      const dh = Math.round(ih * scale);
 
-      for (const layer of FOREST_LAYERS) {
-        const L = { speed: layer.speed, offsetX: rand(0, W), trees: [], trunkTint: layer.trunkTint, canopyTint: layer.canopyTint };
-        for (let i = 0; i < layer.count; i++) {
-          const x = rand(0, W);
-          const trunkW = rand(layer.trunkW[0], layer.trunkW[1]);
-          const trunkH = rand(layer.trunkH[0], layer.trunkH[1]) * H;
-          const yBase  = rand(layer.yBand[0], layer.yBand[1]) * H; // base where trunk stands
-          const canopies = [];
-          const cNum = randi(CANOPIES_PER_TREE[0], CANOPIES_PER_TREE[1]);
+      // draw LEFT-facing (original) at native aspect
+      const leftCanvas = document.createElement('canvas');
+      leftCanvas.width = dw; leftCanvas.height = dh;
+      const lctx = leftCanvas.getContext('2d');
+      lctx.imageSmoothingEnabled = true;
+      lctx.drawImage(katanaImg, 0, 0, dw, dh);
 
-          for (let c = 0; c < cNum; c++) {
-            const r = rand(layer.canopyR[0], layer.canopyR[1]);
-            // Cluster around the trunk top
-            const cx = x + rand(-r*0.6, r*0.6);
-            const cy = (yBase - trunkH) + rand(-r*0.2, r*0.3);
-            canopies.push({ x: cx, y: cy, r });
-          }
+      // draw RIGHT-facing (mirrored) at native aspect
+      const rightCanvas = document.createElement('canvas');
+      rightCanvas.width = dw; rightCanvas.height = dh;
+      const rctx = rightCanvas.getContext('2d');
+      rctx.imageSmoothingEnabled = true;
+      rctx.translate(dw, 0);
+      rctx.scale(-1, 1);
+      rctx.drawImage(katanaImg, 0, 0, dw, dh);
 
-          L.trees.push({ x, trunkW, trunkH, yBase, canopies });
-        }
-        // Spread trees across width (sort by x for consistent gaps)
-        L.trees.sort((a,b)=>a.x-b.x);
-        forest.push(L);
-      }
+      // compute hotspots (mirror X for right)
+      const hxLeft  = Math.max(0, Math.min(dw - 1, Math.round(HOTSPOT_ORIG.x * scale)));
+      const hyLeft  = Math.max(0, Math.min(dh - 1, Math.round(HOTSPOT_ORIG.y * scale)));
+      const hxRight = (dw - 1) - hxLeft;
+      const hyRight = hyLeft;
+
+      katanaLeft  = { url: leftCanvas.toDataURL('image/png'),  hx: hxLeft,  hy: hyLeft };
+      katanaRight = { url: rightCanvas.toDataURL('image/png'), hx: hxRight, hy: hyRight };
+      katanaReady = true;
+    };
+    katanaImg.onerror = () => { katanaReady = false; };
+    katanaImg.src = KATANA_SRC;
+
+    function applyKatanaCursor() {
+      if (!katanaReady) return;
+      const k = (cursorOrient === 'right') ? katanaRight : katanaLeft;
+      canvas.style.cursor = `url("${k.url}") ${k.hx} ${k.hy}, crosshair`;
     }
-
-    buildForest();
 
     /* =======================
        GAME ENTITIES
@@ -185,14 +211,12 @@
       const dt = Math.min(0.033, (tMs - lastT) / 1000);
       lastT = tMs;
 
-      // spawns
       spawnTimer += dt * 1000;
       if (spawnTimer > SPAWN_EVERY_MS && blossoms.length < MAX_FALLING) {
         spawnTimer = 0;
         spawnBlossom();
       }
 
-      updateBackground(dt);
       updateBlossoms(dt);
       updateShards(dt);
       render();
@@ -201,74 +225,21 @@
     }
 
     /* =======================
-       BACKGROUND UPDATE/DRAW
+       BACKGROUND IMAGE (cover)
     ======================= */
-    function updateBackground(dt) {
-      // horizontal parallax drift
-      for (const L of forest) {
-        L.offsetX = (L.offsetX - L.speed * 20 * dt) % W;
+    function drawBackgroundImage() {
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        const iw = bgImg.width, ih = bgImg.height;
+        const scale = Math.max(W / iw, H / ih); // cover (fill without stretch)
+        const dw = iw * scale, dh = ih * scale;
+        const dx = (W - dw) * 0.5;
+        const dy = (H - dh) * 0.5;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(bgImg, dx, dy, dw, dh);
+      } else {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, W, H);
       }
-    }
-
-    function drawForestLayer(L) {
-      ctx.save();
-      ctx.translate(-L.offsetX, 0);
-
-      // draw twice for seamless wrap
-      for (let wrap = 0; wrap < 2; wrap++) {
-        for (const t of L.trees) {
-          // trunk
-          ctx.fillStyle = L.trunkTint;
-          ctx.fillRect(t.x, t.yBase - t.trunkH, t.trunkW, t.trunkH);
-
-          // simple branches (two short diagonals) — very subtle
-          ctx.save();
-          ctx.strokeStyle = L.trunkTint;
-          ctx.lineWidth = Math.max(1, t.trunkW * 0.12);
-          ctx.beginPath();
-          // left branch
-          ctx.moveTo(t.x + t.trunkW*0.6, t.yBase - t.trunkH*0.65);
-          ctx.lineTo(t.x - t.trunkW*1.2, t.yBase - t.trunkH*0.78);
-          // right branch
-          ctx.moveTo(t.x + t.trunkW*0.6, t.yBase - t.trunkH*0.48);
-          ctx.lineTo(t.x + t.trunkW*2.0, t.yBase - t.trunkH*0.62);
-          ctx.stroke();
-          ctx.restore();
-
-          // canopy (flat circles)
-          ctx.fillStyle = L.canopyTint;
-          for (const c of t.canopies) {
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
-            ctx.fill();
-          }
-        }
-        ctx.translate(W, 0);
-      }
-      ctx.restore();
-    }
-
-    function drawBackground() {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, W, H);
-
-      // slight bottom ground line (very soft)
-      const groundGrad = ctx.createLinearGradient(0, H*0.84, 0, H);
-      groundGrad.addColorStop(0, "rgba(0,0,0,0)");
-      groundGrad.addColorStop(1, "rgba(0,0,0,0.06)");
-      ctx.fillStyle = groundGrad;
-      ctx.fillRect(0, H*0.84, W, H*0.16);
-
-      // draw far to near
-      drawForestLayer(forest[0]);
-      drawForestLayer(forest[1]);
-
-      // faint top vignette to frame petals
-      const v = ctx.createLinearGradient(0, 0, 0, H*0.4);
-      v.addColorStop(0.0, "rgba(0,0,0,0.05)");
-      v.addColorStop(1.0, "rgba(0,0,0,0)");
-      ctx.fillStyle = v;
-      ctx.fillRect(0, 0, W, H*0.4);
     }
 
     /* =======================
@@ -296,7 +267,7 @@
     }
 
     function render() {
-      drawBackground();
+      drawBackgroundImage();
       // Whole blossoms
       for (const b of blossoms) {
         ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle);
@@ -328,9 +299,22 @@
       try { await enterFullscreen(); } catch(e) {}
       startOverlay.style.display = 'none';
       started = true;
+
+      // Apply initial cursor (left by default)
+      if (katanaReady) applyKatanaCursor();
+      else {
+        katanaImg.onload = () => { katanaImg.onload = null; applyKatanaCursor(); };
+      }
+
       lastT = performance.now();
-      if (img.complete) requestAnimationFrame(tick);
-      else img.onload = () => requestAnimationFrame(tick);
+      if (img.complete && bgImg.complete) requestAnimationFrame(tick);
+      else {
+        let pending = 0;
+        const tryStart = () => { if (--pending <= 0) requestAnimationFrame(tick); };
+        if (!img.complete)  { pending++; img.onload  = tryStart; }
+        if (!bgImg.complete){ pending++; bgImg.onload = tryStart; }
+        if (pending === 0) requestAnimationFrame(tick);
+      }
     });
   })();
   </script>
