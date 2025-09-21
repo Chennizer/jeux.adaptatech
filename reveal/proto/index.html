@@ -27,9 +27,11 @@
 
       --bottom-ui: var(--ui-reserve);
 
-      --photo-card-size: clamp(96px, 15vh, 220px);
+      --photo-card-size: clamp(80px, 10vh, 160px);
+      --photo-strip-gap: clamp(10px, 2vmin, 22px);
+      --photo-strip-pad: clamp(6px, 1.4vh, 16px);
       --bin-gap: clamp(12px, 2.4vmin, 24px);
-      --bin-pad: clamp(12px, 2.8vmin, 26px);
+      --bin-pad: clamp(10px, 2.4vmin, 22px);
     }
 
     *,*::before,*::after{ box-sizing:border-box; }
@@ -159,6 +161,17 @@
       padding-inline: clamp(12px, 3vmin, 36px);
       min-height:0;
     }
+    #drag-transfer .slide-shell{
+      grid-template-columns: 1fr;
+    }
+    #drag-transfer .shell-main{
+      max-width: min(100%, 1200px);
+      margin-inline: auto;
+      width: 100%;
+    }
+    #drag-transfer .shell-side{
+      display: none;
+    }
     .bin{
       border: 3px solid color-mix(in srgb, var(--bin-accent, #294936) 18%, var(--card-br));
       border-radius: 16px;
@@ -225,11 +238,12 @@
   flex-wrap:nowrap;
   align-items:center;
   justify-content:center;
-  gap: clamp(12px, 2.4vmin, 24px);
-  padding-block: clamp(12px, 2vh, 28px);
-  padding-inline: clamp(16px, 3.4vw, 36px);
-  margin: clamp(4px, 1vmin, 10px) 0 clamp(16px, 2.4vmin, 22px);
-  min-height: calc(var(--photo-card-size) + clamp(12px, 2vh, 28px));
+  gap: var(--photo-strip-gap);
+  padding-block: var(--photo-strip-pad);
+  padding-inline: clamp(14px, 3vw, 32px);
+  margin: clamp(4px, 1vmin, 10px) auto clamp(14px, 2vmin, 20px);
+  min-height: calc(var(--photo-card-size) + (2 * var(--photo-strip-pad)));
+  max-width: min(100%, calc(6 * var(--photo-card-size) + 5 * var(--photo-strip-gap) + clamp(28px, 6vw, 64px)));
   overflow: visible;
   border-radius: 16px;
 }
@@ -262,31 +276,34 @@
 }
 
 .transfer-legend{
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(12px, 2vmin, 24px);
-  margin: clamp(4px, 1vmin, 10px) 0 clamp(16px, 2.4vmin, 22px);
-  font-weight: 600;
-  color: var(--green);
-  font-size: clamp(.95rem, 2vmin, 1.2rem);
-  text-align: center;
-  align-items: center;
-}
-.transfer-label{
   display:flex;
-  flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap: clamp(6px, 1.2vmin, 12px);
+  flex-wrap:wrap;
+  gap: clamp(18px, 3vmin, 40px);
+  margin: clamp(4px, 1vmin, 12px) auto clamp(14px, 2vmin, 20px);
+  font-weight: 600;
+  color: var(--green);
+  font-size: clamp(.95rem, 2.2vmin, 1.25rem);
+}
+.transfer-label{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap: clamp(12px, 2vmin, 24px);
+  text-align:left;
 }
 .transfer-icon{
-  max-height: clamp(120px, 20vh, 220px);
+  height: clamp(90px, 18vh, 200px);
   width: auto;
-  height: auto;
   flex: 0 0 auto;
   object-fit: contain;
 }
-.transfer-text{ display:inline-block; }
+.transfer-text{
+  display:inline-flex;
+  align-items:center;
+  white-space: nowrap;
+}
 
 
 /* --- Ajuste la zone des bacs pour tenir sous la bande --- */
@@ -709,14 +726,14 @@
         <div id="photoStrip" class="photo-strip bin" aria-label="Photos des élèves (aperçu)"></div>
 
         <div class="transfer-legend">
-          <span class="transfer-label">
+          <div class="transfer-label">
             <img class="transfer-icon" src="../../images/pictos/apple.png" alt="Pictogramme de pomme"/>
             <span class="transfer-text">À la maison</span>
-          </span>
-          <span class="transfer-label">
+          </div>
+          <div class="transfer-label">
             <img class="transfer-icon" src="../../images/pictos/bear.png" alt="Pictogramme d’ours"/>
             <span class="transfer-text">À l’école</span>
-          </span>
+          </div>
         </div>
 
         <div class="transfer-wrap">
@@ -725,9 +742,7 @@
         </div>
       </div>
     </div>
-    <aside class="shell-side">
-      <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-    </aside>
+    <aside class="shell-side" aria-hidden="true"></aside>
   </div>
 </section>
 
@@ -757,16 +772,97 @@
   const WS_URL = `wss://ws-relay.gui98789.workers.dev/ws/${encodeURIComponent(room)}`;
   const deckTitle = 'Routine matinale';
   // 6 photos affichées en bande au-dessus des bacs (remplace les chemins par les vôtres)
-  const PRESENCE_PHOTOS = [
-    '../../images/accueilval/olivier.png',
-    '../../images/accueilval/neythem.png',
-    '../../images/accueilval/hassan.png',
-    '../../images/accueilval/carlos.png',
-    '../../images/accueilval/jayden.png',
-    '../../images/accueilval/charles.png'
+  const STUDENT_SOURCE_DIRS = [
+    '../../images/accueilval/',
+    '../../images/accueilval/noms/',
+    '../../images/eleves/',
+    '../../images/'
   ];
+  const STUDENT_SOURCE_EXTS = ['.png', '.webp', '.jpg', '.jpeg'];
+
+  function buildStudent(slug, label, index){
+    const fallbackLabel = `Élève ${index + 1}`;
+    const cleanLabel = (label && String(label).trim()) || fallbackLabel;
+    const baseSlug = (slug && String(slug).trim()) || cleanLabel;
+    const normalizedSlug = typeof baseSlug.normalize === 'function'
+      ? baseSlug.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      : baseSlug;
+    const normalizedLabel = typeof cleanLabel.normalize === 'function'
+      ? cleanLabel.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      : cleanLabel;
+    const lowerSlug = normalizedSlug.toLowerCase();
+    const hyphenLabel = normalizedLabel.replace(/\s+/g, '-');
+    const condensedLabel = normalizedLabel.replace(/\s+/g, '');
+    const variants = new Set(
+      [
+        normalizedSlug,
+        lowerSlug,
+        normalizedLabel,
+        hyphenLabel,
+        condensedLabel,
+        cleanLabel,
+        cleanLabel.toLowerCase(),
+        cleanLabel.toUpperCase()
+      ].filter(Boolean)
+    );
+
+    const sources = [];
+    const seen = new Set();
+    variants.forEach((variant)=>{
+      const trimmed = variant.trim();
+      if (!trimmed) return;
+      const lowerVariant = trimmed.toLowerCase();
+      const capitalVariant = lowerVariant.charAt(0).toUpperCase() + lowerVariant.slice(1);
+      [trimmed, lowerVariant, capitalVariant].forEach((form)=>{
+        if (!form) return;
+        STUDENT_SOURCE_DIRS.forEach((dir)=>{
+          STUDENT_SOURCE_EXTS.forEach((ext)=>{
+            const path = `${dir}${form}${ext}`;
+            if (!seen.has(path)){
+              seen.add(path);
+              sources.push(path);
+            }
+          });
+        });
+      });
+    });
+
+    if (!sources.length){
+      const fallbackSlug = lowerSlug || hyphenLabel.toLowerCase();
+      if (fallbackSlug){
+        STUDENT_SOURCE_EXTS.forEach((ext)=>{
+          const path = `${STUDENT_SOURCE_DIRS[0]}${fallbackSlug}${ext}`;
+          if (!seen.has(path)){
+            seen.add(path);
+            sources.push(path);
+          }
+        });
+      }
+    }
+
+    const safeSlug = (lowerSlug || hyphenLabel || `student-${index + 1}`).replace(/\s+/g, '-');
+
+    return {
+      slug: safeSlug,
+      label: cleanLabel,
+      sources
+    };
+  }
+
+  const PRESENCE_STUDENTS = [
+    buildStudent('olivier', 'Olivier', 0),
+    buildStudent('neythem', 'Neythem', 1),
+    buildStudent('hassan', 'Hassan', 2),
+    buildStudent('carlos', 'Carlos', 3),
+    buildStudent('jayden', 'Jayden', 4),
+    buildStudent('charles', 'Charles', 5)
+  ];
+  const PRESENCE_PHOTOS = PRESENCE_STUDENTS.map(student => student.sources[0]);
   // Option de secours si vous n’avez pas encore les fichiers
-  const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURIComponent('Élève '+(i+1))}`;
+  const FALLBACK_PHOTO = (label, i = 0)=> {
+    const text = label || `Élève ${i + 1}`;
+    return `https://placehold.co/240x240?text=${encodeURIComponent(text)}`;
+  };
 
 
   // Directory for day-of-week images
@@ -1527,59 +1623,82 @@
   window.addEventListener('resize', scheduleScale);
   Reveal.on('slidechanged', (e)=>{ if (e.currentSlide?.id === 'drag-transfer') scheduleScale(); });
   Reveal.on('ready', ()=>{ if (Reveal.getCurrentSlide()?.id === 'drag-transfer') scheduleScale(); });
-  // --- Build photo strip (6 vignettes ≈10vh)
-// --- Build photo strip as a draggable bin (same behavior as the 2 boxes)
-// --- Build photo strip as simple flex row (no inner grid, no scaling)
-(function buildPhotoStrip(){
-  const strip = document.getElementById('photoStrip');
-  if (!strip) return;
-  strip.innerHTML = '';
-
-  const srcs = (Array.isArray(PRESENCE_PHOTOS) && PRESENCE_PHOTOS.length)
-    ? PRESENCE_PHOTOS.slice(0, 6)
-    : Array.from({length:6}, (_,i)=>FALLBACK_PHOTO(i));
-
-  srcs.forEach((src, i)=>{
-    const btn = document.createElement('button');
-    btn.className = 'photo-card draggable';
-    btn.setAttribute('draggable','true');
-    btn.dataset.type = 'photo';
-    btn.dataset.name = `student-${i}`;
-
-    const img = new Image();
-    img.loading = 'lazy';
-    img.alt = `Élève ${i+1}`;
-    img.src = src;
-    img.onerror = ()=>{ img.src = FALLBACK_PHOTO(i); };
-    btn.appendChild(img);
-
-    // DnD behavior
-    btn.addEventListener('dragstart', (e)=>{
-      e.dataTransfer.setData('text/plain', btn.dataset.name);
-      e.dataTransfer.effectAllowed = 'move';
-      btn.classList.add('dragging');
-    });
-    btn.addEventListener('dragend', ()=>{
-      btn.classList.remove('dragging');
-      scheduleScale(); // ensure bin layout stays consistent
-    });
-
-    strip.appendChild(btn);
-  });
-
-  // Make the strip itself accept drops (no inner grid)
-  strip.addEventListener('dragover', (e)=>{ e.preventDefault(); strip.classList.add('drag-over'); e.dataTransfer.dropEffect='move'; });
-  strip.addEventListener('dragleave', ()=> strip.classList.remove('drag-over'));
-  strip.addEventListener('drop', (e)=>{
-    e.preventDefault(); strip.classList.remove('drag-over');
-    const dragging = document.querySelector('.draggable.dragging');
-    if (dragging) {
-      strip.appendChild(dragging);
-      dragging.classList.remove('dragging');
-      scheduleScale();
+  function loadImageInOrder(img, sources, fallbackSrc, attempt = 0){
+    const list = Array.isArray(sources) ? sources : (sources ? [sources] : []);
+    const unique = attempt === 0 ? [...new Set(list.filter(Boolean))] : list;
+    if (!unique.length || attempt >= unique.length){
+      img.onerror = null;
+      img.src = fallbackSrc;
+      return;
     }
-  });
-})();
+    img.onerror = ()=> loadImageInOrder(img, unique, fallbackSrc, attempt + 1);
+    img.src = unique[attempt];
+  }
+
+  // --- Build photo strip (6 vignettes ≈10vh, tailles constantes)
+  (function buildPhotoStrip(){
+    const strip = document.getElementById('photoStrip');
+    if (!strip) return;
+    strip.innerHTML = '';
+
+    const fallbackStudents = Array.from({ length: 6 }, (_, i) => ({
+      slug: `student-${i + 1}`,
+      label: `Élève ${i + 1}`,
+      sources: (Array.isArray(PRESENCE_PHOTOS) && PRESENCE_PHOTOS[i]) ? [PRESENCE_PHOTOS[i]] : []
+    }));
+
+    const students = (Array.isArray(PRESENCE_STUDENTS) && PRESENCE_STUDENTS.length)
+      ? PRESENCE_STUDENTS.slice(0, 6)
+      : fallbackStudents;
+
+    students.forEach((student, i)=>{
+      const btn = document.createElement('button');
+      btn.className = 'photo-card draggable';
+      btn.setAttribute('draggable','true');
+      btn.dataset.type = 'photo';
+      btn.dataset.name = student.slug || `student-${i + 1}`;
+      const label = student.label || `Élève ${i + 1}`;
+      btn.setAttribute('aria-label', label);
+      btn.title = label;
+
+      const img = new Image();
+      img.loading = 'lazy';
+      img.alt = label;
+
+      const candidates = Array.isArray(student.sources) && student.sources.length
+        ? student.sources
+        : (Array.isArray(PRESENCE_PHOTOS) && PRESENCE_PHOTOS[i]) ? [PRESENCE_PHOTOS[i]] : [];
+
+      loadImageInOrder(img, candidates, FALLBACK_PHOTO(label, i));
+      btn.appendChild(img);
+
+      // DnD behavior
+      btn.addEventListener('dragstart', (e)=>{
+        e.dataTransfer.setData('text/plain', btn.dataset.name);
+        e.dataTransfer.effectAllowed = 'move';
+        btn.classList.add('dragging');
+      });
+      btn.addEventListener('dragend', ()=>{
+        btn.classList.remove('dragging');
+        scheduleScale(); // ensure bin layout stays consistent
+      });
+
+      strip.appendChild(btn);
+    });
+
+    // Make the strip itself accept drops (no inner grid)
+    strip.addEventListener('dragover', (e)=>{ e.preventDefault(); strip.classList.add('drag-over'); e.dataTransfer.dropEffect='move'; });
+    strip.addEventListener('dragleave', ()=> strip.classList.remove('drag-over'));
+    strip.addEventListener('drop', (e)=>{
+      e.preventDefault(); strip.classList.remove('drag-over');
+      const dragging = document.querySelector('.draggable.dragging');
+      if (dragging) {
+        strip.appendChild(dragging);
+        dragging.classList.remove('dragging');
+        scheduleScale();
+      }
+    });
+  })();
 
 
 
