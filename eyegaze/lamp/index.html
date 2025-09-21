@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sky Lanterns — Hover to Light, Hover Again to Launch</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    #game {
+      display: block;
+      width: 100vw; height: 100vh;
+      cursor: crosshair;
+      background: #000;
+    }
+    #startOverlay {
+      position: fixed; inset: 0;
+      display: grid; place-items: center;
+      background: rgba(0,0,0,0.75);
+      z-index: 10;
+    }
+    #startBtn {
+      padding: 14px 22px;
+      border: 2px solid #d4a100; color: #d4a100; background: #000;
+      border-radius: 12px; font-size: 18px; font-weight: 700;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+      cursor: pointer;
+    }
+    #startBtn:active { transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <div id="startOverlay">
+    <button id="startBtn">Start • Fullscreen</button>
+  </div>
+  <canvas id="game"></canvas>
+
+  <script>
+  (() => {
+    /* =======================
+       CONFIG / ASSETS
+    ======================= */
+    const CLOSED_SRC = "../../images/samurai/closedlamp.png";
+    const LIT_SRC    = "../../images/samurai/litlamp.png";
+    const BG_SRC     = "../../images/samurai/lampbg.png";
+
+    // Count & sizing
+    const LANTERN_COUNT = 5;
+    const LAMP_H_MIN = 90;   // px (visual target height)
+    const LAMP_H_MAX = 150;  // px
+    const HOVER_RADIUS = 60; // px distance trigger
+
+    // Movement (launched)
+    const ASCEND_SPEED_MIN = 55;
+    const ASCEND_SPEED_MAX = 95;
+    const DRIFT_X_MIN = 15;
+    const DRIFT_X_MAX = 40;
+    const SWAY_FREQ_MIN = 0.4;   // Hz
+    const SWAY_FREQ_MAX = 0.9;   // Hz
+    const SWAY_AMP_MIN  = 12;    // px
+    const SWAY_AMP_MAX  = 28;    // px
+
+    // Bottom row spawn padding
+    const BOTTOM_PAD_V = 24;   // px from bottom
+    const SIDE_PAD_H   = 24;   // px from sides
+
+    // Small debounce so one hover doesn't instantly do both actions
+    const HOVER_COOLDOWN_MS = 250;
+
+    /* =======================
+       SETUP
+    ======================= */
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width  = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    });
+
+    const imgClosed = new Image(); imgClosed.src = CLOSED_SRC;
+    const imgLit    = new Image(); imgLit.src    = LIT_SRC;
+    const bgImg     = new Image(); bgImg.src     = BG_SRC;
+
+    const pointer = { x: -9999, y: -9999, inside: false };
+    canvas.addEventListener('pointermove', e => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      pointer.y = (e.clientY - rect.top)  * (canvas.height / rect.height);
+      pointer.inside = true;
+    });
+    canvas.addEventListener('pointerleave', () => pointer.inside = false);
+
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const nowMs = () => performance.now();
+
+    /* =======================
+       LANTERN MODEL
+       state: "closed" -> "lit" -> "ascend"
+    ======================= */
+    const lanterns = [];
+
+    function spawnLanternBottom() {
+      // pick a target display height
+      const dispH = rand(LAMP_H_MIN, LAMP_H_MAX);
+
+      // Use closed image to compute aspect (fallback 1)
+      const iw = imgClosed.naturalWidth  || 1;
+      const ih = imgClosed.naturalHeight || 1;
+      const aspect = iw / ih;
+      const dispW = dispH * aspect;
+
+      const x = rand(SIDE_PAD_H + dispW * 0.5, W - SIDE_PAD_H - dispW * 0.5);
+      const y = H - BOTTOM_PAD_V - dispH * 0.5;
+
+      const t0 = nowMs();
+
+      lanterns.push({
+        x, y,
+        w: dispW, h: dispH,
+        state: "closed",
+        lastHover: 0,     // cooldown
+        // ascend params
+        ascendVy: rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX),
+        driftBase: rand(-1, 1) < 0 ? -1 : 1,
+        driftSpeed: rand(DRIFT_X_MIN, DRIFT_X_MAX),
+        swayFreq: rand(SWAY_FREQ_MIN, SWAY_FREQ_MAX),
+        swayAmp: rand(SWAY_AMP_MIN, SWAY_AMP_MAX),
+        born: t0
+      });
+    }
+
+    function ensureCount() {
+      while (lanterns.length < LANTERN_COUNT) spawnLanternBottom();
+    }
+
+    function resetOne(i) {
+      lanterns.splice(i, 1);
+      ensureCount();
+    }
+
+    function isHovering(l) {
+      const dx = pointer.x - l.x;
+      const dy = pointer.y - l.y;
+      return (dx*dx + dy*dy) <= (HOVER_RADIUS * HOVER_RADIUS);
+    }
+
+    function handleHoverActions(l) {
+      const t = nowMs();
+      if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
+      l.lastHover = t;
+
+      if (l.state === "closed") {
+        l.state = "lit";
+      } else if (l.state === "lit") {
+        l.state = "ascend";
+        // give each launch a slightly fresh vertical speed
+        l.ascendVy = rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX);
+      }
+    }
+
+    /* =======================
+       LOOP
+    ======================= */
+    let lastT = performance.now();
+    let started = false;
+
+    function drawBackgroundImage() {
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        const iw = bgImg.width, ih = bgImg.height;
+        const scale = Math.max(W / iw, H / ih); // cover
+        const dw = iw * scale, dh = ih * scale;
+        const dx = (W - dw) * 0.5;
+        const dy = (H - dh) * 0.5;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(bgImg, dx, dy, dw, dh);
+      } else {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    function update(dt) {
+      for (let i = lanterns.length - 1; i >= 0; i--) {
+        const l = lanterns[i];
+
+        if (pointer.inside && isHovering(l)) {
+          handleHoverActions(l);
+        }
+
+        if (l.state === "ascend") {
+          // upward movement with gentle sway/drift
+          const t = (performance.now() - l.born) / 1000;
+          const sway = Math.sin(2 * Math.PI * l.swayFreq * t) * l.swayAmp;
+          l.y -= l.ascendVy * dt;
+          l.x += l.driftBase * l.driftSpeed * dt + sway * dt * 0.6;
+
+          // remove when out of screen (top + small margin)
+          if (l.y + l.h * 0.5 < -30) {
+            resetOne(i);
+            continue;
+          }
+        } else {
+          // keep at bottom (if resized, re-clamp to bottom row)
+          const targetY = H - BOTTOM_PAD_V - l.h * 0.5;
+          if (Math.abs(l.y - targetY) > 0.5) l.y += Math.sign(targetY - l.y) * Math.min(180 * dt, Math.abs(targetY - l.y));
+          l.x = Math.min(W - SIDE_PAD_H - l.w * 0.5, Math.max(SIDE_PAD_H + l.w * 0.5, l.x));
+        }
+      }
+    }
+
+    function render() {
+      drawBackgroundImage();
+
+      for (const l of lanterns) {
+        ctx.save();
+        ctx.translate(l.x, l.y);
+
+        // choose image by state
+        const img = (l.state === "closed") ? imgClosed : imgLit;
+
+        // draw centered
+        ctx.drawImage(img, -l.w/2, -l.h/2, l.w, l.h);
+        ctx.restore();
+      }
+    }
+
+    function tick(tMs) {
+      if (!started) return;
+      const dt = Math.min(0.033, (tMs - lastT) / 1000);
+      lastT = tMs;
+
+      ensureCount();
+      update(dt);
+      render();
+
+      requestAnimationFrame(tick);
+    }
+
+    /* ===== FULLSCREEN START ===== */
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
+
+    async function enterFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+    }
+
+    startBtn.addEventListener('click', async () => {
+      try { await enterFullscreen(); } catch(e) {}
+      startOverlay.style.display = 'none';
+      started = true;
+
+      lastT = performance.now();
+
+      // wait for required assets once, then go
+      let pending = 0;
+      const tryStart = () => { if (--pending <= 0) requestAnimationFrame(tick); };
+      if (!bgImg.complete)   { pending++; bgImg.onload   = tryStart; }
+      if (!imgClosed.complete){ pending++; imgClosed.onload = tryStart; }
+      if (!imgLit.complete)  { pending++; imgLit.onload  = tryStart; }
+      if (pending === 0) requestAnimationFrame(tick);
+    });
+  })();
+  </script>
+</body>
+</html>
