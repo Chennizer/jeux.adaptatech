@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title class="translate" data-fr="Nuages : jeu switch" data-en="Clouds : switch game">Nuages : jeu switch</title>
+
+  <!-- p5.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+
+  <!-- thème global -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background:#87CEEB; }
+    canvas { display: block; position: fixed; top: 0; left: 0; }
+
+    /* Icônes fixes */
+    .corner-btn{
+      position: fixed; top: 16px;
+      width: 40px; height: 40px; border-radius: 50%;
+      display:flex; align-items:center; justify-content:center;
+      z-index: 9999; cursor: pointer; user-select:none;
+      background:#000; color:#fff; font-size:22px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.25);
+    }
+    #info-icon{ left:16px; }
+    #settings-icon{ right:16px; }
+
+    /* Menu */
+    #menu {
+      display: none;
+      position: fixed; top: 72px; right: 16px;
+      background: rgba(255,255,255,0.95);
+      padding: 12px; border-radius: 8px; color: #000; width: 260px; z-index: 10000;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    #menu.show { display: block; }
+
+    /* Modal info */
+    #infoModal{
+      display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%);
+      background:#fff; color:#000; padding:20px; border-radius:10px; z-index:10001;
+      width:min(520px, 90vw); box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    #infoModal button{
+      margin-top:10px; padding:8px 16px; font-size:16px; border:none; border-radius:6px; cursor:pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Icône Info (remplace l’overlay) -->
+  <div id="info-icon" class="corner-btn" title="Info" aria-label="Info">ⓘ</div>
+
+  <!-- Icône réglages -->
+  <div id="settings-icon" class="corner-btn" title="Options" aria-label="Options">⚙️</div>
+
+  <!-- Menu -->
+  <div id="menu">
+    <h2 class="translate" data-fr="Options" data-en="Options" style="margin-top:0;">Options</h2>
+
+    <h3 class="translate" data-fr="Musique & son" data-en="Music &amp; Sound" style="margin-bottom:4px;">Musique &amp; son</h3>
+    <label style="display:block; margin-bottom:8px;">
+      <span class="translate" data-fr="Désactiver la musique" data-en="Disable music">Désactiver la musique</span>
+      <input type="checkbox" id="muteMusic" style="margin-left:8px;">
+    </label>
+    <label style="display:block; margin-bottom:12px;">
+      <span class="translate" data-fr="Volume musique" data-en="Music volume">Volume musique</span>
+      <span id="musicVolVal">50</span>
+      <input type="range" id="musicVol" min="0" max="100" value="50" style="width:100%;">
+    </label>
+
+    <label style="display:block; margin-bottom:8px;">
+      <span class="translate" data-fr="Désactiver les effets" data-en="Disable SFX">Désactiver les effets</span>
+      <input type="checkbox" id="muteSFX" style="margin-left:8px;">
+    </label>
+    <label style="display:block; margin-bottom:12px;">
+      <span class="translate" data-fr="Volume effets" data-en="SFX volume">Volume effets</span>
+      <span id="sfxVolVal">50</span>
+      <input type="range" id="sfxVol" min="0" max="100" value="50" style="width:100%;">
+    </label>
+
+    <h3 class="translate" data-fr="Délai entre appuis" data-en="Press delay" style="margin-bottom:4px;">Délai entre appuis (ms)</h3>
+    <label style="display:block;">
+      <span class="translate" data-fr="Délai" data-en="Delay">Délai</span>
+      <span id="tapDelayVal">2000</span>
+      <input type="range" id="tapDelaySlider" min="500" max="5000" value="2000" style="width:100%;">
+    </label>
+  </div>
+
+  <!-- Info modal -->
+  <div id="infoModal">
+    <p class="translate" data-fr="Compétence : appui simple<br>SENICT niveau 1 · Roadmap 8-10"
+       data-en="Skill: single press<br>SENICT level 1 · Roadmap 8-10"
+       style="margin:0; font-size:18px;">
+      Compétence : appui simple<br>SENICT niveau 1 · Roadmap 8-10
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+  </div>
+
+  <script>
+    /* === PARAMÈTRES VIA QUERY =============================== */
+    function getParam(name, defVal){
+      try {
+        const u = new URL(location.href);
+        const v = u.searchParams.get(name);
+        return v === null ? defVal : v;
+      } catch { return defVal; }
+    }
+    let requiredPresses = parseInt(getParam('requiredPresses', '5'), 10);
+    if (!Number.isFinite(requiredPresses) || requiredPresses < 1) requiredPresses = 5;
+
+    /* === AUDIO & STATE ====================================== */
+    const thunderPaths = [ '../../sounds/cloudswind.mp3' ]; // SFX / souffle court
+    let thunderSounds = [], rainSound; // rainSound = ambiance continue
+
+    let tapDelay = 2000, lastTap = -Infinity;
+    let clouds = [];
+    let baseSkyColor, greySkyColor;
+    let paused = false;
+
+    /* === ORBIT FINALE (clouds only) ========================= */
+    const ORBIT_DURATION_MS = 7000;
+    const ORBIT_ELLIPSE_Y   = 0.70;
+    const ORBIT_MIN_R_FRAC  = 0.12;
+    const ORBIT_MAX_R_FRAC  = 0.42;
+    const ORBIT_SPEED_MIN   = 0.6;
+    const ORBIT_SPEED_MAX   = 1.0;
+
+    let orbitFinale = false;
+    let orbitStart  = 0;
+    let orbitCX = 0, orbitCY = 0;
+
+    function startOrbitFinale(){
+      if (orbitFinale) return;
+      orbitFinale = true;
+      orbitStart  = millis();
+
+      orbitCX = width * 0.5;
+      orbitCY = height * 0.45;
+
+      const Rmin = Math.min(width, height) * ORBIT_MIN_R_FRAC;
+      const Rmax = Math.min(width, height) * ORBIT_MAX_R_FRAC;
+
+      clouds.forEach((c,i)=>{
+        c.stopped = true;
+        const dx = c.x - orbitCX;
+        const dy = c.baseY - orbitCY;
+        const r0 = Math.max(Rmin, Math.min(Rmax, Math.hypot(dx, dy)));
+        c.orbitR = r0 * random(0.9, 1.1);
+        c.orbitTheta0 = Math.atan2(dy, dx);
+        const dir = random() < 0.5 ? -1 : 1;
+        c.orbitOmega = dir * random(ORBIT_SPEED_MIN, ORBIT_SPEED_MAX);
+        c.orbitEll  = ORBIT_ELLIPSE_Y * random(0.92, 1.08);
+      });
+    }
+
+    /* === Cloud class ======================================== */
+    class Cloud {
+      constructor() {
+        const count = clouds.length;
+        if (count < 4) {
+          const col = count % 2, row = Math.floor(count / 2);
+          this.minX = col * width/2;
+          this.maxX = (col+1) * width/2;
+          this.minY = row * height/2;
+          this.maxY = (row+1) * height/2;
+        } else if (count === 4) {
+          this.minX = width*0.25; this.maxX = width*0.75;
+          this.minY = height*0.25; this.maxY = height*0.75;
+        } else {
+          this.minX = 0; this.maxX = width;
+          this.minY = 0; this.maxY = height;
+        }
+        this.w = random(width * 0.5, width * 0.6);
+        this.h = this.w * 0.4;
+        this.targetX = random(this.minX + this.w/2, this.maxX - this.w/2);
+        this.baseY   = random(this.minY + this.h/2, this.maxY - this.h/2);
+        if (random() < 0.5) {
+          this.x = -this.w;
+          this.speed = (this.targetX + this.w)/(60*3);
+        } else {
+          this.x = width + this.w;
+          this.speed = -((width + this.w - this.targetX)/(60*3));
+        }
+        this.stopped = false;
+        this.phase = random(TWO_PI);
+        this.col = color(129,133,137,225);
+        this.parts = [];
+        const n = floor(random(5,8));
+        for (let i=0; i<n; i++){
+          const pw = random(this.w*0.5,this.w*0.8),
+                ph = pw*random(0.5,0.8),
+                dx = random(-this.w*0.4,this.w*0.4),
+                dy = random(-this.h*0.3,this.h*0.3);
+          this.parts.push({dx,dy,pw,ph});
+        }
+
+        this.orbitR = 0; this.orbitTheta0 = 0; this.orbitOmega = 0; this.orbitEll = 1;
+      }
+      update() {
+        if (!this.stopped) {
+          this.x += this.speed;
+          if ((this.speed>0 && this.x>=this.targetX) ||
+              (this.speed<0 && this.x<=this.targetX)) {
+            this.x = this.targetX;
+            this.stopped = true;
+          }
+        } else if (orbitFinale) {
+          const t = (millis() - orbitStart) / 1000;
+          const theta = this.orbitTheta0 + this.orbitOmega * t;
+          this.x     = orbitCX + this.orbitR * Math.cos(theta);
+          this.baseY = orbitCY + this.orbitR * this.orbitEll * Math.sin(theta);
+        }
+      }
+      show() {
+        noStroke();
+        fill(this.col);
+        const bob = orbitFinale ? 0.6 : 1.0;
+        const fy = this.baseY + Math.sin(frameCount*0.01 + this.phase) * 20 * bob;
+        this.parts.forEach(p=>{ ellipse(this.x+p.dx, fy+p.dy, p.pw, p.ph); });
+      }
+    }
+
+    /* === p5 lifecycle ======================================= */
+    function preload() {
+      thunderSounds = thunderPaths.map(p=>loadSound(p));
+      rainSound     = loadSound('../../sounds/rain1.mp3'); // ambiance
+    }
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      baseSkyColor = color(135,206,235);
+      greySkyColor = color(80,80,80);
+
+      // 🔁 Autostart ambiance (si autorisé)
+      try { getAudioContext().resume(); } catch(e){}
+      if (rainSound?.isLoaded()) startAmbience();
+      else rainSound?.once('loaded', startAmbience);
+    }
+
+    let lastMs = 0;
+    function draw() {
+      const now = millis();
+      const dt = lastMs ? (now - lastMs)/1000 : 0;
+      lastMs = now;
+
+      const t = Math.min(1, clouds.length / requiredPresses);
+      background(lerpColor(baseSkyColor, greySkyColor, orbitFinale ? 1 : t));
+
+      clouds.forEach(c=>{ c.update(); c.show(); });
+
+      if (orbitFinale && (now - orbitStart) > ORBIT_DURATION_MS) {
+        orbitFinale = false;
+        // Ici, pas de "next" automatique demandé.
+      }
+    }
+
+    /* === INPUT ============================================== */
+    function keyPressed() {
+      if (key === ' ') {
+        if (paused || orbitFinale) return;
+        if (clouds.length >= requiredPresses) return;
+
+        const now = millis();
+        if (now - lastTap < tapDelay) return;
+        lastTap = now;
+
+        clouds.push(new Cloud());
+        if (!isSFXMuted && thunderSounds.length) {
+          const sfx = random(thunderSounds);
+          sfx.setVolume(volSFX);
+          sfx.play();
+        }
+
+        if (clouds.length >= requiredPresses) {
+          startOrbitFinale();
+          return;
+        }
+      }
+
+      if (keyCode === ENTER) {
+        resetGame();
+      }
+
+      if (key.toLowerCase()==='f'){
+        if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      }
+    }
+
+    function resetGame(){
+      lastTap = -Infinity;
+      clouds = [];
+      orbitFinale = false;
+    }
+
+    function windowResized(){ resizeCanvas(windowWidth, windowHeight); }
+
+    /* === AUDIO helpers ====================================== */
+    let isMusicMuted=false, isSFXMuted=false;
+    let volMusic=.5, volSFX=.5;
+
+    function startAmbience(){
+      if(!rainSound) return;
+      rainSound.setLoop(true);
+      rainSound.setVolume(isMusicMuted?0:volMusic);
+      if(!rainSound.isPlaying()) rainSound.play();
+    }
+    function pauseAllAudio(){
+      try {
+        rainSound && rainSound.stop();
+        thunderSounds.forEach(s => { try { s.stop(); } catch{} });
+        if (typeof getAudioContext === 'function') {
+          const ac = getAudioContext();
+          if (ac && ac.state === 'running') ac.suspend();
+        }
+      } catch {}
+    }
+    function resumeAudio(){
+      try {
+        if (typeof getAudioContext === 'function') {
+          const ac = getAudioContext();
+          if (ac && ac.state === 'suspended') ac.resume();
+        }
+        if (!isMusicMuted && rainSound) {
+          if (!rainSound.isPlaying()) {
+            rainSound.setLoop(true);
+            rainSound.setVolume(isMusicMuted?0:volMusic);
+            rainSound.play();
+          }
+        }
+      } catch {}
+    }
+
+    /* === STOP / RESUME depuis le parent ===================== */
+    window.ADAPTATECH_game_onPause = function(){
+      paused = true;
+      pauseAllAudio();
+      noLoop();
+    };
+    window.ADAPTATECH_game_onResume = function(){
+      paused = false;
+      loop();
+      resumeAudio();
+    };
+
+    /* === UI & menu ========================================== */
+    window.addEventListener('load', ()=>{
+      const icon    = document.getElementById('settings-icon');
+      const infoIco = document.getElementById('info-icon');
+      const menu    = document.getElementById('menu');
+      const muteM   = document.getElementById('muteMusic');
+      const volM    = document.getElementById('musicVol');
+      const valM    = document.getElementById('musicVolVal');
+      const muteS   = document.getElementById('muteSFX');
+      const volS    = document.getElementById('sfxVol');
+      const valS    = document.getElementById('sfxVolVal');
+      const slider  = document.getElementById('tapDelaySlider');
+      const valT    = document.getElementById('tapDelayVal');
+      const infoModal = document.getElementById('infoModal');
+      const closeModal= document.getElementById('closeModal');
+
+      // Contrôles
+      slider.oninput = e=>{ tapDelay = +e.target.value; valT.textContent=e.target.value; };
+      volM.oninput   = e=>{ volMusic=e.target.value/100; valM.textContent=e.target.value;
+                            if(!isMusicMuted && rainSound) rainSound.setVolume(volMusic); };
+      volS.oninput   = e=>{ volSFX=e.target.value/100; valS.textContent=e.target.value;
+                            if(!isSFXMuted) thunderSounds.forEach(s=>s.setVolume(volSFX)); };
+
+      muteM.onchange = e=>{ isMusicMuted=e.target.checked; rainSound && rainSound.setVolume(isMusicMuted?0:volMusic); };
+      muteS.onchange = e=>{ isSFXMuted=e.target.checked; thunderSounds.forEach(s=>s.setVolume(isSFXMuted?0:volSFX)); };
+
+      // Menu
+      icon.addEventListener('pointerup', e=>{
+        e.stopPropagation();
+        menu.classList.toggle('show');
+      });
+      document.addEventListener('pointerup', e=>{
+        if (!menu.contains(e.target) && !icon.contains(e.target)) {
+          menu.classList.remove('show');
+        }
+      });
+
+      // Info
+      infoIco.onclick    = ()=> infoModal.style.display='block';
+      closeModal.onclick = ()=> infoModal.style.display='none';
+
+      // Fallback autoplay : démarre l’audio à la première interaction si bloqué
+      const firstInteract = ()=>{
+        resumeAudio();
+        window.removeEventListener('pointerdown', firstInteract);
+        window.removeEventListener('keydown', firstInteract);
+      };
+      window.addEventListener('pointerdown', firstInteract, {once:true});
+      window.addEventListener('keydown', firstInteract, {once:true});
+    });
+  </script>
+
+  <script src="../../js/translationonly.js"></script>
+</body>
+</html>
