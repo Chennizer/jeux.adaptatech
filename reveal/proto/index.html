@@ -26,6 +26,8 @@
       --tile-min: 160px; --tile-max: 520px;
 
       --bottom-ui: var(--ui-reserve);
+
+      --presence-photo-size: max(72px, 10vh);
     }
 
     *,*::before,*::after{ box-sizing:border-box; }
@@ -161,9 +163,10 @@
       background:#fff;
       box-shadow: var(--shadow);
       position: relative;
-      overflow: hidden;
+      overflow: auto;
       display: grid;
-      place-items: start center;
+      align-content: start;
+      justify-items: center;
     }
     .bin.drag-over{
       border: 3px solid color-mix(in srgb, var(--bin-accent, #294936) 65%, var(--card-br));
@@ -172,17 +175,38 @@
         0 6px 22px rgba(0,0,0,.10);
     }
     #drag-transfer .bin-grid{
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 18vmin, 220px), 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: var(--grid-gap);
-      transform-origin: top left;
-      will-change: transform;
-      justify-self: center;
+      justify-content: center;
+      align-items: flex-start;
+      width: 100%;
     }
 
-    .draggable{ background: transparent; border: none; padding: 0; display:flex; align-items:center; justify-content:center; cursor: grab; border-radius: 14px; }
+    .draggable{
+      background: transparent;
+      border: none;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      border-radius: 14px;
+      width: clamp(120px, 18vmin, 220px);
+      height: clamp(120px, 18vmin, 220px);
+    }
     .draggable:active{ cursor: grabbing; }
     .draggable img{ width: 100%; height: auto; aspect-ratio: 1/1; object-fit: contain; display: block; border-radius: 14px; }
+
+    .photo-card.draggable{
+      width: var(--presence-photo-size);
+      height: var(--presence-photo-size);
+      display: grid;
+    }
+    .photo-card.draggable img{
+      height: 100%;
+      object-fit: cover;
+    }
     .transfer-controls{ margin-bottom: clamp(8px, 1.6vmin, 16px); display:flex; gap:.6rem; align-items:center; justify-content:flex-end; }
     .btn{ border:1px solid var(--card-br); background:#f9fafb; padding:.5em .8em; border-radius:10px; cursor:pointer; font-weight:600; }
     .btn:hover{ background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.08); }
@@ -204,40 +228,39 @@
   justify-content:center;
   gap: 1.5rem;
 }
-/* --- Présences: bande de photos (10vh) --- */
 /* --- Présences: bande de photos — fixed single row (10vh) --- */
 .photo-strip{
-  height: 10vh;                 /* fixed height */
-  min-height: 84px;             /* safety on tiny screens */
+  --strip-size: var(--presence-photo-size);
   display: flex;
-  flex-wrap: nowrap;            /* always one line */
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;      /* center the 6 items */
+  justify-content: center;
   gap: clamp(10px, 2vmin, 18px);
+  padding: clamp(4px, 0.8vmin, 10px) clamp(12px, 2vmin, 20px);
   margin-bottom: clamp(12px, 2vmin, 18px);
-  overflow: visible;            /* never clip images */
+  min-height: var(--strip-size);
+  overflow: visible;
   border-radius: 16px;
-  /* optional subtle style */
-  /* border: 2px solid var(--card-br); box-shadow: var(--shadow); background:#fff; */
 }
 
-/* each photo is a draggable button */
 .photo-card{
   background: #fff;
   border: 2px solid var(--card-br);
   border-radius: 14px;
   box-shadow: var(--shadow);
-  height: 100%;                 /* fill the 10vh strip height */
-  aspect-ratio: 1/1;            /* keep square; width auto-scales */
-  display: grid; place-items: center;
+  width: var(--presence-photo-size);
+  height: var(--presence-photo-size);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
   padding: 0;
   cursor: grab;
 }
 .photo-card:active{ cursor: grabbing; }
 
 .photo-card img{
+  width: 100%;
   height: 100%;
-  width: auto;                  /* width follows height/aspect */
   display: block;
   object-fit: cover;
   border-radius: 12px;
@@ -664,12 +687,10 @@
         <div id="photoStrip" class="photo-strip bin" aria-label="Photos des élèves (aperçu)"></div>
 
         <div class="note-tip" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--grid-gap);align-items:end;margin-bottom:.5rem;">
-          <div style="display:flex;align-items:center;gap:.6rem;justify-content:center;">
-            <img src="https://placehold.co/48x48" alt="Maison" width="48" height="48" style="border-radius:8px;">
+          <div style="display:flex;align-items:center;justify-content:center;">
             <span>À la maison</span>
           </div>
-          <div style="display:flex;align-items:center;gap:.6rem;justify-content:center;">
-            <img src="https://placehold.co/48x48" alt="École" width="48" height="48" style="border-radius:8px;">
+          <div style="display:flex;align-items:center;justify-content:center;">
             <span>À l’école</span>
           </div>
         </div>
@@ -1475,40 +1496,6 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
     if (e.currentSlide?.id === 'owl-root') stepSelectors.owl.refresh();
   });
 
-  // ===== Auto-scaling for drag bins (no scroll)
-  function computeScaleToFit(container, content){
-    if (!container || !content) return 1;
-    const prev = content.style.transform;
-    content.style.transform = 'none';
-    const cw = content.scrollWidth;
-    const ch = content.scrollHeight;
-    content.style.transform = prev;
-    if (cw === 0 || ch === 0) return 1;
-    const scaleW = container.clientWidth  / cw;
-    const scaleH = container.clientHeight / ch;
-    return Math.min(1, scaleW, scaleH);
-  }
-
-  function scaleBins(){
-    const left  = document.querySelector('#drag-transfer #bin-left');
-    const right = document.querySelector('#drag-transfer #bin-right');
-    [left, right].forEach(bin=>{
-      if (!bin) return;
-      const inner = bin.querySelector('.bin-grid');
-      if (!inner) return;
-      const s = computeScaleToFit(bin, inner);
-      inner.style.transform = `scale(${s})`;
-    });
-  }
-
-  let scaleTimer = null;
-  function scheduleScale(){
-    if (scaleTimer) cancelAnimationFrame(scaleTimer);
-    scaleTimer = requestAnimationFrame(scaleBins);
-  }
-  window.addEventListener('resize', scheduleScale);
-  Reveal.on('slidechanged', (e)=>{ if (e.currentSlide?.id === 'drag-transfer') scheduleScale(); });
-  Reveal.on('ready', ()=>{ if (Reveal.getCurrentSlide()?.id === 'drag-transfer') scheduleScale(); });
   // --- Build photo strip (6 vignettes ≈10vh)
 // --- Build photo strip as a draggable bin (same behavior as the 2 boxes)
 // --- Build photo strip as simple flex row (no inner grid, no scaling)
@@ -1543,7 +1530,6 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
     });
     btn.addEventListener('dragend', ()=>{
       btn.classList.remove('dragging');
-      scheduleScale(); // still scales the two big bins only
     });
 
     // Click: send into LEFT bin first, then toggle L<->R on subsequent clicks
@@ -1556,7 +1542,6 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
       } else {
         document.querySelector('#bin-left .bin-grid').appendChild(btn);
       }
-      scheduleScale();
     });
 
     strip.appendChild(btn);
@@ -1575,7 +1560,7 @@ const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURICompo
 
 
 
-// Drag & transfer setup (top photo strip is its own flex bin; only the two big bins scale)
+// Drag & transfer setup (top photo strip stays flex; bins keep items at fixed size)
 let transferInitialized = false;
 function setupTransfer(){
   if (transferInitialized) return;
@@ -1624,12 +1609,10 @@ function setupTransfer(){
     });
     btn.addEventListener('dragend', ()=>{
       btn.classList.remove('dragging');
-      scheduleScale();
     });
     btn.addEventListener('click', ()=>{
       const inLeft = btn.closest('#bin-left') !== null;
       (inLeft ? innerRight : innerLeft).appendChild(btn);
-      scheduleScale();
     });
 
     return btn;
@@ -1644,7 +1627,7 @@ function setupTransfer(){
     bin.addEventListener('drop', (e)=>{
       e.preventDefault(); bin.classList.remove('drag-over');
       const dragging = document.querySelector('.draggable.dragging');
-      if (dragging) { inner.appendChild(dragging); dragging.classList.remove('dragging'); scheduleScale(); }
+      if (dragging) { inner.appendChild(dragging); dragging.classList.remove('dragging'); }
     });
   }
   bindDnD(left,  innerLeft);
@@ -1664,12 +1647,7 @@ function setupTransfer(){
     const pictosLeft = Array.from(innerLeft.querySelectorAll('.draggable:not([data-type="photo"])'));
     pictosLeft.sort((a,b)=> (order.get(a.dataset.name)||0) - (order.get(b.dataset.name)||0));
     pictosLeft.forEach(el => innerLeft.appendChild(el));
-
-    scheduleScale();
   });
-
-  scheduleScale(); // scales only the two large bins
-  window.addEventListener('load', scheduleScale);
 }
 
 
