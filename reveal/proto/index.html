@@ -247,6 +247,7 @@
   justify-self: center;
   align-self: center;
   aspect-ratio: 1 / 1;
+  position: relative;
 }
 .photo-card:active{ cursor: grabbing; }
 
@@ -256,6 +257,60 @@
   display: block;
   object-fit: cover;
   border-radius: 12px;
+}
+
+.photo-strip.presence-select-mode{
+  box-shadow: 0 0 0 4px rgba(173,241,210,0.45);
+}
+
+.photo-card.presence-selectable{
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--green) 60%, #ffffff);
+  box-shadow: 0 0 0 4px rgba(173,241,210,0.65), var(--shadow);
+}
+.photo-card.presence-selectable.presence-hover{
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 0 5px rgba(41,73,54,0.45), 0 18px 32px rgba(0,0,0,0.18);
+}
+.photo-card.presence-selectable:focus-visible{
+  outline: 4px solid var(--mint);
+  outline-offset: 3px;
+}
+
+.photo-card.presence-waiting{
+  cursor: wait;
+  opacity: .85;
+  border-color: color-mix(in srgb, var(--muted) 60%, #ffffff);
+  box-shadow: 0 0 0 4px rgba(82,96,109,0.3), var(--shadow);
+}
+.photo-card.presence-waiting::after{
+  content: '…';
+  position: absolute;
+  bottom: 10px;
+  right: 12px;
+  font-size: clamp(1rem, 2.6vmin, 1.4rem);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.photo-card.presence-flash{
+  animation: presenceFlash 600ms ease-in-out;
+}
+
+.photo-card.presence-placed{
+  animation: presencePlaced 420ms ease-out;
+}
+
+@keyframes presenceFlash{
+  0%{ transform: scale(1); box-shadow: 0 0 0 0 rgba(41,73,54,0); }
+  45%{ transform: scale(1.05); box-shadow: 0 0 0 8px rgba(173,241,210,0.75); }
+  100%{ transform: scale(1); box-shadow: var(--shadow); }
+}
+
+@keyframes presencePlaced{
+  0%{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(41,73,54,0); }
+  60%{ transform: scale(1.04); box-shadow: 0 0 0 8px rgba(173,241,210,0.65); }
+  100%{ transform: scale(1); box-shadow: var(--shadow); }
 }
 
 .transfer-legend{
@@ -788,6 +843,9 @@
     </div>
     <aside class="shell-side">
       <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
+      <button id="remoteBtnPresence" class="side-btn" title="Demander (contrôleur)">
+        <img src="../../images/ch.png" alt="Contrôleur"/>
+      </button>
     </aside>
   </div>
 </section>
@@ -828,6 +886,14 @@
   ];
   // Option de secours si un fichier manque encore côté client
   const FALLBACK_PHOTO = (label)=> `https://placehold.co/240x240?text=${encodeURIComponent(label)}`;
+  const toAbsoluteUrl = (path)=>{
+    if (!path) return path;
+    try { return new URL(path, location.href).toString(); } catch { return path; }
+  };
+  const PRESENCE_DEST_OPTIONS = {
+    home:   { label: 'À la maison', image: toAbsoluteUrl('../../images/accueilval/maison.png') },
+    school: { label: 'À l’école',  image: toAbsoluteUrl('../../images/accueilval/ecole.png') }
+  };
 
 
   // Directory for day-of-week images
@@ -1264,9 +1330,213 @@
   }
 
   // ===== WebSocket remote
-  const remoteBtnWeather = document.getElementById('remoteBtnWeather');
-  const remoteBtnVideos  = document.getElementById('remoteBtnVideos');
-  const remoteBtnOwl     = document.getElementById('remoteBtnOwl');
+  const remoteBtnWeather   = document.getElementById('remoteBtnWeather');
+  const remoteBtnVideos    = document.getElementById('remoteBtnVideos');
+  const remoteBtnOwl       = document.getElementById('remoteBtnOwl');
+  const remoteBtnPresence  = document.getElementById('remoteBtnPresence');
+  const photoStrip         = document.getElementById('photoStrip');
+
+  const presenceState = {
+    selecting: false,
+    cards: [],
+    keyHandler: null,
+    pendingFlashTimer: null,
+  };
+
+  function presenceCards(){
+    return Array.from(photoStrip?.querySelectorAll('.photo-card') || []);
+  }
+
+  function presencePointerEnter(e){
+    const card = e.currentTarget;
+    if (card) card.classList.add('presence-hover');
+  }
+
+  function presencePointerLeave(e){
+    const card = e.currentTarget;
+    if (card) card.classList.remove('presence-hover');
+  }
+
+  function exitPresenceSelectMode(selected){
+    if (!presenceState.selecting) return;
+    presenceState.selecting = false;
+    if (presenceState.pendingFlashTimer){
+      clearTimeout(presenceState.pendingFlashTimer);
+      presenceState.pendingFlashTimer = null;
+    }
+    photoStrip?.classList.remove('presence-select-mode');
+    remoteBtnPresence?.setAttribute('aria-pressed','false');
+    if (presenceState.keyHandler){
+      window.removeEventListener('keydown', presenceState.keyHandler, true);
+      presenceState.keyHandler = null;
+    }
+    const selectedCard = selected?.card || null;
+    presenceState.cards.forEach(card => {
+      card.removeEventListener('click', onPresenceCardClick);
+      card.removeEventListener('pointerenter', presencePointerEnter);
+      card.removeEventListener('pointerleave', presencePointerLeave);
+      card.removeEventListener('mouseenter', presencePointerEnter);
+      card.removeEventListener('mouseleave', presencePointerLeave);
+      card.classList.remove('presence-selectable','presence-hover');
+      const prev = card.dataset.prevDraggable;
+      if (!selectedCard || card !== selectedCard){
+        if (prev === 'false') card.setAttribute('draggable','false');
+        else card.setAttribute('draggable','true');
+        delete card.dataset.prevDraggable;
+      }
+    });
+    presenceState.cards = [];
+
+    if (selectedCard){
+      selectedCard.classList.add('presence-waiting');
+      selectedCard.setAttribute('aria-busy','true');
+      if (typeof selected?.prevDraggable !== 'undefined'){
+        selectedCard.dataset.prevDraggable = selected.prevDraggable;
+      }
+    } else {
+      setRemoteStatus('');
+    }
+  }
+
+  function onPresenceCardClick(e){
+    const card = e.currentTarget;
+    if (!card) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const prev = card.dataset.prevDraggable;
+    exitPresenceSelectMode({ card, prevDraggable: prev });
+    sendPresenceRequest(card, prev);
+  }
+
+  function flashPendingCard(){
+    if (presenceState.pendingFlashTimer) clearTimeout(presenceState.pendingFlashTimer);
+    const card = lastPending?.kind === 'presence' ? lastPending.card : null;
+    if (!card) return;
+    card.classList.add('presence-flash');
+    presenceState.pendingFlashTimer = setTimeout(()=>{
+      card.classList.remove('presence-flash');
+      presenceState.pendingFlashTimer = null;
+    }, 620);
+  }
+
+  function enterPresenceSelectMode(){
+    if (presenceState.selecting) return;
+    if (lastPending?.kind === 'presence'){ flashPendingCard(); return; }
+    const cards = presenceCards();
+    if (!cards.length) return;
+    presenceState.selecting = true;
+    presenceState.cards = cards;
+    photoStrip?.classList.add('presence-select-mode');
+    remoteBtnPresence?.setAttribute('aria-pressed','true');
+    setRemoteStatus('Choisissez un élève à interroger.');
+    cards.forEach(card => {
+      card.classList.add('presence-selectable');
+      card.dataset.prevDraggable = (card.getAttribute('draggable') === 'false') ? 'false' : 'true';
+      card.setAttribute('draggable','false');
+      card.addEventListener('click', onPresenceCardClick);
+      card.addEventListener('pointerenter', presencePointerEnter);
+      card.addEventListener('pointerleave', presencePointerLeave);
+      card.addEventListener('mouseenter', presencePointerEnter);
+      card.addEventListener('mouseleave', presencePointerLeave);
+    });
+    presenceState.keyHandler = (e)=>{
+      if (!presenceState.selecting) return;
+      const key = (e.key || '').toLowerCase();
+      if (key === 'escape' || key === 'esc' || key === 'q'){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        exitPresenceSelectMode();
+      }
+    };
+    window.addEventListener('keydown', presenceState.keyHandler, true);
+  }
+
+  function sendPresenceRequest(card, prevDraggable){
+    if (!card) return;
+    setupTransfer();
+    const studentName = card.dataset.student || card.getAttribute('aria-label') || 'Élève';
+    const studentId = card.dataset.studentId || card.dataset.name || studentName;
+    const img = card.querySelector('img');
+    const studentImage = toAbsoluteUrl(img?.currentSrc || img?.src || card.dataset.photo || FALLBACK_PHOTO(studentName));
+    const msg = {
+      type: 'request_presence',
+      from: 'slides',
+      deckTitle,
+      studentId,
+      name: studentName,
+      image: studentImage,
+      options: {
+        home:   { ...PRESENCE_DEST_OPTIONS.home },
+        school: { ...PRESENCE_DEST_OPTIONS.school }
+      },
+      note: "en attente d'une réponse"
+    };
+    lastPending = { kind: 'presence', msg, card, origin: card.parentElement, prevDraggable: prevDraggable ?? 'true' };
+    wsSend(msg);
+    showWait(`En attente de ${studentName}`);
+    setRemoteStatus(`Demande envoyée pour ${studentName}…`);
+  }
+
+  function cancelPresencePending(reason){
+    if (!lastPending || lastPending.kind !== 'presence') return;
+    if (presenceState.pendingFlashTimer){
+      clearTimeout(presenceState.pendingFlashTimer);
+      presenceState.pendingFlashTimer = null;
+    }
+    const { card, origin, prevDraggable } = lastPending;
+    if (card){
+      card.classList.remove('presence-waiting','presence-flash','presence-placed');
+      card.removeAttribute('aria-busy');
+      const target = (origin && origin.isConnected) ? origin : photoStrip;
+      if (target && !target.contains(card)) target.appendChild(card);
+      const restore = prevDraggable === 'false' ? 'false' : 'true';
+      card.setAttribute('draggable', restore);
+      delete card.dataset.prevDraggable;
+    }
+    lastPending = null;
+    if (reason !== 'keep-wait') hideWait();
+    if (reason === 'stop') setRemoteStatus('Demande annulée.');
+    else if (reason === 'disconnect') setRemoteStatus('Connexion perdue. Demande annulée.');
+    scheduleScale();
+  }
+
+  function handlePresenceChoice(msg){
+    hideWait();
+    setupTransfer();
+    if (presenceState.pendingFlashTimer){
+      clearTimeout(presenceState.pendingFlashTimer);
+      presenceState.pendingFlashTimer = null;
+    }
+    const destination = (msg.destination || '').toLowerCase();
+    const studentId = msg.studentId || lastPending?.card?.dataset.studentId;
+    const selector = studentId ? `.photo-card[data-student-id="${studentId}"]` : null;
+    const card = selector ? document.querySelector(selector) : (lastPending?.kind === 'presence' ? lastPending.card : null);
+    const targetBinId = destination === 'school' ? 'bin-right' : 'bin-left';
+    const targetBin = ensureBinGridById(targetBinId);
+    const label = msg.name || card?.dataset?.student || 'Élève';
+    if (card && targetBin){
+      targetBin.appendChild(card);
+      card.classList.remove('presence-waiting','presence-flash');
+      card.removeAttribute('aria-busy');
+      card.classList.add('presence-placed');
+      setTimeout(()=> card.classList.remove('presence-placed'), 620);
+      card.setAttribute('draggable','true');
+      delete card.dataset.prevDraggable;
+    }
+    scheduleScale();
+    const destLabel = destination === 'school' ? 'à l’école' : 'à la maison';
+    setRemoteStatus(`${label} est ${destLabel}.`);
+    lastPending = null;
+  }
+
+  remoteBtnPresence?.addEventListener('click', ()=>{
+    if (presenceState.selecting){
+      exitPresenceSelectMode();
+      return;
+    }
+    enterPresenceSelectMode();
+  });
+
   let WS=null, hbInterval=null, watchdogInterval=null, lastActivity=0, backoffMs=1000, reconnectTimer=null, connecting=false;
   let lastPending=null;
   function setRemoteStatus(txt){ const remoteStatus = document.getElementById('remoteStatus'); if(remoteStatus) remoteStatus.textContent = txt || ''; }
@@ -1312,9 +1582,25 @@
         const map = { sun:1, cloud:2, rain:3, snow:4 }; const v = map[String(msg.key||'').toLowerCase()] ?? 0;
         Reveal.slide(h, v); if (lastPending?.kind==='weather') lastPending=null; return;
       }
+      if (msg.type==='presence_choice'){
+        handlePresenceChoice(msg);
+        return;
+      }
+      if (msg.type==='stop_presence'){
+        cancelPresencePending('stop');
+        exitPresenceSelectMode();
+        return;
+      }
     };
     WS.onerror = ()=> setRemoteStatus('Erreur WebSocket');
-    WS.onclose  = ()=>{ clearWsTimers(); setRemoteStatus('WebSocket fermé'); connecting=false; scheduleReconnect(); };
+    WS.onclose  = ()=>{
+      clearWsTimers();
+      exitPresenceSelectMode();
+      cancelPresencePending('disconnect');
+      setRemoteStatus('WebSocket fermé');
+      connecting=false;
+      scheduleReconnect();
+    };
     watchdogInterval=setInterval(()=>{ if(Date.now()-lastActivity>60000){ try{ WS.close(); }catch{} } }, 5000);
   }
   connectWS();
@@ -1600,15 +1886,19 @@
     ? PRESENCE_STUDENTS.slice(0, 6)
     : Array.from({length:6}, (_,i)=>({ name: `Élève ${i+1}`, image: FALLBACK_PHOTO(`Élève ${i+1}`) }));
 
-  entries.forEach(({ name, image }, index)=>{
+  entries.forEach((student, index)=>{
+    const { name, image, id } = student || {};
     const label = name || `Élève ${index + 1}`;
     const fallbackSrc = FALLBACK_PHOTO(label);
+    const studentId = id || `student-${index}`;
     const btn = document.createElement('button');
     btn.className = 'photo-card draggable';
     btn.setAttribute('draggable','true');
     btn.dataset.type = 'photo';
-    btn.dataset.name = `student-${index}`;
+    btn.dataset.name = studentId;
+    btn.dataset.studentId = studentId;
     btn.dataset.student = label;
+    btn.dataset.photo = toAbsoluteUrl(image || fallbackSrc);
     btn.setAttribute('aria-label', label);
 
     const img = new Image();
@@ -1616,7 +1906,12 @@
     img.decoding = 'async';
     img.alt = label;
     img.src = image || fallbackSrc;
-    img.onerror = ()=>{ if (img.src !== fallbackSrc) img.src = fallbackSrc; };
+    img.onerror = ()=>{
+      if (img.src !== fallbackSrc){
+        img.src = fallbackSrc;
+        btn.dataset.photo = toAbsoluteUrl(fallbackSrc);
+      }
+    };
     btn.appendChild(img);
 
     // DnD behavior
@@ -1650,19 +1945,7 @@
 
 
 
-// Drag & transfer setup (top photo strip is its own flex bin)
-let transferInitialized = false;
-function setupTransfer(){
-  if (transferInitialized) return;
-  transferInitialized = true;
-
-  const left   = document.getElementById('bin-left');
-  const right  = document.getElementById('bin-right');
-  const strip  = document.getElementById('photoStrip');
-  const resetBtn = document.getElementById('resetTransfer');
-
-  // Ensure each *large* bin has an inner .bin-grid (strip does NOT use it)
-  function ensureInner(bin){
+  function ensureBinGrid(bin){
     if (!bin) return null;
     let inner = bin.querySelector('.bin-grid');
     if (!inner){
@@ -1674,8 +1957,21 @@ function setupTransfer(){
     }
     return inner;
   }
-  const innerLeft   = ensureInner(left);
-  const innerRight  = ensureInner(right);
+  function ensureBinGridById(id){ return ensureBinGrid(document.getElementById(id)); }
+
+// Drag & transfer setup (top photo strip is its own flex bin)
+let transferInitialized = false;
+function setupTransfer(){
+  if (transferInitialized) return;
+  transferInitialized = true;
+
+  const left   = document.getElementById('bin-left');
+  const right  = document.getElementById('bin-right');
+  const strip  = document.getElementById('photoStrip');
+  const resetBtn = document.getElementById('resetTransfer');
+
+  const innerLeft   = ensureBinGrid(left);
+  const innerRight  = ensureBinGrid(right);
 
   // Les bacs commencent vides : seules les photos peuvent être déplacées depuis la bande.
   innerLeft.innerHTML = '';
@@ -1700,6 +1996,13 @@ function setupTransfer(){
     // photos
     [...document.querySelectorAll('#bin-left  .draggable[data-type="photo"]'),
      ...document.querySelectorAll('#bin-right .draggable[data-type="photo"]')].forEach(el => strip.appendChild(el));
+
+    strip.querySelectorAll('.photo-card').forEach(card => {
+      card.classList.remove('presence-waiting','presence-flash','presence-placed');
+      card.removeAttribute('aria-busy');
+      card.setAttribute('draggable','true');
+      delete card.dataset.prevDraggable;
+    });
 
     innerLeft.innerHTML = '';
     innerRight.innerHTML = '';

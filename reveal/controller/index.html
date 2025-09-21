@@ -117,6 +117,88 @@
     top:50%; left:50%; width:0; height:0; transform: translate(-50%, -50%);
   }
 
+  /* ===== Presence prompt overlay ===== */
+  #presencePrompt{
+    position: fixed;
+    inset: 0;
+    display: none;
+    z-index: 6;
+    background: var(--bg);
+    color: var(--fg);
+    padding: clamp(24px, 6vw, 72px);
+    grid-template-rows: auto auto;
+    gap: clamp(32px, 6vmin, 80px);
+    justify-items: center;
+    align-content: center;
+  }
+  .presence-student{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: clamp(16px, 3vmin, 28px);
+    text-align:center;
+  }
+  #presenceStudentPhoto{
+    width: clamp(220px, 40vmin, 460px);
+    height: clamp(220px, 40vmin, 460px);
+    border-radius: 20px;
+    object-fit: cover;
+    box-shadow: 0 18px 46px rgba(0,0,0,.55);
+    border: 4px solid rgba(255,255,255,0.65);
+    background: rgba(0,0,0,0.15);
+  }
+  #presenceStudentName{
+    font: 800 clamp(1.8rem,4.2vw,3.2rem)/1.1 system-ui;
+    text-shadow: 0 2px 18px rgba(0,0,0,.55);
+  }
+  .presence-choices{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap: clamp(28px, 6vw, 80px);
+  }
+  .presence-choice{
+    appearance:none;
+    border:3px solid var(--card-border);
+    border-radius:20px;
+    background: var(--card-bg);
+    color: var(--card-fg);
+    width: clamp(220px, 32vmin, 360px);
+    aspect-ratio: 1 / 1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap: clamp(12px, 2.2vmin, 22px);
+    padding: clamp(16px, 4vmin, 28px);
+    position:relative;
+    overflow:hidden;
+    box-shadow: 0 16px 40px rgba(0,0,0,.5);
+    cursor:pointer;
+    transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease;
+  }
+  .presence-choice img{
+    width: clamp(120px, 26vmin, 220px);
+    max-width: 80%;
+    height: auto;
+    object-fit: contain;
+  }
+  .presence-label{
+    font: 800 clamp(1.2rem,3vw,2.2rem)/1.15 system-ui;
+    text-align:center;
+  }
+  .presence-choice:focus-visible{
+    outline: 4px solid var(--c-cyan);
+    outline-offset: 4px;
+  }
+  @media (hover:hover) and (pointer:fine){
+    .presence-choice:hover{ transform: translateY(-4px); box-shadow: 0 22px 44px rgba(0,0,0,.55); }
+  }
+  @media (max-width: 640px){
+    #presencePrompt{ padding: clamp(18px, 5vw, 36px); gap: clamp(24px, 5vmin, 60px); }
+    .presence-choice{ width: clamp(180px, 44vw, 260px); }
+  }
+
   /* ========= Quick Settings (toggle with M) – VISUALS ONLY ========= */
   #menuMask{
     position: fixed; inset: 0; background: rgba(0,0,0,.45);
@@ -261,6 +343,22 @@
 <div id="startOverlay"><button id="startBtn">Start</button></div>
 <span id="controllerIndicator" title="Contrôleur : déconnecté" aria-label="État du contrôleur"></span>
 <div id="chooser" aria-hidden="true"></div>
+<div id="presencePrompt" aria-hidden="true">
+  <div class="presence-student">
+    <img id="presenceStudentPhoto" alt="" loading="lazy">
+    <div id="presenceStudentName"></div>
+  </div>
+  <div class="presence-choices">
+    <button class="presence-choice" data-destination="home">
+      <img id="presenceChoiceHome" alt="">
+      <span id="presenceLabelHome" class="presence-label">À la maison</span>
+    </button>
+    <button class="presence-choice" data-destination="school">
+      <img id="presenceChoiceSchool" alt="">
+      <span id="presenceLabelSchool" class="presence-label">À l’école</span>
+    </button>
+  </div>
+</div>
 
 <!-- Quick settings menu (toggle with 'M') -->
 <div id="menuMask" aria-hidden="true"></div>
@@ -328,6 +426,11 @@
     if (thumb) { const name = thumb.split('/').pop(); return IMG_BASE + name; }
     if (keyIfWeather) return IMG_BASE + keyIfWeather + '.png';
     return null;
+  }
+
+  function toAbsoluteUrlMaybe(url){
+    if (!url) return null;
+    try { return new URL(url, location.href).toString(); } catch { return url; }
   }
 
   function makeImg(srcCandidate, title){
@@ -517,16 +620,33 @@
 
   /* ---------- UI (chooser) ---------- */
   const chooser = document.getElementById('chooser');
+  const presencePrompt = document.getElementById('presencePrompt');
+  const presenceStudentImg = document.getElementById('presenceStudentPhoto');
+  const presenceStudentName = document.getElementById('presenceStudentName');
+  const presenceChoiceButtons = Array.from(document.querySelectorAll('.presence-choice'));
+  const presenceChoiceHomeImg = document.getElementById('presenceChoiceHome');
+  const presenceChoiceSchoolImg = document.getElementById('presenceChoiceSchool');
+  const presenceLabelHome = document.getElementById('presenceLabelHome');
+  const presenceLabelSchool = document.getElementById('presenceLabelSchool');
+
   let locked = false;
   let currentMode = 'video';
+
+  const DEFAULT_PRESENCE_IMAGES = {
+    home: `${IMG_BASE}accueilval/maison.png`,
+    school: `${IMG_BASE}accueilval/ecole.png`
+  };
+  let activePresence = null;
 
   function hideChooser(){
     chooser.style.display = 'none';
     chooser.setAttribute('aria-hidden','true');
     chooser.innerHTML = '';
     chooser.classList.remove('count-1','count-2','count-3','count-4');
-    pointerState.showingChoices = false;
-    applyPointerStyles();
+    if (!presencePrompt || presencePrompt.style.display === 'none'){
+      pointerState.showingChoices = false;
+      applyPointerStyles();
+    }
   }
   function applyLayoutClass(count){
     chooser.classList.remove('count-1','count-2','count-3','count-4');
@@ -534,6 +654,101 @@
     else if (count===2) chooser.classList.add('count-2');
     else if (count===3) chooser.classList.add('count-3');
     else if (count===4) chooser.classList.add('count-4');
+  }
+
+  function presencePlaceholder(name){
+    const label = name ? String(name) : 'Élève';
+    return `https://placehold.co/600x600?text=${encodeURIComponent(label)}`;
+  }
+
+  function setPresenceImage(img, src, fallback){
+    if (!img) return;
+    const safeFallback = fallback || src || presencePlaceholder('');
+    img.onerror = ()=>{ if (img.src !== safeFallback) img.src = safeFallback; };
+    img.src = src || safeFallback;
+  }
+
+  function hidePresencePrompt(){
+    if (!presencePrompt) return;
+    presencePrompt.style.display = 'none';
+    presencePrompt.setAttribute('aria-hidden','true');
+    presenceChoiceButtons.forEach(btn => cancelDwell(btn));
+    activePresence = null;
+    needMotionArm = false;
+    motionArmed = false;
+    if (!chooser || chooser.style.display === 'none' || chooser.style.display === ''){
+      pointerState.showingChoices = false;
+    } else {
+      pointerState.showingChoices = true;
+    }
+    applyPointerStyles();
+  }
+
+  function showPresencePrompt(payload){
+    if (!presencePrompt) return;
+    hidePresencePrompt();
+    const name = payload?.name || 'Élève';
+    activePresence = {
+      studentId: payload?.studentId || '',
+      name
+    };
+    const studentFallback = presencePlaceholder(name);
+    const studentSrc = toAbsoluteUrlMaybe(payload?.image) || studentFallback;
+    setPresenceImage(presenceStudentImg, studentSrc, studentFallback);
+    if (presenceStudentImg) presenceStudentImg.alt = `Portrait de ${name}`;
+    if (presenceStudentName) presenceStudentName.textContent = name;
+
+    const options = payload?.options || {};
+    const homeOpt = options.home || (Array.isArray(options) ? options[0] : null) || {};
+    const schoolOpt = options.school || (Array.isArray(options) ? options[1] : null) || {};
+    const homeLabel = homeOpt.label || 'À la maison';
+    const schoolLabel = schoolOpt.label || 'À l’école';
+
+    if (presenceLabelHome) presenceLabelHome.textContent = homeLabel;
+    if (presenceLabelSchool) presenceLabelSchool.textContent = schoolLabel;
+
+    setPresenceImage(presenceChoiceHomeImg, toAbsoluteUrlMaybe(homeOpt.image) || DEFAULT_PRESENCE_IMAGES.home, DEFAULT_PRESENCE_IMAGES.home);
+    if (presenceChoiceHomeImg) presenceChoiceHomeImg.alt = homeLabel;
+    setPresenceImage(presenceChoiceSchoolImg, toAbsoluteUrlMaybe(schoolOpt.image) || DEFAULT_PRESENCE_IMAGES.school, DEFAULT_PRESENCE_IMAGES.school);
+    if (presenceChoiceSchoolImg) presenceChoiceSchoolImg.alt = schoolLabel;
+
+    presenceChoiceButtons.forEach(btn => {
+      const dest = btn.getAttribute('data-destination');
+      const label = dest === 'school' ? schoolLabel : homeLabel;
+      btn.setAttribute('aria-label', label);
+    });
+
+    presencePrompt.style.display = 'grid';
+    presencePrompt.setAttribute('aria-hidden','false');
+
+    currentMode = 'presence';
+    needMotionArm = true;
+    motionArmed = false;
+    armOrigin.x = pointerTracker.x;
+    armOrigin.y = pointerTracker.y;
+    pointerState.showingChoices = true;
+    applyPointerStyles();
+    locked = false;
+  }
+
+  function confirmPresenceChoice(destination){
+    if (!activePresence || !destination) return;
+    if (locked) return;
+    const payload = {
+      type: 'presence_choice',
+      studentId: activePresence.studentId,
+      destination,
+      from: 'controller'
+    };
+    if (activePresence.name) payload.name = activePresence.name;
+    try {
+      if (window.__ws) window.__ws.send(JSON.stringify(payload));
+      locked = true;
+      pulseIndicator();
+      hidePresencePrompt();
+    } catch {
+      locked = false;
+    }
   }
 
   /* ===== Dwell helpers ===== */
@@ -587,6 +802,17 @@
     card.dataset.dwellActive = '0';
     setPointerDwell(false);
   }
+
+  presenceChoiceButtons.forEach(btn => {
+    const dest = btn.getAttribute('data-destination');
+    const onEnter = () => { if (!locked && motionArmed) beginDwell(btn, () => confirmPresenceChoice(dest)); };
+    const onLeave = () => cancelDwell(btn);
+    btn.addEventListener('pointerenter', onEnter);
+    btn.addEventListener('pointerleave', onLeave);
+    btn.addEventListener('mouseenter', onEnter);
+    btn.addEventListener('mouseleave', onLeave);
+    btn.addEventListener('click', (e)=>{ e.preventDefault(); confirmPresenceChoice(dest); });
+  });
 
   /* ---------- WebSocket with heartbeat + debounced reconnect ---------- */
   const room = qs.get('room') || 'test';
@@ -684,8 +910,21 @@
         return;
       }
 
+      if (msg.type === 'request_presence'){
+        locked = false;
+        hideChooser();
+        showPresencePrompt(msg);
+        return;
+      }
+
       if (msg.type === 'stop_video' || msg.type === 'stop_weather'){
         hideChooser(); locked = false; return;
+      }
+
+      if (msg.type === 'stop_presence'){
+        hidePresencePrompt();
+        locked = false;
+        return;
       }
     };
 
@@ -693,6 +932,8 @@
     ws.onclose = () => {
       setIndicator('off');
       hideChooser();
+      hidePresencePrompt();
+      locked = false;
       clearTimers();
       connecting = false;
       scheduleReconnect();
@@ -784,6 +1025,7 @@
   const _orig_showChooserFor = showChooserFor; // si déjà défini plus haut par hoisting
   function showChooserFor(options, mode){
     if (locked) return;
+    hidePresencePrompt();
     currentMode = mode || 'video';
 
     // Armer l’anti-immobilité avant d’afficher
