@@ -274,13 +274,14 @@
 }
 .transfer-label{
   display:flex;
+  flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap: clamp(6px, 1.2vmin, 12px);
+  gap: clamp(6px, 1.6vmin, 16px);
 }
 .transfer-icon{
-  width: clamp(26px, 4vh, 42px);
-  height: auto;
+  height: clamp(120px, 20vh, 220px);
+  width: auto;
   flex: 0 0 auto;
 }
 .transfer-text{ display:inline-block; }
@@ -707,24 +708,11 @@
 
         <div class="transfer-legend">
           <span class="transfer-label">
-            <svg class="transfer-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
-              <polygon points="32 10 12 28 52 28" fill="#F7D794" stroke="#294936" stroke-width="4" stroke-linejoin="round"/>
-              <rect x="18" y="28" width="28" height="24" fill="#FFECD2" stroke="#294936" stroke-width="4" rx="3"/>
-              <rect x="22" y="34" width="8" height="8" fill="#FFFFFF" stroke="#294936" stroke-width="3" rx="1"/>
-              <rect x="34" y="34" width="8" height="8" fill="#FFFFFF" stroke="#294936" stroke-width="3" rx="1"/>
-              <rect x="28" y="38" width="8" height="14" fill="#294936" rx="2"/>
-            </svg>
+            <img class="transfer-icon" src="../../images/pictos/teddybear.png" alt="Picto maison" loading="lazy" />
             <span class="transfer-text">À la maison</span>
           </span>
           <span class="transfer-label">
-            <svg class="transfer-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
-              <polygon points="32 8 12 24 52 24" fill="#ADF1D2" stroke="#294936" stroke-width="4" stroke-linejoin="round"/>
-              <rect x="20" y="24" width="24" height="28" fill="#F2F6F9" stroke="#294936" stroke-width="4" rx="3"/>
-              <rect x="26" y="32" width="12" height="20" fill="#D36135" rx="2"/>
-              <circle cx="26" cy="40" r="4" fill="#FFFFFF" stroke="#294936" stroke-width="3"/>
-              <circle cx="38" cy="40" r="4" fill="#FFFFFF" stroke="#294936" stroke-width="3"/>
-              <path d="M32 16V8L42 12L32 16Z" fill="#D36135" stroke="#294936" stroke-width="3" stroke-linejoin="round"/>
-            </svg>
+            <img class="transfer-icon" src="../../images/pictos/schoolyard.png" alt="Picto école" loading="lazy" />
             <span class="transfer-text">À l’école</span>
           </span>
         </div>
@@ -766,17 +754,17 @@
   const room = qs.get('room') || 'test';
   const WS_URL = `wss://ws-relay.gui98789.workers.dev/ws/${encodeURIComponent(room)}`;
   const deckTitle = 'Routine matinale';
-  // 6 photos affichées en bande au-dessus des bacs (remplace les chemins par les vôtres)
+  // 6 photos affichées en bande au-dessus des bacs
   const PRESENCE_PHOTOS = [
-    '../../images/arthur.jpg',
-    '../../images/presences/child2.jpg',
-    '../../images/presences/child3.jpg',
-    '../../images/presences/child4.jpg',
-    '../../images/presences/child5.jpg',
-    '../../images/presences/child6.jpg'
+    { name: 'Olivier', src: '../../images/accueilval/olivier.png' },
+    { name: 'Neythem', src: '../../images/accueilval/neythem.png' },
+    { name: 'Hassan', src: '../../images/accueilval/hassan.png' },
+    { name: 'Carlos', src: '../../images/accueilval/carlos.png' },
+    { name: 'Jayden', src: '../../images/accueilval/jayden.png' },
+    { name: 'Charles', src: '../../images/accueilval/charles.png' }
   ];
   // Option de secours si vous n’avez pas encore les fichiers
-  const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURIComponent('Élève '+(i+1))}`;
+  const FALLBACK_PHOTO = (label)=> `https://placehold.co/240x240?text=${encodeURIComponent(label)}`;
 
 
   // Directory for day-of-week images
@@ -1545,22 +1533,39 @@
   if (!strip) return;
   strip.innerHTML = '';
 
-  const srcs = (Array.isArray(PRESENCE_PHOTOS) && PRESENCE_PHOTOS.length)
+  const entries = (Array.isArray(PRESENCE_PHOTOS) && PRESENCE_PHOTOS.length)
     ? PRESENCE_PHOTOS.slice(0, 6)
-    : Array.from({length:6}, (_,i)=>FALLBACK_PHOTO(i));
+    : Array.from({length:6}, (_,i)=>({
+        name: `Élève ${i+1}`,
+        src: FALLBACK_PHOTO(`Élève ${i+1}`)
+      }));
 
-  srcs.forEach((src, i)=>{
+  entries.forEach((entry, i)=>{
+    const label = (entry && typeof entry === 'object' && 'name' in entry)
+      ? entry.name
+      : `Élève ${i+1}`;
+    const primarySrc = (entry && typeof entry === 'object' && 'src' in entry)
+      ? entry.src
+      : (typeof entry === 'string' ? entry : null);
+
     const btn = document.createElement('button');
     btn.className = 'photo-card draggable';
     btn.setAttribute('draggable','true');
     btn.dataset.type = 'photo';
     btn.dataset.name = `student-${i}`;
+    if (label) btn.dataset.label = label;
 
     const img = new Image();
     img.loading = 'lazy';
-    img.alt = `Élève ${i+1}`;
-    img.src = src;
-    img.onerror = ()=>{ img.src = FALLBACK_PHOTO(i); };
+    img.alt = label;
+    const fallbackSrc = FALLBACK_PHOTO(label || `Élève ${i+1}`);
+    img.src = primarySrc || fallbackSrc;
+    img.onerror = ()=>{
+      if (img.src !== fallbackSrc) {
+        img.onerror = null;
+        img.src = fallbackSrc;
+      }
+    };
     btn.appendChild(img);
 
     // DnD behavior
