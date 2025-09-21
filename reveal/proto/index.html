@@ -28,6 +28,8 @@
       --bottom-ui: var(--ui-reserve);
 
       --photo-card-size: clamp(96px, 15vh, 220px);
+      --bin-gap: clamp(12px, 2.4vmin, 24px);
+      --bin-pad: clamp(12px, 2.8vmin, 26px);
     }
 
     *,*::before,*::after{ box-sizing:border-box; }
@@ -146,10 +148,11 @@
     /* ===== Drag & transfer ===== */
     .transfer-wrap{
       display:grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, max-content);
+      justify-content:center;
       gap: var(--grid-gap);
       align-items:start;
-      justify-items:stretch;
+      justify-items:center;
       padding-bottom: calc(var(--content-inset) * 0.5);
       column-gap: clamp(24px, 4vmin, 60px);
       row-gap: clamp(16px, 3vmin, 40px);
@@ -159,17 +162,19 @@
     .bin{
       border: 3px solid color-mix(in srgb, var(--bin-accent, #294936) 18%, var(--card-br));
       border-radius: 16px;
-      padding: clamp(6px, 1.4vmin, 14px);
       background:#fff;
       box-shadow: var(--shadow);
       position: relative;
       overflow: hidden;
-      display: grid;
-      place-items: start center;
-      align-content: start;
     }
     .transfer-wrap > .bin{
-      width:100%;
+      width:auto;
+      padding: var(--bin-pad);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-width: calc(3 * var(--photo-card-size) + 2 * var(--bin-gap));
+      min-height: calc(2 * var(--photo-card-size) + var(--bin-gap));
     }
     .bin.drag-over{
       border: 3px solid color-mix(in srgb, var(--bin-accent, #294936) 65%, var(--card-br));
@@ -179,11 +184,15 @@
     }
     #drag-transfer .bin-grid{
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 18vmin, 220px), 1fr));
-      gap: var(--grid-gap);
+      grid-template-columns: repeat(3, var(--photo-card-size));
+      grid-template-rows: repeat(2, var(--photo-card-size));
+      gap: var(--bin-gap);
       justify-items: center;
-      align-items: start;
-      justify-self: center;
+      align-items: center;
+      justify-content: center;
+      align-content: start;
+      width: calc(3 * var(--photo-card-size) + 2 * var(--bin-gap));
+      min-height: calc(2 * var(--photo-card-size) + var(--bin-gap));
     }
 
     .draggable{ background: transparent; border: none; padding: 0; display:flex; align-items:center; justify-content:center; cursor: grab; border-radius: 14px; }
@@ -757,19 +766,17 @@
   const room = qs.get('room') || 'test';
   const WS_URL = `wss://ws-relay.gui98789.workers.dev/ws/${encodeURIComponent(room)}`;
   const deckTitle = 'Routine matinale';
-  const PICTO_SRC = '../../images/pictos/';
-  const TRANSFER_PICTOS = ['apple.png','banana.png','basketball.png','boat.png','book.png','brush.png','bowl.png','broccoli.png'];
   // 6 photos affichées en bande au-dessus des bacs (remplace les chemins par les vôtres)
-const PRESENCE_PHOTOS = [
-  '../../images/arthur.jpg',
-  '../../images/presences/child2.jpg',
-  '../../images/presences/child3.jpg',
-  '../../images/presences/child4.jpg',
-  '../../images/presences/child5.jpg',
-  '../../images/presences/child6.jpg'
-];
-// Option de secours si vous n’avez pas encore les fichiers
-const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURIComponent('Élève '+(i+1))}`;
+  const PRESENCE_PHOTOS = [
+    '../../images/arthur.jpg',
+    '../../images/presences/child2.jpg',
+    '../../images/presences/child3.jpg',
+    '../../images/presences/child4.jpg',
+    '../../images/presences/child5.jpg',
+    '../../images/presences/child6.jpg'
+  ];
+  // Option de secours si vous n’avez pas encore les fichiers
+  const FALLBACK_PHOTO = (i)=> `https://placehold.co/240x240?text=${encodeURIComponent('Élève '+(i+1))}`;
 
 
   // Directory for day-of-week images
@@ -1614,33 +1621,9 @@ function setupTransfer(){
   const innerLeft   = ensureInner(left);
   const innerRight  = ensureInner(right);
 
-  // Seed pictos into the LEFT bin
+  // Les bacs commencent vides : seules les photos peuvent être déplacées depuis la bande.
   innerLeft.innerHTML = '';
   innerRight.innerHTML = '';
-  function createItem(name){
-    const btn = document.createElement('button');
-    btn.className = 'draggable';
-    btn.setAttribute('draggable','true');
-    btn.setAttribute('aria-label', name.replace('.png',''));
-    btn.dataset.name = name;
-
-    const img = new Image();
-    img.src = PICTO_SRC + name;
-    img.alt = name.replace('.png','');
-    btn.appendChild(img);
-
-    btn.addEventListener('dragstart', (e)=>{
-      e.dataTransfer.setData('text/plain', name);
-      e.dataTransfer.effectAllowed = 'move';
-      btn.classList.add('dragging');
-    });
-    btn.addEventListener('dragend', ()=>{
-      btn.classList.remove('dragging');
-      scheduleScale();
-    });
-    return btn;
-  }
-  TRANSFER_PICTOS.forEach(n => innerLeft.appendChild(createItem(n)));
 
   // Generic DnD binding for the two large bins
   function bindDnD(bin, inner){
@@ -1656,21 +1639,14 @@ function setupTransfer(){
   bindDnD(left,  innerLeft);
   bindDnD(right, innerRight);
 
-  // Reset: photos back to strip, pictos back to left in original order
+  // Reset: ramène toutes les photos dans la bande et vide les bacs
   resetBtn?.addEventListener('click', ()=>{
     // photos
     [...document.querySelectorAll('#bin-left  .draggable[data-type="photo"]'),
      ...document.querySelectorAll('#bin-right .draggable[data-type="photo"]')].forEach(el => strip.appendChild(el));
 
-    // pictos
-    const movedPictos = Array.from(document.querySelectorAll('#bin-right .draggable:not([data-type="photo"])'));
-    movedPictos.forEach(el => innerLeft.appendChild(el));
-
-    const order = new Map(TRANSFER_PICTOS.map((n,i)=>[n,i]));
-    const pictosLeft = Array.from(innerLeft.querySelectorAll('.draggable:not([data-type="photo"])'));
-    pictosLeft.sort((a,b)=> (order.get(a.dataset.name)||0) - (order.get(b.dataset.name)||0));
-    pictosLeft.forEach(el => innerLeft.appendChild(el));
-
+    innerLeft.innerHTML = '';
+    innerRight.innerHTML = '';
     scheduleScale();
   });
 
