@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cherry Blossom Cut — Background Image + Katana Cursor (Mirrored)</title>
+  <title>Cherry Blossom Cut — Tornado Swirl (Fly-Off) Intro</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -48,23 +48,49 @@
     const IMG_SRC = "../../images/samurai/cherryblossom.png";       // petal image
     const BG_SRC  = "../../images/samurai/cherryblossombg.png";     // background image
     const SLASH_SOUND = "../../sounds/blade.mp3";
-    const KATANA_SRC = "../../images/samurai/katana.png";   // custom cursor source
+    const KATANA_SRC  = "../../images/samurai/katana.png";
+    const SONG_SRC    = "../../songs/samurai/cherryblossomsong2.mp3"; // << added bg song
 
     // Cursor limits and hotspot (in ORIGINAL image pixels)
-    const CURSOR_MAX_PX = 124; // longest side; keeps browsers happy; aspect ratio preserved
-    const HOTSPOT_ORIG = { x: 12, y: 28 }; // adjust if your katana tip is elsewhere
+    const CURSOR_MAX_PX = 124;
+    const HOTSPOT_ORIG = { x: 12, y: 28 };
 
-    // Larger blossoms, fewer on screen
-    const SPAWN_EVERY_MS = 1400;
-    const FALL_SPEED_MIN = 40;
-    const FALL_SPEED_MAX = 95;
+    // Play (normal game) settings
+    const SPAWN_EVERY_MS   = 1400;
+    const FALL_SPEED_MIN   = 40;
+    const FALL_SPEED_MAX   = 95;
     const BLOSSOM_SIZE_MIN = 72 * 3;
     const BLOSSOM_SIZE_MAX = 138 * 3;
     const HOVER_CUT_RADIUS = 52;
     const SHARD_SPREAD_SPEED = 190;
-    const SHARD_ROT_SPEED = 1.2;
-    const SHARD_FADE_TIME = 0.85;
-    const MAX_FALLING = 5;
+    const SHARD_ROT_SPEED    = 1.2;
+    const SHARD_FADE_TIME    = 0.85;
+    const MAX_FALLING        = 5;
+
+    // Intro (tornado swirl) settings — fly-off
+    const INTRO_DURATION_MS = 5000;     // 5s total
+    const SWIRL_PETALS      = 50;       // keep it smooth
+    const SWIRL_SIZE_MIN    = 40;
+    const SWIRL_SIZE_MAX    = 100;
+    const SWIRL_RAD_MIN     = 20;       // starting radius
+    const SWIRL_RAD_MAX     = 220;
+    const SWIRL_DR_MIN      = 16;       // baseline radial expansion (px/s)
+    const SWIRL_DR_MAX      = 42;
+    const SWIRL_DA_MIN      = 2.2;      // angular vel (rad/s)
+    const SWIRL_DA_MAX      = 4.2;
+    const SWIRL_SPIN_MIN    = -1.6;     // self-rotation (rad/s)
+    const SWIRL_SPIN_MAX    =  1.6;
+    const SWIRL_CENTER_DRIFT_Y = 12;    // gentle downward drift (px/s)
+
+    // Strong outward burst controls
+    const BURST_START_T     = 0.60;     // fraction of intro when burst begins
+    const BURST_MAX_OUT_PX  = 1800;     // additional outward speed at peak (px/s)
+    const BURST_SPINUP_MUL  = 1.6;      // multiplies angular velocity during burst
+    const FINAL_BLAST_MS    = 350;      // last ms window for a final kick
+    const FINAL_BLAST_OUT   = 2200;     // extra outward speed (px/s) in last window
+
+    // Off-screen margin for culling
+    const OFF_MARGIN = 320;
 
     /* =======================
        SETUP
@@ -74,16 +100,20 @@
     let W = canvas.width  = window.innerWidth;
     let H = canvas.height = window.innerHeight;
 
+    let resizeRAF = 0;
     window.addEventListener('resize', () => {
-      W = canvas.width  = window.innerWidth;
-      H = canvas.height = window.innerHeight;
+      cancelAnimationFrame(resizeRAF);
+      resizeRAF = requestAnimationFrame(() => {
+        W = canvas.width  = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+      });
     });
 
-    // Images
+    // Assets
     const img = new Image(); img.src = IMG_SRC;
     const bgImg = new Image(); bgImg.src = BG_SRC;
 
-    // preload slash sound
+    // Audio
     const slashAudio = new Audio(SLASH_SOUND);
     slashAudio.volume = 0.6;
     function playSlash() {
@@ -92,10 +122,15 @@
       s.play().catch(()=>{});
     }
 
-    // pointer + movement tracking for cursor flip
+    // Background music (added)
+    const bgSong = new Audio(SONG_SRC);
+    bgSong.volume = 0.75;   // 75%
+    bgSong.loop = true;
+
+    // Pointer / cursor flip
     const pointer = { x: -9999, y: -9999, prevX: -9999, inside: false };
-    const MOVE_THRESH = 2; // px; prevents flicker when jittering
-    let cursorOrient = 'left'; // 'left' by default
+    const MOVE_THRESH = 2;
+    let cursorOrient = 'left';
 
     canvas.addEventListener('pointermove', e => {
       const rect = canvas.getBoundingClientRect();
@@ -105,15 +140,9 @@
 
       pointer.x = x; pointer.y = y; pointer.inside = true;
 
-      // Flip cursor when moving right vs left
-      if (started && katanaReady) {
-        if (dx > MOVE_THRESH && cursorOrient !== 'right') {
-          cursorOrient = 'right';
-          applyKatanaCursor();
-        } else if (dx < -MOVE_THRESH && cursorOrient !== 'left') {
-          cursorOrient = 'left';
-          applyKatanaCursor();
-        }
+      if (gameState === 'play' && katanaReady) {
+        if (dx > MOVE_THRESH && cursorOrient !== 'right') { cursorOrient = 'right'; applyKatanaCursor(); }
+        else if (dx < -MOVE_THRESH && cursorOrient !== 'left') { cursorOrient = 'left'; applyKatanaCursor(); }
       }
       pointer.prevX = x;
     });
@@ -125,7 +154,7 @@
     const nowSec = () => performance.now()/1000;
 
     /* =======================
-       KATANA CURSOR (left/right, aspect preserved)
+       KATANA CURSOR
     ======================= */
     let katanaReady = false;
     let katanaLeft = null;   // {url, hx, hy}
@@ -134,27 +163,23 @@
     const katanaImg = new Image();
     katanaImg.onload = () => {
       const iw = katanaImg.width, ih = katanaImg.height;
-      const scale = Math.min(1, CURSOR_MAX_PX / Math.max(iw, ih)); // keeps aspect ratio
+      const scale = Math.min(1, CURSOR_MAX_PX / Math.max(iw, ih));
       const dw = Math.round(iw * scale);
       const dh = Math.round(ih * scale);
 
-      // draw LEFT-facing (original) at native aspect
       const leftCanvas = document.createElement('canvas');
       leftCanvas.width = dw; leftCanvas.height = dh;
       const lctx = leftCanvas.getContext('2d');
       lctx.imageSmoothingEnabled = true;
       lctx.drawImage(katanaImg, 0, 0, dw, dh);
 
-      // draw RIGHT-facing (mirrored) at native aspect
       const rightCanvas = document.createElement('canvas');
       rightCanvas.width = dw; rightCanvas.height = dh;
       const rctx = rightCanvas.getContext('2d');
       rctx.imageSmoothingEnabled = true;
-      rctx.translate(dw, 0);
-      rctx.scale(-1, 1);
+      rctx.translate(dw, 0); rctx.scale(-1, 1);
       rctx.drawImage(katanaImg, 0, 0, dw, dh);
 
-      // compute hotspots (mirror X for right)
       const hxLeft  = Math.max(0, Math.min(dw - 1, Math.round(HOTSPOT_ORIG.x * scale)));
       const hyLeft  = Math.max(0, Math.min(dh - 1, Math.round(HOTSPOT_ORIG.y * scale)));
       const hxRight = (dw - 1) - hxLeft;
@@ -200,26 +225,126 @@
       const rightRect = { sx: img.width/2, sy: 0, sw: img.width/2, sh: img.height };
       const tw = b.w, th = b.h, tBorn = nowSec();
       shards.push({clip:leftRect,x:b.x-tw/4,y:b.y,w:tw/2,h:th,angle:b.angle,vx:-SHARD_SPREAD_SPEED*0.75,vy:-SHARD_SPREAD_SPEED*0.25,rot:-SHARD_ROT_SPEED,born:tBorn,life:SHARD_FADE_TIME});
-      shards.push({clip:rightRect,x:b.x+tw/4,y:b.y,w:tw/2,h:th,angle:b.angle,vx:SHARD_SPREAD_SPEED*0.75,vy:-SHARD_SPREAD_SPEED*0.25,rot:SHARD_ROT_SPEED,born:tBorn,life:SHARD_FADE_TIME});
+      shards.push({clip:rightRect,x:b.x+tw/4,y:b.y,w:tw/2,h:th,angle:b.angle,vx: SHARD_SPREAD_SPEED*0.75,vy:-SHARD_SPREAD_SPEED*0.25,rot: SHARD_ROT_SPEED,born:tBorn,life: SHARD_FADE_TIME});
       b.cut = true;
     }
 
-    let lastT = performance.now(), spawnTimer = 0, started = false;
+    /* =======================
+       INTRO: TORNADO SWIRL (FLY-OFF)
+    ======================= */
+    let gameState = 'idle';  // 'idle' | 'intro' | 'play'
+    let introStartMs = 0;
+
+    let swirlCenter = { x: 0, y: 0 };
+    let swirlPetals = []; // {r,a,w,h,spin,dr,da,angle,done}
+
+    function smoothstep01(t){ return t*t*(3-2*t); } // 0..1 -> smooth 0..1
+
+    function initSwirl() {
+      swirlCenter.x = W * 0.5;
+      swirlCenter.y = H * 0.55;
+      swirlPetals = [];
+
+      for (let i = 0; i < SWIRL_PETALS; i++) {
+        const r  = rand(SWIRL_RAD_MIN, SWIRL_RAD_MAX);
+        const a  = rand(0, Math.PI * 2);
+        const size = rand(SWIRL_SIZE_MIN, SWIRL_SIZE_MAX);
+        const aspect = (img.width || 1) / (img.height || 1);
+        const w = aspect >= 1 ? size*aspect : size;
+        const h = aspect >= 1 ? size : size/aspect;
+
+        swirlPetals.push({
+          r, a, w, h,
+          spin: rand(SWIRL_SPIN_MIN, SWIRL_SPIN_MAX),              // self-rotation
+          dr:   rand(SWIRL_DR_MIN, SWIRL_DR_MAX),                  // base radial expansion
+          da:   rand(SWIRL_DA_MIN, SWIRL_DA_MAX) * (Math.random()<0.5?-1:1), // angular velocity
+          angle: rand(-Math.PI, Math.PI),
+          done: false
+        });
+      }
+    }
+
+    function updateSwirl(dt, t01) {
+      // gentle vertical drift of the whole column
+      swirlCenter.y += SWIRL_CENTER_DRIFT_Y * dt;
+
+      // ramped burst strength 0..1 after BURST_START_T
+      const burstPhase = Math.max(0, (t01 - BURST_START_T) / (1 - BURST_START_T));
+      const burst = smoothstep01(burstPhase); // smooth ramp-up
+
+      // final blast window
+      const remainingMs = INTRO_DURATION_MS * (1 - t01);
+      const finalBlast = remainingMs <= FINAL_BLAST_MS ? (1 - remainingMs / FINAL_BLAST_MS) : 0;
+
+      for (const p of swirlPetals) {
+        if (p.done) continue;
+
+        // spin-up during burst (tighter/twitchier swirl)
+        const daNow = p.da * (1 + (BURST_SPINUP_MUL - 1) * burst);
+
+        // strong outward push during burst + final blast
+        const outward = p.dr + (BURST_MAX_OUT_PX * burst) + (FINAL_BLAST_OUT * finalBlast);
+
+        // integrate polar motion
+        p.a     += daNow * dt;     // orbit
+        p.r     += outward * dt;   // spiral out faster and then explode
+        p.angle += p.spin * dt;    // petal self-rotation
+
+        // compute position for off-screen test
+        const x = swirlCenter.x + Math.cos(p.a) * p.r;
+        const y = swirlCenter.y + Math.sin(p.a) * p.r;
+
+        if (x < -OFF_MARGIN || x > W + OFF_MARGIN || y < -OFF_MARGIN || y > H + OFF_MARGIN) {
+          p.done = true; // out of view; stop drawing
+        }
+      }
+    }
+
+    function drawSwirl() {
+      drawBackgroundImage();
+      for (const p of swirlPetals) {
+        if (p.done) continue;
+        const x = swirlCenter.x + Math.cos(p.a) * p.r;
+        const y = swirlCenter.y + Math.sin(p.a) * p.r;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(p.angle);
+        ctx.drawImage(img, -p.w/2, -p.h/2, p.w, p.h);
+        ctx.restore();
+      }
+    }
+
+    /* =======================
+       GAME LOOP STATE
+    ======================= */
+    let lastT = performance.now(), spawnTimer = 0;
 
     function tick(tMs) {
-      if (!started) return;
       const dt = Math.min(0.033, (tMs - lastT) / 1000);
       lastT = tMs;
 
-      spawnTimer += dt * 1000;
-      if (spawnTimer > SPAWN_EVERY_MS && blossoms.length < MAX_FALLING) {
-        spawnTimer = 0;
-        spawnBlossom();
-      }
+      if (gameState === 'intro') {
+        const elapsed = tMs - introStartMs;
+        const t01 = Math.min(1, Math.max(0, elapsed / INTRO_DURATION_MS));
+        updateSwirl(dt, t01);
+        drawSwirl();
 
-      updateBlossoms(dt);
-      updateShards(dt);
-      render();
+        if (elapsed >= INTRO_DURATION_MS) {
+          gameState = 'play';
+          // switch to katana cursor now
+          if (katanaReady) applyKatanaCursor();
+          spawnTimer = SPAWN_EVERY_MS + 1; // seed first blossom soon
+        }
+      } else if (gameState === 'play') {
+        spawnTimer += dt * 1000;
+        if (spawnTimer > SPAWN_EVERY_MS && blossoms.length < MAX_FALLING) {
+          spawnTimer = 0;
+          spawnBlossom();
+        }
+        updateBlossoms(dt);
+        updateShards(dt);
+        render();
+      }
 
       requestAnimationFrame(tick);
     }
@@ -230,7 +355,7 @@
     function drawBackgroundImage() {
       if (bgImg.complete && bgImg.naturalWidth > 0) {
         const iw = bgImg.width, ih = bgImg.height;
-        const scale = Math.max(W / iw, H / ih); // cover (fill without stretch)
+        const scale = Math.max(W / iw, H / ih); // cover
         const dw = iw * scale, dh = ih * scale;
         const dx = (W - dw) * 0.5;
         const dy = (H - dh) * 0.5;
@@ -243,7 +368,7 @@
     }
 
     /* =======================
-       GAME RENDER/UPDATE
+       PLAY RENDER/UPDATE
     ======================= */
     function updateBlossoms(dt) {
       for (let i = blossoms.length-1; i>=0; i--) {
@@ -298,15 +423,17 @@
     startBtn.addEventListener('click', async () => {
       try { await enterFullscreen(); } catch(e) {}
       startOverlay.style.display = 'none';
-      started = true;
 
-      // Apply initial cursor (left by default)
-      if (katanaReady) applyKatanaCursor();
-      else {
-        katanaImg.onload = () => { katanaImg.onload = null; applyKatanaCursor(); };
-      }
+      // START MUSIC (added)
+      try { bgSong.currentTime = 0; bgSong.play(); } catch(e) {}
+
+      // Start tornado swirl; katana appears when play begins
+      gameState = 'intro';
+      introStartMs = performance.now();
+      initSwirl();
 
       lastT = performance.now();
+      // ensure assets are ready before loop
       if (img.complete && bgImg.complete) requestAnimationFrame(tick);
       else {
         let pending = 0;
