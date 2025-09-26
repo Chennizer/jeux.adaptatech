@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Samurai Focus — Ki Gathering (Eye-gaze)</title>
+  <title>Samurai Focus — Ki Ball (Opaque + Small Halo + Crescendo)</title>
   <style>
-    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#000; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#000;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     #game { display:block; width:100vw; height:100vh; cursor: crosshair; background:#000; }
-    #startOverlay { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,0.75); z-index:10; }
-    #startBtn{ padding:14px 22px; border:2px solid #6ad1c9; color:#6ad1c9; background:#000; border-radius:12px; font-size:18px; font-weight:700; box-shadow:0 6px 24px rgba(0,0,0,.25); cursor:pointer; }
+    #startOverlay { position:fixed; inset:0; display:grid; place-items:center;
+      background:rgba(0,0,0,0.75); z-index:10; }
+    #startBtn { padding:14px 22px; border:2px solid #6ad1c9; color:#6ad1c9; background:#000;
+      border-radius:12px; font-size:18px; font-weight:700; box-shadow:0 6px 24px rgba(0,0,0,.25); cursor:pointer; }
     #startBtn:active{ transform:translateY(1px); }
   </style>
 </head>
@@ -19,40 +22,54 @@
   <script>
   (() => {
     /* =======================
+       PLACEHOLDER ASSETS
+    ======================= */
+    const BG_SRC     = "../../images/samurai/lampbg.png";
+    const PETAL_SRC  = "../../images/samurai/cherryblossom.png";
+    const TARGET_SRC = "../../images/samurai/litlamp1.png";
+    const SFX_RELEASE= "../../sounds/blade.mp3";
+    const SFX_IMPACT = "../../sounds/gong.mp3";
+
+    /* =======================
        TUNABLES
     ======================= */
-    const BG_SRC         = "../../images/samurai/meditationbg.png";      // calm temple/night garden
-    const PETAL_SRC      = "../../images/samurai/cherryblossom.png";     // reuse petal
-    const GONG_SOUND     = "../../sounds/gong.mp3";
-    const BREATH_IN_SND  = "../../sounds/breath_in.mp3";
-    const BREATH_OUT_SND = "../../sounds/breath_out.mp3";
+    // Dwell: 100px → 200px over 2s
+    const MIN_DIAMETER = 100;
+    const MAX_DIAMETER = 200;
+    const DWELL_MS     = 2000;
+    const MAX_JITTER_PX= 26;
+    const DECAY_PER_SEC= 0.5;
+    const ENTRY_GRACE_MS = 200;
 
-    // Focus ring + dwell logic
-    const FOCUS_RADIUS_PCT     = 0.14;  // radius of target circle as fraction of min(W,H)
-    const MAX_JITTER_PX        = 26;    // allowed movement per sample while charging
-    const REQUIRED_DWELL_MS    = 3800;  // continuous stable time to reach 100%
-    const DECAY_PER_SEC        = 0.35;  // charge decay fraction when outside or too jittery
-    const ENTRY_GRACE_MS       = 250;   // brief grace when entering focus zone
+    // Launch (ball flies; no ray)
+    const LAUNCH_SPEED_X = 950;
+    const LAUNCH_SPEED_Y = -120;
+    const GRAVITY_Y      = 520;
 
-    // Breathing guide ring
-    const BREATH_IN_SEC  = 3.0;
-    const BREATH_OUT_SEC = 3.0;
-    const BREATH_PAUSE   = 0.6;
+    // Trail (faint echoes; main ball stays opaque)
+    const TRAIL_SEGMENTS = 14;
+    const TRAIL_ALPHA    = 0.10;
 
-    // Ambient petals
-    const AMBIENT_PETALS = 28;
-    const PETAL_SIZE_MIN = 34, PETAL_SIZE_MAX = 88;
-    const PETAL_VX_MIN = -15, PETAL_VX_MAX = 15;
-    const PETAL_VY_MIN = 10,  PETAL_VY_MAX = 24;
-    const PETAL_ROT_MIN = -0.6, PETAL_ROT_MAX = 0.6;
+    // Ball look (solid + small halo)
+    const BALL_RGB       = "120,220,210";
+    const RIM_ALPHA      = 0.15;
+    const HALO_INNER_MULT = 1.00;
+    const HALO_OUTER_MULT = 1.12; // ~6% of diameter outside the edge
+    const HALO_ALPHA      = 0.25;
+    const HALO_TRAIL_ALPHA= 0.18;
 
-    // Burst at completion
-    const BURST_PETALS = 140;
-    const BURST_SPEED  = 360;
-    const BURST_LIFE   = 1.6;  // seconds
+    // Local jitter only
+    const ORB_SHAKE_MAX  = 8;
+    const ORB_SHAKE_FX   = 23, ORB_SHAKE_FY = 17;
 
-    // HUD
-    const METER_WIDTH = 320, METER_HEIGHT = 14;
+    // Target & impact/reset
+    const TARGET_MIN_X_FRAC = 0.62, TARGET_MAX_X_FRAC = 0.82, TARGET_Y_FRAC = 0.56;
+    const RESET_DELAY_MS    = 1400;
+    const IMPACT_PETALS     = 150;
+    const IMPACT_SPEED      = 420;
+    const IMPACT_LIFE       = 1.8;
+    const SHOCKWAVE_MAX_R   = 260;
+    const FLASH_MAX_ALPHA   = 0.75;
 
     /* =======================
        SETUP
@@ -62,323 +79,397 @@
     let W = canvas.width  = window.innerWidth;
     let H = canvas.height = window.innerHeight;
 
+    const bgImg     = new Image(); bgImg.src = BG_SRC;
+    const petalImg  = new Image(); petalImg.src = PETAL_SRC;
+    const targetImg = new Image(); targetImg.src = TARGET_SRC;
+
+    const sfxRelease= new Audio(SFX_RELEASE); sfxRelease.volume = 0.7;
+    const sfxImpact = new Audio(SFX_IMPACT);  sfxImpact.volume  = 0.75;
+    function play(a){ try{ a.currentTime = 0; a.play(); }catch(_){} }
+
     function resize(){
       W = canvas.width  = window.innerWidth;
       H = canvas.height = window.innerHeight;
-      focusCx = W/2; focusCy = H*0.54;
-      focusR  = Math.min(W,H) * FOCUS_RADIUS_PCT;
+      focusCx = W*0.28; focusCy = H*0.64; // “hands” position
+      placeTarget();
     }
     window.addEventListener('resize', resize);
 
-    const bgImg = new Image();    bgImg.src = BG_SRC;
-    const petalImg = new Image(); petalImg.src = PETAL_SRC;
-
-    // Audio
-    const gong      = new Audio(GONG_SOUND);      gong.volume = 0.7;
-    const breathIn  = new Audio(BREATH_IN_SND);   breathIn.volume = 0.35;
-    const breathOut = new Audio(BREATH_OUT_SND);  breathOut.volume = 0.35;
-
-    function playOnce(aud){ try {aud.currentTime = 0; aud.play();} catch(_){} }
-    function clonePlay(src, vol=1){
-      const a = new Audio(src); a.volume = vol; a.play().catch(()=>{});
-    }
-
-    // Pointer / gaze
-    const pointer = { x:-9999, y:-9999, px:-9999, py:-9999, inside:false, moved:0 };
+    // Pointer / eye-gaze
+    const pointer = { x:-9999, y:-9999, px:-9999, py:-9999, moved:0, inside:false };
     canvas.addEventListener('pointermove', e=>{
       const r = canvas.getBoundingClientRect();
       const x = (e.clientX - r.left) * (canvas.width / r.width);
-      const y = (e.clientY - r.top)  * (canvas.height / r.height);
+      const y = (e.clientY - r.top ) * (canvas.height / r.height);
       if (pointer.px !== -9999) pointer.moved = Math.hypot(x-pointer.px, y-pointer.py);
       pointer.x=x; pointer.y=y; pointer.px=x; pointer.py=y; pointer.inside=true;
     });
-    canvas.addEventListener('pointerleave', ()=>{ pointer.inside=false; });
+    canvas.addEventListener('pointerleave', ()=> pointer.inside=false);
+
+    const rand = (a,b)=>a+Math.random()*(b-a);
+
+    /* =======================
+       AUDIO (WebAudio) — charging hum with crescendo
+    ======================= */
+    let audioCtx=null, masterGain=null;
+    let chargeGain=null, filter=null, osc1=null, osc2=null, osc1Gain=null, osc2Gain=null;
+
+    function setupAudio(){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain(); masterGain.gain.value = 0.9; masterGain.connect(audioCtx.destination);
+
+      // Two oscillators blended, through a lowpass filter → charging tone
+      osc1 = audioCtx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = 90;
+      osc2 = audioCtx.createOscillator(); osc2.type = 'triangle';  osc2.frequency.value = 180;
+
+      osc1Gain = audioCtx.createGain(); osc1Gain.gain.value = 0.35;
+      osc2Gain = audioCtx.createGain(); osc2Gain.gain.value = 0.25;
+
+      filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 600; filter.Q.value = 0.7;
+
+      chargeGain = audioCtx.createGain(); chargeGain.gain.value = 0.0; // we’ll ramp this with charge
+
+      osc1.connect(osc1Gain); osc2.connect(osc2Gain);
+      osc1Gain.connect(filter); osc2Gain.connect(filter);
+      filter.connect(chargeGain); chargeGain.connect(masterGain);
+
+      osc1.start(); osc2.start();
+    }
+
+    function updateChargeSound(active){
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+
+      if (active){
+        // Gain rises nonlinearly with charge; smooth with setTargetAtTime
+        const gTarget = 0.05 + 0.55*Math.pow(charge01, 1.2);
+        chargeGain.gain.setTargetAtTime(gTarget, t, 0.06);
+
+        // Pitch glide & filter opening as charge builds
+        const f1 = 90  + (240-90)  * charge01;   // 90 → 240 Hz
+        const f2 = 180 + (520-180) * charge01;   // 180 → 520 Hz
+        const ff = 700 + (4200-700)* charge01;   // lowpass opens
+
+        osc1.frequency.setTargetAtTime(f1, t, 0.05);
+        osc2.frequency.setTargetAtTime(f2, t, 0.05);
+        filter.frequency.setTargetAtTime(ff, t, 0.08);
+      } else {
+        // Fade out quickly when not charging
+        chargeGain.gain.setTargetAtTime(0.0001, t, 0.08);
+      }
+    }
+
+    function punchAndSilenceChargeSound(){
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      // quick bump then cut
+      const cur = chargeGain.gain.value;
+      chargeGain.gain.setValueAtTime(cur, t);
+      chargeGain.gain.exponentialRampToValueAtTime(Math.max(0.001, cur*1.5), t+0.05);
+      chargeGain.gain.exponentialRampToValueAtTime(0.0001, t+0.15);
+      // brief filter sweep for satisfying “lift”
+      filter.frequency.cancelScheduledValues(t);
+      filter.frequency.setTargetAtTime(6000, t, 0.03);
+    }
 
     /* =======================
        STATE
     ======================= */
-    let started = false;
-    let lastT   = performance.now();
-    let focusCx = W/2, focusCy = H*0.54;
-    let focusR  = Math.min(W,H)*FOCUS_RADIUS_PCT;
+    let started=false, lastT=performance.now();
 
-    let charge01 = 0;                   // 0..1
-    let enterTimeMs = 0;                // time when pointer entered zone
-    let inZone = false;
-    let completed = false;
+    // Focus & charge
+    let focusCx=W*0.28, focusCy=H*0.64;
+    let charge01=0, inZone=false, enterMs=0, locked=false;
+    const diameterFromCharge = ()=> MIN_DIAMETER + (MAX_DIAMETER - MIN_DIAMETER)*charge01;
+    const radiusFromCharge   = ()=> diameterFromCharge()*0.5;
 
-    // Ambient petals
-    const petals = [];
-    const rand = (a,b)=>a+Math.random()*(b-a);
-    function spawnAmbientPetal(initial=false){
-      const size = rand(PETAL_SIZE_MIN, PETAL_SIZE_MAX);
-      const x = Math.random()*W;
-      const y = initial ? rand(-H, H) : -size - 20;
-      petals.push({
-        x,y, w:size, h:size, ang:rand(-Math.PI,Math.PI),
-        vx: rand(PETAL_VX_MIN, PETAL_VX_MAX),
-        vy: rand(PETAL_VY_MIN, PETAL_VY_MAX),
-        rot: rand(PETAL_ROT_MIN, PETAL_ROT_MAX)
-      });
+    // Projectile (ball)
+    let proj=null; // {x,y,vx,vy,r,trail:[{x,y,r,a}]}
+
+    // Target
+    let target={x:0,y:0,w:0,h:0};
+    function placeTarget(){
+      const fx = rand(TARGET_MIN_X_FRAC, TARGET_MAX_X_FRAC);
+      target.w = Math.min(220, W*0.14);
+      const aspect=(targetImg.naturalWidth||1)/(targetImg.naturalHeight||1);
+      target.h = target.w / aspect;
+      target.x = W*fx;
+      target.y = H*TARGET_Y_FRAC;
     }
-    for (let i=0;i<AMBIENT_PETALS;i++) spawnAmbientPetal(true);
+    placeTarget();
 
-    // Burst shards
-    const shards = []; // {x,y,w,h,ang,vx,vy,rot,born,life}
-    function spawnBurst(){
-      const tBorn = performance.now()/1000;
-      for (let i=0;i<BURST_PETALS;i++){
+    // Impact FX
+    const shards=[]; // {x,y,w,h,ang,vx,vy,rot,born,life}
+    function spawnImpactBurst(cx,cy){
+      const tBorn=performance.now()/1000;
+      for (let i=0;i<IMPACT_PETALS;i++){
         const a = Math.random()*Math.PI*2;
-        const sp = BURST_SPEED*(0.4+0.6*Math.random());
-        const size = rand(26,72);
+        const sp= IMPACT_SPEED*(0.4+0.6*Math.random());
+        const size=rand(24,72);
         shards.push({
-          x: focusCx, y: focusCy,
-          w:size, h:size,
-          ang: rand(-Math.PI, Math.PI),
-          vx: Math.cos(a)*sp,
-          vy: Math.sin(a)*sp - rand(60,120),
-          rot: rand(-1.6,1.6),
-          born: tBorn, life: BURST_LIFE
+          x:cx, y:cy, w:size, h:size, ang:rand(-Math.PI,Math.PI),
+          vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - rand(60,120),
+          rot:rand(-1.6,1.6), born:tBorn, life:IMPACT_LIFE
         });
       }
-      playOnce(gong);
     }
+    let flashT=0, flashLife=0, flashMax=FLASH_MAX_ALPHA;
+    let shockT=0, shockLife=0, shockX=0, shockY=0;
+    function triggerFlash(a=FLASH_MAX_ALPHA, life=0.18){ flashT=0; flashLife=life; flashMax=a; }
+    function triggerShockwave(cx,cy,life=0.9){ shockT=0; shockLife=life; shockX=cx; shockY=cy; }
+
+    let resetAtMs=0;
 
     /* =======================
-       BREATHING GUIDE
+       LOGIC
     ======================= */
-    let breathTimer = 0;  // cycles IN → PAUSE → OUT → PAUSE
-    function breathPhase(dt){
-      breathTimer += dt;
-      const total = BREATH_IN_SEC + BREATH_PAUSE + BREATH_OUT_SEC + BREATH_PAUSE;
-      breathTimer %= total;
-
-      if (breathTimer < BREATH_IN_SEC) return {phase:'in',   t:breathTimer/BREATH_IN_SEC};
-      const t1 = breathTimer - BREATH_IN_SEC;
-      if (t1 < BREATH_PAUSE) return {phase:'hold1',t:t1/BREATH_PAUSE};
-
-      const t2 = t1 - BREATH_PAUSE;
-      if (t2 < BREATH_OUT_SEC) return {phase:'out',  t:t2/BREATH_OUT_SEC};
-
-      const t3 = t2 - BREATH_OUT_SEC;
-      return {phase:'hold2', t:t3/BREATH_PAUSE};
-    }
-
-    let lastPhase = '';
-    function maybePlayBreathSound(ph){
-      if (ph.phase !== lastPhase){
-        lastPhase = ph.phase;
-        if (ph.phase==='in')  playOnce(breathIn);
-        if (ph.phase==='out') playOnce(breathOut);
-      }
-    }
-
-    /* =======================
-       UPDATE / RENDER
-    ======================= */
-    function inFocusZone(x,y){
-      return Math.hypot(x-focusCx, y-focusCy) <= focusR;
-    }
+    function inBall(x,y,r){ return Math.hypot(x-focusCx, y-focusCy) <= r; }
 
     function update(dt){
-      // ambient petals
-      for (let i=petals.length-1;i>=0;i--){
-        const p = petals[i];
-        p.x += p.vx*dt; p.y += p.vy*dt; p.ang += p.rot*dt;
-        if (p.y - p.h/2 > H+40) { petals.splice(i,1); spawnAmbientPetal(false); }
+      // Charging
+      let isChargingAudibly = false;
+
+      if (!proj && !resetAtMs){
+        const r = radiusFromCharge();
+        const inside = pointer.inside && inBall(pointer.x, pointer.y, r);
+        const stable = pointer.moved <= MAX_JITTER_PX;
+
+        if (inside){
+          if (!inZone){ inZone=true; enterMs=performance.now(); }
+          const graceOk = (performance.now() - enterMs) >= ENTRY_GRACE_MS;
+          if (graceOk && stable){
+            charge01 = Math.min(1, charge01 + dt*(1000/DWELL_MS));
+            isChargingAudibly = true;
+            if (charge01 >= 1 && !locked){
+              locked = true;
+              proj = { x:focusCx, y:focusCy, vx:LAUNCH_SPEED_X, vy:LAUNCH_SPEED_Y, r:radiusFromCharge(), trail:[] };
+              punchAndSilenceChargeSound();
+              play(sfxRelease);
+            }
+          } else if (!locked){
+            charge01 = Math.max(0, charge01 - DECAY_PER_SEC*dt);
+          }
+        } else {
+          inZone=false;
+          if (!locked) charge01 = Math.max(0, charge01 - DECAY_PER_SEC*dt);
+        }
       }
 
-      // shards
+      updateChargeSound(isChargingAudibly);
+
+      // Projectile flight
+      if (proj){
+        proj.vy += GRAVITY_Y * dt;
+        proj.x  += proj.vx * dt;
+        proj.y  += proj.vy * dt;
+
+        // trail (faint; doesn’t affect main ball opacity)
+        proj.trail.push({ x:proj.x, y:proj.y, r:proj.r, a:1 });
+        if (proj.trail.length > TRAIL_SEGMENTS) proj.trail.shift();
+        for (const t of proj.trail) t.a *= 0.9;
+
+        // circle vs AABB collision
+        const cx = Math.max(target.x - target.w/2, Math.min(proj.x, target.x + target.w/2));
+        const cy = Math.max(target.y - target.h/2, Math.min(proj.y, target.y + target.h/2));
+        const hit = ((proj.x - cx)**2 + (proj.y - cy)**2) <= (proj.r*proj.r);
+
+        if (hit){
+          spawnImpactBurst(target.x, target.y);
+          play(sfxImpact);
+          triggerFlash();
+          triggerShockwave(target.x, target.y);
+          proj = null;
+          resetAtMs = performance.now() + RESET_DELAY_MS;
+          locked = false;
+        }
+
+        // off-screen → reset
+        if (proj && (proj.x - proj.r > W + 100 || proj.y - proj.r > H + 100 || proj.y + proj.r < -100)){
+          proj = null;
+          resetAtMs = performance.now() + 800;
+          locked = false;
+        }
+      }
+
+      // Impact shards
       const now = performance.now()/1000;
       for (let i=shards.length-1;i>=0;i--){
-        const s = shards[i];
+        const s=shards[i];
         s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 360*dt; s.ang += s.rot*dt;
         if (now - s.born > s.life) shards.splice(i,1);
       }
 
-      // breathing guide
-      const ph = breathPhase(dt);
-      maybePlayBreathSound(ph);
+      // FX timers
+      if (flashLife>0){ flashT+=dt; if (flashT>=flashLife) flashLife=0; }
+      if (shockLife>0){ shockT+=dt; if (shockT>=shockLife) shockLife=0; }
 
-      // focus logic
-      const currentlyIn = pointer.inside && inFocusZone(pointer.x, pointer.y);
-      const stable = pointer.moved <= MAX_JITTER_PX;
+      // Re-arm
+      if (resetAtMs && performance.now() >= resetAtMs){
+        resetAtMs = 0;
+        charge01  = 0;
+        placeTarget();
+      }
+    }
 
-      if (currentlyIn){
-        if (!inZone){ inZone = true; enterTimeMs = performance.now(); }
-        const graceOk = (performance.now() - enterTimeMs) >= ENTRY_GRACE_MS;
-
-        if (graceOk && stable && !completed){
-          // grow towards 1.0 based on REQUIRED_DWELL_MS
-          const grow = dt * (1000 / REQUIRED_DWELL_MS);
-          charge01 = Math.min(1, charge01 + grow);
-          if (charge01 >= 1 && !completed){
-            completed = true;
-            spawnBurst();
-          }
-        }
+    /* =======================
+       RENDER
+    ======================= */
+    function drawBackground(){
+      if (bgImg.complete && bgImg.naturalWidth>0){
+        const iw=bgImg.width, ih=bgImg.height;
+        const scale=Math.max(W/iw, H/ih);
+        ctx.drawImage(bgImg, (W-iw*scale)/2, (H-ih*scale)/2, iw*scale, ih*scale);
       } else {
-        inZone = false;
-      }
-
-      // decay when not steady / outside (unless already completed)
-      if (!completed && (!currentlyIn || !stable)){
-        charge01 = Math.max(0, charge01 - DECAY_PER_SEC * dt);
+        ctx.fillStyle="#041017"; ctx.fillRect(0,0,W,H);
       }
     }
 
-    function drawBackgroundImage(){
-      if (bgImg.complete && bgImg.naturalWidth > 0){
-        const iw = bgImg.width, ih = bgImg.height;
-        const scale = Math.max(W/iw, H/ih);
-        const dw = iw*scale, dh = ih*scale;
-        const dx = (W-dw)/2, dy = (H-dh)/2;
-        ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(bgImg, dx, dy, dw, dh);
-      } else {
-        ctx.fillStyle = "#041017"; ctx.fillRect(0,0,W,H);
-      }
+    function orbJitter(){
+      const t = performance.now()/1000;
+      const amp = ORB_SHAKE_MAX * Math.pow(charge01, 1.2);
+      const ox = Math.sin(t*ORB_SHAKE_FX*2*Math.PI + 0.31) * amp;
+      const oy = Math.cos(t*ORB_SHAKE_FY*2*Math.PI + 1.13) * amp * 0.8;
+      return [ox, oy];
     }
 
-    function drawAmbient(){
-      // subtle star fog/glow behind petals
+    function drawSmallHalo(cx, cy, r, alpha=HALO_ALPHA){
+      const inner = r*HALO_INNER_MULT, outer = r*HALO_OUTER_MULT;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const g = ctx.createRadialGradient(W*0.5, H*0.35, 0, W*0.5, H*0.35, Math.max(W,H)*0.6);
-      g.addColorStop(0, 'rgba(140,200,255,0.06)');
-      g.addColorStop(1, 'rgba(140,200,255,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(W*0.5, H*0.35, Math.max(W,H)*0.6, 0, Math.PI*2); ctx.fill();
+      const g = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
+      g.addColorStop(0, `rgba(${BALL_RGB},${alpha})`);
+      g.addColorStop(1, `rgba(${BALL_RGB},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, outer, 0, Math.PI*2); ctx.fill();
       ctx.restore();
+    }
 
-      // ambient petals
-      for (const p of petals){
-        ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.ang);
-        ctx.drawImage(petalImg, -p.w/2, -p.h/2, p.w, p.h);
-        ctx.restore();
+    // Fully opaque sphere (no inner white circle)
+    function drawSolidBall(cx, cy, r, withRim=true){
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = `rgb(${BALL_RGB})`;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+      if (withRim){
+        ctx.strokeStyle = `rgba(255,255,255,${RIM_ALPHA})`;
+        ctx.lineWidth = Math.max(1, r*0.02);
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
       }
-    }
-
-    function drawFocus(ph){
-      // outer breathing halo
-      const breathe01 = (ph.phase==='in')  ? ph.t
-                        : (ph.phase==='out') ? 1-ph.t
-                        : (ph.phase==='hold1' ? 1 : 0); // hold2 minimal
-      const haloR = focusR * (1.15 + 0.25 * breathe01);
-
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      let grad = ctx.createRadialGradient(focusCx, focusCy, 0, focusCx, focusCy, haloR);
-      grad.addColorStop(0, `rgba(120,220,210,0.25)`);
-      grad.addColorStop(1, `rgba(120,220,210,0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(focusCx, focusCy, haloR, 0, Math.PI*2); ctx.fill();
-      ctx.restore();
-
-      // base circle
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(180,240,235,0.9)';
-      ctx.beginPath(); ctx.arc(focusCx, focusCy, focusR, 0, Math.PI*2); ctx.stroke();
-
-      // progress arc
-      const arcR = focusR * 0.92;
-      ctx.lineWidth = 8;
-      ctx.strokeStyle = 'rgba(80,200,190,0.9)';
-      ctx.beginPath();
-      ctx.arc(focusCx, focusCy, arcR, -Math.PI/2, -Math.PI/2 + charge01 * Math.PI*2);
-      ctx.stroke();
-
-      // inner orb grows with charge
-      const orbR = focusR * (0.25 + 0.6 * charge01);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      const og = ctx.createRadialGradient(focusCx, focusCy, 0, focusCx, focusCy, orbR);
-      og.addColorStop(0, `rgba(120,220,210,${0.45+0.45*charge01})`);
-      og.addColorStop(1, `rgba(120,220,210,0)`);
-      ctx.fillStyle = og;
-      ctx.beginPath(); ctx.arc(focusCx, focusCy, orbR, 0, Math.PI*2); ctx.fill();
-      ctx.restore();
-
-      // tiny sparkle
-      ctx.save();
-      ctx.globalAlpha = 0.35 + 0.45 * charge01;
-      ctx.fillStyle = '#dffff8';
-      ctx.beginPath(); ctx.arc(focusCx, focusCy, 2, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
 
-    function drawMeter(){
-      const x = (W - METER_WIDTH)/2;
-      const y = H * 0.82;
-      ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(x, y, METER_WIDTH, METER_HEIGHT);
-      ctx.fillStyle = 'rgba(110,220,210,0.9)';  ctx.fillRect(x, y, METER_WIDTH * charge01, METER_HEIGHT);
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.strokeRect(x, y, METER_WIDTH, METER_HEIGHT);
-      // label
-      ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-      ctx.textAlign = 'center'; ctx.fillText('Focus / Ki', W/2, y - 10);
+    function drawChargingBall(){
+      const r = radiusFromCharge();
+      const [ox, oy] = orbJitter();
+      const cx = focusCx + ox, cy = focusCy + oy;
+      drawSolidBall(cx, cy, r, true);
+      drawSmallHalo(cx, cy, r, HALO_ALPHA);
+    }
+
+    function drawProjectile(){
+      if (!proj) return;
+      // trail ghosts (small halo + faint body)
+      ctx.save(); ctx.globalCompositeOperation = 'source-over';
+      for (let i=0;i<proj.trail.length;i++){
+        const t = proj.trail[i];
+        if (t.a <= 0.02) continue;
+        ctx.globalAlpha = TRAIL_ALPHA * t.a;
+        drawSolidBall(t.x, t.y, t.r*0.9, false);
+        drawSmallHalo(t.x, t.y, t.r*0.9, HALO_TRAIL_ALPHA * t.a);
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+
+      // main ball (opaque) + small halo
+      drawSolidBall(proj.x, proj.y, proj.r, true);
+      drawSmallHalo(proj.x, proj.y, proj.r, HALO_ALPHA);
+    }
+
+    function drawTarget(){
+      if (!targetImg.complete) return;
+      ctx.drawImage(targetImg, target.x - target.w/2, target.y - target.h/2, target.w, target.h);
     }
 
     function drawShards(){
-      const t = performance.now()/1000;
+      const t=performance.now()/1000;
       for (const s of shards){
-        const alpha = Math.max(0, 1 - (t - s.born)/s.life);
-        ctx.save(); ctx.globalAlpha = alpha;
+        const a = Math.max(0, 1 - (t - s.born)/s.life);
+        ctx.save(); ctx.globalAlpha = a;
         ctx.translate(s.x, s.y); ctx.rotate(s.ang);
         ctx.drawImage(petalImg, -s.w/2, -s.h/2, s.w, s.h);
         ctx.restore();
       }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawFlash(){
+      if (flashLife<=0) return;
+      const p = Math.min(1, flashT/flashLife);
+      const a = flashMax * (1 - p);
+      if (a <= 0.01) return;
+      ctx.save(); ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fillRect(0,0,W,H); ctx.restore();
+    }
+
+    function drawShockwave(){
+      if (shockLife<=0) return;
+      const p = Math.min(1, shockT/shockLife);
+      const r = SHOCKWAVE_MAX_R*p;
+      const a = 0.35*(1-p);
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle=`rgba(255,255,255,${a})`;
+      ctx.lineWidth = 6*(1-p);
+      ctx.beginPath(); ctx.arc(shockX, shockY, r, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
     }
 
     function render(){
-      drawBackgroundImage();
-      drawAmbient();
-
-      const ph = breathPhase(0); // query only (no advance)
-      drawFocus(ph);
-      drawMeter();
+      drawBackground();
+      drawTarget();
+      if (!proj) drawChargingBall();
+      drawProjectile();
       drawShards();
-
-      if (completed){
-        // subtle “Mastery” text pulse
-        ctx.save();
-        ctx.textAlign='center'; ctx.fillStyle='rgba(255,255,255,0.9)';
-        ctx.font = '700 clamp(24px, 5vmin, 48px) system-ui, -apple-system, Segoe UI, Roboto, Arial';
-        ctx.fillText('Mastery achieved', W/2, H*0.18);
-        ctx.restore();
-      }
+      drawShockwave();
+      drawFlash();
     }
 
+    /* =======================
+       MAIN LOOP
+    ======================= */
     function tick(tMs){
       if (!started) return;
       const dt = Math.min(0.033, (tMs - lastT)/1000);
       lastT = tMs;
-
       update(dt);
       render();
-
       requestAnimationFrame(tick);
     }
 
-    /* ===== FULLSCREEN START ===== */
-    const startOverlay = document.getElementById('startOverlay');
-    const startBtn = document.getElementById('startBtn');
+    /* =======================
+       START
+    ======================= */
+    const startOverlay=document.getElementById('startOverlay');
+    const startBtn=document.getElementById('startBtn');
 
     async function enterFullscreen(){
-      const el = document.documentElement;
+      const el=document.documentElement;
       if (el.requestFullscreen) await el.requestFullscreen();
       else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
-      else if (el.msRequestFullscreen) await el.msRequestFullscreen();
     }
 
     startBtn.addEventListener('click', async ()=>{
-      try { await enterFullscreen(); } catch(e){}
-      startOverlay.style.display = 'none';
+      try{ await enterFullscreen(); }catch(e){}
+      startOverlay.style.display='none';
       started = true;
-
       resize();
-      // ensure images
+
+      // Init audio on user gesture
+      try { setupAudio(); await audioCtx.resume(); } catch(e){ /* ignore */ }
+
+      // ensure images then start
       let pending = 0;
       const tryStart = ()=>{ if (--pending<=0) requestAnimationFrame(tick); };
-      [bgImg, petalImg].forEach(im=>{ if (!im.complete){ pending++; im.onload = tryStart; }});
+      [bgImg, petalImg, targetImg].forEach(im=>{ if (!im.complete){ pending++; im.onload=tryStart; }});
       if (pending===0) requestAnimationFrame(tick);
     });
   })();

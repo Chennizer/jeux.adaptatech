@@ -49,7 +49,8 @@
     const BG_SRC  = "../../images/samurai/cherryblossombg.png";     // background image
     const SLASH_SOUND = "../../sounds/blade.mp3";
     const KATANA_SRC  = "../../images/samurai/katana.png";
-    const SONG_SRC    = "../../songs/samurai/cherryblossomsong2.mp3"; // << added bg song
+    const SONG_SRC    = "../../songs/samurai/cherryblossomsong2.mp3"; // bg song
+    const KATANA_DRAW_SRC = "../../sounds/katana.mp3";               // sword drawing SFX
 
     // Cursor limits and hotspot (in ORIGINAL image pixels)
     const CURSOR_MAX_PX = 124;
@@ -122,10 +123,14 @@
       s.play().catch(()=>{});
     }
 
-    // Background music (added)
+    // Background music
     const bgSong = new Audio(SONG_SRC);
     bgSong.volume = 0.75;   // 75%
     bgSong.loop = true;
+
+    // Katana draw SFX (for the moment the sword cursor appears)
+    const katanaDraw = new Audio(KATANA_DRAW_SRC);
+    katanaDraw.volume = 0.9;
 
     // Pointer / cursor flip
     const pointer = { x: -9999, y: -9999, prevX: -9999, inside: false };
@@ -140,7 +145,7 @@
 
       pointer.x = x; pointer.y = y; pointer.inside = true;
 
-      if (gameState === 'play' && katanaReady) {
+      if (gameState === 'play' && katanaReady && katanaRevealed) {
         if (dx > MOVE_THRESH && cursorOrient !== 'right') { cursorOrient = 'right'; applyKatanaCursor(); }
         else if (dx < -MOVE_THRESH && cursorOrient !== 'left') { cursorOrient = 'left'; applyKatanaCursor(); }
       }
@@ -159,6 +164,7 @@
     let katanaReady = false;
     let katanaLeft = null;   // {url, hx, hy}
     let katanaRight = null;  // {url, hx, hy}
+    let katanaRevealed = false; // becomes true once we show the katana cursor + play SFX
 
     const katanaImg = new Image();
     katanaImg.onload = () => {
@@ -188,6 +194,11 @@
       katanaLeft  = { url: leftCanvas.toDataURL('image/png'),  hx: hxLeft,  hy: hyLeft };
       katanaRight = { url: rightCanvas.toDataURL('image/png'), hx: hxRight, hy: hyRight };
       katanaReady = true;
+
+      // If we are already in play and haven't revealed yet, do it now
+      if (gameState === 'play' && !katanaRevealed) {
+        revealKatanaCursorWithSfx();
+      }
     };
     katanaImg.onerror = () => { katanaReady = false; };
     katanaImg.src = KATANA_SRC;
@@ -196,6 +207,49 @@
       if (!katanaReady) return;
       const k = (cursorOrient === 'right') ? katanaRight : katanaLeft;
       canvas.style.cursor = `url("${k.url}") ${k.hx} ${k.hy}, crosshair`;
+    }
+
+    function revealKatanaCursorWithSfx() {
+      if (!katanaReady) return; // will be retried via onload above
+      applyKatanaCursor();
+      katanaRevealed = true;
+      // Play the katana drawing sound when the sword appears
+      try { katanaDraw.currentTime = 0; katanaDraw.play(); } catch(e) {}
+    }
+
+    /* =======================
+       HUD: SLICE COUNTER
+    ======================= */
+    let sliceCount = 0;
+    function drawHUD() {
+      const pad = Math.max(12, Math.min(20, Math.floor(W * 0.01 + H * 0.01)));
+      const iconSize = Math.max(24, Math.min(36, Math.floor((W + H) * 0.02)));
+      const textSize = Math.max(18, Math.min(28, Math.floor((W + H) * 0.018)));
+
+      const xRight = W - pad;
+      const yTop = pad + iconSize * 0.1;
+
+      ctx.save();
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${textSize}px ui-rounded, ui-sans-serif, system-ui, Segoe UI, Roboto, Arial`;
+      ctx.fillStyle = '#d40000';
+      ctx.shadowColor = 'rgba(0,0,0,0.25)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+
+      // Number
+      ctx.fillText(`${sliceCount}`, xRight, yTop + iconSize * 0.5);
+
+      // Icon left of the number
+      if (img.complete && img.naturalWidth > 0) {
+        const iconX = xRight - ctx.measureText(`${sliceCount}`).width - 10 - iconSize;
+        const iconY = pad;
+        ctx.shadowColor = 'rgba(0,0,0,0.18)';
+        ctx.drawImage(img, iconX, iconY, iconSize, iconSize);
+      }
+      ctx.restore();
     }
 
     /* =======================
@@ -221,6 +275,8 @@
 
     function cutBlossom(b) {
       playSlash();
+      sliceCount++;
+
       const leftRect  = { sx: 0, sy: 0, sw: img.width/2, sh: img.height };
       const rightRect = { sx: img.width/2, sy: 0, sw: img.width/2, sh: img.height };
       const tw = b.w, th = b.h, tBorn = nowSec();
@@ -312,6 +368,8 @@
         ctx.drawImage(img, -p.w/2, -p.h/2, p.w, p.h);
         ctx.restore();
       }
+      // HUD during intro (shows 0)
+      drawHUD();
     }
 
     /* =======================
@@ -331,8 +389,10 @@
 
         if (elapsed >= INTRO_DURATION_MS) {
           gameState = 'play';
-          // switch to katana cursor now
-          if (katanaReady) applyKatanaCursor();
+
+          // Reveal sword cursor + SFX if ready, or as soon as it becomes ready
+          if (katanaReady) revealKatanaCursorWithSfx();
+
           spawnTimer = SPAWN_EVERY_MS + 1; // seed first blossom soon
         }
       } else if (gameState === 'play') {
@@ -407,6 +467,8 @@
         ctx.drawImage(img,s.clip.sx,s.clip.sy,s.clip.sw,s.clip.sh,-s.w/2,-s.h/2,s.w,s.h);
         ctx.restore();
       }
+      // HUD over everything
+      drawHUD();
     }
 
     /* ===== FULLSCREEN START ===== */
@@ -422,9 +484,14 @@
 
     startBtn.addEventListener('click', async () => {
       try { await enterFullscreen(); } catch(e) {}
+
+      // Hide overlay
       startOverlay.style.display = 'none';
 
-      // START MUSIC (added)
+      // Hide cursor during the entire intro animation
+      canvas.style.cursor = 'none';
+
+      // Start music (user gesture exists, so this should be allowed)
       try { bgSong.currentTime = 0; bgSong.play(); } catch(e) {}
 
       // Start tornado swirl; katana appears when play begins
@@ -443,6 +510,7 @@
         if (pending === 0) requestAnimationFrame(tick);
       }
     });
+
   })();
   </script>
 </body>
