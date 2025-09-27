@@ -239,7 +239,7 @@
       display:none;
       align-items:center;
       justify-content:center;
-      z-index:140;
+      z-index:1200;
       padding:24px;
     }
 
@@ -325,13 +325,6 @@
             <input id="color" type="color" value="#ff7a59" class="color-input" />
           </div>
           <div class="option-item">
-            <label for="mode" class="teal-label label-block translate" data-fr="Mode" data-en="Mode">Mode</label>
-            <select id="mode" class="styled-select">
-              <option value="draw" selected class="translate" data-fr="Dessiner" data-en="Draw">Draw</option>
-              <option value="erase" class="translate" data-fr="Effacer" data-en="Erase">Erase</option>
-            </select>
-          </div>
-          <div class="option-item">
             <label for="shape" class="teal-label label-block translate" data-fr="Forme intégrée" data-en="Built-in outline">Built-in outline</label>
             <select id="shape" class="styled-select">
               <option value="blob"  class="translate" data-fr="Goutte" data-en="Blob">Blob</option>
@@ -354,22 +347,6 @@
           <div class="option-item">
             <label for="outlineFile" class="teal-label label-block translate" data-fr="Téléverser un contour" data-en="Upload outline">Téléverser un contour</label>
             <input id="outlineFile" type="file" accept="image/png, image/svg+xml" class="styled-input" />
-          </div>
-          <div class="option-item">
-            <label for="fitMode" class="teal-label label-block translate" data-fr="Ajuster l'image" data-en="Fit uploaded image">Ajuster l'image</label>
-            <select id="fitMode" class="styled-select">
-              <option value="contain" selected class="translate" data-fr="Conserver les proportions" data-en="Contain (keep aspect)">Contain (keep aspect)</option>
-              <option value="cover" class="translate" data-fr="Recouvrir" data-en="Cover">Cover</option>
-              <option value="stretch" class="translate" data-fr="Étirer" data-en="Stretch">Stretch</option>
-            </select>
-          </div>
-          <div class="option-item">
-            <label for="maskSource" class="teal-label label-block translate" data-fr="Source du masque" data-en="Mask source">Mask source</label>
-            <select id="maskSource" class="styled-select">
-              <option value="alpha" selected class="translate" data-fr="Alpha (opaque = intérieur)" data-en="Alpha (opaque = inside)">Alpha (opaque = inside)</option>
-              <option value="luma" class="translate" data-fr="Luminance (blanc = intérieur)" data-en="Luminance (white = inside)">Luminance (white = inside)</option>
-              <option value="alpha-invert" class="translate" data-fr="Alpha inversé" data-en="Alpha inverted">Alpha inverted</option>
-            </select>
           </div>
           <p class="hint translate" data-fr="Utilise une forme intégrée, sélectionne une image ou téléverse ton propre contour pour définir la zone de dessin." data-en="Use a built-in shape, choose a preset image, or upload your own outline to define the drawing area.">Use a built-in shape, choose a preset image, or upload your own outline to define the drawing area.</p>
           <details>
@@ -456,14 +433,11 @@
     const brushEl = document.getElementById('brush');
     const brushV = document.getElementById('brushV');
     const colorEl = document.getElementById('color');
-    const modeEl = document.getElementById('mode');
     const clearEl = document.getElementById('clear');
     const dlEl = document.getElementById('download');
     const shapeEl = document.getElementById('shape');
 
     const outlineFileEl = document.getElementById('outlineFile');
-    const fitModeEl = document.getElementById('fitMode');
-    const maskSourceEl = document.getElementById('maskSource');
 
     const openLibraryBtn = document.getElementById('openPresetModal');
     const presetSummary = document.getElementById('presetSummary');
@@ -555,9 +529,6 @@
       const a = document.createElement('a'); a.href=url; a.download='drawing.png'; a.click();
     });
     shapeEl.addEventListener('change', ()=>{ userMask = null; drawOutline(); showBuiltInSummary(); });
-    fitModeEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
-    maskSourceEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
-
     showBuiltInSummary();
 
     outlineFileEl.addEventListener('change', async (e)=>{
@@ -782,7 +753,7 @@
       img.src = url;
     }
 
-    function computeFit(destW,destH, imgW,imgH, mode){
+    function computeFit(destW,destH, imgW,imgH, mode='contain'){
       if(mode==='stretch') return { x:0, y:0, w:destW, h:destH };
       const r = imgW/imgH, R = destW/destH;
       if(mode==='cover'){
@@ -804,20 +775,14 @@
       maskCtx.setTransform(oc.getTransform());
       maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
       const rect = out.getBoundingClientRect();
-      const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
+      const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, 'contain');
       maskCtx.drawImage(userMask, fit.x, fit.y, fit.w, fit.h);
 
-      // Convert to chosen mask source
+      // Convert to a simple alpha mask
       const img = maskCtx.getImageData(0,0,maskCanvas.width, maskCanvas.height);
-      const data = img.data; const mode = maskSourceEl.value;
+      const data = img.data;
       for(let i=0;i<data.length; i+=4){
-        const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
-        let alpha = a;
-        if(mode==='luma'){
-          const y = 0.2126*r + 0.7152*g + 0.0722*b; alpha = y;
-        } else if(mode==='alpha-invert'){
-          alpha = 255 - a;
-        }
+        const alpha = data[i+3];
         data[i]=255; data[i+1]=255; data[i+2]=255; data[i+3]=alpha;
       }
       maskCtx.putImageData(img,0,0);
@@ -828,7 +793,7 @@
       oc.clearRect(0,0,out.width,out.height);
       if(!userMask){ oc.save(); oc.fillStyle='white'; oc.globalAlpha=0.06; oc.fill(shapePath); oc.globalAlpha=1; oc.lineWidth=6; oc.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--edge')||'#e2e8f0'; oc.stroke(shapePath); oc.restore(); return; }
       const rect = out.getBoundingClientRect();
-      const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
+      const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, 'contain');
       oc.save(); oc.globalAlpha = 0.25; oc.drawImage(userMask, fit.x, fit.y, fit.w, fit.h); oc.restore();
     }
 
@@ -854,18 +819,71 @@
     function draw(e){
       if(!drawing) return;
       const cur = getPos(e);
-      const size = +brushEl.value; const color = colorEl.value; const erasing = (modeEl.value==='erase');
+      const size = +brushEl.value;
+      const color = colorEl.value;
 
       if(userMask){
-        sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over'; sc.strokeStyle = erasing ? '#000' : color; sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke(); sc.globalCompositeOperation='destination-in'; sc.drawImage(maskCanvas,0,0); sc.restore();
-        ic.save(); ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.drawImage(scratch,0,0); ic.restore(); sc.clearRect(0,0,scratch.width,scratch.height);
+        sc.save();
+        sc.lineCap='round';
+        sc.lineJoin='round';
+        sc.lineWidth=size;
+        sc.globalCompositeOperation='source-over';
+        sc.strokeStyle = color;
+        sc.beginPath();
+        sc.moveTo(prev.x, prev.y);
+        sc.lineTo(cur.x, cur.y);
+        sc.stroke();
+        sc.globalCompositeOperation='destination-in';
+        sc.drawImage(maskCanvas,0,0);
+        sc.restore();
+        ic.save();
+        ic.globalCompositeOperation = 'source-over';
+        ic.drawImage(scratch,0,0);
+        ic.restore();
+        sc.clearRect(0,0,scratch.width,scratch.height);
       } else {
         if(!shapePath) return;
         if(supportsPathClip){
-          ic.save(); ic.clip(shapePath); ic.lineCap='round'; ic.lineJoin='round'; ic.lineWidth=size; ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.strokeStyle = erasing ? 'rgba(0,0,0,1)' : color; ic.beginPath(); ic.moveTo(prev.x, prev.y); ic.lineTo(cur.x, cur.y); ic.stroke(); ic.restore();
+          ic.save();
+          ic.clip(shapePath);
+          ic.lineCap='round';
+          ic.lineJoin='round';
+          ic.lineWidth=size;
+          ic.globalCompositeOperation = 'source-over';
+          ic.strokeStyle = color;
+          ic.beginPath();
+          ic.moveTo(prev.x, prev.y);
+          ic.lineTo(cur.x, cur.y);
+          ic.stroke();
+          ic.restore();
         } else {
-          if(!maskImageData){ maskCanvas.width = out.width; maskCanvas.height = out.height; maskCtx.setTransform(oc.getTransform()); maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height); maskCtx.fillStyle = '#fff'; maskCtx.fill(shapePath); maskImageData = maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height); }
-          sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over'; sc.strokeStyle = erasing ? '#000' : color; sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke(); sc.globalCompositeOperation='destination-in'; sc.putImageData(maskImageData,0,0); sc.restore(); ic.save(); ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.drawImage(scratch,0,0); ic.restore(); sc.clearRect(0,0,scratch.width,scratch.height);
+          if(!maskImageData){
+            maskCanvas.width = out.width;
+            maskCanvas.height = out.height;
+            maskCtx.setTransform(oc.getTransform());
+            maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
+            maskCtx.fillStyle = '#fff';
+            maskCtx.fill(shapePath);
+            maskImageData = maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+          }
+          sc.save();
+          sc.lineCap='round';
+          sc.lineJoin='round';
+          sc.lineWidth=size;
+          sc.globalCompositeOperation='source-over';
+          sc.strokeStyle = color;
+          sc.beginPath();
+          sc.moveTo(prev.x, prev.y);
+          sc.lineTo(cur.x, cur.y);
+          sc.stroke();
+          sc.globalCompositeOperation='destination-in';
+          sc.putImageData(maskImageData,0,0);
+          sc.restore();
+          ic.save();
+          ic.globalCompositeOperation = 'source-over';
+          ic.drawImage(scratch,0,0);
+          ic.restore();
+          sc.clearRect(0,0,scratch.width,scratch.height);
         }
       }
 
