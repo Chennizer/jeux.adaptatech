@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Samurai Focus — Ki Ball (Opaque + Small Halo + Crescendo)</title>
+  <title>Samurai Focus — One Orb → Moon (Respawn)</title>
   <style>
     html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#000;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
@@ -22,18 +22,17 @@
   <script>
   (() => {
     /* =======================
-       PLACEHOLDER ASSETS
+       PLACEHOLDER ASSETS (reuse your files)
     ======================= */
     const BG_SRC     = "../../images/samurai/lampbg.png";
     const PETAL_SRC  = "../../images/samurai/cherryblossom.png";
-    const TARGET_SRC = "../../images/samurai/litlamp1.png";
     const SFX_RELEASE= "../../sounds/blade.mp3";
     const SFX_IMPACT = "../../sounds/gong.mp3";
 
     /* =======================
        TUNABLES
     ======================= */
-    // Dwell: 100px → 200px over 2s
+    // Dwell → ball size: 100 → 200 px over 2s
     const MIN_DIAMETER = 100;
     const MAX_DIAMETER = 200;
     const DWELL_MS     = 2000;
@@ -41,35 +40,52 @@
     const DECAY_PER_SEC= 0.5;
     const ENTRY_GRACE_MS = 200;
 
-    // Launch (ball flies; no ray)
-    const LAUNCH_SPEED_X = 950;
-    const LAUNCH_SPEED_Y = -120;
-    const GRAVITY_Y      = 520;
+    // Spawn area (bottom third)
+    const SPAWN_X_MIN_FRAC = 0.20;
+    const SPAWN_X_MAX_FRAC = 0.80;
+    const SPAWN_Y_MIN_FRAC = 0.68;
+    const SPAWN_Y_MAX_FRAC = 0.90;
 
-    // Trail (faint echoes; main ball stays opaque)
-    const TRAIL_SEGMENTS = 14;
-    const TRAIL_ALPHA    = 0.10;
+    // Launch path → to the moon (perspective shrink)
+    const LAUNCH_MS      = 6000;   // flight duration
+    const END_RADIUS     = 10;     // size at the moon
+    const BEZIER_PEAK    = 0.34;   // arc height (fraction of screen)
+    const RESPAWN_DELAY_MS = 2500; // wait before next orb
 
-    // Ball look (solid + small halo)
+    // Ball look (opaque + small halo)
     const BALL_RGB       = "120,220,210";
     const RIM_ALPHA      = 0.15;
     const HALO_INNER_MULT = 1.00;
-    const HALO_OUTER_MULT = 1.12; // ~6% of diameter outside the edge
+    const HALO_OUTER_MULT = 1.12;  // ~6% of diameter beyond edge
     const HALO_ALPHA      = 0.25;
-    const HALO_TRAIL_ALPHA= 0.18;
+    const HALO_TRAIL_ALPHA= 0.16;
 
     // Local jitter only
     const ORB_SHAKE_MAX  = 8;
     const ORB_SHAKE_FX   = 23, ORB_SHAKE_FY = 17;
 
-    // Target & impact/reset
-    const TARGET_MIN_X_FRAC = 0.62, TARGET_MAX_X_FRAC = 0.82, TARGET_Y_FRAC = 0.56;
-    const RESET_DELAY_MS    = 1400;
-    const IMPACT_PETALS     = 150;
-    const IMPACT_SPEED      = 420;
-    const IMPACT_LIFE       = 1.8;
-    const SHOCKWAVE_MAX_R   = 260;
-    const FLASH_MAX_ALPHA   = 0.75;
+    // Audio (crescendo while charging)
+    const HUM_GAIN_MAX   = 0.6;
+
+    // Moon
+    const MOON_R         = 70;
+    const MOON_GLOW_R    = 240;
+    const MOON_X_FRAC    = 0.78;
+    const MOON_Y_FRAC    = 0.24;
+
+    // Impact FX
+    const IMPACT_PETALS  = 180;
+    const IMPACT_SPEED   = 460;
+    const IMPACT_LIFE    = 1.9;
+    const SHOCKWAVE_MAX_R= 340;
+    const FLASH_MAX_ALPHA= 0.7;
+
+    // Craters
+    const MAX_CRATERS      = 24;
+    const CRATER_FADE_MS   = 250; // pop-in duration
+    const CRATER_R_MIN_FR  = 0.06; // 6% of moon radius
+    const CRATER_R_MAX_FR  = 0.14; // 14% of moon radius
+    const CRATER_MARGIN_FR = 0.04; // keep inside disk
 
     /* =======================
        SETUP
@@ -81,19 +97,14 @@
 
     const bgImg     = new Image(); bgImg.src = BG_SRC;
     const petalImg  = new Image(); petalImg.src = PETAL_SRC;
-    const targetImg = new Image(); targetImg.src = TARGET_SRC;
 
     const sfxRelease= new Audio(SFX_RELEASE); sfxRelease.volume = 0.7;
     const sfxImpact = new Audio(SFX_IMPACT);  sfxImpact.volume  = 0.75;
-    function play(a){ try{ a.currentTime = 0; a.play(); }catch(_){} }
+    const play = a => { try { a.currentTime = 0; a.play(); } catch(_){} };
 
-    function resize(){
-      W = canvas.width  = window.innerWidth;
-      H = canvas.height = window.innerHeight;
-      focusCx = W*0.28; focusCy = H*0.64; // “hands” position
-      placeTarget();
-    }
-    window.addEventListener('resize', resize);
+    const rand  = (a,b)=>a+Math.random()*(b-a);
+    const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+    const nowS  = ()=> performance.now()/1000;
 
     // Pointer / eye-gaze
     const pointer = { x:-9999, y:-9999, px:-9999, py:-9999, moved:0, inside:false };
@@ -106,232 +117,180 @@
     });
     canvas.addEventListener('pointerleave', ()=> pointer.inside=false);
 
-    const rand = (a,b)=>a+Math.random()*(b-a);
+    // Moon position (responsive)
+    let moon = { x: W*MOON_X_FRAC, y: H*MOON_Y_FRAC };
+    function resize(){
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+      moon.x = W*MOON_X_FRAC; moon.y = H*MOON_Y_FRAC;
+      if (orb && !launching){
+        // keep orb within spawn band on resize
+        orb.cx = clamp(orb.cx, W*SPAWN_X_MIN_FRAC, W*SPAWN_X_MAX_FRAC);
+        orb.cy = clamp(orb.cy, H*SPAWN_Y_MIN_FRAC, H*SPAWN_Y_MAX_FRAC);
+      }
+    }
+    window.addEventListener('resize', resize);
 
     /* =======================
-       AUDIO (WebAudio) — charging hum with crescendo
+       AUDIO — charging hum
     ======================= */
     let audioCtx=null, masterGain=null;
-    let chargeGain=null, filter=null, osc1=null, osc2=null, osc1Gain=null, osc2Gain=null;
+    let chargeGain=null, filter=null, osc1=null, osc2=null, o1g=null, o2g=null;
 
     function setupAudio(){
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
       masterGain = audioCtx.createGain(); masterGain.gain.value = 0.9; masterGain.connect(audioCtx.destination);
 
-      // Two oscillators blended, through a lowpass filter → charging tone
       osc1 = audioCtx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = 90;
       osc2 = audioCtx.createOscillator(); osc2.type = 'triangle';  osc2.frequency.value = 180;
 
-      osc1Gain = audioCtx.createGain(); osc1Gain.gain.value = 0.35;
-      osc2Gain = audioCtx.createGain(); osc2Gain.gain.value = 0.25;
+      o1g = audioCtx.createGain(); o1g.gain.value = 0.35;
+      o2g = audioCtx.createGain(); o2g.gain.value = 0.25;
 
-      filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 600; filter.Q.value = 0.7;
+      filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 700; filter.Q.value = 0.7;
 
-      chargeGain = audioCtx.createGain(); chargeGain.gain.value = 0.0; // we’ll ramp this with charge
+      chargeGain = audioCtx.createGain(); chargeGain.gain.value = 0.0;
 
-      osc1.connect(osc1Gain); osc2.connect(osc2Gain);
-      osc1Gain.connect(filter); osc2Gain.connect(filter);
+      osc1.connect(o1g); osc2.connect(o2g);
+      o1g.connect(filter); o2g.connect(filter);
       filter.connect(chargeGain); chargeGain.connect(masterGain);
 
       osc1.start(); osc2.start();
     }
-
-    function updateChargeSound(active){
+    function updateHum(level){
       if (!audioCtx) return;
       const t = audioCtx.currentTime;
+      const gTarget = clamp(HUM_GAIN_MAX * Math.pow(level,1.15), 0, HUM_GAIN_MAX);
+      chargeGain.gain.setTargetAtTime(gTarget, t, 0.06);
 
-      if (active){
-        // Gain rises nonlinearly with charge; smooth with setTargetAtTime
-        const gTarget = 0.05 + 0.55*Math.pow(charge01, 1.2);
-        chargeGain.gain.setTargetAtTime(gTarget, t, 0.06);
-
-        // Pitch glide & filter opening as charge builds
-        const f1 = 90  + (240-90)  * charge01;   // 90 → 240 Hz
-        const f2 = 180 + (520-180) * charge01;   // 180 → 520 Hz
-        const ff = 700 + (4200-700)* charge01;   // lowpass opens
-
-        osc1.frequency.setTargetAtTime(f1, t, 0.05);
-        osc2.frequency.setTargetAtTime(f2, t, 0.05);
-        filter.frequency.setTargetAtTime(ff, t, 0.08);
-      } else {
-        // Fade out quickly when not charging
-        chargeGain.gain.setTargetAtTime(0.0001, t, 0.08);
-      }
+      const f1 = 90  + (240-90)  * level;
+      const f2 = 180 + (520-180) * level;
+      const ff = 700 + (4200-700)* level;
+      osc1.frequency.setTargetAtTime(f1, t, 0.05);
+      osc2.frequency.setTargetAtTime(f2, t, 0.05);
+      filter.frequency.setTargetAtTime(ff, t, 0.08);
     }
-
-    function punchAndSilenceChargeSound(){
+    function cutHumPunch(){
       if (!audioCtx) return;
       const t = audioCtx.currentTime;
-      // quick bump then cut
-      const cur = chargeGain.gain.value;
+      const cur = chargeGain.gain.value || 0.0001;
       chargeGain.gain.setValueAtTime(cur, t);
-      chargeGain.gain.exponentialRampToValueAtTime(Math.max(0.001, cur*1.5), t+0.05);
-      chargeGain.gain.exponentialRampToValueAtTime(0.0001, t+0.15);
-      // brief filter sweep for satisfying “lift”
-      filter.frequency.cancelScheduledValues(t);
+      chargeGain.gain.exponentialRampToValueAtTime(Math.max(0.001, cur*1.6), t+0.05);
+      chargeGain.gain.exponentialRampToValueAtTime(0.0001, t+0.18);
       filter.frequency.setTargetAtTime(6000, t, 0.03);
     }
 
     /* =======================
-       STATE
+       ORB (single)
     ======================= */
-    let started=false, lastT=performance.now();
+    let orb = null;            // {cx,cy,charge,inZone,enterMs,launching,launchT0,startR,trail,renderR}
+    let launching = false;
+    let respawnAtMs = 0;
 
-    // Focus & charge
-    let focusCx=W*0.28, focusCy=H*0.64;
-    let charge01=0, inZone=false, enterMs=0, locked=false;
-    const diameterFromCharge = ()=> MIN_DIAMETER + (MAX_DIAMETER - MIN_DIAMETER)*charge01;
-    const radiusFromCharge   = ()=> diameterFromCharge()*0.5;
-
-    // Projectile (ball)
-    let proj=null; // {x,y,vx,vy,r,trail:[{x,y,r,a}]}
-
-    // Target
-    let target={x:0,y:0,w:0,h:0};
-    function placeTarget(){
-      const fx = rand(TARGET_MIN_X_FRAC, TARGET_MAX_X_FRAC);
-      target.w = Math.min(220, W*0.14);
-      const aspect=(targetImg.naturalWidth||1)/(targetImg.naturalHeight||1);
-      target.h = target.w / aspect;
-      target.x = W*fx;
-      target.y = H*TARGET_Y_FRAC;
+    function spawnOrb(){
+      orb = {
+        cx: W*rand(SPAWN_X_MIN_FRAC, SPAWN_X_MAX_FRAC),
+        cy: H*SPAWN_Y_MIN_FRAC + rand(0, (H*SPAWN_Y_MAX_FRAC - H*SPAWN_Y_MIN_FRAC)),
+        charge: 0, inZone:false, enterMs:0,
+        launching:false, launchT0:0, startR:MIN_DIAMETER*0.5,
+        trail: [], renderR: MIN_DIAMETER*0.5
+      };
     }
-    placeTarget();
+    function radiusFromCharge(o){ return (MIN_DIAMETER + (MAX_DIAMETER - MIN_DIAMETER)*o.charge) * 0.5; }
+    function inOrb(o, x, y){ return Math.hypot(x - o.cx, y - o.cy) <= radiusFromCharge(o); }
 
-    // Impact FX
-    const shards=[]; // {x,y,w,h,ang,vx,vy,rot,born,life}
-    function spawnImpactBurst(cx,cy){
-      const tBorn=performance.now()/1000;
+    /* =======================
+       IMPACT FX
+    ======================= */
+    const shards=[];
+    function burstAt(x,y){
+      const tBorn = nowS();
       for (let i=0;i<IMPACT_PETALS;i++){
         const a = Math.random()*Math.PI*2;
         const sp= IMPACT_SPEED*(0.4+0.6*Math.random());
         const size=rand(24,72);
         shards.push({
-          x:cx, y:cy, w:size, h:size, ang:rand(-Math.PI,Math.PI),
+          x, y, w:size, h:size, ang:rand(-Math.PI,Math.PI),
           vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - rand(60,120),
           rot:rand(-1.6,1.6), born:tBorn, life:IMPACT_LIFE
         });
       }
     }
-    let flashT=0, flashLife=0, flashMax=FLASH_MAX_ALPHA;
-    let shockT=0, shockLife=0, shockX=0, shockY=0;
-    function triggerFlash(a=FLASH_MAX_ALPHA, life=0.18){ flashT=0; flashLife=life; flashMax=a; }
-    function triggerShockwave(cx,cy,life=0.9){ shockT=0; shockLife=life; shockX=cx; shockY=cy; }
-
-    let resetAtMs=0;
+    let flashLife=0, flashT=0, shockLife=0, shockT=0, shockX=0, shockY=0;
+    function flash(a=FLASH_MAX_ALPHA, life=0.16){ flashLife=life; flashT=0; }
+    function shock(cx,cy,life=0.9){ shockLife=life; shockT=0; shockX=cx; shockY=cy; }
 
     /* =======================
-       LOGIC
+       CRATERS
     ======================= */
-    function inBall(x,y,r){ return Math.hypot(x-focusCx, y-focusCy) <= r; }
-
-    function update(dt){
-      // Charging
-      let isChargingAudibly = false;
-
-      if (!proj && !resetAtMs){
-        const r = radiusFromCharge();
-        const inside = pointer.inside && inBall(pointer.x, pointer.y, r);
-        const stable = pointer.moved <= MAX_JITTER_PX;
-
-        if (inside){
-          if (!inZone){ inZone=true; enterMs=performance.now(); }
-          const graceOk = (performance.now() - enterMs) >= ENTRY_GRACE_MS;
-          if (graceOk && stable){
-            charge01 = Math.min(1, charge01 + dt*(1000/DWELL_MS));
-            isChargingAudibly = true;
-            if (charge01 >= 1 && !locked){
-              locked = true;
-              proj = { x:focusCx, y:focusCy, vx:LAUNCH_SPEED_X, vy:LAUNCH_SPEED_Y, r:radiusFromCharge(), trail:[] };
-              punchAndSilenceChargeSound();
-              play(sfxRelease);
-            }
-          } else if (!locked){
-            charge01 = Math.max(0, charge01 - DECAY_PER_SEC*dt);
-          }
-        } else {
-          inZone=false;
-          if (!locked) charge01 = Math.max(0, charge01 - DECAY_PER_SEC*dt);
-        }
+    // Stored relative to the moon so they scale on resize
+    // { ang: radians, dist: 0..1 of moon radius, rFrac: radius as fraction of moon radius, bornMs: timestamp }
+    const craters = [];
+    function addCraterFromImpact() {
+      // Approach angle from last trail segment if available
+      let ang = -Math.PI/2; // default: from below
+      if (orb && orb.trail && orb.trail.length >= 2) {
+        const a = orb.trail[orb.trail.length - 1];
+        const b = orb.trail[orb.trail.length - 2];
+        ang = Math.atan2(a.y - b.y, a.x - b.x);
       }
+      const rFrac = rand(CRATER_R_MIN_FR, CRATER_R_MAX_FR);
+      const distMax = Math.max(0, 1 - rFrac - CRATER_MARGIN_FR);
+      const dist = rand(0.10, distMax);
+      craters.push({ ang, dist, rFrac, bornMs: performance.now() });
+      if (craters.length > MAX_CRATERS) craters.shift();
+    }
 
-      updateChargeSound(isChargingAudibly);
+    function drawCraters() {
+      if (!craters.length) return;
+      // light from top-left
+      const LVX = -0.5, LVY = -0.9;
+      const lvLen = Math.hypot(LVX, LVY) || 1;
+      const lx = LVX / lvLen, ly = LVY / lvLen;
+      const nowMs = performance.now();
 
-      // Projectile flight
-      if (proj){
-        proj.vy += GRAVITY_Y * dt;
-        proj.x  += proj.vx * dt;
-        proj.y  += proj.vy * dt;
+      for (const c of craters) {
+        // pop-in animation
+        const age = nowMs - c.bornMs;
+        const k = Math.min(1, age / CRATER_FADE_MS); // 0..1
+        const scale = 0.7 + 0.3 * k;                 // start slightly smaller
+        const alpha = k;                              // fade in
 
-        // trail (faint; doesn’t affect main ball opacity)
-        proj.trail.push({ x:proj.x, y:proj.y, r:proj.r, a:1 });
-        if (proj.trail.length > TRAIL_SEGMENTS) proj.trail.shift();
-        for (const t of proj.trail) t.a *= 0.9;
+        const cx = moon.x + Math.cos(c.ang) * c.dist * MOON_R;
+        const cy = moon.y + Math.sin(c.ang) * c.dist * MOON_R;
+        const r  = c.rFrac * MOON_R * scale;
 
-        // circle vs AABB collision
-        const cx = Math.max(target.x - target.w/2, Math.min(proj.x, target.x + target.w/2));
-        const cy = Math.max(target.y - target.h/2, Math.min(proj.y, target.y + target.h/2));
-        const hit = ((proj.x - cx)**2 + (proj.y - cy)**2) <= (proj.r*proj.r);
+        // base depression (radial gradient, darker center)
+        const g = ctx.createRadialGradient(
+          cx - lx * r * 0.25, cy - ly * r * 0.25, r * 0.15,
+          cx, cy, r
+        );
+        g.addColorStop(0, `rgba(185,190,205,${0.45*alpha})`);
+        g.addColorStop(1, `rgba(160,165,185,0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
 
-        if (hit){
-          spawnImpactBurst(target.x, target.y);
-          play(sfxImpact);
-          triggerFlash();
-          triggerShockwave(target.x, target.y);
-          proj = null;
-          resetAtMs = performance.now() + RESET_DELAY_MS;
-          locked = false;
-        }
+        // soft shadow rim on far (down-right) side
+        const shadowAng = Math.atan2(-ly, -lx);
+        ctx.strokeStyle = `rgba(90,100,130,${0.20*alpha})`;
+        ctx.lineWidth = Math.max(1, r * 0.12);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, shadowAng - 0.9, shadowAng + 0.9);
+        ctx.stroke();
 
-        // off-screen → reset
-        if (proj && (proj.x - proj.r > W + 100 || proj.y - proj.r > H + 100 || proj.y + proj.r < -100)){
-          proj = null;
-          resetAtMs = performance.now() + 800;
-          locked = false;
-        }
-      }
-
-      // Impact shards
-      const now = performance.now()/1000;
-      for (let i=shards.length-1;i>=0;i--){
-        const s=shards[i];
-        s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 360*dt; s.ang += s.rot*dt;
-        if (now - s.born > s.life) shards.splice(i,1);
-      }
-
-      // FX timers
-      if (flashLife>0){ flashT+=dt; if (flashT>=flashLife) flashLife=0; }
-      if (shockLife>0){ shockT+=dt; if (shockT>=shockLife) shockLife=0; }
-
-      // Re-arm
-      if (resetAtMs && performance.now() >= resetAtMs){
-        resetAtMs = 0;
-        charge01  = 0;
-        placeTarget();
+        // subtle highlight on light (top-left) side
+        const lightAng = Math.atan2(ly, lx);
+        ctx.strokeStyle = `rgba(255,255,255,${0.12*alpha})`;
+        ctx.lineWidth = Math.max(1, r * 0.08);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, lightAng - 0.9, lightAng + 0.9);
+        ctx.stroke();
       }
     }
 
     /* =======================
-       RENDER
+       DRAW HELPERS
     ======================= */
-    function drawBackground(){
-      if (bgImg.complete && bgImg.naturalWidth>0){
-        const iw=bgImg.width, ih=bgImg.height;
-        const scale=Math.max(W/iw, H/ih);
-        ctx.drawImage(bgImg, (W-iw*scale)/2, (H-ih*scale)/2, iw*scale, ih*scale);
-      } else {
-        ctx.fillStyle="#041017"; ctx.fillRect(0,0,W,H);
-      }
-    }
-
-    function orbJitter(){
-      const t = performance.now()/1000;
-      const amp = ORB_SHAKE_MAX * Math.pow(charge01, 1.2);
-      const ox = Math.sin(t*ORB_SHAKE_FX*2*Math.PI + 0.31) * amp;
-      const oy = Math.cos(t*ORB_SHAKE_FY*2*Math.PI + 1.13) * amp * 0.8;
-      return [ox, oy];
-    }
-
     function drawSmallHalo(cx, cy, r, alpha=HALO_ALPHA){
       const inner = r*HALO_INNER_MULT, outer = r*HALO_OUTER_MULT;
       ctx.save();
@@ -343,8 +302,6 @@
       ctx.beginPath(); ctx.arc(cx, cy, outer, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
-
-    // Fully opaque sphere (no inner white circle)
     function drawSolidBall(cx, cy, r, withRim=true){
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
@@ -357,59 +314,63 @@
       }
       ctx.restore();
     }
-
-    function drawChargingBall(){
-      const r = radiusFromCharge();
-      const [ox, oy] = orbJitter();
-      const cx = focusCx + ox, cy = focusCy + oy;
-      drawSolidBall(cx, cy, r, true);
-      drawSmallHalo(cx, cy, r, HALO_ALPHA);
+    function orbJitter(charge01){
+      const t = performance.now()/1000;
+      const amp = ORB_SHAKE_MAX * Math.pow(charge01,1.2);
+      const ox = Math.sin(t*ORB_SHAKE_FX*2*Math.PI + 0.31) * amp;
+      const oy = Math.cos(t*ORB_SHAKE_FY*2*Math.PI + 1.13) * amp * 0.8;
+      return [ox, oy];
     }
 
-    function drawProjectile(){
-      if (!proj) return;
-      // trail ghosts (small halo + faint body)
-      ctx.save(); ctx.globalCompositeOperation = 'source-over';
-      for (let i=0;i<proj.trail.length;i++){
-        const t = proj.trail[i];
-        if (t.a <= 0.02) continue;
-        ctx.globalAlpha = TRAIL_ALPHA * t.a;
-        drawSolidBall(t.x, t.y, t.r*0.9, false);
-        drawSmallHalo(t.x, t.y, t.r*0.9, HALO_TRAIL_ALPHA * t.a);
-      }
+    function drawMoon(){
+      // glow
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      const g = ctx.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, MOON_GLOW_R);
+      g.addColorStop(0,  'rgba(255,245,220,0.18)');
+      g.addColorStop(1,  'rgba(255,245,220,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(moon.x, moon.y, MOON_GLOW_R, 0, Math.PI*2); ctx.fill();
       ctx.restore();
-      ctx.globalAlpha = 1;
+      // disk
+      ctx.save();
+      ctx.fillStyle = 'rgb(245,245,250)';
+      ctx.beginPath(); ctx.arc(moon.x, moon.y, MOON_R, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
 
-      // main ball (opaque) + small halo
-      drawSolidBall(proj.x, proj.y, proj.r, true);
-      drawSmallHalo(proj.x, proj.y, proj.r, HALO_ALPHA);
+      // craters over the disk
+      drawCraters();
     }
 
-    function drawTarget(){
-      if (!targetImg.complete) return;
-      ctx.drawImage(targetImg, target.x - target.w/2, target.y - target.h/2, target.w, target.h);
+    function drawBackground(){
+      if (bgImg.complete && bgImg.naturalWidth>0){
+        const iw=bgImg.width, ih=bgImg.height;
+        const sc=Math.max(W/iw, H/ih);
+        ctx.drawImage(bgImg, (W-iw*sc)/2, (H-ih*sc)/2, iw*sc, ih*sc);
+      } else {
+        ctx.fillStyle="#041017"; ctx.fillRect(0,0,W,H);
+      }
     }
 
     function drawShards(){
-      const t=performance.now()/1000;
-      for (const s of shards){
+      const t=nowS();
+      for (let i=shards.length-1; i>=0; i--){
+        const s = shards[i];
         const a = Math.max(0, 1 - (t - s.born)/s.life);
         ctx.save(); ctx.globalAlpha = a;
         ctx.translate(s.x, s.y); ctx.rotate(s.ang);
         ctx.drawImage(petalImg, -s.w/2, -s.h/2, s.w, s.h);
         ctx.restore();
+        if (a<=0) shards.splice(i,1);
       }
-      ctx.globalAlpha = 1;
     }
-
     function drawFlash(){
       if (flashLife<=0) return;
       const p = Math.min(1, flashT/flashLife);
-      const a = flashMax * (1 - p);
-      if (a <= 0.01) return;
-      ctx.save(); ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fillRect(0,0,W,H); ctx.restore();
+      const a = FLASH_MAX_ALPHA*(1-p);
+      if (a<=0.01) return;
+      ctx.save(); ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.fillRect(0,0,W,H); ctx.restore();
     }
-
     function drawShockwave(){
       if (shockLife<=0) return;
       const p = Math.min(1, shockT/shockLife);
@@ -423,19 +384,152 @@
       ctx.restore();
     }
 
+    /* =======================
+       EASING (slower early ascent)
+    ======================= */
+    const easeInCubic = t => t*t*t;
+
+    /* =======================
+       UPDATE
+    ======================= */
+    let started=false, lastT=performance.now();
+
+    function maybeCharge(dt){
+      if (!orb || launching) return;
+      const r = radiusFromCharge(orb);
+      const inside = pointer.inside && inOrb(orb, pointer.x, pointer.y);
+      const stable = pointer.moved <= MAX_JITTER_PX;
+
+      if (inside){
+        if (!orb.inZone){ orb.inZone = true; orb.enterMs = performance.now(); }
+        const ok = (performance.now() - orb.enterMs) >= ENTRY_GRACE_MS;
+        if (ok){
+          orb.charge = Math.min(1, orb.charge + dt*(1000/DWELL_MS));
+          if (orb.charge >= 1 && !launching){
+            // launch!
+            launching = true;
+            cutHumPunch();
+            play(sfxRelease);
+            orb.launching = true;
+            orb.launchT0 = performance.now();
+            orb.startR  = radiusFromCharge(orb);
+            orb.trail.length = 0;
+          }
+        }
+      } else {
+        orb.inZone = false;
+        if (!launching) orb.charge = Math.max(0, orb.charge - DECAY_PER_SEC*dt);
+      }
+    }
+
+    function update(dt){
+      // Spawn if needed
+      if (!orb && !launching && respawnAtMs && performance.now() >= respawnAtMs){
+        respawnAtMs = 0;
+        spawnOrb();
+      } else if (!orb && !launching && !respawnAtMs){
+        // first time
+        spawnOrb();
+      }
+
+      // Charging
+      maybeCharge(dt);
+
+      // Update hum
+      updateHum(orb && !launching ? orb.charge : 0);
+
+      // Launch curve (eased to slow early ascent)
+      if (launching && orb){
+        const tNow = performance.now();
+        const pLinear = clamp((tNow - orb.launchT0)/LAUNCH_MS, 0, 1);
+        const t = easeInCubic(pLinear);
+
+        const p0   = { x:orb.cx, y:orb.cy };
+        const ctrl = { x:orb.cx + (moon.x - orb.cx)*0.35, y: Math.min(orb.cy, moon.y) - H*BEZIER_PEAK };
+        const p1   = { x:moon.x, y:moon.y };
+
+        const x = (1-t)*(1-t)*p0.x + 2*(1-t)*t*ctrl.x + t*t*p1.x;
+        const y = (1-t)*(1-t)*p0.y + 2*(1-t)*t*ctrl.y + t*t*p1.y;
+        const r = orb.startR + (END_RADIUS - orb.startR) * t;
+
+        // trail
+        orb.trail.push({ x, y, r, a:1 });
+        if (orb.trail.length>18) orb.trail.shift();
+        for (const tr of orb.trail) tr.a *= 0.9;
+
+        orb.cx = x; orb.cy = y; orb.renderR = r;
+
+        if (t>=1){
+          // Impact & clean up
+          addCraterFromImpact();     // <<< add a crater
+          burstAt(moon.x, moon.y);
+          flash(); shock(moon.x, moon.y);
+          play(sfxImpact);
+          launching = false;
+          orb = null;
+          respawnAtMs = performance.now() + RESPAWN_DELAY_MS; // schedule next orb
+        }
+      }
+
+      // FX timers
+      if (flashLife>0){ flashT += dt; if (flashT>=flashLife) flashLife=0; }
+      if (shockLife>0){ shockT += dt; if (shockT>=shockLife) shockLife=0; }
+
+      // Petal physics
+      const t = nowS();
+      for (let i=shards.length-1;i>=0;i--){
+        const s=shards[i];
+        s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 360*dt; s.ang += s.rot*dt;
+        if (t - s.born > s.life) shards.splice(i,1);
+      }
+    }
+
+    /* =======================
+       RENDER
+    ======================= */
+    function drawOrb(){
+      if (!orb) return;
+      if (!launching){
+        const r = radiusFromCharge(orb);
+        const [ox, oy] = orbJitter(orb.charge);
+        const cx = orb.cx + ox, cy = orb.cy + oy;
+        drawSolidBall(cx, cy, r, true);
+        drawSmallHalo(cx, cy, r, HALO_ALPHA);
+      } else {
+        // trail echoes
+        ctx.save(); ctx.globalCompositeOperation='source-over';
+        for (const tr of orb.trail){
+          if (tr.a<=0.02) continue;
+          ctx.globalAlpha = 0.10 * tr.a;
+          drawSolidBall(tr.x, tr.y, tr.r*0.9, false);
+          drawSmallHalo(tr.x, tr.y, tr.r*0.9, HALO_TRAIL_ALPHA*tr.a);
+        }
+        ctx.restore(); ctx.globalAlpha=1;
+
+        // current position
+        drawSolidBall(orb.cx, orb.cy, orb.renderR||END_RADIUS, true);
+        drawSmallHalo(orb.cx, orb.cy, orb.renderR||END_RADIUS, HALO_ALPHA);
+      }
+    }
+
     function render(){
-      drawBackground();
-      drawTarget();
-      if (!proj) drawChargingBall();
-      drawProjectile();
+      // bg + moon + craters
+      if (bgImg.complete && bgImg.naturalWidth>0){
+        const iw=bgImg.width, ih=bgImg.height;
+        const sc=Math.max(W/iw, H/ih);
+        ctx.drawImage(bgImg, (W-iw*sc)/2, (H-ih*sc)/2, iw*sc, ih*sc);
+      } else {
+        ctx.fillStyle="#041017"; ctx.fillRect(0,0,W,H);
+      }
+      drawMoon();
+
+      drawOrb();
+
       drawShards();
       drawShockwave();
       drawFlash();
     }
 
-    /* =======================
-       MAIN LOOP
-    ======================= */
     function tick(tMs){
       if (!started) return;
       const dt = Math.min(0.033, (tMs - lastT)/1000);
@@ -461,16 +555,16 @@
       try{ await enterFullscreen(); }catch(e){}
       startOverlay.style.display='none';
       started = true;
-      resize();
-
-      // Init audio on user gesture
-      try { setupAudio(); await audioCtx.resume(); } catch(e){ /* ignore */ }
 
       // ensure images then start
       let pending = 0;
       const tryStart = ()=>{ if (--pending<=0) requestAnimationFrame(tick); };
-      [bgImg, petalImg, targetImg].forEach(im=>{ if (!im.complete){ pending++; im.onload=tryStart; }});
+      [bgImg, petalImg].forEach(im=>{ if (!im.complete){ pending++; im.onload=tryStart; }});
       if (pending===0) requestAnimationFrame(tick);
+
+      // audio on gesture
+      try { setupAudio(); await audioCtx.resume(); } catch(e){}
+      resize();
     });
   })();
   </script>
