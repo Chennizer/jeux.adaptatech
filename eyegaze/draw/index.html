@@ -1,253 +1,824 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Draw Within the Lines — Canvas Demo (Presets + User Image Mask + Compat + Tests)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Dessiner dans les lignes" data-en="Draw within the lines">Dessiner dans les lignes</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
   <style>
-    :root{
-      --bg:#0b0f14; --panel:#111923; --ink:#f5f5f5; --accent:#4fd1c5; --edge:#e2e8f0; --ok:#22c55e; --bad:#ef4444;
+    :root {
+      --ui-scale: 1;
+      --sidebar-w: clamp(96px, calc(120px * var(--ui-scale)), 196px);
+      --sidebar-pad-x: clamp(8px, calc(12px * var(--ui-scale)), 16px);
+      --sidebar-pad-y: clamp(12px, calc(14px * var(--ui-scale)), 18px);
+      --swatch-size: clamp(48px, calc(68px * var(--ui-scale)), 92px);
+      --swatch-gap: clamp(10px, calc(12px * var(--ui-scale)), 16px);
+      --swatch-border: clamp(4px, calc(5px * var(--ui-scale)), 6px);
+      --swatch-outline: clamp(3px, calc(4px * var(--ui-scale)), 5px);
+      --brush-btn: clamp(40px, calc(48px * var(--ui-scale)), 60px);
+      --brush-gap: clamp(10px, calc(12px * var(--ui-scale)), 16px);
+      --save-btn: clamp(40px, calc(48px * var(--ui-scale)), 60px);
+      --save-radius: clamp(8px, calc(10px * var(--ui-scale)), 12px);
     }
-    html,body{height:100%;margin:0;background:var(--bg);color:#e6edf3;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-    .wrap{display:grid;grid-template-columns:380px 1fr;height:100%;}
-    .panel{background:var(--panel);padding:16px 14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);overflow:auto}
-    .panel h1{font-size:18px;margin:0 0 10px}
-    .panel .row{display:flex;align-items:center;gap:10px;margin:10px 0}
-    .panel label{font-size:13px;opacity:.9;min-width:110px}
-    .panel input[type="color"], .panel input[type="range"], .panel button, select{width:100%}
-    .panel .hint{font-size:12px;opacity:.7;margin-top:8px;line-height:1.35}
 
-    .stage{position:relative;display:grid;place-items:center;background:radial-gradient(1200px 600px at 60% -10%, #1a2330 0%, #0b0f14 60%, #080c11 100%)}
-    canvas{display:block;max-width:100%;height:auto}
-    #ink{position:absolute;inset:0}
-    #outline{position:absolute;inset:0;pointer-events:none}
-    .badge{position:absolute;top:12px;right:12px;background:#0b1520;border:1px solid rgba(255,255,255,.1);padding:6px 10px;border-radius:999px;font-size:12px}
-    .controls{display:grid;gap:10px}
-    .buttons{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-    .buttons button{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:#101722;color:#e6edf3;cursor:pointer}
-    .buttons button:hover{border-color:rgba(255,255,255,.25)}
-    .tip{font-size:12px;opacity:.75;margin-top:6px}
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background: #02060c;
+      color: #e6edf3;
+      min-height: 100vh;
+      overflow: hidden;
+    }
 
-    details{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 10px}
-    details summary{cursor:pointer;font-size:13px}
-    #testResults{margin-top:8px;font-size:12px;line-height:1.5}
-    .ok{color:var(--ok)} .bad{color:var(--bad)}
-    .preview{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:center}
-    .preview img{width:64px;height:64px;object-fit:contain;background:#0b1520;border:1px solid rgba(255,255,255,.06);border-radius:8px}
-    .muted{opacity:.6}
+    body.light { background: #f1f5f9; color: #111; }
+    body.dark  { background: #02060c; color: #e6edf3; }
+
+    .game-container {
+      width: 100%;
+      height: 100vh;
+      display: none;
+      position: relative;
+    }
+
+    #sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: var(--sidebar-w);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(16px, calc(20px * var(--ui-scale)), 26px);
+      padding: var(--sidebar-pad-y) var(--sidebar-pad-x);
+      background: #ffffff;
+      color: #111;
+      box-shadow: 0 0 18px rgba(0,0,0,0.18);
+      z-index: 40;
+    }
+
+    body.dark #sidebar {
+      background: #ffffff;
+      color: #111;
+    }
+
+    #menuBtn {
+      align-self: stretch;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 2px solid #0ea5e9;
+      background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+      color: #fff;
+      font-weight: 700;
+      font-size: clamp(16px, calc(18px * var(--ui-scale)), 20px);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #palette {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(var(--swatch-size), 1fr));
+      grid-auto-rows: var(--swatch-size);
+      gap: var(--swatch-gap);
+      justify-content: center;
+      align-content: start;
+    }
+
+    .swatch {
+      position: relative;
+      border-radius: 50%;
+      border: var(--swatch-border) solid #ffffff;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.14);
+      overflow: hidden;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.12s ease;
+    }
+
+    .swatch.active {
+      transform: scale(1.05);
+    }
+
+    .swatch.active::before {
+      content: "";
+      position: absolute;
+      inset: calc(var(--swatch-outline) + 2px);
+      border-radius: 50%;
+      border: var(--swatch-outline) solid rgba(17,17,17,0.8);
+      pointer-events: none;
+    }
+
+    #customColorRow {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-self: stretch;
+      text-align: center;
+      font-size: 14px;
+      color: #0b1724;
+    }
+
+    #customColor {
+      width: 100%;
+      height: 44px;
+      border-radius: 12px;
+      border: 2px solid rgba(14,165,233,0.35);
+      cursor: pointer;
+      background: transparent;
+    }
+
+    #brushSizes {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--brush-gap);
+    }
+
+    .brushBtn {
+      width: var(--brush-btn);
+      height: var(--brush-btn);
+      border-radius: 50%;
+      border: 2px solid #ccc;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.12s ease, background-color 0.12s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .brushBtn span {
+      display: block;
+      border-radius: 50%;
+      background: #0b1724;
+    }
+
+    .brushBtn[data-size="small"] span { width: 10px; height: 10px; }
+    .brushBtn[data-size="medium"] span { width: 18px; height: 18px; }
+    .brushBtn[data-size="large"] span { width: 30px; height: 30px; }
+
+    .brushBtn.active {
+      border-color: #0ea5e9;
+      background: #e0f2fe;
+      transform: scale(1.08);
+    }
+
+    .sidebar-actions {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+      margin-top: auto;
+    }
+
+    .sidebar-actions button {
+      padding: 12px;
+      border-radius: 12px;
+      border: 2px solid rgba(14,165,233,0.4);
+      background: rgba(14,165,233,0.12);
+      color: #0b1724;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .sidebar-actions button.primary {
+      background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .sidebar-actions button.danger {
+      background: rgba(239,68,68,0.14);
+      border-color: rgba(239,68,68,0.55);
+      color: #b91c1c;
+    }
+
+    .sidebar-actions button.toggle-active {
+      background: rgba(234,179,8,0.16);
+      border-color: rgba(234,179,8,0.6);
+      color: #92400e;
+    }
+
+    #stage {
+      position: fixed;
+      left: var(--sidebar-w);
+      top: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(1100px 600px at 60% -10%, #1a2330 0%, #060b14 60%, #03070d 100%);
+    }
+
+    #canvasWrap {
+      position: relative;
+      width: min(100%, 1400px);
+      max-height: 100%;
+      aspect-ratio: 14 / 9;
+      box-shadow: 0 18px 48px rgba(0,0,0,0.3);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #ink { touch-action: none; cursor: crosshair; }
+    #outline { pointer-events: none; }
+
+    #badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(11,21,32,0.82);
+      color: #e2e8f0;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4,10,18,0.65);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(16px, 6vw, 40px);
+      z-index: 200;
+    }
+
+    .modal.show { display: flex; }
+
+    .modal-content {
+      width: min(960px, 100%);
+      max-height: min(92vh, 840px);
+      background: #0f1729;
+      color: #f8fafc;
+      border-radius: 20px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+      padding: clamp(18px, 4vw, 32px);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+    }
+
+    .modal-content h1 {
+      margin: 0;
+      font-size: clamp(24px, calc(28px * var(--ui-scale)), 34px);
+    }
+
+    .modal-content p {
+      margin: 0;
+      line-height: 1.5;
+      color: rgba(226, 232, 240, 0.78);
+    }
+
+    .options-grid {
+      display: grid;
+      gap: clamp(18px, calc(24px * var(--ui-scale)), 28px);
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .options-column {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .options-column label {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #38bdf8;
+    }
+
+    .options-column select,
+    .options-column input[type="file"],
+    .options-column button,
+    .options-column input[type="color"] {
+      margin-top: 6px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 2px solid rgba(56,189,248,0.35);
+      background: rgba(15,23,42,0.6);
+      color: #e2e8f0;
+      font-size: 15px;
+    }
+
+    .options-column button {
+      cursor: pointer;
+      background: linear-gradient(135deg, rgba(14,165,233,0.35), rgba(56,189,248,0.45));
+    }
+
+    #presetStatus {
+      font-size: 13px;
+      color: rgba(226,232,240,0.7);
+    }
+
+    #runTests {
+      align-self: start;
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: 2px solid rgba(94,234,212,0.4);
+      background: rgba(45,212,191,0.2);
+      color: #d1fae5;
+      cursor: pointer;
+    }
+
+    #testResults {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    #testResults .ok { color: #34d399; }
+    #testResults .bad { color: #f87171; }
+
+    #startButton {
+      align-self: flex-end;
+      padding: 12px 22px;
+      font-size: 18px;
+      border-radius: 14px;
+      border: none;
+      font-weight: 700;
+      background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+      color: #fff;
+      cursor: pointer;
+      letter-spacing: 0.06em;
+    }
+
+    #presetModal .modal-content {
+      width: min(1040px, 100%);
+    }
+
+    #presetList {
+      display: grid;
+      gap: 22px;
+    }
+
+    .preset-category {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .preset-category h3 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #38bdf8;
+    }
+
+    .preset-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+
+    .preset-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(15,23,42,0.65);
+      border: 2px solid transparent;
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: transform 0.12s ease, border-color 0.12s ease;
+    }
+
+    .preset-btn:hover,
+    .preset-btn:focus-visible {
+      transform: translateY(-2px);
+      border-color: rgba(56,189,248,0.65);
+    }
+
+    .preset-btn img {
+      width: 96px;
+      height: 96px;
+      object-fit: contain;
+      background: rgba(15,23,42,0.85);
+      border-radius: 12px;
+      border: 1px solid rgba(148,163,184,0.35);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .modal-actions button {
+      padding: 10px 18px;
+      border-radius: 12px;
+      border: 2px solid rgba(148,163,184,0.4);
+      background: rgba(15,23,42,0.55);
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+
+    @media (max-width: 900px) {
+      #stage { left: calc(var(--sidebar-w) - 12px); }
+    }
   </style>
-  <!-- Optional presets file; if present, provides window.PNG_ARRAY -->
+
   <script src="../../js/cvipngarray.js" defer></script>
 </head>
-<body>
-  <div class="wrap">
-    <aside class="panel">
-      <h1>Draw within the outline</h1>
-      <div class="controls">
-        <div class="row">
-          <label>Brush size <span id="brushV">18</span>px</label>
-          <input id="brush" type="range" min="3" max="64" value="18" />
-        </div>
-        <div class="row">
-          <label>Brush color</label>
-          <input id="color" type="color" value="#ff7a59" />
-        </div>
-        <div class="row">
-          <label>Mode</label>
-          <select id="mode">
-            <option value="draw" selected>Draw</option>
-            <option value="erase">Erase</option>
-          </select>
-        </div>
-        <div class="buttons">
-          <button id="clear">Clear</button>
-          <button id="download">Save PNG</button>
-        </div>
+<body class="dark">
+  <div id="game-options" class="modal show" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <h1 class="translate" data-fr="Dessiner dans les lignes" data-en="Draw within the outline">Dessiner dans les lignes</h1>
+      <p class="translate" data-fr="Choisissez une forme ou importez votre masque. Le dessin reste à l'intérieur de la zone opaque." data-en="Choose a built-in outline or import your own mask. Drawing stays inside the opaque area."></p>
 
-        <!-- Built-in vector shapes -->
-        <div class="row">
-          <label>Built‑in outline</label>
+      <div class="options-grid">
+        <div class="options-column">
+          <label class="translate" data-fr="Contour intégré" data-en="Built-in outline">Contour intégré</label>
           <select id="shape">
             <option value="blob">Blob</option>
-            <option value="star">Star</option>
-            <option value="heart">Heart</option>
-            <option value="rect">Rounded rectangle</option>
+            <option value="star">Étoile</option>
+            <option value="heart">Cœur</option>
+            <option value="rect">Rectangle arrondi</option>
           </select>
-        </div>
 
-        <!-- Presets from PNG_ARRAY -->
-        <div class="row">
-          <label>Preset category</label>
-          <select id="presetCategory" disabled>
-            <option>Loading…</option>
-          </select>
-        </div>
-        <div class="row">
-          <label>Preset item</label>
-          <select id="presetItem" disabled>
-            <option>Select a category</option>
-          </select>
-        </div>
-        <div class="row preview">
-          <img id="presetThumb" alt="preview"/>
-          <button id="loadPreset" disabled>Use preset as mask</button>
-        </div>
-        <p id="presetStatus" class="hint muted">Presets will activate if <code>../../js/cvipngarray.js</code> is found.</p>
-
-        <!-- Upload -->
-        <div class="row">
-          <label>Upload outline</label>
+          <label class="translate" data-fr="Charger un fichier" data-en="Upload outline">Charger un fichier</label>
           <input id="outlineFile" type="file" accept="image/png, image/svg+xml" />
         </div>
-        <div class="row">
-          <label>Fit uploaded</label>
+
+        <div class="options-column">
+          <label class="translate" data-fr="Ajustement du masque" data-en="Mask fit">Ajustement du masque</label>
           <select id="fitMode">
-            <option value="contain" selected>Contain (keep aspect)</option>
+            <option value="contain" selected>Contain</option>
             <option value="cover">Cover</option>
             <option value="stretch">Stretch</option>
           </select>
-        </div>
-        <div class="row">
-          <label>Mask source</label>
+
+          <label class="translate" data-fr="Source du masque" data-en="Mask source">Source du masque</label>
           <select id="maskSource">
-            <option value="alpha" selected>Alpha (opaque = inside)</option>
-            <option value="luma">Luminance (white = inside)</option>
-            <option value="alpha-invert">Alpha inverted</option>
+            <option value="alpha">Alpha (opaque = intérieur)</option>
+            <option value="luma">Luminance (clair = intérieur)</option>
+            <option value="alpha-invert">Alpha inversé</option>
           </select>
+
+          <button id="openPresetPicker" type="button" disabled class="translate" data-fr="Choisir un PNG de la bibliothèque" data-en="Choose PNG from library">Choisir un PNG de la bibliothèque</button>
+          <div id="presetStatus" aria-live="polite">Chargement des préréglages…</div>
         </div>
 
-        <p class="hint">Use a <strong>built‑in shape</strong>, pick a <strong>preset</strong> from your PNG list, or <strong>upload PNG/SVG</strong>. The opaque region becomes the drawable area. A faint guide is shown on the canvas.</p>
+        <div class="options-column">
+          <label class="translate" data-fr="Tests" data-en="Diagnostics">Tests</label>
+          <button id="runTests" type="button" class="translate" data-fr="Lancer les tests" data-en="Run tests">Lancer les tests</button>
+          <div id="testResults">Aucun test lancé.</div>
+        </div>
+      </div>
 
-        <details>
-          <summary>Diagnostics & self‑tests</summary>
-          <div class="row">
-            <button id="runTests">Run tests</button>
-          </div>
-          <div id="testResults">No tests run yet.</div>
-        </details>
+      <div class="modal-actions">
+        <button id="startButton" type="button" class="translate" data-fr="Commencer" data-en="Start drawing">Commencer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="presetModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="presetTitle">
+    <div class="modal-content">
+      <h1 id="presetTitle" class="translate" data-fr="Bibliothèque PNG" data-en="PNG library">Bibliothèque PNG</h1>
+      <p id="presetEmpty" class="translate" data-fr="Aucun PNG n'est disponible." data-en="No PNG presets available." hidden>Aucun PNG n'est disponible.</p>
+      <div id="presetList"></div>
+      <div class="modal-actions">
+        <button id="closePreset" type="button" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="drawGame" class="game-container" aria-hidden="true">
+    <aside id="sidebar">
+      <button id="menuBtn" type="button">☰ Menu</button>
+
+      <div id="palette" role="listbox" aria-label="Palette de couleurs"></div>
+
+      <div id="customColorRow">
+        <span class="translate" data-fr="Couleur personnalisée" data-en="Custom color">Couleur personnalisée</span>
+        <input id="customColor" type="color" value="#ff7a59" />
+      </div>
+
+      <div id="brushSizes" aria-label="Tailles du pinceau">
+        <div class="brushBtn" data-size="small"><span></span></div>
+        <div class="brushBtn active" data-size="medium"><span></span></div>
+        <div class="brushBtn" data-size="large"><span></span></div>
+      </div>
+
+      <div class="sidebar-actions">
+        <button id="modeToggle" type="button" class="toggle-active" data-mode="draw">Mode: Dessiner</button>
+        <button id="clear" type="button" class="danger translate" data-fr="Effacer" data-en="Clear">Effacer</button>
+        <button id="download" type="button" class="primary translate" data-fr="Enregistrer PNG" data-en="Save PNG">Enregistrer PNG</button>
       </div>
     </aside>
 
-    <main class="stage">
-      <div class="badge">Canvas demo</div>
-      <canvas id="ink" width="1400" height="900" aria-label="Ink layer"></canvas>
-      <canvas id="outline" width="1400" height="900" aria-label="Outline layer"></canvas>
-    </main>
+    <div id="stage">
+      <div id="canvasWrap">
+        <div id="badge" class="translate" data-fr="Mode masque actif" data-en="Mask enabled">Mode masque actif</div>
+        <canvas id="ink" width="1400" height="900" aria-label="Couche d'encre"></canvas>
+        <canvas id="outline" width="1400" height="900" aria-label="Contour"></canvas>
+      </div>
+    </div>
   </div>
 
   <script>
-    // --- Setup canvases ---
+    const DEFAULT_COLORS = [
+      "#ff7a59", "#ef4444", "#f97316", "#facc15", "#10b981", "#0ea5e9", "#6366f1", "#ec4899", "#1f2937", "#f8fafc"
+    ];
+
+    const colorPalette = document.getElementById('palette');
+    const customColorInput = document.getElementById('customColor');
+    const brushButtons = Array.from(document.querySelectorAll('.brushBtn'));
+    const modeToggle = document.getElementById('modeToggle');
+    const clearBtn = document.getElementById('clear');
+    const downloadBtn = document.getElementById('download');
+    const menuBtn = document.getElementById('menuBtn');
+
+    const optionsModal = document.getElementById('game-options');
+    const startButton = document.getElementById('startButton');
+    const drawGame = document.getElementById('drawGame');
+    const presetModal = document.getElementById('presetModal');
+    const openPresetPicker = document.getElementById('openPresetPicker');
+    const closePresetBtn = document.getElementById('closePreset');
+    const presetList = document.getElementById('presetList');
+    const presetStatus = document.getElementById('presetStatus');
+    const presetEmpty = document.getElementById('presetEmpty');
+
+    const runTestsBtn = document.getElementById('runTests');
+    const testResults = document.getElementById('testResults');
+
+    const shapeEl = document.getElementById('shape');
+    const outlineFileEl = document.getElementById('outlineFile');
+    const fitModeEl = document.getElementById('fitMode');
+    const maskSourceEl = document.getElementById('maskSource');
+
     const ink = document.getElementById('ink');
     const out = document.getElementById('outline');
     const ic = ink.getContext('2d');
     const oc = out.getContext('2d');
 
-    // Avoid ResizeObserver loops by batching in rAF and resizing only on change
+    let currentColor = customColorInput.value;
+    let brushSize = 22;
+    let currentMode = 'draw';
+    let gameStarted = false;
+
+    function getCurrentLang(){
+      return document.documentElement.lang === 'en' ? 'en' : 'fr';
+    }
+
+    function updateStartButtonLabel(){
+      const lang = getCurrentLang();
+      if(!gameStarted){
+        const attr = lang === 'en' ? 'data-en' : 'data-fr';
+        const text = startButton.getAttribute(attr) || startButton.textContent;
+        startButton.textContent = text;
+      } else {
+        startButton.textContent = lang === 'en' ? 'Close menu' : 'Fermer le menu';
+      }
+    }
+
+    function updateUiScale(){
+      const vmin = Math.min(window.innerWidth, window.innerHeight);
+      const scale = Math.min(1.6, Math.max(0.72, vmin / 900));
+      document.documentElement.style.setProperty('--ui-scale', scale.toFixed(3));
+    }
+    updateUiScale();
+    window.addEventListener('resize', updateUiScale, { passive: true });
+
+    function buildPalette(){
+      colorPalette.innerHTML = '';
+      DEFAULT_COLORS.forEach((color, index)=>{
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'swatch';
+        btn.style.background = color;
+        btn.setAttribute('aria-label', color);
+        btn.addEventListener('click', ()=> selectColor(color, btn));
+        if(index === 0){
+          selectColor(color, btn);
+        }
+        colorPalette.appendChild(btn);
+      });
+    }
+
+    function selectColor(color, btn){
+      currentColor = color;
+      customColorInput.value = color;
+      colorPalette.querySelectorAll('.swatch').forEach(el=> el.classList.remove('active'));
+      if(btn){ btn.classList.add('active'); }
+    }
+
+    customColorInput.addEventListener('input', ()=>{
+      currentColor = customColorInput.value;
+      colorPalette.querySelectorAll('.swatch').forEach(el=> el.classList.remove('active'));
+    });
+
+    function setBrushSize(sizeKey){
+      const sizes = { small: 12, medium: 22, large: 38 };
+      brushSize = sizes[sizeKey] || 22;
+      brushButtons.forEach(btn=>{
+        btn.classList.toggle('active', btn.dataset.size === sizeKey);
+      });
+    }
+
+    brushButtons.forEach(btn=>{
+      btn.addEventListener('click', ()=> setBrushSize(btn.dataset.size));
+    });
+    setBrushSize('medium');
+
+    function updateModeLabel(){
+      const lang = getCurrentLang();
+      if(currentMode === 'draw'){
+        modeToggle.textContent = lang === 'en' ? 'Mode: Draw' : 'Mode: Dessiner';
+        modeToggle.classList.add('toggle-active');
+      } else {
+        modeToggle.textContent = lang === 'en' ? 'Mode: Erase' : 'Mode: Effacer';
+        modeToggle.classList.remove('toggle-active');
+      }
+    }
+
+    modeToggle.addEventListener('click', ()=>{
+      currentMode = currentMode === 'draw' ? 'erase' : 'draw';
+      updateModeLabel();
+    });
+
+    updateModeLabel();
+    updateStartButtonLabel();
+
+    clearBtn.addEventListener('click', ()=>{
+      ic.clearRect(0,0,ink.width,ink.height);
+    });
+
+    downloadBtn.addEventListener('click', ()=>{
+      const url = mergeForExport();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'dessin.png';
+      a.click();
+    });
+
+    menuBtn.addEventListener('click', ()=>{
+      optionsModal.classList.add('show');
+      updateStartButtonLabel();
+      drawGame.setAttribute('aria-hidden', 'true');
+    });
+
+    function closeOptions(){
+      optionsModal.classList.remove('show');
+      drawGame.setAttribute('aria-hidden', 'false');
+      requestResize();
+    }
+
+    async function enterFullscreen(){
+      const el = document.documentElement;
+      try {
+        if(el.requestFullscreen) await el.requestFullscreen();
+        else if(el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+        else if(el.msRequestFullscreen) await el.msRequestFullscreen();
+      } catch (e) {}
+    }
+
+    startButton.addEventListener('click', async ()=>{
+      if(!gameStarted){
+        await enterFullscreen();
+        drawGame.style.display = 'block';
+        gameStarted = true;
+        buildPalette();
+        requestResize();
+      }
+      updateStartButtonLabel();
+      closeOptions();
+    });
+
+    closePresetBtn.addEventListener('click', ()=>{
+      presetModal.classList.remove('show');
+    });
+
+    openPresetPicker.addEventListener('click', ()=>{
+      buildPresetList();
+      presetModal.classList.add('show');
+    });
+
+    presetModal.addEventListener('click', (e)=>{
+      if(e.target === presetModal){
+        presetModal.classList.remove('show');
+      }
+    });
+
+    optionsModal.addEventListener('click', (e)=>{
+      if(e.target === optionsModal && gameStarted){
+        closeOptions();
+      }
+    });
+
+    outlineFileEl.addEventListener('change', async (e)=>{
+      const file = e.target.files?.[0];
+      if(!file) return;
+      await loadUserMaskFromFile(file);
+      redrawMaskGuide();
+      if(gameStarted){ closeOptions(); }
+    });
+
+    shapeEl.addEventListener('change', ()=>{
+      userMask = null;
+      drawOutline();
+    });
+
+    fitModeEl.addEventListener('change', ()=>{
+      rebuildMaskCache();
+      redrawMaskGuide();
+    });
+
+    maskSourceEl.addEventListener('change', ()=>{
+      rebuildMaskCache();
+      redrawMaskGuide();
+    });
+
+    const scratch = document.createElement('canvas');
+    const sc = scratch.getContext('2d');
+
+    const maskCanvas = document.createElement('canvas');
+    const maskCtx = maskCanvas.getContext('2d');
+
+    let shapePath = null;
+    let userMask = null;
+    let maskImageData = null;
+
     let resizePending = false;
     function fitCanvas(cnv){
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       const rect = cnv.getBoundingClientRect();
       const w = Math.max(1, Math.round(rect.width * dpr));
       const h = Math.max(1, Math.round(rect.height * dpr));
-      if (cnv.width !== w || cnv.height !== h){
-        cnv.width = w; cnv.height = h;
+      if(cnv.width !== w || cnv.height !== h){
+        cnv.width = w;
+        cnv.height = h;
         const ctx = cnv.getContext('2d');
-        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
     }
+
     function resizeAllImmediate(){
-      fitCanvas(ink); fitCanvas(out); drawOutline(); syncScratch(); rebuildMaskCache();
+      if(!gameStarted) return;
+      fitCanvas(ink);
+      fitCanvas(out);
+      drawOutline();
+      syncScratch();
+      rebuildMaskCache();
     }
-    function requestResize(){ if(resizePending) return; resizePending = true; requestAnimationFrame(()=>{ resizePending=false; resizeAllImmediate(); }); }
-    const ro = new ResizeObserver(()=>{ requestResize(); });
+
+    function requestResize(){
+      if(resizePending) return;
+      resizePending = true;
+      requestAnimationFrame(()=>{
+        resizePending = false;
+        resizeAllImmediate();
+      });
+    }
+
+    const ro = new ResizeObserver(()=> requestResize());
     ro.observe(out);
-
-    // --- UI ---
-    const brushEl = document.getElementById('brush');
-    const brushV = document.getElementById('brushV');
-    const colorEl = document.getElementById('color');
-    const modeEl = document.getElementById('mode');
-    const clearEl = document.getElementById('clear');
-    const dlEl = document.getElementById('download');
-    const shapeEl = document.getElementById('shape');
-
-    const outlineFileEl = document.getElementById('outlineFile');
-    const fitModeEl = document.getElementById('fitMode');
-    const maskSourceEl = document.getElementById('maskSource');
-
-    const catEl = document.getElementById('presetCategory');
-    const itemEl = document.getElementById('presetItem');
-    const loadPresetBtn = document.getElementById('loadPreset');
-    const presetThumb = document.getElementById('presetThumb');
-    const presetStatus = document.getElementById('presetStatus');
-
-    const runTestsBtn = document.getElementById('runTests');
-    const testResults = document.getElementById('testResults');
-
-    brushEl.addEventListener('input', ()=> brushV.textContent = brushEl.value);
-    clearEl.addEventListener('click', ()=>{ ic.clearRect(0,0,ink.width,ink.height); });
-    dlEl.addEventListener('click', ()=>{
-      const url = mergeForExport();
-      const a = document.createElement('a'); a.href=url; a.download='drawing.png'; a.click();
-    });
-    shapeEl.addEventListener('change', ()=>{ userMask = null; drawOutline(); });
-    fitModeEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
-    maskSourceEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
-
-    outlineFileEl.addEventListener('change', async (e)=>{
-      const file = e.target.files?.[0]; if(!file) return; await loadUserMaskFromFile(file); redrawMaskGuide();
-    });
-
-    // --- Presets (PNG_ARRAY) ---
-    function enablePresets(){
-      if(!window.PNG_ARRAY || !Array.isArray(window.PNG_ARRAY) || window.PNG_ARRAY.length===0){
-        catEl.disabled = true; itemEl.disabled = true; loadPresetBtn.disabled = true;
-        presetStatus.textContent = 'Preset list not found. Ensure ../../js/cvipngarray.js is loaded.';
-        return;
-      }
-      const cats = [...new Set(window.PNG_ARRAY.map(x=>x.category))].sort((a,b)=>a.localeCompare(b));
-      catEl.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
-      catEl.disabled = false; itemEl.disabled = false; loadPresetBtn.disabled = false;
-      presetStatus.textContent = `Loaded ${window.PNG_ARRAY.length} preset PNGs across ${cats.length} categories.`;
-      updateItems();
-    }
-
-    function updateItems(){
-      const cat = catEl.value;
-      const items = window.PNG_ARRAY.filter(x=>x.category===cat).sort((a,b)=>a.name.localeCompare(b.name));
-      itemEl.innerHTML = items.map(i=>`<option value="${i.file}" data-name="${i.name}">${i.name}</option>`).join('');
-      if(items[0]){ presetThumb.src = items[0].file; presetThumb.alt = items[0].name; }
-    }
-
-    catEl.addEventListener('change', updateItems);
-    itemEl.addEventListener('change', ()=>{ const opt=itemEl.selectedOptions[0]; if(opt){ presetThumb.src=opt.value; presetThumb.alt=opt.dataset.name; }});
-
-    loadPresetBtn.addEventListener('click', ()=>{
-      const src = itemEl.value; if(!src) return;
-      loadUserMaskFromURL(src);
-    });
-
-    // wait for defered presets script to load
-    window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(enablePresets, 0); });
-
-    // --- Outline as vector path (Path2D) ---
-    let shapePath = null; // Path2D in canvas units
 
     function makePath(kind, w, h){
       const p = new Path2D();
-      const pad = Math.min(w,h)*0.12;
-      const cx=w/2, cy=h/2;
-      if(kind==='rect'){
-        const r = Math.min(w,h)*0.18; // radius
-        const x=pad, y=pad, rw=w-2*pad, rh=h-2*pad;
-        roundRectPath(p,x,y,rw,rh,r);
-      } else if(kind==='blob'){
-        const rx=w*0.32, ry=h*0.28;
+      const pad = Math.min(w,h) * 0.12;
+      const cx = w / 2;
+      const cy = h / 2;
+      if(kind === 'rect'){
+        const r = Math.min(w,h) * 0.18;
+        roundRectPath(p, pad, pad, w - pad*2, h - pad*2, r);
+      } else if(kind === 'blob'){
+        const rx = w * 0.32;
+        const ry = h * 0.28;
         blobPath(p, cx, cy, rx, ry);
-      } else if(kind==='star'){
-        starPath(p, cx, cy, Math.min(w,h)*0.36, 5);
-      } else if(kind==='heart'){
-        heartPath(p, cx, cy, Math.min(w,h)*0.36);
+      } else if(kind === 'star'){
+        starPath(p, cx, cy, Math.min(w,h) * 0.36, 5);
+      } else if(kind === 'heart'){
+        heartPath(p, cx, cy, Math.min(w,h) * 0.36);
       }
       return p;
     }
@@ -271,17 +842,24 @@
     }
 
     function starPath(p, cx, cy, r, spikes){
-      const step=Math.PI/spikes; let rot=Math.PI/2*3; let x=cx; let y=cy - r;
+      const step = Math.PI / spikes;
+      let rot = Math.PI / 2 * 3;
       p.moveTo(cx, cy - r);
       for(let i=0;i<spikes;i++){
-        x = cx + Math.cos(rot)*r; y = cy + Math.sin(rot)*r; p.lineTo(x,y); rot += step;
-        x = cx + Math.cos(rot)*r*0.5; y = cy + Math.sin(rot)*r*0.5; p.lineTo(x,y); rot += step;
+        let x = cx + Math.cos(rot) * r;
+        let y = cy + Math.sin(rot) * r;
+        p.lineTo(x, y);
+        rot += step;
+        x = cx + Math.cos(rot) * r * 0.5;
+        y = cy + Math.sin(rot) * r * 0.5;
+        p.lineTo(x, y);
+        rot += step;
       }
       p.closePath();
     }
 
     function heartPath(p, cx, cy, s){
-      const top = cy - s*0.25;
+      const top = cy - s * 0.25;
       p.moveTo(cx, top);
       p.bezierCurveTo(cx + s*0.5, top - s*0.6, cx + s, cy - s*0.05, cx, cy + s*0.75);
       p.bezierCurveTo(cx - s, cy - s*0.05, cx - s*0.5, top - s*0.6, cx, top);
@@ -292,66 +870,85 @@
       const rect = out.getBoundingClientRect();
       shapePath = makePath(shapeEl.value, rect.width, rect.height);
       oc.clearRect(0,0,out.width,out.height);
-      if(userMask){ redrawMaskGuide(); }
-      else {
-        oc.save(); oc.fillStyle='white'; oc.globalAlpha=0.06; oc.fill(shapePath); oc.globalAlpha=1; oc.lineWidth=6; oc.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--edge')||'#e2e8f0'; oc.stroke(shapePath); oc.restore();
+      if(userMask){
+        redrawMaskGuide();
+      } else if(shapePath){
+        oc.save();
+        oc.fillStyle = 'white';
+        oc.globalAlpha = 0.08;
+        oc.fill(shapePath);
+        oc.globalAlpha = 1;
+        oc.lineWidth = 6;
+        const lightTheme = document.body.classList.contains('light');
+        oc.strokeStyle = lightTheme ? '#111827' : '#e2e8f0';
+        oc.stroke(shapePath);
+        oc.restore();
       }
     }
-
-    // --- User mask (PNG/SVG) pipeline ---
-    let userMask = null;           // HTMLImageElement
-    const maskCanvas = document.createElement('canvas');
-    const maskCtx = maskCanvas.getContext('2d');
-    let maskImageData = null;      // Uint8ClampedArray of RGBA (cached)
 
     async function loadUserMaskFromFile(file){
       const url = URL.createObjectURL(file);
       await loadUserMaskFromURL(url, true);
     }
+
     function loadUserMaskFromURL(url, revoke=false){
       const img = new Image();
-      img.onload = ()=>{ if(revoke) URL.revokeObjectURL(url); userMask = img; rebuildMaskCache(); drawOutline(); };
-      img.onerror = ()=>{ if(revoke) URL.revokeObjectURL(url); alert('Could not load image. Try a PNG or SVG.'); };
+      img.onload = ()=>{
+        if(revoke) URL.revokeObjectURL(url);
+        userMask = img;
+        rebuildMaskCache();
+        drawOutline();
+        presetModal.classList.remove('show');
+      };
+      img.onerror = ()=>{
+        if(revoke) URL.revokeObjectURL(url);
+        alert('Impossible de charger cette image. Veuillez utiliser un PNG ou un SVG.');
+      };
       img.src = url;
     }
 
-    function computeFit(destW,destH, imgW,imgH, mode){
-      if(mode==='stretch') return { x:0, y:0, w:destW, h:destH };
-      const r = imgW/imgH, R = destW/destH;
-      if(mode==='cover'){
-        const w = R>r ? destW : destH*r;
-        const h = R>r ? destW/r : destH;
-        const x = (destW - w)/2; const y = (destH - h)/2;
-        return {x,y,w,h};
-      } else { // contain
-        const w = R>r ? destH*r : destW;
-        const h = R>r ? destH : destW/r;
-        const x = (destW - w)/2; const y = (destH - h)/2;
-        return {x,y,w,h};
+    function computeFit(destW, destH, imgW, imgH, mode){
+      if(mode === 'stretch') return { x:0, y:0, w:destW, h:destH };
+      const r = imgW / imgH;
+      const R = destW / destH;
+      if(mode === 'cover'){
+        const w = R > r ? destW : destH * r;
+        const h = R > r ? destW / r : destH;
+        return { x: (destW - w)/2, y: (destH - h)/2, w, h };
+      } else {
+        const w = R > r ? destH * r : destW;
+        const h = R > r ? destH : destW / r;
+        return { x: (destW - w)/2, y: (destH - h)/2, w, h };
       }
     }
 
     function rebuildMaskCache(){
-      if(!userMask){ maskImageData=null; return; }
-      maskCanvas.width = out.width; maskCanvas.height = out.height;
+      if(!userMask){
+        maskImageData = null;
+        return;
+      }
+      maskCanvas.width = out.width;
+      maskCanvas.height = out.height;
       maskCtx.setTransform(oc.getTransform());
       maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
       const rect = out.getBoundingClientRect();
       const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
       maskCtx.drawImage(userMask, fit.x, fit.y, fit.w, fit.h);
-
-      // Convert to chosen mask source
       const img = maskCtx.getImageData(0,0,maskCanvas.width, maskCanvas.height);
-      const data = img.data; const mode = maskSourceEl.value;
-      for(let i=0;i<data.length; i+=4){
+      const data = img.data;
+      const mode = maskSourceEl.value;
+      for(let i=0;i<data.length;i+=4){
         const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
         let alpha = a;
-        if(mode==='luma'){
-          const y = 0.2126*r + 0.7152*g + 0.0722*b; alpha = y;
-        } else if(mode==='alpha-invert'){
+        if(mode === 'luma'){
+          alpha = 0.2126*r + 0.7152*g + 0.0722*b;
+        } else if(mode === 'alpha-invert'){
           alpha = 255 - a;
         }
-        data[i]=255; data[i+1]=255; data[i+2]=255; data[i+3]=alpha;
+        data[i] = 255;
+        data[i+1] = 255;
+        data[i+2] = 255;
+        data[i+3] = alpha;
       }
       maskCtx.putImageData(img,0,0);
       maskImageData = img;
@@ -359,111 +956,314 @@
 
     function redrawMaskGuide(){
       oc.clearRect(0,0,out.width,out.height);
-      if(!userMask){ oc.save(); oc.fillStyle='white'; oc.globalAlpha=0.06; oc.fill(shapePath); oc.globalAlpha=1; oc.lineWidth=6; oc.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--edge')||'#e2e8f0'; oc.stroke(shapePath); oc.restore(); return; }
+      if(!userMask){
+        if(shapePath){
+          oc.save();
+          oc.fillStyle='white';
+          oc.globalAlpha = 0.08;
+          oc.fill(shapePath);
+          oc.globalAlpha = 1;
+          oc.lineWidth = 6;
+          oc.strokeStyle = '#e2e8f0';
+          oc.stroke(shapePath);
+          oc.restore();
+        }
+        return;
+      }
       const rect = out.getBoundingClientRect();
       const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
-      oc.save(); oc.globalAlpha = 0.25; oc.drawImage(userMask, fit.x, fit.y, fit.w, fit.h); oc.restore();
+      oc.save();
+      oc.globalAlpha = 0.28;
+      oc.drawImage(userMask, fit.x, fit.y, fit.w, fit.h);
+      oc.restore();
     }
 
-    // --- Drawing with live clipping/masking ---
-    let drawing=false, prev=null;
+    function syncScratch(){
+      scratch.width = ink.width;
+      scratch.height = ink.height;
+      sc.setTransform(ic.getTransform());
+      sc.clearRect(0,0,scratch.width,scratch.height);
+    }
 
-    // Capability detect: does this browser support ctx.clip(Path2D)?
+    function getPos(e){
+      const r = ink.getBoundingClientRect();
+      if(e.touches && e.touches[0]){
+        return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+      }
+      return { x: (e.clientX||e.x) - r.left, y: (e.clientY||e.y) - r.top };
+    }
+
+    let drawing = false;
+    let prev = null;
+
     const supportsPathClip = (function(){
-      try{ const c = document.createElement('canvas').getContext('2d'); const p = new Path2D(); p.rect(0,0,1,1); c.save(); c.clip(p); c.restore(); return true; }catch(e){ return false; }
+      try {
+        const c = document.createElement('canvas').getContext('2d');
+        const p = new Path2D();
+        p.rect(0,0,1,1);
+        c.save();
+        c.clip(p);
+        c.restore();
+        return true;
+      } catch (e){
+        return false;
+      }
     })();
 
-    // Scratch canvas for mask-based pipeline
-    const scratch = document.createElement('canvas');
-    const sc = scratch.getContext('2d');
-
-    function syncScratch(){ scratch.width = ink.width; scratch.height = ink.height; sc.setTransform(ic.getTransform()); sc.clearRect(0,0,scratch.width,scratch.height); }
-
-    function getPos(e){ const r = ink.getBoundingClientRect(); if(e.touches && e.touches[0]){ return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top }; } return { x: (e.clientX||e.x) - r.left, y: (e.clientY||e.y) - r.top }; }
-
-    function begin(e){ drawing=true; prev=getPos(e); e.preventDefault(); }
-    function end(){ drawing=false; prev=null; }
+    function begin(e){ drawing = true; prev = getPos(e); e.preventDefault(); }
+    function end(){ drawing = false; prev = null; }
 
     function draw(e){
       if(!drawing) return;
       const cur = getPos(e);
-      const size = +brushEl.value; const color = colorEl.value; const erasing = (modeEl.value==='erase');
+      const size = brushSize;
+      const color = currentColor;
+      const erasing = currentMode === 'erase';
 
       if(userMask){
-        sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over'; sc.strokeStyle = erasing ? '#000' : color; sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke(); sc.globalCompositeOperation='destination-in'; sc.drawImage(maskCanvas,0,0); sc.restore();
-        ic.save(); ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.drawImage(scratch,0,0); ic.restore(); sc.clearRect(0,0,scratch.width,scratch.height);
+        sc.save();
+        sc.lineCap='round';
+        sc.lineJoin='round';
+        sc.lineWidth=size;
+        sc.globalCompositeOperation='source-over';
+        sc.strokeStyle = erasing ? '#000' : color;
+        sc.beginPath();
+        sc.moveTo(prev.x, prev.y);
+        sc.lineTo(cur.x, cur.y);
+        sc.stroke();
+        sc.globalCompositeOperation='destination-in';
+        sc.drawImage(maskCanvas,0,0);
+        sc.restore();
+
+        ic.save();
+        ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+        ic.drawImage(scratch,0,0);
+        ic.restore();
+        sc.clearRect(0,0,scratch.width,scratch.height);
       } else {
         if(!shapePath) return;
         if(supportsPathClip){
-          ic.save(); ic.clip(shapePath); ic.lineCap='round'; ic.lineJoin='round'; ic.lineWidth=size; ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.strokeStyle = erasing ? 'rgba(0,0,0,1)' : color; ic.beginPath(); ic.moveTo(prev.x, prev.y); ic.lineTo(cur.x, cur.y); ic.stroke(); ic.restore();
+          ic.save();
+          ic.clip(shapePath);
+          ic.lineCap='round';
+          ic.lineJoin='round';
+          ic.lineWidth=size;
+          ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+          ic.strokeStyle = erasing ? 'rgba(0,0,0,1)' : color;
+          ic.beginPath();
+          ic.moveTo(prev.x, prev.y);
+          ic.lineTo(cur.x, cur.y);
+          ic.stroke();
+          ic.restore();
         } else {
-          if(!maskImageData){ maskCanvas.width = out.width; maskCanvas.height = out.height; maskCtx.setTransform(oc.getTransform()); maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height); maskCtx.fillStyle = '#fff'; maskCtx.fill(shapePath); maskImageData = maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height); }
-          sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over'; sc.strokeStyle = erasing ? '#000' : color; sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke(); sc.globalCompositeOperation='destination-in'; sc.putImageData(maskImageData,0,0); sc.restore(); ic.save(); ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.drawImage(scratch,0,0); ic.restore(); sc.clearRect(0,0,scratch.width,scratch.height);
+          if(!maskImageData){
+            maskCanvas.width = out.width;
+            maskCanvas.height = out.height;
+            maskCtx.setTransform(oc.getTransform());
+            maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
+            maskCtx.fillStyle = '#fff';
+            maskCtx.fill(shapePath);
+            maskImageData = maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+          }
+          sc.save();
+          sc.lineCap='round';
+          sc.lineJoin='round';
+          sc.lineWidth=size;
+          sc.globalCompositeOperation='source-over';
+          sc.strokeStyle = erasing ? '#000' : color;
+          sc.beginPath();
+          sc.moveTo(prev.x, prev.y);
+          sc.lineTo(cur.x, cur.y);
+          sc.stroke();
+          sc.globalCompositeOperation='destination-in';
+          sc.putImageData(maskImageData,0,0);
+          sc.restore();
+          ic.save();
+          ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+          ic.drawImage(scratch,0,0);
+          ic.restore();
+          sc.clearRect(0,0,scratch.width,scratch.height);
         }
       }
 
-      prev = cur; e.preventDefault();
+      prev = cur;
+      e.preventDefault();
     }
 
-    // Pointer/touch events
     ink.addEventListener('pointerdown', begin);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
-    window.addEventListener('pointerout', (e)=>{ if(e.target===ink) end(); });
-    window.addEventListener('pointermove', draw, {passive:false});
-    ink.addEventListener('touchstart', begin, {passive:false});
-    window.addEventListener('touchend', end, {passive:false});
-    window.addEventListener('touchmove', draw, {passive:false});
+    window.addEventListener('pointerout', (e)=>{ if(e.target === ink) end(); });
+    window.addEventListener('pointermove', draw, { passive: false });
 
-    // First paint
+    ink.addEventListener('touchstart', begin, { passive: false });
+    window.addEventListener('touchend', end, { passive: false });
+    window.addEventListener('touchmove', draw, { passive: false });
+
     requestResize();
 
-    // --- Export helper (also used in tests) ---
-    function mergeForExport(){ const merge = document.createElement('canvas'); merge.width = ink.width; merge.height = ink.height; const mc = merge.getContext('2d'); mc.setTransform(ic.getTransform()); mc.drawImage(out,0,0); mc.drawImage(ink,0,0); return merge.toDataURL('image/png'); }
+    function mergeForExport(){
+      const merge = document.createElement('canvas');
+      merge.width = ink.width;
+      merge.height = ink.height;
+      const mc = merge.getContext('2d');
+      mc.setTransform(ic.getTransform());
+      mc.drawImage(out,0,0);
+      mc.drawImage(ink,0,0);
+      return merge.toDataURL('image/png');
+    }
 
-    // --- Self-tests ---
     runTestsBtn?.addEventListener('click', runSelfTests);
     function runSelfTests(){
       const results = [];
       try {
-        // T1: API presence
-        results.push(["API: Path2D exists", typeof Path2D === 'function']);
-        results.push(["API: Have clip(Path2D) OR fallback mask", typeof ic.clip === 'function' || true]);
-
-        // T2/T3: Clip pipeline — outside vs inside
-        const c = document.createElement('canvas'); c.width = 100; c.height = 100; const ctx = c.getContext('2d');
+        results.push(["API: Path2D existe", typeof Path2D === 'function']);
+        const c = document.createElement('canvas');
+        c.width = 100; c.height = 100;
+        const ctx = c.getContext('2d');
         const rect = new Path2D(); rect.rect(20,20,60,60);
-        try{ ctx.save(); ctx.clip(rect); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0,10); ctx.lineTo(100,10); ctx.stroke(); ctx.restore(); }catch{}
-        const pxOutside = ctx.getImageData(10,10,1,1).data[3]; results.push(["Clip: outside does not render", pxOutside === 0]);
-        try{ ctx.save(); ctx.clip(rect); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(10,50); ctx.lineTo(90,50); ctx.stroke(); ctx.restore(); }catch{}
-        const pxInside = ctx.getImageData(50,50,1,1).data[3]; results.push(["Clip: inside renders", pxInside > 0]);
+        try { ctx.save(); ctx.clip(rect); ctx.strokeStyle='#fff'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(0,10); ctx.lineTo(100,10); ctx.stroke(); ctx.restore(); } catch{}
+        const pxOutside = ctx.getImageData(10,10,1,1).data[3];
+        results.push(["Clip: extérieur vide", pxOutside === 0]);
+        try { ctx.save(); ctx.clip(rect); ctx.strokeStyle='#fff'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(10,50); ctx.lineTo(90,50); ctx.stroke(); ctx.restore(); } catch{}
+        const pxInside = ctx.getImageData(50,50,1,1).data[3];
+        results.push(["Clip: intérieur rempli", pxInside > 0]);
 
-        // T4: erasing works (destination-out)
-        const ctx2 = document.createElement('canvas').getContext('2d'); ctx2.canvas.width=100; ctx2.canvas.height=100; try{ ctx2.save(); ctx2.clip(rect); }catch{} ctx2.fillStyle = '#fff'; ctx2.fillRect(20,20,60,60); ctx2.restore?.(); ctx2.save?.(); try{ ctx2.clip(rect); }catch{} ctx2.globalCompositeOperation='destination-out'; ctx2.lineWidth = 8; ctx2.strokeStyle = 'rgba(0,0,0,1)'; ctx2.beginPath(); ctx2.moveTo(20,50); ctx2.lineTo(80,50); ctx2.stroke(); ctx2.restore?.(); const erased = ctx2.getImageData(50,50,1,1).data[3]; results.push(["Erase: destination-out clears pixels", erased === 0]);
+        const ctx2 = document.createElement('canvas').getContext('2d');
+        ctx2.canvas.width = 100; ctx2.canvas.height = 100;
+        try { ctx2.save(); ctx2.clip(rect); } catch{}
+        ctx2.fillStyle = '#fff'; ctx2.fillRect(20,20,60,60);
+        ctx2.restore?.(); ctx2.save?.();
+        try { ctx2.clip(rect); } catch{}
+        ctx2.globalCompositeOperation='destination-out';
+        ctx2.lineWidth=8;
+        ctx2.strokeStyle='rgba(0,0,0,1)';
+        ctx2.beginPath(); ctx2.moveTo(20,50); ctx2.lineTo(80,50); ctx2.stroke();
+        ctx2.restore?.();
+        const erased = ctx2.getImageData(50,50,1,1).data[3];
+        results.push(["Gomme: destination-out", erased === 0]);
 
-        // T5/T6: Fallback mask from path inside/outside
-        const fc = document.createElement('canvas'); fc.width=100; fc.height=100; const fctx = fc.getContext('2d'); const fScratch = document.createElement('canvas'); fScratch.width=100; fScratch.height=100; const fsc = fScratch.getContext('2d'); const fRect = new Path2D(); fRect.rect(20,20,60,60);
-        fsc.save(); fsc.strokeStyle='#fff'; fsc.lineWidth=6; fsc.beginPath(); fsc.moveTo(0,10); fsc.lineTo(100,10); fsc.stroke(); fsc.globalCompositeOperation='destination-in'; fsc.fillStyle='#fff'; fsc.fill(fRect); fsc.restore(); fctx.drawImage(fScratch,0,0); const fOutside = fctx.getImageData(10,10,1,1).data[3]; results.push(["Mask fallback: outside does not render", fOutside === 0]);
-        fsc.clearRect(0,0,100,100); fsc.save(); fsc.strokeStyle='#fff'; fsc.lineWidth=6; fsc.beginPath(); fsc.moveTo(10,50); fsc.lineTo(90,50); fsc.stroke(); fsc.globalCompositeOperation='destination-in'; fsc.fillStyle='#fff'; fsc.fill(fRect); fsc.restore(); fctx.clearRect(0,0,100,100); fctx.drawImage(fScratch,0,0); const fInside = fctx.getImageData(50,50,1,1).data[3]; results.push(["Mask fallback: inside renders", fInside > 0]);
+        const fc = document.createElement('canvas');
+        fc.width=100; fc.height=100;
+        const fctx = fc.getContext('2d');
+        const fScratch = document.createElement('canvas');
+        fScratch.width=100; fScratch.height=100;
+        const fsc = fScratch.getContext('2d');
+        const fRect = new Path2D(); fRect.rect(20,20,60,60);
+        fsc.save(); fsc.strokeStyle='#fff'; fsc.lineWidth=6; fsc.beginPath(); fsc.moveTo(0,10); fsc.lineTo(100,10); fsc.stroke(); fsc.globalCompositeOperation='destination-in'; fsc.fillStyle='#fff'; fsc.fill(fRect); fsc.restore();
+        fctx.drawImage(fScratch,0,0);
+        const fOutside = fctx.getImageData(10,10,1,1).data[3];
+        results.push(["Masque: extérieur vide", fOutside === 0]);
+        fsc.clearRect(0,0,100,100);
+        fsc.save(); fsc.strokeStyle='#fff'; fsc.lineWidth=6; fsc.beginPath(); fsc.moveTo(10,50); fsc.lineTo(90,50); fsc.stroke(); fsc.globalCompositeOperation='destination-in'; fsc.fillStyle='#fff'; fsc.fill(fRect); fsc.restore();
+        fctx.clearRect(0,0,100,100);
+        fctx.drawImage(fScratch,0,0);
+        const fInside = fctx.getImageData(50,50,1,1).data[3];
+        results.push(["Masque: intérieur rempli", fInside > 0]);
 
-        // T7: Export contains pixels
-        const testInk = document.createElement('canvas'); testInk.width=50; testInk.height=50; const ti = testInk.getContext('2d'); const testOut = document.createElement('canvas'); testOut.width=50; testOut.height=50; const to = testOut.getContext('2d'); ti.fillStyle='#fff'; ti.fillRect(10,10,10,10); to.strokeStyle='#fff'; to.strokeRect(5,5,20,20); const merged = (function(){ const merge = document.createElement('canvas'); merge.width=50; merge.height=50; const mc = merge.getContext('2d'); mc.drawImage(testOut,0,0); mc.drawImage(testInk,0,0); return mc.getImageData(12,12,1,1).data[3]; })(); results.push(["Export: merged image contains pixels", merged > 0]);
+        const testInk = document.createElement('canvas');
+        testInk.width=50; testInk.height=50;
+        const ti = testInk.getContext('2d');
+        const testOut = document.createElement('canvas');
+        testOut.width=50; testOut.height=50;
+        const to = testOut.getContext('2d');
+        ti.fillStyle='#fff'; ti.fillRect(10,10,10,10);
+        to.strokeStyle='#fff'; to.strokeRect(5,5,20,20);
+        const merged = (function(){
+          const merge = document.createElement('canvas');
+          merge.width=50; merge.height=50;
+          const mc = merge.getContext('2d');
+          mc.drawImage(testOut,0,0);
+          mc.drawImage(testInk,0,0);
+          return mc.getImageData(12,12,1,1).data[3];
+        })();
+        results.push(["Export: pixels présents", merged > 0]);
 
-        // T8: Preset filtering (synthetic) — does not depend on external file
-        const fake = [ {name:'a',file:'a.png',category:'x'}, {name:'b',file:'b.png',category:'y'}, {name:'c',file:'c.png',category:'x'} ];
-        const cats = [...new Set(fake.map(x=>x.category))].sort();
-        results.push(["Presets: unique categories computed", cats.join(',')==='x,y']);
+        const fake = [
+          { name:'a', file:'a.png', category:'x' },
+          { name:'b', file:'b.png', category:'y' },
+          { name:'c', file:'c.png', category:'x' }
+        ];
+        const cats = [...new Set(fake.map(x=>x.category))].sort().join(',');
+        results.push(["Préréglages: catégories uniques", cats === 'x,y']);
         const inX = fake.filter(x=>x.category==='x').map(x=>x.name).sort().join(',');
-        results.push(["Presets: items filter by category", inX==='a,c']);
-
-      } catch (err){
-        results.push([`Exception during tests: ${err?.message||err}`, false]);
+        results.push(["Préréglages: filtrage", inX === 'a,c']);
+      } catch(err){
+        results.push([`Exception: ${err?.message||err}`, false]);
       }
-
       testResults.innerHTML = results.map(([name, ok])=> ok ? `<div class="ok">✔ ${name}</div>` : `<div class="bad">✖ ${name}</div>`).join('');
     }
 
-    // Notes: Uploaded PNG/SVG or Preset PNG are rasterized and used as alpha/luma masks; brush is composited through the mask so strokes cannot cross the outline.
+    function buildPresetList(){
+      presetList.innerHTML = '';
+      if(!window.PNG_ARRAY || !Array.isArray(window.PNG_ARRAY) || window.PNG_ARRAY.length === 0){
+        presetEmpty.hidden = false;
+        return;
+      }
+      presetEmpty.hidden = true;
+      const byCategory = new Map();
+      window.PNG_ARRAY.forEach(item=>{
+        if(!byCategory.has(item.category)){
+          byCategory.set(item.category, []);
+        }
+        byCategory.get(item.category).push(item);
+      });
+      const categories = Array.from(byCategory.keys()).sort((a,b)=> a.localeCompare(b));
+      categories.forEach(cat=>{
+        const section = document.createElement('section');
+        section.className = 'preset-category';
+        const title = document.createElement('h3');
+        title.textContent = cat;
+        section.appendChild(title);
+        const grid = document.createElement('div');
+        grid.className = 'preset-grid';
+        byCategory.get(cat)
+          .sort((a,b)=> a.name.localeCompare(b.name))
+          .forEach(item=>{
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'preset-btn';
+            const img = document.createElement('img');
+            img.src = item.file;
+            img.alt = item.name;
+            const label = document.createElement('span');
+            label.textContent = item.name;
+            btn.appendChild(img);
+            btn.appendChild(label);
+            btn.addEventListener('click', ()=>{
+              loadUserMaskFromURL(item.file);
+            });
+            grid.appendChild(btn);
+          });
+        section.appendChild(grid);
+        presetList.appendChild(section);
+      });
+    }
+
+    function enablePresets(){
+      if(window.PNG_ARRAY && Array.isArray(window.PNG_ARRAY) && window.PNG_ARRAY.length){
+        openPresetPicker.disabled = false;
+        presetStatus.textContent = `Préréglages chargés: ${window.PNG_ARRAY.length}`;
+      } else {
+        openPresetPicker.disabled = true;
+        presetStatus.textContent = 'Aucun préréglage détecté (../../js/cvipngarray.js).';
+      }
+    }
+    window.addEventListener('DOMContentLoaded', ()=> setTimeout(enablePresets, 0));
+
+    function buildInitialOutline(){
+      if(!gameStarted) return;
+      drawOutline();
+    }
+
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState === 'visible'){ requestResize(); }
+    });
+
+    window.addEventListener('resize', ()=> requestResize(), { passive: true });
+
+    requestResize();
+    buildInitialOutline();
   </script>
 </body>
 </html>
