@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-fr="Jeux météo automatiques" data-en="Automatic Weather Games">Jeux météo automatiques</title>
+  <link rel="stylesheet" href="../../css/menu.css">
+  <link rel="stylesheet" href="../../css/global.css">
+  <link rel="stylesheet" href="../../css/layout.css">
+  <link rel="stylesheet" href="../../css/components.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+  <style>
+    :root {
+      --weather-accent: #009688;
+      --weather-accent-dark: #006b63;
+      --weather-highlight: #ff4d4d;
+      --weather-card-bg: #ffffff;
+      --weather-card-fg: #000000;
+      --weather-card-border: rgba(255, 255, 255, 0.4);
+    }
+
+    body.weather-menu {
+      background: #000;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+    }
+
+    main[hidden] {
+      display: none;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(24px, 6vmin, 48px);
+      padding: clamp(24px, 8vw, 60px);
+      box-sizing: border-box;
+    }
+
+    .mode-banner {
+      display: grid;
+      gap: 12px;
+      text-align: center;
+      max-width: 780px;
+    }
+
+    .mode-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 24px;
+      border-radius: 999px;
+      background: rgba(0, 150, 136, 0.18);
+      color: #76fff0;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: clamp(0.9rem, 2vmin, 1.1rem);
+    }
+
+    .weather-grid {
+      --card-size: clamp(220px, 32vmin, 360px);
+      --gap: clamp(28px, 6vmin, 60px);
+      display: grid;
+      grid-template-columns: repeat(2, var(--card-size));
+      grid-auto-rows: var(--card-size);
+      gap: var(--gap);
+      place-content: center;
+      justify-items: center;
+      align-items: center;
+      width: 100%;
+    }
+
+    .weather-card {
+      all: unset;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 1 / 1;
+      background: var(--weather-card-bg);
+      color: var(--weather-card-fg);
+      border-radius: 16px;
+      border: 3px solid var(--weather-card-border);
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .weather-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.6);
+        border-color: rgba(255, 255, 255, 0.65);
+      }
+    }
+
+    .weather-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .tile-title {
+      position: absolute;
+      inset: auto 0 0;
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.85) 100%);
+      color: #fff;
+      text-align: center;
+    }
+
+    .tile-title h3 {
+      margin: 0;
+      font-size: clamp(1.1rem, 2.5vmin, 1.6rem);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .weather-card.is-selected {
+      border-color: var(--weather-highlight);
+      box-shadow: 0 0 0 4px rgba(255, 77, 77, 0.4), 0 24px 40px rgba(0, 0, 0, 0.7);
+    }
+
+    .weather-card:focus-visible {
+      outline: 4px solid rgba(0, 191, 255, 0.65);
+      outline-offset: 4px;
+    }
+
+    .game-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      background: #000;
+      z-index: 40;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease;
+    }
+
+    .game-overlay[hidden] {
+      display: none;
+    }
+
+    .game-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .game-overlay .back-button {
+      position: absolute;
+      top: clamp(16px, 4vmin, 32px);
+      left: clamp(16px, 4vmin, 32px);
+      z-index: 2;
+    }
+
+    .back-button {
+      border: none;
+      border-radius: 999px;
+      padding: 12px 24px;
+      background: rgba(255, 255, 255, 0.18);
+      color: #ffffff;
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 160ms ease, transform 160ms ease;
+    }
+
+    .back-button:focus-visible {
+      outline: 3px solid rgba(255, 255, 255, 0.5);
+      outline-offset: 3px;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .back-button:hover {
+        background: rgba(255, 255, 255, 0.28);
+        transform: translateY(-1px);
+      }
+    }
+
+    iframe {
+      flex: 1;
+      border: none;
+      width: 100%;
+      background: #000;
+    }
+
+    /* Eyegaze-style start menu */
+    #game-options.modal {
+      transition: opacity 320ms ease;
+    }
+
+    #game-options.modal.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #game-options #control-panel-options {
+      max-width: 900px;
+      padding: clamp(24px, 6vmin, 40px);
+      gap: clamp(20px, 4vmin, 32px);
+    }
+
+    #options-title-bar {
+      display: grid;
+      gap: 10px;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    #options-title-bar h2 {
+      margin: 0;
+      font-size: clamp(1.6rem, 3.5vmin, 2.2rem);
+      color: #004d40;
+    }
+
+    #options-inline-container {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr minmax(0, 420px) 1fr;
+      gap: clamp(16px, 4vmin, 36px);
+      align-items: stretch;
+    }
+
+    #options-inline-container > .options-column {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 clamp(6px, 1vw, 12px);
+    }
+
+    .mode-menu-column {
+      align-items: stretch;
+    }
+
+    .mode-menu {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(14px, 2.4vmin, 22px);
+      max-height: clamp(260px, 52vh, 420px);
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .mode-menu::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .mode-menu::-webkit-scrollbar-thumb {
+      background: rgba(0, 150, 136, 0.45);
+      border-radius: 999px;
+    }
+
+    .mode-menu::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+    }
+
+    .mode-card {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(14px, 3vmin, 18px);
+      font-size: clamp(1rem, 2.4vmin, 1.15rem);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+
+    .mode-card.is-active,
+    .mode-card.selected {
+      background-color: var(--weather-accent);
+      box-shadow: 0 6px 18px rgba(0, 150, 136, 0.45);
+    }
+
+    @media (max-width: 720px) {
+      #options-inline-container {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .weather-grid {
+        grid-template-columns: repeat(2, minmax(180px, 42vw));
+        grid-auto-rows: minmax(180px, 42vw);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .weather-grid {
+        grid-template-columns: repeat(2, minmax(140px, 40vw));
+        grid-auto-rows: minmax(140px, 40vw);
+        gap: clamp(18px, 6vmin, 28px);
+      }
+    }
+  </style>
+</head>
+<body class="menu weather-menu">
+  <div id="game-options" class="modal" role="dialog" aria-modal="true">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title" class="translate" data-fr="Jeux météo automatiques" data-en="Automatic weather games">Jeux météo automatiques</h2>
+      </div>
+      <div id="mode-divider"></div>
+      <div id="options-inline-container">
+        <div class="options-column"></div>
+        <div class="options-column mode-menu-column">
+          <div class="mode-menu" id="modeMenu" role="listbox" data-label-fr="Modes de navigation" data-label-en="Navigation modes">
+            <button class="button mode-card translate is-active" type="button"
+                    data-index="0"
+                    data-mode-id="touch"
+                    data-label-fr="Mode tactile"
+                    data-label-en="Touch mode"
+                    data-description-fr="Utilise l'écran tactile ou la souris pour choisir un jeu."
+                    data-description-en="Use the touchscreen or mouse to choose a game."
+                    data-fr="Mode tactile"
+                    data-en="Touch mode"
+                    aria-pressed="true">
+              Mode tactile
+            </button>
+            <button class="button mode-card translate" type="button"
+                    data-index="1"
+                    data-mode-id="multiple"
+                    data-label-fr="Mode choix multiples"
+                    data-label-en="Multiple choice mode"
+                    data-description-fr="Appuie sur Entrée pour déplacer la sélection. Appuie sur Espace pour lancer le jeu surligné."
+                    data-description-en="Press Enter to move the highlight. Press Space to launch the highlighted game."
+                    data-fr="Mode choix multiples"
+                    data-en="Multiple choice mode"
+                    aria-pressed="false">
+              Mode choix multiples
+            </button>
+            <button class="button mode-card translate" type="button"
+                    data-index="2"
+                    data-mode-id="scan"
+                    data-label-fr="Mode balayage"
+                    data-label-en="Scanning mode"
+                    data-description-fr="La sélection avance automatiquement toutes les 10 secondes. Appuie sur Espace pour lancer le jeu en surbrillance."
+                    data-description-en="The highlight moves every 10 seconds. Press Space to start the highlighted game."
+                    data-fr="Mode balayage"
+                    data-en="Scanning mode"
+                    aria-pressed="false">
+              Mode balayage
+            </button>
+          </div>
+        </div>
+        <div class="options-column"></div>
+      </div>
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+    </div>
+  </div>
+
+  <main id="mainContent" hidden>
+    <div class="mode-banner">
+      <span id="modeChip" class="mode-chip" data-fr="Mode tactile" data-en="Touch mode">Mode tactile</span>
+    </div>
+
+    <section id="weatherChooser" class="weather-grid" role="list">
+      <button class="weather-card" type="button" role="listitem"
+        data-index="0"
+        data-src="../sunauto/index.html"
+        data-title-fr="Soleil"
+        data-title-en="Sun"
+        data-description-fr="Ambiance lumineuse"
+        data-description-en="Warm sunshine"
+        aria-label="Soleil - Ambiance lumineuse">
+        <img src="../../images/sun.png" alt="Icône de soleil">
+        <div class="tile-title">
+          <h3 data-fr="Soleil" data-en="Sun">Soleil</h3>
+        </div>
+      </button>
+
+      <button class="weather-card" type="button" role="listitem"
+        data-index="1"
+        data-src="../cloudauto/index.html"
+        data-title-fr="Nuages"
+        data-title-en="Clouds"
+        data-description-fr="Douce brise"
+        data-description-en="Soft breeze"
+        aria-label="Nuages - Douce brise">
+        <img src="../../images/cloud.png" alt="Icône de nuage">
+        <div class="tile-title">
+          <h3 data-fr="Nuages" data-en="Clouds">Nuages</h3>
+        </div>
+      </button>
+
+      <button class="weather-card" type="button" role="listitem"
+        data-index="2"
+        data-src="../stormauto/index.html"
+        data-title-fr="Pluie"
+        data-title-en="Rain"
+        data-description-fr="Orage relaxant"
+        data-description-en="Relaxing storm"
+        aria-label="Pluie - Orage relaxant">
+        <img src="../../images/rain.png" alt="Icône de pluie">
+        <div class="tile-title">
+          <h3 data-fr="Pluie" data-en="Rain">Pluie</h3>
+        </div>
+      </button>
+
+      <button class="weather-card" type="button" role="listitem"
+        data-index="3"
+        data-src="../snowauto/index.html"
+        data-title-fr="Neige"
+        data-title-en="Snow"
+        data-description-fr="Flocons scintillants"
+        data-description-en="Shimmering snow"
+        aria-label="Neige - Flocons scintillants">
+        <img src="../../images/snow.png" alt="Icône de neige">
+        <div class="tile-title">
+          <h3 data-fr="Neige" data-en="Snow">Neige</h3>
+        </div>
+      </button>
+    </section>
+  </main>
+
+  <div class="game-overlay" id="gameOverlay" hidden>
+    <button class="back-button translate" id="backButton" type="button" data-fr="Retour" data-en="Back">Retour</button>
+    <iframe id="gameFrame" title="Jeu météo automatique" allow="autoplay; fullscreen" allowfullscreen sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-orientation-lock allow-popups" tabindex="-1"></iframe>
+  </div>
+
+  <button id="langToggle" class="floating-button lang-toggle" title="Changer la langue / Switch language">EN</button>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const langBtn = document.getElementById('langToggle');
+      const siteLang = localStorage.getItem('siteLanguage') || 'fr';
+      langBtn.textContent = siteLang === 'fr' ? 'EN' : 'FR';
+      langBtn.addEventListener('click', () => {
+        toggleLanguage();
+        const updatedLang = localStorage.getItem('siteLanguage') || 'fr';
+        langBtn.textContent = updatedLang === 'fr' ? 'EN' : 'FR';
+      });
+    });
+  </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      fetch('../../footer.html')
+        .then(response => response.text())
+        .then(data => {
+          document.body.insertAdjacentHTML('beforeend', data);
+        });
+    });
+  </script>
+
+  <script>
+    (function() {
+      const startModal = document.getElementById('game-options');
+      const startButton = document.getElementById('startButton');
+      const mainContent = document.getElementById('mainContent');
+      const gameOverlay = document.getElementById('gameOverlay');
+      const gameFrame = document.getElementById('gameFrame');
+      const backButton = document.getElementById('backButton');
+      const modeChip = document.getElementById('modeChip');
+      const modeMenu = document.getElementById('modeMenu');
+      const modeCards = Array.from(document.querySelectorAll('.mode-card'));
+      const fsKey = 'weatherAutoFS';
+      const cards = Array.from(document.querySelectorAll('.weather-card'));
+
+      const getSiteLanguage = () => (localStorage.getItem('siteLanguage') || 'fr');
+
+      const applyCurrentLanguage = element => {
+        if (!element) return;
+        const lang = getSiteLanguage();
+        const attr = lang === 'fr' ? 'data-fr' : 'data-en';
+        const text = element.getAttribute(attr);
+        if (text) {
+          element.textContent = text;
+        }
+      };
+
+      const modes = [
+        {
+          id: 'touch',
+          labelFr: 'Mode tactile',
+          labelEn: 'Touch mode',
+          descriptionFr: "Utilise l'écran tactile ou la souris pour choisir un jeu.",
+          descriptionEn: 'Use the touchscreen or mouse to choose a game.'
+        },
+        {
+          id: 'multiple',
+          labelFr: 'Mode choix multiples',
+          labelEn: 'Multiple choice mode',
+          descriptionFr: 'Appuie sur Entrée pour déplacer la sélection. Appuie sur Espace pour lancer le jeu surligné.',
+          descriptionEn: 'Press Enter to move the highlight. Press Space to launch the highlighted game.'
+        },
+        {
+          id: 'scan',
+          labelFr: 'Mode balayage',
+          labelEn: 'Scanning mode',
+          descriptionFr: 'La sélection avance automatiquement toutes les {seconds} secondes. Appuie sur Espace pour lancer le jeu en surbrillance.',
+          descriptionEn: 'The highlight moves every {seconds} seconds. Press Space to start the highlighted game.'
+        }
+      ];
+
+      let modeIndex = 0;
+      let highlightIndex = 0;
+      let scanTimer = null;
+      let lastCard = null;
+      let gameActive = false;
+      let scanIntervalMs = 10000;
+
+      function focusGameFrame() {
+        if (!gameActive) return;
+        const tryFocus = () => {
+          try {
+            gameFrame.contentWindow?.focus();
+          } catch {}
+          if (typeof gameFrame.focus === 'function') {
+            try {
+              gameFrame.focus({ preventScroll: true });
+            } catch {
+              gameFrame.focus();
+            }
+          }
+        };
+        tryFocus();
+        setTimeout(tryFocus, 120);
+      }
+
+      function hideStartModal() {
+        if (!startModal) return;
+        startModal.classList.add('hidden');
+        setTimeout(() => {
+          startModal.remove();
+        }, 420);
+      }
+
+      async function enterFullscreen() {
+        const el = document.documentElement;
+        if (document.fullscreenElement === el) return true;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (!req) return false;
+        try {
+          await req.call(el);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function clearSelection() {
+        cards.forEach(card => {
+          card.classList.remove('is-selected');
+          card.removeAttribute('aria-selected');
+        });
+      }
+
+      function highlightCard(index) {
+        if (!cards.length) return;
+        const normalized = ((index % cards.length) + cards.length) % cards.length;
+        clearSelection();
+        const card = cards[normalized];
+        if (card) {
+          card.classList.add('is-selected');
+          card.setAttribute('aria-selected', 'true');
+        }
+        highlightIndex = normalized;
+      }
+
+      function stopScanTimer() {
+        if (scanTimer) {
+          clearInterval(scanTimer);
+          scanTimer = null;
+        }
+      }
+
+      function startScanTimer() {
+        stopScanTimer();
+        scanTimer = setInterval(() => {
+          advanceHighlight();
+        }, scanIntervalMs);
+      }
+
+      function formatDescription(mode) {
+        if (mode.id !== 'scan') return { fr: mode.descriptionFr, en: mode.descriptionEn };
+        const seconds = Math.round(scanIntervalMs / 1000);
+        return {
+          fr: mode.descriptionFr.replace('{seconds}', seconds.toString()),
+          en: mode.descriptionEn.replace('{seconds}', seconds.toString())
+        };
+      }
+
+      function applyMode(newIndex) {
+        modeIndex = ((newIndex % modes.length) + modes.length) % modes.length;
+        const mode = modes[modeIndex];
+        const descriptions = formatDescription(mode);
+
+        if (modeChip) {
+          modeChip.setAttribute('data-fr', mode.labelFr);
+          modeChip.setAttribute('data-en', mode.labelEn);
+          applyCurrentLanguage(modeChip);
+        }
+
+        if (typeof updateLanguage === 'function') {
+          updateLanguage();
+        }
+
+        stopScanTimer();
+        if (!mainContent.hidden) {
+          clearSelection();
+          if (mode.id === 'multiple' || mode.id === 'scan') {
+            highlightCard(0);
+            if (mode.id === 'scan' && !gameActive) {
+              startScanTimer();
+            }
+          }
+        } else {
+          clearSelection();
+        }
+      }
+
+      function advanceHighlight() {
+        if (!cards.length) return;
+        const nextIndex = (highlightIndex + 1) % cards.length;
+        highlightCard(nextIndex);
+      }
+
+      function updateModeCardStates() {
+        const lang = getSiteLanguage();
+        modeCards.forEach((card, index) => {
+          const isActive = index === modeIndex;
+          card.classList.toggle('is-active', isActive);
+          card.classList.toggle('selected', isActive);
+          card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          const mode = modes[index];
+          if (mode) {
+            const descriptions = formatDescription(mode);
+            const labelText = lang === 'fr' ? mode.labelFr : mode.labelEn;
+            const descriptionText = lang === 'fr' ? descriptions.fr : descriptions.en;
+            const composed = descriptionText ? `${labelText}. ${descriptionText}` : labelText;
+            card.setAttribute('aria-label', composed);
+            card.setAttribute('data-description-fr', descriptions.fr);
+            card.setAttribute('data-description-en', descriptions.en);
+          }
+        });
+      }
+
+      function setSelectedMode(newIndex, options = {}) {
+        applyMode(newIndex);
+        updateModeCardStates();
+        if (options.focus && modeCards.length) {
+          const normalized = ((modeIndex % modeCards.length) + modeCards.length) % modeCards.length;
+          const card = modeCards[normalized];
+          if (card && typeof card.focus === 'function') {
+            try {
+              card.focus({ preventScroll: true });
+            } catch {
+              card.focus();
+            }
+          }
+        }
+      }
+
+      function refreshLanguageDependentText() {
+        if (modeChip) {
+          applyCurrentLanguage(modeChip);
+        }
+        if (modeMenu) {
+          const lang = getSiteLanguage();
+          const label = lang === 'fr' ? modeMenu.dataset.labelFr : modeMenu.dataset.labelEn;
+          if (label) {
+            modeMenu.setAttribute('aria-label', label);
+          }
+        }
+        if (startButton) {
+          applyCurrentLanguage(startButton);
+        }
+        if (backButton) {
+          applyCurrentLanguage(backButton);
+        }
+        if (typeof updateLanguage === 'function') {
+          updateLanguage();
+        }
+        updateModeCardStates();
+      }
+
+      async function showGame(card) {
+        if (!card) return;
+        lastCard = card;
+        stopScanTimer();
+        const src = card.dataset.src;
+        if (src) {
+          gameFrame.src = src;
+        }
+        gameActive = true;
+        sessionStorage.setItem(fsKey, '1');
+        await enterFullscreen();
+        gameOverlay.removeAttribute('hidden');
+        requestAnimationFrame(() => {
+          gameOverlay.classList.add('visible');
+          focusGameFrame();
+        });
+      }
+
+      function closeGame() {
+        if (!gameActive) return;
+        gameOverlay.classList.remove('visible');
+        setTimeout(() => {
+          if (!gameOverlay.classList.contains('visible')) {
+            gameActive = false;
+            gameOverlay.setAttribute('hidden', '');
+            gameFrame.src = 'about:blank';
+            const focusTarget = lastCard && mainContent.contains(lastCard) ? lastCard : cards[0];
+            if (focusTarget && typeof focusTarget.focus === 'function') {
+              try {
+                focusTarget.focus({ preventScroll: true });
+              } catch {
+                focusTarget.focus();
+              }
+            }
+            const mode = modes[modeIndex];
+            if (mode && mode.id === 'scan') {
+              startScanTimer();
+            }
+          }
+        }, 240);
+      }
+
+      function selectHighlightedCard() {
+        const card = cards[highlightIndex];
+        if (card) {
+          showGame(card);
+        }
+      }
+
+      startButton.addEventListener('click', async () => {
+        sessionStorage.setItem(fsKey, '1');
+        await enterFullscreen();
+        mainContent.hidden = false;
+        hideStartModal();
+        applyMode(modeIndex);
+        updateModeCardStates();
+        setTimeout(() => {
+          const focusTarget = cards[highlightIndex] || cards[0];
+          if (focusTarget && typeof focusTarget.focus === 'function') {
+            try {
+              focusTarget.focus({ preventScroll: true });
+            } catch {
+              focusTarget.focus();
+            }
+          }
+        }, 200);
+      });
+
+      if (startModal) {
+        startModal.addEventListener('keydown', event => {
+          const key = event.key;
+          if (!key) return;
+          if (key === 'ArrowRight' || key === 'ArrowDown') {
+            event.preventDefault();
+            setSelectedMode(modeIndex + 1, { focus: true });
+          } else if (key === 'ArrowLeft' || key === 'ArrowUp') {
+            event.preventDefault();
+            setSelectedMode(modeIndex - 1, { focus: true });
+          }
+        });
+      }
+
+      modeCards.forEach((card, index) => {
+        card.addEventListener('click', () => {
+          setSelectedMode(index);
+        });
+
+        card.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setSelectedMode(index);
+            if (startButton && document.body.contains(startButton)) {
+              try {
+                startButton.focus({ preventScroll: true });
+              } catch {
+                startButton.focus();
+              }
+            }
+          }
+        });
+      });
+
+      cards.forEach(card => {
+        card.addEventListener('click', () => {
+          if (!mainContent.hidden) {
+            if (modes[modeIndex].id !== 'touch') {
+              highlightIndex = cards.indexOf(card);
+              highlightCard(highlightIndex);
+            }
+            showGame(card);
+          }
+        });
+      });
+
+      backButton.addEventListener('click', () => {
+        closeGame();
+      });
+
+      document.addEventListener('click', event => {
+        const target = event.target;
+        if (!target) return;
+        if (target.id === 'langToggle') {
+          setTimeout(() => {
+            refreshLanguageDependentText();
+          }, 0);
+        }
+      });
+
+      document.addEventListener('keydown', event => {
+        if (!gameOverlay.hasAttribute('hidden')) {
+          const key = event.key ? event.key.toLowerCase() : '';
+          if (key === 'escape' || key === 'esc') {
+            event.preventDefault();
+            closeGame();
+          } else if (key === 'q') {
+            event.preventDefault();
+            closeGame();
+          }
+          return;
+        }
+
+        if (mainContent.hidden) {
+          return;
+        }
+
+        const mode = modes[modeIndex];
+        if (mode.id === 'multiple') {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            advanceHighlight();
+          } else if (event.code === 'Space' || event.key === ' ') {
+            event.preventDefault();
+            selectHighlightedCard();
+          }
+        } else if (mode.id === 'scan') {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            advanceHighlight();
+            startScanTimer();
+          } else if (event.code === 'Space' || event.key === ' ') {
+            event.preventDefault();
+            selectHighlightedCard();
+          }
+        }
+      });
+
+      gameOverlay.addEventListener('click', event => {
+        if (event.target === gameOverlay) {
+          closeGame();
+        }
+      });
+
+      gameFrame.addEventListener('load', () => {
+        if (!gameActive) return;
+        try {
+          const frameWindow = gameFrame.contentWindow;
+          if (frameWindow) {
+            const keyListener = event => {
+              if (!gameActive) {
+                frameWindow.removeEventListener('keydown', keyListener);
+                return;
+              }
+              const key = event.key ? event.key.toLowerCase() : '';
+              if (key === 'escape' || key === 'esc') {
+                event.preventDefault();
+                closeGame();
+              } else if (key === 'q') {
+                event.preventDefault();
+                closeGame();
+              }
+            };
+            frameWindow.addEventListener('keydown', keyListener);
+          }
+        } catch {}
+        focusGameFrame();
+      });
+
+      setSelectedMode(0);
+      refreshLanguageDependentText();
+    })();
+  </script>
+
+  <script src="../../js/translationmain.js"></script>
+</body>
+</html>
