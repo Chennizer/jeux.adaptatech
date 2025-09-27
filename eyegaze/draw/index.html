@@ -1,469 +1,877 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Draw Within the Lines — Canvas Demo (Presets + User Image Mask + Compat + Tests)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Dessiner (Eyegaze)" data-en="Draw (Eyegaze)">Dessiner (Eyegaze)</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
   <style>
     :root{
-      --bg:#0b0f14; --panel:#111923; --ink:#f5f5f5; --accent:#4fd1c5; --edge:#e2e8f0; --ok:#22c55e; --bad:#ef4444;
+      --ui-scale: 1;
+      --sidebar-w: clamp(96px, calc(120px * var(--ui-scale)), 180px);
+      --sidebar-pad-x: clamp(8px, calc(12px * var(--ui-scale)), 16px);
+      --sidebar-pad-y: clamp(8px, calc(12px * var(--ui-scale)), 16px);
+      --swatch-size: 84px;
+      --swatch-gap: 12px;
+      --swatch-border: clamp(3px, calc(5px * var(--ui-scale)), 6px);
+      --swatch-outline: clamp(3px, calc(5px * var(--ui-scale)), 6px);
+      --brush-btn: clamp(36px, calc(44px * var(--ui-scale)), 56px);
+      --brush-dot-s: clamp(6px,  calc(8px * var(--ui-scale)),  10px);
+      --brush-dot-m: clamp(12px, calc(16px * var(--ui-scale)), 20px);
+      --brush-dot-l: clamp(22px, calc(28px * var(--ui-scale)), 34px);
+      --brush-gap: clamp(8px, calc(12px * var(--ui-scale)), 16px);
+      --save-btn: clamp(36px, calc(44px * var(--ui-scale)), 56px);
+      --save-radius: clamp(8px, calc(10px * var(--ui-scale)), 12px);
+      --swatch-min: 26px;
+      --swatch-max: 96px;
+      --palette-cols: 1;
+      --dwell-red: rgba(255, 64, 64, 0.48);
     }
-    html,body{height:100%;margin:0;background:var(--bg);color:#e6edf3;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-    .wrap{display:grid;grid-template-columns:380px 1fr;height:100%;}
-    .panel{background:var(--panel);padding:16px 14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);overflow:auto}
-    .panel h1{font-size:18px;margin:0 0 10px}
-    .panel .row{display:flex;align-items:center;gap:10px;margin:10px 0}
-    .panel label{font-size:13px;opacity:.9;min-width:110px}
-    .panel input[type="color"], .panel input[type="range"], .panel button, select{width:100%}
-    .panel .hint{font-size:12px;opacity:.7;margin-top:8px;line-height:1.35}
 
-    .stage{position:relative;display:grid;place-items:center;background:radial-gradient(1200px 600px at 60% -10%, #1a2330 0%, #0b0f14 60%, #080c11 100%)}
-    canvas{display:block;max-width:100%;height:auto}
-    #ink{position:absolute;inset:0}
-    #outline{position:absolute;inset:0;pointer-events:none}
-    .badge{position:absolute;top:12px;right:12px;background:#0b1520;border:1px solid rgba(255,255,255,.1);padding:6px 10px;border-radius:999px;font-size:12px}
-    .controls{display:grid;gap:10px}
-    .buttons{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-    .buttons button{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:#101722;color:#e6edf3;cursor:pointer}
-    .buttons button:hover{border-color:rgba(255,255,255,.25)}
-    .tip{font-size:12px;opacity:.75;margin-top:6px}
+    body.light { background-color: #fff; color: #000; }
+    body.dark  { background-color: #000; color: #fff; }
 
-    details{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 10px}
-    details summary{cursor:pointer;font-size:13px}
-    #testResults{margin-top:8px;font-size:12px;line-height:1.5}
-    .ok{color:var(--ok)} .bad{color:var(--bad)}
-    .preview{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:center}
-    .preview img{width:64px;height:64px;object-fit:contain;background:#0b1520;border:1px solid rgba(255,255,255,.06);border-radius:8px}
-    .muted{opacity:.6}
+    #langToggle{
+      position: fixed; top: 10px; right: 10px; z-index: 99999;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 10px; border: 2px solid #009688;
+      background: #fff; color: #009688; font-weight: 700; cursor: pointer; user-select: none;
+    }
+    body.dark #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    .game-container { width: 100%; height: 100%; display: none; }
+
+    #sidebar{
+      position: fixed; left: 0; top: 0; bottom: 0; z-index: 20;
+      width: var(--sidebar-w);
+      display: flex; flex-direction: column;
+      padding: var(--sidebar-pad-y) var(--sidebar-pad-x);
+      gap: clamp(12px, calc(14px * var(--ui-scale)), 18px);
+      background: #fff; border-right: 1px solid #e6e6e6;
+      box-shadow: 0 0 18px rgba(0,0,0,.05);
+      color: #000;
+    }
+    body.dark #sidebar{ background:#fff; border-right-color:#e6e6e6; color:#000; }
+
+    #palette{
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(var(--palette-cols, 1), var(--swatch-size));
+      grid-auto-rows: var(--swatch-size);
+      justify-content: center;
+      align-content: start;
+      gap: var(--swatch-gap);
+      overflow: hidden;
+      padding-inline: 8px;
+    }
+
+    .swatch{
+      width: var(--swatch-size); height: var(--swatch-size);
+      border-radius: 50%;
+      border: var(--swatch-border) solid #ffffff;
+      box-shadow: 0 1px 6px rgba(0,0,0,.22) inset, 0 3px 10px rgba(0,0,0,.12);
+      transition: transform .12s ease;
+      position: relative;
+      flex: 0 0 auto;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .swatch.active{ transform: scale(1.03); }
+    .swatch.active::before{
+      content:"";
+      position:absolute;
+      inset: calc(var(--swatch-outline) + 2px);
+      border: var(--swatch-outline) solid #111;
+      border-radius: 50%;
+      pointer-events:none;
+      z-index: 2;
+    }
+
+    .swatch .dwell,
+    .brushBtn .dwell,
+    .sidebar-action .dwell{
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 100%; height: 100%;
+      transform: translate(-50%, -50%) scale(0.08);
+      transform-origin: center center;
+      pointer-events: none;
+      border-radius: 50%;
+      background-color: var(--dwell-red);
+      will-change: transform;
+      z-index: 1;
+    }
+
+    #brushSizes{
+      display: flex; flex-direction: column; align-items: center;
+      gap: var(--brush-gap); margin-top: 4px;
+    }
+    .brushBtn{
+      width: var(--brush-btn); height: var(--brush-btn);
+      border-radius: 50%;
+      border: 2px solid #aaa; background: #f8f8f8;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.1) inset;
+      transition: transform .12s ease, background-color .12s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .brushBtn span{ display: block; border-radius: 50%; background: #333; }
+    .brushBtn.small  span{ width: var(--brush-dot-s); height: var(--brush-dot-s); }
+    .brushBtn.medium span{ width: var(--brush-dot-m); height: var(--brush-dot-m); }
+    .brushBtn.large  span{ width: var(--brush-dot-l); height: var(--brush-dot-l); }
+    .brushBtn.active{ border-color:#333; transform: scale(1.08); background:#ececec; }
+
+    #sidebar .sidebar-actions{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(8px, calc(10px * var(--ui-scale)), 14px);
+      margin-top: clamp(8px, calc(12px * var(--ui-scale)), 18px);
+    }
+    .sidebar-action{
+      position: relative;
+      border-radius: 12px;
+      border: 2px solid #ddd;
+      background: #fafafa;
+      min-height: clamp(42px, calc(48px * var(--ui-scale)), 60px);
+      display: flex; align-items: center; justify-content: center;
+      font: clamp(12px, calc(16px * var(--ui-scale)), 18px)/1.1 system-ui, Arial, sans-serif;
+      cursor: pointer;
+      transition: background-color .12s ease, transform .12s ease;
+    }
+    .sidebar-action:hover{ background:#f2f2f2; transform: translateY(-1px); }
+    .sidebar-action.active{ border-color:#14b8a6; color:#0f766e; background:#e0f2f1; }
+
+    #canvasStack{
+      position: fixed;
+      inset: 0;
+      cursor: crosshair;
+      background: radial-gradient(circle at 50% 30%, rgba(255,255,255,0.05), rgba(0,0,0,0.6));
+    }
+    #canvasStack canvas{
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #outline{ pointer-events: none; }
+
+    body.light #canvasStack{ background: radial-gradient(circle at 50% 30%, rgba(0,0,0,0.05), rgba(240,240,240,0.6)); }
+
+    .modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 20px;
+    }
+    .modal-backdrop.open{ display: flex; }
+    .mask-modal{
+      max-width: 720px;
+      width: min(95vw, 720px);
+      max-height: 90vh;
+      overflow: auto;
+      background: #f8fafc;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 24px 48px rgba(0,0,0,0.35);
+      color: #0b1520;
+    }
+    .mask-modal h2{ margin-top: 0; }
+    .mask-section{ margin-bottom: 24px; }
+    .mask-grid{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+    }
+    .mask-option{
+      border: 2px solid transparent;
+      border-radius: 12px;
+      padding: 12px;
+      background: #fff;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      transition: transform .12s ease, border-color .12s ease;
+    }
+    .mask-option:hover{ transform: translateY(-2px); border-color:#14b8a6; }
+    .mask-option.active{ border-color:#0f766e; box-shadow: 0 6px 16px rgba(20,184,166,0.3); }
+    .mask-option img{ width: 96px; height: 96px; object-fit: contain; }
+
+    .mask-modal footer{
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    #signatureRow { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+    #signatureText { display:none; max-width: 220px; }
+
+    @media (max-width: 800px){
+      :root{ --palette-cols: 2; --swatch-size: clamp(var(--swatch-min), calc(72px * var(--ui-scale)), var(--swatch-max)); }
+    }
+    @media (max-width: 540px){
+      :root{ --palette-cols: 3; --swatch-size: clamp(var(--swatch-min), calc(60px * var(--ui-scale)), var(--swatch-max)); }
+    }
+    @media (max-width: 420px){
+      :root{ --palette-cols: 4; --swatch-size: clamp(var(--swatch-min), calc(52px * var(--ui-scale)), var(--swatch-max)); }
+    }
   </style>
-  <!-- Optional presets file; if present, provides window.PNG_ARRAY -->
+
   <script src="../../js/cvipngarray.js" defer></script>
 </head>
-<body>
-  <div class="wrap">
-    <aside class="panel">
-      <h1>Draw within the outline</h1>
-      <div class="controls">
-        <div class="row">
-          <label>Brush size <span id="brushV">18</span>px</label>
-          <input id="brush" type="range" min="3" max="64" value="18" />
-        </div>
-        <div class="row">
-          <label>Brush color</label>
-          <input id="color" type="color" value="#ff7a59" />
-        </div>
-        <div class="row">
-          <label>Mode</label>
-          <select id="mode">
-            <option value="draw" selected>Draw</option>
-            <option value="erase">Erase</option>
-          </select>
-        </div>
-        <div class="buttons">
-          <button id="clear">Clear</button>
-          <button id="download">Save PNG</button>
-        </div>
+<body class="dark">
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
 
-        <!-- Built-in vector shapes -->
-        <div class="row">
-          <label>Built‑in outline</label>
-          <select id="shape">
-            <option value="blob">Blob</option>
-            <option value="star">Star</option>
-            <option value="heart">Heart</option>
-            <option value="rect">Rounded rectangle</option>
-          </select>
-        </div>
-
-        <!-- Presets from PNG_ARRAY -->
-        <div class="row">
-          <label>Preset category</label>
-          <select id="presetCategory" disabled>
-            <option>Loading…</option>
-          </select>
-        </div>
-        <div class="row">
-          <label>Preset item</label>
-          <select id="presetItem" disabled>
-            <option>Select a category</option>
-          </select>
-        </div>
-        <div class="row preview">
-          <img id="presetThumb" alt="preview"/>
-          <button id="loadPreset" disabled>Use preset as mask</button>
-        </div>
-        <p id="presetStatus" class="hint muted">Presets will activate if <code>../../js/cvipngarray.js</code> is found.</p>
-
-        <!-- Upload -->
-        <div class="row">
-          <label>Upload outline</label>
-          <input id="outlineFile" type="file" accept="image/png, image/svg+xml" />
-        </div>
-        <div class="row">
-          <label>Fit uploaded</label>
-          <select id="fitMode">
-            <option value="contain" selected>Contain (keep aspect)</option>
-            <option value="cover">Cover</option>
-            <option value="stretch">Stretch</option>
-          </select>
-        </div>
-        <div class="row">
-          <label>Mask source</label>
-          <select id="maskSource">
-            <option value="alpha" selected>Alpha (opaque = inside)</option>
-            <option value="luma">Luminance (white = inside)</option>
-            <option value="alpha-invert">Alpha inverted</option>
-          </select>
-        </div>
-
-        <p class="hint">Use a <strong>built‑in shape</strong>, pick a <strong>preset</strong> from your PNG list, or <strong>upload PNG/SVG</strong>. The opaque region becomes the drawable area. A faint guide is shown on the canvas.</p>
-
-        <details>
-          <summary>Diagnostics & self‑tests</summary>
-          <div class="row">
-            <button id="runTests">Run tests</button>
-          </div>
-          <div id="testResults">No tests run yet.</div>
-        </details>
-      </div>
-    </aside>
-
-    <main class="stage">
-      <div class="badge">Canvas demo</div>
-      <canvas id="ink" width="1400" height="900" aria-label="Ink layer"></canvas>
-      <canvas id="outline" width="1400" height="900" aria-label="Outline layer"></canvas>
-    </main>
+<div id="game-options" class="modal">
+  <div id="options-title-bar">
+    <h2 id="options-main-title" class="translate" data-fr="Dessiner (Eyegaze)" data-en="Draw (Eyegaze)">Dessiner (Eyegaze)</h2>
   </div>
 
-  <script>
-    // --- Setup canvases ---
-    const ink = document.getElementById('ink');
-    const out = document.getElementById('outline');
-    const ic = ink.getContext('2d');
-    const oc = out.getContext('2d');
+  <div id="control-panel-options">
+    <div id="mode-divider"></div>
 
-    // Avoid ResizeObserver loops by batching in rAF and resizing only on change
-    let resizePending = false;
-    function fitCanvas(cnv){
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const rect = cnv.getBoundingClientRect();
-      const w = Math.max(1, Math.round(rect.width * dpr));
-      const h = Math.max(1, Math.round(rect.height * dpr));
-      if (cnv.width !== w || cnv.height !== h){
-        cnv.width = w; cnv.height = h;
-        const ctx = cnv.getContext('2d');
-        ctx.setTransform(dpr,0,0,dpr,0,0);
-      }
+    <div id="options-inline-container">
+      <div class="options-column">
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="muteSFX">
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons (SFX)</span>
+          </label>
+        </div>
+        <div class="option-item">
+          <label for="sfxVol" class="teal-label">
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
+            <span id="sfxVolVal">50</span>
+          </label>
+          <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
+        </div>
+      </div>
+
+      <div class="options-column">
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block translate" data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select">
+            <option value="light" class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" selected class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="options-column">
+        <div class="option-item">
+          <label for="paletteSizeSelect" class="teal-label label-block translate" data-fr="Nombre de couleurs" data-en="Number of colors">Nombre de couleurs</label>
+          <select id="paletteSizeSelect" class="styled-select">
+            <option value="4" class="translate" data-fr="4 couleurs" data-en="4 colors">4 couleurs</option>
+            <option value="7" selected class="translate" data-fr="7 couleurs" data-en="7 colors">7 couleurs</option>
+            <option value="13" class="translate" data-fr="13 couleurs" data-en="13 colors">13 couleurs</option>
+          </select>
+        </div>
+        <div class="option-item" id="signatureRow">
+          <label class="teal-label" for="signatureEnable" style="user-select:none;">
+            <input type="checkbox" id="signatureEnable">
+            <span class="translate" data-fr="Signature" data-en="Signature">Signature</span>
+          </label>
+          <input type="text" id="signatureText" class="styled-input" placeholder="Votre nom / Your name" />
+        </div>
+      </div>
+    </div>
+
+    <div id="mode-divider"></div>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+</div>
+
+<div class="game-container" id="paintGame">
+  <aside id="sidebar">
+    <div id="palette"></div>
+
+    <div id="brushSizes">
+      <div class="brushBtn small" data-size="small" title="Petit / Small"><span></span></div>
+      <div class="brushBtn medium active" data-size="medium" title="Moyen / Medium"><span></span></div>
+      <div class="brushBtn large" data-size="large" title="Grand / Large"><span></span></div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button id="modeToggle" class="sidebar-action" type="button" data-mode="draw" title="Basculer dessin/gomme">✏️</button>
+      <button id="clearBtn" class="sidebar-action" type="button" title="Effacer la toile">🧽</button>
+      <button id="maskBtn" class="sidebar-action" type="button" title="Choisir un masque">🖼️</button>
+      <button id="saveBtn" class="sidebar-action" type="button" title="Enregistrer PNG">💾</button>
+    </div>
+  </aside>
+
+  <div id="canvasStack">
+    <canvas id="ink" width="1400" height="900" aria-label="Calque de dessin"></canvas>
+    <canvas id="outline" width="1400" height="900" aria-label="Calque de guide"></canvas>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="maskModal" aria-hidden="true">
+  <div class="mask-modal" role="dialog" aria-modal="true" aria-labelledby="maskModalTitle">
+    <h2 id="maskModalTitle" class="translate" data-fr="Choisir un masque" data-en="Choose a mask">Choisir un masque</h2>
+
+    <section class="mask-section">
+      <h3 class="translate" data-fr="Formes intégrées" data-en="Built-in shapes">Formes intégrées</h3>
+      <div class="mask-grid" id="shapeGrid">
+        <button class="mask-option" data-shape="blob" type="button">
+          <span class="translate" data-fr="Blob" data-en="Blob">Blob</span>
+        </button>
+        <button class="mask-option" data-shape="star" type="button">
+          <span class="translate" data-fr="Étoile" data-en="Star">Étoile</span>
+        </button>
+        <button class="mask-option" data-shape="heart" type="button">
+          <span class="translate" data-fr="Cœur" data-en="Heart">Cœur</span>
+        </button>
+        <button class="mask-option" data-shape="rect" type="button">
+          <span class="translate" data-fr="Rectangle" data-en="Rectangle">Rectangle</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="mask-section">
+      <h3 class="translate" data-fr="Bibliothèque PNG" data-en="PNG library">Bibliothèque PNG</h3>
+      <p id="presetStatus" class="translate" data-fr="Chargement des vignettes…" data-en="Loading thumbnails…">Chargement des vignettes…</p>
+      <div class="mask-grid" id="presetGrid"></div>
+    </section>
+
+    <section class="mask-section">
+      <h3 class="translate" data-fr="Importer un fichier" data-en="Import a file">Importer un fichier</h3>
+      <input id="outlineFile" type="file" accept="image/png, image/svg+xml" />
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:12px;">
+        <label class="translate" data-fr="Ajustement:" data-en="Fit mode:">Ajustement:</label>
+        <select id="fitMode" class="styled-select">
+          <option value="contain" selected class="translate" data-fr="Contenir" data-en="Contain">Contenir</option>
+          <option value="cover" class="translate" data-fr="Couvrir" data-en="Cover">Couvrir</option>
+          <option value="stretch" class="translate" data-fr="Étirer" data-en="Stretch">Étirer</option>
+        </select>
+        <label class="translate" data-fr="Source du masque:" data-en="Mask source:">Source du masque:</label>
+        <select id="maskSource" class="styled-select">
+          <option value="alpha" selected class="translate" data-fr="Alpha (opaque = dedans)" data-en="Alpha (opaque = inside)">Alpha (opaque = dedans)</option>
+          <option value="luma" class="translate" data-fr="Luminance (clair = dedans)" data-en="Luminance (light = inside)">Luminance (clair = dedans)</option>
+          <option value="alpha-invert" class="translate" data-fr="Alpha inversé" data-en="Alpha inverted">Alpha inversé</option>
+        </select>
+      </div>
+    </section>
+
+    <footer>
+      <button type="button" id="closeMask" class="button translate" data-fr="Fermer" data-en="Close">Fermer</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+const LS_LANG_KEY = 'siteLanguage';
+const LS_PALETTE_KEY = 'draw_palette_size';
+const langToggle  = document.getElementById('langToggle');
+function getLang(){ try{const s=localStorage.getItem(LS_LANG_KEY); if(s==='en'||s==='fr') return s;}catch(e){} return (document.documentElement.lang==='en')?'en':'fr'; }
+function setLang(lang){
+  const safe=(lang==='en')?'en':'fr';
+  document.documentElement.lang=safe;
+  try{localStorage.setItem(LS_LANG_KEY,safe);}catch(e){}
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr=el.getAttribute('data-fr'); const en=el.getAttribute('data-en');
+    if (safe==='fr' && fr!=null) el.textContent=fr;
+    if (safe==='en' && en!=null) el.textContent=en;
+  });
+  if(typeof enablePresets === 'function'){ enablePresets(); }
+}
+(function initLang(){
+  let initial='fr';
+  try{
+    const saved=localStorage.getItem(LS_LANG_KEY);
+    initial=(saved==='en'||saved==='fr')?saved:(document.documentElement.lang==='en'?'en':'fr');
+    localStorage.setItem(LS_LANG_KEY,initial);
+  }catch(e){
+    initial=(document.documentElement.lang==='en'?'en':'fr');
+  }
+  setLang(initial);
+})();
+langToggle.addEventListener('click', ()=> setLang(getLang()==='fr'?'en':'fr'));
+
+const themeSelect   = document.getElementById('themeSelect');
+const paletteSizeSelect = document.getElementById('paletteSizeSelect');
+function applyTheme(theme){
+  document.body.classList.remove('light','dark');
+  document.body.classList.add(theme==='dark'?'dark':'light');
+}
+
+const signatureEnable = document.getElementById('signatureEnable');
+const signatureTextInput = document.getElementById('signatureText');
+signatureEnable.addEventListener('change', ()=>{
+  signatureTextInput.style.display = signatureEnable.checked ? 'block' : 'none';
+});
+
+(function initPaletteSize(){
+  try{
+    const saved = localStorage.getItem(LS_PALETTE_KEY);
+    if(saved==='4'||saved==='7'||saved==='13'){
+      paletteSizeSelect.value = saved;
     }
-    function resizeAllImmediate(){
-      fitCanvas(ink); fitCanvas(out); drawOutline(); syncScratch(); rebuildMaskCache();
-    }
-    function requestResize(){ if(resizePending) return; resizePending = true; requestAnimationFrame(()=>{ resizePending=false; resizeAllImmediate(); }); }
-    const ro = new ResizeObserver(()=>{ requestResize(); });
-    ro.observe(out);
+  }catch(e){}
+})();
 
-    // --- UI ---
-    const brushEl = document.getElementById('brush');
-    const brushV = document.getElementById('brushV');
-    const colorEl = document.getElementById('color');
-    const modeEl = document.getElementById('mode');
-    const clearEl = document.getElementById('clear');
-    const dlEl = document.getElementById('download');
-    const shapeEl = document.getElementById('shape');
+const startButton = document.getElementById('startButton');
+const gameOptions = document.getElementById('game-options');
+const gameContainer = document.getElementById('paintGame');
+startButton.addEventListener('click', ()=>{
+  applyTheme(themeSelect.value);
+  gameOptions.style.display='none';
+  gameContainer.style.display='block';
+  requestResize();
+});
 
-    const outlineFileEl = document.getElementById('outlineFile');
-    const fitModeEl = document.getElementById('fitMode');
-    const maskSourceEl = document.getElementById('maskSource');
+themeSelect.addEventListener('change', ()=> applyTheme(themeSelect.value));
+paletteSizeSelect.addEventListener('change', ()=>{
+  try{ localStorage.setItem(LS_PALETTE_KEY, paletteSizeSelect.value); }catch(e){}
+  buildPalette(+paletteSizeSelect.value);
+});
 
-    const catEl = document.getElementById('presetCategory');
-    const itemEl = document.getElementById('presetItem');
-    const loadPresetBtn = document.getElementById('loadPreset');
-    const presetThumb = document.getElementById('presetThumb');
-    const presetStatus = document.getElementById('presetStatus');
+const PALETTES = {
+  4: ['#ff7a59','#ffd166','#06d6a0','#118ab2'],
+  7: ['#ff7a59','#ffd166','#06d6a0','#118ab2','#3a86ff','#8338ec','#ff006e'],
+  13:['#ff7a59','#ffb703','#f9c74f','#90be6d','#06d6a0','#118ab2','#457b9d','#1d3557','#3a86ff','#8338ec','#ff006e','#ef476f','#ffd6a5']
+};
 
-    const runTestsBtn = document.getElementById('runTests');
-    const testResults = document.getElementById('testResults');
-
-    brushEl.addEventListener('input', ()=> brushV.textContent = brushEl.value);
-    clearEl.addEventListener('click', ()=>{ ic.clearRect(0,0,ink.width,ink.height); });
-    dlEl.addEventListener('click', ()=>{
-      const url = mergeForExport();
-      const a = document.createElement('a'); a.href=url; a.download='drawing.png'; a.click();
+const paletteEl = document.getElementById('palette');
+let currentColor = '#ff7a59';
+function buildPalette(count){
+  const colors = PALETTES[count] || PALETTES[7];
+  paletteEl.innerHTML = '';
+  colors.forEach((color, idx)=>{
+    const swatch = document.createElement('button');
+    swatch.className = 'swatch' + (idx===0?' active':'');
+    swatch.style.background = color;
+    swatch.type='button';
+    swatch.dataset.color = color;
+    swatch.addEventListener('click', ()=>{
+      currentColor = color;
+      paletteEl.querySelectorAll('.swatch').forEach(btn=>btn.classList.toggle('active', btn===swatch));
+      if(isErasing){ toggleMode(); }
     });
-    shapeEl.addEventListener('change', ()=>{ userMask = null; drawOutline(); });
-    fitModeEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
-    maskSourceEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
+    paletteEl.appendChild(swatch);
+  });
+  currentColor = colors[0] || '#ff7a59';
+}
 
-    outlineFileEl.addEventListener('change', async (e)=>{
-      const file = e.target.files?.[0]; if(!file) return; await loadUserMaskFromFile(file); redrawMaskGuide();
+buildPalette(+paletteSizeSelect.value);
+
+const brushButtons = document.querySelectorAll('.brushBtn');
+let brushSize = 24;
+brushButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    brushButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const size = btn.dataset.size;
+    brushSize = size==='small'?14:size==='large'?42:24;
+  });
+});
+
+const modeToggle = document.getElementById('modeToggle');
+let isErasing = false;
+function toggleMode(){
+  isErasing = !isErasing;
+  modeToggle.dataset.mode = isErasing ? 'erase' : 'draw';
+  modeToggle.textContent = isErasing ? '🩹' : '✏️';
+  modeToggle.classList.toggle('active', isErasing);
+}
+modeToggle.addEventListener('click', toggleMode);
+
+const clearBtn = document.getElementById('clearBtn');
+const saveBtn = document.getElementById('saveBtn');
+clearBtn.addEventListener('click', ()=>{ ic.clearRect(0,0,ink.width,ink.height); });
+saveBtn.addEventListener('click', ()=>{
+  const url = mergeForExport();
+  const a = document.createElement('a');
+  a.href = url; a.download = 'dessin.png';
+  a.click();
+});
+
+const ink = document.getElementById('ink');
+const out = document.getElementById('outline');
+const ic = ink.getContext('2d');
+const oc = out.getContext('2d');
+
+let resizePending = false;
+function fitCanvas(cnv){
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const rect = cnv.getBoundingClientRect();
+  const w = Math.max(1, Math.round(rect.width * dpr));
+  const h = Math.max(1, Math.round(rect.height * dpr));
+  if (cnv.width !== w || cnv.height !== h){
+    cnv.width = w; cnv.height = h;
+    const ctx = cnv.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+}
+function resizeAllImmediate(){
+  fitCanvas(ink); fitCanvas(out);
+  drawOutline();
+  syncScratch();
+  rebuildMaskCache();
+}
+function requestResize(){
+  if(resizePending) return;
+  resizePending = true;
+  requestAnimationFrame(()=>{
+    resizePending=false;
+    resizeAllImmediate();
+  });
+}
+const ro = new ResizeObserver(()=>{ requestResize(); });
+ro.observe(out);
+
+let currentShape = 'blob';
+let userMask = null;
+const maskCanvas = document.createElement('canvas');
+const maskCtx = maskCanvas.getContext('2d');
+let maskImageData = null;
+
+const fitModeEl = document.getElementById('fitMode');
+const maskSourceEl = document.getElementById('maskSource');
+fitModeEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
+maskSourceEl.addEventListener('change', ()=>{ rebuildMaskCache(); redrawMaskGuide(); });
+
+function loadUserMaskFromURL(url, revoke=false){
+  const img = new Image();
+  img.onload = ()=>{
+    if(revoke) URL.revokeObjectURL(url);
+    userMask = img;
+    shapeButtons?.forEach(btn=>btn.classList.remove('active'));
+    rebuildMaskCache();
+    drawOutline();
+    closeMaskModal();
+  };
+  img.onerror = ()=>{ if(revoke) URL.revokeObjectURL(url); alert('Impossible de charger cette image.'); };
+  img.src = url;
+}
+async function loadUserMaskFromFile(file){
+  const url = URL.createObjectURL(file);
+  await loadUserMaskFromURL(url, true);
+}
+
+const outlineFileEl = document.getElementById('outlineFile');
+outlineFileEl.addEventListener('change', async (e)=>{
+  const file = e.target.files?.[0];
+  if(!file) return;
+  await loadUserMaskFromFile(file);
+  redrawMaskGuide();
+});
+
+function computeFit(destW,destH, imgW,imgH, mode){
+  if(mode==='stretch') return { x:0, y:0, w:destW, h:destH };
+  const r = imgW/imgH, R = destW/destH;
+  if(mode==='cover'){
+    const w = R>r ? destW : destH*r;
+    const h = R>r ? destW/r : destH;
+    const x = (destW - w)/2; const y = (destH - h)/2;
+    return {x,y,w,h};
+  } else {
+    const w = R>r ? destH*r : destW;
+    const h = R>r ? destH : destW/r;
+    const x = (destW - w)/2; const y = (destH - h)/2;
+    return {x,y,w,h};
+  }
+}
+
+function rebuildMaskCache(){
+  if(!userMask){ maskImageData=null; return; }
+  maskCanvas.width = out.width;
+  maskCanvas.height = out.height;
+  maskCtx.setTransform(oc.getTransform());
+  maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
+  const rect = out.getBoundingClientRect();
+  const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
+  maskCtx.drawImage(userMask, fit.x, fit.y, fit.w, fit.h);
+
+  const img = maskCtx.getImageData(0,0,maskCanvas.width, maskCanvas.height);
+  const data = img.data; const mode = maskSourceEl.value;
+  for(let i=0;i<data.length; i+=4){
+    const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
+    let alpha = a;
+    if(mode==='luma'){
+      const y = 0.2126*r + 0.7152*g + 0.0722*b; alpha = y;
+    } else if(mode==='alpha-invert'){
+      alpha = 255 - a;
+    }
+    data[i]=255; data[i+1]=255; data[i+2]=255; data[i+3]=alpha;
+  }
+  maskCtx.putImageData(img,0,0);
+  maskImageData = img;
+}
+
+function makePath(kind, w, h){
+  const p = new Path2D();
+  const pad = Math.min(w,h)*0.12;
+  const cx=w/2, cy=h/2;
+  if(kind==='rect'){
+    const r = Math.min(w,h)*0.18;
+    const x=pad, y=pad, rw=w-2*pad, rh=h-2*pad;
+    roundRectPath(p,x,y,rw,rh,r);
+  } else if(kind==='blob'){
+    const rx=w*0.32, ry=h*0.28;
+    blobPath(p, cx, cy, rx, ry);
+  } else if(kind==='star'){
+    starPath(p, cx, cy, Math.min(w,h)*0.36, 5);
+  } else if(kind==='heart'){
+    heartPath(p, cx, cy, Math.min(w,h)*0.36);
+  }
+  return p;
+}
+function roundRectPath(p,x,y,w,h,r){
+  p.moveTo(x+r,y);
+  p.arcTo(x+w,y,x+w,y+h,r);
+  p.arcTo(x+w,y+h,x,y+h,r);
+  p.arcTo(x,y+h,x,y,r);
+  p.arcTo(x,y,x+w,y,r);
+  p.closePath();
+}
+function blobPath(p, cx, cy, rx, ry){
+  p.moveTo(cx, cy-ry);
+  p.bezierCurveTo(cx+rx*0.6, cy-ry, cx+rx, cy-ry*0.2, cx+rx, cy);
+  p.bezierCurveTo(cx+rx, cy+ry*0.6, cx+rx*0.4, cy+ry, cx, cy+ry);
+  p.bezierCurveTo(cx-rx*0.6, cy+ry, cx-rx, cy+ry*0.2, cx-rx, cy);
+  p.bezierCurveTo(cx-rx, cy-ry*0.6, cx-rx*0.4, cy-ry, cx, cy-ry);
+  p.closePath();
+}
+function starPath(p, cx, cy, r, spikes){
+  const step=Math.PI/spikes; let rot=Math.PI/2*3; let x=cx; let y=cy - r;
+  p.moveTo(cx, cy - r);
+  for(let i=0;i<spikes;i++){
+    x = cx + Math.cos(rot)*r; y = cy + Math.sin(rot)*r; p.lineTo(x,y); rot += step;
+    x = cx + Math.cos(rot)*r*0.5; y = cy + Math.sin(rot)*r*0.5; p.lineTo(x,y); rot += step;
+  }
+  p.closePath();
+}
+function heartPath(p, cx, cy, s){
+  const top = cy - s*0.25;
+  p.moveTo(cx, top);
+  p.bezierCurveTo(cx + s*0.5, top - s*0.6, cx + s, cy - s*0.05, cx, cy + s*0.75);
+  p.bezierCurveTo(cx - s, cy - s*0.05, cx - s*0.5, top - s*0.6, cx, top);
+  p.closePath();
+}
+
+let shapePath = null;
+function drawOutline(){
+  const rect = out.getBoundingClientRect();
+  shapePath = makePath(currentShape, rect.width, rect.height);
+  oc.clearRect(0,0,out.width,out.height);
+  if(userMask){ redrawMaskGuide(); }
+  else {
+    oc.save();
+    oc.fillStyle = '#ffffff';
+    oc.globalAlpha = 0.08;
+    oc.fill(shapePath);
+    oc.globalAlpha = 1;
+    oc.lineWidth = 6;
+    oc.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--edge') || '#0f172a';
+    oc.stroke(shapePath);
+    oc.restore();
+  }
+}
+
+function redrawMaskGuide(){
+  oc.clearRect(0,0,out.width,out.height);
+  if(!userMask){
+    oc.save();
+    oc.fillStyle = '#ffffff';
+    oc.globalAlpha = 0.08;
+    oc.fill(shapePath);
+    oc.globalAlpha = 1;
+    oc.lineWidth = 6;
+    oc.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--edge') || '#0f172a';
+    oc.stroke(shapePath);
+    oc.restore();
+    return;
+  }
+  const rect = out.getBoundingClientRect();
+  const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
+  oc.save();
+  oc.globalAlpha = 0.3;
+  oc.drawImage(userMask, fit.x, fit.y, fit.w, fit.h);
+  oc.restore();
+}
+
+const scratch = document.createElement('canvas');
+const sc = scratch.getContext('2d');
+function syncScratch(){
+  scratch.width = ink.width;
+  scratch.height = ink.height;
+  sc.setTransform(ic.getTransform());
+  sc.clearRect(0,0,scratch.width,scratch.height);
+}
+
+let drawing=false, prev=null;
+const supportsPathClip = (function(){
+  try{
+    const c = document.createElement('canvas').getContext('2d');
+    const p = new Path2D(); p.rect(0,0,1,1);
+    c.save(); c.clip(p); c.restore();
+    return true;
+  }catch(e){ return false; }
+})();
+
+function getPos(e){
+  const r = ink.getBoundingClientRect();
+  if(e.touches && e.touches[0]){
+    return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+  }
+  return { x: (e.clientX||e.x) - r.left, y: (e.clientY||e.y) - r.top };
+}
+function begin(e){ drawing=true; prev=getPos(e); e.preventDefault(); }
+function end(){ drawing=false; prev=null; }
+function draw(e){
+  if(!drawing) return;
+  const cur = getPos(e);
+  const size = brushSize;
+  const color = currentColor;
+  const erasing = isErasing;
+
+  if(userMask){
+    sc.save();
+    sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size;
+    sc.globalCompositeOperation='source-over';
+    sc.strokeStyle = erasing ? '#000' : color;
+    sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke();
+    sc.globalCompositeOperation='destination-in';
+    sc.drawImage(maskCanvas,0,0);
+    sc.restore();
+    ic.save();
+    ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+    ic.drawImage(scratch,0,0);
+    ic.restore();
+    sc.clearRect(0,0,scratch.width,scratch.height);
+  } else {
+    if(!shapePath) return;
+    if(supportsPathClip){
+      ic.save();
+      ic.clip(shapePath);
+      ic.lineCap='round'; ic.lineJoin='round'; ic.lineWidth=size;
+      ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+      ic.strokeStyle = erasing ? 'rgba(0,0,0,1)' : color;
+      ic.beginPath(); ic.moveTo(prev.x, prev.y); ic.lineTo(cur.x, cur.y); ic.stroke();
+      ic.restore();
+    } else {
+      if(!maskImageData){
+        maskCanvas.width = out.width; maskCanvas.height = out.height;
+        maskCtx.setTransform(oc.getTransform());
+        maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
+        maskCtx.fillStyle = '#fff';
+        maskCtx.fill(shapePath);
+        maskImageData = maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+      }
+      sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size;
+      sc.globalCompositeOperation='source-over';
+      sc.strokeStyle = erasing ? '#000' : color;
+      sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke();
+      sc.globalCompositeOperation='destination-in';
+      sc.putImageData(maskImageData,0,0);
+      sc.restore();
+      ic.save(); ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+      ic.drawImage(scratch,0,0);
+      ic.restore();
+      sc.clearRect(0,0,scratch.width,scratch.height);
+    }
+  }
+
+  prev = cur;
+  e.preventDefault();
+}
+
+ink.addEventListener('pointerdown', begin);
+window.addEventListener('pointerup', end);
+window.addEventListener('pointercancel', end);
+window.addEventListener('pointerout', (e)=>{ if(e.target===ink) end(); });
+window.addEventListener('pointermove', draw, {passive:false});
+ink.addEventListener('touchstart', begin, {passive:false});
+window.addEventListener('touchend', end, {passive:false});
+window.addEventListener('touchmove', draw, {passive:false});
+
+function mergeForExport(){
+  const merge = document.createElement('canvas');
+  merge.width = ink.width;
+  merge.height = ink.height;
+  const mc = merge.getContext('2d');
+  mc.setTransform(ic.getTransform());
+  mc.drawImage(out,0,0);
+  mc.drawImage(ink,0,0);
+  if(signatureEnable.checked && signatureTextInput.value.trim()){
+    mc.save();
+    mc.font = '32px "Comic Sans MS", "Marker Felt", cursive';
+    mc.fillStyle = '#111';
+    mc.textAlign = 'right';
+    mc.textBaseline = 'bottom';
+    mc.fillText(signatureTextInput.value.trim(), merge.width - 24, merge.height - 24);
+    mc.restore();
+  }
+  return merge.toDataURL('image/png');
+}
+
+const maskModal = document.getElementById('maskModal');
+const maskBtn = document.getElementById('maskBtn');
+const closeMask = document.getElementById('closeMask');
+function openMaskModal(){ maskModal.classList.add('open'); maskModal.setAttribute('aria-hidden','false'); }
+function closeMaskModal(){ maskModal.classList.remove('open'); maskModal.setAttribute('aria-hidden','true'); }
+maskBtn.addEventListener('click', openMaskModal);
+closeMask.addEventListener('click', closeMaskModal);
+maskModal.addEventListener('click', (e)=>{ if(e.target===maskModal) closeMaskModal(); });
+
+const shapeButtons = Array.from(document.querySelectorAll('#shapeGrid .mask-option'));
+function selectShape(shape){
+  userMask = null;
+  maskImageData = null;
+  currentShape = shape;
+  shapeButtons.forEach(btn=>btn.classList.toggle('active', btn.dataset.shape===shape));
+  drawOutline();
+  closeMaskModal();
+}
+shapeButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=> selectShape(btn.dataset.shape));
+});
+selectShape('blob');
+
+const presetGrid = document.getElementById('presetGrid');
+const presetStatus = document.getElementById('presetStatus');
+function enablePresets(){
+  if(!window.PNG_ARRAY || !Array.isArray(window.PNG_ARRAY) || window.PNG_ARRAY.length===0){
+    presetGrid.innerHTML = '';
+    presetGrid.classList.add('empty');
+    presetStatus.textContent = getLang()==='fr'
+      ? 'Aucun PNG trouvé. Ajoutez ../../js/cvipngarray.js.'
+      : 'No PNG list found. Include ../../js/cvipngarray.js.';
+    return;
+  }
+  presetGrid.classList.remove('empty');
+  presetStatus.textContent = getLang()==='fr'
+    ? `Chargé ${window.PNG_ARRAY.length} PNG.`
+    : `Loaded ${window.PNG_ARRAY.length} PNGs.`;
+  presetGrid.innerHTML = '';
+  window.PNG_ARRAY.forEach(item=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mask-option';
+    btn.dataset.src = item.file;
+    btn.innerHTML = `<img src="${item.file}" alt="${item.name}"><span>${item.name}</span>`;
+    btn.addEventListener('click', ()=>{
+      loadUserMaskFromURL(item.file);
     });
+    presetGrid.appendChild(btn);
+  });
+}
+window.addEventListener('DOMContentLoaded', ()=> setTimeout(enablePresets, 0));
 
-    // --- Presets (PNG_ARRAY) ---
-    function enablePresets(){
-      if(!window.PNG_ARRAY || !Array.isArray(window.PNG_ARRAY) || window.PNG_ARRAY.length===0){
-        catEl.disabled = true; itemEl.disabled = true; loadPresetBtn.disabled = true;
-        presetStatus.textContent = 'Preset list not found. Ensure ../../js/cvipngarray.js is loaded.';
-        return;
-      }
-      const cats = [...new Set(window.PNG_ARRAY.map(x=>x.category))].sort((a,b)=>a.localeCompare(b));
-      catEl.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
-      catEl.disabled = false; itemEl.disabled = false; loadPresetBtn.disabled = false;
-      presetStatus.textContent = `Loaded ${window.PNG_ARRAY.length} preset PNGs across ${cats.length} categories.`;
-      updateItems();
-    }
+window.addEventListener('resize', requestResize);
 
-    function updateItems(){
-      const cat = catEl.value;
-      const items = window.PNG_ARRAY.filter(x=>x.category===cat).sort((a,b)=>a.name.localeCompare(b.name));
-      itemEl.innerHTML = items.map(i=>`<option value="${i.file}" data-name="${i.name}">${i.name}</option>`).join('');
-      if(items[0]){ presetThumb.src = items[0].file; presetThumb.alt = items[0].name; }
-    }
-
-    catEl.addEventListener('change', updateItems);
-    itemEl.addEventListener('change', ()=>{ const opt=itemEl.selectedOptions[0]; if(opt){ presetThumb.src=opt.value; presetThumb.alt=opt.dataset.name; }});
-
-    loadPresetBtn.addEventListener('click', ()=>{
-      const src = itemEl.value; if(!src) return;
-      loadUserMaskFromURL(src);
-    });
-
-    // wait for defered presets script to load
-    window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(enablePresets, 0); });
-
-    // --- Outline as vector path (Path2D) ---
-    let shapePath = null; // Path2D in canvas units
-
-    function makePath(kind, w, h){
-      const p = new Path2D();
-      const pad = Math.min(w,h)*0.12;
-      const cx=w/2, cy=h/2;
-      if(kind==='rect'){
-        const r = Math.min(w,h)*0.18; // radius
-        const x=pad, y=pad, rw=w-2*pad, rh=h-2*pad;
-        roundRectPath(p,x,y,rw,rh,r);
-      } else if(kind==='blob'){
-        const rx=w*0.32, ry=h*0.28;
-        blobPath(p, cx, cy, rx, ry);
-      } else if(kind==='star'){
-        starPath(p, cx, cy, Math.min(w,h)*0.36, 5);
-      } else if(kind==='heart'){
-        heartPath(p, cx, cy, Math.min(w,h)*0.36);
-      }
-      return p;
-    }
-
-    function roundRectPath(p,x,y,w,h,r){
-      p.moveTo(x+r,y);
-      p.arcTo(x+w,y,x+w,y+h,r);
-      p.arcTo(x+w,y+h,x,y+h,r);
-      p.arcTo(x,y+h,x,y,r);
-      p.arcTo(x,y,x+w,y,r);
-      p.closePath();
-    }
-
-    function blobPath(p, cx, cy, rx, ry){
-      p.moveTo(cx, cy-ry);
-      p.bezierCurveTo(cx+rx*0.6, cy-ry, cx+rx, cy-ry*0.2, cx+rx, cy);
-      p.bezierCurveTo(cx+rx, cy+ry*0.6, cx+rx*0.4, cy+ry, cx, cy+ry);
-      p.bezierCurveTo(cx-rx*0.6, cy+ry, cx-rx, cy+ry*0.2, cx-rx, cy);
-      p.bezierCurveTo(cx-rx, cy-ry*0.6, cx-rx*0.4, cy-ry, cx, cy-ry);
-      p.closePath();
-    }
-
-    function starPath(p, cx, cy, r, spikes){
-      const step=Math.PI/spikes; let rot=Math.PI/2*3; let x=cx; let y=cy - r;
-      p.moveTo(cx, cy - r);
-      for(let i=0;i<spikes;i++){
-        x = cx + Math.cos(rot)*r; y = cy + Math.sin(rot)*r; p.lineTo(x,y); rot += step;
-        x = cx + Math.cos(rot)*r*0.5; y = cy + Math.sin(rot)*r*0.5; p.lineTo(x,y); rot += step;
-      }
-      p.closePath();
-    }
-
-    function heartPath(p, cx, cy, s){
-      const top = cy - s*0.25;
-      p.moveTo(cx, top);
-      p.bezierCurveTo(cx + s*0.5, top - s*0.6, cx + s, cy - s*0.05, cx, cy + s*0.75);
-      p.bezierCurveTo(cx - s, cy - s*0.05, cx - s*0.5, top - s*0.6, cx, top);
-      p.closePath();
-    }
-
-    function drawOutline(){
-      const rect = out.getBoundingClientRect();
-      shapePath = makePath(shapeEl.value, rect.width, rect.height);
-      oc.clearRect(0,0,out.width,out.height);
-      if(userMask){ redrawMaskGuide(); }
-      else {
-        oc.save(); oc.fillStyle='white'; oc.globalAlpha=0.06; oc.fill(shapePath); oc.globalAlpha=1; oc.lineWidth=6; oc.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--edge')||'#e2e8f0'; oc.stroke(shapePath); oc.restore();
-      }
-    }
-
-    // --- User mask (PNG/SVG) pipeline ---
-    let userMask = null;           // HTMLImageElement
-    const maskCanvas = document.createElement('canvas');
-    const maskCtx = maskCanvas.getContext('2d');
-    let maskImageData = null;      // Uint8ClampedArray of RGBA (cached)
-
-    async function loadUserMaskFromFile(file){
-      const url = URL.createObjectURL(file);
-      await loadUserMaskFromURL(url, true);
-    }
-    function loadUserMaskFromURL(url, revoke=false){
-      const img = new Image();
-      img.onload = ()=>{ if(revoke) URL.revokeObjectURL(url); userMask = img; rebuildMaskCache(); drawOutline(); };
-      img.onerror = ()=>{ if(revoke) URL.revokeObjectURL(url); alert('Could not load image. Try a PNG or SVG.'); };
-      img.src = url;
-    }
-
-    function computeFit(destW,destH, imgW,imgH, mode){
-      if(mode==='stretch') return { x:0, y:0, w:destW, h:destH };
-      const r = imgW/imgH, R = destW/destH;
-      if(mode==='cover'){
-        const w = R>r ? destW : destH*r;
-        const h = R>r ? destW/r : destH;
-        const x = (destW - w)/2; const y = (destH - h)/2;
-        return {x,y,w,h};
-      } else { // contain
-        const w = R>r ? destH*r : destW;
-        const h = R>r ? destH : destW/r;
-        const x = (destW - w)/2; const y = (destH - h)/2;
-        return {x,y,w,h};
-      }
-    }
-
-    function rebuildMaskCache(){
-      if(!userMask){ maskImageData=null; return; }
-      maskCanvas.width = out.width; maskCanvas.height = out.height;
-      maskCtx.setTransform(oc.getTransform());
-      maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
-      const rect = out.getBoundingClientRect();
-      const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
-      maskCtx.drawImage(userMask, fit.x, fit.y, fit.w, fit.h);
-
-      // Convert to chosen mask source
-      const img = maskCtx.getImageData(0,0,maskCanvas.width, maskCanvas.height);
-      const data = img.data; const mode = maskSourceEl.value;
-      for(let i=0;i<data.length; i+=4){
-        const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
-        let alpha = a;
-        if(mode==='luma'){
-          const y = 0.2126*r + 0.7152*g + 0.0722*b; alpha = y;
-        } else if(mode==='alpha-invert'){
-          alpha = 255 - a;
-        }
-        data[i]=255; data[i+1]=255; data[i+2]=255; data[i+3]=alpha;
-      }
-      maskCtx.putImageData(img,0,0);
-      maskImageData = img;
-    }
-
-    function redrawMaskGuide(){
-      oc.clearRect(0,0,out.width,out.height);
-      if(!userMask){ oc.save(); oc.fillStyle='white'; oc.globalAlpha=0.06; oc.fill(shapePath); oc.globalAlpha=1; oc.lineWidth=6; oc.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--edge')||'#e2e8f0'; oc.stroke(shapePath); oc.restore(); return; }
-      const rect = out.getBoundingClientRect();
-      const fit = computeFit(rect.width, rect.height, userMask.naturalWidth, userMask.naturalHeight, fitModeEl.value);
-      oc.save(); oc.globalAlpha = 0.25; oc.drawImage(userMask, fit.x, fit.y, fit.w, fit.h); oc.restore();
-    }
-
-    // --- Drawing with live clipping/masking ---
-    let drawing=false, prev=null;
-
-    // Capability detect: does this browser support ctx.clip(Path2D)?
-    const supportsPathClip = (function(){
-      try{ const c = document.createElement('canvas').getContext('2d'); const p = new Path2D(); p.rect(0,0,1,1); c.save(); c.clip(p); c.restore(); return true; }catch(e){ return false; }
-    })();
-
-    // Scratch canvas for mask-based pipeline
-    const scratch = document.createElement('canvas');
-    const sc = scratch.getContext('2d');
-
-    function syncScratch(){ scratch.width = ink.width; scratch.height = ink.height; sc.setTransform(ic.getTransform()); sc.clearRect(0,0,scratch.width,scratch.height); }
-
-    function getPos(e){ const r = ink.getBoundingClientRect(); if(e.touches && e.touches[0]){ return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top }; } return { x: (e.clientX||e.x) - r.left, y: (e.clientY||e.y) - r.top }; }
-
-    function begin(e){ drawing=true; prev=getPos(e); e.preventDefault(); }
-    function end(){ drawing=false; prev=null; }
-
-    function draw(e){
-      if(!drawing) return;
-      const cur = getPos(e);
-      const size = +brushEl.value; const color = colorEl.value; const erasing = (modeEl.value==='erase');
-
-      if(userMask){
-        sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over'; sc.strokeStyle = erasing ? '#000' : color; sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke(); sc.globalCompositeOperation='destination-in'; sc.drawImage(maskCanvas,0,0); sc.restore();
-        ic.save(); ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.drawImage(scratch,0,0); ic.restore(); sc.clearRect(0,0,scratch.width,scratch.height);
-      } else {
-        if(!shapePath) return;
-        if(supportsPathClip){
-          ic.save(); ic.clip(shapePath); ic.lineCap='round'; ic.lineJoin='round'; ic.lineWidth=size; ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.strokeStyle = erasing ? 'rgba(0,0,0,1)' : color; ic.beginPath(); ic.moveTo(prev.x, prev.y); ic.lineTo(cur.x, cur.y); ic.stroke(); ic.restore();
-        } else {
-          if(!maskImageData){ maskCanvas.width = out.width; maskCanvas.height = out.height; maskCtx.setTransform(oc.getTransform()); maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height); maskCtx.fillStyle = '#fff'; maskCtx.fill(shapePath); maskImageData = maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height); }
-          sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over'; sc.strokeStyle = erasing ? '#000' : color; sc.beginPath(); sc.moveTo(prev.x, prev.y); sc.lineTo(cur.x, cur.y); sc.stroke(); sc.globalCompositeOperation='destination-in'; sc.putImageData(maskImageData,0,0); sc.restore(); ic.save(); ic.globalCompositeOperation = erasing ? 'destination-out' : 'source-over'; ic.drawImage(scratch,0,0); ic.restore(); sc.clearRect(0,0,scratch.width,scratch.height);
-        }
-      }
-
-      prev = cur; e.preventDefault();
-    }
-
-    // Pointer/touch events
-    ink.addEventListener('pointerdown', begin);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-    window.addEventListener('pointerout', (e)=>{ if(e.target===ink) end(); });
-    window.addEventListener('pointermove', draw, {passive:false});
-    ink.addEventListener('touchstart', begin, {passive:false});
-    window.addEventListener('touchend', end, {passive:false});
-    window.addEventListener('touchmove', draw, {passive:false});
-
-    // First paint
-    requestResize();
-
-    // --- Export helper (also used in tests) ---
-    function mergeForExport(){ const merge = document.createElement('canvas'); merge.width = ink.width; merge.height = ink.height; const mc = merge.getContext('2d'); mc.setTransform(ic.getTransform()); mc.drawImage(out,0,0); mc.drawImage(ink,0,0); return merge.toDataURL('image/png'); }
-
-    // --- Self-tests ---
-    runTestsBtn?.addEventListener('click', runSelfTests);
-    function runSelfTests(){
-      const results = [];
-      try {
-        // T1: API presence
-        results.push(["API: Path2D exists", typeof Path2D === 'function']);
-        results.push(["API: Have clip(Path2D) OR fallback mask", typeof ic.clip === 'function' || true]);
-
-        // T2/T3: Clip pipeline — outside vs inside
-        const c = document.createElement('canvas'); c.width = 100; c.height = 100; const ctx = c.getContext('2d');
-        const rect = new Path2D(); rect.rect(20,20,60,60);
-        try{ ctx.save(); ctx.clip(rect); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0,10); ctx.lineTo(100,10); ctx.stroke(); ctx.restore(); }catch{}
-        const pxOutside = ctx.getImageData(10,10,1,1).data[3]; results.push(["Clip: outside does not render", pxOutside === 0]);
-        try{ ctx.save(); ctx.clip(rect); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(10,50); ctx.lineTo(90,50); ctx.stroke(); ctx.restore(); }catch{}
-        const pxInside = ctx.getImageData(50,50,1,1).data[3]; results.push(["Clip: inside renders", pxInside > 0]);
-
-        // T4: erasing works (destination-out)
-        const ctx2 = document.createElement('canvas').getContext('2d'); ctx2.canvas.width=100; ctx2.canvas.height=100; try{ ctx2.save(); ctx2.clip(rect); }catch{} ctx2.fillStyle = '#fff'; ctx2.fillRect(20,20,60,60); ctx2.restore?.(); ctx2.save?.(); try{ ctx2.clip(rect); }catch{} ctx2.globalCompositeOperation='destination-out'; ctx2.lineWidth = 8; ctx2.strokeStyle = 'rgba(0,0,0,1)'; ctx2.beginPath(); ctx2.moveTo(20,50); ctx2.lineTo(80,50); ctx2.stroke(); ctx2.restore?.(); const erased = ctx2.getImageData(50,50,1,1).data[3]; results.push(["Erase: destination-out clears pixels", erased === 0]);
-
-        // T5/T6: Fallback mask from path inside/outside
-        const fc = document.createElement('canvas'); fc.width=100; fc.height=100; const fctx = fc.getContext('2d'); const fScratch = document.createElement('canvas'); fScratch.width=100; fScratch.height=100; const fsc = fScratch.getContext('2d'); const fRect = new Path2D(); fRect.rect(20,20,60,60);
-        fsc.save(); fsc.strokeStyle='#fff'; fsc.lineWidth=6; fsc.beginPath(); fsc.moveTo(0,10); fsc.lineTo(100,10); fsc.stroke(); fsc.globalCompositeOperation='destination-in'; fsc.fillStyle='#fff'; fsc.fill(fRect); fsc.restore(); fctx.drawImage(fScratch,0,0); const fOutside = fctx.getImageData(10,10,1,1).data[3]; results.push(["Mask fallback: outside does not render", fOutside === 0]);
-        fsc.clearRect(0,0,100,100); fsc.save(); fsc.strokeStyle='#fff'; fsc.lineWidth=6; fsc.beginPath(); fsc.moveTo(10,50); fsc.lineTo(90,50); fsc.stroke(); fsc.globalCompositeOperation='destination-in'; fsc.fillStyle='#fff'; fsc.fill(fRect); fsc.restore(); fctx.clearRect(0,0,100,100); fctx.drawImage(fScratch,0,0); const fInside = fctx.getImageData(50,50,1,1).data[3]; results.push(["Mask fallback: inside renders", fInside > 0]);
-
-        // T7: Export contains pixels
-        const testInk = document.createElement('canvas'); testInk.width=50; testInk.height=50; const ti = testInk.getContext('2d'); const testOut = document.createElement('canvas'); testOut.width=50; testOut.height=50; const to = testOut.getContext('2d'); ti.fillStyle='#fff'; ti.fillRect(10,10,10,10); to.strokeStyle='#fff'; to.strokeRect(5,5,20,20); const merged = (function(){ const merge = document.createElement('canvas'); merge.width=50; merge.height=50; const mc = merge.getContext('2d'); mc.drawImage(testOut,0,0); mc.drawImage(testInk,0,0); return mc.getImageData(12,12,1,1).data[3]; })(); results.push(["Export: merged image contains pixels", merged > 0]);
-
-        // T8: Preset filtering (synthetic) — does not depend on external file
-        const fake = [ {name:'a',file:'a.png',category:'x'}, {name:'b',file:'b.png',category:'y'}, {name:'c',file:'c.png',category:'x'} ];
-        const cats = [...new Set(fake.map(x=>x.category))].sort();
-        results.push(["Presets: unique categories computed", cats.join(',')==='x,y']);
-        const inX = fake.filter(x=>x.category==='x').map(x=>x.name).sort().join(',');
-        results.push(["Presets: items filter by category", inX==='a,c']);
-
-      } catch (err){
-        results.push([`Exception during tests: ${err?.message||err}`, false]);
-      }
-
-      testResults.innerHTML = results.map(([name, ok])=> ok ? `<div class="ok">✔ ${name}</div>` : `<div class="bad">✖ ${name}</div>`).join('');
-    }
-
-    // Notes: Uploaded PNG/SVG or Preset PNG are rasterized and used as alpha/luma masks; brush is composited through the mask so strokes cannot cross the outline.
-  </script>
+requestResize();
+</script>
 </body>
 </html>
