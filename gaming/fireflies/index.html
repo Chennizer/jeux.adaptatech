@@ -200,24 +200,11 @@
     </div>
   </div>
 
-  <button id="langToggle" type="button" title="Changer la langue / Switch language">EN</button>
+  <button id="langToggle" type="button" title="Changer la langue / Switch language">FR / EN</button>
 
   <script src="../../js/translationmain.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const langBtn = document.getElementById('langToggle');
-      if (langBtn) {
-        const siteLang = localStorage.getItem('siteLanguage') || 'en';
-        langBtn.textContent = (siteLang === 'fr') ? 'EN' : 'FR';
-        langBtn.addEventListener('click', () => {
-          if (typeof toggleLanguage === 'function') {
-            toggleLanguage();
-          }
-          const updated = localStorage.getItem('siteLanguage') || 'en';
-          langBtn.textContent = (updated === 'fr') ? 'EN' : 'FR';
-        });
-      }
-
       const canvas = document.getElementById('fireflyCanvas');
       const ctx = canvas.getContext('2d', { alpha: false });
 
@@ -255,6 +242,47 @@
       const sizeVal = document.getElementById('sizeVal');
 
       const music = new Audio('../../songs/space/spacebest1.mp3');
+
+      const LS_LANG_KEY = 'siteLanguage';
+      function readStoredLanguage() {
+        try {
+          const saved = localStorage.getItem(LS_LANG_KEY);
+          if (saved === 'fr' || saved === 'en') {
+            return saved;
+          }
+        } catch (e) {}
+        return document.documentElement.lang === 'fr' ? 'fr' : 'en';
+      }
+
+      function syncLanguageFromStorage() {
+        if (typeof updateLanguage === 'function') {
+          updateLanguage();
+        }
+        const lang = readStoredLanguage();
+        document.documentElement.lang = lang;
+        if (langToggleBtn) {
+          langToggleBtn.textContent = 'FR / EN';
+          const ariaLabel = lang === 'fr'
+            ? 'Basculer vers la version anglaise'
+            : 'Switch to the French version';
+          langToggleBtn.setAttribute('aria-label', ariaLabel);
+        }
+      }
+
+      syncLanguageFromStorage();
+
+      langToggleBtn?.addEventListener('click', () => {
+        if (typeof toggleLanguage === 'function') {
+          toggleLanguage();
+        } else {
+          const current = readStoredLanguage();
+          const next = current === 'fr' ? 'en' : 'fr';
+          try {
+            localStorage.setItem(LS_LANG_KEY, next);
+          } catch (e) {}
+        }
+        syncLanguageFromStorage();
+      });
 
       const IDLE_ACTIVITY = 0.18;
       const BURST_DURATION = 3.8;
@@ -492,8 +520,9 @@
         const swirlStrength = 28 * burstEase;
         const radialStrength = 18 * burstEase;
         const waveStrength = 15 * burstEase;
+        const cascadeDownStrength = 42 * burstEase;
+        const cascadeSwayStrength = 18 * burstEase;
         const jitterStrength = 0.6 * burstEase;
-        const burstProgress = burstPhase > 0 ? 1 - burstPhase : 0;
         const glowBoost = 0.45 * burstEase * lerp(0.75, 1.25, lightSetting.level);
 
         const N = FIREFLIES.list.length;
@@ -574,28 +603,28 @@
 
             switch (burstVariant) {
               case 'cascade': {
-                const pulse = Math.sin(burstProgress * 7 + f.phase + burstWaveOffset);
-                const pulseForce = radialAmt * (0.45 + 0.55 * pulse);
-                f.vx += normX * pulseForce;
-                f.vy += normY * pulseForce;
-                f.vx += tangentX * swirlDir * swirlAmt * 0.65;
-                f.vy += tangentY * swirlDir * swirlAmt * 0.65;
+                const sheet = Math.sin(FIREFLIES.t * 3.2 + f.phase + burstWaveOffset);
+                const downward = cascadeDownStrength * (0.35 + 0.65 * falloff) * dt * invZ;
+                const sway = cascadeSwayStrength * sheet * dt * invZ;
+                f.vx += sway + normX * radialAmt * 0.15;
+                f.vy += downward + Math.abs(normY) * radialAmt * 0.4;
                 break;
               }
               case 'aurora': {
-                const wave = Math.sin(FIREFLIES.t * 4.5 + f.phase + burstWaveOffset);
+                const wave = Math.sin(FIREFLIES.t * 4.8 + f.phase + burstWaveOffset);
+                const crest = Math.cos(FIREFLIES.t * 2.4 + burstWaveOffset * 0.5 + f.phase * 0.5);
                 const waveForce = waveStrength * wave * dt * invZ * (0.6 + 0.4 * falloff);
-                f.vx += tangentX * waveForce;
-                f.vy += tangentY * waveForce;
-                f.vx += normX * radialAmt * 0.3;
-                f.vy += normY * radialAmt * 0.3;
+                const drift = waveStrength * 0.35 * crest * dt * invZ;
+                f.vx += tangentX * waveForce + normX * radialAmt * 0.25;
+                f.vy += drift + normY * radialAmt * 0.15;
                 break;
               }
               default: {
-                f.vx += tangentX * swirlDir * swirlAmt;
-                f.vy += tangentY * swirlDir * swirlAmt;
-                f.vx += normX * radialAmt * 0.2;
-                f.vy += normY * radialAmt * 0.2;
+                const spiral = swirlAmt * (0.8 + 0.2 * falloff);
+                f.vx += tangentX * swirlDir * spiral;
+                f.vy += tangentY * swirlDir * spiral;
+                f.vx += normX * radialAmt * 0.25;
+                f.vy += normY * radialAmt * 0.25;
                 break;
               }
             }
@@ -699,9 +728,6 @@
         const boostScale = lerp(0.4, 1.0, lightSetting.level);
         pulseBoost = Math.min(1, Math.max(pulseBoost, 0.45 * boostScale) + 0.4 * boostScale);
         pulseFlash = 1;
-        burstFocus.x = W * (0.15 + Math.random() * 0.7);
-        burstFocus.y = H * (0.18 + Math.random() * 0.64);
-
         burstTimer = BURST_DURATION;
         if (effectMode === 'surprise') {
           burstVariant = BURST_VARIANTS[Math.floor(Math.random() * BURST_VARIANTS.length)];
@@ -711,12 +737,35 @@
         swirlDir = Math.random() < 0.5 ? -1 : 1;
         burstWaveOffset = Math.random() * Math.PI * 2;
 
+        if (burstVariant === 'cascade') {
+          burstFocus.x = W * (0.2 + Math.random() * 0.6);
+          burstFocus.y = H * 0.18;
+        } else if (burstVariant === 'aurora') {
+          burstFocus.x = W * (0.3 + Math.random() * 0.4);
+          burstFocus.y = H * (0.32 + Math.random() * 0.2);
+        } else {
+          burstFocus.x = W * (0.15 + Math.random() * 0.7);
+          burstFocus.y = H * (0.18 + Math.random() * 0.64);
+        }
+
         const boostBase = (0.28 + Math.random() * 0.34) * (0.6 + lightSetting.level * 1.1);
         for (const f of FIREFLIES.list) {
-          const angle = Math.atan2(burstFocus.y - f.y, burstFocus.x - f.x) + (Math.random() - 0.5) * 0.9;
-          const strength = boostBase * (0.5 + Math.random() * 0.9);
-          f.vx += Math.cos(angle) * strength;
-          f.vy += Math.sin(angle) * strength;
+          if (burstVariant === 'cascade') {
+            const sway = (Math.random() - 0.5) * boostBase * 0.8;
+            const drop = boostBase * (0.6 + Math.random() * 1.1);
+            f.vx += sway;
+            f.vy += drop;
+          } else if (burstVariant === 'aurora') {
+            const waveKick = (Math.random() - 0.5) * boostBase * 1.1;
+            const lift = boostBase * (0.2 + Math.random() * 0.5);
+            f.vx += waveKick;
+            f.vy -= lift * 0.3;
+          } else {
+            const angle = Math.atan2(burstFocus.y - f.y, burstFocus.x - f.x) + (Math.random() - 0.5) * 0.9;
+            const strength = boostBase * (0.5 + Math.random() * 0.9);
+            f.vx += Math.cos(angle) * strength;
+            f.vy += Math.sin(angle) * strength;
+          }
           f.glow = Math.max(f.glow, 0.95 + Math.random() * 0.7);
           f.hue = (f.hue + 12 + Math.random() * 34) % 360;
         }
