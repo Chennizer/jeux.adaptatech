@@ -46,8 +46,8 @@
   }
   body.dark #langToggle{ background:#111; color:#14b8a6; border-color:#14b8a6 }
 
-  /* ===== Start Menu: ONLY background is black; keep prior control styles ===== */
-  #game-options{ background:#000; }  /* ← only this is forced */
+  /* ===== Start Menu: ONLY background is black ===== */
+  #game-options{ background:#000; }
 
   /* 3-column layout */
   #options-inline-container{
@@ -67,7 +67,6 @@
   }
   #presetThumb{
     width:112px; height:112px; object-fit:contain;
-    /* Render PNG content as solid black, preserve alpha */
     filter: brightness(0) saturate(100%);
   }
 
@@ -84,6 +83,14 @@
   .swatch.active::before{ content:""; position:absolute; inset:calc(var(--swatch-outline) + 2px); border:var(--swatch-outline) solid #111; border-radius:50%; pointer-events:none; z-index:2 }
   .swatch .dwell{ position:absolute; left:50%; top:50%; width:100%; height:100%; transform:translate(-50%,-50%) scale(.08);
     transform-origin:center; pointer-events:none; border-radius:50%; background-color:var(--dwell-red); will-change:transform; z-index:1; }
+
+  /* dwell overlay for brush buttons */
+  .brushBtn .dwell{
+    position:absolute; left:50%; top:50%; width:100%; height:100%;
+    transform:translate(-50%,-50%) scale(.08); transform-origin:center; pointer-events:none;
+    border-radius:50%; background-color:var(--dwell-red); will-change:transform; z-index:1;
+  }
+
   @keyframes dwellGrow{ from{transform:translate(-50%,-50%) scale(.08)} to{transform:translate(-50%,-50%) scale(1.02)} }
   .flash::after{ content:""; position:absolute; left:50%; top:50%; width:100%; height:100%; transform:translate(-50%,-50%) scale(1);
     border-radius:50%; box-shadow:0 0 0 0 rgba(17,17,17,.35); animation:ringPulse 420ms ease-out; pointer-events:none; }
@@ -91,9 +98,9 @@
     60%{box-shadow:0 0 0 18px rgba(17,17,17,0); transform:translate(-50%,-50%) scale(1.08)}
     100%{box-shadow:0 0 0 24px rgba(17,17,17,0); transform:translate(-50%,-50%) scale(1)} }
 
-  #brushSizes{ display:flex; flex-direction:column; align-items:center; gap:var(--brush-gap) }
+  #brushSizes{ display:flex; flex-direction:column; align-items:center; gap:var(--brush-gap); position:relative; }
   .brushBtn{ width:var(--brush-btn); height:var(--brush-btn); border-radius:50%; border:2px solid #aaa; background:#f8f8f8;
-    display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.1) inset; transition:transform .12s, background-color .12s; }
+    display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.1) inset; transition:transform .12s, background-color .12s; position:relative; overflow:hidden; }
   .brushBtn span{ display:block; border-radius:50%; background:#333 }
   .brushBtn.small span{width:6px;height:6px} .brushBtn.medium span{width:16px;height:16px} .brushBtn.large span{width:28px;height:28px}
   .brushBtn.active{ border-color:#333; background:#ececec }
@@ -112,8 +119,13 @@
   #ink,#outline{ position:absolute; inset:0; width:100%; height:100% }
   #outline{ pointer-events:none }
 
-  /* Cursor preview */
-  #cursorPreview{ position:fixed; left:0; top:0; width:20px; height:20px; border-radius:50%; pointer-events:none; z-index:15; mix-blend-mode:multiply; transform:translate(-50%,-50%); opacity:.65; outline:var(--cursor-outline) solid rgba(0,0,0,.18) }
+  /* Cursor preview (RAISED z-index so it's above the sidebar) */
+  #cursorPreview{
+    position:fixed; left:0; top:0; width:20px; height:20px; border-radius:50%;
+    pointer-events:none; z-index:50; /* sidebar is 20 */
+    mix-blend-mode:multiply; transform:translate(-50%,-50%); opacity:.65;
+    outline:var(--cursor-outline) solid rgba(0,0,0,.18)
+  }
 </style>
 </head>
 <body class="light">
@@ -286,7 +298,7 @@ const cursorEl=document.getElementById('cursorPreview');
 
 function sidebarW(){ return sidebar.getBoundingClientRect().width; }
 
-/* ===== Sizing to stage (right of sidebar) ===== */
+/* ===== Sizing helpers ===== */
 function fitCanvasToStage(){
   const cssW=stage.clientWidth;
   const cssH=stage.clientHeight;
@@ -297,6 +309,27 @@ function fitCanvasToStage(){
   const h=Math.max(1,Math.round(cssH*dpr));
   if(ink.width!==w||ink.height!==h){ ink.width=w; ink.height=h; ic.setTransform(dpr,0,0,dpr,0,0); }
   if(out.width!==w||out.height!==h){ out.width=w; out.height=h; oc.setTransform(dpr,0,0,dpr,0,0); }
+}
+
+/* Preserve ink content across resizes / FS transitions */
+async function fitCanvasPreserveInk(){
+  let bitmap = null;
+  try { bitmap = await createImageBitmap(ink); } catch(e){}
+
+  fitCanvasToStage();
+
+  if (bitmap){
+    const cssW = stage.clientWidth;
+    const cssH = stage.clientHeight;
+    ic.save();
+    const prevSmooth = ic.imageSmoothingEnabled;
+    ic.imageSmoothingEnabled = true;
+    ic.clearRect(0,0,cssW,cssH);
+    ic.drawImage(bitmap, 0, 0, cssW, cssH);
+    ic.imageSmoothingEnabled = prevSmooth;
+    ic.restore();
+    try { bitmap.close && bitmap.close(); } catch(e){}
+  }
 }
 
 /* ===== Mask pipeline (upload + presets) ===== */
@@ -330,19 +363,34 @@ function redrawMaskGuide(){
   const rect=out.getBoundingClientRect();
   const fit=computeFit(rect.width,rect.height,userMask.naturalWidth,userMask.naturalHeight);
   oc.save();
-  oc.globalAlpha = 0.5;      // translucent preview only
+  oc.globalAlpha = 0.5;
   oc.drawImage(userMask,fit.x,fit.y,fit.w,fit.h);
   oc.restore();
 }
 
 function loadUserMaskFromURL(url,revoke=false){
   const img=new Image(); img.crossOrigin='anonymous';
-  img.onload=()=>{ if(revoke) URL.revokeObjectURL(url); userMask=img; fitCanvasToStage(); rebuildMaskCache(); redrawMaskGuide(); };
+  img.onload=()=>{ if(revoke) URL.revokeObjectURL(url); userMask=img; fitCanvasPreserveInk(); rebuildMaskCache(); redrawMaskGuide(); };
   img.onerror=()=>{ if(revoke) URL.revokeObjectURL(url); alert('Could not load image.'); };
   img.src=url;
 }
 function loadUserMaskFromFile(file){ const url=URL.createObjectURL(file); loadUserMaskFromURL(url,true); }
 document.getElementById('outlineFile').addEventListener('change',(e)=>{ const f=e.target.files?.[0]; if(!f) return; loadUserMaskFromFile(f); });
+
+/* ===== Name sanitizer: remove “CVI” from visible labels only ===== */
+function sanitizeLabel(s){
+  if (!s) return '';
+  let out = String(s);
+
+  // Remove standalone or decorated "CVI" tokens: "cvi", "CVI", "cvi_", "- cvi", "(CVI)" etc.
+  out = out.replace(/(^|[\s_\-\(\[\{])cvi([\s_\-\)\]\}]|$)/ig, ' ');
+  // Also remove leading "cvi-" or "cvi_" or "cvi "
+  out = out.replace(/^cvi[\s_\-]+/i, '');
+  // Collapse whitespace and trim
+  out = out.replace(/\s{2,}/g, ' ').trim();
+
+  return out;
+}
 
 /* ===== Preset UI (auto-apply) ===== */
 const catEl=document.getElementById('presetCategory');
@@ -357,10 +405,10 @@ function enablePresets(){
   }
 
   const cats=[...new Set(arr.map(x=>x.category))].sort((a,b)=>a.localeCompare(b));
-  catEl.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  catEl.innerHTML = cats.map(c=>`<option value="${c}">${sanitizeLabel(c)}</option>`).join('');
   catEl.disabled = itemEl.disabled = false;
 
-  // --- RANDOM SELECTION ON LOAD ---
+  // Random selection on load
   const rndItem = arr[Math.floor(Math.random()*arr.length)];
   const rndCat  = rndItem.category;
   catEl.value = rndCat;
@@ -372,7 +420,7 @@ function enablePresets(){
   if(match){
     itemEl.value = match.file;
     presetThumb.src = match.file;
-    presetThumb.alt = match.name;
+    presetThumb.alt = sanitizeLabel(match.name);
     loadUserMaskFromURL(match.file);
   }
 }
@@ -381,15 +429,23 @@ function updateItems(applyFirst=false){
   const cat = catEl.value || (arr[0]?.category ?? '');
   if(!catEl.value && cat) catEl.value = cat;
   const items = arr.filter(x=>x.category===cat).sort((a,b)=>a.name.localeCompare(b.name));
-  itemEl.innerHTML = items.map(i=>`<option value="${i.file}" data-name="${i.name}">${i.name}</option>`).join('');
+  itemEl.innerHTML = items.map(i=>`<option value="${i.file}" data-name="${sanitizeLabel(i.name)}">${sanitizeLabel(i.name)}</option>`).join('');
   if(items[0]){
-    presetThumb.src = items[0].file; presetThumb.alt = items[0].name;
+    presetThumb.src = items[0].file; presetThumb.alt = sanitizeLabel(items[0].name);
     itemEl.value = items[0].file;
     if(applyFirst) loadUserMaskFromURL(items[0].file);
   }
 }
 catEl.addEventListener('change', ()=>updateItems(true));
-itemEl.addEventListener('change', ()=>{ const src=itemEl.value; if(!src) return; presetThumb.src=src; loadUserMaskFromURL(src); });
+itemEl.addEventListener('change', ()=>{
+  const src=itemEl.value;
+  if(!src) return;
+  const opt = itemEl.options[itemEl.selectedIndex];
+  const displayName = opt ? (opt.getAttribute('data-name') || opt.textContent) : '';
+  presetThumb.src = src;
+  presetThumb.alt = sanitizeLabel(displayName);
+  loadUserMaskFromURL(src);
+});
 
 window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(enablePresets, 0); });
 
@@ -424,7 +480,37 @@ function onPointerMove(e){
   e.preventDefault();
 }
 ink.addEventListener('pointerenter',(e)=>{ prev=getPos(e); },{passive:false});
-ink.addEventListener('pointerleave',()=>{ prev=null; },{passive:true});
+
+/* Fullscreen transition guard */
+let _fsTransition = false;
+let _fsTimer = null;
+
+async function onFullscreenChange(){
+  _fsTransition = true;
+  clearTimeout(_fsTimer);
+
+  await fitCanvasPreserveInk();
+  rebuildMaskCache();
+  redrawMaskGuide();
+  syncScratch();
+
+  requestAnimationFrame(async ()=>{
+    await fitCanvasPreserveInk();
+    rebuildMaskCache();
+    redrawMaskGuide();
+    syncScratch();
+  });
+
+  _fsTimer = setTimeout(()=>{ _fsTransition = false; }, 250);
+}
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+document.addEventListener('msfullscreenchange', onFullscreenChange);
+
+ink.addEventListener('pointerleave',()=>{
+  if (_fsTransition) return;
+  prev=null;
+},{passive:true});
 ink.addEventListener('pointermove', onPointerMove, {passive:false});
 
 /* Touch support */
@@ -464,17 +550,48 @@ function wireSwatches(){
   });
 }
 
+/* ===== Brush size with hover dwell (like colors) ===== */
+const brushBtns = Array.from(document.querySelectorAll('.brushBtn'));
+function setBrushSize(btn){
+  brushBtns.forEach(b=>b.classList.toggle('active', b===btn));
+  sizeMode = btn.dataset.size;
+  btn.classList.add('flash'); setTimeout(()=>btn.classList.remove('flash'),460);
+}
+function wireBrushButtons(){
+  brushBtns.forEach(b=>{
+    let timer=null;
+    const clearTimer=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+
+    b.addEventListener('mouseenter', ()=>{
+      clearTimer();
+      resetDwellCircle(b);
+      startDwellCircle(b, HOVER_DWELL_MS);
+      timer = setTimeout(()=>{ setBrushSize(b); }, HOVER_DWELL_MS+5);
+    });
+
+    b.addEventListener('mouseleave', ()=>{
+      clearTimer();
+      resetDwellCircle(b);
+    });
+
+    b.addEventListener('click', ()=>{ clearTimer(); resetDwellCircle(b); setBrushSize(b); });
+    b.addEventListener('touchstart', ()=>{ clearTimer(); resetDwellCircle(b); setBrushSize(b); });
+  });
+}
+
+/* Build palette & brush dwell bindings */
 function buildPalette(n){
   while(paletteEl.firstChild) paletteEl.removeChild(paletteEl.firstChild);
   let colors=pickColors(n);
   if(document.body.classList.contains('dark') && colors.length>0) colors[0]='#FFFFFF';
   colors.forEach(col=>{ const btn=document.createElement('button'); btn.className='swatch'; btn.style.background=col; btn.dataset.color=col; paletteEl.appendChild(btn); });
   wireSwatches();
+  wireBrushButtons();
   const sw=document.querySelectorAll('.swatch'); if(sw.length){ const rnd=Math.floor(Math.random()*sw.length); setColor(sw[rnd]); }
   layoutPalette();
 }
 
-/* >>> GROW MORE (like other page): allow much bigger max when fewer colors */
+/* Palette sizing */
 function layoutPalette(){
   const n=paletteEl.children.length; if(!n) return;
   const cs=getComputedStyle(sidebar);
@@ -484,9 +601,7 @@ function layoutPalette(){
   const availH=Math.max(0, sidebar.clientHeight - padY - reserve);
   const availW=Math.max(0, sidebar.clientWidth  - padX);
 
-  // Scale gap with UI scale a bit
-  const rootCS = getComputedStyle(document.documentElement);
-  const uiScale = parseFloat(rootCS.getPropertyValue('--ui-scale')) || 1;
+  const uiScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
   const gap = Math.max(6, Math.min(14, Math.round(12 * uiScale)));
 
   const fit=(cols,min,max)=>{
@@ -499,13 +614,12 @@ function layoutPalette(){
     return {s,cols};
   };
 
-  // More generous max size when fewer colors (like previous page)
   const nIs13 = (n >= 13);
   const minSize = nIs13 ? 24 : 28;
   const maxSize = nIs13 ? 52 : 96;
 
   let L=fit(1,minSize,maxSize);
-  if(L.s<=minSize+1 && n>6){ L=fit(2,minSize,maxSize); } // two columns if tight
+  if(L.s<=minSize+1 && n>6){ L=fit(2,minSize,maxSize); }
 
   sidebar.style.setProperty('--palette-cols', String(L.cols));
   sidebar.style.setProperty('--swatch-size', L.s+'px');
@@ -516,18 +630,27 @@ function layoutPalette(){
   sidebar.style.setProperty('--swatch-outline', border+'px');
 }
 
-/* ===== Brush + mode + cursor ===== */
-document.querySelectorAll('.brushBtn').forEach(b=> b.addEventListener('click',()=>{ document.querySelectorAll('.brushBtn').forEach(x=>x.classList.toggle('active',x===b)); sizeMode=b.dataset.size; }));
+/* ===== Brush mode + cursor ===== */
 const modeDraw=document.getElementById('modeDraw');
 const modeErase=document.getElementById('modeErase');
 modeDraw.onclick=()=>{ erasing=false; modeDraw.classList.add('active'); modeErase.classList.remove('active'); }
 modeErase.onclick=()=>{ erasing=true;  modeErase.classList.add('active'); modeDraw.classList.remove('active'); }
 
+/* Pointer preview:
+   Small same; Medium & Large are 1.5× bigger VISUALLY (pointer only). */
+function pointerDiameter(){
+  if (sizeMode==='small') return 8;                 // unchanged
+  if (sizeMode==='medium') return Math.round(16*1.5); // 24
+  return Math.round(34*1.5);                        // 51
+}
 function updateCursor(x,y){
-  if(x<sidebarW()){ cursorEl.style.opacity=0; return; }
-  cursorEl.style.opacity=.65; cursorEl.style.left=x+'px'; cursorEl.style.top=y+'px';
-  const d= (sizeMode==='small'?8:(sizeMode==='large'?34:18));
-  cursorEl.style.width=d+'px'; cursorEl.style.height=d+'px'; cursorEl.style.background=erasing?'#fff':currentColor;
+  cursorEl.style.opacity=.65;
+  cursorEl.style.left=x+'px';
+  cursorEl.style.top =y+'px';
+  const d = pointerDiameter();
+  cursorEl.style.width=d+'px';
+  cursorEl.style.height=d+'px';
+  cursorEl.style.background=erasing?'#fff':currentColor;
 }
 addEventListener('mousemove',e=>updateCursor(e.clientX,e.clientY),{passive:true});
 addEventListener('touchmove',e=>{ const t=e.touches[0]; if(t) updateCursor(t.clientX,t.clientY); },{passive:true});
@@ -548,28 +671,30 @@ paletteSizeSelect.onchange=()=>{ if(!stage.classList.contains('hidden')) buildPa
 startButton.onclick=async ()=>{
   setTheme(themeSelect.value);
 
-  // Go fullscreen on start
   await enterFullscreen();
 
-  // Hide language toggle during gameplay
   document.getElementById('langToggle').style.display = 'none';
-
-  // 🔒 Hide the native mouse pointer everywhere after starting
   document.documentElement.classList.add('hide-native-cursor');
 
   gameOptions.style.display='none';
   sidebar.style.display='flex';
   stage.classList.remove('hidden');
 
-  fitCanvasToStage();
+  await fitCanvasPreserveInk();
   buildPalette(parseInt(paletteSizeSelect.value,10)||7);
   syncScratch();
 
-  // Ensure mask preview drawn after first layout
-  requestAnimationFrame(()=>{ fitCanvasToStage(); rebuildMaskCache(); redrawMaskGuide(); });
+  requestAnimationFrame(async ()=>{ await fitCanvasPreserveInk(); rebuildMaskCache(); redrawMaskGuide(); });
 };
 
-addEventListener('resize', ()=>{ if(stage.classList.contains('hidden')) return; fitCanvasToStage(); rebuildMaskCache(); redrawMaskGuide(); }, {passive:true});
+/* Preserve drawings on window resizes too */
+addEventListener('resize', async ()=>{
+  if(stage.classList.contains('hidden')) return;
+  await fitCanvasPreserveInk();
+  rebuildMaskCache();
+  redrawMaskGuide();
+  syncScratch();
+}, {passive:true});
 
 /* Initial theme + preset activation */
 setTheme('light');
