@@ -113,8 +113,16 @@
       --gap: clamp(20px,6vmin,56px); --card-size: clamp(200px,32vmin,360px);
     }
     main{ min-height:100dvh; display:none; place-items:center; padding:clamp(20px,6vmin,48px) }
-    .mode-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 18px; border-radius:999px;
-      background:rgba(0,150,136,.18); color:#76fff0; letter-spacing:.08em; font-weight:800; text-transform:uppercase; font-size:.95rem }
+    .mode-chip{
+      display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+      padding:10px 22px; border-radius:999px; border:none;
+      background:rgba(0,150,136,.18); color:#76fff0; letter-spacing:.08em; font-weight:800; text-transform:uppercase; font-size:.95rem;
+      cursor:pointer; transition:transform .18s ease, box-shadow .18s ease;
+    }
+    .mode-chip:focus-visible{ outline:3px solid rgba(118,255,240,.85); outline-offset:3px; }
+    .mode-chip__label{ font-size:.95rem; }
+    .mode-chip__menu{ font-size:.72rem; letter-spacing:.14em; opacity:.85; color:#c4fff6; }
+    @media(hover:hover) and (pointer:fine){ .mode-chip:hover{ transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,0,0,.35); } }
     .weather-grid{ display:grid; place-content:center; justify-items:center; align-items:center;
       grid-template-columns:repeat(2,var(--card-size)); grid-auto-rows:var(--card-size); gap:var(--gap); width:100% }
 
@@ -231,7 +239,10 @@
 
   <!-- ===== MAIN CONTENT (hidden until start) ===== -->
   <main id="mainContent">
-    <div class="mode-chip translate" id="modeChip" data-fr="Mode tactile" data-en="Touch mode">Mode tactile</div>
+    <button class="mode-chip" id="modeChip" type="button">
+      <span id="modeChipLabel" class="mode-chip__label translate" data-fr="Mode tactile" data-en="Touch mode">Mode tactile</span>
+      <span id="modeChipMenu" class="mode-chip__menu translate" data-fr="Retour au menu" data-en="Back to menu">Retour au menu</span>
+    </button>
 
     <section id="weatherChooser" class="weather-grid" role="list">
       <button class="weather-card" type="button" role="listitem"
@@ -269,6 +280,37 @@
   <script>
     /* ===== Language ===== */
     const LS_LANG_KEY='siteLanguage';
+
+    const MODES = {
+      touch:    { frLabel:'Mode tactile',        enLabel:'Touch mode' },
+      single:   { frLabel:'Mode un bouton',      enLabel:'Single-switch mode' },
+      multiple: { frLabel:'Mode choix multiples', enLabel:'Multiple choice mode' },
+      scan:     { frLabel:'Mode balayage',       enLabel:'Scanning mode' }
+    };
+
+    let modeKey='touch', highlightIndex=-1, scanTimer=null, lastCard=null, gameActive=false;
+    let scanIntervalMs = 10000;
+    let autoReturnHandle=null;
+
+    function updateModeChipLabel(langOverride){
+      const label=document.getElementById('modeChipLabel');
+      if(!label) return;
+      const lang=langOverride||getLang();
+      const data=MODES[modeKey]||MODES.touch;
+      label.dataset.fr=data.frLabel;
+      label.dataset.en=data.enLabel;
+      label.textContent=(lang==='fr')?data.frLabel:data.enLabel;
+
+      const menuSpan=document.getElementById('modeChipMenu');
+      const menuFr=menuSpan?.dataset?.fr||'Retour au menu';
+      const menuEn=menuSpan?.dataset?.en||'Back to menu';
+      const button=document.getElementById('modeChip');
+      if(button){
+        button.setAttribute('aria-label', lang==='fr'
+          ? `${data.frLabel} — ${menuFr}`
+          : `${data.enLabel} — ${menuEn}`);
+      }
+    }
     function getLang(){ try{const s=localStorage.getItem(LS_LANG_KEY); if(s==='en'||s==='fr') return s;}catch(e){} return (document.documentElement.lang==='en')?'en':'fr'; }
     function setLang(lang){
       const safe=(lang==='en')?'en':'fr';
@@ -279,13 +321,7 @@
         if (safe==='fr' && fr!=null) el.textContent=fr;
         if (safe==='en' && en!=null) el.textContent=en;
       });
-      const modeChip=document.getElementById('modeChip');
-      if (modeChip){
-        const cur=document.getElementById('modeSelect').value;
-        modeChip.textContent = (safe==='fr')
-          ? (cur==='touch'?'Mode tactile':cur==='single'?'Mode un bouton':cur==='multiple'?'Mode choix multiples':'Mode balayage')
-          : (cur==='touch'?'Touch mode':cur==='single'?'Single-switch mode':cur==='multiple'?'Multiple choice mode':'Scanning mode');
-      }
+      updateModeChipLabel(safe);
     }
     (function initLang(){
       let initial='fr';
@@ -315,6 +351,11 @@
     const themeSelect = document.getElementById('themeSelect');
     const scanTimeRow = document.getElementById('scanTimeRow');
     const scanSeconds = document.getElementById('scanSeconds');
+    const gameOptions = document.getElementById('game-options');
+    const langToggleButton = document.getElementById('langToggle');
+
+    modeKey = modeSelect?.value || modeKey;
+    updateModeChipLabel();
 
     /* Timer controls */
     const returnTimerEnabled = document.getElementById('returnTimerEnabled');
@@ -327,17 +368,6 @@
     const cycleSfx = new Audio('../../sounds/woosh.mp3');
     cycleSfx.preload = 'auto';
     cycleSfx.load();
-
-    const MODES = {
-      touch:    { frLabel:'Mode tactile',       enLabel:'Touch mode' },
-      single:   { frLabel:'Mode un bouton',     enLabel:'Single-switch mode' },
-      multiple: { frLabel:'Mode choix multiples', enLabel:'Multiple choice mode' },
-      scan:     { frLabel:'Mode balayage',      enLabel:'Scanning mode' }
-    };
-
-    let modeKey='touch', highlightIndex=-1, scanTimer=null, lastCard=null, gameActive=false;
-    let scanIntervalMs = 10000;
-    let autoReturnHandle=null;
 
     function applyTheme(theme){
       const t=(theme==='light')?'light':'dark';
@@ -354,13 +384,7 @@
     setScanRowVisibility();
 
     function refreshModeUI(){
-      const lang=getLang();
-      const m=MODES[modeKey];
-      if (modeChip){
-        modeChip.dataset.fr=m.frLabel;
-        modeChip.dataset.en=m.enLabel;
-        modeChip.textContent=(lang==='fr')?m.frLabel:m.enLabel;
-      }
+      updateModeChipLabel();
     }
 
     function playCycleSound(){
@@ -393,13 +417,13 @@
       // Stop scanning when leaving scan mode
       if (modeKey!=='scan') stopScanTimer();
 
-      // Touch: no highlight; Single: highlight follows mouse; Multiple/Scan: show a highlight when grid visible
+      // Touch: no highlight; Single: highlight waits for click; Multiple/Scan: show a highlight when grid visible
       if (modeKey==='touch'){
         clearHighlight();
       } else if ((modeKey==='multiple' || modeKey==='scan') && mainContent.style.display==='grid') {
         if (highlightIndex < 0) highlightCard(0);
       } else if (modeKey==='single'){
-        clearHighlight(); // none until hovered
+        clearHighlight(); // none until a card is clicked
       }
       refreshModeUI();
     });
@@ -417,6 +441,13 @@
     function enterFullscreen(){
       const el=document.documentElement; const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
       if(!req) return Promise.resolve(false); return req.call(el).then(()=>true).catch(()=>false);
+    }
+
+    function exitFullscreenSafe(){
+      const exit=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;
+      if(exit && document.fullscreenElement){
+        try{ exit.call(document); }catch(e){}
+      }
     }
 
     function highlightCard(i){
@@ -463,13 +494,28 @@
           try{ document.activeElement && document.activeElement.blur && document.activeElement.blur(); }catch(e){}
 
           // Resume scanning if applicable
-          if(modeKey==='scan') startScanTimer();
+          if(modeKey==='scan' && mainContent.style.display==='grid') startScanTimer();
         }
       },220);
     }
 
     backButton.addEventListener('click', closeGame);
     gameOverlay.addEventListener('click', e=>{ if(e.target===gameOverlay) closeGame(); });
+
+    function returnToMenu(){
+      if(mainContent.style.display!=='grid') return;
+      if(gameActive) closeGame();
+      stopScanTimer();
+      clearHighlight();
+      mainContent.style.display='none';
+      if(gameOptions) gameOptions.classList.remove('hidden');
+      if(langToggleButton) langToggleButton.classList.remove('hidden');
+      exitFullscreenSafe();
+      modeChip?.blur();
+      requestAnimationFrame(()=>{ try{ startButton?.focus({preventScroll:true}); }catch(e){ startButton?.focus(); } });
+    }
+
+    modeChip?.addEventListener('click', returnToMenu);
 
     document.addEventListener('keydown', e=>{
       if(!gameOverlay.hasAttribute('hidden')){
@@ -485,7 +531,7 @@
         if(e.key==='Enter'){ e.preventDefault(); highlightCard((highlightIndex+1+cards.length)%cards.length); startScanTimer(); }
         else if(e.code==='Space'||e.key===' '){ e.preventDefault(); if(highlightIndex>=0) showGame(cards[highlightIndex]); }
       }else if(modeKey==='single'){
-        // Space launches currently highlighted (set by mouse hover)
+        // Space launches currently highlighted (selected via click)
         if(e.code==='Space'||e.key===' '){ e.preventDefault(); if(highlightIndex>=0) showGame(cards[highlightIndex]); }
       }
     });
@@ -493,8 +539,8 @@
     /* Start: hide menu; only show tiles after Start */
     startButton.addEventListener('click', async ()=>{
       await enterFullscreen();
-      document.getElementById('game-options').remove();
-      document.getElementById('langToggle')?.remove();
+      gameOptions?.classList.add('hidden');
+      langToggleButton?.classList.add('hidden');
       mainContent.style.display='grid';
 
       // Initial highlight rules per mode
@@ -504,7 +550,7 @@
         highlightCard(0);
         if(modeKey==='scan' && !gameActive) startScanTimer();
       } else if (modeKey==='single'){
-        clearHighlight(); // wait for mouse hover to set selection
+        clearHighlight(); // wait for user click to set selection
       }
 
       refreshModeUI();
@@ -526,13 +572,6 @@
         }
       });
 
-      // Hover drives selection in Single-switch mode
-      card.addEventListener('mouseenter', ()=>{
-        if(mainContent.style.display!=='grid') return;
-        if(modeKey==='single'){
-          setHighlightByCard(card);
-        }
-      });
     });
 
     /* Close with Esc from inside iframe */
