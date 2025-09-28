@@ -241,6 +241,7 @@
 
       let pulseBoost = 0;
       let pulseFlash = 0;
+      let swirlEnergy = 0;
       let lastFrame = 0;
       let running = false;
       let animationId = null;
@@ -434,20 +435,25 @@
         ctx.restore();
       }
 
-      function renderFireflies(dt, intensity) {
-        const activity = clamp(intensity, 0, 1);
+      function renderFireflies(dt, intensity, swirl) {
+        const baseActivity = 0.18;
+        const burstActivity = clamp(intensity, 0, 1);
+        const swirlActivity = clamp(swirl, 0, 1);
+        const activity = clamp(baseActivity + burstActivity * 0.7 + swirlActivity * 0.4, 0, 1);
+        const energized = clamp(burstActivity + swirlActivity * 0.75, 0, 1);
         const sN = sizeNorm();
         FIREFLIES.t += dt;
 
         clearToBg(false);
 
-        const wanderBase = lerp(0.0, 0.22, activity);
-        const attractK = lerp(0, 36, activity);
-        const repelK = lerp(0, 26, activity);
-        const maxSpeed = lerp(0.0001, 32, activity);
-        const dampBase = lerp(0.72, 0.975, activity);
+        const wanderBase = 0.035 + 0.21 * activity;
+        const attractK = energized > 0.0005 ? lerp(0, 36, energized) : 0;
+        const repelK = energized > 0.0005 ? lerp(0, 24, energized) : 0;
+        const swirlForce = energized > 0.0005 ? lerp(0, 48, energized) : 0;
+        const maxSpeed = 4 + 28 * activity;
+        const dampBase = lerp(0.84, 0.975, activity);
         const damp = Math.pow(dampBase, dt * 60);
-        const velScale = dt * lerp(0, 36, activity);
+        const velScale = dt * (6 + 30 * activity);
 
         const pullR = 220 + 360 * sN;
         const pullR2 = pullR * pullR;
@@ -469,28 +475,34 @@
 
           let near = 0;
           const invZ = f.invZ;
-
-          if (activity > 0.0005) {
-            const dx = burstFocus.x - f.x;
-            const dy = burstFocus.y - f.y;
-            const dist2 = dx * dx + dy * dy;
-            let dist = 0;
-            if (dist2 < nearRange2) {
-              dist = Math.sqrt(dist2);
-              near = clamp(1 - (dist / nearRange), 0, 1) * activity;
-            } else if (dist2 < pullR2) {
-              dist = Math.sqrt(dist2);
+          const dx = burstFocus.x - f.x;
+          const dy = burstFocus.y - f.y;
+          const dist2 = dx * dx + dy * dy;
+          let dist = 0;
+          if (dist2 > 0.0001) {
+            dist = Math.sqrt(dist2);
+            if (dist2 < nearRange2 && energized > 0) {
+              near = clamp(1 - (dist / nearRange), 0, 1) * energized;
             }
+          }
 
-            const wanderLocal = wanderBase * (1 + 0.7 * (1 - near));
-            f.vx += (Math.random() - 0.5) * wanderLocal * invZ;
-            f.vy += (Math.random() - 0.5) * wanderLocal * invZ;
+          const wanderLocal = wanderBase * (1 + 0.6 * Math.sin(FIREFLIES.t * 0.6 + f.phase));
+          f.vx += (Math.random() - 0.5) * wanderLocal * invZ;
+          f.vy += (Math.random() - 0.5) * wanderLocal * invZ;
 
+          if (energized > 0 && dist2 > 0.0001) {
             if (dist2 < pullR2 && dist > 0) {
               const t = 1 - dist / pullR;
               const pull = attractK * (0.25 + 0.75 * t) * dt * invZ / 320;
               f.vx += dx * pull;
               f.vy += dy * pull;
+            }
+
+            if (swirlForce > 0) {
+              const invDist = 1 / Math.max(dist, 80);
+              const swirlScale = swirlForce * invDist * dt * invZ / 12;
+              f.vx += -dy * swirlScale;
+              f.vy += dx * swirlScale;
             }
 
             if (repelK > 0) {
@@ -525,11 +537,11 @@
             }
           }
 
-          const settle = lerp(0.0, 0.00012, activity);
+          const settle = lerp(0.00004, 0.00016, activity);
           f.vx += (W * 0.5 - f.x) * settle;
           f.vy += (H * 0.5 - f.y) * settle;
 
-          const maxLocal = Math.max(0.0002, maxSpeed * invZ);
+          const maxLocal = Math.max(0.0008, maxSpeed * invZ);
           const maxLocalSq = maxLocal * maxLocal;
           const magSq = f.vx * f.vx + f.vy * f.vy;
           if (magSq > maxLocalSq && magSq > 0) {
@@ -555,16 +567,17 @@
 
           f.phase += dt * (0.6 + 1.2 * activity);
           const twinkle = 0.5 + 0.5 * Math.sin(f.phase + f.x * 0.01 + f.y * 0.01);
-          const baseGlow = 0.20 + 0.26 * twinkle;
-          f.glow = clamp(baseGlow + near * (0.52 + 0.38 * activity), 0.12, 1.4);
+          const baseGlow = 0.18 + 0.24 * twinkle + 0.12 * baseActivity;
+          const burstGlow = near * (0.55 + 0.45 * energized) + swirlActivity * 0.35;
+          f.glow = clamp(baseGlow + burstGlow, 0.15, 1.5);
         }
 
-        const trailAlpha = 0.03 + 0.12 * activity;
-        const baseTrailW = 0.8 + 1.5 * activity;
+        const trailAlpha = 0.04 + 0.1 * activity + 0.08 * energized;
+        const baseTrailW = 0.9 + 1.7 * activity;
         const sizeBoost = 1.68;
-        const bloomScale = 4.2 + 6.2 * activity;
-        const coreAlpha = clamp(0.22 + 0.28 * activity, 0, 0.6);
-        const bloomBase = clamp(0.06 + 0.12 * activity, 0, 0.36);
+        const bloomScale = 4.0 + 6.6 * activity;
+        const coreAlpha = clamp(0.26 + 0.32 * activity + 0.24 * energized, 0, 0.75);
+        const bloomBase = clamp(0.08 + 0.12 * activity + 0.18 * energized, 0, 0.48);
 
         ctx.lineCap = 'round';
         ctx.globalCompositeOperation = 'screen';
@@ -609,8 +622,9 @@
         if (now - lastBurstTime < 180) return;
         lastBurstTime = now;
 
-        pulseBoost = Math.min(1, Math.max(pulseBoost, 0.75) + 0.35);
+        pulseBoost = Math.min(1, Math.max(pulseBoost, 0.6) + 0.45);
         pulseFlash = 1;
+        swirlEnergy = 1;
         burstFocus.x = W * (0.15 + Math.random() * 0.7);
         burstFocus.y = H * (0.18 + Math.random() * 0.64);
 
@@ -645,10 +659,11 @@
         lastFrame = now;
 
         const intensity = mapIntensity();
+        swirlEnergy = Math.max(0, swirlEnergy - dt * 0.28);
 
-        renderFireflies(dt, intensity);
+        renderFireflies(dt, intensity, swirlEnergy);
         drawPulseOverlay();
-        pulseBoost = Math.max(0, pulseBoost - dt * (0.28 + 0.34 * intensity));
+        pulseBoost = Math.max(0, pulseBoost - dt * (0.18 + 0.28 * (0.4 + intensity)));
         pulseFlash = Math.max(0, pulseFlash - dt * 1.4);
 
         animationId = requestAnimationFrame(frame);
@@ -692,6 +707,9 @@
         if (musicWanted) {
           music.pause();
         }
+        pulseBoost = 0;
+        pulseFlash = 0;
+        swirlEnergy = 0;
       }
 
       startButton?.addEventListener('click', startExperience);
