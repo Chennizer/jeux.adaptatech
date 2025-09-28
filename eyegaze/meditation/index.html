@@ -27,7 +27,7 @@
     const BG_SRC = "../../images/samurai/lampbg.png";
 
     // Pointer image (square, per your update)
-    const POINTER_SRC = "../../images/samurai/enzo.png";
+    const POINTER_SRC = "../../images/samurai/chi.png";
 
     // Moonrock shards (random)
     const ROCK_SRCS = [
@@ -119,11 +119,16 @@
     const INFLOW_OUTER_MIN = 1.40;
     const INFLOW_OUTER_MAX = 2.30;
 
-    // Pointer sizing (NEW)
+    // Pointer sizing
     const POINTER_PX_MAX = 120;      // hard cap
     const POINTER_BASE_PX = 96;      // nominal size before breathing/charge
     const POINTER_BREATH = 0.04;     // ±4% breathing
     const POINTER_CHARGE_SCALE = 0.15; // up to +15% with full charge
+
+    // Hover / charge zone tuning
+    const HOVER_RADIUS_MULT   = 1.30; // 1.0 = exact ball radius; 1.3 = +30% larger
+    const HOVER_PAD_PX        = 48;   // extra fixed pixels beyond the scaled radius
+    const CHARGE_EDGE_FALLOFF = 0.6;  // 0..1 min charge-rate at the outer hover edge
 
     /* =======================
        SETUP
@@ -248,7 +253,6 @@
       };
     }
     function radiusFromCharge(o){ return (MIN_DIAMETER + (MAX_DIAMETER - MIN_DIAMETER)*o.charge) * 0.5; }
-    function inOrb(o, x, y){ return Math.hypot(x - o.cx, y - o.cy) <= radiusFromCharge(o); }
 
     /* =======================
        IMPACT FX
@@ -596,7 +600,7 @@
     }
 
     /* =======================
-       POINTER DRAW (UPDATED SIZE)
+       POINTER DRAW (uses expanded hover zone)
     ======================= */
     function drawPointer(){
       if (!pointer.inside) return;
@@ -611,11 +615,16 @@
       const size = Math.min(POINTER_PX_MAX, POINTER_BASE_PX * scale);
       const w = size, h = size;
 
-      // mild pull toward the orb while charging
+      // mild pull toward the orb over expanded hover zone
       let x = pointer.x, y = pointer.y;
       if (orb && !launching){
-        const dx = orb.cx - x, dy = orb.cy - y, d = Math.hypot(dx,dy) || 1;
-        const pull = Math.max(0, 1 - d / 220) * 6 * charge;
+        const dx = orb.cx - x, dy = orb.cy - y;
+        const d  = Math.hypot(dx,dy) || 1;
+        const r  = radiusFromCharge(orb);
+        const exR = r * HOVER_RADIUS_MULT + HOVER_PAD_PX;
+
+        const near = 1 - Math.min(1, d / exR); // 0..1 inside expanded zone
+        const pull = 6 * (0.35 + 0.65*near) * (charge || 0); // up to ~6px
         x += (dx/d)*pull; y += (dy/d)*pull;
       }
 
@@ -642,20 +651,31 @@
     }
 
     /* =======================
-       UPDATE
+       UPDATE (expanded hover zone + rate falloff)
     ======================= */
     let started=false, lastT=performance.now(), lastDt=0;
 
     function maybeCharge(dt){
       if (!orb || launching) return;
-      const r = radiusFromCharge(orb);
-      const inside = pointer.inside && inOrb(orb, pointer.x, pointer.y);
+
+      const r   = radiusFromCharge(orb);
+      const exR = r * HOVER_RADIUS_MULT + HOVER_PAD_PX;
+
+      const dx = pointer.x - orb.cx, dy = pointer.y - orb.cy;
+      const dist = Math.hypot(dx, dy);
+
+      const inside = pointer.inside && dist <= exR;   // expanded hover area
 
       if (inside){
         if (!orb.inZone){ orb.inZone = true; orb.enterMs = performance.now(); }
         const ok = (performance.now() - orb.enterMs) >= ENTRY_GRACE_MS;
         if (ok){
-          orb.charge = Math.min(1, orb.charge + dt*(1000/DWELL_MS));
+          // prox = 1 at center/ball, 0 at expanded edge
+          const prox = 1 - Math.min(1, Math.max(0, (dist - r) / Math.max(1, exR - r)));
+          const rateScale = CHARGE_EDGE_FALLOFF + (1 - CHARGE_EDGE_FALLOFF) * prox;
+
+          orb.charge = Math.min(1, orb.charge + dt * (1000 / DWELL_MS) * rateScale);
+
           if (orb.charge >= 1 && !launching){
             launching = true;
             cutHumPunch();
@@ -756,7 +776,7 @@
       }
 
       if (flashLife>0){ flashT += dt; if (flashT>=flashLife) flashLife=0; }
-      if (shockLife>0){ shockT += dt; if (shockT>=shockLife) shockLife=0; }
+      if (shockLife>0){ shockT += dt; if (shockLife>=shockLife) shockLife=0; }
 
       const t = nowS();
       for (let i=shards.length-1;i>=0;i--){
@@ -819,9 +839,9 @@
     function render(){
       drawBackground();
       drawMoon();
-      drawInflow();     // behind pointer and orb
-      drawPointer();    // custom pointer sprite (larger)
-      drawOrb();
+      drawInflow();
+      drawOrb();        // draw the ball first
+      drawPointer();    // then pointer on top of the ball
       drawShards();
       drawShockwave();
       drawFlash();
