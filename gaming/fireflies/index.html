@@ -235,8 +235,7 @@
       let H = 0;
 
       const settings = {
-        baseIntensity: 0.58,
-        size: 0.62,
+        size: 0.58,
         trail: 0.12
       };
 
@@ -292,7 +291,7 @@
       }
 
       function mapIntensity() {
-        return clamp(settings.baseIntensity + pulseBoost, 0, 1);
+        return clamp(pulseBoost, 0, 1);
       }
 
       function sizeNorm() {
@@ -353,8 +352,10 @@
       function firefliesInit() {
         FIREFLIES.list.length = 0;
         const sN = sizeNorm();
-        const n = Math.floor(70 + 240 * sN);
-        const spread = Math.hypot(W, H) * 0.6;
+        const area = W * H;
+        const density = clamp(Math.sqrt(area / (1280 * 720)), 0.6, 1.25);
+        const n = Math.floor(clamp(90 * density + 110 * sN, 90, 200));
+        const spread = Math.hypot(W, H) * 0.58;
         const neighborA = FIREFLY_NEIGHBORS.a;
         const neighborB = FIREFLY_NEIGHBORS.b;
         neighborA.length = n;
@@ -435,28 +436,29 @@
         ctx.restore();
       }
 
-      function renderFireflies(dt) {
-        const intensity = mapIntensity();
+      function renderFireflies(dt, intensity) {
+        const activity = clamp(intensity, 0, 1);
         const sN = sizeNorm();
         FIREFLIES.t += dt;
 
         clearToBg(false);
 
-        const baseWander = 0.10 + 0.12 * intensity;
-        const attractK = 6 + 32 * intensity;
-        const repelK = 12 + 22 * intensity;
-        const maxSpeed = 10 + 24 * intensity;
-        const damp = Math.pow(0.975, dt * 60);
-        const velScale = dt * 38;
+        const wanderBase = lerp(0.0, 0.22, activity);
+        const attractK = lerp(0, 36, activity);
+        const repelK = lerp(0, 26, activity);
+        const maxSpeed = lerp(0.0001, 32, activity);
+        const dampBase = lerp(0.72, 0.975, activity);
+        const damp = Math.pow(dampBase, dt * 60);
+        const velScale = dt * lerp(0, 36, activity);
 
-        const pullR = 220 + 380 * sN;
+        const pullR = 220 + 360 * sN;
         const pullR2 = pullR * pullR;
-        const nearRange = 180 + 260 * sN;
+        const nearRange = 180 + 240 * sN;
         const nearRange2 = nearRange * nearRange;
-        const repelR = 140 + 260 * sN;
+        const repelR = 160 + 240 * sN;
         const repelR2 = repelR * repelR;
-        const hopXLimit = W * 0.45;
-        const hopYLimit = H * 0.45;
+        const hopXLimit = W * 0.42;
+        const hopYLimit = H * 0.42;
 
         const neighborsA = FIREFLY_NEIGHBORS.a;
         const neighborsB = FIREFLY_NEIGHBORS.b;
@@ -467,64 +469,69 @@
           f.px = f.x;
           f.py = f.y;
 
-          const dx = mouse.x - f.x;
-          const dy = mouse.y - f.y;
-          const dist2 = dx * dx + dy * dy;
           let near = 0;
-          let dist = 0;
-          if (dist2 < nearRange2) {
-            dist = Math.sqrt(dist2);
-            near = clamp(1 - (dist / nearRange), 0, 1);
-          } else if (dist2 < pullR2) {
-            dist = Math.sqrt(dist2);
-          }
-
           const invZ = f.invZ;
-          const wanderLocal = baseWander * (1 + 0.9 * (1 - near));
 
-          f.vx += (Math.random() - 0.5) * wanderLocal * invZ;
-          f.vy += (Math.random() - 0.5) * wanderLocal * invZ;
+          if (activity > 0.0005) {
+            const dx = mouse.x - f.x;
+            const dy = mouse.y - f.y;
+            const dist2 = dx * dx + dy * dy;
+            let dist = 0;
+            if (dist2 < nearRange2) {
+              dist = Math.sqrt(dist2);
+              near = clamp(1 - (dist / nearRange), 0, 1) * activity;
+            } else if (dist2 < pullR2) {
+              dist = Math.sqrt(dist2);
+            }
 
-          if (dist2 < pullR2 && dist > 0) {
-            const t = 1 - dist / pullR;
-            const pull = attractK * (0.25 + 0.75 * t) * dt * invZ / 320;
-            f.vx += dx * pull;
-            f.vy += dy * pull;
-          }
+            const wanderLocal = wanderBase * (1 + 0.7 * (1 - near));
+            f.vx += (Math.random() - 0.5) * wanderLocal * invZ;
+            f.vy += (Math.random() - 0.5) * wanderLocal * invZ;
 
-          const idxA = neighborsA[i];
-          const idxB = neighborsB[i];
-          const gA = FIREFLIES.list[idxA];
-          if (gA && gA !== f) {
-            const rx = f.x - gA.x;
-            const ry = f.y - gA.y;
-            const rd2 = rx * rx + ry * ry + 0.0001;
-            if (rd2 < repelR2) {
-              const inv = 1 / Math.sqrt(rd2);
-              const repelScale = (repelK * (1 - rd2 / repelR2)) * dt * invZ / 120;
-              f.vx += rx * inv * repelScale;
-              f.vy += ry * inv * repelScale;
+            if (dist2 < pullR2 && dist > 0) {
+              const t = 1 - dist / pullR;
+              const pull = attractK * (0.25 + 0.75 * t) * dt * invZ / 320;
+              f.vx += dx * pull;
+              f.vy += dy * pull;
+            }
+
+            if (repelK > 0) {
+              const idxA = neighborsA[i];
+              const idxB = neighborsB[i];
+
+              const gA = FIREFLIES.list[idxA];
+              if (gA && gA !== f) {
+                const rx = f.x - gA.x;
+                const ry = f.y - gA.y;
+                const rd2 = rx * rx + ry * ry + 0.0001;
+                if (rd2 < repelR2) {
+                  const inv = 1 / Math.sqrt(rd2);
+                  const repelScale = (repelK * (1 - rd2 / repelR2)) * dt * invZ / 120;
+                  f.vx += rx * inv * repelScale;
+                  f.vy += ry * inv * repelScale;
+                }
+              }
+
+              const gB = FIREFLIES.list[idxB];
+              if (gB && gB !== f) {
+                const rx = f.x - gB.x;
+                const ry = f.y - gB.y;
+                const rd2 = rx * rx + ry * ry + 0.0001;
+                if (rd2 < repelR2) {
+                  const inv = 1 / Math.sqrt(rd2);
+                  const repelScale = (repelK * (1 - rd2 / repelR2)) * dt * invZ / 120;
+                  f.vx += rx * inv * repelScale;
+                  f.vy += ry * inv * repelScale;
+                }
+              }
             }
           }
-          const gB = FIREFLIES.list[idxB];
-          if (gB && gB !== f) {
-            const rx = f.x - gB.x;
-            const ry = f.y - gB.y;
-            const rd2 = rx * rx + ry * ry + 0.0001;
-            if (rd2 < repelR2) {
-              const inv = 1 / Math.sqrt(rd2);
-              const repelScale = (repelK * (1 - rd2 / repelR2)) * dt * invZ / 120;
-              f.vx += rx * inv * repelScale;
-              f.vy += ry * inv * repelScale;
-            }
-          }
 
-          const cdx = (W * 0.5 - f.x);
-          const cdy = (H * 0.5 - f.y);
-          f.vx += cdx * 0.000015;
-          f.vy += cdy * 0.000015;
+          const settle = lerp(0.0, 0.00012, activity);
+          f.vx += (W * 0.5 - f.x) * settle;
+          f.vy += (H * 0.5 - f.y) * settle;
 
-          const maxLocal = maxSpeed * invZ;
+          const maxLocal = Math.max(0.0002, maxSpeed * invZ);
           const maxLocalSq = maxLocal * maxLocal;
           const magSq = f.vx * f.vx + f.vy * f.vy;
           if (magSq > maxLocalSq && magSq > 0) {
@@ -532,6 +539,7 @@
             f.vx *= scale;
             f.vy *= scale;
           }
+
           f.vx *= damp;
           f.vy *= damp;
           f.x += f.vx * velScale;
@@ -547,31 +555,31 @@
             }
           }
 
-          f.phase += dt * (0.6 + 1.4 * intensity);
+          f.phase += dt * (0.6 + 1.2 * activity);
           const twinkle = 0.5 + 0.5 * Math.sin(f.phase + f.x * 0.01 + f.y * 0.01);
           const baseGlow = 0.20 + 0.26 * twinkle;
-          f.glow = clamp(baseGlow + near * (0.50 + 0.42 * intensity), 0.10, 1.5);
+          f.glow = clamp(baseGlow + near * (0.52 + 0.38 * activity), 0.12, 1.4);
         }
 
-        const trailAlpha = 0.05 + 0.11 * intensity;
-        const baseTrailW = 1.0 + 1.3 * intensity;
-        const sizeBoost = 1.72;
-        const bloomScale = 4.8 + 5.8 * intensity;
-        const coreAlpha = clamp(0.22 + 0.28 * intensity, 0, 0.6);
-        const bloomBase = clamp(0.05 + 0.10 * intensity, 0, 0.32);
+        const trailAlpha = 0.03 + 0.12 * activity;
+        const baseTrailW = 0.8 + 1.5 * activity;
+        const sizeBoost = 1.68;
+        const bloomScale = 4.2 + 6.2 * activity;
+        const coreAlpha = clamp(0.22 + 0.28 * activity, 0, 0.6);
+        const bloomBase = clamp(0.06 + 0.12 * activity, 0, 0.36);
 
         ctx.lineCap = 'round';
         ctx.globalCompositeOperation = 'screen';
         for (let i = 0; i < N; i++) {
           const f = FIREFLIES.list[i];
           ctx.strokeStyle = `hsla(${(f.hue + 30) | 0}, 90%, 72%, ${trailAlpha})`;
-          ctx.lineWidth = Math.max(1, baseTrailW * f.invZ);
+          ctx.lineWidth = Math.max(0.6, baseTrailW * f.invZ);
           ctx.beginPath();
           ctx.moveTo(f.px, f.py);
           ctx.lineTo(f.x, f.y);
           ctx.stroke();
 
-          const coreR = sizeBoost * (2.4 + 4.1 * f.glow) * f.invZ;
+          const coreR = sizeBoost * (2.2 + 4.0 * f.glow) * f.invZ;
           const bloomR = coreR * bloomScale;
 
           const aCore = coreAlpha;
@@ -598,19 +606,27 @@
         ctx.restore();
       }
 
-      function updatePointer(dt) {
-        idleClock += dt;
-        const idleRadius = Math.min(W, H) * 0.18;
-        const idleX = W * 0.5 + Math.cos(idleClock * 0.4) * idleRadius;
-        const idleY = H * 0.5 + Math.sin(idleClock * 0.32) * idleRadius;
-        pointerTarget.x = lerp(pointerTarget.x, idleX, dt * 1.4);
-        pointerTarget.y = lerp(pointerTarget.y, idleY, dt * 1.4);
+      function updatePointer(dt, intensity) {
+        const active = intensity > 0.02;
+        if (active) {
+          idleClock += dt;
+          const radius = Math.min(W, H) * lerp(0.02, 0.18, intensity);
+          const idleX = W * 0.5 + Math.cos(idleClock * lerp(0.18, 0.42, intensity)) * radius;
+          const idleY = H * 0.5 + Math.sin(idleClock * lerp(0.16, 0.36, intensity)) * radius;
+          pointerTarget.x = lerp(pointerTarget.x, idleX, dt * lerp(1.2, 2.8, intensity));
+          pointerTarget.y = lerp(pointerTarget.y, idleY, dt * lerp(1.2, 2.8, intensity));
+        } else {
+          idleClock = 0;
+          pointerTarget.x = lerp(pointerTarget.x, W * 0.5, dt * 3.6);
+          pointerTarget.y = lerp(pointerTarget.y, H * 0.5, dt * 3.6);
+        }
 
-        const follow = Math.min(1, dt * (pulseBoost > 0 ? 12 : 6));
+        const follow = Math.min(1, dt * lerp(6, 14, intensity));
         mouse.vx += (pointerTarget.x - mouse.x) * follow;
         mouse.vy += (pointerTarget.y - mouse.y) * follow;
-        mouse.vx *= 0.90;
-        mouse.vy *= 0.90;
+        const damp = active ? 0.90 : 0.80;
+        mouse.vx *= damp;
+        mouse.vy *= damp;
         mouse.x += mouse.vx;
         mouse.y += mouse.vy;
         mouse.speed = Math.hypot(mouse.vx, mouse.vy);
@@ -621,12 +637,13 @@
         if (now - lastBurstTime < 180) return;
         lastBurstTime = now;
 
-        pulseBoost = Math.min(1, pulseBoost + 0.6);
+        pulseBoost = Math.min(1, Math.max(pulseBoost, 0.75) + 0.35);
         pulseFlash = 1;
         pointerTarget.x = W * (0.15 + Math.random() * 0.7);
         pointerTarget.y = H * (0.18 + Math.random() * 0.64);
+        idleClock = 0;
 
-        const boostBase = 0.35 + Math.random() * 0.45;
+        const boostBase = 0.40 + Math.random() * 0.4;
         for (const f of FIREFLIES.list) {
           const angle = Math.atan2(pointerTarget.y - f.y, pointerTarget.x - f.x) + (Math.random() - 0.5) * 0.7;
           const strength = boostBase * (0.6 + Math.random() * 0.8);
@@ -656,11 +673,12 @@
         const dt = Math.min(0.1, (now - lastFrame) / 1000);
         lastFrame = now;
 
-        updatePointer(dt);
-        pulseBoost = Math.max(0, pulseBoost - dt * 0.45);
+        const intensity = mapIntensity();
+        updatePointer(dt, intensity);
 
-        renderFireflies(dt);
+        renderFireflies(dt, intensity);
         drawPulseOverlay();
+        pulseBoost = Math.max(0, pulseBoost - dt * (0.28 + 0.34 * intensity));
         pulseFlash = Math.max(0, pulseFlash - dt * 1.4);
 
         animationId = requestAnimationFrame(frame);
@@ -693,7 +711,6 @@
 
         lastFrame = performance.now();
         animationId = requestAnimationFrame(frame);
-        triggerBurst();
       }
 
       function stopExperience() {
