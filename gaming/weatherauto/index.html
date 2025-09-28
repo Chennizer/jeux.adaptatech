@@ -189,20 +189,17 @@
 
           <div class="option-item">
             <label for="returnTimerMin" class="teal-label label-block">
-              <span class="translate" data-fr="Durée" data-en="Duration">Durée</span> — <span id="rtmLabel">3</span>
-              <span class="translate" data-fr="minutes" data-en="minutes">minutes</span>
+              <span class="translate" data-fr="Durée" data-en="Duration">Durée</span> —
+              <span id="rtmLabel" class="translate" data-fr="3 minutes" data-en="3 minutes">3 minutes</span>
             </label>
             <select id="returnTimerMin" class="styled-select compact-field">
+              <option value="0.5" class="translate" data-fr="30 secondes" data-en="30 seconds">30 secondes</option>
               <option value="1"  class="translate" data-fr="1 minute" data-en="1 minute">1 minute</option>
+              <option value="1.5" class="translate" data-fr="1 minute 30 secondes" data-en="1 minute 30 seconds">1 minute 30 secondes</option>
               <option value="2"  class="translate" data-fr="2 minutes" data-en="2 minutes">2 minutes</option>
               <option value="3"  selected class="translate" data-fr="3 minutes" data-en="3 minutes">3 minutes</option>
               <option value="5"  class="translate" data-fr="5 minutes" data-en="5 minutes">5 minutes</option>
               <option value="10" class="translate" data-fr="10 minutes" data-en="10 minutes">10 minutes</option>
-              <option value="15" class="translate" data-fr="15 minutes" data-en="15 minutes">15 minutes</option>
-              <option value="20" class="translate" data-fr="20 minutes" data-en="20 minutes">20 minutes</option>
-              <option value="30" class="translate" data-fr="30 minutes" data-en="30 minutes">30 minutes</option>
-              <option value="45" class="translate" data-fr="45 minutes" data-en="45 minutes">45 minutes</option>
-              <option value="60" class="translate" data-fr="60 minutes" data-en="60 minutes">60 minutes</option>
             </select>
           </div>
         </div>
@@ -298,6 +295,9 @@
       multiple: { frLabel:'Mode choix multiples', enLabel:'Multiple choice mode' },
       scan:     { frLabel:'Mode balayage',       enLabel:'Scanning mode' }
     };
+
+    const MIN_RETURN_MINUTES = 0.5;
+    const MAX_RETURN_MINUTES = 10;
 
     let modeKey='touch', highlightIndex=-1, scanTimer=null, lastCard=null, gameActive=false;
     let scanIntervalMs = 10000;
@@ -441,18 +441,56 @@
     refreshModeUI();
 
     function clamp(n,lo,hi){ return Math.max(lo,Math.min(hi,n)); }
-    function minutesToMs(m){ return Math.round(clamp(Number(m)||3, 1, 120))*60*1000; }
-    function updateReturnTimerLabel(){
-      if (!returnTimerMin || !rtmLabel) return;
-      const value = clamp(parseInt(returnTimerMin.value || '3', 10), 1, 120);
-      if (String(value) !== returnTimerMin.value) {
-        returnTimerMin.value = String(value);
+    function minutesToMs(m){
+      const minutes = clamp(Number(m) || 3, MIN_RETURN_MINUTES, MAX_RETURN_MINUTES);
+      return Math.round(minutes * 60 * 1000);
+    }
+    function normalizeMinutesValue(value){
+      return (Math.round(value * 120) / 120).toString().replace(/\.0+$/,'').replace(/(\.\d*[1-9])0+$/,'$1');
+    }
+    function formatDurationLabel(minutes, lang){
+      const totalSeconds = Math.round(minutes * 60);
+      const mins = Math.floor(totalSeconds / 60);
+      const secs = totalSeconds % 60;
+      const isFrench = (lang === 'fr');
+
+      if (mins === 0){
+        const secondsWord = isFrench ? (secs > 1 ? 'secondes' : 'seconde') : (secs > 1 ? 'seconds' : 'second');
+        return `${secs} ${secondsWord}`;
       }
-      rtmLabel.textContent = String(value);
+
+      const minuteWord = isFrench ? (mins > 1 ? 'minutes' : 'minute') : (mins > 1 ? 'minutes' : 'minute');
+      if (secs === 0){
+        return `${mins} ${minuteWord}`;
+      }
+
+      const secondsWord = isFrench ? (secs > 1 ? 'secondes' : 'seconde') : (secs > 1 ? 'seconds' : 'second');
+      return `${mins} ${minuteWord} ${secs} ${secondsWord}`;
+    }
+    function updateReturnTimerLabel(langOverride){
+      if (!returnTimerMin || !rtmLabel) return;
+      const lang = langOverride || getLang();
+      let value = Number(returnTimerMin.value);
+      if (Number.isNaN(value)) value = 3;
+      value = clamp(value, MIN_RETURN_MINUTES, MAX_RETURN_MINUTES);
+
+      const normalized = normalizeMinutesValue(value);
+      if (normalized !== returnTimerMin.value) {
+        returnTimerMin.value = normalized;
+      }
+
+      const frLabel = formatDurationLabel(value, 'fr');
+      const enLabel = formatDurationLabel(value, 'en');
+      rtmLabel.dataset.fr = frLabel;
+      rtmLabel.dataset.en = enLabel;
+      rtmLabel.textContent = (lang === 'fr') ? frLabel : enLabel;
     }
     updateReturnTimerLabel();
     returnTimerMin.addEventListener('change', updateReturnTimerLabel);
     returnTimerMin.addEventListener('input', updateReturnTimerLabel);
+    if (langToggleButton) {
+      langToggleButton.addEventListener('click', () => updateReturnTimerLabel());
+    }
     function clearAutoReturn(){ if(autoReturnHandle){ clearTimeout(autoReturnHandle); autoReturnHandle=null; } }
     function startAutoReturnIfEnabled(){ clearAutoReturn(); if(!returnTimerEnabled.checked) return; autoReturnHandle=setTimeout(()=>closeGame(), minutesToMs(returnTimerMin.value)); }
 
