@@ -247,8 +247,8 @@
       let animationId = null;
       let lastBurstTime = 0;
 
-      const mouse = { x: 0, y: 0, vx: 0, vy: 0, speed: 0 };
-      const pointerTarget = { x: 0, y: 0 };
+      const attractor = { x: 0, y: 0, vx: 0, vy: 0, speed: 0 };
+      const attractorTarget = { x: 0, y: 0 };
 
       const overlay = document.getElementById('promptOverlay');
       const startButton = document.getElementById('startButton');
@@ -473,8 +473,8 @@
           const invZ = f.invZ;
 
           if (activity > 0.0005) {
-            const dx = mouse.x - f.x;
-            const dy = mouse.y - f.y;
+          const dx = attractor.x - f.x;
+          const dy = attractor.y - f.y;
             const dist2 = dx * dx + dy * dy;
             let dist = 0;
             if (dist2 < nearRange2) {
@@ -597,7 +597,7 @@
         ctx.globalCompositeOperation = 'screen';
         ctx.globalAlpha = Math.pow(pulseFlash, 1.25) * 0.55;
         const radius = Math.max(W, H) * 0.55;
-        const grad = ctx.createRadialGradient(mouse.x, mouse.y, radius * 0.15, mouse.x, mouse.y, radius);
+        const grad = ctx.createRadialGradient(attractor.x, attractor.y, radius * 0.15, attractor.x, attractor.y, radius);
         grad.addColorStop(0.0, 'rgba(140, 255, 230, 0.85)');
         grad.addColorStop(0.45, 'rgba(60, 180, 255, 0.35)');
         grad.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
@@ -606,30 +606,30 @@
         ctx.restore();
       }
 
-      function updatePointer(dt, intensity) {
+      function updateAttractor(dt, intensity) {
         const active = intensity > 0.02;
         if (active) {
           idleClock += dt;
           const radius = Math.min(W, H) * lerp(0.02, 0.18, intensity);
           const idleX = W * 0.5 + Math.cos(idleClock * lerp(0.18, 0.42, intensity)) * radius;
           const idleY = H * 0.5 + Math.sin(idleClock * lerp(0.16, 0.36, intensity)) * radius;
-          pointerTarget.x = lerp(pointerTarget.x, idleX, dt * lerp(1.2, 2.8, intensity));
-          pointerTarget.y = lerp(pointerTarget.y, idleY, dt * lerp(1.2, 2.8, intensity));
+          attractorTarget.x = lerp(attractorTarget.x, idleX, dt * lerp(1.2, 2.8, intensity));
+          attractorTarget.y = lerp(attractorTarget.y, idleY, dt * lerp(1.2, 2.8, intensity));
         } else {
           idleClock = 0;
-          pointerTarget.x = lerp(pointerTarget.x, W * 0.5, dt * 3.6);
-          pointerTarget.y = lerp(pointerTarget.y, H * 0.5, dt * 3.6);
+          attractorTarget.x = lerp(attractorTarget.x, W * 0.5, dt * 3.6);
+          attractorTarget.y = lerp(attractorTarget.y, H * 0.5, dt * 3.6);
         }
 
         const follow = Math.min(1, dt * lerp(6, 14, intensity));
-        mouse.vx += (pointerTarget.x - mouse.x) * follow;
-        mouse.vy += (pointerTarget.y - mouse.y) * follow;
+        attractor.vx += (attractorTarget.x - attractor.x) * follow;
+        attractor.vy += (attractorTarget.y - attractor.y) * follow;
         const damp = active ? 0.90 : 0.80;
-        mouse.vx *= damp;
-        mouse.vy *= damp;
-        mouse.x += mouse.vx;
-        mouse.y += mouse.vy;
-        mouse.speed = Math.hypot(mouse.vx, mouse.vy);
+        attractor.vx *= damp;
+        attractor.vy *= damp;
+        attractor.x += attractor.vx;
+        attractor.y += attractor.vy;
+        attractor.speed = Math.hypot(attractor.vx, attractor.vy);
       }
 
       function triggerBurst() {
@@ -639,13 +639,17 @@
 
         pulseBoost = Math.min(1, Math.max(pulseBoost, 0.75) + 0.35);
         pulseFlash = 1;
-        pointerTarget.x = W * (0.15 + Math.random() * 0.7);
-        pointerTarget.y = H * (0.18 + Math.random() * 0.64);
+        attractorTarget.x = W * (0.15 + Math.random() * 0.7);
+        attractorTarget.y = H * (0.18 + Math.random() * 0.64);
+        attractor.x = attractorTarget.x;
+        attractor.y = attractorTarget.y;
+        attractor.vx = 0;
+        attractor.vy = 0;
         idleClock = 0;
 
         const boostBase = 0.40 + Math.random() * 0.4;
         for (const f of FIREFLIES.list) {
-          const angle = Math.atan2(pointerTarget.y - f.y, pointerTarget.x - f.x) + (Math.random() - 0.5) * 0.7;
+          const angle = Math.atan2(attractorTarget.y - f.y, attractorTarget.x - f.x) + (Math.random() - 0.5) * 0.7;
           const strength = boostBase * (0.6 + Math.random() * 0.8);
           f.vx += Math.cos(angle) * strength;
           f.vy += Math.sin(angle) * strength;
@@ -658,8 +662,8 @@
       function resizeCanvas() {
         W = canvas.width = window.innerWidth;
         H = canvas.height = window.innerHeight;
-        mouse.x = pointerTarget.x = W * 0.5;
-        mouse.y = pointerTarget.y = H * 0.5;
+        attractor.x = attractorTarget.x = W * 0.5;
+        attractor.y = attractorTarget.y = H * 0.5;
         firefliesInit();
         clearToBg(true);
       }
@@ -674,7 +678,7 @@
         lastFrame = now;
 
         const intensity = mapIntensity();
-        updatePointer(dt, intensity);
+        updateAttractor(dt, intensity);
 
         renderFireflies(dt, intensity);
         drawPulseOverlay();
