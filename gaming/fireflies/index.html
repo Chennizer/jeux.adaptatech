@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lucioles — Jeu Switch</title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 35%, rgba(34,59,94,0.6), #020512 62%);
+      font-family: "Poppins", "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #e8fbff;
+      letter-spacing: 0.02em;
+    }
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #hud {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      text-align: center;
+      pointer-events: none;
+      background: radial-gradient(circle at center, rgba(10,20,45,0.45), rgba(2,5,18,0.1) 65%, transparent 85%);
+      font-size: clamp(1.2rem, 2vw + 0.8rem, 2.6rem);
+      font-weight: 600;
+      text-shadow: 0 0 18px rgba(80,200,255,0.55);
+      transition: opacity 0.6s ease;
+      padding: 24px;
+    }
+    #hud.hidden {
+      opacity: 0;
+    }
+    #hud small {
+      font-size: clamp(0.85rem, 1.4vw + 0.3rem, 1.3rem);
+      font-weight: 400;
+      color: rgba(210,244,255,0.78);
+    }
+    #hud kbd {
+      padding: 8px 16px;
+      border-radius: 12px;
+      border: 2px solid rgba(110,220,255,0.55);
+      background: rgba(14,38,66,0.48);
+      box-shadow: 0 0 22px rgba(90,200,255,0.35);
+      letter-spacing: 0.08em;
+    }
+    #langToggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 2px solid rgba(140,220,255,0.65);
+      background: rgba(10,28,46,0.7);
+      color: #b8efff;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 30;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    #langToggle:hover,
+    #langToggle:focus-visible {
+      transform: translateY(-1px);
+      background: rgba(22,68,104,0.8);
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <div id="hud" class="translate" data-fr="Appuie sur <kbd>ESPACE</kbd> pour libérer les lucioles" data-en="Press <kbd>SPACE</kbd> to release the fireflies">
+    Appuie sur <kbd>ESPACE</kbd> pour libérer les lucioles
+    <small class="translate" data-fr="Chaque pression déclenche une danse lumineuse" data-en="Each press launches a luminous dance">
+      Chaque pression déclenche une danse lumineuse
+    </small>
+  </div>
+  <button id="langToggle" class="translate" data-fr="EN" data-en="FR">EN</button>
+
+  <script>
+  (function(){
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    let W = 0, H = 0;
+
+    const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+    const FIREFLIES = { list: [], t: 0 };
+    const FIREFLY_NEIGHBORS = { a: [], b: [] };
+    const FIREFLY_SPRITES = new Map();
+    const FIREFLY_SPRITE_SIZE = 256;
+
+    let baseIntensity = 0.46;
+    let boostLevel = 0;
+    let flashLevel = 0;
+
+    const mouse = { x: 0, y: 0, vx: 0, vy: 0 };
+    let autopilot = true;
+    let autopilotTimer = 0;
+    let autopPhase = 0;
+    let lastPointerT = performance.now();
+
+    const overlay = document.getElementById('hud');
+    const langToggle = document.getElementById('langToggle');
+    const audio = new Audio('../../songs/space/spacebest1.mp3');
+    audio.loop = true;
+    audio.volume = 0.68;
+    let audioUnlocked = false;
+
+    function resize(){
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+      mouse.x = W * 0.5;
+      mouse.y = H * 0.5;
+      firefliesInit();
+      clearToBg(true);
+    }
+
+    function mapIntensity(){
+      return clamp(baseIntensity + boostLevel * 0.8, 0, 1);
+    }
+    function sizeNorm(){
+      const longest = Math.max(W, H);
+      return clamp((longest - 480) / 1080, 0.35, 0.95);
+    }
+    function mapTrail(){
+      return clamp(0.08 + 0.1 * mapIntensity(), 0.08, 0.22);
+    }
+    function clearToBg(hard=false){
+      ctx.globalCompositeOperation = 'source-over';
+      if (hard){
+        ctx.fillStyle = '#020512';
+      } else {
+        ctx.fillStyle = `rgba(2,5,18,${mapTrail()})`;
+      }
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    function getFireflySprite(hue){
+      const quant = ((Math.round(hue / 12) * 12) % 360 + 360) % 360;
+      if (FIREFLY_SPRITES.has(quant)){
+        return FIREFLY_SPRITES.get(quant);
+      }
+      const off = document.createElement('canvas');
+      off.width = off.height = FIREFLY_SPRITE_SIZE;
+      const g = off.getContext('2d');
+      const cx = FIREFLY_SPRITE_SIZE / 2;
+
+      const bloom = g.createRadialGradient(cx, cx, cx * 0.10, cx, cx, cx * 0.95);
+      bloom.addColorStop(0.0, `hsla(${quant}, 100%, 70%, 1)`);
+      bloom.addColorStop(0.55, `hsla(${(quant + 16) % 360}, 95%, 55%, 0.65)`);
+      bloom.addColorStop(1.0, `hsla(${(quant + 56) % 360}, 85%, 45%, 0)`);
+      g.fillStyle = bloom;
+      g.fillRect(0, 0, off.width, off.height);
+
+      const highlight = g.createRadialGradient(cx * 0.68, cx * 0.68, cx * 0.06, cx * 0.68, cx * 0.68, cx * 0.28);
+      highlight.addColorStop(0.0, `hsla(${(quant + 36) % 360}, 100%, 90%, 0.75)`);
+      highlight.addColorStop(1.0, `hsla(${(quant + 36) % 360}, 100%, 90%, 0)`);
+      g.fillStyle = highlight;
+      g.fillRect(0, 0, off.width, off.height);
+
+      const sprite = { canvas: off, radius: FIREFLY_SPRITE_SIZE / 2 };
+      FIREFLY_SPRITES.set(quant, sprite);
+      return sprite;
+    }
+
+    function drawGlowSprite(sprite, x, y, radius, alpha, composite='screen'){
+      if (!sprite || alpha <= 0.001) return;
+      ctx.save();
+      ctx.globalCompositeOperation = composite;
+      ctx.globalAlpha = alpha;
+      const scale = radius / sprite.radius;
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.drawImage(sprite.canvas, -sprite.radius, -sprite.radius);
+      ctx.restore();
+    }
+
+    function firefliesInit(){
+      FIREFLIES.list.length = 0;
+      const sN = sizeNorm();
+      const n = Math.floor(80 + 260 * sN);
+      const spread = Math.hypot(W, H) * 0.62;
+      const neighborA = FIREFLY_NEIGHBORS.a;
+      const neighborB = FIREFLY_NEIGHBORS.b;
+      neighborA.length = n;
+      neighborB.length = n;
+
+      for (let i=0; i<n; i++){
+        const z = 0.58 + Math.random() * 0.82;
+        const invZ = 1 / z;
+        const ang = Math.random() * Math.PI * 2;
+        const rad = Math.sqrt(Math.random()) * spread;
+        const cx = W * 0.5 + Math.cos(ang) * rad;
+        const cy = H * 0.5 + Math.sin(ang) * rad;
+        FIREFLIES.list.push({
+          x: cx, y: cy, px: cx, py: cy,
+          vx: (Math.random() - 0.5) * 0.25,
+          vy: (Math.random() - 0.5) * 0.25,
+          z,
+          invZ,
+          hue: 170 + Math.random() * 80,
+          glow: 0.25 + Math.random() * 0.4,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+
+      const shortOffset = Math.min(n - 1, 13);
+      const longOffset = Math.min(n - 1, Math.max(shortOffset + 1, Math.round(n * 0.24)));
+      for (let i=0; i<n; i++){
+        neighborA[i] = (i + shortOffset) % n;
+        neighborB[i] = (i + longOffset) % n;
+      }
+    }
+
+    function flyWrap(f){
+      const pad = 80;
+      let wrapped = false;
+      if (f.x < -pad){ f.x = W + pad; wrapped = true; }
+      if (f.x > W + pad){ f.x = -pad; wrapped = true; }
+      if (f.y < -pad){ f.y = H + pad; wrapped = true; }
+      if (f.y > H + pad){ f.y = -pad; wrapped = true; }
+      if (wrapped){ f.px = f.x; f.py = f.y; }
+      return wrapped;
+    }
+
+    function drawFirefly(f, coreR, bloomR, alphaCore, alphaBloom){
+      const sprite = getFireflySprite(f.hue);
+      if (alphaBloom > 0.001){
+        drawGlowSprite(sprite, f.x, f.y, bloomR, alphaBloom, 'screen');
+      }
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = `hsla(${f.hue|0}, 100%, 68%, ${alphaCore})`;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, coreR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.strokeStyle = `hsla(${(f.hue + 36)|0}, 100%, 88%, ${0.55 * alphaCore})`;
+      ctx.lineWidth = Math.max(0.7, coreR * 0.3);
+      ctx.beginPath();
+      ctx.arc(f.x - coreR * 0.32, f.y - coreR * 0.32, coreR * 0.30, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    function triggerBurst(){
+      boostLevel = Math.min(1, boostLevel + 0.85);
+      flashLevel = 1;
+      const cx = mouse.x;
+      const cy = mouse.y;
+      for (const f of FIREFLIES.list){
+        const dx = f.x - cx;
+        const dy = f.y - cy;
+        const dist = Math.hypot(dx, dy) || 1;
+        const push = (220 + Math.random() * 240) / dist;
+        f.vx += dx * push * 0.0028;
+        f.vy += dy * push * 0.0028;
+        f.hue = (f.hue + 6 + Math.random() * 28) % 360;
+        f.glow = Math.max(f.glow, 1.2);
+        f.phase += Math.random() * Math.PI;
+      }
+    }
+
+    function updateAutopilot(dt, tNow){
+      if (autopilot){
+        autopPhase += dt;
+        const tx = W * 0.5 + Math.cos(autopPhase * 0.27) * W * 0.18;
+        const ty = H * 0.52 + Math.sin(autopPhase * 0.33) * H * 0.14;
+        const ease = 1 - Math.pow(0.001, dt);
+        mouse.x += (tx - mouse.x) * ease;
+        mouse.y += (ty - mouse.y) * ease;
+      } else {
+        autopilotTimer -= dt;
+        if (autopilotTimer <= 0){
+          autopilot = true;
+        }
+      }
+    }
+
+    function renderFireflies(dt){
+      const intensity = mapIntensity();
+      const sN = sizeNorm();
+      FIREFLIES.t += dt;
+
+      clearToBg(false);
+
+      const boostFactor = 1 + boostLevel * 0.9;
+      const baseWander = (0.10 + 0.12 * intensity) * boostFactor;
+      const attractK = (6 + 32 * intensity) * (0.85 + boostLevel * 0.25);
+      const repelK = 12 + 22 * intensity;
+      const maxSpeed = (10 + 24 * intensity) * (1 + boostLevel * 0.4);
+      const damp = Math.pow(0.975, dt * 60);
+      const velScale = dt * 38 * (1 + boostLevel * 0.35);
+
+      const pullR = 220 + 380 * sN;
+      const pullR2 = pullR * pullR;
+      const nearRange = 180 + 260 * sN;
+      const nearRange2 = nearRange * nearRange;
+      const repelR = 140 + 260 * sN;
+      const repelR2 = repelR * repelR;
+      const hopXLimit = W * 0.45;
+      const hopYLimit = H * 0.45;
+
+      const neighborsA = FIREFLY_NEIGHBORS.a;
+      const neighborsB = FIREFLY_NEIGHBORS.b;
+
+      const N = FIREFLIES.list.length;
+      for (let i=0; i<N; i++){
+        const f = FIREFLIES.list[i];
+        f.px = f.x; f.py = f.y;
+
+        const dx = mouse.x - f.x;
+        const dy = mouse.y - f.y;
+        const dist2 = dx * dx + dy * dy;
+        let near = 0;
+        let dist = 0;
+        if (dist2 < nearRange2){
+          dist = Math.sqrt(dist2);
+          near = clamp(1 - (dist / nearRange), 0, 1);
+        } else if (dist2 < pullR2){
+          dist = Math.sqrt(dist2);
+        }
+
+        const invZ = f.invZ;
+        const wanderLocal = baseWander * (1 + 0.9 * (1 - near));
+        f.vx += (Math.random() - 0.5) * wanderLocal * invZ;
+        f.vy += (Math.random() - 0.5) * wanderLocal * invZ;
+
+        if (dist2 < pullR2 && dist > 0){
+          const t = 1 - dist / pullR;
+          const pull = attractK * (0.25 + 0.75 * t) * dt * invZ / 320;
+          f.vx += dx * pull;
+          f.vy += dy * pull;
+        }
+
+        const idxA = neighborsA[i];
+        const idxB = neighborsB[i];
+        const gA = FIREFLIES.list[idxA];
+        if (gA && gA !== f){
+          const rx = f.x - gA.x;
+          const ry = f.y - gA.y;
+          const rd2 = rx * rx + ry * ry + 0.0001;
+          if (rd2 < repelR2){
+            const inv = 1 / Math.sqrt(rd2);
+            const repelScale = (repelK * (1 - rd2 / repelR2)) * dt * invZ / 120;
+            f.vx += rx * inv * repelScale;
+            f.vy += ry * inv * repelScale;
+          }
+        }
+        const gB = FIREFLIES.list[idxB];
+        if (gB && gB !== f){
+          const rx = f.x - gB.x;
+          const ry = f.y - gB.y;
+          const rd2 = rx * rx + ry * ry + 0.0001;
+          if (rd2 < repelR2){
+            const inv = 1 / Math.sqrt(rd2);
+            const repelScale = (repelK * (1 - rd2 / repelR2)) * dt * invZ / 120;
+            f.vx += rx * inv * repelScale;
+            f.vy += ry * inv * repelScale;
+          }
+        }
+
+        const cdx = (W * 0.5 - f.x);
+        const cdy = (H * 0.5 - f.y);
+        f.vx += cdx * 0.000015;
+        f.vy += cdy * 0.000015;
+
+        const maxLocal = maxSpeed * invZ;
+        const maxLocalSq = maxLocal * maxLocal;
+        const magSq = f.vx * f.vx + f.vy * f.vy;
+        if (magSq > maxLocalSq && magSq > 0){
+          const scale = maxLocal / Math.sqrt(magSq);
+          f.vx *= scale;
+          f.vy *= scale;
+        }
+        f.vx *= damp;
+        f.vy *= damp;
+        f.x += f.vx * velScale;
+        f.y += f.vy * velScale;
+
+        const wrapped = flyWrap(f);
+        if (!wrapped){
+          const hopX = Math.abs(f.x - f.px);
+          const hopY = Math.abs(f.y - f.py);
+          if (hopX > hopXLimit || hopY > hopYLimit){ f.px = f.x; f.py = f.y; }
+        }
+
+        f.phase += dt * (0.6 + 1.4 * intensity + boostLevel * 0.9);
+        const twinkle = 0.5 + 0.5 * Math.sin(f.phase + f.x * 0.01 + f.y * 0.01);
+        const baseGlow = 0.22 + 0.28 * twinkle;
+        const spark = boostLevel > 0.01 ? 0.35 * boostLevel * (0.5 + Math.random() * 0.5) : 0;
+        f.glow = clamp(baseGlow + near * (0.50 + 0.42 * intensity) + spark, 0.10, 1.8);
+      }
+
+      const trailAlpha = 0.05 + 0.11 * intensity;
+      const baseTrailW = 1.0 + 1.3 * intensity;
+      const sizeBoost = 1.72;
+      const bloomScale = 4.8 + 5.8 * intensity;
+      const coreAlpha = clamp(0.24 + 0.30 * intensity + 0.2 * boostLevel, 0, 0.75);
+      const bloomBase = clamp(0.05 + 0.10 * intensity + 0.08 * boostLevel, 0, 0.4);
+
+      ctx.lineCap = 'round';
+      ctx.globalCompositeOperation = 'screen';
+      for (let i=0; i<N; i++){
+        const f = FIREFLIES.list[i];
+        ctx.strokeStyle = `hsla(${(f.hue + 30)|0}, 90%, 72%, ${trailAlpha})`;
+        ctx.lineWidth = Math.max(1, baseTrailW * f.invZ);
+        ctx.beginPath();
+        ctx.moveTo(f.px, f.py);
+        ctx.lineTo(f.x, f.y);
+        ctx.stroke();
+
+        const coreR = sizeBoost * (2.4 + 4.1 * f.glow) * f.invZ;
+        const bloomR = coreR * bloomScale;
+        const aCore = coreAlpha;
+        const aBloom = bloomBase * clamp(f.glow / 3.2, 0.35, 0.95);
+        drawFirefly(f, coreR, bloomR, aCore, aBloom);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+
+      if (flashLevel > 0.001){
+        ctx.fillStyle = `rgba(90, 190, 255, ${flashLevel * 0.18})`;
+        ctx.globalCompositeOperation = 'screen';
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = 'source-over';
+        flashLevel = Math.max(0, flashLevel - dt * 1.6);
+      }
+    }
+
+    let lastFrame = performance.now();
+    function loop(t){
+      const now = t || performance.now();
+      let dt = (now - lastFrame) / 1000;
+      if (!Number.isFinite(dt) || dt <= 0){ dt = 0.016; }
+      dt = Math.min(dt, 0.05);
+      lastFrame = now;
+
+      updateAutopilot(dt, now / 1000);
+      renderFireflies(dt);
+
+      boostLevel = Math.max(0, boostLevel - dt / 3.2);
+
+      requestAnimationFrame(loop);
+    }
+
+    function unlockAudio(){
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      audio.currentTime = 0;
+      audio.play().catch(()=>{});
+    }
+
+    function handleSpace(e){
+      if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar'){
+        e.preventDefault();
+        unlockAudio();
+        overlay.classList.add('hidden');
+        triggerBurst();
+      }
+    }
+
+    function handlePointer(e){
+      const rect = canvas.getBoundingClientRect();
+      const nx = e.clientX - rect.left;
+      const ny = e.clientY - rect.top;
+      const t = performance.now();
+      const dt = Math.max(0.016, (t - lastPointerT) / 1000);
+      mouse.vx = (nx - mouse.x) / dt;
+      mouse.vy = (ny - mouse.y) / dt;
+      mouse.x = nx;
+      mouse.y = ny;
+      lastPointerT = t;
+      autopilot = false;
+      autopilotTimer = 4.5;
+    }
+
+    window.addEventListener('resize', resize);
+    window.addEventListener('keydown', handleSpace);
+    canvas.addEventListener('pointerdown', (e)=>{ handlePointer(e); triggerBurst(); unlockAudio(); overlay.classList.add('hidden'); });
+    canvas.addEventListener('pointermove', handlePointer);
+
+    langToggle.addEventListener('click', ()=>{
+      if (typeof toggleLanguage === 'function') {
+        toggleLanguage();
+      }
+    });
+
+    resize();
+    requestAnimationFrame(loop);
+
+    document.addEventListener('visibilitychange', ()=>{
+      if (!document.hidden && audioUnlocked){
+        audio.play().catch(()=>{});
+      }
+    });
+  })();
+  </script>
+  <script src="../../js/translationmain.js"></script>
+</body>
+</html>
