@@ -1,16 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Draw Within the Lines — Eyegaze Menu + Upload Mask</title>
+<title class="translate"
+        data-fr="Dessine dans le contour — Eyegaze"
+        data-en="Draw Within the Lines — Eyegaze">Dessine dans le contour — Eyegaze</title>
 
 <link rel="stylesheet" href="../../css/games.css" />
 <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
 
+<!-- Preset image registry: exposes window.PNG_ARRAY -->
+<script src="../../js/cviPngArray.js" defer></script>
+
 <style>
   :root{
-    --bg:#0b0f14; --edge:#e2e8f0; --ui-scale:1;
+    --ui-scale:1;
     --sidebar-w: clamp(96px, calc(120px * var(--ui-scale)), 180px);
     --sidebar-pad-x: clamp(8px, calc(12px * var(--ui-scale)), 16px);
     --sidebar-pad-y: clamp(8px, calc(12px * var(--ui-scale)), 16px);
@@ -22,88 +27,169 @@
     --save-btn: clamp(36px, calc(44px * var(--ui-scale)), 56px);
     --save-radius: clamp(8px, calc(10px * var(--ui-scale)), 12px);
     --cursor-outline: clamp(1px, calc(2px * var(--ui-scale)), 3px);
+    --dwell-red: rgba(255,64,64,.48);
   }
-  html,body{height:100%;margin:0;background:var(--bg);color:#e6edf3;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-  body.light{background:#fff;color:#000} body.dark{background:#000;color:#fff}
 
-  /* Menu toggle (same button style) */
-  #langToggle{ position:fixed; top:10px; right:10px; z-index:99999; display:inline-flex; gap:6px;
-    padding:6px 10px; border-radius:10px; border:2px solid #009688; background:#fff; color:#009688;
-    font-weight:700; cursor:pointer; user-select:none; }
+  html,body{height:100%;margin:0;background:#fff;color:#000;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  body.light{background:#fff;color:#000}
+  body.dark {background:#000;color:#fff}
+
+  /* Hide native cursor when enabled after Start */
+  .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+
+  /* Language toggle */
+  #langToggle{
+    position:fixed; top:10px; right:10px; z-index:99999;
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 10px; border-radius:10px; border:2px solid #009688;
+    background:#fff; color:#009688; font-weight:700; cursor:pointer; user-select:none;
+  }
   body.dark #langToggle{ background:#111; color:#14b8a6; border-color:#14b8a6 }
 
-  /* Sidebar (like your other game) */
+  /* ===== Start Menu: ONLY background is black; keep prior control styles ===== */
+  #game-options{ background:#000; }  /* ← only this is forced */
+
+  /* 3-column layout */
+  #options-inline-container{
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap:16px;
+  }
+  .options-column{ display:flex; flex-direction:column; gap:12px; }
+
+  /* Preview centered + black-on-white */
+  .previewBox{ display:flex; justify-content:center; align-items:center; }
+  .thumbCard{
+    display:flex; align-items:center; justify-content:center;
+    width:140px; height:140px; background:#fff; border-radius:12px;
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow: 0 6px 18px rgba(0,0,0,.18);
+  }
+  #presetThumb{
+    width:112px; height:112px; object-fit:contain;
+    /* Render PNG content as solid black, preserve alpha */
+    filter: brightness(0) saturate(100%);
+  }
+
+  /* In-game left sidebar */
   #sidebar{ position:fixed; left:0; top:0; bottom:0; z-index:20; width:var(--sidebar-w); display:none;
     flex-direction:column; gap:clamp(12px, calc(14px * var(--ui-scale)), 18px);
     padding:var(--sidebar-pad-y) var(--sidebar-pad-x); background:#fff; color:#000; border-right:1px solid #e6e6e6; box-shadow:0 0 18px rgba(0,0,0,.05); }
+
   #palette{ flex:1; display:grid; grid-template-columns:repeat(var(--palette-cols), var(--swatch-size));
     grid-auto-rows:var(--swatch-size); gap:var(--swatch-gap); justify-content:center; align-content:start; padding-inline:8px; overflow:hidden; }
-  .swatch{ width:var(--swatch-size); height:var(--swatch-size); border-radius:50%; border:var(--swatch-border) solid #fff;
-    box-shadow:0 1px 6px rgba(0,0,0,.22) inset, 0 3px 10px rgba(0,0,0,.12); transition:.12s; position:relative; overflow:hidden; }
-  .swatch.active{ transform:scale(1.03) }
-  .swatch.active::before{ content:""; position:absolute; inset:calc(var(--swatch-outline) + 2px);
-    border:var(--swatch-outline) solid #111; border-radius:50%; pointer-events:none }
+  .swatch{ width:var(--swatch-size); height:var(--swatch-size); border-radius:50%; border:var(--swatch-border) solid #ffffff;
+    box-shadow:0 1px 6px rgba(0,0,0,.22) inset, 0 3px 10px rgba(0,0,0,.12); transition:transform .12s ease; position:relative; flex:0 0 auto; overflow:hidden; }
+  .swatch.active{ transform:scale(1.06) }
+  .swatch.active::before{ content:""; position:absolute; inset:calc(var(--swatch-outline) + 2px); border:var(--swatch-outline) solid #111; border-radius:50%; pointer-events:none; z-index:2 }
+  .swatch .dwell{ position:absolute; left:50%; top:50%; width:100%; height:100%; transform:translate(-50%,-50%) scale(.08);
+    transform-origin:center; pointer-events:none; border-radius:50%; background-color:var(--dwell-red); will-change:transform; z-index:1; }
+  @keyframes dwellGrow{ from{transform:translate(-50%,-50%) scale(.08)} to{transform:translate(-50%,-50%) scale(1.02)} }
+  .flash::after{ content:""; position:absolute; left:50%; top:50%; width:100%; height:100%; transform:translate(-50%,-50%) scale(1);
+    border-radius:50%; box-shadow:0 0 0 0 rgba(17,17,17,.35); animation:ringPulse 420ms ease-out; pointer-events:none; }
+  @keyframes ringPulse{ 0%{box-shadow:0 0 0 0 rgba(17,17,17,.35); transform:translate(-50%,-50%) scale(1)}
+    60%{box-shadow:0 0 0 18px rgba(17,17,17,0); transform:translate(-50%,-50%) scale(1.08)}
+    100%{box-shadow:0 0 0 24px rgba(17,17,17,0); transform:translate(-50%,-50%) scale(1)} }
+
   #brushSizes{ display:flex; flex-direction:column; align-items:center; gap:var(--brush-gap) }
   .brushBtn{ width:var(--brush-btn); height:var(--brush-btn); border-radius:50%; border:2px solid #aaa; background:#f8f8f8;
-    display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.1) inset; }
+    display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.1) inset; transition:transform .12s, background-color .12s; }
   .brushBtn span{ display:block; border-radius:50%; background:#333 }
   .brushBtn.small span{width:6px;height:6px} .brushBtn.medium span{width:16px;height:16px} .brushBtn.large span{width:28px;height:28px}
   .brushBtn.active{ border-color:#333; background:#ececec }
+
   #modeRow{ display:flex; gap:8px; justify-content:center }
   .modeBtn{ padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fafafa; color:#000; font:600 12px/1 system-ui,Arial; cursor:pointer }
   .modeBtn.active{ border-color:#333; background:#ececec }
+
   #saveBtn{ appearance:none; width:var(--save-btn); height:var(--save-btn); border-radius:var(--save-radius);
     border:1px solid #ddd; background:#fafafa; color:#000; align-self:center; cursor:pointer }
 
-  /* Stage + canvases (key: fill the stage) */
-  .stage{ position:relative; height:100vh; background:radial-gradient(1200px 600px at 60% -10%, #1a2330 0%, #0b0f14 60%, #080c11 100%) }
-  #ink,#outline{ position:absolute; inset:0; width:100%; height:100% } /* ensure non-zero CSS size */
-  #outline{ pointer-events:none }
-  .badge{ position:absolute; top:12px; right:12px; background:#0b1520; border:1px solid rgba(255,255,255,.1); padding:6px 10px; border-radius:999px; font-size:12px }
+  /* Stage */
+  .stage{ position:fixed; left:var(--sidebar-w); right:0; top:0; bottom:0; background:#fff; }
+  body.dark .stage{ background:radial-gradient(1200px 600px at 60% -10%, #1a2330 0%, #0b0f14 60%, #080c11 100%); }
   .stage.hidden{ visibility:hidden }
+  #ink,#outline{ position:absolute; inset:0; width:100%; height:100% }
+  #outline{ pointer-events:none }
 
-  /* Menu layout (only theme, colors, upload) */
-  #options-inline-container{ gap:18px }
+  /* Cursor preview */
+  #cursorPreview{ position:fixed; left:0; top:0; width:20px; height:20px; border-radius:50%; pointer-events:none; z-index:15; mix-blend-mode:multiply; transform:translate(-50%,-50%); opacity:.65; outline:var(--cursor-outline) solid rgba(0,0,0,.18) }
 </style>
 </head>
-<body class="dark">
-<button id="langToggle">FR / EN</button>
+<body class="light">
 
-<!-- ===== Menu ===== -->
+<!-- EN/FR toggle -->
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+<!-- ===== Start Menu (background only black) ===== -->
 <div id="game-options" class="modal">
-  <div id="options-title-bar"><h2 id="options-main-title">Draw within the outline</h2></div>
+  <div id="options-title-bar">
+    <h2 id="options-main-title" class="translate"
+        data-fr="Dessine dans le contour"
+        data-en="Draw within the outline">Dessine dans le contour</h2>
+  </div>
+
   <div id="control-panel-options">
     <div id="mode-divider"></div>
+
     <div id="options-inline-container">
-      <div class="options-column">
+      <!-- LEFT: Theme + palette size -->
+      <div class="options-column" id="leftCol">
         <div class="option-item">
-          <label for="themeSelect" class="teal-label label-block">Theme</label>
+          <label for="themeSelect" class="teal-label label-block translate"
+                 data-fr="Mode" data-en="Theme">Mode</label>
           <select id="themeSelect" class="styled-select">
-            <option value="light">Light</option>
-            <option value="dark" selected>Dark</option>
+            <option value="light" selected class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
           </select>
         </div>
-      </div>
-      <div class="options-column">
+
         <div class="option-item">
-          <label for="paletteSizeSelect" class="teal-label label-block">Number of colors</label>
+          <label for="paletteSizeSelect" class="teal-label label-block translate"
+                 data-fr="Nombre de couleurs" data-en="Number of colors">Nombre de couleurs</label>
           <select id="paletteSizeSelect" class="styled-select">
-            <option value="4">4 colors</option>
-            <option value="7" selected>7 colors</option>
-            <option value="13">13 colors</option>
+            <option value="4"  class="translate" data-fr="4 couleurs"  data-en="4 colors">4 couleurs</option>
+            <option value="7"  selected class="translate" data-fr="7 couleurs"  data-en="7 colors">7 couleurs</option>
+            <option value="13" class="translate" data-fr="13 couleurs" data-en="13 colors">13 couleurs</option>
           </select>
         </div>
       </div>
-      <div class="options-column">
+
+      <!-- MIDDLE: Preset Category + Item + Live Preview (auto-applies) -->
+      <div class="options-column" id="midCol">
         <div class="option-item">
-          <label class="teal-label label-block">Upload outline (PNG/SVG)</label>
-          <input id="outlineFile" type="file" accept="image/png, image/svg+xml" class="styled-input" />
-          <small>Opaque area = drawable area. You’ll see a translucent preview.</small>
+          <label class="teal-label label-block translate"
+                 data-fr="Catégorie de préréglages" data-en="Preset category">Catégorie de préréglages</label>
+          <select id="presetCategory" class="styled-select" disabled>
+            <option class="translate" data-fr="Chargement…" data-en="Loading…">Chargement…</option>
+          </select>
+        </div>
+        <div class="option-item">
+          <label class="teal-label label-block translate"
+                 data-fr="Préréglage" data-en="Preset item">Préréglage</label>
+          <select id="presetItem" class="styled-select" disabled>
+            <option class="translate" data-fr="Choisissez une catégorie" data-en="Select a category">Choisissez une catégorie</option>
+          </select>
+        </div>
+        <div class="option-item previewBox">
+          <div class="thumbCard">
+            <img id="presetThumb" alt="preview"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Upload -->
+      <div class="options-column" id="rightCol">
+        <div class="option-item">
+          <label class="teal-label label-block translate"
+                 data-fr="Importer un contour (PNG/SVG)" data-en="Upload outline (PNG/SVG)">Importer un contour (PNG/SVG)</label>
+          <input id="outlineFile" type="file" accept="image/png, image/svg+xml" />
         </div>
       </div>
     </div>
+
     <div id="mode-divider"></div>
-    <button id="startButton" class="button">Start</button>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
   </div>
 </div>
 
@@ -116,43 +202,96 @@
     <div class="brushBtn large"  data-size="large"  title="Large"><span></span></div>
   </div>
   <div id="modeRow">
-    <button class="modeBtn active" id="modeDraw">✏️ Draw</button>
-    <button class="modeBtn"        id="modeErase">🧽 Erase</button>
+    <button class="modeBtn active" id="modeDraw">
+      <span class="translate" data-fr="✏️ Dessiner" data-en="✏️ Draw">✏️ Dessiner</span>
+    </button>
+    <button class="modeBtn" id="modeErase">
+      <span class="translate" data-fr="🧽 Effacer" data-en="🧽 Erase">🧽 Effacer</span>
+    </button>
   </div>
   <button id="saveBtn" type="button" title="Save PNG">💾</button>
 </aside>
 
-<!-- ===== Stage ===== -->
+<!-- ===== Stage (right of menu) ===== -->
 <main class="stage hidden" id="stage">
-  <div class="badge">Canvas demo</div>
   <canvas id="ink" width="1400" height="900" aria-label="Ink layer"></canvas>
   <canvas id="outline" width="1400" height="900" aria-label="Outline layer"></canvas>
 </main>
 
 <!-- cursor preview -->
-<div id="cursorPreview" style="position:fixed;left:0;top:0;width:20px;height:20px;border-radius:50%;pointer-events:none;z-index:15;mix-blend-mode:multiply;transform:translate(-50%,-50%);opacity:.65;outline:2px solid rgba(0,0,0,.18)"></div>
+<div id="cursorPreview"></div>
 
 <script>
-/* ===== Theme toggle ===== */
-const langToggle=document.getElementById('langToggle');
-function setTheme(t){ document.body.classList.remove('light','dark'); document.body.classList.add(t==='dark'?'dark':'light'); }
-langToggle.addEventListener('click',()=> setTheme(document.body.classList.contains('dark')?'light':'dark'));
+/* =========================
+   Language — shared storage key
+   ========================= */
+const LS_LANG_KEY = 'siteLanguage';
+const langToggle  = document.getElementById('langToggle');
 
-/* ===== Canvases & sizing (identical logic to the first working file) ===== */
+function getLang(){
+  try { const saved = localStorage.getItem(LS_LANG_KEY); if (saved === 'en' || saved === 'fr') return saved; } catch(e){}
+  return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+}
+function setLang(lang){
+  const safe = (lang === 'en') ? 'en' : 'fr';
+  document.documentElement.lang = safe;
+  try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e){}
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr = el.getAttribute('data-fr'); const en = el.getAttribute('data-en');
+    if (safe === 'fr' && fr != null) el.textContent = fr;
+    if (safe === 'en' && en != null) el.textContent = en;
+  });
+}
+(function normalizeLangOnLoad(){
+  let initial = 'fr';
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') { initial = saved; }
+    else {
+      initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      localStorage.setItem(LS_LANG_KEY, initial);
+    }
+  } catch(e){ initial = (document.documentElement.lang === 'en') ? 'en' : 'fr'; }
+  setLang(initial);
+})();
+langToggle.addEventListener('click', ()=> setLang(getLang()==='fr' ? 'en' : 'fr'));
+
+/* =========================
+   Theme
+   ========================= */
+function setTheme(t){
+  document.body.classList.remove('light','dark');
+  document.body.classList.add(t==='dark'?'dark':'light');
+}
+
+/* ===== Enter fullscreen helper ===== */
+async function enterFullscreen(){
+  const el=document.documentElement;
+  try{
+    if(el.requestFullscreen)             await el.requestFullscreen();
+    else if(el.webkitRequestFullscreen)  await el.webkitRequestFullscreen();
+    else if(el.msRequestFullscreen)      await el.msRequestFullscreen();
+  }catch(e){ /* ignore */ }
+}
+
+/* ===== Elements ===== */
 const ink=document.getElementById('ink');
 const out=document.getElementById('outline');
 const ic=ink.getContext('2d');
 const oc=out.getContext('2d');
 const stage=document.getElementById('stage');
+const sidebar=document.getElementById('sidebar');
+const paletteEl=document.getElementById('palette');
+const cursorEl=document.getElementById('cursorPreview');
 
+function sidebarW(){ return sidebar.getBoundingClientRect().width; }
+
+/* ===== Sizing to stage (right of sidebar) ===== */
 function fitCanvasToStage(){
-  // 1) use visible CSS size of stage
-  const cssW=stage.clientWidth||window.innerWidth;
-  const cssH=stage.clientHeight||window.innerHeight;
+  const cssW=stage.clientWidth;
+  const cssH=stage.clientHeight;
   ink.style.width=out.style.width=cssW+'px';
   ink.style.height=out.style.height=cssH+'px';
-
-  // 2) map to device pixels with DPR and set transforms
   const dpr=Math.max(1,window.devicePixelRatio||1);
   const w=Math.max(1,Math.round(cssW*dpr));
   const h=Math.max(1,Math.round(cssH*dpr));
@@ -160,21 +299,10 @@ function fitCanvasToStage(){
   if(out.width!==w||out.height!==h){ out.width=w; out.height=h; oc.setTransform(dpr,0,0,dpr,0,0); }
 }
 
-function drawFallbackGuide(){
-  const rect=out.getBoundingClientRect();
-  const p=new Path2D(); const pad=Math.min(rect.width,rect.height)*0.12; const r=Math.min(rect.width,rect.height)*0.18;
-  const x=pad,y=pad,w=rect.width-2*pad,h=rect.height-2*pad;
-  p.moveTo(x+r,y); p.arcTo(x+w,y,x+w,y+h,r); p.arcTo(x+w,y+h,x,y+h,r); p.arcTo(x,y+h,x,y,r); p.arcTo(x,y,x+w,y,r); p.closePath();
-  oc.clearRect(0,0,out.width,out.height);
-  oc.save(); oc.fillStyle='white'; oc.globalAlpha=0.08; oc.fill(p);
-  oc.globalAlpha=1; oc.lineWidth=6; oc.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--edge')||'#e2e8f0'; oc.stroke(p); oc.restore();
-}
-
-/* ===== Mask pipeline (upload only) ===== */
+/* ===== Mask pipeline (upload + presets) ===== */
 let userMask=null;
 const maskCanvas=document.createElement('canvas');
 const maskCtx=maskCanvas.getContext('2d');
-let maskImageData=null;
 
 function computeFit(destW,destH,imgW,imgH){
   const r=imgW/imgH, R=destW/destH;
@@ -182,11 +310,11 @@ function computeFit(destW,destH,imgW,imgH){
   const x=(destW-w)/2, y=(destH-h)/2;
   return {x,y,w,h};
 }
+
 function rebuildMaskCache(){
-  if(!userMask){ maskImageData=null; return; }
+  if(!userMask){ return; }
   maskCanvas.width=out.width; maskCanvas.height=out.height;
 
-  // IMPORTANT: re-derive dpr from canvas vs CSS rect so drawing coords in CSS px match
   const rect=out.getBoundingClientRect();
   const dpr = out.width / Math.max(1, rect.width);
   maskCtx.setTransform(dpr,0,0,dpr,0,0);
@@ -194,102 +322,195 @@ function rebuildMaskCache(){
 
   const fit=computeFit(rect.width,rect.height,userMask.naturalWidth,userMask.naturalHeight);
   maskCtx.drawImage(userMask,fit.x,fit.y,fit.w,fit.h);
-
-  // Try to cache alpha (safe when not CORS-tainted). If tainted, we still draw fine using maskCanvas directly.
-  try{
-    const img=maskCtx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
-    const d=img.data;
-    for(let i=0;i<d.length;i+=4){ const a=d[i+3]; d[i]=255; d[i+1]=255; d[i+2]=255; d[i+3]=a; }
-    maskCtx.putImageData(img,0,0);
-    maskImageData=img;
-  }catch{ maskImageData=null; }
 }
+
 function redrawMaskGuide(){
   oc.clearRect(0,0,out.width,out.height);
-  if(!userMask){ drawFallbackGuide(); return; }
+  if(!userMask) return;
   const rect=out.getBoundingClientRect();
   const fit=computeFit(rect.width,rect.height,userMask.naturalWidth,userMask.naturalHeight);
-  // Align oc’s transform with CSS px like above (oc already has DPR transform)
   oc.save();
-  oc.globalAlpha=0.6;
+  oc.globalAlpha = 0.5;      // translucent preview only
   oc.drawImage(userMask,fit.x,fit.y,fit.w,fit.h);
-  oc.globalAlpha=1;
-  oc.lineWidth=2; oc.strokeStyle='rgba(0,0,0,.35)'; oc.strokeRect(fit.x,fit.y,fit.w,fit.h);
   oc.restore();
 }
+
 function loadUserMaskFromURL(url,revoke=false){
-  const img=new Image(); img.crossOrigin='anonymous'; // OK for blob URLs; safe for same-origin files
+  const img=new Image(); img.crossOrigin='anonymous';
   img.onload=()=>{ if(revoke) URL.revokeObjectURL(url); userMask=img; fitCanvasToStage(); rebuildMaskCache(); redrawMaskGuide(); };
-  img.onerror=()=>{ if(revoke) URL.revokeObjectURL(url); alert('Could not load image. Use a PNG/SVG from same origin or choose another file.'); };
+  img.onerror=()=>{ if(revoke) URL.revokeObjectURL(url); alert('Could not load image.'); };
   img.src=url;
 }
-async function loadUserMaskFromFile(file){
-  const url=URL.createObjectURL(file);
-  loadUserMaskFromURL(url,true);
-}
+function loadUserMaskFromFile(file){ const url=URL.createObjectURL(file); loadUserMaskFromURL(url,true); }
+document.getElementById('outlineFile').addEventListener('change',(e)=>{ const f=e.target.files?.[0]; if(!f) return; loadUserMaskFromFile(f); });
 
-/* Upload input */
-const outlineFileEl=document.getElementById('outlineFile');
-outlineFileEl.addEventListener('change',(e)=>{ const f=e.target.files?.[0]; if(!f) return; loadUserMaskFromFile(f); });
+/* ===== Preset UI (auto-apply) ===== */
+const catEl=document.getElementById('presetCategory');
+const itemEl=document.getElementById('presetItem');
+const presetThumb=document.getElementById('presetThumb');
 
-/* ===== Drawing (unchanged logic) ===== */
-let drawing=false, prev=null, erasing=false, sizeMode='medium', currentColor='#000';
-const supportsPathClip=(function(){ try{ const c=document.createElement('canvas').getContext('2d'); const p=new Path2D(); p.rect(0,0,1,1); c.save(); c.clip(p); c.restore(); return true; }catch(e){ return false; } })();
-const scratch=document.createElement('canvas'); const sc=scratch.getContext('2d');
-function syncScratch(){ scratch.width=ink.width; scratch.height=ink.height; sc.setTransform(ic.getTransform()); sc.clearRect(0,0,scratch.width,scratch.height); }
-function getPos(e){ const r=ink.getBoundingClientRect(); if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX-r.left,y:e.touches[0].clientY-r.top}; return {x:(e.clientX||e.x)-r.left,y:(e.clientY||e.y)-r.top}; }
-function brushSize(){ return sizeMode==='small'?8:(sizeMode==='large'?34:18); }
-function begin(e){ drawing=true; prev=getPos(e); e.preventDefault(); }
-function end(){ drawing=false; prev=null; }
-function draw(e){
-  if(!drawing) return;
-  const cur=getPos(e); const size=brushSize();
-  if(userMask){
-    sc.save(); sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over';
-    sc.strokeStyle=erasing?'#000':currentColor;
-    sc.beginPath(); sc.moveTo(prev.x,prev.y); sc.lineTo(cur.x,cur.y); sc.stroke();
-    sc.globalCompositeOperation='destination-in'; sc.drawImage(maskCanvas,0,0);
-    sc.restore();
-    ic.save(); ic.globalCompositeOperation=erasing?'destination-out':'source-over'; ic.drawImage(scratch,0,0); ic.restore();
-    sc.clearRect(0,0,scratch.width,scratch.height);
-  } else {
-    if(supportsPathClip){
-      oc.save(); oc.clip(new Path2D()); oc.restore(); // no-op; we rely on fallback guide only for now
-    }
+function enablePresets(){
+  const arr = window.PNG_ARRAY;
+  if(!arr || !Array.isArray(arr) || arr.length===0){
+    catEl.disabled = itemEl.disabled = true;
+    return;
   }
-  prev=cur; e.preventDefault();
-}
-ink.addEventListener('pointerdown',begin); window.addEventListener('pointerup',end);
-window.addEventListener('pointercancel',end); window.addEventListener('pointerout',e=>{ if(e.target===ink) end(); });
-window.addEventListener('pointermove',draw,{passive:false});
-ink.addEventListener('touchstart',begin,{passive:false}); window.addEventListener('touchend',end,{passive:false});
-window.addEventListener('touchmove',draw,{passive:false});
 
-/* ===== Palette (4 / 7 / 13) ===== */
+  const cats=[...new Set(arr.map(x=>x.category))].sort((a,b)=>a.localeCompare(b));
+  catEl.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  catEl.disabled = itemEl.disabled = false;
+
+  // --- RANDOM SELECTION ON LOAD ---
+  const rndItem = arr[Math.floor(Math.random()*arr.length)];
+  const rndCat  = rndItem.category;
+  catEl.value = rndCat;
+
+  updateItems(false);
+
+  const itemsInCat = (window.PNG_ARRAY||[]).filter(x=>x.category===rndCat).sort((a,b)=>a.name.localeCompare(b.name));
+  const match = itemsInCat.find(i=>i.file===rndItem.file) || itemsInCat[0];
+  if(match){
+    itemEl.value = match.file;
+    presetThumb.src = match.file;
+    presetThumb.alt = match.name;
+    loadUserMaskFromURL(match.file);
+  }
+}
+function updateItems(applyFirst=false){
+  const arr = window.PNG_ARRAY || [];
+  const cat = catEl.value || (arr[0]?.category ?? '');
+  if(!catEl.value && cat) catEl.value = cat;
+  const items = arr.filter(x=>x.category===cat).sort((a,b)=>a.name.localeCompare(b.name));
+  itemEl.innerHTML = items.map(i=>`<option value="${i.file}" data-name="${i.name}">${i.name}</option>`).join('');
+  if(items[0]){
+    presetThumb.src = items[0].file; presetThumb.alt = items[0].name;
+    itemEl.value = items[0].file;
+    if(applyFirst) loadUserMaskFromURL(items[0].file);
+  }
+}
+catEl.addEventListener('change', ()=>updateItems(true));
+itemEl.addEventListener('change', ()=>{ const src=itemEl.value; if(!src) return; presetThumb.src=src; loadUserMaskFromURL(src); });
+
+window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(enablePresets, 0); });
+
+/* ===== Drawing (mask-based) — HOVER TO DRAW ===== */
+let prev=null, erasing=false, sizeMode='medium', currentColor='#000';
+const scratch=document.createElement('canvas'); const sc=scratch.getContext('2d');
+
+function syncScratch(){ scratch.width=ink.width; scratch.height=ink.height; sc.setTransform(ic.getTransform()); sc.clearRect(0,0,scratch.width,scratch.height); }
+function getPos(e){ const r=ink.getBoundingClientRect(); const x=(e.touches?.[0]?.clientX ?? e.clientX ?? e.x)-r.left; const y=(e.touches?.[0]?.clientY ?? e.clientY ?? e.y)-r.top; return {x,y}; }
+function brushSize(){ return sizeMode==='small'?8:(sizeMode==='large'?34:18); }
+
+function drawStep(from,to){
+  if(!userMask) return;
+  const size=brushSize();
+  sc.save();
+  sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over';
+  sc.strokeStyle=erasing?'#000':currentColor;
+  sc.beginPath(); sc.moveTo(from.x,from.y); sc.lineTo(to.x,to.y); sc.stroke();
+  sc.globalCompositeOperation='destination-in'; sc.drawImage(maskCanvas,0,0);
+  sc.restore();
+
+  ic.save(); ic.globalCompositeOperation=erasing?'destination-out':'source-over'; ic.drawImage(scratch,0,0); ic.restore();
+  sc.clearRect(0,0,scratch.width,scratch.height);
+}
+
+function onPointerMove(e){
+  if(!userMask) return;
+  const cur=getPos(e);
+  if(!prev){ prev=cur; return; }
+  drawStep(prev,cur);
+  prev=cur;
+  e.preventDefault();
+}
+ink.addEventListener('pointerenter',(e)=>{ prev=getPos(e); },{passive:false});
+ink.addEventListener('pointerleave',()=>{ prev=null; },{passive:true});
+ink.addEventListener('pointermove', onPointerMove, {passive:false});
+
+/* Touch support */
+ink.addEventListener('touchstart',(e)=>{ prev=getPos(e); e.preventDefault(); },{passive:false});
+ink.addEventListener('touchend', ()=>{ prev=null; },{passive:true});
+ink.addEventListener('touchmove',(e)=>{ onPointerMove(e); },{passive:false});
+
+/* ===== Palette with hover dwell ===== */
 const PALETTE_13=["#000000","#FF6B6B","#F94144","#FFD166","#F9C74F","#06D6A0","#90BE6D","#43AA8B","#118AB2","#3A86FF","#9B59B6","#8338EC","#FF9F1C"];
-const sidebar=document.getElementById('sidebar'), paletteEl=document.getElementById('palette');
 function pickColors(n){ if(n>=13) return PALETTE_13.slice(0,13); if(n==7) return ["#000000","#FF6B6B","#FFD166","#06D6A0","#118AB2","#9B59B6","#FF9F1C"]; if(n==4) return ["#000000","#FF6B6B","#06D6A0","#3A86FF"]; return PALETTE_13.slice(0,n); }
+
+const HOVER_DWELL_MS = 650;
+function setColor(el){
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('active',s===el));
+  currentColor = el?.dataset?.color || "#000000";
+  cursorEl.style.background = currentColor;
+  const dw = el.querySelector('.dwell'); if (dw) dw.remove();
+  el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),460);
+}
+function startDwellCircle(el, durationMs){
+  let overlay = el.querySelector('.dwell');
+  if(!overlay){ overlay = document.createElement('div'); overlay.className='dwell'; el.appendChild(overlay); }
+  overlay.style.animation='none'; overlay.style.transform='translate(-50%,-50%) scale(0.08)'; void overlay.offsetWidth;
+  overlay.style.animation=`dwellGrow ${durationMs}ms linear forwards`;
+}
+function resetDwellCircle(el){ const overlay=el.querySelector('.dwell'); if(overlay) overlay.remove(); }
+
+function wireSwatches(){
+  const swatches = document.querySelectorAll('.swatch');
+  swatches.forEach(s=>{
+    let timer=null;
+    const clearTimer=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+    s.addEventListener('mouseenter',()=>{ clearTimer(); resetDwellCircle(s); startDwellCircle(s,HOVER_DWELL_MS); timer=setTimeout(()=>{ setColor(s); }, HOVER_DWELL_MS+5); });
+    s.addEventListener('mouseleave',()=>{ clearTimer(); resetDwellCircle(s); });
+    s.addEventListener('click',()=>{ clearTimer(); resetDwellCircle(s); setColor(s); });
+    s.addEventListener('touchstart',()=>{ clearTimer(); resetDwellCircle(s); setColor(s); });
+  });
+}
+
 function buildPalette(n){
   while(paletteEl.firstChild) paletteEl.removeChild(paletteEl.firstChild);
   let colors=pickColors(n);
-  if(document.body.classList.contains('dark')) colors[0]="#FFFFFF";
-  colors.forEach(col=>{ const b=document.createElement('button'); b.className='swatch'; b.style.background=col; b.dataset.color=col; b.onclick=()=>{ document.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('active',s===b)); currentColor=col; }; paletteEl.appendChild(b); });
-  const sw=paletteEl.querySelector('.swatch'); if(sw) sw.click();
+  if(document.body.classList.contains('dark') && colors.length>0) colors[0]='#FFFFFF';
+  colors.forEach(col=>{ const btn=document.createElement('button'); btn.className='swatch'; btn.style.background=col; btn.dataset.color=col; paletteEl.appendChild(btn); });
+  wireSwatches();
+  const sw=document.querySelectorAll('.swatch'); if(sw.length){ const rnd=Math.floor(Math.random()*sw.length); setColor(sw[rnd]); }
   layoutPalette();
 }
+
+/* >>> GROW MORE (like other page): allow much bigger max when fewer colors */
 function layoutPalette(){
   const n=paletteEl.children.length; if(!n) return;
-  const padY=parseFloat(getComputedStyle(sidebar).paddingTop)+parseFloat(getComputedStyle(sidebar).paddingBottom);
-  const padX=parseFloat(getComputedStyle(sidebar).paddingLeft)+parseFloat(getComputedStyle(sidebar).paddingRight);
+  const cs=getComputedStyle(sidebar);
+  const padY=parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom);
+  const padX=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight);
   const reserve=document.getElementById('brushSizes').offsetHeight + document.getElementById('modeRow').offsetHeight + document.getElementById('saveBtn').offsetHeight + 32;
   const availH=Math.max(0, sidebar.clientHeight - padY - reserve);
   const availW=Math.max(0, sidebar.clientWidth  - padX);
-  const gap=12;
-  const fit=(cols,min,max)=>{ const rows=Math.ceil(n/cols); const sH=Math.floor((availH-(rows-1)*gap)/rows); const sW=Math.floor((availW-(cols-1)*gap)/cols); let s=Math.min(sH,sW); if(!Number.isFinite(s)) s=min; s=Math.max(min,Math.min(max,s)); return {s,cols}; };
-  let L=fit(1,24,52); if(L.s<=25 && n>6) L=fit(2,24,52);
+
+  // Scale gap with UI scale a bit
+  const rootCS = getComputedStyle(document.documentElement);
+  const uiScale = parseFloat(rootCS.getPropertyValue('--ui-scale')) || 1;
+  const gap = Math.max(6, Math.min(14, Math.round(12 * uiScale)));
+
+  const fit=(cols,min,max)=>{
+    const rows=Math.ceil(n/cols);
+    const sH=Math.floor((availH-(rows-1)*gap)/rows);
+    const sW=Math.floor((availW-(cols-1)*gap)/cols);
+    let s=Math.min(sH,sW);
+    if(!Number.isFinite(s)) s=min;
+    s=Math.max(min,Math.min(max,s));
+    return {s,cols};
+  };
+
+  // More generous max size when fewer colors (like previous page)
+  const nIs13 = (n >= 13);
+  const minSize = nIs13 ? 24 : 28;
+  const maxSize = nIs13 ? 52 : 96;
+
+  let L=fit(1,minSize,maxSize);
+  if(L.s<=minSize+1 && n>6){ L=fit(2,minSize,maxSize); } // two columns if tight
+
   sidebar.style.setProperty('--palette-cols', String(L.cols));
   sidebar.style.setProperty('--swatch-size', L.s+'px');
   sidebar.style.setProperty('--swatch-gap', gap+'px');
+
   const border=Math.max(2, Math.round(L.s*.06));
   sidebar.style.setProperty('--swatch-border', border+'px');
   sidebar.style.setProperty('--swatch-outline', border+'px');
@@ -297,11 +518,17 @@ function layoutPalette(){
 
 /* ===== Brush + mode + cursor ===== */
 document.querySelectorAll('.brushBtn').forEach(b=> b.addEventListener('click',()=>{ document.querySelectorAll('.brushBtn').forEach(x=>x.classList.toggle('active',x===b)); sizeMode=b.dataset.size; }));
-document.getElementById('modeDraw').onclick=()=>{ erasing=false; modeDraw.classList.add('active'); modeErase.classList.remove('active'); }
-document.getElementById('modeErase').onclick=()=>{ erasing=true;  modeErase.classList.add('active'); modeDraw.classList.remove('active'); }
-const cursorEl=document.getElementById('cursorPreview');
-function sidebarW(){ return sidebar.getBoundingClientRect().width; }
-function updateCursor(x,y){ if(x<sidebarW()){ cursorEl.style.opacity=0; return; } cursorEl.style.opacity=.65; cursorEl.style.left=x+'px'; cursorEl.style.top=y+'px'; const d=brushSize(); cursorEl.style.width=d+'px'; cursorEl.style.height=d+'px'; cursorEl.style.background=erasing?'#fff':currentColor; }
+const modeDraw=document.getElementById('modeDraw');
+const modeErase=document.getElementById('modeErase');
+modeDraw.onclick=()=>{ erasing=false; modeDraw.classList.add('active'); modeErase.classList.remove('active'); }
+modeErase.onclick=()=>{ erasing=true;  modeErase.classList.add('active'); modeDraw.classList.remove('active'); }
+
+function updateCursor(x,y){
+  if(x<sidebarW()){ cursorEl.style.opacity=0; return; }
+  cursorEl.style.opacity=.65; cursorEl.style.left=x+'px'; cursorEl.style.top=y+'px';
+  const d= (sizeMode==='small'?8:(sizeMode==='large'?34:18));
+  cursorEl.style.width=d+'px'; cursorEl.style.height=d+'px'; cursorEl.style.background=erasing?'#fff':currentColor;
+}
 addEventListener('mousemove',e=>updateCursor(e.clientX,e.clientY),{passive:true});
 addEventListener('touchmove',e=>{ const t=e.touches[0]; if(t) updateCursor(t.clientX,t.clientY); },{passive:true});
 
@@ -314,31 +541,39 @@ const themeSelect=document.getElementById('themeSelect');
 const paletteSizeSelect=document.getElementById('paletteSizeSelect');
 const startButton=document.getElementById('startButton');
 const gameOptions=document.getElementById('game-options');
-const sidebarEl=document.getElementById('sidebar');
 
 themeSelect.onchange=()=> setTheme(themeSelect.value);
 paletteSizeSelect.onchange=()=>{ if(!stage.classList.contains('hidden')) buildPalette(parseInt(paletteSizeSelect.value,10)||7); };
 
-startButton.onclick=()=>{
+startButton.onclick=async ()=>{
   setTheme(themeSelect.value);
+
+  // Go fullscreen on start
+  await enterFullscreen();
+
+  // Hide language toggle during gameplay
+  document.getElementById('langToggle').style.display = 'none';
+
+  // 🔒 Hide the native mouse pointer everywhere after starting
+  document.documentElement.classList.add('hide-native-cursor');
+
   gameOptions.style.display='none';
-  sidebarEl.style.display='flex';
+  sidebar.style.display='flex';
   stage.classList.remove('hidden');
 
-  // Exact order that guarantees non-zero rects:
   fitCanvasToStage();
-  drawFallbackGuide();
   buildPalette(parseInt(paletteSizeSelect.value,10)||7);
   syncScratch();
 
-  // One more frame to be 100% sure, then (re)build mask preview
+  // Ensure mask preview drawn after first layout
   requestAnimationFrame(()=>{ fitCanvasToStage(); rebuildMaskCache(); redrawMaskGuide(); });
 };
 
 addEventListener('resize', ()=>{ if(stage.classList.contains('hidden')) return; fitCanvasToStage(); rebuildMaskCache(); redrawMaskGuide(); }, {passive:true});
 
-/* Initial (menu visible) */
-setTheme('dark');
+/* Initial theme + preset activation */
+setTheme('light');
+window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(enablePresets, 0); });
 </script>
 </body>
 </html>

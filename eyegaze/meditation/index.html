@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Samurai Focus — One Orb → Moon (Respawn)</title>
+  <title>Samurai Focus — One Orb → Moon (Constant Speed + Designed Halo + Strong/Slow Shake)</title>
   <style>
     html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#000;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
@@ -46,10 +46,10 @@
     const SPAWN_Y_MIN_FRAC = 0.68;
     const SPAWN_Y_MAX_FRAC = 0.90;
 
-    // Launch path → to the moon (perspective shrink)
-    const LAUNCH_MS      = 6000;   // flight duration
-    const END_RADIUS     = 10;     // size at the moon
-    const BEZIER_PEAK    = 0.34;   // arc height (fraction of screen)
+    // Launch path → to the moon (constant speed along curve)
+    const LAUNCH_SPEED_PX = 360;   // px/s (your chosen speed)
+    const END_RADIUS      = 10;    // size at the moon
+    const BEZIER_PEAK     = 0.34;  // arc height (fraction of screen)
     const RESPAWN_DELAY_MS = 2500; // wait before next orb
 
     // Ball look (opaque + small halo)
@@ -67,9 +67,9 @@
     // Audio (crescendo while charging)
     const HUM_GAIN_MAX   = 0.6;
 
-    // Moon
-    const MOON_R         = 70;
-    const MOON_GLOW_R    = 240;
+    // Moon (bigger + designed halo)
+    const MOON_R         = 140;     // doubled from 70
+    const MOON_GLOW_R    = 560;     // larger to fit the designed halo
     const MOON_X_FRAC    = 0.78;
     const MOON_Y_FRAC    = 0.24;
 
@@ -86,6 +86,14 @@
     const CRATER_R_MIN_FR  = 0.06; // 6% of moon radius
     const CRATER_R_MAX_FR  = 0.14; // 14% of moon radius
     const CRATER_MARGIN_FR = 0.04; // keep inside disk
+
+    // Moon-only shake — STRONGER and SLOWER
+    // Lower stiffness → slower oscillation; lower damping → longer lingering
+    // Bigger impulse → larger initial displacement
+    const SHAKE_STIFFNESS = 8;
+    const SHAKE_DAMPING   = 5;
+    const SHAKE_IMPULSE   = 240;
+    let mShake = { ox: 0, oy: 0, vx: 0, vy: 0 }; // offset & velocity
 
     /* =======================
        SETUP
@@ -183,7 +191,7 @@
     /* =======================
        ORB (single)
     ======================= */
-    let orb = null;            // {cx,cy,charge,inZone,enterMs,launching,launchT0,startR,trail,renderR}
+    let orb = null;            // {cx,cy,charge,inZone,enterMs,launching,launchT0,startR,trail,renderR, path, s}
     let launching = false;
     let respawnAtMs = 0;
 
@@ -193,7 +201,8 @@
         cy: H*SPAWN_Y_MIN_FRAC + rand(0, (H*SPAWN_Y_MAX_FRAC - H*SPAWN_Y_MIN_FRAC)),
         charge: 0, inZone:false, enterMs:0,
         launching:false, launchT0:0, startR:MIN_DIAMETER*0.5,
-        trail: [], renderR: MIN_DIAMETER*0.5
+        trail: [], renderR: MIN_DIAMETER*0.5,
+        path: null, s: 0
       };
     }
     function radiusFromCharge(o){ return (MIN_DIAMETER + (MAX_DIAMETER - MIN_DIAMETER)*o.charge) * 0.5; }
@@ -223,8 +232,6 @@
     /* =======================
        CRATERS
     ======================= */
-    // Stored relative to the moon so they scale on resize
-    // { ang: radians, dist: 0..1 of moon radius, rFrac: radius as fraction of moon radius, bornMs: timestamp }
     const craters = [];
     function addCraterFromImpact() {
       // Approach angle from last trail segment if available
@@ -262,7 +269,7 @@
 
         // base depression (radial gradient, darker center)
         const g = ctx.createRadialGradient(
-          cx - lx * r * 0.25, cy - ly * r * 0.25, r * 0.15,
+          cx - (lx * r * 0.25), cy - (ly * r * 0.25), r * 0.15,
           cx, cy, r
         );
         g.addColorStop(0, `rgba(185,190,205,${0.45*alpha})`);
@@ -286,6 +293,25 @@
         ctx.arc(cx, cy, r, lightAng - 0.9, lightAng + 0.9);
         ctx.stroke();
       }
+    }
+
+    /* =======================
+       MOON SHAKE HELPERS
+    ======================= */
+    function moonKick(ix, iy, power = 1) {
+      const len = Math.hypot(ix, iy) || 1;
+      const ux = ix / len, uy = iy / len;
+      mShake.vx += ux * SHAKE_IMPULSE * power;
+      mShake.vy += uy * SHAKE_IMPULSE * power;
+    }
+    function updateMoonShake(dt) {
+      // spring-damper to origin: a = -k*x - c*v
+      mShake.vx += (-SHAKE_STIFFNESS * mShake.ox - SHAKE_DAMPING * mShake.vx) * dt;
+      mShake.vy += (-SHAKE_STIFFNESS * mShake.oy - SHAKE_DAMPING * mShake.vy) * dt;
+      mShake.ox += mShake.vx * dt;
+      mShake.oy += mShake.vy * dt;
+      if (Math.abs(mShake.ox) < 0.01) mShake.ox = 0;
+      if (Math.abs(mShake.oy) < 0.01) mShake.oy = 0;
     }
 
     /* =======================
@@ -322,16 +348,74 @@
       return [ox, oy];
     }
 
-    function drawMoon(){
-      // glow
+    /* =======================
+       MOON + DESIGNED HALO
+    ======================= */
+    function drawMoonHaloLayers(){
       ctx.save();
-      ctx.globalCompositeOperation='lighter';
-      const g = ctx.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, MOON_GLOW_R);
-      g.addColorStop(0,  'rgba(255,245,220,0.18)');
-      g.addColorStop(1,  'rgba(255,245,220,0)');
+      ctx.globalCompositeOperation = 'lighter';
+
+      // 1) Outer diffuse aura with slight warm→cool blend
+      let g = ctx.createRadialGradient(moon.x, moon.y, MOON_R*0.8, moon.x, moon.y, MOON_GLOW_R);
+      g.addColorStop(0.00, 'rgba(255,244,220,0.22)');
+      g.addColorStop(0.45, 'rgba(230,240,255,0.10)');
+      g.addColorStop(1.00, 'rgba(190,210,255,0.00)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(moon.x, moon.y, MOON_GLOW_R, 0, Math.PI*2); ctx.fill();
+
+      // 2) Warm inner corona hugging the disk
+      const coronaR = MOON_R * 1.35;
+      g = ctx.createRadialGradient(moon.x, moon.y, MOON_R*0.95, moon.x, moon.y, coronaR);
+      g.addColorStop(0.00, 'rgba(255,248,235,0.42)');
+      g.addColorStop(1.00, 'rgba(255,248,235,0.00)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(moon.x, moon.y, coronaR, 0, Math.PI*2); ctx.fill();
+
+      // 3) Anisotropic (elliptical) halo for stylized atmosphere scatter
+      ctx.save();
+      ctx.translate(moon.x, moon.y);
+      ctx.rotate(-0.12);
+      ctx.scale(1.35, 0.85);
+      const ellR = MOON_R * 2.4;
+      g = ctx.createRadialGradient(0, 0, MOON_R*0.9, 0, 0, ellR);
+      g.addColorStop(0.00, 'rgba(255,240,210,0.10)');
+      g.addColorStop(1.00, 'rgba(180,200,255,0.00)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, ellR, 0, Math.PI*2); ctx.fill();
       ctx.restore();
+
+      // 4) Thin pearly rim ring
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      ctx.lineWidth = Math.max(1, MOON_R * 0.04);
+      ctx.beginPath(); ctx.arc(moon.x, moon.y, MOON_R * 1.05, 0, Math.PI*2); ctx.stroke();
+
+      // 5) Very subtle starburst spokes (tasteful)
+      const RAY_COUNT = 6;
+      for (let i=0;i<RAY_COUNT;i++){
+        const ang = i * (Math.PI / RAY_COUNT);
+        ctx.save();
+        ctx.translate(moon.x, moon.y);
+        ctx.rotate(ang + 0.2);
+        const grad = ctx.createLinearGradient(0, 0, MOON_R * 3.2, 0);
+        grad.addColorStop(0, 'rgba(255,240,210,0.08)');
+        grad.addColorStop(1, 'rgba(255,240,210,0.00)');
+        ctx.fillStyle = grad;
+        ctx.globalAlpha = 0.22;
+        ctx.fillRect(0, -1.5, MOON_R * 3.2, 3);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    function drawMoon(){
+      // translate just the moon (and its craters/halo) by shake offset
+      ctx.save();
+      ctx.translate(mShake.ox, mShake.oy);
+
+      // Designed halo layers (behind disk)
+      drawMoonHaloLayers();
+
       // disk
       ctx.save();
       ctx.fillStyle = 'rgb(245,245,250)';
@@ -340,8 +424,13 @@
 
       // craters over the disk
       drawCraters();
+
+      ctx.restore(); // end translate
     }
 
+    /* =======================
+       BACKGROUND + FX
+    ======================= */
     function drawBackground(){
       if (bgImg.complete && bgImg.naturalWidth>0){
         const iw=bgImg.width, ih=bgImg.height;
@@ -385,9 +474,44 @@
     }
 
     /* =======================
-       EASING (slower early ascent)
+       CONSTANT-SPEED PATH HELPERS
     ======================= */
-    const easeInCubic = t => t*t*t;
+    function bezierPoint(p0, p1, p2, t){
+      const u = 1 - t;
+      const x = u*u*p0.x + 2*u*t*p1.x + t*t*p2.x;
+      const y = u*u*p0.y + 2*u*t*p1.y + t*t*p2.y;
+      return { x, y };
+    }
+    function makePathLUT(p0, p1, p2, segments = 260){
+      const ts = [], xs = [], ys = [], cum = [];
+      let total = 0;
+      let prev = bezierPoint(p0, p1, p2, 0);
+      ts.push(0); xs.push(prev.x); ys.push(prev.y); cum.push(0);
+      for (let i=1;i<=segments;i++){
+        const t = i/segments;
+        const p = bezierPoint(p0, p1, p2, t);
+        total += Math.hypot(p.x - prev.x, p.y - prev.y);
+        ts.push(t); xs.push(p.x); ys.push(p.y); cum.push(total);
+        prev = p;
+      }
+      return { ts, xs, ys, cum, total };
+    }
+    function samplePathByS(lut, s){
+      const target = Math.max(0, Math.min(lut.total, s));
+      let lo = 0, hi = lut.cum.length - 1;
+      while (lo < hi){
+        const mid = (lo + hi) >> 1;
+        if (lut.cum[mid] < target) lo = mid + 1; else hi = mid;
+      }
+      if (lo === 0) return { x: lut.xs[0], y: lut.ys[0], t: lut.ts[0] };
+      const i = lo, j = lo - 1;
+      const c0 = lut.cum[j], c1 = lut.cum[i];
+      const ratio = (target - c0) / Math.max(1e-6, (c1 - c0));
+      const x = lut.xs[j] + (lut.xs[i] - lut.xs[j]) * ratio;
+      const y = lut.ys[j] + (lut.ys[i] - lut.ys[j]) * ratio;
+      const t = lut.ts[j] + (lut.ts[i] - lut.ts[j]) * ratio;
+      return { x, y, t };
+    }
 
     /* =======================
        UPDATE
@@ -398,7 +522,6 @@
       if (!orb || launching) return;
       const r = radiusFromCharge(orb);
       const inside = pointer.inside && inOrb(orb, pointer.x, pointer.y);
-      const stable = pointer.moved <= MAX_JITTER_PX;
 
       if (inside){
         if (!orb.inZone){ orb.inZone = true; orb.enterMs = performance.now(); }
@@ -414,6 +537,13 @@
             orb.launchT0 = performance.now();
             orb.startR  = radiusFromCharge(orb);
             orb.trail.length = 0;
+
+            // Build constant-speed path LUT
+            const p0   = { x:orb.cx, y:orb.cy };
+            const ctrl = { x:orb.cx + (moon.x - orb.cx)*0.35, y: Math.min(orb.cy, moon.y) - H*BEZIER_PEAK };
+            const p1   = { x:moon.x, y:moon.y };
+            orb.path = makePathLUT(p0, ctrl, p1, 260);
+            orb.s = 0;
           }
         }
       } else {
@@ -438,33 +568,43 @@
       // Update hum
       updateHum(orb && !launching ? orb.charge : 0);
 
-      // Launch curve (eased to slow early ascent)
-      if (launching && orb){
-        const tNow = performance.now();
-        const pLinear = clamp((tNow - orb.launchT0)/LAUNCH_MS, 0, 1);
-        const t = easeInCubic(pLinear);
-
-        const p0   = { x:orb.cx, y:orb.cy };
-        const ctrl = { x:orb.cx + (moon.x - orb.cx)*0.35, y: Math.min(orb.cy, moon.y) - H*BEZIER_PEAK };
-        const p1   = { x:moon.x, y:moon.y };
-
-        const x = (1-t)*(1-t)*p0.x + 2*(1-t)*t*ctrl.x + t*t*p1.x;
-        const y = (1-t)*(1-t)*p0.y + 2*(1-t)*t*ctrl.y + t*t*p1.y;
-        const r = orb.startR + (END_RADIUS - orb.startR) * t;
+      // Launch — constant speed along the curve
+      if (launching && orb && orb.path){
+        orb.s += LAUNCH_SPEED_PX * dt;
+        const done = orb.s >= orb.path.total - 0.5;
+        const P = samplePathByS(orb.path, orb.s);
+        // linear radius shrink by normalized distance
+        const u = Math.min(1, orb.s / Math.max(1e-6, orb.path.total));
+        const r = orb.startR + (END_RADIUS - orb.startR) * u;
 
         // trail
-        orb.trail.push({ x, y, r, a:1 });
+        orb.trail.push({ x:P.x, y:P.y, r, a:1 });
         if (orb.trail.length>18) orb.trail.shift();
         for (const tr of orb.trail) tr.a *= 0.9;
 
-        orb.cx = x; orb.cy = y; orb.renderR = r;
+        orb.cx = P.x; orb.cy = P.y; orb.renderR = r;
 
-        if (t>=1){
-          // Impact & clean up
-          addCraterFromImpact();     // <<< add a crater
+        if (done){
+          // derive impact direction from last trail segment
+          let ix = 0, iy = -1;
+          if (orb.trail.length >= 2) {
+            const a = orb.trail[orb.trail.length - 1];
+            const b = orb.trail[orb.trail.length - 2];
+            ix = a.x - b.x; iy = a.y - b.y;
+          }
+
+          // bigger visible nudge, then kick
+          const len = Math.hypot(ix, iy) || 1;
+          const ux = ix/len, uy = iy/len;
+          mShake.ox += ux * 12;
+          mShake.oy += uy * 12;
+          moonKick(ix, iy, 1.6);
+
+          addCraterFromImpact();
           burstAt(moon.x, moon.y);
           flash(); shock(moon.x, moon.y);
           play(sfxImpact);
+
           launching = false;
           orb = null;
           respawnAtMs = performance.now() + RESPAWN_DELAY_MS; // schedule next orb
@@ -482,6 +622,9 @@
         s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 360*dt; s.ang += s.rot*dt;
         if (t - s.born > s.life) shards.splice(i,1);
       }
+
+      // Moon shake integration (slow, strong)
+      updateMoonShake(dt);
     }
 
     /* =======================
@@ -513,7 +656,7 @@
     }
 
     function render(){
-      // bg + moon + craters
+      // bg
       if (bgImg.complete && bgImg.naturalWidth>0){
         const iw=bgImg.width, ih=bgImg.height;
         const sc=Math.max(W/iw, H/ih);
@@ -521,10 +664,12 @@
       } else {
         ctx.fillStyle="#041017"; ctx.fillRect(0,0,W,H);
       }
+
+      // moon (with designed halo + stronger, slower shake)
       drawMoon();
 
+      // orb + fx
       drawOrb();
-
       drawShards();
       drawShockwave();
       drawFlash();
