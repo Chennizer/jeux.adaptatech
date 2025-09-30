@@ -32,6 +32,83 @@
       cursor: pointer;
     }
     #startBtn:active { transform: translateY(1px); }
+
+    #modeSelector {
+      position: fixed;
+      left: 24px;
+      bottom: 24px;
+      display: flex;
+      gap: 14px;
+      z-index: 12;
+      pointer-events: none; /* tiles re-enable events individually */
+      color: #f8eacb;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .mode-tile {
+      position: relative;
+      width: 92px;
+      height: 92px;
+      border-radius: 18px;
+      background: rgba(18,18,22,0.72);
+      border: 2px solid rgba(255,255,255,0.16);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      pointer-events: auto;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.35);
+    }
+    .mode-tile img {
+      width: 68px;
+      height: 68px;
+      object-fit: contain;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,0.55));
+      pointer-events: none;
+      user-select: none;
+    }
+    .mode-tile .label {
+      position: absolute;
+      bottom: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: rgba(255,240,200,0.75);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      pointer-events: none;
+    }
+    .mode-tile::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow: 0 0 0 0 rgba(255,210,120,0.0);
+      transition: box-shadow 0.22s ease;
+      pointer-events: none;
+    }
+    .mode-tile.active {
+      border-color: rgba(255,210,120,0.9);
+      box-shadow: 0 12px 24px rgba(255,180,60,0.25);
+    }
+    .mode-tile.active::after {
+      box-shadow: 0 0 14px 4px rgba(255,210,120,0.55);
+    }
+    .mode-tile.hovering {
+      transform: translateY(-4px);
+      border-color: rgba(255,220,160,0.8);
+    }
+    .mode-tile .progress {
+      position: absolute;
+      inset: -6px;
+      border-radius: 24px;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+      background: none;
+      filter: drop-shadow(0 0 10px rgba(255,210,120,0.45));
+    }
   </style>
 </head>
 <body>
@@ -39,6 +116,18 @@
     <button id="startBtn">Start • Fullscreen</button>
   </div>
   <canvas id="game"></canvas>
+  <div id="modeSelector" role="group" aria-label="Interaction mode">
+    <div class="mode-tile active" data-mode="chi" aria-pressed="true" role="button">
+      <img src="../../images/samurai/chi.png" alt="Chi mode" />
+      <div class="progress"></div>
+      <span class="label">Chi</span>
+    </div>
+    <div class="mode-tile" data-mode="katana" aria-pressed="false" role="button">
+      <img src="../../images/samurai/katana.png" alt="Katana mode" />
+      <div class="progress"></div>
+      <span class="label">Katana</span>
+    </div>
+  </div>
 
   <script>
   (() => {
@@ -132,6 +221,19 @@
     const ROPE_ATTACH_FROM_BOTTOM_FRAC = 0.10;
     const ROPE_ANCHOR_BOTTOM_OFFSET    = 0;
 
+    const MODE_DWELL_MS = 500;
+
+    const KATANA_CURSOR_SRC = "../../images/samurai/katana.png";
+    const KATANA_CURSOR_MAX_PX = 124;
+    const KATANA_CURSOR_HOTSPOT = { x: 12, y: 28 };
+    const KATANA_MOVE_THRESHOLD = 2;
+
+    const CHI_POINTER_SRC = "../../images/samurai/chi.png";
+    const CHI_POINTER_BASE = 96;
+    const CHI_POINTER_MAX = 118;
+    const CHI_POINTER_BREATH = 0.05;
+    const CHI_POINTER_BREATH_FREQ = 0.8;
+
     /* =======================
        SETUP
     ======================= */
@@ -165,14 +267,161 @@
     function getClosedImg(type){ return type===1 ? imgClosed1 : imgClosed2; }
     function getLitImg(type){    return type===1 ? imgLit1    : imgLit2; }
 
-    const pointer = { x: -9999, y: -9999, inside: false };
+    const modeSelector = document.getElementById('modeSelector');
+    const modeTileNodes = Array.from(modeSelector.querySelectorAll('.mode-tile'));
+    const modeTiles = modeTileNodes.map(el => ({
+      el,
+      mode: el.dataset.mode,
+      progressEl: el.querySelector('.progress'),
+      dwellStart: 0
+    }));
+    let hoveredTile = null;
+    let currentMode = 'chi';
+
+    function refreshModeTiles() {
+      for (const tile of modeTiles) {
+        const active = tile.mode === currentMode;
+        tile.el.classList.toggle('active', active);
+        tile.el.setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
+    }
+
+    const pointer = { x: -9999, y: -9999, inside: false, prevX: -9999 };
+    let cursorOrient = 'left';
+
+    function applyCurrentCursor() {
+      if (currentMode === 'chi') {
+        canvas.style.cursor = 'none';
+        return;
+      }
+      if (katanaCursorReady) {
+        const data = cursorOrient === 'right' ? katanaCursor.right : katanaCursor.left;
+        canvas.style.cursor = `url(${data.url}) ${data.hx} ${data.hy}, auto`;
+      } else {
+        canvas.style.cursor = 'crosshair';
+      }
+    }
+
+    canvas.style.cursor = 'none';
+
     canvas.addEventListener('pointermove', e => {
       const rect = canvas.getBoundingClientRect();
       pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
       pointer.y = (e.clientY - rect.top)  * (canvas.height / rect.height);
       pointer.inside = true;
+      const dx = (pointer.prevX === -9999) ? 0 : pointer.x - pointer.prevX;
+      if (currentMode === 'katana' && Math.abs(dx) > KATANA_MOVE_THRESHOLD) {
+        const wantOrient = dx > 0 ? 'right' : 'left';
+        if (wantOrient !== cursorOrient) {
+          cursorOrient = wantOrient;
+          applyCurrentCursor();
+        }
+      }
+      pointer.prevX = pointer.x;
     });
-    canvas.addEventListener('pointerleave', () => pointer.inside = false);
+    canvas.addEventListener('pointerleave', () => {
+      pointer.inside = false;
+      pointer.prevX = -9999;
+    });
+
+    function setTileProgress(tile, progress) {
+      if (!tile.progressEl) return;
+      const clamped = Math.max(0, Math.min(1, progress));
+      if (clamped <= 0) {
+        tile.progressEl.style.opacity = '0';
+        tile.progressEl.style.background = 'none';
+        return;
+      }
+      const deg = Math.round(clamped * 360);
+      tile.progressEl.style.opacity = '1';
+      const ring = `conic-gradient(rgba(255,210,120,0.85) 0deg, rgba(255,210,120,0.85) ${deg}deg, rgba(255,210,120,0.12) ${deg}deg, rgba(255,210,120,0.12) 360deg)`;
+      tile.progressEl.style.background = ring;
+    }
+
+    function clearTileProgress(tile) {
+      tile.dwellStart = 0;
+      tile.el.classList.remove('hovering');
+      setTileProgress(tile, 0);
+    }
+
+    function setMode(mode) {
+      if (mode === currentMode) {
+        applyCurrentCursor();
+        return;
+      }
+      currentMode = mode;
+      refreshModeTiles();
+      applyCurrentCursor();
+    }
+
+    function updateModeHover() {
+      if (!hoveredTile) return;
+      const tile = hoveredTile;
+      if (!tile.dwellStart) tile.dwellStart = performance.now();
+      const elapsed = performance.now() - tile.dwellStart;
+      const progress = Math.min(1, elapsed / MODE_DWELL_MS);
+      setTileProgress(tile, progress);
+      if (progress >= 1) {
+        clearTileProgress(tile);
+        hoveredTile = null;
+        setMode(tile.mode);
+      }
+    }
+
+    for (const tile of modeTiles) {
+      tile.el.addEventListener('pointerenter', () => {
+        if (hoveredTile && hoveredTile !== tile) {
+          clearTileProgress(hoveredTile);
+        }
+        hoveredTile = tile;
+        tile.dwellStart = performance.now();
+        tile.el.classList.add('hovering');
+        setTileProgress(tile, 0.001);
+      });
+      tile.el.addEventListener('pointerleave', () => {
+        if (hoveredTile === tile) hoveredTile = null;
+        clearTileProgress(tile);
+      });
+    }
+
+    const katanaCursor = { left: null, right: null };
+    let katanaCursorReady = false;
+    const katanaCursorImg = new Image();
+    katanaCursorImg.src = KATANA_CURSOR_SRC;
+    katanaCursorImg.onload = () => {
+      const iw = katanaCursorImg.width;
+      const ih = katanaCursorImg.height;
+      if (!iw || !ih) return;
+      const scale = Math.min(1, KATANA_CURSOR_MAX_PX / Math.max(iw, ih));
+      const dw = Math.round(iw * scale);
+      const dh = Math.round(ih * scale);
+
+      const build = flipX => {
+        const c = document.createElement('canvas');
+        c.width = dw; c.height = dh;
+        const cctx = c.getContext('2d');
+        cctx.imageSmoothingEnabled = true;
+        if (flipX) {
+          cctx.translate(dw, 0);
+          cctx.scale(-1, 1);
+        }
+        cctx.drawImage(katanaCursorImg, 0, 0, dw, dh);
+        const hx = Math.max(0, Math.min(dw - 1, Math.round(KATANA_CURSOR_HOTSPOT.x * scale)));
+        const hy = Math.max(0, Math.min(dh - 1, Math.round(KATANA_CURSOR_HOTSPOT.y * scale)));
+        return { url: c.toDataURL('image/png'), hx: flipX ? (dw - 1) - hx : hx, hy };
+      };
+
+      katanaCursor.left = build(false);
+      katanaCursor.right = build(true);
+      katanaCursorReady = true;
+      if (currentMode === 'katana') applyCurrentCursor();
+    };
+
+    const chiPointerImg = new Image();
+    chiPointerImg.src = CHI_POINTER_SRC;
+
+    refreshModeTiles();
+    applyCurrentCursor();
 
     const rand = (a, b) => a + Math.random() * (b - a);
     const nowMs = () => performance.now();
@@ -248,16 +497,17 @@
 
     function handleHoverActions(l) {
       const t = nowMs();
-      if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
-      l.lastHover = t;
-
-      if (l.state === "closed") {
-        l.state = "lit";
-      } else if (l.state === "lit") {
-        // prepare rope snap
-        l.state = "ascend";
+      if (currentMode === 'chi') {
+        if (l.state !== 'closed') return;
+        if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
+        l.lastHover = t;
+        l.state = 'lit';
+      } else if (currentMode === 'katana') {
+        if (l.state !== 'lit') return;
+        if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
+        l.lastHover = t;
+        l.state = 'ascend';
         l.ascendVy = rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX);
-        // capture a break point at snap moment (midpoint between anchor and attach)
         const p0 = { x: l.anchor.x, y: l.anchor.y };
         const p2 = { x: l.x, y: l.y + l.h * (0.5 - ROPE_ATTACH_FROM_BOTTOM_FRAC) };
         const mid = { x: (p0.x + p2.x)/2, y: (p0.y + p2.y)/2 };
@@ -321,6 +571,40 @@
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    function drawChiPointer() {
+      if (currentMode !== 'chi' || !pointer.inside) return;
+      const ready = chiPointerImg && chiPointerImg.complete && chiPointerImg.naturalWidth > 0;
+      const t = performance.now() / 1000;
+      const breathe = 1 + CHI_POINTER_BREATH * Math.sin(t * 2 * Math.PI * CHI_POINTER_BREATH_FREQ);
+      const size = Math.min(CHI_POINTER_MAX, CHI_POINTER_BASE * breathe);
+      const x = pointer.x;
+      const y = pointer.y;
+
+      const glowR = size * 0.75;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+      g.addColorStop(0, 'rgba(180,255,255,0.35)');
+      g.addColorStop(1, 'rgba(140,200,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.imageSmoothingQuality = 'high';
+      if (ready) {
+        ctx.drawImage(chiPointerImg, x - size/2, y - size/2, size, size);
+      } else {
+        ctx.fillStyle = '#cfefff';
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(6, size * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     function renderStars(t) {
@@ -544,6 +828,8 @@
     }
 
     function update(dt) {
+      updateModeHover();
+
       // ambient
       updateAmbient(dt);
       updateBgLanterns(dt);
@@ -626,6 +912,8 @@
         ctx.fill();
       }
       ctx.restore();
+
+      drawChiPointer();
     }
 
     function tick(tMs) {
