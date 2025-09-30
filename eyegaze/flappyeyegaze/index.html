@@ -103,7 +103,7 @@
             </div>
             <div class="bird-chip" role="option" aria-selected="false" data-bird="owl">
               <span class="bird-emoji">🦉</span>
-              <span class="translate" data-fr="Chouette (Nuit + sapins)" data-en="Owl (Night + firs)">Chouette (Nuit + sapins)</span>
+              <span class="translate" data-fr="Chouette (Nuit + fleurs)" data-en="Owl (Night + flowers)">Chouette (Nuit + fleurs)</span>
             </div>
             <div class="bird-chip" role="option" aria-selected="false" data-bird="parrot">
               <span class="bird-emoji">🦜</span>
@@ -336,7 +336,7 @@
       ],
       cycle: [0, 1, 2],
       scaleH: 6.5,
-      theme: 'night-firs'
+      theme: 'night-flowers'   // <<— owl = night sky + FLOWERS
     },
     parrot: {
       bases: [
@@ -389,7 +389,6 @@
   // Obstacles
   const pipes = [];       let pipeTimer   = 0;
   const flowerTunnels = []; let flowerTimer = 0;
-  const firTunnels = [];    let firTimer    = 0;
 
   // Clouds & stars
   const clouds = [];
@@ -441,7 +440,6 @@
     score = 0; scoreEl.textContent = '0';
     pipes.length = 0; pipeTimer = 0;
     flowerTunnels.length = 0; flowerTimer = 0;
-    firTunnels.length = 0; firTimer = 0;
     groundOffset = 0;
     bird.x = Math.round(W*0.25);
     bird.y = Math.round(H*0.45);
@@ -523,7 +521,7 @@
     }
     ctx.restore();
 
-    // Full bright moon
+    // Moon
     const mx = W*0.16, my = H*0.18;
     ctx.save();
     const mr = Math.max(28, Math.min(W,H)*0.05);
@@ -674,7 +672,7 @@
   }
 
   /* =========================
-     Flowers (sunny theme)
+     Flowers (used by parrot & owl themes)
      ========================= */
   function makeFlowerStyle(){
     const petals = ['#ff5e7e','#ff9f1c','#ffd166','#06d6a0','#7b5cff','#ff66c4','#ff7f50'];
@@ -768,207 +766,6 @@
   }
 
   /* =========================
-     NIGHT FIR TREES (owl theme)
-     ========================= */
-  /* =========================
-   CHRISTMAS-TREE LOOK
-   ========================= */
-function makeFirStyle(){
-  // deeper greens + warmer bark = “Christmas tree” vibe
-  return {
-    trunk1: '#5a3a2a',
-    trunk2: '#3e281f',
-    foliage: '#256d2a',
-    foliageShade: '#1e5723',
-    highlight: 'rgba(255,255,255,0.06)'
-  };
-}
-// 1) Tronc plus mince (garde les rainures)
-// 1) Tronc plus mince (garde les rainures)
-function drawTrunkRect(r, style){
-  const grad = ctx.createLinearGradient(r.x, 0, r.x + r.w, 0);
-  grad.addColorStop(0, style.trunk2);
-  grad.addColorStop(0.5, style.trunk1);
-  grad.addColorStop(1, style.trunk2);
-  ctx.fillStyle = grad;
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-
-  ctx.fillStyle = 'rgba(0,0,0,0.10)';
-  const grooves = 2;
-  for (let i = 1; i <= grooves; i++){
-    const gx = r.x + Math.round((i/(grooves+1)) * r.w);
-    ctx.fillRect(gx, r.y, 1, r.h);
-  }
-}
-
-// 2) Tiers géants couvrant toute la longueur, AVEC chevauchement
-// Bas = 2x le haut, pointe qui dépasse, et recouvrement du haut de tronc.
-function buildFirHitboxes(t){
-  const xCenter = t.x + t.w/2;
-  const bottomY = t.topH + t.gap;
-  const worldBottom = H - GH;
-
-  const topStemH    = Math.max(0, t.topH);
-  const bottomStemH = Math.max(0, worldBottom - bottomY);
-
-  // tronc mince (sera recouvert)
-  const trunkW = Math.max(8, Math.round(PIPE_W * 0.55));
-
-  // cône: étroit à la pointe, large vers l’ouverture
-  const baseTierW = Math.max(trunkW*3.0, PIPE_W*3.2);
-  const tipTierW  = Math.max(trunkW*1.05, PIPE_W*1.20);
-
-  // grands triangles + chevauchement
-  const TIERS_TOP    = 4;   // 4 grands étages en haut
-  const TIERS_BOTTOM = 5;   // 5 en bas (peut rester 4 si tu veux)
-  const OVERLAP      = Math.max(8, Math.round(PIPE_W * 0.28));
-  const OVERHANG     = Math.max(10, PIPE_W * 0.45);  // pointe qui dépasse
-  const GAP_COVER    = Math.max(6,  Math.round(PIPE_W * 0.18)); // mord dans l’ouverture pour cacher le haut du tronc
-
-  // On force le ratio bas = 2x haut, sans dépasser la longueur dispo.
-  const availTop    = topStemH + OVERHANG;
-  const availBottom = bottomStemH + OVERHANG;
-  const topTarget   = Math.min(availTop, Math.max(0, (availBottom)/2)); // haut <= moitié du bas dispo
-  const botTarget   = Math.min(availBottom, topTarget * 2);             // bas = 2x haut (borné par dispo)
-
-  // utilitaire: hauteur de triangle pour couvrir "total" avec chevauchement
-  function tierH(total, n){ return (total + (n-1)*OVERLAP) / n; }
-
-  const tiersTop = [];
-  const tiersBot = [];
-
-  function pushTier(list, apexY, h, w, inverted){
-    list.push({
-      x: Math.round(xCenter - w/2),
-      y: Math.round(inverted ? (apexY - h) : apexY),
-      w: Math.round(w),
-      h: Math.round(h),
-      apexY,
-      inverted
-    });
-  }
-
-  // ----- PARTIE HAUTE (inversée) -----
-  if (topStemH > 0 && topTarget > 0){
-    const hTop = tierH(topTarget, TIERS_TOP);
-    // première pointe au-dessus du sommet + on finit en mordant légèrement l’ouverture
-    const firstApex = t.topH - topStemH - OVERHANG; // pointe la plus haute
-    for (let i=0;i<TIERS_TOP;i++){
-      // 0..1 : de la pointe vers la base (ouverture)
-      const tNorm = (i + 0.5) / TIERS_TOP;
-      const w = tipTierW + tNorm * (baseTierW - tipTierW);
-      // on avance vers l’ouverture, en chevauchant
-      let apexY = firstApex + i * (hTop - OVERLAP);
-      // le dernier étage mord un peu dans l’ouverture pour cacher le haut du tronc
-      if (i === TIERS_TOP - 1) apexY += GAP_COVER;
-      pushTier(tiersTop, apexY, hTop, w, /*inverted*/ true);
-    }
-  }
-
-  // ----- PARTIE BASSE -----
-  if (bottomStemH > 0 && botTarget > 0){
-    const hBot = tierH(botTarget, TIERS_BOTTOM);
-    const firstApex = bottomY; // part du bord du tronc
-    for (let i=0;i<TIERS_BOTTOM;i++){
-      const tNorm = (i + 0.5) / TIERS_BOTTOM;
-      const w = tipTierW + tNorm * (baseTierW - tipTierW);
-      let apexY = firstApex + i * (hBot - OVERLAP);
-      // le tout premier étage mord dans l’ouverture pour masquer la "tête" du tronc
-      if (i === 0) apexY += Math.max(0, GAP_COVER - 2);
-      pushTier(tiersBot, apexY, hBot, w, /*inverted*/ false);
-    }
-  }
-
-  // Tronc (principalement pour collisions; visuellement, il sera masqué par les étages proches de l’ouverture)
-  t._hit = {
-    topTrunk:    { x: Math.round(xCenter - trunkW/2), y: 0,       w: trunkW, h: topStemH },
-    bottomTrunk: { x: Math.round(xCenter - trunkW/2), y: bottomY, w: trunkW, h: bottomStemH },
-    tiersTop,
-    tiersBot
-  };
-}
-
-
-// slightly narrower trunk with subtle grooves/shading
-function drawTrunkRect(r, style){
-  const grad = ctx.createLinearGradient(r.x, 0, r.x + r.w, 0);
-  grad.addColorStop(0, style.trunk2);
-  grad.addColorStop(0.5, style.trunk1);
-  grad.addColorStop(1, style.trunk2);
-  ctx.fillStyle = grad;
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-
-  ctx.fillStyle = 'rgba(0,0,0,0.10)';
-  const grooves = 3;
-  for (let i = 1; i <= grooves; i++){
-    const gx = r.x + Math.round((i/(grooves+1)) * r.w);
-    ctx.fillRect(gx, r.y, 1, r.h);
-  }
-}
-
-// fuller tier with small shadow + faint edge highlight
-function drawTier(tier, style){
-  const {x, w, h, apexY, inverted} = tier;
-  const xCenter = x + w/2;
-
-  ctx.save();
-  ctx.translate(xCenter, apexY);
-  if (inverted) ctx.scale(1, -1);
-
-  // main triangle
-  ctx.fillStyle = style.foliage;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);          // apex
-  ctx.lineTo(-w/2, h);
-  ctx.lineTo( w/2, h);
-  ctx.closePath();
-  ctx.fill();
-
-  // right-face shadow to give depth
-  ctx.fillStyle = style.foliageShade;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(w/2, h);
-  ctx.lineTo(0,   h);
-  ctx.closePath();
-  ctx.fill();
-
-  // faint highlight near left edge
-  ctx.fillStyle = style.highlight;
-  ctx.beginPath();
-  ctx.moveTo(-w*0.22, h*0.38);
-  ctx.lineTo(-w*0.06, h*0.18);
-  ctx.lineTo(-w*0.06, h*0.34);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.restore();
-}
-
-
-  function drawFirTunnel(t){
-    if (!t._hit) buildFirHitboxes(t);
-    const style = t.style || makeFirStyle();
-    drawTrunkRect(t._hit.topTrunk, style);
-    drawTrunkRect(t._hit.bottomTrunk, style);
-    for (const tier of t._hit.tiersTop) drawTier(tier, style);
-    for (const tier of t._hit.tiersBot) drawTier(tier, style);
-  }
-
-  function collideFirTunnel(t, cx, cy, cr){
-    if (!t._hit) buildFirHitboxes(t);
-    const trunks = [t._hit.topTrunk, t._hit.bottomTrunk];
-    for (const r of trunks){
-      if (circleRectCollide(cx, cy, cr, r.x, r.y, r.w, r.h)) return true;
-    }
-    const tiers = t._hit.tiersTop.concat(t._hit.tiersBot);
-    for (const r of tiers){
-      if (circleRectCollide(cx, cy, cr, r.x, r.y, r.w, r.h)) return true;
-    }
-    return false;
-  }
-
-  /* =========================
      Bird drawing
      ========================= */
   function drawBirdSprite(b) {
@@ -1054,6 +851,9 @@ function drawTier(tier, style){
   }
   requestAnimationFrame(step);
 
+  function usingFlowers(){ return currentTheme === 'sunny-flowers' || currentTheme === 'night-flowers'; }
+  function isNight(){ return currentTheme === 'night-flowers'; }
+
   function update(dt, now){
     rescaleConfig();
 
@@ -1082,7 +882,7 @@ function drawTier(tier, style){
 
     bird.y = clamp(bird.y, bird.r+5, H - GH - bird.r - 5);
 
-    if (currentTheme === 'sunny-flowers'){
+    if (usingFlowers()){
       // FLOWER SPAWN
       flowerTimer -= dt;
       if (flowerTimer <= 0){
@@ -1104,27 +904,6 @@ function drawTier(tier, style){
         }
       }
       while (flowerTunnels.length && flowerTunnels[0].x + flowerTunnels[0].w < -10) flowerTunnels.shift();
-
-    } else if (currentTheme === 'night-firs'){
-      // FIR SPAWN
-      firTimer -= dt;
-      if (firTimer <= 0){
-        const gap = cfg.gap;
-        const margin = 30;
-        const minY = margin + 30, maxY = H - margin - 30 - GH;
-        const center = rand(minY + gap/2, Math.max(minY + gap/2, maxY - gap/2));
-        firTunnels.push({ x: W + 8, topH: center - gap/2, w: PIPE_W, gap, scored:false, _hit:null, style: makeFirStyle() });
-        if (firTunnels.length > 12) firTunnels.shift();
-        firTimer = cfg.spawn;
-      }
-      for (const tN of firTunnels){
-        tN.x -= (cfg.speed * 60) * dt;
-        tN._hit = null; // geometry depends on x
-        if (!tN.scored && tN.x + tN.w < bird.x - bird.r){
-          tN.scored = true; score++; scoreEl.textContent = score; scoreChime();
-        }
-      }
-      while (firTunnels.length && firTunnels[0].x + firTunnels[0].w < -10) firTunnels.shift();
 
     } else {
       // PIPES
@@ -1152,7 +931,7 @@ function drawTier(tier, style){
     const hitGround = bird.y + bird.r > H - GH;
     let hitObstacle = false;
 
-    if (currentTheme === 'sunny-flowers'){
+    if (usingFlowers()){
       for (const f of flowerTunnels){
         if (!f._hit){
           const headSize = Math.max(28, PIPE_W*1.2);
@@ -1174,10 +953,6 @@ function drawTier(tier, style){
         const c1 = ( (bird.x - h.headTop.cx)**2 + (bird.y - h.headTop.cy)**2 <= (bird.r + h.headTop.r)**2 );
         const c2 = ( (bird.x - h.headBottom.cx)**2 + (bird.y - h.headBottom.cy)**2 <= (bird.r + h.headBottom.r)**2 );
         if (c1||c2){ hitObstacle = true; break; }
-      }
-    } else if (currentTheme === 'night-firs'){
-      for (const tN of firTunnels){
-        if (collideFirTunnel(tN, bird.x, bird.y, bird.r)){ hitObstacle = true; break; }
       }
     } else {
       for (const p of pipes){
@@ -1202,20 +977,18 @@ function drawTier(tier, style){
   }
 
   function draw(){
-    if (currentTheme === 'night-firs') drawSkyNight();
+    if (isNight()) drawSkyNight();
     else if (currentTheme === 'sunny-flowers') drawSkySunny();
     else { drawSkyDay(); drawSun(); }
 
-    if (currentTheme !== 'night-firs') {
+    if (!isNight()) {
       ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.92)';
       for (const c of clouds) roundedCloud(c);
       ctx.restore();
     }
 
-    if (currentTheme === 'sunny-flowers'){
+    if (usingFlowers()){
       for (const f of flowerTunnels) drawFlowerTunnel(f);
-    } else if (currentTheme === 'night-firs'){
-      for (const tN of firTunnels) drawFirTunnel(tN);
     } else {
       for (const p of pipes) drawPipe(p.x, p.topH, p.w, p.gap);
     }

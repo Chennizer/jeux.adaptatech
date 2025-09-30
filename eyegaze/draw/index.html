@@ -84,8 +84,10 @@
   .swatch .dwell{ position:absolute; left:50%; top:50%; width:100%; height:100%; transform:translate(-50%,-50%) scale(.08);
     transform-origin:center; pointer-events:none; border-radius:50%; background-color:var(--dwell-red); will-change:transform; z-index:1; }
 
-  /* dwell overlay for brush buttons */
-  .brushBtn .dwell{
+  /* dwell overlay for brush + mode + save buttons */
+  .brushBtn .dwell,
+  .modeBtn .dwell,
+  #saveBtn .dwell{
     position:absolute; left:50%; top:50%; width:100%; height:100%;
     transform:translate(-50%,-50%) scale(.08); transform-origin:center; pointer-events:none;
     border-radius:50%; background-color:var(--dwell-red); will-change:transform; z-index:1;
@@ -106,11 +108,12 @@
   .brushBtn.active{ border-color:#333; background:#ececec }
 
   #modeRow{ display:flex; gap:8px; justify-content:center }
-  .modeBtn{ padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fafafa; color:#000; font:600 12px/1 system-ui,Arial; cursor:pointer }
+  .modeBtn{ padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fafafa; color:#000; font:600 12px/1 system-ui,Arial; cursor:pointer;
+    position:relative; overflow:hidden; } /* for dwell overlay */
   .modeBtn.active{ border-color:#333; background:#ececec }
 
   #saveBtn{ appearance:none; width:var(--save-btn); height:var(--save-btn); border-radius:var(--save-radius);
-    border:1px solid #ddd; background:#fafafa; color:#000; align-self:center; cursor:pointer }
+    border:1px solid #ddd; background:#fafafa; color:#000; align-self:center; cursor:pointer; position:relative; overflow:hidden; } /* for dwell overlay */
 
   /* Stage */
   .stage{ position:fixed; left:var(--sidebar-w); right:0; top:0; bottom:0; background:#fff; }
@@ -381,14 +384,9 @@ document.getElementById('outlineFile').addEventListener('change',(e)=>{ const f=
 function sanitizeLabel(s){
   if (!s) return '';
   let out = String(s);
-
-  // Remove standalone or decorated "CVI" tokens: "cvi", "CVI", "cvi_", "- cvi", "(CVI)" etc.
   out = out.replace(/(^|[\s_\-\(\[\{])cvi([\s_\-\)\]\}]|$)/ig, ' ');
-  // Also remove leading "cvi-" or "cvi_" or "cvi "
   out = out.replace(/^cvi[\s_\-]+/i, '');
-  // Collapse whitespace and trim
   out = out.replace(/\s{2,}/g, ' ').trim();
-
   return out;
 }
 
@@ -538,6 +536,24 @@ function startDwellCircle(el, durationMs){
 }
 function resetDwellCircle(el){ const overlay=el.querySelector('.dwell'); if(overlay) overlay.remove(); }
 
+/* Generic hover-to-click wiring (used by mode & save) */
+function wireHoverToClick(el, onActivate){
+  let timer = null;
+  const clearTimer = ()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+
+  el.addEventListener('mouseenter', ()=>{
+    clearTimer();
+    resetDwellCircle(el);
+    startDwellCircle(el, HOVER_DWELL_MS);
+    timer = setTimeout(()=>{ onActivate(); }, HOVER_DWELL_MS+5);
+  });
+
+  el.addEventListener('mouseleave', ()=>{ clearTimer(); resetDwellCircle(el); });
+
+  el.addEventListener('click', ()=>{ clearTimer(); resetDwellCircle(el); onActivate(); });
+  el.addEventListener('touchstart', ()=>{ clearTimer(); resetDwellCircle(el); onActivate(); });
+}
+
 function wireSwatches(){
   const swatches = document.querySelectorAll('.swatch');
   swatches.forEach(s=>{
@@ -633,8 +649,19 @@ function layoutPalette(){
 /* ===== Brush mode + cursor ===== */
 const modeDraw=document.getElementById('modeDraw');
 const modeErase=document.getElementById('modeErase');
-modeDraw.onclick=()=>{ erasing=false; modeDraw.classList.add('active'); modeErase.classList.remove('active'); }
-modeErase.onclick=()=>{ erasing=true;  modeErase.classList.add('active'); modeDraw.classList.remove('active'); }
+
+function activateDrawMode(){
+  erasing=false;
+  modeDraw.classList.add('active');
+  modeErase.classList.remove('active');
+  modeDraw.classList.add('flash'); setTimeout(()=>modeDraw.classList.remove('flash'),460);
+}
+function activateEraseMode(){
+  erasing=true;
+  modeErase.classList.add('active');
+  modeDraw.classList.remove('active');
+  modeErase.classList.add('flash'); setTimeout(()=>modeErase.classList.remove('flash'),460);
+}
 
 /* Pointer preview:
    Small same; Medium & Large are 1.5× bigger VISUALLY (pointer only). */
@@ -657,7 +684,7 @@ addEventListener('touchmove',e=>{ const t=e.touches[0]; if(t) updateCursor(t.cli
 
 /* ===== Save ===== */
 function exportPNG(){ const m=document.createElement('canvas'); m.width=ink.width; m.height=ink.height; const mc=m.getContext('2d'); mc.setTransform(ic.getTransform()); mc.drawImage(out,0,0); mc.drawImage(ink,0,0); return m.toDataURL('image/png'); }
-document.getElementById('saveBtn').onclick=()=>{ const a=document.createElement('a'); a.href=exportPNG(); a.download='drawing.png'; a.click(); };
+function doSave(){ const a=document.createElement('a'); a.href=exportPNG(); a.download='drawing.png'; a.click(); }
 
 /* ===== Menu wiring ===== */
 const themeSelect=document.getElementById('themeSelect');
@@ -683,6 +710,12 @@ startButton.onclick=async ()=>{
   await fitCanvasPreserveInk();
   buildPalette(parseInt(paletteSizeSelect.value,10)||7);
   syncScratch();
+
+  /* Wire hover-to-click for mode + save (after DOM visible) */
+  const saveBtn = document.getElementById('saveBtn');
+  wireHoverToClick(modeDraw, activateDrawMode);
+  wireHoverToClick(modeErase, activateEraseMode);
+  wireHoverToClick(saveBtn, doSave);
 
   requestAnimationFrame(async ()=>{ await fitCanvasPreserveInk(); rebuildMaskCache(); redrawMaskGuide(); });
 };
