@@ -15,7 +15,7 @@
     #game {
       display: block;
       width: 100vw; height: 100vh;
-      cursor: crosshair;
+      cursor: none;
       background: #000;
     }
     #startOverlay {
@@ -32,6 +32,70 @@
       cursor: pointer;
     }
     #startBtn:active { transform: translateY(1px); }
+
+    #modeSelector {
+      position: fixed;
+      left: 24px;
+      bottom: 24px;
+      display: flex;
+      gap: 14px;
+      z-index: 6;
+      pointer-events: none;
+    }
+
+    .mode-tile {
+      pointer-events: auto;
+      width: 78px;
+      height: 78px;
+      border-radius: 18px;
+      border: 2px solid rgba(255,255,255,0.22);
+      background: rgba(0,0,0,0.55);
+      display: grid;
+      place-items: center;
+      position: relative;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      color: #fff;
+    }
+
+    .mode-tile img {
+      width: 62%;
+      height: auto;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55));
+    }
+
+    .mode-tile .progress-bar {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      height: 6px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.18);
+      overflow: hidden;
+    }
+
+    .mode-tile .progress-bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: calc(var(--progress, 0) * 100%);
+      background: linear-gradient(90deg, #d4a100, #ffe17a);
+      transition: width 0.06s ease-out;
+    }
+
+    .mode-tile.dwell {
+      transform: scale(1.05);
+      box-shadow: 0 0 14px rgba(212,161,0,0.3);
+    }
+
+    .mode-tile.active {
+      border-color: #d4a100;
+      box-shadow: 0 0 18px rgba(212,161,0,0.55);
+    }
+
+    .mode-tile.active .progress-bar::after {
+      background: linear-gradient(90deg, #ffe17a, #ffd24d);
+    }
   </style>
 </head>
 <body>
@@ -39,6 +103,16 @@
     <button id="startBtn">Start • Fullscreen</button>
   </div>
   <canvas id="game"></canvas>
+  <div id="modeSelector" aria-label="Interaction mode">
+    <button class="mode-tile" data-mode="chi" aria-pressed="true">
+      <img src="../../images/samurai/chi.png" alt="Chi" />
+      <div class="progress-bar" aria-hidden="true"></div>
+    </button>
+    <button class="mode-tile" data-mode="katana" aria-pressed="false">
+      <img src="../../images/samurai/katana.png" alt="Katana" />
+      <div class="progress-bar" aria-hidden="true"></div>
+    </button>
+  </div>
 
   <script>
   (() => {
@@ -46,6 +120,8 @@
        TUNABLES
     ======================= */
     const BG_SRC      = "../../images/samurai/lampbg.png";
+    const KATANA_SRC  = "../../images/samurai/katana.png";
+    const CHI_POINTER_SRC = "../../images/samurai/chi.png";
 
     // Two lamp variants
     const CLOSED1_SRC = "../../images/samurai/closedlamp1.png";
@@ -93,6 +169,14 @@
       { core: '255,185,185', halo: '255,185,185' }, // blush
       { core: '185,220,255', halo: '185,220,255' }, // pale blue
     ];
+
+    const MODE_DWELL_MS = 500;
+    const KATANA_CURSOR_MAX_PX = 124;
+    const KATANA_HOTSPOT_ORIG = { x: 12, y: 28 };
+    const KATANA_MOVE_THRESH = 2;
+
+    const CHI_POINTER_BASE_PX = 96;
+    const CHI_POINTER_BREATH = 0.05;
 
     // Idle motion
     const IDLE_BOB_AMP_CLOSED = 2.2;
@@ -162,17 +246,176 @@
     const imgClosed2 = new Image(); imgClosed2.src = CLOSED2_SRC;
     const imgLit2    = new Image(); imgLit2.src    = LIT2_SRC;
 
+    const chiPointerImg = new Image(); chiPointerImg.src = CHI_POINTER_SRC;
+
+    const katanaImg = new Image();
+    let katanaReady = false;
+    let katanaLeft = null;
+    let katanaRight = null;
+
+    let currentMode = 'chi';
+    let cursorOrient = 'right';
+
     function getClosedImg(type){ return type===1 ? imgClosed1 : imgClosed2; }
     function getLitImg(type){    return type===1 ? imgLit1    : imgLit2; }
 
-    const pointer = { x: -9999, y: -9999, inside: false };
+    const pointer = { x: -9999, y: -9999, prevX: -9999, inside: false };
     canvas.addEventListener('pointermove', e => {
       const rect = canvas.getBoundingClientRect();
-      pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-      pointer.y = (e.clientY - rect.top)  * (canvas.height / rect.height);
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top)  * (canvas.height / rect.height);
+      const dx = (pointer.prevX === -9999) ? 0 : (x - pointer.prevX);
+
+      pointer.x = x;
+      pointer.y = y;
+      pointer.prevX = x;
       pointer.inside = true;
+
+      if (currentMode === 'katana' && katanaReady) {
+        if (dx > KATANA_MOVE_THRESH && cursorOrient !== 'right') {
+          cursorOrient = 'right';
+          applyKatanaCursor();
+        } else if (dx < -KATANA_MOVE_THRESH && cursorOrient !== 'left') {
+          cursorOrient = 'left';
+          applyKatanaCursor();
+        }
+      }
     });
-    canvas.addEventListener('pointerleave', () => pointer.inside = false);
+    canvas.addEventListener('pointerleave', () => {
+      pointer.inside = false;
+      pointer.prevX = -9999;
+    });
+
+    function applyKatanaCursor() {
+      if (currentMode !== 'katana') return;
+      if (katanaReady && katanaLeft && katanaRight) {
+        const data = (cursorOrient === 'right') ? katanaRight : katanaLeft;
+        canvas.style.cursor = `url("${data.url}") ${data.hx} ${data.hy}, crosshair`;
+      } else {
+        canvas.style.cursor = 'crosshair';
+      }
+    }
+
+    function applyModeCursor() {
+      if (currentMode === 'katana') {
+        applyKatanaCursor();
+      } else {
+        canvas.style.cursor = 'none';
+      }
+    }
+
+    katanaImg.onload = () => {
+      const iw = katanaImg.width;
+      const ih = katanaImg.height;
+      if (!iw || !ih) { katanaReady = false; return; }
+      const scale = Math.min(1, KATANA_CURSOR_MAX_PX / Math.max(iw, ih));
+      const dw = Math.round(iw * scale);
+      const dh = Math.round(ih * scale);
+
+      const leftCanvas = document.createElement('canvas');
+      leftCanvas.width = dw;
+      leftCanvas.height = dh;
+      const lctx = leftCanvas.getContext('2d');
+      lctx.imageSmoothingEnabled = true;
+      lctx.drawImage(katanaImg, 0, 0, dw, dh);
+
+      const rightCanvas = document.createElement('canvas');
+      rightCanvas.width = dw;
+      rightCanvas.height = dh;
+      const rctx = rightCanvas.getContext('2d');
+      rctx.imageSmoothingEnabled = true;
+      rctx.translate(dw, 0);
+      rctx.scale(-1, 1);
+      rctx.drawImage(katanaImg, 0, 0, dw, dh);
+
+      const hxLeft  = Math.max(0, Math.min(dw - 1, Math.round(KATANA_HOTSPOT_ORIG.x * scale)));
+      const hyLeft  = Math.max(0, Math.min(dh - 1, Math.round(KATANA_HOTSPOT_ORIG.y * scale)));
+      const hxRight = (dw - 1) - hxLeft;
+      const hyRight = hyLeft;
+
+      katanaLeft  = { url: leftCanvas.toDataURL('image/png'),  hx: hxLeft,  hy: hyLeft };
+      katanaRight = { url: rightCanvas.toDataURL('image/png'), hx: hxRight, hy: hyRight };
+      katanaReady = true;
+      if (currentMode === 'katana') applyKatanaCursor();
+    };
+    katanaImg.onerror = () => {
+      katanaReady = false;
+      katanaLeft = katanaRight = null;
+      if (currentMode === 'katana') canvas.style.cursor = 'crosshair';
+    };
+    katanaImg.src = KATANA_SRC;
+
+    const modeSelector = document.getElementById('modeSelector');
+    const modeTiles = Array.from(modeSelector.querySelectorAll('.mode-tile'));
+    const modeHover = { tile: null, start: 0, triggered: false };
+
+    function updateModeUI() {
+      for (const tile of modeTiles) {
+        const isActive = tile.dataset.mode === currentMode;
+        tile.classList.toggle('active', isActive);
+        tile.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        if (modeHover.tile !== tile) {
+          tile.classList.remove('dwell');
+          tile.style.setProperty('--progress', '0');
+        }
+      }
+    }
+
+    function setMode(mode) {
+      if (mode !== 'chi' && mode !== 'katana') return;
+      if (currentMode === mode) {
+        updateModeUI();
+        applyModeCursor();
+        return;
+      }
+      currentMode = mode;
+      cursorOrient = 'right';
+      if (currentMode === 'katana') {
+        pointer.prevX = pointer.x;
+      }
+      updateModeUI();
+      applyModeCursor();
+    }
+
+    function clearModeHover(tile) {
+      if (!tile) return;
+      if (modeHover.tile === tile) {
+        modeHover.tile = null;
+        modeHover.start = 0;
+        modeHover.triggered = false;
+      }
+      tile.classList.remove('dwell');
+      tile.style.setProperty('--progress', '0');
+      tile.blur();
+    }
+
+    function updateModeHover() {
+      if (!modeHover.tile) return;
+      const elapsed = performance.now() - modeHover.start;
+      const progress = Math.min(1, elapsed / MODE_DWELL_MS);
+      modeHover.tile.style.setProperty('--progress', progress.toFixed(3));
+      if (progress >= 1 && !modeHover.triggered) {
+        modeHover.triggered = true;
+        setMode(modeHover.tile.dataset.mode);
+      }
+    }
+
+    modeTiles.forEach(tile => {
+      tile.addEventListener('pointerenter', () => {
+        modeHover.tile = tile;
+        modeHover.start = performance.now();
+        modeHover.triggered = false;
+        tile.classList.add('dwell');
+      });
+      tile.addEventListener('pointerleave', () => clearModeHover(tile));
+      tile.addEventListener('pointercancel', () => clearModeHover(tile));
+      tile.addEventListener('click', e => {
+        e.preventDefault();
+        setMode(tile.dataset.mode);
+      });
+    });
+
+    setMode(currentMode);
 
     const rand = (a, b) => a + Math.random() * (b - a);
     const nowMs = () => performance.now();
@@ -249,15 +492,14 @@
     function handleHoverActions(l) {
       const t = nowMs();
       if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
-      l.lastHover = t;
 
-      if (l.state === "closed") {
+      if (currentMode === 'chi' && l.state === "closed") {
+        l.lastHover = t;
         l.state = "lit";
-      } else if (l.state === "lit") {
-        // prepare rope snap
+      } else if (currentMode === 'katana' && l.state === "lit") {
+        l.lastHover = t;
         l.state = "ascend";
         l.ascendVy = rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX);
-        // capture a break point at snap moment (midpoint between anchor and attach)
         const p0 = { x: l.anchor.x, y: l.anchor.y };
         const p2 = { x: l.x, y: l.y + l.h * (0.5 - ROPE_ATTACH_FROM_BOTTOM_FRAC) };
         const mid = { x: (p0.x + p2.x)/2, y: (p0.y + p2.y)/2 };
@@ -544,6 +786,8 @@
     }
 
     function update(dt) {
+      updateModeHover();
+
       // ambient
       updateAmbient(dt);
       updateBgLanterns(dt);
@@ -570,6 +814,38 @@
           l.x = Math.min(W - SIDE_PAD_H - l.w * 0.5, Math.max(SIDE_PAD_H + l.w * 0.5, l.x));
         }
       }
+    }
+
+    function drawChiPointer() {
+      if (currentMode !== 'chi' || !pointer.inside) return;
+      const ready = chiPointerImg && chiPointerImg.complete && chiPointerImg.naturalWidth > 0;
+      const t = performance.now() / 1000;
+      const scale = 1 + CHI_POINTER_BREATH * Math.sin(t * 2 * Math.PI * 0.8);
+      const baseSize = ready ? Math.min(CHI_POINTER_BASE_PX, chiPointerImg.naturalWidth) : CHI_POINTER_BASE_PX;
+      const size = baseSize * scale;
+      const x = pointer.x;
+      const y = pointer.y;
+      const glowR = size * 0.55;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+      g.addColorStop(0, 'rgba(200,240,255,0.28)');
+      g.addColorStop(1, 'rgba(120,200,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, glowR, 0, Math.PI * 2); ctx.fill();
+
+      ctx.globalCompositeOperation = 'source-over';
+      if (ready) {
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(chiPointerImg, x - size / 2, y - size / 2, size, size);
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(6, size * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     function render() {
@@ -626,6 +902,8 @@
         ctx.fill();
       }
       ctx.restore();
+
+      drawChiPointer();
     }
 
     function tick(tMs) {
