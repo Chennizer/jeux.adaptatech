@@ -426,19 +426,10 @@
     let cursorOrient = 'left';
 
     function applyCurrentCursor() {
-      if (currentMode === 'chi') {
-        canvas.style.cursor = 'none';
-        return;
-      }
-      if (katanaCursorReady) {
-        const data = cursorOrient === 'right' ? katanaCursor.right : katanaCursor.left;
-        canvas.style.cursor = `url(${data.url}) ${data.hx} ${data.hy}, auto`;
-      } else {
-        canvas.style.cursor = 'crosshair';
-      }
+      // We draw both chi and katana pointers directly on the canvas so keep the native
+      // cursor hidden while hovering the play area.
+      canvas.style.cursor = 'none';
     }
-
-    canvas.style.cursor = 'none';
 
     function updatePointerFromEvent(e) {
       const rect = canvas.getBoundingClientRect();
@@ -548,7 +539,7 @@
       const dw = Math.round(iw * scale);
       const dh = Math.round(ih * scale);
 
-      const build = flipX => {
+      const makeCanvas = flipX => {
         const c = document.createElement('canvas');
         c.width = dw; c.height = dh;
         const cctx = c.getContext('2d');
@@ -558,13 +549,14 @@
           cctx.scale(-1, 1);
         }
         cctx.drawImage(katanaCursorImg, 0, 0, dw, dh);
-        const hx = Math.max(0, Math.min(dw - 1, Math.round(KATANA_CURSOR_HOTSPOT.x * scale)));
-        const hy = Math.max(0, Math.min(dh - 1, Math.round(KATANA_CURSOR_HOTSPOT.y * scale)));
-        return { url: c.toDataURL('image/png'), hx: flipX ? (dw - 1) - hx : hx, hy };
+        return c;
       };
 
-      katanaCursor.left = build(false);
-      katanaCursor.right = build(true);
+      const hx = Math.max(0, Math.min(dw - 1, Math.round(KATANA_CURSOR_HOTSPOT.x * scale)));
+      const hy = Math.max(0, Math.min(dh - 1, Math.round(KATANA_CURSOR_HOTSPOT.y * scale)));
+
+      katanaCursor.left = { canvas: makeCanvas(false), hx, hy };
+      katanaCursor.right = { canvas: makeCanvas(true), hx: (dw - 1) - hx, hy };
       katanaCursorReady = true;
       if (currentMode === 'katana') applyCurrentCursor();
     };
@@ -755,6 +747,33 @@
         ctx.beginPath();
         ctx.arc(x, y, Math.max(6, size * 0.12), 0, Math.PI * 2);
         ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawKatanaPointer() {
+      if (currentMode !== 'katana' || !pointer.inside) return;
+      const data = cursorOrient === 'right' ? katanaCursor.right : katanaCursor.left;
+      const ready = katanaCursorReady && data && data.canvas;
+      const hx = data ? data.hx : 0;
+      const hy = data ? data.hy : 0;
+      const drawX = pointer.x - hx;
+      const drawY = pointer.y - hy;
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      if (ready) {
+        ctx.drawImage(data.canvas, drawX, drawY, data.canvas.width, data.canvas.height);
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pointer.x - 18, pointer.y - 18);
+        ctx.lineTo(pointer.x + 22, pointer.y + 22);
+        ctx.moveTo(pointer.x + 22, pointer.y - 18);
+        ctx.lineTo(pointer.x - 18, pointer.y + 22);
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -1066,6 +1085,7 @@
       ctx.restore();
 
       drawChiPointer();
+      drawKatanaPointer();
     }
 
     function tick(tMs) {
