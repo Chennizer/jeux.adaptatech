@@ -233,25 +233,26 @@
     }
 
     #enemyStatus {
-      width: 100%;
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
       align-items: center;
-      padding-inline: clamp(12px, 3vw, 28px);
+      gap: 10px;
+      margin-bottom: clamp(10px, 2vh, 18px);
+      text-align: center;
     }
 
     .enemy-name {
       font-size: clamp(1rem, 2vw, 1.4rem);
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       font-weight: 700;
-      color: rgba(252, 211, 77, 0.9);
-      text-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+      color: rgba(252, 211, 77, 0.88);
     }
 
     #enemyHearts {
       display: flex;
       gap: 6px;
+      justify-content: center;
     }
 
     #enemyHearts .heart {
@@ -269,7 +270,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
+      cursor: inherit;
       padding: clamp(6px, 1vw, 12px);
       border-radius: clamp(180px, 32vh, 260px);
     }
@@ -382,7 +383,7 @@
       text-transform: uppercase;
       letter-spacing: 0.24em;
       font-weight: 700;
-      cursor: pointer;
+      cursor: inherit;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
@@ -513,6 +514,20 @@
       const defeatAudio = new Audio("../../sounds/samurai/spacerockexplosion2.mp3");
       const victoryAudio = new Audio("../../sounds/samurai/spacerockexplosion1.mp3");
 
+      const cursorConfigs = {
+        chi: {
+          src: "../../images/samurai/chi.png",
+          maxSize: 96,
+        },
+        katana: {
+          src: "../../images/samurai/katana.png",
+          maxSize: 124,
+          hotspot: { x: 12, y: 28 },
+        },
+      };
+      const cursorCache = {};
+      const cursorPromises = {};
+
       Object.values(abilities).forEach(ability => { ability.audio.preload = "auto"; ability.audio.volume = 0.65; });
       [enemyAudio, defeatAudio, victoryAudio].forEach(a => { a.preload = "auto"; a.volume = 0.6; });
 
@@ -543,6 +558,8 @@
       const resultTitle = document.getElementById("resultTitle");
       const resultSubtitle = document.getElementById("resultSubtitle");
       const restartBtn = document.getElementById("restartBtn");
+
+      Object.keys(cursorConfigs).forEach(mode => loadCursor(mode));
 
       function buildHearts(container, total) {
         container.innerHTML = "";
@@ -602,6 +619,70 @@
         setTimeout(() => tag.remove(), 900);
       }
 
+      function loadCursor(mode) {
+        if (cursorCache[mode]) {
+          return Promise.resolve(cursorCache[mode]);
+        }
+        if (cursorPromises[mode]) {
+          return cursorPromises[mode];
+        }
+        const config = cursorConfigs[mode];
+        if (!config) {
+          cursorCache[mode] = null;
+          return Promise.resolve(null);
+        }
+
+        cursorPromises[mode] = new Promise(resolve => {
+          const img = new Image();
+          img.onload = () => {
+            const iw = img.width || 1;
+            const ih = img.height || 1;
+            const maxDim = Math.max(iw, ih) || 1;
+            const scale = config.maxSize ? Math.min(1, config.maxSize / maxDim) : 1;
+            const dw = Math.max(1, Math.round(iw * scale));
+            const dh = Math.max(1, Math.round(ih * scale));
+
+            const canvas = document.createElement("canvas");
+            canvas.width = dw;
+            canvas.height = dh;
+            const ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(img, 0, 0, dw, dh);
+
+            const hx = config.hotspot
+              ? Math.max(0, Math.min(dw - 1, Math.round(config.hotspot.x * scale)))
+              : Math.round(dw / 2);
+            const hy = config.hotspot
+              ? Math.max(0, Math.min(dh - 1, Math.round(config.hotspot.y * scale)))
+              : Math.round(dh / 2);
+
+            const data = { url: canvas.toDataURL("image/png"), hx, hy };
+            cursorCache[mode] = data;
+            resolve(data);
+          };
+          img.onerror = () => {
+            cursorCache[mode] = null;
+            resolve(null);
+          };
+          img.src = config.src;
+        }).finally(() => {
+          delete cursorPromises[mode];
+        });
+
+        return cursorPromises[mode];
+      }
+
+      function applyCursor(mode) {
+        loadCursor(mode).then(data => {
+          if (selectedAbility !== mode) return;
+          if (data) {
+            document.body.style.cursor = `url(${data.url}) ${data.hx} ${data.hy}, auto`;
+          } else {
+            document.body.style.cursor = "auto";
+          }
+        });
+      }
+
       let hoveredTile = null;
       let enemyHoverActive = false;
       let enemyHoverStart = 0;
@@ -623,6 +704,7 @@
           tile.el.classList.toggle("active", isActive);
           tile.el.setAttribute("aria-pressed", String(isActive));
         });
+        applyCursor(mode);
       }
 
       function setTileProgress(tile, progress) {
@@ -813,6 +895,7 @@
       updateHearts(enemyHeartsEl, enemyHp, TOTAL_ENEMY_HP);
       updateTurnState(false);
       addLogEntry("Appuyez sur \"Entrer en combat\" pour lancer le duel.", "system");
+      applyCursor(selectedAbility);
 
       function animationLoop() {
         const now = performance.now();
