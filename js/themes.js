@@ -302,18 +302,17 @@
       return null;
     }
     const frenchLabel = item.label.fr || {};
-    const article = typeof frenchLabel.article === 'string' ? frenchLabel.article.trim() : '';
-    const word = typeof frenchLabel.word === 'string' ? frenchLabel.word.trim() : '';
-    if (!article && !word) {
+    const rawWord = typeof frenchLabel.word === 'string' ? frenchLabel.word.trim() : '';
+    if (!rawWord) {
       return null;
     }
-    if (!article) {
-      return word;
+    const normalized = rawWord.replace(/\s+/g, ' ');
+    const [firstChar, ...rest] = normalized;
+    if (!firstChar) {
+      return null;
     }
-    if (/[’']$/.test(article)) {
-      return word;
-    }
-    return `${article} ${word}`.replace(/\s+/g, ' ').replace(/’ /g, '’');
+    const capitalizedFirst = firstChar.toLocaleUpperCase('fr-FR');
+    return `${capitalizedFirst}${rest.join('')}`;
   }
 
   function generatePictoThemes(indexJson) {
