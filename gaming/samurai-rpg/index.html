@@ -371,6 +371,11 @@
 
     #enemyTarget.hovering .target-progress { opacity: 0.9; }
 
+    #enemyTarget.katana-combo .target-progress {
+      border-color: rgba(252, 211, 77, 0.7);
+      box-shadow: 0 0 28px rgba(252, 211, 77, 0.35);
+    }
+
     #enemySprite {
       width: clamp(220px, 40vh, 320px);
       object-fit: contain;
@@ -525,6 +530,7 @@
       const TOTAL_PLAYER_HP = 10;
       const TOTAL_ENEMY_HP = 10;
       const DWELL_MS = 1000;
+      const KATANA_COMBO_DURATION = 5000;
       const ENEMY_ATTACK_DURATION = 10000;
       const TURN_TIMELINE_SIZE = 34;
       const TURN_TIMELINE_CURRENT_INDEX = Math.floor(TURN_TIMELINE_SIZE / 2);
@@ -793,11 +799,17 @@
       let enemyHoverActive = false;
       let enemyHoverStart = 0;
       let enemyPointerInside = false;
+      let katanaCombo = {
+        active: false,
+        start: 0,
+        hits: 0,
+        timeout: null,
+      };
 
       function updateTurnState(playerTurnNow) {
         isPlayerTurn = playerTurnNow;
         const status = playerTurnNow
-          ? "Votre tour. Maintenez 1 seconde pour attaquer."
+          ? "Votre tour. Fixez 1 seconde pour canaliser le chi ou enchaînez le katana."
           : "Tour ennemi. Attendez sa riposte.";
         enemyTarget.setAttribute("aria-label", `${enemyTargetBaseLabel}. ${status}`);
         if (!playerTurnNow) {
@@ -807,7 +819,7 @@
       }
 
       function setSelectedAbility(mode) {
-        if (!abilities[mode]) return;
+        if (!abilities[mode] || katanaCombo.active) return;
         selectedAbility = mode;
         modeTileData.forEach(tile => {
           const isActive = tile.mode === mode;
@@ -877,9 +889,11 @@
       }
 
       function clearEnemyHover() {
+        if (katanaCombo.active) return;
         enemyHoverActive = false;
         enemyHoverStart = 0;
         enemyTarget.classList.remove("hovering");
+        enemyTarget.classList.remove("katana-combo");
         setEnemyProgress(0);
       }
 
@@ -896,13 +910,107 @@
       }
 
       function tryStartEnemyHover() {
-        if (enemyHoverActive || !enemyPointerInside || !started || busy || !isPlayerTurn) {
+        if (
+          enemyHoverActive ||
+          !enemyPointerInside ||
+          !started ||
+          busy ||
+          !isPlayerTurn ||
+          selectedAbility === "katana"
+        ) {
           return;
         }
         enemyHoverActive = true;
         enemyHoverStart = performance.now();
         enemyTarget.classList.add("hovering");
         setEnemyProgress(0.02);
+      }
+
+      function stopKatanaCombo() {
+        if (katanaCombo.timeout) {
+          clearTimeout(katanaCombo.timeout);
+          katanaCombo.timeout = null;
+        }
+        if (!katanaCombo.active) {
+          enemyTarget.classList.remove("katana-combo");
+          return;
+        }
+        katanaCombo.active = false;
+        katanaCombo.hits = 0;
+        katanaCombo.start = 0;
+        setEnemyProgress(0);
+        enemyTarget.classList.remove("hovering");
+        enemyTarget.classList.remove("katana-combo");
+        busy = false;
+      }
+
+      function applyEnemyDamage(amount) {
+        if (amount <= 0) return enemyHp <= 0;
+        enemyHp = Math.max(0, enemyHp - amount);
+        updateHearts(enemyHeartsEl, enemyHp, TOTAL_ENEMY_HP);
+        spawnDamageTag(enemyTarget, amount, "player");
+        triggerEnemyHit();
+        return enemyHp <= 0;
+      }
+
+      function finalizeKatanaCombo(enemyDefeated = false) {
+        if (!katanaCombo.active) return;
+        if (katanaCombo.timeout) {
+          clearTimeout(katanaCombo.timeout);
+          katanaCombo.timeout = null;
+        }
+        const totalHits = katanaCombo.hits;
+        katanaCombo.active = false;
+        katanaCombo.hits = 0;
+        katanaCombo.start = 0;
+        setEnemyProgress(0);
+        enemyTarget.classList.remove("hovering");
+        enemyTarget.classList.remove("katana-combo");
+
+        if (enemyDefeated) {
+          busy = false;
+          return;
+        }
+
+        if (totalHits > 0) {
+          addLogEntry(
+            `Vous enchaînez ${totalHits} coup${totalHits > 1 ? "s" : ""} de katana et infligez ${totalHits} dégât${totalHits > 1 ? "s" : ""}.`,
+            "player"
+          );
+        }
+
+        updateTurnState(false);
+        setTimeout(enemyAttack, 900);
+      }
+
+      function registerKatanaHit() {
+        katanaCombo.hits += 1;
+        const enemyDefeated = applyEnemyDamage(1);
+        if (enemyDefeated) {
+          finalizeKatanaCombo(true);
+          endBattle(true);
+        }
+      }
+
+      function handleKatanaEntry() {
+        if (!started || !isPlayerTurn) return;
+        if (!katanaCombo.active) {
+          busy = true;
+          katanaCombo.active = true;
+          katanaCombo.start = performance.now();
+          katanaCombo.hits = 0;
+          enemyTarget.classList.add("hovering");
+          enemyTarget.classList.add("katana-combo");
+          setEnemyProgress(0.02);
+          playAudio(abilities.katana.audio);
+          if (katanaCombo.timeout) {
+            clearTimeout(katanaCombo.timeout);
+          }
+          katanaCombo.timeout = setTimeout(() => {
+            finalizeKatanaCombo(false);
+          }, KATANA_COMBO_DURATION);
+        }
+        registerKatanaHit();
       }
 
       function playerAttack() {
@@ -917,10 +1025,7 @@
           isCrit = true;
         }
         playAudio(ability.audio);
-        enemyHp = Math.max(0, enemyHp - damage);
-        updateHearts(enemyHeartsEl, enemyHp, TOTAL_ENEMY_HP);
-        spawnDamageTag(enemyTarget, damage, "player");
-        triggerEnemyHit();
+        applyEnemyDamage(damage);
         addLogEntry(`Vous utilisez ${ability.label} et infligez ${damage} dégâts${isCrit ? " (coup critique !)" : ""}.`, "player");
 
         if (enemyHp <= 0) {
@@ -978,6 +1083,8 @@
         enemyTarget.classList.remove("enemy-attacking");
         enemySprite.classList.remove("enemy-attacking");
         clearEnemyHover();
+        stopKatanaCombo();
+        busy = true;
         playAudio(playerWon ? victoryAudio : defeatAudio);
         const summary = playerWon
           ? "Vous remportez le duel. Préparez-vous pour le prochain adversaire."
@@ -1007,6 +1114,7 @@
         }
         enemyTarget.classList.remove("enemy-attacking");
         enemySprite.classList.remove("enemy-attacking");
+        stopKatanaCombo();
         playerHp = TOTAL_PLAYER_HP;
         enemyHp = TOTAL_ENEMY_HP;
         busy = false;
@@ -1017,7 +1125,10 @@
         if (battleLog) {
           battleLog.innerHTML = "";
         }
-        addLogEntry("Le duel commence. Choisissez un pouvoir puis fixez l'ennemi 1 s pour attaquer.", "system");
+        addLogEntry(
+          "Le duel commence. Choisissez un pouvoir. Canalisez le chi 1 s ou multipliez les entrées katana en 5 s.",
+          "system"
+        );
         setSelectedAbility("chi");
         clearEnemyHover();
         updateTurnState(true);
@@ -1031,7 +1142,16 @@
 
       enemyTarget.addEventListener("pointerenter", () => {
         enemyPointerInside = true;
-        if (!started || busy || !isPlayerTurn) {
+        if (!started || !isPlayerTurn) {
+          clearEnemyHover();
+          stopKatanaCombo();
+          return;
+        }
+        if (selectedAbility === "katana") {
+          handleKatanaEntry();
+          return;
+        }
+        if (busy) {
           clearEnemyHover();
           return;
         }
@@ -1040,6 +1160,9 @@
 
       const leaveEnemy = () => {
         enemyPointerInside = false;
+        if (katanaCombo.active) {
+          return;
+        }
         clearEnemyHover();
       };
 
@@ -1068,7 +1191,11 @@
           }
         }
 
-        if (enemyHoverActive) {
+        if (katanaCombo.active) {
+          const elapsedCombo = now - katanaCombo.start;
+          const progress = Math.min(1, elapsedCombo / KATANA_COMBO_DURATION);
+          setEnemyProgress(progress);
+        } else if (enemyHoverActive) {
           if (!started || busy || !isPlayerTurn) {
             clearEnemyHover();
           } else {
