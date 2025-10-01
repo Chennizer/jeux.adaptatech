@@ -336,14 +336,73 @@
       return config && config.file ? config.file : `${gameId}.html`;
     }
 
+    function getThemeDisplayLabel(themeName, themeData, locale) {
+      if (!themeData) {
+        return themeName;
+      }
+      const displayName = themeData.displayName;
+      if (typeof displayName === 'string' && displayName.trim()) {
+        return displayName;
+      }
+      if (displayName && typeof displayName === 'object') {
+        const normalizedLocale = (locale || 'fr').toLowerCase();
+        const localeCandidates = [normalizedLocale];
+        const hyphenIndex = normalizedLocale.indexOf('-');
+        if (hyphenIndex > 0) {
+          localeCandidates.push(normalizedLocale.slice(0, hyphenIndex));
+        }
+        localeCandidates.push('fr', 'en');
+        for (const candidate of localeCandidates) {
+          if (displayName[candidate]) {
+            return displayName[candidate];
+          }
+        }
+      }
+      return themeName;
+    }
+
     function populateThemesDropdown() {
       const themesDropdown = document.getElementById('mediaOption');
-      const allThemeNames = Object.keys(window.themes);
-      allThemeNames.forEach(themeName => {
-        if (themeName === "default") return;
+      if (!themesDropdown || !window.themes) {
+        return;
+      }
+
+      const DEFAULT_THEME_KEY = 'default';
+      const locale = (navigator.language || 'fr').toLowerCase();
+
+      const placeholderOption = document.createElement('option');
+      placeholderOption.value = '';
+      placeholderOption.textContent = 'Sélectionner';
+      placeholderOption.selected = true;
+
+      themesDropdown.innerHTML = '';
+      themesDropdown.appendChild(placeholderOption);
+
+      const themeEntries = Object.entries(window.themes)
+        .filter(([key]) => key !== DEFAULT_THEME_KEY)
+        .map(([key, themeData]) => ({
+          key,
+          themeData,
+          label: getThemeDisplayLabel(key, themeData, locale)
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, locale, { sensitivity: 'base' }));
+
+      themeEntries.forEach(({ key, themeData, label }) => {
         const option = document.createElement('option');
-        option.value = themeName;
-        option.textContent = themeName.charAt(0).toUpperCase() + themeName.slice(1);
+        option.value = key;
+        option.textContent = label;
+        if (themeData && themeData.description) {
+          option.title = themeData.description;
+        }
+        if (themeData && themeData.metadata) {
+          const { categoryId, accentColor } = themeData.metadata;
+          if (categoryId) {
+            option.dataset.category = categoryId;
+          }
+          if (accentColor) {
+            option.dataset.accentColor = accentColor;
+          }
+        }
         themesDropdown.appendChild(option);
       });
     }
