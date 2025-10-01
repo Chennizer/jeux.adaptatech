@@ -18,12 +18,22 @@
     return null;
   }
 
+  function encodeGamePath(path) {
+    if (!path) {
+      return path;
+    }
+    try {
+      return encodeURI(path);
+    } catch (error) {
+      console.warn('Unable to encode game file path:', path, error);
+      return path;
+    }
+  }
+
   function getGameFileById(gameId) {
     const config = getGameConfigById(gameId);
-    if (config && config.file) {
-      return config.file;
-    }
-    return `${gameId}.html`;
+    const rawPath = config && config.file ? config.file : `${gameId}.html`;
+    return encodeGamePath(rawPath);
   }
 
   function getThemeData(selections) {
