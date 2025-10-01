@@ -153,62 +153,37 @@
   </div>
   <canvas id="hiddenCanvas"></canvas>
   <script src="../../js/themes.js"></script>
+  <script src="js/session-helpers.js"></script>
   <script>
     let ROWS = 2;
     let COLS = 2;
     const PIECE_SIZE = 130;
+    let puzzleSession = null;
+    let puzzleOptions = {};
     document.addEventListener('DOMContentLoaded', () => {
-      const gameIdentifier = 'puzzle';
-      const selections = JSON.parse(localStorage.getItem('gameSelections'));
-      let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      if (!selections || !selections.gameOrder || isNaN(currentGameIndex)) {
-        alert("Game selections not found. Redirecting to selection page.");
-        window.location.href = "main.html";
-        return;
-      }
-      if (selections.gameOrder[currentGameIndex] !== gameIdentifier) {
-        alert("This is not your current game. Redirecting to the correct game.");
-        window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        return;
-      }
-      const activityNumber = currentGameIndex + 1;
-      const activityOverlay = document.getElementById('activityNumberOverlay');
-      const numberTextEl = activityOverlay.querySelector('.number-text');
-      numberTextEl.textContent = activityNumber.toString();
-      activityOverlay.style.display = 'flex';
-      function hideOverlayAndStart() {
-        const mediaOption = selections.mediaOption || "";
-        const themeData = window.themes[mediaOption] || window.themes["default"];
-        if (themeData.startSound) {
-          const sfx = new Audio(themeData.startSound);
-          sfx.currentTime = 0;
-          sfx.play().catch(err => console.warn('Sound play error:', err));
-        }
-        activityOverlay.style.display = 'none';
-        document.removeEventListener('click', hideOverlayAndStart);
-        document.removeEventListener('touchend', hideOverlayAndStart);
+      puzzleSession = sessionHelpers.ensureCurrentGame('puzzle');
+      if (!puzzleSession) { return; }
+
+      puzzleOptions = sessionHelpers.getCurrentGameOptions(puzzleSession);
+      sessionHelpers.setupReinforcerRedirect();
+
+      const dimension = puzzleOptions.puzzleDimension || '2x2';
+      if (dimension === '3x3') { ROWS = 3; COLS = 3; }
+      else if (dimension === '4x4') { ROWS = 4; COLS = 4; }
+      else { ROWS = 2; COLS = 2; }
+
+      sessionHelpers.showActivityOverlay(() => {
         document.getElementById('puzzleContainer').style.display = 'flex';
         document.getElementById('toggleReferenceContainer').style.display = 'block';
         startPuzzleLogic();
-      }
-      document.addEventListener('click', hideOverlayAndStart);
-      document.addEventListener('touchend', hideOverlayAndStart);
+      }, puzzleSession);
     });
     function startPuzzleLogic() {
-      const selections = JSON.parse(localStorage.getItem('gameSelections'));
-      let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      const mediaOption = selections.mediaOption || "";
-      const themeData = window.themes[mediaOption] || window.themes["default"];
+      const themeData = (puzzleSession && puzzleSession.themeData) || {};
       const imagesArr = themeData.images || ["../../images/toupieetbinou.png"];
       const randomIndex = Math.floor(Math.random() * imagesArr.length);
       const puzzleImageSrc = imagesArr[randomIndex];
       const referenceImageSrc = puzzleImageSrc;
-      const puzzleOptions = selections.gameOptions[currentGameIndex] || {};
-      console.log("Puzzle options:", puzzleOptions);
-      let dimension = puzzleOptions.puzzleDimension || '2x2';
-      if (dimension === '3x3') { ROWS = 3; COLS = 3; }
-      else if (dimension === '4x4') { ROWS = 4; COLS = 4; }
-      else { ROWS = 2; COLS = 2; }
       initializePuzzleGame(puzzleImageSrc, referenceImageSrc);
     }
     function initializePuzzleGame(puzzleImagePath, referenceImagePath) {
@@ -276,13 +251,8 @@
         piecesArea.addEventListener('dragenter', onDragEnter);
         piecesArea.addEventListener('dragleave', onDragLeave);
 
-        const selections = JSON.parse(localStorage.getItem('gameSelections'));
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        const puzzleOptions = selections.gameOptions[currentGameIndex] || {};
-        console.log("For piece creation, puzzleOptions:", puzzleOptions);
-        console.log("puzzleEasy flag value:", puzzleOptions.puzzleEasy);
-        const easyMode = puzzleOptions.puzzleEasy === "on" || puzzleOptions.puzzleEasy === "true";
-        console.log("Easy mode enabled:", easyMode);
+        const easyModeValue = puzzleOptions ? puzzleOptions.puzzleEasy : null;
+        const easyMode = easyModeValue === true || easyModeValue === 'true' || easyModeValue === 'on';
 
         shuffleArray(puzzlePieces);
         puzzlePieces.forEach(piece => {
@@ -430,11 +400,6 @@
       document.getElementById('reinforcerOverlay').style.display = 'flex';
     }
     // Remove any video playback logic from the reinforcer overlay.
-    const reinforcerButton = document.getElementById('reinforcerButton');
-    reinforcerButton.addEventListener('click', () => {
-      // Simply redirect to reinforcer.html when the button is pressed.
-      window.location.href = "reinforcer.html";
-    });
     let touchData = { dragging: false, element: null, originalParent: null, originalSlot: null, originalPosition: { left: 0, top: 0 }, offsetX: 0, offsetY: 0 };
     function touchStartHandler(e) {
       e.preventDefault();
