@@ -12,9 +12,7 @@
       overflow: hidden;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
     }
-    body {
-      display: flex;
-    }
+    body { display: flex; }
     #layout {
       display: flex;
       width: 100vw;
@@ -36,11 +34,7 @@
       position: relative;
       z-index: 12;
     }
-    #modePanel .panel-ornaments {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
+    #modePanel .panel-ornaments { position: absolute; inset: 0; pointer-events: none; }
     #modePanel .panel-ornaments img {
       position: absolute;
       width: clamp(110px, 14vw, 160px);
@@ -58,18 +52,20 @@
       height: 100vh;
       background: #000;
       overflow: hidden;
+      z-index: 20; /* keep canvas/lights in front of panel */
     }
     #game {
       display: block;
       width: 100%;
       height: 100%;
       background: #000;
+      position: relative;
     }
     #startOverlay {
       position: absolute; inset: 0;
       display: grid; place-items: center;
       background: rgba(0,0,0,0.75);
-      z-index: 10;
+      z-index: 30;
     }
     #startBtn {
       padding: 14px 22px;
@@ -147,9 +143,7 @@
       background: rgba(220, 20, 20, 0.55);
       transition: width 0.08s linear, height 0.08s linear, opacity 0.12s ease;
     }
-    .mode-tile.hovering .progress {
-      opacity: 0.75;
-    }
+    .mode-tile.hovering .progress { opacity: 0.75; }
   </style>
 </head>
 <body>
@@ -206,12 +200,12 @@
     const SWAY_AMP_MIN     = 12;
     const SWAY_AMP_MAX     = 28;
 
-    // Scattering along bottom
-    const SIDE_PAD_H   = 24;  // px from sides
-    const BOTTOM_PAD_V = 24;  // px from bottom
-    const SEP_EXTRA    = 40;  // spacing to avoid clumping
+    // Scattering along bottom — raise baseline so lamps sit higher (longer rope)
+    const SIDE_PAD_H   = 24;
+    const BOTTOM_PAD_V = 140;   // ↑ was 24. Higher value = lamps start higher from bottom
+    const SEP_EXTRA    = 40;
 
-    // Stars — toned down
+    // Stars
     const STAR_DENSITY_PER_MPX = 55;
     const STAR_MIN_SIZE = 0.8, STAR_MAX_SIZE = 2.0;
     const STAR_MIN_AMP  = 0.25, STAR_MAX_AMP = 0.55;
@@ -227,10 +221,10 @@
     const FIREFLY_PULSE_MIN = 0.6, FIREFLY_PULSE_MAX = 1.2;
     const FIREFLY_SIZE_MIN = 1.8, FIREFLY_SIZE_MAX = 3.2;
     const FIREFLY_COLORS = [
-      { core: '255,230,140', halo: '255,230,140' }, // warm yellow
-      { core: '185,255,185', halo: '185,255,185' }, // mint green
-      { core: '255,185,185', halo: '255,185,185' }, // blush
-      { core: '185,220,255', halo: '185,220,255' }, // pale blue
+      { core: '255,230,140', halo: '255,230,140' },
+      { core: '185,255,185', halo: '185,255,185' },
+      { core: '255,185,185', halo: '255,185,185' },
+      { core: '185,220,255', halo: '185,220,255' },
     ];
 
     // Idle motion
@@ -246,14 +240,14 @@
 
     const HOVER_COOLDOWN_MS = 250;
 
-    // Distant background lanterns (behind foreground)
+    // Distant background lanterns
     const BG_LANTERN_COUNT = 10;
     const BG_LANTERN_SIZE_MIN = 14, BG_LANTERN_SIZE_MAX = 26; // px
     const BG_LANTERN_SPEED_MIN = 10, BG_LANTERN_SPEED_MAX = 22; // px/s
     const BG_LANTERN_HALO_ALPHA = 0.10;
     const BG_LANTERN_CORE_ALPHA = 0.20;
 
-    // Shooting star (rare)
+    // Shooting star
     const SHOOTING_STAR_MIN_INTERVAL = 18; // seconds
     const SHOOTING_STAR_MAX_INTERVAL = 45;
     const SHOOTING_STAR_SPEED_MIN = 600, SHOOTING_STAR_SPEED_MAX = 900; // px/s
@@ -261,15 +255,17 @@
     const SHOOTING_STAR_LIFE = 1.2; // seconds
 
     // === ROPE (tethers) ===
-    const ROPE_COLOR_RGB = '210,180,140'; // muted warm
-    const ROPE_ALPHA     = 0.75;
-    const ROPE_WIDTH     = 2.0;           // px
-    const ROPE_SAG_MAX   = 80;            // px extra sag at mid
-    const ROPE_SAG_RATIO = 0.30;          // sag fraction of rope length
-    const ROPE_SNAP_LIFE = 0.6;           // seconds for snap animation
-    // attach 10% up from the lamp's bottom; anchor at the absolute screen bottom
+    const ROPE_COLOR_RGB = '210,180,140';
+    const ROPE_ALPHA     = 0.85;   // slightly more visible
+    const ROPE_WIDTH     = 4.0;    // ↑ thicker rope (was 2.0)
+    const ROPE_SAG_MAX   = 120;    // ↑ allow a taller curve
+    const ROPE_SAG_RATIO = 0.36;   // ↑ a bit more sag as length grows
+    const ROPE_SNAP_LIFE = 0.6;
     const ROPE_ATTACH_FROM_BOTTOM_FRAC = 0.10;
-    const ROPE_ANCHOR_BOTTOM_OFFSET    = 0;
+    const ROPE_ANCHOR_BOTTOM_OFFSET    = 0; // anchor stays at absolute bottom edge
+
+    // Dwell + audio
+    const LAMP_DWELL_MS = 1000;
 
     const MODE_DWELL_MS = 500;
 
@@ -278,7 +274,7 @@
     const KATANA_CURSOR_HOTSPOT = { x: 12, y: 28 };
     const KATANA_MOVE_THRESHOLD = 2;
 
-    const POINTER_EDGE_GRACE = 22; // px tolerance to keep the pointer active near edges
+    const POINTER_EDGE_GRACE = 22;
 
     const CHI_POINTER_SRC = "../../images/samurai/chi.png";
     const CHI_POINTER_BASE = 96;
@@ -304,7 +300,7 @@
       rebuildStars();
       rebuildFireflies();
       rebuildBgLanterns();
-      // keep rope anchors at the absolute bottom & inside margins
+      // keep rope anchors at bottom & inside margins
       for (const l of lanterns) {
         if (!l.anchor) continue;
         l.anchor.y = H - ROPE_ANCHOR_BOTTOM_OFFSET;
@@ -346,8 +342,6 @@
     let cursorOrient = 'left';
 
     function applyCurrentCursor() {
-      // We draw both chi and katana pointers directly on the canvas so keep the native
-      // cursor hidden while hovering the play area.
       canvas.style.cursor = 'none';
     }
 
@@ -411,10 +405,7 @@
     }
 
     function setMode(mode) {
-      if (mode === currentMode) {
-        applyCurrentCursor();
-        return;
-      }
+      if (mode === currentMode) { applyCurrentCursor(); return; }
       currentMode = mode;
       refreshModeTiles();
       applyCurrentCursor();
@@ -436,9 +427,7 @@
 
     for (const tile of modeTiles) {
       tile.el.addEventListener('pointerenter', () => {
-        if (hoveredTile && hoveredTile !== tile) {
-          clearTileProgress(hoveredTile);
-        }
+        if (hoveredTile && hoveredTile !== tile) clearTileProgress(hoveredTile);
         hoveredTile = tile;
         tile.dwellStart = performance.now();
         tile.el.classList.add('hovering');
@@ -467,10 +456,7 @@
         c.width = dw; c.height = dh;
         const cctx = c.getContext('2d');
         cctx.imageSmoothingEnabled = true;
-        if (flipX) {
-          cctx.translate(dw, 0);
-          cctx.scale(-1, 1);
-        }
+        if (flipX) { cctx.translate(dw, 0); cctx.scale(-1, 1); }
         cctx.drawImage(katanaCursorImg, 0, 0, dw, dh);
         return c;
       };
@@ -491,8 +477,26 @@
     applyCurrentCursor();
 
     const rand = (a, b) => a + Math.random() * (b - a);
+    const clamp01 = v => Math.max(0, Math.min(1, v));
     const nowMs = () => performance.now();
     const nowSec = () => performance.now()/1000;
+
+    /* =======================
+       AUDIO (lamp lit)
+    ======================= */
+    const lampLitSounds = [1,2,3].map(i => {
+      const a = new Audio(`../../sounds/samurai/lamplit${i}.mp3`);
+      a.preload = 'auto';
+      a.volume = 0.8;
+      return a;
+    });
+    function playRandomLampLit() {
+      const base = lampLitSounds[Math.floor(Math.random() * lampLitSounds.length)];
+      if (!base) return;
+      const a = base.cloneNode(true);
+      a.volume = base.volume;
+      a.play().catch(() => {});
+    }
 
     /* =======================
        LANTERNS (foreground)
@@ -512,7 +516,7 @@
         }
         if (ok) return x;
       }
-      return rand(minX, maxX); // fallback
+      return rand(minX, maxX);
     }
 
     function spawnLanternBottom() {
@@ -526,7 +530,7 @@
       const dispW = dispH * aspect;
 
       const x = chooseScatteredX(dispW);
-      const y = H - BOTTOM_PAD_V - dispH * 0.5;
+      const y = H - BOTTOM_PAD_V - dispH * 0.5; // higher baseline
       const born = nowMs();
 
       lanterns.push({
@@ -541,20 +545,14 @@
         bobFreq: rand(IDLE_BOB_FREQ_MIN, IDLE_BOB_FREQ_MAX),
         bobPhase: Math.random() * Math.PI * 2,
         born,
-        // rope anchor at the very bottom (slightly x-offset to avoid perfect verticals)
+        dwellStartChi: 0,
         anchor: { x: x + rand(-30,30), y: H - ROPE_ANCHOR_BOTTOM_OFFSET },
-        snap: null // populated on release
+        snap: null
       });
     }
 
-    function ensureCount() {
-      while (lanterns.length < LANTERN_COUNT) spawnLanternBottom();
-    }
-
-    function resetOne(i) {
-      lanterns.splice(i, 1);
-      ensureCount();
-    }
+    function ensureCount() { while (lanterns.length < LANTERN_COUNT) spawnLanternBottom(); }
+    function resetOne(i) { lanterns.splice(i, 1); ensureCount(); }
 
     function isHovering(l) {
       const dx = pointer.x - l.x;
@@ -565,13 +563,22 @@
     function handleHoverActions(l) {
       const t = nowMs();
       if (currentMode === 'chi') {
-        if (l.state !== 'closed') return;
-        if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
-        l.lastHover = t;
-        l.state = 'lit';
+        if (l.state !== 'closed') { l.dwellStartChi = 0; return; }
+        if (!pointer.inside || !isHovering(l)) { l.dwellStartChi = 0; return; }
+
+        if (!l.dwellStartChi) l.dwellStartChi = t;
+        const elapsed = t - l.dwellStartChi;
+        if (elapsed >= LAMP_DWELL_MS && (t - l.lastHover) >= HOVER_COOLDOWN_MS) {
+          l.lastHover = t;
+          l.state = 'lit';
+          l.dwellStartChi = 0;
+          playRandomLampLit();
+        }
       } else if (currentMode === 'katana') {
+        l.dwellStartChi = 0;
         if (l.state !== 'lit') return;
         if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
+        if (!isHovering(l)) return;
         l.lastHover = t;
         l.state = 'ascend';
         l.ascendVy = rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX);
@@ -646,8 +653,7 @@
       const t = performance.now() / 1000;
       const breathe = 1 + CHI_POINTER_BREATH * Math.sin(t * 2 * Math.PI * CHI_POINTER_BREATH_FREQ);
       const size = Math.min(CHI_POINTER_MAX, CHI_POINTER_BASE * breathe);
-      const x = pointer.x;
-      const y = pointer.y;
+      const x = pointer.x, y = pointer.y;
 
       const glowR = size * 0.75;
       ctx.save();
@@ -656,20 +662,15 @@
       g.addColorStop(0, 'rgba(180,255,255,0.35)');
       g.addColorStop(1, 'rgba(140,200,255,0)');
       ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(x, y, glowR, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, glowR, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
 
       ctx.save();
       ctx.imageSmoothingQuality = 'high';
-      if (ready) {
-        ctx.drawImage(chiPointerImg, x - size/2, y - size/2, size, size);
-      } else {
+      if (ready) ctx.drawImage(chiPointerImg, x - size/2, y - size/2, size, size);
+      else {
         ctx.fillStyle = '#cfefff';
-        ctx.beginPath();
-        ctx.arc(x, y, Math.max(6, size * 0.12), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, Math.max(6, size * 0.12), 0, Math.PI * 2); ctx.fill();
       }
       ctx.restore();
     }
@@ -678,17 +679,14 @@
       if (currentMode !== 'katana' || !pointer.inside) return;
       const data = cursorOrient === 'right' ? katanaCursor.right : katanaCursor.left;
       const ready = katanaCursorReady && data && data.canvas;
-      const hx = data ? data.hx : 0;
-      const hy = data ? data.hy : 0;
-      const drawX = pointer.x - hx;
-      const drawY = pointer.y - hy;
+      const hx = data ? data.hx : 0, hy = data ? data.hy : 0;
+      const drawX = pointer.x - hx, drawY = pointer.y - hy;
 
       ctx.save();
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      if (ready) {
-        ctx.drawImage(data.canvas, drawX, drawY, data.canvas.width, data.canvas.height);
-      } else {
+      if (ready) ctx.drawImage(data.canvas, drawX, drawY, data.canvas.width, data.canvas.height);
+      else {
         ctx.strokeStyle = 'rgba(255,255,255,0.75)';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -718,8 +716,7 @@
 
         ctx.globalAlpha = Math.max(0.18, a);
         ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgb(255,240,210)';
-        ctx.fill();
+        ctx.fillStyle = 'rgb(255,240,210)'; ctx.fill();
       }
       ctx.restore();
     }
@@ -728,10 +725,7 @@
        BACKGROUND LANTERNS
     ======================= */
     let bgLanterns = [];
-    function rebuildBgLanterns() {
-      bgLanterns = [];
-      for (let i = 0; i < BG_LANTERN_COUNT; i++) spawnBgLantern(true);
-    }
+    function rebuildBgLanterns() { bgLanterns = []; for (let i = 0; i < BG_LANTERN_COUNT; i++) spawnBgLantern(true); }
     function spawnBgLantern(initial=false) {
       const type = Math.random() < 0.5 ? 1 : 2;
       const size = rand(BG_LANTERN_SIZE_MIN, BG_LANTERN_SIZE_MAX);
@@ -805,10 +799,7 @@
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.65 * a;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, 1.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgb(255,240,210)';
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, Math.PI * 2); ctx.fillStyle = 'rgb(255,240,210)'; ctx.fill();
       const x2 = s.x - s.dir * s.len;
       const y2 = s.y + 0.25 * s.len;
       const grad = ctx.createLinearGradient(x2, y2, s.x, s.y);
@@ -816,10 +807,7 @@
       grad.addColorStop(1, 'rgba(255,240,210,0.6)');
       ctx.strokeStyle = grad;
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x2, y2);
-      ctx.lineTo(s.x, s.y);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(s.x, s.y); ctx.stroke();
       ctx.restore();
     }
 
@@ -828,76 +816,85 @@
     ======================= */
     function ropePoints(l, t) {
       const p0 = { x: l.anchor.x, y: l.anchor.y };
-      // attach 10% up from the lamp's bottom
       const p2 = { x: l.x, y: l.y + l.h * (0.5 - ROPE_ATTACH_FROM_BOTTOM_FRAC) };
       const len = Math.hypot(p2.x - p0.x, p2.y - p0.y);
       const sag = Math.min(ROPE_SAG_MAX, len * ROPE_SAG_RATIO);
-      const sway = Math.sin((t + l.bobPhase) * 2 * Math.PI * l.bobFreq) * 4; // gentle sway
-      const p1 = {
-        x: (p0.x + p2.x)/2 + sway * 0.6,
-        y: (p0.y + p2.y)/2 + sag + sway * 0.2
-      };
+      const sway = Math.sin((t + l.bobPhase) * 2 * Math.PI * l.bobFreq) * 4;
+      const p1 = { x: (p0.x + p2.x)/2 + sway * 0.6, y: (p0.y + p2.y)/2 + sag + sway * 0.2 };
       return { p0, p1, p2 };
     }
-
     function drawIntactRope(l, t) {
       const { p0, p1, p2 } = ropePoints(l, t);
       ctx.save();
       ctx.lineWidth = ROPE_WIDTH;
       ctx.lineCap = 'round';
       ctx.strokeStyle = `rgba(${ROPE_COLOR_RGB},${ROPE_ALPHA})`;
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y); ctx.stroke();
       ctx.restore();
     }
-
     function drawSnappingRope(l, t) {
       if (!l.snap) return;
       const age = t - l.snap.t0;
-      const p = Math.min(1, age / l.snap.life); // 0→1
+      const p = Math.min(1, age / l.snap.life);
       const { p0, p1, p2 } = ropePoints(l, t);
       const B = l.snap.breakPt || { x: (p0.x + p2.x)/2, y: (p0.y + p2.y)/2 };
-
-      // endpoints retreat towards their anchors as the snap progresses
       const topEnd = { x: p2.x + (B.x - p2.x) * (1 - p), y: p2.y + (B.y - p2.y) * (1 - p) };
       const botEnd = { x: p0.x + (B.x - p0.x) * (1 - p), y: p0.y + (B.y - p0.y) * (1 - p) };
-
-      // slight recoil offsets
       const recoil = (1 - p) * 6;
       const topOff = { x: 0, y: -recoil };
       const botOff = { x: 0, y: recoil * 0.6 };
 
       ctx.save();
-      ctx.lineWidth = ROPE_WIDTH;
-      ctx.lineCap = 'round';
+      ctx.lineWidth = ROPE_WIDTH; ctx.lineCap = 'round';
       ctx.strokeStyle = `rgba(${ROPE_COLOR_RGB},${ROPE_ALPHA * (1 - p)})`;
-
-      // top piece (near lantern)
-      ctx.beginPath();
-      ctx.moveTo(p2.x, p2.y);
-      ctx.lineTo(topEnd.x + topOff.x, topEnd.y + topOff.y);
-      ctx.stroke();
-
-      // bottom piece (near anchor)
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(botEnd.x + botOff.x, botEnd.y + botOff.y);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p2.x, p2.y); ctx.lineTo(topEnd.x + topOff.x, topEnd.y + topOff.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(botEnd.x + botOff.x, botEnd.y + botOff.y); ctx.stroke();
       ctx.restore();
 
-      if (p >= 1) l.snap = null; // done
+      if (p >= 1) l.snap = null;
     }
-
     function drawRopes(t) {
       for (const l of lanterns) {
-        if (l.state === 'closed' || l.state === 'lit') {
-          drawIntactRope(l, t);
-        } else if (l.state === 'ascend' && l.snap) {
-          drawSnappingRope(l, t);
-        }
+        if (l.state === 'closed' || l.state === 'lit') drawIntactRope(l, t);
+        else if (l.state === 'ascend' && l.snap) drawSnappingRope(l, t);
       }
+    }
+
+    /* =======================
+       INTERNAL FILL (progress inside lantern)
+    ======================= */
+    function renderLampFillInside(l) {
+      if (l.state !== 'closed' || !l.dwellStartChi) return;
+      const elapsed = performance.now() - l.dwellStartChi;
+      const p = clamp01(elapsed / LAMP_DWELL_MS);
+
+      if (!l._fillC) l._fillC = document.createElement('canvas');
+      const oc = l._fillC;
+      const w = Math.max(2, Math.round(l.w));
+      const h = Math.max(2, Math.round(l.h));
+      if (oc.width !== w || oc.height !== h) { oc.width = w; oc.height = h; }
+      const octx = oc.getContext('2d');
+      octx.clearRect(0, 0, w, h);
+
+      const fillH = Math.max(1, Math.floor(h * p));
+      const y0 = h - fillH;
+      const grad = octx.createLinearGradient(0, h, 0, y0);
+      grad.addColorStop(0.00, 'rgba(255,220,140,0.95)');
+      grad.addColorStop(0.60, 'rgba(255,205,120,0.65)');
+      grad.addColorStop(1.00, 'rgba(255,180,100,0.35)');
+
+      octx.globalCompositeOperation = 'source-over';
+      octx.fillStyle = grad;
+      octx.fillRect(0, y0, w, fillH);
+
+      octx.globalCompositeOperation = 'destination-in';
+      const closedImg = getClosedImg(l.type);
+      octx.drawImage(closedImg, 0, 0, w, h);
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(oc, -l.w/2, -l.h/2, l.w, l.h);
+      ctx.restore();
     }
 
     /* =======================
@@ -934,20 +931,27 @@
       for (let i = lanterns.length - 1; i >= 0; i--) {
         const l = lanterns[i];
 
-        if (pointer.inside && isHovering(l)) handleHoverActions(l);
+        if (pointer.inside && isHovering(l)) {
+          handleHoverActions(l);
+        } else {
+          l.dwellStartChi = (currentMode === 'chi' && l.state === 'closed' && isHovering(l)) ? l.dwellStartChi : 0;
+        }
+
+        const minX = SIDE_PAD_H + l.w * 0.5;
+        const maxX = W - SIDE_PAD_H - l.w * 0.5;
 
         if (l.state === "ascend") {
           const t = (performance.now() - l.born) / 1000;
           const sway = Math.sin(2 * Math.PI * l.swayFreq * t) * l.swayAmp;
           l.y -= l.ascendVy * dt;
           l.x += l.driftBase * l.driftSpeed * dt + sway * dt * 0.6;
-
+          l.x = Math.max(minX, Math.min(maxX, l.x));
           if (l.y + l.h * 0.5 < -30) { resetOne(i); continue; }
         } else {
           const targetY = H - BOTTOM_PAD_V - l.h * 0.5;
           if (Math.abs(l.y - targetY) > 0.5)
             l.y += Math.sign(targetY - l.y) * Math.min(180 * dt, Math.abs(targetY - l.y));
-          l.x = Math.min(W - SIDE_PAD_H - l.w * 0.5, Math.max(SIDE_PAD_H + l.w * 0.5, l.x));
+          l.x = Math.max(minX, Math.min(maxX, l.x));
         }
       }
     }
@@ -957,13 +961,13 @@
 
       drawBackgroundImage();
       renderStars(t);
-      renderShootingStar();   // above stars, below everything else
-      renderBgLanterns();     // distant lanterns behind foreground
+      renderShootingStar();
+      renderBgLanterns();
 
-      // Ropes should sit behind lamp glow & lamps
+      // Ropes behind lamps
       drawRopes(t);
 
-      // Constant glow for lit/ascending lamps (foreground)
+      // Constant glow for lit/ascending lamps
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       for (const l of lanterns) {
@@ -973,7 +977,7 @@
       }
       ctx.restore();
 
-      // Foreground lamps (with subtle bob/rot)
+      // Foreground lamps
       for (const l of lanterns) {
         const bobAmp = (l.state === "lit" || l.state === "ascend")
           ? IDLE_BOB_AMP_LIT : IDLE_BOB_AMP_CLOSED;
@@ -985,11 +989,19 @@
         ctx.save();
         ctx.translate(l.x, l.y + yOff);
         ctx.rotate(rot);
+
+        // draw lantern image first
         ctx.drawImage(img, -l.w/2, -l.h/2, l.w, l.h);
+
+        // if closed and dwelling, overlay the internal fill
+        if (l.state === 'closed' && l.dwellStartChi) {
+          renderLampFillInside(l); // uses local transform
+        }
+
         ctx.restore();
       }
 
-      // Colored fireflies (soft, above all)
+      // Fireflies on top
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       for (const f of fireflies) {
@@ -1002,8 +1014,7 @@
         ctx.beginPath(); ctx.arc(f.x, f.y, haloR, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
         ctx.beginPath(); ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgb(${f.color.core})`;
-        ctx.fill();
+        ctx.fillStyle = `rgb(${f.color.core})`; ctx.fill();
       }
       ctx.restore();
 
