@@ -12,14 +12,61 @@
       overflow: hidden;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
     }
+    body {
+      display: flex;
+    }
+    #layout {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
+    }
+    #modePanel {
+      width: 20vw;
+      min-width: 180px;
+      max-width: 320px;
+      background: #050505;
+      border-right: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 10px 0 26px rgba(0,0,0,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(32px, 5vh, 72px) clamp(16px, 1.8vw, 32px);
+      position: relative;
+      z-index: 12;
+    }
+    #modePanel .panel-ornaments {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    #modePanel .panel-ornaments img {
+      position: absolute;
+      width: clamp(110px, 14vw, 160px);
+      opacity: 0.18;
+      filter: blur(0.2px) drop-shadow(0 6px 10px rgba(0,0,0,0.55));
+    }
+    #modePanel .panel-ornaments .branch-corner {
+      bottom: clamp(18px, 6vh, 32px);
+      left: clamp(12px, 2vw, 28px);
+      transform: rotate(-12deg);
+    }
+    #playArea {
+      flex: 1;
+      position: relative;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
+    }
     #game {
       display: block;
-      width: 100vw; height: 100vh;
-      cursor: crosshair;
+      width: 100%;
+      height: 100%;
       background: #000;
     }
     #startOverlay {
-      position: fixed; inset: 0;
+      position: absolute; inset: 0;
       display: grid; place-items: center;
       background: rgba(0,0,0,0.75);
       z-index: 10;
@@ -32,13 +79,105 @@
       cursor: pointer;
     }
     #startBtn:active { transform: translateY(1px); }
+
+    #modeSelector {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(24px, 5vh, 48px);
+      width: 100%;
+      align-items: center;
+      pointer-events: none; /* tiles re-enable events individually */
+      color: #f8eacb;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .mode-tile {
+      position: relative;
+      width: clamp(120px, 16vw, 220px);
+      aspect-ratio: 1;
+      border-radius: 24px;
+      background: rgba(18,18,22,0.92);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      pointer-events: auto;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.5);
+    }
+    .mode-tile img {
+      width: 68%;
+      height: 68%;
+      object-fit: contain;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,0.55));
+      pointer-events: none;
+      user-select: none;
+    }
+    .mode-tile .label {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: rgba(255,240,200,0.75);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      pointer-events: none;
+    }
+    .mode-tile.active {
+      border-color: rgba(255,210,120,0.5);
+      box-shadow: 0 16px 36px rgba(255,180,60,0.24);
+    }
+    .mode-tile.hovering {
+      transform: translateY(-6px);
+      border-color: rgba(255,120,120,0.65);
+    }
+    .mode-tile .progress {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      opacity: 0;
+      transform: translate(-50%, -50%);
+      border-radius: 20px;
+      pointer-events: none;
+      background: rgba(220, 20, 20, 0.55);
+      transition: width 0.08s linear, height 0.08s linear, opacity 0.12s ease;
+    }
+    .mode-tile.hovering .progress {
+      opacity: 0.75;
+    }
   </style>
 </head>
 <body>
-  <div id="startOverlay">
-    <button id="startBtn">Start • Fullscreen</button>
+  <div id="layout">
+    <aside id="modePanel">
+      <div class="panel-ornaments" aria-hidden="true">
+        <img src="../../images/samurai/cherryblossom.png" alt="" class="branch-corner" />
+      </div>
+      <div id="modeSelector" role="group" aria-label="Interaction mode">
+        <div class="mode-tile active" data-mode="chi" aria-pressed="true" role="button">
+          <img src="../../images/samurai/chi.png" alt="Chi mode" />
+          <div class="progress"></div>
+          <span class="label">Chi</span>
+        </div>
+        <div class="mode-tile" data-mode="katana" aria-pressed="false" role="button">
+          <img src="../../images/samurai/katana.png" alt="Katana mode" />
+          <div class="progress"></div>
+          <span class="label">Katana</span>
+        </div>
+      </div>
+    </aside>
+    <div id="playArea">
+      <div id="startOverlay">
+        <button id="startBtn">Start • Fullscreen</button>
+      </div>
+      <canvas id="game"></canvas>
+    </div>
   </div>
-  <canvas id="game"></canvas>
 
   <script>
   (() => {
@@ -132,17 +271,36 @@
     const ROPE_ATTACH_FROM_BOTTOM_FRAC = 0.10;
     const ROPE_ANCHOR_BOTTOM_OFFSET    = 0;
 
+    const MODE_DWELL_MS = 500;
+
+    const KATANA_CURSOR_SRC = "../../images/samurai/katana.png";
+    const KATANA_CURSOR_MAX_PX = 124;
+    const KATANA_CURSOR_HOTSPOT = { x: 12, y: 28 };
+    const KATANA_MOVE_THRESHOLD = 2;
+
+    const POINTER_EDGE_GRACE = 22; // px tolerance to keep the pointer active near edges
+
+    const CHI_POINTER_SRC = "../../images/samurai/chi.png";
+    const CHI_POINTER_BASE = 96;
+    const CHI_POINTER_MAX = 118;
+    const CHI_POINTER_BREATH = 0.05;
+    const CHI_POINTER_BREATH_FREQ = 0.8;
+
     /* =======================
        SETUP
     ======================= */
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
-    let W = canvas.width  = window.innerWidth;
-    let H = canvas.height = window.innerHeight;
+    const initialRect = canvas.getBoundingClientRect();
+    let W = canvas.width  = initialRect.width  || window.innerWidth;
+    let H = canvas.height = initialRect.height || window.innerHeight;
 
     function resize() {
-      W = canvas.width  = window.innerWidth;
-      H = canvas.height = window.innerHeight;
+      const rect = canvas.getBoundingClientRect();
+      const displayW = rect.width  || W;
+      const displayH = rect.height || H;
+      W = canvas.width  = displayW;
+      H = canvas.height = displayH;
       rebuildStars();
       rebuildFireflies();
       rebuildBgLanterns();
@@ -165,14 +323,172 @@
     function getClosedImg(type){ return type===1 ? imgClosed1 : imgClosed2; }
     function getLitImg(type){    return type===1 ? imgLit1    : imgLit2; }
 
-    const pointer = { x: -9999, y: -9999, inside: false };
-    canvas.addEventListener('pointermove', e => {
+    const modeSelector = document.getElementById('modeSelector');
+    const modeTileNodes = Array.from(modeSelector.querySelectorAll('.mode-tile'));
+    const modeTiles = modeTileNodes.map(el => ({
+      el,
+      mode: el.dataset.mode,
+      progressEl: el.querySelector('.progress'),
+      dwellStart: 0
+    }));
+    let hoveredTile = null;
+    let currentMode = 'chi';
+
+    function refreshModeTiles() {
+      for (const tile of modeTiles) {
+        const active = tile.mode === currentMode;
+        tile.el.classList.toggle('active', active);
+        tile.el.setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
+    }
+
+    const pointer = { x: -9999, y: -9999, inside: false, prevX: -9999 };
+    let cursorOrient = 'left';
+
+    function applyCurrentCursor() {
+      // We draw both chi and katana pointers directly on the canvas so keep the native
+      // cursor hidden while hovering the play area.
+      canvas.style.cursor = 'none';
+    }
+
+    function updatePointerFromEvent(e) {
       const rect = canvas.getBoundingClientRect();
-      pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-      pointer.y = (e.clientY - rect.top)  * (canvas.height / rect.height);
-      pointer.inside = true;
-    });
-    canvas.addEventListener('pointerleave', () => pointer.inside = false);
+      const displayW = rect.width || 1;
+      const displayH = rect.height || 1;
+      const scaleX = displayW ? W / displayW : 1;
+      const scaleY = displayH ? H / displayH : 1;
+      const relX = e.clientX - rect.left;
+      const relY = e.clientY - rect.top;
+
+      const clampedX = Math.max(0, Math.min(displayW, relX));
+      const clampedY = Math.max(0, Math.min(displayH, relY));
+      pointer.x = clampedX * scaleX;
+      pointer.y = clampedY * scaleY;
+
+      const insideNow =
+        relX >= -POINTER_EDGE_GRACE && relX <= displayW + POINTER_EDGE_GRACE &&
+        relY >= -POINTER_EDGE_GRACE && relY <= displayH + POINTER_EDGE_GRACE;
+
+      if (currentMode === 'katana' && pointer.prevX !== -9999 && insideNow) {
+        const dx = pointer.x - pointer.prevX;
+        if (Math.abs(dx) > KATANA_MOVE_THRESHOLD) {
+          const wantOrient = dx > 0 ? 'right' : 'left';
+          if (wantOrient !== cursorOrient) {
+            cursorOrient = wantOrient;
+            applyCurrentCursor();
+          }
+        }
+      }
+
+      pointer.prevX = insideNow ? pointer.x : -9999;
+      pointer.inside = insideNow;
+    }
+
+    window.addEventListener('pointermove', updatePointerFromEvent, { passive: true });
+
+    function setTileProgress(tile, progress) {
+      if (!tile.progressEl) return;
+      const clamped = Math.max(0, Math.min(1, progress));
+      const pct = (clamped * 100).toFixed(1) + '%';
+      if (clamped <= 0) {
+        tile.progressEl.style.width = '0%';
+        tile.progressEl.style.height = '0%';
+        tile.progressEl.style.opacity = '';
+        return;
+      }
+      tile.progressEl.style.width = pct;
+      tile.progressEl.style.height = pct;
+    }
+
+    function clearTileProgress(tile) {
+      tile.dwellStart = 0;
+      tile.el.classList.remove('hovering');
+      if (tile.progressEl) {
+        tile.progressEl.style.width = '0%';
+        tile.progressEl.style.height = '0%';
+        tile.progressEl.style.opacity = '';
+      }
+    }
+
+    function setMode(mode) {
+      if (mode === currentMode) {
+        applyCurrentCursor();
+        return;
+      }
+      currentMode = mode;
+      refreshModeTiles();
+      applyCurrentCursor();
+    }
+
+    function updateModeHover() {
+      if (!hoveredTile) return;
+      const tile = hoveredTile;
+      if (!tile.dwellStart) tile.dwellStart = performance.now();
+      const elapsed = performance.now() - tile.dwellStart;
+      const progress = Math.min(1, elapsed / MODE_DWELL_MS);
+      setTileProgress(tile, progress);
+      if (progress >= 1) {
+        clearTileProgress(tile);
+        hoveredTile = null;
+        setMode(tile.mode);
+      }
+    }
+
+    for (const tile of modeTiles) {
+      tile.el.addEventListener('pointerenter', () => {
+        if (hoveredTile && hoveredTile !== tile) {
+          clearTileProgress(hoveredTile);
+        }
+        hoveredTile = tile;
+        tile.dwellStart = performance.now();
+        tile.el.classList.add('hovering');
+        setTileProgress(tile, 0.02);
+      });
+      tile.el.addEventListener('pointerleave', () => {
+        if (hoveredTile === tile) hoveredTile = null;
+        clearTileProgress(tile);
+      });
+    }
+
+    const katanaCursor = { left: null, right: null };
+    let katanaCursorReady = false;
+    const katanaCursorImg = new Image();
+    katanaCursorImg.src = KATANA_CURSOR_SRC;
+    katanaCursorImg.onload = () => {
+      const iw = katanaCursorImg.width;
+      const ih = katanaCursorImg.height;
+      if (!iw || !ih) return;
+      const scale = Math.min(1, KATANA_CURSOR_MAX_PX / Math.max(iw, ih));
+      const dw = Math.round(iw * scale);
+      const dh = Math.round(ih * scale);
+
+      const makeCanvas = flipX => {
+        const c = document.createElement('canvas');
+        c.width = dw; c.height = dh;
+        const cctx = c.getContext('2d');
+        cctx.imageSmoothingEnabled = true;
+        if (flipX) {
+          cctx.translate(dw, 0);
+          cctx.scale(-1, 1);
+        }
+        cctx.drawImage(katanaCursorImg, 0, 0, dw, dh);
+        return c;
+      };
+
+      const hx = Math.max(0, Math.min(dw - 1, Math.round(KATANA_CURSOR_HOTSPOT.x * scale)));
+      const hy = Math.max(0, Math.min(dh - 1, Math.round(KATANA_CURSOR_HOTSPOT.y * scale)));
+
+      katanaCursor.left = { canvas: makeCanvas(false), hx, hy };
+      katanaCursor.right = { canvas: makeCanvas(true), hx: (dw - 1) - hx, hy };
+      katanaCursorReady = true;
+      if (currentMode === 'katana') applyCurrentCursor();
+    };
+
+    const chiPointerImg = new Image();
+    chiPointerImg.src = CHI_POINTER_SRC;
+
+    refreshModeTiles();
+    applyCurrentCursor();
 
     const rand = (a, b) => a + Math.random() * (b - a);
     const nowMs = () => performance.now();
@@ -248,16 +564,17 @@
 
     function handleHoverActions(l) {
       const t = nowMs();
-      if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
-      l.lastHover = t;
-
-      if (l.state === "closed") {
-        l.state = "lit";
-      } else if (l.state === "lit") {
-        // prepare rope snap
-        l.state = "ascend";
+      if (currentMode === 'chi') {
+        if (l.state !== 'closed') return;
+        if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
+        l.lastHover = t;
+        l.state = 'lit';
+      } else if (currentMode === 'katana') {
+        if (l.state !== 'lit') return;
+        if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
+        l.lastHover = t;
+        l.state = 'ascend';
         l.ascendVy = rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX);
-        // capture a break point at snap moment (midpoint between anchor and attach)
         const p0 = { x: l.anchor.x, y: l.anchor.y };
         const p2 = { x: l.x, y: l.y + l.h * (0.5 - ROPE_ATTACH_FROM_BOTTOM_FRAC) };
         const mid = { x: (p0.x + p2.x)/2, y: (p0.y + p2.y)/2 };
@@ -321,6 +638,67 @@
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    function drawChiPointer() {
+      if (currentMode !== 'chi' || !pointer.inside) return;
+      const ready = chiPointerImg && chiPointerImg.complete && chiPointerImg.naturalWidth > 0;
+      const t = performance.now() / 1000;
+      const breathe = 1 + CHI_POINTER_BREATH * Math.sin(t * 2 * Math.PI * CHI_POINTER_BREATH_FREQ);
+      const size = Math.min(CHI_POINTER_MAX, CHI_POINTER_BASE * breathe);
+      const x = pointer.x;
+      const y = pointer.y;
+
+      const glowR = size * 0.75;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+      g.addColorStop(0, 'rgba(180,255,255,0.35)');
+      g.addColorStop(1, 'rgba(140,200,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.imageSmoothingQuality = 'high';
+      if (ready) {
+        ctx.drawImage(chiPointerImg, x - size/2, y - size/2, size, size);
+      } else {
+        ctx.fillStyle = '#cfefff';
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(6, size * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawKatanaPointer() {
+      if (currentMode !== 'katana' || !pointer.inside) return;
+      const data = cursorOrient === 'right' ? katanaCursor.right : katanaCursor.left;
+      const ready = katanaCursorReady && data && data.canvas;
+      const hx = data ? data.hx : 0;
+      const hy = data ? data.hy : 0;
+      const drawX = pointer.x - hx;
+      const drawY = pointer.y - hy;
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      if (ready) {
+        ctx.drawImage(data.canvas, drawX, drawY, data.canvas.width, data.canvas.height);
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pointer.x - 18, pointer.y - 18);
+        ctx.lineTo(pointer.x + 22, pointer.y + 22);
+        ctx.moveTo(pointer.x + 22, pointer.y - 18);
+        ctx.lineTo(pointer.x - 18, pointer.y + 22);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     function renderStars(t) {
@@ -544,6 +922,8 @@
     }
 
     function update(dt) {
+      updateModeHover();
+
       // ambient
       updateAmbient(dt);
       updateBgLanterns(dt);
@@ -626,6 +1006,9 @@
         ctx.fill();
       }
       ctx.restore();
+
+      drawChiPointer();
+      drawKatanaPointer();
     }
 
     function tick(tMs) {
@@ -657,9 +1040,7 @@
       started = true;
 
       lastT = performance.now();
-      rebuildStars();
-      rebuildFireflies();
-      rebuildBgLanterns();
+      resize();
       scheduleShootingStar();
 
       // Wait for images once
