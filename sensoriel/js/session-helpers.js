@@ -5,6 +5,27 @@
     window.location.href = 'main.html';
   }
 
+  function getGameConfigById(gameId) {
+    if (!gameId || !Array.isArray(global.gamesConfig)) {
+      return null;
+    }
+    for (let index = 0; index < global.gamesConfig.length; index += 1) {
+      const config = global.gamesConfig[index];
+      if (config && config.id === gameId) {
+        return config;
+      }
+    }
+    return null;
+  }
+
+  function getGameFileById(gameId) {
+    const config = getGameConfigById(gameId);
+    if (config && config.file) {
+      return config.file;
+    }
+    return `${gameId}.html`;
+  }
+
   function getThemeData(selections) {
     if (!global.themes) {
       return {};
@@ -54,7 +75,7 @@
     if (gameId) {
       const currentGameId = session.selections.gameOrder[session.currentGameIndex];
       if (currentGameId !== gameId) {
-        window.location.href = `${currentGameId}.html`;
+        window.location.href = getGameFileById(currentGameId);
         return null;
       }
     }
@@ -136,7 +157,7 @@
 
     if (nextIndex < session.selections.gameOrder.length) {
       const nextGameId = session.selections.gameOrder[nextIndex];
-      window.location.href = `${nextGameId}.html`;
+      window.location.href = getGameFileById(nextGameId);
     } else {
       window.location.href = 'completion.html';
     }
@@ -153,6 +174,7 @@
   }
 
   global.sessionHelpers = {
+    getGameFileById,
     loadSession,
     ensureCurrentGame,
     getCurrentGameOptions,
