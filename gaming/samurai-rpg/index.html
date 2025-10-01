@@ -275,23 +275,6 @@
       border-radius: clamp(180px, 32vh, 260px);
     }
 
-    #enemyTarget .target-progress {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 0;
-      height: 0;
-      opacity: 0;
-      transform: translate(-50%, -50%);
-      border-radius: 999px;
-      border: 4px solid rgba(252, 211, 77, 0.45);
-      box-shadow: 0 0 24px rgba(252, 211, 77, 0.25);
-      pointer-events: none;
-      transition: width 0.08s linear, height 0.08s linear, opacity 0.12s ease;
-    }
-
-    #enemyTarget.hovering .target-progress { opacity: 0.9; }
-
     #enemySprite {
       width: clamp(220px, 40vh, 320px);
       object-fit: contain;
@@ -300,16 +283,33 @@
       transition: transform 0.25s ease;
     }
 
-    #turnBanner {
-      font-size: clamp(0.9rem, 2vw, 1.2rem);
-      letter-spacing: 0.3em;
-      text-transform: uppercase;
-      color: rgba(252, 211, 77, 0.85);
-      padding: 10px 18px;
-      border-radius: 999px;
-      border: 1px solid rgba(252, 211, 77, 0.35);
-      background: rgba(17, 17, 24, 0.65);
-      box-shadow: 0 0 24px rgba(252, 211, 77, 0.22);
+    #enemyTarget.hit { animation: enemyHitShake 0.42s ease; }
+
+    #enemySprite.hit { animation: enemyHitFlash 0.42s ease; }
+
+    @keyframes enemyHitShake {
+      0% { transform: translate(0); }
+      20% { transform: translate(-8px, 4px); }
+      40% { transform: translate(6px, -4px); }
+      60% { transform: translate(-4px, 3px); }
+      80% { transform: translate(3px, -2px); }
+      100% { transform: translate(0); }
+    }
+
+    @keyframes enemyHitFlash {
+      0% {
+        filter: drop-shadow(0 26px 36px rgba(0, 0, 0, 0.7));
+      }
+      25% {
+        filter: drop-shadow(0 26px 36px rgba(0, 0, 0, 0.75)) saturate(1.4) brightness(1.6)
+          hue-rotate(-12deg);
+      }
+      50% {
+        filter: drop-shadow(0 26px 36px rgba(220, 38, 38, 0.55)) brightness(1.2);
+      }
+      100% {
+        filter: drop-shadow(0 26px 36px rgba(0, 0, 0, 0.7));
+      }
     }
 
     #battleLog {
@@ -463,9 +463,7 @@
           <div class="enemy-name">Bandit du crépuscule</div>
           <div id="enemyHearts" class="heart-row" aria-live="polite" aria-label="Vie de l'ennemi"></div>
         </header>
-        <div id="turnBanner" role="status" aria-live="polite">Votre tour — maintenez 1 s</div>
         <div id="enemyTarget" role="button" aria-label="Attaquer l'ennemi">
-          <div class="target-progress" aria-hidden="true"></div>
           <img id="enemySprite" src="../../images/samurai/enzo.png" alt="Ennemi" />
         </div>
         <section id="battleLog" aria-live="polite" aria-atomic="false"></section>
@@ -540,11 +538,9 @@
 
       const playerHeartsEl = document.getElementById("playerHearts");
       const enemyHeartsEl = document.getElementById("enemyHearts");
-      const turnBanner = document.getElementById("turnBanner");
       const battleLog = document.getElementById("battleLog");
       const enemySprite = document.getElementById("enemySprite");
       const enemyTarget = document.getElementById("enemyTarget");
-      const enemyTargetProgress = enemyTarget.querySelector(".target-progress");
       const modeTiles = Array.from(document.querySelectorAll(".mode-tile"));
       const modeTileData = modeTiles.map(el => ({
         el,
@@ -690,7 +686,6 @@
 
       function updateTurnState(playerTurnNow) {
         isPlayerTurn = playerTurnNow;
-        turnBanner.textContent = playerTurnNow ? "Votre tour — maintenez 1 s" : "Tour ennemi";
         if (!playerTurnNow) {
           clearEnemyHover();
         }
@@ -751,26 +746,10 @@
         clearTileProgress(tile);
       }
 
-      function setEnemyProgress(progress) {
-        const clamped = Math.max(0, Math.min(1, progress));
-        if (clamped <= 0) {
-          enemyTargetProgress.style.width = "0px";
-          enemyTargetProgress.style.height = "0px";
-          enemyTargetProgress.style.opacity = "";
-          return;
-        }
-        const bounds = enemyTarget.getBoundingClientRect();
-        const base = Math.max(bounds.width, bounds.height) * 1.2;
-        const size = base * clamped;
-        enemyTargetProgress.style.width = `${size}px`;
-        enemyTargetProgress.style.height = `${size}px`;
-      }
-
       function clearEnemyHover() {
         enemyHoverActive = false;
         enemyHoverStart = 0;
         enemyTarget.classList.remove("hovering");
-        setEnemyProgress(0);
       }
 
       function tryStartEnemyHover() {
@@ -780,7 +759,15 @@
         enemyHoverActive = true;
         enemyHoverStart = performance.now();
         enemyTarget.classList.add("hovering");
-        setEnemyProgress(0.02);
+      }
+
+      function triggerEnemyHitEffect() {
+        enemyTarget.classList.add("hit");
+        enemySprite.classList.add("hit");
+        setTimeout(() => {
+          enemyTarget.classList.remove("hit");
+          enemySprite.classList.remove("hit");
+        }, 420);
       }
 
       function playerAttack() {
@@ -798,8 +785,7 @@
         enemyHp = Math.max(0, enemyHp - damage);
         updateHearts(enemyHeartsEl, enemyHp, TOTAL_ENEMY_HP);
         spawnDamageTag(enemyTarget, damage, "player");
-        enemySprite.style.transform = "translateY(-12px) scale(1.02)";
-        setTimeout(() => { enemySprite.style.transform = ""; }, 250);
+        triggerEnemyHitEffect();
         addLogEntry(`Vous utilisez ${ability.label} et infligez ${damage} dégâts${isCrit ? " (coup critique !)" : ""}.`, "player");
 
         if (enemyHp <= 0) {
@@ -917,7 +903,6 @@
           } else {
             const elapsed = now - enemyHoverStart;
             const progress = Math.min(1, elapsed / DWELL_MS);
-            setEnemyProgress(progress);
             if (progress >= 1) {
               clearEnemyHover();
               playerAttack();
