@@ -56,61 +56,82 @@
       z-index: 10;
     }
 
-    #modePanel .panel-ornaments {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-
-    #modePanel .panel-ornaments img {
-      position: absolute;
-      width: clamp(120px, 16vw, 180px);
-      opacity: 0.2;
-      filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.6));
-    }
-
-    #modePanel .panel-ornaments .branch-corner {
-      bottom: clamp(14px, 6vh, 40px);
-      left: clamp(10px, 3vw, 28px);
-      transform: rotate(-12deg);
-    }
-
     #turnTimeline {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(4px, 0.9vw, 10px);
-      padding: clamp(10px, 1.8vh, 16px) 0;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: clamp(12px, 1.8vw, 20px);
+      padding: clamp(14px, 2.2vh, 22px) clamp(16px, 2.8vw, 26px);
       margin-top: auto;
       width: 100%;
       position: relative;
       z-index: 2;
-      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 16px 32px rgba(0, 0, 0, 0.35);
     }
 
-    #turnTimeline::before,
-    #turnTimeline::after {
+    .turn-slot {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(6px, 1.4vh, 10px);
+      padding: clamp(8px, 1.6vh, 12px) clamp(6px, 1.2vw, 10px);
+      border-radius: 12px;
+      position: relative;
+      transition: background 0.35s ease, box-shadow 0.35s ease, transform 0.35s ease;
+    }
+
+    .turn-slot::after {
       content: "";
       position: absolute;
-      top: 50%;
-      width: 24%;
-      height: 160%;
+      inset: 10%;
+      border-radius: 10px;
+      border: 1px solid transparent;
       pointer-events: none;
-      background: linear-gradient(90deg, rgba(2, 2, 5, 0.92), transparent 70%);
-      transform: translateY(-50%);
-      z-index: 1;
+      transition: border-color 0.35s ease;
     }
 
-    #turnTimeline::before { left: -1px; }
+    .turn-slot.is-current {
+      background: rgba(252, 211, 77, 0.08);
+      box-shadow: 0 12px 24px rgba(252, 211, 77, 0.18);
+      transform: translateY(-4px);
+    }
 
-    #turnTimeline::after {
-      right: -1px;
-      background: linear-gradient(-90deg, rgba(2, 2, 5, 0.92), transparent 70%);
+    .turn-slot.is-current::after {
+      border-color: rgba(252, 211, 77, 0.4);
+    }
+
+    .turn-slot.is-last,
+    .turn-slot.is-next {
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: 0 8px 18px rgba(255, 255, 255, 0.08);
+    }
+
+    .turn-slot.is-last .turn-position,
+    .turn-slot.is-next .turn-position {
+      opacity: 0.75;
+    }
+
+    .turn-slot.is-current .turn-position {
+      color: rgba(252, 211, 77, 0.95);
+    }
+
+    .turn-position {
+      font-size: clamp(0.65rem, 1.4vw, 0.8rem);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.58);
+      transition: color 0.3s ease, opacity 0.3s ease;
     }
 
     .turn-icon {
-      width: clamp(24px, 2.6vw, 34px);
-      height: clamp(24px, 2.6vw, 34px);
+      width: clamp(34px, 3.8vw, 46px);
+      height: clamp(34px, 3.8vw, 46px);
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.08);
       background-size: contain;
@@ -486,9 +507,6 @@
 <body>
   <div id="layout">
     <aside id="modePanel">
-      <div class="panel-ornaments" aria-hidden="true">
-        <img src="../../images/samurai/cherryblossom.png" alt="" class="branch-corner" />
-      </div>
       <div id="panelInner">
         <div class="player-status">
           <div class="player-name">Ronin</div>
@@ -533,7 +551,12 @@
       const DWELL_MS = 1000;
       const ENEMY_ATTACK_DURATION = 10000;
       const KATANA_COMBO_WINDOW_MS = 5000;
-      const TURN_TIMELINE_SIZE = 3;
+      const TIMELINE_POSITIONS = [
+        { key: "last", label: "Avant" },
+        { key: "current", label: "Maintenant" },
+        { key: "next", label: "Après" },
+      ];
+      const TURN_TIMELINE_SIZE = TIMELINE_POSITIONS.length;
       const TURN_TIMELINE_CURRENT_INDEX = Math.floor(TURN_TIMELINE_SIZE / 2);
 
       const abilities = {
@@ -680,13 +703,25 @@
         if (!turnTimelineEl) return;
         turnTimelineEl.innerHTML = "";
         turnTimelineItems = [];
-        for (let i = 0; i < TURN_TIMELINE_SIZE; i++) {
+        TIMELINE_POSITIONS.forEach(position => {
+          const slot = document.createElement("div");
+          slot.className = "turn-slot";
+          slot.dataset.position = position.key;
+          slot.setAttribute("role", "listitem");
+
+          const label = document.createElement("span");
+          label.className = "turn-position";
+          label.textContent = position.label;
+
           const icon = document.createElement("span");
           icon.className = "turn-icon";
-          icon.setAttribute("role", "listitem");
-          turnTimelineEl.appendChild(icon);
-          turnTimelineItems.push(icon);
-        }
+          icon.setAttribute("aria-hidden", "true");
+
+          slot.appendChild(label);
+          slot.appendChild(icon);
+          turnTimelineEl.appendChild(slot);
+          turnTimelineItems.push({ slot, icon });
+        });
         refreshTurnTimeline();
       }
 
@@ -701,40 +736,47 @@
 
         const states = [
           {
-            index: lastIndex,
             actor: lastActor,
             label: lastActor === "player"
               ? "Dernière action du joueur"
               : "Dernière action de l’ennemi",
+            slotClass: "is-last",
           },
           {
-            index: currentIndex,
             actor: currentActor,
             label: currentActor === "player" ? "Tour du joueur" : "Tour de l’ennemi",
+            slotClass: "is-current",
           },
           {
-            index: nextIndex,
             actor: nextActor,
             label: nextActor === "player"
               ? "Prochaine action du joueur"
               : "Prochaine action de l’ennemi",
+            slotClass: "is-next",
           },
         ];
 
-        turnTimelineItems.forEach((icon, index) => {
+        turnTimelineItems.forEach((item, index) => {
           const state = states[index];
           if (!state) {
-            icon.className = "turn-icon";
-            icon.removeAttribute("aria-label");
+            item.slot.className = "turn-slot";
+            item.slot.removeAttribute("aria-label");
+            item.icon.className = "turn-icon";
             return;
           }
 
-          icon.classList.toggle("player", state.actor === "player");
-          icon.classList.toggle("enemy", state.actor === "enemy");
-          icon.classList.toggle("is-last", index === lastIndex);
-          icon.classList.toggle("is-current", index === currentIndex);
-          icon.classList.toggle("is-next", index === nextIndex);
-          icon.setAttribute("aria-label", state.label);
+          const isPlayer = state.actor === "player";
+          const isEnemy = state.actor === "enemy";
+
+          item.slot.className = `turn-slot ${state.slotClass}`;
+          item.slot.setAttribute("aria-label", state.label);
+
+          item.icon.className = "turn-icon";
+          item.icon.classList.toggle("player", isPlayer);
+          item.icon.classList.toggle("enemy", isEnemy);
+          item.icon.classList.toggle("is-last", index === lastIndex);
+          item.icon.classList.toggle("is-current", index === currentIndex);
+          item.icon.classList.toggle("is-next", index === nextIndex);
         });
       }
 
