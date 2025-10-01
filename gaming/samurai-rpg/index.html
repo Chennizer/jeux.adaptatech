@@ -75,6 +75,88 @@
       transform: rotate(-12deg);
     }
 
+    #turnTimeline {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(4px, 0.9vw, 10px);
+      padding: clamp(10px, 1.8vh, 16px) 0;
+      margin-top: auto;
+      width: 100%;
+      position: relative;
+      z-index: 2;
+      overflow: hidden;
+    }
+
+    #turnTimeline::before,
+    #turnTimeline::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 24%;
+      height: 160%;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(2, 2, 5, 0.92), transparent 70%);
+      transform: translateY(-50%);
+      z-index: 1;
+    }
+
+    #turnTimeline::before { left: -1px; }
+
+    #turnTimeline::after {
+      right: -1px;
+      background: linear-gradient(-90deg, rgba(2, 2, 5, 0.92), transparent 70%);
+    }
+
+    .turn-icon {
+      width: clamp(24px, 2.6vw, 34px);
+      height: clamp(24px, 2.6vw, 34px);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      opacity: 0.32;
+      filter: saturate(0.65);
+      transition: transform 0.35s ease, opacity 0.35s ease, filter 0.35s ease, box-shadow 0.35s ease;
+      position: relative;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .turn-icon.player {
+      background-image: url("../../images/samurai/katana.png");
+    }
+
+    .turn-icon.enemy {
+      background-image: url("../../images/samurai/enzo.png");
+      background-size: 140%;
+    }
+
+    .turn-icon.is-last,
+    .turn-icon.is-next {
+      opacity: 0.7;
+      filter: saturate(0.9);
+      transform: scale(1.08);
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.12);
+    }
+
+    .turn-icon.is-current {
+      opacity: 1;
+      filter: saturate(1.15);
+      transform: scale(1.24);
+      box-shadow: 0 0 18px rgba(252, 211, 77, 0.35);
+    }
+
+    .turn-icon::after {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      pointer-events: none;
+    }
+
     #panelInner {
       width: 100%;
       display: flex;
@@ -304,6 +386,14 @@
       animation: enemyHitFlash 0.3s ease-in-out;
     }
 
+    #enemyTarget.enemy-attacking {
+      animation: enemyChargePulse 10s ease-in-out;
+    }
+
+    #enemySprite.enemy-attacking {
+      animation: enemyChargeSway 10s ease-in-out;
+    }
+
     @keyframes enemyHitShake {
       0% { transform: translate3d(0, 0, 0); }
       20% { transform: translate3d(-6px, -2px, 0); }
@@ -323,6 +413,28 @@
       }
       80% { filter: drop-shadow(0 26px 36px rgba(0, 0, 0, 0.7)) brightness(1.08); }
       100% { filter: drop-shadow(0 26px 36px rgba(0, 0, 0, 0.7)); opacity: 1; }
+    }
+
+    @keyframes enemyChargePulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 rgba(248, 113, 113, 0.1); }
+      25% { transform: scale(1.04); box-shadow: 0 0 28px rgba(248, 113, 113, 0.35); }
+      50% { transform: scale(0.98); box-shadow: 0 0 18px rgba(248, 113, 113, 0.25); }
+      75% { transform: scale(1.05); box-shadow: 0 0 32px rgba(248, 113, 113, 0.4); }
+      100% { transform: scale(1); box-shadow: 0 0 0 rgba(248, 113, 113, 0.1); }
+    }
+
+    @keyframes enemyChargeSway {
+      0% { transform: translate3d(0, 0, 0) scale(1); filter: drop-shadow(0 26px 36px rgba(0, 0, 0, 0.7)); }
+      20% {
+        transform: translate3d(-8px, -6px, 0) scale(1.04);
+        filter: drop-shadow(0 34px 52px rgba(248, 113, 113, 0.45)) saturate(1.2);
+      }
+      50% { transform: translate3d(6px, 10px, 0) scale(0.97); filter: drop-shadow(0 30px 46px rgba(0, 0, 0, 0.8)); }
+      80% {
+        transform: translate3d(-4px, -4px, 0) scale(1.06);
+        filter: drop-shadow(0 38px 56px rgba(248, 113, 113, 0.5)) saturate(1.25);
+      }
+      100% { transform: translate3d(0, 0, 0) scale(1); filter: drop-shadow(0 26px 36px rgba(0, 0, 0, 0.7)); }
     }
 
     .damage-tag {
@@ -391,6 +503,7 @@
           </div>
         </div>
       </div>
+      <div id="turnTimeline" role="list" aria-label="Ordre des actions"></div>
     </aside>
     <main id="battleArea">
       <div id="battleBg" aria-hidden="true"></div>
@@ -412,6 +525,9 @@
       const TOTAL_PLAYER_HP = 10;
       const TOTAL_ENEMY_HP = 10;
       const DWELL_MS = 1000;
+      const ENEMY_ATTACK_DURATION = 10000;
+      const TURN_TIMELINE_SIZE = 34;
+      const TURN_TIMELINE_CURRENT_INDEX = Math.floor(TURN_TIMELINE_SIZE / 2);
 
       const abilities = {
         chi: {
@@ -465,6 +581,7 @@
       const enemySprite = document.getElementById("enemySprite");
       const enemyTarget = document.getElementById("enemyTarget");
       const enemyTargetProgress = enemyTarget.querySelector(".target-progress");
+      const turnTimelineEl = document.getElementById("turnTimeline");
       const enemyNameEl = document.querySelector("#enemyStatus .enemy-name");
       const enemyTargetBaseLabel = enemyNameEl
         ? `Attaquer ${enemyNameEl.textContent.trim()}`
@@ -479,6 +596,9 @@
       }));
 
       Object.keys(cursorConfigs).forEach(mode => loadCursor(mode));
+
+      let turnTimelineItems = [];
+      let enemyAttackTimeout = null;
 
       function buildHearts(container, total) {
         container.innerHTML = "";
@@ -540,6 +660,69 @@
         tag.style.top = `${y - containerBounds.top}px`;
         document.body.appendChild(tag);
         setTimeout(() => tag.remove(), 900);
+      }
+
+      function opponent(actor) {
+        return actor === "player" ? "enemy" : "player";
+      }
+
+      function buildTurnTimeline() {
+        if (!turnTimelineEl) return;
+        turnTimelineEl.innerHTML = "";
+        turnTimelineItems = [];
+        for (let i = 0; i < TURN_TIMELINE_SIZE; i++) {
+          const icon = document.createElement("span");
+          icon.className = "turn-icon";
+          icon.setAttribute("role", "listitem");
+          turnTimelineEl.appendChild(icon);
+          turnTimelineItems.push(icon);
+        }
+        refreshTurnTimeline();
+      }
+
+      function refreshTurnTimeline() {
+        if (!turnTimelineEl || !turnTimelineItems.length) return;
+        const currentActor = isPlayerTurn ? "player" : "enemy";
+        const lastActor = opponent(currentActor);
+        const nextActor = opponent(currentActor);
+        const lastIndex = 0;
+        const currentIndex = TURN_TIMELINE_CURRENT_INDEX;
+        const nextIndex = TURN_TIMELINE_SIZE - 1;
+
+        turnTimelineItems.forEach((icon, index) => {
+          let actor;
+          if (index === lastIndex) {
+            actor = lastActor;
+          } else if (index === currentIndex) {
+            actor = currentActor;
+          } else if (index === nextIndex) {
+            actor = nextActor;
+          } else if (index < currentIndex) {
+            const distance = currentIndex - index;
+            actor = distance % 2 === 0 ? currentActor : lastActor;
+          } else {
+            const distance = index - currentIndex;
+            actor = distance % 2 === 0 ? currentActor : nextActor;
+          }
+
+          icon.classList.toggle("player", actor === "player");
+          icon.classList.toggle("enemy", actor === "enemy");
+          icon.classList.toggle("is-last", index === lastIndex);
+          icon.classList.toggle("is-current", index === currentIndex);
+          icon.classList.toggle("is-next", index === nextIndex);
+
+          let label;
+          if (index === currentIndex) {
+            label = actor === "player" ? "Tour du joueur" : "Tour de l’ennemi";
+          } else if (index === lastIndex) {
+            label = actor === "player" ? "Dernière action du joueur" : "Dernière action de l’ennemi";
+          } else if (index === nextIndex) {
+            label = actor === "player" ? "Prochaine action du joueur" : "Prochaine action de l’ennemi";
+          } else {
+            label = actor === "player" ? "Action du joueur" : "Action de l’ennemi";
+          }
+          icon.setAttribute("aria-label", label);
+        });
       }
 
       function loadCursor(mode) {
@@ -620,6 +803,7 @@
         if (!playerTurnNow) {
           clearEnemyHover();
         }
+        refreshTurnTimeline();
       }
 
       function setSelectedAbility(mode) {
@@ -749,27 +933,50 @@
       }
 
       function enemyAttack() {
+        busy = true;
         const damage = randomInt(1, 3);
-        playAudio(enemyAudio);
-        playerHp = Math.max(0, playerHp - damage);
-        updateHearts(playerHeartsEl, playerHp, TOTAL_PLAYER_HP);
-        spawnDamageTag(playerHeartsEl, damage, "enemy");
-        addLogEntry(`Le bandit riposte et inflige ${damage} dégâts.`, "enemy");
+        enemyTarget.classList.add("enemy-attacking");
+        enemySprite.classList.add("enemy-attacking");
+        addLogEntry("Le bandit concentre son énergie pour attaquer...", "enemy");
 
-        if (playerHp <= 0) {
-          endBattle(false);
-          return;
+        const resolveAttack = () => {
+          enemyAttackTimeout = null;
+          enemyTarget.classList.remove("enemy-attacking");
+          enemySprite.classList.remove("enemy-attacking");
+          playAudio(enemyAudio);
+          playerHp = Math.max(0, playerHp - damage);
+          updateHearts(playerHeartsEl, playerHp, TOTAL_PLAYER_HP);
+          spawnDamageTag(playerHeartsEl, damage, "enemy");
+          addLogEntry(`Le bandit riposte et inflige ${damage} dégâts.`, "enemy");
+
+          if (playerHp <= 0) {
+            endBattle(false);
+            return;
+          }
+
+          updateTurnState(true);
+          busy = false;
+          tryStartEnemyHover();
+        };
+
+        if (enemyAttackTimeout) {
+          clearTimeout(enemyAttackTimeout);
+          enemyAttackTimeout = null;
         }
 
-        updateTurnState(true);
-        busy = false;
-        tryStartEnemyHover();
+        enemyAttackTimeout = setTimeout(resolveAttack, ENEMY_ATTACK_DURATION);
       }
 
       function endBattle(playerWon) {
         busy = true;
         started = false;
         isPlayerTurn = false;
+        if (enemyAttackTimeout) {
+          clearTimeout(enemyAttackTimeout);
+          enemyAttackTimeout = null;
+        }
+        enemyTarget.classList.remove("enemy-attacking");
+        enemySprite.classList.remove("enemy-attacking");
         clearEnemyHover();
         playAudio(playerWon ? victoryAudio : defeatAudio);
         const summary = playerWon
@@ -786,6 +993,7 @@
         postBattleTimeout = setTimeout(() => {
           resetBattle();
         }, 2600);
+        refreshTurnTimeline();
       }
 
       function resetBattle() {
@@ -793,6 +1001,12 @@
           clearTimeout(postBattleTimeout);
           postBattleTimeout = null;
         }
+        if (enemyAttackTimeout) {
+          clearTimeout(enemyAttackTimeout);
+          enemyAttackTimeout = null;
+        }
+        enemyTarget.classList.remove("enemy-attacking");
+        enemySprite.classList.remove("enemy-attacking");
         playerHp = TOTAL_PLAYER_HP;
         enemyHp = TOTAL_ENEMY_HP;
         busy = false;
@@ -837,6 +1051,7 @@
       updateHearts(playerHeartsEl, playerHp, TOTAL_PLAYER_HP);
       updateHearts(enemyHeartsEl, enemyHp, TOTAL_ENEMY_HP);
       applyCursor(selectedAbility);
+      buildTurnTimeline();
       resetBattle();
 
       function animationLoop() {
