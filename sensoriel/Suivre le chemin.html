@@ -12,6 +12,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* Fullscreen reset */
     html, body {
@@ -96,21 +99,6 @@
     <div id="game-content"></div>
   </div>
   
-  <!-- Reinforcer overlay (common for all games) -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
-  
   <!-- Audio elements -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
@@ -119,107 +107,54 @@
   <script>
     // Create a global AudioContext to help unlock audio on iOS.
     window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    
+
+    let themeData = {};
+    let tracingWidthSetting = 'medium';
+    let hardModeEnabled = false;
+    let repetitionsLeft = 1;
+    let reinforcerController = null;
+
     document.addEventListener('DOMContentLoaded', function() {
-      // --- Theme/Audio Setup ---
-      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-      const mediaOption = selections.mediaOption || "";
-      const themeData = (window.themes && window.themes[mediaOption])
-                        ? window.themes[mediaOption]
-                        : window.themes["default"] || {};
-      
+      const session = sessionHelpers.ensureCurrentGame('suivre-le-chemin');
+      if (!session) { return; }
+
+      themeData = session.themeData || {};
+      reinforcerController = sessionHelpers.setupSharedReinforcer(session);
+
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
-      
-      // Set reinforcer video source (even though video playback is not used)
-      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-        reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
-      } else {
-        reinforcerVideoSource.src = "../../videos/africa.mp4";
+
+      const options = sessionHelpers.getCurrentGameOptions(session);
+      tracingWidthSetting = options['Largeur du tracé'] || 'medium';
+      hardModeEnabled = options['Hard mode'] === true || options['Hard mode'] === 'true';
+      repetitionsLeft = Number(options.activityRepetitions);
+      if (!Number.isFinite(repetitionsLeft) || repetitionsLeft < 1) {
+        repetitionsLeft = 1;
       }
-      const reinforcerVideo = document.getElementById('reinforcerVideo');
-      reinforcerVideo.load();
-      
-      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      if (isNaN(overallGameIndex)) {
-        alert("Game selections not found. Redirecting to main page.");
-        window.location.href = "main.html";
-        return;
-      }
-      
-      const activityOverlay = document.getElementById('activityNumberOverlay');
-      const numberTextEl = activityOverlay.querySelector('.number-text');
-      numberTextEl.textContent = (overallGameIndex + 1).toString();
-      activityOverlay.style.display = 'flex';
-      
-      function hideOverlayAndStart() {
-        // Unlock AudioContext on user gesture.
+
+      sessionHelpers.showActivityOverlay(() => {
         if (window.audioContext && window.audioContext.state === 'suspended') {
           window.audioContext.resume().catch(err => console.warn('AudioContext resume failed:', err));
         }
-        if (themeData.startSound) {
-          let sfx = new Audio(themeData.startSound);
-          sfx.play().catch(err => console.warn('Sound play error:', err));
-        }
-        activityOverlay.style.display = 'none';
-        document.removeEventListener('click', hideOverlayAndStart);
-        document.removeEventListener('touchend', hideOverlayAndStart);
-        startGame(); // Begin the game
-      }
-      document.addEventListener('click', hideOverlayAndStart);
-      document.addEventListener('touchend', hideOverlayAndStart);
-      
-      function navigateToNextGame() {
-        const selections = JSON.parse(localStorage.getItem('gameSelections'));
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-        if (currentGameIndex < selections.gameOrder.length) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        } else {
-          window.location.href = "completion.html";
-        }
-      }
+        startGame();
+      }, session);
+    });
       
       function showFinalReinforcerVideo() {
         const finalRewardSound = document.getElementById('final-reward-sound');
         finalRewardSound.currentTime = 0;
         finalRewardSound.play().catch(error => console.error('Error playing final reward sound:', error));
-        const reinforcerOverlay = document.getElementById('reinforcerOverlay');
-        reinforcerOverlay.style.display = 'flex';
-        reinforcerVideo.style.display = 'none';
-        document.getElementById('videoOverlayCover').style.display = 'none';
+        if (reinforcerController && typeof reinforcerController.show === 'function') {
+          reinforcerController.show();
+        } else {
+          sessionHelpers.advanceToNextGame();
+        }
       }
-      
-      // --- Modified Reinforcer Button ---
-      // When the reinforcer button is clicked, immediately redirect to reinforcer.html.
-      const reinforcerButton = document.getElementById('reinforcerButton');
-      reinforcerButton.addEventListener('click', function() {
-        window.location.href = "reinforcer.html";
-      });
       
       // ----------------------------------------------------------------------------
       // TRACING ACTIVITY WITH HARD MODE RESET, REPETITIONS, and PARTICLE EFFECTS
       // ----------------------------------------------------------------------------
-      let repetitionsLeft = 1;
-      
-      function initRepetitions() {
-        const selectionsObj = JSON.parse(localStorage.getItem('gameSelections'));
-        if (selectionsObj &&
-            selectionsObj.gameOrder &&
-            selectionsObj.gameOrder.includes("Suivre le chemin")) {
-          const index = selectionsObj.gameOrder.indexOf("Suivre le chemin");
-          if (selectionsObj.gameOptions &&
-              selectionsObj.gameOptions[index] &&
-              selectionsObj.gameOptions[index]["activityRepetitions"]) {
-            repetitionsLeft = parseInt(selectionsObj.gameOptions[index]["activityRepetitions"], 10) || 1;
-          }
-        }
-      }
-      initRepetitions();
-      
       function handleCompletion() {
         repetitionsLeft--;
         console.log(`Tracing completed once. Repetitions left: ${repetitionsLeft}`);
@@ -299,33 +234,20 @@
         pathContainer.appendChild(interactiveLayer);
       
         let offsetDist = 35;
-        const selectionsObj = JSON.parse(localStorage.getItem('gameSelections'));
-        if (selectionsObj && selectionsObj.gameOrder && selectionsObj.gameOrder.includes("Suivre le chemin")) {
-          const index = selectionsObj.gameOrder.indexOf("Suivre le chemin");
-          if (selectionsObj.gameOptions && selectionsObj.gameOptions[index] && selectionsObj.gameOptions[index]["Largeur du tracé"]) {
-            const tracingOption = selectionsObj.gameOptions[index]["Largeur du tracé"];
-            switch(tracingOption) {
-              case "hard":
-                offsetDist = 20;
-                break;
-              case "easy":
-                offsetDist = 50;
-                break;
-              case "medium":
-              default:
-                offsetDist = 35;
-                break;
-            }
-          }
+        switch (tracingWidthSetting) {
+          case "hard":
+            offsetDist = 20;
+            break;
+          case "easy":
+            offsetDist = 50;
+            break;
+          case "medium":
+          default:
+            offsetDist = 35;
+            break;
         }
-      
-        let isHardMode = false;
-        if (selectionsObj && selectionsObj.gameOptions) {
-          const index = selectionsObj.gameOrder.indexOf("Suivre le chemin");
-          if (selectionsObj.gameOptions[index]["Hard mode"] === "true") {
-            isHardMode = true;
-          }
-        }
+
+        const isHardMode = hardModeEnabled;
       
         const containerWidth = interactiveLayer.clientWidth;
         const containerHeight = interactiveLayer.clientHeight;

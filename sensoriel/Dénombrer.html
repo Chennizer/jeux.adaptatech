@@ -10,6 +10,9 @@
   <title>Counting with Themed Objects</title>
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* Basic reset */
     *, *::before, *::after {
@@ -131,163 +134,68 @@
   </div>
 
   <!-- Reinforcer overlay -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
-
   <!-- Audio elements -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
   <audio id="final-reward-sound" src="" preload="auto"></audio>
 
   <script>
+    let themeData = {};
+    let difficultySetting = 'easy';
+    let activityRepetitions = 1;
+    let correctCount = 0;
+    let reinforcerController = null;
+
     document.addEventListener('DOMContentLoaded', function() {
-      /***********************************************************
-       * 1) Retrieve global settings from localStorage
-       ***********************************************************/
-      var selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-      var mediaOption = selections.mediaOption || "default";
-      var themeData = (window.themes && window.themes[mediaOption]) ||
-                      (window.themes && window.themes["default"]) || {};
+      const session = sessionHelpers.ensureCurrentGame('denombrer');
+      if (!session) { return; }
+
+      themeData = session.themeData || {};
+      reinforcerController = sessionHelpers.setupSharedReinforcer(session);
 
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
 
-      var reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-        reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
-      } else {
-        reinforcerVideoSource.src = "../../videos/africa.mp4";
-      }
-      var reinforcerVideo = document.getElementById('reinforcerVideo');
-      reinforcerVideo.load();
-
-      /***********************************************************
-       * Global Repetition Settings
-       * Retrieve the number of required repetitions (correct answers)
-       * and initialize the counter.
-       ***********************************************************/
-      var activityRepetitions = parseInt(localStorage.getItem('activityRepetitions'), 10);
-      if (isNaN(activityRepetitions) || activityRepetitions < 1) {
+      const options = sessionHelpers.getCurrentGameOptions(session);
+      difficultySetting = options.difficulty || 'easy';
+      activityRepetitions = Number(options.activityRepetitions);
+      if (!Number.isFinite(activityRepetitions) || activityRepetitions < 1) {
         activityRepetitions = 1;
       }
-      var correctCount = 0;
+      correctCount = 0;
 
-      /***********************************************************
-       * 2) Activity Number Overlay
-       ***********************************************************/
-      var overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      if (isNaN(overallGameIndex)) {
-        alert("Game selections not found. Redirecting to main page.");
-        window.location.href = "main.html";
-        return;
-      }
-      var activityOverlay = document.getElementById('activityNumberOverlay');
-      var numberTextEl = activityOverlay.querySelector('.number-text');
-      numberTextEl.textContent = (overallGameIndex + 1).toString();
-      activityOverlay.style.display = 'flex';
-
-      function hideOverlayAndStart() {
-        if (themeData.startSound) {
-          var sfx = new Audio(themeData.startSound);
-          sfx.play().catch(function(err) { console.warn('Sound play error:', err); });
-        }
-        activityOverlay.style.display = 'none';
-        document.removeEventListener('click', hideOverlayAndStart);
-        document.removeEventListener('touchend', hideOverlayAndStart);
+      sessionHelpers.showActivityOverlay(() => {
         startGame();
-      }
-      document.addEventListener('click', hideOverlayAndStart);
-      document.addEventListener('touchend', hideOverlayAndStart);
+      }, session);
+    });
 
-      /***********************************************************
-       * 3) Navigation to next game
-       ***********************************************************/
-      function navigateToNextGame() {
-        var selections = JSON.parse(localStorage.getItem('gameSelections'));
-        var currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-
-        if (currentGameIndex < selections.gameOrder.length) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        } else {
-          window.location.href = "completion.html";
-        }
-      }
-
-      /***********************************************************
-       * 4) Reinforcer / Reward
-       ***********************************************************/
-      function showReinforcerSound() {
-        setTimeout(function() {
-          var wordRewardSound = document.getElementById('word-reward-sound');
-          wordRewardSound.currentTime = 0;
-          wordRewardSound.play().then(function() {
-            // after it finishes, go to next game
-            setTimeout(navigateToNextGame, 1500);
-          }).catch(function(error) {
-            console.error('Error playing reinforcer sound:', error);
-          });
-        }, 2000);
-      }
-
-      // Modified function: show reinforcer overlay with button visible.
-      function showFinalReinforcerVideo() {
-        var finalRewardSound = document.getElementById('final-reward-sound');
-        finalRewardSound.currentTime = 0;
-        finalRewardSound.play().catch(function(error) {
-          console.error('Error playing final reward sound:', error);
+    function showReinforcerSound() {
+      setTimeout(function() {
+        const wordRewardSound = document.getElementById('word-reward-sound');
+        wordRewardSound.currentTime = 0;
+        wordRewardSound.play().then(function() {
+          setTimeout(() => sessionHelpers.advanceToNextGame(), 1500);
+        }).catch(function(error) {
+          console.error('Error playing reinforcer sound:', error);
         });
-        var reinforcerOverlay = document.getElementById('reinforcerOverlay');
-        var reinforcerButton = document.getElementById('reinforcerButton');
-        var reinforcerVideo = document.getElementById('reinforcerVideo');
-        var videoOverlayCover = document.getElementById('videoOverlayCover');
+      }, 2000);
+    }
 
-        // Show overlay with button visible and video hidden
-        reinforcerOverlay.style.display = 'flex';
-        reinforcerButton.style.display = 'flex';
-        reinforcerVideo.style.display = 'none';
-        videoOverlayCover.style.display = 'none';
-      }
-
-      var reinforcerButton = document.getElementById('reinforcerButton');
-      // *** Minimal change: only replace the logic inside this event listener. ***
-      reinforcerButton.addEventListener('click', function() {
-        // Instead of playing the video, navigate to reinforcer.html
-        window.location.href = "reinforcer.html";
+    function showFinalReinforcerVideo() {
+      const finalRewardSound = document.getElementById('final-reward-sound');
+      finalRewardSound.currentTime = 0;
+      finalRewardSound.play().catch(function(error) {
+        console.error('Error playing final reward sound:', error);
       });
-
-      reinforcerVideo.addEventListener('ended', function() {
-        navigateToNextGame();
-      }, { once: true });
-
-      function hideReinforcer() {
-        var reinforcerOverlay = document.getElementById('reinforcerOverlay');
-        reinforcerOverlay.style.display = 'none';
-        reinforcerButton.style.display = 'flex';
-        reinforcerVideo.style.display = 'none';
-        reinforcerVideo.pause();
-        reinforcerVideo.currentTime = 0;
-        document.getElementById('videoOverlayCover').style.display = 'none';
-        reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
+      if (reinforcerController && typeof reinforcerController.show === 'function') {
+        reinforcerController.show();
+      } else {
+        sessionHelpers.advanceToNextGame();
       }
+    }
 
-      /***********************************************************
-       * 5) MAIN GAME LOGIC: Counting with Themed Objects
-       ***********************************************************/
-      window.startGame = function() {
+    window.startGame = function() {
         var gameContent = document.getElementById('game-content');
         gameContent.innerHTML = "";
 
@@ -309,9 +217,8 @@
         objectsContainer.className = "objects-container";
 
         // Difficulty => numObjects, maxOption
-        var difficulty = localStorage.getItem('difficulty') || "easy";
         var numObjects, maxOption;
-        switch (difficulty) {
+        switch (difficultySetting) {
           case "easy":
             numObjects = Math.floor(Math.random() * 3) + 1;
             maxOption = 3;

@@ -10,6 +10,9 @@
   <title>Jeu de Complétion de Mot</title>
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* Reset and base styles */
     *, *::before, *::after {
@@ -198,152 +201,114 @@
       <div class="target-word" id="target-word"></div>
     </div>
   </div>
-  <!-- Reinforcer overlay remains the same in markup -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <!-- The source will be set dynamically from themes.js -->
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
   <!-- Audio elements (sources set dynamically) -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
   <audio id="final-reward-sound" src="" preload="auto"></audio>
   
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Retrieve selections and theme information from localStorage and themes.js
-      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-      const mediaOption = selections.mediaOption || "";
-      const themeData = (window.themes && window.themes[mediaOption])
-                        ? window.themes[mediaOption]
-                        : window.themes["default"] || {};
-      
-      // Build the full words array paired by index (first word with first image, etc.)
-      let fullWords = [];
-      if (themeData.words && themeData.words.length > 0) {
-        fullWords = themeData.words.map((word, index) => ({
-          word: word,
-          image: (themeData.transparentPNGs && themeData.transparentPNGs.length > index)
-                   ? themeData.transparentPNGs[index]
-                   : "../../images/toupieetbinou.png"
-        }));
-      } else {
-        fullWords = [
+    <script>
+      let completewordSession = null;
+      let themeData = {};
+      let words = [];
+      let wordIndex = 0;
+      let showModelLetters = false;
+
+      let lettersContainer = null;
+      let targetImage = null;
+      let targetWordContainer = null;
+      let reinforcerController = null;
+      let errorSoundElement = null;
+      let wordRewardSound = null;
+      let finalRewardSound = null;
+
+      let slots = [];
+      let activeDragElement = null;
+      let initialX = 0;
+      let initialY = 0;
+      let currentX = 0;
+      let currentY = 0;
+
+      let synth = window.speechSynthesis;
+      let frenchVoice = null;
+      let voicesInitialized = false;
+      let audioContext;
+      let errorSoundBuffer = null;
+
+      document.addEventListener('DOMContentLoaded', () => {
+        completewordSession = sessionHelpers.ensureCurrentGame('completeword');
+        if (!completewordSession) { return; }
+
+        themeData = completewordSession.themeData || {};
+
+        lettersContainer = document.getElementById('letters-container');
+        targetImage = document.getElementById('target-image');
+        targetWordContainer = document.getElementById('target-word');
+        errorSoundElement = document.getElementById('error-sound');
+        wordRewardSound = document.getElementById('word-reward-sound');
+        finalRewardSound = document.getElementById('final-reward-sound');
+
+        setupMediaAssets();
+        setupGameOptions();
+        reinforcerController = sessionHelpers.setupSharedReinforcer(completewordSession);
+
+        sessionHelpers.showActivityOverlay(() => {
+          beginGame();
+        }, completewordSession);
+      });
+
+      function setupMediaAssets() {
+        if (errorSoundElement) {
+          errorSoundElement.src = themeData.errorSound || "../../sounds/error.mp3";
+        }
+        if (wordRewardSound) {
+          wordRewardSound.src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
+        }
+        if (finalRewardSound) {
+          finalRewardSound.src = themeData.finalRewardSound || "../../sounds/victory.mp3";
+        }
+
+      }
+
+      function setupGameOptions() {
+        const options = sessionHelpers.getCurrentGameOptions(completewordSession) || {};
+        const fullWords = buildFullWordList();
+        let desiredCount = parseInt(options.testtoupieWordCount, 10);
+        if (!Number.isFinite(desiredCount) || desiredCount < 1) {
+          desiredCount = fullWords.length;
+        }
+        const shuffledWords = fullWords.slice().sort(() => Math.random() - 0.5);
+        words = shuffledWords.slice(0, Math.min(desiredCount, shuffledWords.length));
+        showModelLetters = options.showModelLetters === true || options.showModelLetters === 'true';
+        wordIndex = 0;
+      }
+
+      function buildFullWordList() {
+        if (themeData.words && themeData.words.length > 0) {
+          return themeData.words.map((word, index) => ({
+            word,
+            image: (themeData.transparentPNGs && themeData.transparentPNGs.length > index)
+              ? themeData.transparentPNGs[index]
+              : "../../images/toupieetbinou.png"
+          }));
+        }
+        return [
           { word: "Binou", image: "../../images/binou.png" },
           { word: "Toupie", image: "../../images/toupieetbinou.png" },
           { word: "Chaton", image: "../../images/chaton.png" },
           { word: "Pomme", image: "../../images/pomme.png" }
         ];
       }
-      
-      // Retrieve the current game options (for completeword) from selections.
-      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      if (isNaN(overallGameIndex)) {
-        alert("Game selections not found. Redirecting to main page.");
-        window.location.href = "main.html";
-        return;
-      }
-      if (selections.gameOrder[overallGameIndex] !== "completeword") {
-        alert("This is not your current game. Redirecting to the correct game.");
-        window.location.href = selections.gameOrder[overallGameIndex] + ".html";
-        return;
-      }
-      
-      // Read the word count option (for completeword)
-      const currentGameOptions = selections.gameOptions[overallGameIndex] || {};
-      let desiredCount = parseInt(currentGameOptions.testtoupieWordCount, 10);
-      if (isNaN(desiredCount) || desiredCount < 1) {
-        desiredCount = fullWords.length;
-      }
-      
-      // Read and convert the "showModelLetters" option
-      let showModelLetters = (currentGameOptions.showModelLetters === "true");
-      
-      // Randomize fullWords and limit to the desired count.
-      let shuffledWords = fullWords.slice().sort(() => Math.random() - 0.5);
-      let words = shuffledWords.slice(0, Math.min(desiredCount, shuffledWords.length));
-      
-      // Use a separate local word index so the game always starts at 0.
-      let wordIndex = 0;
-      
-      // Update audio element sources (using defaults if the theme does not define them)
-      document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
-      document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
-      document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
-      
-      // Set the reinforcer video source (choose one at random from the theme's list)
-      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-        const randomIndex = Math.floor(Math.random() * themeData.reinforcerVideos.length);
-        reinforcerVideoSource.src = themeData.reinforcerVideos[randomIndex];
-      } else {
-        reinforcerVideoSource.src = "../../videos/africa.mp4";
-      }
-      const reinforcerVideo = document.getElementById('reinforcerVideo');
-      reinforcerVideo.load();
-      
-      // DOM references used by the game
-      const lettersContainer = document.getElementById('letters-container');
-      const targetImage = document.getElementById('target-image');
-      const targetWordContainer = document.getElementById('target-word');
-      const reinforcerOverlay = document.getElementById('reinforcerOverlay');
-      const reinforcerButton = document.getElementById('reinforcerButton');
-      const videoOverlayCover = document.getElementById('videoOverlayCover');
-      
-      // Audio elements
-      const errorSoundElement = document.getElementById('error-sound');
-      const wordRewardSound = document.getElementById('word-reward-sound');
-      const finalRewardSound = document.getElementById('final-reward-sound');
-  
-      // -----------------------------
-      // Activity Overlay Feature
-      // -----------------------------
-      const activityOverlay = document.getElementById('activityNumberOverlay');
-      const numberTextEl = activityOverlay.querySelector('.number-text');
-      numberTextEl.textContent = (overallGameIndex + 1).toString();
-      activityOverlay.style.display = 'flex';
-      
-      function hideOverlayAndStart() {
+
+      async function beginGame() {
         unlockAudio();
         window.speechSynthesis.getVoices();
         initializeSpeechSynthesis();
         const warmupUtterance = new SpeechSynthesisUtterance(" ");
         warmupUtterance.lang = 'fr-FR';
         window.speechSynthesis.speak(warmupUtterance);
-        if (themeData.startSound) {
-          const sfx = new Audio(themeData.startSound);
-          sfx.currentTime = 0;
-          sfx.play().catch(err => console.warn('Sound play error:', err));
-        }
-        activityOverlay.style.display = 'none';
-        document.removeEventListener('click', hideOverlayAndStart);
-        document.removeEventListener('touchend', hideOverlayAndStart);
-        initialize();
+        await initialize();
       }
-      
-      document.addEventListener('click', hideOverlayAndStart);
-      document.addEventListener('touchend', hideOverlayAndStart);
-      // -----------------------------
-  
-      let slots = [];
-      let activeDragElement = null;
-      let initialX = 0, initialY = 0;
-      let currentX = 0, currentY = 0;
-  
-      let synth = window.speechSynthesis;
-      let frenchVoice = null;
-      let audioContext;
-      let errorSoundBuffer = null;
-  
+
       async function loadErrorSound() {
         try {
           audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -354,7 +319,7 @@
           console.error('Error loading error sound:', error);
         }
       }
-  
+
       function playErrorSound() {
         if (!audioContext || !errorSoundBuffer) {
           console.warn('AudioContext not initialized or errorSoundBuffer not loaded.');
@@ -365,7 +330,7 @@
         source.connect(audioContext.destination);
         source.start(0);
       }
-  
+
       function selectFrenchVoice() {
         return new Promise((resolve, reject) => {
           let voices = synth.getVoices();
@@ -391,7 +356,7 @@
           }
         });
       }
-  
+
       function speakText(text, callback) {
         if (!synth) {
           console.error("Speech Synthesis not supported in this browser.");
@@ -410,7 +375,7 @@
           speak(text, callback);
         }
       }
-  
+
       function speak(text, callback) {
         const utterThis = new SpeechSynthesisUtterance(text);
         utterThis.voice = frenchVoice;
@@ -425,8 +390,7 @@
         console.log("Speaking:", text, "with voice:", utterThis.voice);
         synth.speak(utterThis);
       }
-  
-      let voicesInitialized = false;
+
       function initializeSpeechSynthesis() {
         if (voicesInitialized) return;
         voicesInitialized = true;
@@ -434,7 +398,7 @@
           console.error(error);
         });
       }
-  
+
       function unlockAudio() {
         if (audioContext && audioContext.state === 'suspended') {
           audioContext.resume().catch(error => {
@@ -442,7 +406,7 @@
           });
         }
       }
-  
+
       async function initialize() {
         await loadErrorSound();
         initializeTargetImage();
@@ -451,17 +415,16 @@
         insertModelLetters();
         attachSlotEventListeners();
       }
-  
+
       function initializeTargetImage() {
         const currentWord = words[wordIndex].word;
         const imagePath = words[wordIndex].image;
         targetImage.src = imagePath;
         targetImage.alt = currentWord + " Image";
       }
-  
+
       function initializeSlots() {
         const currentWord = words[wordIndex].word;
-        const targetWordContainer = document.getElementById('target-word');
         targetWordContainer.innerHTML = '';
         targetWordContainer.style.gridTemplateColumns = `repeat(${currentWord.length}, 1fr)`;
         for (let i = 0; i < currentWord.length; i++) {
@@ -473,9 +436,9 @@
           slot.appendChild(placedLetterDiv);
           targetWordContainer.appendChild(slot);
         }
-        slots = document.querySelectorAll('.letter-slot');
+        slots = targetWordContainer.querySelectorAll('.letter-slot');
       }
-  
+
       function initializeLetters() {
         const currentWord = words[wordIndex].word;
         const lettersArray = currentWord.split('');
@@ -491,10 +454,9 @@
           letterDiv.addEventListener('touchstart', touchStart, { passive: false });
         });
       }
-  
+
       function insertModelLetters() {
         const currentWord = words[wordIndex].word;
-        const targetWordContainer = document.getElementById('target-word');
         slots.forEach(slot => {
           const position = parseInt(slot.getAttribute('data-position'));
           const modelLetter = currentWord[position];
@@ -505,21 +467,21 @@
         });
         toggleModelLetters();
       }
-  
+
       function toggleModelLetters() {
-        const modelLetters = document.querySelectorAll('.model-letter');
+        const modelLetters = targetWordContainer.querySelectorAll('.model-letter');
         modelLetters.forEach(modelDiv => {
           modelDiv.style.display = showModelLetters ? 'block' : 'none';
         });
       }
-  
+
       function shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [array[i], array[j]] = [array[j], array[i]];
         }
       }
-  
+
       function positionLetterRandomly(letterDiv) {
         const container = lettersContainer;
         const letterWidth = letterDiv.offsetWidth;
@@ -541,7 +503,7 @@
         letterDiv.style.left = `${left}px`;
         letterDiv.style.top = `${top}px`;
       }
-  
+
       function isOverlapping(left, top, width, height, existingLetters) {
         for (let el of existingLetters) {
           const elLeft = parseInt(el.style.left);
@@ -559,7 +521,7 @@
         }
         return false;
       }
-  
+
       function dragStartMouse(e) {
         e.preventDefault();
         activeDragElement = e.target;
@@ -571,7 +533,7 @@
         document.addEventListener('mouseup', dragEndMouse);
         moveToBody(activeDragElement, rect.left, rect.top);
       }
-  
+
       function dragMoveMouse(e) {
         if (!activeDragElement) return;
         currentX = e.clientX - initialX;
@@ -580,8 +542,8 @@
         activeDragElement.style.top = `${currentY}px`;
         updateDropIndicator();
       }
-  
-      function dragEndMouse(e) {
+
+      function dragEndMouse() {
         if (!activeDragElement) return;
         activeDragElement.classList.remove('dragging');
         removeDropIndicator();
@@ -596,7 +558,7 @@
         }
         activeDragElement = null;
       }
-  
+
       function touchStart(e) {
         if (e.target.classList.contains('letter')) {
           e.preventDefault();
@@ -611,7 +573,7 @@
           document.addEventListener('touchend', touchEnd);
         }
       }
-  
+
       function touchMove(e) {
         if (!activeDragElement) return;
         e.preventDefault();
@@ -622,8 +584,8 @@
         activeDragElement.style.top = `${currentY}px`;
         updateDropIndicator();
       }
-  
-      function touchEnd(e) {
+
+      function touchEnd() {
         if (!activeDragElement) return;
         activeDragElement.classList.remove('dragging');
         removeDropIndicator();
@@ -638,7 +600,7 @@
         }
         activeDragElement = null;
       }
-  
+
       function updateDropIndicator() {
         slots.forEach(slot => slot.classList.remove('over'));
         const slot = getDropSlot(activeDragElement);
@@ -646,24 +608,25 @@
           slot.classList.add('over');
         }
       }
-  
+
       function removeDropIndicator() {
         slots.forEach(slot => slot.classList.remove('over'));
       }
-  
+
       function moveToBody(element, left, top) {
         document.body.appendChild(element);
         element.style.position = 'fixed';
         element.style.left = `${left}px`;
         element.style.top = `${top}px`;
       }
-  
+
       function appendToLettersContainer(element) {
         lettersContainer.appendChild(element);
         element.style.position = 'absolute';
       }
-  
+
       function getDropSlot(draggedElement) {
+        if (!draggedElement) return null;
         const draggedRect = draggedElement.getBoundingClientRect();
         for (let slot of slots) {
           const slotRect = slot.getBoundingClientRect();
@@ -678,17 +641,15 @@
         }
         return null;
       }
-  
-      // Updated handleDrop function:
+
       function handleDrop(draggedElement, slot) {
-        // Block drop if the slot is already filled.
         if (slot.classList.contains('filled')) {
           playErrorSound();
           appendToLettersContainer(draggedElement);
           positionLetterRandomly(draggedElement);
           return;
         }
-  
+
         const index = parseInt(slot.getAttribute('data-position'));
         const requiredLetter = words[wordIndex].word[index];
         const draggedLetter = draggedElement.dataset.letter;
@@ -711,7 +672,7 @@
           positionLetterRandomly(draggedElement);
         }
       }
-  
+
       function showReinforcerSound() {
         setTimeout(() => {
           wordRewardSound.currentTime = 0;
@@ -730,7 +691,7 @@
           }, 3000);
         }, 200);
       }
-  
+
       function checkCompletion() {
         let correct = true;
         slots.forEach(slot => {
@@ -745,29 +706,21 @@
           });
         }
       }
-  
+
       function showFinalReinforcerVideo() {
-        finalRewardSound.currentTime = 0;
-        finalRewardSound.play().catch(error => {
-          console.error('Error playing finalRewardSound:', error);
-        });
-        reinforcerOverlay.style.display = 'flex';
-        reinforcerVideo.style.display = 'none';
-        videoOverlayCover.style.display = 'none';
-      }
-  
-      function navigateToNextGame() {
-        const selections = JSON.parse(localStorage.getItem('gameSelections'));
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-        if (currentGameIndex < selections.gameOrder.length) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
+        if (finalRewardSound) {
+          finalRewardSound.currentTime = 0;
+          finalRewardSound.play().catch(error => {
+            console.error('Error playing finalRewardSound:', error);
+          });
+        }
+        if (reinforcerController && typeof reinforcerController.show === 'function') {
+          reinforcerController.show();
         } else {
-          window.location.href = "completion.html";
+          sessionHelpers.advanceToNextGame();
         }
       }
-  
+
       function moveToNextWord() {
         wordIndex++;
         if (wordIndex >= words.length) {
@@ -776,7 +729,7 @@
           resetGame();
         }
       }
-  
+
       function resetGame() {
         slots.forEach(slot => {
           const placedLetterDiv = slot.querySelector('.placed-letter');
@@ -792,7 +745,7 @@
         insertModelLetters();
         attachSlotEventListeners();
       }
-  
+
       function attachSlotEventListeners() {
         slots.forEach((slot, index) => {
           slot.addEventListener('dragover', (e) => {
@@ -835,16 +788,6 @@
           });
         });
       }
-  
-      // --- Modified Reinforcer Overlay ---
-      // When the reinforcer button is clicked, immediately redirect to reinforcer.html.
-      reinforcerButton.addEventListener('click', () => {
-        window.location.href = "reinforcer.html";
-      });
-  
-      // (Removed video-playback logic and "ended" listener)
-  
-    });
-  </script>
+    </script>
 </body>
 </html>

@@ -1,0 +1,190 @@
+(function (global) {
+  'use strict';
+
+  const gamesConfig = [
+    {
+      id: 'puzzle',
+      label: 'Casse-tête',
+      file: 'puzzle.html',
+      options: [
+        {
+          type: 'select',
+          label: 'Taille du casse-tête:',
+          name: 'puzzleDimension',
+          options: [
+            { value: '2x2', text: '2×2' },
+            { value: '3x3', text: '3×3' },
+            { value: '4x4', text: '4×4' }
+          ]
+        },
+        {
+          type: 'checkbox',
+          label: 'Indicateur de contour:',
+          name: 'puzzleEasy'
+        }
+      ]
+    },
+    {
+      id: 'completeword',
+      label: 'Compléter le mot',
+      file: 'completeword.html',
+      options: [
+        {
+          type: 'checkbox',
+          label: 'Modèle de lettres:',
+          name: 'showModelLetters',
+          defaultChecked: true
+        },
+        {
+          type: 'number',
+          label: 'Nombre de mots:',
+          name: 'testtoupieWordCount',
+          min: 1,
+          max: 10,
+          value: 1
+        }
+      ]
+    },
+    {
+      id: 'matchnumber',
+      label: 'Match Number',
+      file: 'matchnumber.html',
+      options: [
+        {
+          type: 'select',
+          label: 'Wrong Answer Retry:',
+          name: 'wrongAnswerRetry',
+          options: [
+            { value: 'true', text: 'Yes' },
+            { value: 'false', text: 'No' }
+          ]
+        },
+        {
+          type: 'number',
+          label: 'Activity Repetitions:',
+          name: 'activityRepetitions',
+          min: 1,
+          max: 10,
+          value: 1
+        }
+      ]
+    },
+    {
+      id: 'cartes-memoire',
+      label: 'Cartes mémoire',
+      file: 'Cartes mémoire.html',
+      options: [
+        {
+          type: 'number',
+          label: 'Number of Pairs:',
+          name: 'paires',
+          min: 1,
+          max: 10,
+          value: 3
+        }
+      ]
+    },
+    {
+      id: 'denombrer',
+      label: 'Dénombrer',
+      file: 'Dénombrer.html',
+      options: [
+        {
+          type: 'select',
+          label: 'Difficulté:',
+          name: 'difficulty',
+          options: [
+            { value: 'easy', text: '1 à 3' },
+            { value: 'medium', text: '1 à 5' },
+            { value: 'hard', text: '1 à 10' }
+          ]
+        },
+        {
+          type: 'number',
+          label: 'Répétitions:',
+          name: 'activityRepetitions',
+          min: 1,
+          max: 10,
+          value: 1
+        }
+      ]
+    },
+    {
+      id: 'imagedecouverte',
+      label: "Découvrir l'image",
+      file: 'imagedecouverte.html',
+      options: [
+        {
+          type: 'select',
+          label: 'Difficulty:',
+          name: 'difficulty',
+          options: [
+            { value: 'easy', text: 'Débutant' },
+            { value: 'medium', text: 'Medium' },
+            { value: 'hard', text: 'Difficile' }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'suivre-le-chemin',
+      label: 'Suivre le chemin',
+      file: 'Suivre le chemin.html',
+      options: [
+        {
+          type: 'select',
+          label: 'Largeur du tracé:',
+          name: 'Largeur du tracé',
+          options: [
+            { value: 'easy', text: 'Large' },
+            { value: 'medium', text: 'Moyen' },
+            { value: 'hard', text: 'Étroit' }
+          ]
+        },
+        {
+          type: 'checkbox',
+          label: 'Mode difficile (retour au début en cas de déviation):',
+          name: 'Hard mode'
+        },
+        {
+          type: 'number',
+          label: 'Nombre de répétitions:',
+          name: 'activityRepetitions',
+          min: 1,
+          max: 10,
+          value: 1
+        }
+      ]
+    },
+    {
+      id: 'game7',
+      label: 'Game 7',
+      file: null,
+      options: [],
+      disabled: true
+    },
+    {
+      id: 'game8',
+      label: 'Game 8',
+      file: null,
+      options: [],
+      disabled: true
+    },
+    {
+      id: 'game9',
+      label: 'Game 9',
+      file: null,
+      options: [],
+      disabled: true
+    },
+    {
+      id: 'game10',
+      label: 'Game 10',
+      file: null,
+      options: [],
+      disabled: true
+    }
+  ];
+
+  global.gamesConfig = gamesConfig;
+})(window);

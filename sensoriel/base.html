@@ -10,6 +10,9 @@
   <title>Base Game</title>
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* Basic reset and layout styles */
     *, *::before, *::after {
@@ -59,21 +62,6 @@
     </div>
   </div>
 
-  <!-- Reinforcer overlay (common for all games) -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
-
   <!-- Audio elements for error, reinforcer, and final reward sounds -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
@@ -84,6 +72,7 @@
       // Retrieve game selections and theme information from localStorage and themes.js
       const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       const mediaOption = selections.mediaOption || "";
+      const reinforcerType = selections.reinforcerType || 'shortvideo';
       const themeData = (window.themes && window.themes[mediaOption])
                         ? window.themes[mediaOption]
                         : window.themes["default"] || {};
@@ -93,16 +82,6 @@
       // Use the dynamically imported reinforcer sound (or fallback to rooster)
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
-
-      // Set the reinforcer video source (randomly selected from theme)
-      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-        reinforcerVideoSource.src = themeData.reinforcerVideos[Math.floor(Math.random() * themeData.reinforcerVideos.length)];
-      } else {
-        reinforcerVideoSource.src = "../../videos/africa.mp4";
-      }
-      const reinforcerVideo = document.getElementById('reinforcerVideo');
-      reinforcerVideo.load();
 
       // Show the activity overlay with the game index
       let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
@@ -133,17 +112,41 @@
       document.addEventListener('click', hideOverlayAndStart);
       document.addEventListener('touchend', hideOverlayAndStart);
 
+      const resolveGameFile = (gameId) => {
+        if (!gameId) {
+          return '';
+        }
+        if (window.sessionHelpers && typeof window.sessionHelpers.getGameFileById === 'function') {
+          return window.sessionHelpers.getGameFileById(gameId);
+        }
+        if (Array.isArray(window.gamesConfig)) {
+          const match = window.gamesConfig.find(game => game && game.id === gameId);
+          if (match && match.file) {
+            return match.file;
+          }
+        }
+        return `${gameId}.html`;
+      };
+
       // Generic function to navigate to the next game.
       function navigateToNextGame() {
-        const selections = JSON.parse(localStorage.getItem('gameSelections'));
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;  // Increment overall game index.
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-        if (currentGameIndex < selections.gameOrder.length) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        } else {
-          window.location.href = "completion.html";
+        if (window.sessionHelpers && typeof window.sessionHelpers.advanceToNextGame === 'function') {
+          sessionHelpers.advanceToNextGame();
+          return;
         }
+        const updatedSelections = JSON.parse(localStorage.getItem('gameSelections')) || {};
+        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        currentGameIndex += 1;
+        localStorage.setItem('currentGameIndex', currentGameIndex);
+        if (Array.isArray(updatedSelections.gameOrder) && currentGameIndex < updatedSelections.gameOrder.length) {
+          const nextGameId = updatedSelections.gameOrder[currentGameIndex];
+          const nextGameFile = resolveGameFile(nextGameId);
+          if (nextGameFile) {
+            window.location.href = nextGameFile;
+            return;
+          }
+        }
+        window.location.href = "completion.html";
       }
 
       // Generic function to show the reinforcer sound between words.
@@ -160,44 +163,35 @@
         }, 2000); // 2-second delay
       }
 
+      let reinforcerController = null;
+      if (window.sessionHelpers && typeof window.sessionHelpers.setupSharedReinforcer === 'function') {
+        const session = sessionHelpers.loadSession ? sessionHelpers.loadSession() : null;
+        if (session) {
+          reinforcerController = sessionHelpers.setupSharedReinforcer(session, {
+            reinforcerType,
+            onAdvance: navigateToNextGame
+          });
+        }
+      }
+      if (!reinforcerController && window.reinforcerOverlay && typeof window.reinforcerOverlay.init === 'function') {
+        reinforcerController = window.reinforcerOverlay.init({
+          reinforcerType,
+          themeData,
+          onAdvance: navigateToNextGame
+        });
+      }
+
       // Generic function to show the final reinforcer overlay.
-      // In this mode, the reinforcer button remains visible until the user clicks it.
       function showFinalReinforcerVideo() {
         finalRewardSound.currentTime = 0;
         finalRewardSound.play().catch(error => {
           console.error('Error playing final reward sound:', error);
         });
-        reinforcerOverlay.style.display = 'flex';
-        reinforcerVideo.style.display = 'none';
-        document.getElementById('videoOverlayCover').style.display = 'none';
-        // Note: Do not auto-navigate; wait for the user to click the reinforcer button.
-      }
-
-      // Set up the reinforcer button event.
-      const reinforcerButton = document.getElementById('reinforcerButton');
-      reinforcerButton.addEventListener('click', function() {
-        reinforcerButton.style.display = 'none';
-        reinforcerOverlay.style.background = '#000';
-        reinforcerVideo.style.display = 'block';
-        document.getElementById('videoOverlayCover').style.display = 'block';
-        reinforcerVideo.play().catch(err => {
-          console.warn('Video play failed:', err);
-          hideReinforcer();
-        });
-      });
-      // When the reinforcer video ends, navigate to the next game.
-      reinforcerVideo.addEventListener('ended', function() {
-        navigateToNextGame();
-      }, { once: true });
-
-      function hideReinforcer() {
-        reinforcerOverlay.style.display = 'none';
-        reinforcerButton.style.display = 'flex';
-        reinforcerVideo.style.display = 'none';
-        reinforcerVideo.pause();
-        reinforcerVideo.currentTime = 0;
-        document.getElementById('videoOverlayCover').style.display = 'none';
-        reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
+        if (reinforcerController && typeof reinforcerController.show === 'function') {
+          reinforcerController.show({ reinforcerType });
+        } else {
+          navigateToNextGame();
+        }
       }
 
       // --- PLACEHOLDER: Insert your game-specific logic here ---

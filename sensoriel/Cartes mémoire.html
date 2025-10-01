@@ -10,6 +10,9 @@
   <title>Jeu de mémoire</title>
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* =================== Base Layout (Memory-Game Style) =================== */
     *, *::before, *::after {
@@ -175,88 +178,34 @@
   <audio id="match-sound" src="../../sounds/flip.mp3" preload="auto"></audio>
   <audio id="victory-sound" src="../../sounds/victory.mp3" preload="auto"></audio>
 
-  <!-- Reinforcer overlay with big smiley button (video functions removed) -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton"></button>
-    <div id="videoOverlayCover"></div>
-  </div>
-
   <script>
+    let themeData = {};
+    let desiredPairs = 3;
+    let reinforcerController = null;
+
     /****************************************
      * 1) Base Logic (Activity Overlay, Audio, Reinforcer)
      ****************************************/
     document.addEventListener('DOMContentLoaded', function() {
-      // Retrieve global selections and theme data from localStorage and themes.js
-      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-      const mediaOption = selections.mediaOption || "";
-      const themeData = (window.themes && window.themes[mediaOption])
-                        ? window.themes[mediaOption]
-                        : window.themes["default"] || {};
+      const session = sessionHelpers.ensureCurrentGame('cartes-memoire');
+      if (!session) { return; }
 
-      // --- Read the user-chosen number of pairs for the memory game ---
-      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      if (isNaN(overallGameIndex)) {
-        alert("Game selections not found. Redirecting to main page.");
-        window.location.href = "main.html";
-        return;
-      }
-      const currentGameOptions = selections.gameOptions[overallGameIndex] || {};
-      let desiredPairs = parseInt(currentGameOptions.paires, 10);
-      if (isNaN(desiredPairs) || desiredPairs < 1) {
-        desiredPairs = 3;  // default fallback
+      themeData = session.themeData || {};
+      reinforcerController = sessionHelpers.setupSharedReinforcer(session);
+
+      const options = sessionHelpers.getCurrentGameOptions(session);
+      desiredPairs = parseInt(options.paires, 10);
+      if (!Number.isFinite(desiredPairs) || desiredPairs < 1) {
+        desiredPairs = 3;
       }
 
-      // Set dynamic audio sources
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
 
-      // Show the activity overlay with the game index
-      const activityOverlay = document.getElementById('activityNumberOverlay');
-      const numberTextEl = activityOverlay.querySelector('.number-text');
-      numberTextEl.textContent = (overallGameIndex + 1).toString();
-      activityOverlay.style.display = 'flex';
-
-      function hideOverlayAndStart() {
-        if (themeData.startSound) {
-          const sfx = new Audio(themeData.startSound);
-          sfx.play().catch(err => console.warn('startSound play error:', err));
-        }
-        activityOverlay.style.display = 'none';
-        document.removeEventListener('click', hideOverlayAndStart);
-        document.removeEventListener('touchend', hideOverlayAndStart);
-        // Start the game, passing in the desired number of pairs
+      sessionHelpers.showActivityOverlay(() => {
         startGame(desiredPairs);
-      }
-      document.addEventListener('click', hideOverlayAndStart);
-      document.addEventListener('touchend', hideOverlayAndStart);
-
-      // Generic function to navigate to the next game.
-      function navigateToNextGame() {
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-        if (currentGameIndex < selections.gameOrder.length) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        } else {
-          window.location.href = "completion.html";
-        }
-      }
-
-      // Generic function to show reinforcer sound after 2s delay.
-      function showReinforcerSound() {
-        setTimeout(() => {
-          const reinforcerSound = document.getElementById('word-reward-sound');
-          reinforcerSound.currentTime = 0;
-          reinforcerSound.play().catch(err => console.error("Error playing reinforcer sound:", err));
-        }, 2000);
-      }
-
-      // Set up the reinforcer button event to redirect to reinforcer.html.
-      const reinforcerButton = document.getElementById('reinforcerButton');
-      reinforcerButton.addEventListener('click', () => {
-        window.location.href = "reinforcer.html";
-      });
+      }, session);
 
       /****************************************
        * 2) Memory Game (Jeu de Répartition de Jetons)
@@ -454,8 +403,11 @@
       }
 
       function showReinforcerPrompt() {
-        // Instead of playing a video here, simply show the reinforcer overlay.
-        document.getElementById('reinforcerOverlay').style.display = 'flex';
+        if (reinforcerController && typeof reinforcerController.show === 'function') {
+          reinforcerController.show();
+        } else {
+          sessionHelpers.advanceToNextGame();
+        }
       }
     });
   </script>

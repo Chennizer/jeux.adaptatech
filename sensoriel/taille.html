@@ -11,6 +11,9 @@
 
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
 
   <style>
     /* Basic Reset */
@@ -127,31 +130,6 @@
       animation: shake 0.5s;
     }
 
-    /* Reinforcer Overlay */
-    #reinforcerOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.8);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      transition: opacity 0.3s ease;
-      opacity: 0;
-    }
-    #reinforcerOverlay.show {
-      display: flex;
-      opacity: 1;
-    }
-    #reinforcerVideo {
-      max-width: 90%;
-      max-height: 90%;
-      display: none; /* hidden until user clicks "reinforcerButton" */
-    }
-
     /* Activity overlay (game index) styling */
     #activityNumberOverlay {
       position: fixed;
@@ -191,21 +169,6 @@
     <div id="game-content"><!-- Filled via JS --></div>
   </div>
 
-  <!-- Reinforcer overlay (video) -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement">Voir la vidéo</button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
-
   <!-- Audio elements -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
@@ -218,6 +181,7 @@
        ********************************************************/
       const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
       const mediaOption = selections.mediaOption || "";
+      const reinforcerType = selections.reinforcerType || 'shortvideo';
       const themeData = (window.themes && window.themes[mediaOption])
                         ? window.themes[mediaOption]
                         : window.themes["default"] || {};
@@ -226,19 +190,6 @@
       document.getElementById('error-sound').src        = themeData.errorSound        || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src  = themeData.reinforcerSound   || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound  || "../../sounds/victory.mp3";
-
-      // Set up video
-      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-      if (themeData.reinforcerVideos?.length > 0) {
-        reinforcerVideoSource.src = themeData.reinforcerVideos[
-          Math.floor(Math.random() * themeData.reinforcerVideos.length)
-        ];
-      } else {
-        // Fallback video
-        reinforcerVideoSource.src = "../../videos/africa.mp4";
-      }
-      const reinforcerVideo = document.getElementById('reinforcerVideo');
-      reinforcerVideo.load();
 
       /*******************************************************
        * 2. Show Activity Overlay (Game Index), then hide on tap
@@ -265,40 +216,72 @@
       /*******************************************************
        * 3. Navigation and Reinforcer
        ********************************************************/
-      function navigateToNextGame() {
-        const currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10) + 1;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-
-        if (currentGameIndex < (selections.gameOrder?.length || 0)) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        } else {
-          // If no more games, go to completion page
-          window.location.href = "completion.html";
+      const resolveGameFile = (gameId) => {
+        if (!gameId) {
+          return '';
         }
+        if (window.sessionHelpers && typeof window.sessionHelpers.getGameFileById === 'function') {
+          return window.sessionHelpers.getGameFileById(gameId);
+        }
+        if (Array.isArray(window.gamesConfig)) {
+          const match = window.gamesConfig.find(game => game && game.id === gameId);
+          if (match && match.file) {
+            return match.file;
+          }
+        }
+        return `${gameId}.html`;
+      };
+
+      function navigateToNextGame() {
+        if (window.sessionHelpers && typeof window.sessionHelpers.advanceToNextGame === 'function') {
+          sessionHelpers.advanceToNextGame();
+          return;
+        }
+        const currentIndexRaw = localStorage.getItem('currentGameIndex');
+        const nextIndex = parseInt(currentIndexRaw, 10) + 1;
+        localStorage.setItem('currentGameIndex', nextIndex);
+
+        if (Array.isArray(selections.gameOrder) && nextIndex < selections.gameOrder.length) {
+          const nextGameId = selections.gameOrder[nextIndex];
+          const nextGameFile = resolveGameFile(nextGameId);
+          if (nextGameFile) {
+            window.location.href = nextGameFile;
+            return;
+          }
+        }
+        // If no more games, go to completion page
+        window.location.href = "completion.html";
+      }
+
+      const finalRewardAudio = document.getElementById('final-reward-sound');
+
+      let reinforcerController = null;
+      if (window.sessionHelpers && typeof window.sessionHelpers.setupSharedReinforcer === 'function') {
+        const session = sessionHelpers.loadSession ? sessionHelpers.loadSession() : null;
+        if (session) {
+          reinforcerController = sessionHelpers.setupSharedReinforcer(session, {
+            reinforcerType,
+            onAdvance: navigateToNextGame
+          });
+        }
+      }
+      if (!reinforcerController && window.reinforcerOverlay && typeof window.reinforcerOverlay.init === 'function') {
+        reinforcerController = window.reinforcerOverlay.init({
+          reinforcerType,
+          themeData,
+          onAdvance: navigateToNextGame
+        });
       }
 
       function showFinalReinforcerVideo() {
-        // Play final reward sound
-        const finalRewardAudio = document.getElementById('final-reward-sound');
         finalRewardAudio.currentTime = 0;
         finalRewardAudio.play().catch(console.error);
-
-        // Show overlay
-        const overlay = document.getElementById('reinforcerOverlay');
-        overlay.classList.add('show');
-      }
-
-      // Reinforcer button plays the video
-      document.getElementById('reinforcerButton').addEventListener('click', function() {
-        this.style.display = 'none';
-        reinforcerVideo.style.display = 'block';
-        reinforcerVideo.play().catch(err => {
-          console.warn('Video play failed:', err);
-          // If video can't play, just go next
+        if (reinforcerController && typeof reinforcerController.show === 'function') {
+          reinforcerController.show({ reinforcerType });
+        } else {
           navigateToNextGame();
-        });
-      });
-      reinforcerVideo.addEventListener('ended', navigateToNextGame, { once: true });
+        }
+      }
 
       /*******************************************************
        * 4. Shuffle Utility
