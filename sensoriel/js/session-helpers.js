@@ -173,6 +173,31 @@
     });
   }
 
+  function setupSharedReinforcer(session, options) {
+    if (!global.reinforcerOverlay || typeof global.reinforcerOverlay.init !== 'function') {
+      console.warn('reinforcerOverlay module is not available.');
+      return null;
+    }
+
+    const activeSession = session || loadSession();
+    if (!activeSession) {
+      return null;
+    }
+
+    const reinforcerType = activeSession.selections && activeSession.selections.reinforcerType
+      ? activeSession.selections.reinforcerType
+      : 'shortvideo';
+
+    const config = Object.assign({
+      reinforcerType,
+      themeData: activeSession.themeData || {},
+      onAdvance: advanceToNextGame,
+      imageDisplayDurationMs: 10000
+    }, options || {});
+
+    return global.reinforcerOverlay.init(config);
+  }
+
   global.sessionHelpers = {
     getGameFileById,
     loadSession,
@@ -180,6 +205,7 @@
     getCurrentGameOptions,
     showActivityOverlay,
     advanceToNextGame,
-    setupReinforcerRedirect
+    setupReinforcerRedirect,
+    setupSharedReinforcer
   };
 })(window);

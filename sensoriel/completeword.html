@@ -12,6 +12,7 @@
   <script src="../../js/themes.js"></script>
   <script src="js/games-config.js"></script>
   <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* Reset and base styles */
     *, *::before, *::after {
@@ -200,21 +201,6 @@
       <div class="target-word" id="target-word"></div>
     </div>
   </div>
-  <!-- Reinforcer overlay remains the same in markup -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <!-- The source will be set dynamically from themes.js -->
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
   <!-- Audio elements (sources set dynamically) -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
@@ -230,9 +216,7 @@
       let lettersContainer = null;
       let targetImage = null;
       let targetWordContainer = null;
-      let reinforcerOverlay = null;
-      let videoOverlayCover = null;
-      let reinforcerVideo = null;
+      let reinforcerController = null;
       let errorSoundElement = null;
       let wordRewardSound = null;
       let finalRewardSound = null;
@@ -259,23 +243,13 @@
         lettersContainer = document.getElementById('letters-container');
         targetImage = document.getElementById('target-image');
         targetWordContainer = document.getElementById('target-word');
-        reinforcerOverlay = document.getElementById('reinforcerOverlay');
-        videoOverlayCover = document.getElementById('videoOverlayCover');
-        reinforcerVideo = document.getElementById('reinforcerVideo');
         errorSoundElement = document.getElementById('error-sound');
         wordRewardSound = document.getElementById('word-reward-sound');
         finalRewardSound = document.getElementById('final-reward-sound');
 
         setupMediaAssets();
         setupGameOptions();
-        sessionHelpers.setupReinforcerRedirect();
-
-        if (reinforcerVideo) {
-          reinforcerVideo.load();
-          reinforcerVideo.addEventListener('ended', () => {
-            sessionHelpers.advanceToNextGame();
-          }, { once: true });
-        }
+        reinforcerController = sessionHelpers.setupSharedReinforcer(completewordSession);
 
         sessionHelpers.showActivityOverlay(() => {
           beginGame();
@@ -293,15 +267,6 @@
           finalRewardSound.src = themeData.finalRewardSound || "../../sounds/victory.mp3";
         }
 
-        const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-        if (reinforcerVideoSource) {
-          if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-            const randomIndex = Math.floor(Math.random() * themeData.reinforcerVideos.length);
-            reinforcerVideoSource.src = themeData.reinforcerVideos[randomIndex];
-          } else {
-            reinforcerVideoSource.src = "../../videos/africa.mp4";
-          }
-        }
       }
 
       function setupGameOptions() {
@@ -749,14 +714,10 @@
             console.error('Error playing finalRewardSound:', error);
           });
         }
-        if (reinforcerOverlay) {
-          reinforcerOverlay.style.display = 'flex';
-        }
-        if (reinforcerVideo) {
-          reinforcerVideo.style.display = 'none';
-        }
-        if (videoOverlayCover) {
-          videoOverlayCover.style.display = 'none';
+        if (reinforcerController && typeof reinforcerController.show === 'function') {
+          reinforcerController.show();
+        } else {
+          sessionHelpers.advanceToNextGame();
         }
       }
 

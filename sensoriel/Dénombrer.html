@@ -12,6 +12,7 @@
   <script src="../../js/themes.js"></script>
   <script src="js/games-config.js"></script>
   <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* Basic reset */
     *, *::before, *::after {
@@ -133,20 +134,6 @@
   </div>
 
   <!-- Reinforcer overlay -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
-
   <!-- Audio elements -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
@@ -157,28 +144,18 @@
     let difficultySetting = 'easy';
     let activityRepetitions = 1;
     let correctCount = 0;
-    let reinforcerVideo = null;
+    let reinforcerController = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       const session = sessionHelpers.ensureCurrentGame('denombrer');
       if (!session) { return; }
 
       themeData = session.themeData || {};
-      sessionHelpers.setupReinforcerRedirect();
+      reinforcerController = sessionHelpers.setupSharedReinforcer(session);
 
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
-
-      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-        const randomIndex = Math.floor(Math.random() * themeData.reinforcerVideos.length);
-        reinforcerVideoSource.src = themeData.reinforcerVideos[randomIndex];
-      } else {
-        reinforcerVideoSource.src = "../../videos/africa.mp4";
-      }
-      reinforcerVideo = document.getElementById('reinforcerVideo');
-      reinforcerVideo.load();
 
       const options = sessionHelpers.getCurrentGameOptions(session);
       difficultySetting = options.difficulty || 'easy';
@@ -187,10 +164,6 @@
         activityRepetitions = 1;
       }
       correctCount = 0;
-
-      reinforcerVideo.addEventListener('ended', function() {
-        sessionHelpers.advanceToNextGame();
-      }, { once: true });
 
       sessionHelpers.showActivityOverlay(() => {
         startGame();
@@ -215,38 +188,10 @@
       finalRewardSound.play().catch(function(error) {
         console.error('Error playing final reward sound:', error);
       });
-      const reinforcerOverlay = document.getElementById('reinforcerOverlay');
-      const reinforcerButton = document.getElementById('reinforcerButton');
-      const videoOverlayCover = document.getElementById('videoOverlayCover');
-
-      reinforcerOverlay.style.display = 'flex';
-      reinforcerButton.style.display = 'flex';
-      if (reinforcerVideo) {
-        reinforcerVideo.style.display = 'none';
-      }
-      videoOverlayCover.style.display = 'none';
-    }
-
-    function hideReinforcer() {
-      const reinforcerOverlay = document.getElementById('reinforcerOverlay');
-      const reinforcerButton = document.getElementById('reinforcerButton');
-      if (reinforcerOverlay) {
-        reinforcerOverlay.style.display = 'none';
-      }
-      if (reinforcerButton) {
-        reinforcerButton.style.display = 'flex';
-      }
-      if (reinforcerVideo) {
-        reinforcerVideo.style.display = 'none';
-        reinforcerVideo.pause();
-        reinforcerVideo.currentTime = 0;
-      }
-      const cover = document.getElementById('videoOverlayCover');
-      if (cover) {
-        cover.style.display = 'none';
-      }
-      if (reinforcerOverlay) {
-        reinforcerOverlay.style.background = 'rgba(0,0,0,0.8)';
+      if (reinforcerController && typeof reinforcerController.show === 'function') {
+        reinforcerController.show();
+      } else {
+        sessionHelpers.advanceToNextGame();
       }
     }
 

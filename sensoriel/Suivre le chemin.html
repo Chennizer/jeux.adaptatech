@@ -14,6 +14,7 @@
   <script src="../../js/themes.js"></script>
   <script src="js/games-config.js"></script>
   <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
   <style>
     /* Fullscreen reset */
     html, body {
@@ -98,21 +99,6 @@
     <div id="game-content"></div>
   </div>
   
-  <!-- Reinforcer overlay (common for all games) -->
-  <div id="reinforcerOverlay">
-    <button id="reinforcerButton" aria-label="Voir la vidéo de renforcement"></button>
-    <video id="reinforcerVideo"
-           playsinline
-           webkit-playsinline
-           disablepictureinpicture
-           controlslist="nodownload noremoteplayback"
-           preload="auto">
-      <source id="reinforcerVideoSource" src="" type="video/mp4">
-      Votre navigateur ne supporte pas la balise vidéo.
-    </video>
-    <div id="videoOverlayCover"></div>
-  </div>
-  
   <!-- Audio elements -->
   <audio id="error-sound" src="" preload="auto"></audio>
   <audio id="word-reward-sound" src="" preload="auto"></audio>
@@ -126,28 +112,18 @@
     let tracingWidthSetting = 'medium';
     let hardModeEnabled = false;
     let repetitionsLeft = 1;
-    let reinforcerVideo = null;
+    let reinforcerController = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       const session = sessionHelpers.ensureCurrentGame('suivre-le-chemin');
       if (!session) { return; }
 
       themeData = session.themeData || {};
-      sessionHelpers.setupReinforcerRedirect();
+      reinforcerController = sessionHelpers.setupSharedReinforcer(session);
 
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
-
-      const reinforcerVideoSource = document.getElementById('reinforcerVideoSource');
-      if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-        const randomIndex = Math.floor(Math.random() * themeData.reinforcerVideos.length);
-        reinforcerVideoSource.src = themeData.reinforcerVideos[randomIndex];
-      } else {
-        reinforcerVideoSource.src = "../../videos/africa.mp4";
-      }
-      reinforcerVideo = document.getElementById('reinforcerVideo');
-      reinforcerVideo.load();
 
       const options = sessionHelpers.getCurrentGameOptions(session);
       tracingWidthSetting = options['Largeur du tracé'] || 'medium';
@@ -156,10 +132,6 @@
       if (!Number.isFinite(repetitionsLeft) || repetitionsLeft < 1) {
         repetitionsLeft = 1;
       }
-
-      reinforcerVideo.addEventListener('ended', function() {
-        sessionHelpers.advanceToNextGame();
-      }, { once: true });
 
       sessionHelpers.showActivityOverlay(() => {
         if (window.audioContext && window.audioContext.state === 'suspended') {
@@ -173,10 +145,11 @@
         const finalRewardSound = document.getElementById('final-reward-sound');
         finalRewardSound.currentTime = 0;
         finalRewardSound.play().catch(error => console.error('Error playing final reward sound:', error));
-        const reinforcerOverlay = document.getElementById('reinforcerOverlay');
-        reinforcerOverlay.style.display = 'flex';
-        reinforcerVideo.style.display = 'none';
-        document.getElementById('videoOverlayCover').style.display = 'none';
+        if (reinforcerController && typeof reinforcerController.show === 'function') {
+          reinforcerController.show();
+        } else {
+          sessionHelpers.advanceToNextGame();
+        }
       }
       
       // ----------------------------------------------------------------------------
