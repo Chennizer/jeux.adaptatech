@@ -1,111 +1,428 @@
-/* themes.js */
-window.themes = {
-    PatPatrouille: {
-      images: [
-        "../../images/patpatrouille1.jpg",
-        "../../images/patpatrouille2.jpg"
+/* Enhanced theme registry for sensory games */
+(function registerSensoryThemes(global) {
+  'use strict';
 
-      ],
-      transparentPNGs: [
-        "../../images/pawpatrolruben.png",
-        "../../images/chase.png",
-        "../../images/pawpatroleverest.png",
-        "../../images/pawpatrolmarshall.png",
-        "../../images/pawpatrolrocky.png",
-        "../../images/pawpatrolstella.png",
-        "../../images/pawpatrolzuma.png"
-      ],
-      reinforcerVideos: [
-        "https://bucket.adaptatech.org/patpatrouilleintro.mp4",
-        "https://bucket.adaptatech.org/patpatrouillejungle.mp4",
-        "https://bucket.adaptatech.org/patpatrouillepirate.mp4",
-        "https://bucket.adaptatech.org/patpatrouillesauvetage.mp4"
-      
-      ],
-      words: [
-        "Ruben", "Chase","Everest","Marshall","Rocky","Stella","Zuma"
-      ],
-      startSound: "../../sounds/pawpatrol1.mp3",
-      reinforcerSound: "../../sounds/victory.mp3"
-    },
-    moana: {
-      images: [
-        "../../images/moana-background.jpg",
+  if (!global) {
+    return;
+  }
 
-      ],
-      transparentPNGs: [
-        "../../images/moana.png",
-        "../../images/maui.png",
-        "../../images/pua.png",
-        "../../images/palmier.png"
-      ],
-      reinforcerVideos: [
-        "https://bucket.adaptatech.org/moana-finale.mp4",
-        "https://bucket.adaptatech.org/moana-le-bleu-lumiere.mp4",
-        "https://bucket.adaptatech.org/moana-logo-te-pate.mp4",
-        "https://bucket.adaptatech.org/moana-pour-les-hommes.mp4",
-       
-      ],
-      words: [
-        "Moana", "noel","g","h"
-      ],
-      startSound: "../../sounds/firework.mp3",
-      reinforcerSound: "../../sounds/victory.mp3"
-    },
-    Toupie_et_Binou: {
-        images: [
-          "../../images/toupiecamping.jpg",
-          "../../images/toupiechambre.jpeg",
-          "../../images/toupiecinema.jpeg"
-        ],
-        transparentPNGs: [
-          "../../images/toupieetbinou.png",
-          "../../images/toupieetbinou2.png",
-          "../../images/toupieetbinouart.png",
-          "../../images/toupieetbinouavion.png",
-          "../../images/binou.png",
-          "../../images/toupieetbinouhalloween.png"
-        ],
-        reinforcerVideos: [
-          "https://bucket.adaptatech.org/toupieetbinou1.mp4",
-          "https://bucket.adaptatech.org/toupieetbinou2.mp4",
-          "https://bucket.adaptatech.org/toupieetbinou3.mp4",
-          "https://bucket.adaptatech.org/toupieetbinou4.mp4",
-          "https://bucket.adaptatech.org/toupieetbinou5.mp4",
-         
-        ],
-        words: [
-          "Amitié", "Courir","Peinture","Avion", "Binou","Costume"
-        ],
-        startSound: "../../sounds/toupieetbinoustart.mp3",
-        reinforcerSound: "../../sounds/victory.mp3"
+  const MEDIA_BASE = '../../';
+  const IMAGE_BASE = `${MEDIA_BASE}images/`;
+  const SOUND_BASE = `${MEDIA_BASE}sounds/`;
+  const VIDEO_BUCKET = 'https://bucket.adaptatech.org/';
+  const PICTO_INDEX_PATH = `${IMAGE_BASE}pictos/index.json`;
+
+  const DEFAULT_COLORS = { primary: '#175676', accent: '#FFC857' };
+  const DEFAULT_BACKGROUNDS = [
+    `${IMAGE_BASE}bgforest.png`,
+    `${IMAGE_BASE}africanbackground2.webp`,
+    `${IMAGE_BASE}africanbackground3.webp`
+  ];
+  const DEFAULT_REINFORCER_VIDEOS = [
+    `${VIDEO_BUCKET}afrique1.mp4`,
+    `${VIDEO_BUCKET}moana-finale.mp4`,
+    `${VIDEO_BUCKET}patpatrouilleintro.mp4`,
+    `${VIDEO_BUCKET}toupieetbinou1.mp4`
+  ];
+  const DEFAULT_REINFORCER_SOUND = `${SOUND_BASE}victory.mp3`;
+  const DEFAULT_ERROR_SOUND = `${SOUND_BASE}error.mp3`;
+
+  function mergeColors(customColors) {
+    return Object.assign({}, DEFAULT_COLORS, customColors || {});
+  }
+
+  function sanitizeWords(words) {
+    if (!Array.isArray(words)) {
+      return [];
+    }
+    return words
+      .map(word => (typeof word === 'string' ? word.trim() : ''))
+      .filter(Boolean);
+  }
+
+  function asNonEmptyStringArray(value) {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const normalized = value
+      .map(entry => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter(Boolean);
+
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  function pickFirstString() {
+    for (let index = 0; index < arguments.length; index += 1) {
+      const candidate = arguments[index];
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+    return undefined;
+  }
+
+  function createTheme(config) {
+    const {
+      id,
+      displayName,
+      categoryId = 'custom',
+      colors,
+      images = [],
+      transparentPNGs = [],
+      words = [],
+      reinforcerVideos = [],
+      reinforcerImages = [],
+      startSound,
+      reinforcerSound,
+      errorSound,
+      finalRewardSound
+    } = config || {};
+
+    const theme = {
+      id,
+      displayName: displayName || id,
+      metadata: {
+        categoryId,
+        colors: mergeColors(colors)
       },
-    Afrique: {
+      images: Array.isArray(images) ? images.slice() : [],
+      transparentPNGs: Array.isArray(transparentPNGs) ? transparentPNGs.slice() : [],
+      words: sanitizeWords(words),
+      reinforcerVideos:
+        Array.isArray(reinforcerVideos) && reinforcerVideos.length > 0
+          ? reinforcerVideos.slice()
+          : DEFAULT_REINFORCER_VIDEOS.slice(),
+      reinforcerImages: Array.isArray(reinforcerImages) ? reinforcerImages.slice() : []
+    };
+
+    if (startSound) {
+      theme.startSound = startSound;
+    }
+    theme.reinforcerSound = reinforcerSound || DEFAULT_REINFORCER_SOUND;
+    theme.errorSound = errorSound || DEFAULT_ERROR_SOUND;
+    if (finalRewardSound) {
+      theme.finalRewardSound = finalRewardSound;
+    }
+
+    return theme;
+  }
+
+  const baseThemes = {
+    default: createTheme({
+      id: 'default',
+      displayName: 'Thème général',
+      categoryId: 'generic',
+      images: DEFAULT_BACKGROUNDS,
+      transparentPNGs: [
+        `${IMAGE_BASE}cartoonelephant.png`,
+        `${IMAGE_BASE}cartoongiraffe.png`,
+        `${IMAGE_BASE}cartoongorilla.png`
+      ],
+      words: ['Éléphant', 'Girafe', 'Gorille'],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}afrique1.mp4`,
+        `${VIDEO_BUCKET}afrique2.mp4`
+      ],
+      startSound: `${SOUND_BASE}firework.mp3`
+    }),
+    patPatrouille: createTheme({
+      id: 'patPatrouille',
+      displayName: 'Pat Patrouille',
+      categoryId: 'licence',
+      colors: { primary: '#1F4AA5', accent: '#F8C300' },
       images: [
-        "../../images/africanbackground1.webp",
-        "../../images/africanbackground2.webp",
-        "../../images/africanbackground3.webp"
+        `${IMAGE_BASE}patpatrouille1.jpg`,
+        `${IMAGE_BASE}patpatrouille2.jpg`
       ],
       transparentPNGs: [
-        "../../images/cartoonelephant.png",
-        "../../images/cartoongiraffe.png",
-        "../../images/cartoongorilla.png",
-        "../../images/cartoonlion.png",
-        "../../images/cartoonrhino.png",
-        "../../images/cartoontiger.png",
+        `${IMAGE_BASE}pawpatrolruben.png`,
+        `${IMAGE_BASE}chase.png`,
+        `${IMAGE_BASE}pawpatroleverest.png`,
+        `${IMAGE_BASE}pawpatrolmarshall.png`,
+        `${IMAGE_BASE}pawpatrolrocky.png`,
+        `${IMAGE_BASE}pawpatrolstella.png`,
+        `${IMAGE_BASE}pawpatrolzuma.png`
       ],
+      words: ['Ruben', 'Chase', 'Everest', 'Marshall', 'Rocky', 'Stella', 'Zuma'],
       reinforcerVideos: [
-        "https://bucket.adaptatech.org/afrique1.mp4",
-        "https://bucket.adaptatech.org/afrique2.mp4",
-        "https://bucket.adaptatech.org/afrique3.mp4",
-        "https://bucket.adaptatech.org/afrique4.mp4",
-        "https://bucket.adaptatech.org/afrique5.mp4",
+        `${VIDEO_BUCKET}patpatrouilleintro.mp4`,
+        `${VIDEO_BUCKET}patpatrouillejungle.mp4`,
+        `${VIDEO_BUCKET}patpatrouillepirate.mp4`,
+        `${VIDEO_BUCKET}patpatrouillesauvetage.mp4`
       ],
-      words: [
-        "Éléphant", "Giraffe", "Gorille", "Lion", "Rhinocéros", "Tigre"
+      startSound: `${SOUND_BASE}pawpatrol1.mp3`
+    }),
+    moana: createTheme({
+      id: 'moana',
+      displayName: 'Vaiana',
+      categoryId: 'licence',
+      colors: { primary: '#0077B6', accent: '#FFB703' },
+      images: [`${IMAGE_BASE}moana-background.jpg`],
+      transparentPNGs: [
+        `${IMAGE_BASE}moana.png`,
+        `${IMAGE_BASE}maui.png`,
+        `${IMAGE_BASE}pua.png`,
+        `${IMAGE_BASE}palmier.png`
       ],
-      startSound: "../../sounds/africaflute.mp3",
-      reinforcerSound: "../../sounds/victory.mp3"
-    },
+      words: ['Vaiana', 'Maui', 'Pua', 'Te Fiti'],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}moana-finale.mp4`,
+        `${VIDEO_BUCKET}moana-le-bleu-lumiere.mp4`,
+        `${VIDEO_BUCKET}moana-logo-te-pate.mp4`,
+        `${VIDEO_BUCKET}moana-pour-les-hommes.mp4`
+      ],
+      startSound: `${SOUND_BASE}moana.mp3`
+    }),
+    toupieEtBinou: createTheme({
+      id: 'toupieEtBinou',
+      displayName: 'Toupie et Binou',
+      categoryId: 'licence',
+      colors: { primary: '#F97316', accent: '#FDE68A' },
+      images: [
+        `${IMAGE_BASE}toupiecamping.jpg`,
+        `${IMAGE_BASE}toupiechambre.jpeg`,
+        `${IMAGE_BASE}toupiecinema.jpeg`
+      ],
+      transparentPNGs: [
+        `${IMAGE_BASE}toupieetbinou.png`,
+        `${IMAGE_BASE}toupieetbinou2.png`,
+        `${IMAGE_BASE}toupieetbinouart.png`,
+        `${IMAGE_BASE}toupieetbinouavion.png`,
+        `${IMAGE_BASE}binou.png`,
+        `${IMAGE_BASE}toupieetbinouhalloween.png`
+      ],
+      words: ['Amitié', 'Courir', 'Peinture', 'Avion', 'Binou', 'Costume'],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}toupieetbinou1.mp4`,
+        `${VIDEO_BUCKET}toupieetbinou2.mp4`,
+        `${VIDEO_BUCKET}toupieetbinou3.mp4`,
+        `${VIDEO_BUCKET}toupieetbinou4.mp4`,
+        `${VIDEO_BUCKET}toupieetbinou5.mp4`
+      ],
+      startSound: `${SOUND_BASE}toupieetbinoustart.mp3`
+    }),
+    afrique: createTheme({
+      id: 'afrique',
+      displayName: 'Animaux d’Afrique',
+      categoryId: 'animaux',
+      colors: { primary: '#9A3412', accent: '#F59E0B' },
+      images: [
+        `${IMAGE_BASE}africanbackground1.webp`,
+        `${IMAGE_BASE}africanbackground2.webp`,
+        `${IMAGE_BASE}africanbackground3.webp`
+      ],
+      transparentPNGs: [
+        `${IMAGE_BASE}cartoonelephant.png`,
+        `${IMAGE_BASE}cartoongiraffe.png`,
+        `${IMAGE_BASE}cartoongorilla.png`,
+        `${IMAGE_BASE}cartoonlion.png`,
+        `${IMAGE_BASE}cartoonrhino.png`,
+        `${IMAGE_BASE}cartoontiger.png`
+      ],
+      words: ['Éléphant', 'Girafe', 'Gorille', 'Lion', 'Rhinocéros', 'Tigre'],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}afrique1.mp4`,
+        `${VIDEO_BUCKET}afrique2.mp4`,
+        `${VIDEO_BUCKET}afrique3.mp4`,
+        `${VIDEO_BUCKET}afrique4.mp4`,
+        `${VIDEO_BUCKET}afrique5.mp4`
+      ],
+      startSound: `${SOUND_BASE}africaflute.mp3`
+    })
   };
-  
+
+  const themeAliases = {
+    PatPatrouille: 'patPatrouille',
+    Toupie_et_Binou: 'toupieEtBinou',
+    Afrique: 'afrique'
+  };
+
+  Object.entries(themeAliases).forEach(([alias, canonical]) => {
+    if (baseThemes[canonical]) {
+      Object.defineProperty(baseThemes, alias, {
+        get() {
+          return baseThemes[canonical];
+        },
+        enumerable: false
+      });
+    }
+  });
+
+  global.themes = baseThemes;
+
+  const PICTO_CATEGORY_MAPPINGS = {
+    animaux: {
+      displayName: 'Animaux (Pictogrammes)',
+      images: [
+        `${IMAGE_BASE}africanbackground1.webp`,
+        `${IMAGE_BASE}africanbackground3.webp`
+      ],
+      colors: { primary: '#D97706', accent: '#F97316' },
+      startSound: `${SOUND_BASE}africaflute.mp3`,
+      reinforcerSound: `${SOUND_BASE}africa-sound.wav`,
+      errorSound: `${SOUND_BASE}woosh.mp3`,
+      finalRewardSound: `${SOUND_BASE}victory.mp3`,
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}afrique1.mp4`,
+        `${VIDEO_BUCKET}afrique2.mp4`,
+        `${VIDEO_BUCKET}afrique3.mp4`
+      ]
+    },
+    aliments: {
+      displayName: 'Aliments (Pictogrammes)',
+      images: [`${IMAGE_BASE}basket.webp`, `${IMAGE_BASE}association.png`],
+      colors: { primary: '#B45309', accent: '#F97316' },
+      startSound: `${SOUND_BASE}cartoon/cartoonappear1.mp3`,
+      reinforcerSound: `${SOUND_BASE}cartoon/cartoonappear2.mp3`,
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}toupieetbinou2.mp4`,
+        `${VIDEO_BUCKET}toupieetbinou3.mp4`
+      ]
+    },
+    fruits: {
+      displayName: 'Fruits (Pictogrammes)',
+      images: [`${IMAGE_BASE}basket.webp`, `${IMAGE_BASE}bgforest.png`],
+      colors: { primary: '#DB2777', accent: '#FBBF24' },
+      startSound: `${SOUND_BASE}cartoon/cartoonappear2.mp3`,
+      reinforcerSound: `${SOUND_BASE}cartoon/cartoonappear3.mp3`
+    },
+    legumes: {
+      displayName: 'Légumes (Pictogrammes)',
+      images: [`${IMAGE_BASE}basket.webp`, `${IMAGE_BASE}association.png`],
+      colors: { primary: '#15803D', accent: '#86EFAC' },
+      startSound: `${SOUND_BASE}cartoon/cartoonappear3.mp3`
+    },
+    jouetsFidgets: {
+      displayName: 'Jouets et Fidgets',
+      images: [`${IMAGE_BASE}toupiechambre.jpeg`, `${IMAGE_BASE}toupiecinema.jpeg`],
+      colors: { primary: '#7C3AED', accent: '#F472B6' },
+      startSound: `${SOUND_BASE}cartoon/cartoonappear4.mp3`
+    },
+    hygieneSante: {
+      displayName: 'Hygiène et santé',
+      images: DEFAULT_BACKGROUNDS,
+      colors: { primary: '#0F766E', accent: '#5EEAD4' },
+      startSound: `${SOUND_BASE}cartoon/cartoonappear5.mp3`
+    }
+  };
+
+  function buildLabel(item) {
+    if (!item || !item.label) {
+      return null;
+    }
+    const frenchLabel = item.label.fr || {};
+    const article = typeof frenchLabel.article === 'string' ? frenchLabel.article.trim() : '';
+    const word = typeof frenchLabel.word === 'string' ? frenchLabel.word.trim() : '';
+    if (!article && !word) {
+      return null;
+    }
+    if (!article) {
+      return word;
+    }
+
+    const normalizedArticle = article.replace(/’/g, "'").toLowerCase();
+    if (normalizedArticle === "l'") {
+      return word;
+    }
+
+    return `${article} ${word}`.replace(/\s+/g, ' ').trim();
+  }
+
+  function generatePictoThemes(indexJson) {
+    if (!indexJson || !indexJson.categories) {
+      return {};
+    }
+
+    const basePath = typeof indexJson.base === 'string' ? indexJson.base : `${IMAGE_BASE}pictos/`;
+    const generated = {};
+
+    Object.entries(indexJson.categories).forEach(([categoryId, categoryData]) => {
+      if (!categoryData || !Array.isArray(categoryData.items) || categoryData.items.length === 0) {
+        return;
+      }
+
+      const mapping = PICTO_CATEGORY_MAPPINGS[categoryId] || {};
+      const themeId = `picto_${categoryId}`;
+      const words = sanitizeWords(categoryData.items.map(buildLabel).filter(Boolean));
+      const transparentPNGs = categoryData.items.map(item => `${basePath}${item.file}`);
+      const categoryMedia = categoryData.media || {};
+      const reinforcerVideos =
+        asNonEmptyStringArray(categoryMedia.reinforcerVideos) ||
+        asNonEmptyStringArray(categoryData.reinforcerVideos) ||
+        asNonEmptyStringArray(mapping.reinforcerVideos);
+      const reinforcerImages =
+        asNonEmptyStringArray(categoryMedia.reinforcerImages) ||
+        asNonEmptyStringArray(categoryData.reinforcerImages) ||
+        asNonEmptyStringArray(mapping.reinforcerImages);
+      const startSound =
+        pickFirstString(categoryMedia.startSound, categoryData.startSound, mapping.startSound);
+      const reinforcerSound = pickFirstString(
+        categoryMedia.reinforcerSound,
+        categoryData.reinforcerSound,
+        mapping.reinforcerSound
+      );
+      const errorSound = pickFirstString(
+        categoryMedia.errorSound,
+        categoryData.errorSound,
+        mapping.errorSound
+      );
+      const finalRewardSound = pickFirstString(
+        categoryMedia.finalRewardSound,
+        categoryData.finalRewardSound,
+        mapping.finalRewardSound
+      );
+
+      generated[themeId] = createTheme({
+        id: themeId,
+        displayName:
+          mapping.displayName ||
+          (categoryData.label && categoryData.label.fr) ||
+          `Pictogrammes ${categoryId}`,
+        categoryId,
+        colors: mapping.colors,
+        images: Array.isArray(mapping.images) && mapping.images.length > 0
+          ? mapping.images
+          : DEFAULT_BACKGROUNDS,
+        transparentPNGs,
+        words,
+        reinforcerVideos,
+        reinforcerImages,
+        startSound,
+        reinforcerSound,
+        errorSound,
+        finalRewardSound
+      });
+    });
+
+    return generated;
+  }
+
+  function extendWithPictoThemes() {
+    if (typeof fetch !== 'function') {
+      return;
+    }
+
+    fetch(PICTO_INDEX_PATH)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(indexJson => {
+        const generatedThemes = generatePictoThemes(indexJson);
+        Object.assign(global.themes, generatedThemes);
+        if (typeof document !== 'undefined' && document) {
+          const eventDetail = { generated: Object.keys(generatedThemes) };
+          document.dispatchEvent(new CustomEvent('themes:pictoThemesLoaded', { detail: eventDetail }));
+        }
+      })
+      .catch(error => {
+        console.warn('Unable to extend sensory themes with pictogram categories:', error);
+      });
+  }
+
+  extendWithPictoThemes();
+})(typeof window !== 'undefined' ? window : undefined);
+
