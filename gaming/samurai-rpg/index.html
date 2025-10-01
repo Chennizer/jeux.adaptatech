@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Samurai Showdown — Turn-Based Prototype</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #f8eacb;
+      overflow: hidden;
+    }
+    body { display: flex; }
+    #layout {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+    #modePanel {
+      width: 22vw;
+      min-width: 200px;
+      max-width: 340px;
+      background: #050505;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 12px 0 32px rgba(0,0,0,0.55);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: clamp(28px, 5vh, 64px) clamp(16px, 2vw, 32px);
+      gap: clamp(28px, 4vh, 48px);
+      position: relative;
+      z-index: 10;
+    }
+    #modePanel .panel-ornaments { position: absolute; inset: 0; pointer-events: none; }
+    #modePanel .panel-ornaments img {
+      position: absolute;
+      width: clamp(120px, 15vw, 180px);
+      opacity: 0.2;
+      filter: blur(0.2px) drop-shadow(0 6px 12px rgba(0,0,0,0.6));
+    }
+    #modePanel .panel-ornaments .branch-corner {
+      bottom: clamp(24px, 6vh, 38px);
+      left: clamp(12px, 2vw, 28px);
+      transform: rotate(-14deg);
+    }
+    #playerVitals {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 12px;
+    }
+    .hearts {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      width: 100%;
+    }
+    .heart {
+      aspect-ratio: 1;
+      border-radius: 12px;
+      background: radial-gradient(circle at 30% 30%, rgba(255,120,140,0.95), rgba(140,20,40,0.9));
+      box-shadow: inset 0 0 12px rgba(0,0,0,0.45), 0 6px 18px rgba(0,0,0,0.4);
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      color: rgba(0,0,0,0.85);
+      transition: filter 0.3s ease, opacity 0.3s ease;
+    }
+    .heart.lost {
+      filter: grayscale(0.85);
+      opacity: 0.25;
+    }
+    #modeSelector {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(20px, 4vh, 40px);
+      width: 100%;
+      align-items: center;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 15px;
+      color: rgba(255,240,220,0.85);
+    }
+    .mode-tile {
+      position: relative;
+      width: clamp(128px, 18vw, 220px);
+      aspect-ratio: 1;
+      border-radius: 24px;
+      background: rgba(16,16,22,0.9);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.5);
+    }
+    .mode-tile img {
+      width: 70%;
+      height: 70%;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 12px rgba(0,0,0,0.6));
+      pointer-events: none;
+      user-select: none;
+    }
+    .mode-tile .label {
+      position: absolute;
+      bottom: -26px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: rgba(255,240,200,0.7);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      pointer-events: none;
+    }
+    .mode-tile.active {
+      border-color: rgba(255,200,120,0.6);
+      box-shadow: 0 18px 38px rgba(255,180,80,0.28);
+      transform: translateY(-6px);
+    }
+    .mode-tile.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+      box-shadow: none;
+    }
+    #turnLabel {
+      font-size: 14px;
+      letter-spacing: 0.26em;
+      color: rgba(255, 220, 120, 0.8);
+      text-transform: uppercase;
+    }
+    #playArea {
+      flex: 1;
+      position: relative;
+      height: 100vh;
+      overflow: hidden;
+      background: #010101;
+    }
+    #battleScene {
+      position: absolute;
+      inset: 0;
+      background: url("../../images/samurai/samurainightbg.png") center/cover no-repeat;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(24px, 5vh, 48px) clamp(24px, 6vw, 72px);
+    }
+    #battleScene::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 20% 20%, rgba(255,140,120,0.12), transparent 60%),
+                  linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.65));
+      pointer-events: none;
+    }
+    #enemyCard {
+      position: relative;
+      z-index: 2;
+      max-width: clamp(280px, 30vw, 420px);
+      background: rgba(12,12,18,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: clamp(22px, 3vw, 36px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+      display: grid;
+      gap: clamp(16px, 2vh, 28px);
+      align-items: center;
+      justify-items: center;
+    }
+    .enemy-portrait {
+      width: clamp(180px, 26vw, 280px);
+      filter: drop-shadow(0 18px 28px rgba(0,0,0,0.7));
+      transition: transform 0.25s ease;
+      cursor: pointer;
+    }
+    .enemy-portrait.hit {
+      transform: translateX(-8px) rotate(-2deg) scale(1.03);
+    }
+    .enemy-portrait.enemy-turn {
+      cursor: default;
+      opacity: 0.7;
+    }
+    #enemyStatus {
+      width: 100%;
+      display: grid;
+      gap: 8px;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 12px;
+    }
+    .hp-bar {
+      position: relative;
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      overflow: hidden;
+    }
+    .hp-bar-fill {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      background: linear-gradient(90deg, rgba(255,110,120,0.85), rgba(130,20,40,0.9));
+      transition: width 0.35s ease;
+    }
+    #battleLog {
+      position: relative;
+      z-index: 2;
+      width: min(640px, 80vw);
+      max-height: 32vh;
+      background: rgba(12,12,18,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: clamp(16px, 2vw, 24px);
+      box-shadow: 0 16px 46px rgba(0,0,0,0.55);
+      overflow-y: auto;
+      font-size: clamp(14px, 2vh, 16px);
+      line-height: 1.5;
+    }
+    #battleLog ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 12px;
+    }
+    #battleLog li { opacity: 0.92; }
+    #battleLog li strong { color: rgba(255,215,140,0.92); }
+    #startOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      display: grid;
+      place-items: center;
+      z-index: 5;
+    }
+    #startBtn {
+      padding: 14px 28px;
+      border-radius: 14px;
+      border: 2px solid rgba(255,210,120,0.85);
+      background: rgba(10,10,14,0.9);
+      color: rgba(255,220,160,0.92);
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 0.18s ease;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+    }
+    #startBtn:active { transform: translateY(2px); }
+    @media (max-width: 900px) {
+      body { flex-direction: column; }
+      #layout { flex-direction: column; }
+      #modePanel {
+        width: 100%;
+        max-width: none;
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+      }
+      #playerVitals { align-items: flex-start; }
+      #modeSelector { flex-direction: row; }
+      .mode-tile { width: clamp(120px, 36vw, 160px); }
+      .mode-tile .label { bottom: -22px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="layout">
+    <aside id="modePanel">
+      <div class="panel-ornaments" aria-hidden="true">
+        <img src="../../images/samurai/cherryblossom.png" alt="" class="branch-corner" />
+      </div>
+      <div id="playerVitals">
+        <span id="turnLabel">Player Turn</span>
+        <div class="hearts" role="img" aria-label="Player hearts">
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+          <div class="heart">❤</div>
+        </div>
+      </div>
+      <div id="modeSelector" role="group" aria-label="Choose ability">
+        <div class="mode-tile active" data-mode="chi" aria-pressed="true" role="button">
+          <img src="../../images/samurai/chi.png" alt="Chi Power" />
+          <span class="label">Chi Burst</span>
+        </div>
+        <div class="mode-tile" data-mode="katana" aria-pressed="false" role="button">
+          <img src="../../images/samurai/katana.png" alt="Katana Strike" />
+          <span class="label">Katana Slash</span>
+        </div>
+      </div>
+    </aside>
+    <main id="playArea">
+      <div id="battleScene">
+        <section id="enemyCard">
+          <img src="../../images/samurai/enzo.png" alt="Armored opponent" class="enemy-portrait" />
+          <div id="enemyStatus">
+            <span>Enemy Vitality</span>
+            <div class="hp-bar" aria-hidden="true">
+              <div class="hp-bar-fill" id="enemyHpFill"></div>
+            </div>
+            <span id="enemyHpText">12 / 12</span>
+          </div>
+        </section>
+        <section id="battleLog" aria-live="polite">
+          <ul id="logList">
+            <li>Press Start, choose a power, then strike the enemy to begin.</li>
+          </ul>
+        </section>
+      </div>
+      <div id="startOverlay">
+        <button id="startBtn">Start • Enter the Duel</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const MAX_PLAYER_HP = 10;
+      const MAX_ENEMY_HP = 12;
+      const PLAYER_DAMAGE = {
+        chi: () => Math.floor(Math.random() * 2) + 2,     // 2-3
+        katana: () => Math.floor(Math.random() * 3) + 3   // 3-5
+      };
+      const ENEMY_DAMAGE = () => Math.floor(Math.random() * 3) + 1; // 1-3
+
+      const hearts = Array.from(document.querySelectorAll('.heart'));
+      const modeTiles = Array.from(document.querySelectorAll('.mode-tile'));
+      const enemyPortrait = document.querySelector('.enemy-portrait');
+      const enemyHpFill = document.getElementById('enemyHpFill');
+      const enemyHpText = document.getElementById('enemyHpText');
+      const logList = document.getElementById('logList');
+      const turnLabel = document.getElementById('turnLabel');
+      const startBtn = document.getElementById('startBtn');
+      const startOverlay = document.getElementById('startOverlay');
+
+      const sfxChi = new Audio('../../sounds/samurai/energyball.mp3');
+      const sfxKatana = new Audio('../../sounds/katana.mp3');
+      const sfxEnemy = new Audio('../../sounds/samurai/spacerockexplosion1.mp3');
+
+      let currentMode = 'chi';
+      let playerHP = MAX_PLAYER_HP;
+      let enemyHP = MAX_ENEMY_HP;
+      let playerTurn = true;
+      let battleActive = false;
+      let enemyTimeout = null;
+
+      const setMode = (mode) => {
+        currentMode = mode;
+        modeTiles.forEach(tile => {
+          const isActive = tile.dataset.mode === mode;
+          tile.classList.toggle('active', isActive);
+          tile.setAttribute('aria-pressed', String(isActive));
+        });
+        logAction('Guide', `Prepared <strong>${mode === 'chi' ? 'Chi Burst' : 'Katana Slash'}</strong>. Tap the foe to strike.`);
+      };
+
+      const updateHearts = () => {
+        hearts.forEach((heart, index) => {
+          heart.classList.toggle('lost', index >= playerHP);
+        });
+      };
+
+      const updateEnemyHp = () => {
+        const ratio = Math.max(enemyHP, 0) / MAX_ENEMY_HP;
+        enemyHpFill.style.width = `${Math.max(ratio * 100, 0)}%`;
+        enemyHpText.textContent = `${Math.max(enemyHP, 0)} / ${MAX_ENEMY_HP}`;
+      };
+
+      const setTurn = (isPlayer) => {
+        playerTurn = isPlayer;
+        turnLabel.textContent = isPlayer ? 'Player Turn' : 'Enemy Turn';
+        turnLabel.style.color = isPlayer ? 'rgba(255,220,140,0.92)' : 'rgba(255,140,120,0.85)';
+        modeTiles.forEach(tile => tile.classList.toggle('disabled', !isPlayer || !battleActive));
+        enemyPortrait.classList.toggle('enemy-turn', !isPlayer);
+      };
+
+      const logAction = (actor, message) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${actor}:</strong> ${message}`;
+        logList.appendChild(li);
+        logList.scrollTop = logList.scrollHeight;
+      };
+
+      const endBattle = (playerWon) => {
+        battleActive = false;
+        clearTimeout(enemyTimeout);
+        const result = playerWon ? 'Victory! The samurai bows in respect.' : 'Defeat... regroup and try again.';
+        logAction('Battle', result);
+        setTurn(false);
+        enemyPortrait.classList.add('enemy-turn');
+        startOverlay.style.display = 'grid';
+        startBtn.textContent = 'Restart Duel';
+      };
+
+      const playSfx = (audio) => {
+        try {
+          audio.currentTime = 0;
+          audio.play();
+        } catch (err) {
+          console.warn('Audio playback prevented', err);
+        }
+      };
+
+      const playerAttack = () => {
+        if (!battleActive || !playerTurn) return;
+        enemyPortrait.classList.add('hit');
+        requestAnimationFrame(() => {
+          setTimeout(() => enemyPortrait.classList.remove('hit'), 220);
+        });
+
+        const damage = PLAYER_DAMAGE[currentMode]();
+        if (currentMode === 'chi') {
+          playSfx(sfxChi);
+        } else {
+          playSfx(sfxKatana);
+        }
+
+        enemyHP -= damage;
+        updateEnemyHp();
+        logAction('Player', `${currentMode === 'chi' ? 'Chi energy bursts' : 'Katana arc cleaves'} for <strong>${damage}</strong> damage!`);
+
+        if (enemyHP <= 0) {
+          endBattle(true);
+          return;
+        }
+
+        setTurn(false);
+        enemyTimeout = setTimeout(enemyAttack, 1100);
+      };
+
+      const enemyAttack = () => {
+        if (!battleActive) return;
+        playSfx(sfxEnemy);
+        const damage = Math.min(playerHP, ENEMY_DAMAGE());
+        playerHP -= damage;
+        updateHearts();
+        logAction('Enemy', `Counter strikes for <strong>${damage}</strong> damage!`);
+
+        if (playerHP <= 0) {
+          endBattle(false);
+          return;
+        }
+
+        setTurn(true);
+        logAction('Guide', 'Choose your power and strike again.');
+      };
+
+      modeTiles.forEach(tile => {
+        tile.addEventListener('click', () => {
+          if (!battleActive || !playerTurn) return;
+          setMode(tile.dataset.mode);
+        });
+      });
+
+      enemyPortrait.addEventListener('click', () => {
+        if (!playerTurn || !battleActive) return;
+        playerAttack();
+      });
+
+      startBtn.addEventListener('click', () => {
+        battleActive = true;
+        playerHP = MAX_PLAYER_HP;
+        enemyHP = MAX_ENEMY_HP;
+        updateHearts();
+        updateEnemyHp();
+        setMode(currentMode);
+        logList.innerHTML = '';
+        logAction('Guide', 'Select a power tile and tap the enemy portrait to attack.');
+        setTurn(true);
+        enemyPortrait.classList.remove('enemy-turn');
+        startOverlay.style.display = 'none';
+      });
+
+      updateHearts();
+      updateEnemyHp();
+      setTurn(true);
+    })();
+  </script>
+</body>
+</html>
