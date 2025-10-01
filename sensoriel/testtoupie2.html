@@ -10,6 +10,8 @@
   <title>Shape Sorting Drag & Drop</title>
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
   <style>
     /* Basic reset and layout styles */
     *, *::before, *::after {
@@ -229,17 +231,41 @@
       document.addEventListener('click', hideOverlayAndStart);
       document.addEventListener('touchend', hideOverlayAndStart);
 
+      const resolveGameFile = (gameId) => {
+        if (!gameId) {
+          return '';
+        }
+        if (window.sessionHelpers && typeof window.sessionHelpers.getGameFileById === 'function') {
+          return window.sessionHelpers.getGameFileById(gameId);
+        }
+        if (Array.isArray(window.gamesConfig)) {
+          const match = window.gamesConfig.find(game => game && game.id === gameId);
+          if (match && match.file) {
+            return match.file;
+          }
+        }
+        return `${gameId}.html`;
+      };
+
       // Generic function to navigate to the next game.
       function navigateToNextGame() {
-        const selections = JSON.parse(localStorage.getItem('gameSelections'));
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex++;  // Increment overall game index.
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-        if (currentGameIndex < selections.gameOrder.length) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        } else {
-          window.location.href = "completion.html";
+        if (window.sessionHelpers && typeof window.sessionHelpers.advanceToNextGame === 'function') {
+          sessionHelpers.advanceToNextGame();
+          return;
         }
+        const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
+        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
+        currentGameIndex += 1;
+        localStorage.setItem('currentGameIndex', currentGameIndex);
+        if (Array.isArray(selections.gameOrder) && currentGameIndex < selections.gameOrder.length) {
+          const nextGameId = selections.gameOrder[currentGameIndex];
+          const nextGameFile = resolveGameFile(nextGameId);
+          if (nextGameFile) {
+            window.location.href = nextGameFile;
+            return;
+          }
+        }
+        window.location.href = "completion.html";
       }
 
       // Generic function to show the reinforcer sound between words.

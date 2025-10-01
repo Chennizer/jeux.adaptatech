@@ -11,6 +11,8 @@
 
   <!-- Load shared themes file -->
   <script src="../../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
 
   <style>
     /* Basic Reset */
@@ -265,16 +267,41 @@
       /*******************************************************
        * 3. Navigation and Reinforcer
        ********************************************************/
-      function navigateToNextGame() {
-        const currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10) + 1;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-
-        if (currentGameIndex < (selections.gameOrder?.length || 0)) {
-          window.location.href = selections.gameOrder[currentGameIndex] + ".html";
-        } else {
-          // If no more games, go to completion page
-          window.location.href = "completion.html";
+      const resolveGameFile = (gameId) => {
+        if (!gameId) {
+          return '';
         }
+        if (window.sessionHelpers && typeof window.sessionHelpers.getGameFileById === 'function') {
+          return window.sessionHelpers.getGameFileById(gameId);
+        }
+        if (Array.isArray(window.gamesConfig)) {
+          const match = window.gamesConfig.find(game => game && game.id === gameId);
+          if (match && match.file) {
+            return match.file;
+          }
+        }
+        return `${gameId}.html`;
+      };
+
+      function navigateToNextGame() {
+        if (window.sessionHelpers && typeof window.sessionHelpers.advanceToNextGame === 'function') {
+          sessionHelpers.advanceToNextGame();
+          return;
+        }
+        const currentIndexRaw = localStorage.getItem('currentGameIndex');
+        const nextIndex = parseInt(currentIndexRaw, 10) + 1;
+        localStorage.setItem('currentGameIndex', nextIndex);
+
+        if (Array.isArray(selections.gameOrder) && nextIndex < selections.gameOrder.length) {
+          const nextGameId = selections.gameOrder[nextIndex];
+          const nextGameFile = resolveGameFile(nextGameId);
+          if (nextGameFile) {
+            window.location.href = nextGameFile;
+            return;
+          }
+        }
+        // If no more games, go to completion page
+        window.location.href = "completion.html";
       }
 
       function showFinalReinforcerVideo() {
