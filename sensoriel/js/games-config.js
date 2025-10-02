@@ -157,18 +157,56 @@
       ]
     },
     {
-      id: 'game7',
-      label: 'Game 7',
-      file: null,
-      options: [],
-      disabled: true
+      id: 'tri-thematique',
+      label: 'Classer les pictogrammes',
+      file: 'tri-thematique.html',
+      options: [
+        {
+          type: 'select',
+          label: 'Nombre de catégories:',
+          name: 'categoryCount',
+          options: [
+            { value: '2', text: '2' },
+            { value: '3', text: '3' },
+            { value: '4', text: '4' }
+          ],
+          value: '3'
+        },
+        {
+          type: 'number',
+          label: 'Nombre d’items:',
+          name: 'itemCount',
+          min: 3,
+          max: 12,
+          value: 6
+        }
+      ]
     },
     {
-      id: 'game8',
-      label: 'Game 8',
-      file: null,
-      options: [],
-      disabled: true
+      id: 'mot-vers-image',
+      label: 'Lecture globale',
+      file: 'mot-vers-image.html',
+      options: [
+        {
+          type: 'number',
+          label: 'Nombre d’épreuves:',
+          name: 'roundCount',
+          min: 1,
+          max: 10,
+          value: 4
+        },
+        {
+          type: 'select',
+          label: 'Nombre de choix:',
+          name: 'choiceCount',
+          options: [
+            { value: '2', text: '2' },
+            { value: '3', text: '3' },
+            { value: '4', text: '4' }
+          ],
+          value: '3'
+        }
+      ]
     },
     {
       id: 'game9',
