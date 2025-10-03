@@ -150,6 +150,8 @@
     return Math.min(Math.max(value, min), max);
   }
 
+  const MIN_ITEMS_FOR_RELEVANT_CATEGORY = 8;
+
   function buildCategoryPool(pictoIndex) {
     const basePath = typeof pictoIndex.base === 'string' ? pictoIndex.base : '../../images/pictos/';
     const pool = [];
@@ -165,11 +167,37 @@
         .map((item) => buildPictoEntry(basePath, categoryId, item))
         .filter(Boolean);
       if (entries.length > 0) {
-        pool.push({ id: categoryId, label: readableLabel, items: entries });
+        pool.push({
+          id: categoryId,
+          label: readableLabel,
+          items: entries,
+          itemCount: entries.length
+        });
       }
     });
 
-    return pool;
+    const relevantCategories = selectRelevantCategories(pool);
+    return relevantCategories.length > 0 ? relevantCategories : pool;
+  }
+
+  function selectRelevantCategories(categories) {
+    if (!Array.isArray(categories)) {
+      return [];
+    }
+
+    const filtered = categories.filter((category) => {
+      return Array.isArray(category.items) && category.items.length >= MIN_ITEMS_FOR_RELEVANT_CATEGORY;
+    });
+
+    if (filtered.length === 0) {
+      return [];
+    }
+
+    return filtered.sort((a, b) => {
+      const countA = Array.isArray(a.items) ? a.items.length : 0;
+      const countB = Array.isArray(b.items) ? b.items.length : 0;
+      return countB - countA;
+    });
   }
 
   function getCategoryLabel(categoryId, categoryData) {
