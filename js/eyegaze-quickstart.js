@@ -13,9 +13,9 @@
     style.textContent = `
       #${WRAPPER_ID} {
         position: fixed;
-        inset: auto 0 32px 0;
+        inset: auto 32px 32px auto;
         display: flex;
-        justify-content: center;
+        justify-content: flex-end;
         pointer-events: none;
         z-index: 1200;
       }
@@ -77,7 +77,7 @@
       }
       @media (max-width: 600px) {
         #${WRAPPER_ID} {
-          inset: auto 0 18px 0;
+          inset: auto 18px 18px auto;
         }
         #${WRAPPER_ID} .eyegaze-quick-start {
           padding: 16px;
@@ -173,12 +173,23 @@
       return Promise.resolve();
     }
 
+    function runNativeStart(){
+      try {
+        startButton.click();
+      } catch (e) {
+        startButton.dispatchEvent(new Event('click'));
+      }
+    }
+
     function triggerStart(){
       cancelDwell();
-      enterFullscreen().finally(() => {
-        try { startButton.click(); } catch (e) { startButton.dispatchEvent(new Event('click')); }
-        hideQuickStart();
+      const fullscreenAttempt = enterFullscreen();
+      runNativeStart();
+      fullscreenAttempt.catch(() => {
+        // Retry shortly after the native start in case new elements appear.
+        window.setTimeout(() => { enterFullscreen().catch(() => {}); }, 120);
       });
+      hideQuickStart();
     }
 
     function startDwell(){
