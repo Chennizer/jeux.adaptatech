@@ -143,7 +143,11 @@
     wrapper.appendChild(quickStartBtn);
     document.body.appendChild(wrapper);
 
+    let activated = false;
+    let awaitingTrusted = false;
+    let fullscreenRequested = false;
     let dwellTimeout = null;
+    let fallbackHideTimeout = null;
     let langObserver = null;
 
     function updateAriaLabel(){
@@ -157,20 +161,30 @@
       langObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
     }
 
-    function enterFullscreen(){
-      const element = document.documentElement;
-      if (!element) return Promise.resolve();
-      if (document.fullscreenElement) return Promise.resolve();
+    function requestFullscreenOn(element){
+      if (!element || document.fullscreenElement) {
+        return Promise.resolve(false);
+      }
       const request = element.requestFullscreen || element.webkitRequestFullscreen || element.mozRequestFullScreen || element.msRequestFullscreen;
       if (typeof request === 'function') {
         try {
           const result = request.call(element);
-          return Promise.resolve(result).catch(() => {});
+          return Promise.resolve(result).then(() => true).catch(() => false);
         } catch (err) {
-          return Promise.resolve();
+          return Promise.resolve(false);
         }
       }
-      return Promise.resolve();
+      return Promise.resolve(false);
+    }
+
+    function enterFullscreen(){
+      const targets = [document.documentElement, document.body];
+      return targets.reduce((chain, element) => {
+        return chain.then((succeeded) => {
+          if (succeeded || document.fullscreenElement) return true;
+          return requestFullscreenOn(element);
+        });
+      }, Promise.resolve(false));
     }
 
     function runNativeStart(){
@@ -181,26 +195,62 @@
       }
     }
 
-    function triggerStart(){
-      cancelDwell();
-      const fullscreenAttempt = enterFullscreen();
-      runNativeStart();
-      fullscreenAttempt.catch(() => {
-        // Retry shortly after the native start in case new elements appear.
-        window.setTimeout(() => { enterFullscreen().catch(() => {}); }, 120);
+    function ensureFullscreenAfterActivation(){
+      if (fullscreenRequested) return;
+      fullscreenRequested = true;
+      const delays = [0, 120, 360, 900];
+      delays.forEach((delay) => {
+        window.setTimeout(() => {
+          enterFullscreen().catch(() => {});
+        }, delay);
       });
-      hideQuickStart();
+    }
+
+    function triggerStart(event){
+      const isTrusted = !!(event && event.isTrusted);
+
+      cancelDwell();
+
+      if (!activated) {
+        activated = true;
+        runNativeStart();
+      }
+
+      if (isTrusted) {
+        awaitingTrusted = false;
+        if (fallbackHideTimeout !== null) {
+          clearTimeout(fallbackHideTimeout);
+          fallbackHideTimeout = null;
+        }
+        ensureFullscreenAfterActivation();
+        hideQuickStart();
+        return;
+      }
+
+      if (!awaitingTrusted) {
+        awaitingTrusted = true;
+        enterFullscreen().catch(() => {});
+        fallbackHideTimeout = window.setTimeout(() => {
+          if (!awaitingTrusted) return;
+          awaitingTrusted = false;
+          enterFullscreen().catch(() => {});
+          hideQuickStart();
+        }, 1800);
+      }
     }
 
     function startDwell(){
-      cancelDwell();
+      if (activated) return;
       const dwellTime = getDwellTime();
       progress.style.transition = 'none';
       progress.style.transform = 'scale(0)';
       progress.offsetWidth; // force reflow
       progress.style.transition = `transform ${dwellTime}ms ease-in-out`;
       progress.style.transform = 'scale(1)';
-      dwellTimeout = window.setTimeout(triggerStart, dwellTime);
+      if (dwellTimeout !== null) {
+        clearTimeout(dwellTimeout);
+      }
+      dwellTimeout = window.setTimeout(() => { triggerStart(null); }, dwellTime);
     }
 
     function cancelDwell(){
@@ -213,6 +263,10 @@
     }
 
     function hideQuickStart(){
+      if (fallbackHideTimeout !== null) {
+        clearTimeout(fallbackHideTimeout);
+        fallbackHideTimeout = null;
+      }
       wrapper.classList.add('hidden');
       if (observer) observer.disconnect();
       if (langObserver) {
@@ -224,9 +278,16 @@
     quickStartBtn.addEventListener('pointerenter', startDwell);
     quickStartBtn.addEventListener('pointerleave', cancelDwell);
     quickStartBtn.addEventListener('pointercancel', cancelDwell);
+    quickStartBtn.addEventListener('pointerdown', cancelDwell);
     quickStartBtn.addEventListener('pointerup', cancelDwell);
     quickStartBtn.addEventListener('blur', cancelDwell);
     quickStartBtn.addEventListener('click', triggerStart);
+    quickStartBtn.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        triggerStart(event);
+      }
+    });
 
     startButton.addEventListener('click', hideQuickStart, { once: true });
   }
