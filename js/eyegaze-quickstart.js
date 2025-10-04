@@ -145,7 +145,8 @@
 
     let activated = false;
     let awaitingTrusted = false;
-    let fullscreenRequested = false;
+    let fullscreenAttemptsScheduled = false;
+    let fullscreenSucceeded = false;
     let dwellTimeout = null;
     let fallbackHideTimeout = null;
     let langObserver = null;
@@ -163,13 +164,17 @@
 
     function requestFullscreenOn(element){
       if (!element || document.fullscreenElement) {
-        return Promise.resolve(false);
+        if (document.fullscreenElement) fullscreenSucceeded = true;
+        return Promise.resolve(document.fullscreenElement ? true : false);
       }
       const request = element.requestFullscreen || element.webkitRequestFullscreen || element.mozRequestFullScreen || element.msRequestFullscreen;
       if (typeof request === 'function') {
         try {
           const result = request.call(element);
-          return Promise.resolve(result).then(() => true).catch(() => false);
+          return Promise.resolve(result).then(() => {
+            fullscreenSucceeded = true;
+            return true;
+          }).catch(() => false);
         } catch (err) {
           return Promise.resolve(false);
         }
@@ -181,10 +186,22 @@
       const targets = [document.documentElement, document.body];
       return targets.reduce((chain, element) => {
         return chain.then((succeeded) => {
-          if (succeeded || document.fullscreenElement) return true;
+          if (succeeded || document.fullscreenElement) {
+            if (document.fullscreenElement) fullscreenSucceeded = true;
+            return true;
+          }
           return requestFullscreenOn(element);
         });
-      }, Promise.resolve(false));
+      }, Promise.resolve(document.fullscreenElement ? true : false));
+    }
+
+    function attemptFullscreenFromEvent(event){
+      if (fullscreenSucceeded || document.fullscreenElement) {
+        fullscreenSucceeded = true;
+        return;
+      }
+      if (!event || !event.isTrusted) return;
+      enterFullscreen().catch(() => {});
     }
 
     function runNativeStart(){
@@ -196,8 +213,9 @@
     }
 
     function ensureFullscreenAfterActivation(){
-      if (fullscreenRequested) return;
-      fullscreenRequested = true;
+      if (fullscreenSucceeded) return;
+      if (fullscreenAttemptsScheduled) return;
+      fullscreenAttemptsScheduled = true;
       const delays = [0, 120, 360, 900];
       delays.forEach((delay) => {
         window.setTimeout(() => {
@@ -214,6 +232,7 @@
       if (!activated) {
         activated = true;
         runNativeStart();
+        ensureFullscreenAfterActivation();
       }
 
       if (isTrusted) {
@@ -275,16 +294,29 @@
       }
     }
 
-    quickStartBtn.addEventListener('pointerenter', startDwell);
+    quickStartBtn.addEventListener('pointerenter', (event) => {
+      attemptFullscreenFromEvent(event);
+      startDwell();
+    });
     quickStartBtn.addEventListener('pointerleave', cancelDwell);
     quickStartBtn.addEventListener('pointercancel', cancelDwell);
-    quickStartBtn.addEventListener('pointerdown', cancelDwell);
-    quickStartBtn.addEventListener('pointerup', cancelDwell);
+    quickStartBtn.addEventListener('pointerdown', (event) => {
+      attemptFullscreenFromEvent(event);
+      cancelDwell();
+    });
+    quickStartBtn.addEventListener('pointerup', (event) => {
+      attemptFullscreenFromEvent(event);
+      cancelDwell();
+    });
     quickStartBtn.addEventListener('blur', cancelDwell);
-    quickStartBtn.addEventListener('click', triggerStart);
+    quickStartBtn.addEventListener('click', (event) => {
+      attemptFullscreenFromEvent(event);
+      triggerStart(event);
+    });
     quickStartBtn.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
+        attemptFullscreenFromEvent(event);
         triggerStart(event);
       }
     });
