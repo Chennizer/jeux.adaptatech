@@ -150,6 +150,8 @@
     let dwellTimeout = null;
     let fallbackHideTimeout = null;
     let langObserver = null;
+    let pendingFullscreenCleanup = null;
+    let lastPointerEvent = null;
 
     function updateAriaLabel(){
       const lang = (document.documentElement.lang === 'en') ? 'en' : 'fr';
@@ -204,6 +206,81 @@
       enterFullscreen().catch(() => {});
     }
 
+    function armFullscreenOnNextActivation(){
+      if (fullscreenSucceeded || document.fullscreenElement) {
+        fullscreenSucceeded = true;
+        return;
+      }
+      if (pendingFullscreenCleanup) return;
+
+      const events = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'touchstart', 'touchend'];
+      const handler = (activationEvent) => {
+        if (!activationEvent.isTrusted) return;
+        enterFullscreen().finally(() => {
+          if (document.fullscreenElement) {
+            fullscreenSucceeded = true;
+            cleanup();
+          }
+        }).catch(() => {});
+      };
+
+      const cleanup = () => {
+        if (!pendingFullscreenCleanup) return;
+        events.forEach((eventName) => {
+          window.removeEventListener(eventName, handler, true);
+        });
+        pendingFullscreenCleanup = null;
+      };
+
+      pendingFullscreenCleanup = cleanup;
+      events.forEach((eventName) => {
+        window.addEventListener(eventName, handler, true);
+      });
+
+      window.setTimeout(() => {
+        if (pendingFullscreenCleanup) {
+          cleanup();
+        }
+      }, 6000);
+    }
+
+    function dispatchSyntheticClickSequence(baseEvent){
+      if (!startButton) return;
+      const init = (type, options = {}) => {
+        const details = {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          button: 0,
+          buttons: type === 'pointerdown' || type === 'mousedown' ? 1 : 0,
+          clientX: baseEvent?.clientX ?? 0,
+          clientY: baseEvent?.clientY ?? 0,
+          pointerId: baseEvent?.pointerId ?? 1,
+          pointerType: baseEvent?.pointerType ?? 'mouse',
+          isPrimary: true,
+          ...options
+        };
+        if (type.startsWith('pointer')) {
+          if (typeof PointerEvent !== 'function') return;
+          startButton.dispatchEvent(new PointerEvent(type, details));
+        } else {
+          startButton.dispatchEvent(new MouseEvent(type, details));
+        }
+      };
+      init('pointerdown');
+      init('mousedown');
+      init('pointerup');
+      init('mouseup');
+      startButton.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: baseEvent?.clientX ?? 0,
+        clientY: baseEvent?.clientY ?? 0,
+        button: 0
+      }));
+    }
+
     function runNativeStart(){
       try {
         startButton.click();
@@ -216,12 +293,13 @@
       if (fullscreenSucceeded) return;
       if (fullscreenAttemptsScheduled) return;
       fullscreenAttemptsScheduled = true;
-      const delays = [0, 120, 360, 900];
+      const delays = [0, 120, 360, 900, 1800, 3200];
       delays.forEach((delay) => {
         window.setTimeout(() => {
           enterFullscreen().catch(() => {});
         }, delay);
       });
+      armFullscreenOnNextActivation();
     }
 
     function triggerStart(event){
@@ -231,6 +309,9 @@
 
       if (!activated) {
         activated = true;
+        if (!isTrusted) {
+          dispatchSyntheticClickSequence(lastPointerEvent);
+        }
         runNativeStart();
         ensureFullscreenAfterActivation();
       }
@@ -249,6 +330,7 @@
       if (!awaitingTrusted) {
         awaitingTrusted = true;
         enterFullscreen().catch(() => {});
+        armFullscreenOnNextActivation();
         fallbackHideTimeout = window.setTimeout(() => {
           if (!awaitingTrusted) return;
           awaitingTrusted = false;
@@ -286,6 +368,9 @@
         clearTimeout(fallbackHideTimeout);
         fallbackHideTimeout = null;
       }
+      if (pendingFullscreenCleanup) {
+        pendingFullscreenCleanup();
+      }
       wrapper.classList.add('hidden');
       if (observer) observer.disconnect();
       if (langObserver) {
@@ -295,16 +380,19 @@
     }
 
     quickStartBtn.addEventListener('pointerenter', (event) => {
+      lastPointerEvent = event;
       attemptFullscreenFromEvent(event);
       startDwell();
     });
     quickStartBtn.addEventListener('pointerleave', cancelDwell);
     quickStartBtn.addEventListener('pointercancel', cancelDwell);
     quickStartBtn.addEventListener('pointerdown', (event) => {
+      lastPointerEvent = event;
       attemptFullscreenFromEvent(event);
       cancelDwell();
     });
     quickStartBtn.addEventListener('pointerup', (event) => {
+      lastPointerEvent = event;
       attemptFullscreenFromEvent(event);
       cancelDwell();
     });
@@ -320,6 +408,22 @@
         triggerStart(event);
       }
     });
+
+    quickStartBtn.addEventListener('mouseenter', (event) => {
+      lastPointerEvent = event;
+      attemptFullscreenFromEvent(event);
+      if (!('PointerEvent' in window)) startDwell();
+    });
+    quickStartBtn.addEventListener('mouseleave', () => {
+      if (!('PointerEvent' in window)) cancelDwell();
+    });
+    quickStartBtn.addEventListener('touchstart', (event) => {
+      const touch = event.touches && event.touches[0];
+      lastPointerEvent = touch ? { clientX: touch.clientX, clientY: touch.clientY, pointerType: 'touch', pointerId: 1, isTrusted: event.isTrusted } : event;
+      attemptFullscreenFromEvent(event);
+      startDwell();
+    }, { passive: true });
+    quickStartBtn.addEventListener('touchend', cancelDwell);
 
     startButton.addEventListener('click', hideQuickStart, { once: true });
   }
