@@ -23,23 +23,24 @@
       #${WRAPPER_ID} .eyegaze-quick-start {
         position: relative;
         pointer-events: auto;
-        padding: 18px 28px;
-        border-radius: 16px;
+        border-radius: 26px;
         border: 2px solid rgba(255,255,255,0.18);
-        background: rgba(17,17,17,0.75);
+        background: rgba(17,17,17,0.78);
         color: #fff;
         font-weight: 700;
         font-size: 1.05rem;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         overflow: hidden;
         box-shadow: 0 16px 40px rgba(0,0,0,0.35);
-        backdrop-filter: blur(6px);
-        min-width: min(320px, 70vw);
+        backdrop-filter: blur(8px);
+        width: min(150px, 32vw);
+        aspect-ratio: 1 / 1;
+        padding: 18px;
       }
       #${WRAPPER_ID} .eyegaze-quick-start:focus-visible {
         outline: 3px solid rgba(20,184,166,0.65);
@@ -47,13 +48,14 @@
       }
       #${WRAPPER_ID} .eyegaze-quick-start .eyegaze-quick-start-progress {
         position: absolute;
-        inset: 6px;
-        border-radius: 12px;
-        background: rgba(255,64,64,0.55);
-        width: 0%;
-        height: 0%;
+        inset: 10px;
+        border-radius: 20px;
+        background: radial-gradient(circle at center, rgba(255,64,64,0.7) 0%, rgba(255,32,32,0.7) 35%, rgba(255,32,32,0.45) 100%);
         pointer-events: none;
+        transform: scale(0);
         transform-origin: center;
+        opacity: 0.92;
+        will-change: transform;
       }
       #${WRAPPER_ID} .eyegaze-quick-start .eyegaze-quick-start-text {
         position: relative;
@@ -65,11 +67,11 @@
         text-align: center;
       }
       #${WRAPPER_ID} .eyegaze-quick-start .eyegaze-quick-start-label {
-        font-size: 1.05rem;
-        letter-spacing: .02em;
+        font-size: 1.08rem;
+        letter-spacing: .04em;
       }
       #${WRAPPER_ID} .eyegaze-quick-start .eyegaze-quick-start-hint {
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         font-weight: 500;
         opacity: 0.85;
       }
@@ -78,9 +80,10 @@
           inset: auto 0 18px 0;
         }
         #${WRAPPER_ID} .eyegaze-quick-start {
-          padding: 16px 22px;
+          padding: 16px;
           font-size: 1rem;
-          min-width: min(280px, 90vw);
+          width: min(132px, 42vw);
+          border-radius: 22px;
         }
         #${WRAPPER_ID} .eyegaze-quick-start .eyegaze-quick-start-label {
           font-size: 1rem;
@@ -118,8 +121,8 @@
 
     const label = document.createElement('span');
     label.className = 'eyegaze-quick-start-label translate';
-    label.dataset.fr = 'Démarrage rapide';
-    label.dataset.en = 'Quick start';
+    label.dataset.fr = 'Go';
+    label.dataset.en = 'Quickstart';
     const hint = document.createElement('span');
     hint.className = 'eyegaze-quick-start-hint translate';
     hint.dataset.fr = 'Options par défaut · Survol 1,5 s';
@@ -154,22 +157,38 @@
       langObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
     }
 
+    function enterFullscreen(){
+      const element = document.documentElement;
+      if (!element) return Promise.resolve();
+      if (document.fullscreenElement) return Promise.resolve();
+      const request = element.requestFullscreen || element.webkitRequestFullscreen || element.mozRequestFullScreen || element.msRequestFullscreen;
+      if (typeof request === 'function') {
+        try {
+          const result = request.call(element);
+          return Promise.resolve(result).catch(() => {});
+        } catch (err) {
+          return Promise.resolve();
+        }
+      }
+      return Promise.resolve();
+    }
+
     function triggerStart(){
       cancelDwell();
-      try { startButton.click(); } catch (e) { startButton.dispatchEvent(new Event('click')); }
-      hideQuickStart();
+      enterFullscreen().finally(() => {
+        try { startButton.click(); } catch (e) { startButton.dispatchEvent(new Event('click')); }
+        hideQuickStart();
+      });
     }
 
     function startDwell(){
       cancelDwell();
       const dwellTime = getDwellTime();
       progress.style.transition = 'none';
-      progress.style.width = '0%';
-      progress.style.height = '0%';
+      progress.style.transform = 'scale(0)';
       progress.offsetWidth; // force reflow
-      progress.style.transition = `width ${dwellTime}ms linear, height ${dwellTime}ms linear`;
-      progress.style.width = '100%';
-      progress.style.height = '100%';
+      progress.style.transition = `transform ${dwellTime}ms ease-in-out`;
+      progress.style.transform = 'scale(1)';
       dwellTimeout = window.setTimeout(triggerStart, dwellTime);
     }
 
@@ -178,9 +197,8 @@
         clearTimeout(dwellTimeout);
         dwellTimeout = null;
       }
-      progress.style.transition = 'width 150ms ease-out, height 150ms ease-out';
-      progress.style.width = '0%';
-      progress.style.height = '0%';
+      progress.style.transition = 'transform 180ms ease-out';
+      progress.style.transform = 'scale(0)';
     }
 
     function hideQuickStart(){
