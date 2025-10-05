@@ -285,10 +285,12 @@
   <!-- 1. Load themes.js FIRST so we have window.themes. -->
   <script src="../js/themes.js"></script>
   <script src="js/games-config.js"></script>
+  <script src="js/fullscreen.js"></script>
 
   <!-- 2. Then our main logic script. -->
   <script>
     const maxGames = 10;
+    const FULLSCREEN_PREFERENCE_KEY = 'sensorielFullscreenPreferred';
     const gameSelectionsContainer = document.getElementById('gameSelections');
     const addGameBtn = document.getElementById('addGameBtn');
     const selectionForm = document.getElementById('selectionForm');
@@ -614,22 +616,62 @@
 
     addGameBtn.addEventListener('click', addGameSelectionAnimated);
 
-    selectionForm.addEventListener('submit', function(e) {
+    function setFullscreenPreference() {
+      try {
+        localStorage.setItem(FULLSCREEN_PREFERENCE_KEY, 'true');
+      } catch (error) {
+        console.warn('Unable to store fullscreen preference:', error);
+      }
+    }
+
+    async function requestDocumentFullscreen() {
+      const element = document.documentElement;
+      if (!element) {
+        return false;
+      }
+
+      const request =
+        element.requestFullscreen ||
+        element.webkitRequestFullscreen ||
+        element.msRequestFullscreen ||
+        element.mozRequestFullScreen;
+
+      if (!request) {
+        return false;
+      }
+
+      try {
+        const result = request.call(element, { navigationUI: 'hide' });
+        if (result && typeof result.then === 'function') {
+          await result;
+        }
+        return true;
+      } catch (error) {
+        console.warn('Fullscreen request from main page failed:', error);
+        return false;
+      }
+    }
+
+    selectionForm.addEventListener('submit', async function(e) {
       e.preventDefault();
       errorMsg.textContent = '';
 
       const gameBlocks = gameSelectionsContainer.querySelectorAll('.game-selection-block');
       const selectedGames = [];
       const gameDetails = [];
+      let duplicateSelection = false;
 
-      gameBlocks.forEach(block => {
+      for (const block of gameBlocks) {
         const gameSelect = block.querySelector('.game-select');
         const selectedGame = gameSelect.value;
-        if (selectedGame === '') return;
+        if (selectedGame === '') {
+          continue;
+        }
 
         if (selectedGames.includes(selectedGame)) {
           errorMsg.textContent = "Each game must be unique. Please adjust your selections.";
-          throw new Error("Duplicate game selection.");
+          duplicateSelection = true;
+          break;
         }
         selectedGames.push(selectedGame);
 
@@ -650,7 +692,11 @@
           id: selectedGame,
           options: options
         });
-      });
+      }
+
+      if (duplicateSelection) {
+        return;
+      }
 
       if (gameDetails.length < 1) {
         errorMsg.textContent = "Please select at least one game.";
@@ -695,6 +741,19 @@
         errorMsg.textContent = "L'activité sélectionnée est introuvable.";
         return;
       }
+      setFullscreenPreference();
+
+      if (window.SensorielFullscreen && typeof window.SensorielFullscreen.markPreferred === 'function') {
+        window.SensorielFullscreen.markPreferred(true);
+        try {
+          await window.SensorielFullscreen.ensure();
+        } catch (error) {
+          console.warn('Sensoriel fullscreen helper error:', error);
+        }
+      } else {
+        await requestDocumentFullscreen();
+      }
+
       window.location.href = firstGameFile;
     });
   </script>

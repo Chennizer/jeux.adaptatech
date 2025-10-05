@@ -315,23 +315,51 @@
     return `${capitalizedFirst}${rest.join('')}`;
   }
 
+  const MIN_PICTO_ITEMS_FOR_THEME = 8;
+
   function generatePictoThemes(indexJson) {
     if (!indexJson || !indexJson.categories) {
       return {};
     }
 
     const basePath = typeof indexJson.base === 'string' ? indexJson.base : `${IMAGE_BASE}pictos/`;
-    const generated = {};
+    const preparedCategories = [];
 
     Object.entries(indexJson.categories).forEach(([categoryId, categoryData]) => {
-      if (!categoryData || !Array.isArray(categoryData.items) || categoryData.items.length === 0) {
+      if (!categoryData || !Array.isArray(categoryData.items)) {
         return;
       }
 
+      const validItems = categoryData.items.filter(item => item && typeof item.file === 'string');
+      if (validItems.length === 0) {
+        return;
+      }
+
+      preparedCategories.push({
+        id: categoryId,
+        data: categoryData,
+        items: validItems,
+        itemCount: validItems.length
+      });
+    });
+
+    if (preparedCategories.length === 0) {
+      return {};
+    }
+
+    const richCategories = preparedCategories.filter(category => category.itemCount >= MIN_PICTO_ITEMS_FOR_THEME);
+    const categoriesToUse = (richCategories.length > 0 ? richCategories : preparedCategories)
+      .slice()
+      .sort((a, b) => b.itemCount - a.itemCount);
+
+    const generated = {};
+
+    categoriesToUse.forEach((category) => {
+      const { id: categoryId, data: categoryData, items } = category;
       const mapping = PICTO_CATEGORY_MAPPINGS[categoryId] || {};
       const themeId = `picto_${categoryId}`;
-      const words = sanitizeWords(categoryData.items.map(buildLabel).filter(Boolean));
-      const transparentPNGs = categoryData.items.map(item => `${basePath}${item.file}`);
+      const words = sanitizeWords(items.map(buildLabel).filter(Boolean));
+      const transparentPNGs = items.map(item => `${basePath}${item.file}`);
 
       generated[themeId] = createTheme({
         id: themeId,
