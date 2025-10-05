@@ -39,6 +39,10 @@
       return;
     }
 
+    if (window.sessionHelpers && typeof window.sessionHelpers.updateActivityMarker === 'function') {
+      window.sessionHelpers.updateActivityMarker(readingSession);
+    }
+
     themeData = readingSession.themeData || {};
     captureDomElements();
     prepareAudioPlayers();

@@ -31,6 +31,10 @@
       return;
     }
 
+    if (window.sessionHelpers && typeof window.sessionHelpers.updateActivityMarker === 'function') {
+      window.sessionHelpers.updateActivityMarker(triSession);
+    }
+
     themeData = triSession.themeData || {};
     statusMessageEl = document.getElementById('statusMessage');
     itemsContainerEl = document.getElementById('itemsContainer');

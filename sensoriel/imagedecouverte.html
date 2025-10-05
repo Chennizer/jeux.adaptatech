@@ -82,7 +82,13 @@
   </div>
   <div class="sensorial-shell">
     <header class="sensorial-header">
-      <h1 class="sensorial-title">Découvrir l’image</h1>
+      <div class="sensorial-header-main">
+        <h1 class="sensorial-title">Découvrir l’image</h1>
+        <div class="sensorial-activity-marker" role="group" aria-label="Activité en cours">
+          <img src="../../images/plasticbasket.png" alt="" />
+          <span class="sensorial-activity-number">–</span>
+        </div>
+      </div>
       <p class="sensorial-subtitle">Frotte l’écran pour révéler l’image cachée.</p>
     </header>
     <main class="sensorial-content">
@@ -96,96 +102,47 @@
   <audio id="final-reward-sound" src="" preload="auto"></audio>
   <script src="js/fullscreen.js"></script>
   <script>
+    let activeSession = null;
+    let themeData = {};
+    let reinforcerType = 'shortvideo';
+    let difficultySetting = 'medium';
+    let reinforcerController = null;
+
     document.addEventListener('DOMContentLoaded', function() {
-      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-      const mediaOption = selections.mediaOption || "";
-      const reinforcerType = selections.reinforcerType || 'shortvideo';
-      const themeData = (window.themes && window.themes[mediaOption])
-                          ? window.themes[mediaOption]
-                          : window.themes["default"] || {};
-      
+      activeSession = sessionHelpers.ensureCurrentGame('imagedecouverte');
+      if (!activeSession) { return; }
+
+      sessionHelpers.updateActivityMarker(activeSession);
+
+      themeData = activeSession.themeData || {};
+      reinforcerType = (activeSession.selections && activeSession.selections.reinforcerType)
+        ? activeSession.selections.reinforcerType
+        : 'shortvideo';
+
       document.getElementById('error-sound').src = themeData.errorSound || "../../sounds/error.mp3";
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../../sounds/rooster.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../../sounds/victory.mp3";
-      
-      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      if (isNaN(overallGameIndex)) {
-        alert("Game selections not found. Redirecting to main page.");
-        window.location.href = "main.html";
-        return;
-      }
-      
-      const activityOverlay = document.getElementById('activityNumberOverlay');
-      const numberTextEl = activityOverlay.querySelector('.number-text');
-      numberTextEl.textContent = (overallGameIndex + 1).toString();
-      activityOverlay.style.display = 'flex';
-      
-      function hideOverlayAndStart() {
-        if (themeData.startSound) {
-          let sfx = new Audio(themeData.startSound);
-          sfx.play().catch(err => console.warn('Sound play error:', err));
-        }
-        activityOverlay.style.display = 'none';
-        document.removeEventListener('click', hideOverlayAndStart);
-        document.removeEventListener('touchend', hideOverlayAndStart);
-        startGame();
-      }
-      
-      document.addEventListener('click', hideOverlayAndStart);
-      document.addEventListener('touchend', hideOverlayAndStart);
-      
-      const resolveGameFile = (gameId) => {
-        if (!gameId) {
-          return '';
-        }
-        if (window.sessionHelpers && typeof window.sessionHelpers.getGameFileById === 'function') {
-          return window.sessionHelpers.getGameFileById(gameId);
-        }
-        if (Array.isArray(window.gamesConfig)) {
-          const match = window.gamesConfig.find(game => game && game.id === gameId);
-          if (match && match.file) {
-            return match.file;
-          }
-        }
-        return `${gameId}.html`;
-      };
 
-      function navigateToNextGame() {
-        if (window.sessionHelpers && typeof window.sessionHelpers.advanceToNextGame === 'function') {
-          sessionHelpers.advanceToNextGame();
-          return;
-        }
-        const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10) + 1;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-        if (Array.isArray(selections.gameOrder) && currentGameIndex < selections.gameOrder.length) {
-          const nextGameId = selections.gameOrder[currentGameIndex];
-          const nextGameFile = resolveGameFile(nextGameId);
-          if (nextGameFile) {
-            window.location.href = nextGameFile;
-            return;
-          }
-        }
-        window.location.href = "completion.html";
-      }
+      const options = sessionHelpers.getCurrentGameOptions(activeSession);
+      difficultySetting = options.difficulty || 'medium';
 
-      let reinforcerController = null;
-      if (window.sessionHelpers && typeof window.sessionHelpers.setupSharedReinforcer === 'function') {
-        const session = sessionHelpers.loadSession ? sessionHelpers.loadSession() : null;
-        if (session) {
-          reinforcerController = sessionHelpers.setupSharedReinforcer(session, {
-            reinforcerType,
-            onAdvance: navigateToNextGame
-          });
-        }
-      }
+      reinforcerController = sessionHelpers.setupSharedReinforcer(activeSession, {
+        reinforcerType,
+        onAdvance: sessionHelpers.advanceToNextGame
+      });
+
       if (!reinforcerController && window.reinforcerOverlay && typeof window.reinforcerOverlay.init === 'function') {
         reinforcerController = window.reinforcerOverlay.init({
           reinforcerType,
           themeData,
-          onAdvance: navigateToNextGame
+          onAdvance: sessionHelpers.advanceToNextGame
         });
       }
+
+      sessionHelpers.showActivityOverlay(() => {
+        startGame();
+      }, activeSession);
+    });
 
       function showReinforcerSound() {
         const wordRewardSound = document.getElementById('word-reward-sound');
@@ -303,12 +260,7 @@
         }
         updateParticles();
         
-        const globalSelections = JSON.parse(localStorage.getItem('gameSelections'));
-        const currentIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        const gameOptionsForThisGame = (globalSelections.gameOptions && globalSelections.gameOptions[currentIndex])
-                                        ? globalSelections.gameOptions[currentIndex]
-                                        : {};
-        const difficulty = gameOptionsForThisGame.difficulty || "medium";
+        const difficulty = difficultySetting || "medium";
         let eraseRadius = 30;
         if (difficulty === "easy") { eraseRadius = 50; }
         else if (difficulty === "hard") { eraseRadius = 20; }
@@ -343,7 +295,7 @@
                 if (reinforcerController && typeof reinforcerController.show === 'function') {
                   reinforcerController.show({ reinforcerType });
                 } else {
-                  navigateToNextGame();
+                  sessionHelpers.advanceToNextGame();
                 }
               }, 500);
             }

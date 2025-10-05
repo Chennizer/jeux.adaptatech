@@ -156,6 +156,35 @@
     document.addEventListener('touchend', handler, { once: true });
   }
 
+  function updateActivityMarker(session, options) {
+    const marker = document.querySelector('.sensorial-activity-marker');
+    if (!marker) {
+      return;
+    }
+
+    const activeSession = session || loadSession();
+    const numberEl = marker.querySelector('.sensorial-activity-number');
+    const placeholder = options && typeof options.placeholder === 'string'
+      ? options.placeholder
+      : '–';
+
+    let activityIndex = null;
+    if (activeSession && Number.isFinite(activeSession.currentGameIndex)) {
+      activityIndex = activeSession.currentGameIndex + 1;
+    }
+
+    if (numberEl) {
+      numberEl.textContent = activityIndex ? String(activityIndex) : placeholder;
+    }
+
+    const ariaLabel = activityIndex
+      ? `Activité ${activityIndex}`
+      : (options && typeof options.ariaLabel === 'string'
+        ? options.ariaLabel
+        : 'Activité en cours');
+    marker.setAttribute('aria-label', ariaLabel);
+  }
+
   function advanceToNextGame() {
     const session = loadSession();
     if (!session) {
@@ -214,6 +243,7 @@
     ensureCurrentGame,
     getCurrentGameOptions,
     showActivityOverlay,
+    updateActivityMarker,
     advanceToNextGame,
     setupReinforcerRedirect,
     setupSharedReinforcer
