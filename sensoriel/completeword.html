@@ -93,13 +93,24 @@
       object-fit: contain;
       display: block;
     }
-    .target-word {
+    .target-word-wrapper {
+      width: 100%;
       display: flex;
-      flex-wrap: wrap;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .target-word {
+      --word-scale: 1;
+      display: inline-flex;
+      flex-wrap: nowrap;
       justify-content: center;
       align-items: flex-end;
       gap: clamp(12px, 2.4vw, 20px);
-      width: 100%;
+      transform: scale(var(--word-scale));
+      transform-origin: center top;
+    }
+    .target-word.is-scaled {
+      will-change: transform;
     }
     .letter-slot-group {
       display: flex;
@@ -200,7 +211,9 @@
         <div class="letters-container" id="letters-container"></div>
         <div class="target-word-container">
           <img src="../../images/binou.png" alt="Image" class="target-image" id="target-image">
-          <div class="target-word" id="target-word"></div>
+          <div class="target-word-wrapper">
+            <div class="target-word" id="target-word"></div>
+          </div>
         </div>
       </div>
     </main>
@@ -227,6 +240,7 @@
       let finalRewardSound = null;
 
       let slots = [];
+      let pendingWordScaleFrame = null;
       let activeDragElement = null;
       let initialX = 0;
       let initialY = 0;
@@ -251,6 +265,8 @@
         errorSoundElement = document.getElementById('error-sound');
         wordRewardSound = document.getElementById('word-reward-sound');
         finalRewardSound = document.getElementById('final-reward-sound');
+
+        window.addEventListener('resize', scheduleWordScale);
 
         setupMediaAssets();
         setupGameOptions();
@@ -396,6 +412,8 @@
         synth.speak(utterThis);
       }
 
+      window.addEventListener('orientationchange', scheduleWordScale);
+
       function initializeSpeechSynthesis() {
         if (voicesInitialized) return;
         voicesInitialized = true;
@@ -444,6 +462,7 @@
           targetWordContainer.appendChild(group);
         }
         slots = targetWordContainer.querySelectorAll('.letter-slot');
+        scheduleWordScale();
       }
 
       function initializeLetters() {
@@ -483,6 +502,39 @@
         modelLetters.forEach(modelDiv => {
           modelDiv.style.display = showModelLetters ? 'block' : 'none';
         });
+        scheduleWordScale();
+      }
+
+      function scheduleWordScale() {
+        if (!targetWordContainer) return;
+        if (pendingWordScaleFrame) {
+          cancelAnimationFrame(pendingWordScaleFrame);
+        }
+        pendingWordScaleFrame = requestAnimationFrame(() => {
+          pendingWordScaleFrame = null;
+          scaleWordToFit();
+        });
+      }
+
+      function scaleWordToFit() {
+        if (!targetWordContainer) return;
+        const wrapper = targetWordContainer.parentElement;
+        if (!wrapper) return;
+
+        targetWordContainer.style.setProperty('--word-scale', 1);
+        targetWordContainer.classList.remove('is-scaled');
+
+        const availableWidth = wrapper.clientWidth;
+        const actualWidth = targetWordContainer.scrollWidth;
+        if (!availableWidth || !actualWidth) {
+          return;
+        }
+
+        const nextScale = Math.min(1, availableWidth / actualWidth);
+        targetWordContainer.style.setProperty('--word-scale', nextScale);
+        if (nextScale < 0.999) {
+          targetWordContainer.classList.add('is-scaled');
+        }
       }
 
       function shuffleArray(array) {
