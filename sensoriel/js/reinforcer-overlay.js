@@ -1,8 +1,8 @@
 (function (global) {
   'use strict';
 
-  const DEFAULT_VIDEO = '../../videos/africa.mp4';
-  const DEFAULT_IMAGE = '../../images/default_reinforcer.png';
+const DEFAULT_VIDEO = '../videos/africa.mp4';
+const DEFAULT_IMAGE = '../images/default_reinforcer.png';
   const DEFAULT_BUTTON_LABELS = {
     video: 'Voir la vidéo de renforcement',
     image: 'Continuer'

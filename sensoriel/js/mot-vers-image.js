@@ -1,9 +1,9 @@
 (function () {
   'use strict';
 
-  const PICTO_INDEX_URL = '../../images/pictos/index.json';
-  const DEFAULT_ERROR_SOUND = '../../sounds/error.mp3';
-  const DEFAULT_SUCCESS_SOUND = '../../sounds/victory.mp3';
+const PICTO_INDEX_URL = '../images/pictos/index.json';
+const DEFAULT_ERROR_SOUND = '../sounds/error.mp3';
+const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
 
   let readingSession = null;
   let themeData = {};
@@ -190,7 +190,7 @@
   }
 
   function buildPictoPairsFromIndex(pictoIndex, maxItems) {
-    const basePath = typeof pictoIndex.base === 'string' ? pictoIndex.base : '../../images/pictos/';
+    const basePath = typeof pictoIndex.base === 'string' ? pictoIndex.base : '../images/pictos/';
     const pool = [];
     Object.keys(pictoIndex.categories || {}).forEach((categoryId) => {
       const category = pictoIndex.categories[categoryId];

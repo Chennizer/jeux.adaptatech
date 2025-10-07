@@ -1,9 +1,9 @@
 (function () {
   'use strict';
 
-  const PICTO_INDEX_URL = '../../images/pictos/index.json';
-  const DEFAULT_ERROR_SOUND = '../../sounds/error.mp3';
-  const DEFAULT_SUCCESS_SOUND = '../../sounds/victory.mp3';
+const PICTO_INDEX_URL = '../images/pictos/index.json';
+const DEFAULT_ERROR_SOUND = '../sounds/error.mp3';
+const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
 
   let triSession = null;
   let themeData = {};
@@ -157,7 +157,7 @@
   const MIN_ITEMS_FOR_RELEVANT_CATEGORY = 8;
 
   function buildCategoryPool(pictoIndex) {
-    const basePath = typeof pictoIndex.base === 'string' ? pictoIndex.base : '../../images/pictos/';
+    const basePath = typeof pictoIndex.base === 'string' ? pictoIndex.base : '../images/pictos/';
     const pool = [];
     const rawCategories = pictoIndex.categories || {};
 
