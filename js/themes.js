@@ -10,7 +10,6 @@
   const IMAGE_BASE = `${MEDIA_BASE}images/`;
   const SOUND_BASE = `${MEDIA_BASE}sounds/`;
   const VIDEO_BUCKET = 'https://bucket.adaptatech.org/';
-  const PICTO_INDEX_PATH = `${IMAGE_BASE}pictos/index.json`;
 
   const DEFAULT_COLORS = { primary: '#175676', accent: '#FFC857' };
   const DEFAULT_BACKGROUNDS = [
@@ -206,6 +205,294 @@
         `${VIDEO_BUCKET}afrique5.mp4`
       ],
       startSound: `${SOUND_BASE}africaflute.mp3`
+    }),
+    picto_animaux: createTheme({
+      id: 'picto_animaux',
+      displayName: 'Animaux (Pictogrammes)',
+      categoryId: 'animaux',
+      colors: { primary: '#D97706', accent: '#F97316' },
+      images: [
+        `${IMAGE_BASE}africanbackground1.webp`,
+        `${IMAGE_BASE}africanbackground2.webp`,
+        `${IMAGE_BASE}africanbackground3.webp`
+      ],
+      transparentPNGs: [
+        `${IMAGE_BASE}pictos/bear.png`,
+        `${IMAGE_BASE}pictos/beaver.png`,
+        `${IMAGE_BASE}pictos/cat.png`,
+        `${IMAGE_BASE}pictos/cow.png`,
+        `${IMAGE_BASE}pictos/Hcow.png`,
+        `${IMAGE_BASE}pictos/deer.png`,
+        `${IMAGE_BASE}pictos/dog.png`,
+        `${IMAGE_BASE}pictos/dolphin.png`,
+        `${IMAGE_BASE}pictos/duck.png`,
+        `${IMAGE_BASE}pictos/eagle.png`,
+        `${IMAGE_BASE}pictos/elephant.png`,
+        `${IMAGE_BASE}pictos/fish.png`,
+        `${IMAGE_BASE}pictos/fox.png`,
+        `${IMAGE_BASE}pictos/giraffe.png`,
+        `${IMAGE_BASE}pictos/horse.png`,
+        `${IMAGE_BASE}pictos/lion.png`,
+        `${IMAGE_BASE}pictos/malemoose.png`,
+        `${IMAGE_BASE}pictos/moose.png`,
+        `${IMAGE_BASE}pictos/owl.png`,
+        `${IMAGE_BASE}pictos/penguin.png`,
+        `${IMAGE_BASE}pictos/pig.png`,
+        `${IMAGE_BASE}pictos/rabbit.png`,
+        `${IMAGE_BASE}pictos/racoon.png`,
+        `${IMAGE_BASE}pictos/rooster.png`,
+        `${IMAGE_BASE}pictos/shark.png`,
+        `${IMAGE_BASE}pictos/sheep.png`,
+        `${IMAGE_BASE}pictos/skunk.png`,
+        `${IMAGE_BASE}pictos/snake.png`,
+        `${IMAGE_BASE}pictos/squirrel.png`,
+        `${IMAGE_BASE}pictos/tiger.png`,
+        `${IMAGE_BASE}pictos/whale.png`
+      ],
+      words: [
+        'Ours',
+        'Castor',
+        'Chat',
+        'Vache',
+        'Cerf',
+        'Chien',
+        'Dauphin',
+        'Canard',
+        'Aigle',
+        'Éléphant',
+        'Poisson',
+        'Renard',
+        'Girafe',
+        'Cheval',
+        'Lion',
+        'Orignal mâle',
+        'Orignal',
+        'Chouette',
+        'Pingouin',
+        'Cochon',
+        'Lapin',
+        'Raton laveur',
+        'Coq',
+        'Requin',
+        'Mouton',
+        'Moufette',
+        'Serpent',
+        'Écureuil',
+        'Tigre',
+        'Baleine'
+      ],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}afrique1.mp4`,
+        `${VIDEO_BUCKET}afrique2.mp4`,
+        `${VIDEO_BUCKET}afrique3.mp4`
+      ],
+      startSound: `${SOUND_BASE}africaflute.mp3`,
+      reinforcerSound: `${SOUND_BASE}africa-sound.wav`
+    }),
+    picto_aliments: createTheme({
+      id: 'picto_aliments',
+      displayName: 'Aliments (Pictogrammes)',
+      categoryId: 'aliments',
+      colors: { primary: '#B45309', accent: '#F97316' },
+      images: [
+        `${IMAGE_BASE}basket.webp`,
+        `${IMAGE_BASE}association.png`,
+        `${IMAGE_BASE}bgforest.png`
+      ],
+      transparentPNGs: [
+        `${IMAGE_BASE}pictos/almond.png`,
+        `${IMAGE_BASE}pictos/bread.png`,
+        `${IMAGE_BASE}pictos/lentils.png`,
+        `${IMAGE_BASE}pictos/oats.png`,
+        `${IMAGE_BASE}pictos/peanut.png`,
+        `${IMAGE_BASE}pictos/rice.png`,
+        `${IMAGE_BASE}pictos/walnut.png`,
+        `${IMAGE_BASE}pictos/apple.png`,
+        `${IMAGE_BASE}pictos/avocado.png`,
+        `${IMAGE_BASE}pictos/banana.png`,
+        `${IMAGE_BASE}pictos/blueberry.png`,
+        `${IMAGE_BASE}pictos/coconut.png`,
+        `${IMAGE_BASE}pictos/grapes.png`,
+        `${IMAGE_BASE}pictos/kiwi.png`,
+        `${IMAGE_BASE}pictos/lemon.png`,
+        `${IMAGE_BASE}pictos/lime.png`,
+        `${IMAGE_BASE}pictos/mango.png`,
+        `${IMAGE_BASE}pictos/olive.png`,
+        `${IMAGE_BASE}pictos/orange.png`,
+        `${IMAGE_BASE}pictos/pear.png`,
+        `${IMAGE_BASE}pictos/pineapple.png`,
+        `${IMAGE_BASE}pictos/raspberry.png`,
+        `${IMAGE_BASE}pictos/strawberry.png`,
+        `${IMAGE_BASE}pictos/watermelon.png`,
+        `${IMAGE_BASE}pictos/beans.png`,
+        `${IMAGE_BASE}pictos/bellpepper.png`,
+        `${IMAGE_BASE}pictos/broccoli.png`,
+        `${IMAGE_BASE}pictos/cabbage.png`,
+        `${IMAGE_BASE}pictos/carrot.png`,
+        `${IMAGE_BASE}pictos/cauliflower.png`,
+        `${IMAGE_BASE}pictos/chickpeas.png`,
+        `${IMAGE_BASE}pictos/chilipepper.png`,
+        `${IMAGE_BASE}pictos/corn.png`,
+        `${IMAGE_BASE}pictos/cucumber.png`,
+        `${IMAGE_BASE}pictos/eggplant.png`,
+        `${IMAGE_BASE}pictos/garlic.png`,
+        `${IMAGE_BASE}pictos/lettuce.png`,
+        `${IMAGE_BASE}pictos/mushroom.png`,
+        `${IMAGE_BASE}pictos/onion.png`,
+        `${IMAGE_BASE}pictos/pepper.png`,
+        `${IMAGE_BASE}pictos/potato.png`,
+        `${IMAGE_BASE}pictos/radish.png`,
+        `${IMAGE_BASE}pictos/seaweed.png`,
+        `${IMAGE_BASE}pictos/spinach.png`,
+        `${IMAGE_BASE}pictos/sweetpotato.png`,
+        `${IMAGE_BASE}pictos/tomato.png`,
+        `${IMAGE_BASE}pictos/zuchini.png`
+      ],
+      words: [
+        'Amande',
+        'Pain',
+        'Lentilles',
+        'Avoine',
+        'Arachide',
+        'Riz',
+        'Noix',
+        'Pomme',
+        'Avocat',
+        'Banane',
+        'Bleuet',
+        'Noix de coco',
+        'Raisin',
+        'Kiwi',
+        'Citron',
+        'Lime',
+        'Mangue',
+        'Olive',
+        'Orange',
+        'Poire',
+        'Ananas',
+        'Framboise',
+        'Fraise',
+        'Pastèque',
+        'Haricots',
+        'Poivron',
+        'Brocoli',
+        'Chou',
+        'Carotte',
+        'Chou-fleur',
+        'Pois chiches',
+        'Piment',
+        'Maïs',
+        'Concombre',
+        'Aubergine',
+        'Ail',
+        'Laitue',
+        'Champignon',
+        'Oignon',
+        'Pomme de terre',
+        'Radis',
+        'Algues',
+        'Épinards',
+        'Patate douce',
+        'Tomate',
+        'Courgette'
+      ],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}toupieetbinou2.mp4`,
+        `${VIDEO_BUCKET}toupieetbinou3.mp4`,
+        `${VIDEO_BUCKET}toupieetbinou4.mp4`
+      ],
+      startSound: `${SOUND_BASE}cartoon/cartoonappear2.mp3`,
+      reinforcerSound: `${SOUND_BASE}cartoon/cartoonappear3.mp3`
+    }),
+    picto_transports: createTheme({
+      id: 'picto_transports',
+      displayName: 'Transports (Pictogrammes)',
+      categoryId: 'transports',
+      colors: { primary: '#1F4AA5', accent: '#F97316' },
+      images: [
+        `${IMAGE_BASE}patpatrouille1.jpg`,
+        `${IMAGE_BASE}patpatrouille2.jpg`
+      ],
+      transparentPNGs: [
+        `${IMAGE_BASE}pictos/bicycle.png`,
+        `${IMAGE_BASE}pictos/boat.png`,
+        `${IMAGE_BASE}pictos/bus.png`,
+        `${IMAGE_BASE}pictos/car.png`,
+        `${IMAGE_BASE}pictos/caravan.png`,
+        `${IMAGE_BASE}pictos/firetruck.png`,
+        `${IMAGE_BASE}pictos/helicopter.png`,
+        `${IMAGE_BASE}pictos/monstertruck.png`,
+        `${IMAGE_BASE}pictos/moto.png`,
+        `${IMAGE_BASE}pictos/policecar.png`,
+        `${IMAGE_BASE}pictos/rocket.png`,
+        `${IMAGE_BASE}pictos/schoolbus.png`,
+        `${IMAGE_BASE}pictos/sportscar.png`,
+        `${IMAGE_BASE}pictos/submarine.png`,
+        `${IMAGE_BASE}pictos/truck.png`
+      ],
+      words: [
+        'Vélo',
+        'Bateau',
+        'Autobus',
+        'Voiture',
+        'Caravane',
+        'Camion de pompiers',
+        'Hélicoptère',
+        'Monster truck',
+        'Moto',
+        'Voiture de police',
+        'Fusée',
+        'Autobus scolaire',
+        'Voiture de sport',
+        'Sous-marin',
+        'Camion'
+      ],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}patpatrouillejungle.mp4`,
+        `${VIDEO_BUCKET}patpatrouillesauvetage.mp4`
+      ],
+      startSound: `${SOUND_BASE}cartoon/cartoonappear4.mp3`
+    }),
+    picto_vehiculesConstruction: createTheme({
+      id: 'picto_vehiculesConstruction',
+      displayName: 'Véhicules de construction (Pictogrammes)',
+      categoryId: 'vehiculesConstruction',
+      colors: { primary: '#92400E', accent: '#FBBF24' },
+      images: [
+        `${IMAGE_BASE}toupiecamping.jpg`,
+        `${IMAGE_BASE}toupiecinema.jpeg`
+      ],
+      transparentPNGs: [
+        `${IMAGE_BASE}pictos/bulldozer.png`,
+        `${IMAGE_BASE}pictos/cementtruck.png`,
+        `${IMAGE_BASE}pictos/compactor.png`,
+        `${IMAGE_BASE}pictos/crane truck.png`,
+        `${IMAGE_BASE}pictos/crane.png`,
+        `${IMAGE_BASE}pictos/dumptruck.png`,
+        `${IMAGE_BASE}pictos/excavator.png`,
+        `${IMAGE_BASE}pictos/forklift.png`,
+        `${IMAGE_BASE}pictos/loader.png`,
+        `${IMAGE_BASE}pictos/roadroller.png`,
+        `${IMAGE_BASE}pictos/tractor.png`
+      ],
+      words: [
+        'Bulldozer',
+        'Camion bétonnière',
+        'Compacteur',
+        'Camion-grue',
+        'Grue',
+        'Camion-benne',
+        'Excavatrice',
+        'Chariot élévateur',
+        'Chargeuse',
+        'Rouleau compresseur',
+        'Tracteur'
+      ],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}patpatrouillepirate.mp4`,
+        `${VIDEO_BUCKET}patpatrouillejungle.mp4`
+      ],
+      startSound: `${SOUND_BASE}cartoon/cartoonappear5.mp3`
     })
   };
 
@@ -228,193 +515,5 @@
 
   global.themes = baseThemes;
 
-  const PICTO_CATEGORY_MAPPINGS = {
-    animaux: {
-      displayName: 'Animaux (Pictogrammes)',
-      images: [
-        `${IMAGE_BASE}africanbackground1.webp`,
-        `${IMAGE_BASE}africanbackground3.webp`
-      ],
-      colors: { primary: '#D97706', accent: '#F97316' },
-      startSound: `${SOUND_BASE}africaflute.mp3`,
-      reinforcerSound: `${SOUND_BASE}africa-sound.wav`,
-      reinforcerVideos: [
-        `${VIDEO_BUCKET}afrique1.mp4`,
-        `${VIDEO_BUCKET}afrique2.mp4`,
-        `${VIDEO_BUCKET}afrique3.mp4`
-      ]
-    },
-    aliments: {
-      displayName: 'Aliments (Pictogrammes)',
-      images: [`${IMAGE_BASE}basket.webp`, `${IMAGE_BASE}association.png`],
-      colors: { primary: '#B45309', accent: '#F97316' },
-      startSound: `${SOUND_BASE}cartoon/cartoonappear1.mp3`,
-      reinforcerSound: `${SOUND_BASE}cartoon/cartoonappear3.mp3`,
-      reinforcerVideos: [
-        `${VIDEO_BUCKET}toupieetbinou2.mp4`,
-        `${VIDEO_BUCKET}toupieetbinou3.mp4`
-      ]
-    },
-    fruits: {
-      displayName: 'Fruits (Pictogrammes)',
-      images: [`${IMAGE_BASE}basket.webp`, `${IMAGE_BASE}bgforest.png`],
-      colors: { primary: '#DB2777', accent: '#FBBF24' },
-      startSound: `${SOUND_BASE}cartoon/cartoonappear2.mp3`,
-      reinforcerVideos: [
-        `${VIDEO_BUCKET}moana-le-bleu-lumiere.mp4`,
-        `${VIDEO_BUCKET}moana-logo-te-pate.mp4`
-      ]
-    },
-    legumes: {
-      displayName: 'Légumes (Pictogrammes)',
-      images: [`${IMAGE_BASE}basket.webp`, `${IMAGE_BASE}association.png`],
-      colors: { primary: '#15803D', accent: '#86EFAC' },
-      startSound: `${SOUND_BASE}cartoon/cartoonappear3.mp3`,
-      reinforcerVideos: [
-        `${VIDEO_BUCKET}toupieetbinou4.mp4`,
-        `${VIDEO_BUCKET}toupieetbinou5.mp4`
-      ]
-    },
-    jouetsFidgets: {
-      displayName: 'Jouets et Fidgets',
-      images: [`${IMAGE_BASE}toupiechambre.jpeg`, `${IMAGE_BASE}toupiecinema.jpeg`],
-      colors: { primary: '#7C3AED', accent: '#F472B6' },
-      startSound: `${SOUND_BASE}cartoon/cartoonappear4.mp3`,
-      reinforcerVideos: [
-        `${VIDEO_BUCKET}patpatrouillejungle.mp4`,
-        `${VIDEO_BUCKET}patpatrouillesauvetage.mp4`
-      ]
-    },
-    hygieneSante: {
-      displayName: 'Hygiène et santé',
-      images: DEFAULT_BACKGROUNDS,
-      colors: { primary: '#0F766E', accent: '#5EEAD4' },
-      startSound: `${SOUND_BASE}cartoon/cartoonappear5.mp3`,
-      reinforcerVideos: [
-        `${VIDEO_BUCKET}patpatrouillepirate.mp4`,
-        `${VIDEO_BUCKET}moana-pour-les-hommes.mp4`
-      ]
-    }
-  };
-
-  function buildLabel(item) {
-    if (!item || !item.label) {
-      return null;
-    }
-    const frenchLabel = item.label.fr || {};
-    const rawWord = typeof frenchLabel.word === 'string' ? frenchLabel.word.trim() : '';
-    if (!rawWord) {
-      return null;
-    }
-    const normalized = rawWord.replace(/\s+/g, ' ');
-    const [firstChar, ...rest] = normalized;
-    if (!firstChar) {
-      return null;
-    }
-    const capitalizedFirst = firstChar.toLocaleUpperCase('fr-FR');
-    return `${capitalizedFirst}${rest.join('')}`;
-  }
-
-  const MIN_PICTO_ITEMS_FOR_THEME = 8;
-
-  function generatePictoThemes(indexJson) {
-    if (!indexJson || !indexJson.categories) {
-      return {};
-    }
-
-    const basePath = typeof indexJson.base === 'string' ? indexJson.base : `${IMAGE_BASE}pictos/`;
-    const preparedCategories = [];
-
-    Object.entries(indexJson.categories).forEach(([categoryId, categoryData]) => {
-      if (!categoryData || !Array.isArray(categoryData.items)) {
-        return;
-      }
-
-      const validItems = categoryData.items.filter(item => item && typeof item.file === 'string');
-      if (validItems.length === 0) {
-        return;
-      }
-
-      preparedCategories.push({
-        id: categoryId,
-        data: categoryData,
-        items: validItems,
-        itemCount: validItems.length
-      });
-    });
-
-    if (preparedCategories.length === 0) {
-      return {};
-    }
-
-    const richCategories = preparedCategories.filter(category => category.itemCount >= MIN_PICTO_ITEMS_FOR_THEME);
-    const categoriesToUse = (richCategories.length > 0 ? richCategories : preparedCategories)
-      .slice()
-      .sort((a, b) => b.itemCount - a.itemCount);
-
-    const generated = {};
-
-    categoriesToUse.forEach((category) => {
-      const { id: categoryId, data: categoryData, items } = category;
-      const mapping = PICTO_CATEGORY_MAPPINGS[categoryId] || {};
-      const themeId = `picto_${categoryId}`;
-      const words = sanitizeWords(items.map(buildLabel).filter(Boolean));
-      const transparentPNGs = items.map(item => `${basePath}${item.file}`);
-
-      generated[themeId] = createTheme({
-        id: themeId,
-        displayName:
-          mapping.displayName ||
-          (categoryData.label && categoryData.label.fr) ||
-          `Pictogrammes ${categoryId}`,
-        categoryId,
-        colors: mapping.colors,
-        images: Array.isArray(mapping.images) && mapping.images.length > 0
-          ? mapping.images
-          : DEFAULT_BACKGROUNDS,
-        transparentPNGs,
-        words,
-        reinforcerVideos: Array.isArray(mapping.reinforcerVideos) && mapping.reinforcerVideos.length > 0
-          ? mapping.reinforcerVideos
-          : undefined,
-        reinforcerImages: Array.isArray(mapping.reinforcerImages) && mapping.reinforcerImages.length > 0
-          ? mapping.reinforcerImages
-          : undefined,
-        startSound: mapping.startSound,
-        reinforcerSound: mapping.reinforcerSound,
-        errorSound: mapping.errorSound,
-        finalRewardSound: mapping.finalRewardSound
-      });
-    });
-
-    return generated;
-  }
-
-  function extendWithPictoThemes() {
-    if (typeof fetch !== 'function') {
-      return;
-    }
-
-    fetch(PICTO_INDEX_PATH)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(indexJson => {
-        const generatedThemes = generatePictoThemes(indexJson);
-        Object.assign(global.themes, generatedThemes);
-        if (typeof document !== 'undefined' && document) {
-          const eventDetail = { generated: Object.keys(generatedThemes) };
-          document.dispatchEvent(new CustomEvent('themes:pictoThemesLoaded', { detail: eventDetail }));
-        }
-      })
-      .catch(error => {
-        console.warn('Unable to extend sensory themes with pictogram categories:', error);
-      });
-  }
-
-  extendWithPictoThemes();
 })(typeof window !== 'undefined' ? window : undefined);
 
