@@ -6,7 +6,7 @@
     return;
   }
 
-  const MEDIA_BASE = '../../';
+  const MEDIA_BASE = '../';
   const IMAGE_BASE = `${MEDIA_BASE}images/`;
   const SOUND_BASE = `${MEDIA_BASE}sounds/`;
   const VIDEO_BUCKET = 'https://bucket.adaptatech.org/';
