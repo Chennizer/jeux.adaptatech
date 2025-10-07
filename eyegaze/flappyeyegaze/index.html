@@ -102,6 +102,21 @@
           </label>
           <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
         </div>
+
+        <!-- Music controls -->
+        <div class="option-item" style="margin-top:8px;">
+          <label class="teal-label">
+            <input type="checkbox" id="muteMusic">
+            <span class="translate" data-fr="Désactiver la musique" data-en="Disable music">Désactiver la musique</span>
+          </label>
+        </div>
+        <div class="option-item">
+          <label for="musicVol" class="teal-label">
+            <span class="translate" data-fr="Volume musique:" data-en="Music volume:">Volume musique:</span>
+            <span id="musicVolVal">35</span>
+          </label>
+          <input type="range" id="musicVol" class="styled-slider" min="0" max="100" value="35">
+        </div>
       </div>
 
       <!-- Column 2 (middle): Bird selector (STACKED PILLS) -->
@@ -139,14 +154,6 @@
           </select>
         </div>
 
-        <div class="option-item">
-          <div class="teal-label translate" data-fr="Contrôles" data-en="Controls">Contrôles</div>
-          <div class="small-note">
-            <span class="translate" data-fr="Souris/Doigt pour monter/descendre" data-en="Mouse/Finger to steer up/down">Souris/Doigt pour monter/descendre</span><br>
-            <span class="translate" data-fr="Pause: P — Redémarrer: R" data-en="Pause: P — Restart: R">Pause: P — Redémarrer: R</span><br>
-            <span class="translate" data-fr="Démarrer: Espace ou Entrée" data-en="Start: Space or Enter">Démarrer: Espace ou Entrée</span>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -226,6 +233,11 @@
   const startButton    = document.getElementById('startButton');
   const difficultySel  = document.getElementById('difficultySelect');
 
+  // Music controls (new)
+  const muteMusic   = document.getElementById('muteMusic');
+  const musicVol    = document.getElementById('musicVol');
+  const musicVolVal = document.getElementById('musicVolVal');
+
   // Bird selector (STACKED PILLS)
   const birdList  = document.getElementById('birdList');
   const birdChips = Array.from(birdList.querySelectorAll('.bird-chip'));
@@ -238,10 +250,13 @@
       ch.setAttribute('aria-selected', 'true');
       birdSet = ch.dataset.bird || 'classic';
       loadSpriteSet(birdSet); // live preview swap
+      // If music already playing, crossfade to matching track
+      if (state === State.PLAYING && musicElA) musicCrossfade(themeForSet(birdSet), 0.6);
     });
   });
 
   sfxVol.addEventListener('input', () => sfxVolVal.textContent = sfxVol.value);
+  if (musicVol) musicVol.addEventListener('input', () => (musicVolVal.textContent = musicVol.value));
 
   if (typeof initEyegazeMenu === 'function') initEyegazeMenu();
 
@@ -266,7 +281,7 @@
     rescaleConfig();
   });
 
-  // Audio
+  // ---------- Audio: SFX ----------
   let AC, masterGain;
   function ensureAudio() {
     if (!AC) {
@@ -305,23 +320,108 @@
   function scoreChime(){ ensureAudio(); beep(850, .07, 'square', .5); setTimeout(()=>beep(1100,.06,'square',.45), 30); }
   function hitSfx(){ ensureAudio(); beep(200, .18, 'sawtooth', .35); setTimeout(()=>beep(120,.22,'sawtooth',.3), 40); }
 
+  // ---------- Music: external MP3s with fade ----------
+  // Put your mp3 files here:
+  // ../../audio/flappy/classic.mp3, owl.mp3, parrot.mp3
+  const THEME_MP3 = {
+    classic: "../../songs/bird1.mp3",
+    night:   "../../songs/bird2.mp3",
+    sunny:   "../../songs/bird3.mp3"
+  };
+
+  let musicElA = null; // active track
+  let musicElB = null; // crossfade target
+  let musicFadeTimer = null;
+
+  function effectiveMusicVolume(){
+    if (!musicVol) return 0.35; // fallback default
+    const muted = !!muteMusic.checked;
+    const v = parseInt(musicVol.value, 10);
+    return muted ? 0 : Math.max(0, Math.min(1, (isNaN(v)?35:v)/100));
+  }
+  function setMusicVolImmediate(v){
+    if (musicElA) musicElA.volume = v;
+    if (musicElB) musicElB.volume = Math.min(musicElB.volume, v);
+  }
+  if (muteMusic) muteMusic.addEventListener('change', ()=> setMusicVolImmediate(effectiveMusicVolume()));
+  if (musicVol)  musicVol.addEventListener('input',  ()=> setMusicVolImmediate(effectiveMusicVolume()));
+
+  function createMusicEl(src){
+    const a = new Audio();
+    a.src = src;
+    a.preload = "auto";
+    a.loop = true;
+    a.volume = effectiveMusicVolume();
+    a.crossOrigin = "anonymous";
+    return a;
+  }
+  function fadeVolume(el, from, to, sec, onEnd){
+    if (!el) return;
+    if (musicFadeTimer) cancelAnimationFrame(musicFadeTimer);
+    const start = performance.now();
+    const dur = Math.max(50, sec*1000);
+    function step(now){
+      const k = Math.min(1, (now - start)/dur);
+      el.volume = from + (to - from) * k;
+      if (k < 1) musicFadeTimer = requestAnimationFrame(step);
+      else if (onEnd) onEnd();
+    }
+    musicFadeTimer = requestAnimationFrame(step);
+  }
+  function crossfade(outEl, inEl, sec, targetVol, startVol=0.0001){
+    if (outEl) fadeVolume(outEl, outEl.volume, 0.0001, sec);
+    if (inEl)  fadeVolume(inEl, startVol, targetVol, sec);
+  }
+  function themeForSet(setName){
+    if (setName === 'owl') return 'night';
+    if (setName === 'parrot') return 'sunny';
+    return 'classic';
+  }
+  function startMusic(themeName, fadeInSec=0.8){
+    const theme = themeName || themeForSet(birdSet);
+    const src = THEME_MP3[theme];
+    if (!src) return;
+
+    // If same src already playing, just fade to current volume
+    if (musicElA && musicElA.src.includes(src)) {
+      fadeVolume(musicElA, musicElA.volume, effectiveMusicVolume(), fadeInSec);
+      return;
+    }
+
+    if (musicElB) { musicElB.pause(); musicElB = null; }
+    musicElB = createMusicEl(src);
+    musicElB.volume = 0.0001;
+    musicElB.play().catch(()=>{ /* will start after user interaction (Start) */ });
+
+    crossfade(musicElA, musicElB, fadeInSec, effectiveMusicVolume(), 0.0001);
+    setTimeout(()=>{
+      if (musicElA && musicElA !== musicElB) musicElA.pause();
+      musicElA = musicElB;
+      musicElB = null;
+    }, Math.max(50, fadeInSec*1000 + 50));
+  }
+  function musicCrossfade(themeName, fadeSec=0.6){
+    if (!musicElA) return;
+    startMusic(themeName, fadeSec);
+  }
+  function stopMusic(fadeOutSec=1.0){
+    if (!musicElA) return;
+    fadeVolume(musicElA, musicElA.volume, 0.0001, fadeOutSec, ()=> musicElA.pause());
+  }
+
+  // ---------- Game core ----------
   const rand = (a,b)=>a + Math.random()*(b-a);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
   const State = { READY:0, PLAYING:1, PAUSED:2, DEAD:3 };
   let state = State.READY;
   let score = 0, best = parseInt(localStorage.getItem('flappy-best')||'0',10);
-  bestEl.textContent = best;
-
-  // Difficulty presets
   const presetsBase = {
     easy:   { gap: 240, speed: 1.0 },
     normal: { gap: 170, speed: 2.4 },
     hard:   { gap: 140, speed: 3.6 }
   };
   const SPACING_FACTOR = { easy: 0.42, normal: 0.33, hard: 0.27 };
-
-  // Flowers: larger than pipes but not huge
   const FLOWER_GAP_MULT = { easy: 1.30, normal: 1.38, hard: 1.50 };
 
   let cfg = { gap: 220, speed: 2.4, spawn: 1.5 };
@@ -483,6 +583,10 @@
     langToggle.style.display = 'none';
     await loadSpriteSet(birdSet);
     if (state === State.DEAD) resetGameState();
+
+    // Start music for current bird with fade-in
+    startMusic(themeForSet(birdSet), 0.8);
+
     state = State.PLAYING;
   }
 
@@ -493,6 +597,7 @@
       else if (state === State.PAUSED){ state = State.PLAYING; }
     } else if (e.key === 'r' || e.key === 'R'){
       restart();
+      stopMusic(0.5);
     } else if (e.code === 'Space' || e.code === 'Enter'){
       if (state === State.READY || state === State.PAUSED || state === State.DEAD){
         e.preventDefault();
@@ -994,6 +1099,7 @@
       if (state !== State.DEAD){
         state = State.DEAD;
         hitSfx();
+        stopMusic(1.2); // fade out track on game over
         if (score > best){ best = score; localStorage.setItem('flappy-best', String(best)); bestEl.textContent = best; }
         setTimeout(()=>{
           try { document.getElementById('game-options').style.display = 'flex'; } catch(e){}
