@@ -2,7 +2,7 @@
   'use strict';
 
 const DEFAULT_ERROR_SOUND = '../sounds/error.mp3';
-const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
+const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
 
   let readingSession = null;
   let themeData = {};
