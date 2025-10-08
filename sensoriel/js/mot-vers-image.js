@@ -97,7 +97,7 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
   function revealGameContainer() {
     const container = document.getElementById('gameContainer');
     if (container) {
-      container.style.display = 'flex';
+      container.style.display = 'grid';
     }
   }
 
