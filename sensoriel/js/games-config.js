@@ -66,6 +66,19 @@
           min: 1,
           max: 10,
           value: 1
+        },
+        {
+          type: 'number',
+          label: 'Maximum addend:',
+          name: 'maxAddend',
+          min: 2,
+          max: 10,
+          value: 5
+        },
+        {
+          type: 'checkbox',
+          label: 'Afficher le cadre de dix:',
+          name: 'showTenFrame'
         }
       ]
     },
