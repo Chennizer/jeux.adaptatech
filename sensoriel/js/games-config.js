@@ -47,7 +47,7 @@
     },
     {
       id: 'matchnumber',
-      label: 'Match Number',
+      label: 'Additions',
       file: 'matchnumber.html',
       options: [
         {
