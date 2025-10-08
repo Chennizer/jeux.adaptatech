@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-const PICTO_INDEX_URL = '../images/pictos/index.json';
 const DEFAULT_ERROR_SOUND = '../sounds/error.mp3';
 const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
 
@@ -30,7 +29,7 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
     initializeGame();
   });
 
-  async function initializeGame() {
+  function initializeGame() {
     readingSession = window.sessionHelpers && window.sessionHelpers.ensureCurrentGame
       ? window.sessionHelpers.ensureCurrentGame('mot-vers-image')
       : null;
@@ -52,21 +51,14 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
       reinforcerController = window.sessionHelpers.setupSharedReinforcer(readingSession);
     }
 
-    let pictoIndex = null;
-    try {
-      pictoIndex = await loadPictoIndex();
-    } catch (error) {
-      console.warn('Unable to load pictogram index, using theme-only assets.', error);
-    }
-
     if (window.sessionHelpers && typeof window.sessionHelpers.showActivityOverlay === 'function') {
       window.sessionHelpers.showActivityOverlay(() => {
         revealGameContainer();
-        startGame(pictoIndex);
+        startGame();
       }, readingSession);
     } else {
       revealGameContainer();
-      startGame(pictoIndex);
+      startGame();
     }
   }
 
@@ -102,22 +94,14 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
     return audio;
   }
 
-  async function loadPictoIndex() {
-    const response = await fetch(PICTO_INDEX_URL, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    return response.json();
-  }
-
   function revealGameContainer() {
     const container = document.getElementById('gameContainer');
     if (container) {
-      container.style.display = 'flex';
+      container.style.display = 'grid';
     }
   }
 
-  function startGame(pictoIndex) {
+  function startGame() {
     const options = window.sessionHelpers && typeof window.sessionHelpers.getCurrentGameOptions === 'function'
       ? window.sessionHelpers.getCurrentGameOptions(readingSession) || {}
       : {};
@@ -125,7 +109,7 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
     totalRounds = clampNumber(parseInt(options.roundCount, 10), 1, 10, 4);
     choiceCount = clampNumber(parseInt(options.choiceCount, 10), 2, 4, 3);
 
-    availablePairs = buildWordImagePairs(pictoIndex);
+    availablePairs = buildWordImagePairs();
     if (availablePairs.length < 2) {
       setStatusMessage('Aucun mot illustré disponible pour ce thème.', 'error');
       disableSpeakButton();
@@ -154,17 +138,9 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
     return Math.min(Math.max(value, min), max);
   }
 
-  function buildWordImagePairs(pictoIndex) {
-    const pairs = [];
+  function buildWordImagePairs() {
     const themePairs = buildThemePairs();
-    pairs.push(...themePairs);
-
-    if (pairs.length < 8 && pictoIndex && pictoIndex.categories) {
-      const fallback = buildPictoPairsFromIndex(pictoIndex, 12);
-      pairs.push(...fallback);
-    }
-
-    const uniquePairs = deduplicatePairs(pairs);
+    const uniquePairs = deduplicatePairs(themePairs);
     return shuffleArray(uniquePairs);
   }
 
@@ -187,38 +163,6 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
       });
     }
     return pairs;
-  }
-
-  function buildPictoPairsFromIndex(pictoIndex, maxItems) {
-    const basePath = typeof pictoIndex.base === 'string' ? pictoIndex.base : '../images/pictos/';
-    const pool = [];
-    Object.keys(pictoIndex.categories || {}).forEach((categoryId) => {
-      const category = pictoIndex.categories[categoryId];
-      if (!category || !Array.isArray(category.items)) {
-        return;
-      }
-      category.items.forEach((item) => {
-        const label = item && item.label && item.label.fr;
-        const file = item && item.file;
-        if (!label || !file) {
-          return;
-        }
-        const article = typeof label.article === 'string' ? `${label.article} `.trim() : '';
-        const word = typeof label.word === 'string' ? label.word.trim() : '';
-        const combined = sanitizeWord(`${article}${word}`);
-        if (!combined) {
-          return;
-        }
-        pool.push({
-          word: combined,
-          image: `${basePath}${file}`,
-          alt: combined,
-          categoryId: categoryId
-        });
-      });
-    });
-    const shuffled = shuffleArray(pool);
-    return shuffled.slice(0, maxItems);
   }
 
   function deduplicatePairs(pairs) {
@@ -301,11 +245,16 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
       button.dataset.word = option.word;
       button.setAttribute('aria-label', option.word);
 
+      const imageWrapper = document.createElement('div');
+      imageWrapper.className = 'choice-card__image';
+
       const image = document.createElement('img');
       image.src = option.image;
       image.alt = option.alt || option.word;
       image.draggable = false;
-      button.appendChild(image);
+      imageWrapper.appendChild(image);
+
+      button.appendChild(imageWrapper);
 
       const label = document.createElement('span');
       label.textContent = option.word;
