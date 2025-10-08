@@ -245,11 +245,16 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
       button.dataset.word = option.word;
       button.setAttribute('aria-label', option.word);
 
+      const imageWrapper = document.createElement('div');
+      imageWrapper.className = 'choice-card__image';
+
       const image = document.createElement('img');
       image.src = option.image;
       image.alt = option.alt || option.word;
       image.draggable = false;
-      button.appendChild(image);
+      imageWrapper.appendChild(image);
+
+      button.appendChild(imageWrapper);
 
       const label = document.createElement('span');
       label.textContent = option.word;
