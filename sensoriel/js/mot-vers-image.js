@@ -408,12 +408,23 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/victory.mp3';
       }
       return;
     }
+    const synth = window.speechSynthesis;
     const utterance = new SpeechSynthesisUtterance(word);
-    utterance.lang = speechVoice && speechVoice.lang ? speechVoice.lang : 'fr-FR';
+    const voiceLang = speechVoice && speechVoice.lang ? speechVoice.lang : 'fr-CA';
+    utterance.lang = voiceLang;
     if (speechVoice) {
       utterance.voice = speechVoice;
     }
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    utterance.rate = 0.8;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const speakQueuedUtterance = () => synth.speak(utterance);
+
+    if (synth.speaking || synth.pending) {
+      synth.cancel();
+    }
+
+    Promise.resolve().then(speakQueuedUtterance);
   }
 })();
