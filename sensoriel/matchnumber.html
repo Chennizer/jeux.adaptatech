@@ -31,6 +31,8 @@
       background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(232,241,255,0.85));
       border-radius: 26px;
       box-shadow: inset 0 0 0 1px rgba(15,30,60,0.06);
+      position: relative;
+      overflow: hidden;
     }
 
     #game-content {
@@ -39,6 +41,31 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .game-scale-wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow: hidden;
+    }
+
+    .game-scale-inner {
+      width: min(1120px, 100%);
+      transform-origin: top center;
+    }
+
+    .addition-layout {
+      width: 100%;
+      display: flex;
+      justify-content: space-around;
+      align-items: stretch;
+      flex-wrap: wrap;
+      gap: clamp(12px, 3vw, 24px);
     }
 
     .equation-panel {
@@ -241,6 +268,10 @@
     let activityRepetitions = 1;
     let correctAttempts = 0;
     let reinforcerController = null;
+    let scaleObserver = null;
+    let scalingListenersAttached = false;
+    let currentScaleInner = null;
+    let scalingRaf = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       const session = sessionHelpers.ensureCurrentGame('matchnumber');
@@ -281,6 +312,70 @@
       }
     }
 
+    function scheduleScaling() {
+      if (scalingRaf !== null) {
+        cancelAnimationFrame(scalingRaf);
+      }
+      scalingRaf = requestAnimationFrame(() => {
+        scalingRaf = null;
+        applyScaling();
+      });
+    }
+
+    function applyScaling() {
+      if (!currentScaleInner) {
+        return;
+      }
+      const contentArea = document.querySelector('.sensorial-content');
+      if (!contentArea) {
+        return;
+      }
+
+      currentScaleInner.style.transform = 'scale(1)';
+      currentScaleInner.style.marginTop = '0px';
+      currentScaleInner.style.marginBottom = '0px';
+
+      const availableHeight = contentArea.clientHeight;
+      const contentHeight = currentScaleInner.offsetHeight;
+
+      if (!availableHeight || !contentHeight) {
+        return;
+      }
+
+      const scale = Math.min(1, availableHeight / contentHeight);
+      currentScaleInner.style.transform = `scale(${scale})`;
+
+      const scaledHeight = contentHeight * scale;
+      const extraSpace = Math.max(0, (availableHeight - scaledHeight) / 2);
+      currentScaleInner.style.marginTop = `${extraSpace}px`;
+      currentScaleInner.style.marginBottom = `${extraSpace}px`;
+    }
+
+    function initializeScaling(scaleInner) {
+      if (scaleObserver) {
+        scaleObserver.disconnect();
+      }
+
+      currentScaleInner = scaleInner;
+
+      if (typeof ResizeObserver === 'function') {
+        scaleObserver = new ResizeObserver(() => {
+          scheduleScaling();
+        });
+        scaleObserver.observe(scaleInner);
+      } else {
+        scaleObserver = null;
+      }
+
+      if (!scalingListenersAttached) {
+        window.addEventListener('resize', scheduleScaling);
+        window.addEventListener('orientationchange', scheduleScaling);
+        scalingListenersAttached = true;
+      }
+
+      scheduleScaling();
+    }
+
     // --- Game-Specific Logic: Additions ---
     window.startGame = function(options) {
       const gameContent = document.getElementById('game-content');
@@ -288,13 +383,16 @@
 
       correctAttempts = 0;
 
-      const container = document.createElement('div');
-      container.style.display = 'flex';
-      container.style.justifyContent = 'space-around';
-      container.style.alignItems = 'stretch';
-      container.style.height = '100%';
-      container.style.flexWrap = 'wrap';
-      gameContent.appendChild(container);
+      const scaleWrapper = document.createElement('div');
+      scaleWrapper.classList.add('game-scale-wrapper');
+      const scaleInner = document.createElement('div');
+      scaleInner.classList.add('game-scale-inner', 'addition-layout');
+      scaleWrapper.appendChild(scaleInner);
+      gameContent.appendChild(scaleWrapper);
+
+      initializeScaling(scaleInner);
+
+      const container = scaleInner;
 
       const equationPanel = document.createElement('div');
       equationPanel.classList.add('equation-panel');
@@ -381,6 +479,8 @@
           img.src = chosenImage;
           img.alt = '';
           img.setAttribute('aria-hidden', 'true');
+          img.addEventListener('load', scheduleScaling);
+          img.addEventListener('error', scheduleScaling);
           objectsWrapper.appendChild(img);
         }
 
@@ -402,6 +502,7 @@
 
           wrapper.appendChild(tenFrame);
         }
+        scheduleScaling();
       }
 
       function newActivity() {
@@ -487,6 +588,8 @@
           });
           buttonContainer.appendChild(btn);
         });
+
+        scheduleScaling();
       }
 
       newActivity();
