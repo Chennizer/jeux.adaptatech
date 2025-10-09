@@ -238,6 +238,16 @@
 
 <script>
 /* =========================
+   DPR helper (zoom-proof)
+   - If DPR is fractional (e.g., 1.25 / 1.5 from zoom or Windows scale), use 1 for perfect alignment.
+   ========================= */
+function getDPR(){
+  const raw = window.devicePixelRatio || 1;
+  const isFractional = Math.abs(raw - Math.round(raw)) > 0.001;
+  return isFractional ? 1 : raw;
+}
+
+/* =========================
    Language — shared storage key
    ========================= */
 const LS_LANG_KEY = 'siteLanguage';
@@ -307,7 +317,7 @@ function fitCanvasToStage(){
   const cssH=stage.clientHeight;
   ink.style.width=out.style.width=cssW+'px';
   ink.style.height=out.style.height=cssH+'px';
-  const dpr=Math.max(1,window.devicePixelRatio||1);
+  const dpr=getDPR();
   const w=Math.max(1,Math.round(cssW*dpr));
   const h=Math.max(1,Math.round(cssH*dpr));
   if(ink.width!==w||ink.height!==h){ ink.width=w; ink.height=h; ic.setTransform(dpr,0,0,dpr,0,0); }
@@ -339,6 +349,11 @@ async function fitCanvasPreserveInk(){
 let userMask=null;
 const maskCanvas=document.createElement('canvas');
 const maskCtx=maskCanvas.getContext('2d');
+let maskCSSW=0, maskCSSH=0;
+
+let presetsInitialized=false;
+let selectedPresetSrc=null;   // if preset chosen from registry
+let selectedPresetBlob=null;  // if user uploaded a file
 
 function computeFit(destW,destH,imgW,imgH){
   const r=imgW/imgH, R=destW/destH;
@@ -347,37 +362,46 @@ function computeFit(destW,destH,imgW,imgH){
   return {x,y,w,h};
 }
 
+/* Build mask in CSS-px space, with unified DPR */
 function rebuildMaskCache(){
   if(!userMask){ return; }
-  maskCanvas.width=out.width; maskCanvas.height=out.height;
+  maskCanvas.width=out.width;
+  maskCanvas.height=out.height;
 
-  const rect=out.getBoundingClientRect();
+  const rect=out.getBoundingClientRect(); // CSS px
   const dpr = out.width / Math.max(1, rect.width);
-  maskCtx.setTransform(dpr,0,0,dpr,0,0);
-  maskCtx.clearRect(0,0,rect.width,rect.height);
-
   const fit=computeFit(rect.width,rect.height,userMask.naturalWidth,userMask.naturalHeight);
-  maskCtx.drawImage(userMask,fit.x,fit.y,fit.w,fit.h);
+
+  maskCSSW = rect.width;
+  maskCSSH = rect.height;
+
+  const m = maskCtx;
+  m.setTransform(dpr,0,0,dpr,0,0);   // draw using CSS px coordinates
+  m.clearRect(0,0,rect.width,rect.height);
+  m.drawImage(userMask,fit.x,fit.y,fit.w,fit.h);
 }
 
+/* Draw guide from the cached mask, with explicit destination size */
 function redrawMaskGuide(){
   oc.clearRect(0,0,out.width,out.height);
   if(!userMask) return;
-  const rect=out.getBoundingClientRect();
-  const fit=computeFit(rect.width,rect.height,userMask.naturalWidth,userMask.naturalHeight);
   oc.save();
   oc.globalAlpha = 0.5;
-  oc.drawImage(userMask,fit.x,fit.y,fit.w,fit.h);
+  oc.drawImage(maskCanvas, 0, 0, maskCSSW, maskCSSH);
   oc.restore();
 }
 
-function loadUserMaskFromURL(url,revoke=false){
+function loadUserMaskFromURL(url,revoke=false, remember=true){
   const img=new Image(); img.crossOrigin='anonymous';
-  img.onload=()=>{ if(revoke) URL.revokeObjectURL(url); userMask=img; fitCanvasPreserveInk(); rebuildMaskCache(); redrawMaskGuide(); };
+  img.onload=()=>{ if(revoke) URL.revokeObjectURL(url); userMask=img; if(remember){ selectedPresetSrc=url; selectedPresetBlob=null; } fitCanvasPreserveInk(); rebuildMaskCache(); redrawMaskGuide(); };
   img.onerror=()=>{ if(revoke) URL.revokeObjectURL(url); alert('Could not load image.'); };
   img.src=url;
 }
-function loadUserMaskFromFile(file){ const url=URL.createObjectURL(file); loadUserMaskFromURL(url,true); }
+function loadUserMaskFromFile(file){
+  selectedPresetBlob=file; selectedPresetSrc=null;
+  const url=URL.createObjectURL(file);
+  loadUserMaskFromURL(url,true,false);
+}
 document.getElementById('outlineFile').addEventListener('change',(e)=>{ const f=e.target.files?.[0]; if(!f) return; loadUserMaskFromFile(f); });
 
 /* ===== Name sanitizer: remove “CVI” from visible labels only ===== */
@@ -396,9 +420,11 @@ const itemEl=document.getElementById('presetItem');
 const presetThumb=document.getElementById('presetThumb');
 
 function enablePresets(){
+  if (presetsInitialized) return;  // guard against double init
   const arr = window.PNG_ARRAY;
   if(!arr || !Array.isArray(arr) || arr.length===0){
     catEl.disabled = itemEl.disabled = true;
+    presetsInitialized = true;
     return;
   }
 
@@ -406,7 +432,7 @@ function enablePresets(){
   catEl.innerHTML = cats.map(c=>`<option value="${c}">${sanitizeLabel(c)}</option>`).join('');
   catEl.disabled = itemEl.disabled = false;
 
-  // Random selection on load
+  // Pick one random item ONCE; remember it
   const rndItem = arr[Math.floor(Math.random()*arr.length)];
   const rndCat  = rndItem.category;
   catEl.value = rndCat;
@@ -419,8 +445,11 @@ function enablePresets(){
     itemEl.value = match.file;
     presetThumb.src = match.file;
     presetThumb.alt = sanitizeLabel(match.name);
-    loadUserMaskFromURL(match.file);
+    selectedPresetSrc = match.file;    // remember menu selection
+    loadUserMaskFromURL(match.file,false,false); // load but don't override remembered src again
   }
+
+  presetsInitialized = true;
 }
 function updateItems(applyFirst=false){
   const arr = window.PNG_ARRAY || [];
@@ -431,7 +460,10 @@ function updateItems(applyFirst=false){
   if(items[0]){
     presetThumb.src = items[0].file; presetThumb.alt = sanitizeLabel(items[0].name);
     itemEl.value = items[0].file;
-    if(applyFirst) loadUserMaskFromURL(items[0].file);
+    if(applyFirst){
+      selectedPresetSrc = items[0].file;
+      loadUserMaskFromURL(items[0].file,false,false);
+    }
   }
 }
 catEl.addEventListener('change', ()=>updateItems(true));
@@ -442,7 +474,8 @@ itemEl.addEventListener('change', ()=>{
   const displayName = opt ? (opt.getAttribute('data-name') || opt.textContent) : '';
   presetThumb.src = src;
   presetThumb.alt = sanitizeLabel(displayName);
-  loadUserMaskFromURL(src);
+  selectedPresetSrc = src;
+  loadUserMaskFromURL(src,false,false);
 });
 
 window.addEventListener('DOMContentLoaded', ()=>{ setTimeout(enablePresets, 0); });
@@ -462,7 +495,10 @@ function drawStep(from,to){
   sc.lineCap='round'; sc.lineJoin='round'; sc.lineWidth=size; sc.globalCompositeOperation='source-over';
   sc.strokeStyle=erasing?'#000':currentColor;
   sc.beginPath(); sc.moveTo(from.x,from.y); sc.lineTo(to.x,to.y); sc.stroke();
-  sc.globalCompositeOperation='destination-in'; sc.drawImage(maskCanvas,0,0);
+
+  // clip with the same cached mask; explicit destination size in CSS px
+  sc.globalCompositeOperation='destination-in';
+  if(maskCSSW&&maskCSSH){ sc.drawImage(maskCanvas,0,0,maskCSSW,maskCSSH); }
   sc.restore();
 
   ic.save(); ic.globalCompositeOperation=erasing?'destination-out':'source-over'; ic.drawImage(scratch,0,0); ic.restore();
@@ -711,6 +747,14 @@ startButton.onclick=async ()=>{
   buildPalette(parseInt(paletteSizeSelect.value,10)||7);
   syncScratch();
 
+  /* Re-apply exactly the image selected in the menu */
+  if (selectedPresetBlob){
+    const u = URL.createObjectURL(selectedPresetBlob);
+    loadUserMaskFromURL(u, true, false);
+  } else if (selectedPresetSrc){
+    loadUserMaskFromURL(selectedPresetSrc, false, false);
+  }
+
   /* Wire hover-to-click for mode + save (after DOM visible) */
   const saveBtn = document.getElementById('saveBtn');
   wireHoverToClick(modeDraw, activateDrawMode);
@@ -728,6 +772,17 @@ addEventListener('resize', async ()=>{
   redrawMaskGuide();
   syncScratch();
 }, {passive:true});
+
+/* Also rebuild on zoom / Windows display-scale changes */
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', async ()=>{
+    if(stage.classList.contains('hidden')) return;
+    await fitCanvasPreserveInk();
+    rebuildMaskCache();
+    redrawMaskGuide();
+    syncScratch();
+  }, {passive:true});
+}
 
 /* Initial theme + preset activation */
 setTheme('light');
