@@ -17,8 +17,14 @@
     `${IMAGE_BASE}africanbackground2.webp`,
     `${IMAGE_BASE}africanbackground3.webp`
   ];
-  const DEFAULT_REINFORCER_SOUND = `${SOUND_BASE}victory.mp3`;
-  const DEFAULT_ERROR_SOUND = `${SOUND_BASE}error.mp3`;
+  // Sensorial games now share a unified audio palette (start, success, error, final)
+  // regardless of the selected visual theme to provide a consistent experience.
+  const SHARED_SOUNDS = Object.freeze({
+    start: `${SOUND_BASE}startactivity.mp3`,
+    success: `${SOUND_BASE}success3.mp3`,
+    error: `${SOUND_BASE}error.mp3`,
+    final: `${SOUND_BASE}victory.mp3`
+  });
   const DEFAULT_REINFORCER_VIDEOS = [
     `${VIDEO_BUCKET}afrique1.mp4`,
     `${VIDEO_BUCKET}patpatrouilleintro.mp4`,
@@ -50,10 +56,10 @@
       words = [],
       reinforcerVideos = [],
       reinforcerImages = [],
-      startSound,
-      reinforcerSound,
-      errorSound,
-      finalRewardSound
+      startSound: _ignoredStartSound,
+      reinforcerSound: _ignoredReinforcerSound,
+      errorSound: _ignoredErrorSound,
+      finalRewardSound: _ignoredFinalRewardSound
     } = config || {};
 
     const theme = {
@@ -72,14 +78,10 @@
       reinforcerImages: Array.isArray(reinforcerImages) ? reinforcerImages.slice() : []
     };
 
-    if (startSound) {
-      theme.startSound = startSound;
-    }
-    theme.reinforcerSound = reinforcerSound || DEFAULT_REINFORCER_SOUND;
-    theme.errorSound = errorSound || DEFAULT_ERROR_SOUND;
-    if (finalRewardSound) {
-      theme.finalRewardSound = finalRewardSound;
-    }
+    theme.startSound = SHARED_SOUNDS.start;
+    theme.reinforcerSound = SHARED_SOUNDS.success;
+    theme.errorSound = SHARED_SOUNDS.error;
+    theme.finalRewardSound = SHARED_SOUNDS.final;
 
     return theme;
   }

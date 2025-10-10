@@ -71,6 +71,10 @@
       return null;
     }
 
+    if (!selections.completionDestination || typeof selections.completionDestination !== 'string') {
+      selections.completionDestination = 'accessyoutube';
+    }
+
     const themeData = getThemeData(selections);
 
     return { selections, currentGameIndex, themeData };

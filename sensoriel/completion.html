@@ -1,11 +1,182 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=https://www.accessyoutube.org.uk/">
-  <title>Completion</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fin de la session</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      background: #10151a;
+      color: #f2f5f8;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    main {
+      text-align: center;
+      max-width: 480px;
+      width: 100%;
+      background: rgba(15, 23, 30, 0.8);
+      border-radius: 12px;
+      padding: 32px 24px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(6px);
+    }
+    h1 {
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 1.8rem;
+      font-weight: 600;
+    }
+    p {
+      margin: 0 0 18px 0;
+      line-height: 1.5;
+    }
+    a {
+      color: #8dd2ff;
+    }
+    a:hover,
+    a:focus {
+      color: #c5e7ff;
+    }
+    .status {
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+    .hint {
+      font-size: 0.9rem;
+      color: #c1ccd6;
+    }
+  </style>
 </head>
 <body>
-  <p>If you are not redirected automatically, please click <a href="https://www.accessyoutube.org.uk/">here</a>.</p>
+  <main>
+    <h1>Session terminée</h1>
+    <p id="statusMessage" class="status">Redirection en cours…</p>
+    <p class="hint">
+      Si rien ne se passe, vous pouvez continuer avec
+      <a id="manualLink" href="https://www.accessyoutube.org.uk/" target="_blank" rel="noopener noreferrer">Accès YouTube</a>.
+    </p>
+  </main>
+
+  <script src="js/fullscreen.js"></script>
+  <script>
+    (function() {
+      const DEFAULT_DESTINATION_KEY = 'accessyoutube';
+      const DESTINATIONS = {
+        accessyoutube: {
+          label: 'Accès YouTube',
+          url: 'https://www.accessyoutube.org.uk/',
+          external: true
+        },
+        'tactile-etoiles': {
+          label: 'Étoiles tactiles',
+          url: '../tactile/étoiles/index.html?origin=sensoriel',
+          fullscreen: true
+        },
+        'tactile-fingerpaint': {
+          label: 'Fingerpaint tactile',
+          url: '../tactile/fingerpaint/index.html?origin=sensoriel',
+          fullscreen: true
+        }
+      };
+
+      const statusMessage = document.getElementById('statusMessage');
+      const manualLink = document.getElementById('manualLink');
+
+      function safeParseSelections() {
+        try {
+          const raw = localStorage.getItem('gameSelections');
+          if (!raw) {
+            return null;
+          }
+          const parsed = JSON.parse(raw);
+          return (parsed && typeof parsed === 'object') ? parsed : null;
+        } catch (error) {
+          console.warn('Unable to parse stored selections for completion:', error);
+          return null;
+        }
+      }
+
+      function encodeUrl(url) {
+        if (!url) {
+          return url;
+        }
+        try {
+          return encodeURI(url);
+        } catch (error) {
+          console.warn('Unable to encode completion redirect URL:', url, error);
+          return url;
+        }
+      }
+
+      const storedSelections = safeParseSelections();
+      const destinationKey = storedSelections && storedSelections.completionDestination
+        ? storedSelections.completionDestination
+        : DEFAULT_DESTINATION_KEY;
+      const destination = DESTINATIONS[destinationKey] || DESTINATIONS[DEFAULT_DESTINATION_KEY];
+      const redirectUrl = destination.external ? destination.url : encodeUrl(destination.url);
+      const destinationLabel = destination.label || redirectUrl;
+
+      if (statusMessage) {
+        statusMessage.textContent = `Redirection vers ${destinationLabel}…`;
+      }
+
+      if (manualLink) {
+        manualLink.textContent = destinationLabel;
+        manualLink.href = redirectUrl;
+        if (destination.external) {
+          manualLink.target = '_blank';
+          manualLink.rel = 'noopener noreferrer';
+        } else {
+          manualLink.removeAttribute('target');
+          manualLink.removeAttribute('rel');
+        }
+      }
+
+      async function attemptFullscreenIfNeeded() {
+        if (!destination.fullscreen) {
+          return;
+        }
+
+        try {
+          if (window.SensorielFullscreen && typeof window.SensorielFullscreen.markPreferred === 'function') {
+            window.SensorielFullscreen.markPreferred(true);
+            await window.SensorielFullscreen.ensure();
+            return;
+          }
+
+          const docEl = document.documentElement;
+          if (docEl && docEl.requestFullscreen) {
+            await docEl.requestFullscreen();
+          }
+        } catch (error) {
+          console.warn('Fullscreen request before tactile redirect failed:', error);
+        }
+      }
+
+      async function redirectToDestination() {
+        await attemptFullscreenIfNeeded();
+        setTimeout(() => {
+          window.location.href = redirectUrl;
+        }, 150);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          setTimeout(redirectToDestination, 350);
+        });
+      } else {
+        setTimeout(redirectToDestination, 350);
+      }
+    })();
+  </script>
 </body>
 </html>
