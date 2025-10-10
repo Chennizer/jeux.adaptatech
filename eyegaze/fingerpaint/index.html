@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <!-- Title with translation attributes -->
+  <title class="translate"
+        data-fr="Fingerpainting (commande oculaire)"
+        data-en="Fingerpainting (Eye gaze)">
+    Fingerpainting (commande oculaire)
+  </title>
+
+  <!-- p5.js and p5.sound -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="../../js/jingles.js"></script>
+
+  <style>
+    /* Settings Icon (gear) */
+    #settingsIcon {
+      position: fixed;
+      top: 10px; right: 10px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background-color: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.3s ease, background-color 0.3s ease;
+      z-index: 1100;
+    }
+    #settingsIcon:hover {
+      transform: rotate(90deg);
+      background-color: rgba(0,0,0,0.9);
+    }
+
+    /* Fullscreen Button */
+    #fullscreen-btn {
+      position: fixed;
+      top: 15px; right: 60px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 1100;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    #fullscreen-btn:hover {
+      background: rgba(0,0,0,0.9);
+    }
+
+    /* Options Menu */
+    #menu {
+      position: fixed;
+      top: 60px;
+      right: -300px;
+      width: 270px;
+      background: rgba(0,0,0,0.85);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      transition: right 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+      color: #fff;
+      overflow-y: auto;
+      max-height: calc(100vh - 80px);
+      z-index: 2000;
+      pointer-events: none; /* no pointer events while hidden */
+    }
+    #menu.visible {
+      right: 10px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #menu h2, #menu h3 {
+      margin-top: 15px;
+      margin-bottom: 8px;
+      color: #00bfff;
+      font-weight: 500;
+    }
+    #menu h2 {
+      font-size: 20px;
+      text-align: center;
+    }
+    #menu h3 {
+      font-size: 16px;
+    }
+
+    /* Settings options labels */
+    #menu label {
+      display: flex;
+      flex-direction: column;
+      margin: 20px 0;
+      font-size: 13px;
+    }
+    #menu label:hover {
+      color: #00bfff;
+    }
+
+    /* Range slider styling */
+    #menu input[type="range"],
+    #menu select { margin-top: 5px; }
+    #menu input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      background: #008080;
+      border-radius: 2px;
+    }
+    #menu input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #008080;
+      border-radius: 50%;
+      cursor: pointer;
+      margin-top: -5px;
+    }
+    /* Firefox: range slider */
+    #menu input[type="range"] {
+      background: transparent;
+    }
+    #menu input[type="range"]::-moz-range-track {
+      height: 4px;
+      background: #008080;
+      border-radius: 2px;
+    }
+    #menu input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: #008080;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    #promptOverlay.smiley-start {
+      background: rgba(0, 0, 0, 0.95);
+    }
+
+    #promptOverlay.smiley-start #startButton.smiley-start__button {
+      width: min(60vw, 420px);
+      height: min(60vw, 420px);
+      max-width: 380px;
+      max-height: 380px;
+      padding: 0;
+      border-radius: 50%;
+      background: none;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease;
+    }
+
+    #promptOverlay.smiley-start #startButton.smiley-start__button span {
+      font-size: clamp(72px, 20vw, 160px);
+      line-height: 1;
+    }
+
+    #promptOverlay.smiley-start #startButton.smiley-start__button:hover {
+      background: none;
+      transform: scale(1.1);
+    }
+
+    #promptOverlay.smiley-start #startButton.smiley-start__button:active {
+      transform: scale(0.9);
+    }
+
+    #promptOverlay.smiley-start #startButton.smiley-start__button:focus-visible {
+      outline: 4px solid #4dd2ff;
+      outline-offset: 6px;
+    }
+
+  </style>
+</head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-B45TJG4GBJ');
+</script>
+<body>
+  <!-- Prompt Overlay with translation markup -->
+  <div id="promptOverlay">
+    <p class="translate"
+       data-fr="Déplacez votre regard pour peindre : le trait se crée uniquement quand le pointeur bouge.<br>Si vous arrêtez de regarder le dessin pendant 2&nbsp;secondes, il explose en particules (sauf si &quot;Garder le tracé&quot; est activé)."
+       data-en="Move your gaze to paint—the stroke appears only while the pointer is moving.<br>If you look away for 2&nbsp;seconds the drawing bursts into particles (unless &quot;Keep the stroke&quot; is enabled).">
+      Déplacez votre regard pour peindre : le trait se crée uniquement quand le pointeur bouge.<br>
+      Si vous arrêtez de regarder le dessin pendant 2&nbsp;secondes, il explose en particules (sauf si \"Garder le tracé\" est activé).
+    </p>
+    <button id="startButton" class="translate"
+            data-fr="Commencer"
+            data-en="Start">
+      Commencer
+    </button>
+  </div>
+
+  <!-- Gear Icon -->
+  <div id="settingsIcon"
+       class="translate"
+       data-fr="⚙️"
+       data-en="⚙️">
+    ⚙️
+  </div>
+
+  <!-- Fullscreen Button -->
+  <button id="fullscreen-btn" class="translate"
+          data-fr="Plein écran"
+          data-en="Fullscreen">
+    Plein écran
+  </button>
+
+  <!-- Options Menu with translation markup -->
+  <div id="menu">
+    <h2 class="translate" 
+        data-fr="Paramètres"
+        data-en="Settings">
+      Paramètres
+    </h2>
+    <label>
+      <span class="translate"
+            data-fr="Largeur du trait : "
+            data-en="Stroke width: ">
+        Largeur du trait :
+      </span>
+      <span id="strokeWidthDisplay">30</span>
+      <input type="range" id="strokeWidthSlider" min="1" max="200" value="30">
+    </label>
+    <label>
+      <span class="translate"
+            data-fr="Garder le tracé"
+            data-en="Keep drawing">
+        Garder le tracé
+      </span>
+      <input type="checkbox" id="keepDrawingToggle">
+    </label>
+    <button id="resetButton" class="translate"
+            data-fr="Réinitialiser le dessin"
+            data-en="Reset drawing">
+      Réinitialiser le dessin
+    </button>
+  </div>
+
+  <script>
+    /* p5 variables & logic for the fingerpainting game with intense explosions. */
+    let state = "idle";         // "idle", "drawing", or "exploding"
+    let strokePoints = [];      // Points for the current stroke
+    let savedStrokes = [];      // If keepDrawing=true
+    let particles = [];         // Explosion particles
+    let musicFiles = [];        // p5.SoundFile array
+    let currentMusic = null;    // Current jingle
+    let strokeHueOffset = 0;    
+    let started = false;        
+    let releaseTime = null;     
+    let strokeWidth = 30;       
+    let keepDrawing = false;    
+    let canvas;                 
+    let menuOpen = false;
+
+    const STILLNESS_DELAY_MS = 2000; // 2 seconds of stillness to end a stroke
+    const MOVE_THRESHOLD_PX = 2;     // ignore tiny jitter from eye trackers
+    let lastPointerMoveTime = 0;
+    let previousPointer = null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const launchedFromSensoriel = urlParams.get('origin') === 'sensoriel';
+
+    if (launchedFromSensoriel) {
+      const overlay = document.getElementById('promptOverlay');
+      const startButton = document.getElementById('startButton');
+      if (overlay && startButton) {
+        overlay.classList.add('smiley-start');
+        const description = overlay.querySelector('p');
+        if (description) {
+          description.remove();
+        }
+        startButton.innerHTML = '<span aria-hidden="true">😀</span>';
+        startButton.setAttribute('aria-label', 'Commencer l’activité');
+        startButton.classList.add('smiley-start__button');
+        startButton.classList.remove('translate');
+        startButton.removeAttribute('data-fr');
+        startButton.removeAttribute('data-en');
+      }
+    }
+
+    function startStrokeAt(x, y) {
+      if (!started || menuOpen) return;
+      if (state !== "idle") return;
+
+      if (releaseTime !== null) {
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        releaseTime = null;
+      }
+
+      state = "drawing";
+      strokePoints = [];
+      strokeHueOffset = random(360);
+
+      if (musicFiles.length > 0) {
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        currentMusic = random(musicFiles);
+        if (currentMusic && currentMusic.isLoaded()) {
+          currentMusic.setVolume(1);
+          currentMusic.loop();
+        }
+      }
+
+      strokePoints.push({ x, y });
+      previousPointer = { x, y };
+      lastPointerMoveTime = millis();
+    }
+
+    function appendStrokePoint(x, y) {
+      if (!started || menuOpen) return;
+      if (state !== "drawing") return;
+
+      const lastPoint = strokePoints[strokePoints.length - 1];
+      if (!lastPoint || dist(lastPoint.x, lastPoint.y, x, y) >= 0.5) {
+        strokePoints.push({ x, y });
+        previousPointer = { x, y };
+        lastPointerMoveTime = millis();
+      }
+    }
+
+    function finishStroke() {
+      if (state !== "drawing") return;
+
+      const lastPoint = strokePoints[strokePoints.length - 1] || null;
+
+      if (strokePoints.length < 2) {
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        strokePoints = [];
+        state = "idle";
+        if (lastPoint) {
+          previousPointer = { x: lastPoint.x, y: lastPoint.y };
+        }
+        lastPointerMoveTime = millis();
+        return;
+      }
+
+      if (keepDrawing) {
+        savedStrokes.push([...strokePoints]);
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        state = "idle";
+      } else {
+        state = "exploding";
+        if (currentMusic && currentMusic.isPlaying()) {
+          releaseTime = millis();
+        }
+        spawnExplosion(strokePoints);
+      }
+
+      strokePoints = [];
+      if (lastPoint) {
+        previousPointer = { x: lastPoint.x, y: lastPoint.y };
+      }
+      lastPointerMoveTime = millis();
+    }
+
+    function monitorPointerMovement() {
+      const now = millis();
+      const pointer = { x: mouseX, y: mouseY };
+
+      if (previousPointer === null) {
+        previousPointer = { ...pointer };
+        lastPointerMoveTime = now;
+        return;
+      }
+
+      const movedDist = dist(pointer.x, pointer.y, previousPointer.x, previousPointer.y);
+      const movedEnough = movedDist >= MOVE_THRESHOLD_PX;
+
+      if (!started || menuOpen) {
+        previousPointer = { ...pointer };
+        lastPointerMoveTime = now;
+        return;
+      }
+
+      if (state === "exploding") {
+        previousPointer = { ...pointer };
+        lastPointerMoveTime = now;
+        return;
+      }
+
+      if (movedEnough) {
+        previousPointer = { ...pointer };
+        if (state === "idle") {
+          startStrokeAt(pointer.x, pointer.y);
+        } else if (state === "drawing") {
+          appendStrokePoint(pointer.x, pointer.y);
+        } else {
+          lastPointerMoveTime = now;
+        }
+      } else if (state === "drawing") {
+        if (now - lastPointerMoveTime >= STILLNESS_DELAY_MS) {
+          finishStroke();
+          previousPointer = { ...pointer };
+          lastPointerMoveTime = now;
+        }
+      } else {
+        lastPointerMoveTime = now;
+      }
+    }
+
+    function preload() {
+      if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
+        for (let item of window.jingleLibraryArray) {
+          musicFiles.push(loadSound(item.src));
+        }
+      } else {
+        console.error("Jingle library not found!");
+      }
+    }
+
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.position(0, 0);
+    }
+
+    function draw() {
+      background(255);
+      monitorPointerMovement();
+      if (!started) return;
+
+      // Draw saved strokes
+      for (let s of savedStrokes) {
+        drawStroke(s);
+      }
+
+      // Fade out music if needed
+      if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
+        let elapsed = millis() - releaseTime;
+        let newVol = map(elapsed, 0, 500, 1, 0, true);
+        currentMusic.setVolume(newVol);
+        if (elapsed >= 500) {
+          currentMusic.stop();
+          releaseTime = null;
+        }
+      }
+
+      // Draw current stroke if drawing
+      if (state === "drawing") {
+        drawStroke(strokePoints);
+      }
+
+      // If exploding
+      if (state === "exploding") {
+        updateParticles();
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function mousePressed() {
+      // If menu is open, close it & skip
+      if (menuOpen) {
+        document.getElementById("menu").classList.remove("visible");
+        menuOpen = false;
+        return;
+      }
+      if (!started) return;
+      startStrokeAt(mouseX, mouseY);
+    }
+
+    function mouseDragged() {
+      if (menuOpen || !started) return;
+      appendStrokePoint(mouseX, mouseY);
+    }
+
+    function mouseReleased() {
+      if (menuOpen || !started) return;
+      finishStroke();
+    }
+
+    // Draw the stroke as gradient color
+    function drawStroke(points) {
+      if (points.length < 2) return;
+      colorMode(HSB, 360, 100, 100, 255);
+      drawingContext.shadowBlur = 10;
+      for (let i = 1; i < points.length; i++) {
+        let h = (strokeHueOffset + map(i, 0, points.length, 0, 360)) % 360;
+        let c = color(h, 80, 100, 255);
+        stroke(c);
+        strokeWeight(strokeWidth);
+        line(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y);
+        drawingContext.shadowColor = c.toString();
+      }
+      drawingContext.shadowBlur = 0;
+      colorMode(RGB, 255);
+    }
+
+    function spawnExplosion(strokeArr) {
+      // For each point, spawn ~10 intense particles
+      for (let pt of strokeArr) {
+        for (let i = 0; i < 10; i++) {
+          particles.push(new Particle(pt.x, pt.y));
+        }
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].display();
+        if (particles[i].isDead()) {
+          particles.splice(i, 1);
+        }
+      }
+      if (particles.length === 0 && state === "exploding") {
+        state = "idle";
+      }
+    }
+
+    // Particle class with big velocity range
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = random(-12, 12);
+        this.vy = random(-12, 12);
+        this.alpha = 255;
+        this.size = random(5, 15);
+        this.hue = random(360);
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.2; // gravity
+        this.alpha -= 5;
+        this.alpha = max(this.alpha, 0);
+      }
+      display() {
+        push();
+        colorMode(HSB, 360, 100, 100, 255);
+        noStroke();
+        fill(this.hue, 80, 100, this.alpha);
+        ellipse(this.x, this.y, this.size);
+        pop();
+      }
+      isDead() { return this.alpha <= 0; }
+    }
+
+    // Explode all saved strokes when resetting
+    function explodeAllSavedStrokes() {
+      if (savedStrokes.length === 0) return;
+      let allPoints = [];
+      for (let s of savedStrokes) {
+        allPoints = allPoints.concat(s);
+      }
+      savedStrokes = [];
+      if (currentMusic && currentMusic.isPlaying()) {
+        releaseTime = millis();
+      }
+      state = "exploding";
+      spawnExplosion(allPoints);
+    }
+
+    // Fullscreen toggler
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error("Erreur en plein écran:", err);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    /* DOM logic */
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      toggleFullscreen();
+    });
+
+    // Settings icon & menu
+    const menuElem = document.getElementById("menu");
+    document.getElementById("settingsIcon").addEventListener("click", function(e) {
+      e.stopPropagation();
+      menuElem.classList.toggle("visible");
+      menuOpen = menuElem.classList.contains("visible");
+      // If opening while drawing, cancel stroke & stop music
+      if (menuOpen && state === "drawing") {
+        state = "idle";
+        strokePoints = [];
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+      }
+    });
+    menuElem.addEventListener("mousedown", e => e.stopPropagation());
+    menuElem.addEventListener("touchstart", e => e.stopPropagation());
+
+    // If user clicks outside the menu, close it
+    document.addEventListener("click", function(e) {
+      const settingsIcon = document.getElementById("settingsIcon");
+      if (menuOpen && !menuElem.contains(e.target) && e.target !== settingsIcon) {
+        menuElem.classList.remove("visible");
+        menuOpen = false;
+      }
+    });
+
+    // Fullscreen button
+    document.getElementById("fullscreen-btn").addEventListener("click", function(e) {
+      e.stopPropagation();
+      toggleFullscreen();
+    });
+
+    // Stroke width
+    document.getElementById("strokeWidthSlider").addEventListener("input", function() {
+      strokeWidth = parseInt(this.value);
+      document.getElementById("strokeWidthDisplay").innerText = strokeWidth;
+    });
+
+    // Keep drawing
+    document.getElementById("keepDrawingToggle").addEventListener("change", function() {
+      keepDrawing = this.checked;
+    });
+
+    // Reset button: explode all saved strokes
+    document.getElementById("resetButton").addEventListener("click", function(e) {
+      e.stopPropagation();
+      explodeAllSavedStrokes();
+    });
+  </script>
+
+  <!-- translationonly.js: same approach used in your other snippet -->
+  <script src="../../js/translationonly.js"></script>
+</body>
+</html>
