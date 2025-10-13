@@ -712,14 +712,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renumberCards() {
     const containers = [localVideoList, urlVideoList].filter(Boolean);
     containers.forEach(container => {
+      let order = 1;
       const cards = Array.from(container.querySelectorAll('.video-card'));
-      cards.forEach((card, idx) => {
+      cards.forEach(card => {
         let b = card.querySelector('.video-index');
         if (!b) {
           b = createIndexBadge();
           card.insertBefore(b, card.firstChild);
         }
-        b.textContent = String(idx + 1);
+
+        if (card.classList.contains('selected')) {
+          b.textContent = String(order++);
+          b.style.visibility = '';
+        } else {
+          b.textContent = '';
+          b.style.visibility = 'hidden';
+        }
       });
     });
   }
@@ -1141,6 +1149,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const isSelected = card.classList.contains('selected');
       card.classList.toggle('deselected', !isSelected);
     });
+
+    renumberCards();
 
     startButton.style.display = selectedMedia.length ? 'block' : 'none';
     if (urlVideoList) saveYoutubeUrls();
