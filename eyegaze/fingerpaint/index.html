@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Fingerpainting (commande oculaire)" data-en="Fingerpainting (Eye gaze)">Fingerpainting (commande oculaire)</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <script src="../../js/jingles.js"></script>
+
+  <style>
+    :root {
+      --menu-max-width: min(880px, 92vw);
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background: #000;
+      color: #fff;
+      min-height: 100vh;
+      overflow: hidden;
+      display: block;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: #fff;
+      color: #009688;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    #langToggle:focus-visible {
+      outline: 3px solid #4dd2ff;
+      outline-offset: 4px;
+    }
+
+    #game-options #control-panel-options {
+      width: 100%;
+      max-width: var(--menu-max-width);
+    }
+
+    #control-panel-options {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    #options-inline-container {
+      width: 100%;
+    }
+
+    #options-inline-container > .options-column {
+      align-items: center;
+      gap: 18px;
+    }
+
+    #options-inline-container > .options-column:first-child {
+      align-items: flex-start;
+    }
+
+    .value-readout {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 6px;
+      color: #00ffc6;
+    }
+
+    .menu-note {
+      margin: 12px 0 0;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .menu-note strong {
+      color: #00ffc6;
+      font-weight: 600;
+    }
+
+    .options-column .teal-label {
+      justify-content: center;
+      text-align: center;
+      width: 100%;
+    }
+
+    .options-column .label-block {
+      width: 100%;
+    }
+
+    .options-column .styled-slider {
+      width: 70%;
+      max-width: 280px;
+    }
+
+    .options-column:first-child .teal-label {
+      justify-content: flex-start;
+    }
+
+    .options-column:first-child .styled-slider {
+      align-self: flex-start;
+    }
+
+    .options-column:first-child .value-readout {
+      align-self: flex-start;
+    }
+
+    .option-item.checkbox-item {
+      margin-top: 16px;
+    }
+
+    .option-item.checkbox-item .teal-label {
+      align-items: center;
+      font-weight: 600;
+    }
+
+    .option-item.checkbox-item span {
+      margin-left: 4px;
+      font-weight: 500;
+      color: #fff;
+    }
+
+    .option-item.checkbox-item input[type="checkbox"]:checked + span {
+      color: #00ffc6;
+    }
+
+    .option-item.checkbox-item input[type="checkbox"]:focus-visible {
+      outline: 3px solid #4dd2ff;
+      outline-offset: 2px;
+    }
+
+    .game-container {
+      position: fixed;
+      inset: 0;
+      display: none;
+      background: #000;
+    }
+
+    #canvasStage {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+
+    #canvasStage canvas {
+      display: block;
+    }
+
+    #hudControls {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    #resetButton {
+      border: 2px solid rgba(255, 255, 255, 0.55);
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
+
+    #resetButton:hover,
+    #resetButton:focus-visible {
+      background: rgba(0, 255, 198, 0.18);
+      border-color: rgba(0, 255, 198, 0.7);
+      outline: none;
+    }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      transition: opacity 160ms ease;
+    }
+
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff0000;
+    }
+
+    .hide-native-cursor,
+    .hide-native-cursor * {
+      cursor: none !important;
+    }
+
+    @media (max-width: 720px) {
+      .options-column .styled-slider {
+        width: 90%;
+      }
+      .options-column:first-child {
+        align-items: center !important;
+      }
+      .options-column:first-child .styled-slider,
+      .options-column:first-child .value-readout {
+        align-self: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate" data-fr="Fingerpainting (commande oculaire)" data-en="Fingerpainting (Eye gaze)">Fingerpainting (commande oculaire)</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <p class="menu-note translate" data-fr="Déplacez votre regard pour peindre. Le tracé s'arrête et explose si vous restez immobile." data-en="Move your gaze to paint. The stroke stops and bursts if you stay still.">Déplacez votre regard pour peindre. Le tracé s'arrête et explose si vous restez immobile.</p>
+
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column" id="strokeColumn">
+          <div class="option-item">
+            <label for="strokeWidthSlider" class="teal-label label-block translate" data-fr="Largeur du trait" data-en="Stroke width">Largeur du trait</label>
+            <div class="value-readout"><span id="strokeWidthDisplay">30</span> px</div>
+            <input type="range" id="strokeWidthSlider" class="styled-slider" min="1" max="200" value="30" />
+          </div>
+
+          <div class="option-item">
+            <label for="explosionSizeSlider" class="teal-label label-block translate" data-fr="Taille de l'explosion" data-en="Explosion size">Taille de l'explosion</label>
+            <div class="value-readout">x<span id="explosionSizeDisplay">10</span></div>
+            <input type="range" id="explosionSizeSlider" class="styled-slider" min="1" max="30" value="10" />
+          </div>
+        </div>
+
+        <div class="options-column" id="volumeColumn">
+          <div class="option-item">
+            <label for="musicVolume" class="teal-label label-block translate" data-fr="Volume" data-en="Volume">Volume</label>
+            <div class="value-readout"><span id="musicVolumeDisplay">100</span>%</div>
+            <input type="range" id="musicVolume" class="styled-slider" min="0" max="100" value="100" />
+          </div>
+        </div>
+
+        <div class="options-column" id="pauseColumn">
+          <div class="option-item">
+            <label for="pauseTimeSlider" class="teal-label label-block translate" data-fr="Pause avant explosion" data-en="Pause before explosion">Pause avant explosion</label>
+            <div class="value-readout"><span id="pauseTimeDisplay">2.0</span> s</div>
+            <input type="range" id="pauseTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="2000" />
+          </div>
+
+          <div class="option-item checkbox-item">
+            <label class="teal-label">
+              <input type="checkbox" id="keepDrawingToggle" />
+              <span class="translate" data-fr="Garder le tracé" data-en="Keep the stroke">Garder le tracé</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+    </div>
+  </div>
+
+  <div class="game-container" id="gameContainer" aria-live="polite" aria-label="Surface de dessin">
+    <div id="hudControls">
+      <button id="resetButton" class="translate" data-fr="Tout faire exploser" data-en="Explode all">Tout faire exploser</button>
+    </div>
+    <div id="canvasStage"></div>
+  </div>
+
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationonly.js"></script>
+
+  <script>
+    const LS_LANG_KEY = 'siteLanguage';
+
+    function getPreferredLanguage() {
+      try {
+        const stored = localStorage.getItem(LS_LANG_KEY);
+        if (stored === 'fr' || stored === 'en') {
+          return stored;
+        }
+      } catch (e) {}
+      return 'fr';
+    }
+
+    function applyLanguage(lang) {
+      const safeLang = lang === 'en' ? 'en' : 'fr';
+      document.documentElement.lang = safeLang;
+      document.querySelectorAll('.translate').forEach(el => {
+        const text = el.getAttribute(`data-${safeLang}`);
+        if (text != null) {
+          el.innerHTML = text;
+        }
+      });
+      try {
+        localStorage.setItem(LS_LANG_KEY, safeLang);
+      } catch (e) {}
+    }
+
+    function initLanguageToggle() {
+      const langToggle = document.getElementById('langToggle');
+      if (!langToggle) return;
+      const current = getPreferredLanguage();
+      applyLanguage(current);
+      langToggle.addEventListener('click', () => {
+        const next = (document.documentElement.lang === 'fr') ? 'en' : 'fr';
+        applyLanguage(next);
+      });
+    }
+
+    initLanguageToggle();
+
+    let state = 'idle';
+    let strokePoints = [];
+    let savedStrokes = [];
+    let particles = [];
+    let musicFiles = [];
+    let currentMusic = null;
+    let strokeHueOffset = 0;
+    let started = false;
+    let releaseTime = null;
+    let releaseStartVolume = 1;
+    let strokeWidth = 30;
+    let keepDrawing = false;
+    let canvas;
+    let lastPointerPosition = { x: null, y: null };
+    let lastPointerMoveTime = 0;
+    let previousPointer = null;
+    let musicVolume = 100;
+    let stillnessDelayMs = 2000;
+    let explosionParticlesPerPoint = 10;
+    let explodeHoverTimeout = null;
+
+    const MOVE_THRESHOLD_PX = 2;
+
+    function startStrokeAt(x, y) {
+      if (!started) return;
+      if (state !== 'idle') return;
+
+      if (releaseTime !== null) {
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        releaseTime = null;
+      }
+
+      state = 'drawing';
+      strokePoints = [];
+      strokeHueOffset = random(360);
+
+      if (musicFiles.length > 0) {
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        currentMusic = random(musicFiles);
+        if (currentMusic && currentMusic.isLoaded()) {
+          const vol = musicVolume / 100;
+          currentMusic.setVolume(vol);
+          releaseStartVolume = vol;
+          currentMusic.loop();
+        }
+      }
+
+      strokePoints.push({ x, y });
+      previousPointer = { x, y };
+      lastPointerMoveTime = millis();
+    }
+
+    function appendStrokePoint(x, y) {
+      if (!started || state !== 'drawing') return;
+      const lastPoint = strokePoints[strokePoints.length - 1];
+      if (!lastPoint || dist(lastPoint.x, lastPoint.y, x, y) >= 0.5) {
+        strokePoints.push({ x, y });
+        previousPointer = { x, y };
+        lastPointerMoveTime = millis();
+      }
+    }
+
+    function finishStroke() {
+      if (state !== 'drawing') return;
+      const lastPoint = strokePoints[strokePoints.length - 1] || null;
+
+      if (strokePoints.length < 2) {
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        strokePoints = [];
+        state = 'idle';
+        if (lastPoint) {
+          previousPointer = { x: lastPoint.x, y: lastPoint.y };
+        }
+        lastPointerMoveTime = millis();
+        return;
+      }
+
+      if (keepDrawing) {
+        savedStrokes.push([...strokePoints]);
+        if (currentMusic && currentMusic.isPlaying()) {
+          currentMusic.stop();
+        }
+        state = 'idle';
+      } else {
+        state = 'exploding';
+        if (currentMusic && currentMusic.isPlaying()) {
+          releaseTime = millis();
+          releaseStartVolume = typeof currentMusic.getVolume === 'function' ? currentMusic.getVolume() : (musicVolume / 100);
+        }
+        spawnExplosion(strokePoints);
+      }
+
+      strokePoints = [];
+      if (lastPoint) {
+        previousPointer = { x: lastPoint.x, y: lastPoint.y };
+      }
+      lastPointerMoveTime = millis();
+    }
+
+    function monitorPointerMovement() {
+      const now = millis();
+      const pointer = { x: mouseX, y: mouseY };
+
+      if (previousPointer === null) {
+        previousPointer = { ...pointer };
+        lastPointerMoveTime = now;
+        return;
+      }
+
+      const movedDist = dist(pointer.x, pointer.y, previousPointer.x, previousPointer.y);
+      const movedEnough = movedDist >= MOVE_THRESHOLD_PX;
+
+      if (!started) {
+        previousPointer = { ...pointer };
+        lastPointerMoveTime = now;
+        return;
+      }
+
+      if (state === 'exploding') {
+        previousPointer = { ...pointer };
+        lastPointerMoveTime = now;
+        return;
+      }
+
+      if (movedEnough) {
+        previousPointer = { ...pointer };
+        if (state === 'idle') {
+          startStrokeAt(pointer.x, pointer.y);
+        } else if (state === 'drawing') {
+          appendStrokePoint(pointer.x, pointer.y);
+        } else {
+          lastPointerMoveTime = now;
+        }
+      } else if (state === 'drawing') {
+        if (now - lastPointerMoveTime >= stillnessDelayMs) {
+          finishStroke();
+          previousPointer = { ...pointer };
+          lastPointerMoveTime = now;
+        }
+      } else {
+        lastPointerMoveTime = now;
+      }
+    }
+
+    function preload() {
+      if (window.jingleLibraryArray && window.jingleLibraryArray.length > 0) {
+        for (const item of window.jingleLibraryArray) {
+          musicFiles.push(loadSound(item.src));
+        }
+      } else {
+        console.error('Jingle library not found!');
+      }
+    }
+
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight);
+      const stage = document.getElementById('canvasStage');
+      if (stage) {
+        canvas.parent(stage);
+      }
+    }
+
+    function draw() {
+      background(255);
+      monitorPointerMovement();
+      if (!started) return;
+
+      for (const s of savedStrokes) {
+        drawStroke(s);
+      }
+
+      if (releaseTime !== null && currentMusic && currentMusic.isPlaying()) {
+        const elapsed = millis() - releaseTime;
+        const newVol = map(elapsed, 0, 500, releaseStartVolume, 0, true);
+        currentMusic.setVolume(newVol);
+        if (elapsed >= 500) {
+          currentMusic.stop();
+          releaseTime = null;
+        }
+      }
+
+      if (state === 'drawing') {
+        drawStroke(strokePoints);
+      }
+
+      if (state === 'exploding') {
+        updateParticles();
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function mousePressed() {
+      if (!started) return;
+      startStrokeAt(mouseX, mouseY);
+    }
+
+    function mouseDragged() {
+      if (!started) return;
+      appendStrokePoint(mouseX, mouseY);
+    }
+
+    function mouseReleased() {
+      if (!started) return;
+      finishStroke();
+    }
+
+    function drawStroke(points) {
+      if (points.length < 2) return;
+      colorMode(HSB, 360, 100, 100, 255);
+      drawingContext.shadowBlur = 10;
+      for (let i = 1; i < points.length; i++) {
+        const h = (strokeHueOffset + map(i, 0, points.length, 0, 360)) % 360;
+        const c = color(h, 80, 100, 255);
+        stroke(c);
+        strokeWeight(strokeWidth);
+        line(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y);
+        drawingContext.shadowColor = c.toString();
+      }
+      drawingContext.shadowBlur = 0;
+      colorMode(RGB, 255);
+    }
+
+    function spawnExplosion(strokeArr) {
+      for (const pt of strokeArr) {
+        for (let i = 0; i < explosionParticlesPerPoint; i++) {
+          particles.push(new Particle(pt.x, pt.y));
+        }
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].display();
+        if (particles[i].isDead()) {
+          particles.splice(i, 1);
+        }
+      }
+      if (particles.length === 0 && state === 'exploding') {
+        state = 'idle';
+      }
+    }
+
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = random(-12, 12);
+        this.vy = random(-12, 12);
+        this.alpha = 255;
+        this.size = random(5, 15);
+        this.hue = random(360);
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.2;
+        this.alpha -= 5;
+        this.alpha = max(this.alpha, 0);
+      }
+      display() {
+        push();
+        colorMode(HSB, 360, 100, 100, 255);
+        noStroke();
+        fill(this.hue, 80, 100, this.alpha);
+        ellipse(this.x, this.y, this.size);
+        pop();
+      }
+      isDead() {
+        return this.alpha <= 0;
+      }
+    }
+
+    function explodeAllSavedStrokes() {
+      if (savedStrokes.length === 0) return;
+      let allPoints = [];
+      for (const s of savedStrokes) {
+        allPoints = allPoints.concat(s);
+      }
+      savedStrokes = [];
+      if (currentMusic && currentMusic.isPlaying()) {
+        releaseTime = millis();
+        releaseStartVolume = typeof currentMusic.getVolume === 'function' ? currentMusic.getVolume() : (musicVolume / 100);
+      }
+      state = 'exploding';
+      spawnExplosion(allPoints);
+    }
+
+    function requestFullscreenSafe() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+      }
+    }
+
+    const strokeSlider = document.getElementById('strokeWidthSlider');
+    const strokeDisplay = document.getElementById('strokeWidthDisplay');
+    const explosionSlider = document.getElementById('explosionSizeSlider');
+    const explosionDisplay = document.getElementById('explosionSizeDisplay');
+    const keepToggle = document.getElementById('keepDrawingToggle');
+    const musicSlider = document.getElementById('musicVolume');
+    const musicDisplay = document.getElementById('musicVolumeDisplay');
+    const pauseSlider = document.getElementById('pauseTimeSlider');
+    const pauseDisplay = document.getElementById('pauseTimeDisplay');
+    const resetButton = document.getElementById('resetButton');
+    const startButton = document.getElementById('startButton');
+
+    function syncSettingsFromControls() {
+      if (strokeSlider) {
+        strokeWidth = parseInt(strokeSlider.value, 10) || 30;
+        strokeDisplay.textContent = strokeWidth;
+      }
+      if (explosionSlider && explosionDisplay) {
+        explosionParticlesPerPoint = parseInt(explosionSlider.value, 10) || 10;
+        explosionDisplay.textContent = explosionParticlesPerPoint;
+      }
+      if (keepToggle) {
+        keepDrawing = keepToggle.checked;
+      }
+      if (musicSlider) {
+        musicVolume = parseInt(musicSlider.value, 10) || 0;
+        musicDisplay.textContent = musicVolume;
+        if (currentMusic && currentMusic.isPlaying()) {
+          const vol = musicVolume / 100;
+          currentMusic.setVolume(vol, 0.1);
+          releaseStartVolume = vol;
+        }
+      }
+      if (pauseSlider) {
+        stillnessDelayMs = parseInt(pauseSlider.value, 10) || 2000;
+        pauseDisplay.textContent = (stillnessDelayMs / 1000).toFixed(1);
+      }
+    }
+
+    if (strokeSlider) {
+      strokeSlider.addEventListener('input', () => {
+        strokeWidth = parseInt(strokeSlider.value, 10) || 30;
+        strokeDisplay.textContent = strokeWidth;
+      });
+    }
+
+    if (explosionSlider && explosionDisplay) {
+      explosionSlider.addEventListener('input', () => {
+        explosionParticlesPerPoint = parseInt(explosionSlider.value, 10) || 10;
+        explosionDisplay.textContent = explosionParticlesPerPoint;
+      });
+    }
+
+    if (keepToggle) {
+      keepToggle.addEventListener('change', () => {
+        keepDrawing = keepToggle.checked;
+      });
+    }
+
+    if (musicSlider) {
+      musicSlider.addEventListener('input', () => {
+        musicVolume = parseInt(musicSlider.value, 10) || 0;
+        musicDisplay.textContent = musicVolume;
+        if (currentMusic && currentMusic.isPlaying()) {
+          const vol = musicVolume / 100;
+          currentMusic.setVolume(vol, 0.1);
+          releaseStartVolume = vol;
+        }
+      });
+    }
+
+    if (pauseSlider) {
+      pauseSlider.addEventListener('input', () => {
+        stillnessDelayMs = parseInt(pauseSlider.value, 10) || 2000;
+        pauseDisplay.textContent = (stillnessDelayMs / 1000).toFixed(1);
+      });
+    }
+
+    if (resetButton) {
+      resetButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (!started) return;
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+          explodeHoverTimeout = null;
+        }
+        explodeAllSavedStrokes();
+      });
+      resetButton.addEventListener('pointerenter', () => {
+        if (!started) return;
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+        }
+        explodeHoverTimeout = setTimeout(() => {
+          explodeHoverTimeout = null;
+          explodeAllSavedStrokes();
+        }, 1500);
+      });
+      resetButton.addEventListener('pointerleave', () => {
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+          explodeHoverTimeout = null;
+        }
+      });
+      resetButton.addEventListener('pointercancel', () => {
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+          explodeHoverTimeout = null;
+        }
+      });
+    }
+
+    const gazePointer = document.getElementById('gazePointer');
+
+    function setGazePointerPosition(x, y) {
+      if (!gazePointer) return;
+      gazePointer.style.left = `${x}px`;
+      gazePointer.style.top = `${y}px`;
+    }
+
+    function updateGazePointerVisibility() {
+      const shouldShow = started;
+      document.documentElement.classList.toggle('hide-native-cursor', shouldShow);
+      if (!gazePointer) return;
+      if (shouldShow && lastPointerPosition.x !== null && lastPointerPosition.y !== null) {
+        setGazePointerPosition(lastPointerPosition.x, lastPointerPosition.y);
+        gazePointer.style.opacity = 1;
+      } else {
+        gazePointer.style.opacity = 0;
+      }
+    }
+
+    window.addEventListener('pointermove', event => {
+      lastPointerPosition = { x: event.clientX, y: event.clientY };
+      setGazePointerPosition(event.clientX, event.clientY);
+      if (started && gazePointer) {
+        gazePointer.style.opacity = 1;
+      }
+    }, { passive: true });
+
+    window.addEventListener('pointerleave', () => {
+      if (gazePointer) {
+        gazePointer.style.opacity = 0;
+      }
+    });
+
+    window.addEventListener('pointerenter', () => {
+      updateGazePointerVisibility();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && gazePointer) {
+        gazePointer.style.opacity = 0;
+      } else {
+        updateGazePointerVisibility();
+      }
+    });
+
+    function startGame() {
+      if (started) return;
+      syncSettingsFromControls();
+      started = true;
+      const container = document.getElementById('gameContainer');
+      if (container) {
+        container.style.display = 'block';
+      }
+      const langToggle = document.getElementById('langToggle');
+      if (langToggle) {
+        langToggle.style.display = 'none';
+      }
+      try {
+        if (window.eyegazeSettings && typeof window.eyegazeSettings.hideOverlay === 'function') {
+          window.eyegazeSettings.hideOverlay();
+        } else {
+          const menu = document.getElementById('game-options');
+          if (menu) menu.style.display = 'none';
+        }
+      } catch (e) {
+        const menu = document.getElementById('game-options');
+        if (menu) menu.style.display = 'none';
+      }
+      requestFullscreenSafe();
+      updateGazePointerVisibility();
+      previousPointer = null;
+      lastPointerMoveTime = millis();
+    }
+
+    if (startButton) {
+      startButton.addEventListener('click', startGame);
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const launchedFromSensoriel = urlParams.get('origin') === 'sensoriel';
+    if (launchedFromSensoriel && startButton) {
+      startButton.innerHTML = '<span aria-hidden="true">😀</span>';
+      startButton.setAttribute('aria-label', 'Commencer l’activité');
+      startButton.classList.remove('translate');
+      startButton.removeAttribute('data-fr');
+      startButton.removeAttribute('data-en');
+    }
+
+    syncSettingsFromControls();
+    updateGazePointerVisibility();
+  </script>
+</body>
+</html>
