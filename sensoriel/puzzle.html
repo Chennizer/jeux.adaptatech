@@ -32,47 +32,43 @@
       background: linear-gradient(135deg, #f3f6fb 0%, #e0e6f2 100%);
       border: 3px solid rgba(15, 30, 60, 0.12);
       border-radius: 22px;
-      display: grid;
-      place-items: center;
       padding: clamp(10px, 2vw, 18px);
-      gap: clamp(8px, 1.6vw, 16px);
       overflow: hidden;
     }
     #puzzleArea {
       background: #fff;
       border: 4px solid rgba(15, 30, 60, 0.16);
       border-radius: 24px;
-      display: grid;
-      gap: 0;
       box-sizing: border-box;
       position: relative;
       box-shadow: 0 18px 34px rgba(12, 27, 54, 0.18);
     }
     #toggleReferenceContainer { display: none; }
     .slot {
-      background: #e2e2e2;
+      position: absolute;
+      background: rgba(214, 222, 240, 0.35);
       border: none;
-      position: relative;
       overflow: hidden;
       box-sizing: border-box;
+      pointer-events: auto;
+      transition: box-shadow 0.2s ease, background-color 0.2s ease;
     }
     .draggable-piece {
       cursor: grab;
-      border: 2px solid transparent;
-      border-radius: 4px;
+      border: none;
       object-fit: cover;
       position: absolute;
       touch-action: none;
       user-select: none;
       transition: opacity 0.2s;
       box-sizing: border-box;
+      will-change: transform, left, top;
     }
-    .draggable-piece.active { opacity: 0.8; cursor: grabbing; z-index: 1000; }
+    .draggable-piece.active { opacity: 0.85; cursor: grabbing; z-index: 1000; }
     #hiddenCanvas { display: none; }
     .highlight {
-      outline: 3px dashed #00aaff;
-      outline-offset: -5px;
-      background-color: rgba(0, 170, 255, 0.1);
+      box-shadow: 0 0 0 4px rgba(0, 170, 255, 0.35) inset;
+      background-color: rgba(0, 170, 255, 0.12);
     }
     .modal {
       display: none;
@@ -147,6 +143,9 @@
     let ROWS = 2;
     let COLS = 2;
     const PIECE_SIZE = 130;
+    const CONNECTOR_TYPES = { FLAT: 0, TAB: 1, SLOT: -1 };
+    const CONNECTOR_LENGTH_RATIO = 0.32;
+    const CONNECTOR_WIDTH_RATIO = 0.52;
     let puzzleSession = null;
     let puzzleOptions = {};
     let reinforcerController = null;
@@ -202,54 +201,68 @@
       const puzzleHeight = ROWS * PIECE_SIZE;
       puzzleArea.style.width = (puzzleWidth + 8) + 'px';
       puzzleArea.style.height = (puzzleHeight + 8) + 'px';
-      puzzleArea.style.gridTemplateColumns = `repeat(${COLS}, ${PIECE_SIZE}px)`;
-      puzzleArea.style.gridTemplateRows = `repeat(${ROWS}, ${PIECE_SIZE}px)`;
-
       const puzzleImage = new Image();
       puzzleImage.src = puzzleImagePath;
       puzzleImage.onload = () => {
         puzzleArea.innerHTML = "";
         piecesArea.innerHTML = "";
-        window.puzzlePieces = [];
-
         hiddenCanvas.width = puzzleWidth;
         hiddenCanvas.height = puzzleHeight;
         ctx.drawImage(puzzleImage, 0, 0, puzzleWidth, puzzleHeight);
 
         const sourcePieceWidth = puzzleWidth / COLS;
         const sourcePieceHeight = puzzleHeight / ROWS;
+        const tabLength = PIECE_SIZE * CONNECTOR_LENGTH_RATIO;
+        const tabWidth = PIECE_SIZE * CONNECTOR_WIDTH_RATIO;
+        const connectorGrid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+        const puzzlePieces = [];
+        const puzzlePieceMap = {};
+        window.puzzlePieces = puzzlePieces;
+        window.puzzlePieceMap = puzzlePieceMap;
+
         let pieceIndex = 0;
         for (let row = 0; row < ROWS; row++) {
           for (let col = 0; col < COLS; col++) {
-            const pieceCanvas = document.createElement('canvas');
-            pieceCanvas.width = sourcePieceWidth;
-            pieceCanvas.height = sourcePieceHeight;
-            const pieceCtx = pieceCanvas.getContext('2d');
-            pieceCtx.drawImage(
-              hiddenCanvas,
-              col * sourcePieceWidth, row * sourcePieceHeight,
-              sourcePieceWidth, sourcePieceHeight,
-              0, 0,
-              sourcePieceWidth, sourcePieceHeight
-            );
-            const pieceDataURL = pieceCanvas.toDataURL();
-            puzzlePieces.push({ index: pieceIndex, row, col, img: pieceDataURL });
+            const pieceMeta = createPieceMeta({
+              row,
+              col,
+              index: pieceIndex,
+              sourceWidth: sourcePieceWidth,
+              sourceHeight: sourcePieceHeight,
+              tabLength,
+              tabWidth,
+              connectorGrid,
+              hiddenCanvas
+            });
+            puzzlePieces.push(pieceMeta);
+            puzzlePieceMap[pieceIndex] = pieceMeta;
+            connectorGrid[row][col] = pieceMeta;
             pieceIndex++;
           }
         }
 
-        for (let i = 0; i < puzzlePieces.length; i++) {
+        puzzlePieces.forEach(meta => {
           const slot = document.createElement('div');
           slot.classList.add('slot');
-          slot.dataset.index = i;
-          slot.style.width = PIECE_SIZE + "px";
-          slot.style.height = PIECE_SIZE + "px";
+          slot.dataset.index = meta.index;
+          slot.dataset.path = meta.path;
+          slot.dataset.connectors = JSON.stringify(meta.connectors);
+          slot.dataset.width = meta.bounds.width;
+          slot.dataset.height = meta.bounds.height;
+          slot.dataset.offsetX = meta.bounds.offsetX;
+          slot.dataset.offsetY = meta.bounds.offsetY;
+          slot.style.width = `${meta.bounds.width}px`;
+          slot.style.height = `${meta.bounds.height}px`;
+          slot.style.left = `${meta.slotPosition.left}px`;
+          slot.style.top = `${meta.slotPosition.top}px`;
+          applyClipPathStyles(slot, meta.path);
           slot.addEventListener('dragover', allowDrop);
           slot.addEventListener('drop', onDrop);
           slot.addEventListener('dragenter', onDragEnter);
           slot.addEventListener('dragleave', onDragLeave);
           puzzleArea.appendChild(slot);
-        }
+        });
+
         piecesArea.addEventListener('dragover', allowDrop);
         piecesArea.addEventListener('drop', onDropLeft);
         piecesArea.addEventListener('dragenter', onDragEnter);
@@ -259,35 +272,215 @@
         const easyMode = easyModeValue === true || easyModeValue === 'true' || easyModeValue === 'on';
 
         shuffleArray(puzzlePieces);
-        puzzlePieces.forEach(piece => {
+        puzzlePieces.forEach(pieceMeta => {
           const imgEl = document.createElement('img');
-          imgEl.src = piece.img;
+          imgEl.src = pieceMeta.img;
           imgEl.classList.add('draggable-piece');
           imgEl.draggable = true;
-          imgEl.dataset.index = piece.index;
-          imgEl.style.width = PIECE_SIZE + "px";
-          imgEl.style.height = PIECE_SIZE + "px";
-          
+          imgEl.dataset.index = pieceMeta.index;
+          imgEl.dataset.width = pieceMeta.bounds.width;
+          imgEl.dataset.height = pieceMeta.bounds.height;
+          imgEl.dataset.offsetX = pieceMeta.bounds.offsetX;
+          imgEl.dataset.offsetY = pieceMeta.bounds.offsetY;
+          imgEl.dataset.path = pieceMeta.path;
+          imgEl.dataset.connectors = JSON.stringify(pieceMeta.connectors);
+          imgEl.style.width = `${pieceMeta.bounds.width}px`;
+          imgEl.style.height = `${pieceMeta.bounds.height}px`;
+          applyClipPathStyles(imgEl, pieceMeta.path);
+          imgEl.style.boxShadow = '0 0 0 1px rgba(15, 30, 60, 0.12) inset';
+
           if (easyMode) {
-            console.log(`Applying easy mode borders for piece ${piece.index} at row ${piece.row}, col ${piece.col}`);
-            if (piece.row === 0) { imgEl.style.borderTop = "4px solid #000"; }
-            if (piece.row === ROWS - 1) { imgEl.style.borderBottom = "4px solid #000"; }
-            if (piece.col === 0) { imgEl.style.borderLeft = "4px solid #000"; }
-            if (piece.col === COLS - 1) { imgEl.style.borderRight = "4px solid #000"; }
-          } else {
-            imgEl.style.border = "2px solid transparent";
+            applyEdgeHints(imgEl, pieceMeta);
           }
-          
+
           imgEl.addEventListener('dragstart', onDragStart);
           imgEl.addEventListener('dragend', onDragEnd);
-          placePieceRandomlyInGrid(imgEl, piecesArea.clientWidth, piecesArea.clientHeight);
           piecesArea.appendChild(imgEl);
+          placePieceRandomlyInArea(imgEl, piecesArea.clientWidth, piecesArea.clientHeight, pieceMeta);
           imgEl.addEventListener('touchstart', touchStartHandler, { passive: false });
           imgEl.addEventListener('touchmove', touchMoveHandler, { passive: false });
           imgEl.addEventListener('touchend', touchEndHandler);
         });
       };
       puzzleImage.onerror = err => { console.error("Puzzle image load error:", err); };
+    }
+    function createPieceMeta({ row, col, index, sourceWidth, sourceHeight, tabLength, tabWidth, connectorGrid, hiddenCanvas }) {
+      const connectors = determineConnectors(row, col, connectorGrid);
+      const geometry = buildPiecePathData(PIECE_SIZE, connectors, tabLength, tabWidth);
+      const { pathString, width, height, offsetX, offsetY, extend } = geometry;
+      const pieceCanvas = document.createElement('canvas');
+      pieceCanvas.width = Math.ceil(width);
+      pieceCanvas.height = Math.ceil(height);
+      const pieceCtx = pieceCanvas.getContext('2d');
+      const path2d = new Path2D(pathString);
+      pieceCtx.save();
+      pieceCtx.clip(path2d);
+
+      const srcX = col * sourceWidth - extend.west;
+      const srcY = row * sourceHeight - extend.north;
+      const srcWidth = sourceWidth + extend.west + extend.east;
+      const srcHeight = sourceHeight + extend.north + extend.south;
+
+      pieceCtx.drawImage(
+        hiddenCanvas,
+        srcX,
+        srcY,
+        srcWidth,
+        srcHeight,
+        0,
+        0,
+        width,
+        height
+      );
+      pieceCtx.restore();
+      pieceCtx.lineWidth = 1.4;
+      pieceCtx.strokeStyle = 'rgba(15, 30, 60, 0.25)';
+      pieceCtx.stroke(path2d);
+
+      const slotLeft = col * PIECE_SIZE - offsetX;
+      const slotTop = row * PIECE_SIZE - offsetY;
+
+      return {
+        index,
+        row,
+        col,
+        img: pieceCanvas.toDataURL(),
+        connectors,
+        path: pathString,
+        bounds: { width, height, offsetX, offsetY },
+        slotPosition: { left: slotLeft, top: slotTop }
+      };
+    }
+    function determineConnectors(row, col, connectorGrid) {
+      const connectors = { north: CONNECTOR_TYPES.FLAT, south: CONNECTOR_TYPES.FLAT, east: CONNECTOR_TYPES.FLAT, west: CONNECTOR_TYPES.FLAT };
+      if (row > 0 && connectorGrid[row - 1][col]) {
+        connectors.north = invertConnector(connectorGrid[row - 1][col].connectors.south);
+      }
+      if (col > 0 && connectorGrid[row][col - 1]) {
+        connectors.west = invertConnector(connectorGrid[row][col - 1].connectors.east);
+      }
+      if (col < COLS - 1) {
+        connectors.east = randomConnectorType();
+      }
+      if (row < ROWS - 1) {
+        connectors.south = randomConnectorType();
+      }
+      return connectors;
+    }
+    function invertConnector(value) {
+      if (value === CONNECTOR_TYPES.FLAT) { return CONNECTOR_TYPES.FLAT; }
+      return value * -1;
+    }
+    function randomConnectorType() {
+      return Math.random() > 0.5 ? CONNECTOR_TYPES.TAB : CONNECTOR_TYPES.SLOT;
+    }
+    function buildPiecePathData(baseSize, connectors, tabLength, tabWidth) {
+      const extendWest = connectors.west === CONNECTOR_TYPES.TAB ? tabLength : 0;
+      const extendEast = connectors.east === CONNECTOR_TYPES.TAB ? tabLength : 0;
+      const extendNorth = connectors.north === CONNECTOR_TYPES.TAB ? tabLength : 0;
+      const extendSouth = connectors.south === CONNECTOR_TYPES.TAB ? tabLength : 0;
+      const width = baseSize + extendWest + extendEast;
+      const height = baseSize + extendNorth + extendSouth;
+      const offsetX = extendWest;
+      const offsetY = extendNorth;
+      const baseLeft = offsetX;
+      const baseTop = offsetY;
+      const baseRight = baseLeft + baseSize;
+      const baseBottom = baseTop + baseSize;
+      const indentDepth = tabLength * 0.82;
+      const handle = tabWidth * 0.35;
+      const halfTab = tabWidth / 2;
+      const commands = [];
+      const fmt = (num) => Number(num.toFixed(3));
+      const moveTo = (x, y) => `M ${fmt(x)} ${fmt(y)}`;
+      const lineTo = (x, y) => `L ${fmt(x)} ${fmt(y)}`;
+      const curveTo = (cp1x, cp1y, cp2x, cp2y, x, y) => `C ${fmt(cp1x)} ${fmt(cp1y)} ${fmt(cp2x)} ${fmt(cp2y)} ${fmt(x)} ${fmt(y)}`;
+
+      commands.push(moveTo(baseLeft, baseTop));
+
+      const topMid = baseLeft + baseSize / 2;
+      if (connectors.north === CONNECTOR_TYPES.FLAT) {
+        commands.push(lineTo(baseRight, baseTop));
+      } else {
+        const direction = connectors.north === CONNECTOR_TYPES.TAB ? -1 : 1;
+        const depth = connectors.north === CONNECTOR_TYPES.TAB ? tabLength : indentDepth;
+        const startX = topMid - halfTab;
+        const endX = topMid + halfTab;
+        const tipY = baseTop + direction * depth;
+        commands.push(lineTo(startX, baseTop));
+        commands.push(curveTo(startX + handle, baseTop, topMid - handle, tipY, topMid, tipY));
+        commands.push(curveTo(topMid + handle, tipY, endX - handle, baseTop, endX, baseTop));
+        commands.push(lineTo(baseRight, baseTop));
+      }
+
+      const rightMid = baseTop + baseSize / 2;
+      if (connectors.east === CONNECTOR_TYPES.FLAT) {
+        commands.push(lineTo(baseRight, baseBottom));
+      } else {
+        const direction = connectors.east === CONNECTOR_TYPES.TAB ? 1 : -1;
+        const depth = connectors.east === CONNECTOR_TYPES.TAB ? tabLength : indentDepth;
+        const startY = rightMid - halfTab;
+        const endY = rightMid + halfTab;
+        const tipX = baseRight + direction * depth;
+        commands.push(lineTo(baseRight, startY));
+        commands.push(curveTo(baseRight, startY + handle, tipX, rightMid - handle, tipX, rightMid));
+        commands.push(curveTo(tipX, rightMid + handle, baseRight, endY - handle, baseRight, endY));
+        commands.push(lineTo(baseRight, baseBottom));
+      }
+
+      const bottomMid = baseLeft + baseSize / 2;
+      if (connectors.south === CONNECTOR_TYPES.FLAT) {
+        commands.push(lineTo(baseLeft, baseBottom));
+      } else {
+        const direction = connectors.south === CONNECTOR_TYPES.TAB ? 1 : -1;
+        const depth = connectors.south === CONNECTOR_TYPES.TAB ? tabLength : indentDepth;
+        const startX = bottomMid + halfTab;
+        const endX = bottomMid - halfTab;
+        const tipY = baseBottom + direction * depth;
+        commands.push(lineTo(startX, baseBottom));
+        commands.push(curveTo(startX - handle, baseBottom, bottomMid + handle, tipY, bottomMid, tipY));
+        commands.push(curveTo(bottomMid - handle, tipY, endX + handle, baseBottom, endX, baseBottom));
+        commands.push(lineTo(baseLeft, baseBottom));
+      }
+
+      const leftMid = baseTop + baseSize / 2;
+      if (connectors.west === CONNECTOR_TYPES.FLAT) {
+        commands.push(lineTo(baseLeft, baseTop));
+      } else {
+        const direction = connectors.west === CONNECTOR_TYPES.TAB ? -1 : 1;
+        const depth = connectors.west === CONNECTOR_TYPES.TAB ? tabLength : indentDepth;
+        const startY = leftMid + halfTab;
+        const endY = leftMid - halfTab;
+        const tipX = baseLeft + direction * depth;
+        commands.push(lineTo(baseLeft, startY));
+        commands.push(curveTo(baseLeft, startY - handle, tipX, leftMid + handle, tipX, leftMid));
+        commands.push(curveTo(tipX, leftMid - handle, baseLeft, endY + handle, baseLeft, endY));
+        commands.push(lineTo(baseLeft, baseTop));
+      }
+
+      commands.push('Z');
+      return {
+        pathString: commands.join(' '),
+        width,
+        height,
+        offsetX,
+        offsetY,
+        extend: { north: extendNorth, south: extendSouth, east: extendEast, west: extendWest }
+      };
+    }
+    function applyClipPathStyles(element, pathString) {
+      if (!element || !pathString) { return; }
+      const pathValue = `path('${pathString}')`;
+      element.style.clipPath = pathValue;
+      element.style.webkitClipPath = pathValue;
+    }
+    function applyEdgeHints(el, pieceMeta) {
+      const shadows = [];
+      if (pieceMeta.row === 0) { shadows.push('0 -4px 0 0 rgba(0,0,0,0.6) inset'); }
+      if (pieceMeta.row === ROWS - 1) { shadows.push('0 4px 0 0 rgba(0,0,0,0.6) inset'); }
+      if (pieceMeta.col === 0) { shadows.push('-4px 0 0 0 rgba(0,0,0,0.6) inset'); }
+      if (pieceMeta.col === COLS - 1) { shadows.push('4px 0 0 0 rgba(0,0,0,0.6) inset'); }
+      el.style.boxShadow = shadows.join(', ') || '0 0 0 1px rgba(15, 30, 60, 0.2) inset';
     }
     function shuffleArray(array) {
       for (let i = array.length - 1; i > 0; i--) {
@@ -296,32 +489,64 @@
       }
       return array;
     }
-    function placePieceRandomlyInGrid(pieceEl, containerW, containerH) {
-      const totalCells = ROWS * COLS;
-      const randomCell = Math.floor(Math.random() * totalCells);
-      const cellWidth = containerW / COLS;
-      const cellHeight = containerH / ROWS;
-      const maxOffsetX = cellWidth - PIECE_SIZE - 10;
-      const maxOffsetY = cellHeight - PIECE_SIZE - 10;
-      const offsetX = Math.floor(Math.random() * Math.max(1, maxOffsetX));
-      const offsetY = Math.floor(Math.random() * Math.max(1, maxOffsetY));
-      const cellRow = Math.floor(randomCell / COLS);
-      const cellCol = randomCell % COLS;
+    function placePieceRandomlyInArea(pieceEl, containerW, containerH, pieceMeta) {
+      if (!pieceMeta) { return; }
+      const width = pieceMeta.bounds.width;
+      const height = pieceMeta.bounds.height;
+      const maxLeft = Math.max(0, containerW - width);
+      const maxTop = Math.max(0, containerH - height);
+      const left = Math.random() * maxLeft;
+      const top = Math.random() * maxTop;
       pieceEl.style.position = 'absolute';
-      pieceEl.style.left = (cellCol * cellWidth + offsetX) + 'px';
-      pieceEl.style.top = (cellRow * cellHeight + offsetY) + 'px';
+      pieceEl.style.left = `${left}px`;
+      pieceEl.style.top = `${top}px`;
+    }
+    function getPieceMeta(index) {
+      if (!index) { return null; }
+      return (window.puzzlePieceMap && window.puzzlePieceMap[index]) || null;
+    }
+    function snapPieceIntoSlot(pieceEl, slotEl, pieceMeta) {
+      if (!pieceEl || !slotEl || !pieceMeta) { return; }
+      slotEl.innerHTML = '';
+      slotEl.appendChild(pieceEl);
+      pieceEl.style.position = 'absolute';
+      pieceEl.style.left = '0px';
+      pieceEl.style.top = '0px';
+      pieceEl.style.transform = '';
+      pieceEl.style.width = `${pieceMeta.bounds.width}px`;
+      pieceEl.style.height = `${pieceMeta.bounds.height}px`;
+      applyClipPathStyles(pieceEl, pieceMeta.path);
+      pieceEl.dataset.originalParent = 'slot';
+      pieceEl.dataset.originalSlot = slotEl.dataset.index;
+    }
+    function releasePieceToPool(pieceEl) {
+      if (!pieceEl || !piecesAreaEl) { return; }
+      const meta = getPieceMeta(pieceEl.dataset.index);
+      if (!meta) { return; }
+      piecesAreaEl.appendChild(pieceEl);
+      pieceEl.style.position = 'absolute';
+      pieceEl.style.transform = '';
+      pieceEl.style.width = `${meta.bounds.width}px`;
+      pieceEl.style.height = `${meta.bounds.height}px`;
+      applyClipPathStyles(pieceEl, meta.path);
+      placePieceRandomlyInArea(pieceEl, piecesAreaEl.clientWidth, piecesAreaEl.clientHeight, meta);
+      pieceEl.dataset.originalParent = 'piecesArea';
+      pieceEl.dataset.originalSlot = 'piecesArea';
     }
     function onDragStart(e) {
-      e.dataTransfer.setData('text/plain', e.target.dataset.index);
+      const pieceIndex = e.target.dataset.index;
+      if (!pieceIndex) { return; }
+      e.dataTransfer.setData('text/plain', pieceIndex);
       const ghost = new Image();
       ghost.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUCNdj+P///38ACfsD/0FHT68AAAAASUVORK5CYII=';
       e.dataTransfer.setDragImage(ghost, 0, 0);
       e.target.classList.add('active');
       const originalParent = e.target.parentElement;
-      e.target.dataset.originalParent = originalParent.id || originalParent.className;
-      if (originalParent.classList.contains('slot')) {
+      if (originalParent && originalParent.classList.contains('slot')) {
+        e.target.dataset.originalParent = 'slot';
         e.target.dataset.originalSlot = originalParent.dataset.index;
       } else {
+        e.target.dataset.originalParent = 'piecesArea';
         e.target.dataset.originalSlot = 'piecesArea';
       }
     }
@@ -331,67 +556,44 @@
     function onDragLeave(e) { e.currentTarget.classList.remove('highlight'); }
     function onDrop(e) {
       e.preventDefault();
-      e.currentTarget.classList.remove('highlight');
-      const pieceIndex = e.dataTransfer.getData('text/plain');
       const slot = e.currentTarget;
+      slot.classList.remove('highlight');
+      const pieceIndex = e.dataTransfer.getData('text/plain');
+      if (!pieceIndex) { return; }
       const draggedImg = document.querySelector(`.draggable-piece[data-index='${pieceIndex}']`);
-      if (!draggedImg) return;
-      const originalParentId = draggedImg.dataset.originalParent;
-      const originalSlot = draggedImg.dataset.originalSlot;
-      const existingPiece = slot.querySelector('img');
+      if (!draggedImg) { return; }
+      const pieceMeta = getPieceMeta(pieceIndex);
+      if (!pieceMeta) { return; }
+      const existingPiece = slot.querySelector('.draggable-piece');
       if (existingPiece) {
+        const originalParentId = draggedImg.dataset.originalParent;
+        const originalSlot = draggedImg.dataset.originalSlot;
         if (originalParentId === 'piecesArea') {
-          if (piecesAreaEl) {
-            piecesAreaEl.appendChild(existingPiece);
-            existingPiece.style.width = PIECE_SIZE + 'px';
-            existingPiece.style.height = PIECE_SIZE + 'px';
-            placePieceRandomlyInGrid(existingPiece, piecesAreaEl.clientWidth, piecesAreaEl.clientHeight);
-          }
+          releasePieceToPool(existingPiece);
         } else {
           const originalSlotElement = document.querySelector(`.slot[data-index='${originalSlot}']`);
           if (originalSlotElement) {
-            originalSlotElement.innerHTML = '';
-            originalSlotElement.appendChild(existingPiece);
-            existingPiece.style.position = 'absolute';
-            existingPiece.style.left = '0';
-            existingPiece.style.top = '0';
-            existingPiece.style.width = '100%';
-            existingPiece.style.height = '100%';
+            snapPieceIntoSlot(existingPiece, originalSlotElement, getPieceMeta(existingPiece.dataset.index));
+          } else {
+            releasePieceToPool(existingPiece);
           }
         }
       }
-      slot.innerHTML = '';
-      slot.appendChild(draggedImg);
-      draggedImg.style.position = 'absolute';
-      draggedImg.style.left = '0';
-      draggedImg.style.top = '0';
-      draggedImg.style.width = '100%';
-      draggedImg.style.height = '100%';
-      draggedImg.dataset.originalParent = slot.classList.contains('slot') ? slot.className : slot.id;
-      draggedImg.dataset.originalSlot = slot.dataset.index;
+      snapPieceIntoSlot(draggedImg, slot, pieceMeta);
       checkPuzzleCompletion();
     }
     function onDropLeft(e) {
       e.preventDefault();
       e.currentTarget.classList.remove('highlight');
       const pieceIndex = e.dataTransfer.getData('text/plain');
+      if (!pieceIndex) { return; }
       const draggedImg = document.querySelector(`.draggable-piece[data-index='${pieceIndex}']`);
-      if (!draggedImg) return;
-      const originalParentId = draggedImg.dataset.originalParent;
-      const originalSlot = draggedImg.dataset.originalSlot;
-      if (originalParentId !== 'piecesArea') {
-        const originalSlotElement = document.querySelector(`.slot[data-index='${originalSlot}']`);
-        if (originalSlotElement) { originalSlotElement.innerHTML = ""; }
+      if (!draggedImg) { return; }
+      if (draggedImg.dataset.originalParent === 'slot') {
+        const originalSlotElement = document.querySelector(`.slot[data-index='${draggedImg.dataset.originalSlot}']`);
+        if (originalSlotElement) { originalSlotElement.innerHTML = ''; }
       }
-      if (piecesAreaEl) {
-        piecesAreaEl.appendChild(draggedImg);
-        draggedImg.style.position = 'absolute';
-        draggedImg.style.width = PIECE_SIZE + 'px';
-        draggedImg.style.height = PIECE_SIZE + 'px';
-        placePieceRandomlyInGrid(draggedImg, piecesAreaEl.clientWidth, piecesAreaEl.clientHeight);
-      }
-      draggedImg.dataset.originalParent = 'piecesArea';
-      draggedImg.dataset.originalSlot = 'piecesArea';
+      releasePieceToPool(draggedImg);
     }
     function checkPuzzleCompletion() {
       let correct = 0;
@@ -418,15 +620,20 @@
         sessionHelpers.advanceToNextGame();
       }
     }
-    let touchData = { dragging: false, element: null, originalParent: null, originalSlot: null, originalPosition: { left: 0, top: 0 }, offsetX: 0, offsetY: 0 };
+    let touchData = { dragging: false, element: null, originalParentType: null, originalSlot: null, originalPosition: { left: 0, top: 0 }, offsetX: 0, offsetY: 0 };
     function touchStartHandler(e) {
       e.preventDefault();
       const touch = e.touches[0];
       touchData.dragging = true;
       touchData.element = e.target;
-      touchData.originalParent = e.target.parentElement;
-      if (e.target.parentElement.classList.contains('slot')) { touchData.originalSlot = e.target.parentElement.dataset.index; }
-      else { touchData.originalSlot = 'piecesArea'; }
+      const parent = e.target.parentElement;
+      if (parent && parent.classList.contains('slot')) {
+        touchData.originalParentType = 'slot';
+        touchData.originalSlot = parent.dataset.index;
+      } else {
+        touchData.originalParentType = 'piecesArea';
+        touchData.originalSlot = 'piecesArea';
+      }
       e.target.classList.add('active');
       const rect = e.target.getBoundingClientRect();
       touchData.offsetX = touch.clientX - rect.left;
@@ -460,59 +667,40 @@
       } else { resetTouchElementPosition(touchData.element); }
       touchData.element.style.zIndex = '';
       touchData.element.style.position = 'absolute';
+      touchData.originalParentType = null;
+      touchData.originalSlot = null;
       touchData.element = null;
     }
     function onDropTouch(clientX, clientY, slotEl, draggedImg) {
-      const existingPiece = slotEl.querySelector('img');
-      const originalParentId = touchData.originalParent.id || touchData.originalParent.className;
-      const originalSlot = touchData.originalSlot;
+      const pieceMeta = getPieceMeta(draggedImg.dataset.index);
+      if (!pieceMeta) { return; }
+      const existingPiece = slotEl.querySelector('.draggable-piece');
       if (existingPiece) {
-        if (originalParentId === 'piecesArea') {
-          if (piecesAreaEl) {
-            piecesAreaEl.appendChild(existingPiece);
-            existingPiece.style.position = 'absolute';
-            existingPiece.style.width = PIECE_SIZE + "px";
-            existingPiece.style.height = PIECE_SIZE + "px";
-            placePieceRandomlyInGrid(existingPiece, piecesAreaEl.clientWidth, piecesAreaEl.clientHeight);
-          }
+        if (touchData.originalParentType === 'piecesArea') {
+          releasePieceToPool(existingPiece);
         } else {
-          const originalSlotElement = document.querySelector(`.slot[data-index='${originalSlot}']`);
-          if (originalSlotElement) { originalSlotElement.innerHTML = ''; originalSlotElement.appendChild(existingPiece);
-            existingPiece.style.position = 'absolute';
-            existingPiece.style.left = '0';
-            existingPiece.style.top = '0';
-            existingPiece.style.width = '100%';
-            existingPiece.style.height = '100%';
+          const originalSlotElement = document.querySelector(`.slot[data-index='${touchData.originalSlot}']`);
+          if (originalSlotElement) {
+            snapPieceIntoSlot(existingPiece, originalSlotElement, getPieceMeta(existingPiece.dataset.index));
+          } else {
+            releasePieceToPool(existingPiece);
           }
         }
       }
-      slotEl.innerHTML = '';
-      slotEl.appendChild(draggedImg);
-      draggedImg.style.position = 'absolute';
-      draggedImg.style.left = '0';
-      draggedImg.style.top = '0';
-      draggedImg.style.width = '100%';
-      draggedImg.style.height = '100%';
-      draggedImg.dataset.originalParent = slotEl.classList.contains('slot') ? slotEl.className : slotEl.id;
-      draggedImg.dataset.originalSlot = slotEl.dataset.index;
+      snapPieceIntoSlot(draggedImg, slotEl, pieceMeta);
       checkPuzzleCompletion();
     }
     function onDropLeftTouch(clientX, clientY, draggedImg) {
-      const oldParent = draggedImg.parentElement;
-      if (oldParent && oldParent.classList.contains('slot')) { oldParent.innerHTML = ""; }
-      if (piecesAreaEl) {
-        piecesAreaEl.appendChild(draggedImg);
-        draggedImg.style.position = 'absolute';
-        draggedImg.style.width = PIECE_SIZE + 'px';
-        draggedImg.style.height = PIECE_SIZE + 'px';
-        placePieceRandomlyInGrid(draggedImg, piecesAreaEl.clientWidth, piecesAreaEl.clientHeight);
+      if (touchData.originalParentType === 'slot') {
+        const originalSlotElement = document.querySelector(`.slot[data-index='${touchData.originalSlot}']`);
+        if (originalSlotElement) { originalSlotElement.innerHTML = ''; }
       }
-      draggedImg.dataset.originalParent = 'piecesArea';
-      draggedImg.dataset.originalSlot = 'piecesArea';
+      releasePieceToPool(draggedImg);
     }
     function resetTouchElementPosition(pieceEl) {
-      if (pieceEl.parentElement.id === 'piecesArea' && piecesAreaEl) {
-        placePieceRandomlyInGrid(pieceEl, piecesAreaEl.clientWidth, piecesAreaEl.clientHeight);
+      if (pieceEl.parentElement && pieceEl.parentElement.id === 'piecesArea' && piecesAreaEl) {
+        const meta = getPieceMeta(pieceEl.dataset.index);
+        placePieceRandomlyInArea(pieceEl, piecesAreaEl.clientWidth, piecesAreaEl.clientHeight, meta);
       }
     }
     function getDropTarget(x, y) {
