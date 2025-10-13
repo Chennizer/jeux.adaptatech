@@ -182,7 +182,7 @@
     }),
     afrique: createTheme({
       id: 'afrique',
-      displayName: 'Animaux d’Afrique',
+      displayName: 'Afrique (cartoon)',
       categoryId: 'animaux',
       colors: { primary: '#9A3412', accent: '#F59E0B' },
       images: [
@@ -214,9 +214,12 @@
       categoryId: 'animaux',
       colors: { primary: '#D97706', accent: '#F97316' },
       images: [
-        `${IMAGE_BASE}africanbackground1.webp`,
-        `${IMAGE_BASE}africanbackground2.webp`,
-        `${IMAGE_BASE}africanbackground3.webp`
+        `${IMAGE_BASE}animalsimage1.png`,
+        `${IMAGE_BASE}animalsimage2.png`,
+        `${IMAGE_BASE}animalsimage3.png`,
+        `${IMAGE_BASE}animalsimage4.png`,
+        `${IMAGE_BASE}animalsimage5.png`,
+        `${IMAGE_BASE}animalsimage6.png`
       ],
       transparentPNGs: [
         `${IMAGE_BASE}pictos/bear.png`,
