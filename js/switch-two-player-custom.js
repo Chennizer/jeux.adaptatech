@@ -712,14 +712,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renumberCards() {
     const containers = [localVideoList, urlVideoList].filter(Boolean);
     containers.forEach(container => {
+      let order = 1;
       const cards = Array.from(container.querySelectorAll('.video-card'));
-      cards.forEach((card, idx) => {
+      cards.forEach(card => {
         let b = card.querySelector('.video-index');
         if (!b) {
           b = createIndexBadge();
           card.insertBefore(b, card.firstChild);
         }
-        b.textContent = String(idx + 1);
+
+        if (card.classList.contains('selected')) {
+          b.textContent = String(order++);
+          b.style.visibility = '';
+        } else {
+          b.textContent = '';
+          b.style.visibility = 'hidden';
+        }
       });
     });
   }
@@ -800,6 +808,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function initCard(card) {
     card.classList.add('selected');
+    card.classList.remove('deselected');
 
     if (!card.querySelector('.video-index')) {
       card.insertBefore(createIndexBadge(), card.firstChild);
@@ -1114,15 +1123,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Selection click (keep selected, no toggle-off)
+  // Selection click toggles active state
   if (videoSelectionDiv) {
     videoSelectionDiv.addEventListener('click', (e) => {
       if (e.target.closest('.order-controls') || e.target.classList.contains('remove-btn')) return;
       const card = e.target.closest('.video-card');
-      if (card && !card.classList.contains('selected')) {
-        card.classList.add('selected');
-        updateSelectedMedia();
-      }
+      if (!card) return;
+
+      const willSelect = !card.classList.contains('selected');
+      card.classList.toggle('selected', willSelect);
+      card.classList.toggle('deselected', !willSelect);
+
+      updateSelectedMedia();
     });
   }
 
@@ -1133,9 +1145,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       .filter(c => c.classList.contains('selected'))
       .map(c => c.dataset.src);
 
-    if (!selectedMedia.length) {
-      selectedMedia = videoCardsArray.map(c => c.dataset.src);
-    }
+    videoCardsArray.forEach(card => {
+      const isSelected = card.classList.contains('selected');
+      card.classList.toggle('deselected', !isSelected);
+    });
+
+    renumberCards();
 
     startButton.style.display = selectedMedia.length ? 'block' : 'none';
     if (urlVideoList) saveYoutubeUrls();
