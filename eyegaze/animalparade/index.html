@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title class="translate" data-fr="Parade des animaux" data-en="Animal Parade">Parade des animaux</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
+  <style>
+    /* ===== THEME ===== */
+    body {
+      background: url('../../images/firefly.png') center / cover fixed no-repeat;
+      color:#000;
+    }
+    body::before {
+      content:"";
+      position:fixed;
+      inset:0;
+      background:rgba(255,255,255,0.65);
+      z-index:-1;
+    }
+    body.dark::before { background:rgba(0,0,0,0.55); }
+    body.light { color:#000; }
+    body.dark  { color:#fff; }
+    body.light .letter-cell { background:rgba(255,255,255,0.92); color:#1f2933; }
+    body.dark  .letter-cell { background:rgba(24,24,24,0.85); color:#f8fafc; }
+
+    /* ===== LANGUAGE TOGGLE ===== */
+    #langToggle {
+      position: fixed; top:10px; right:10px;
+      z-index: 99999;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 10px; border: 2px solid #009688;
+      background: #fff; color: #009688; font-weight: 700; cursor: pointer;
+      user-select: none;
+    }
+    body.dark #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    /* Hide native cursor globally when custom pointer is enabled */
+    .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+
+    /* ===== LAYOUT ===== */
+    .game-container {
+      width: 100%; max-width: 100vw; height: 100%;
+      display: none; flex-direction: column; align-items: center; justify-content: flex-start;
+      padding: 10px; box-sizing: border-box;
+    }
+
+    .top-strip{
+      width: min(920px, 92vw);
+      margin-top: 8px; padding: 6px 14px; border-radius: 12px;
+      display: none; box-sizing: border-box; border: 2px solid;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+      transition: opacity 500ms ease, margin-bottom 120ms ease;
+      margin-bottom: 16px; opacity: 1;
+    }
+    .top-strip.fade-out { opacity: 0; }
+    .top-strip.hidden { display: none !important; }
+    body.light .top-strip { background:rgba(0,191,165,0.9); border-color: rgba(0,150,136,0.45); }
+    body.dark  .top-strip { background:rgba(8,36,34,0.85); border-color: rgba(20,184,166,0.45); box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+
+    .grid-outer { flex:1; display:flex; align-items:center; justify-content:center; width:100%; max-width:100vw; }
+
+    .letter-grid {
+      display:none; width:100%; max-width:100vw; box-sizing:border-box;
+      place-content:center; justify-items:stretch; align-items:stretch; margin:0;
+    }
+    .letter-grid.no-input { pointer-events:none; }
+
+    .letter-cell {
+      position: relative; border-radius: 18px;
+      display:flex; align-items:center; justify-content:center;
+      border:2px solid rgba(0,0,0,0.08); overflow:hidden; transform: translateZ(0);
+      background-clip: padding-box; box-sizing:border-box;
+      width:100%; height:100%; opacity:1;
+      transition: opacity 500ms ease, transform 500ms ease, filter 500ms ease, box-shadow 300ms ease;
+    }
+    body.light .letter-cell::before,
+    body.dark .letter-cell::before {
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(135deg, rgba(255,255,255,0.85), rgba(255,255,255,0));
+      opacity:0.65;
+      pointer-events:none;
+    }
+    body.dark .letter-cell::before { opacity:0.35; background:linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0)); }
+
+    .prompt-wrapper { display:flex; align-items:center; justify-content:center; gap:18px; flex-wrap:wrap; width:100%; }
+    #prompt { text-align:center; margin:0; display:none; opacity:1; transition:opacity 500ms ease; }
+    #prompt .prompt-text { font-size:1.35rem; font-weight:700; color:#f0fdfa; letter-spacing:0.02em; }
+    body.dark #prompt .prompt-text { color:#ccfbf1; }
+    #prompt .target-letter { display:block; font-size:3.6rem; font-weight:800; color:#ffffff; margin-top:6px; text-shadow:0 6px 18px rgba(0,0,0,0.35); line-height:1; }
+    body.dark #prompt .target-letter { color:#5eead4; text-shadow:none; }
+
+    .letter-cell.dim { opacity:0; transform: scale(0.92); filter: blur(1px); }
+
+    .dwell-fill {
+      position:absolute; background: rgba(255,0,0,0.5);
+      top:50%; left:50%; width:0; height:0; transform: translate(-50%,-50%);
+      pointer-events:none; border-radius:8px;
+    }
+
+    /* Inputs */
+    .styled-input {
+      width:100%; max-width:160px; padding:10px 14px; font-size:18px; font-weight:bold;
+      color:#000; border:2px solid #009688; border-radius:8px; background:#fff; text-align:center;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .styled-input:focus { border-color:#14b8a6; box-shadow:0 0 0 3px rgba(0,150,136,0.15); outline:none; }
+
+    /* >>> Compact form fields (smaller vertical footprint) */
+    .compact-field { padding:8px 10px !important; font-size:16px !important; height:38px !important; }
+    .compact-label { margin-bottom:4px !important; display:inline-block; }
+
+    /* If your global CSS defines .styled-select, this keeps it compact too */
+    select.styled-select.compact-field { padding:6px 8px !important; height:38px !important; font-size:16px !important; }
+
+    .letter-cell.correct { color:#fff; background:#fb7185; box-shadow:0 0 0 4px rgba(248,113,113,0.45); }
+
+    .flying-tile {
+      position:fixed; left:0; top:0; transform: translate3d(0,0,0) scale(1); transform-origin:center;
+      z-index:9999; pointer-events:none; border-radius:12px; border:2px solid rgba(0,0,0,0.15);
+      overflow:hidden; background-color:inherit; color:inherit; backface-visibility:hidden; will-change: transform;
+      contain: layout paint style; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      display:flex; align-items:center; justify-content:center;
+    }
+
+    .letter-grid.grid-locked { pointer-events:none; }
+    .letter-grid.grid-locked .letter-cell { opacity:.35; filter: grayscale(70%); transition: opacity 250ms ease, filter 250ms ease; }
+    @keyframes readyPop { 0%{ transform:scale(.98);} 100%{ transform:scale(1);} }
+    .letter-grid.ready-pop .letter-cell { animation: readyPop 220ms ease; }
+
+    .animal-tile {
+      position:relative;
+      width:100%;
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .animal-tile img {
+      position:absolute;
+      inset:8px;
+      width:auto;
+      height:auto;
+      max-width:calc(100% - 16px);
+      max-height:calc(100% - 16px);
+      object-fit:contain;
+      opacity:0.8;
+      transition:transform 400ms ease, opacity 400ms ease;
+      pointer-events:none;
+    }
+    .letter-cell.correct .animal-tile img { transform:scale(1.12); opacity:1; }
+    .animal-tile .cell-char {
+      position:relative;
+      z-index:1;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:6px 14px;
+      border-radius:999px;
+      font-weight:800;
+      letter-spacing:0.08em;
+      background:rgba(15,118,110,0.92);
+      color:#f0fdfa;
+      box-shadow:0 10px 28px rgba(13,148,136,0.35);
+      text-transform:uppercase;
+    }
+    body.dark .animal-tile .cell-char { background:rgba(94,234,212,0.16); color:#ccfbf1; box-shadow:0 10px 28px rgba(15,118,110,0.45); border:2px solid rgba(94,234,212,0.35); }
+
+    .animal-card {
+      display:flex;
+      align-items:center;
+      gap:16px;
+      padding:8px 14px;
+      border-radius:14px;
+      background:rgba(255,255,255,0.88);
+      color:#0f172a;
+      box-shadow:0 6px 24px rgba(15,23,42,0.15);
+      max-width:320px;
+      transition:opacity 300ms ease, transform 300ms ease;
+    }
+    body.dark .animal-card { background:rgba(15,23,42,0.85); color:#e0f2fe; box-shadow:0 10px 34px rgba(2,6,23,0.65); }
+    .animal-card.hidden { opacity:0; transform:translateY(16px); pointer-events:none; }
+    .animal-card img { width:92px; height:92px; object-fit:contain; filter:drop-shadow(0 8px 12px rgba(0,0,0,0.28)); }
+    .animal-card .animal-info { display:flex; flex-direction:column; align-items:flex-start; }
+    .animal-card .animal-name { font-size:1.1rem; font-weight:700; letter-spacing:0.03em; }
+    .animal-card .animal-tagline { font-size:0.9rem; opacity:0.82; }
+    .animal-card.celebrate { animation: cardCelebrate 720ms ease; }
+
+    @keyframes cardCelebrate {
+      0% { transform: translateY(18px) scale(0.92); opacity:0; }
+      55% { transform: translateY(-6px) scale(1.05); opacity:1; }
+      100% { transform: translateY(0) scale(1); opacity:1; }
+    }
+
+    .parade-progress {
+      display:none;
+      margin-bottom:14px;
+      padding:6px 14px;
+      background:rgba(255,255,255,0.88);
+      border-radius:50px;
+      font-weight:600;
+      letter-spacing:0.04em;
+      color:#0f172a;
+      box-shadow:0 6px 18px rgba(15,23,42,0.15);
+    }
+    body.dark .parade-progress { background:rgba(15,23,42,0.85); color:#e2e8f0; box-shadow:0 8px 24px rgba(2,6,23,0.6); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .letter-cell.wrong-flash { box-shadow: inset 0 0 0 3px rgba(198,40,40,.5); }
+    }
+
+    /* ===== CUSTOM POINTER (CENTERED RED CIRCLE) ===== */
+    #gazePointer{
+      position:fixed; left:0; top:0;
+      width: var(--gp-size, 36px); height: var(--gp-size, 36px);
+      transform: translate(-50%,-50%); pointer-events:none; z-index:10000;
+      opacity:0; will-change: transform, opacity;
+    }
+    #gazePointer::before{
+      content:""; position:absolute; inset:0; border-radius:50%; background:#ff0000;
+    }
+    #gazePointer.gp-dwell::before{ animation: gpPulse 700ms ease-in-out infinite alternate; }
+    @keyframes gpPulse{ from{ transform: scale(1);} to{ transform: scale(1.06);} }
+    @media (prefers-reduced-motion: reduce){ #gazePointer.gp-dwell::before{ animation:none; } }
+
+    /* ===== COMPACT POINTER OPTIONS ===== */
+    .gp-compact { display:flex; flex-direction:column; gap:6px; }
+    .gp-summary { cursor:pointer; font-weight:600; padding:6px 0; opacity:.85; }
+    .gp-advanced { display:flex; flex-direction:column; gap:8px; padding:4px 0 2px; }
+    .gp-row { display:grid; grid-template-columns: 1fr minmax(140px, 1.4fr); align-items:center; gap:10px; }
+    .gp-label { white-space:nowrap; }
+    .gp-range { width:100%; }
+    details#gpDetails { border-left:3px solid rgba(0,150,136,.25); padding-left:10px; }
+    details#gpDetails[open] .gp-summary { opacity:1; }
+
+    /* ===== MINIMAL ADVANCED MODAL ===== */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      display: none; align-items: center; justify-content: center; z-index: 90000;
+    }
+    .modal-backdrop.show { display:flex; }
+    .adv-modal {
+      width: min(520px, 92vw);
+      background: #fff; color:#111; border-radius: 12px; border:2px solid rgba(0,150,136,.35);
+      box-shadow: 0 18px 60px rgba(0,0,0,.28);
+      padding: 12px 14px;
+    }
+    body.dark .adv-modal { background:#0e0e0e; color:#eaeaea; border-color: rgba(20,184,166,.45); }
+    .adv-header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .adv-title { margin:0; font-size:1.05rem; }
+    .adv-close { border:0; background:transparent; font-size:1.4rem; cursor:pointer; line-height:1; color:inherit; }
+    .adv-body { display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+    .adv-row { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .adv-row .right { display:flex; align-items:center; gap:10px; }
+    .adv-row input[type="range"]{ width: 160px; }
+    .open-adv-btn {
+      margin-top:6px; border:2px solid #0aa; background:transparent; color:#0aa; border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:600;
+    }
+    body.dark .open-adv-btn { border-color:#14b8a6; color:#14b8a6; }
+
+    /* Slightly denser option items */
+    .option-item { margin-bottom: 10px; }
+    .label-block { margin-bottom: 6px; }
+  </style>
+
+  <!-- Analytics (optional) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date()); gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body>
+
+<!-- EN/FR toggle (shown only on main menu; hidden after Start) -->
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+<!-- Options modal (Main) -->
+<div id="game-options" class="modal">
+  <div id="options-title-bar">
+    <h2 id="options-main-title" class="translate" data-fr="Chasse aux lettres" data-en="Letter Hunt">Chasse aux lettres</h2>
+  </div>
+
+  <div id="control-panel-options">
+    <div id="mode-divider"></div>
+
+    <div id="options-inline-container">
+      <!-- LEFT COLUMN -->
+      <div class="options-column">
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="muteSFX">
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="ttsEnabled" checked>
+            <span class="translate" data-fr="Lecture vocale" data-en="Voice reading (TTS)">Lecture vocale</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label for="sfxVol" class="teal-label">
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
+            <span id="sfxVolVal">50</span>
+          </label>
+          <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
+        </div>
+
+        <div class="option-item">
+          <label for="layoutScale" class="teal-label">
+            <span class="translate" data-fr="Taille des tuiles:" data-en="Tile sizes:">Taille :</span>
+            <span id="layoutScaleVal"> 1.00</span>
+          </label>
+          <input type="range" id="layoutScale" class="styled-slider" min="0.8" max="1.4" step="0.05" value="1.0">
+        </div>
+      </div>
+
+      <!-- MIDDLE COLUMN -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="letterSet" class="teal-label label-block compact-label translate" data-fr="Lettres à afficher" data-en="Letters to show">Lettres à afficher</label>
+          <input id="letterSet" type="text" value="ABCD" maxlength="9" class="styled-input compact-field">
+        </div>
+
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block compact-label translate" data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select compact-field">
+            <option value="light" selected class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+          </select>
+        </div>
+
+        <!-- Button to open Advanced Options -->
+        <div class="option-item">
+          <button id="openAdvanced" class="open-adv-btn translate" data-fr="Options avancées…" data-en="Advanced options…">Options avancées…</button>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="dwellTimeSlider" class="teal-label">
+            <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
+            <span id="dwellTimeVal">1500</span> ms
+          </label>
+          <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500">
+        </div>
+
+        <!-- ========= Gaze pointer options (COMPACT) ========= -->
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked>
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
+        </div>
+        <!-- ======================================= -->
+      </div>
+    </div>
+
+    <div id="mode-divider"></div>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+</div>
+
+<!-- Advanced Options Modal (minimal) -->
+<div id="advBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="advTitle">
+  <div class="adv-modal">
+    <div class="adv-header">
+      <h3 id="advTitle" class="adv-title translate" data-fr="Options avancées" data-en="Advanced Options">Options avancées</h3>
+      <button id="advClose" class="adv-close" aria-label="Fermer">×</button>
+    </div>
+    <div class="adv-body">
+      <div class="adv-row">
+        <label class="teal-label">
+          <input type="checkbox" id="alphabetMode">
+          <span class="translate" data-fr="Alphabet (A → Z, 1 tuile)" data-en="Alphabet (A → Z, 1 tile)">Alphabet (A → Z, 1 tuile)</span>
+        </label>
+      </div>
+
+      <div class="adv-row">
+        <label class="teal-label">
+          <input type="checkbox" id="randomMode">
+          <span class="translate" data-fr="Aléatoire" data-en="Random">Aléatoire</span>
+        </label>
+        <div class="right">
+          <label for="randomCount" class="teal-label">
+            <span class="translate" data-fr="Tuiles:" data-en="Tiles:">Tuiles:</span>
+            <span id="randomCountVal">4</span>
+          </label>
+          <input type="range" id="randomCount" min="1" max="9" step="1" value="4">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Game area -->
+<div class="game-container">
+  <div id="topStrip" class="top-strip">
+    <div class="prompt-wrapper">
+      <h2 id="prompt">
+        <span id="promptText" class="prompt-text translate" data-fr="Trouve l'animal" data-en="Spot the animal">Trouve l'animal</span><br>
+        <span class="target-letter"></span>
+      </h2>
+      <div id="animalCard" class="animal-card hidden" aria-live="polite">
+        <img id="animalImage" src="" alt="" role="presentation">
+        <div class="animal-info">
+          <span id="animalName" class="animal-name"></span>
+          <span id="animalTagline" class="animal-tagline"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="paradeProgress" class="parade-progress translate" data-fr="Parade: 0 animaux" data-en="Parade: 0 animals">Parade: 0 animaux</div>
+
+  <div class="grid-outer">
+    <div class="letter-grid"></div>
+  </div>
+</div>
+
+<audio id="correctSound" src="../../sounds/success3.mp3"></audio>
+<audio id="wrongSound"   src="../../sounds/error.mp3"></audio>
+<audio id="paradeMusic" src="../../songs/spring/spring2.mp3" loop></audio>
+
+<!-- Custom gaze pointer -->
+<div id="gazePointer" aria-hidden="true"></div>
+
+<script src="../../js/eyegaze-menu.js"></script>
+<script src="../../js/translationonly.js"></script>
+
+<script>
+/* =========================
+   Language — shared storage key with Number Hunt
+   ========================= */
+const LS_LANG_KEY = 'siteLanguage';
+const langToggle  = document.getElementById('langToggle');
+
+function getLang(){
+  try { const saved = localStorage.getItem(LS_LANG_KEY); if (saved === 'en' || saved === 'fr') return saved; } catch(e){}
+  return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+}
+function setLang(lang){
+  const safe = (lang === 'en') ? 'en' : 'fr';
+  document.documentElement.lang = safe;
+  try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e){}
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr = el.getAttribute('data-fr'); const en = el.getAttribute('data-en');
+    if (safe === 'fr' && fr != null) el.textContent = fr;
+    if (safe === 'en' && en != null) el.textContent = en;
+  });
+}
+(function normalizeLangOnLoad(){
+  let initial = 'fr';
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') { initial = saved; }
+    else {
+      initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      localStorage.setItem(LS_LANG_KEY, initial);
+    }
+  } catch(e){ initial = (document.documentElement.lang === 'en') ? 'en' : 'fr'; }
+  setLang(initial);
+})();
+langToggle.addEventListener('click', ()=>{
+  setLang(getLang()==='fr' ? 'en' : 'fr');
+  choosePreferredVoice();
+  refreshAnimalCard();
+  updateParadeProgress();
+});
+
+/* =========================
+   Controls & UI
+   ========================= */
+const muteSFX       = document.getElementById('muteSFX');
+const sfxVol        = document.getElementById('sfxVol');
+const sfxVolVal     = document.getElementById('sfxVolVal');
+const dwellSlider   = document.getElementById('dwellTimeSlider');
+const dwellTimeVal  = document.getElementById('dwellTimeVal');
+const themeSelect   = document.getElementById('themeSelect');
+const startButton   = document.getElementById('startButton');
+const ttsEnabled    = document.getElementById('ttsEnabled');
+const layoutScaleEl = document.getElementById('layoutScale');
+const layoutScaleVal= document.getElementById('layoutScaleVal');
+const animalCard    = document.getElementById('animalCard');
+const animalImage   = document.getElementById('animalImage');
+const animalName    = document.getElementById('animalName');
+const animalTagline = document.getElementById('animalTagline');
+const paradeProgress= document.getElementById('paradeProgress');
+const paradeMusicEl = document.getElementById('paradeMusic');
+
+/* Pointer controls (compact) */
+const showGazePointer = document.getElementById('showGazePointer');
+const gpDetails       = document.getElementById('gpDetails');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
+
+/* Advanced options elements */
+const openAdvanced   = document.getElementById('openAdvanced');
+const advBackdrop    = document.getElementById('advBackdrop');
+const advClose       = document.getElementById('advClose');
+const alphabetModeEl = document.getElementById('alphabetMode');
+const randomModeEl   = document.getElementById('randomMode');
+const randomCountEl  = document.getElementById('randomCount');
+const randomCountVal = document.getElementById('randomCountVal');
+
+/* Persisted TTS toggle */
+const LS_KEYS = { ttsEnabled: 'chasselettres:ttsEnabled' };
+(function initPersistedControls(){
+  try {
+    const en = localStorage.getItem(LS_KEYS.ttsEnabled);
+    if (en === null) { ttsEnabled.checked = true; localStorage.setItem(LS_KEYS.ttsEnabled, 'true'); }
+    else { ttsEnabled.checked = (en === 'true'); }
+  } catch(e) { ttsEnabled.checked = true; }
+})();
+initEyegazeMenu();
+
+sfxVol.addEventListener('input', () => { sfxVolVal.textContent = sfxVol.value; applyMusicVolume(); });
+muteSFX.addEventListener('change', applyMusicVolume);
+dwellSlider.addEventListener('input', () => dwellTimeVal.textContent = dwellSlider.value);
+ttsEnabled.addEventListener('change', () => { try { localStorage.setItem(LS_KEYS.ttsEnabled, String(ttsEnabled.checked)); } catch(e){} });
+
+layoutScaleEl.addEventListener('input', () => {
+  layoutScaleVal.textContent = parseFloat(layoutScaleEl.value).toFixed(2);
+  if (document.querySelector('.game-container').style.display === 'flex') {
+    layoutScale = parseFloat(layoutScaleEl.value);
+    adjustGridSizes();
+  }
+});
+
+/* Input sanitation */
+const letterInput = document.getElementById('letterSet');
+letterInput.addEventListener('input', () => {
+  let v = letterInput.value.toUpperCase().replace(/[^A-Z]/g, '');
+  if (v.length > 9) v = v.slice(0, 9);
+  letterInput.value = v;
+});
+
+/* =========================
+   Advanced options modal wiring
+   ========================= */
+function openAdv(){ advBackdrop.classList.add('show'); }
+function closeAdv(){ advBackdrop.classList.remove('show'); }
+openAdvanced.addEventListener('click', openAdv);
+advClose.addEventListener('click', closeAdv);
+advBackdrop.addEventListener('click', (e)=>{ if (e.target === advBackdrop) closeAdv(); });
+window.addEventListener('keydown', (e)=>{ if (advBackdrop.classList.contains('show') && e.key === 'Escape') closeAdv(); });
+
+/* Enforce exclusivity: Alphabet vs Random */
+function updateModeExclusivity(changed){
+  if (changed === 'alphabet' && alphabetModeEl.checked) { randomModeEl.checked = false; }
+  if (changed === 'random' && randomModeEl.checked) { alphabetModeEl.checked = false; }
+}
+alphabetModeEl.addEventListener('change', ()=>updateModeExclusivity('alphabet'));
+randomModeEl.addEventListener('change', ()=>updateModeExclusivity('random'));
+
+/* Random tiles count readout */
+randomCountEl.addEventListener('input', ()=>{ randomCountVal.textContent = randomCountEl.value; });
+
+/* Eyegaze settings sync */
+function syncEyegazeSettingsFromUI() {
+  try {
+    if (window.eyegazeSettings) {
+      eyegazeSettings.sfxMuted   = !!muteSFX.checked;
+      eyegazeSettings.sfxVolume  = parseInt(sfxVol.value, 10) || 50;
+      eyegazeSettings.dwellTime  = parseInt(dwellSlider.value, 10) || 1500;
+      eyegazeSettings.ttsEnabled = !!ttsEnabled.checked;
+      /* Pointer */
+      eyegazeSettings.showGazePointer  = !!showGazePointer.checked;
+      eyegazeSettings.gazePointerSize  = parseInt(gazeSize.value,10) || 36;
+      eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, (parseInt(gazeOpacity.value,10)||60)/100));
+    }
+    applyMusicVolume();
+  } catch(e) {}
+}
+
+function applyMusicVolume() {
+  if (!paradeMusicEl) return;
+  const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
+  const sfxSetting = window.eyegazeSettings?.sfxVolume;
+  const uiVol = parseInt(sfxVol.value, 10);
+  const volPercent = (typeof sfxSetting === 'number') ? sfxSetting : (isNaN(uiVol) ? 50 : uiVol);
+  const volume = Math.max(0, Math.min(1, volPercent / 100)) * 0.55;
+  paradeMusicEl.volume = muted ? 0 : volume;
+}
+
+/* =========================
+   Game state
+   ========================= */
+let letters = [];
+let targetLetter;
+let hoverTimeout;
+let selectedTheme = 'light';
+const LETTER_POOL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+const ANIMAL_SPRITES = [
+  { img: '../../images/sprites/bear1.png',  nameFr: 'Ourson artiste',     nameEn: 'Artful Bear' },
+  { img: '../../images/sprites/fox2.png',   nameFr: 'Renard magique',     nameEn: 'Magic Fox' },
+  { img: '../../images/sprites/owl3.png',   nameFr: 'Hibou jazz',         nameEn: 'Jazz Owl' },
+  { img: '../../images/sprites/racoon4.png',nameFr: 'Raton espiègle',     nameEn: 'Playful Raccoon' },
+  { img: '../../images/sprites/bear5.png',  nameFr: 'Ours tambour',       nameEn: 'Drum Bear' },
+  { img: '../../images/sprites/fox5.png',   nameFr: 'Renard lumière',     nameEn: 'Luminous Fox' }
+];
+
+const ANIMAL_TAGLINES = [
+  { fr: 'Prépare les fanions de la fête.',        en: 'Waves the parade pennants.' },
+  { fr: 'Frappe le tambour du rythme.',           en: 'Keeps the parade beat.' },
+  { fr: 'Fait tournoyer les rubans géants.',      en: 'Spins giant ribbons.' },
+  { fr: 'Lance des confettis scintillants.',      en: 'Tosses sparkling confetti.' },
+  { fr: 'Danse sur le char des bulles.',          en: 'Dances on the bubble float.' },
+  { fr: 'Illumine le ciel de lucioles.',          en: 'Lights the firefly sky.' }
+];
+
+const ANIMAL_SFX = [
+  '../../sounds/cartoon/cartoonappear1.mp3',
+  '../../sounds/cartoon/cartoonappear2.mp3',
+  '../../sounds/cartoon/cartoonappear3.mp3',
+  '../../sounds/cartoon/cartoonappear4.mp3',
+  '../../sounds/cartoon/cartoonappear5.mp3'
+].map(src => {
+  const audio = new Audio(src);
+  audio.preload = 'auto';
+  return audio;
+});
+
+const letterAnimals = {};
+LETTER_POOL.forEach((letter, idx) => {
+  const sprite = ANIMAL_SPRITES[idx % ANIMAL_SPRITES.length];
+  const tagline = ANIMAL_TAGLINES[idx % ANIMAL_TAGLINES.length];
+  const sfx = ANIMAL_SFX[idx % ANIMAL_SFX.length];
+  letterAnimals[letter] = {
+    letter,
+    img: sprite.img,
+    nameFr: sprite.nameFr,
+    nameEn: sprite.nameEn,
+    taglineFr: tagline.fr,
+    taglineEn: tagline.en,
+    audio: sfx
+  };
+});
+
+let roundsCompleted = 0;
+
+let hoveredTile = null;
+let activeHoverTile = null;
+let lastPointer = { x: null, y: null };
+let currentAnimal = null;
+
+function refreshAnimalCard(animated = false) {
+  if (!animalCard || !currentAnimal) return;
+  const lang = getLang();
+  animalImage.src = currentAnimal.img;
+  const animalLabel = (lang === 'fr') ? currentAnimal.nameFr : currentAnimal.nameEn;
+  animalImage.alt = animalLabel;
+  animalName.textContent = animalLabel;
+  animalTagline.textContent = (lang === 'fr') ? currentAnimal.taglineFr : currentAnimal.taglineEn;
+  if (animated) {
+    animalCard.classList.add('hidden');
+    void animalCard.offsetWidth;
+  }
+  animalCard.classList.remove('celebrate');
+  animalCard.classList.remove('hidden');
+}
+
+function hideAnimalCard() {
+  if (!animalCard) return;
+  animalCard.classList.add('hidden');
+}
+
+function updateParadeProgress() {
+  if (!paradeProgress) return;
+  const lang = getLang();
+  const count = roundsCompleted;
+  const plural = (lang === 'fr')
+    ? (count === 1 ? 'animal' : 'animaux')
+    : (count === 1 ? 'animal' : 'animals');
+  paradeProgress.textContent = (lang === 'fr')
+    ? `Parade : ${count} ${plural}`
+    : `Parade: ${count} ${plural}`;
+  const containerVisible = document.querySelector('.game-container')?.style.display === 'flex';
+  paradeProgress.style.display = containerVisible ? 'inline-flex' : 'none';
+}
+
+/* Special modes state */
+let useAlphabetMode = false;
+let alphabetIndex = 0; // 0..25 -> A..Z
+let useRandomMode = false;
+let randomTilesCount = 4;
+
+let layoutScale = 1.0;
+const EDGE_PAD = 10;
+const MIN_TILE = 64;
+const GAP_MIN  = 80;
+const GAP_MAX  = 120;
+
+const READY_DELAY_MS = 3000;
+let isReady = false;
+
+const correctAudio = document.getElementById('correctSound');
+const wrongAudio   = document.getElementById('wrongSound');
+
+function applyTheme(theme) {
+  document.body.classList.remove('light','dark');
+  document.body.classList.add(theme);
+}
+
+/* =========================
+   TTS (language-aware)
+   ========================= */
+let preferredVoice = null;
+function choosePreferredVoice() {
+  const ss = window.speechSynthesis;
+  if (!ss || !ss.getVoices) return;
+  const voices = ss.getVoices() || [];
+  if (!voices.length) return;
+
+  const lang = getLang();
+  const by = (fn) => voices.find(fn);
+
+  if (lang === 'fr') {
+    preferredVoice =
+      by(v => /sylvie/i.test(v.name || '') && /^fr[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^fr[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^fr[-_]?FR/i.test(v.lang || '')) ||
+      by(v => (v.lang || '').toLowerCase().startsWith('fr')) ||
+      voices[0];
+  } else {
+    preferredVoice =
+      by(v => /^en[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^en[-_]?US/i.test(v.lang || '')) ||
+      by(v => /^en[-_]?GB/i.test(v.lang || '')) ||
+      by(v => (v.lang || '').toLowerCase().startsWith('en')) ||
+      voices[0];
+  }
+}
+function makeUtterance(text) {
+  const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
+  const sfxSetting = window.eyegazeSettings?.sfxVolume;
+  const uiVol = parseInt(sfxVol.value, 10);
+  const volPercent = (typeof sfxSetting === 'number') ? sfxSetting : (isNaN(uiVol) ? 50 : uiVol);
+  const volume = muted ? 0 : Math.max(0, Math.min(1, volPercent / 100));
+
+  const u = new SpeechSynthesisUtterance(text);
+  if (preferredVoice) { u.voice = preferredVoice; u.lang = preferredVoice.lang || (getLang()==='fr'?'fr-CA':'en-US'); }
+  else { u.lang = (getLang()==='fr'?'fr-CA':'en-US'); }
+  u.rate = 1.0; u.volume = volume;
+  return u;
+}
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  try { speechSynthesis.cancel(); } catch(e) {}
+  speechSynthesis.speak(makeUtterance(text));
+}
+function speakNoCancel(text) {
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.speak(makeUtterance(text));
+}
+function speakPromptWithGap(letter) {
+  const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
+  if (!enabled || !letter) return;
+  try { speechSynthesis.cancel(); } catch(e) {}
+
+  const lang = getLang();
+  const promptText = (lang === 'fr') ? 'Trouve la lettre' : 'Find the letter';
+  const first = makeUtterance(promptText);
+  let handedOff = false;
+
+  first.onboundary = (ev) => {
+    const start = ev.charIndex ?? 0;
+    const tail = promptText.slice(start).trim().toLowerCase();
+    if (!handedOff && (tail === 'lettre' || tail === 'letter')) {
+      handedOff = true;
+      setTimeout(() => { try { speechSynthesis.cancel(); } catch(e) {} speakNoCancel(letter); }, TIMING.boundaryTailMs);
+    }
+  };
+  first.onend = () => { if (!handedOff) setTimeout(() => speakNoCancel(letter), TIMING.ttsGap); };
+  speechSynthesis.speak(first);
+}
+function speakPromptIfEnabled() { if (!targetLetter) return; speakPromptWithGap(targetLetter); }
+if ('speechSynthesis' in window) { speechSynthesis.addEventListener('voiceschanged', choosePreferredVoice); choosePreferredVoice(); }
+
+/* =========================
+   Lock / unlock
+   ========================= */
+function lockGrid() {
+  const grid = document.querySelector('.letter-grid');
+  isReady = false;
+  stopHover();
+  if (grid) grid.classList.add('grid-locked');
+}
+function unlockGrid() {
+  const grid = document.querySelector('.letter-grid');
+  isReady = true;
+  if (grid) {
+    grid.classList.remove('grid-locked');
+    grid.classList.add('ready-pop');
+    setTimeout(() => grid.classList.remove('ready-pop'), 260);
+  }
+  if (!hoveredTile && lastPointer.x !== null && lastPointer.y !== null) {
+    const el = document.elementFromPoint(lastPointer.x, lastPointer.y);
+    const tile = el && (el.closest ? el.closest('.letter-cell') : null);
+    if (tile) hoveredTile = tile;
+  }
+  if (hoveredTile) startHover(hoveredTile);
+}
+
+/* =========================
+   Startup & rounds
+   ========================= */
+function startGame() {
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen();
+  } else if (document.documentElement.webkitRequestFullscreen) {
+    document.documentElement.webkitRequestFullscreen();
+  } else if (document.documentElement.msRequestFullscreen) {
+    document.documentElement.msRequestFullscreen();
+  }
+
+  document.getElementById('langToggle').style.display = 'none'; // hide language toggle in-game
+  syncEyegazeSettingsFromUI();
+
+  selectedTheme = themeSelect.value;
+  applyTheme(selectedTheme);
+
+  roundsCompleted = 0;
+  currentAnimal = null;
+  updateParadeProgress();
+  hideAnimalCard();
+  if (paradeMusicEl) {
+    applyMusicVolume();
+    try { paradeMusicEl.currentTime = 0; paradeMusicEl.play().catch(()=>{}); } catch(e) {}
+  }
+
+  /* Read special modes from Advanced modal */
+  useAlphabetMode = !!alphabetModeEl.checked;
+  useRandomMode   = !!randomModeEl.checked && !useAlphabetMode; // alphabet wins if both checked
+  randomTilesCount = Math.max(1, Math.min(9, parseInt(randomCountEl.value,10) || 4));
+
+  alphabetIndex = 0;
+
+  if (useAlphabetMode) {
+    letters = ['A']; // start with A
+  } else if (useRandomMode) {
+    letters = getRandomLetters(randomTilesCount);
+  } else {
+    const inputVal = letterInput.value.toUpperCase().replace(/[^A-Z]/g,'');
+    letters = Array.from(new Set(inputVal.split(''))).slice(0, 9);
+    if (letters.length === 0) letters = ['A','B','C','D'];
+  }
+
+  layoutScale = parseFloat(layoutScaleEl.value) || 1.0;
+  layoutScaleVal.textContent = layoutScale.toFixed(2);
+
+  document.querySelector('.game-container').style.display = 'flex';
+  document.getElementById('topStrip').style.display = 'block';
+  updateParadeProgress();
+
+  const grid = document.querySelector('.letter-grid');
+  grid.style.display = 'grid';
+  document.getElementById('prompt').style.display = 'block';
+
+  buildGrid();
+  nextRound();
+
+  try { if (window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); } catch(e) {}
+
+  choosePreferredVoice();
+  updateGazeStyles();
+  applyPointerToggle(); // hide native cursor if enabled (now only after Start)
+}
+startButton.addEventListener('click', startGame);
+
+/* ====== Random helpers ====== */
+function getRandomLetters(n){
+  const pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  // pick unique random letters up to n
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, Math.max(1, Math.min(9, n)));
+}
+
+/* ====== Grid build & sizing ====== */
+function buildGrid() {
+  const grid = document.querySelector('.letter-grid');
+  grid.innerHTML = '';
+
+  const total = letters.length;
+  /* Force 1 column in alphabet mode (single tile), otherwise auto */
+  const columns = useAlphabetMode ? 1 : Math.min(3, Math.ceil(Math.sqrt(total)));
+  grid.dataset.columns = String(columns);
+
+  grid.style.padding = EDGE_PAD + 'px';
+
+  letters.forEach(letter => {
+    const cell = document.createElement('div');
+    cell.className = 'letter-cell';
+    const animal = letterAnimals[letter] || letterAnimals['A'];
+    cell.innerHTML = `<figure class="animal-tile"><img src="${animal.img}" alt="" role="presentation"><span class="cell-char">${letter}</span></figure>`;
+
+    cell.addEventListener('pointerenter', () => {
+      hoveredTile = cell;
+      if (isReady) startHover(cell);
+    });
+    cell.addEventListener('pointerleave', () => {
+      if (hoveredTile === cell) hoveredTile = null;
+      stopHover();
+    });
+
+    grid.appendChild(cell);
+  });
+
+  adjustGridSizes();
+}
+window.addEventListener('resize', adjustGridSizes);
+
+function adjustGridSizes() {
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const grid = document.querySelector('.letter-grid');
+  const cells = grid.querySelectorAll('.letter-cell');
+  if (!cells.length) return;
+
+  const columns = parseInt(grid.dataset.columns || '1', 10);
+  const rows    = Math.ceil(cells.length / columns);
+
+  const outer = grid.parentElement;
+  const containerW = grid.clientWidth;
+  const containerH = outer ? outer.clientHeight : grid.clientHeight;
+
+  const contentW = Math.max(0, containerW - 2 * EDGE_PAD);
+  const contentH = Math.max(0, containerH - 2 * EDGE_PAD);
+  const contentMin = Math.min(contentW, contentH);
+
+  let GAP = Math.round((contentMin * 0.02) / Math.max(0.8, layoutScale));
+  GAP = clamp(GAP, GAP_MIN, GAP_MAX);
+  grid.style.gap = GAP + 'px';
+
+  const maxByW = (contentW - (columns - 1) * GAP) / columns;
+  const maxByH = (contentH - (rows    - 1) * GAP) / rows;
+  const candidate = Math.floor(Math.min(maxByW, maxByH));
+
+  const size = Math.max(MIN_TILE, Math.min(candidate, Math.floor(candidate * layoutScale)));
+
+  const track = size + 'px';
+  grid.style.gridTemplateColumns = `repeat(${columns}, ${track})`;
+  grid.style.gridAutoRows        = track;
+
+  const fontPx = Math.max(24, Math.floor(size * 0.55));
+  cells.forEach(c => { c.style.fontSize = fontPx + 'px'; });
+
+  const strip = document.getElementById('topStrip');
+  if (strip && strip.style.display !== 'none') {
+    const stripGap = Math.max(10, Math.min(22, Math.round(size * 0.12)));
+    strip.style.marginBottom = stripGap + 'px';
+  }
+}
+
+function nextRound() {
+  const strip = document.getElementById('topStrip');
+  strip.classList.remove('hidden','fade-out');
+
+  if (useAlphabetMode) {
+    if (alphabetIndex >= 26) alphabetIndex = 0; // loop
+    targetLetter = String.fromCharCode(65 + alphabetIndex); // A..Z
+    letters = [targetLetter];
+    buildGrid(); // ensure single tile
+  } else if (useRandomMode) {
+    letters = getRandomLetters(randomTilesCount);
+    targetLetter = letters[Math.floor(Math.random() * letters.length)];
+    buildGrid();
+  } else {
+    targetLetter = letters[Math.floor(Math.random() * letters.length)];
+  }
+
+  currentAnimal = letterAnimals[targetLetter] || letterAnimals['A'];
+  document.querySelector("#prompt .target-letter").textContent = targetLetter;
+
+  const lang = getLang();
+  const promptEl = document.getElementById('promptText');
+  const animalLabel = (lang === 'fr') ? currentAnimal.nameFr : currentAnimal.nameEn;
+  if (lang === 'fr') { promptEl.textContent = `Invite ${animalLabel} en trouvant la lettre ${targetLetter}.`; }
+  else { promptEl.textContent = `Invite ${animalLabel} by finding letter ${targetLetter}.`; }
+  refreshAnimalCard(true);
+
+  lockGrid();
+  speakPromptIfEnabled();
+  adjustGridSizes();
+
+  setTimeout(unlockGrid, READY_DELAY_MS);
+}
+
+/* ====== Dwell hover handling ====== */
+let currentOverlay;
+
+function startHover(tile) {
+  if (!isReady) return;
+  if (activeHoverTile === tile && currentOverlay) return;
+
+  const hoverTime = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
+
+  stopHover();
+  activeHoverTile = tile;
+
+  currentOverlay = document.createElement('div');
+  currentOverlay.className = 'dwell-fill';
+  currentOverlay.style.pointerEvents = 'none';
+  tile.appendChild(currentOverlay);
+
+  requestAnimationFrame(() => {
+    currentOverlay.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
+    currentOverlay.style.width = '0';
+    currentOverlay.style.height = '0';
+    requestAnimationFrame(() => {
+      currentOverlay.style.width = '100%';
+      currentOverlay.style.height = '100%';
+    });
+  });
+
+  if (gazePointer) gazePointer.classList.add('gp-dwell');
+
+  hoverTimeout = setTimeout(() => {
+    handleSelection(tile);
+    stopHover();
+  }, hoverTime);
+}
+
+function stopHover() {
+  clearTimeout(hoverTimeout);
+  if (currentOverlay && currentOverlay.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
+  currentOverlay = null;
+  activeHoverTile = null;
+  if (gazePointer) gazePointer.classList.remove('gp-dwell');
+}
+
+/* ====== Timings (ms) ====== */
+const TIMING = { holdRed:1000, glide:4000, grow:3000, pauseAfterGrow:3000, ttsGap:350, boundaryTailMs:180 };
+
+/* ====== WRONG feedback ====== */
+function wrongFeedback(el){
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) {
+    el.classList.add('wrong-flash');
+    setTimeout(() => el.classList.remove('wrong-flash'), 250);
+    return;
+  }
+  if (el.animate) {
+    el.animate(
+      [
+        { transform: 'translateX(0)' },
+        { transform: 'translateX(-10px)' },
+        { transform: 'translateX(10px)' },
+        { transform: 'translateX(-7px)' },
+        { transform: 'translateX(7px)' },
+        { transform: 'translateX(-4px)' },
+        { transform: 'translateX(4px)' },
+        { transform: 'translateX(0)' }
+      ],
+      { duration: 420, easing: 'ease' }
+    );
+    const prev = el.style.boxShadow;
+    el.style.boxShadow = 'inset 0 0 0 3px rgba(198,40,40,.45)';
+    setTimeout(() => { el.style.boxShadow = prev || ''; }, 420);
+  }
+  try { if (navigator.vibrate) navigator.vibrate(60); } catch(e){}
+}
+
+/* ====== Correct selection ====== */
+function handleSelection(el) {
+  const letter = el.textContent.trim();
+
+  if (letter !== targetLetter) {
+    playSound(wrongAudio);
+    wrongFeedback(el);
+    return;
+  }
+
+  const grid  = document.querySelector('.letter-grid');
+  const strip = document.getElementById('topStrip');
+  const foundLetter = letter;
+  const foundAnimal = letterAnimals[foundLetter] || letterAnimals['A'];
+
+  const startRect = el.getBoundingClientRect();
+
+  if (foundAnimal?.audio) playSound(foundAnimal.audio); else playSound(correctAudio);
+  grid.classList.add('no-input');
+  grid.querySelectorAll('.letter-cell').forEach(cell => { if (cell !== el) cell.classList.add('dim'); });
+
+  strip.classList.add('fade-out');
+
+  el.classList.add('correct');
+  if (animalCard) {
+    animalCard.classList.remove('hidden');
+    animalCard.classList.add('celebrate');
+    setTimeout(() => animalCard.classList.remove('celebrate'), 900);
+  }
+  setTimeout(() => {
+    el.classList.remove('correct');
+
+    const dark = getComputedStyle(document.body).backgroundColor === 'rgb(0, 0, 0)';
+    const bgColor = dark ? '#222' : '#fff';
+    const textColor = dark ? '#fff' : '#000';
+    el.style.backgroundColor = bgColor;
+    el.style.color = textColor;
+
+    glideTileToCenter(el, TIMING.glide, TIMING.grow, {bgColor, textColor}, startRect).then((clone) => {
+      const ttsOn = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
+      if (ttsOn && foundLetter) speak(foundLetter);
+
+      setTimeout(() => {
+        if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
+        grid.querySelectorAll('.letter-cell').forEach(cell => cell.classList.remove('dim'));
+        el.style.opacity = '';
+        el.style.backgroundColor = '';
+        el.style.color = '';
+        el.style.pointerEvents = '';
+        grid.classList.remove('no-input');
+
+        strip.classList.add('hidden');
+        strip.classList.remove('fade-out');
+
+        if (useAlphabetMode) alphabetIndex = (alphabetIndex + 1) % 26;
+
+        roundsCompleted += 1;
+        updateParadeProgress();
+        hideAnimalCard();
+        nextRound();
+      }, TIMING.pauseAfterGrow);
+    });
+
+  }, TIMING.holdRed);
+}
+
+/* Glide & grow animation — pixel-anchored */
+function glideTileToCenter(tile, glideMs = 1200, growMs = 700, forcedColors, startRect) {
+  return new Promise(resolve => {
+    const r  = startRect || tile.getBoundingClientRect();
+    const cs = getComputedStyle(tile);
+
+    const clone = tile.cloneNode(true);
+    clone.className = 'flying-tile';
+    clone.style.width  = r.width + 'px';
+    clone.style.height = r.height + 'px';
+    clone.style.left   = r.left + 'px';
+    clone.style.top    = r.top  + 'px';
+    clone.style.transform = 'translate3d(0,0,0) scale(1)';
+    clone.style.transformOrigin = 'center center';
+
+    const bg = forcedColors?.bgColor || cs.backgroundColor;
+    const fg = forcedColors?.textColor || cs.color;
+    clone.style.backgroundColor = bg;
+    clone.style.color           = fg;
+    clone.style.borderRadius    = cs.borderRadius;
+    clone.style.border          = cs.border;
+    clone.style.boxShadow       = cs.boxShadow;
+    clone.style.fontSize        = cs.fontSize;
+    clone.style.lineHeight      = cs.lineHeight;
+    const char = clone.querySelector('.cell-char');
+    if (char) char.style.color = fg;
+
+    document.body.appendChild(clone);
+
+    tile.style.opacity = '0';
+    tile.style.pointerEvents = 'none';
+
+    const centerX = window.innerWidth  / 2;
+    const centerY = window.innerHeight / 2;
+    const dx = centerX - (r.left + r.width  / 2);
+    const dy = centerY - (r.top  + r.height / 2);
+
+    const margin = Math.max(16, Math.min(40, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.04)));
+    const maxScaleW = (window.innerWidth  - margin * 2) / r.width;
+    const maxScaleH = (window.innerHeight - margin * 2) / r.height;
+    let targetScale = Math.min(2, maxScaleW, maxScaleH);
+    targetScale = Math.max(1, targetScale);
+
+    const growthFactor = Math.max(0, targetScale - 1);
+    const adjustedGrowMs = Math.round(growMs * (0.4 + 0.6 * Math.min(1, growthFactor)));
+
+    void clone.getBoundingClientRect();
+
+    const a1 = clone.animate(
+      [
+        { transform: 'translate3d(0px, 0px, 0) scale(1)' },
+        { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1)` }
+      ],
+      { duration: glideMs, easing: 'cubic-bezier(.25,.8,.25,1)', fill: 'forwards' }
+    );
+    a1.onfinish = () => {
+      const a2 = clone.animate(
+        [
+          { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1)` },
+          { transform: `translate3d(${dx}px, ${dy}px, 0) scale(${targetScale})` }
+        ],
+        { duration: adjustedGrowMs, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'forwards' }
+      );
+      a2.onfinish = () => resolve(clone);
+    };
+  });
+}
+
+function playSound(audioEl) {
+  const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
+  const sfxSetting = window.eyegazeSettings?.sfxVolume;
+  const uiVol = parseInt(sfxVol.value, 10);
+  const volPercent = (typeof sfxSetting === 'number') ? sfxSetting : (isNaN(uiVol) ? 50 : uiVol);
+
+  audioEl.volume = muted ? 0 : Math.max(0, Math.min(1, volPercent / 100));
+  try { audioEl.currentTime = 0; audioEl.play(); } catch(e) {}
+  setTimeout(() => { try { audioEl.pause(); audioEl.currentTime = 0; } catch(e){} }, 2000);
+}
+
+/* =========================
+   CUSTOM POINTER — logic (no-lag tracking + cursor hide)
+   ========================= */
+const gazePointer = document.getElementById('gazePointer');
+
+function setPointerPos(x, y){ gazePointer.style.left = x + 'px'; gazePointer.style.top = y + 'px'; }
+
+const rawHandler  = (e) => { lastPointer.x = e.clientX; lastPointer.y = e.clientY; setPointerPos(e.clientX, e.clientY); };
+const moveHandler = (e) => { lastPointer.x = e.clientX; lastPointer.y = e.clientY; setPointerPos(e.clientX, e.clientY); };
+if ('onpointerrawupdate' in window) window.addEventListener('pointerrawupdate', rawHandler, {passive:true});
+window.addEventListener('pointermove', moveHandler, {passive:true});
+
+window.addEventListener('pointerleave', ()=>{
+  if (!gazePointer) return;
+  gazePointer._savedOpacity = gazePointer.style.opacity;
+  gazePointer.style.opacity = 0;
+});
+window.addEventListener('pointerenter', ()=>{
+  updateGazeStyles();
+  if (lastPointer.x != null && lastPointer.y != null) setPointerPos(lastPointer.x, lastPointer.y);
+});
+
+/* ===== UPDATED: show only after game starts ===== */
+function updateGazeStyles(){
+  if (!gazePointer) return;
+  const size = (parseInt(gazeSize?.value,10) || 36);
+  const opct = Math.max(0, Math.min(1, (parseInt(gazeOpacity?.value,10) || 60) / 100));
+  if (gazeSizeVal)    gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct*100);
+  gazePointer.style.setProperty('--gp-size', size + 'px');
+
+  const gameShown = (document.querySelector('.game-container')?.style.display === 'flex');
+  gazePointer.style.opacity = (showGazePointer?.checked && gameShown) ? opct : 0;
+}
+
+function applyPointerToggle(){
+  const gameShown = (document.querySelector('.game-container')?.style.display === 'flex');
+  const enable = !!showGazePointer?.checked && gameShown;
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  /* auto-open/close the advanced details to reduce visual clutter */
+  if (gpDetails) gpDetails.open = enable ? gpDetails.open : false;
+  updateGazeStyles();
+  if (enable && lastPointer.x != null && lastPointer.y != null) setPointerPos(lastPointer.x, lastPointer.y);
+}
+
+/* UI listeners */
+[showGazePointer, gazeSize, gazeOpacity].forEach(el=>{
+  if (el) el.addEventListener('input', ()=>{
+    applyPointerToggle();
+    syncEyegazeSettingsFromUI();
+  });
+});
+applyPointerToggle();
+updateGazeStyles();
+
+/* Theme change keeps pointer/cursor rules consistent */
+themeSelect.addEventListener('change', ()=>{
+  applyTheme(themeSelect.value);
+  applyPointerToggle();
+});
+
+/* Keep labels in sync initially */
+dwellTimeVal.textContent = dwellSlider.value;
+randomCountVal.textContent = randomCountEl.value;
+</script>
+</body>
+</html>
