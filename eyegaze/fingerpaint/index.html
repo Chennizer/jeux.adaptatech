@@ -176,6 +176,33 @@
       outline-offset: 6px;
     }
 
+    /* Custom gaze pointer (same red dot as other eyegaze games) */
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      transition: opacity 160ms ease;
+    }
+
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff0000;
+    }
+
+    .hide-native-cursor,
+    .hide-native-cursor * {
+      cursor: none !important;
+    }
+
   </style>
 </head>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
@@ -200,6 +227,8 @@
       Commencer
     </button>
   </div>
+
+  <div id="gazePointer" aria-hidden="true"></div>
 
   <!-- Gear Icon -->
   <div id="settingsIcon"
@@ -258,10 +287,11 @@
     let strokeHueOffset = 0;    
     let started = false;        
     let releaseTime = null;     
-    let strokeWidth = 30;       
-    let keepDrawing = false;    
-    let canvas;                 
+    let strokeWidth = 30;
+    let keepDrawing = false;
+    let canvas;
     let menuOpen = false;
+    let lastPointerPosition = { x: null, y: null };
 
     const STILLNESS_DELAY_MS = 2000; // 2 seconds of stillness to end a stroke
     const MOVE_THRESHOLD_PX = 2;     // ignore tiny jitter from eye trackers
@@ -587,6 +617,7 @@
       started = true;
       document.getElementById("promptOverlay").style.display = "none";
       toggleFullscreen();
+      updateGazePointerVisibility();
     });
 
     // Settings icon & menu
@@ -638,6 +669,57 @@
       e.stopPropagation();
       explodeAllSavedStrokes();
     });
+
+    /* Gaze pointer logic */
+    const gazePointer = document.getElementById("gazePointer");
+
+    function setGazePointerPosition(x, y) {
+      if (!gazePointer) return;
+      gazePointer.style.left = `${x}px`;
+      gazePointer.style.top = `${y}px`;
+    }
+
+    function updateGazePointerVisibility() {
+      const shouldShow = started;
+      document.documentElement.classList.toggle("hide-native-cursor", shouldShow);
+
+      if (!gazePointer) return;
+
+      if (shouldShow && lastPointerPosition.x !== null && lastPointerPosition.y !== null) {
+        setGazePointerPosition(lastPointerPosition.x, lastPointerPosition.y);
+        gazePointer.style.opacity = 1;
+      } else {
+        gazePointer.style.opacity = 0;
+      }
+    }
+
+    window.addEventListener("pointermove", event => {
+      lastPointerPosition = { x: event.clientX, y: event.clientY };
+      setGazePointerPosition(event.clientX, event.clientY);
+      if (started && gazePointer) {
+        gazePointer.style.opacity = 1;
+      }
+    }, { passive: true });
+
+    window.addEventListener("pointerleave", () => {
+      if (gazePointer) {
+        gazePointer.style.opacity = 0;
+      }
+    });
+
+    window.addEventListener("pointerenter", () => {
+      updateGazePointerVisibility();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && gazePointer) {
+        gazePointer.style.opacity = 0;
+      } else {
+        updateGazePointerVisibility();
+      }
+    });
+
+    updateGazePointerVisibility();
   </script>
 
   <!-- translationonly.js: same approach used in your other snippet -->
