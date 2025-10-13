@@ -120,57 +120,28 @@
       align-self: flex-start;
     }
 
-    .options-column:first-child .option-item:last-child {
-      margin-bottom: 0;
+    .option-item.checkbox-item {
+      margin-top: 16px;
     }
 
-    .options-column:first-child .teal-label:has(input[type="checkbox"]) {
-      justify-content: flex-start;
-    }
-
-    .options-column:first-child .teal-label input[type="checkbox"] {
-      margin-top: 0;
-    }
-
-    .options-column:first-child .option-item.checkbox-item {
-      margin-top: 8px;
-    }
-
-    .options-column:first-child .option-item.checkbox-item .teal-label {
+    .option-item.checkbox-item .teal-label {
+      align-items: center;
       font-weight: 600;
     }
 
-    .options-column:first-child .option-item.checkbox-item span {
+    .option-item.checkbox-item span {
+      margin-left: 4px;
       font-weight: 500;
-    }
-
-    .options-column:first-child .option-item.checkbox-item input[type="checkbox"]:focus-visible {
-      outline: 3px solid #4dd2ff;
-      outline-offset: 2px;
-    }
-
-    .options-column:first-child .option-item.checkbox-item span {
       color: #fff;
     }
 
-    .options-column:first-child .option-item.checkbox-item input[type="checkbox"]:checked + span {
+    .option-item.checkbox-item input[type="checkbox"]:checked + span {
       color: #00ffc6;
     }
 
-    .options-column:first-child .option-item.checkbox-item {
-      align-self: flex-start;
-    }
-
-    .options-column:first-child .option-item.checkbox-item .teal-label {
-      align-items: center;
-    }
-
-    .options-column:first-child .option-item.checkbox-item span {
-      margin-left: 4px;
-    }
-
-    .options-column:first-child .option-item.checkbox-item {
-      margin-top: 16px;
+    .option-item.checkbox-item input[type="checkbox"]:focus-visible {
+      outline: 3px solid #4dd2ff;
+      outline-offset: 2px;
     }
 
     .game-container {
@@ -288,11 +259,10 @@
             <input type="range" id="strokeWidthSlider" class="styled-slider" min="1" max="200" value="30" />
           </div>
 
-          <div class="option-item checkbox-item">
-            <label class="teal-label">
-              <input type="checkbox" id="keepDrawingToggle" />
-              <span class="translate" data-fr="Garder le tracé" data-en="Keep the stroke">Garder le tracé</span>
-            </label>
+          <div class="option-item">
+            <label for="explosionSizeSlider" class="teal-label label-block translate" data-fr="Taille de l'explosion" data-en="Explosion size">Taille de l'explosion</label>
+            <div class="value-readout">x<span id="explosionSizeDisplay">10</span></div>
+            <input type="range" id="explosionSizeSlider" class="styled-slider" min="1" max="30" value="10" />
           </div>
         </div>
 
@@ -309,6 +279,13 @@
             <label for="pauseTimeSlider" class="teal-label label-block translate" data-fr="Pause avant explosion" data-en="Pause before explosion">Pause avant explosion</label>
             <div class="value-readout"><span id="pauseTimeDisplay">2.0</span> s</div>
             <input type="range" id="pauseTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="2000" />
+          </div>
+
+          <div class="option-item checkbox-item">
+            <label class="teal-label">
+              <input type="checkbox" id="keepDrawingToggle" />
+              <span class="translate" data-fr="Garder le tracé" data-en="Keep the stroke">Garder le tracé</span>
+            </label>
           </div>
         </div>
       </div>
@@ -389,6 +366,8 @@
     let previousPointer = null;
     let musicVolume = 100;
     let stillnessDelayMs = 2000;
+    let explosionParticlesPerPoint = 10;
+    let explodeHoverTimeout = null;
 
     const MOVE_THRESHOLD_PX = 2;
 
@@ -602,7 +581,7 @@
 
     function spawnExplosion(strokeArr) {
       for (const pt of strokeArr) {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < explosionParticlesPerPoint; i++) {
           particles.push(new Particle(pt.x, pt.y));
         }
       }
@@ -679,6 +658,8 @@
 
     const strokeSlider = document.getElementById('strokeWidthSlider');
     const strokeDisplay = document.getElementById('strokeWidthDisplay');
+    const explosionSlider = document.getElementById('explosionSizeSlider');
+    const explosionDisplay = document.getElementById('explosionSizeDisplay');
     const keepToggle = document.getElementById('keepDrawingToggle');
     const musicSlider = document.getElementById('musicVolume');
     const musicDisplay = document.getElementById('musicVolumeDisplay');
@@ -691,6 +672,10 @@
       if (strokeSlider) {
         strokeWidth = parseInt(strokeSlider.value, 10) || 30;
         strokeDisplay.textContent = strokeWidth;
+      }
+      if (explosionSlider && explosionDisplay) {
+        explosionParticlesPerPoint = parseInt(explosionSlider.value, 10) || 10;
+        explosionDisplay.textContent = explosionParticlesPerPoint;
       }
       if (keepToggle) {
         keepDrawing = keepToggle.checked;
@@ -714,6 +699,13 @@
       strokeSlider.addEventListener('input', () => {
         strokeWidth = parseInt(strokeSlider.value, 10) || 30;
         strokeDisplay.textContent = strokeWidth;
+      });
+    }
+
+    if (explosionSlider && explosionDisplay) {
+      explosionSlider.addEventListener('input', () => {
+        explosionParticlesPerPoint = parseInt(explosionSlider.value, 10) || 10;
+        explosionDisplay.textContent = explosionParticlesPerPoint;
       });
     }
 
@@ -746,7 +738,33 @@
       resetButton.addEventListener('click', (event) => {
         event.preventDefault();
         if (!started) return;
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+          explodeHoverTimeout = null;
+        }
         explodeAllSavedStrokes();
+      });
+      resetButton.addEventListener('pointerenter', () => {
+        if (!started) return;
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+        }
+        explodeHoverTimeout = setTimeout(() => {
+          explodeHoverTimeout = null;
+          explodeAllSavedStrokes();
+        }, 1500);
+      });
+      resetButton.addEventListener('pointerleave', () => {
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+          explodeHoverTimeout = null;
+        }
+      });
+      resetButton.addEventListener('pointercancel', () => {
+        if (explodeHoverTimeout) {
+          clearTimeout(explodeHoverTimeout);
+          explodeHoverTimeout = null;
+        }
       });
     }
 
