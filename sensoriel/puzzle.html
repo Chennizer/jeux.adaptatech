@@ -549,9 +549,27 @@
       const pieceIndex = e.target.dataset.index;
       if (!pieceIndex) { return; }
       e.dataTransfer.setData('text/plain', pieceIndex);
-      const ghost = new Image();
-      ghost.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUCNdj+P///38ACfsD/0FHT68AAAAASUVORK5CYII=';
-      e.dataTransfer.setDragImage(ghost, 0, 0);
+      if (currentDragPreview) {
+        currentDragPreview.remove();
+        currentDragPreview = null;
+      }
+      const dragClone = e.target.cloneNode(true);
+      dragClone.classList.remove('active');
+      dragClone.style.position = 'absolute';
+      dragClone.style.left = '-9999px';
+      dragClone.style.top = '-9999px';
+      dragClone.style.pointerEvents = 'none';
+      dragClone.style.margin = '0';
+      dragClone.style.transform = 'none';
+      dragClone.style.opacity = '1';
+      document.body.appendChild(dragClone);
+      currentDragPreview = dragClone;
+      const rect = e.target.getBoundingClientRect();
+      const pointerX = (typeof e.clientX === 'number' ? e.clientX : rect.left + rect.width / 2);
+      const pointerY = (typeof e.clientY === 'number' ? e.clientY : rect.top + rect.height / 2);
+      const offsetX = pointerX - rect.left;
+      const offsetY = pointerY - rect.top;
+      e.dataTransfer.setDragImage(dragClone, offsetX, offsetY);
       e.target.classList.add('active');
       const originalParent = e.target.parentElement;
       if (originalParent && originalParent.classList.contains('slot')) {
@@ -562,7 +580,13 @@
         e.target.dataset.originalSlot = 'piecesArea';
       }
     }
-    function onDragEnd(e) { e.target.classList.remove('active'); }
+    function onDragEnd(e) {
+      e.target.classList.remove('active');
+      if (currentDragPreview) {
+        currentDragPreview.remove();
+        currentDragPreview = null;
+      }
+    }
     function allowDrop(e) { e.preventDefault(); }
     function onDragEnter(e) { e.currentTarget.classList.add('highlight'); }
     function onDragLeave(e) { e.currentTarget.classList.remove('highlight'); }
@@ -627,11 +651,14 @@
         });
       }
       if (reinforcerController && typeof reinforcerController.show === 'function') {
-        reinforcerController.show();
+        setTimeout(() => {
+          reinforcerController.show();
+        }, 2000);
       } else {
         sessionHelpers.advanceToNextGame();
       }
     }
+    let currentDragPreview = null;
     let touchData = { dragging: false, element: null, originalParentType: null, originalSlot: null, originalPosition: { left: 0, top: 0 }, offsetX: 0, offsetY: 0 };
     function touchStartHandler(e) {
       e.preventDefault();
