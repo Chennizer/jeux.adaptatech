@@ -121,6 +121,43 @@
     }
   }
 
+  let iosZoomDisabled = false;
+
+  function disableIOSZoom() {
+    if (iosZoomDisabled) {
+      return;
+    }
+    iosZoomDisabled = true;
+
+    const listenerOptions = { passive: false, capture: true };
+
+    const preventScaleGesture = (event) => {
+      event.preventDefault();
+    };
+
+    const preventPinchMove = (event) => {
+      const touches = event.touches || [];
+      const scale = typeof event.scale === 'number' ? event.scale : 1;
+      if (touches.length > 1 || scale !== 1) {
+        event.preventDefault();
+      }
+    };
+
+    let lastTouchEnd = 0;
+    const preventDoubleTap = (event) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 350) {
+        event.preventDefault();
+      }
+      lastTouchEnd = now;
+    };
+
+    doc.addEventListener('gesturestart', preventScaleGesture, listenerOptions);
+    doc.addEventListener('gesturechange', preventScaleGesture, listenerOptions);
+    doc.addEventListener('touchmove', preventPinchMove, listenerOptions);
+    doc.addEventListener('touchend', preventDoubleTap, listenerOptions);
+  }
+
   doc.addEventListener('fullscreenchange', () => {
     if (isFullscreenActive()) {
       removeGestureListeners();
@@ -131,6 +168,7 @@
 
   doc.addEventListener('visibilitychange', handleVisibilityReturn);
   doc.addEventListener('DOMContentLoaded', () => {
+    disableIOSZoom();
     if (shouldMaintainFullscreen()) {
       maintainFullscreen();
     }
