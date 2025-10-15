@@ -43,7 +43,7 @@
       flex: 1 1 auto;
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
       gap: clamp(20px, 4vw, 36px);
       align-items: stretch;
     }
@@ -58,16 +58,17 @@
       gap: clamp(18px, 3vh, 26px);
       align-content: start;
       justify-items: center;
-      grid-auto-rows: minmax(clamp(150px, 22vh, 240px), auto);
       overflow-y: auto;
     }
 
-    .shadow-board {
-      grid-template-columns: repeat(auto-fit, minmax(clamp(180px, 22vw, 260px), 1fr));
+    .shadow-pieces {
+      grid-template-columns: repeat(auto-fit, minmax(clamp(160px, 22vw, 220px), 1fr));
+      grid-auto-rows: minmax(clamp(160px, 24vh, 230px), auto);
     }
 
-    .shadow-pieces {
-      grid-template-columns: repeat(auto-fit, minmax(clamp(150px, 20vw, 210px), 1fr));
+    .shadow-board {
+      grid-template-columns: repeat(auto-fit, minmax(clamp(200px, 24vw, 280px), 1fr));
+      grid-auto-rows: minmax(clamp(190px, 28vh, 260px), auto);
     }
 
     .shadow-slot {
@@ -82,7 +83,7 @@
       justify-content: center;
       padding: clamp(12px, 3vh, 24px);
       transition: border-color 0.2s ease, transform 0.2s ease;
-      cursor: pointer;
+      cursor: grab;
     }
 
     .shadow-slot::before {
@@ -141,11 +142,18 @@
       align-items: center;
       justify-content: center;
       padding: clamp(12px, 2.4vh, 20px);
-      cursor: pointer;
+      cursor: grab;
       transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
       touch-action: manipulation;
       user-select: none;
       position: relative;
+    }
+
+    .shadow-token-placeholder {
+      width: 100%;
+      min-height: clamp(150px, 24vh, 220px);
+      border-radius: clamp(16px, 3vw, 24px);
+      border: 2px dashed transparent;
     }
 
     .shadow-token img {
@@ -156,15 +164,21 @@
     }
 
     .shadow-token:focus,
-    .shadow-token:hover,
-    .shadow-token.is-selected {
+    .shadow-token:hover {
       outline: none;
       border-color: rgba(28, 140, 214, 0.7);
       transform: translateY(-4px);
     }
 
+    .shadow-token.is-dragging {
+      pointer-events: none;
+      cursor: grabbing;
+      box-shadow: 0 28px 40px rgba(15, 30, 60, 0.24);
+      transform: none !important;
+    }
+
     .shadow-token.is-placed {
-      opacity: 0.55;
+      opacity: 0.85;
       cursor: default;
       transform: none;
       box-shadow: none;
@@ -200,19 +214,13 @@
       75% { transform: translateX(8px); }
     }
 
-    @media (max-width: 1200px) {
-      .shadow-layout {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-      }
-    }
-
     @media (max-width: 980px) {
       .shadow-layout {
         grid-template-columns: 1fr;
       }
       .shadow-board,
       .shadow-pieces {
-        grid-template-columns: repeat(auto-fit, minmax(clamp(160px, 42vw, 240px), 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(clamp(160px, 48vw, 240px), 1fr));
       }
     }
 
@@ -242,15 +250,15 @@
           <span class="sensorial-activity-number">–</span>
         </div>
       </div>
-      <p class="sensorial-subtitle">Sélectionne une image puis la silhouette qui lui correspond.</p>
+      <p class="sensorial-subtitle">Glisse chaque image vers la silhouette identique.</p>
     </header>
     <main class="sensorial-content">
       <div class="game-container" id="shadowGame" aria-live="polite">
         <div class="shadow-layout">
+          <section class="shadow-pieces" id="shadowPieces" aria-label="Images à glisser"></section>
           <section class="shadow-board" id="shadowBoard" aria-label="Ombres à compléter"></section>
-          <section class="shadow-pieces" id="shadowPieces" aria-label="Images à placer"></section>
         </div>
-        <p class="shadow-instruction">Tape sur une image pour la sélectionner, puis sur l’ombre correspondante.</p>
+        <p class="shadow-instruction">Glisse chaque image vers son ombre. Quand toutes les silhouettes sont remplies, la récompense apparaît.</p>
         <p class="shadow-status" id="shadowStatus" aria-live="assertive"></p>
       </div>
     </main>
@@ -273,7 +281,7 @@
       let reinforcerType = 'shortvideo';
       let targetCount = 3;
       let remainingMatches = 0;
-      let activeToken = null;
+      let dragState = null;
 
       const boardEl = document.getElementById('shadowBoard');
       const piecesEl = document.getElementById('shadowPieces');
@@ -342,17 +350,7 @@
           slot.className = 'shadow-slot';
           slot.style.setProperty('--shadow-image', `url("${src}")`);
           slot.dataset.target = src;
-          slot.setAttribute('tabindex', '0');
-          slot.setAttribute('role', 'button');
           slot.setAttribute('aria-label', `Ombre ${index + 1}`);
-
-          slot.addEventListener('click', () => tryPlace(slot));
-          slot.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              tryPlace(slot);
-            }
-          });
 
           boardEl.appendChild(slot);
         });
@@ -362,98 +360,201 @@
         piecesEl.innerHTML = '';
         const shuffledPieces = shuffleArray(images.slice());
         shuffledPieces.forEach((src, index) => {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'shadow-token';
-          button.dataset.image = src;
-          button.setAttribute('aria-label', `Image ${index + 1}`);
-          button.setAttribute('aria-pressed', 'false');
+          const token = document.createElement('button');
+          token.type = 'button';
+          token.className = 'shadow-token';
+          token.dataset.image = src;
+          token.setAttribute('aria-label', `Image ${index + 1}`);
 
           const img = document.createElement('img');
           img.src = src;
           img.alt = '';
-          button.appendChild(img);
+          token.appendChild(img);
 
-          button.addEventListener('click', () => setActiveToken(button));
-          button.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              setActiveToken(button);
-            }
-          });
+          token.addEventListener('pointerdown', (event) => beginDrag(event, token));
 
-          piecesEl.appendChild(button);
+          piecesEl.appendChild(token);
         });
       }
 
-      function setActiveToken(button) {
-        if (!button || button.dataset.locked === 'true') {
+      function beginDrag(event, token) {
+        if (!token || token.dataset.locked === 'true') {
           return;
         }
-        if (activeToken === button) {
-          button.classList.remove('is-selected');
-          button.setAttribute('aria-pressed', 'false');
-          activeToken = null;
-          statusEl.textContent = '';
-          return;
-        }
-        if (activeToken) {
-          activeToken.classList.remove('is-selected');
-          activeToken.setAttribute('aria-pressed', 'false');
-        }
-        activeToken = button;
-        activeToken.classList.add('is-selected');
-        activeToken.setAttribute('aria-pressed', 'true');
-        statusEl.textContent = 'Choisis maintenant l’ombre correspondante.';
+        event.preventDefault();
+
+        const rect = token.getBoundingClientRect();
+        const placeholder = document.createElement('div');
+        placeholder.className = 'shadow-token-placeholder';
+        placeholder.style.width = `${rect.width}px`;
+        placeholder.style.height = `${rect.height}px`;
+        token.parentElement.insertBefore(placeholder, token);
+
+        dragState = {
+          token,
+          placeholder,
+          pointerId: event.pointerId,
+          offsetX: event.clientX - rect.left,
+          offsetY: event.clientY - rect.top,
+          currentSlot: null
+        };
+
+        token.classList.add('is-dragging');
+        token.style.width = `${rect.width}px`;
+        token.style.height = `${rect.height}px`;
+        token.style.position = 'fixed';
+        token.style.left = `${rect.left}px`;
+        token.style.top = `${rect.top}px`;
+        token.style.margin = '0';
+        token.style.zIndex = '2000';
+
+        token.setPointerCapture(event.pointerId);
+        document.body.appendChild(token);
+
+        moveToken(event.clientX, event.clientY);
+
+        token.addEventListener('pointermove', handleDragMove);
+        token.addEventListener('pointerup', endDrag);
+        token.addEventListener('pointercancel', cancelDrag);
+        statusEl.textContent = 'Dépose l’image sur la bonne ombre.';
       }
 
-      function tryPlace(slot) {
-        if (slot.dataset.filled === 'true') {
-          statusEl.textContent = 'Cette ombre est déjà complétée.';
+      function handleDragMove(event) {
+        if (!dragState || event.pointerId !== dragState.pointerId) {
           return;
         }
-        if (!activeToken) {
-          statusEl.textContent = 'Sélectionne d’abord une image.';
-          slot.classList.add('needs-token');
-          setTimeout(() => slot.classList.remove('needs-token'), 550);
+        moveToken(event.clientX, event.clientY);
+        highlightSlot(event.clientX, event.clientY);
+      }
+
+      function moveToken(clientX, clientY) {
+        if (!dragState) { return; }
+        const { token, offsetX, offsetY } = dragState;
+        token.style.left = `${clientX - offsetX}px`;
+        token.style.top = `${clientY - offsetY}px`;
+      }
+
+      function highlightSlot(clientX, clientY) {
+        const slot = findSlotAtPoint(clientX, clientY);
+        if (dragState.currentSlot && dragState.currentSlot !== slot) {
+          dragState.currentSlot.classList.remove('is-target');
+        }
+        dragState.currentSlot = slot;
+        if (slot && slot.dataset.filled !== 'true') {
+          slot.classList.add('is-target');
+        }
+      }
+
+      function endDrag(event) {
+        if (!dragState || event.pointerId !== dragState.pointerId) {
           return;
         }
 
+        const { token } = dragState;
+        token.releasePointerCapture(event.pointerId);
+
+        const slot = findSlotAtPoint(event.clientX, event.clientY);
+        if (slot && slot.dataset.filled !== 'true') {
+          completeAttempt(slot);
+        } else {
+          if (slot && slot.dataset.filled === 'true') {
+            statusEl.textContent = 'Cette ombre est déjà remplie.';
+          } else {
+            statusEl.textContent = 'Essaie encore.';
+          }
+          resetToken();
+        }
+      }
+
+      function cancelDrag(event) {
+        if (!dragState || event.pointerId !== dragState.pointerId) {
+          return;
+        }
+        resetToken();
+      }
+
+      function findSlotAtPoint(x, y) {
+        const { token } = dragState || {};
+        if (!token) { return null; }
+        token.style.visibility = 'hidden';
+        const element = document.elementFromPoint(x, y);
+        token.style.visibility = '';
+        return element ? element.closest('.shadow-slot') : null;
+      }
+
+      function completeAttempt(slot) {
+        if (!dragState) { return; }
+        const { token, placeholder } = dragState;
         const expected = slot.dataset.target;
-        const candidate = activeToken.dataset.image;
+        const candidate = token.dataset.image;
+
+        slot.classList.remove('is-target');
+
         if (expected === candidate) {
           slot.dataset.filled = 'true';
           slot.classList.add('is-correct');
-          activeToken.classList.add('is-correct', 'is-placed');
-          activeToken.dataset.locked = 'true';
-          activeToken.disabled = true;
-          activeToken.classList.remove('is-selected');
-          activeToken.setAttribute('aria-pressed', 'true');
+          token.classList.add('is-correct', 'is-placed');
+          token.dataset.locked = 'true';
+          token.disabled = true;
 
-          const clone = activeToken.querySelector('img').cloneNode(true);
+          const clone = token.querySelector('img').cloneNode(true);
           clone.classList.add('placed-image');
           slot.appendChild(clone);
 
           playSound('word-reward-sound');
           remainingMatches -= 1;
-          activeToken = null;
           statusEl.textContent = remainingMatches === 0
             ? 'Bravo ! Toutes les ombres sont complétées.'
             : 'Super ! Continue avec les autres ombres.';
+
+          cleanupToken(token, placeholder, true);
 
           if (remainingMatches === 0) {
             setTimeout(finishGame, 900);
           }
         } else {
           slot.classList.add('is-incorrect');
-          activeToken.classList.add('is-incorrect');
+          token.classList.add('is-incorrect');
           playSound('error-sound');
           statusEl.textContent = 'Ce n’est pas la bonne ombre.';
           setTimeout(() => {
             slot.classList.remove('is-incorrect');
-            activeToken.classList.remove('is-incorrect');
+            token.classList.remove('is-incorrect');
           }, 600);
+          cleanupToken(token, placeholder, false);
         }
+      }
+
+      function resetToken() {
+        if (!dragState) { return; }
+        const { token, placeholder, currentSlot } = dragState;
+        if (currentSlot) {
+          currentSlot.classList.remove('is-target');
+        }
+        cleanupToken(token, placeholder, false);
+      }
+
+      function cleanupToken(token, placeholder, lockInPlace) {
+        token.classList.remove('is-dragging');
+        token.style.position = '';
+        token.style.left = '';
+        token.style.top = '';
+        token.style.margin = '';
+        token.style.zIndex = '';
+        token.style.width = '';
+        token.style.height = '';
+
+        token.removeEventListener('pointermove', handleDragMove);
+        token.removeEventListener('pointerup', endDrag);
+        token.removeEventListener('pointercancel', cancelDrag);
+
+        if (lockInPlace) {
+          token.remove();
+        } else {
+          placeholder.parentElement.insertBefore(token, placeholder);
+        }
+        placeholder.remove();
+        dragState = null;
       }
 
       function playSound(id) {
