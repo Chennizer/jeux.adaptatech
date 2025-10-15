@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="../images/binou.png" />
+  <link rel="stylesheet" href="../css/ipadteachh.css" />
+  <title>Associer à l'ombre</title>
+
+  <script src="../js/themes.js"></script>
+  <script src="js/games-config.js"></script>
+  <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
+
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    :root {
+      --shell-max-width: 1180px;
+      --shell-radius: 28px;
+      --shell-padding: clamp(20px, 5vw, 44px);
+      --shell-gap: clamp(24px, 5vw, 40px);
+      --accent: #6366f1;
+      --accent-soft: rgba(99, 102, 241, 0.12);
+      --success: #10b981;
+      --error: #ef4444;
+      --surface: #ffffff;
+      --text-primary: #111827;
+      --text-muted: #475569;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: clamp(12px, 4vw, 36px);
+      font-family: 'Nunito', 'Arial', sans-serif;
+      background: linear-gradient(155deg, #fce7f3 0%, #e0f2fe 55%, #ede9fe 100%);
+      color: var(--text-primary);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .game-shell {
+      width: min(100%, var(--shell-max-width));
+      background: var(--surface);
+      border-radius: var(--shell-radius);
+      box-shadow: 0 24px 50px rgba(79, 70, 229, 0.18);
+      padding: var(--shell-padding);
+      display: flex;
+      flex-direction: column;
+      gap: var(--shell-gap);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .game-header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(10px, 2vw, 18px);
+      align-items: center;
+    }
+
+    .activity-title {
+      font-size: clamp(1.9rem, 2vw + 1.1rem, 2.7rem);
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    .game-instruction {
+      font-size: clamp(1.1rem, 1.2vw + 0.9rem, 1.45rem);
+      color: var(--text-muted);
+      max-width: 720px;
+      margin: 0;
+    }
+
+    .shadow-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: clamp(18px, 4vw, 32px);
+    }
+
+    .shadow-slot {
+      position: relative;
+      min-height: clamp(160px, 26vw, 220px);
+      border-radius: 28px;
+      border: 4px dashed rgba(99, 102, 241, 0.22);
+      background: linear-gradient(160deg, rgba(99, 102, 241, 0.06), rgba(255, 255, 255, 0.88));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(20px, 3vw, 28px);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .shadow-slot::after {
+      content: attr(data-label);
+      position: absolute;
+      inset: auto 0 14px 0;
+      text-align: center;
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: rgba(30, 41, 59, 0.35);
+    }
+
+    .shadow-slot .shadow-outline {
+      width: clamp(120px, 18vw, 180px);
+      max-height: 100%;
+      object-fit: contain;
+      filter: grayscale(100%) brightness(0.35) contrast(1.25) saturate(0.3);
+      opacity: 0.78;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+
+    .shadow-slot .placed-image {
+      position: absolute;
+      width: clamp(120px, 18vw, 190px);
+      max-height: 90%;
+      object-fit: contain;
+      pointer-events: none;
+      transition: transform 0.4s ease;
+      filter: drop-shadow(0 12px 20px rgba(99, 102, 241, 0.28));
+    }
+
+    .shadow-slot.is-target {
+      border-color: rgba(99, 102, 241, 0.6);
+      box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.16);
+      background: linear-gradient(160deg, rgba(99, 102, 241, 0.12), rgba(255, 255, 255, 0.9));
+    }
+
+    .shadow-slot.is-error {
+      border-color: rgba(239, 68, 68, 0.72);
+      box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.14);
+      animation: shake 0.35s ease;
+    }
+
+    .shadow-slot.is-matched {
+      border-style: solid;
+      border-color: rgba(16, 185, 129, 0.85);
+      background: linear-gradient(160deg, rgba(16, 185, 129, 0.12), rgba(236, 253, 245, 0.95));
+    }
+
+    .shadow-slot.is-matched .shadow-outline {
+      opacity: 0;
+    }
+
+    .pieces-tray {
+      display: flex;
+      flex-wrap: wrap;
+      gap: clamp(14px, 3vw, 22px);
+      justify-content: center;
+      padding: clamp(14px, 3vw, 24px);
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(79, 70, 229, 0.08));
+      border: 2px solid rgba(99, 102, 241, 0.12);
+    }
+
+    .match-piece {
+      background: var(--surface);
+      border-radius: 24px;
+      border: 3px solid transparent;
+      padding: clamp(12px, 2.4vw, 18px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      box-shadow: 0 12px 20px rgba(79, 70, 229, 0.14);
+      touch-action: manipulation;
+    }
+
+    .match-piece img {
+      width: clamp(90px, 15vw, 140px);
+      max-height: clamp(110px, 20vw, 160px);
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .match-piece:focus {
+      outline: none;
+      border-color: rgba(99, 102, 241, 0.65);
+      box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.16);
+    }
+
+    .match-piece:hover {
+      transform: translateY(-6px);
+    }
+
+    .match-piece.is-selected {
+      border-color: rgba(99, 102, 241, 0.8);
+      box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.16);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .match-piece.is-hidden {
+      visibility: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .match-piece.is-error {
+      border-color: rgba(239, 68, 68, 0.75);
+      box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.14);
+      animation: shake 0.35s ease;
+    }
+
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-8px); }
+      50% { transform: translateX(8px); }
+      75% { transform: translateX(-8px); }
+      100% { transform: translateX(0); }
+    }
+
+    #activityNumberOverlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(30, 41, 59, 0.78);
+      color: #fff;
+      z-index: 10000;
+      font-size: clamp(4rem, 9vw, 8rem);
+      font-weight: 800;
+      letter-spacing: 0.12em;
+    }
+
+    @media (max-width: 720px) {
+      .shadow-board {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      }
+
+      .shadow-slot::after {
+        font-size: 0.85rem;
+      }
+
+      .match-piece img {
+        width: clamp(80px, 24vw, 120px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .match-piece,
+      .shadow-slot,
+      .shadow-slot .placed-image {
+        transition: none;
+      }
+
+      .match-piece:hover {
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="activityNumberOverlay">
+    <div class="number-text"></div>
+  </div>
+
+  <div class="game-shell">
+    <header class="game-header">
+      <div class="activity-title">Associe chaque image à son ombre</div>
+      <p class="game-instruction">Choisis une carte en bas puis touche l'ombre correspondante pour la placer.</p>
+    </header>
+
+    <section class="shadow-board" id="shadow-board" aria-live="polite"></section>
+    <section class="pieces-tray" id="piece-tray" aria-label="Cartes à placer"></section>
+  </div>
+
+  <audio id="error-sound" src="" preload="auto"></audio>
+  <audio id="word-reward-sound" src="" preload="auto"></audio>
+  <audio id="final-reward-sound" src="" preload="auto"></audio>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const DEFAULT_IMAGE = '../images/binou.png';
+
+      function clamp(value, min, max) {
+        const numeric = Number.parseInt(value, 10);
+        if (Number.isNaN(numeric)) {
+          return min;
+        }
+        return Math.min(Math.max(numeric, min), max);
+      }
+
+      function shuffle(array) {
+        for (let index = array.length - 1; index > 0; index -= 1) {
+          const j = Math.floor(Math.random() * (index + 1));
+          [array[index], array[j]] = [array[j], array[index]];
+        }
+        return array;
+      }
+
+      function prettifyLabel(src) {
+        if (!src || typeof src !== 'string') {
+          return 'Illustration';
+        }
+        const fileName = src.split('/').pop() || '';
+        const withoutExtension = fileName.replace(/\.[^.]+$/, '');
+        const cleaned = withoutExtension.replace(/[-_]+/g, ' ').trim();
+        if (!cleaned) {
+          return 'Illustration';
+        }
+        return cleaned.split(' ').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : '').join(' ');
+      }
+
+      function createDescriptors(pool, desired) {
+        const descriptors = [];
+        if (!Array.isArray(pool) || pool.length === 0) {
+          pool = [DEFAULT_IMAGE];
+        }
+        const uniquePool = Array.from(new Set(pool.filter(Boolean)));
+        if (uniquePool.length === 0) {
+          uniquePool.push(DEFAULT_IMAGE);
+        }
+        const effectiveDesired = Math.max(2, Math.min(desired, 6));
+        let attempts = 0;
+        while (descriptors.length < effectiveDesired && attempts < effectiveDesired * 4) {
+          const src = uniquePool[descriptors.length % uniquePool.length];
+          descriptors.push({
+            id: `${src}__${descriptors.length}`,
+            src,
+            label: prettifyLabel(src)
+          });
+          attempts += 1;
+          if (descriptors.length % uniquePool.length === 0) {
+            shuffle(uniquePool);
+          }
+        }
+        return shuffle(descriptors);
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        if (!window.sessionHelpers || typeof window.sessionHelpers.ensureCurrentGame !== 'function') {
+          console.warn('Session helpers not available.');
+          return;
+        }
+
+        const session = window.sessionHelpers.ensureCurrentGame('shadow-match');
+        if (!session) {
+          return;
+        }
+
+        const { themeData } = session;
+        const options = window.sessionHelpers.getCurrentGameOptions(session) || {};
+        const matchCount = clamp(options.matchCount, 2, 6);
+
+        const boardEl = document.getElementById('shadow-board');
+        const trayEl = document.getElementById('piece-tray');
+
+        const errorAudio = document.getElementById('error-sound');
+        const successAudio = document.getElementById('word-reward-sound');
+        const finalAudio = document.getElementById('final-reward-sound');
+
+        if (errorAudio) {
+          errorAudio.src = (themeData && themeData.errorSound) || '../sounds/error.mp3';
+        }
+        if (successAudio) {
+          successAudio.src = (themeData && themeData.reinforcerSound) || '../sounds/success3.mp3';
+        }
+        if (finalAudio) {
+          finalAudio.src = (themeData && themeData.finalRewardSound) || '../sounds/victory.mp3';
+        }
+
+        const reinforcerController = (window.sessionHelpers && typeof window.sessionHelpers.setupSharedReinforcer === 'function')
+          ? window.sessionHelpers.setupSharedReinforcer(session)
+          : null;
+
+        function playAudio(audioEl) {
+          if (!audioEl) {
+            return;
+          }
+          audioEl.currentTime = 0;
+          audioEl.play().catch(() => {});
+        }
+
+        function showFinalReinforcer() {
+          playAudio(finalAudio);
+          if (reinforcerController && typeof reinforcerController.show === 'function') {
+            const reinforcerType = (session.selections && session.selections.reinforcerType) || 'shortvideo';
+            reinforcerController.show({ reinforcerType });
+          } else if (window.sessionHelpers && typeof window.sessionHelpers.advanceToNextGame === 'function') {
+            window.sessionHelpers.advanceToNextGame();
+          }
+        }
+
+        const pool = Array.isArray(themeData && themeData.transparentPNGs)
+          ? themeData.transparentPNGs.filter(Boolean)
+          : [];
+        const descriptors = createDescriptors(pool, matchCount);
+
+        let selectedPiece = null;
+        let interactionLocked = false;
+        let matchedCount = 0;
+
+        function updateSlotFocus() {
+          const slots = boardEl.querySelectorAll('.shadow-slot[data-locked="false"]');
+          slots.forEach(slot => {
+            if (selectedPiece) {
+              slot.classList.add('is-target');
+            } else {
+              slot.classList.remove('is-target');
+            }
+          });
+        }
+
+        function selectPiece(button) {
+          if (interactionLocked || button.classList.contains('is-hidden')) {
+            return;
+          }
+          if (selectedPiece === button) {
+            button.classList.remove('is-selected');
+            selectedPiece = null;
+            updateSlotFocus();
+            return;
+          }
+          if (selectedPiece) {
+            selectedPiece.classList.remove('is-selected');
+          }
+          selectedPiece = button;
+          button.classList.add('is-selected');
+          updateSlotFocus();
+        }
+
+        function handleSlotClick(slot) {
+          if (interactionLocked || slot.dataset.locked === 'true') {
+            return;
+          }
+          if (!selectedPiece) {
+            slot.classList.add('is-target');
+            setTimeout(() => {
+              slot.classList.remove('is-target');
+            }, 300);
+            return;
+          }
+
+          interactionLocked = true;
+
+          const isCorrect = slot.dataset.matchId === selectedPiece.dataset.matchId;
+          if (isCorrect) {
+            slot.dataset.locked = 'true';
+            slot.classList.remove('is-target');
+            slot.classList.add('is-matched');
+
+            const placed = document.createElement('img');
+            placed.className = 'placed-image';
+            placed.src = selectedPiece.dataset.src;
+            placed.alt = selectedPiece.dataset.alt || 'Illustration placée';
+            slot.appendChild(placed);
+
+            selectedPiece.classList.remove('is-selected');
+            selectedPiece.classList.add('is-hidden');
+            selectedPiece.setAttribute('aria-hidden', 'true');
+            selectedPiece.disabled = true;
+            selectedPiece = null;
+            updateSlotFocus();
+
+            matchedCount += 1;
+            playAudio(successAudio);
+
+            setTimeout(() => {
+              interactionLocked = false;
+              if (matchedCount >= descriptors.length) {
+                showFinalReinforcer();
+              }
+            }, matchedCount >= descriptors.length ? 650 : 350);
+          } else {
+            slot.classList.add('is-error');
+            selectedPiece.classList.add('is-error');
+            playAudio(errorAudio);
+            setTimeout(() => {
+              slot.classList.remove('is-error');
+              if (selectedPiece) {
+                selectedPiece.classList.remove('is-error');
+              }
+              interactionLocked = false;
+            }, 650);
+          }
+        }
+
+        function renderBoard() {
+          boardEl.innerHTML = '';
+          const slotOrder = shuffle(descriptors.slice());
+          slotOrder.forEach(descriptor => {
+            const slot = document.createElement('button');
+            slot.type = 'button';
+            slot.className = 'shadow-slot';
+            slot.dataset.matchId = descriptor.id;
+            slot.dataset.locked = 'false';
+            slot.setAttribute('aria-label', `Ombre pour ${descriptor.label}`);
+            slot.setAttribute('data-label', descriptor.label);
+
+            const outline = document.createElement('img');
+            outline.className = 'shadow-outline';
+            outline.src = descriptor.src;
+            outline.alt = `Ombre de ${descriptor.label}`;
+            slot.appendChild(outline);
+
+            slot.addEventListener('click', () => handleSlotClick(slot));
+            boardEl.appendChild(slot);
+          });
+        }
+
+        function renderPieces() {
+          trayEl.innerHTML = '';
+          const pieceOrder = shuffle(descriptors.slice());
+          pieceOrder.forEach(descriptor => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'match-piece';
+            button.dataset.matchId = descriptor.id;
+            button.dataset.src = descriptor.src;
+            button.dataset.alt = descriptor.label;
+            button.setAttribute('aria-label', descriptor.label);
+
+            const img = document.createElement('img');
+            img.src = descriptor.src;
+            img.alt = descriptor.label;
+            button.appendChild(img);
+
+            button.addEventListener('click', () => selectPiece(button));
+            trayEl.appendChild(button);
+          });
+        }
+
+        function initialiseGame() {
+          renderBoard();
+          renderPieces();
+          selectedPiece = null;
+          matchedCount = 0;
+          interactionLocked = false;
+        }
+
+        if (window.sessionHelpers && typeof window.sessionHelpers.showActivityOverlay === 'function') {
+          window.sessionHelpers.showActivityOverlay(() => {
+            if (typeof window.sessionHelpers.updateActivityMarker === 'function') {
+              window.sessionHelpers.updateActivityMarker(session);
+            }
+            initialiseGame();
+          }, session);
+        } else {
+          initialiseGame();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -222,6 +222,59 @@
       ]
     },
     {
+      id: 'taille',
+      label: 'Taille (Petit · Moyen · Grand)',
+      file: 'taille.html',
+      options: [
+        {
+          type: 'number',
+          label: 'Nombre de rounds:',
+          name: 'rounds',
+          min: 1,
+          max: 6,
+          value: 3
+        }
+      ]
+    },
+    {
+      id: 'shadow-match',
+      label: 'Associer aux ombres',
+      file: 'shadow-match.html',
+      options: [
+        {
+          type: 'number',
+          label: 'Nombre d’ombres:',
+          name: 'matchCount',
+          min: 2,
+          max: 6,
+          value: 3
+        }
+      ]
+    },
+    {
+      id: 'identical-match',
+      label: 'Images identiques',
+      file: 'identical-match.html',
+      options: [
+        {
+          type: 'number',
+          label: 'Nombre de choix:',
+          name: 'choiceCount',
+          min: 2,
+          max: 6,
+          value: 4
+        },
+        {
+          type: 'number',
+          label: 'Nombre de rounds:',
+          name: 'rounds',
+          min: 1,
+          max: 8,
+          value: 3
+        }
+      ]
+    },
+    {
       id: 'game9',
       label: 'Game 9',
       file: null,
