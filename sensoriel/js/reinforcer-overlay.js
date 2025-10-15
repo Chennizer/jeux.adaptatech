@@ -15,9 +15,15 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
   let sourceEl;
   let imageEl;
   let coverEl;
+  let socialEl;
+  let socialMessageEl;
+  let socialHintEl;
+  let socialProgressFillEl;
+  let socialRemainingEl;
   let buttonHandler = null;
   let videoEndedHandler = null;
   let imageTimer = null;
+  let socialInterval = null;
   let completionResolver = null;
   let completed = false;
 
@@ -26,6 +32,7 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
     themeData: {},
     onAdvance: null,
     imageDisplayDurationMs: 10000,
+    socialDurationMs: 30000,
     buttonLabels: DEFAULT_BUTTON_LABELS
   };
 
@@ -121,6 +128,66 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
         pointer-events: auto;
         z-index: 10;
       }
+      #reinforcerOverlay #socialReinforcer {
+        position: absolute;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 40px 20px;
+        text-align: center;
+        color: #0f172a;
+        background: linear-gradient(135deg, #f8fdff 0%, #e0f2ff 55%, #ccfbf1 100%);
+      }
+      #reinforcerOverlay #socialReinforcer .social-content {
+        max-width: 680px;
+        width: min(90vw, 680px);
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+        background: rgba(255, 255, 255, 0.85);
+        border-radius: 28px;
+        padding: clamp(32px, 5vw, 48px);
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+        border: 2px solid rgba(20, 184, 166, 0.2);
+      }
+      #reinforcerOverlay #socialReinforcer .social-message {
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #0f766e;
+        text-shadow: 0 4px 16px rgba(45, 212, 191, 0.25);
+      }
+      #reinforcerOverlay #socialReinforcer .progress-visual {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      #reinforcerOverlay #socialReinforcer .progress-track {
+        width: 100%;
+        height: 18px;
+        border-radius: 12px;
+        background: rgba(14, 165, 233, 0.18);
+        overflow: hidden;
+        border: 2px solid rgba(14, 165, 233, 0.3);
+        box-shadow: inset 0 0 12px rgba(14, 165, 233, 0.15);
+      }
+      #reinforcerOverlay #socialReinforcer .progress-fill {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #38bdf8, #14b8a6);
+        transition: width 0.2s linear;
+      }
+      #reinforcerOverlay #socialReinforcer .progress-hint {
+        font-size: clamp(1rem, 2.5vw, 1.4rem);
+        font-weight: 600;
+        color: #0369a1;
+      }
+      #reinforcerOverlay #socialReinforcer .progress-remaining {
+        font-weight: 700;
+        color: #0f172a;
+      }
     `;
     document.head.appendChild(styleEl);
   }
@@ -184,6 +251,30 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
         overlayEl.appendChild(coverEl);
       }
     }
+    if (!socialEl) {
+      socialEl = overlayEl.querySelector('#socialReinforcer');
+      if (!socialEl) {
+        socialEl = document.createElement('div');
+        socialEl.id = 'socialReinforcer';
+        socialEl.setAttribute('aria-live', 'polite');
+        socialEl.innerHTML = `
+          <div class="social-content">
+            <p class="social-message">Bravo :) tu as fini un panier !</p>
+            <div class="progress-visual">
+              <div class="progress-track" role="presentation">
+                <div class="progress-fill"></div>
+              </div>
+              <p class="progress-hint">Prochain jeu dans <span class="progress-remaining">30</span> secondes</p>
+            </div>
+          </div>
+        `;
+        overlayEl.appendChild(socialEl);
+      }
+      socialMessageEl = socialEl.querySelector('.social-message');
+      socialHintEl = socialEl.querySelector('.progress-hint');
+      socialProgressFillEl = socialEl.querySelector('.progress-fill');
+      socialRemainingEl = socialEl.querySelector('.progress-remaining');
+    }
     overlayEl.style.position = 'fixed';
   }
 
@@ -232,8 +323,16 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
     }
   }
 
+  function clearSocialTimer() {
+    if (socialInterval) {
+      clearInterval(socialInterval);
+      socialInterval = null;
+    }
+  }
+
   function hideOverlay() {
     clearImageTimer();
+    clearSocialTimer();
     cleanupButtonListener();
     cleanupVideoListener();
     if (videoEl) {
@@ -243,6 +342,9 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
     }
     if (imageEl) {
       imageEl.style.display = 'none';
+    }
+    if (socialEl) {
+      socialEl.style.display = 'none';
     }
     if (coverEl) {
       coverEl.style.display = 'none';
@@ -276,6 +378,7 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
 
   function showVideo(options) {
     clearImageTimer();
+    clearSocialTimer();
     if (!buttonEl || !videoEl || !sourceEl || !coverEl) {
       return Promise.resolve();
     }
@@ -341,6 +444,7 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
 
   function showImage(options) {
     clearImageTimer();
+    clearSocialTimer();
     if (!buttonEl || !imageEl) {
       return Promise.resolve();
     }
@@ -395,6 +499,99 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
     return promise;
   }
 
+  function showSocial(options) {
+    clearImageTimer();
+    clearSocialTimer();
+    cleanupButtonListener();
+    cleanupVideoListener();
+
+    if (!overlayEl || !socialEl) {
+      return Promise.resolve();
+    }
+
+    if (videoEl) {
+      videoEl.pause();
+      videoEl.currentTime = 0;
+      videoEl.style.display = 'none';
+    }
+    if (imageEl) {
+      imageEl.style.display = 'none';
+    }
+    if (coverEl) {
+      coverEl.style.display = 'none';
+    }
+    if (buttonEl) {
+      buttonEl.style.display = 'none';
+    }
+
+    const duration = options && Number.isFinite(options.socialDurationMs)
+      ? options.socialDurationMs
+      : Number.isFinite(config.socialDurationMs)
+        ? config.socialDurationMs
+        : 30000;
+    const intervalDuration = options && Number.isFinite(options.socialUpdateIntervalMs)
+      ? options.socialUpdateIntervalMs
+      : 200;
+
+    const message = options && options.socialMessage
+      ? options.socialMessage
+      : 'Bravo :) tu as fini un panier !';
+    const hintPrefix = options && options.socialHintPrefix
+      ? options.socialHintPrefix
+      : 'Prochain jeu dans';
+    const hintSuffix = options && options.socialHintSuffix
+      ? options.socialHintSuffix
+      : 'secondes';
+
+    if (socialMessageEl) {
+      socialMessageEl.textContent = message;
+    }
+    if (socialHintEl) {
+      const remainingMarkup = `${Math.max(Math.ceil(duration / 1000), 0)}`;
+      socialHintEl.innerHTML = `${hintPrefix} <span class="progress-remaining">${remainingMarkup}</span> ${hintSuffix}`;
+      socialRemainingEl = socialHintEl.querySelector('.progress-remaining');
+    }
+    if (socialProgressFillEl) {
+      socialProgressFillEl.style.width = '0%';
+    }
+
+    const background = options && options.socialBackground
+      ? options.socialBackground
+      : 'linear-gradient(135deg, #f8fdff 0%, #e0f2ff 55%, #ccfbf1 100%)';
+    overlayEl.style.background = background;
+
+    socialEl.style.display = 'flex';
+
+    const startTime = Date.now();
+
+    const promise = new Promise((resolve) => {
+      completionResolver = resolve;
+    });
+
+    const updateProgress = () => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(duration - elapsed, 0);
+      const progress = duration > 0 ? Math.min(elapsed / duration, 1) : 1;
+
+      if (socialProgressFillEl) {
+        socialProgressFillEl.style.width = `${progress * 100}%`;
+      }
+      if (socialRemainingEl) {
+        socialRemainingEl.textContent = `${Math.max(Math.ceil(remaining / 1000), 0)}`;
+      }
+
+      if (remaining <= 0) {
+        clearSocialTimer();
+        complete();
+      }
+    };
+
+    updateProgress();
+    socialInterval = window.setInterval(updateProgress, intervalDuration);
+
+    return promise;
+  }
+
   function show(options) {
     ensureOverlayElements();
     overlayEl.style.display = 'flex';
@@ -405,6 +602,9 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
     const type = options && options.reinforcerType ? options.reinforcerType : config.reinforcerType;
     if (type === 'image') {
       return showImage(options);
+    }
+    if (type === 'social') {
+      return showSocial(options);
     }
     return showVideo(options);
   }
@@ -417,6 +617,9 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
     config.imageDisplayDurationMs = Number.isFinite(opts.imageDisplayDurationMs)
       ? opts.imageDisplayDurationMs
       : 10000;
+    config.socialDurationMs = Number.isFinite(opts.socialDurationMs)
+      ? opts.socialDurationMs
+      : 30000;
     config.buttonLabels = Object.assign({}, DEFAULT_BUTTON_LABELS, opts.buttonLabels || {});
 
     injectStyles();
