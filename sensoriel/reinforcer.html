@@ -18,7 +18,7 @@
       padding: 0;
     }
     html, body {
-      background-color: black;
+      background-color: #f0f9ff;
       height: 100%;
       margin: 0;
     }
@@ -29,7 +29,7 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
-      background-color: black;
+      background-color: #0f172a;
     }
     /* Play button styling */
     #playButton {
@@ -70,6 +70,67 @@
       display: none;
       z-index: 5;
     }
+    /* Social reinforcer styling */
+    #socialReinforcer {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 40px 20px;
+      text-align: center;
+      color: #0f172a;
+      background: linear-gradient(135deg, #f8fdff 0%, #e0f2ff 55%, #ccfbf1 100%);
+    }
+    #socialReinforcer .social-content {
+      max-width: 680px;
+      width: min(90vw, 680px);
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 28px;
+      padding: clamp(32px, 5vw, 48px);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+      border: 2px solid rgba(20, 184, 166, 0.2);
+    }
+    #socialReinforcer .social-message {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #0f766e;
+      text-shadow: 0 4px 16px rgba(45, 212, 191, 0.25);
+    }
+    #socialReinforcer .progress-visual {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    #socialReinforcer .progress-track {
+      width: 100%;
+      height: 18px;
+      border-radius: 12px;
+      background: rgba(14, 165, 233, 0.18);
+      overflow: hidden;
+      border: 2px solid rgba(14, 165, 233, 0.3);
+      box-shadow: inset 0 0 12px rgba(14, 165, 233, 0.15);
+    }
+    #socialReinforcer .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #38bdf8, #14b8a6);
+      transition: width 0.2s linear;
+    }
+    #socialReinforcer .progress-hint {
+      font-size: clamp(1rem, 2.5vw, 1.4rem);
+      font-weight: 600;
+      color: #0369a1;
+    }
+    #socialReinforcer .progress-remaining {
+      font-weight: 700;
+      color: #0f172a;
+    }
   </style>
 </head>
 <body>
@@ -99,10 +160,21 @@
         <polygon points="40,30 70,50 40,70" fill="#fff"/>
       </svg>
     </button>
-    
+
     <!-- Image element for image reinforcer (initially hidden) -->
     <img id="reinforcerImage" src="" alt="Reinforcer Image" style="display:none; background-color:black; max-width:90%; border:3px solid #fff; border-radius:10px;">
     <div id="videoOverlayCover"></div>
+    <div id="socialReinforcer" aria-live="polite">
+      <div class="social-content">
+        <p class="social-message">Bravo :) tu as fini un panier&nbsp;!</p>
+        <div class="progress-visual">
+          <div class="progress-track" role="presentation">
+            <div class="progress-fill"></div>
+          </div>
+          <p class="progress-hint">Prochain jeu dans <span class="progress-remaining">30</span>&nbsp;secondes</p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -142,6 +214,9 @@
       const reinforcerImage = document.getElementById('reinforcerImage');
       const playButton = document.getElementById('playButton');
       const videoOverlayCover = document.getElementById('videoOverlayCover');
+      const socialContainer = document.getElementById('socialReinforcer');
+      const socialProgressFill = socialContainer ? socialContainer.querySelector('.progress-fill') : null;
+      const socialProgressRemaining = socialContainer ? socialContainer.querySelector('.progress-remaining') : null;
 
       // Ensure the overlay is visible
       document.getElementById('reinforcerOverlay').style.display = 'flex';
@@ -214,6 +289,39 @@
         setTimeout(() => {
           navigateToNextGame();
         }, 10000);
+      } else if (reinforcerType === "social") {
+        reinforcerVideo.style.display = 'none';
+        playButton.style.display = 'none';
+        reinforcerImage.style.display = 'none';
+        if (socialContainer) {
+          socialContainer.style.display = 'flex';
+          const durationMs = 30000;
+          const startTime = Date.now();
+          let intervalId = null;
+          const updateProgress = () => {
+            const elapsed = Date.now() - startTime;
+            const remaining = Math.max(durationMs - elapsed, 0);
+            const progress = Math.min(elapsed / durationMs, 1);
+            if (socialProgressFill) {
+              socialProgressFill.style.width = `${progress * 100}%`;
+            }
+            if (socialProgressRemaining) {
+              socialProgressRemaining.textContent = String(Math.ceil(remaining / 1000));
+            }
+            if (remaining <= 0) {
+              if (intervalId !== null) {
+                clearInterval(intervalId);
+              }
+              navigateToNextGame();
+            }
+          };
+          updateProgress();
+          intervalId = setInterval(updateProgress, 200);
+        } else {
+          setTimeout(() => {
+            navigateToNextGame();
+          }, 30000);
+        }
       }
 
       const resolveGameFile = (gameId) => {
