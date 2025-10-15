@@ -222,6 +222,42 @@
       ]
     },
     {
+      id: 'taille',
+      label: 'Comparer les tailles',
+      file: 'taille.html',
+      options: []
+    },
+    {
+      id: 'shadow-match',
+      label: 'Associer aux ombres',
+      file: 'shadow-match.html',
+      options: [
+        {
+          type: 'number',
+          label: 'Nombre d’ombres:',
+          name: 'shadowItemCount',
+          min: 2,
+          max: 6,
+          value: 4
+        }
+      ]
+    },
+    {
+      id: 'identical-match',
+      label: 'Trouve l’image identique',
+      file: 'identical-match.html',
+      options: [
+        {
+          type: 'number',
+          label: 'Nombre de choix:',
+          name: 'matchChoiceCount',
+          min: 2,
+          max: 6,
+          value: 3
+        }
+      ]
+    },
+    {
       id: 'game9',
       label: 'Game 9',
       file: null,
