@@ -584,16 +584,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     tileContainer.style.display = "flex";
-    tileContainer.style.flexDirection = "column";
     tileContainer.style.justifyContent = "center";
     tileContainer.style.alignItems = "center";
+
+    const isPair = tilesToDisplay.length === 2;
+    tileContainer.classList.toggle('two-tiles', isPair);
+    tileContainer.style.flexDirection = isPair ? "" : "column";
 
     if (!tilesToDisplay.length) {
       requirePointerMotionBeforeHover();
       return;
     }
 
-    if (tilesToDisplay.length <= 2) {
+    if (isPair) {
+      tilesToDisplay.forEach(choice => tileContainer.appendChild(createTile(choice)));
+    } else if (tilesToDisplay.length <= 2) {
       tileContainer.appendChild(makeRow(tilesToDisplay));
     } else {
       const row1Count = Math.ceil(tilesToDisplay.length / 2);
