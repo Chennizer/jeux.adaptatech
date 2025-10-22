@@ -574,42 +574,34 @@ document.addEventListener('DOMContentLoaded', () => {
     tileContainer.innerHTML = "";
     const tilesToDisplay = selectedTileIndices.map(i => mediaChoices[i]);
 
-    // If only one tile, just create one row
-    if (tilesToDisplay.length <= 1) {
+    const makeRow = items => {
       const row = document.createElement('div');
       row.style.display = "flex";
       row.style.justifyContent = "center";
       row.style.gap = "var(--tile-gap)";
-      tilesToDisplay.forEach(choice => {
-        row.appendChild(createTile(choice));
-      });
-      tileContainer.appendChild(row);
-    } else {
-      // Split tiles into two rows optimally
-      const row1Count = Math.ceil(tilesToDisplay.length / 2);
-      const row1 = document.createElement('div');
-      const row2 = document.createElement('div');
-      row1.style.display = "flex";
-      row1.style.justifyContent = "center";
-      row1.style.gap = "var(--tile-gap)";
-      row2.style.display = "flex";
-      row2.style.justifyContent = "center";
-      row2.style.gap = "var(--tile-gap)";
-      for (let i = 0; i < row1Count; i++) {
-        row1.appendChild(createTile(tilesToDisplay[i]));
-      }
-      for (let i = row1Count; i < tilesToDisplay.length; i++) {
-        row2.appendChild(createTile(tilesToDisplay[i]));
-      }
-      tileContainer.appendChild(row1);
-      tileContainer.appendChild(row2);
-      // Ensure tileContainer itself is centered vertically
-      tileContainer.style.display = "flex";
-      tileContainer.style.flexDirection = "column";
-      tileContainer.style.justifyContent = "center";
-      tileContainer.style.alignItems = "center";
-    }
+      items.forEach(choice => row.appendChild(createTile(choice)));
+      return row;
+    };
+
     tileContainer.style.display = "flex";
+    tileContainer.style.flexDirection = "column";
+    tileContainer.style.justifyContent = "center";
+    tileContainer.style.alignItems = "center";
+
+    if (!tilesToDisplay.length) {
+      requirePointerMotionBeforeHover();
+      return;
+    }
+
+    if (tilesToDisplay.length <= 2) {
+      tileContainer.appendChild(makeRow(tilesToDisplay));
+    } else {
+      const row1Count = Math.ceil(tilesToDisplay.length / 2);
+      const firstRow = makeRow(tilesToDisplay.slice(0, row1Count));
+      const secondRow = makeRow(tilesToDisplay.slice(row1Count));
+      tileContainer.appendChild(firstRow);
+      tileContainer.appendChild(secondRow);
+    }
     requirePointerMotionBeforeHover();
   }
 
