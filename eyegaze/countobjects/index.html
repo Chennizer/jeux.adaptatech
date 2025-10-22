@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Compte les objets" data-en="Count the objects">Compte les objets</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
+  <style>
+    :root {
+      --tile-count: 1;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Nunito', 'Segoe UI', sans-serif;
+      background: #f0f6f5;
+      color: #0d1f1e;
+      transition: background 0.3s ease, color 0.3s ease;
+      overflow: hidden;
+    }
+
+    body.light { background: #f0f6f5; color: #0d1f1e; }
+    body.dark  { background: #040f0e; color: #f4fbfa; }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: #fff;
+      color: #009688;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+    body.dark #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    .modal {
+      background: rgba(0,0,0,0.7);
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 12px;
+    }
+
+    #game-options {
+      width: min(960px, 96vw);
+      background: #ffffff;
+      color: #07302c;
+      border-radius: 16px;
+      border: 2px solid rgba(0,150,136,0.35);
+      box-shadow: 0 18px 70px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+    body.dark #game-options { background:#051413; color:#e8fffd; border-color:rgba(20,184,166,0.35); }
+
+    #options-title-bar {
+      background: linear-gradient(120deg, #00c6a4, #00a48b);
+      padding: 18px 24px;
+      color: #fff;
+    }
+    body.dark #options-title-bar { background: linear-gradient(120deg, #0a6053, #0c9180); }
+
+    #control-panel-options {
+      padding: 20px 24px 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    #options-inline-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+    }
+
+    .option-item { display: flex; flex-direction: column; gap: 8px; }
+    .teal-label { font-weight: 600; color: inherit; }
+    .styled-input,
+    .styled-select,
+    .styled-slider { width: 100%; }
+
+    .button {
+      align-self: center;
+      padding: 12px 28px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(120deg,#00c6a4,#009688);
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .button:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(0,150,136,0.25); }
+
+    .game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 20px 16px 32px;
+      box-sizing: border-box;
+      gap: 20px;
+    }
+
+    .top-strip {
+      width: min(1180px, 96vw);
+      background: rgba(0,150,136,0.15);
+      border: 2px solid rgba(0,150,136,0.45);
+      border-radius: 22px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 12px 34px rgba(0,0,0,0.12);
+      backdrop-filter: blur(4px);
+    }
+    body.dark .top-strip {
+      background: rgba(5,70,64,0.78);
+      border-color: rgba(20,184,166,0.55);
+      box-shadow: 0 20px 48px rgba(0,0,0,0.55);
+    }
+
+    #prompt {
+      margin: 0;
+      font-size: clamp(1.4rem, 3vw, 2.2rem);
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .number-strip {
+      display: grid;
+      grid-template-columns: repeat(var(--tile-count, 1), minmax(70px, 1fr));
+      gap: clamp(14px, 2.6vw, 28px);
+      width: min(1180px, 95vw);
+      margin: 0 auto;
+    }
+
+    .number-tile {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 18px;
+      border: 2px solid rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(2.1rem, 4.4vw, 3.4rem);
+      font-weight: 800;
+      background: #ffffff;
+      color: #00796b;
+      box-shadow: 0 10px 26px rgba(0,0,0,0.12);
+      cursor: none;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: transform .2s ease, box-shadow .2s ease;
+      overflow: hidden;
+    }
+    body.dark .number-tile {
+      background: #082422;
+      color: #7ff7e5;
+      border-color: rgba(20,184,166,0.35);
+      box-shadow: 0 14px 34px rgba(0,0,0,0.65);
+    }
+
+    .number-tile.correct {
+      background: #c62828;
+      color: #fff;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.35);
+    }
+    .number-tile.wrong {
+      background: #fdd835;
+      color: #000;
+    }
+
+    .number-tile .dwell-fill {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      transform: translate(-50%, -50%);
+      background: rgba(231, 76, 60, 0.4);
+      border-radius: 12px;
+      pointer-events: none;
+    }
+
+    .play-area {
+      flex: 1;
+      width: min(1180px, 96vw);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(16px, 3vw, 28px);
+      box-sizing: border-box;
+    }
+
+    #objectArea {
+      width: 100%;
+      min-height: min(60vh, 620px);
+      background: rgba(255,255,255,0.7);
+      border: 2px dashed rgba(0,150,136,0.45);
+      border-radius: 26px;
+      display: grid;
+      gap: clamp(22px, 3.4vw, 40px);
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      align-content: center;
+      justify-items: center;
+      padding: clamp(28px, 5vw, 60px);
+      box-shadow: inset 0 0 28px rgba(0,0,0,0.08);
+    }
+    body.dark #objectArea {
+      background: rgba(4, 35, 33, 0.88);
+      border-color: rgba(20,184,166,0.55);
+      box-shadow: inset 0 0 34px rgba(0,0,0,0.52);
+    }
+
+    .object-img {
+      width: clamp(140px, 16vmin, 220px);
+      height: clamp(140px, 16vmin, 220px);
+      object-fit: contain;
+      filter: drop-shadow(0 8px 18px rgba(0,0,0,0.18));
+      transition: transform .2s ease;
+      background: rgba(255,255,255,0.85);
+      border-radius: 22px;
+      padding: clamp(12px, 2vw, 18px);
+    }
+    body.dark .object-img {
+      background: rgba(7,36,34,0.92);
+    }
+
+    .empty-state {
+      font-size: 1.2rem;
+      text-align: center;
+      color: inherit;
+      opacity: 0.85;
+    }
+
+    #optionsButton {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      z-index: 12000;
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: 2px solid rgba(0,150,136,0.35);
+      background: rgba(0,150,136,0.1);
+      color: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    body.dark #optionsButton {
+      border-color: rgba(20,184,166,0.55);
+      background: rgba(20,184,166,0.12);
+    }
+
+    .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 20000;
+      opacity: 0;
+      transition: opacity 200ms ease;
+    }
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: rgba(255,0,0,0.85);
+    }
+    #gazePointer.gp-dwell::before {
+      animation: gpPulse 700ms ease-in-out infinite alternate;
+    }
+    @keyframes gpPulse {
+      from { transform: scale(1); }
+      to   { transform: scale(1.1); }
+    }
+
+    @media (max-width: 768px) {
+      #options-inline-container { grid-template-columns: 1fr; }
+      .number-strip { gap: clamp(10px, 3vw, 16px); }
+    }
+  </style>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);} 
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body class="light">
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <button id="optionsButton" type="button" class="translate" data-fr="Options" data-en="Options">Options</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate" data-fr="Compte les objets" data-en="Count the objects">Compte les objets</h2>
+    </div>
+
+    <div id="control-panel-options">
+    <div id="mode-divider"></div>
+
+    <div id="options-inline-container">
+      <div class="options-column">
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="muteSFX" />
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="ttsEnabled" />
+            <span class="translate" data-fr="Lecture vocale" data-en="Voice reading (TTS)">Lecture vocale</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label for="sfxVol" class="teal-label">
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
+            <span id="sfxVolVal">50</span>
+          </label>
+          <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50" />
+        </div>
+      </div>
+
+      <div class="options-column">
+        <div class="option-item">
+          <label for="categorySelect" class="teal-label label-block translate"
+                 data-fr="Catégorie" data-en="Category">Catégorie</label>
+          <select id="categorySelect" class="styled-select"></select>
+        </div>
+
+        <div class="option-item">
+          <label for="tileCount" class="teal-label">
+            <span class="translate" data-fr="Nombre d’objets:" data-en="Number of objects:">Nombre d’objets:</span>
+            <span id="tileCountVal">4</span>
+          </label>
+          <input type="range" id="tileCount" class="styled-slider" min="2" max="9" step="1" value="4" />
+        </div>
+      </div>
+
+      <div class="options-column">
+        <div class="option-item">
+          <label for="dwellTimeSlider" class="teal-label">
+            <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
+            <span id="dwellTimeVal">1500</span> ms
+          </label>
+          <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500" />
+        </div>
+
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block translate"
+                 data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select">
+            <option value="light" class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+          </select>
+        </div>
+
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked />
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36" />
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100" />
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div id="mode-divider"></div>
+
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+  <div class="game-container" id="gameContainer">
+    <div class="top-strip">
+      <h2 id="prompt" class="translate" data-fr="Combien d'objets vois-tu?" data-en="How many objects do you see?">Combien d'objets vois-tu?</h2>
+      <div class="number-strip" id="numberStrip" aria-label="Choisis le bon nombre"></div>
+    </div>
+
+    <div class="play-area">
+      <div id="objectArea" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <audio id="correctSound" src="../../sounds/success3.mp3"></audio>
+  <audio id="wrongSound" src="../../sounds/error.mp3"></audio>
+
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationonly.js"></script>
+
+  <script>
+    const LS_LANG_KEY = 'siteLanguage';
+    const langToggle = document.getElementById('langToggle');
+    const categorySelect = document.getElementById('categorySelect');
+    let pictogramCategories = {};
+    let selectedCategory = 'all';
+
+    function getLang() {
+      try {
+        const stored = localStorage.getItem(LS_LANG_KEY);
+        if (stored === 'fr' || stored === 'en') return stored;
+      } catch (e) {}
+      return document.documentElement.lang === 'en' ? 'en' : 'fr';
+    }
+
+    function setLang(lang) {
+      const safe = (lang === 'en') ? 'en' : 'fr';
+      document.documentElement.lang = safe;
+      try { localStorage.setItem(LS_LANG_KEY, safe); } catch (e) {}
+      document.querySelectorAll('.translate').forEach(el => {
+        const fr = el.getAttribute('data-fr');
+        const en = el.getAttribute('data-en');
+        if (safe === 'fr' && fr != null) el.textContent = fr;
+        if (safe === 'en' && en != null) el.textContent = en;
+      });
+      updateCategoryOptionLabels();
+      updateLangToggleLabel();
+    }
+
+    (function initLanguage() {
+      let initial = 'fr';
+      try {
+        const stored = localStorage.getItem(LS_LANG_KEY);
+        if (stored === 'en' || stored === 'fr') initial = stored;
+        else {
+          initial = document.documentElement.lang === 'en' ? 'en' : 'fr';
+          localStorage.setItem(LS_LANG_KEY, initial);
+        }
+      } catch (e) {
+        initial = document.documentElement.lang === 'en' ? 'en' : 'fr';
+      }
+      setLang(initial);
+    })();
+
+    function updateLangToggleLabel() {
+      const lang = getLang();
+      langToggle.textContent = lang === 'fr' ? 'EN' : 'FR';
+    }
+
+    function updateCategoryOptionLabels() {
+      if (!categorySelect) return;
+      const lang = getLang();
+      Array.from(categorySelect.options).forEach(opt => {
+        const label = lang === 'en' ? opt.getAttribute('data-en') : opt.getAttribute('data-fr');
+        if (label) opt.textContent = label;
+      });
+    }
+
+    langToggle.addEventListener('click', () => {
+      const next = getLang() === 'fr' ? 'en' : 'fr';
+      setLang(next);
+    });
+
+    const optionsModal   = document.getElementById('game-options');
+    const gameContainer  = document.getElementById('gameContainer');
+    const numberStrip    = document.getElementById('numberStrip');
+    const objectArea     = document.getElementById('objectArea');
+    const startButton    = document.getElementById('startButton');
+    const optionsButton  = document.getElementById('optionsButton');
+    const themeSelect    = document.getElementById('themeSelect');
+    const tileCountEl    = document.getElementById('tileCount');
+    const tileCountVal   = document.getElementById('tileCountVal');
+    const dwellSlider    = document.getElementById('dwellTimeSlider');
+    const dwellTimeVal   = document.getElementById('dwellTimeVal');
+    const showPointer    = document.getElementById('showGazePointer');
+    const gazePointerEl  = document.getElementById('gazePointer');
+    const gazeSize       = document.getElementById('gazeSize');
+    const gazeSizeVal    = document.getElementById('gazeSizeVal');
+    const gazeOpacity    = document.getElementById('gazeOpacity');
+    const gazeOpacityVal = document.getElementById('gazeOpacityVal');
+    const muteSFX        = document.getElementById('muteSFX');
+    const sfxVol         = document.getElementById('sfxVol');
+    const sfxVolVal      = document.getElementById('sfxVolVal');
+    const ttsEnabled     = document.getElementById('ttsEnabled');
+    const correctAudio   = document.getElementById('correctSound');
+    const wrongAudio     = document.getElementById('wrongSound');
+
+    initEyegazeMenu();
+
+    tileCountEl.addEventListener('input', () => {
+      tileCountVal.textContent = tileCountEl.value;
+    });
+
+    if (categorySelect) {
+      categorySelect.addEventListener('change', () => {
+        selectedCategory = categorySelect.value || 'all';
+        rebuildPictogramPool();
+        if (hasStarted) {
+          roundLocked = false;
+          nextRound();
+        }
+      });
+    }
+
+    sfxVol.addEventListener('input', () => {
+      sfxVolVal.textContent = sfxVol.value;
+    });
+
+    dwellSlider.addEventListener('input', () => {
+      dwellTimeVal.textContent = dwellSlider.value;
+    });
+
+    themeSelect.addEventListener('change', () => {
+      applyTheme(themeSelect.value);
+    });
+
+    showPointer.addEventListener('change', updatePointerStyles);
+    gazeSize.addEventListener('input', updatePointerStyles);
+    gazeOpacity.addEventListener('input', updatePointerStyles);
+
+    function applyTheme(theme) {
+      const target = theme === 'dark' ? 'dark' : 'light';
+      document.body.classList.remove('light', 'dark');
+      document.body.classList.add(target);
+    }
+
+    function updatePointerStyles() {
+      const size = parseInt(gazeSize.value, 10) || 36;
+      const opacity = Math.max(0, Math.min(1, (parseInt(gazeOpacity.value, 10) || 60) / 100));
+      gazeSizeVal.textContent = size;
+      gazeOpacityVal.textContent = Math.round(opacity * 100);
+      gazePointerEl.style.setProperty('--gp-size', size + 'px');
+      if (showPointer.checked && gameContainer.style.display === 'flex') {
+        gazePointerEl.style.opacity = opacity;
+        document.body.classList.add('hide-native-cursor');
+      } else {
+        gazePointerEl.style.opacity = 0;
+        document.body.classList.remove('hide-native-cursor');
+      }
+    }
+
+    let pictogramBase = '../../images/pictos/';
+    let pictogramPool = [];
+    let maxTiles = parseInt(tileCountEl.value, 10) || 4;
+    let currentAnswer = 0;
+    let roundLocked = false;
+    let hasStarted = false;
+    const dwellTimers = new Map();
+
+    function populateCategorySelect(preserveValue) {
+      if (!categorySelect) return;
+      const lang = getLang();
+      const previous = preserveValue ?? selectedCategory ?? 'all';
+      categorySelect.innerHTML = '';
+
+      const allOption = document.createElement('option');
+      allOption.value = 'all';
+      allOption.setAttribute('data-fr', 'Toutes les catégories');
+      allOption.setAttribute('data-en', 'All categories');
+      allOption.textContent = lang === 'en' ? 'All categories' : 'Toutes les catégories';
+      categorySelect.appendChild(allOption);
+
+      Object.entries(pictogramCategories).forEach(([key, info]) => {
+        const fr = info.labelFr || key;
+        const en = info.labelEn || fr;
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.setAttribute('data-fr', fr);
+        opt.setAttribute('data-en', en);
+        opt.textContent = lang === 'en' ? en : fr;
+        categorySelect.appendChild(opt);
+      });
+
+      if (previous && categorySelect.querySelector(`option[value="${previous}"]`)) {
+        categorySelect.value = previous;
+      }
+      selectedCategory = categorySelect.value || 'all';
+      updateCategoryOptionLabels();
+    }
+
+    function rebuildPictogramPool() {
+      const choice = selectedCategory;
+      const pool = [];
+      if (choice === 'all') {
+        Object.values(pictogramCategories).forEach(cat => {
+          pool.push(...cat.items);
+        });
+      } else if (pictogramCategories[choice]) {
+        pool.push(...pictogramCategories[choice].items);
+      }
+      pictogramPool = pool;
+    }
+
+    async function loadPictograms() {
+      try {
+        const res = await fetch('../../images/pictos/index.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        pictogramBase = data.base || '../../images/pictos/';
+        if (!/\/$/.test(pictogramBase)) {
+          pictogramBase += '/';
+        }
+        const categories = data.categories || {};
+        const mapped = {};
+        Object.entries(categories).forEach(([key, cat]) => {
+          const items = (cat.items || []).reduce((acc, item) => {
+            if (item && item.file) {
+              const fr = item.label?.fr?.word || '';
+              const en = item.label?.en?.word || '';
+              acc.push({
+                file: item.file,
+                alt: fr || en || 'pictogram'
+              });
+            }
+            return acc;
+          }, []);
+          if (items.length) {
+            mapped[key] = {
+              labelFr: cat.label?.fr || key,
+              labelEn: cat.label?.en || cat.label?.fr || key,
+              items
+            };
+          }
+        });
+        pictogramCategories = mapped;
+        populateCategorySelect();
+        rebuildPictogramPool();
+        if (hasStarted) {
+          roundLocked = false;
+          nextRound();
+        }
+      } catch (err) {
+        console.error('Unable to load pictograms', err);
+        pictogramCategories = {};
+        pictogramPool = [];
+        if (hasStarted) {
+          nextRound();
+        }
+      }
+    }
+
+    populateCategorySelect();
+    loadPictograms();
+
+    function buildNumberStrip(count) {
+      numberStrip.innerHTML = '';
+      numberStrip.style.setProperty('--tile-count', count);
+      for (let i = 1; i <= count; i++) {
+        const tile = document.createElement('div');
+        tile.className = 'number-tile';
+        tile.textContent = i;
+        tile.setAttribute('data-value', i);
+        tile.setAttribute('role', 'button');
+        tile.setAttribute('tabindex', '-1');
+
+        const fill = document.createElement('div');
+        fill.className = 'dwell-fill';
+        tile.appendChild(fill);
+
+        tile.addEventListener('pointerenter', () => startDwell(tile));
+        tile.addEventListener('pointerleave', () => cancelDwell(tile));
+        tile.addEventListener('pointercancel', () => cancelDwell(tile));
+
+        numberStrip.appendChild(tile);
+      }
+    }
+
+    function cancelAllDwells() {
+      dwellTimers.forEach(({ timeout, fill, tile }) => {
+        clearTimeout(timeout);
+        if (fill) {
+          fill.style.transition = '';
+          fill.style.width = '0';
+          fill.style.height = '0';
+        }
+      });
+      dwellTimers.clear();
+      gazePointerEl.classList.remove('gp-dwell');
+    }
+
+    function startDwell(tile) {
+      if (!hasStarted || roundLocked) return;
+      const hoverTime = (window.eyegazeSettings?.dwellTime) || (parseInt(dwellSlider.value, 10) || 1500);
+
+      cancelDwell(tile);
+      const fill = tile.querySelector('.dwell-fill');
+      if (fill) {
+        fill.style.transition = 'none';
+        fill.style.width = '0';
+        fill.style.height = '0';
+        requestAnimationFrame(() => {
+          fill.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
+          fill.style.width = '100%';
+          fill.style.height = '100%';
+        });
+      }
+
+      if (gazePointerEl) gazePointerEl.classList.add('gp-dwell');
+
+      const timeout = setTimeout(() => {
+        selectTile(tile);
+      }, hoverTime);
+
+      dwellTimers.set(tile, { timeout, fill, tile });
+    }
+
+    function cancelDwell(tile) {
+      const entry = dwellTimers.get(tile);
+      if (!entry) return;
+      clearTimeout(entry.timeout);
+      if (entry.fill) {
+        entry.fill.style.transition = '';
+        entry.fill.style.width = '0';
+        entry.fill.style.height = '0';
+      }
+      dwellTimers.delete(tile);
+      if (dwellTimers.size === 0) {
+        gazePointerEl.classList.remove('gp-dwell');
+      }
+    }
+
+    function selectTile(tile) {
+      if (roundLocked) return;
+      const value = parseInt(tile.getAttribute('data-value'), 10);
+      cancelDwell(tile);
+      roundLocked = true;
+
+      if (value === currentAnswer) {
+        tile.classList.add('correct');
+        playSound(correctAudio);
+        setTimeout(() => {
+          tile.classList.remove('correct');
+          roundLocked = false;
+          nextRound();
+        }, 1100);
+      } else {
+        tile.classList.add('wrong');
+        playSound(wrongAudio);
+        setTimeout(() => {
+          tile.classList.remove('wrong');
+          roundLocked = false;
+        }, 900);
+      }
+    }
+
+    function playSound(audioEl) {
+      const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
+      const globalVol = typeof window.eyegazeSettings?.sfxVolume === 'number' ? window.eyegazeSettings.sfxVolume : parseInt(sfxVol.value, 10);
+      const sliderVol = parseInt(sfxVol.value, 10);
+      const volume = isNaN(globalVol) ? (isNaN(sliderVol) ? 50 : sliderVol) : globalVol;
+      audioEl.volume = muted ? 0 : Math.max(0, Math.min(1, volume / 100));
+      try {
+        audioEl.currentTime = 0;
+        audioEl.play();
+      } catch (e) {}
+      setTimeout(() => {
+        try {
+          audioEl.pause();
+          audioEl.currentTime = 0;
+        } catch (e) {}
+      }, 1800);
+    }
+
+    function nextRound() {
+      cancelAllDwells();
+      if (!pictogramPool.length) {
+        const hasCategories = Object.keys(pictogramCategories).length > 0;
+        const emptyMessage = hasCategories
+          ? `<div class="empty-state translate" data-fr="Aucun pictogramme disponible pour cette catégorie" data-en="No pictograms available for this category">Aucun pictogramme disponible pour cette catégorie</div>`
+          : `<div class="empty-state translate" data-fr="Impossible de charger les pictogrammes" data-en="Unable to load pictograms">Impossible de charger les pictogrammes</div>`;
+        objectArea.innerHTML = emptyMessage;
+        setLang(getLang());
+        return;
+      }
+
+      const count = Math.floor(Math.random() * maxTiles) + 1;
+      currentAnswer = count;
+      const choice = pictogramPool[Math.floor(Math.random() * pictogramPool.length)];
+
+      objectArea.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const img = document.createElement('img');
+        img.className = 'object-img';
+        img.src = pictogramBase + choice.file;
+        img.alt = choice.alt || '';
+        objectArea.appendChild(img);
+      }
+    }
+
+    function startGame() {
+      cancelAllDwells();
+      maxTiles = parseInt(tileCountEl.value, 10) || 4;
+      if (!hasStarted) {
+        buildNumberStrip(maxTiles);
+      } else if (maxTiles !== numberStrip.children.length) {
+        buildNumberStrip(maxTiles);
+      }
+      hasStarted = true;
+      roundLocked = false;
+      optionsModal.style.display = 'none';
+      gameContainer.style.display = 'flex';
+      optionsButton.style.display = 'inline-flex';
+      applyTheme(themeSelect.value);
+      updatePointerStyles();
+      setLang(getLang());
+      nextRound();
+    }
+
+    startButton.addEventListener('click', startGame);
+
+    optionsButton.addEventListener('click', () => {
+      optionsModal.style.display = 'flex';
+      optionsButton.style.display = 'none';
+      cancelAllDwells();
+    });
+
+    const pointerMoveHandler = (e) => {
+      if (!gazePointerEl) return;
+      gazePointerEl.style.left = e.clientX + 'px';
+      gazePointerEl.style.top = e.clientY + 'px';
+    };
+    if ('onpointerrawupdate' in window) {
+      window.addEventListener('pointerrawupdate', pointerMoveHandler, { passive: true });
+    }
+    window.addEventListener('pointermove', pointerMoveHandler, { passive: true });
+
+    window.addEventListener('pointerleave', () => {
+      gazePointerEl.style.opacity = 0;
+    });
+
+    window.addEventListener('pointerenter', () => {
+      updatePointerStyles();
+    });
+
+    applyTheme(themeSelect.value);
+    updatePointerStyles();
+  </script>
+</body>
+</html>
