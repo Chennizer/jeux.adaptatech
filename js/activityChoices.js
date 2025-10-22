@@ -107,6 +107,14 @@ const activityChoices = [
     categories: ['musique']
   },
   {
+    id: 'beauty-and-beast',
+    name: { fr: 'La belle et la bête', en: 'Beauty and the Beast' },
+    shortName: { fr: 'Belle et la bête', en: 'Beauty & the Beast' },
+    image: '../../images/belleetbete.jpg',
+    href: '../switch/belleetbete/index.html',
+    categories: ['musique']
+  },
+  {
     id: 'music-choices',
     name: { fr: 'Choix musicaux', en: 'Musical choices' },
     shortName: { fr: 'Musique', en: 'Music' },
