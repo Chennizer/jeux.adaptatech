@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Compte les objets" data-en="Count the objects">Compte les objets</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
+  <style>
+    body.light { background: #fff; color: #000; }
+    body.dark  { background: #000; color: #fff; }
+
+    /* Language toggle */
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: #fff;
+      color: #009688;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+    body.dark #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    .game-container {
+      width: 100%;
+      max-width: 100vw;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 10px;
+      box-sizing: border-box;
+      gap: 20px;
+    }
+
+    .top-strip {
+      width: min(920px, 92vw);
+      margin-top: 8px;
+      padding: 12px 18px;
+      border-radius: 14px;
+      display: none;
+      box-sizing: border-box;
+      border: 2px solid;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+      transition: opacity 500ms ease;
+      margin-bottom: 8px;
+      opacity: 1;
+    }
+    body.light .top-strip { background:#00bfa5; border-color: rgba(0,150,136,0.55); }
+    body.dark  .top-strip { background:#082422; border-color: rgba(20,184,166,0.55); box-shadow:0 8px 24px rgba(0,0,0,0.35); }
+    .top-strip.hidden { display: none !important; }
+
+    #prompt {
+      margin: 0;
+      text-align: center;
+      color: #ffffff;
+      font-size: clamp(1.2rem, 2.6vw, 1.6rem);
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+
+    .number-line {
+      width: min(960px, 95vw);
+      display: none;
+      gap: 12px;
+      transition: transform 200ms ease;
+    }
+    .number-line.ready { display: grid; }
+
+    .number-tile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      border: 2px solid rgba(0,0,0,0.15);
+      background: #ffffff;
+      color: #111827;
+      font-size: clamp(1.6rem, 4vw, 2.8rem);
+      font-weight: 800;
+      padding: 24px 12px;
+      box-sizing: border-box;
+      overflow: hidden;
+      transition: transform 200ms ease, box-shadow 220ms ease, background-color 220ms ease, color 220ms ease;
+      user-select: none;
+    }
+    body.dark .number-tile {
+      background: #1f2937;
+      color: #f9fafb;
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    .number-tile.correct {
+      background: #c62828 !important;
+      color: #ffffff !important;
+      box-shadow: 0 14px 30px rgba(198,40,40,0.35);
+    }
+
+    .number-tile.wrong {
+      animation: shake 0.45s ease;
+      box-shadow: inset 0 0 0 3px rgba(198,40,40,0.45);
+    }
+
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-5px); }
+      80% { transform: translateX(5px); }
+      100% { transform: translateX(0); }
+    }
+
+    .dwell-fill {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      transform: translate(-50%, -50%);
+      background: rgba(255,0,0,0.5);
+      pointer-events: none;
+      border-radius: 10px;
+    }
+
+    .pictogram-zone {
+      width: min(960px, 95vw);
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #pictogramWrapper {
+      width: 100%;
+      min-height: clamp(200px, 36vh, 420px);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 20px;
+      place-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+      border-radius: 16px;
+      border: 2px solid rgba(0,0,0,0.08);
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+    body.dark #pictogramWrapper {
+      border-color: rgba(255,255,255,0.15);
+      background: rgba(31,41,55,0.6);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.45);
+    }
+
+    .pictogram {
+      width: min(160px, 18vmin);
+      height: min(160px, 18vmin);
+      object-fit: contain;
+      user-select: none;
+      pointer-events: none;
+      filter: drop-shadow(0 4px 10px rgba(0,0,0,0.12));
+    }
+
+    .round-feedback {
+      font-size: 1.2rem;
+      text-align: center;
+      font-weight: 600;
+      min-height: 1.6em;
+    }
+    body.light .round-feedback { color: #0f172a; }
+    body.dark  .round-feedback { color: #f1f5f9; }
+
+    .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      will-change: transform, opacity;
+    }
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff0000;
+    }
+    #gazePointer.gp-dwell::before {
+      animation: gpPulse 700ms ease-in-out infinite alternate;
+    }
+    @keyframes gpPulse {
+      from { transform: scale(1); }
+      to   { transform: scale(1.08); }
+    }
+
+    .gp-compact { display:flex; flex-direction:column; gap:6px; }
+    .gp-summary { cursor:pointer; font-weight:600; padding:6px 0; opacity:.85; }
+    .gp-advanced { display:flex; flex-direction:column; gap:8px; padding:4px 0 2px; }
+    .gp-row { display:grid; grid-template-columns: 1fr minmax(140px, 1.4fr); align-items:center; gap:10px; }
+    .gp-label { white-space:nowrap; }
+    .gp-range { width:100%; }
+    details#gpDetails { border-left:3px solid rgba(0,150,136,.25); padding-left:10px; }
+    details#gpDetails[open] .gp-summary { opacity:1; }
+
+    .styled-input, .styled-select { width:100%; }
+  </style>
+</head>
+<body class="light">
+
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+<div id="game-options" class="modal">
+  <div id="options-title-bar">
+    <h2 id="options-main-title" class="translate" data-fr="Compte les objets" data-en="Count the objects">Compte les objets</h2>
+  </div>
+
+  <div id="control-panel-options">
+    <div id="mode-divider"></div>
+
+    <div id="options-inline-container">
+      <div class="options-column">
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="muteSFX">
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label for="sfxVol" class="teal-label">
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
+            <span id="sfxVolVal">50</span>
+          </label>
+          <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
+        </div>
+
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block compact-label translate" data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select compact-field">
+            <option value="light" selected class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="options-column">
+        <div class="option-item">
+          <label for="tileCount" class="teal-label">
+            <span class="translate" data-fr="Nombre de tuiles:" data-en="Number of tiles:">Nombre de tuiles:</span>
+            <span id="tileCountVal">6</span>
+          </label>
+          <input type="range" id="tileCount" class="styled-slider" min="3" max="12" value="6">
+        </div>
+
+        <div class="option-item">
+          <label for="dwellTimeSlider" class="teal-label">
+            <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
+            <span id="dwellTimeVal">1500</span> ms
+          </label>
+          <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500">
+        </div>
+
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked>
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div id="mode-divider"></div>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+</div>
+
+<div class="game-container" id="gameContainer">
+  <div id="topStrip" class="top-strip">
+    <h2 id="prompt" class="translate" data-fr="Compte les objets" data-en="Count the objects">Compte les objets</h2>
+  </div>
+
+  <div id="feedback" class="round-feedback"></div>
+
+  <div id="numberLine" class="number-line"></div>
+
+  <div class="pictogram-zone">
+    <div id="pictogramWrapper"></div>
+  </div>
+</div>
+
+<audio id="correctSound" src="../../sounds/success3.mp3"></audio>
+<audio id="wrongSound"   src="../../sounds/error.mp3"></audio>
+
+<div id="gazePointer" aria-hidden="true"></div>
+
+<script src="../../js/eyegaze-menu.js"></script>
+<script src="../../js/translationonly.js"></script>
+
+<script>
+const LS_LANG_KEY = 'siteLanguage';
+const langToggle  = document.getElementById('langToggle');
+const muteSFX       = document.getElementById('muteSFX');
+const sfxVol        = document.getElementById('sfxVol');
+const sfxVolVal     = document.getElementById('sfxVolVal');
+const themeSelect   = document.getElementById('themeSelect');
+const startButton   = document.getElementById('startButton');
+const tileCountEl   = document.getElementById('tileCount');
+const tileCountVal  = document.getElementById('tileCountVal');
+const dwellSlider   = document.getElementById('dwellTimeSlider');
+const dwellTimeVal  = document.getElementById('dwellTimeVal');
+const showGazePointer = document.getElementById('showGazePointer');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
+
+const gameContainer = document.getElementById('gameContainer');
+const numberLine    = document.getElementById('numberLine');
+const pictogramWrapper = document.getElementById('pictogramWrapper');
+const feedbackEl    = document.getElementById('feedback');
+const topStrip      = document.getElementById('topStrip');
+
+const correctAudio  = document.getElementById('correctSound');
+const wrongAudio    = document.getElementById('wrongSound');
+const gazePointer   = document.getElementById('gazePointer');
+
+function getLang() {
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') return saved;
+  } catch (e) {}
+  return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+}
+
+function setLang(lang) {
+  const safe = (lang === 'en') ? 'en' : 'fr';
+  document.documentElement.lang = safe;
+  try { localStorage.setItem(LS_LANG_KEY, safe); } catch (e) {}
+  document.querySelectorAll('.translate').forEach(el => {
+    const fr = el.getAttribute('data-fr');
+    const en = el.getAttribute('data-en');
+    if (safe === 'fr' && fr != null) el.textContent = fr;
+    if (safe === 'en' && en != null) el.textContent = en;
+  });
+  updateLangButton();
+  renderFeedback();
+}
+
+function updateLangButton() {
+  if (!langToggle) return;
+  langToggle.textContent = (getLang() === 'fr') ? 'EN' : 'FR';
+}
+
+function toggleLanguage() {
+  const next = (getLang() === 'fr') ? 'en' : 'fr';
+  setLang(next);
+}
+
+(function normalizeLangOnLoad(){
+  let initial = 'fr';
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') { initial = saved; }
+    else {
+      initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      localStorage.setItem(LS_LANG_KEY, initial);
+    }
+  } catch(e) { initial = (document.documentElement.lang === 'en') ? 'en' : 'fr'; }
+  setLang(initial);
+})();
+
+langToggle.addEventListener('click', toggleLanguage);
+
+let tileCount = parseInt(tileCountEl.value, 10) || 6;
+let targetCount = 0;
+let pictogramList = [];
+let currentPicto = null;
+let activeHoverTile = null;
+let hoverTimeout = null;
+let currentOverlay = null;
+let ready = false;
+let pointerShown = false;
+let lastPointer = { x: null, y: null };
+let lastFeedback = { type: 'none', count: 0, picto: null };
+
+initEyegazeMenu();
+
+function applyTheme(theme) {
+  document.body.classList.remove('light','dark');
+  document.body.classList.add(theme);
+}
+
+function playSound(audioEl) {
+  const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
+  const sfxSetting = window.eyegazeSettings?.sfxVolume;
+  const uiVol = parseInt(sfxVol.value, 10);
+  const volPercent = (typeof sfxSetting === 'number') ? sfxSetting : (isNaN(uiVol) ? 50 : uiVol);
+  audioEl.volume = muted ? 0 : Math.max(0, Math.min(1, volPercent / 100));
+  try {
+    audioEl.currentTime = 0;
+    audioEl.play();
+  } catch (e) {}
+}
+
+function syncEyegazeSettingsFromUI() {
+  try {
+    if (!window.eyegazeSettings) return;
+    eyegazeSettings.sfxMuted   = !!muteSFX.checked;
+    eyegazeSettings.sfxVolume  = parseInt(sfxVol.value, 10) || 50;
+    eyegazeSettings.dwellTime  = parseInt(dwellSlider.value, 10) || 1500;
+    eyegazeSettings.showGazePointer  = !!showGazePointer.checked;
+    eyegazeSettings.gazePointerSize  = parseInt(gazeSize.value,10) || 36;
+    eyegazeSettings.gazePointerAlpha = Math.max(0, Math.min(1, (parseInt(gazeOpacity.value,10)||60)/100));
+  } catch (e) {}
+}
+
+function updateTileCountDisplay() {
+  tileCount = parseInt(tileCountEl.value, 10) || 6;
+  tileCountVal.textContent = tileCount;
+  numberLine.style.setProperty('--tile-count', tileCount);
+  if (numberLine.classList.contains('ready')) {
+    buildNumberTiles();
+  }
+}
+
+function updateDwellDisplay() {
+  dwellTimeVal.textContent = dwellSlider.value;
+}
+
+function updateGazeStyles() {
+  if (!gazePointer) return;
+  const size = parseInt(gazeSize.value, 10) || 36;
+  const opacity = Math.max(0, Math.min(1, (parseInt(gazeOpacity.value,10) || 60) / 100));
+  gazePointer.style.setProperty('--gp-size', size + 'px');
+  gazePointer.style.opacity = (showGazePointer.checked && pointerShown) ? opacity : 0;
+  if (gazeSizeVal) gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opacity * 100);
+}
+
+function applyPointerToggle() {
+  const enable = !!showGazePointer.checked && pointerShown;
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  if (!enable) { gazePointer.classList.remove('gp-dwell'); }
+  updateGazeStyles();
+}
+
+[showGazePointer, gazeSize, gazeOpacity].forEach(el => {
+  el.addEventListener('input', () => {
+    syncEyegazeSettingsFromUI();
+    updateGazeStyles();
+    applyPointerToggle();
+  });
+});
+
+themeSelect.addEventListener('change', () => {
+  applyTheme(themeSelect.value);
+  applyPointerToggle();
+});
+
+sfxVol.addEventListener('input', () => {
+  sfxVolVal.textContent = sfxVol.value;
+  syncEyegazeSettingsFromUI();
+});
+
+muteSFX.addEventListener('change', syncEyegazeSettingsFromUI);
+
+tileCountEl.addEventListener('input', () => {
+  updateTileCountDisplay();
+  syncEyegazeSettingsFromUI();
+});
+
+dwellSlider.addEventListener('input', () => {
+  updateDwellDisplay();
+  syncEyegazeSettingsFromUI();
+});
+
+function buildNumberTiles() {
+  numberLine.innerHTML = '';
+  numberLine.style.gridTemplateColumns = `repeat(${tileCount}, minmax(70px, 1fr))`;
+
+  for (let i = 1; i <= tileCount; i++) {
+    const tile = document.createElement('div');
+    tile.className = 'number-tile';
+    tile.dataset.value = String(i);
+    tile.textContent = i;
+
+    tile.addEventListener('pointerenter', () => startHover(tile));
+    tile.addEventListener('pointerleave', stopHover);
+    tile.addEventListener('pointerdown', () => handleSelection(tile));
+    tile.addEventListener('click', () => handleSelection(tile));
+
+    numberLine.appendChild(tile);
+  }
+}
+
+async function loadPictograms() {
+  if (pictogramList.length) return;
+  try {
+    const response = await fetch('../../images/pictos/newindex.json');
+    const data = await response.json();
+    const categories = data?.categories || {};
+    const base = data?.base || '../../images/pictos/';
+    const list = [];
+    Object.values(categories).forEach(category => {
+      (category?.items || []).forEach(item => {
+        if (item?.file) {
+          list.push({
+            src: base + item.file,
+            fr: item?.label?.fr?.word || '',
+            en: item?.label?.en?.word || ''
+          });
+        }
+      });
+    });
+    if (list.length) {
+      pictogramList = list;
+    }
+  } catch (err) {
+    console.error('Unable to load pictograms', err);
+  }
+}
+
+function pickRandomPicto() {
+  if (!pictogramList.length) {
+    return { src: '../../images/pictos/apple.png', fr: 'pomme', en: 'apple' };
+  }
+  const index = Math.floor(Math.random() * pictogramList.length);
+  return pictogramList[index];
+}
+
+function startRound() {
+  stopHover();
+  ready = false;
+  numberLine.querySelectorAll('.number-tile').forEach(tile => {
+    tile.classList.remove('correct','wrong');
+    tile.style.pointerEvents = 'none';
+  });
+  lastFeedback = { type: 'none', count: 0, picto: null };
+  renderFeedback();
+
+  targetCount = Math.floor(Math.random() * tileCount) + 1;
+  currentPicto = pickRandomPicto();
+
+  pictogramWrapper.innerHTML = '';
+  for (let i = 0; i < targetCount; i++) {
+    const img = document.createElement('img');
+    img.src = currentPicto.src;
+    img.alt = currentPicto.fr || currentPicto.en || 'pictogram';
+    img.className = 'pictogram';
+    pictogramWrapper.appendChild(img);
+  }
+
+  setTimeout(() => {
+    numberLine.querySelectorAll('.number-tile').forEach(tile => {
+      tile.style.pointerEvents = '';
+    });
+    ready = true;
+  }, 300);
+}
+
+function startHover(tile) {
+  if (!ready) return;
+  if (activeHoverTile === tile && currentOverlay) return;
+
+  stopHover();
+  activeHoverTile = tile;
+
+  const hoverTime = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
+
+  currentOverlay = document.createElement('div');
+  currentOverlay.className = 'dwell-fill';
+  tile.appendChild(currentOverlay);
+
+  requestAnimationFrame(() => {
+    currentOverlay.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
+    currentOverlay.style.width = '0';
+    currentOverlay.style.height = '0';
+    requestAnimationFrame(() => {
+      currentOverlay.style.width = '100%';
+      currentOverlay.style.height = '100%';
+    });
+  });
+
+  if (gazePointer) gazePointer.classList.add('gp-dwell');
+
+  hoverTimeout = setTimeout(() => {
+    handleSelection(tile);
+  }, hoverTime);
+}
+
+function stopHover() {
+  clearTimeout(hoverTimeout);
+  hoverTimeout = null;
+  if (currentOverlay && currentOverlay.parentElement) {
+    currentOverlay.parentElement.removeChild(currentOverlay);
+  }
+  currentOverlay = null;
+  activeHoverTile = null;
+  if (gazePointer) gazePointer.classList.remove('gp-dwell');
+}
+
+function wrongFeedback(tile) {
+  tile.classList.add('wrong');
+  setTimeout(() => tile.classList.remove('wrong'), 500);
+}
+
+function handleSelection(tile) {
+  if (!ready) return;
+  const value = parseInt(tile.dataset.value, 10);
+  const dwellTime = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
+
+  stopHover();
+
+  if (value !== targetCount) {
+    playSound(wrongAudio);
+    wrongFeedback(tile);
+    lastFeedback = { type: 'retry', count: 0, picto: null };
+    renderFeedback();
+    return;
+  }
+
+  ready = false;
+  playSound(correctAudio);
+  tile.classList.add('correct');
+  lastFeedback = { type: 'success', count: targetCount, picto: currentPicto };
+  renderFeedback();
+
+  setTimeout(() => {
+    tile.classList.remove('correct');
+    startRound();
+  }, Math.max(900, Math.min(2000, dwellTime + 400)));
+}
+
+async function startGame() {
+  if (document.documentElement.requestFullscreen) {
+    try { document.documentElement.requestFullscreen(); } catch (e) {}
+  }
+
+  await loadPictograms();
+
+  syncEyegazeSettingsFromUI();
+  applyTheme(themeSelect.value);
+
+  document.getElementById('game-options').style.display = 'none';
+  gameContainer.style.display = 'flex';
+  topStrip.style.display = 'block';
+  numberLine.classList.add('ready');
+
+  pointerShown = true;
+  updateGazeStyles();
+  applyPointerToggle();
+
+  buildNumberTiles();
+  startRound();
+
+  if (langToggle) langToggle.style.display = 'none';
+}
+
+startButton.addEventListener('click', () => {
+  startGame();
+});
+
+updateTileCountDisplay();
+updateDwellDisplay();
+updateGazeStyles();
+applyTheme(themeSelect.value);
+applyPointerToggle();
+syncEyegazeSettingsFromUI();
+
+document.addEventListener('pointermove', (event) => {
+  lastPointer.x = event.clientX;
+  lastPointer.y = event.clientY;
+  if (!gazePointer) return;
+  gazePointer.style.left = event.clientX + 'px';
+  gazePointer.style.top = event.clientY + 'px';
+});
+
+document.addEventListener('pointerenter', () => {
+  updateGazeStyles();
+  if (lastPointer.x != null && lastPointer.y != null && gazePointer) {
+    gazePointer.style.left = lastPointer.x + 'px';
+    gazePointer.style.top = lastPointer.y + 'px';
+  }
+});
+
+document.addEventListener('pointerleave', () => {
+  if (gazePointer) gazePointer.style.opacity = 0;
+});
+
+function renderFeedback() {
+  if (!feedbackEl) return;
+  const lang = getLang();
+  if (lastFeedback.type === 'retry') {
+    feedbackEl.textContent = (lang === 'fr') ? 'Essaie encore !' : 'Try again!';
+    return;
+  }
+  if (lastFeedback.type === 'success' && lastFeedback.picto) {
+    const noun = (lang === 'fr') ? (lastFeedback.picto.fr || 'objet') : (lastFeedback.picto.en || 'object');
+    if (lang === 'fr') {
+      const plural = lastFeedback.count > 1 ? 's' : '';
+      feedbackEl.textContent = `Bravo ! Il y avait ${lastFeedback.count} ${noun}${plural}.`;
+    } else {
+      const plural = lastFeedback.count > 1 ? 's' : '';
+      const verb = lastFeedback.count > 1 ? 'were' : 'was';
+      feedbackEl.textContent = `Great! There ${verb} ${lastFeedback.count} ${noun}${plural}.`;
+    }
+    return;
+  }
+  feedbackEl.textContent = '';
+}
+
+</script>
+</body>
+</html>
