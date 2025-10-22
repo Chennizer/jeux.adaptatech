@@ -222,7 +222,7 @@
   <!-- p5.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
 
-  <!-- p5 Concert Background: beams only (no haze, no bars) -->
+  <!-- p5 Concert Background: symmetric positions; all beams tilt down-right -->
   <script>
   (function () {
     const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -257,7 +257,9 @@
 
     new p5((p) => {
       let W = 0, H = 0, beams = [];
-      const beamCount = 7;
+      const beamsPerSide = 3;        // how many projectors on each side
+      const sideMargin = 90;         // distance from screen edge
+      const sideSpread = 120;        // spacing between projectors on the same side
 
       function resize() {
         const bg = document.getElementById('p5-bg');
@@ -283,13 +285,27 @@
         resize();
         window.addEventListener('resize', resize);
 
-        for (let i = 0; i < beamCount; i++) {
+        beams = [];
+        // Left bank
+        for (let i = 0; i < beamsPerSide; i++) {
           beams.push({
-            x: (i / (beamCount - 1)) * W,
-            base: (i / (beamCount - 1)) * Math.PI * 0.75,
-            speed: (0.4 + Math.random() * 0.5) * (reduceMotion ? 0.5 : 1),
-            width: p.random(160, 260),
-            hue: i % 2 ? 310 : 195  // magenta / cyan
+            side: 'L',
+            offset: i,
+            base: (i / Math.max(1, beamsPerSide - 1)) * Math.PI * 0.5,
+            speed: (0.35 + Math.random() * 0.35) * (reduceMotion ? 0.6 : 1),
+            width: p.random(120, 180),
+            hue: i % 2 ? 310 : 195   // magenta / cyan
+          });
+        }
+        // Right bank (positions mirrored; hues alternated)
+        for (let i = 0; i < beamsPerSide; i++) {
+          beams.push({
+            side: 'R',
+            offset: i,
+            base: (i / Math.max(1, beamsPerSide - 1)) * Math.PI * 0.5,
+            speed: (0.35 + Math.random() * 0.35) * (reduceMotion ? 0.6 : 1),
+            width: p.random(120, 180),
+            hue: i % 2 ? 195 : 310
           });
         }
       };
@@ -297,7 +313,7 @@
       p.draw = function () {
         if (!W || !H) return;
 
-        /* Backdrop gradient */
+        // Backdrop gradient (subtle)
         p.clear();
         fillLinearGradient(p, 0, 0, 0, H, [
           [0, 'rgba(0,0,0,1)'],
@@ -305,19 +321,24 @@
         ]);
         p.rect(0, 0, W, H);
 
-        /* Sweeping beams (side projectors) */
+        // Symmetric positions; orientation unified (down-right)
         p.push();
         p.noStroke();
-        for (let i = 0; i < beams.length; i++) {
-          const b = beams[i];
+        for (const b of beams) {
           const t = p.millis() / 1000;
-          const sway = Math.sin(b.base + t * b.speed) * (reduceMotion ? 0.18 : 0.35);
-          const angle = -0.3 + sway;
+          const sway = Math.sin(b.base + t * b.speed) * (reduceMotion ? 0.12 : 0.22); // gentle sway
 
-          const cx = b.x;
-          const cy = H * 0.12;
-          const len = H * 1.0;
-          const w = b.width;
+          // Origins mirrored across Y axis
+          const cx = (b.side === 'L') ? (sideMargin + b.offset * sideSpread)
+                                      : (W - sideMargin - b.offset * sideSpread);
+          const cy = H * 0.12 + b.offset * 6; // tiny vertical stagger
+
+          // Unified beam direction (tilt down-right), not mirrored
+          const baseAngleDownRight = -0.45;    // negative -> lean to the right
+          const angle = baseAngleDownRight + sway;
+
+          const len = H * 0.65;                // shorter beams
+          const w   = b.width * 0.7;           // narrower beams
 
           p.push();
           p.translate(cx, cy);
@@ -327,6 +348,8 @@
           const core = `hsla(${c0}, 100%, ${reduceMotion ? 65 : 75}%, 0.75)`;
           const edge = `hsla(${c0}, 80%, 50%, 0)`;
           fillLinearGradient(p, 0, 0, 0, len, [[0, core],[1, edge]]);
+
+          // triangular light cone
           p.beginShape();
           p.vertex(0, 0);
           p.vertex(-w * 0.5, len);
@@ -336,7 +359,7 @@
         }
         p.pop();
 
-        /* Confetti injection & draw (kept) */
+        // Confetti (kept)
         if (pendingConfetti.length) {
           while (pendingConfetti.length) {
             const it = pendingConfetti.pop();
