@@ -434,6 +434,9 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       if (selectedTileIndices.length === 4) tileContainer.classList.add('grid-2x2');
       else tileContainer.classList.remove('grid-2x2');
+
+      if (selectedTileIndices.length === 2) tileContainer.classList.add('two-tiles');
+      else tileContainer.classList.remove('two-tiles');
       tileContainer.style.display = 'flex';
       currentSelectedIndex = 0;
       if (mode !== 'thisOrThat') updateSelection();
