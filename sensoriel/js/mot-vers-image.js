@@ -256,10 +256,6 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
 
       button.appendChild(imageWrapper);
 
-      const label = document.createElement('span');
-      label.textContent = option.word;
-      button.appendChild(label);
-
       button.addEventListener('click', () => handleChoiceSelection(button, option.word === targetPair.word));
       button.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
