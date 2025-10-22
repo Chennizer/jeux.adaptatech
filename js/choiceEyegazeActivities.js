@@ -17,6 +17,20 @@
     return Array.isArray(choice.categories) ? choice.categories : [choice.categories];
   }
 
+  function applyLanguageToDynamicContent() {
+    const lang = getLang().startsWith('fr') ? 'fr' : 'en';
+    document.documentElement.lang = lang;
+    document.querySelectorAll('.translate').forEach((el) => {
+      const fr = el.getAttribute('data-fr');
+      const en = el.getAttribute('data-en');
+      if (lang === 'fr' && fr != null) {
+        el.textContent = fr;
+      } else if (lang === 'en' && en != null) {
+        el.textContent = en;
+      }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     if (!Array.isArray(window.activityChoices)) {
       console.error('activityChoices not found');
@@ -698,5 +712,21 @@
 
     populateCategorySelect();
     populateTilePickerGrid();
+    applyLanguageToDynamicContent();
+
+    window.addEventListener('siteLanguageChanged', () => {
+      applyLanguageToDynamicContent();
+      const previousCategory = currentCategory;
+      populateCategorySelect();
+      if (categorySelect) {
+        const hasOption = Array.from(categorySelect.options || []).some(opt => opt.value === previousCategory);
+        categorySelect.value = hasOption ? previousCategory : 'all';
+        currentCategory = categorySelect.value;
+      }
+      populateTilePickerGrid();
+      renderGameTiles();
+      choosePreferredVoice();
+      applyLanguageToDynamicContent();
+    });
   });
 })();
