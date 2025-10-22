@@ -65,7 +65,8 @@
     const tileContainer     = document.getElementById('tile-container');
 
     if (tileCountInput) {
-      const maxChoices = Array.isArray(window.activityChoices) ? window.activityChoices.length : 6;
+      const totalChoices = Array.isArray(window.activityChoices) ? window.activityChoices.length : 6;
+      const maxChoices = Math.min(6, totalChoices);
       tileCountInput.max = String(maxChoices);
       if ((parseInt(tileCountInput.value, 10) || 1) > maxChoices) {
         tileCountInput.value = String(maxChoices);
@@ -679,7 +680,7 @@
     }
 
     chooseTilesButton?.addEventListener('click', () => {
-      const maxChoices = window.activityChoices.length;
+      const maxChoices = Math.min(6, window.activityChoices.length);
       desiredTileCount = Math.min(parseInt(tileCountInput.value, 10) || 1, maxChoices);
       if (tileCountInput.value !== String(desiredTileCount)) {
         tileCountInput.value = String(desiredTileCount);
