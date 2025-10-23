@@ -105,7 +105,7 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
       : {};
 
     totalRounds = clampNumber(parseInt(options.roundCount, 10), 1, 10, 4);
-    choiceCount = clampNumber(parseInt(options.choiceCount, 10), 2, 2, 2);
+    choiceCount = clampNumber(parseInt(options.choiceCount, 10), 2, 4, 3);
 
     availablePairs = buildWordImagePairs();
     if (availablePairs.length < 2) {
