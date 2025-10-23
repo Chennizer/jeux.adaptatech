@@ -11,7 +11,6 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
   let errorAudio = null;
 
   let currentWordEl = null;
-  let roundCounterEl = null;
   let choicesGridEl = null;
   let statusMessageEl = null;
   let speakButtonEl = null;
@@ -64,7 +63,6 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
 
   function captureDomElements() {
     currentWordEl = document.getElementById('currentWord');
-    roundCounterEl = document.getElementById('roundCounter');
     choicesGridEl = document.getElementById('choicesGrid');
     statusMessageEl = document.getElementById('readingStatus');
     speakButtonEl = document.getElementById('speakButton');
@@ -97,7 +95,7 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
   function revealGameContainer() {
     const container = document.getElementById('gameContainer');
     if (container) {
-      container.style.display = 'grid';
+      container.style.display = 'flex';
     }
   }
 
@@ -208,19 +206,10 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
     }
 
     activePair = pair;
-    updateRoundCounter();
     updateCurrentWord(pair.word);
-    setStatusMessage('Choisis l’image qui correspond au mot.', '');
+    setStatusMessage('', '');
     renderChoices(pair);
     speakWord(pair.word, true);
-  }
-
-  function updateRoundCounter() {
-    if (!roundCounterEl) {
-      return;
-    }
-    const humanIndex = currentRoundIndex + 1;
-    roundCounterEl.textContent = `Essai ${humanIndex} sur ${totalRounds}`;
   }
 
   function updateCurrentWord(word) {
@@ -255,10 +244,6 @@ const DEFAULT_SUCCESS_SOUND = '../sounds/success3.mp3';
       imageWrapper.appendChild(image);
 
       button.appendChild(imageWrapper);
-
-      const label = document.createElement('span');
-      label.textContent = option.word;
-      button.appendChild(label);
 
       button.addEventListener('click', () => handleChoiceSelection(button, option.word === targetPair.word));
       button.addEventListener('keydown', (event) => {
