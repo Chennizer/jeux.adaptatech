@@ -121,6 +121,14 @@ const activityChoices = [
     image: '../../images/choixeyegaze.png',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
+  },
+  {
+    id: 'fairies',
+    name: { fr: 'Trouver la fée', en: 'Find the fairy' },
+    shortName: { fr: 'Fée', en: 'fairy' },
+    image: '../../images/findme.png',
+    href: '../choixeyegaze/index.html',
+    categories: ['inclusive']
   }
 ];
 
