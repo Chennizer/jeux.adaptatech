@@ -681,14 +681,22 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.style.display = 'none';
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       const id = getYouTubeId(videoUrl);
-      const startPlayback = () => {
-        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
-          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
+      const resumeSeconds = (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] !== undefined)
+        ? Math.max(videoResumePositions[videoUrl], 0)
+        : null;
+      let resumeApplied = resumeSeconds === null;
+      const onReady = () => {
+        if (youtubePlayer && youtubePlayer.playVideo) {
+          youtubePlayer.playVideo();
         }
-        youtubePlayer.playVideo();
       };
-      const onReady = () => { startPlayback(); };
       const onStateChange = (e) => {
+        if (!resumeApplied && youtubePlayer && (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING)) {
+          resumeApplied = true;
+          try {
+            youtubePlayer.seekTo(resumeSeconds, true);
+          } catch {}
+        }
         if (e.data === YT.PlayerState.ENDED) {
           delete videoResumePositions[videoUrl];
           videoPlaying = false;
@@ -703,21 +711,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
       if (!youtubePlayer) {
+        const playerVars = { rel: 0, modestbranding: 1, controls: 0 };
+        if (resumeSeconds !== null) {
+          playerVars.start = Math.floor(resumeSeconds);
+        }
         youtubePlayer = new YT.Player('youtube-player', {
           host: 'https://www.youtube-nocookie.com',
           videoId: id,
-          playerVars: { rel: 0, modestbranding: 1, controls: 0 },
+          playerVars,
           events: { onReady, onStateChange }
         });
       } else {
-        youtubePlayer.loadVideoById(id);
+        if (resumeSeconds !== null) {
+          youtubePlayer.loadVideoById({ videoId: id, startSeconds: resumeSeconds });
+        } else {
+          youtubePlayer.loadVideoById(id);
+        }
         // Ensure we react when the video ends even if the player was
         // previously created for a preview (which has no state change
         // handler by default).
         try {
           youtubePlayer.addEventListener('onStateChange', onStateChange);
         } catch {}
-        startPlayback();
+        if (youtubePlayer && youtubePlayer.playVideo) {
+          youtubePlayer.playVideo();
+        }
       }
     } else {
       if (youtubeDiv) youtubeDiv.style.display = 'none';
