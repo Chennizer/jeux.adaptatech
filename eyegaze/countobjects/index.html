@@ -86,6 +86,22 @@
       border-color: rgba(0,0,0,0.18);
       transform: scale(1.05);
     }
+    .number-tile.count-hint {
+      background: #ffd54f;
+      color: #0f172a;
+      transform: scale(1.12);
+      box-shadow: 0 14px 32px rgba(0,0,0,0.22);
+      animation: countGlow 1200ms ease-in-out infinite alternate;
+    }
+    body.dark .number-tile.count-hint {
+      background: #facc15;
+      color: #0f172a;
+      box-shadow: 0 18px 34px rgba(250,204,21,0.28);
+    }
+    @keyframes countGlow {
+      from { transform: scale(1.08); }
+      to   { transform: scale(1.18); }
+    }
 
     .objects-area {
       flex: 1;
@@ -126,6 +142,49 @@
     .objects-grid.count-7 { --obj-size: min(20vmin, 170px); grid-template-columns: repeat(4, minmax(var(--obj-size), 1fr)); }
     .objects-grid.count-8 { --obj-size: min(18vmin, 160px); grid-template-columns: repeat(4, minmax(var(--obj-size), 1fr)); }
     .objects-grid.count-9 { --obj-size: min(16vmin, 150px); grid-template-columns: repeat(3, minmax(var(--obj-size), 1fr)); }
+
+    .object-wrapper {
+      position: relative;
+      width: var(--obj-size);
+      height: var(--obj-size);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 20px;
+      overflow: hidden;
+      transition: transform 220ms ease, box-shadow 220ms ease;
+    }
+    .object-wrapper.countable {
+      cursor: pointer;
+    }
+    .object-wrapper.counted {
+      transform: scale(1.06);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.18);
+    }
+    body.dark .object-wrapper.counted {
+      box-shadow: 0 18px 38px rgba(0,0,0,0.45);
+    }
+    .object-wrapper.counted::after {
+      content: attr(data-order);
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      min-width: 32px;
+      min-height: 32px;
+      padding: 4px 6px;
+      border-radius: 999px;
+      background: #c62828;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.24);
+    }
+    body.dark .object-wrapper.counted::after {
+      background: #ef4444;
+    }
 
     .dwell-fill {
       position: absolute;
@@ -244,6 +303,13 @@
           </label>
           <input type="range" id="maxNumberSlider" class="styled-slider" min="1" max="9" step="1" value="5">
         </div>
+
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="countingMode">
+            <span class="translate" data-fr="Mode comptage" data-en="Counting mode">Mode comptage</span>
+          </label>
+        </div>
       </div>
 
         <div class="options-column">
@@ -325,12 +391,22 @@ let currentCategoryKey = null;
 let currentItem = null;
 let currentCount = 1;
 let isReady = false;
-let activeHoverTile = null;
+let activeHoverElement = null;
 let hoverTimeout = null;
 let currentOverlay = null;
+let hoverCompleteHandler = null;
+
+let countingProgress = 0;
+let countingComplete = false;
+let countingHintTile = null;
 
 const LS_LANG_KEY = 'siteLanguage';
 const LS_KEYS = { ttsEnabled: 'countobjects:ttsEnabled' };
+
+const NUMBER_WORDS_FR = [null, 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'];
+const NUMBER_WORDS_EN = [null, 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+const EN_INVARIANT_PLURALS = new Set(['fish', 'sheep', 'deer', 'moose', 'series', 'species']);
+const FR_INVARIANT_PLURALS = new Set(['nez']);
 
 const langToggle = document.getElementById('langToggle');
 const startButton = document.getElementById('startButton');
@@ -342,6 +418,7 @@ const objectsGrid = document.getElementById('objectsGrid');
 const categorySelect = document.getElementById('categorySelect');
 const maxNumberSlider = document.getElementById('maxNumberSlider');
 const maxNumberVal = document.getElementById('maxNumberVal');
+const countingMode = document.getElementById('countingMode');
 const themeSelect = document.getElementById('themeSelect');
 const dwellSlider = document.getElementById('dwellTimeSlider');
 const dwellTimeVal = document.getElementById('dwellTimeVal');
@@ -452,6 +529,17 @@ maxNumberSlider.addEventListener('input', () => {
   maxNumberVal.textContent = maxNumberSlider.value;
   if (isGameActive()) nextRound();
 });
+
+if (countingMode) {
+  countingMode.addEventListener('change', () => {
+    resetCountingState();
+    stopHover();
+    if (isGameActive()) {
+      buildNumberStrip();
+      renderObjects(currentItem, currentCount);
+    }
+  });
+}
 
 if (dwellSlider) {
   dwellSlider.addEventListener('input', () => {
@@ -656,6 +744,11 @@ if ('speechSynthesis' in window) {
   choosePreferredVoice();
 }
 
+function isTtsEnabled() {
+  if (!('speechSynthesis' in window)) return false;
+  return !!(ttsEnabled?.checked) || !!(window.eyegazeSettings?.ttsEnabled);
+}
+
 function makeUtterance(text) {
   const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
   const sfxSetting = window.eyegazeSettings?.sfxVolume;
@@ -675,20 +768,35 @@ function makeUtterance(text) {
   return u;
 }
 
-function speakPrompt(item) {
-  if (!('speechSynthesis' in window)) return;
-  const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
-  if (!enabled || !item) return;
+function speakText(text, onEnd) {
+  if (!isTtsEnabled()) {
+    if (typeof onEnd === 'function') onEnd();
+    return;
+  }
 
   try { speechSynthesis.cancel(); } catch(e) {}
 
+  const utter = makeUtterance(text);
+  if (typeof onEnd === 'function') {
+    const finalize = () => {
+      utter.removeEventListener('end', finalize);
+      utter.removeEventListener('error', finalize);
+      onEnd();
+    };
+    utter.addEventListener('end', finalize);
+    utter.addEventListener('error', finalize);
+  }
+  speechSynthesis.speak(utter);
+}
+
+function speakPrompt(item) {
+  if (!item) return;
   const lang = getLang();
   const noun = labelFor(item, lang);
   const text = (lang === 'fr')
     ? (noun ? `Compte ${noun}` : 'Compte les images')
     : (noun ? `Count ${noun}` : 'Count the pictures');
-  const utter = makeUtterance(text);
-  speechSynthesis.speak(utter);
+  speakText(text);
 }
 
 function stopHover() {
@@ -696,22 +804,24 @@ function stopHover() {
   hoverTimeout = null;
   if (currentOverlay && currentOverlay.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
   currentOverlay = null;
-  activeHoverTile = null;
+  activeHoverElement = null;
+  hoverCompleteHandler = null;
   setPointerDwell(false);
 }
 
-function startHover(tile) {
+function startHover(target, onComplete) {
   if (!isReady) return;
-  if (activeHoverTile === tile && currentOverlay) return;
+  if (activeHoverElement === target && currentOverlay) return;
 
   const dwell = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
 
   stopHover();
-  activeHoverTile = tile;
+  activeHoverElement = target;
+  hoverCompleteHandler = (typeof onComplete === 'function') ? onComplete : null;
 
   currentOverlay = document.createElement('div');
   currentOverlay.className = 'dwell-fill';
-  tile.appendChild(currentOverlay);
+  target.appendChild(currentOverlay);
 
   requestAnimationFrame(() => {
     currentOverlay.style.transition = `width ${dwell}ms linear, height ${dwell}ms linear`;
@@ -726,9 +836,140 @@ function startHover(tile) {
   setPointerDwell(true);
 
   hoverTimeout = setTimeout(() => {
-    handleSelection(tile);
-    stopHover();
+    const handler = hoverCompleteHandler || handleSelection;
+    handler(target);
+    if (handler !== handleSelection) {
+      stopHover();
+    }
   }, dwell);
+}
+
+function pluralizeEnglishWord(word, count) {
+  if (count <= 1) return word;
+  const lower = (word || '').toLowerCase();
+  if (EN_INVARIANT_PLURALS.has(lower)) return word;
+  if (/(s|x|z|ch|sh)$/.test(lower)) return word + 'es';
+  if (lower.endsWith('fe')) return word.slice(0, -2) + 'ves';
+  if (lower.endsWith('f')) return word.slice(0, -1) + 'ves';
+  if (/[bcdfghjklmnpqrstvwxyz]y$/.test(lower)) return word.slice(0, -1) + 'ies';
+  return word + 's';
+}
+
+function pluralizeFrenchWord(word, count) {
+  if (count <= 1) return word;
+  const lower = (word || '').toLowerCase();
+  if (FR_INVARIANT_PLURALS.has(lower)) return word;
+  if (lower.endsWith('al')) return word.slice(0, -2) + 'aux';
+  if (/(eau|au|eu)$/.test(lower)) return word + 'x';
+  if (/[sxz]$/.test(lower)) return word;
+  return word + 's';
+}
+
+function pluralizeLabelWord(item, lang, count) {
+  if (!item) return '';
+  const base = item.label?.[lang]?.word;
+  if (!base) return '';
+  if (count <= 1) return base;
+
+  const parts = base.split(/\s+/).filter(Boolean);
+  if (!parts.length) return base;
+
+  const pluralize = (lang === 'fr') ? pluralizeFrenchWord : pluralizeEnglishWord;
+  const lastIndex = parts.length - 1;
+  parts[lastIndex] = pluralize(parts[lastIndex], count);
+
+  if (lang === 'fr' && parts.length > 1) {
+    for (let i = 0; i < lastIndex; i++) {
+      parts[i] = pluralize(parts[i], count);
+    }
+  }
+
+  return parts.join(' ');
+}
+
+function countingSummaryText() {
+  const lang = getLang();
+  const numberWord = (lang === 'fr') ? (NUMBER_WORDS_FR[currentCount] || String(currentCount)) : (NUMBER_WORDS_EN[currentCount] || String(currentCount));
+  const labelWord = currentItem ? pluralizeLabelWord(currentItem, lang, currentCount) : '';
+
+  if (lang === 'fr') {
+    return labelWord ? `Il y a ${numberWord} ${labelWord}.` : `Il y en a ${numberWord}.`;
+  }
+  return labelWord ? `There are ${numberWord} ${labelWord}.` : `There are ${numberWord}.`;
+}
+
+function speakCountingNumber(value, onEnd) {
+  speakText(String(value), onEnd);
+}
+
+function speakCountingSummary() {
+  highlightCorrectNumber();
+  const summary = countingSummaryText();
+  if (summary) {
+    speakText(summary);
+  }
+}
+
+function clearCountHint() {
+  if (countingHintTile) {
+    countingHintTile.classList.remove('count-hint');
+    countingHintTile = null;
+  }
+  if (numberStrip) {
+    numberStrip.querySelectorAll('.number-tile.count-hint').forEach(tile => tile.classList.remove('count-hint'));
+  }
+}
+
+function highlightCorrectNumber() {
+  clearCountHint();
+  if (!numberStrip) return;
+  const tile = numberStrip.querySelector(`.number-tile[data-value="${currentCount}"]`);
+  if (tile) {
+    tile.classList.add('count-hint');
+    countingHintTile = tile;
+  }
+}
+
+function resetCountingState() {
+  countingProgress = 0;
+  countingComplete = false;
+  clearCountHint();
+  if (objectsGrid) {
+    objectsGrid.querySelectorAll('.object-wrapper').forEach(wrapper => {
+      wrapper.classList.remove('counted');
+      wrapper.removeAttribute('data-counted');
+      wrapper.removeAttribute('data-order');
+    });
+  }
+}
+
+function handleCountingStep(element) {
+  if (!countingMode?.checked || !element) return;
+  if (countingComplete) {
+    highlightCorrectNumber();
+    const summary = countingSummaryText();
+    if (summary) speakText(summary);
+    return;
+  }
+
+  const already = element.getAttribute('data-counted') === 'true';
+  if (already) {
+    const order = parseInt(element.getAttribute('data-order'), 10);
+    if (!isNaN(order) && order > 0) speakCountingNumber(order);
+    return;
+  }
+
+  countingProgress += 1;
+  element.setAttribute('data-counted', 'true');
+  element.setAttribute('data-order', String(countingProgress));
+  element.classList.add('counted');
+
+  speakCountingNumber(countingProgress, () => {
+    if (countingProgress === currentCount && !countingComplete) {
+      countingComplete = true;
+      speakCountingSummary();
+    }
+  });
 }
 
 function handleSelection(tile) {
@@ -743,6 +984,7 @@ function handleSelection(tile) {
 
   isReady = false;
   playSound(correctAudio);
+  clearCountHint();
   tile.classList.add('correct');
   setPointerDwell(false);
 
@@ -781,9 +1023,9 @@ function buildNumberStrip() {
     tile.textContent = i;
     tile.setAttribute('data-value', String(i));
 
-    tile.addEventListener('pointerenter', () => startHover(tile));
+    tile.addEventListener('pointerenter', () => startHover(tile, handleSelection));
     tile.addEventListener('pointerleave', () => {
-      if (activeHoverTile === tile) stopHover();
+      if (activeHoverElement === tile) stopHover();
     });
     tile.addEventListener('pointerdown', () => handleSelection(tile));
     tile.addEventListener('click', () => handleSelection(tile));
@@ -801,11 +1043,26 @@ function renderObjects(item, count) {
   objectsGrid.className = 'objects-grid';
   objectsGrid.classList.add(`count-${Math.max(1, Math.min(9, count))}`);
 
+  const countingActive = !!countingMode?.checked;
+
   for (let i = 0; i < count; i++) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'object-wrapper';
+    if (countingActive) wrapper.classList.add('countable');
+
     const img = document.createElement('img');
     img.src = base + item.file;
     img.alt = labelFor(item, getLang());
-    objectsGrid.appendChild(img);
+    wrapper.appendChild(img);
+
+    if (countingActive) {
+      wrapper.addEventListener('pointerenter', () => startHover(wrapper, handleCountingStep));
+      wrapper.addEventListener('pointerleave', () => {
+        if (activeHoverElement === wrapper) stopHover();
+      });
+    }
+
+    objectsGrid.appendChild(wrapper);
   }
 }
 
@@ -823,6 +1080,7 @@ function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
 function nextRound() {
   stopHover();
+  resetCountingState();
   if (!pictosData || !categorySelect.value) return;
   const category = pictosData.categories[categorySelect.value];
   if (!category || !category.items || !category.items.length) return;
