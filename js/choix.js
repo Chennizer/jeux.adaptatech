@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const timeLimitInput = document.getElementById('time-limit-seconds');
   const resumeVideoContainer = document.getElementById('resume-video-container');
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
+  const pressSwitchToPauseCheckbox = document.getElementById('press-switch-to-pause');
   const tilePickerModal = document.getElementById('tile-picker-modal');
   const tilePickerGrid = document.getElementById('tile-picker-grid');
   const tilePickerPanel = tilePickerModal ? tilePickerModal.querySelector('#control-panel-options') : null;
@@ -271,12 +272,25 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.remove('this-or-that-mode');
   });
 
+  function updateResumeVideoVisibility() {
+    if (!resumeVideoContainer) return;
+    const show = (enableTimeLimitCheckbox && enableTimeLimitCheckbox.checked) ||
+      (pressSwitchToPauseCheckbox && pressSwitchToPauseCheckbox.checked);
+    resumeVideoContainer.style.display = show ? 'block' : 'none';
+  }
+
   // Time-limit toggle
   enableTimeLimitCheckbox.addEventListener('change', () => {
     const show = enableTimeLimitCheckbox.checked;
     timeLimitContainer.style.display = show ? 'block' : 'none';
-    resumeVideoContainer.style.display = show ? 'block' : 'none';
+    updateResumeVideoVisibility();
   });
+
+  if (pressSwitchToPauseCheckbox) {
+    pressSwitchToPauseCheckbox.addEventListener('change', updateResumeVideoVisibility);
+  }
+
+  updateResumeVideoVisibility();
 
   // Tile picker
   function populateTilePickerGrid() {
@@ -570,12 +584,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', e => {
     if (!inputEnabled) return;
     resetInactivityTimer();
-    if (videoPlaying && e.key === 'Backspace') {
-      e.preventDefault();
-      resetToChoicesScreen();
+    if (videoPlaying) {
+      if ((e.key === ' ' || e.code === 'Space') && pressSwitchToPauseCheckbox && pressSwitchToPauseCheckbox.checked) {
+        e.preventDefault();
+        resetToChoicesScreen();
+        return;
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        resetToChoicesScreen();
+        return;
+      }
       return;
     }
-    if (videoPlaying) return;
     if ((mode === 'flashcard' || mode === 'flashcard-manual') && e.key === ' ') {
       e.preventDefault();
       if (mode === 'flashcard') {
