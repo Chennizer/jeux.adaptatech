@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const timeLimitInput = document.getElementById('time-limit-seconds');
   const resumeVideoContainer = document.getElementById('resume-video-container');
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
+  const pressSwitchToPauseCheckbox = document.getElementById('press-switch-to-pause');
   const tilePickerModal = document.getElementById('tile-picker-modal');
   const tilePickerGrid = document.getElementById('tile-picker-grid');
   const tilePickerPanel = tilePickerModal ? tilePickerModal.querySelector('#control-panel-options') : null;
@@ -32,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const youtubeDiv = document.getElementById('youtube-player');
   const ytImportControls = document.getElementById('yt-import-controls');
   let youtubePlayer = null;
+  let youtubeStateChangeHandler = null;
   let currentVideoUrl = null;
   const cycleSfx = new Audio("../../sounds/woosh.mp3");
   cycleSfx.preload = 'auto';
@@ -103,6 +105,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function resetInactivityTimer() {
     if (!videoPlaying) startInactivityTimer();
+  }
+
+  function updateResumeVideoVisibility() {
+    if (!resumeVideoContainer) return;
+    const shouldShow = (enableTimeLimitCheckbox && enableTimeLimitCheckbox.checked) ||
+      (pressSwitchToPauseCheckbox && pressSwitchToPauseCheckbox.checked);
+    resumeVideoContainer.style.display = shouldShow ? 'block' : 'none';
+  }
+
+  function rememberVideoPosition(videoUrl) {
+    if (!enableResumeVideoCheckbox || !enableResumeVideoCheckbox.checked || !videoUrl) {
+      return false;
+    }
+    if (isYouTubeUrl(videoUrl)) {
+      if (youtubePlayer && typeof youtubePlayer.getCurrentTime === 'function') {
+        videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+        return true;
+      }
+      return false;
+    }
+    videoResumePositions[videoUrl] = videoPlayer.currentTime;
+    return true;
   }
 
   tileCountInput.addEventListener('input', () => {
@@ -275,8 +299,14 @@ document.addEventListener('DOMContentLoaded', () => {
   enableTimeLimitCheckbox.addEventListener('change', () => {
     const show = enableTimeLimitCheckbox.checked;
     timeLimitContainer.style.display = show ? 'block' : 'none';
-    resumeVideoContainer.style.display = show ? 'block' : 'none';
+    updateResumeVideoVisibility();
   });
+
+  if (pressSwitchToPauseCheckbox) {
+    pressSwitchToPauseCheckbox.addEventListener('change', updateResumeVideoVisibility);
+  }
+
+  updateResumeVideoVisibility();
 
   // Tile picker
   function populateTilePickerGrid() {
@@ -570,12 +600,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', e => {
     if (!inputEnabled) return;
     resetInactivityTimer();
-    if (videoPlaying && e.key === 'Backspace') {
-      e.preventDefault();
-      resetToChoicesScreen();
+    if (videoPlaying) {
+      if ((e.key === ' ' || e.code === 'Space') && pressSwitchToPauseCheckbox && pressSwitchToPauseCheckbox.checked) {
+        e.preventDefault();
+        if (currentVideoUrl) {
+          if (!rememberVideoPosition(currentVideoUrl)) {
+            delete videoResumePositions[currentVideoUrl];
+          }
+        }
+        resetToChoicesScreen();
+        return;
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        resetToChoicesScreen();
+        return;
+      }
       return;
     }
-    if (videoPlaying) return;
     if ((mode === 'flashcard' || mode === 'flashcard-manual') && e.key === ' ') {
       e.preventDefault();
       if (mode === 'flashcard') {
@@ -640,14 +682,26 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.style.display = 'none';
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       const id = getYouTubeId(videoUrl);
-      const startPlayback = () => {
-        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
-          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
+      const shouldResume = enableResumeVideoCheckbox && enableResumeVideoCheckbox.checked;
+      let pendingResume = (shouldResume && typeof videoResumePositions[videoUrl] === 'number')
+        ? videoResumePositions[videoUrl]
+        : null;
+
+      const applyPendingResume = (player) => {
+        if (pendingResume != null && player && typeof player.seekTo === 'function') {
+          player.seekTo(pendingResume, true);
+          pendingResume = null;
         }
-        youtubePlayer.playVideo();
       };
-      const onReady = () => { startPlayback(); };
-      const onStateChange = (e) => {
+
+      if (youtubeStateChangeHandler && youtubePlayer && youtubePlayer.removeEventListener) {
+        try { youtubePlayer.removeEventListener('onStateChange', youtubeStateChangeHandler); } catch {}
+      }
+
+      youtubeStateChangeHandler = (e) => {
+        if (e.data === YT.PlayerState.PLAYING) {
+          applyPendingResume(e.target || youtubePlayer);
+        }
         if (e.data === YT.PlayerState.ENDED) {
           delete videoResumePositions[videoUrl];
           videoPlaying = false;
@@ -661,22 +715,36 @@ document.addEventListener('DOMContentLoaded', () => {
           tileContainer.style.display = 'flex';
         }
       };
+
+      const onReady = (event) => {
+        const player = event.target;
+        if (pendingResume != null) {
+          player.loadVideoById({ videoId: id, startSeconds: pendingResume });
+        } else {
+          player.loadVideoById(id);
+        }
+        player.playVideo();
+      };
       if (!youtubePlayer) {
         youtubePlayer = new YT.Player('youtube-player', {
           host: 'https://www.youtube-nocookie.com',
           videoId: id,
           playerVars: { rel: 0, modestbranding: 1, controls: 0 },
-          events: { onReady, onStateChange }
+          events: { onReady, onStateChange: youtubeStateChangeHandler }
         });
       } else {
-        youtubePlayer.loadVideoById(id);
+        if (pendingResume != null) {
+          youtubePlayer.loadVideoById({ videoId: id, startSeconds: pendingResume });
+        } else {
+          youtubePlayer.loadVideoById(id);
+        }
         // Ensure we react when the video ends even if the player was
         // previously created for a preview (which has no state change
         // handler by default).
         try {
-          youtubePlayer.addEventListener('onStateChange', onStateChange);
+          youtubePlayer.addEventListener('onStateChange', youtubeStateChangeHandler);
         } catch {}
-        startPlayback();
+        youtubePlayer.playVideo();
       }
     } else {
       if (youtubeDiv) youtubeDiv.style.display = 'none';
@@ -701,13 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (videoTimeLimitTimeout) clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
-          if (enableResumeVideoCheckbox.checked) {
-            if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
-              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
-            } else {
-              videoResumePositions[videoUrl] = videoPlayer.currentTime;
-            }
-          } else {
+          if (!rememberVideoPosition(videoUrl)) {
             delete videoResumePositions[videoUrl];
           }
           if (isYouTubeUrl(videoUrl) && youtubePlayer) {
