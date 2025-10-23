@@ -185,6 +185,9 @@
     body.dark .object-wrapper.counted::after {
       background: #ef4444;
     }
+    .object-wrapper.countable.counted::after {
+      display: none;
+    }
 
     .dwell-fill {
       position: absolute;
@@ -399,6 +402,8 @@ let hoverCompleteHandler = null;
 let countingProgress = 0;
 let countingComplete = false;
 let countingHintTile = null;
+
+const COUNTING_DWELL_MS = 300;
 
 const LS_LANG_KEY = 'siteLanguage';
 const LS_KEYS = { ttsEnabled: 'countobjects:ttsEnabled' };
@@ -809,29 +814,34 @@ function stopHover() {
   setPointerDwell(false);
 }
 
-function startHover(target, onComplete) {
+function startHover(target, onComplete, options = {}) {
   if (!isReady) return;
   if (activeHoverElement === target && currentOverlay) return;
 
-  const dwell = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
+  const dwellSetting = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
+  const dwell = Math.max(100, Math.min(5000, typeof options.dwellOverride === 'number' ? options.dwellOverride : dwellSetting));
 
   stopHover();
   activeHoverElement = target;
   hoverCompleteHandler = (typeof onComplete === 'function') ? onComplete : null;
 
-  currentOverlay = document.createElement('div');
-  currentOverlay.className = 'dwell-fill';
-  target.appendChild(currentOverlay);
+  if (!options.skipOverlay) {
+    currentOverlay = document.createElement('div');
+    currentOverlay.className = 'dwell-fill';
+    target.appendChild(currentOverlay);
 
-  requestAnimationFrame(() => {
-    currentOverlay.style.transition = `width ${dwell}ms linear, height ${dwell}ms linear`;
-    currentOverlay.style.width = '0';
-    currentOverlay.style.height = '0';
     requestAnimationFrame(() => {
-      currentOverlay.style.width = '100%';
-      currentOverlay.style.height = '100%';
+      currentOverlay.style.transition = `width ${dwell}ms linear, height ${dwell}ms linear`;
+      currentOverlay.style.width = '0';
+      currentOverlay.style.height = '0';
+      requestAnimationFrame(() => {
+        currentOverlay.style.width = '100%';
+        currentOverlay.style.height = '100%';
+      });
     });
-  });
+  } else {
+    currentOverlay = null;
+  }
 
   setPointerDwell(true);
 
@@ -1056,7 +1066,7 @@ function renderObjects(item, count) {
     wrapper.appendChild(img);
 
     if (countingActive) {
-      wrapper.addEventListener('pointerenter', () => startHover(wrapper, handleCountingStep));
+      wrapper.addEventListener('pointerenter', () => startHover(wrapper, handleCountingStep, { dwellOverride: COUNTING_DWELL_MS, skipOverlay: true }));
       wrapper.addEventListener('pointerleave', () => {
         if (activeHoverElement === wrapper) stopHover();
       });
