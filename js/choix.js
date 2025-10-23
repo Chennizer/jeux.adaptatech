@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const timeLimitInput = document.getElementById('time-limit-seconds');
   const resumeVideoContainer = document.getElementById('resume-video-container');
   const enableResumeVideoCheckbox = document.getElementById('enable-resume-video');
+  const pressSwitchToPauseCheckbox = document.getElementById('press-switch-to-pause');
   const tilePickerModal = document.getElementById('tile-picker-modal');
   const tilePickerGrid = document.getElementById('tile-picker-grid');
   const tilePickerPanel = tilePickerModal ? tilePickerModal.querySelector('#control-panel-options') : null;
@@ -33,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const ytImportControls = document.getElementById('yt-import-controls');
   let youtubePlayer = null;
   let currentVideoUrl = null;
+  let pendingYoutubeResumeTime = null;
+  let youtubePlaybackHandlerAttached = false;
   const cycleSfx = new Audio("../../sounds/woosh.mp3");
   cycleSfx.preload = 'auto';
   cycleSfx.load();
@@ -103,6 +106,66 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function resetInactivityTimer() {
     if (!videoPlaying) startInactivityTimer();
+  }
+
+  function updateResumeVideoVisibility() {
+    if (!resumeVideoContainer) return;
+    const shouldShow = (enableTimeLimitCheckbox && enableTimeLimitCheckbox.checked) ||
+      (pressSwitchToPauseCheckbox && pressSwitchToPauseCheckbox.checked);
+    resumeVideoContainer.style.display = shouldShow ? 'block' : 'none';
+  }
+
+  function rememberVideoPosition(videoUrl) {
+    if (!enableResumeVideoCheckbox || !enableResumeVideoCheckbox.checked || !videoUrl) {
+      return false;
+    }
+    if (isYouTubeUrl(videoUrl)) {
+      if (youtubePlayer && typeof youtubePlayer.getCurrentTime === 'function') {
+        videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
+        return true;
+      }
+      return false;
+    }
+    videoResumePositions[videoUrl] = videoPlayer.currentTime;
+    return true;
+  }
+
+  function clearPendingYoutubeResume() {
+    pendingYoutubeResumeTime = null;
+  }
+
+  function handleYoutubeStateChange(e) {
+    if (!youtubePlayer || typeof YT === 'undefined') return;
+    if (!videoPlaying && pendingYoutubeResumeTime == null) return;
+    const resumeStates = [
+      YT.PlayerState.CUED,
+      YT.PlayerState.BUFFERING,
+      YT.PlayerState.PAUSED,
+      YT.PlayerState.PLAYING
+    ];
+    if (pendingYoutubeResumeTime != null && resumeStates.includes(e.data)) {
+      const target = pendingYoutubeResumeTime;
+      pendingYoutubeResumeTime = null;
+      try { youtubePlayer.seekTo(target, true); } catch {}
+      try { youtubePlayer.playVideo(); } catch {}
+      return;
+    }
+    if (e.data === YT.PlayerState.ENDED) {
+      if (currentVideoUrl) {
+        delete videoResumePositions[currentVideoUrl];
+      }
+      videoPlaying = false;
+      videoContainer.style.display = 'none';
+      if (mode === 'flashcard') {
+        currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
+        renderFlashcard();
+        startFlashcardTimer();
+      }
+      resumeGameActivity();
+      tileContainer.style.display = 'flex';
+      currentVideoUrl = null;
+      clearPendingYoutubeResume();
+    }
   }
 
   tileCountInput.addEventListener('input', () => {
@@ -275,8 +338,14 @@ document.addEventListener('DOMContentLoaded', () => {
   enableTimeLimitCheckbox.addEventListener('change', () => {
     const show = enableTimeLimitCheckbox.checked;
     timeLimitContainer.style.display = show ? 'block' : 'none';
-    resumeVideoContainer.style.display = show ? 'block' : 'none';
+    updateResumeVideoVisibility();
   });
+
+  if (pressSwitchToPauseCheckbox) {
+    pressSwitchToPauseCheckbox.addEventListener('change', updateResumeVideoVisibility);
+  }
+
+  updateResumeVideoVisibility();
 
   // Tile picker
   function populateTilePickerGrid() {
@@ -500,6 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
           playerVars: { controls: 0, disablekb: 1, rel: 0, modestbranding: 1 },
           events: { onReady: startPreview }
         });
+        youtubePlaybackHandlerAttached = false;
       } else {
         youtubePlayer.loadVideoById(id);
         startPreview();
@@ -543,6 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentVideoUrl && isYouTubeUrl(currentVideoUrl) && youtubePlayer) {
       try { youtubePlayer.stopVideo(); } catch {}
     }
+    clearPendingYoutubeResume();
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
@@ -570,12 +641,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', e => {
     if (!inputEnabled) return;
     resetInactivityTimer();
-    if (videoPlaying && e.key === 'Backspace') {
-      e.preventDefault();
-      resetToChoicesScreen();
+    if (videoPlaying) {
+      if ((e.key === ' ' || e.code === 'Space') && pressSwitchToPauseCheckbox && pressSwitchToPauseCheckbox.checked) {
+        e.preventDefault();
+        if (currentVideoUrl) {
+          if (!rememberVideoPosition(currentVideoUrl)) {
+            delete videoResumePositions[currentVideoUrl];
+          }
+        }
+        resetToChoicesScreen();
+        return;
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        resetToChoicesScreen();
+        return;
+      }
       return;
     }
-    if (videoPlaying) return;
     if ((mode === 'flashcard' || mode === 'flashcard-manual') && e.key === ' ') {
       e.preventDefault();
       if (mode === 'flashcard') {
@@ -640,45 +723,38 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.style.display = 'none';
       if (youtubeDiv) youtubeDiv.style.display = 'block';
       const id = getYouTubeId(videoUrl);
-      const startPlayback = () => {
-        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] && youtubePlayer && youtubePlayer.seekTo) {
-          youtubePlayer.seekTo(videoResumePositions[videoUrl], true);
-        }
-        youtubePlayer.playVideo();
-      };
-      const onReady = () => { startPlayback(); };
-      const onStateChange = (e) => {
-        if (e.data === YT.PlayerState.ENDED) {
-          delete videoResumePositions[videoUrl];
-          videoPlaying = false;
-          videoContainer.style.display = 'none';
-          if (mode === 'flashcard') {
-            currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
-            renderFlashcard();
-            startFlashcardTimer();
-          }
-          resumeGameActivity();
-          tileContainer.style.display = 'flex';
-        }
-      };
+      pendingYoutubeResumeTime = (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl] != null)
+        ? videoResumePositions[videoUrl]
+        : null;
       if (!youtubePlayer) {
         youtubePlayer = new YT.Player('youtube-player', {
           host: 'https://www.youtube-nocookie.com',
           videoId: id,
           playerVars: { rel: 0, modestbranding: 1, controls: 0 },
-          events: { onReady, onStateChange }
+          events: {
+            onReady: () => {
+              if (pendingYoutubeResumeTime != null) {
+                try { youtubePlayer.seekTo(pendingYoutubeResumeTime, true); } catch {}
+                clearPendingYoutubeResume();
+              }
+              try { youtubePlayer.playVideo(); } catch {}
+            },
+            onStateChange: handleYoutubeStateChange
+          }
         });
+        youtubePlaybackHandlerAttached = true;
       } else {
         youtubePlayer.loadVideoById(id);
-        // Ensure we react when the video ends even if the player was
-        // previously created for a preview (which has no state change
-        // handler by default).
-        try {
-          youtubePlayer.addEventListener('onStateChange', onStateChange);
-        } catch {}
-        startPlayback();
+        if (!youtubePlaybackHandlerAttached) {
+          try {
+            youtubePlayer.addEventListener('onStateChange', handleYoutubeStateChange);
+            youtubePlaybackHandlerAttached = true;
+          } catch {}
+        }
+        try { youtubePlayer.playVideo(); } catch {}
       }
     } else {
+      clearPendingYoutubeResume();
       if (youtubeDiv) youtubeDiv.style.display = 'none';
       videoPlayer.style.display = 'block';
       videoSource.src = videoUrl;
@@ -701,13 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (videoTimeLimitTimeout) clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
-          if (enableResumeVideoCheckbox.checked) {
-            if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
-              videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
-            } else {
-              videoResumePositions[videoUrl] = videoPlayer.currentTime;
-            }
-          } else {
+          if (!rememberVideoPosition(videoUrl)) {
             delete videoResumePositions[videoUrl];
           }
           if (isYouTubeUrl(videoUrl) && youtubePlayer) {
