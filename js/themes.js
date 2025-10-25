@@ -152,6 +152,31 @@
       ],
       startSound: `${SOUND_BASE}moana.mp3`
     }),
+    construction: createTheme({
+      id: 'construction',
+      displayName: 'Construction',
+      categoryId: 'construction',
+      colors: { primary: '#0077B6', accent: '#FFB703' },
+      images: [`${IMAGE_BASE}moana-background.jpg`],
+      transparentPNGs: [
+        `${IMAGE_BASE}pictos/bulldozer.png`,
+        `${IMAGE_BASE}pictos/cementtruck.png`,
+        `${IMAGE_BASE}pictos/compactor.png`,
+        `${IMAGE_BASE}pictos/crane.png`
+        `${IMAGE_BASE}pictos/dumptruck.png`,
+        `${IMAGE_BASE}pictos/excavator.png`,
+        `${IMAGE_BASE}pictos/forklift.png`,
+        `${IMAGE_BASE}pictos/loader.png`
+        `${IMAGE_BASE}pictos/tractor.png`,
+      ],
+      words: ['bulldozer', 'béton', 'rouleau', 'grue', 'benne', 'pelleteuse', 'chariot', 'chargeuse', 'tracteur'],
+      reinforcerVideos: [
+        `${VIDEO_BUCKET}constructionvehicles1.mp4`,
+        `${VIDEO_BUCKET}constructionvehicles2.mp4`,
+        `${VIDEO_BUCKET}constructionvehicles3.mp4`,
+      ],
+      startSound: `${SOUND_BASE}construction.mp3`
+    }),
     toupieEtBinou: createTheme({
       id: 'toupieEtBinou',
       displayName: 'Toupie et Binou',
