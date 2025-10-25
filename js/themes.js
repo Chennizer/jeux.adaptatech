@@ -143,7 +143,7 @@
         `${IMAGE_BASE}pua.png`,
         `${IMAGE_BASE}palmier.png`
       ],
-      words: ['Vaiana', 'Maui', 'Pua', 'Te Fiti'],
+      words: ['Moana', 'Maui', 'Cochon', 'Palmier'],
       reinforcerVideos: [
         `${VIDEO_BUCKET}moana-finale.mp4`,
         `${VIDEO_BUCKET}moana-le-bleu-lumiere.mp4`,
@@ -235,7 +235,7 @@
     }),
     picto_animaux: createTheme({
       id: 'picto_animaux',
-      displayName: 'Animaux (Pictogrammes)',
+      displayName: 'Animaux',
       categoryId: 'animaux',
       colors: { primary: '#D97706', accent: '#F97316' },
       images: [
@@ -284,7 +284,7 @@
         'Castor',
         'Chat',
         'Vache',
-        'Vache Holstein',
+        'Vache Highland',
         'Cerf',
         'Chien',
         'Dauphin',
@@ -296,7 +296,7 @@
         'Girafe',
         'Cheval',
         'Lion',
-        'Orignal mâle',
+        'Orignal',
         'Orignal',
         'Chouette',
         'Pingouin',
@@ -322,13 +322,15 @@
     }),
     picto_aliments: createTheme({
       id: 'picto_aliments',
-      displayName: 'Aliments (Pictogrammes)',
+      displayName: 'Aliments',
       categoryId: 'aliments',
       colors: { primary: '#B45309', accent: '#F97316' },
       images: [
-        `${IMAGE_BASE}basket.webp`,
-        `${IMAGE_BASE}association.png`,
-        `${IMAGE_BASE}bgforest.png`
+        `${IMAGE_BASE}foodimge1.png`,
+        `${IMAGE_BASE}foodimge5.png`,
+        `${IMAGE_BASE}foodimge4.png`,
+        `${IMAGE_BASE}foodimge3.png`,
+        `${IMAGE_BASE}foodimge2.png`
       ],
       transparentPNGs: [
         `${IMAGE_BASE}pictos/almond.png`,
@@ -429,9 +431,9 @@
         'Courgette'
       ],
       reinforcerVideos: [
-        `${VIDEO_BUCKET}toupieetbinou2.mp4`,
-        `${VIDEO_BUCKET}toupieetbinou3.mp4`,
-        `${VIDEO_BUCKET}toupieetbinou4.mp4`
+        `${VIDEO_BUCKET}abcdesfruits1.mp4`,
+        `${VIDEO_BUCKET}abcdesfruits2.mp4`,
+        `${VIDEO_BUCKET}j'aimelesfruits.mp4`
       ],
       startSound: `${SOUND_BASE}cartoon/cartoonappear2.mp3`,
       reinforcerSound: `${SOUND_BASE}cartoon/cartoonappear3.mp3`
