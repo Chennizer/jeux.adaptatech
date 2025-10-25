@@ -440,7 +440,7 @@
     }),
     picto_transports: createTheme({
       id: 'picto_transports',
-      displayName: 'Transports (Pictogrammes)',
+      displayName: 'Transports',
       categoryId: 'transports',
       colors: { primary: '#1F4AA5', accent: '#F97316' },
       images: [
