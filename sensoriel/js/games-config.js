@@ -52,16 +52,16 @@
       options: [
         {
           type: 'select',
-          label: 'Wrong Answer Retry:',
+          label: 'Nouvelle tentative après une erreur :',
           name: 'wrongAnswerRetry',
           options: [
-            { value: 'true', text: 'Yes' },
-            { value: 'false', text: 'No' }
+            { value: 'true', text: 'Oui' },
+            { value: 'false', text: 'Non' }
           ]
         },
         {
           type: 'number',
-          label: 'Activity Repetitions:',
+          label: 'Répétitions de l’activité :',
           name: 'activityRepetitions',
           min: 1,
           max: 10,
@@ -69,7 +69,7 @@
         },
         {
           type: 'number',
-          label: 'Maximum addend:',
+          label: 'Terme maximal :',
           name: 'maxAddend',
           min: 2,
           max: 10,
@@ -89,7 +89,7 @@
       options: [
         {
           type: 'number',
-          label: 'Number of Pairs:',
+          label: 'Nombre de paires :',
           name: 'paires',
           min: 1,
           max: 10,
@@ -129,11 +129,11 @@
       options: [
         {
           type: 'select',
-          label: 'Difficulty:',
+          label: 'Difficulté :',
           name: 'difficulty',
           options: [
             { value: 'easy', text: 'Débutant' },
-            { value: 'medium', text: 'Medium' },
+            { value: 'medium', text: 'Intermédiaire' },
             { value: 'hard', text: 'Difficile' }
           ]
         }

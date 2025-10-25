@@ -456,6 +456,69 @@
       }
     }
 
+    function restoreGameSelectionsBlocks() {
+      const stored = getStoredSelections();
+      if (!stored || !Array.isArray(stored.gameOrder) || stored.gameOrder.length === 0) {
+        return false;
+      }
+
+      const optionsList = Array.isArray(stored.gameOptions) ? stored.gameOptions : [];
+      const totalToRestore = Math.min(stored.gameOrder.length, maxGames);
+
+      gameSelectionsContainer.innerHTML = '';
+      gameCount = 0;
+
+      let restoredAny = false;
+
+      for (let index = 0; index < totalToRestore; index++) {
+        const gameId = stored.gameOrder[index];
+        addGameSelection();
+        const block = gameSelectionsContainer.lastElementChild;
+        if (!block) {
+          continue;
+        }
+
+        const gameSelect = block.querySelector('.game-select');
+        if (gameSelect) {
+          if (optionExists(gameSelect, gameId)) {
+            gameSelect.value = gameId;
+            const changeEvent = new Event('change', { bubbles: true });
+            gameSelect.dispatchEvent(changeEvent);
+            restoredAny = true;
+          } else {
+            handleGameSelectionChange({ target: gameSelect }, block);
+          }
+        }
+
+        const savedOptions = optionsList[index] || {};
+        const optionInputs = block.querySelectorAll('.game-specific-options input, .game-specific-options select');
+        optionInputs.forEach(input => {
+          if (!(input.name in savedOptions)) {
+            return;
+          }
+
+          const savedValue = savedOptions[input.name];
+          if (input.type === 'checkbox') {
+            input.checked = savedValue === true || savedValue === 'true';
+          } else if (input.type === 'number') {
+            if (typeof savedValue === 'number') {
+              input.value = savedValue;
+            } else if (savedValue !== undefined && savedValue !== null) {
+              const numericValue = Number(savedValue);
+              if (!Number.isNaN(numericValue)) {
+                input.value = numericValue;
+              }
+            }
+          } else {
+            input.value = savedValue;
+          }
+        });
+      }
+
+      updateGameNumbers();
+      return restoredAny;
+    }
+
     // Standard function to add a basket container (non-animated, for initial load)
     function addGameSelection() {
       if (gameCount >= maxGames) return;
@@ -659,9 +722,13 @@
     window.addEventListener('DOMContentLoaded', () => {
       populateThemesDropdown();
       restoreGlobalPreferences();
-      // Add 2 baskets on load (using standard add)
-      addGameSelection();
-      addGameSelection();
+      const restored = restoreGameSelectionsBlocks();
+      if (!restored) {
+        gameSelectionsContainer.innerHTML = '';
+        gameCount = 0;
+        addGameSelection();
+        addGameSelection();
+      }
     });
 
     addGameBtn.addEventListener('click', addGameSelectionAnimated);
@@ -719,7 +786,7 @@
         }
 
         if (selectedGames.includes(selectedGame)) {
-          errorMsg.textContent = "Each game must be unique. Please adjust your selections.";
+          errorMsg.textContent = "Chaque activité doit être unique. Veuillez ajuster vos sélections.";
           duplicateSelection = true;
           break;
         }
@@ -749,7 +816,7 @@
       }
 
       if (gameDetails.length < 1) {
-        errorMsg.textContent = "Please select at least one game.";
+        errorMsg.textContent = "Veuillez sélectionner au moins une activité.";
         return;
       }
 
@@ -766,7 +833,7 @@
 
       const mediaOption = document.getElementById('mediaOption').value;
       if (!mediaOption) {
-        errorMsg.textContent = "Please select a media theme.";
+        errorMsg.textContent = "Veuillez sélectionner un thème média.";
         return;
       }
 
