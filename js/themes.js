@@ -162,11 +162,11 @@
         `${IMAGE_BASE}pictos/bulldozer.png`,
         `${IMAGE_BASE}pictos/cementtruck.png`,
         `${IMAGE_BASE}pictos/compactor.png`,
-        `${IMAGE_BASE}pictos/crane.png`
+        `${IMAGE_BASE}pictos/crane.png`,
         `${IMAGE_BASE}pictos/dumptruck.png`,
         `${IMAGE_BASE}pictos/excavator.png`,
         `${IMAGE_BASE}pictos/forklift.png`,
-        `${IMAGE_BASE}pictos/loader.png`
+        `${IMAGE_BASE}pictos/loader.png`,
         `${IMAGE_BASE}pictos/tractor.png`,
       ],
       words: ['bulldozer', 'béton', 'rouleau', 'grue', 'benne', 'pelleteuse', 'chariot', 'chargeuse', 'tracteur'],
