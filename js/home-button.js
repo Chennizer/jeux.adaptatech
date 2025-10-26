@@ -1,5 +1,14 @@
-// translateStatic.js
-const AdaptatechHomeButton = window.AdaptatechHomeButton || (() => {
+(function() {
+  if (window.AdaptatechHomeButton &&
+      typeof window.AdaptatechHomeButton.setupFloatingButtons === 'function') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', window.AdaptatechHomeButton.setupFloatingButtons);
+    } else {
+      window.AdaptatechHomeButton.setupFloatingButtons();
+    }
+    return;
+  }
+
   function ensureFloatingButtonStyles() {
     if (document.getElementById('floating-button-style')) {
       return;
@@ -101,26 +110,15 @@ const AdaptatechHomeButton = window.AdaptatechHomeButton || (() => {
     });
   }
 
-  return {
+  window.AdaptatechHomeButton = {
     ensureFloatingButtonStyles,
     computeDefaultBackUrl,
     setupFloatingButtons,
   };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFloatingButtons);
+  } else {
+    setupFloatingButtons();
+  }
 })();
-
-window.AdaptatechHomeButton = AdaptatechHomeButton;
-const { setupFloatingButtons } = AdaptatechHomeButton;
-
-document.addEventListener('DOMContentLoaded', () => {
-  const userLang = localStorage.getItem('siteLanguage') || 'en';
-  // For each element that has data-fr (or data-en),
-  // set its .innerHTML to the correct language attribute.
-  document.querySelectorAll('[data-fr]').forEach(el => {
-    const text = el.getAttribute(`data-${userLang}`);
-    if (text != null) {
-      el.innerHTML = text;
-    }
-  });
-
-  setupFloatingButtons();
-});
