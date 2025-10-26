@@ -1,180 +1,644 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>TrackyMouse – Modal + Game</title>
+  <meta charset="UTF-8" />
+  <title>Tête haute = Lecture (audio/image ou vidéo) — TrackyMouse</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<!-- p5.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <!-- TrackyMouse -->
+  <script src="../../lib/tracky-mouse.js"></script>
+  <link rel="stylesheet" href="../../css/otherswitch.css" />
 
-<style>
-  html,body{margin:0;height:100%;background:#222;cursor:none;font-family:sans-serif}
-
-  /* écran de démarrage */
-  #start-screen{position:fixed;inset:0;background:#000;
-    display:flex;align-items:center;justify-content:center;z-index:99999}
-  #start-btn{font:700 2rem/1.2 sans-serif;color:#fff;background:#444;
-    border:2px solid #888;border-radius:12px;padding:.8em 2em;cursor:pointer}
-  #start-btn:hover{background:#666}
-
-  /* bouton menu */
-  #menu-btn{position:fixed;top:16px;left:16px;z-index:9000;
-    font-size:2rem;color:#eee;background:none;border:none;cursor:pointer;
-    padding:.1em .3em;border-radius:6px}
-  #menu-btn:hover{background:#444}
-
-  /* pointeur visuel */
-  .head-pointer{position:fixed;width:36px;height:36px;border-radius:50%;
-    background:rgba(255,200,0,.85);box-shadow:0 0 10px 4px #ffc800;
-    transform:translate(-50%,-50%);pointer-events:none;z-index:10000}
-
-  /* modal TrackyMouse */
-  #tracky-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);
-    display:none;align-items:center;justify-content:center;z-index:8000}
-  #tracky-content{position:relative}
-  #close-modal{position:absolute;top:-42px;right:-42px;font-size:2rem;
-    background:none;border:none;color:#eee;cursor:pointer}
-
-  /* TrackyMouse : même look sombre que le reste */
-  .tracky-mouse-ui{display:flex;flex-direction:column;align-items:center;gap:1rem;color:#e4e4e4}
-  .tracky-mouse-canvas-container{width:320px!important;max-width:100%;
-    border:2px solid #444;border-radius:12px;overflow:hidden;box-shadow:0 0 12px #000a}
-  .tracky-mouse-canvas-container video,
-  .tracky-mouse-canvas-container canvas{width:100%!important;height:auto!important;display:block}
-  .tracky-mouse-controls{width:320px;display:flex;flex-direction:column;gap:.6rem;
-    background:#111;padding:1rem 1.2rem;border-radius:12px;box-shadow:0 0 10px #0006}
-  .tracky-mouse-start-stop-button{align-self:flex-start;padding:.3rem 1rem;font-weight:600;
-    border-radius:6px;border:1px solid #888;background:#333;color:#eee;cursor:pointer}
-  .tracky-mouse-start-stop-button:hover{background:#555}
-  .tracky-mouse-desktop-app-download-message{display:none!important}
-
-  /* → Décommentez pour masquer complètement les contrôles Tracky Mouse
-  .tracky-mouse-controls{display:none!important}
-  */
-
-  /* score */
-  #score-box{position:fixed;top:16px;right:16px;font:700 1.2rem sans-serif;
-    color:#fff;background:#000a;padding:.4em .8em;border-radius:8px;z-index:9000}
-</style>
-</head>
-<body>
-
-<!-- Écran de démarrage -->
-<div id="start-screen"><button id="start-btn">Démarrer</button></div>
-
-<!-- Score -->
-<div id="score-box" style="display:none">Score : 0</div>
-
-<!-- Bouton menu -->
-<button id="menu-btn" title="Menu" style="display:none">☰</button>
-
-<!-- Modal TrackyMouse -->
-<div id="tracky-modal">
-  <div id="tracky-content">
-    <button id="close-modal" aria-label="Fermer">✕</button>
-    <div id="tracky-root"></div>
-  </div>
-</div>
-
-<!-- Librairie TrackyMouse -->
-<script src="../../lib/tracky-mouse.js"></script>
-<script>
-/* ========= VARIABLES ========= */
-let pointerX = innerWidth / 2,
-    pointerY = innerHeight / 2,
-    score    = 0;
-
-/* Curseur jaune permanent */
-const dot = Object.assign(document.createElement('div'), { className:'head-pointer' });
-document.body.appendChild(dot);
-
-/* Accès rapide aux éléments DOM */
-const startScreen = document.getElementById('start-screen');
-const startBtn    = document.getElementById('start-btn');
-const scoreBox    = document.getElementById('score-box');
-const menuBtn     = document.getElementById('menu-btn');
-const modal       = document.getElementById('tracky-modal');
-const trackyRoot  = document.getElementById('tracky-root');
-
-/* ========= LANCEMENT ========= */
-async function start () {
-  /* Plein-écran */
-  if (!document.fullscreenElement) {
-    try { await document.documentElement.requestFullscreen(); } catch {}
-  }
-
-  /* Affichage interface */
-  startScreen.style.display = 'none';
-  menuBtn.style.display     = 'block';
-  scoreBox.style.display    = 'block';
-
-  /* Tracky Mouse */
-  TrackyMouse.dependenciesRoot = "";           // adapte si nécessaire
-  await TrackyMouse.loadDependencies();
-  TrackyMouse.init(trackyRoot);
-  TrackyMouse.useCamera();
-
-  /* Utiliser “Démarrer” comme proxy : activation immédiate */
-  waitForInternalButton(btn => btn.click());
-
-  /* Màj du pointeur */
-  TrackyMouse.onPointerMove = (x, y) => {
-    pointerX = x; pointerY = y;
-    dot.style.left = x + 'px';
-    dot.style.top  = y + 'px';
-  };
-}
-
-/* Petit utilitaire : attend que TrackyMouse ait injecté son bouton */
-function waitForInternalButton (callback) {
-  const tryActivate = () => {
-    const btn = trackyRoot.querySelector('.tracky-mouse-start-stop-button');
-    if (btn) { callback(btn); }
-    else     { requestAnimationFrame(tryActivate); }
-  };
-  tryActivate();
-}
-
-/* ========= MODAL ========= */
-function toggleModal () {
-  modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
-}
-
-/* ========= p5 : Jeu “Pop la bulle” ========= */
-new p5(p => {
-  let target = { x:0, y:0, r:40, c:'#00b7ff' };
-
-  p.setup = () => {
-    p.createCanvas(innerWidth, innerHeight)
-      .style('z-index','0').position(0,0);
-    spawn();
-  };
-
-  p.windowResized = () => p.resizeCanvas(innerWidth, innerHeight);
-
-  function spawn () {
-    target.x = p.random(60, p.width  - 60);
-    target.y = p.random(60, p.height - 60);
-    target.r = p.random(30, 60);
-    target.c = p.color(p.random(80,255), p.random(80,255), p.random(80,255));
-  }
-
-  p.draw = () => {
-    p.clear();
-    p.noStroke(); p.fill(target.c);
-    p.circle(target.x, target.y, target.r * 2);
-
-    if (p.dist(pointerX, pointerY, target.x, target.y) < target.r) {
-      score++; scoreBox.textContent = 'Score : ' + score;
-      spawn();
+  <style>
+    :root{
+      --panel-bg: rgba(0,0,0,.85);
+      --accent: #2EC4B6;
     }
-  };
-});
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{
+      min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background:#111; color:#fff; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; overflow:hidden;
+    }
+    body.light{ background:#fff; color:#000; }
 
-/* ========= ÉVÉNEMENTS ========= */
-startBtn.addEventListener('click', start);
-menuBtn .addEventListener('click', toggleModal);
-document.getElementById('close-modal').addEventListener('click', toggleModal);
-</script>
-</body> 
+    /* Always show system cursor */
+    html, body, #trackyRoot, #trackyRoot * { cursor: default !important; }
+
+    /* Media layers (behind UI) */
+    #rewardBg, #rewardVideo{
+      position:fixed; inset:0; z-index:1; pointer-events:none;
+      opacity:0; transition:opacity .2s ease;
+    }
+    #rewardBg{
+      background-position:center; background-repeat:no-repeat; background-size:cover;
+    }
+    #rewardVideo{
+      width:100%; height:100%; object-fit:cover; background:#000;
+    }
+
+    /* Overlay welcome */
+    #overlay{
+      position:fixed; inset:0; background:#000; color:#fff;
+      display:flex; flex-direction:column; gap:1rem; align-items:center; justify-content:center; z-index:9999;
+      text-align:left; padding:2rem;
+    }
+    #overlay h1{font-size:clamp(1.4rem,3.2vw,2rem); margin-bottom:.5rem;}
+    #overlay p{opacity:.9; margin-bottom:1rem; text-align:center;}
+    .welcome{
+      width:min(900px,92vw); display:grid; gap:1rem;
+      grid-template-columns: 1fr;
+    }
+    .mode-row{
+      display:grid; gap:1rem;
+      grid-template-columns: 1fr 1fr;
+    }
+    .card{
+      border-radius:14px; background:#181818; padding:1rem; border:1px solid #333;
+    }
+    .card h3{margin-bottom:.5rem; font-size:1.05rem;}
+    .choice{ display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem;}
+    .choice input{ transform:scale(1.15); }
+    .inputs{ display:grid; gap:.5rem; }
+    .inline{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; }
+    .small{ font-size:.9rem; opacity:.8; }
+    .row{ display:flex; gap:1rem; align-items:center; }
+    .row > * { flex:1; }
+    .foot{ display:flex; gap:.8rem; justify-content:center; margin-top:1rem; }
+    button, .btn{
+      font:600 1rem/1.1 system-ui; padding:.8rem 1.2rem; border-radius:12px;
+      border:1px solid #333; background:#333; color:#fff; cursor:pointer;
+    }
+    button[disabled]{ opacity:.5; cursor:not-allowed; }
+    .hint{ text-align:center; opacity:.8; font-size:.9rem; margin-top:.4rem; }
+
+    /* Pointeur tête */
+    #headDot{
+      position:fixed; inset:auto; width:38px; height:38px; border-radius:999px;
+      background:#ff2a2acc; box-shadow:0 0 10px 4px #ff2a2a; transform:translate(-50%,-50%);
+      pointer-events:none; z-index:10000;
+    }
+
+    /* Zone “tête en bas” (visuelle) */
+    #bottomZone{
+      position:fixed; left:0; right:0; bottom:0;
+      height:15vh; background:linear-gradient(to top, #e00a 0%, #e00a 30%, transparent 100%);
+      outline:1px solid #e007; z-index:5; pointer-events:none;
+    }
+
+    /* Indicateur d’état */
+    .status{
+      position:fixed; top:10px; left:10px; display:flex; gap:.6rem; align-items:center; z-index:1100;
+      background:var(--panel-bg); padding:.6rem .8rem; border-radius:12px; box-shadow:0 4px 12px #0006;
+    }
+    .lamp{ width:14px; height:14px; border-radius:999px; background:#777; box-shadow:0 0 0 2px #0008 inset; }
+    .lamp.play{ background:#21c55d; }
+    .lamp.pause{ background:#d9463e; }
+    .status small{opacity:.8}
+
+    /* Panneau chronos */
+    .timers{
+      position:fixed; top:58px; left:10px; z-index:1100;
+      background:var(--panel-bg); padding:.6rem .8rem; border-radius:12px; box-shadow:0 4px 12px #0006;
+      display:none; flex-direction:column; gap:.35rem; min-width:220px;
+    }
+    .timers.show{ display:flex; }
+    .trow{ display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+    .trow .label{ opacity:.9; }
+    .trow .time{ font-variant-numeric: tabular-nums; font-weight:600; }
+    #resetTimers{ margin-top:.4rem; align-self:flex-end; }
+
+    /* Panneaux (Options / Caméra) */
+    .panel{
+      position:fixed; top:60px; right:-320px; width:300px; max-width:92vw;
+      background:var(--panel-bg); padding:16px; border-radius:12px; box-shadow:0 8px 24px #0008;
+      transition:right .28s ease, opacity .28s ease; opacity:0; z-index:1200;
+    }
+    .panel.show{ right:12px; opacity:1; }
+    .panel h2{ font-size:1.05rem; margin-bottom:.4rem; text-align:center; }
+    .panel label{ display:flex; flex-direction:column; gap:.35rem; font-size:.9rem; margin:.6rem 0; }
+    .panel input[type="range"], .panel input[type="file"], .panel input[type="color"]{ width:100%; }
+    .inlineOpt{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; }
+    .help{ font-size:.8rem; opacity:.75; }
+
+    /* Icônes */
+    .menu{
+      position:fixed; top:10px; right:10px; display:flex; gap:.5rem; z-index:1300;
+    }
+    .btnIcon{
+      width:42px; height:42px; border-radius:999px; display:grid; place-items:center; cursor:pointer;
+      background:rgba(0,0,0,.7); color:#fff; font-size:22px; user-select:none;
+    }
+    .btnIcon:hover{ filter:brightness(1.2); }
+    #camBtn{ background:#000a; }
+    #optBtn{ background:#000a; }
+
+    /* TrackyMouse tuning */
+    #trackyRoot .tracky-mouse-canvas-container{ width:100% !important; max-width:100% !important; margin-top:6px !important; }
+    #trackyRoot .tracky-mouse-canvas-container video,
+    #trackyRoot .tracky-mouse-canvas-container canvas{ width:100% !important; height:auto !important; }
+    #trackyRoot .tracky-mouse-controls{ width:100% !important; margin-bottom:4px !important; }
+    #trackyRoot p, #trackyRoot a[href*="trackymouse"]{ display:none !important; }
+    #startEnabled, #start-enabled, #mirrorEnabled, #mirror-enabled{ display:none !important; }
+  </style>
+</head>
+<body class="light">
+  <!-- Media layers -->
+  <div id="rewardBg" aria-hidden="true"></div>
+  <video id="rewardVideo" preload="metadata" playsinline muted></video>
+
+  <!-- Overlay welcome -->
+  <div id="overlay">
+    <h1>Tête haute = Lecture</h1>
+    <p>Choisis le mode : <strong>Image/Audio</strong> (image et/ou son jouent quand la tête est en haut) ou <strong>Vidéo</strong> (la vidéo joue quand la tête est en haut).</p>
+
+    <div class="welcome">
+      <div class="mode-row">
+        <!-- Mode 1: Image / Audio -->
+        <div class="card" id="cardAV">
+          <div class="choice"><input type="radio" name="mode" id="modeAV" checked><label for="modeAV"><strong>Mode Image / Audio</strong></label></div>
+          <div class="inputs">
+            <label>Image de fond (optionnel) <input id="bgImageFile" type="file" accept="image/*" /></label>
+            <label>Fichier audio (optionnel) <input id="audioFile" type="file" accept="audio/*" /></label>
+            <div class="inline small"><span>Audio en boucle</span><input id="loopAudio" type="checkbox" checked></div>
+          </div>
+        </div>
+
+        <!-- Mode 2: Vidéo -->
+        <div class="card" id="cardVideo">
+          <div class="choice"><input type="radio" name="mode" id="modeVideo"><label for="modeVideo"><strong>Mode Vidéo</strong></label></div>
+          <div class="inputs">
+            <label>Fichier vidéo <input id="videoFile" type="file" accept="video/*" /></label>
+            <div class="inline small"><span>Vidéo en boucle</span><input id="loopVideo" type="checkbox" checked></div>
+            <div class="inline small"><span>Commencer muet</span><input id="muteVideo" type="checkbox" checked></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="card">
+          <h3>Paramètres rapides</h3>
+          <div class="inline"><span>Volume</span><input id="vol" type="range" min="0" max="100" value="100" /></div>
+          <div class="inline"><span>Hauteur zone bas (% écran)</span><input id="zone" type="range" min="5" max="40" value="15" /></div>
+          <div class="inline"><span>Fond clair</span><input id="bg" type="checkbox" checked /></div>
+          <div class="inline"><span>Afficher chronos tête haut/bas</span><input id="showTimers" type="checkbox" /></div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <button id="start" disabled>Démarrer</button>
+      </div>
+      <div class="hint">Astuce : plein écran recommandé (F11 sur PC).</div>
+    </div>
+  </div>
+
+  <!-- Pointeur -->
+  <div id="headDot"></div>
+
+  <!-- Zone bas (visuelle) -->
+  <div id="bottomZone" aria-hidden="true"></div>
+
+  <!-- Indicateur -->
+  <div class="status"><div id="lamp" class="lamp pause"></div><small id="stateText">Pause</small></div>
+
+  <!-- Panneau chronos -->
+  <div id="timers" class="timers" aria-live="polite">
+    <div class="trow"><span class="label">↑ Tête en haut</span><span id="upTime" class="time">00:00:00</span></div>
+    <div class="trow"><span class="label">↓ Tête en bas</span><span id="downTime" class="time">00:00:00</span></div>
+    <button id="resetTimers" class="btn small" type="button">Réinitialiser</button>
+  </div>
+
+  <!-- Menus après démarrage -->
+  <div class="menu">
+    <div id="optBtn" class="btnIcon" title="Options">⚙️</div>
+    <div id="camBtn" class="btnIcon" title="Caméra / Pointeur">📷</div>
+  </div>
+
+  <!-- Panneau options -->
+  <div id="optPanel" class="panel" role="dialog" aria-label="Options">
+    <h2>Options</h2>
+    <label class="inlineOpt">
+      Volume
+      <input id="vol2" type="range" min="0" max="100" value="100" />
+    </label>
+    <label class="inlineOpt">
+      Hauteur zone bas (% écran)
+      <input id="zone2" type="range" min="5" max="40" value="15" />
+    </label>
+    <label class="inlineOpt">
+      Fond clair
+      <input id="bg2" type="checkbox" checked />
+    </label>
+    <label class="inlineOpt">
+      Afficher chronos
+      <input id="showTimers2" type="checkbox" />
+    </label>
+    <button id="resetTimers2" class="btn" type="button">Réinitialiser les chronos</button>
+    <p class="help">Les chronos comptent le temps cumulé tête en haut vs tête en bas depuis le démarrage (ou la dernière réinitialisation).</p>
+  </div>
+
+  <!-- Panneau caméra -->
+  <div id="camPanel" class="panel" role="dialog" aria-label="Caméra & pointeur">
+    <h2>Caméra & Pointeur</h2>
+    <label class="inlineOpt">
+      Couleur du pointeur
+      <input id="dotColor" type="color" value="#ff2a2a" />
+    </label>
+    <label class="inlineOpt">
+      Taille du pointeur (px)
+      <input id="dotSize" type="range" min="18" max="80" value="38" />
+    </label>
+    <div id="trackyRoot" style="margin-top:.6rem;"></div>
+  </div>
+
+  <script>
+    // ---------- STATE ----------
+    let pointerX = innerWidth/2, pointerY = innerHeight/2;
+    let bottomZonePct = 15;
+    let isPlaying = false;
+    let mode = 'av'; // 'av' (image/audio) or 'video'
+
+    // Audio elements
+    const audio = new Audio();
+    audio.loop = true;
+    let audioCtx = null, srcNode = null, gain = null;
+    let audioObjectUrl = null;
+
+    // Image background
+    const rewardBg = document.getElementById('rewardBg');
+    let rewardBgObjectUrl = null;
+
+    // Video
+    const videoEl = document.getElementById('rewardVideo');
+    let videoObjectUrl = null;
+
+    // UI references
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('start');
+    const headDot  = document.getElementById('headDot');
+    const bottomZone = document.getElementById('bottomZone');
+    const lamp = document.getElementById('lamp');
+    const stateText = document.getElementById('stateText');
+
+    const optBtn = document.getElementById('optBtn');
+    const camBtn = document.getElementById('camBtn');
+    const optPanel = document.getElementById('optPanel');
+    const camPanel = document.getElementById('camPanel');
+
+    // Welcome controls
+    const modeAV = document.getElementById('modeAV');
+    const modeVideo = document.getElementById('modeVideo');
+
+    const bgImageInput = document.getElementById('bgImageFile');
+    const audioInput   = document.getElementById('audioFile');
+    const loopAudio    = document.getElementById('loopAudio');
+
+    const videoInput   = document.getElementById('videoFile');
+    const loopVideo    = document.getElementById('loopVideo');
+    const muteVideo    = document.getElementById('muteVideo');
+
+    // Quick params (welcome)
+    const volInput = document.getElementById('vol');
+    const zoneInput = document.getElementById('zone');
+    const bgInput = document.getElementById('bg');
+    const showTimers = document.getElementById('showTimers');
+
+    // Options panel duplicates
+    const vol2 = document.getElementById('vol2');
+    const zone2 = document.getElementById('zone2');
+    const bg2 = document.getElementById('bg2');
+    const showTimers2 = document.getElementById('showTimers2');
+    const resetTimersBtn = document.getElementById('resetTimers2');
+
+    // Camera panel
+    const dotColor  = document.getElementById('dotColor');
+    const dotSize   = document.getElementById('dotSize');
+    const trackyRoot = document.getElementById('trackyRoot');
+
+    // Timers UI
+    const timersBox = document.getElementById('timers');
+    const upTimeText = document.getElementById('upTime');
+    const downTimeText = document.getElementById('downTime');
+    const resetTimersBtnTop = document.getElementById('resetTimers');
+
+    // ---------- TIMERS STATE ----------
+    let headUpPrev = null;
+    let lastChange = 0;
+    let upTimeMs = 0;
+    let downTimeMs = 0;
+    let lastUiUpdate = 0;
+
+    // ---------- HELPERS ----------
+    function setLamp(playing){
+      isPlaying = playing;
+      lamp.classList.toggle('play', playing);
+      lamp.classList.toggle('pause', !playing);
+      stateText.textContent = playing ? 'Lecture' : 'Pause';
+      if (mode === 'av') {
+        rewardBg.style.opacity = (playing && rewardBg.style.backgroundImage) ? '1' : '0';
+        videoEl.style.opacity = '0';
+      } else {
+        videoEl.style.opacity = playing ? '1' : '0';
+        rewardBg.style.opacity = '0';
+      }
+    }
+    function resizeBottomZone(){
+      const h = Math.max(5, Math.min(40, bottomZonePct));
+      bottomZone.style.height = h + 'vh';
+    }
+    function setDotStyle(){
+      headDot.style.background = dotColor.value + 'cc';
+      headDot.style.boxShadow  = '0 0 10px 4px ' + dotColor.value;
+      headDot.style.width = dotSize.value + 'px';
+      headDot.style.height = dotSize.value + 'px';
+    }
+    function ensureAudioGraph(){
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        gain = audioCtx.createGain();
+        gain.gain.value = (volInput.value|0) / 100;
+        srcNode = audioCtx.createMediaElementSource(audio);
+        srcNode.connect(gain).connect(audioCtx.destination);
+      }
+    }
+    async function fadeTo(target, ms=120){
+      if (!gain) return;
+      const now = audioCtx.currentTime;
+      const curr = gain.gain.value;
+      const end = Math.max(0, Math.min(1, target));
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(curr, now);
+      gain.gain.linearRampToValueAtTime(end, now + ms/1000);
+      if (end === 0) {
+        setTimeout(()=>{ if (!isPlaying) audio.pause(); }, ms+30);
+      }
+    }
+    async function playAudio(){
+      ensureAudioGraph();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      if (audio.src && audio.paused) { try { await audio.play(); } catch(e){} }
+      await fadeTo( (volInput.value|0)/100 );
+      setLamp(true);
+    }
+    async function pauseAudio(){
+      ensureAudioGraph();
+      await fadeTo(0);
+      setLamp(false);
+    }
+    async function playVideo(){
+      videoEl.loop = loopVideo.checked;
+      videoEl.muted = muteVideo.checked;
+      videoEl.volume = (volInput.value|0)/100;
+      if (videoEl.src && videoEl.paused) { try { await videoEl.play(); } catch(e){} }
+      setLamp(true);
+    }
+    async function pauseVideo(){
+      if (!videoEl.paused) videoEl.pause();
+      setLamp(false);
+    }
+
+    function setRewardBg(url){
+      if (rewardBgObjectUrl) URL.revokeObjectURL(rewardBgObjectUrl);
+      rewardBgObjectUrl = url;
+      rewardBg.style.backgroundImage = url ? `url("${url}")` : '';
+      if (mode === 'av') rewardBg.style.opacity = (isPlaying && url) ? '1' : '0';
+    }
+    function setAudioSrc(url){
+      if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl);
+      audioObjectUrl = url;
+      audio.src = url || '';
+      audio.loop = loopAudio.checked;
+    }
+    function setVideoSrc(url){
+      if (videoObjectUrl) URL.revokeObjectURL(videoObjectUrl);
+      videoObjectUrl = url;
+      videoEl.src = url || '';
+      videoEl.loop = loopVideo.checked;
+      videoEl.muted = muteVideo.checked;
+      videoEl.volume = (volInput.value|0)/100;
+    }
+
+    function validateWelcome(){
+      // Enable Start if: AV mode has at least image OR audio; Video mode has video.
+      let ok = false;
+      if (modeAV.checked){
+        mode = 'av';
+        ok = !!(bgImageInput.files?.[0] || audioInput.files?.[0]);
+      } else {
+        mode = 'video';
+        ok = !!(videoInput.files?.[0]);
+      }
+      startBtn.disabled = !ok;
+    }
+
+    function fmt(ms){
+      const total = Math.floor(ms/1000);
+      const h = Math.floor(total/3600);
+      const m = Math.floor((total%3600)/60);
+      const s = total%60;
+      return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }
+
+    function setTimersVisible(v){
+      timersBox.classList.toggle('show', v);
+      showTimers.checked = v;
+      showTimers2.checked = v;
+    }
+
+    function resetTimers(currentHeadUp){
+      const now = performance.now();
+      upTimeMs = 0; downTimeMs = 0;
+      lastChange = now;
+      headUpPrev = currentHeadUp;
+      upTimeText.textContent = '00:00:00';
+      downTimeText.textContent = '00:00:00';
+    }
+
+    function updateTimerUI(now, headUp){
+      // Update visible display at ~5 FPS to save a bit of work
+      if (now - lastUiUpdate < 200) return;
+      lastUiUpdate = now;
+      const up = upTimeMs + (headUp ? now - lastChange : 0);
+      const down = downTimeMs + (!headUp ? now - lastChange : 0);
+      upTimeText.textContent = fmt(up);
+      downTimeText.textContent = fmt(down);
+    }
+
+    // ---------- LOGIC LOOP ----------
+    function loop(){
+      const zoneTop = innerHeight * (1 - bottomZonePct/100);
+      const headUp = (pointerY < zoneTop);
+      const now = performance.now();
+
+      // Timers accumulate on state change
+      if (headUpPrev === null){
+        headUpPrev = headUp;
+        lastChange = now;
+      } else if (headUp !== headUpPrev){
+        const dt = now - lastChange;
+        if (headUpPrev) upTimeMs += dt; else downTimeMs += dt;
+        headUpPrev = headUp;
+        lastChange = now;
+      }
+      updateTimerUI(now, headUp);
+
+      if (mode === 'av') {
+        if (headUp) {
+          if (audio.src) { if (!isPlaying) playAudio(); else setLamp(true); }
+          else setLamp(true);
+        } else {
+          if (audio.src && isPlaying) pauseAudio();
+          else setLamp(false);
+        }
+      } else { // video
+        if (headUp) {
+          if (!isPlaying) playVideo(); else setLamp(true);
+        } else {
+          if (isPlaying) pauseVideo();
+        }
+      }
+      requestAnimationFrame(loop);
+    }
+
+    // ---------- WELCOME HANDLERS ----------
+    modeAV.onchange = validateWelcome;
+    modeVideo.onchange = validateWelcome;
+
+    bgImageInput.onchange = ()=>{
+      const f = bgImageInput.files?.[0];
+      if (f) setRewardBg(URL.createObjectURL(f)); else setRewardBg(null);
+      validateWelcome();
+    };
+    audioInput.onchange = ()=>{
+      const f = audioInput.files?.[0];
+      if (f) setAudioSrc(URL.createObjectURL(f)); else setAudioSrc(null);
+      validateWelcome();
+    };
+    loopAudio.onchange = ()=> audio.loop = loopAudio.checked;
+
+    videoInput.onchange = ()=>{
+      const f = videoInput.files?.[0];
+      if (f) setVideoSrc(URL.createObjectURL(f)); else setVideoSrc(null);
+      validateWelcome();
+    };
+    loopVideo.onchange = ()=> videoEl.loop = loopVideo.checked;
+    muteVideo.onchange = ()=> videoEl.muted = muteVideo.checked;
+
+    volInput.oninput = ()=>{
+      if (gain) gain.gain.value = (volInput.value|0)/100;
+      videoEl.volume = (volInput.value|0)/100;
+      vol2.value = volInput.value;
+    };
+    zoneInput.oninput = ()=>{
+      bottomZonePct = zoneInput.value|0; resizeBottomZone();
+      zone2.value = zoneInput.value;
+    };
+    bgInput.onchange = ()=>{
+      document.body.classList.toggle('light', bgInput.checked);
+      bg2.checked = bgInput.checked;
+    };
+    showTimers.onchange = ()=> setTimersVisible(showTimers.checked);
+
+    // ---------- OPTIONS PANELS ----------
+    optBtn.onclick = ()=>{ camPanel.classList.remove('show'); optPanel.classList.toggle('show'); };
+    camBtn.onclick = ()=>{ optPanel.classList.remove('show'); camPanel.classList.toggle('show'); };
+
+    vol2.oninput = ()=>{ volInput.value = vol2.value; volInput.oninput(); };
+    zone2.oninput = ()=>{ zoneInput.value = zone2.value; zoneInput.oninput(); };
+    bg2.onchange = ()=>{ bgInput.checked = bg2.checked; bgInput.onchange(); };
+    showTimers2.onchange = ()=> setTimersVisible(showTimers2.checked);
+
+    resetTimersBtn.addEventListener('click', ()=>{
+      const zoneTop = innerHeight * (1 - bottomZonePct/100);
+      resetTimers(pointerY < zoneTop);
+    });
+    resetTimersBtnTop.addEventListener('click', ()=>{
+      const zoneTop = innerHeight * (1 - bottomZonePct/100);
+      resetTimers(pointerY < zoneTop);
+    });
+
+    dotColor.oninput = setDotStyle;
+    dotSize.oninput  = setDotStyle;
+
+    window.addEventListener('resize', resizeBottomZone);
+
+    // ---------- START ----------
+    startBtn.addEventListener('pointerup', async (e)=>{
+      e.preventDefault();
+      overlay.remove();
+      document.documentElement.requestFullscreen?.();
+
+      // Prepare audio graph (if audio provided)
+      if (audio.src) { ensureAudioGraph(); }
+
+      // TrackyMouse
+      TrackyMouse.dependenciesRoot = "";
+      await TrackyMouse.loadDependencies();
+      TrackyMouse.init(trackyRoot);
+      TrackyMouse.useCamera();
+      TrackyMouse.onPointerMove = (x, y)=>{
+        pointerX = x; pointerY = y;
+        headDot.style.left = x + 'px';
+        headDot.style.top  = y + 'px';
+      };
+
+      // Auto-start TM
+      (function autoStart(){
+        const b = trackyRoot.querySelector('.tracky-mouse-start-stop-button');
+        b ? b.click() : requestAnimationFrame(autoStart);
+      })();
+
+      // Scrub UI bits
+      (function scrub(){
+        trackyRoot.querySelectorAll('label').forEach(lbl=>{
+          const t = lbl.textContent.toLowerCase();
+          if (t.includes('start') || t.includes('mirror')) lbl.remove();
+        });
+        trackyRoot.querySelectorAll('input[type="checkbox"]').forEach(inp=>{
+          const id = (inp.id||'').toLowerCase();
+          if (id.includes('start') || id.includes('mirror')){
+            inp.closest('label')?.remove(); inp.remove();
+          }
+        });
+        trackyRoot.querySelectorAll('p,a').forEach(el=>{
+          if (el.textContent.includes('TrackyMouse desktop app')) el.remove();
+        });
+        requestAnimationFrame(scrub);
+      })();
+
+      // Apply styles/params and timers init
+      setDotStyle();
+      resizeBottomZone();
+
+      // Init timers baseline
+      const zoneTop = innerHeight * (1 - bottomZonePct/100);
+      headUpPrev = (pointerY < zoneTop);
+      lastChange = performance.now();
+      upTimeText.textContent = '00:00:00';
+      downTimeText.textContent = '00:00:00';
+      setTimersVisible(showTimers.checked);
+
+      requestAnimationFrame(loop);
+    });
+
+    // TM toggle shortcut
+    window.addEventListener('keydown', e=>{
+      if (e.code === 'Space'){
+        const b = trackyRoot.querySelector('.tracky-mouse-start-stop-button');
+        if (b) b.click();
+        e.preventDefault();
+      }
+    });
+
+    // Cleanup object URLs
+    window.addEventListener('beforeunload', ()=>{
+      if (rewardBgObjectUrl) URL.revokeObjectURL(rewardBgObjectUrl);
+      if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl);
+      if (videoObjectUrl) URL.revokeObjectURL(videoObjectUrl);
+    });
+
+    // Initial validation
+    validateWelcome();
+  </script>
+</body>
 </html>

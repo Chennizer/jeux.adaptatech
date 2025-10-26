@@ -482,52 +482,13 @@
         'Camion'
       ],
       reinforcerVideos: [
-        `${VIDEO_BUCKET}patpatrouillejungle.mp4`,
-        `${VIDEO_BUCKET}patpatrouillesauvetage.mp4`
+        `${VIDEO_BUCKET}firetruck.mp4`,
+        `${VIDEO_BUCKET}policecar.mp4`,
+        `${VIDEO_BUCKET}wheelsonthebus1.mp4`
       ],
       startSound: `${SOUND_BASE}cartoon/cartoonappear4.mp3`
     }),
-    picto_vehiculesConstruction: createTheme({
-      id: 'picto_vehiculesConstruction',
-      displayName: 'Véhicules de construction (Pictogrammes)',
-      categoryId: 'vehiculesConstruction',
-      colors: { primary: '#92400E', accent: '#FBBF24' },
-      images: [
-        `${IMAGE_BASE}toupiecamping.jpg`,
-        `${IMAGE_BASE}toupiecinema.jpeg`
-      ],
-      transparentPNGs: [
-        `${IMAGE_BASE}pictos/bulldozer.png`,
-        `${IMAGE_BASE}pictos/cementtruck.png`,
-        `${IMAGE_BASE}pictos/compactor.png`,
-        `${IMAGE_BASE}pictos/crane truck.png`,
-        `${IMAGE_BASE}pictos/crane.png`,
-        `${IMAGE_BASE}pictos/dumptruck.png`,
-        `${IMAGE_BASE}pictos/excavator.png`,
-        `${IMAGE_BASE}pictos/forklift.png`,
-        `${IMAGE_BASE}pictos/loader.png`,
-        `${IMAGE_BASE}pictos/roadroller.png`,
-        `${IMAGE_BASE}pictos/tractor.png`
-      ],
-      words: [
-        'Bulldozer',
-        'Camion bétonnière',
-        'Compacteur',
-        'Camion-grue',
-        'Grue',
-        'Camion-benne',
-        'Excavatrice',
-        'Chariot élévateur',
-        'Chargeuse',
-        'Rouleau compresseur',
-        'Tracteur'
-      ],
-      reinforcerVideos: [
-        `${VIDEO_BUCKET}patpatrouillepirate.mp4`,
-        `${VIDEO_BUCKET}patpatrouillejungle.mp4`
-      ],
-      startSound: `${SOUND_BASE}cartoon/cartoonappear5.mp3`
-    })
+    
   };
 
   const themeAliases = {
