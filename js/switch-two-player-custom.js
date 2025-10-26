@@ -413,6 +413,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   const okButton = document.getElementById('ok-button');
   const videoSelectionDiv = document.getElementById('video-selection');
 
+  function createHomeButton() {
+    if (document.querySelector('.floating-button.home-button')) {
+      return;
+    }
+
+    const homeButton = document.createElement('a');
+    homeButton.href = '../index.html';
+    homeButton.className = 'floating-button home-button';
+    homeButton.setAttribute('aria-label', 'Retour au menu précédent / Back to previous menu');
+    homeButton.title = 'Retour au menu précédent / Back to previous menu';
+    homeButton.textContent = '🏠';
+
+    document.body.appendChild(homeButton);
+  }
+
+  createHomeButton();
+
   // Default to interval mode with a 30-second interval
   playModeSelect.value = 'interval';
   intervalLabel.style.display = 'inline-block';
