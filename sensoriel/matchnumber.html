@@ -412,12 +412,15 @@
       synth.speak(utterance);
     }
 
-    function buildTotalMessage(total) {
+    function buildAdditionEquationMessage(addendOne, addendTwo) {
+      if (!Number.isFinite(addendOne) || addendOne <= 0 || !Number.isFinite(addendTwo) || addendTwo <= 0) {
+        return '';
+      }
+      const total = addendOne + addendTwo;
       if (!Number.isFinite(total) || total <= 0) {
         return '';
       }
-      const label = total > 1 ? 'objets en tout' : 'objet en tout';
-      return `Il y a ${total} ${label}.`;
+      return `${addendOne} + ${addendTwo} égal ${total}.`;
     }
 
     function highlightHelperButton(button) {
@@ -441,7 +444,7 @@
       }
     }
 
-    function attachTouchAssist(targetElements, expectedCount, finalMessage, onComplete) {
+    function attachTouchAssist(targetElements, expectedCount, finalMessage, onComplete, options) {
       if (!touchCountAssistEnabled || !Array.isArray(targetElements) || targetElements.length === 0) {
         return function noop() {};
       }
@@ -451,6 +454,30 @@
       let finalTimeoutId = null;
       let finalAnnounced = false;
       const pointerSupported = typeof window !== 'undefined' && 'PointerEvent' in window;
+
+      const config = (options && typeof options === 'object') ? options : {};
+      const groupSequences = Array.isArray(config.groupSequences) ? config.groupSequences : null;
+      const elementGroupMap = new WeakMap();
+
+      if (groupSequences) {
+        groupSequences.forEach((group) => {
+          if (!group || !Array.isArray(group.elements) || group.elements.length === 0) {
+            return;
+          }
+          const expectedGroupCount = Number(group.expectedCount);
+          const groupInfo = {
+            expectedCount: Number.isFinite(expectedGroupCount) && expectedGroupCount > 0
+              ? expectedGroupCount
+              : group.elements.length,
+            counted: 0
+          };
+          group.elements.forEach((element) => {
+            if (element) {
+              elementGroupMap.set(element, groupInfo);
+            }
+          });
+        });
+      }
 
       const handler = (event) => {
         if (event && typeof event.preventDefault === 'function') {
@@ -462,9 +489,17 @@
         }
 
         countedElements.add(element);
-        counted += 1;
         element.classList.add('touch-assist-counted');
-        speakText(String(counted));
+        const groupInfo = elementGroupMap.get(element);
+        let spokenCount;
+        if (groupInfo) {
+          groupInfo.counted += 1;
+          spokenCount = groupInfo.counted;
+        } else {
+          spokenCount = counted + 1;
+        }
+        counted += 1;
+        speakText(String(spokenCount));
 
         if (!finalAnnounced && counted >= expectedCount) {
           finalAnnounced = true;
@@ -822,13 +857,18 @@
 
         if (touchCountAssistEnabled && assistTargets.length > 0) {
           initializeSpeechSupport();
-          const finalMessage = buildTotalMessage(currentCorrectNumber);
+          const finalMessage = buildAdditionEquationMessage(addendOne, addendTwo);
           const highlightAction = () => {
             if (correctChoiceButton) {
               highlightHelperButton(correctChoiceButton);
             }
           };
-          activeAssistCleanup = attachTouchAssist(assistTargets, currentCorrectNumber, finalMessage, highlightAction);
+          activeAssistCleanup = attachTouchAssist(assistTargets, currentCorrectNumber, finalMessage, highlightAction, {
+            groupSequences: [
+              { elements: groupOneImages, expectedCount: addendOne },
+              { elements: groupTwoImages, expectedCount: addendTwo }
+            ]
+          });
         }
       }
 
