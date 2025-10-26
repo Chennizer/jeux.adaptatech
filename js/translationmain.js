@@ -10,6 +10,7 @@ function updateLanguage() {
   if (toggleBtn) {
     toggleBtn.textContent = (lang === 'fr') ? 'English' : 'Français';
   }
+  document.dispatchEvent(new CustomEvent('siteLanguageChange', { detail: { language: lang } }));
 }
 // Toggle language between French and English.
 function toggleLanguage() {
