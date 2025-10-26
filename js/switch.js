@@ -44,6 +44,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadConfig();
 
+    function createRecordedAudioInstance() {
+        if (!recordedAudio) {
+            return null;
+        }
+
+        return new Audio(recordedAudio);
+    }
+
     const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
     const spacePromptSelectionModal = document.getElementById('space-prompt-selection-modal');
     const closeSpacePromptModal = document.getElementById('close-space-prompt-modal');
@@ -84,14 +92,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
             if (selectedSound === 'record-own' && recordedAudio) {
                 // Create a new Audio object each time we play the recorded sound
-                currentSound = new Audio(recordedAudio);  // Use the recorded audio URL
+                currentSound = createRecordedAudioInstance();  // Use the recorded audio URL
             } else {
                 const soundOption = spacePromptSounds.find(option => option.value === selectedSound);
                 if (soundOption && soundOption.src) {
                     currentSound = new Audio(soundOption.src);
                 }
             }
-    
+
             if (currentSound) {
                 console.log("Playing sound: ", currentSound.src);  // Debugging log for sound source
                 currentSound.play().catch(err => {
@@ -211,9 +219,13 @@ document.addEventListener('DOMContentLoaded', () => {
         recordButton.style.display = 'block';  // Reset record button for next use
     
         // Play the recorded sound after closing the modal
-        if (recordedAudio) {
-            recordedAudio.play();  // Play the recorded audio
-            console.log("Playing the recorded sound");
+        const previewAudio = createRecordedAudioInstance();
+        if (previewAudio) {
+            previewAudio.play().then(() => {
+                console.log("Playing the recorded sound");
+            }).catch(err => {
+                console.error("Error playing recorded preview: ", err);
+            });
         }
     });
     // Show the media selection modal
