@@ -17,6 +17,42 @@
     button.textContent = '🏠';
 
     body.appendChild(button);
+
+    var controlPanel = document.getElementById('control-panel');
+    var startButton = document.getElementById('control-panel-start-button');
+
+    function hideHomeButton() {
+      button.style.display = 'none';
+    }
+
+    function showHomeButton() {
+      button.style.display = '';
+    }
+
+    if (controlPanel) {
+      var updateFromControlPanel = function () {
+        var isHidden = window.getComputedStyle(controlPanel).display === 'none';
+        if (isHidden) {
+          hideHomeButton();
+        } else {
+          showHomeButton();
+        }
+      };
+
+      updateFromControlPanel();
+
+      if (window.MutationObserver) {
+        var observer = new MutationObserver(function () {
+          updateFromControlPanel();
+        });
+
+        observer.observe(controlPanel, { attributes: true, attributeFilter: ['style', 'class'] });
+      }
+    }
+
+    if (startButton) {
+      startButton.addEventListener('click', hideHomeButton);
+    }
   });
 })();
 
