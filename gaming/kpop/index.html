@@ -53,6 +53,47 @@
     }
     .game-stage.active { display: flex; }
 
+    .music-energy-meter {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      width: min(260px, 40vw);
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      padding: .75rem 1rem;
+      border-radius: 14px;
+      background: rgba(15,4,22,.8);
+      border: 1px solid rgba(255,79,172,.25);
+      box-shadow: 0 18px 40px rgba(0,0,0,.35), 0 0 28px rgba(255,79,172,.3);
+      backdrop-filter: blur(6px);
+      z-index: 5;
+    }
+    .music-energy-meter h2 {
+      margin: 0;
+      font-size: .95rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #ffd6f5;
+    }
+    .music-energy-bar {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      overflow: hidden;
+    }
+    .music-energy-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ff4fac, #ffd86d);
+      transition: width 200ms ease;
+    }
+    .music-energy-value {
+      font-size: .9rem;
+      font-weight: 600;
+    }
+
     /* UI (hidden during play) */
     .game-overlay {
       position: absolute; left: 50%; transform: translateX(-50%); top: 2rem;
@@ -63,6 +104,46 @@
     .game-stage.active .game-overlay { display: none !important; }
 
     .monster-field { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
+
+    .loss-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background: rgba(7,2,12,.82);
+      backdrop-filter: blur(6px);
+      z-index: 6;
+      opacity: 1;
+      transition: opacity 240ms ease;
+    }
+    .loss-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .loss-card {
+      width: min(420px, 86vw);
+      padding: 2rem;
+      text-align: center;
+      border-radius: 20px;
+      background: rgba(22,7,32,.92);
+      border: 1px solid rgba(255,79,172,.28);
+      box-shadow: 0 22px 60px rgba(0,0,0,.5), 0 0 50px rgba(255,79,172,.28);
+    }
+    .loss-card h2 {
+      margin: 0 0 .75rem;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      color: #ffb0f0;
+    }
+    .loss-card p {
+      margin: 0 0 1.5rem;
+      line-height: 1.45;
+      color: rgba(255,255,255,.85);
+    }
+    .loss-card .btn {
+      min-width: 160px;
+    }
 
     .monster {
       position: absolute; width: 160px; height: 160px; background-size: contain; background-repeat: no-repeat; background-position: center;
@@ -118,6 +199,7 @@
       .menu-card { padding: 1.5rem; }
       .game-overlay { font-size: 1rem; padding: .6rem 1.1rem; }
       .hero { width: min(46vw, 320px); }
+      .music-energy-meter { left: 1rem; right: 1rem; width: auto; }
     }
   </style>
 </head>
@@ -147,10 +229,26 @@
     <!-- p5 full-screen background (behind monsters & hero) -->
     <div id="p5-bg" aria-hidden="true" style="position:absolute; inset:0; z-index:0; pointer-events:none;"></div>
 
+    <div class="music-energy-meter" id="musicEnergyMeter">
+      <h2>Music Energy</h2>
+      <div class="music-energy-bar" id="musicEnergyBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-labelledby="musicEnergyLabel">
+        <div class="music-energy-fill" id="musicEnergyFill"></div>
+      </div>
+      <div class="music-energy-value" id="musicEnergyLabel">100%</div>
+    </div>
+
     <div class="monster-field" id="monsterField"></div>
 
     <!-- Text UI (hidden when playing) -->
     <div class="game-overlay">Press SPACE to banish demons</div>
+
+    <div class="loss-overlay hidden" id="lossOverlay" role="alertdialog" aria-modal="true" aria-labelledby="lossTitle" aria-describedby="lossDescription">
+      <div class="loss-card">
+        <h2 id="lossTitle">The Beat Fell Silent</h2>
+        <p id="lossDescription">The demons drained the music's energy. Rally your focus and restart to protect the sound!</p>
+        <button class="btn btn-primary" id="restartButton">Restart</button>
+      </div>
+    </div>
   </div>
 
   <!-- p5.js -->
@@ -336,6 +434,15 @@
       slideOut: 700
     };
 
+    const MUSIC_CONSTANTS = {
+      ENERGY_MAX: 100,
+      ENERGY_MIN: 0,
+      DRAIN_INTERVAL: 500,
+      BASE_DRAIN: 2,
+      EXTRA_MONSTER_DRAIN: 1,
+      RESTORE_ON_BANISH: 15
+    };
+
     const state = {
       started: false,
       attackInProgress: false,
@@ -346,7 +453,10 @@
       sfxMuted: false,
       sfxVolume: 100,
       heroEl: null,
-      heroTimer: null
+      heroTimer: null,
+      musicEnergy: MUSIC_CONSTANTS.ENERGY_MAX,
+      musicDrainTimer: null,
+      musicLost: false
     };
     window.kpopState = state;
 
@@ -373,8 +483,53 @@
       if (!state.music) return;
       if (state.sfxMuted) { state.music.volume = 0; return; }
       const base = (state.sfxVolume || 0) / 100;
-      const penalty = Math.max(0, 1 - state.monsters.length * 0.1);
-      state.music.volume = Math.max(0, Math.min(1, base * penalty));
+      const energyFactor = state.musicEnergy / MUSIC_CONSTANTS.ENERGY_MAX;
+      state.music.volume = Math.max(0, Math.min(1, base * energyFactor));
+    }
+
+    function updateEnergyUI() {
+      const fill = document.getElementById('musicEnergyFill');
+      const label = document.getElementById('musicEnergyLabel');
+      const bar = document.getElementById('musicEnergyBar');
+      const value = Math.round(state.musicEnergy);
+      if (fill) fill.style.width = `${value}%`;
+      if (label) label.textContent = `${value}%`;
+      if (bar) bar.setAttribute('aria-valuenow', `${value}`);
+    }
+
+    function setMusicEnergy(value) {
+      const clamped = Math.max(MUSIC_CONSTANTS.ENERGY_MIN, Math.min(MUSIC_CONSTANTS.ENERGY_MAX, value));
+      state.musicEnergy = clamped;
+      updateEnergyUI();
+      updateMusicVolume();
+      if (clamped <= MUSIC_CONSTANTS.ENERGY_MIN) {
+        triggerMusicLoss();
+      }
+    }
+
+    function changeMusicEnergy(delta) {
+      if (state.musicLost && delta >= 0) return;
+      setMusicEnergy(state.musicEnergy + delta);
+    }
+
+    function triggerMusicLoss() {
+      if (state.musicLost) return;
+      state.musicLost = true;
+      state.started = false;
+      clearTimeout(state.spawnTimeout);
+      clearInterval(state.musicDrainTimer);
+      state.musicDrainTimer = null;
+      window.removeEventListener('keydown', handleKeyDown);
+      state.attackInProgress = false;
+      if (state.music) state.music.pause();
+
+      const overlay = document.getElementById('lossOverlay');
+      if (overlay) overlay.classList.remove('hidden');
+    }
+
+    function hideLossOverlay() {
+      const overlay = document.getElementById('lossOverlay');
+      if (overlay && !overlay.classList.contains('hidden')) overlay.classList.add('hidden');
     }
 
     function spawnMonster() {
@@ -450,6 +605,7 @@
 
           removed.classList.remove('hit');
           removed.classList.add('banish');
+          changeMusicEnergy(MUSIC_CONSTANTS.RESTORE_ON_BANISH);
           updateMusicVolume();
 
           removed.addEventListener('animationend', () => {
@@ -466,6 +622,18 @@
         spawnMonster();
         scheduleNextSpawn();
       }, state.spawnDelaySeconds * 1000);
+    }
+
+    function startMusicDrain() {
+      clearInterval(state.musicDrainTimer);
+      state.musicDrainTimer = setInterval(() => {
+        if (!state.started || state.musicLost) return;
+        const monsters = state.monsters.length;
+        if (monsters > 0) {
+          const drain = MUSIC_CONSTANTS.BASE_DRAIN + Math.max(0, monsters - 1) * MUSIC_CONSTANTS.EXTRA_MONSTER_DRAIN;
+          changeMusicEnergy(-drain);
+        }
+      }, MUSIC_CONSTANTS.DRAIN_INTERVAL);
     }
 
     function showHero() {
@@ -531,6 +699,9 @@
     function startGame() {
       if (state.started) return;
       state.started = true;
+      state.musicLost = false;
+      hideLossOverlay();
+      setMusicEnergy(MUSIC_CONSTANTS.ENERGY_MAX);
 
       document.getElementById('landingMenu')?.classList.add('hidden');
       const stage = document.getElementById('gameStage');
@@ -545,17 +716,21 @@
 
       spawnMonster();
       scheduleNextSpawn();
+      startMusicDrain();
 
       window.addEventListener('keydown', handleKeyDown);
     }
 
     function stopGame() {
       clearTimeout(state.spawnTimeout);
+      clearInterval(state.musicDrainTimer);
+      state.musicDrainTimer = null;
       window.removeEventListener('keydown', handleKeyDown);
 
       if (state.music) {
         state.music.pause();
         state.music.currentTime = 0;
+        state.music = null;
       }
       clearMonsters();
 
@@ -564,6 +739,10 @@
       state.heroEl = null;
 
       state.started = false;
+      state.musicLost = false;
+      state.musicEnergy = MUSIC_CONSTANTS.ENERGY_MAX;
+      updateEnergyUI();
+      hideLossOverlay();
       document.getElementById('gameStage')?.classList.remove('active');
       document.getElementById('landingMenu')?.classList.remove('hidden');
       state.attackInProgress = false;
@@ -594,6 +773,14 @@
       }
 
       if (startButton) startButton.addEventListener('click', startGame);
+
+      const restartButton = document.getElementById('restartButton');
+      if (restartButton) {
+        restartButton.addEventListener('click', () => {
+          hideLossOverlay();
+          stopGame();
+        });
+      }
     })();
 
     document.addEventListener('visibilitychange', () => {
@@ -604,9 +791,13 @@
       }
     });
 
-    window.addEventListener('beforeunload', () => { clearTimeout(state.spawnTimeout); });
+    window.addEventListener('beforeunload', () => {
+      clearTimeout(state.spawnTimeout);
+      clearInterval(state.musicDrainTimer);
+    });
 
     preloadSprites();
+    updateEnergyUI();
   </script>
 </body>
 </html>
