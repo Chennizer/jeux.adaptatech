@@ -92,6 +92,23 @@
       box-shadow: 0 22px 40px rgba(5, 35, 55, 0.32);
     }
 
+    .numeral-button.helper-highlight {
+      box-shadow: 0 0 0 4px rgba(56, 193, 114, 0.85), 0 0 18px rgba(56, 193, 114, 0.65);
+      animation: helperHighlightPulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes helperHighlightPulse {
+      0% {
+        box-shadow: 0 0 0 4px rgba(56, 193, 114, 0.85), 0 0 18px rgba(56, 193, 114, 0.65);
+      }
+      50% {
+        box-shadow: 0 0 0 6px rgba(56, 193, 114, 0.75), 0 0 24px rgba(56, 193, 114, 0.55);
+      }
+      100% {
+        box-shadow: 0 0 0 4px rgba(56, 193, 114, 0.85), 0 0 18px rgba(56, 193, 114, 0.65);
+      }
+    }
+
     .objects-container {
       flex: 1 1 auto;
       height: 100%;
@@ -117,6 +134,18 @@
       height: 100%;
       object-fit: contain;
       animation: pulse 2s infinite;
+    }
+
+    .object-item img.touch-assist-target {
+      cursor: pointer;
+      animation-duration: 2.4s;
+    }
+
+    .object-item img.touch-assist-counted {
+      animation: none;
+      transform: scale(0.95);
+      opacity: 0.85;
+      filter: saturate(0.85);
     }
 
     @keyframes pulse {
@@ -162,6 +191,11 @@
     let activityRepetitions = 1;
     let correctCount = 0;
     let reinforcerController = null;
+    let touchCountAssistEnabled = false;
+    let speechVoice = null;
+    let speechInitialized = false;
+    let activeAssistCleanup = null;
+    let helperHighlightButton = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       const session = sessionHelpers.ensureCurrentGame('denombrer');
@@ -176,11 +210,15 @@
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../sounds/success3.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../sounds/victory.mp3";
 
-      const options = sessionHelpers.getCurrentGameOptions(session);
+      const options = sessionHelpers.getCurrentGameOptions(session) || {};
       difficultySetting = options.difficulty || 'easy';
       activityRepetitions = Number(options.activityRepetitions);
       if (!Number.isFinite(activityRepetitions) || activityRepetitions < 1) {
         activityRepetitions = 1;
+      }
+      touchCountAssistEnabled = options.touchCountAssist === true || options.touchCountAssist === 'true';
+      if (touchCountAssistEnabled) {
+        initializeSpeechSupport();
       }
       correctCount = 0;
 
@@ -202,6 +240,11 @@
     }
 
     function showFinalReinforcerVideo() {
+      if (typeof activeAssistCleanup === 'function') {
+        activeAssistCleanup();
+        activeAssistCleanup = null;
+      }
+      clearHelperHighlight();
       const finalRewardSound = document.getElementById('final-reward-sound');
       finalRewardSound.currentTime = 0;
       finalRewardSound.play().catch(function(error) {
@@ -214,9 +257,222 @@
       }
     }
 
+    function initializeSpeechSupport() {
+      if (speechInitialized) {
+        return;
+      }
+      if (!('speechSynthesis' in window)) {
+        speechInitialized = true;
+        return;
+      }
+
+      speechInitialized = true;
+
+      const populateVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) {
+          return;
+        }
+        speechVoice = selectFrenchVoice(voices) || voices[0];
+      };
+
+      populateVoice();
+      window.speechSynthesis.addEventListener('voiceschanged', populateVoice);
+    }
+
+    function selectFrenchVoice(voices) {
+      if (!Array.isArray(voices)) {
+        return null;
+      }
+      for (let index = 0; index < voices.length; index += 1) {
+        const voice = voices[index];
+        if (voice && voice.lang && /fr(-|_|$)/i.test(voice.lang)) {
+          return voice;
+        }
+      }
+      return null;
+    }
+
+    function speakText(text) {
+      if (!touchCountAssistEnabled || !text || !('speechSynthesis' in window)) {
+        return;
+      }
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (speechVoice) {
+        utterance.voice = speechVoice;
+        utterance.lang = speechVoice.lang || 'fr-CA';
+      } else {
+        utterance.lang = 'fr-CA';
+      }
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      if (synth.speaking || synth.pending) {
+        synth.cancel();
+      }
+      synth.speak(utterance);
+    }
+
+    function pluralizeFrenchWord(word) {
+      if (!word) {
+        return 'objets';
+      }
+      if (/[sxz]$/i.test(word)) {
+        return word;
+      }
+      if (/objets?$/i.test(word)) {
+        return word.endsWith('s') ? word : `${word}s`;
+      }
+      return `${word}s`;
+    }
+
+    function deriveObjectLabels(imagePath) {
+      const fallback = { singular: 'objet', plural: 'objets' };
+      if (!imagePath || typeof imagePath !== 'string') {
+        return fallback;
+      }
+
+      if (Array.isArray(themeData.transparentPNGs)) {
+        const imageIndex = themeData.transparentPNGs.indexOf(imagePath);
+        if (imageIndex >= 0 && Array.isArray(themeData.words)) {
+          const rawWord = themeData.words[imageIndex];
+          if (typeof rawWord === 'string' && rawWord.trim().length > 0) {
+            const normalized = rawWord.trim().toLowerCase();
+            return {
+              singular: normalized,
+              plural: pluralizeFrenchWord(normalized)
+            };
+          }
+        }
+      }
+
+      const parts = imagePath.split('/');
+      const fileName = parts.length > 0 ? parts[parts.length - 1] : '';
+      const baseName = fileName.split('.')[0] || '';
+      const cleaned = baseName.replace(/[_\-]+/g, ' ').replace(/\d+/g, '').trim();
+      if (!cleaned) {
+        return fallback;
+      }
+
+      const normalized = cleaned.toLowerCase();
+      return {
+        singular: normalized,
+        plural: pluralizeFrenchWord(normalized)
+      };
+    }
+
+    function buildFinalMessage(count, labels) {
+      const safeLabels = labels || { singular: 'objet', plural: 'objets' };
+      const label = count > 1
+        ? (safeLabels.plural || 'objets')
+        : (safeLabels.singular || 'objet');
+      return `Il y a ${count} ${label}.`;
+    }
+
+    function highlightHelperButton(button) {
+      if (helperHighlightButton && helperHighlightButton !== button) {
+        helperHighlightButton.classList.remove('helper-highlight');
+      }
+
+      if (!button) {
+        helperHighlightButton = null;
+        return;
+      }
+
+      helperHighlightButton = button;
+      helperHighlightButton.classList.add('helper-highlight');
+    }
+
+    function clearHelperHighlight() {
+      if (helperHighlightButton) {
+        helperHighlightButton.classList.remove('helper-highlight');
+        helperHighlightButton = null;
+      }
+    }
+
+    function attachTouchAssist(targetElements, expectedCount, finalMessage, onComplete) {
+      if (!touchCountAssistEnabled || !Array.isArray(targetElements) || targetElements.length === 0) {
+        return function noop() {};
+      }
+
+      const countedElements = new WeakSet();
+      let counted = 0;
+      let finalTimeoutId = null;
+      let finalAnnounced = false;
+      const pointerSupported = typeof window !== 'undefined' && 'PointerEvent' in window;
+
+      const handler = (event) => {
+        if (event && typeof event.preventDefault === 'function') {
+          event.preventDefault();
+        }
+        const element = event.currentTarget;
+        if (!element || countedElements.has(element)) {
+          return;
+        }
+
+        countedElements.add(element);
+        counted += 1;
+        element.classList.add('touch-assist-counted');
+        speakText(String(counted));
+
+        if (!finalAnnounced && counted >= expectedCount) {
+          finalAnnounced = true;
+          finalTimeoutId = window.setTimeout(() => {
+            if (finalMessage) {
+              speakText(finalMessage);
+            }
+            if (typeof onComplete === 'function') {
+              onComplete();
+            }
+          }, 600);
+        }
+      };
+
+      targetElements.forEach((element) => {
+        if (!element) {
+          return;
+        }
+        element.classList.add('touch-assist-target');
+        if (pointerSupported) {
+          element.addEventListener('pointerdown', handler);
+        } else {
+          element.addEventListener('touchstart', handler, { passive: false });
+          element.addEventListener('click', handler);
+        }
+      });
+
+      return function cleanup() {
+        if (finalTimeoutId !== null) {
+          window.clearTimeout(finalTimeoutId);
+          finalTimeoutId = null;
+        }
+        targetElements.forEach((element) => {
+          if (!element) {
+            return;
+          }
+          element.classList.remove('touch-assist-target');
+          element.classList.remove('touch-assist-counted');
+          if (pointerSupported) {
+            element.removeEventListener('pointerdown', handler);
+          } else {
+            element.removeEventListener('touchstart', handler);
+            element.removeEventListener('click', handler);
+          }
+        });
+      };
+    }
+
     window.startGame = function() {
         var gameContent = document.getElementById('game-content');
         gameContent.innerHTML = "";
+
+        if (typeof activeAssistCleanup === 'function') {
+          activeAssistCleanup();
+          activeAssistCleanup = null;
+        }
+        clearHelperHighlight();
 
         // Create left side (numeral container)
         var numeralContainer = document.createElement('div');
@@ -256,6 +512,7 @@
         }
 
         // Create numeral buttons 1..maxOption and add them to the wrapper
+        var correctButton = null;
         for (var i = 1; i <= maxOption; i++) {
           var btn = document.createElement('button');
           btn.className = "numeral-button";
@@ -263,6 +520,7 @@
           btn.addEventListener('click', function() {
             if (parseInt(this.textContent, 10) === numObjects) {
               correctCount++;
+              clearHelperHighlight();
               if (correctCount < activityRepetitions) {
                 var wordRewardSound = document.getElementById('word-reward-sound');
                 wordRewardSound.currentTime = 0;
@@ -280,6 +538,9 @@
               document.getElementById('error-sound').play();
             }
           });
+          if (touchCountAssistEnabled && i === numObjects) {
+            correctButton = btn;
+          }
           numeralButtonsWrapper.appendChild(btn);
         }
 
@@ -293,6 +554,7 @@
         }
         var chosenImage = themeImages[Math.floor(Math.random() * themeImages.length)];
 
+        var assistTargets = [];
         for (var j = 0; j < numObjects; j++) {
           // Each item is absolutely positioned => .object-item
           var itemDiv = document.createElement('div');
@@ -304,6 +566,7 @@
 
           itemDiv.appendChild(imgEl);
           objectsContainer.appendChild(itemDiv);
+          assistTargets.push(imgEl);
         }
 
         // Add both containers to the layout
@@ -313,6 +576,20 @@
         setTimeout(function() {
           layoutImages(objectsContainer, numObjects);
         }, 50);
+
+        if (touchCountAssistEnabled && assistTargets.length > 0) {
+          var labels = deriveObjectLabels(chosenImage);
+          var finalMessage = buildFinalMessage(numObjects, labels);
+          var highlightAction = function() {
+            if (correctButton) {
+              highlightHelperButton(correctButton);
+            }
+          };
+          if (touchCountAssistEnabled && typeof initializeSpeechSupport === 'function') {
+            initializeSpeechSupport();
+          }
+          activeAssistCleanup = attachTouchAssist(assistTargets, numObjects, finalMessage, highlightAction);
+        }
       };
 
       function pickColumns(n) {

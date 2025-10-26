@@ -79,6 +79,11 @@
           type: 'checkbox',
           label: 'Afficher le cadre de dix:',
           name: 'showTenFrame'
+        },
+        {
+          type: 'checkbox',
+          label: 'Assistant tactile de comptage:',
+          name: 'touchCountAssist'
         }
       ]
     },
@@ -119,6 +124,11 @@
           min: 1,
           max: 10,
           value: 1
+        },
+        {
+          type: 'checkbox',
+          label: 'Assistant tactile de comptage:',
+          name: 'touchCountAssist'
         }
       ]
     },
