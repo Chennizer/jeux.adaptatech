@@ -241,10 +241,18 @@
 
       function showPage(index) {
         if (index < 0 || index >= pages.length) return;
-        pages[currentIndex].classList.remove('active');
+        if (index === currentIndex) return;
         clearGameTimer();
+        const previousPage = pages[currentIndex];
+        if (previousPage) {
+          previousPage.classList.remove('active');
+          if (previousPage.dataset.game) {
+            stopGame(previousPage);
+          }
+        }
         currentIndex = index;
         const page = pages[currentIndex];
+        if (!page) return;
         page.classList.add('active');
         if (page.dataset.game) {
           loadGame(page.dataset.game, page);
@@ -335,29 +343,97 @@
 
       const loadedGames = new Set();
 
-      function autoStartGameFrame(iframe) {
+      function autoStartGameFrame(iframe, attempt = 0) {
         if (!iframe) return;
-        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (!doc) return;
-        const startBtn = doc.getElementById('startBtn');
-        if (startBtn && typeof startBtn.click === 'function') {
-          startBtn.click();
-        }
+        const win = iframe.contentWindow;
+        const doc = win?.document;
+        if (!doc || !win) return;
+
         const startOverlay = doc.getElementById('startOverlay');
         if (startOverlay) {
           startOverlay.style.display = 'none';
         }
+
+        const storyApi = win.storyGameApi;
+        if (storyApi && typeof storyApi.start === 'function') {
+          try {
+            const maybePromise = storyApi.start();
+            if (maybePromise && typeof maybePromise.then === 'function') {
+              maybePromise.catch(() => {});
+            }
+            return;
+          } catch (error) {
+            /* ignore and fall back */
+          }
+        }
+
         const autoFns = ['startExperience', 'startGame'];
-        autoFns.forEach((name) => {
-          const fn = iframe.contentWindow && iframe.contentWindow[name];
+        for (const name of autoFns) {
+          const fn = win[name];
           if (typeof fn === 'function') {
             try {
-              fn.call(iframe.contentWindow);
+              fn.call(win);
+              return;
             } catch (error) {
               /* ignore individual game errors */
             }
           }
-        });
+        }
+
+        const startBtn = doc.getElementById('startBtn');
+        if (startBtn && typeof startBtn.click === 'function') {
+          startBtn.click();
+        }
+
+        if (attempt < 5) {
+          window.setTimeout(() => autoStartGameFrame(iframe, attempt + 1), 200);
+        }
+      }
+
+      function stopGame(page) {
+        const iframe = page?.querySelector('iframe');
+        if (!iframe) return;
+        try {
+          const win = iframe.contentWindow;
+          if (!win) return;
+          const api = win.storyGameApi;
+          if (api && typeof api.stop === 'function') {
+            try {
+              const maybePromise = api.stop();
+              if (maybePromise && typeof maybePromise.then === 'function') {
+                maybePromise.catch(() => {});
+              }
+            } catch (error) {
+              /* ignore stop errors */
+            }
+          } else {
+            const stopFns = ['stopExperience', 'stopGame', 'pauseGame'];
+            for (const name of stopFns) {
+              const fn = win[name];
+              if (typeof fn === 'function') {
+                try {
+                  fn.call(win);
+                } catch (error) {
+                  /* ignore */
+                }
+              }
+            }
+          }
+
+          const doc = win.document;
+          if (doc) {
+            doc.querySelectorAll('audio').forEach((audioEl) => {
+              try {
+                audioEl.pause();
+                audioEl.currentTime = 0;
+              } catch (error) {
+                /* ignore audio cleanup failures */
+              }
+            });
+          }
+        } catch (error) {
+          /* ignore cross-frame issues */
+        }
       }
 
       function loadGame(key, page) {
@@ -687,6 +763,9 @@
     ======================= */
     let gameState = 'idle';  // 'idle' | 'intro' | 'play'
     let introStartMs = 0;
+    let started = false;
+    let rafId = 0;
+    let rafId = 0;
 
     let swirlCenter = { x: 0, y: 0 };
     let swirlPetals = []; // {r,a,w,h,spin,dr,da,angle,done}
@@ -775,6 +854,10 @@
     let lastT = performance.now(), spawnTimer = 0;
 
     function tick(tMs) {
+      if (!started) {
+        rafId = 0;
+        return;
+      }
       const dt = Math.min(0.033, (tMs - lastT) / 1000);
       lastT = tMs;
 
@@ -803,7 +886,7 @@
         render();
       }
 
-      requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     }
 
     /* =======================
@@ -879,34 +962,81 @@
       else if (el.msRequestFullscreen) await el.msRequestFullscreen();
     }
 
-    startBtn.addEventListener('click', async () => {
-      try { await enterFullscreen(); } catch(e) {}
+    function scheduleTick() {
+      if (!started || rafId) return;
+      const begin = () => {
+        if (!started) return;
+        lastT = performance.now();
+        rafId = requestAnimationFrame(tick);
+      };
 
-      // Hide overlay
-      startOverlay.style.display = 'none';
+      if (img.complete && bgImg.complete) {
+        begin();
+        return;
+      }
 
-      // Hide cursor during the entire intro animation
+      let pending = 0;
+      const tryStart = () => {
+        if (--pending <= 0) begin();
+      };
+      if (!img.complete)  { pending++; img.onload  = tryStart; }
+      if (!bgImg.complete){ pending++; bgImg.onload = tryStart; }
+      if (pending === 0) begin();
+    }
+
+    function resetGameState() {
+      gameState = 'idle';
+      introStartMs = 0;
+      swirlPetals = [];
+      blossoms.length = 0;
+      shards.length = 0;
+      katanaRevealed = false;
+      pointer.x = pointer.y = pointer.prevX = -9999;
+      pointer.inside = false;
+      cursorOrient = 'left';
+    }
+
+    async function startExperience(options = {}) {
+      if (started) return;
+
+      if (options.requestFullscreen) {
+        try { await enterFullscreen(); } catch (e) {}
+      }
+
+      started = true;
+      resetGameState();
+      if (startOverlay) startOverlay.style.display = 'none';
       canvas.style.cursor = 'none';
 
-      // Start music (user gesture exists, so this should be allowed)
-      try { bgSong.currentTime = 0; bgSong.play(); } catch(e) {}
+      try { bgSong.currentTime = 0; await bgSong.play(); } catch (e) {}
+      try { katanaDraw.currentTime = 0; katanaDraw.pause(); } catch (e) {}
 
-      // Start tornado swirl; katana appears when play begins
       gameState = 'intro';
       introStartMs = performance.now();
       initSwirl();
 
-      lastT = performance.now();
-      // ensure assets are ready before loop
-      if (img.complete && bgImg.complete) requestAnimationFrame(tick);
-      else {
-        let pending = 0;
-        const tryStart = () => { if (--pending <= 0) requestAnimationFrame(tick); };
-        if (!img.complete)  { pending++; img.onload  = tryStart; }
-        if (!bgImg.complete){ pending++; bgImg.onload = tryStart; }
-        if (pending === 0) requestAnimationFrame(tick);
-      }
+      scheduleTick();
+    }
+
+    function stopExperience() {
+      if (!started) return;
+      started = false;
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      resetGameState();
+      canvas.style.cursor = 'default';
+      try { bgSong.pause(); bgSong.currentTime = 0; } catch (e) {}
+      try { slashAudio.pause(); slashAudio.currentTime = 0; } catch (e) {}
+      try { katanaDraw.pause(); katanaDraw.currentTime = 0; } catch (e) {}
+    }
+
+    startBtn.addEventListener('click', () => {
+      startExperience({ requestFullscreen: true });
     });
+
+    window.startExperience = (options) => startExperience(options);
+    window.stopExperience = stopExperience;
+    window.storyGameApi = { start: startExperience, stop: stopExperience };
 
   })();
   </script>
@@ -1116,6 +1246,7 @@
     let chargeGain=null, filter=null, osc1=null, osc2=null, o1g=null, o2g=null;
 
     function setupAudio(){
+      if (audioCtx) return;
       audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
       masterGain = audioCtx.createGain(); masterGain.gain.value = 0.9; masterGain.connect(audioCtx.destination);
 
@@ -1577,6 +1708,7 @@
        UPDATE (expanded hover zone + rate falloff)
     ======================= */
     let started=false, lastT=performance.now(), lastDt=0;
+    let rafId = 0;
 
     function maybeCharge(dt){
       if (!orb || launching) return;
@@ -1812,13 +1944,16 @@
     }
 
     function tick(tMs){
-      if (!started) return;
+      if (!started) {
+        rafId = 0;
+        return;
+      }
       const dt = Math.min(0.033, (tMs - lastT)/1000);
       lastT = tMs;
       lastDt = dt;
       update(dt);
       render();
-      requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     }
 
     /* =======================
@@ -1833,33 +1968,104 @@
       else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
     }
 
-    startBtn.addEventListener('click', async ()=>{
-      try{ await enterFullscreen(); }catch(e){}
-      startOverlay.style.display='none';
-      started = true;
+    function scheduleTick(){
+      if (!started || rafId) return;
+      const begin = () => {
+        if (!started) return;
+        lastT = performance.now();
+        rafId = requestAnimationFrame(tick);
+      };
 
-      // ensure images then start
+      if (bgImg.complete && pointerImg.complete && moonIcon.complete && rockImgs.every(im => im.complete)) {
+        begin();
+        return;
+      }
+
       let pending = 0;
-      const tryStart = ()=>{ if (--pending<=0) requestAnimationFrame(tick); };
+      const tryStart = () => {
+        if (--pending <= 0) begin();
+      };
 
-      // background
-      if (!bgImg.complete){ pending++; bgImg.onload = tryStart; }
+      if (!bgImg.complete) { pending++; bgImg.onload = tryStart; }
+      if (!pointerImg.complete) { pending++; pointerImg.onload = tryStart; }
+      if (!moonIcon.complete) { pending++; moonIcon.onload = tryStart; }
+      rockImgs.forEach(im => { if (!im.complete) { pending++; im.onload = tryStart; } });
+      if (pending === 0) begin();
+    }
 
-      // pointer
-      if (!pointerImg.complete){ pending++; pointerImg.onload = tryStart; }
+    function resetGameState(){
+      orb = null;
+      launching = false;
+      respawnAtMs = 0;
+      inflow.length = 0;
+      shards.length = 0;
+      craters.length = 0;
+      flashLife = 0; flashT = 0;
+      shockLife = 0; shockT = 0; shockX = 0; shockY = 0;
+      mShake.ox = 0; mShake.oy = 0; mShake.vx = 0; mShake.vy = 0;
+      pointer.x = pointer.y = pointer.px = pointer.py = -9999;
+      pointer.inside = false;
+      pointer.moved = 0;
+    }
 
-      // rocks
-      rockImgs.forEach(im => { if (!im.complete){ pending++; im.onload = tryStart; }});
+    function quietAudio(){
+      if (audioCtx) {
+        try {
+          if (chargeGain && chargeGain.gain) {
+            const t = audioCtx.currentTime;
+            chargeGain.gain.setValueAtTime(0, t);
+            chargeGain.gain.cancelAndHoldAtTime?.(t);
+          }
+          audioCtx.suspend();
+        } catch(e){}
+      }
+      try { sfxRelease.pause(); sfxRelease.currentTime = 0; } catch(e){}
+      sfxImpactClips.forEach(a => { try { a.pause(); a.currentTime = 0; } catch(e){} });
+    }
 
-      // moon icon
-      if (!moonIcon.complete){ pending++; moonIcon.onload = tryStart; }
+    async function startExperience(options = {}){
+      if (started) return;
+      if (options.requestFullscreen) {
+        try { await enterFullscreen(); } catch(e){}
+      }
 
-      if (pending===0) requestAnimationFrame(tick);
+      resetGameState();
+      quietAudio();
+      started = true;
+      if (startOverlay) startOverlay.style.display='none';
 
-      // audio on gesture
-      try { setupAudio(); if (audioCtx.state === 'suspended') await audioCtx.resume(); } catch(e){}
+      try {
+        setupAudio();
+        if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+        if (chargeGain && audioCtx) {
+          const t = audioCtx.currentTime;
+          chargeGain.gain.setTargetAtTime(0, t, 0.1);
+        }
+      } catch(e){}
+
+      try { sfxRelease.pause(); sfxRelease.currentTime = 0; } catch(e){}
+      sfxImpactClips.forEach(a => { try { a.pause(); a.currentTime = 0; } catch(e){} });
+
       resize();
+      scheduleTick();
+    }
+
+    function stopExperience(){
+      if (!started) return;
+      started = false;
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      resetGameState();
+      quietAudio();
+    }
+
+    startBtn.addEventListener('click', () => {
+      startExperience({ requestFullscreen: true });
     });
+
+    window.startExperience = (options) => startExperience(options);
+    window.stopExperience = stopExperience;
+    window.storyGameApi = { start: startExperience, stop: stopExperience };
   })();
   </script>
 </body>
@@ -2945,7 +3151,10 @@ function drawRopes(t) {
     }
 
     function tick(tMs) {
-      if (!started) return;
+      if (!started) {
+        rafId = 0;
+        return;
+      }
       const dt = Math.min(0.033, (tMs - lastT) / 1000);
       lastT = tMs;
 
@@ -2953,7 +3162,7 @@ function drawRopes(t) {
       update(dt);
       render();
 
-      requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     }
 
     /* ===== FULLSCREEN START ===== */
@@ -2967,22 +3176,94 @@ function drawRopes(t) {
       else if (el.msRequestFullscreen) await el.msRequestFullscreen();
     }
 
-    startBtn.addEventListener('click', async () => {
-      try { await enterFullscreen(); } catch(e) {}
-      startOverlay.style.display = 'none';
-      started = true;
+    function scheduleTick() {
+      if (!started || rafId) return;
+      const begin = () => {
+        if (!started) return;
+        lastT = performance.now();
+        rafId = requestAnimationFrame(tick);
+      };
 
-      lastT = performance.now();
-      resize();
-      scheduleShootingStar();
+      const imgs = [bgImg, imgClosed1, imgLit1, imgClosed2, imgLit2, chiPointerImg, katanaCursorImg];
+      if (imgs.every(im => im.complete)) {
+        begin();
+        return;
+      }
 
-      // Wait for images once
       let pending = 0;
-      const tryStart = () => { if (--pending <= 0) requestAnimationFrame(tick); };
-      const imgs = [bgImg, imgClosed1, imgLit1, imgClosed2, imgLit2];
-      for (const im of imgs) if (!im.complete) { pending++; im.onload = tryStart; }
-      if (pending === 0) requestAnimationFrame(tick);
+      const tryStart = () => {
+        if (--pending <= 0) begin();
+      };
+      imgs.forEach(im => { if (!im.complete) { pending++; im.onload = tryStart; } });
+      if (pending === 0) begin();
+    }
+
+    function resetGameState() {
+      lanterns.length = 0;
+      hoveredTile = null;
+      modeTiles.forEach(clearTileProgress);
+      currentMode = 'chi';
+      refreshModeTiles();
+      cursorOrient = 'left';
+      applyCurrentCursor();
+      pointer.x = pointer.y = -9999;
+      pointer.prevX = -9999;
+      pointer.inside = false;
+      stars = [];
+      fireflies = [];
+      bgLanterns = [];
+      activeShootingStar = null;
+      nextStarTime = 0;
+    }
+
+    function rebuildWorld() {
+      ensureCount();
+      rebuildStars();
+      rebuildFireflies();
+      rebuildBgLanterns();
+      scheduleShootingStar();
+    }
+
+    function quietAudio() {
+      [sfxKatanaDraw, sfxChiSelect, sfxKatanaSlice, ...lampLitSounds].forEach(a => {
+        try { a.pause(); a.currentTime = 0; } catch (e) {}
+      });
+    }
+
+    async function startExperience(options = {}) {
+      if (started) return;
+      if (options.requestFullscreen) {
+        try { await enterFullscreen(); } catch (e) {}
+      }
+
+      resetGameState();
+      quietAudio();
+      started = true;
+      if (startOverlay) startOverlay.style.display = 'none';
+      canvas.style.cursor = 'none';
+
+      resize();
+      rebuildWorld();
+      scheduleTick();
+    }
+
+    function stopExperience() {
+      if (!started) return;
+      started = false;
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      quietAudio();
+      resetGameState();
+      canvas.style.cursor = 'default';
+    }
+
+    startBtn.addEventListener('click', () => {
+      startExperience({ requestFullscreen: true });
     });
+
+    window.startExperience = (options) => startExperience(options);
+    window.stopExperience = stopExperience;
+    window.storyGameApi = { start: startExperience, stop: stopExperience };
   })();
   </script>
 </body>
