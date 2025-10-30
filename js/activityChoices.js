@@ -141,7 +141,7 @@ const activityChoices = [
     id: 'baby-shark',
     name: { fr: 'Baby Shark', en: 'Baby Shark' },
     shortName: { fr: 'Baby Shark', en: 'Baby Shark' },
-    image: '../../images/choixeyegaze/Baby Shark.png',
+    image: '../../images/choixeyegaze/BabyShark.png',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
   },
@@ -149,7 +149,7 @@ const activityChoices = [
     id: 'ballon-soccer-musical',
     name: { fr: 'Ballon de soccer musical', en: 'Musical soccer ball' },
     shortName: { fr: 'Ballon musical', en: 'Musical ball' },
-    image: '../../images/choixeyegaze/Ballon de soccer musical.jpeg',
+    image: '../../images/choixeyegaze/Ballondesoccermusical.jpeg',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
   },
@@ -157,7 +157,7 @@ const activityChoices = [
     id: 'chien-musical',
     name: { fr: 'Chien musical', en: 'Musical dog' },
     shortName: { fr: 'Chien musical', en: 'Musical dog' },
-    image: '../../images/choixeyegaze/Chien musical.jpeg',
+    image: '../../images/choixeyegaze/Chienmusical.jpeg',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
   },
@@ -172,7 +172,7 @@ const activityChoices = [
     id: 'reine-des-neiges',
     name: { fr: 'La reine des neiges', en: 'Frozen' },
     shortName: { fr: 'Reine des neiges', en: 'Frozen' },
-    image: '../../images/choixeyegaze/La reine des neiges.png',
+    image: '../../images/choixeyegaze/Lareinedesneiges.png',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
   },
@@ -180,7 +180,7 @@ const activityChoices = [
     id: 'minions',
     name: { fr: 'Les minions', en: 'The Minions' },
     shortName: { fr: 'Minions', en: 'Minions' },
-    image: '../../images/choixeyegaze/Les minions.png',
+    image: '../../images/choixeyegaze/Lesminions.png',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
   },
@@ -188,7 +188,7 @@ const activityChoices = [
     id: 'trolls',
     name: { fr: 'Les trolls', en: 'The Trolls' },
     shortName: { fr: 'Trolls', en: 'Trolls' },
-    image: '../../images/choixeyegaze/Les trolls.png',
+    image: '../../images/choixeyegaze/Lestrolls.png',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
   },
@@ -196,14 +196,14 @@ const activityChoices = [
     id: 'livre-enchante',
     name: { fr: 'Livre enchanté', en: 'Enchanted book' },
     shortName: { fr: 'Livre enchanté', en: 'Enchanted book' },
-    image: '../../images/choixeyegaze/Livre enchanté.jpeg',
+    image: '../../images/choixeyegaze/Livreenchanté.jpeg',
     href: '../choixeyegaze/index.html'
   },
   {
     id: 'machine-a-cookies',
     name: { fr: 'Machine à cookies', en: 'Cookie machine' },
     shortName: { fr: 'Machine à cookies', en: 'Cookie machine' },
-    image: '../../images/choixeyegaze/Machine à cookies.png',
+    image: '../../images/choixeyegaze/Machineàcookies.png',
     href: '../choixeyegaze/index.html'
   },
   {
@@ -224,21 +224,21 @@ const activityChoices = [
     id: 'suis-ligne-droite',
     name: { fr: 'Suis la ligne droite', en: 'Follow the straight line' },
     shortName: { fr: 'Ligne droite', en: 'Straight line' },
-    image: '../../images/choixeyegaze/Suis la ligne droite.png',
+    image: '../../images/choixeyegaze/Suislalignedroite.png',
     href: '../choixeyegaze/index.html'
   },
   {
     id: 'texture-doree',
     name: { fr: 'Texture dorée', en: 'Golden texture' },
     shortName: { fr: 'Texture dorée', en: 'Golden texture' },
-    image: '../../images/choixeyegaze/Texture dorée.jpeg',
+    image: '../../images/choixeyegaze/Texturedorée.jpeg',
     href: '../choixeyegaze/index.html'
   },
   {
     id: 'trouve-intrus',
     name: { fr: "Trouve l'intrus", en: 'Find the intruder' },
     shortName: { fr: "Trouve l'intrus", en: 'Find the intruder' },
-    image: "../../images/choixeyegaze/Trouve l'intrus.png",
+    image: "../../images/choixeyegaze/Trouvelintrus.png",
     href: '../choixeyegaze/index.html'
   },
   {
@@ -252,7 +252,7 @@ const activityChoices = [
     id: 'choix-instruments-musique',
     name: { fr: 'Choix instruments musique', en: 'Music instruments choice' },
     shortName: { fr: 'Instruments', en: 'Instruments' },
-    image: '../../images/choixeyegaze/choix instruments musique.png',
+    image: '../../images/choixeyegaze/choixinstrumentsmusique.png',
     href: '../choixeyegaze/index.html',
     categories: ['musique']
   },
