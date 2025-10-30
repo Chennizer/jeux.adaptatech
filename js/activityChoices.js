@@ -129,6 +129,146 @@ const activityChoices = [
     image: '../../images/findme.png',
     href: '../choixeyegaze/index.html',
     categories: ['inclusive']
+  },
+  {
+    id: 'assiettes',
+    name: { fr: 'Assiettes', en: 'Plates' },
+    shortName: { fr: 'Assiettes', en: 'Plates' },
+    image: '../../images/choixeyegaze/Assiettes.jpeg',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'baby-shark',
+    name: { fr: 'Baby Shark', en: 'Baby Shark' },
+    shortName: { fr: 'Baby Shark', en: 'Baby Shark' },
+    image: '../../images/choixeyegaze/Baby Shark.png',
+    href: '../choixeyegaze/index.html',
+    categories: ['musique']
+  },
+  {
+    id: 'ballon-soccer-musical',
+    name: { fr: 'Ballon de soccer musical', en: 'Musical soccer ball' },
+    shortName: { fr: 'Ballon musical', en: 'Musical ball' },
+    image: '../../images/choixeyegaze/Ballon de soccer musical.jpeg',
+    href: '../choixeyegaze/index.html',
+    categories: ['musique']
+  },
+  {
+    id: 'chien-musical',
+    name: { fr: 'Chien musical', en: 'Musical dog' },
+    shortName: { fr: 'Chien musical', en: 'Musical dog' },
+    image: '../../images/choixeyegaze/Chien musical.jpeg',
+    href: '../choixeyegaze/index.html',
+    categories: ['musique']
+  },
+  {
+    id: 'grenouille',
+    name: { fr: 'Grenouille', en: 'Frog' },
+    shortName: { fr: 'Grenouille', en: 'Frog' },
+    image: '../../images/choixeyegaze/Grenouille.jpeg',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'reine-des-neiges',
+    name: { fr: 'La reine des neiges', en: 'Frozen' },
+    shortName: { fr: 'Reine des neiges', en: 'Frozen' },
+    image: '../../images/choixeyegaze/La reine des neiges.png',
+    href: '../choixeyegaze/index.html',
+    categories: ['musique']
+  },
+  {
+    id: 'minions',
+    name: { fr: 'Les minions', en: 'The Minions' },
+    shortName: { fr: 'Minions', en: 'Minions' },
+    image: '../../images/choixeyegaze/Les minions.png',
+    href: '../choixeyegaze/index.html',
+    categories: ['musique']
+  },
+  {
+    id: 'trolls',
+    name: { fr: 'Les trolls', en: 'The Trolls' },
+    shortName: { fr: 'Trolls', en: 'Trolls' },
+    image: '../../images/choixeyegaze/Les trolls.png',
+    href: '../choixeyegaze/index.html',
+    categories: ['musique']
+  },
+  {
+    id: 'livre-enchante',
+    name: { fr: 'Livre enchanté', en: 'Enchanted book' },
+    shortName: { fr: 'Livre enchanté', en: 'Enchanted book' },
+    image: '../../images/choixeyegaze/Livre enchanté.jpeg',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'machine-a-cookies',
+    name: { fr: 'Machine à cookies', en: 'Cookie machine' },
+    shortName: { fr: 'Machine à cookies', en: 'Cookie machine' },
+    image: '../../images/choixeyegaze/Machine à cookies.png',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'observe',
+    name: { fr: 'Observe', en: 'Observe' },
+    shortName: { fr: 'Observe', en: 'Observe' },
+    image: '../../images/choixeyegaze/Observe.png',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'poursuis-moi',
+    name: { fr: 'Poursuis-moi', en: 'Chase me' },
+    shortName: { fr: 'Poursuis-moi', en: 'Chase me' },
+    image: '../../images/choixeyegaze/Poursuis-moi.png',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'suis-ligne-droite',
+    name: { fr: 'Suis la ligne droite', en: 'Follow the straight line' },
+    shortName: { fr: 'Ligne droite', en: 'Straight line' },
+    image: '../../images/choixeyegaze/Suis la ligne droite.png',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'texture-doree',
+    name: { fr: 'Texture dorée', en: 'Golden texture' },
+    shortName: { fr: 'Texture dorée', en: 'Golden texture' },
+    image: '../../images/choixeyegaze/Texture dorée.jpeg',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'trouve-intrus',
+    name: { fr: "Trouve l'intrus", en: 'Find the intruder' },
+    shortName: { fr: "Trouve l'intrus", en: 'Find the intruder' },
+    image: "../../images/choixeyegaze/Trouve l'intrus.png",
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'trouve-moi',
+    name: { fr: 'Trouve-moi', en: 'Find me' },
+    shortName: { fr: 'Trouve-moi', en: 'Find me' },
+    image: '../../images/choixeyegaze/Trouve-moi.png',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'choix-instruments-musique',
+    name: { fr: 'Choix instruments musique', en: 'Music instruments choice' },
+    shortName: { fr: 'Instruments', en: 'Instruments' },
+    image: '../../images/choixeyegaze/choix instruments musique.png',
+    href: '../choixeyegaze/index.html',
+    categories: ['musique']
+  },
+  {
+    id: 'encore',
+    name: { fr: 'Encore', en: 'Encore' },
+    shortName: { fr: 'Encore', en: 'Encore' },
+    image: '../../images/choixeyegaze/encore.png',
+    href: '../choixeyegaze/index.html'
+  },
+  {
+    id: 'fini',
+    name: { fr: 'Fini', en: 'Finished' },
+    shortName: { fr: 'Fini', en: 'Finished' },
+    image: '../../images/choixeyegaze/fini.png',
+    href: '../choixeyegaze/index.html'
   }
 ];
 
