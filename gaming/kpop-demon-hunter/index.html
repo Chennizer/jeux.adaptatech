@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-fr="Chasseur de démons K-pop" data-en="K-pop Demon Hunter">K-pop Demon Hunter</title>
+  <link rel="stylesheet" href="../../css/games.css">
+  <style>
+    :root {
+      color-scheme: only light;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Quicksand', 'Segoe UI', sans-serif;
+      background: #0f0416;
+      overflow: hidden;
+    }
+
+    .game-stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background-image: url('../../images/kpop/scene.png');
+      background-size: cover;
+      background-position: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .game-overlay {
+      position: absolute;
+      top: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 4, 22, 0.7);
+      color: #fff4fb;
+      padding: 0.75rem 1.5rem;
+      border-radius: 1.5rem;
+      font-size: 1.1rem;
+      letter-spacing: 0.04em;
+      box-shadow: 0 0 20px rgba(255, 79, 172, 0.4);
+      backdrop-filter: blur(6px);
+      text-align: center;
+    }
+
+    .monster-field {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .monster {
+      position: absolute;
+      width: 160px;
+      height: 160px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      animation: pulse 1.2s ease-in-out infinite;
+      filter: drop-shadow(0 0 20px rgba(255, 0, 128, 0.6));
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.08);
+      }
+    }
+
+    .volume-indicator {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 4, 22, 0.75);
+      color: #ffe6ff;
+      padding: 0.5rem 1.25rem;
+      border-radius: 1.25rem;
+      font-size: 1rem;
+      letter-spacing: 0.03em;
+      box-shadow: 0 0 15px rgba(255, 79, 172, 0.35);
+    }
+
+    @media (max-width: 768px) {
+      .monster {
+        width: 120px;
+        height: 120px;
+      }
+
+      .game-overlay {
+        font-size: 1rem;
+        padding: 0.6rem 1.1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="menu-placeholder"></div>
+
+  <div class="game-stage">
+    <div class="monster-field" id="monsterField"></div>
+    <div class="game-overlay" data-fr="Appuyez sur ESPACE pour bannir les démons" data-en="Press SPACE to banish demons">Press SPACE to banish demons</div>
+    <div class="volume-indicator" id="volumeIndicator">Volume: 100%</div>
+  </div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/eyegazeMenuLoader.js"></script>
+  <script>
+    const monsterImages = [
+      "../../images/kpop/monster1.png",
+      "../../images/kpop/monster2.png"
+    ];
+
+    const state = {
+      started: false,
+      monsters: [],
+      spawnDelaySeconds: 10,
+      spawnTimeout: null,
+      music: null
+    };
+
+    function getRandomPosition(container, size = 160) {
+      const padding = 40;
+      const bounds = container.getBoundingClientRect();
+      const maxX = Math.max(bounds.width - size - padding, padding);
+      const maxY = Math.max(bounds.height - size - padding, padding);
+      const x = Math.floor(Math.random() * (maxX - padding) + padding);
+      const y = Math.floor(Math.random() * (maxY - padding) + padding);
+      return { x, y };
+    }
+
+    function updateMusicVolume() {
+      if (!state.music) return;
+      if (eyegazeSettings.sfxMuted) {
+        state.music.volume = 0;
+        return;
+      }
+      const baseVolume = (eyegazeSettings.sfxVolume || 0) / 100;
+      const penalty = Math.max(0, 1 - state.monsters.length * 0.1);
+      const volume = Math.max(0, Math.min(1, baseVolume * penalty));
+      state.music.volume = volume;
+      const displayPercent = Math.round(volume * 100);
+      document.getElementById('volumeIndicator').textContent = `Volume: ${displayPercent}%`;
+    }
+
+    function spawnMonster() {
+      const field = document.getElementById('monsterField');
+      if (!field) return;
+
+      const monster = document.createElement('div');
+      monster.className = 'monster';
+      const sprite = monsterImages[Math.floor(Math.random() * monsterImages.length)];
+      monster.style.backgroundImage = `url('${sprite}')`;
+
+      const baseSize = Math.floor(130 + Math.random() * 70);
+      monster.style.width = `${baseSize}px`;
+      monster.style.height = `${baseSize}px`;
+
+      const { x, y } = getRandomPosition(field, baseSize);
+      monster.style.left = `${x}px`;
+      monster.style.top = `${y}px`;
+
+      field.appendChild(monster);
+      state.monsters.push(monster);
+      updateMusicVolume();
+    }
+
+    function clearMonsters() {
+      state.monsters.forEach(monster => monster.remove());
+      state.monsters.length = 0;
+      updateMusicVolume();
+    }
+
+    function banishMonster() {
+      if (!state.started || state.monsters.length === 0) {
+        return;
+      }
+      const monster = state.monsters.shift();
+      if (monster) {
+        monster.classList.add('vanish');
+        monster.style.transition = 'opacity 250ms ease, transform 250ms ease';
+        monster.style.opacity = '0';
+        monster.style.transform = 'scale(0.6)';
+        setTimeout(() => monster.remove(), 250);
+        updateMusicVolume();
+      }
+    }
+
+    function scheduleNextSpawn() {
+      clearTimeout(state.spawnTimeout);
+      state.spawnTimeout = setTimeout(() => {
+        spawnMonster();
+        scheduleNextSpawn();
+      }, state.spawnDelaySeconds * 1000);
+    }
+
+    function startGame() {
+      if (state.started) return;
+      state.started = true;
+      document.documentElement.requestFullscreen?.();
+
+      eyegazeSettings.hideOverlay();
+
+      state.music = new Audio("../../sounds/kpop/golden.mp3");
+      state.music.loop = true;
+      state.music.addEventListener('canplaythrough', updateMusicVolume, { once: true });
+      state.music.play().catch(() => {
+        updateMusicVolume();
+      });
+      updateMusicVolume();
+
+      scheduleNextSpawn();
+
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    function stopGame() {
+      clearTimeout(state.spawnTimeout);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (state.music) {
+        state.music.pause();
+        state.music.currentTime = 0;
+      }
+      clearMonsters();
+      state.started = false;
+    }
+
+    function handleKeyDown(event) {
+      if (event.code === 'Space') {
+        event.preventDefault();
+        banishMonster();
+      }
+    }
+
+    function setupMenu() {
+      loadEyegazeMenu({
+        title: 'K-pop Demon Hunter',
+        startButtonText: 'Play',
+        customOptions: `
+          <div class="option-item">
+            <label for="spawnDelay" class="teal-label">
+              <span>Intervalle (s): </span>
+              <span id="spawnDelayVal">10</span>
+            </label>
+            <input type="range" id="spawnDelay" class="styled-slider" min="3" max="20" value="10">
+          </div>
+        `
+      }).then(() => {
+        initEyegazeMenu();
+
+        state.spawnDelaySeconds = 10;
+        const spawnSlider = document.getElementById('spawnDelay');
+        const spawnLabel = document.getElementById('spawnDelayVal');
+        const sfxSlider = document.getElementById('sfxVol');
+        const muteToggle = document.getElementById('muteSFX');
+
+        if (spawnSlider && spawnLabel) {
+          spawnSlider.addEventListener('input', event => {
+            const value = Number(event.target.value);
+            state.spawnDelaySeconds = value;
+            spawnLabel.textContent = value;
+            if (state.started) {
+              scheduleNextSpawn();
+            }
+          });
+        }
+
+        if (sfxSlider) {
+          sfxSlider.addEventListener('input', updateMusicVolume);
+        }
+        if (muteToggle) {
+          muteToggle.addEventListener('change', updateMusicVolume);
+        }
+
+        const startButton = document.getElementById('startButton');
+        if (startButton) {
+          startButton.addEventListener('click', startGame);
+        }
+      });
+    }
+
+    window.addEventListener('beforeunload', stopGame);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (state.music) state.music.pause();
+      } else if (state.music && state.started && !eyegazeSettings.sfxMuted) {
+        state.music.play().catch(() => {});
+      }
+    });
+
+    setupMenu();
+  </script>
+</body>
+</html>
