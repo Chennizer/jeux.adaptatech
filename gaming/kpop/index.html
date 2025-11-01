@@ -50,6 +50,7 @@
     .game-stage {
       position: relative; width: 100vw; height: 100vh; background: #000;
       display: none; align-items: center; justify-content: center; z-index: 0;
+      overflow: hidden;
     }
     .game-stage.active { display: flex; }
 
@@ -62,7 +63,37 @@
     }
     .game-stage.active .game-overlay { display: none !important; }
 
-    .monster-field { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
+    .stage-backdrop {
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at center, rgba(28,12,40,.85) 0%, rgba(6,1,12,1) 70%), #04000a;
+      background-image: url('../../images/kpop/scene.png');
+      background-size: cover;
+      background-position: center bottom;
+      filter: brightness(.35) saturate(.9);
+      transition: filter 420ms ease;
+      z-index: -1;
+      pointer-events: none;
+    }
+    .game-stage.lights-on .stage-backdrop { filter: brightness(.72) saturate(1.1); }
+
+    .hero-shadow-row {
+      position: absolute; bottom: clamp(18px, 6vh, 46px); left: 50%; transform: translateX(-50%);
+      display: flex; gap: clamp(26px, 5vw, 80px); align-items: flex-end;
+      z-index: 1; pointer-events: none;
+    }
+    .hero-shadow {
+      width: clamp(120px, 18vw, 210px);
+      filter: brightness(.28) contrast(1.2);
+      opacity: .6; transition: transform 360ms ease, filter 360ms ease, opacity 360ms ease;
+    }
+    .game-stage.lights-on .hero-shadow { filter: brightness(.36) contrast(1.25); opacity: .72; }
+    .hero-shadow.active {
+      opacity: 1;
+      filter: brightness(1) contrast(1.05) drop-shadow(0 0 24px rgba(255,79,172,.55));
+      transform: translateY(-12px) scale(1.05);
+    }
+
+    .monster-field { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 2; }
 
     .monster {
       position: absolute; width: 160px; height: 160px; background-size: contain; background-repeat: no-repeat; background-position: center;
@@ -126,7 +157,7 @@
   <div id="landingMenu" role="dialog" aria-modal="true">
     <div class="menu-card">
       <h1 class="menu-title">K-pop Demon Hunter</h1>
-      <p class="menu-sub">Press 'Play' to start. A demon spawns every 10 seconds.</p>
+      <p class="menu-sub">Press 'Play' to start. When a demon appears, press SPACE to spotlight a hero.</p>
 
       <div class="menu-grid">
         <div class="option-item">
@@ -146,6 +177,13 @@
   <div class="game-stage" id="gameStage">
     <!-- p5 full-screen background (behind monsters & hero) -->
     <div id="p5-bg" aria-hidden="true" style="position:absolute; inset:0; z-index:0; pointer-events:none;"></div>
+
+    <div class="stage-backdrop" aria-hidden="true"></div>
+    <div class="hero-shadow-row" aria-hidden="true">
+      <img src="../../images/kpop/mira.png" class="hero-shadow" data-hero="mira" alt="" />
+      <img src="../../images/kpop/zoey.png" class="hero-shadow" data-hero="zoey" alt="" />
+      <img src="../../images/kpop/rumi.png" class="hero-shadow" data-hero="rumi" alt="" />
+    </div>
 
     <div class="monster-field" id="monsterField"></div>
 
@@ -254,7 +292,7 @@
 
         // Full black background
         p.clear();
-        p.fill(0, 0, 0, 255);
+        p.fill(0, 0, 0, 220);
         p.rect(0, 0, W, H);
 
         // Draw beams
@@ -318,15 +356,16 @@
   <!-- Main game script -->
   <script>
     // Assets
+    const HEROES = [
+      { id: 'mira', sprite: "../../images/kpop/mira.png" },
+      { id: 'zoey', sprite: "../../images/kpop/zoey.png" },
+      { id: 'rumi', sprite: "../../images/kpop/rumi.png" }
+    ];
     const monsterImages = [
       "../../images/kpop/monster1.png",
       "../../images/kpop/monster2.png"
     ];
-    const heroImages = [
-      "../../images/kpop/mira.png",
-      "../../images/kpop/zoey.png",
-      "../../images/kpop/rumi.png"
-    ];
+    const heroSprites = HEROES.map(h => h.sprite);
 
     const TIMING = {
       slideIn: 700,
@@ -345,13 +384,29 @@
       music: null,
       sfxMuted: false,
       sfxVolume: 100,
-      heroEl: null,
-      heroTimer: null
+      heroEl: null
     };
     window.kpopState = state;
 
     function preloadSprites() {
-      [...monsterImages, ...heroImages].forEach(src => { const im = new Image(); im.src = src; });
+      [...monsterImages, ...heroSprites].forEach(src => { const im = new Image(); im.src = src; });
+    }
+
+    function toggleStageLights(on) {
+      const stage = document.getElementById('gameStage');
+      if (!stage) return;
+      stage.classList.toggle('lights-on', Boolean(on));
+    }
+
+    function highlightShadow(heroId) {
+      const id = heroId ? String(heroId) : null;
+      document.querySelectorAll('.hero-shadow').forEach(img => {
+        if (id && img.dataset.hero === id) {
+          img.classList.add('active');
+        } else {
+          img.classList.remove('active');
+        }
+      });
     }
 
     // Spawn position: RIGHT half only (avoid hero on left)
@@ -469,7 +524,7 @@
     }
 
     function showHero() {
-      const sprite = heroImages[Math.floor(Math.random() * heroImages.length)];
+      const hero = HEROES[Math.floor(Math.random() * HEROES.length)];
       const stage = document.getElementById('gameStage');
 
       let el = state.heroEl;
@@ -480,8 +535,11 @@
         state.heroEl = el;
       }
 
+      toggleStageLights(true);
+      highlightShadow(hero.id);
+
       el.classList.remove('hide');
-      el.style.backgroundImage = `url('${sprite}')`;
+      el.style.backgroundImage = `url('${hero.sprite}')`;
       void el.offsetWidth;
       el.classList.add('show');
       return el;
@@ -489,6 +547,9 @@
 
     function hideHero() {
       return new Promise(resolve => {
+        toggleStageLights(false);
+        highlightShadow(null);
+
         const el = state.heroEl;
         if (!el) return resolve();
         el.classList.remove('show');
@@ -508,17 +569,21 @@
     const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
     async function runAttackSequence() {
-      if (!state.started || state.attackInProgress) return;
+      if (!state.started || state.attackInProgress || state.monsters.length === 0) return;
       state.attackInProgress = true;
 
-      showHero();
-      await wait(TIMING.slideIn + 50);
-      await wait(TIMING.pauseBeforeAttack);
+      try {
+        showHero();
+        await wait(TIMING.slideIn + 50);
+        await wait(TIMING.pauseBeforeAttack);
 
-      await animateHitThenBanishAsync();
-
-      await hideHero();
-      state.attackInProgress = false;
+        if (state.monsters.length) {
+          await animateHitThenBanishAsync();
+        }
+      } finally {
+        await hideHero();
+        state.attackInProgress = false;
+      }
     }
 
     function handleKeyDown(event) {
@@ -559,9 +624,10 @@
       }
       clearMonsters();
 
-      if (state.heroTimer) clearTimeout(state.heroTimer);
       if (state.heroEl && state.heroEl.parentNode) state.heroEl.parentNode.removeChild(state.heroEl);
       state.heroEl = null;
+      toggleStageLights(false);
+      highlightShadow(null);
 
       state.started = false;
       document.getElementById('gameStage')?.classList.remove('active');
