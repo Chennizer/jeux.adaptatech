@@ -1103,7 +1103,7 @@
     const MOON_Y_FRAC    = 0.24;
 
     // Impact FX
-    const IMPACT_PETALS  = 180;
+    const IMPACT_PETALS  = 96;
     const IMPACT_SPEED   = 460;
     const IMPACT_LIFE    = 1.9;
     const SHOCKWAVE_MAX_R= 340;
@@ -1128,13 +1128,13 @@
     const MID_COLOR       = { r:160, g:230, b:255 };
     const EDGE_COLOR      = { r: 70, g:150, b:210 };
     const AURA_COLOR      = { r:120, g:220, b:255 };
-    const RING_COUNT      = 3;
+    const RING_COUNT      = 2;
     const RING_ALPHA      = 0.18;
     const RING_PULSE_HZ   = 1.0;
 
     // Inflow particles: near-rim and outer ring
-    const INFLOW_RATE      = 60;
-    const INFLOW_MAX       = 260;
+    const INFLOW_RATE      = 42;
+    const INFLOW_MAX       = 180;
     const INFLOW_ALPHA     = 0.55;
     const INFLOW_INNER_MIN = 0.90;
     const INFLOW_INNER_MAX = 1.20;
@@ -1283,19 +1283,28 @@
     /* =======================
        IMPACT FX
     ======================= */
-    const shards=[];
+    const shards=[], shardPool=[];
+    const SHARD_POOL_LIMIT = 240;
+    function acquireShard(){
+      return shardPool.length ? shardPool.pop() : {};
+    }
+    function releaseShard(s){
+      if (shardPool.length < SHARD_POOL_LIMIT) shardPool.push(s);
+    }
     function burstAt(x,y){
       const tBorn = nowS();
       for (let i=0;i<IMPACT_PETALS;i++){
         const a = Math.random()*Math.PI*2;
         const sp= IMPACT_SPEED*(0.4+0.6*Math.random());
         const size=rand(24,72);
-        shards.push({
-          x, y, w:size, h:size, ang:rand(-Math.PI,Math.PI),
-          vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - rand(60,120),
-          rot:rand(-1.6,1.6), born:tBorn, life:IMPACT_LIFE,
-          img: rockImgs[(Math.random()*rockImgs.length)|0]
-        });
+        const s = acquireShard();
+        s.x = x; s.y = y; s.w = size; s.h = size;
+        s.ang = rand(-Math.PI,Math.PI);
+        s.vx = Math.cos(a)*sp; s.vy = Math.sin(a)*sp - rand(60,120);
+        s.rot = rand(-1.6,1.6);
+        s.born = tBorn; s.life = IMPACT_LIFE;
+        s.img = rockImgs[(Math.random()*rockImgs.length)|0];
+        shards.push(s);
       }
     }
     let flashLife=0, flashT=0, shockLife=0, shockT=0, shockX=0, shockY=0;
@@ -1476,6 +1485,11 @@
       for (let i=shards.length-1; i>=0; i--){
         const s = shards[i];
         const a = Math.max(0, 1 - (t - s.born)/s.life);
+        if (a <= 0.001){
+          shards.splice(i,1);
+          releaseShard(s);
+          continue;
+        }
         ctx.save(); ctx.globalAlpha = a;
         ctx.translate(s.x, s.y); ctx.rotate(s.ang);
         const img = s.img;
@@ -1483,7 +1497,6 @@
           ctx.drawImage(img, -s.w/2, -s.h/2, s.w, s.h);
         }
         ctx.restore();
-        if (a<=0) shards.splice(i,1);
       }
     }
     function drawFlash(){
@@ -1550,6 +1563,11 @@
        ENERGY SPHERE RENDERER (no border)
     ======================= */
     const inflow = []; // {x,y,vx,vy,life}
+    const inflowPool = [];
+    const INFLOW_POOL_LIMIT = 220;
+    function releaseInflowParticle(p){
+      if (inflowPool.length < INFLOW_POOL_LIMIT) inflowPool.push(p);
+    }
     function rgbStr(c, a=1){ return `rgba(${c.r},${c.g},${c.b},${a})`; }
 
     function drawEnergySphere(cx, cy, r, charge=0, vel=null){
@@ -1757,7 +1775,12 @@
           const ux = toCdx/d, uy = toCdy/d;
           const jx = ux*cosJ - uy*sinJ, jy = ux*sinJ + uy*cosJ;
 
-          inflow.push({ x, y, vx:jx*sp, vy:jy*sp, life: 0.35 + Math.random()*0.45 });
+          const life = 0.35 + Math.random()*0.45;
+          const node = inflowPool.length ? inflowPool.pop() : {};
+          node.x = x; node.y = y;
+          node.vx = jx*sp; node.vy = jy*sp;
+          node.life = life; node.maxLife = life;
+          inflow.push(node);
         }
       }
 
@@ -1772,8 +1795,8 @@
         const r = orb.startR + (END_RADIUS - orb.startR) * u;
 
         orb.trail.push({ x:P.x, y:P.y, r, a:1 });
-        if (orb.trail.length>18) orb.trail.shift();
-        for (const tr of orb.trail) tr.a *= 0.9;
+        if (orb.trail.length>12) orb.trail.shift();
+        for (const tr of orb.trail) tr.a *= 0.88;
 
         orb.cx = P.x; orb.cy = P.y; orb.renderR = r;
 
@@ -1812,7 +1835,10 @@
       for (let i=shards.length-1;i>=0;i--){
         const s=shards[i];
         s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 360*dt; s.ang += s.rot*dt;
-        if (t - s.born > s.life) shards.splice(i,1);
+        if (t - s.born > s.life){
+          shards.splice(i,1);
+          releaseShard(s);
+        }
       }
 
       updateMoonShake(dt);
@@ -1863,12 +1889,16 @@
         const p = inflow[i];
         p.life -= lastDt;
         p.x += p.vx*lastDt; p.y += p.vy*lastDt;
-        if (p.life <= 0){ inflow.splice(i,1); }
+        if (p.life <= 0){
+          inflow.splice(i,1);
+          releaseInflowParticle(p);
+        }
       }
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       for (const p of inflow){
-        const a = INFLOW_ALPHA * Math.max(0, Math.min(1, p.life/0.5));
+        const baseLife = p.maxLife || 0.5;
+        const a = INFLOW_ALPHA * Math.max(0, Math.min(1, p.life / baseLife));
         if (a <= 0.01) continue;
         ctx.globalAlpha = a;
         ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, Math.PI*2);
@@ -1969,8 +1999,8 @@
       orb = null;
       launching = false;
       respawnAtMs = 0;
-      inflow.length = 0;
-      shards.length = 0;
+      while (inflow.length) releaseInflowParticle(inflow.pop());
+      while (shards.length) releaseShard(shards.pop());
       craters.length = 0;
       flashLife = 0; flashT = 0;
       shockLife = 0; shockT = 0; shockX = 0; shockY = 0;
