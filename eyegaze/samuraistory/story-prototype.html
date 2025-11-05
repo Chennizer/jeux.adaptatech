@@ -37,6 +37,13 @@
       padding: clamp(24px, 6vw, 80px);
       text-align: center;
     }
+    .page.game-page {
+      gap: 0;
+      padding: 0;
+    }
+    .page.game-page.active {
+      display: block;
+    }
     .landing-page {
       background: radial-gradient(circle at top, rgba(56,189,248,0.25), transparent 60%),
                   radial-gradient(circle at bottom, rgba(190,242,100,0.12), transparent 70%),
@@ -150,9 +157,10 @@
     .game-frame {
       width: 100%;
       height: 100%;
-      border: none;
       display: block;
       background: #000;
+      position: relative;
+      overflow: hidden;
     }
   </style>
 </head>
@@ -187,7 +195,7 @@
     </section>
 
     <section class="page game-page" data-index="3" data-game="cherry">
-      <iframe title="Cherry Blossom Game" class="game-frame" allowfullscreen></iframe>
+      <div class="game-frame" data-game-host></div>
     </section>
 
     <section class="page story-page" data-index="4">
@@ -200,7 +208,7 @@
     </section>
 
     <section class="page game-page" data-index="5" data-game="meditation">
-      <iframe title="Meditation Game" class="game-frame" allowfullscreen></iframe>
+      <div class="game-frame" data-game-host></div>
     </section>
 
     <section class="page story-page" data-index="6">
@@ -213,7 +221,7 @@
     </section>
 
     <section class="page game-page" data-index="7" data-game="lamp">
-      <iframe title="Lantern Game" class="game-frame" allowfullscreen></iframe>
+      <div class="game-frame" data-game-host></div>
     </section>
 
     <section class="page story-page" data-index="8">
@@ -366,130 +374,126 @@
         return templateCache[id];
       }
 
-      const loadedGames = new Set();
+      const gameSessions = new Map();
 
-      function autoStartGameFrame(iframe, attempt = 0) {
-        if (!iframe) return;
-        const win = iframe.contentWindow;
-        const doc = win?.document;
-        if (!doc || !win) return;
-
-        const startOverlay = doc.getElementById('startOverlay');
-        if (startOverlay) {
-          startOverlay.style.display = 'none';
-        }
-
-        const storyApi = win.storyGameApi;
-        if (storyApi && typeof storyApi.start === 'function') {
+      function stopGame(page) {
+        const key = page?.dataset.game;
+        if (!key) return;
+        const session = gameSessions.get(key);
+        if (!session) return;
+        const { api } = session;
+        if (api && typeof api.stop === 'function') {
           try {
-            const maybePromise = storyApi.start();
+            const maybePromise = api.stop();
             if (maybePromise && typeof maybePromise.then === 'function') {
               maybePromise.catch(() => {});
             }
-            return;
           } catch (error) {
-            /* ignore and fall back */
+            /* ignore stop errors */
           }
         }
-
-        const autoFns = ['startExperience', 'startGame'];
-        for (const name of autoFns) {
-          const fn = win[name];
-          if (typeof fn === 'function') {
-            try {
-              fn.call(win);
-              return;
-            } catch (error) {
-              /* ignore individual game errors */
-            }
+        if (session.host) {
+          session.mountedNodes = Array.from(session.host.childNodes);
+          if (session.mountedNodes.length) {
+            session.mountedNodes.forEach((node) => {
+              if (node.parentNode === session.host) {
+                session.host.removeChild(node);
+              }
+            });
+            session.detached = true;
           }
-        }
-
-        const startBtn = doc.getElementById('startBtn');
-        if (startBtn && typeof startBtn.click === 'function') {
-          startBtn.click();
-        }
-
-        if (attempt < 5) {
-          window.setTimeout(() => autoStartGameFrame(iframe, attempt + 1), 200);
         }
       }
 
-      function stopGame(page) {
-        const iframe = page?.querySelector('iframe');
-        if (!iframe) return;
+      function mountGameTemplate(host, templateId) {
+        const html = loadTemplate(templateId);
+        if (!html) return null;
         try {
-          const win = iframe.contentWindow;
-          if (!win) return;
-          const api = win.storyGameApi;
-          if (api && typeof api.stop === 'function') {
+          host.innerHTML = '';
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          const fragment = document.createDocumentFragment();
+          const appendChildren = (parent) => {
+            if (!parent) return;
+            parent.childNodes.forEach((node) => {
+              if (node.nodeName === 'TITLE') return;
+              fragment.appendChild(node.cloneNode(true));
+            });
+          };
+          appendChildren(doc.head);
+          appendChildren(doc.body);
+          window.storyGameApi = null;
+          host.appendChild(fragment);
+          host.querySelectorAll('script').forEach((oldScript) => {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach((attr) => {
+              newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.textContent = oldScript.textContent;
+            oldScript.replaceWith(newScript);
+          });
+        } catch (error) {
+          return null;
+        }
+        const api = window.storyGameApi;
+        return api || null;
+      }
+
+      function resolveTemplateId(key) {
+        if (key === 'cherry') return 'tpl-cherryblossom';
+        if (key === 'meditation') return 'tpl-meditation';
+        if (key === 'lamp') return 'tpl-lamp';
+        return '';
+      }
+
+      function loadGame(key, page) {
+        const host = page.querySelector('[data-game-host]');
+        const note = page.querySelector('.loading-note');
+        if (!host) return;
+
+        let session = gameSessions.get(key);
+        if (!session) {
+          const templateId = resolveTemplateId(key);
+          if (!templateId) return;
+          const api = mountGameTemplate(host, templateId);
+          if (!api) return;
+          const mountedNodes = Array.from(host.childNodes);
+          session = { host, api, mountedNodes, detached: false };
+          gameSessions.set(key, session);
+        } else {
+          session.host = host;
+          if (!session.mountedNodes || !session.mountedNodes.length) {
+            session.mountedNodes = Array.from(host.childNodes);
+          }
+          if (session.detached && session.mountedNodes && session.mountedNodes.length) {
+            host.innerHTML = '';
+            session.mountedNodes.forEach((node) => {
+              host.appendChild(node);
+            });
+            session.detached = false;
+          }
+        }
+
+        if (note) {
+          try {
+            note.remove();
+          } catch (error) {
+            /* ignore */
+          }
+        }
+
+        const { api } = session;
+        if (api && typeof api.start === 'function') {
+          window.requestAnimationFrame(() => {
             try {
-              const maybePromise = api.stop();
+              const maybePromise = api.start();
               if (maybePromise && typeof maybePromise.then === 'function') {
                 maybePromise.catch(() => {});
               }
             } catch (error) {
-              /* ignore stop errors */
+              /* ignore start errors */
             }
-          } else {
-            const stopFns = ['stopExperience', 'stopGame', 'pauseGame'];
-            for (const name of stopFns) {
-              const fn = win[name];
-              if (typeof fn === 'function') {
-                try {
-                  fn.call(win);
-                } catch (error) {
-                  /* ignore */
-                }
-              }
-            }
-          }
-
-          const doc = win.document;
-          if (doc) {
-            doc.querySelectorAll('audio').forEach((audioEl) => {
-              try {
-                audioEl.pause();
-                audioEl.currentTime = 0;
-              } catch (error) {
-                /* ignore audio cleanup failures */
-              }
-            });
-          }
-        } catch (error) {
-          /* ignore cross-frame issues */
-        }
-      }
-
-      function loadGame(key, page) {
-        const iframe = page.querySelector('iframe');
-        const note = page.querySelector('.loading-note');
-        if (!iframe) return;
-
-        const handleLoaded = () => {
-          if (note) {
-            try {
-              note.remove();
-            } catch (error) {
-              /* ignore */
-            }
-          }
-          window.requestAnimationFrame(() => autoStartGameFrame(iframe));
-        };
-
-        if (!loadedGames.has(key)) {
-          let templateId = '';
-          if (key === 'cherry') templateId = 'tpl-cherryblossom';
-          else if (key === 'meditation') templateId = 'tpl-meditation';
-          else if (key === 'lamp') templateId = 'tpl-lamp';
-          if (!templateId) return;
-          const html = loadTemplate(templateId);
-          if (!html) return;
-          iframe.addEventListener('load', handleLoaded, { once: true });
-          iframe.srcdoc = html;
-          loadedGames.add(key);
-        } else {
-          handleLoaded();
+          });
         }
       }
     });
@@ -2115,9 +2119,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Sky Lanterns — Dual Lamps + Scattered + Colored Fireflies + BG Lanterns + Shooting Star + Ropes</title>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    body { display: flex; }
-    #layout { display: flex; width: 100vw; height: 100vh; background: #000; overflow: hidden; }
+    .lamp-root {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      display: flex;
+    }
+    #layout { display: flex; width: 100%; height: 100%; background: #000; overflow: hidden; }
     #modePanel {
       width: 20vw; min-width: 180px; max-width: 320px; background: #050505;
       border-right: 1px solid rgba(255,255,255,0.04); box-shadow: 10px 0 26px rgba(0,0,0,0.55);
@@ -2128,7 +2140,7 @@
     #modePanel .panel-ornaments img { position: absolute; width: clamp(110px, 14vw, 160px); opacity: 0.18; filter: blur(0.2px) drop-shadow(0 6px 10px rgba(0,0,0,0.55)); }
     #modePanel .panel-ornaments .branch-corner { bottom: clamp(18px, 6vh, 32px); left: clamp(12px, 2vw, 28px); transform: rotate(-12deg); }
 
-    #playArea { flex: 1; position: relative; height: 100vh; background: #000; overflow: hidden; z-index: 20; }
+    #playArea { flex: 1; position: relative; height: 100%; background: #000; overflow: hidden; z-index: 20; }
     #game { display: block; width: 100%; height: 100%; background: #000; position: relative; }
 
     #startOverlay { position: absolute; inset: 0; background: #000; z-index: 30; pointer-events: none; }
@@ -2159,27 +2171,29 @@
   </style>
 </head>
 <body>
-  <div id="layout">
-    <aside id="modePanel">
-      <div class="panel-ornaments" aria-hidden="true">
-        <img src="../../images/samurai/cherryblossom.png" alt="" class="branch-corner" />
-      </div>
-      <div id="modeSelector" role="group" aria-label="Interaction mode">
-        <div class="mode-tile active" data-mode="chi" aria-pressed="true" role="button">
-          <img src="../../images/samurai/transparentchi.png" alt="Chi mode" />
-          <div class="progress"></div>
-          <span class="label">Chi</span>
+  <div class="lamp-root" data-lamp-root>
+    <div id="layout">
+      <aside id="modePanel">
+        <div class="panel-ornaments" aria-hidden="true">
+          <img src="../../images/samurai/cherryblossom.png" alt="" class="branch-corner" />
         </div>
-        <div class="mode-tile" data-mode="katana" aria-pressed="false" role="button">
-          <img src="../../images/samurai/katana.png" alt="Katana mode" />
-          <div class="progress"></div>
-          <span class="label">Katana</span>
+        <div id="modeSelector" role="group" aria-label="Interaction mode">
+          <div class="mode-tile active" data-mode="chi" aria-pressed="true" role="button">
+            <img src="../../images/samurai/transparentchi.png" alt="Chi mode" />
+            <div class="progress"></div>
+            <span class="label">Chi</span>
+          </div>
+          <div class="mode-tile" data-mode="katana" aria-pressed="false" role="button">
+            <img src="../../images/samurai/katana.png" alt="Katana mode" />
+            <div class="progress"></div>
+            <span class="label">Katana</span>
+          </div>
         </div>
+      </aside>
+      <div id="playArea">
+        <div id="startOverlay" aria-hidden="true"></div>
+        <canvas id="game"></canvas>
       </div>
-    </aside>
-    <div id="playArea">
-      <div id="startOverlay" aria-hidden="true"></div>
-      <canvas id="game"></canvas>
     </div>
   </div>
 
