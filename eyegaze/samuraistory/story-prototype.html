@@ -148,10 +148,10 @@
       padding: 0;
     }
     .game-frame {
+      position: relative;
       width: 100%;
       height: 100%;
-      border: none;
-      display: block;
+      overflow: hidden;
       background: #000;
     }
   </style>
@@ -187,7 +187,7 @@
     </section>
 
     <section class="page game-page" data-index="3" data-game="cherry">
-      <iframe title="Cherry Blossom Game" class="game-frame" allowfullscreen></iframe>
+      <div class="game-frame" data-game-host></div>
     </section>
 
     <section class="page story-page" data-index="4">
@@ -200,7 +200,7 @@
     </section>
 
     <section class="page game-page" data-index="5" data-game="meditation">
-      <iframe title="Meditation Game" class="game-frame" allowfullscreen></iframe>
+      <div class="game-frame" data-game-host></div>
     </section>
 
     <section class="page story-page" data-index="6">
@@ -213,7 +213,7 @@
     </section>
 
     <section class="page game-page" data-index="7" data-game="lamp">
-      <iframe title="Lantern Game" class="game-frame" allowfullscreen></iframe>
+      <div class="game-frame" data-game-host></div>
     </section>
 
     <section class="page story-page" data-index="8">
@@ -366,23 +366,147 @@
         return templateCache[id];
       }
 
-      const loadedGames = new Set();
+      const loadedGames = new Map();
+      const GAME_TEMPLATES = {
+        cherry: 'tpl-cherryblossom',
+        meditation: 'tpl-meditation',
+        lamp: 'tpl-lamp',
+      };
 
-      function autoStartGameFrame(iframe, attempt = 0) {
-        if (!iframe) return;
-        const win = iframe.contentWindow;
-        const doc = win?.document;
-        if (!doc || !win) return;
+      function escapeCssId(id) {
+        if (window.CSS && typeof window.CSS.escape === 'function') {
+          return window.CSS.escape(id);
+        }
+        return id.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
+      }
 
+      function createShadowDocument(shadow, host) {
+        return {
+          getElementById(id) {
+            if (!id) return null;
+            return shadow.querySelector(`#${escapeCssId(id)}`);
+          },
+          querySelector(selector) {
+            return shadow.querySelector(selector);
+          },
+          querySelectorAll(selector) {
+            return shadow.querySelectorAll(selector);
+          },
+          createElement(tagName) {
+            return document.createElement(tagName);
+          },
+          createElementNS(ns, tagName) {
+            return document.createElementNS(ns, tagName);
+          },
+          addEventListener(type, listener, options) {
+            shadow.addEventListener(type, listener, options);
+          },
+          removeEventListener(type, listener, options) {
+            shadow.removeEventListener(type, listener, options);
+          },
+          get documentElement() {
+            return host;
+          },
+          get body() {
+            return host;
+          },
+        };
+      }
+
+      function scopeStyleText(styleText) {
+        return styleText
+          .replace(/(^|[\s,{])html(?=[\s,{.#:>+~])/gi, '$1:host')
+          .replace(/(^|[\s,{])body(?=[\s,{.#:>+~])/gi, '$1:host')
+          .replace(/position\s*:\s*fixed/gi, 'position: absolute');
+      }
+
+      function createWindowProxy(instance) {
+        const assigned = instance.globals;
+        return new Proxy(window, {
+          get(target, prop, receiver) {
+            if (prop === 'window' || prop === 'self') return receiver;
+            if (prop === 'storyGameApi') return instance.api;
+            if (prop in assigned) return assigned[prop];
+            return Reflect.get(target, prop);
+          },
+          set(target, prop, value) {
+            if (prop === 'storyGameApi') {
+              instance.api = value;
+              return true;
+            }
+            assigned[prop] = value;
+            return true;
+          },
+          has(target, prop) {
+            return prop in assigned || prop in target;
+          },
+        });
+      }
+
+      function evaluateGameScript(instance, code) {
+        if (!code || !code.trim()) return;
+        const fn = new Function('window', 'document', 'host', 'shadowRoot', code);
+        fn.call(instance.windowProxy, instance.windowProxy, instance.document, instance.host, instance.shadow);
+      }
+
+      function mountGameTemplate(key, host) {
+        const templateId = GAME_TEMPLATES[key];
+        if (!templateId) return null;
+        const html = loadTemplate(templateId);
+        if (!html) return null;
+
+        const parser = new DOMParser();
+        const parsed = parser.parseFromString(html, 'text/html');
+        const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
+        while (shadow.firstChild) {
+          shadow.firstChild.remove();
+        }
+
+        const instance = {
+          key,
+          host,
+          shadow,
+          globals: {},
+          api: null,
+        };
+        instance.document = createShadowDocument(shadow, host);
+        instance.windowProxy = createWindowProxy(instance);
+
+        const styles = parsed.querySelectorAll('style');
+        styles.forEach((styleEl) => {
+          const style = document.createElement('style');
+          style.textContent = scopeStyleText(styleEl.textContent || '');
+          shadow.appendChild(style);
+        });
+
+        const bodyChildren = parsed.body ? Array.from(parsed.body.childNodes) : [];
+        bodyChildren.forEach((node) => {
+          if (node.nodeName && node.nodeName.toLowerCase() === 'script') return;
+          const clone = document.importNode(node, true);
+          shadow.appendChild(clone);
+        });
+
+        const scripts = parsed.querySelectorAll('script');
+        scripts.forEach((scriptEl) => {
+          evaluateGameScript(instance, scriptEl.textContent || '');
+        });
+
+        loadedGames.set(key, instance);
+        return instance;
+      }
+
+      function autoStartGameInstance(instance, attempt = 0) {
+        if (!instance) return;
+        const doc = instance.document;
         const startOverlay = doc.getElementById('startOverlay');
         if (startOverlay) {
           startOverlay.style.display = 'none';
         }
 
-        const storyApi = win.storyGameApi;
-        if (storyApi && typeof storyApi.start === 'function') {
+        const api = instance.api;
+        if (api && typeof api.start === 'function') {
           try {
-            const maybePromise = storyApi.start();
+            const maybePromise = api.start();
             if (maybePromise && typeof maybePromise.then === 'function') {
               maybePromise.catch(() => {});
             }
@@ -394,10 +518,13 @@
 
         const autoFns = ['startExperience', 'startGame'];
         for (const name of autoFns) {
-          const fn = win[name];
+          const fn = instance.globals[name];
           if (typeof fn === 'function') {
             try {
-              fn.call(win);
+              const result = fn.call(instance.windowProxy);
+              if (result && typeof result.then === 'function') {
+                result.catch(() => {});
+              }
               return;
             } catch (error) {
               /* ignore individual game errors */
@@ -408,65 +535,65 @@
         const startBtn = doc.getElementById('startBtn');
         if (startBtn && typeof startBtn.click === 'function') {
           startBtn.click();
+          return;
         }
 
         if (attempt < 5) {
-          window.setTimeout(() => autoStartGameFrame(iframe, attempt + 1), 200);
+          window.setTimeout(() => autoStartGameInstance(instance, attempt + 1), 200);
         }
       }
 
       function stopGame(page) {
-        const iframe = page?.querySelector('iframe');
-        if (!iframe) return;
-        try {
-          const win = iframe.contentWindow;
-          if (!win) return;
-          const api = win.storyGameApi;
-          if (api && typeof api.stop === 'function') {
-            try {
-              const maybePromise = api.stop();
-              if (maybePromise && typeof maybePromise.then === 'function') {
-                maybePromise.catch(() => {});
-              }
-            } catch (error) {
-              /* ignore stop errors */
-            }
-          } else {
-            const stopFns = ['stopExperience', 'stopGame', 'pauseGame'];
-            for (const name of stopFns) {
-              const fn = win[name];
-              if (typeof fn === 'function') {
-                try {
-                  fn.call(win);
-                } catch (error) {
-                  /* ignore */
-                }
-              }
-            }
-          }
+        if (!page) return;
+        const key = page.dataset.game;
+        const instance = key ? loadedGames.get(key) : null;
+        if (!instance) return;
 
-          const doc = win.document;
-          if (doc) {
-            doc.querySelectorAll('audio').forEach((audioEl) => {
-              try {
-                audioEl.pause();
-                audioEl.currentTime = 0;
-              } catch (error) {
-                /* ignore audio cleanup failures */
-              }
-            });
+        const api = instance.api;
+        if (api && typeof api.stop === 'function') {
+          try {
+            const maybePromise = api.stop();
+            if (maybePromise && typeof maybePromise.then === 'function') {
+              maybePromise.catch(() => {});
+            }
+          } catch (error) {
+            /* ignore stop errors */
           }
+        } else {
+          const stopFns = ['stopExperience', 'stopGame', 'pauseGame'];
+          for (const name of stopFns) {
+            const fn = instance.globals[name];
+            if (typeof fn === 'function') {
+              try {
+                fn.call(instance.windowProxy);
+              } catch (error) {
+                /* ignore */
+              }
+            }
+          }
+        }
+
+        try {
+          instance.shadow.querySelectorAll('audio').forEach((audioEl) => {
+            audioEl.pause();
+            audioEl.currentTime = 0;
+          });
         } catch (error) {
-          /* ignore cross-frame issues */
+          /* ignore audio cleanup failures */
         }
       }
 
       function loadGame(key, page) {
-        const iframe = page.querySelector('iframe');
+        const host = page.querySelector('[data-game-host]');
         const note = page.querySelector('.loading-note');
-        if (!iframe) return;
+        if (!host) return;
 
-        const handleLoaded = () => {
+        let instance = loadedGames.get(key);
+        if (!instance) {
+          instance = mountGameTemplate(key, host);
+        }
+
+        if (instance) {
           if (note) {
             try {
               note.remove();
@@ -474,22 +601,7 @@
               /* ignore */
             }
           }
-          window.requestAnimationFrame(() => autoStartGameFrame(iframe));
-        };
-
-        if (!loadedGames.has(key)) {
-          let templateId = '';
-          if (key === 'cherry') templateId = 'tpl-cherryblossom';
-          else if (key === 'meditation') templateId = 'tpl-meditation';
-          else if (key === 'lamp') templateId = 'tpl-lamp';
-          if (!templateId) return;
-          const html = loadTemplate(templateId);
-          if (!html) return;
-          iframe.addEventListener('load', handleLoaded, { once: true });
-          iframe.srcdoc = html;
-          loadedGames.add(key);
-        } else {
-          handleLoaded();
+          window.requestAnimationFrame(() => autoStartGameInstance(instance));
         }
       }
     });
