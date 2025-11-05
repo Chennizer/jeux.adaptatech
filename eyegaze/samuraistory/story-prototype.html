@@ -2331,6 +2331,48 @@
     const imgClosed2 = new Image(); imgClosed2.src = CLOSED2_SRC;
     const imgLit2    = new Image(); imgLit2.src    = LIT2_SRC;
 
+    const lanternImageSets = [
+      { closed: imgClosed1, lit: imgLit1 },
+      { closed: imgClosed2, lit: imgLit2 }
+    ];
+
+    function imageHasDimensions(img) {
+      return !!(img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+    }
+
+    function lanternTypeReady(type) {
+      const entry = lanternImageSets[type - 1];
+      if (!entry) return false;
+      return imageHasDimensions(entry.closed) || imageHasDimensions(entry.lit);
+    }
+
+    function lanternAspect(type) {
+      const entry = lanternImageSets[type - 1];
+      if (!entry) return 1;
+      const source = imageHasDimensions(entry.closed) ? entry.closed : imageHasDimensions(entry.lit) ? entry.lit : null;
+      if (!source) return 1;
+      return source.naturalWidth / source.naturalHeight;
+    }
+
+    let lanternAssetsReady = false;
+
+    function updateLanternAssetReadiness() {
+      lanternAssetsReady = lanternImageSets.every((_, idx) => lanternTypeReady(idx + 1));
+      if (lanternAssetsReady) {
+        ensureCount();
+      }
+    }
+
+    lanternImageSets.forEach((set) => {
+      [set.closed, set.lit].forEach((img) => {
+        if (!img) return;
+        if (!imageHasDimensions(img)) {
+          img.addEventListener('load', updateLanternAssetReadiness, { once: false });
+        }
+      });
+    });
+    updateLanternAssetReadiness();
+
     function getClosedImg(type){ return type===1 ? imgClosed1 : imgClosed2; }
     function getLitImg(type){    return type===1 ? imgLit1    : imgLit2; }
 
@@ -2549,13 +2591,10 @@
     }
 
     function spawnLanternBottom() {
+      if (!lanternAssetsReady) return false;
       const type = Math.random() < 0.5 ? 1 : 2;
-      const closedImg = getClosedImg(type);
-
       const dispH = rand(LAMP_H_MIN, LAMP_H_MAX);
-      const iw = closedImg.naturalWidth  || 1;
-      const ih = closedImg.naturalHeight || 1;
-      const aspect = iw / ih;
+      const aspect = lanternAspect(type);
       const dispW = dispH * aspect;
 
       const x = chooseScatteredX(dispW);
@@ -2586,9 +2625,15 @@
         // lift animation data
         restY, groundY, liftT0: 0, liftDur: LIFT_DURATION
       });
+      return true;
     }
 
-    function ensureCount() { while (lanterns.length < LANTERN_COUNT) spawnLanternBottom(); }
+    function ensureCount() {
+      if (!lanternAssetsReady) return;
+      while (lanterns.length < LANTERN_COUNT) {
+        if (!spawnLanternBottom()) break;
+      }
+    }
     function resetOne(i) { lanterns.splice(i, 1); ensureCount(); }
 
     function isHovering(l) {
