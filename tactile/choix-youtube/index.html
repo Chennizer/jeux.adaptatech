@@ -138,6 +138,41 @@
   </div>
 
   <script>window.populateTilePickerGrid = function(){};</script>
+  <script>
+    (function() {
+      const state = window.youtubeState || {
+        apiReady: false,
+        player: null,
+        pendingLoad: null,
+        readyCallbacks: []
+      };
+
+      function flushReadyCallbacks() {
+        if (!state.readyCallbacks.length) return;
+        const callbacks = state.readyCallbacks.slice();
+        state.readyCallbacks.length = 0;
+        callbacks.forEach(cb => {
+          try {
+            cb();
+          } catch (err) {
+            console.error('YouTube ready callback failed', err);
+          }
+        });
+      }
+
+      window.youtubeState = state;
+
+      window.onYouTubeIframeAPIReady = () => {
+        state.apiReady = true;
+        flushReadyCallbacks();
+      };
+
+      if (window.YT && window.YT.Player) {
+        state.apiReady = true;
+        flushReadyCallbacks();
+      }
+    })();
+  </script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="../../js/config.js"></script>
   <script src="../../js/customYoutubeChoices.js"></script>
@@ -190,20 +225,15 @@
         }
       }
 
-      const youtubeState = {
-        apiReady: false,
-        pending: null,
-        player: null
-      };
+      const youtubeState = window.youtubeState;
 
-      window.onYouTubeIframeAPIReady = () => {
-        youtubeState.apiReady = true;
-        if (youtubeState.pending) {
-          const { videoId, startSeconds } = youtubeState.pending;
-          youtubeState.pending = null;
-          createOrLoadYoutube(videoId, startSeconds);
+      function queueYoutubeReady(fn) {
+        if (youtubeState.apiReady) {
+          fn();
+        } else {
+          youtubeState.readyCallbacks.push(fn);
         }
-      };
+      }
 
       function isYouTubeUrl(url) {
         return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/)|(youtu\.be\/))/.test(url);
@@ -350,9 +380,17 @@
 
       function createOrLoadYoutube(videoId, startSeconds) {
         if (!youtubeState.apiReady) {
-          youtubeState.pending = { videoId, startSeconds };
+          youtubeState.pendingLoad = { videoId, startSeconds };
+          queueYoutubeReady(() => {
+            const pending = youtubeState.pendingLoad;
+            youtubeState.pendingLoad = null;
+            if (pending) {
+              createOrLoadYoutube(pending.videoId, pending.startSeconds);
+            }
+          });
           return;
         }
+        youtubeState.pendingLoad = null;
         if (youtubeState.player) {
           youtubeState.player.loadVideoById({ videoId, startSeconds });
           youtubeState.player.playVideo();
