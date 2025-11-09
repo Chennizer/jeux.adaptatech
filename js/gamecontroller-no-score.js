@@ -21,6 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const playModeSelect = document.getElementById('control-panel-play-mode');
     const soundOptionsSelect = document.getElementById('sound-options-select');
     const levelSelect = document.getElementById('level-select');
+    const selectedDifficultyLabel = document.getElementById('selected-difficulty-label');
+    const selectedSoundLabel = document.getElementById('selected-sound-label');
     const videoContainer = document.getElementById('video-container');
 
     let mediaPlayer = null;
@@ -104,13 +106,36 @@ document.addEventListener('DOMContentLoaded', () => {
     
     
 
+    function getSelectedOptionLabel(selectElement) {
+        if (!selectElement) {
+            return '';
+        }
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        return selectedOption ? selectedOption.textContent.trim() : '';
+    }
+
+    function updateSummaryTexts() {
+        if (selectedDifficultyLabel) {
+            selectedDifficultyLabel.textContent = getSelectedOptionLabel(playModeSelect);
+        }
+        if (selectedSoundLabel) {
+            selectedSoundLabel.textContent = getSelectedOptionLabel(soundOptionsSelect);
+        }
+    }
+
     function populateSoundOptions() {
+        if (!soundOptionsSelect) {
+            return;
+        }
+
+        const previousValue = soundOptionsSelect.value || selectedSound || 'piano-sound';
+
         // Clear existing options
         soundOptionsSelect.innerHTML = '';
-        
+
         // Determine the current language; default to 'en'
         const currentLang = document.documentElement.lang || "en";
-        
+
         // Loop through the sound options and create option elements
         spacePromptSounds.forEach((option) => {
             const soundOption = document.createElement('option');
@@ -123,11 +148,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             soundOptionsSelect.appendChild(soundOption);
         });
-        
-        // Set the default selected value to 'piano-sound'
-        soundOptionsSelect.value = 'piano-sound';
-        // Also update the selectedSound variable so playPauseSound() knows which sound to play
-        selectedSound = 'piano-sound';
+
+        const hasPreviousValue = spacePromptSounds.some(option => option.value === previousValue);
+        if (hasPreviousValue) {
+            soundOptionsSelect.value = previousValue;
+            selectedSound = previousValue;
+        } else if (spacePromptSounds.length > 0) {
+            soundOptionsSelect.value = spacePromptSounds[0].value;
+            selectedSound = soundOptionsSelect.value;
+        } else {
+            selectedSound = 'none';
+        }
+
+        updateSummaryTexts();
     }
     
     
@@ -151,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
             default:
                 timestamps = [];
         }
+        updateSummaryTexts();
     }
 
     playModeSelect.addEventListener('change', () => {
@@ -168,14 +202,15 @@ document.addEventListener('DOMContentLoaded', () => {
             default:
                 timestamps = [];
         }
+        updateSummaryTexts();
     });
 
     soundOptionsSelect.addEventListener('change', () => {
-        if (soundOptionsSelect.value === 'record-own') {
+        selectedSound = soundOptionsSelect.value;
+        if (selectedSound === 'record-own') {
             openRecordModal();
-        } else {
-            selectedSound = soundOptionsSelect.value;
         }
+        updateSummaryTexts();
     });
 
     function openRecordModal() {
