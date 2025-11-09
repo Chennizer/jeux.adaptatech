@@ -8,6 +8,7 @@
   <!-- pdf.js (CDN) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.2/tesseract.min.js" integrity="sha512-jBx72t2jcW3si5OJAaVqBPjv5wABK0VM07oR9YoPv7otDW+ScJuUq+5L1Z3usQrrk0c9hTmHNnGwByVmFdvD9Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
   <style>
     :root{ --teal:#009688; --bg:#000; --fg:#fff; }
@@ -33,6 +34,15 @@
     }
     .btn:disabled{ opacity:.5; cursor:not-allowed; }
     #fileInput{ padding:8px; border-radius:10px; border:1px solid #333; background:#111; color:#ddd; }
+    #fileInput.show-picker-inline{
+      position:relative;
+      clip:auto;
+      width:auto;
+      height:auto;
+      opacity:1;
+      display:inline-block;
+      outline:2px dashed var(--teal);
+    }
     #tips{ display:inline-flex; gap:8px; align-items:center; padding:8px 10px;
       border:1px dashed #444; border-radius:10px; background:#0a0a0a; color:#ddd; font-size:14px; z-index:5; }
 
@@ -50,7 +60,20 @@
       position:fixed; left:12px; bottom:12px; padding:6px 10px;
       background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.2);
       border-radius:10px; font-size:14px; user-select:none; z-index:5;
+      display:flex; align-items:center; gap:8px; min-height:28px;
+      transition:border-color 160ms ease, box-shadow 160ms ease;
     }
+    #hud[data-mode="speaking"],
+    #hud[data-mode="preparing"],
+    #hud[data-mode="ocr"]{
+      border-color:rgba(0,150,136,0.8);
+      box-shadow:0 0 12px rgba(0,150,136,0.35);
+    }
+    #hud[data-mode="ocr"]{
+      border-color:rgba(255,193,7,0.7);
+      box-shadow:0 0 12px rgba(255,193,7,0.3);
+    }
+    #hudStatus{ opacity:.8; font-weight:600; min-width:50px; }
 
     #langToggle{
       position:fixed; top:10px; right:10px; z-index:7;
@@ -65,7 +88,7 @@
 
   <div id="topbar">
     <div id="pickerRow">
-      <button id="chooseBtn" class="btn">
+      <button id="chooseBtn" class="btn" type="button">
         <span class="translate" data-fr="Choisir un PDF" data-en="Choose PDF">Choisir un PDF</span>
       </button>
       <input id="fileInput" type="file" accept="application/pdf" />
@@ -90,7 +113,7 @@
          data-en="Press the button below to choose a multi-page PDF file.">
         Appuyez sur le bouton ci-dessous pour choisir un fichier PDF multi-pages.
       </p>
-      <button id="chooseBtnBig" class="btn">
+      <button id="chooseBtnBig" class="btn" type="button">
         <span class="translate" data-fr="Choisir un PDF…" data-en="Choose PDF…">Choisir un PDF…</span>
       </button>
       <p style="opacity:.8; margin-top:10px" class="translate"
@@ -106,7 +129,10 @@
     <canvas id="pageCanvas" aria-hidden="true"></canvas>
   </div>
 
-  <div id="hud"><span id="pageLabel">—</span></div>
+  <div id="hud" data-mode="idle">
+    <span id="pageLabel">—</span>
+    <span id="hudStatus"></span>
+  </div>
 
   <script>
     // ===== Language toggle =====
@@ -117,10 +143,12 @@
         const txt = el.dataset[currentLang];
         if (txt) el.textContent = txt;
       });
+      updateSpeakingStatus();
     }
     langToggle.addEventListener('click', ()=>{
       currentLang = (currentLang === 'fr') ? 'en' : 'fr';
       applyLang();
+      if (canUseSpeech()) choosePreferredVoice();
     });
     applyLang();
 
@@ -133,19 +161,326 @@
     const stage     = document.getElementById('stage');
     const canvas    = document.getElementById('pageCanvas');
     const ctx       = canvas.getContext('2d');
+    const hud       = document.getElementById('hud');
     const hudLabel  = document.getElementById('pageLabel');
+    const hudStatus = document.getElementById('hudStatus');
     const centerPrompt = document.getElementById('centerPrompt');
+    updateSpeakingStatus();
 
     // ===== State =====
     let pdfDoc = null, currentPageNum = 1, totalPages = 0, started = false, loading = false, pdfData = null;
+    let preferredVoice = null;
+    let speechState = 'idle';
+    const pageTextCache = new Map();
+    let ocrWorkerPromise = null;
+    let ocrWorkerLang = null;
 
-    function setHUD(){ hudLabel.textContent = pdfDoc ? `${currentPageNum} / ${totalPages}` : '—'; }
-    async function goFullscreen(){ if (!document.fullscreenElement){ try{ await document.documentElement.requestFullscreen(); }catch(_){ } } }
+    const canUseSpeech = () => typeof window !== 'undefined'
+      && 'speechSynthesis' in window
+      && typeof window.SpeechSynthesisUtterance !== 'undefined';
+
+    function setSpeechState(state){
+      if (speechState === state) return;
+      speechState = state;
+      updateSpeakingStatus();
+    }
+
+    function updateSpeakingStatus(){
+      if (!hudStatus || !hud) return;
+      let mode = 'idle';
+      if (!started){
+        hudStatus.textContent = '';
+        hud.dataset.mode = 'idle';
+        return;
+      }
+      if (!canUseSpeech()){
+        hudStatus.textContent = currentLang === 'fr' ? 'Synthèse indisponible' : 'Speech unavailable';
+        hud.dataset.mode = 'idle';
+        return;
+      }
+      switch (speechState){
+        case 'preparing':
+          hudStatus.textContent = currentLang === 'fr' ? 'Préparation…' : 'Preparing…';
+          mode = 'preparing';
+          break;
+        case 'ocr':
+          hudStatus.textContent = currentLang === 'fr' ? 'Analyse (OCR)…' : 'Scanning (OCR)…';
+          mode = 'ocr';
+          break;
+        case 'speaking':
+          hudStatus.textContent = currentLang === 'fr' ? 'Lecture…' : 'Speaking…';
+          mode = 'speaking';
+          break;
+        default:
+          hudStatus.textContent = currentLang === 'fr' ? 'Prêt' : 'Ready';
+          mode = 'idle';
+      }
+      hud.dataset.mode = mode;
+    }
+
+    function setHUD(){
+      hudLabel.textContent = pdfDoc ? `${currentPageNum} / ${totalPages}` : '—';
+      updateSpeakingStatus();
+    }
+
+    function cancelSpeech(){
+      if (!canUseSpeech()) return;
+      try{ speechSynthesis.cancel(); }catch(_){ }
+      setSpeechState('idle');
+    }
+
+    function choosePreferredVoice(){
+      if (!canUseSpeech()) return;
+      const ss = window.speechSynthesis;
+      if (!ss || !ss.getVoices) return;
+      const voices = ss.getVoices() || [];
+      if (!voices.length) return;
+
+      const lang = currentLang;
+      const pick = (fn) => voices.find(fn);
+      if (lang === 'fr'){
+        preferredVoice =
+          pick(v => /sylvie/i.test(v.name || '') && /^fr[-_]?CA/i.test(v.lang || '')) ||
+          pick(v => /^fr[-_]?CA/i.test(v.lang || '')) ||
+          pick(v => /^fr[-_]?FR/i.test(v.lang || '')) ||
+          pick(v => (v.lang || '').toLowerCase().startsWith('fr')) ||
+          voices[0];
+      }else{
+        preferredVoice =
+          pick(v => /^en[-_]?CA/i.test(v.lang || '')) ||
+          pick(v => /^en[-_]?US/i.test(v.lang || '')) ||
+          pick(v => /^en[-_]?GB/i.test(v.lang || '')) ||
+          pick(v => (v.lang || '').toLowerCase().startsWith('en')) ||
+          voices[0];
+      }
+    }
+
+    function voicesReady(){
+      return new Promise((resolve)=>{
+        if (!canUseSpeech()) return resolve();
+        const ss = window.speechSynthesis;
+        if (!ss) return resolve();
+        const list = ss.getVoices();
+        if (list && list.length) return resolve();
+        const handle = () => {
+          ss.removeEventListener('voiceschanged', handle);
+          resolve();
+        };
+        ss.addEventListener('voiceschanged', handle);
+      });
+    }
+
+    function canUseOCR(){
+      return typeof window !== 'undefined' && window.Tesseract && typeof window.Tesseract.createWorker === 'function';
+    }
+
+    async function ensureOCRWorker(langCode){
+      if (!canUseOCR()) return null;
+      if (!ocrWorkerPromise){
+        ocrWorkerPromise = (async ()=>{
+          const worker = await window.Tesseract.createWorker({
+            logger: (m)=>{ if (m.status === 'recognizing text'){ return; } },
+            workerPath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.2/worker.min.js',
+            corePath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.2/tesseract-core.wasm.js',
+            langPath: 'https://tessdata.projectnaptha.com/4.0.0_best'
+          });
+          await worker.load();
+          return worker;
+        })();
+      }
+      const worker = await ocrWorkerPromise;
+      if (ocrWorkerLang !== langCode){
+        try{
+          await worker.loadLanguage(langCode);
+          await worker.initialize(langCode);
+        }catch(err){
+          console.error('OCR init error:', err);
+          return null;
+        }
+        ocrWorkerLang = langCode;
+      }
+      return worker;
+    }
+
+    async function extractWithOCR(page){
+      const worker = await ensureOCRWorker(currentLang === 'fr' ? 'fra' : 'eng');
+      if (!worker) return '';
+      const viewport = page.getViewport({ scale: 2 * (window.devicePixelRatio || 1) });
+      const ocrCanvas = document.createElement('canvas');
+      const ocrCtx = ocrCanvas.getContext('2d', { willReadFrequently: true });
+      ocrCanvas.width = Math.ceil(viewport.width);
+      ocrCanvas.height = Math.ceil(viewport.height);
+      try{
+        await page.render({ canvasContext: ocrCtx, viewport }).promise;
+        const { data } = await worker.recognize(ocrCanvas);
+        const text = (data?.text || '').replace(/\s+/g, ' ').trim();
+        return text;
+      }catch(err){
+        console.error('OCR error:', err);
+        return '';
+      }finally{
+        ocrCanvas.width = 0;
+        ocrCanvas.height = 0;
+        if (ocrCanvas.remove) ocrCanvas.remove();
+      }
+    }
+
+    async function getPageText(pageNum){
+      if (!pdfDoc) return '';
+      if (pageTextCache.has(pageNum)){
+        const cached = pageTextCache.get(pageNum);
+        if (cached) return cached;
+      }
+      let page = null;
+      try{
+        page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        let text = '';
+        if (textContent && textContent.items && textContent.items.length){
+          const raw = textContent.items.map(item => item?.str || '').join(' ');
+          text = raw.replace(/\s+/g, ' ').trim();
+        }
+        if (!text && canUseOCR()){
+          setSpeechState('ocr');
+          text = await extractWithOCR(page);
+          setSpeechState('preparing');
+        }
+        if (text){
+          pageTextCache.set(pageNum, text);
+        }else{
+          pageTextCache.delete(pageNum);
+        }
+        return text;
+      }catch(err){
+        console.error('Text extraction error:', err);
+        return '';
+      }finally{
+        try{ page?.cleanup?.(); }catch(_){ }
+      }
+    }
+
+    async function speakPageText(text){
+      if (!canUseSpeech() || !text) return;
+      cancelSpeech();
+      await voicesReady();
+      choosePreferredVoice();
+
+      return new Promise((resolve)=>{
+        if (!canUseSpeech()) return resolve();
+        let resolved = false;
+        const finish = () => {
+          if (resolved) return;
+          resolved = true;
+          setSpeechState('idle');
+          resolve();
+        };
+        try{
+          const utterance = new SpeechSynthesisUtterance(text);
+          const fallbackLang = currentLang === 'fr' ? 'fr-CA' : 'en-US';
+          if (preferredVoice){
+            utterance.voice = preferredVoice;
+            utterance.lang = preferredVoice.lang || fallbackLang;
+          }else{
+            utterance.lang = fallbackLang;
+          }
+          utterance.rate = 1.0;
+          utterance.volume = 1.0;
+          utterance.onend = finish;
+          utterance.onerror = finish;
+          setSpeechState('speaking');
+          speechSynthesis.speak(utterance);
+        }catch(err){
+          console.error('Speech synthesis error:', err);
+          finish();
+        }
+      });
+    }
+
+    async function announceCurrentPage(){
+      if (!started){
+        updateSpeakingStatus();
+        return;
+      }
+      if (!canUseSpeech()){
+        updateSpeakingStatus();
+        return;
+      }
+      setSpeechState('preparing');
+      const text = await getPageText(currentPageNum);
+      if (!text){
+        setSpeechState('idle');
+        return;
+      }
+      await speakPageText(text);
+    }
+
+    async function updatePageView({ announce = true } = {}){
+      await renderPage(currentPageNum);
+      setHUD();
+      if (announce) await announceCurrentPage();
+    }
+    async function goFullscreen(){
+      if (document.fullscreenElement) return;
+      try{
+        await document.documentElement.requestFullscreen();
+      }catch(_){ }
+    }
     function hideCenterPrompt(){ centerPrompt.style.display = 'none'; }
 
+    if (canUseSpeech()){
+      try{
+        speechSynthesis.addEventListener('voiceschanged', ()=>{
+          choosePreferredVoice();
+          updateSpeakingStatus();
+        });
+      }catch(_){ }
+      choosePreferredVoice();
+    }
+
     // Clear "Choose PDF" handlers
-    chooseBtn.addEventListener('click', ()=> fileInput.click());
-    chooseBtnBig.addEventListener('click', ()=> fileInput.click());
+    function focusVisibleFileInput(){
+      fileInput.classList.add('show-picker-inline');
+      try{
+        fileInput.focus({ preventScroll: true });
+      }catch(_){
+        try{ fileInput.focus(); }catch(_){ }
+      }
+    }
+
+    async function triggerFileDialog(e){
+      if (e) e.preventDefault();
+      if (!fileInput) return;
+      fileInput.classList.remove('show-picker-inline');
+      fileInput.value = '';
+      if (typeof fileInput.showPicker === 'function'){
+        try{
+          await fileInput.showPicker();
+          return;
+        }catch(err){
+          console.warn('showPicker failed, falling back to click():', err);
+        }
+      }
+      try{
+        fileInput.click();
+      }catch(err){
+        console.warn('Programmatic file dialog trigger failed, revealing input.', err);
+        focusVisibleFileInput();
+      }
+    }
+    chooseBtn.addEventListener('click', triggerFileDialog);
+    chooseBtnBig.addEventListener('click', triggerFileDialog);
+    chooseBtn.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        triggerFileDialog(e);
+      }
+    });
+    chooseBtnBig.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        triggerFileDialog(e);
+      }
+    });
 
     // Drag & drop
     ;['dragenter','dragover'].forEach(ev=>{
@@ -159,34 +494,46 @@
 
     // File selection
     fileInput.addEventListener('change', async (e)=>{
+      fileInput.classList.remove('show-picker-inline');
       const file = e.target.files?.[0];
       if(!file) return;
       await loadPDFFile(file);
     });
 
     async function loadPDFFile(file){
+      cancelSpeech();
+      if (!file) return;
       const arrBuf = await file.arrayBuffer();
       pdfData = arrBuf;
       startBtn.disabled = false;
       hideCenterPrompt();
+      pageTextCache.clear();
+      if (canUseSpeech()) choosePreferredVoice();
+      await openAndRender({ resetPage: true, announce: true });
+      fileInput.value = '';
     }
 
-    // Start viewer
+    // Start viewer (fullscreen)
     startBtn.addEventListener('click', async ()=>{
       if (!pdfData) return;
       await goFullscreen();
-      started = true;
-      await openAndRender();
+      if (!pdfDoc){
+        await openAndRender({ resetPage: true, announce: true });
+      }else{
+        await updatePageView({ announce: false });
+      }
     });
 
-    async function openAndRender(){
+    async function openAndRender({ resetPage = true, announce = true } = {}){
       try{
         const loadingTask = pdfjsLibGlobal.getDocument({ data: pdfData });
         pdfDoc = await loadingTask.promise;
         totalPages = pdfDoc.numPages;
-        currentPageNum = 1;
-        await renderPage(currentPageNum);
+        if (resetPage) currentPageNum = 1;
+        started = true;
         setHUD();
+        updateSpeakingStatus();
+        await updatePageView({ announce });
       }catch(err){
         console.error('PDF load error:', err);
         alert(currentLang === 'fr' ? "Erreur de chargement du PDF." : "Error loading PDF.");
@@ -222,8 +569,7 @@
     stage.addEventListener('click', async ()=>{
       if (!started || !pdfDoc || loading) return;
       currentPageNum = (currentPageNum % totalPages) + 1;
-      await renderPage(currentPageNum);
-      setHUD();
+      await updatePageView();
     });
 
     // Keyboard controls
@@ -232,13 +578,11 @@
       if (e.code === 'Space' || e.code === 'ArrowRight'){
         e.preventDefault();
         currentPageNum = (currentPageNum % totalPages) + 1;
-        await renderPage(currentPageNum);
-        setHUD();
+        await updatePageView();
       } else if (e.code === 'ArrowLeft'){
         e.preventDefault();
         currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
-        await renderPage(currentPageNum);
-        setHUD();
+        await updatePageView();
       }
     });
 
@@ -246,7 +590,7 @@
     window.addEventListener('resize', ()=>{
       if (!started || !pdfDoc) return;
       clearTimeout(window.__resizeT);
-      window.__resizeT = setTimeout(()=>renderPage(currentPageNum), 100);
+      window.__resizeT = setTimeout(()=>{ updatePageView({ announce: false }); }, 100);
     });
 
     // Auto-hide cursor after inactivity
@@ -260,6 +604,15 @@
       window.addEventListener(ev, scheduleCursorHide, {passive:true});
     });
     scheduleCursorHide();
+
+    window.addEventListener('beforeunload', ()=>{
+      if (!ocrWorkerPromise) return;
+      try{
+        ocrWorkerPromise.then(worker=>{
+          try{ worker.terminate?.(); }catch(_){ }
+        }).catch(()=>{});
+      }catch(_){ }
+    });
   </script>
 </body>
 </html>
