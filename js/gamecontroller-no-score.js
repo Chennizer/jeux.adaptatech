@@ -270,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Please select a game mode to start.");
             return;
         }
-        if (!levelSelect.value) {
+        if (levelSelect && !levelSelect.value) {
             alert("Please select a level to start.");
             return;
         }
@@ -611,35 +611,39 @@ document.addEventListener('DOMContentLoaded', () => {
         showOverlayScreen();
     }
 
-    levelSelect.addEventListener('change', () => {
-        const selectedOption = levelSelect.options[levelSelect.selectedIndex];
-        if (selectedOption) {
-            const newVideoSource = selectedOption.getAttribute('data-video-source');
-            if (mediaPlayer) {
-                mediaPlayer.src = newVideoSource;
-                mediaPlayer.load();
-                timestampsEasy   = selectedOption.getAttribute('data-timestamps-easy').split(',').map(Number);
-                timestampsMedium = selectedOption.getAttribute('data-timestamps-medium').split(',').map(Number);
-                timestampsHard   = selectedOption.getAttribute('data-timestamps-hard').split(',').map(Number);
+    if (levelSelect) {
+        levelSelect.addEventListener('change', () => {
+            const selectedOption = levelSelect.options[levelSelect.selectedIndex];
+            if (selectedOption) {
+                const newVideoSource = selectedOption.getAttribute('data-video-source');
+                if (mediaPlayer) {
+                    mediaPlayer.src = newVideoSource;
+                    mediaPlayer.load();
+                    timestampsEasy   = selectedOption.getAttribute('data-timestamps-easy').split(',').map(Number);
+                    timestampsMedium = selectedOption.getAttribute('data-timestamps-medium').split(',').map(Number);
+                    timestampsHard   = selectedOption.getAttribute('data-timestamps-hard').split(',').map(Number);
 
-                switch (selectedDifficulty) {
-                    case 'easy':
-                        timestamps = timestampsEasy;
-                        break;
-                    case 'medium':
-                        timestamps = timestampsMedium;
-                        break;
-                    case 'hard':
-                        timestamps = timestampsHard;
-                        break;
-                    default:
-                        timestamps = [];
+                    switch (selectedDifficulty) {
+                        case 'easy':
+                            timestamps = timestampsEasy;
+                            break;
+                        case 'medium':
+                            timestamps = timestampsMedium;
+                            break;
+                        case 'hard':
+                            timestamps = timestampsHard;
+                            break;
+                        default:
+                            timestamps = [];
+                    }
                 }
+                startButton.classList.remove('hidden');
+                videoContainer.classList.add('hidden');
             }
-            startButton.classList.remove('hidden');
-            videoContainer.classList.add('hidden');
-        }
-    });
+        });
+    } else {
+        startButton.classList.remove('hidden');
+    }
 
     selectSpacePromptButton.addEventListener('click', () => {
         populateSpacePromptImages();
@@ -657,8 +661,8 @@ document.addEventListener('DOMContentLoaded', () => {
     populateSpacePromptImages();
     loadMiscOptions();
     loadConfig();
-    if(levelSelect.value) {
+    if (levelSelect && levelSelect.value) {
         const event = new Event('change');
         levelSelect.dispatchEvent(event);
-      }
+    }
 });
