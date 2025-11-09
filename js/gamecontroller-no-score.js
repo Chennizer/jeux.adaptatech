@@ -298,7 +298,10 @@ document.addEventListener('DOMContentLoaded', () => {
         currentTimestampIndex = 0;
         if (mediaPlayer) {
             mediaPlayer.currentTime = 0;
-            videoContainer.style.display = 'block';
+            if (videoContainer) {
+                videoContainer.classList.remove('hidden');
+                videoContainer.style.display = 'block';
+            }
             mediaPlayer.addEventListener('timeupdate', handleTimeUpdate);
             mediaPlayer.addEventListener('ended', handleMediaEnd);
             mediaPlayer.play().catch(() => {});
