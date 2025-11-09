@@ -8,22 +8,21 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
 
-<!-- Shared overlay/menu styling from other game -->
+<!-- Shared overlay/menu styling from other game (for overlay look) -->
 <link rel="stylesheet" href="../../css/otherswitch.css"/>
 
 <style>
-  /* Scene full-screen */
   html,body{margin:0;height:100%;overflow:hidden;background:#0b1220;}
   canvas{display:block;position:fixed;inset:0; z-index:0;}
 
-  /* ==== Borrowed look & feel from the Xylophone (overlay, buttons, settings) ==== */
-  :root {
+  :root{
     --c1:#FF595E; --c2:#FF924C; --c3:#FFCA3A; --c4:#8AC926;
     --c5:#1982C4; --c6:#6A4C93; --c7:#B5179E; --c8:#2EC4B6;
-    --sel-offset:6px; --sel-border:4px; --corner-length:1.5rem; --corner-radius:.5rem;
+    --teal:#04c8bb;         /* outline/text color for language pill */
+    --pill-bg:#0b0f12;      /* pill background */
   }
-  * { box-sizing:border-box; }
-  body { color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif; }
+  *{box-sizing:border-box;}
+  body{color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;}
 
   /* Landing overlay */
   #promptOverlay{
@@ -31,95 +30,77 @@
     background:#000; display:flex; flex-direction:column;
     align-items:center; justify-content:center; text-align:center; padding:1.25rem;
   }
-  #promptOverlay p{
-    font-size:1.2rem; max-width:min(900px,85%); margin:0 0 1.25rem 0; opacity:.95;
-  }
-  #modeSelect{ display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap; justify-content:center; }
+  #promptOverlay p{font-size:1.2rem; max-width:min(900px,85%); margin:0 0 1.25rem 0; opacity:.95;}
+  #modeSelect{display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap; justify-content:center;}
   #modeSelect button{
     padding:.8rem 1.1rem; min-width:11rem; border:none; border-radius:10px;
     background:rgba(255,255,255,.1); color:#fff; cursor:pointer; font-size:1rem;
     transition:background .2s ease, transform .05s ease;
   }
-  #modeSelect button:hover{ background:rgba(255,255,255,.2); }
-  #modeSelect button.active{ background:#00bfff; color:#000; font-weight:700; }
+  #modeSelect button:hover{background:rgba(255,255,255,.2);}
+  #modeSelect button.active{background:#00bfff; color:#000; font-weight:700;}
   #startButton{
     padding:1rem 2rem; font-size:1.25rem; border:none; border-radius:12px;
     background:var(--c5); color:#fff; cursor:pointer;
   }
-  #startButton:hover{ filter:brightness(1.15); }
+  #startButton:hover{filter:brightness(1.15);}
 
-  /* Settings icon + slide-out menu */
-  #settings-icon{
-    position:fixed; top:14px; right:14px; width:40px; height:40px; border-radius:50%;
-    display:none; align-items:center; justify-content:center; cursor:pointer;
-    background:rgba(0,0,0,.7); color:#fff; font-size:20px; z-index:10001;
-    transition:transform .2s ease, background .2s ease;
+  /* Top-right language toggle – pill style (black with teal outline/text) */
+  #langToggle{
+    position:fixed; top:14px; right:14px; z-index:10001;
+    display:flex; align-items:center; justify-content:center;
+    padding:.35rem .85rem; border-radius:999px; cursor:pointer;
+    background:var(--pill-bg); color:var(--teal);
+    border:2px solid var(--teal); font-weight:700; font-size:.9rem; letter-spacing:.02em;
+    line-height:1; user-select:none;
+    box-shadow:0 0 0 0 rgba(4,200,187,0);
+    transition:box-shadow .2s ease, transform .04s ease, background .2s ease;
   }
-  #settings-icon:hover{ transform:rotate(90deg); background:rgba(0,0,0,.85); }
-  #menu{
-    position:fixed; top:60px; right:-340px; width:300px; max-height:calc(100vh - 80px);
-    overflow:auto; background:rgba(0,0,0,.86); color:#fff; border-radius:12px;
-    padding:14px 16px; z-index:10000; transition:right .25s ease, opacity .25s ease; opacity:0;
-    box-shadow:0 10px 30px rgba(0,0,0,.35);
-  }
-  #menu.show{ right:12px; opacity:1; }
-  #menu h2{ margin:.2rem 0 .8rem 0; font-size:20px; color:#7dd3fc; text-align:center; }
-  #menu h3{ margin:1rem 0 .4rem 0; font-size:15px; color:#93c5fd; }
-  #menu label{ display:block; margin:.5rem 0; font-size:13px }
-  #menu input[type="range"]{ width:100% }
-  #menu .inline{ display:flex; align-items:center; justify-content:space-between; gap:8px }
-  #menu .val{ display:inline-block; min-width:2ch; padding:0 6px; border-radius:6px; background:rgba(255,255,255,.1) }
+  #langToggle:hover{ box-shadow:0 0 0 3px rgba(4,200,187,.18); }
+  #langToggle:active{ transform:translateY(1px); }
 </style>
 </head>
 <body>
 
+<!-- Language toggle (label stays FR / EN; hides after Start) -->
+<button id="langToggle" title="Changer de langue / Change language">FR / EN</button>
+
 <!-- Landing overlay -->
 <div id="promptOverlay">
-  <p>Choisissez un mode, puis appuyez sur Commencer.<br>
-     <small>Espace = neige &nbsp;·&nbsp; Entrée = rejouer</small>
+  <p class="translate"
+     data-fr="Choisissez un mode, puis appuyez sur Commencer.<br><small>Espace = neige · Entrée = rejouer</small>"
+     data-en="Select a mode, then press Start.<br><small>Space = snow · Enter = restart</small>">
+    Choisissez un mode, puis appuyez sur Commencer.<br><small>Espace = neige · Entrée = rejouer</small>
   </p>
   <div id="modeSelect">
-    <button data-mode="normal" class="active">Mode normal (5 clics)</button>
-    <button data-mode="rapid">Mode éclair (1 clic)</button>
+    <button data-mode="normal" class="active translate"
+            data-fr="Mode normal (5 clics)" data-en="Normal mode (5 presses)">Mode normal (5 clics)</button>
+    <button data-mode="rapid" class="translate"
+            data-fr="Mode éclair (1 clic)" data-en="Lightning mode (1 press)">Mode éclair (1 clic)</button>
   </div>
-  <button id="startButton">Commencer</button>
-</div>
-
-<!-- Settings icon + menu -->
-<div id="settings-icon" title="Options">⚙️</div>
-<div id="menu">
-  <h2>Options</h2>
-
-  <h3>Audio</h3>
-  <label class="inline">
-    <span>Désactiver la musique</span>
-    <input type="checkbox" id="muteMusic">
-  </label>
-  <label>
-    <span>Volume musique : <span class="val" id="musicVolVal">50</span></span><br>
-    <input type="range" id="musicVol" min="0" max="100" value="50">
-  </label>
-  <label class="inline">
-    <span>Désactiver les effets</span>
-    <input type="checkbox" id="muteSFX">
-  </label>
-  <label>
-    <span>Volume effets : <span class="val" id="sfxVolVal">70</span></span><br>
-    <input type="range" id="sfxVol" min="0" max="100" value="70">
-  </label>
-
-  <h3>Jeu</h3>
-  <label>
-    <span>Appuis requis (mode normal) : <span class="val" id="reqVal">5</span></span><br>
-    <input type="range" id="requiredPresses" min="3" max="8" step="1" value="5">
-  </label>
-  <label>
-    <span>Délai entre appuis (ms) : <span class="val" id="delayVal">1200</span></span><br>
-    <input type="range" id="tapDelay" min="400" max="2500" step="100" value="1200">
-  </label>
+  <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
 </div>
 
 <script>
+/* ===================== Translation helper ===================== */
+let currentLang = (document.documentElement.lang || 'fr').toLowerCase() === 'en' ? 'en' : 'fr';
+function applyTranslations(){
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr = el.getAttribute('data-fr');
+    const en = el.getAttribute('data-en');
+    el.innerHTML = (currentLang==='fr' ? fr : en) || el.innerHTML;
+  });
+  document.documentElement.lang = currentLang;
+  document.title = (currentLang==='fr') ? 'Météo — Neige (Jeu Switch)' : 'Weather — Snow (Switch Game)';
+}
+document.getElementById('langToggle').addEventListener('pointerup', ()=>{
+  currentLang = (currentLang==='fr') ? 'en' : 'fr';
+  applyTranslations();
+});
+applyTranslations();
+/* ==================================================================== */
+
+
 /* === Paths === */
 const ambiencePath='../../sounds/winterambiance.mp3';
 const pressPath   ='../../sounds/snowing.mp3';
@@ -136,27 +117,33 @@ let presses=0;
 let progress=0, targetProgress=0;
 const INITIAL_SNOW = 0.08;
 
-/* Final target for NORMAL mode (same end level you liked) */
-const NORMAL_FINAL = 0.80;  // end height after the last normal press
-const RAPID_END    = 0.82;  // rapid mode final height
+/* Final targets */
+const NORMAL_FINAL = 0.80;
+const RAPID_END    = 0.82;
 
-/* Weighted distribution shape (first presses smaller, last bigger) */
+/* Timings (ms) */
+const FALL_MS = 2000;
+const RISE_MS = 2000;
+const RAPID_FILL_MS       = 5000;
+const RAPID_RISE_DELAY_MS = 1000;
+
+/* Normal weights */
 const WEIGHT_START = 0.7;
 const WEIGHT_END   = 1.3;
 
-/* Visual easing */
-const LERP_RATE = 0.08;
+/* Lerp */
+const LERP_RATE_NORMAL = 0.08;
+const LERP_RATE_RAPID  = 0.12;
 
-/* Wave control */
+/* Wave / flakes */
 let waveActive=false;
-let spawning=false;
-let spawnUntil=0;
-let airborneCount=0;
 
-/* Celebration trigger mgmt */
+/* Celebration */
 let completionArmed=false;
 let celebrationScheduled=false;
-let celebrationTimeout=null;
+let celebrating=false;
+let celebrateStart=0;
+const CELEBRATE_MS = 30000;
 
 /* Audio */
 let ambience, pressSFX, finishSFX;
@@ -174,7 +161,7 @@ let forest=[];
 const TREE_SCALE = 1.5;
 const TREE_BASE_DROP = 30;
 
-/* Background snow (lighter) */
+/* Background snow */
 const BACK_DENSITY_BASE = 0.00006;
 const BACK_SZ_MIN = 1.0, BACK_SZ_MAX = 2.2;
 const BACK_VY_MIN = 0.22, BACK_VY_MAX = 0.5;
@@ -184,8 +171,7 @@ const BACK_ALPHA  = 110;
 const MAX_SNOW_DEPTH_FRAC = 0.62;
 const groundNoiseSeed = Math.floor(Math.random()*10000);
 
-/* Storm tuning (lighter) */
-const SPAWN_WINDOW_MS = 1200;
+/* Storm tuning */
 const FLAKES_PER_MEGAPIXEL = 140;
 const STORM_ACTIVE_CAP = 6000;
 
@@ -194,11 +180,6 @@ let windT = Math.random()*1000;
 let baseWind = 0;
 let gust = 0;
 
-/* Celebration */
-let celebrating=false;
-let celebrateStart=0;
-const CELEBRATE_MS = 30000;
-
 /* Night elements */
 let sunFadeL=0, starRevealL=0, moonRevealL=0, auroraRevealL=0;
 let stars=[];
@@ -206,410 +187,298 @@ const STAR_DENSITY = 0.00008;
 let moonSeed = Math.floor(Math.random()*10000);
 
 /* Aurora */
-let AUR = {
-  seed: Math.random()*10000,
-  t: 0,
-  bands: [],
-  conf: {
-    topOffsetFrac: 0.12,
-    heightFrac:    0.34,
-    xStep:         16,
-    bandCount:     3,
-    drift:         0.007,
-    baseAlpha:     86
-  }
-};
+let AUR = { seed: Math.random()*10000, t: 0, bands: [], conf: { topOffsetFrac:0.12, heightFrac:0.34, xStep:16, bandCount:3, drift:0.007, baseAlpha:86 } };
 
-/* ===== Rapid fill tween (no tail) ===== */
+/* Normal two-phase animation */
+let pressAnim = { active:false, phase:'fall', startTime:0, inc:0, riseFrom:0, riseTo:0 };
+
+/* Rapid tween */
 let rapidFillActive = false;
 let rapidFillStart  = 0;
 let rapidFillFrom   = 0;
-let rapidFillDur    = 3000; // ms (1-click fill duration)
 
-/* ---------- Weighted increment helpers ---------- */
-function buildWeights(n){
-  if(n<=0) return [];
-  if(n===1) return [1];
-  const arr = [];
-  for(let i=0;i<n;i++){
-    const t = i/(n-1);
-    arr.push(WEIGHT_START + (WEIGHT_END-WEIGHT_START)*t);
+/* Constant spawn planner */
+let spawnPlan = { active:false, start:0, duration:0, rate:0, accum:0 };
+let airborneCount=0;
+
+/* Reset transition */
+let resetTransActive = false;
+let resetTransPhase = 'cover';
+let resetTransStart = 0;
+let resetDidHard = false;
+let resetFlakes = [];
+const RESET_COVER_MS = 2200;
+const RESET_FADE_MS  = 1200;
+const RESET_FLAKES_PER_MP = 900;
+
+/* ---------- Reset transition helpers ---------- */
+function startResetTransition(){
+  resetTransActive = true;
+  resetTransPhase = 'cover';
+  resetTransStart = millis();
+  resetDidHard = false;
+  resetFlakes.length = 0;
+  const pxMP = (w*h)/1e6;
+  const count = Math.floor(pxMP * RESET_FLAKES_PER_MP);
+  for(let i=0;i<count;i++) resetFlakes.push(new ResetFlake());
+}
+function drawResetTransition(){
+  const now = millis();
+  const t = now - resetTransStart;
+
+  for(let i=resetFlakes.length-1;i>=0;i--){
+    const f = resetFlakes[i]; f.update(); f.draw();
+    if(f.dead) resetFlakes[i] = new ResetFlake(true);
   }
-  return arr;
-}
-function sumSlice(arr, start){
-  let s=0; for(let i=start;i<arr.length;i++) s+=arr[i]; return s;
+
+  if (resetTransPhase === 'cover'){
+    const u = constrain(t/RESET_COVER_MS, 0, 1);
+    const a = 255 * u;
+    noStroke(); fill(255,255,255, a*0.8); rect(0,0,w,h);
+    if (t >= RESET_COVER_MS){
+      if(!resetDidHard){ hardResetGame(); resetDidHard=true; }
+      resetTransPhase = 'fade'; resetTransStart = now;
+    }
+  } else {
+    const u = constrain(t/RESET_FADE_MS, 0, 1);
+    const a = 255 * (1 - u);
+    noStroke(); fill(255,255,255, a*0.8); rect(0,0,w,h);
+    if (t >= RESET_FADE_MS){ resetTransActive = false; resetFlakes.length = 0; }
+  }
 }
 
-/* ---------- Helpers ---------- */
+/* ---------- Aurora helpers ---------- */
 function makeBands(){
   AUR.bands.length = 0;
   const C = AUR.conf;
-  for (let i=0; i<C.bandCount; i++){
+  for (let i=0;i<C.bandCount;i++){
     const lane = (i + 0.5) / C.bandCount;
     AUR.bands.push({
       yFracMid: C.topOffsetFrac + C.heightFrac * lane,
-      ampY:     random(20, 34),
-      ampX:     random(28, 46),
-      wavFreq:  random(1.05, 1.5),
-      speed:    random(0.26, 0.40),
-      widthMin: random(18, 24),
-      widthMax: random(46, 70),
-      widthJit: random(0.18, 0.32),
-      noiseP:   random(1000),
-      flowP:    random(2000),
-      hueBias:  random(-0.06, 0.10),
-      alphaMul: random(0.92, 1.18)
+      ampY:random(20,34), ampX:random(28,46),
+      wavFreq:random(1.05,1.5), speed:random(0.26,0.40),
+      widthMin:random(18,24), widthMax:random(46,70),
+      widthJit:random(0.18,0.32),
+      noiseP:random(1000), flowP:random(2000),
+      hueBias:random(-0.06,0.10), alphaMul:random(0.92,1.18)
     });
   }
 }
 function ribbonPolygon(b, tNow, widen=1.0){
-  const C = AUR.conf;
-  const ups = [], downs = [];
+  const C = AUR.conf, ups=[], downs=[];
   for (let x=-w*0.05; x<=w*1.05; x+=C.xStep){
     const siny  = Math.sin(x*0.004*b.wavFreq + tNow*b.speed) * b.ampY;
     const flow  = (noise(x*0.0022 + tNow*0.12 + b.flowP) - 0.5) * b.ampX*2.0;
     const y     = h*b.yFracMid + siny + flow*0.12;
-
-    const x2 = x + 1;
+    const x2    = x + 1;
     const siny2 = Math.sin(x2*0.004*b.wavFreq + tNow*b.speed) * b.ampY;
     const flow2 = (noise(x2*0.0022 + tNow*0.12 + b.flowP) - 0.5) * b.ampX*2.0;
-    const y2 = h*b.yFracMid + siny2 + flow2*0.12;
-
-    const dx = 1, dy = y2 - y;
-    const len = Math.max(1e-3, Math.hypot(dx,dy));
+    const y2    = h*b.yFracMid + siny2 + flow2*0.12;
+    const dx = 1, dy = y2 - y, len = Math.max(1e-3, Math.hypot(dx,dy));
     const nx = -dy/len, ny = dx/len;
-
     const wNoise = (noise(x*0.006 + tNow*0.45 + b.noiseP) - 0.5) * b.widthJit;
     const baseW  = lerp(b.widthMin, b.widthMax, 0.65 + 0.35*Math.sin(tNow*0.8 + x*0.002));
     const halfW  = baseW * (1.0 + wNoise) * 0.5 * widen;
-
-    ups.push({x: x + nx*halfW, y: y + ny*halfW});
-    downs.push({x: x - nx*halfW, y: y - ny*halfW});
+    ups.push({x:x+nx*halfW,y:y+ny*halfW}); downs.push({x:x-nx*halfW,y:y-ny*halfW});
   }
-  const poly = [];
-  for (let p of ups)   poly.push(p);
-  for (let i=downs.length-1; i>=0; i--) poly.push(downs[i]);
-  return poly;
+  const poly=[]; for (let p of ups) poly.push(p); for (let i=downs.length-1;i>=0;i--) poly.push(downs[i]); return poly;
 }
 function mix(a,b,t){ return a + (b-a)*t; }
 function auroraFillColor(b, edge=0.0, tNow=0, brightness=1.0){
-  const g = { r:  50, g: 240, b: 210 };
-  const p = { r: 190, g:  80, b: 255 };
-  const travel = 0.35 + 0.35*(0.5+0.5*Math.sin(tNow*0.6 + b.flowP));
-  const edgeMix = constrain(travel + edge*0.35 - 0.12, 0, 1);
-  const r = mix(g.r, p.r, edgeMix) + b.hueBias*40;
-  const gg= mix(g.g, p.g, edgeMix) + b.hueBias*15;
-  const bl= mix(g.b, p.b, edgeMix) + b.hueBias*25;
+  const g={r:50,g:240,b:210}, p={r:190,g:80,b:255};
+  const travel=0.35+0.35*(0.5+0.5*Math.sin(tNow*0.6+b.flowP)); const edgeMix=constrain(travel+edge*0.35-0.12,0,1);
+  const r=mix(g.r,p.r,edgeMix)+b.hueBias*40, gg=mix(g.g,p.g,edgeMix)+b.hueBias*15, bl=mix(g.b,p.b,edgeMix)+b.hueBias*25;
   return [constrain(r*brightness,0,255), constrain(gg*brightness,0,255), constrain(bl*brightness,0,255)];
 }
 function drawAurora(level){
-  if (level <= 0) return;
-  const C = AUR.conf; AUR.t += C.drift;
+  if (level<=0) return; const C=AUR.conf; AUR.t += C.drift;
   push(); blendMode(SCREEN); noStroke();
-  for (let i=0; i<AUR.bands.length; i++){
-    const b = AUR.bands[i];
-    for (let gp=0; gp<2; gp++){
-      const widen = 1.6 + gp*0.45;
-      const poly  = ribbonPolygon(b, AUR.t, widen);
-      const [r,g,bl] = auroraFillColor(b, 0.0, AUR.t, 0.65 - gp*0.12);
-      fill(r, g, bl, C.baseAlpha * 0.55 * (1 - gp*0.25) * level * b.alphaMul);
-      beginShape(); for (let p of poly) vertex(p.x, p.y); endShape(CLOSE);
+  for (let i=0;i<AUR.bands.length;i++){
+    const b=AUR.bands[i];
+    for (let gp=0;gp<2;gp++){
+      const widen=1.6+gp*0.45, poly=ribbonPolygon(b, AUR.t, widen);
+      const [r,g,bl]=auroraFillColor(b,0.0,AUR.t,0.65-gp*0.12);
+      fill(r,g,bl,C.baseAlpha*0.55*(1-gp*0.25)*level*b.alphaMul);
+      beginShape(); for (let p of poly) vertex(p.x,p.y); endShape(CLOSE);
     }
-    const poly = ribbonPolygon(b, AUR.t, 1.0);
-    const [r,g,bl] = auroraFillColor(b, 0.18, AUR.t, 1.0);
-    fill(r, g, bl, C.baseAlpha * 1.0 * level * b.alphaMul);
-    beginShape(); for (let p of poly) vertex(p.x, p.y); endShape(CLOSE);
-
+    const poly=ribbonPolygon(b,AUR.t,1.0); const [r,g,bl]=auroraFillColor(b,0.18,AUR.t,1.0);
+    fill(r,g,bl,C.baseAlpha*1.0*level*b.alphaMul); beginShape(); for (let p of poly) vertex(p.x,p.y); endShape(CLOSE);
     strokeCap(ROUND); strokeJoin(ROUND); strokeWeight(2.5);
-    for (let k=1; k<poly.length/2; k++){
-      const mPrev = { x:(poly[k-1].x + poly[poly.length- (k)].x)/2,
-                      y:(poly[k-1].y + poly[poly.length- (k)].y)/2 };
-      const mCur  = { x:(poly[k].x   + poly[poly.length- (k+1)].x)/2,
-                      y:(poly[k].y   + poly[poly.length- (k+1)].y)/2 };
-      const [rr,gg,bb] = auroraFillColor(b, 0.0, AUR.t, 1.0);
-      stroke(rr,gg,bb, (C.baseAlpha*0.65) * level);
-      line(mPrev.x, mPrev.y, mCur.x, mCur.y);
+    for (let k=1;k<poly.length/2;k++){
+      const mPrev={x:(poly[k-1].x+poly[poly.length-(k)].x)/2,y:(poly[k-1].y+poly[poly.length-(k)].y)/2};
+      const mCur ={x:(poly[k].x  +poly[poly.length-(k+1)].x)/2,y:(poly[k].y  +poly[poly.length-(k+1)].y)/2};
+      const [rr,gg,bb]=auroraFillColor(b,0.0,AUR.t,1.0); stroke(rr,gg,bb,(C.baseAlpha*0.65)*level); line(mPrev.x,mPrev.y,mCur.x,mCur.y);
     }
     noStroke();
   }
   pop();
 }
-function safePlay(snd, volume=1){
-  if(!snd || typeof snd.play !== 'function') return;
-  try{ snd.setVolume(volume); snd.play(); }catch(e){ console.warn('Audio play failed:', e); }
-}
+function safePlay(snd, volume=1){ if(!snd || typeof snd.play!=='function') return; try{ snd.setVolume(volume); snd.play(); }catch(e){} }
 
+/* ---------- Assets ---------- */
 function preload(){
-  try{ ambience = loadSound(ambiencePath, null, err=>console.warn('Ambience load error:', err)); }catch(e){}
-  try{ pressSFX = loadSound(pressPath,  null, err=>console.warn('Press SFX load error:', err)); }catch(e){}
-  try{ finishSFX= loadSound(finishPath, null, err=>console.warn('Finish SFX load error:', err)); }catch(e){}
-  try{ firImg = loadImage(firPath, ()=>{}, err=>console.warn('Fir image load error:', err)); }catch(e){}
+  try{ ambience=loadSound(ambiencePath,null,()=>{});}catch(e){}
+  try{ pressSFX=loadSound(pressPath,null,()=>{});}catch(e){}
+  try{ finishSFX=loadSound(finishPath,null,()=>{});}catch(e){}
+  try{ firImg=loadImage(firPath,()=>{},()=>{});}catch(e){}
 }
 
+/* ---------- Setup ---------- */
 function setup(){
-  createCanvas(windowWidth, windowHeight);
-  w=width; h=height;
+  createCanvas(windowWidth, windowHeight); w=width; h=height;
 
+  // Clouds (single class, as requested)
   for(let i=0;i<6;i++){
     clouds.push(new Cloud(random(w), random(h*0.05, h*0.45),
       random(120,260), random(50,120), random(0.3,1.2)));
   }
-  buildForest();
-  rebuildBackgroundFlakes();
-  seedStars();
-  makeBands();
+  buildForest(); rebuildBackgroundFlakes(); seedStars(); makeBands();
 
-  // Overlay wiring
-  const modeButtons = [...document.querySelectorAll('#modeSelect button')];
-  let selectedMode = 'normal';
+  // Mode select
+  const modeButtons=[...document.querySelectorAll('#modeSelect button')];
+  let selectedMode='normal';
   modeButtons.forEach(btn=>{
     btn.addEventListener('pointerup', ()=>{
       modeButtons.forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedMode = btn.dataset.mode;
+      btn.classList.add('active'); selectedMode=btn.dataset.mode;
     });
   });
 
-  document.getElementById('startButton').addEventListener('pointerup', (e)=>{
-    e.preventDefault();
-    rapidMode = (selectedMode === 'rapid');
-    startGame();
+  // Start
+  document.getElementById('startButton').addEventListener('pointerup',(e)=>{
+    e.preventDefault(); rapidMode=(selectedMode==='rapid'); startGame();
     document.getElementById('promptOverlay')?.remove();
-    const ico = document.getElementById('settings-icon');
-    ico.style.display = 'flex';
+    const lt=document.getElementById('langToggle'); if(lt) lt.style.display='none';
     document.documentElement.requestFullscreen?.().catch(()=>{});
   });
-
-  // Settings menu
-  const ico = document.getElementById('settings-icon');
-  const menu = document.getElementById('menu');
-  ico.addEventListener('pointerup', ()=> menu.classList.toggle('show'));
-  document.addEventListener('click', (e)=>{
-    if(!menu.contains(e.target) && !ico.contains(e.target)) menu.classList.remove('show');
-  });
-
-  // Inputs
-  const muteM=document.getElementById('muteMusic');
-  const volM =document.getElementById('musicVol');
-  const valM =document.getElementById('musicVolVal');
-  const muteS=document.getElementById('muteSFX');
-  const volS =document.getElementById('sfxVol');
-  const valS =document.getElementById('sfxVolVal');
-  const req  =document.getElementById('requiredPresses');
-  const reqV =document.getElementById('reqVal');
-  const delay=document.getElementById('tapDelay');
-  const delayV=document.getElementById('delayVal');
-
-  muteM.onchange=e=>{
-    isMusicMuted = e.target.checked;
-    ambience?.setVolume(isMusicMuted?0:volMusic);
-    finishSFX?.setVolume(isMusicMuted?0:volMusic);
-  };
-  volM.oninput=e=>{
-    volMusic=e.target.value/100; valM.textContent=e.target.value;
-    if(!isMusicMuted) ambience?.setVolume(volMusic);
-    if(!isMusicMuted) finishSFX?.setVolume(volMusic);
-  };
-  muteS.onchange=e=>{ isSFXMuted = e.target.checked; };
-  volS.oninput=e=>{ volSFX=e.target.value/100; valS.textContent=e.target.value; };
-  req.oninput=e=>{ requiredPresses = parseInt(e.target.value,10); reqV.textContent = requiredPresses; };
-  delay.oninput=e=>{ tapDelay = parseInt(e.target.value,10); delayV.textContent = tapDelay; };
 }
 
 function startGame(){
   gameStarted=true; finished=false; celebrating=false;
-
   completionArmed=false; celebrationScheduled=false;
-  if (celebrationTimeout){ clearTimeout(celebrationTimeout); celebrationTimeout=null; }
+  pressAnim.active=false; rapidFillActive=false; spawnPlan.active=false; airborneCount=0;
+  resetTransActive=false;
+  if (typeof userStartAudio==='function') { userStartAudio(); }
 
-  if (typeof userStartAudio === 'function') { userStartAudio(); }
-
-  presses=0;
-  progress=INITIAL_SNOW;
-  targetProgress=INITIAL_SNOW;
-  stormFlakes.length=0; waveActive=false; spawning=false; airborneCount=0;
+  presses=0; progress=INITIAL_SNOW; targetProgress=INITIAL_SNOW;
+  stormFlakes.length=0; waveActive=false;
 
   if(ambience && ambience.isLoaded()){
-    ambience.setLoop(true);
-    ambience.setVolume(isMusicMuted?0:volMusic);
-    safePlay(ambience, isMusicMuted?0:volMusic);
+    ambience.setLoop(true); ambience.setVolume(isMusicMuted?0:volMusic); safePlay(ambience, isMusicMuted?0:volMusic);
   }
-
-  rebuildBackgroundFlakes();
-  seedStars();
-  moonSeed = Math.floor(Math.random()*10000);
-  AUR.seed = Math.random()*10000;
-  AUR.t = 0;
-  makeBands();
+  rebuildBackgroundFlakes(); seedStars(); moonSeed=Math.floor(Math.random()*10000);
+  AUR.seed=Math.random()*10000; AUR.t=0; makeBands();
 }
-
 function hardResetGame(){
-  celebrating=false; finished=false;
-  completionArmed=false; celebrationScheduled=false;
-  if (celebrationTimeout){ clearTimeout(celebrationTimeout); celebrationTimeout=null; }
-
-  if(ambience && ambience.isLoaded()){
-    ambience.setVolume(isMusicMuted?0:volMusic);
-  }
-
-  presses=0;
-  progress=INITIAL_SNOW;
-  targetProgress=INITIAL_SNOW;
-  stormFlakes.length=0; waveActive=false; spawning=false; airborneCount=0;
-
-  rebuildBackgroundFlakes();
-  seedStars();
-  moonSeed = Math.floor(Math.random()*10000);
-  AUR.seed = Math.random()*10000; AUR.t = 0; makeBands();
+  pressAnim.active=false; rapidFillActive=false; spawnPlan.active=false; airborneCount=0;
+  celebrating=false; finished=false; completionArmed=false; celebrationScheduled=false;
+  if(ambience && ambience.isLoaded()){ ambience.setVolume(isMusicMuted?0:volMusic); }
+  presses=0; progress=INITIAL_SNOW; targetProgress=INITIAL_SNOW; stormFlakes.length=0; waveActive=false;
+  rebuildBackgroundFlakes(); seedStars(); moonSeed=Math.floor(Math.random()*10000);
+  AUR.seed=Math.random()*10000; AUR.t=0; makeBands();
 }
 
-/* ---------- Draw loop ---------- */
+/* ---------- Draw ---------- */
 function draw(){
   if(!gameStarted){ background(0); return; }
-
-  const now = millis();
+  const now=millis();
 
   // Wind
-  windT += 0.0025;
-  baseWind = map(noise(windT), 0, 1, -1.1, 1.1);
-  const gustChance = noise(windT*0.4 + 100);
-  const targetGust = gustChance > 0.75 ? map(noise(windT*1.3+200), 0,1, -2.0, 2.0) : 0;
-  gust = lerp(gust, targetGust, 0.02);
-  const wind = baseWind + gust;
+  windT+=0.0025; baseWind=map(noise(windT),0,1,-1.1,1.1);
+  const gustChance=noise(windT*0.4+100), targetGust=gustChance>0.75?map(noise(windT*1.3+200),0,1,-2.0,2.0):0;
+  gust=lerp(gust, targetGust, 0.02); const wind=baseWind+gust;
 
-  // Celebration timings
-  if (celebrating){
-    const t = now - celebrateStart;
-    sunFadeL      = constrain(t/5000, 0, 1);
-    starRevealL   = constrain((t-5000)/2000, 0, 1);
-    moonRevealL   = constrain((t-5000)/2000, 0, 1);
-    auroraRevealL = constrain((t-7000)/2000, 0, 1);
-  } else {
-    sunFadeL=0; starRevealL=0; moonRevealL=0; auroraRevealL=0;
-  }
-
-  // Sky, sun, clouds
-  drawSnowySky(celebrating, sunFadeL);
-  drawSun(1 - sunFadeL);
-
-  if (!celebrating){
-    for(const c of clouds){ c.update(); c.draw(); }
-  } else {
-    for(const c of clouds){ c.update(); }
-  }
-
-  // Aurora behind trees during celebration
-  if (celebrating && auroraRevealL > 0){ drawAurora(auroraRevealL); }
-
-  // Forest
-  drawForest();
-
-  // Flakes (lighter)
-  if (!celebrating) {
-    for(const f of flakesBack){ f.update(); f.draw(); }
-
-    if(spawning && now < spawnUntil){
-      const pxMP = (w*h)/1e6;
-      let totalFlakes = Math.max(90, Math.floor(pxMP * FLAKES_PER_MEGAPIXEL * 0.9));
-      totalFlakes = Math.min(totalFlakes, STORM_ACTIVE_CAP - stormFlakes.length);
-      const window = Math.max(1, (spawnUntil - now));
-      const perFrame = Math.ceil(totalFlakes * (deltaTime / window));
-      for(let i=0;i<perFrame;i++){
-        if(stormFlakes.length >= STORM_ACTIVE_CAP) break;
-        const fl = new StormFlake();
-        // mass is set when we compute the increment per press (see trigger)
-        fl.mass = 0;
-        fl.windRef = wind;
-        stormFlakes.push(fl);
-        airborneCount++;
+  // Normal two-phase
+  if(!rapidMode && pressAnim.active){
+    if(pressAnim.phase==='fall'){
+      if(now>=pressAnim.startTime+FALL_MS){
+        pressAnim.phase='rise'; pressAnim.startTime=now;
+        pressAnim.riseFrom=targetProgress; pressAnim.riseTo=Math.min(NORMAL_FINAL, pressAnim.riseFrom+pressAnim.inc);
+        spawnPlan.active=false;
       }
     } else {
-      spawning = false;
+      const t=constrain((now-pressAnim.startTime)/RISE_MS,0,1);
+      const eased=easeInOutCubic(t);
+      targetProgress=pressAnim.riseFrom+(pressAnim.riseTo-pressAnim.riseFrom)*eased;
+      if(t>=1){ pressAnim.active=false; waveActive=false; }
     }
+  }
+
+  // Rapid mode
+  if(rapidMode && rapidFillActive){
+    const elapsed=now-rapidFillStart, riseElapsed=Math.max(0, elapsed-RAPID_RISE_DELAY_MS);
+    const u=constrain(riseElapsed/RAPID_FILL_MS,0,1);
+    targetProgress=Math.min(RAPID_END, rapidFillFrom+(RAPID_END-rapidFillFrom)*u);
+    if(elapsed>=RAPID_RISE_DELAY_MS+RAPID_FILL_MS){
+      rapidFillActive=false; spawnPlan.active=false; completionArmed=true; waveActive=false;
+    }
+  }
+
+  // Sky & sun
+  drawSnowySky(celebrating, sunFadeL); drawSun(1 - sunFadeL);
+
+  // Night timers
+  if(celebrating){
+    const t=now-celebrateStart;
+    sunFadeL=constrain(t/5000,0,1);
+    starRevealL=constrain((t-5000)/2000,0,1);
+    moonRevealL=constrain((t-5000)/2000,0,1);
+    auroraRevealL=constrain((t-7000)/2000,0,1);
+  } else { sunFadeL=0; starRevealL=0; moonRevealL=0; auroraRevealL=0; }
+
+  // Clouds
+  if(!celebrating){ for(const c of clouds){ c.update(); c.draw(); } }
+  else { for(const c of clouds){ c.update(); } }
+
+  if(celebrating && auroraRevealL>0){ drawAurora(auroraRevealL); }
+  drawForest();
+
+  // Snow systems
+  if(!celebrating){
+    for(const f of flakesBack){ f.update(); f.draw(); }
+    updateSpawn(now, wind);
 
     for(let i=stormFlakes.length-1;i>=0;i--){
-      const s = stormFlakes[i];
-      s.update(wind);
-      s.draw();
-      if(s.justLanded){
-        s.justLanded = false;
-        airborneCount = Math.max(0, airborneCount - 1);
-
-        // In normal mode, landed flakes contribute to height with the precomputed increment.
-        // We already applied the increment directly; individual flake masses are zeroed so we don't double count.
-      }
+      const s=stormFlakes[i]; s.update(wind); s.draw();
+      if(s.justLanded){ s.justLanded=false; airborneCount=Math.max(0,airborneCount-1); }
       if(s.dead) stormFlakes.splice(i,1);
     }
 
-    if(waveActive && !spawning && airborneCount===0){
-      waveActive = false;
+    if(!rapidMode && !completionArmed && (presses>=requiredPresses)){ completionArmed=true; }
+    if(completionArmed && !celebrationScheduled && !spawnPlan.active && airborneCount===0 && !pressAnim.active && !rapidFillActive){
+      celebrationScheduled=true; setTimeout(()=>{ if(!finished && !celebrating){ finished=true; startCelebration(); } }, 900);
     }
 
-    // Completion (normal mode waits until required presses)
-    if (!rapidMode && !completionArmed && (presses >= requiredPresses)){
-      completionArmed = true;
-    }
-    if (completionArmed && !celebrationScheduled && !waveActive && !spawning && airborneCount===0){
-      celebrationScheduled = true;
-      celebrationTimeout = setTimeout(()=>{
-        if (!finished && !celebrating){
-          finished=true;
-          startCelebration();
-        }
-      }, 900);
-    }
+    const lerpRate=(rapidMode && (rapidFillActive || !celebrating))?LERP_RATE_RAPID:LERP_RATE_NORMAL;
+    progress=lerp(progress, targetProgress, lerpRate); drawSnowGround(progress);
 
-    // Gentle easing
-    progress = lerp(progress, targetProgress, LERP_RATE);
-    drawSnowGround(progress);
-
-    if(waveActive){
-      noStroke();
-      fill(255,255,255, 18 + 22*Math.abs(wind)); // lighter flash
-      rect(0,0,w,h);
-    }
+    if(waveActive){ noStroke(); fill(255,255,255, 16 + 20*Math.abs(baseWind+gust)); rect(0,0,w,h); }
   } else {
-    progress = lerp(progress, targetProgress, LERP_RATE);
-    drawSnowGround(progress);
+    progress=lerp(progress, targetProgress, LERP_RATE_NORMAL); drawSnowGround(progress);
   }
 
-  // Celebration overlays
+  // Celebration overlays & reset transition
   if(celebrating){
-    if (starRevealL > 0) drawStars(starRevealL);
-    if (moonRevealL > 0) drawMoon(moonRevealL);
-
-    noStroke();
-    const a = 5 + 7*Math.sin((now - celebrateStart)/260);
-    fill(255,255,255, a);
-    rect(0,0,w,h);
-
-    if(now - celebrateStart > CELEBRATE_MS){ hardResetGame(); }
+    if(starRevealL>0) drawStars(starRevealL);
+    if(moonRevealL>0) drawMoon(moonRevealL);
+    noStroke(); const a=5 + 7*Math.sin((now - celebrateStart)/260); fill(255,255,255,a); rect(0,0,w,h);
+    if(now - celebrateStart > CELEBRATE_MS && !resetTransActive){ celebrating=false; startResetTransition(); }
   }
+  if(resetTransActive){ drawResetTransition(); }
 
-  sunRot += 0.003;
-  glarePulse = 0.98 + 0.04 * Math.sin(frameCount*0.03);
+  sunRot += 0.003; glarePulse = 0.98 + 0.04 * Math.sin(frameCount*0.03);
 }
 
-/* === Input === */
+/* ---------- Input ---------- */
 function keyPressed(){
   if(key===' ' && gameStarted) trigger();
   if(keyCode===ENTER && gameStarted){
-    if (celebrationTimeout){ clearTimeout(celebrationTimeout); celebrationTimeout=null; }
     completionArmed=false; celebrationScheduled=false;
-
-    rapidFillActive=false;
-    presses=0; progress=INITIAL_SNOW; targetProgress=INITIAL_SNOW;
-    finished=false; celebrating=false; stormFlakes.length=0; waveActive=false; spawning=false; airborneCount=0;
-    rebuildBackgroundFlakes();
-    seedStars();
-    moonSeed = Math.floor(Math.random()*10000);
-    AUR.seed = Math.random()*10000; AUR.t = 0; makeBands();
-
-    if(ambience && ambience.isLoaded() && !isMusicMuted){
-      ambience.setVolume(volMusic);
-      safePlay(ambience, volMusic);
-    }
+    pressAnim.active=false; rapidFillActive=false; spawnPlan.active=false; resetTransActive=false; airborneCount=0;
+    presses=0; progress=INITIAL_SNOW; targetProgress=INITIAL_SNOW; finished=false; celebrating=false; stormFlakes.length=0; waveActive=false;
+    rebuildBackgroundFlakes(); seedStars(); moonSeed=Math.floor(Math.random()*10000);
+    AUR.seed=Math.random()*10000; AUR.t=0; makeBands();
+    if(ambience && ambience.isLoaded() && !isMusicMuted){ ambience.setVolume(volMusic); safePlay(ambience, volMusic); }
   }
   if(key.toLowerCase()==='f'){
     if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
@@ -619,162 +488,92 @@ function keyPressed(){
 function mousePressed(){ if(gameStarted) trigger(); return false; }
 function touchStarted(){ if(gameStarted) trigger(); return false; }
 
-/* === Controls === */
-let currentWaveMass = 0;
+/* ---------- Controls ---------- */
+function buildWeights(n){ if(n<=0) return []; if(n===1) return [1]; const arr=[]; for(let i=0;i<n;i++){ const t=i/(n-1); arr.push(WEIGHT_START + (WEIGHT_END-WEIGHT_START)*t);} return arr; }
+function sumSlice(arr,start){ let s=0; for(let i=start;i<arr.length;i++) s+=arr[i]; return s; }
+
 function trigger(){
-  if(finished || celebrating) return;
-  if(waveActive) return;
-  if(millis()-lastTap < tapDelay) return;
-  lastTap = millis();
+  if(finished || celebrating || resetTransActive) return;
+  if(pressAnim.active || rapidFillActive || spawnPlan.active) return;
+  if(millis()-lastTap < tapDelay) return; lastTap = millis();
 
-  // RAPID MODE — tween only, no tail
   if (rapidMode){
-    rapidFillFrom   = targetProgress;
-    rapidFillStart  = millis();
-    rapidFillActive = true;
-
-    presses = requiredPresses;
-    completionArmed = true;
-
-    waveActive = true;
-    spawning   = true;
-    spawnUntil = rapidFillStart + rapidFillDur;
-    airborneCount = 0;
-
-    if(!isSFXMuted && pressSFX && pressSFX.isLoaded()){
-      pressSFX.setVolume(volSFX);
-      safePlay(pressSFX, volSFX);
-    }
-    rebuildBackgroundFlakes();
-    return;
+    rapidFillFrom=targetProgress; rapidFillStart=millis(); rapidFillActive=true;
+    beginSpawn(RAPID_RISE_DELAY_MS + RAPID_FILL_MS, 2); // double density in rapid mode
+    presses=requiredPresses;
+    if(!isSFXMuted && pressSFX && pressSFX.isLoaded()){ pressSFX.setVolume(volSFX); safePlay(pressSFX, volSFX); }
+    rebuildBackgroundFlakes(); return;
   }
 
-  // ===== NORMAL MODE — weighted increments so first presses are smaller,
-  // and total reaches NORMAL_FINAL exactly after requiredPresses presses. =====
-  const weights = buildWeights(requiredPresses);
-  const pressIdx = Math.min(presses, requiredPresses-1); // 0-based
-  const remaining = Math.max(0, NORMAL_FINAL - targetProgress);
-  const denom = sumSlice(weights, pressIdx); // sum of weights from current press to last
-  let inc = denom > 0 ? remaining * (weights[pressIdx] / denom) : 0;
-
-  // Apply increment immediately to targetProgress
-  const before = targetProgress;
-  targetProgress = Math.min(NORMAL_FINAL, targetProgress + inc);
-
-  // Spawn a small visual storm but keep landed mass zero so we don't double add
-  waveActive = true;
-  spawning   = true;
-  spawnUntil = millis() + SPAWN_WINDOW_MS;
-  airborneCount = 0;
-
-  currentWaveMass = inc; // used only to scale visual density a bit
-
-  if(!isSFXMuted && pressSFX && pressSFX.isLoaded()){
-    pressSFX.setVolume(volSFX);
-    safePlay(pressSFX, volSFX);
-  }
-
-  rebuildBackgroundFlakes();
+  // Normal mode press: fall then rise
+  const weights=buildWeights(requiredPresses);
+  const pressIdx=Math.min(presses, requiredPresses-1);
+  const remaining=Math.max(0, NORMAL_FINAL - targetProgress);
+  const denom=sumSlice(weights, pressIdx);
+  let inc=denom>0 ? remaining * (weights[pressIdx] / denom) : 0;
   presses++;
+
+  pressAnim.active=true; pressAnim.phase='fall'; pressAnim.startTime=millis();
+  pressAnim.inc=inc; pressAnim.riseFrom=targetProgress; pressAnim.riseTo=Math.min(NORMAL_FINAL, pressAnim.riseFrom+inc);
+  beginSpawn(FALL_MS, 1);
+
+  if(!isSFXMuted && pressSFX && pressSFX.isLoaded()){ pressSFX.setVolume(volSFX); safePlay(pressSFX, volSFX); }
+  rebuildBackgroundFlakes();
   if (presses >= requiredPresses) completionArmed = true;
 }
 
-/* === Celebration === */
+/* ---------- Celebration ---------- */
 function startCelebration(){
-  celebrating = true;
-
+  celebrating=true;
   if(ambience && ambience.isLoaded() && !isMusicMuted){ ambience.setVolume(volMusic*0.25); }
-  if(finishSFX && finishSFX.isLoaded() && !isMusicMuted){
-    finishSFX.setVolume(Math.max(0.2, volMusic));
-    safePlay(finishSFX, Math.max(0.2, volMusic));
-  }
-  celebrateStart = millis();
-  sunFadeL=0; starRevealL=0; moonRevealL=0; auroraRevealL=0;
+  if(finishSFX && finishSFX.isLoaded() && !isMusicMuted){ finishSFX.setVolume(Math.max(0.2, volMusic)); safePlay(finishSFX, Math.max(0.2, volMusic)); }
+  celebrateStart=millis(); sunFadeL=0; starRevealL=0; moonRevealL=0; auroraRevealL=0;
 }
 
-/* === Stars & Moon === */
-function seedStars(){
-  stars.length = 0;
-  const n = Math.floor(width * height * STAR_DENSITY);
-  for(let i=0;i<n;i++){
-    stars.push({ x: random(width), y: random(height * 0.55), a: random(110, 230), tw: random(0.4, 0.9), p: random(TWO_PI) });
-  }
-}
+/* ---------- Stars & Moon ---------- */
+function seedStars(){ stars.length=0; const n=Math.floor(width*height*STAR_DENSITY); for(let i=0;i<n;i++){ stars.push({x:random(width), y:random(height*0.55), a:random(110,230), tw:random(0.4,0.9), p:random(TWO_PI)}); } }
 function drawStars(level){
-  const t = millis() * 0.001;
-  noStroke();
-  for(const s of stars){
-    const tw = 0.5 + 0.5 * sin(t * s.tw + s.p);
-    const a  = s.a * (0.55 + 0.45*tw) * level;
-    if (a <= 2) continue;
-    fill(255,255,255,a);
-    circle(s.x, s.y, 1.2);
-  }
+  const t=millis()*0.001; noStroke();
+  for(const s of stars){ const tw=0.5+0.5*sin(t*s.tw+s.p); const a=s.a*(0.55+0.45*tw)*level; if(a<=2) continue; fill(255,255,255,a); circle(s.x,s.y,1.2); }
 }
 function drawMoon(alphaFactor=1){
-  push();
-  translate(w*0.82, h*0.18);
-  noStroke();
-  const R = Math.min(w,h)*0.07;
-  fill(230,234,245, 230 * alphaFactor); ellipse(0,0,R*2,R*2);
+  push(); translate(w*0.82, h*0.18); noStroke();
+  const R=Math.min(w,h)*0.07; fill(230,234,245,230*alphaFactor); ellipse(0,0,R*2,R*2);
   randomSeed(moonSeed);
   for(let i=0;i<9;i++){
-    const ang = random(TWO_PI), rr = random(R*0.12, R*0.78);
-    const cx  = cos(ang)*rr, cy = sin(ang)*rr, cr = random(R*0.04, R*0.12);
-    fill(180,185,200, 70 * alphaFactor); ellipse(cx, cy, cr*2, cr*2);
-    fill(160,168,190, 50 * alphaFactor); ellipse(cx+cr*0.22, cy+cr*0.18, cr*1.2, cr*1.2);
+    const ang=random(TWO_PI), rr=random(R*0.12,R*0.78), cx=cos(ang)*rr, cy=sin(ang)*rr, cr=random(R*0.04,R*0.12);
+    fill(180,185,200,70*alphaFactor); ellipse(cx,cy,cr*2,cr*2);
+    fill(160,168,190,50*alphaFactor); ellipse(cx+cr*0.22, cy+cr*0.18, cr*1.2, cr*1.2);
   }
   pop();
 }
 
-/* === Background snow & helpers === */
+/* ---------- Background & ground ---------- */
 function rebuildBackgroundFlakes(){
-  const factor = 1 + 0.6*Math.min(1, targetProgress + (waveActive? currentWaveMass*0.6:0));
+  const factor = 1 + 0.6*Math.min(1, targetProgress + (waveActive? 0.4:0));
   const backTarget  = Math.floor(w*h*BACK_DENSITY_BASE * factor);
   while(flakesBack.length < backTarget) flakesBack.push(new FlakeBack(true));
   while(flakesBack.length > backTarget) flakesBack.pop();
 }
-
-/* === Ground === */
 function drawSnowGround(p){
-  const samples = 80;
-  noStroke();
-  fill(240, 248, 255);
-  beginShape();
-  vertex(0, h);
-  for(let i=0;i<=samples;i++){
-    const x = map(i,0,samples,0,w);
-    const y = groundYAt(x, p);
-    vertex(x, y);
-  }
-  vertex(w, h);
-  endShape(CLOSE);
-
-  const band = 10 + 18*p;
+  const samples=80; noStroke(); fill(240,248,255); beginShape(); vertex(0,h);
+  for(let i=0;i<=samples;i++){ const x=map(i,0,samples,0,w); vertex(x, groundYAt(x,p)); }
+  vertex(w,h); endShape(CLOSE);
+  const band=10+18*p;
   for(let i=0;i<band;i++){
-    const a = map(i,0,band-1, 60, 0);
-    stroke(255,255,255,a);
-    noFill();
-    beginShape();
-    for(let j=0;j<=samples;j++){
-      const x = map(j,0,samples,0,w);
-      const y = groundYAt(x, p) - i*0.65;
-      vertex(x,y);
-    }
+    const a=map(i,0,band-1,60,0); stroke(255,255,255,a); noFill(); beginShape();
+    for(let j=0;j<=samples;j++){ const x=map(j,0,samples,0,w); vertex(x, groundYAt(x,p)-i*0.65); }
     endShape();
   }
 }
-function groundYAt(x, p){
-  const maxDepth = h * MAX_SNOW_DEPTH_FRAC;
-  const baseY = h - p * maxDepth;
-  const nx = x*0.003;
-  const und = map(noise(nx, groundNoiseSeed), 0, 1, -16*(0.4+p), 16*(0.4+p));
-  const side = Math.abs((x/w)-0.5);
-  const drift = lerp(0, 12*(0.5+p), Math.pow(side,2));
+function groundYAt(x,p){
+  const maxDepth=h*MAX_SNOW_DEPTH_FRAC, baseY=h - p*maxDepth;
+  const nx=x*0.003, und=map(noise(nx, groundNoiseSeed),0,1,-16*(0.4+p),16*(0.4+p));
+  const side=Math.abs((x/w)-0.5), drift=lerp(0, 12*(0.5+p), Math.pow(side,2));
   return baseY + und + drift;
 }
 
-/* === Entities === */
+/* ---------- Entities ---------- */
 class Cloud{
   constructor(x,y,w,h,s){ this.x=x; this.y=y; this.w=w; this.h=h; this.s=s; this.o=random(150,210); }
   update(){
@@ -788,186 +587,125 @@ class Cloud{
       this.o = random(150,210);
     }
   }
-  draw(){
-    noStroke();
-    fill(255,255,255,this.o);
-    ellipse(this.x, this.y, this.w, this.h);
-    ellipse(this.x-this.w*0.45, this.y+this.h*0.05, this.w*0.7, this.h*0.7);
-    ellipse(this.x+this.w*0.45, this.y+this.h*0.05, this.w*0.7, this.h*0.7);
+  draw(){ noStroke(); fill(255,255,255,this.o);
+    ellipse(this.x,this.y,this.w,this.h);
+    ellipse(this.x-this.w*0.45,this.y+this.h*0.05,this.w*0.7,this.h*0.7);
+    ellipse(this.x+this.w*0.45,this.y+this.h*0.05,this.w*0.7,this.h*0.7);
   }
 }
 class FlakeBack{
   constructor(fromTop=false){ this.reset(fromTop); }
   reset(fromTop=false){
-    this.x = random(w);
-    this.y = fromTop ? random(-h*0.6, -10) : random(-h, h);
-    this.sz = random(BACK_SZ_MIN, BACK_SZ_MAX);
-    this.vy = random(BACK_VY_MIN, BACK_VY_MAX);
-    this.alpha = BACK_ALPHA;
-    this.phase = random(TWO_PI);
+    this.x=random(w); this.y=fromTop?random(-h*0.6,-10):random(-h,h);
+    this.sz=random(BACK_SZ_MIN,BACK_SZ_MAX); this.vy=random(BACK_VY_MIN,BACK_VY_MAX);
+    this.alpha=BACK_ALPHA; this.phase=random(TWO_PI);
   }
   update(){
-    this.x += 0.3*Math.sin(frameCount*0.02 + this.phase) * 0.9;
-    this.y += this.vy;
-    if(this.x < -10) this.x = w+10;
-    if(this.x > w+10) this.x = -10;
-    const gy = groundYAt(this.x, targetProgress);
-    if(this.y >= gy - this.sz*0.3) this.reset(true);
-    if(this.y > h + 20) this.reset(true);
+    this.x+=0.3*Math.sin(frameCount*0.02+this.phase)*0.9; this.y+=this.vy;
+    if(this.x<-10) this.x=w+10; if(this.x>w+10) this.x=-10;
+    const gy=groundYAt(this.x, targetProgress);
+    if(this.y>=gy - this.sz*0.3) this.reset(true);
+    if(this.y>h+20) this.reset(true);
   }
-  draw(){
-    noStroke();
-    fill(255,255,255, this.alpha);
-    circle(this.x, this.y, this.sz);
-  }
+  draw(){ noStroke(); fill(255,255,255,this.alpha); circle(this.x,this.y,this.sz); }
 }
 class StormFlake{
   constructor(){
-    this.x = random(-20, w+20);
-    this.y = random(-h*0.6, -10);
-
-    const superChance = 0.15;
-    const isGiant = random() < superChance;
-    this.sz = isGiant ? random(24, 44) : random(10, 22);
-
-    const speedScale = map(this.sz, 10, 44, 0.9, 1.4);
-    const vyMin = max(0.8, (h/300) * speedScale);
-    const vyMax = max(2.2, (h/170) * speedScale);
-
-    this.vy = random(vyMin, vyMax);
-    this.vx = random(-0.9, 0.9);
-    this.alpha = isGiant ? 235 : 215;
-    this.phase = random(TWO_PI);
-    this.dead = false;
-    this.g = random(0.010, 0.020) * speedScale;
-    this.onGround = false;
-    this.justLanded = false;
-    this.fadeSpeed = 18;
-    this.mass = 0.0; // kept 0 to avoid double accumulation (we apply increment directly)
-    this.windRef = 0;
+    this.x=random(-20,w+20); this.y=random(-h*0.6,-10);
+    const superChance=0.15, isGiant=random()<superChance;
+    this.sz=isGiant?random(24,44):random(10,22);
+    const speedScale=map(this.sz,10,44,0.9,1.4);
+    this.vy=random(max(0.8,(h/300)*speedScale), max(2.2,(h/170)*speedScale));
+    this.vx=random(-0.9,0.9); this.alpha=isGiant?235:215; this.phase=random(TWO_PI);
+    this.dead=false; this.g=random(0.010,0.020)*speedScale; this.onGround=false; this.justLanded=false; this.fadeSpeed=18; this.windRef=0;
   }
   update(globalWind){
     if(!this.onGround){
-      this.vy += this.g;
-      const sway = 0.9*Math.sin(frameCount*0.03 + this.phase);
-      this.vx += (globalWind - this.windRef) * 0.02;
-      this.windRef = lerp(this.windRef, globalWind, 0.05);
-
-      this.x += this.vx + sway;
-      this.y += this.vy;
-
-      if(this.x < -60){ this.x = w+60; }
-      if(this.x > w+60){ this.x = -60; }
-
-      const gy = groundYAt(this.x, targetProgress);
-      if(this.y >= gy - this.sz*0.25){
-        this.y = gy - this.sz*0.25;
-        this.onGround = true;
-        this.justLanded = true;
-        this.vx = 0; this.vy = 0; this.g = 0;
-      }
-    }else{
-      this.alpha -= this.fadeSpeed;
-      if(this.alpha<=0) this.dead = true;
-    }
+      this.vy+=this.g; const sway=0.9*Math.sin(frameCount*0.03+this.phase);
+      this.vx+=(globalWind-this.windRef)*0.02; this.windRef=lerp(this.windRef,globalWind,0.05);
+      this.x+=this.vx+sway; this.y+=this.vy;
+      if(this.x<-60) this.x=w+60; if(this.x>w+60) this.x=-60;
+      const gy=groundYAt(this.x, targetProgress);
+      if(this.y>=gy - this.sz*0.25){ this.y=gy - this.sz*0.25; this.onGround=true; this.justLanded=true; this.vx=0; this.vy=0; this.g=0; }
+    } else { this.alpha-=this.fadeSpeed; if(this.alpha<=0) this.dead=true; }
   }
-  draw(){
-    noStroke();
-    fill(255,255,255, this.alpha);
-    circle(this.x, this.y, this.sz);
+  draw(){ noStroke(); fill(255,255,255,this.alpha); circle(this.x,this.y,this.sz); }
+}
+class ResetFlake{
+  constructor(fromTop=false){ this.reset(fromTop); }
+  reset(fromTop=false){
+    this.x=random(w); this.y=fromTop?random(-h*0.7,-10):random(-h,h);
+    this.sz=random(2,6); this.vy=random(2.2,4.5); this.vx=random(-0.8,0.8); this.alpha=255; this.dead=false;
   }
+  update(){ this.x+=this.vx+0.4*Math.sin(frameCount*0.05+this.x*0.01); this.y+=this.vy; if(this.x<-20) this.x=w+20; if(this.x>w+20) this.x=-20; if(this.y>h+20){ this.dead=true; } }
+  draw(){ noStroke(); fill(255,255,255,235); circle(this.x,this.y,this.sz); }
 }
 
-/* === Forest === */
+/* ---------- Forest ---------- */
 function buildForest(){
-  forest.length = 0;
-  const count = Math.floor(random(6, 8));
-  const hasImg = (!!firImg && firImg.width && firImg.height);
+  forest.length=0; const count=Math.floor(random(6,8));
+  const hasImg=(!!firImg && firImg.width && firImg.height);
   for(let i=0;i<count;i++){
-    const slotX = map(i, 0, count-1, w*0.04, w*0.48);
-    const jitter = random(-w*0.05, w*0.03);
-    const centerX = slotX + jitter;
-    const targetHFrac = random(0.36, 0.62);
-    let H = Math.min(h*targetHFrac, h*0.74);
-    H = Math.min(H * TREE_SCALE, h*0.92);
-    let W, useImg = hasImg;
-    if (hasImg){
-      const scale = H / firImg.height;
-      W = firImg.width * scale;
-    } else {
-      W = H * 0.66;
-    }
-    const x = centerX - W/2;
-    const y = h - H + TREE_BASE_DROP;
-    const depth = 1 - targetHFrac;
-    forest.push({x, y, w: W, h: H, depth, useImg});
+    const slotX=map(i,0,count-1,w*0.04,w*0.48), jitter=random(-w*0.05,w*0.03), centerX=slotX+jitter;
+    const targetHFrac=random(0.36,0.62); let H=Math.min(h*targetHFrac,h*0.74); H=Math.min(H*TREE_SCALE,h*0.92);
+    let W, useImg=hasImg;
+    if(hasImg){ const scale=H/firImg.height; W=firImg.width*scale; } else { W=H*0.66; }
+    const x=centerX - W/2, y=h - H + TREE_BASE_DROP, depth=1 - targetHFrac;
+    forest.push({x,y,w:W,h:H,depth,useImg});
   }
   forest.sort((a,b)=>a.depth - b.depth);
 }
 function drawForest(){
   if(!forest.length) return;
   for(const t of forest){
-    if (t.useImg && firImg){
-      image(firImg, t.x, t.y, t.w, t.h);
-    } else {
-      push();
-      noStroke();
-      fill(30, 60, 45, 220);
-      triangle(t.x + t.w*0.5, t.y,
-               t.x,           t.y + t.h,
-               t.x + t.w,     t.y + t.h);
-      pop();
+    if (t.useImg && firImg){ image(firImg, t.x, t.y, t.w, t.h); }
+    else { push(); noStroke(); fill(30,60,45,220);
+      triangle(t.x + t.w*0.5, t.y, t.x, t.y + t.h, t.x + t.w, t.y + t.h); pop();
     }
   }
 }
 
-/* === Resize & utils === */
-function windowResized(){
-  resizeCanvas(windowWidth, windowHeight);
-  w=width; h=height;
-  buildForest();
-  rebuildBackgroundFlakes();
-  seedStars();
-  AUR.seed = Math.random()*10000; AUR.t = 0; makeBands();
-}
+/* ---------- Resize & utils ---------- */
+function windowResized(){ resizeCanvas(windowWidth,windowHeight); w=width; h=height; buildForest(); rebuildBackgroundFlakes(); seedStars(); AUR.seed=Math.random()*10000; AUR.t=0; makeBands(); }
 function easeInOutCubic(x){ return x<0.5 ? 4*x*x*x : 1 - Math.pow(-2*x+2,3)/2; }
 
-/* === Sky & Sun === */
+/* ---------- Sky & Sun ---------- */
 function drawSnowySky(isCelebration, sunFadeLevel){
-  const topBase = [150,175,195];
-  const botBase = [205,215,225];
-  const topNight = [6,12,28];
-  const botNight = [12,22,44];
+  const topBase=[150,175,195], botBase=[205,215,225], topNight=[6,12,28], botNight=[12,22,44];
   noFill();
   for(let y=0;y<h;y++){
-    const gy = y/h;
-    let r = lerp(topBase[0], botBase[0], gy);
-    let g = lerp(topBase[1], botBase[1], gy);
-    let b = lerp(topBase[2], botBase[2], gy);
-    if (isCelebration){
-      r = lerp(r, lerp(topNight[0], botNight[0], gy), sunFadeLevel);
-      g = lerp(g, lerp(topNight[1], botNight[1], gy), sunFadeLevel);
-      b = lerp(b, lerp(topNight[2], botNight[2], gy), sunFadeLevel);
-    }
-    stroke(r,g,b);
-    line(0,y,w,y);
+    const gy=y/h; let r=lerp(topBase[0],botBase[0],gy), g=lerp(topBase[1],botBase[1],gy), b=lerp(topBase[2],botBase[2],gy);
+    if(isCelebration){ r=lerp(r, lerp(topNight[0],botNight[0],gy), sunFadeLevel); g=lerp(g, lerp(topNight[1],botNight[1],gy), sunFadeLevel); b=lerp(b, lerp(topNight[2],botNight[2],gy), sunFadeLevel); }
+    stroke(r,g,b); line(0,y,w,y);
   }
 }
 function drawSun(alphaFactor=1){
-  push();
-  translate(w*0.82, h*0.18);
-  rotate(sunRot);
-  const R = Math.min(w,h)*0.08;
-  noStroke();
+  push(); translate(w*0.82,h*0.18); rotate(sunRot); const R=Math.min(w,h)*0.08; noStroke();
   for(let i=80;i>=1;i--){
-    const t = i/80;
-    fill(255, 220, 120, 7 * t * alphaFactor);
-    const r = R * (1 + 2.2*(1-t)*glarePulse);
-    ellipse(0,0,r*2,r*2);
+    const t=i/80; fill(255,220,120,7*t*alphaFactor); const r=R*(1+2.2*(1-t)*glarePulse); ellipse(0,0,r*2,r*2);
   }
-  fill(255,190,60, 230 * alphaFactor);
-  ellipse(0,0,R*2,R*2);
-  pop();
+  fill(255,190,60,230*alphaFactor); ellipse(0,0,R*2,R*2); pop();
+}
+
+/* ---------- Spawn planner ---------- */
+function beginSpawn(durationMs, densityMul=1){
+  const pxMP=(w*h)/1e6;
+  let totalFlakes=Math.max(90, Math.floor(pxMP*FLAKES_PER_MEGAPIXEL*densityMul));
+  totalFlakes=Math.min(totalFlakes, Math.max(200, STORM_ACTIVE_CAP - stormFlakes.length));
+  spawnPlan.active=true; spawnPlan.start=millis(); spawnPlan.duration=durationMs;
+  spawnPlan.rate=totalFlakes/durationMs; spawnPlan.accum=0; waveActive=true;
+}
+function updateSpawn(now, wind){
+  if(!spawnPlan.active) return;
+  const elapsed=now - spawnPlan.start;
+  if(elapsed>=spawnPlan.duration){ spawnPlan.active=false; waveActive=false; return; }
+  spawnPlan.accum += spawnPlan.rate * deltaTime;
+  let toSpawn=Math.min(300, Math.floor(spawnPlan.accum)); if(toSpawn<=0) return;
+  spawnPlan.accum -= toSpawn;
+  for(let i=0;i<toSpawn;i++){
+    if(stormFlakes.length>=STORM_ACTIVE_CAP) break;
+    const fl=new StormFlake(); fl.windRef=wind; stormFlakes.push(fl); airborneCount++;
+  }
 }
 </script>
 </body>

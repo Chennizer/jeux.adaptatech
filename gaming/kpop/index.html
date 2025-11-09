@@ -112,18 +112,19 @@
 
     /* ====== monsters on right ====== */
     .monster-area { position:absolute; inset:0; pointer-events:none; z-index:2; }
-    .monster {
-      position: absolute;
-      width: clamp(140px, 20vw, 220px);
-      aspect-ratio: 1;
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-      opacity: 0;
-      transform: translate(-50%, -50%) scale(0.2) rotate(-12deg);
-      animation: monsterRise 600ms ease-out forwards;
-      will-change: transform, opacity;
-    }
+.monster {
+  position: absolute;
+  /* was: clamp(140px, 20vw, 220px) */
+  width: clamp(210px, 30vw, 330px);
+  aspect-ratio: 1;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.2) rotate(-12deg);
+  animation: monsterRise 600ms ease-out forwards;
+  will-change: transform, opacity;
+}
     @keyframes monsterRise {
       0% { opacity: 0; transform: translate(-50%, calc(-50% + 80px)) scale(0.35) rotate(-8deg); }
       60% { opacity: 1; transform: translate(-50%, calc(-50% - 6px))   scale(1.05) rotate(3deg); }
@@ -434,6 +435,7 @@
       } else {
         scheduleHardSpawn();
         ensureMusic(true);
+        applyHardVolumeByCount(); // ensure correct level immediately in hard
       }
     });
 
@@ -445,7 +447,9 @@
     ];
     const monsters = [
       "../../images/kpop/monster1.png",
-      "../../images/kpop/monster2.png"
+      "../../images/kpop/monster2.png",
+      "../../images/kpop/monster3.png",
+      "../../images/kpop/monster4.png"
     ];
 
     const monsterArea = document.getElementById('monsterArea');
@@ -521,15 +525,18 @@
       const vol = baseVolume() * multiplier;
       state.music.volume = Math.max(0, Math.min(1, vol));
     }
+
+    // HARD MODE VOLUME MAP (corrected):
+    // 0 -> 100%, 1 -> 75%, 2 -> 50%, 3 -> 25%, 4+ -> 0%
     function applyHardVolumeByCount() {
       if (!state.music) return;
       const n = state.monsters.length;
-      let m = 1;
-      if (n <= 0) m = 1;
+      let m = 1.0;
+      if (n <= 0) m = 1.00;
       else if (n === 1) m = 0.75;
       else if (n === 2) m = 0.50;
       else if (n === 3) m = 0.25;
-      else if (n >= 4) m = 0.0;
+      else m = 0.00; // 4 or more
       applyMusicVolume(m);
     }
 
@@ -620,7 +627,7 @@
         ensureMusic(true);
       } else {
         ensureMusic(true);
-        applyHardVolumeByCount();
+        applyHardVolumeByCount(); // apply immediately on spawn
       }
     }
 
@@ -629,7 +636,10 @@
       state.monsters = state.monsters.filter(m => m !== mon);
       mon.classList.add('banish');
       mon.addEventListener('animationend', () => mon.remove(), { once: true });
-      if (difficulty === 'hard') applyHardVolumeByCount();
+
+      if (difficulty === 'hard') {
+        applyHardVolumeByCount(); // update volume right after removal
+      }
     }
 
     /* ===== Hero element sizing/alignment ===== */
@@ -655,9 +665,7 @@
 
     /* ===== Hero appear/disappear ===== */
     function heroIn(el, {duration=2300}={}, heroId){
-      // Play fixed intro SFX bound to the hero
       playIntroSfxFor(heroId);
-
       el.style.opacity = '0';
       el.style.transform = 'translate(0, 0) scale(1)';
       el.style.willChange = 'transform,opacity';
@@ -794,6 +802,7 @@
       clearSpawnTimer(); // prevent mid-animation spawns
       state.attackInProgress = true;
       ensureMusic(true);
+      if (difficulty === 'hard') applyHardVolumeByCount(); // avoid brief full-volume spike
 
       const target = state.monsters[0];
       const hero = heroes.find(h => h.id === chosenId) || heroes[0];
@@ -862,12 +871,11 @@
     });
 
     window.addEventListener('blur',  () => { if (state.music && !document.hasFocus()) { state.music.pause(); state.musicStarted=false; }});
-    window.addEventListener('focus', () => { if (!started) return; if (!muteSFX.checked && !gameOver) ensureMusic(); });
+    window.addEventListener('focus', () => { if (!started) return; if (!muteSFX.checked && !gameOver) { ensureMusic(); if (difficulty==='hard') applyHardVolumeByCount(); } });
 
     muteSFX.addEventListener('change', () => {
       if (muteSFX.checked) pauseMusic();
-      else ensureMusic(true);
-      if (difficulty === 'hard') applyHardVolumeByCount();
+      else { ensureMusic(true); if (difficulty==='hard') applyHardVolumeByCount(); }
     });
 
     // Init UI state

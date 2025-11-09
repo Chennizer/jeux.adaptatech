@@ -3,61 +3,113 @@
 <head>
 <meta charset="utf-8"/>
 <title>Soleil : Jeu Switch</title>
+
 <!-- p5.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+
+<!-- Shared overlay/menu styling -->
 <link rel="stylesheet" href="../../css/otherswitch.css">
+
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#5aa9e6;}
-  canvas{display:block;position:fixed;top:0;left:0;}
-  #modeOverlay{
-    position:fixed;inset:0;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:24px;
-    background:#000;color:#fff;z-index:10000;}
-  #modeOverlay button{
-    padding:10px 24px;font-size:18px;border:none;border-radius:6px;
-    cursor:pointer;background:#ffd250;color:#000;}
-  #modeOverlay button:hover{background:#ffb930;}
-  #settings-icon{
-    position:fixed;top:16px;right:16px;width:40px;height:40px;
-    border-radius:50%;background:#000;color:#fff;font-size:22px;
-    display:flex;align-items:center;justify-content:center;visibility:hidden;
-    cursor:pointer;z-index:9999;
+  canvas{display:block;position:fixed;top:0;left:0; z-index:0;}
+
+  /* ===== Landing overlay styling (pill language toggle) ===== */
+  :root{
+    --c1:#FF595E; --c2:#FF924C; --c3:#FFCA3A; --c4:#8AC926;
+    --c5:#1982C4; --c6:#6A4C93; --c7:#B5179E; --c8:#2EC4B6;
+    --teal:#04c8bb;
+    --pill-bg:#0b0f12;
   }
-  #menu{z-index:10000;display:none;}
-  #menu.show{display:block;}
+  *{box-sizing:border-box;}
+  body{color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;}
+
+  /* Landing overlay */
+  #promptOverlay{
+    position:fixed; inset:0; z-index:10000;
+    background:#000; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:1.25rem;
+  }
+  #promptOverlay p{font-size:1.2rem; max-width:min(900px,85%); margin:0 0 1.25rem 0; opacity:.95;}
+  #modeSelect{display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap; justify-content:center;}
+  #modeSelect button{
+    padding:.8rem 1.1rem; min-width:11rem; border:none; border-radius:10px;
+    background:rgba(255,255,255,.1); color:#fff; cursor:pointer; font-size:1rem;
+    transition:background .2s ease, transform .05s ease;
+  }
+  #modeSelect button:hover{background:rgba(255,255,255,.2);}
+  #modeSelect button.active{background:#00bfff; color:#000; font-weight:700;}
+  #startButton{
+    padding:1rem 2rem; font-size:1.25rem; border:none; border-radius:12px;
+    background:var(--c5); color:#fff; cursor:pointer;
+  }
+  #startButton:hover{filter:brightness(1.15);}
+
+  /* Top-right language toggle – pill style */
+  #langToggle{
+    position:fixed; top:14px; right:14px; z-index:10001;
+    display:flex; align-items:center; justify-content:center;
+    padding:.35rem .85rem; border-radius:999px; cursor:pointer;
+    background:var(--pill-bg); color:var(--teal);
+    border:2px solid var(--teal); font-weight:700; font-size:.9rem; letter-spacing:.02em;
+    line-height:1; user-select:none;
+    box-shadow:0 0 0 0 rgba(4,200,187,0);
+    transition:box-shadow .2s ease, transform .04s ease, background .2s ease;
+  }
+  #langToggle:hover{ box-shadow:0 0 0 3px rgba(4,200,187,.18); }
+  #langToggle:active{ transform:translateY(1px); }
 </style>
 </head>
 <body>
-<!-- ────────── Choix du mode ────────── -->
-<div id="modeOverlay">
-  <h2>Choisis ton mode&nbsp;:</h2>
-  <button id="btnNormal">Mode normal</button>
-  <button id="btnRapid">Mode éclair (1 clic)</button>
-  <p style="font-size:14px;opacity:.8;">
-    Espace pour les rayons · Entrée pour rejouer
-  </p>
-</div>
 
-<!-- icône réglages + menu -->
-<div id="settings-icon" title="Settings">⚙️</div>
-<div id="menu">
-  <h2>Options</h2>
-  <h3>Musique &amp; son</h3>
-  <label class="inline"><span>Désactiver la musique</span>
-    <input type="checkbox" id="muteMusic"></label><br>
-  <label><span>Volume musique :</span> <span id="musicVolVal">50</span><br>
-    <input type="range" id="musicVol" min="0" max="100" value="50"></label><br>
-  <label class="inline"><span>Désactiver les effets</span>
-    <input type="checkbox" id="muteSFX"></label><br>
-  <label><span>Volume effets :</span> <span id="sfxVolVal">50</span><br>
-    <input type="range" id="sfxVol" min="0" max="100" value="50"></label>
-  <h3>Délai entre appuis (ms)</h3>
-  <label><span>Délai :</span> <span id="tapDelayVal">2000</span><br>
-    <input type="range" id="tapDelaySlider" min="500" max="5000" value="2000"></label>
+<!-- Language toggle (fixed label; hides after Start) -->
+<button id="langToggle" title="Changer de langue / Change language">FR / EN</button>
+
+<!-- Landing overlay -->
+<div id="promptOverlay">
+  <p class="translate"
+     data-fr="Choisissez un mode, puis appuyez sur Commencer.<br><small>Espace = rayons · Entrée = rejouer</small>"
+     data-en="Select a mode, then press Start.<br><small>Space = rays · Enter = restart</small>">
+    Choisissez un mode, puis appuyez sur Commencer.<br><small>Espace = rayons · Entrée = rejouer</small>
+  </p>
+  <div id="modeSelect">
+    <button data-mode="normal" class="active translate"
+            data-fr="Mode normal (plusieurs clics)" data-en="Normal mode (many presses of the switch)">Mode normal</button>
+    <button data-mode="rapid" class="translate"
+            data-fr="Mode éclair (1 clic)" data-en="Lightning mode (1 press)">Mode éclair (1 clic)</button>
+  </div>
+  <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
 </div>
 
 <script>
+/* ===================== Translation helper ===================== */
+let currentLang = (document.documentElement.lang || 'fr').toLowerCase() === 'en' ? 'en' : 'fr';
+function applyTranslations(){
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr = el.getAttribute('data-fr');
+    const en = el.getAttribute('data-en');
+    const use = (currentLang==='fr') ? fr : en;
+    if(use!=null){
+      if(['P','BUTTON','DIV','H2','H3'].includes(el.tagName)){
+        el.innerHTML = use;
+      } else {
+        el.textContent = use;
+      }
+    }
+  });
+  document.documentElement.lang = currentLang;
+  const titleData = { fr: 'Soleil : Jeu Switch', en: 'Sun: Switch Game' };
+  document.title = titleData[currentLang];
+}
+document.getElementById('langToggle').addEventListener('pointerup', ()=>{
+  currentLang = (currentLang==='fr') ? 'en' : 'fr';
+  applyTranslations();
+});
+applyTranslations();
+/* ==================================================================== */
+
+
 /* === AUDIO & ÉTAT ================================================= */
 let gameStarted=false, gameOver=false;
 const ambiencePath='../../sounds/sun/sunnyday.mp3';
@@ -88,17 +140,17 @@ let rapidMode=false;
 /* décor */
 let clouds=[], balloon, birds=[];
 let balloonImg, birdImg;
-let extraBalloons=[];          // ballons supplémentaires (finale)
+let extraBalloons=[];
 let balloonsReleased=false;
 
 /* confetti (boostés) */
 let confetti=[];
-let confettiMidBurstDone=false; // burst supplémentaire à ~50%
+let confettiMidBurstDone=false;
 const CONFETTI_COLS=[[255,210,100],[255,177,66],[255,235,150],[255,196,100],[255,225,120]];
 
 /* Buffers */
-let skyBuffer;                 // ciel
-let haloBuffer;                // halo autour du soleil
+let skyBuffer;
+let haloBuffer;
 
 /* gestion du refresh du ciel (3) */
 let lastSkyUpdateFrame = -999;
@@ -124,9 +176,43 @@ function setup(){
     random(0.5,0.6), 0.25, 'horizontal');
   for(let i=0;i<3;i++) birds.push(new Bird());
 
-  buildSkyBuffer(0);           // ciel initial (froid)
+  buildSkyBuffer(0);
   computeSizes();
-  buildHaloBuffer();           // halo pré-calculé (compact)
+  buildHaloBuffer();
+
+  /* ===== Overlay wiring ===== */
+  const modeButtons=[...document.querySelectorAll('#modeSelect button')];
+  let selectedMode='normal';
+  modeButtons.forEach(btn=>{
+    btn.addEventListener('pointerup', ()=>{
+      modeButtons.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedMode = btn.dataset.mode;
+    });
+  });
+  document.getElementById('startButton').addEventListener('pointerup', (e)=>{
+    e.preventDefault();
+    rapidMode = (selectedMode==='rapid');
+    startGame();
+    document.getElementById('promptOverlay')?.remove();
+    const lt=document.getElementById('langToggle'); if(lt) lt.style.display='none';
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+  });
+}
+
+/* ---------- startGame (moved to global) ---------- */
+function startGame(){
+  gameStarted=true;
+  resizeCanvas(windowWidth,windowHeight);
+  computeSizes();
+  buildSkyBuffer(0);
+  buildHaloBuffer();
+  if (typeof userStartAudio === 'function') { userStartAudio(); }
+  if (ambience){
+    ambience.setLoop(true);
+    ambience.setVolume(isMusicMuted?0:volMusic);
+    ambience.play();
+  }
 }
 
 /* ---------- responsive sizes ---------- */
@@ -143,7 +229,6 @@ function computeSizes(){
 function draw(){
   if(!gameStarted){background(0);return;}
 
-  // (3) Warm sky drift
   if(finalStage===1){
     if(frameCount - lastSkyUpdateFrame >= 6){
       buildSkyBuffer(finalProgress);
@@ -152,21 +237,15 @@ function draw(){
   }
   image(skyBuffer, 0, 0);
 
-  // éléments derrière le soleil
   birds.forEach(b=>{b.update();b.draw();});
   clouds.forEach(c=>{c.update();c.draw();});
 
-  // halo + vignette (1)
   drawHaloAndVignette();
-
-  // soleil et rayons (2)
   drawSun();
 
-  // >>> Ballons devant le soleil <<<
   balloon.update(); balloon.draw();
   extraBalloons.forEach(b=>{b.update();b.draw();});
 
-  // confetti (7) — boostés
   updateAndDrawConfetti();
 
   if(warmFlashAlpha>1){
@@ -192,7 +271,7 @@ function draw(){
 
 /* ---------- halo + vignette ---------- */
 function buildHaloBuffer(){
-  const sz = floor(min(width,height)*0.6); // compact
+  const sz = floor(min(width,height)*0.6);
   haloBuffer = createGraphics(sz, sz);
   const g = haloBuffer;
   g.noStroke();
@@ -219,7 +298,6 @@ function drawHaloAndVignette(){
   image(haloBuffer, 0, 0);
   pop();
 
-  // Vignette douce
   const vigStrength = finalStage===1 ? 70 : 30;
   const rings = 10;
   for(let i=0;i<rings;i++){
@@ -232,7 +310,7 @@ function drawHaloAndVignette(){
   noStroke();
 }
 
-/* ---------- Soleil + rayons + shimmer ---------- */
+/* ---------- Soleil + rayons ---------- */
 function drawSun(){
   push();
   translate(width/2,height/2);
@@ -247,8 +325,8 @@ function drawSun(){
   for(const r of rays){
     const n1 = noise(r.seed, frameCount*0.01);
     const n2 = noise(r.seed+1000, frameCount*0.015);
-    const angOff = radians(-3 + 6*n1);           // ±3°
-    const lenJit = -3 + 6*n2;                    // ±3 px
+    const angOff = radians(-3 + 6*n1);
+    const lenJit = -3 + 6*n2;
     const a = r.angle + angOff;
     const tgt = r.targetLen + lenJit;
 
@@ -338,83 +416,46 @@ class Bird{
   }
 }
 
-/* ---------- Confetti (PLUS APPARENTS) ---------- */
+/* ---------- Confetti ---------- */
 function spawnConfetti(){
-  // Beaucoup plus: 50–80 pièces
   const n = floor(random(50,80));
-  // Reset si trop de confetti en cours (sécurité perf)
   if(confetti.length > 240) confetti.length = 160;
-
   for(let i=0;i<n;i++){
     const angle = random(TWO_PI);
-    const radius = min(width,height)*0.10; // burst un peu plus large
+    const radius = min(width,height)*0.10;
     const x = width/2 + cos(angle)*radius*random(0.15,1);
     const y = height/2 + sin(angle)*radius*random(0.15,1);
-
-    // vitesse initiale plus marquée mais douce
     const sp = random(1.8,3.2);
     const vx = (x - width/2) * 0.018 + random(-0.8,0.8);
     const vy = (y - height/2) * 0.018 - sp;
-
     const col = random(CONFETTI_COLS);
     const rot = random(TWO_PI);
     const rotSp = random(-0.06,0.06);
-
-    // Durée PLUS LONGUE: 600–960 frames (~10–16s à 60fps)
     const maxLife = floor(random(600,960));
-
-    // Plus gros: 14–28 px
     const size = random(14,28);
-
     const shape = random([ 'rect', 'tri' ]);
-
-    confetti.push({
-      x, y, vx, vy,
-      ax: 0, ay: 0.055,    // gravité douce (plus petit => reste plus longtemps)
-      col, rot, rotSp,
-      life: maxLife, maxLife,
-      shape, size
-    });
+    confetti.push({x,y,vx,vy,ax:0,ay:0.055,col,rot,rotSp,life:maxLife,maxLife,shape,size});
   }
 }
-
 function updateAndDrawConfetti(){
-  if(confetti.length===0) return;
-
   for(let i=confetti.length-1;i>=0;i--){
-    const p = confetti[i];
-    // physique
-    p.vx += p.ax; p.vy += p.ay;
-    p.x  += p.vx; p.y  += p.vy;
-    // friction légère (conserve la dérive)
-    p.vx *= 0.995; 
-    p.vy *= 0.997;
-    p.rot += p.rotSp;
-    p.life -= 1;
-
-    // Alpha: plein au début, baisse lentement (courbe ease)
-    const t = constrain(p.life / p.maxLife, 0, 1);
-    const alpha = 255 * (t*t); // ralentit la disparition
-
-    fill(p.col[0], p.col[1], p.col[2], alpha);
-    noStroke();
-    push(); translate(p.x, p.y); rotate(p.rot);
-    if(p.shape==='rect'){
-      rectMode(CENTER);
-      rect(0,0,p.size, p.size*0.6);
-    }else{
-      triangle(-p.size*0.6, p.size*0.5, p.size*0.6, p.size*0.5, 0, -p.size*0.6);
-    }
+    const p=confetti[i];
+    p.vx*=0.995; p.vy*=0.997;
+    p.vx+=p.ax; p.vy+=p.ay; p.x+=p.vx; p.y+=p.vy;
+    p.rot+=p.rotSp; p.life-=1;
+    const t=constrain(p.life/p.maxLife,0,1);
+    const alpha=255*(t*t);
+    fill(p.col[0],p.col[1],p.col[2],alpha); noStroke();
+    push(); translate(p.x,p.y); rotate(p.rot);
+    if(p.shape==='rect'){ rectMode(CENTER); rect(0,0,p.size,p.size*0.6); }
+    else{ triangle(-p.size*0.6,p.size*0.5, p.size*0.6,p.size*0.5, 0,-p.size*0.6); }
     pop();
-
-    // nettoyage
     if(p.life<=0 || p.y>height+80) confetti.splice(i,1);
   }
 }
 
-/* ---------- animation finale (durée = durée du morceau) ---------- */
+/* ---------- animation finale ---------- */
 function handleFinalAnim(){
-  // démarrage
   if(finalStage===0){
     finalStage=1;
     startFinishSound();
@@ -423,30 +464,15 @@ function handleFinalAnim(){
                 ? finishSound.duration()*1000 : null;
     finishDurMs = dur && dur>0 ? dur : 6000;
     finalProgress = 0;
-
-    // confetti + lâcher de ballons
     spawnConfetti();
     confettiMidBurstDone=false;
-    if(!balloonsReleased){
-      releaseExtraBalloons();
-      balloonsReleased=true;
-    }
+    if(!balloonsReleased){ releaseExtraBalloons(); balloonsReleased=true; }
   }
-
   if(finalStage===1){
-    // progression 0..1 pendant toute la durée du morceau
     const elapsed = millis() - (finishStartMs ?? millis());
     finalProgress = constrain(elapsed / finishDurMs, 0, 1);
-
-    // Burst supplémentaire à mi-parcours pour "encore plus visible"
-    if(!confettiMidBurstDone && finalProgress >= 0.48){
-      spawnConfetti();
-      confettiMidBurstDone = true;
-    }
-
-    // Phases : 0–0.2 agrandit, 0.2–0.8 maintient, 0.8–1.0 rétrécit
+    if(!confettiMidBurstDone && finalProgress >= 0.48){ spawnConfetti(); confettiMidBurstDone=true; }
     const growEnd=0.20, shrinkStart=0.80;
-
     if(finalProgress < growEnd){
       const t = finalProgress / growEnd;
       finalScale = lerp(1.0, 1.6, t);
@@ -460,22 +486,17 @@ function handleFinalAnim(){
       finalScale = lerp(1.6, 1.0, t);
       warmFlashAlpha = 0;
     }
-
     const musicEnded = finishSound && !finishSound.isPlaying();
-    if (finalProgress >= 1 || musicEnded){
-      finalStage = 2;
-      gameOver = true;
-    }
+    if (finalProgress >= 1 || musicEnded){ finalStage = 2; gameOver = true; }
   }
 }
-
 function startFinishSound(){
-  ambience?.fade(volMusic,0.2); // atténue l'ambiance
+  ambience?.fade(volMusic,0.2);
   finishSound.setVolume(isMusicMuted?0:volMusic);
   finishSound.play();
 }
 
-/* ---------- Lâcher de ballons (finale) ---------- */
+/* ---------- Lâcher de ballons ---------- */
 function releaseExtraBalloons(){
   extraBalloons.length = 0;
   const n = floor(random(4,7));
@@ -483,10 +504,7 @@ function releaseExtraBalloons(){
     const b = new Balloon(random(60,width-60), height + random(40,200), random(1.1,1.9), random(0.18,0.28), 'vertical');
     b.delayStart = millis() + i*random(250,700);
     const baseUpdate = b.update.bind(b);
-    b.update = function(){
-      if(millis() < this.delayStart) return;
-      baseUpdate();
-    }
+    b.update = function(){ if(millis() < this.delayStart) return; baseUpdate(); }
     extraBalloons.push(b);
   }
 }
@@ -494,38 +512,21 @@ function releaseExtraBalloons(){
 /* ---------- interaction ---------- */
 function addAllRays(){
   for(let i=0;i<MAX_RAYS;i++){
-    rays.push({
-      angle: i*TWO_PI/MAX_RAYS,
-      currLen: innerR,
-      targetLen: (i%2 ? shortLen : longLen),
-      alpha: 0,
-      seed: random(10000)         // shimmer seed
-    });
+    rays.push({ angle: i*TWO_PI/MAX_RAYS, currLen: innerR, targetLen: (i%2 ? shortLen : longLen), alpha: 0, seed: random(10000) });
   }
-  rayCount=MAX_RAYS;
-  screenFlashAlpha=FLASH_INITIAL;
+  rayCount=MAX_RAYS; screenFlashAlpha=FLASH_INITIAL;
 }
 function addSingleRay(){
   const i=rayCount;
-  rays.push({
-    angle: i*TWO_PI/MAX_RAYS,
-    currLen: innerR,
-    targetLen: (i%2 ? shortLen : longLen),
-    alpha: 0,
-    seed: random(10000)           // shimmer seed
-  });
-  rayCount++;
-  screenFlashAlpha=FLASH_INITIAL;
+  rays.push({ angle: i*TWO_PI/MAX_RAYS, currLen: innerR, targetLen: (i%2 ? shortLen : longLen), alpha: 0, seed: random(10000) });
+  rayCount++; screenFlashAlpha=FLASH_INITIAL;
 }
 function trigger(){
   if(!gameStarted||gameOver||(finalStage>0 && !gameOver)) return;
   if(millis()-lastTap<tapDelay) return;
   lastTap=millis();
-  if(rapidMode && rayCount===0){
-    addAllRays();
-  }else if(!rapidMode && rayCount<MAX_RAYS){
-    addSingleRay();
-  }
+  if(rapidMode && rayCount===0){ addAllRays(); }
+  else if(!rapidMode && rayCount<MAX_RAYS){ addSingleRay(); }
   if(!isSFXMuted && raySound){
     raySound.setVolume(volSFX);
     raySound.isLoaded()
@@ -535,9 +536,7 @@ function trigger(){
 }
 function keyPressed(){
   if(key===' '&&gameStarted) trigger();
-  if(keyCode===ENTER && gameStarted && (finalStage===0 || gameOver)){
-    resetScene();
-  }
+  if(keyCode===ENTER && gameStarted && (finalStage===0 || gameOver)){ resetScene(); }
 }
 
 /* ---------- reset ---------- */
@@ -550,76 +549,13 @@ function resetScene(){
   extraBalloons.length=0;
   confetti.length=0;
   confettiMidBurstDone=false;
-
   buildSkyBuffer(0);
   lastSkyUpdateFrame = -999;
-
   balloon.mode='horizontal';balloon.v=random(0.5,0.6);
 }
 
-/* ---------- UI : options et menu ---------- */
-window.addEventListener('load',()=>{
-  const ov=document.getElementById('modeOverlay'),
-        btnN=document.getElementById('btnNormal'),
-        btnR=document.getElementById('btnRapid');
-  btnN.onclick=()=>{rapidMode=false;startGame();};
-  btnR.onclick=()=>{rapidMode=true; startGame();};
-
-  const ico=document.getElementById('settings-icon'),
-        menu=document.getElementById('menu'),
-        muteM=document.getElementById('muteMusic'),
-        volM=document.getElementById('musicVol'),
-        valM=document.getElementById('musicVolVal'),
-        muteS=document.getElementById('muteSFX'),
-        volS=document.getElementById('sfxVol'),
-        valS=document.getElementById('sfxVolVal'),
-        slider=document.getElementById('tapDelaySlider'),
-        valT=document.getElementById('tapDelayVal');
-
-  slider.oninput=e=>{tapDelay=e.target.value;valT.textContent=e.target.value;};
-
-  volM.oninput=e=>{
-    volMusic=e.target.value/100; valM.textContent=e.target.value;
-    if(!isMusicMuted) ambience?.setVolume(volMusic);
-    finishSound.setVolume(isMusicMuted?0:volMusic);
-  };
-  volS.oninput=e=>{
-    volSFX=e.target.value/100; valS.textContent=e.target.value;
-    raySound.setVolume(isSFXMuted?0:volSFX);
-  };
-  muteM.onchange=e=>{
-    isMusicMuted=e.target.checked;
-    ambience?.setVolume(isMusicMuted?0:volMusic);
-    finishSound.setVolume(isMusicMuted?0:volMusic);
-  };
-  muteS.onchange=e=>{
-    isSFXMuted=e.target.checked;
-    raySound.setVolume(isSFXMuted?0:volSFX);
-  };
-
-  function startGame(){
-    ov.remove();
-    gameStarted=true;
-    ico.style.visibility='visible';
-    (document.documentElement.requestFullscreen||
-     document.documentElement.webkitRequestFullscreen)?.call(document.documentElement);
-    resizeCanvas(windowWidth,windowHeight);
-    computeSizes();
-    buildSkyBuffer(0);   // ciel base
-    buildHaloBuffer();   // halo recalé si dimension change
-    ambience.setLoop(true);
-    ambience.setVolume(isMusicMuted?0:volMusic);
-    ambience.play();
-  }
-
-  ico.onclick=()=>{if(gameStarted) menu.classList.toggle('show');};
-  document.onclick=e=>{
-    if(!menu.contains(e.target)&&!ico.contains(e.target)) menu.classList.remove('show');};
-});
-
-/* ---------- Sky buffer (3) ---------- */
+/* ---------- Sky buffer ---------- */
 function buildSkyBuffer(pWarm){
-  // pWarm : 0 = froid; 1 = chaud
   if(!skyBuffer || skyBuffer.width!==width || skyBuffer.height!==height){
     skyBuffer = createGraphics(width, height);
   }
