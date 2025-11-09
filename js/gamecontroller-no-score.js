@@ -526,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const miscOptionsState = {};
 
     function populateMiscOptions() {
-        if (!Array.isArray(miscOptions) || miscOptions.length === 0) {
+        if (!miscOptionsContainer || !Array.isArray(miscOptions) || miscOptions.length === 0) {
             return;
         }
         miscOptions.forEach(option => {
@@ -558,26 +558,28 @@ document.addEventListener('DOMContentLoaded', () => {
         populateMiscOptions();
     }
 
-    miscOptionsButton.addEventListener('click', () => {
-        miscOptionsModal.style.display = 'block';
-    });
-    closeMiscOptionsModal.addEventListener('click', () => {
-        miscOptionsModal.style.display = 'none';
-    });
-    miscOptionsOkButton.addEventListener('click', () => {
-        miscOptionsModal.style.display = 'none';
-        // Example toggles from checkboxes:
-        if (miscOptionsState['mouse-click-option']) {
-            document.addEventListener('click', handleSpacebarPressEquivalent);
-        } else {
-            document.removeEventListener('click', handleSpacebarPressEquivalent);
-        }
-        if (miscOptionsState['right-click-next-option']) {
-            document.addEventListener('contextmenu', handleRightClickNextVideo);
-        } else {
-            document.removeEventListener('contextmenu', handleRightClickNextVideo);
-        }
-    });
+    if (miscOptionsModal && closeMiscOptionsModal && miscOptionsOkButton && miscOptionsButton && miscOptionsContainer) {
+        miscOptionsButton.addEventListener('click', () => {
+            miscOptionsModal.style.display = 'block';
+        });
+        closeMiscOptionsModal.addEventListener('click', () => {
+            miscOptionsModal.style.display = 'none';
+        });
+        miscOptionsOkButton.addEventListener('click', () => {
+            miscOptionsModal.style.display = 'none';
+            // Example toggles from checkboxes:
+            if (miscOptionsState['mouse-click-option']) {
+                document.addEventListener('click', handleSpacebarPressEquivalent);
+            } else {
+                document.removeEventListener('click', handleSpacebarPressEquivalent);
+            }
+            if (miscOptionsState['right-click-next-option']) {
+                document.addEventListener('contextmenu', handleRightClickNextVideo);
+            } else {
+                document.removeEventListener('contextmenu', handleRightClickNextVideo);
+            }
+        });
+    }
 
     function handleRightClickNextVideo(event) {
         event.preventDefault();
