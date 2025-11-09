@@ -77,7 +77,7 @@
       </button>
       <input id="fileInput" type="file" accept="application/pdf" />
       <button id="startBtn" class="btn" disabled>
-        <span class="translate" data-fr="Démarrer (plein écran)" data-en="Start (Fullscreen)">Démarrer (plein écran)</span>
+        <span class="translate" data-fr="Basculer en plein écran" data-en="Toggle fullscreen">Basculer en plein écran</span>
       </button>
     </div>
     <div id="tips">
@@ -118,6 +118,8 @@
     <span id="hudStatus"></span>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
   <script>
     // ===== Language toggle =====
     const langToggle = document.getElementById('langToggle');
@@ -155,6 +157,10 @@
     let pdfDoc = null, currentPageNum = 1, totalPages = 0, started = false, loading = false, pdfData = null;
     let preferredVoice = null;
     let speaking = false;
+    let ocrActive = false;
+    let ocrActiveCount = 0;
+    const pageTextCache = new Map();
+    const ocrPromises = new Map();
 
     const canUseSpeech = () => typeof window !== 'undefined'
       && 'speechSynthesis' in window
@@ -164,6 +170,11 @@
       if (!hudStatus || !hud) return;
       if (!started){
         hudStatus.textContent = '';
+        hud.setAttribute('data-speaking','false');
+        return;
+      }
+      if (ocrActive){
+        hudStatus.textContent = currentLang === 'fr' ? 'Analyse du texte…' : 'Analyzing text…';
         hud.setAttribute('data-speaking','false');
         return;
       }
@@ -183,6 +194,16 @@
 
     function setHUD(){
       hudLabel.textContent = pdfDoc ? `${currentPageNum} / ${totalPages}` : '—';
+      updateSpeakingStatus();
+    }
+
+    function setOCRActive(active){
+      if (active){
+        ocrActiveCount++;
+      }else{
+        ocrActiveCount = Math.max(0, ocrActiveCount - 1);
+      }
+      ocrActive = ocrActiveCount > 0;
       updateSpeakingStatus();
     }
 
@@ -234,14 +255,49 @@
       });
     }
 
+    async function runOCRForPage(pageNum){
+      if (!window.Tesseract || !canvas.width || !canvas.height) return '';
+      if (ocrPromises.has(pageNum)) return ocrPromises.get(pageNum);
+
+      const promise = (async ()=>{
+        setOCRActive(true);
+        try{
+          const langCodes = currentLang === 'fr' ? 'fra+eng' : 'eng+fra';
+          const result = await window.Tesseract.recognize(canvas, langCodes, {
+            logger: () => {}
+          });
+          const raw = result?.data?.text || '';
+          return raw.replace(/\s+/g, ' ').trim();
+        }catch(err){
+          console.error('OCR error:', err);
+          return '';
+        }finally{
+          setOCRActive(false);
+        }
+      })();
+
+      ocrPromises.set(pageNum, promise);
+      const text = await promise;
+      if (text) pageTextCache.set(pageNum, text);
+      return text;
+    }
+
     async function getPageText(pageNum){
       if (!pdfDoc) return '';
+      if (pageTextCache.has(pageNum)) return pageTextCache.get(pageNum);
       try{
         const page = await pdfDoc.getPage(pageNum);
         const textContent = await page.getTextContent();
-        if (!textContent || !textContent.items) return '';
-        const raw = textContent.items.map(item => item?.str || '').join(' ');
-        return raw.replace(/\s+/g, ' ').trim();
+        let raw = '';
+        if (textContent && textContent.items){
+          raw = textContent.items.map(item => item?.str || '').join(' ');
+        }
+        let text = raw.replace(/\s+/g, ' ').trim();
+        if (!text){
+          text = await runOCRForPage(pageNum);
+        }
+        if (text) pageTextCache.set(pageNum, text);
+        return text;
       }catch(err){
         console.error('Text extraction error:', err);
         return '';
@@ -306,6 +362,7 @@
     }
 
     async function updatePageView({ announce = true } = {}){
+      cancelSpeech();
       await renderPage(currentPageNum);
       setHUD();
       if (announce) await announceCurrentPage();
@@ -342,34 +399,45 @@
       const file = e.target.files?.[0];
       if(!file) return;
       await loadPDFFile(file);
+      e.target.value = '';
     });
 
     async function loadPDFFile(file){
       cancelSpeech();
       const arrBuf = await file.arrayBuffer();
       pdfData = arrBuf;
+      pageTextCache.clear();
+      ocrPromises.clear();
+      ocrActiveCount = 0;
+      ocrActive = false;
       startBtn.disabled = false;
       hideCenterPrompt();
-      if (!started) updateSpeakingStatus();
+      await openAndRender({ announce: true });
     }
 
     // Start viewer
     startBtn.addEventListener('click', async ()=>{
-      if (!pdfData) return;
+      if (!pdfDoc && !pdfData) return;
       await goFullscreen();
-      started = true;
-      updateSpeakingStatus();
-      if (canUseSpeech()) choosePreferredVoice();
-      await openAndRender();
+      if (pdfDoc){
+        await updatePageView({ announce: false });
+      }
     });
 
-    async function openAndRender(){
+    async function openAndRender({ announce = true } = {}){
+      if (!pdfData) return;
       try{
+        if (pdfDoc && typeof pdfDoc.destroy === 'function'){
+          try{ await pdfDoc.destroy(); }catch(err){ console.warn('PDF cleanup error:', err); }
+        }
         const loadingTask = pdfjsLibGlobal.getDocument({ data: pdfData });
         pdfDoc = await loadingTask.promise;
         totalPages = pdfDoc.numPages;
         currentPageNum = 1;
-        await updatePageView();
+        started = true;
+        if (canUseSpeech()) choosePreferredVoice();
+        updateSpeakingStatus();
+        await updatePageView({ announce });
       }catch(err){
         console.error('PDF load error:', err);
         alert(currentLang === 'fr' ? "Erreur de chargement du PDF." : "Error loading PDF.");
