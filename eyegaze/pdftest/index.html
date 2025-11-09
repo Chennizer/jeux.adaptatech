@@ -34,6 +34,15 @@
     }
     .btn:disabled{ opacity:.5; cursor:not-allowed; }
     #fileInput{ padding:8px; border-radius:10px; border:1px solid #333; background:#111; color:#ddd; }
+    #fileInput.show-picker-inline{
+      position:relative;
+      clip:auto;
+      width:auto;
+      height:auto;
+      opacity:1;
+      display:inline-block;
+      outline:2px dashed var(--teal);
+    }
     #tips{ display:inline-flex; gap:8px; align-items:center; padding:8px 10px;
       border:1px dashed #444; border-radius:10px; background:#0a0a0a; color:#ddd; font-size:14px; z-index:5; }
 
@@ -79,7 +88,7 @@
 
   <div id="topbar">
     <div id="pickerRow">
-      <button id="chooseBtn" class="btn">
+      <button id="chooseBtn" class="btn" type="button">
         <span class="translate" data-fr="Choisir un PDF" data-en="Choose PDF">Choisir un PDF</span>
       </button>
       <input id="fileInput" type="file" accept="application/pdf" />
@@ -104,7 +113,7 @@
          data-en="Press the button below to choose a multi-page PDF file.">
         Appuyez sur le bouton ci-dessous pour choisir un fichier PDF multi-pages.
       </p>
-      <button id="chooseBtnBig" class="btn">
+      <button id="chooseBtnBig" class="btn" type="button">
         <span class="translate" data-fr="Choisir un PDF…" data-en="Choose PDF…">Choisir un PDF…</span>
       </button>
       <p style="opacity:.8; margin-top:10px" class="translate"
@@ -429,12 +438,49 @@
     }
 
     // Clear "Choose PDF" handlers
-    const triggerFileDialog = ()=>{
+    function focusVisibleFileInput(){
+      fileInput.classList.add('show-picker-inline');
+      try{
+        fileInput.focus({ preventScroll: true });
+      }catch(_){
+        try{ fileInput.focus(); }catch(_){ }
+      }
+    }
+
+    async function triggerFileDialog(e){
+      if (e) e.preventDefault();
+      if (!fileInput) return;
+      fileInput.classList.remove('show-picker-inline');
       fileInput.value = '';
-      fileInput.click();
-    };
+      if (typeof fileInput.showPicker === 'function'){
+        try{
+          await fileInput.showPicker();
+          return;
+        }catch(err){
+          console.warn('showPicker failed, falling back to click():', err);
+        }
+      }
+      try{
+        fileInput.click();
+      }catch(err){
+        console.warn('Programmatic file dialog trigger failed, revealing input.', err);
+        focusVisibleFileInput();
+      }
+    }
     chooseBtn.addEventListener('click', triggerFileDialog);
     chooseBtnBig.addEventListener('click', triggerFileDialog);
+    chooseBtn.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        triggerFileDialog(e);
+      }
+    });
+    chooseBtnBig.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        triggerFileDialog(e);
+      }
+    });
 
     // Drag & drop
     ;['dragenter','dragover'].forEach(ev=>{
@@ -448,6 +494,7 @@
 
     // File selection
     fileInput.addEventListener('change', async (e)=>{
+      fileInput.classList.remove('show-picker-inline');
       const file = e.target.files?.[0];
       if(!file) return;
       await loadPDFFile(file);
