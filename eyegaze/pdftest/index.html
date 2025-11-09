@@ -8,6 +8,7 @@
   <!-- pdf.js (CDN) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
 
   <style>
     :root{ --teal:#009688; --bg:#000; --fg:#fff; }
@@ -50,7 +51,14 @@
       position:fixed; left:12px; bottom:12px; padding:6px 10px;
       background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.2);
       border-radius:10px; font-size:14px; user-select:none; z-index:5;
+      display:flex; align-items:center; gap:8px; min-height:28px;
+      transition:border-color 160ms ease, box-shadow 160ms ease;
     }
+    #hud[data-speaking="true"]{
+      border-color:rgba(0,150,136,0.8);
+      box-shadow:0 0 10px rgba(0,150,136,0.35);
+    }
+    #hudStatus{ opacity:.8; font-weight:600; min-width:50px; }
 
     #langToggle{
       position:fixed; top:10px; right:10px; z-index:7;
@@ -70,7 +78,7 @@
       </button>
       <input id="fileInput" type="file" accept="application/pdf" />
       <button id="startBtn" class="btn" disabled>
-        <span class="translate" data-fr="Démarrer (plein écran)" data-en="Start (Fullscreen)">Démarrer (plein écran)</span>
+        <span class="translate" data-fr="Mode plein écran" data-en="Fullscreen mode">Mode plein écran</span>
       </button>
     </div>
     <div id="tips">
@@ -106,7 +114,10 @@
     <canvas id="pageCanvas" aria-hidden="true"></canvas>
   </div>
 
-  <div id="hud"><span id="pageLabel">—</span></div>
+  <div id="hud" data-speaking="false">
+    <span id="pageLabel">—</span>
+    <span id="hudStatus"></span>
+  </div>
 
   <script>
     // ===== Language toggle =====
@@ -117,10 +128,15 @@
         const txt = el.dataset[currentLang];
         if (txt) el.textContent = txt;
       });
+      updateSpeakingStatus();
     }
-    langToggle.addEventListener('click', ()=>{
+    langToggle.addEventListener('click', async ()=>{
+      invalidateAnnouncements();
+      cancelSpeech();
       currentLang = (currentLang === 'fr') ? 'en' : 'fr';
       applyLang();
+      if (canUseSpeech()) choosePreferredVoice();
+      if (started && canUseSpeech()) await announceCurrentPage();
     });
     applyLang();
 
@@ -133,15 +149,241 @@
     const stage     = document.getElementById('stage');
     const canvas    = document.getElementById('pageCanvas');
     const ctx       = canvas.getContext('2d');
+    const hud       = document.getElementById('hud');
     const hudLabel  = document.getElementById('pageLabel');
+    const hudStatus = document.getElementById('hudStatus');
     const centerPrompt = document.getElementById('centerPrompt');
+    updateSpeakingStatus();
 
     // ===== State =====
     let pdfDoc = null, currentPageNum = 1, totalPages = 0, started = false, loading = false, pdfData = null;
+    let preferredVoice = null;
+    let speaking = false;
+    let analyzingPage = false;
+    const ocrCache = new Map();
+    let announceToken = 0;
 
-    function setHUD(){ hudLabel.textContent = pdfDoc ? `${currentPageNum} / ${totalPages}` : '—'; }
+    const canUseSpeech = () => typeof window !== 'undefined'
+      && 'speechSynthesis' in window
+      && typeof window.SpeechSynthesisUtterance !== 'undefined';
+
+    function updateSpeakingStatus(){
+      if (!hudStatus || !hud) return;
+      if (!started){
+        hudStatus.textContent = '';
+        hud.setAttribute('data-speaking','false');
+        return;
+      }
+      if (analyzingPage){
+        hudStatus.textContent = currentLang === 'fr' ? 'Analyse…' : 'Analyzing…';
+        hud.setAttribute('data-speaking','true');
+        return;
+      }
+      if (!canUseSpeech()){
+        hudStatus.textContent = currentLang === 'fr' ? 'Synthèse indisponible' : 'Speech unavailable';
+        hud.setAttribute('data-speaking','false');
+        return;
+      }
+      if (speaking){
+        hudStatus.textContent = currentLang === 'fr' ? 'Lecture…' : 'Speaking…';
+        hud.setAttribute('data-speaking','true');
+      }else{
+        hudStatus.textContent = currentLang === 'fr' ? 'Prêt' : 'Ready';
+        hud.setAttribute('data-speaking','false');
+      }
+    }
+
+    function setHUD(){
+      hudLabel.textContent = pdfDoc ? `${currentPageNum} / ${totalPages}` : '—';
+      updateSpeakingStatus();
+    }
+
+    function cancelSpeech(){
+      if (!canUseSpeech()){
+        speaking = false;
+        updateSpeakingStatus();
+        return;
+      }
+      try{ speechSynthesis.cancel(); }catch(_){ }
+      speaking = false;
+      updateSpeakingStatus();
+    }
+
+    const invalidateAnnouncements = () => { announceToken++; };
+
+    function choosePreferredVoice(){
+      if (!canUseSpeech()) return;
+      const ss = window.speechSynthesis;
+      if (!ss || !ss.getVoices) return;
+      const voices = ss.getVoices() || [];
+      if (!voices.length) return;
+
+      const lang = currentLang;
+      const pick = (fn) => voices.find(fn);
+      if (lang === 'fr'){
+        preferredVoice =
+          pick(v => /sylvie/i.test(v.name || '') && /^fr[-_]?CA/i.test(v.lang || '')) ||
+          pick(v => /^fr[-_]?CA/i.test(v.lang || '')) ||
+          pick(v => /^fr[-_]?FR/i.test(v.lang || '')) ||
+          pick(v => (v.lang || '').toLowerCase().startsWith('fr')) ||
+          voices[0];
+      }else{
+        preferredVoice =
+          pick(v => /^en[-_]?CA/i.test(v.lang || '')) ||
+          pick(v => /^en[-_]?US/i.test(v.lang || '')) ||
+          pick(v => /^en[-_]?GB/i.test(v.lang || '')) ||
+          pick(v => (v.lang || '').toLowerCase().startsWith('en')) ||
+          voices[0];
+      }
+    }
+
+    function voicesReady(){
+      return new Promise((resolve)=>{
+        if (!canUseSpeech()) return resolve();
+        const ss = window.speechSynthesis;
+        if (!ss) return resolve();
+        const list = ss.getVoices();
+        if (list && list.length) return resolve();
+        const handle = () => {
+          ss.removeEventListener('voiceschanged', handle);
+          resolve();
+        };
+        ss.addEventListener('voiceschanged', handle);
+      });
+    }
+
+    async function getPageText(pageNum){
+      if (!pdfDoc) return '';
+      const cacheKey = `${pageNum}:${currentLang}`;
+      if (ocrCache.has(cacheKey)) return ocrCache.get(cacheKey);
+      let page = null;
+      let offscreen = null;
+      try{
+        page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const raw = (textContent?.items || []).map(item => item?.str || '').join(' ');
+        const cleaned = raw.replace(/\s+/g, ' ').trim();
+        if (cleaned){
+          ocrCache.set(cacheKey, cleaned);
+          return cleaned;
+        }
+        if (!window.Tesseract){
+          return '';
+        }
+        analyzingPage = true;
+        updateSpeakingStatus();
+        const viewport = page.getViewport({ scale: Math.max(2, (window.devicePixelRatio || 1) * 1.5) });
+        offscreen = document.createElement('canvas');
+        offscreen.width = Math.floor(viewport.width);
+        offscreen.height = Math.floor(viewport.height);
+        const offCtx = offscreen.getContext('2d');
+        await page.render({ canvasContext: offCtx, viewport }).promise;
+        const langCode = currentLang === 'fr' ? 'fra' : 'eng';
+        let text = '';
+        try{
+          const result = await Tesseract.recognize(offscreen, langCode, {
+            logger: ()=>{},
+            workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/worker.min.js',
+            corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/tesseract-core-simd.wasm.js',
+            langPath: 'https://tessdata.projectnaptha.com/5.0.0_fast'
+          });
+          text = (result?.data?.text || '').replace(/\s+/g, ' ').trim();
+        }catch(ocrErr){
+          console.error('OCR error:', ocrErr);
+        }
+        ocrCache.set(cacheKey, text);
+        return text;
+      }catch(err){
+        console.error('Text extraction error:', err);
+        return '';
+      }finally{
+        analyzingPage = false;
+        updateSpeakingStatus();
+        if (offscreen){
+          offscreen.width = 0;
+          offscreen.height = 0;
+          if (typeof offscreen.remove === 'function') offscreen.remove();
+        }
+        try{ page?.cleanup?.(); }catch(_){ }
+      }
+    }
+
+    async function speakPageText(text){
+      if (!canUseSpeech() || !text) return;
+      cancelSpeech();
+      await voicesReady();
+      choosePreferredVoice();
+
+      return new Promise((resolve)=>{
+        if (!canUseSpeech()) return resolve();
+        let resolved = false;
+        const finish = () => {
+          if (resolved) return;
+          resolved = true;
+          speaking = false;
+          updateSpeakingStatus();
+          resolve();
+        };
+        try{
+          const utterance = new SpeechSynthesisUtterance(text);
+          const fallbackLang = currentLang === 'fr' ? 'fr-CA' : 'en-US';
+          if (preferredVoice){
+            utterance.voice = preferredVoice;
+            utterance.lang = preferredVoice.lang || fallbackLang;
+          }else{
+            utterance.lang = fallbackLang;
+          }
+          utterance.rate = 1.0;
+          utterance.volume = 1.0;
+          utterance.onend = finish;
+          utterance.onerror = finish;
+          speaking = true;
+          updateSpeakingStatus();
+          speechSynthesis.speak(utterance);
+        }catch(err){
+          console.error('Speech synthesis error:', err);
+          finish();
+        }
+      });
+    }
+
+    async function announceCurrentPage(){
+      const token = ++announceToken;
+      if (!started){
+        updateSpeakingStatus();
+        return;
+      }
+      if (!canUseSpeech()){
+        updateSpeakingStatus();
+        return;
+      }
+      const text = await getPageText(currentPageNum);
+      if (token !== announceToken) return;
+      if (!text){
+        speaking = false;
+        updateSpeakingStatus();
+        return;
+      }
+      await speakPageText(text);
+    }
+
+    async function updatePageView({ announce = true } = {}){
+      await renderPage(currentPageNum);
+      setHUD();
+      if (announce) await announceCurrentPage();
+    }
     async function goFullscreen(){ if (!document.fullscreenElement){ try{ await document.documentElement.requestFullscreen(); }catch(_){ } } }
     function hideCenterPrompt(){ centerPrompt.style.display = 'none'; }
+
+    if (canUseSpeech()){
+      try{
+        speechSynthesis.addEventListener('voiceschanged', ()=>{
+          choosePreferredVoice();
+          updateSpeakingStatus();
+        });
+      }catch(_){ }
+      choosePreferredVoice();
+    }
 
     // Clear "Choose PDF" handlers
     chooseBtn.addEventListener('click', ()=> fileInput.click());
@@ -165,30 +407,56 @@
     });
 
     async function loadPDFFile(file){
+      cancelSpeech();
+      invalidateAnnouncements();
+      analyzingPage = false;
+      started = false;
+      pdfDoc = null;
+      totalPages = 0;
+      setHUD();
+      ocrCache.clear();
       const arrBuf = await file.arrayBuffer();
       pdfData = arrBuf;
+      fileInput.value = '';
       startBtn.disabled = false;
       hideCenterPrompt();
+      updateSpeakingStatus();
+      await openAndRender();
     }
 
     // Start viewer
     startBtn.addEventListener('click', async ()=>{
       if (!pdfData) return;
       await goFullscreen();
-      started = true;
-      await openAndRender();
+      if (!pdfDoc){
+        await openAndRender();
+      }else{
+        await updatePageView();
+      }
     });
 
     async function openAndRender(){
+      if (!pdfData) return;
       try{
+        cancelSpeech();
+        invalidateAnnouncements();
+        analyzingPage = false;
         const loadingTask = pdfjsLibGlobal.getDocument({ data: pdfData });
         pdfDoc = await loadingTask.promise;
         totalPages = pdfDoc.numPages;
         currentPageNum = 1;
-        await renderPage(currentPageNum);
-        setHUD();
+        started = true;
+        updateSpeakingStatus();
+        if (canUseSpeech()) choosePreferredVoice();
+        await updatePageView();
       }catch(err){
         console.error('PDF load error:', err);
+        started = false;
+        pdfDoc = null;
+        totalPages = 0;
+        setHUD();
+        invalidateAnnouncements();
+        updateSpeakingStatus();
         alert(currentLang === 'fr' ? "Erreur de chargement du PDF." : "Error loading PDF.");
       }
     }
@@ -222,8 +490,7 @@
     stage.addEventListener('click', async ()=>{
       if (!started || !pdfDoc || loading) return;
       currentPageNum = (currentPageNum % totalPages) + 1;
-      await renderPage(currentPageNum);
-      setHUD();
+      await updatePageView();
     });
 
     // Keyboard controls
@@ -232,13 +499,11 @@
       if (e.code === 'Space' || e.code === 'ArrowRight'){
         e.preventDefault();
         currentPageNum = (currentPageNum % totalPages) + 1;
-        await renderPage(currentPageNum);
-        setHUD();
+        await updatePageView();
       } else if (e.code === 'ArrowLeft'){
         e.preventDefault();
         currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
-        await renderPage(currentPageNum);
-        setHUD();
+        await updatePageView();
       }
     });
 
@@ -246,7 +511,7 @@
     window.addEventListener('resize', ()=>{
       if (!started || !pdfDoc) return;
       clearTimeout(window.__resizeT);
-      window.__resizeT = setTimeout(()=>renderPage(currentPageNum), 100);
+      window.__resizeT = setTimeout(()=>{ updatePageView({ announce: false }); }, 100);
     });
 
     // Auto-hide cursor after inactivity
