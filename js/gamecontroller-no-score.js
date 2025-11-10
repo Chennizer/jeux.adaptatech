@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlayScreen = document.getElementById('overlay-screen');
     const playModeSelect = document.getElementById('control-panel-play-mode');
     const soundOptionsSelect = document.getElementById('sound-options-select');
+    const soundVolumeSlider = document.getElementById('sound-volume-slider');
     const levelSelect = document.getElementById('level-select');
     const selectedDifficultyLabel = document.getElementById('selected-difficulty-label');
     const selectedSoundLabel = document.getElementById('selected-sound-label');
@@ -45,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let recordedAudio = null;
     let mediaRecorder;
     let audioChunks = [];
+    let soundVolume = soundVolumeSlider ? Math.min(Math.max((Number(soundVolumeSlider.value) || 50) / 100, 0.01), 1) : 1;
 
     const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
     const spacePromptModal = document.getElementById('space-prompt-selection-modal');
@@ -213,6 +215,16 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSummaryTexts();
     });
 
+    if (soundVolumeSlider) {
+        soundVolumeSlider.addEventListener('input', () => {
+            const sliderValue = Number(soundVolumeSlider.value);
+            soundVolume = Math.min(Math.max((isNaN(sliderValue) ? 50 : sliderValue) / 100, 0.01), 1);
+            if (currentSound) {
+                currentSound.volume = soundVolume;
+            }
+        });
+    }
+
     function openRecordModal() {
         recordModal.style.display = 'block';
     }
@@ -292,6 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (currentSound) {
+                currentSound.volume = soundVolume;
                 currentSound.play().catch(() => {});
             }
         }
