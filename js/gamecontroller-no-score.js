@@ -10,9 +10,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----- DOM Elements -----
     const mediaType = document.body.getAttribute('data-media-type'); 
     const videoSource = document.body.getAttribute('data-video-source');
-    let timestampsEasy = document.body.getAttribute('data-timestamps-easy').split(',').map(Number);
-    let timestampsMedium = document.body.getAttribute('data-timestamps-medium').split(',').map(Number);
-    let timestampsHard = document.body.getAttribute('data-timestamps-hard').split(',').map(Number);
+
+    // --- Minimal fix: safe parsing + optional medium ---
+    const toNums = s => (s ? s.split(',').map(v => parseFloat(v)).filter(n => Number.isFinite(n)) : []);
+    let timestampsEasy   = toNums(document.body.getAttribute('data-timestamps-easy'));
+    let timestampsMedium = toNums(document.body.getAttribute('data-timestamps-medium') || document.body.getAttribute('data-timestamps-easy'));
+    let timestampsHard   = toNums(document.body.getAttribute('data-timestamps-hard'));
+
     const promptText = document.body.getAttribute('data-prompt-text') || "Press the space bar to continue!";
     const pauseSoundSrc = document.body.getAttribute('data-pause-sound');
 
@@ -616,9 +620,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mediaPlayer) {
                 mediaPlayer.src = newVideoSource;
                 mediaPlayer.load();
-                timestampsEasy   = selectedOption.getAttribute('data-timestamps-easy').split(',').map(Number);
-                timestampsMedium = selectedOption.getAttribute('data-timestamps-medium').split(',').map(Number);
-                timestampsHard   = selectedOption.getAttribute('data-timestamps-hard').split(',').map(Number);
+
+                // --- Minimal fix on re-parse ---
+                timestampsEasy   = toNums(selectedOption.getAttribute('data-timestamps-easy'));
+                timestampsMedium = toNums(selectedOption.getAttribute('data-timestamps-medium') || selectedOption.getAttribute('data-timestamps-easy'));
+                timestampsHard   = toNums(selectedOption.getAttribute('data-timestamps-hard'));
 
                 switch (selectedDifficulty) {
                     case 'easy':
