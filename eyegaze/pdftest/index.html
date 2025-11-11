@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title class="translate" data-fr="PDF — Avancer en cliquant" data-en="PDF — Click to Advance">PDF — Avancer en cliquant</title>
 
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
   <!-- pdf.js (stable UMD v3) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
@@ -17,24 +20,23 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <style>
+
     :root{ --teal:#009688; --bg:#000; --fg:#fff; }
     html,body{ margin:0; height:100%; background:var(--bg); color:var(--fg);
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; overflow:hidden; }
+    body{ display:block; justify-content:initial; align-items:initial; }
 
     #stage{ position:fixed; inset:0; display:grid; place-items:center; background:#000; cursor:pointer; z-index:1; }
     canvas{ display:block; max-width:100vw; max-height:100vh; }
 
     /* UI */
-    #topbar{ position:fixed; top:10px; left:10px; right:10px; display:flex; gap:10px; align-items:center; justify-content:space-between; z-index:5; }
+    #topbar{ position:fixed; top:10px; left:10px; right:10px; display:flex; gap:10px; align-items:center; justify-content:flex-end; z-index:5; }
     #pickerRow{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .btn{ background:var(--teal); color:#fff; border:none; border-radius:12px; padding:12px 16px; font-weight:800; cursor:pointer; font-size:16px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
-    .btn:disabled{ opacity:.5; cursor:not-allowed; }
-    #fileInput{ padding:8px; border-radius:10px; border:1px solid #333; background:#111; color:#ddd; }
+    #fileInput{ display:none; }
     #tips{ display:inline-flex; gap:8px; align-items:center; padding:8px 10px; border:1px dashed #444; border-radius:10px; background:#0a0a0a; color:#ddd; font-size:14px; z-index:5; }
 
     #centerPrompt{ position:fixed; inset:0; display:grid; place-items:center; z-index:6; background: radial-gradient(transparent, rgba(0,0,0,.35) 60%); }
     #centerPrompt .card{ text-align:center; background:#111; border:1px solid #333; border-radius:16px; padding:20px; max-width:min(700px,90vw); box-shadow:0 10px 30px rgba(0,0,0,.4); }
-    #chooseBtnBig{ font-size:18px; padding:14px 18px; }
 
     #hud{ position:fixed; left:12px; bottom:12px; padding:6px 10px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.2); border-radius:10px; font-size:14px; user-select:none; z-index:5; }
 
@@ -55,62 +57,131 @@
     .playing #hud,
     .playing #centerPrompt,
     .playing #textOut { display:none !important; }
+
+    .game-container{ display:none; }
+
+    #game-options #control-panel-options{ transform:translateY(0); }
+
+    .menu-placeholder{ width:100%; border:2px dashed #009688; border-radius:12px; padding:16px; color:#1f2937; background:#f1f5f9; font-weight:600; text-align:center; min-height:120px; display:flex; align-items:center; justify-content:center; }
+    .menu-placeholder span{ display:block; }
+    body.dark .menu-placeholder{ background:#0f172a; color:#e2e8f0; }
+
+    #selectedFileName{ margin-top:8px; font-size:0.95rem; font-weight:600; color:#009688; text-align:center; word-break:break-word; }
+    #selectedFileName.no-file{ color:#64748b; font-weight:500; }
+
+    #startBtn.button:disabled{ background-color:#b0bec5; cursor:not-allowed; box-shadow:none; }
+
+    .mode-option{ margin-top:10px; display:flex; align-items:center; gap:8px; }
+    .mode-option input[type="radio"]{ margin:0; accent-color:#009688; }
+    .mode-option span{ font-size:0.95rem; line-height:1.2; }
+    .mode-note{ font-size:0.85rem; color:#374151; margin-top:6px; text-align:left; }
+    body.dark .mode-note{ color:#d1d5db; }
+    body.dark .teal-label{ color:#e2e8f0; }
+
   </style>
 </head>
 <body>
+
   <div id="langToggle" title="Basculer la langue / Toggle language">FR / EN</div>
 
-  <div id="topbar">
-    <div id="pickerRow">
-      <button id="chooseBtn" class="btn"><span class="translate" data-fr="Choisir un PDF" data-en="Choose PDF">Choisir un PDF</span></button>
-      <input id="fileInput" type="file" accept="application/pdf" />
-      <button id="startBtn" class="btn" disabled><span class="translate" data-fr="Démarrer (plein écran)" data-en="Start (Fullscreen)">Démarrer (plein écran)</span></button>
-    </div>
-    <div id="tips">
-      <span>🖱️</span>
-      <span class="translate" data-fr="Cliquez ou espace pour avancer. ← / → reculent / avancent. Reboucle à la fin."
-            data-en="Click or Space to advance. ← / → navigate. Loops at the end.">
-        Cliquez ou espace pour avancer. ← / → reculent / avancent. Reboucle à la fin.
-      </span>
+  <div id="game-options" class="modal" role="dialog" aria-modal="true">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 class="translate" data-fr="Lecture PDF" data-en="PDF Reader">Lecture PDF</h2>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <!-- LEFT COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <label for="languageSelect" class="teal-label label-block translate" data-fr="Langue" data-en="Language">Langue</label>
+            <select id="languageSelect" class="styled-select">
+              <option value="fr" class="translate" data-fr="Français" data-en="French">Français</option>
+              <option value="en" class="translate" data-fr="Anglais" data-en="English">Anglais</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- MIDDLE COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <button id="chooseBtn" class="button translate" data-fr="Choisir un PDF" data-en="Choose a PDF">Choisir un PDF</button>
+            <input id="fileInput" type="file" accept="application/pdf" />
+            <div id="selectedFileName" class="translate no-file" data-fr="Aucun fichier sélectionné" data-en="No file selected">Aucun fichier sélectionné</div>
+          </div>
+          <div class="option-item">
+            <div class="menu-placeholder">
+              <span class="translate" data-fr="Menu déroulant à venir" data-en="Scrolling menu coming soon">Menu déroulant à venir</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <span class="teal-label label-block translate" data-fr="Mode de jeu" data-en="Gameplay mode">Mode de jeu</span>
+            <label class="teal-label mode-option">
+              <input type="radio" name="advanceMode" value="direct" checked>
+              <span class="translate" data-fr="Espace pour passer à la page suivante" data-en="Space to advance to next page">Espace pour passer à la page suivante</span>
+            </label>
+            <label class="teal-label mode-option">
+              <input type="radio" name="advanceMode" value="tts-step">
+              <span class="translate" data-fr="Appuyer pour lire, appuyer à nouveau pour avancer" data-en="Press to read, press again to advance">Appuyer pour lire, appuyer à nouveau pour avancer</span>
+            </label>
+            <div class="mode-note translate" data-fr="Le mode lecture utilise la synthèse vocale disponible." data-en="Read mode uses the available text-to-speech.">Le mode lecture utilise la synthèse vocale disponible.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startBtn" class="button translate" data-fr="Commencer" data-en="Start" disabled>Commencer</button>
     </div>
   </div>
 
-  <div id="centerPrompt">
-    <div class="card">
-      <h2 class="translate" data-fr="Charger un PDF" data-en="Load a PDF">Charger un PDF</h2>
-      <p class="translate" data-fr="Appuyez sur le bouton ci-dessous pour choisir un fichier PDF multi-pages."
-         data-en="Press the button below to choose a multi-page PDF file.">
-        Appuyez sur le bouton ci-dessous pour choisir un fichier PDF multi-pages.
-      </p>
-      <button id="chooseBtnBig" class="btn"><span class="translate" data-fr="Choisir un PDF…" data-en="Choose PDF…">Choisir un PDF…</span></button>
-      <p style="opacity:.8; margin-top:10px" class="translate" data-fr="Astuce : vous pouvez aussi déposer un PDF dans la fenêtre." data-en="Tip: you can also drop a PDF into the window.">
-         Astuce : vous pouvez aussi déposer un PDF dans la fenêtre.
-      </p>
+  <div class="game-container">
+    <div id="topbar">
+      <div id="pickerRow">
+        <div id="tips">
+          <span>🖱️</span>
+          <span class="translate" data-fr="Cliquez ou espace pour avancer. ← / → reculent / avancent. Reboucle à la fin." data-en="Click or Space to advance. ← / → navigate. Loops at the end.">Cliquez ou espace pour avancer. ← / → reculent / avancent. Reboucle à la fin.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="centerPrompt">
+      <div class="card">
+        <h2 class="translate" data-fr="Charger un PDF" data-en="Load a PDF">Charger un PDF</h2>
+        <p class="translate" data-fr="Appuyez sur le bouton Choisir un PDF pour sélectionner un fichier." data-en="Press the Choose a PDF button to select a file.">Appuyez sur le bouton Choisir un PDF pour sélectionner un fichier.</p>
+        <p style="opacity:.8; margin-top:10px" class="translate" data-fr="Astuce : vous pouvez aussi déposer un PDF dans la fenêtre." data-en="Tip: you can also drop a PDF into the window.">Astuce : vous pouvez aussi déposer un PDF dans la fenêtre.</p>
+      </div>
+    </div>
+
+    <div id="stage" aria-label="Zone d’affichage PDF">
+      <canvas id="pageCanvas" aria-hidden="true"></canvas>
+    </div>
+
+    <div id="hud"><span id="pageLabel">—</span></div>
+
+    <pre id="textOut"></pre>
+    <div id="ocrHud">
+      <div class="row">
+        <label for="ocrLang">OCR:</label>
+        <select id="ocrLang">
+          <option value="eng" selected>English (eng)</option>
+          <option value="fra">Français (fra)</option>
+          <option value="eng+fra">English + Français</option>
+          <option value="spa">Español (spa)</option>
+          <option value="deu">Deutsch (deu)</option>
+        </select>
+        <label><input type="checkbox" id="autoRead" checked> <span class="translate" data-fr="Lecture auto" data-en="Auto-read">Lecture auto</span></label>
+      </div>
+      <div id="ocrProg" aria-hidden="true"><div id="ocrBar"></div></div>
+      <div id="ocrStatus">—</div>
     </div>
   </div>
 
-  <div id="stage" aria-label="Zone d’affichage PDF">
-    <canvas id="pageCanvas" aria-hidden="true"></canvas>
-  </div>
-
-  <div id="hud"><span id="pageLabel">—</span></div>
-
-  <pre id="textOut"></pre>
-  <div id="ocrHud">
-    <div class="row">
-      <label for="ocrLang">OCR:</label>
-      <select id="ocrLang">
-        <option value="eng" selected>English (eng)</option>
-        <option value="fra">Français (fra)</option>
-        <option value="eng+fra">English + Français</option>
-        <option value="spa">Español (spa)</option>
-        <option value="deu">Deutsch (deu)</option>
-      </select>
-      <label><input type="checkbox" id="autoRead" checked> <span class="translate" data-fr="Lecture auto" data-en="Auto-read">Lecture auto</span></label>
-    </div>
-    <div id="ocrProg" aria-hidden="true"><div id="ocrBar"></div></div>
-    <div id="ocrStatus">—</div>
-  </div>
 
   <script>
     // ===== Fixed OCR zone (percent of page) =====
@@ -121,14 +192,34 @@
 
     // ===== Language toggle =====
     const langToggle = document.getElementById('langToggle');
+    const languageSelect = document.getElementById('languageSelect');
     let currentLang = 'fr';
-    function applyLang(){ document.querySelectorAll('.translate').forEach(el=>{ const t = el.dataset[currentLang]; if(t) el.textContent = t; }); }
-    langToggle.addEventListener('click', ()=>{ currentLang = (currentLang==='fr') ? 'en' : 'fr'; applyLang(); });
+
+    function applyLang(){
+      document.querySelectorAll('.translate').forEach(el=>{
+        const t = el?.dataset?.[currentLang];
+        if (typeof t === 'string') { el.textContent = t; }
+      });
+      document.documentElement.lang = currentLang;
+      if (languageSelect) languageSelect.value = currentLang;
+    }
+
+    langToggle.addEventListener('click', ()=>{
+      currentLang = (currentLang === 'fr') ? 'en' : 'fr';
+      applyLang();
+    });
+
+    if (languageSelect){
+      languageSelect.addEventListener('change', (e)=>{
+        currentLang = (e.target.value === 'en') ? 'en' : 'fr';
+        applyLang();
+      });
+    }
+
     applyLang();
 
     // ===== Elements =====
     const chooseBtn = document.getElementById('chooseBtn');
-    const chooseBtnBig = document.getElementById('chooseBtnBig');
     const fileInput = document.getElementById('fileInput');
     const startBtn  = document.getElementById('startBtn');
     const stage     = document.getElementById('stage');
@@ -136,6 +227,9 @@
     const ctx       = canvas.getContext('2d', { willReadFrequently: true });
     const hudLabel  = document.getElementById('pageLabel');
     const centerPrompt = document.getElementById('centerPrompt');
+    const selectedFileName = document.getElementById('selectedFileName');
+    const gameOptions = document.getElementById('game-options');
+    const gameContainer = document.querySelector('.game-container');
 
     // OCR controls
     const ocrLangSel = document.getElementById('ocrLang');
@@ -143,20 +237,98 @@
     const ocrBar     = document.getElementById('ocrBar');
     const ocrStatus  = document.getElementById('ocrStatus');
     const textOut    = document.getElementById('textOut');
+    const advanceModeRadios = document.querySelectorAll('input[name="advanceMode"]');
 
     // ===== State =====
     let pdfDoc = null, currentPageNum = 1, totalPages = 0, started = false, loading = false, pdfData = null;
     let speakingAllowed = false;
     let currentRenderToken = 0;
+    let advanceMode = 'direct';
+    let awaitingAdvanceConfirm = false;
+    let savedAutoReadPreference = true;
 
     function setHUD(){ hudLabel.textContent = pdfDoc ? `${currentPageNum} / ${totalPages}` : '—'; }
-    async function goFullscreen(){ if (!document.fullscreenElement){ try{ await document.documentElement.requestFullscreen(); }catch(_){ } } }
-    function hideCenterPrompt(){ centerPrompt.style.display = 'none'; }
+    async function goFullscreen(){
+      if (!document.fullscreenElement){
+        try { await document.documentElement.requestFullscreen(); } catch(_){}
+      }
+    }
+    function hideCenterPrompt(){ if (centerPrompt) centerPrompt.style.display = 'none'; }
     function setOcrProgress(p){ ocrBar.style.width = Math.max(0, Math.min(100, Math.round(p*100))) + '%'; }
 
-    // Show/hide all UI
     function enterPlayingUI(){ document.body.classList.add('playing'); }
     function exitPlayingUI(){ document.body.classList.remove('playing'); }
+
+    function setAdvanceMode(mode){
+      advanceMode = (mode === 'tts-step') ? 'tts-step' : 'direct';
+      awaitingAdvanceConfirm = false;
+      if (autoRead){
+        if (advanceMode === 'tts-step'){
+          savedAutoReadPreference = autoRead.checked;
+          autoRead.checked = false;
+          autoRead.disabled = true;
+        } else {
+          autoRead.disabled = false;
+          autoRead.checked = savedAutoReadPreference;
+        }
+      }
+      stopSpeak();
+    }
+
+    advanceModeRadios.forEach(radio=>{
+      radio.addEventListener('change', ()=>{
+        if (radio.checked){ setAdvanceMode(radio.value); }
+      });
+    });
+    setAdvanceMode(document.querySelector('input[name="advanceMode"]:checked')?.value || 'direct');
+
+    if (autoRead){
+      autoRead.addEventListener('change', ()=>{
+        if (advanceMode !== 'tts-step'){
+          savedAutoReadPreference = autoRead.checked;
+        }
+      });
+    }
+
+    function readCurrentPage(){
+      const text = textOut.textContent?.trim();
+      if (text){
+        stopSpeak();
+        speak(text);
+        return true;
+      }
+      return false;
+    }
+
+    async function goToNextPage(){
+      if (!pdfDoc || loading) return;
+      stopSpeak();
+      currentPageNum = (currentPageNum % totalPages) + 1;
+      await renderPage(currentPageNum);
+      setHUD();
+    }
+
+    async function goToPreviousPage(){
+      if (!pdfDoc || loading) return;
+      stopSpeak();
+      currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
+      await renderPage(currentPageNum);
+      setHUD();
+    }
+
+    async function handleForwardAdvance(){
+      if (!started || !pdfDoc || loading) return;
+      if (advanceMode === 'tts-step'){
+        if (!awaitingAdvanceConfirm){
+          if (readCurrentPage()){
+            awaitingAdvanceConfirm = true;
+            return;
+          }
+        }
+        awaitingAdvanceConfirm = false;
+      }
+      await goToNextPage();
+    }
 
     // ===== Paragraph reflow for OCR text =====
     function reflowOcrText(raw) {
@@ -203,11 +375,12 @@
     function stopSpeak(){ window.speechSynthesis?.cancel(); }
 
     // Choose file
-    chooseBtn.addEventListener('click', ()=> fileInput.click());
-    chooseBtnBig.addEventListener('click', ()=> fileInput.click());
+    if (chooseBtn) chooseBtn.addEventListener('click', ()=> fileInput?.click());
 
     // Drag & drop
-    ;['dragenter','dragover'].forEach(ev=>{ window.addEventListener(ev, e=>{ e.preventDefault(); }, {passive:false}); });
+    ;['dragenter','dragover'].forEach(ev=>{
+      window.addEventListener(ev, e=>{ e.preventDefault(); }, {passive:false});
+    });
     window.addEventListener('drop', async e=>{
       e.preventDefault();
       const file = [...(e.dataTransfer?.files||[])].find(f=>f.type==='application/pdf' || f.name?.toLowerCase().endsWith('.pdf'));
@@ -215,7 +388,7 @@
     });
 
     // File selection
-    fileInput.addEventListener('change', async (e)=>{
+    if (fileInput) fileInput.addEventListener('change', async (e)=>{
       const file = e.target.files?.[0];
       if(!file) return;
       await loadPDFFile(file);
@@ -225,15 +398,31 @@
       const arrBuf = await file.arrayBuffer();
       pdfData = new Uint8Array(arrBuf);
       startBtn.disabled = false;
+      if (selectedFileName){
+        selectedFileName.textContent = file.name;
+        selectedFileName.dataset.fr = file.name;
+        selectedFileName.dataset.en = file.name;
+        selectedFileName.classList.remove('no-file');
+      }
       hideCenterPrompt();
+      awaitingAdvanceConfirm = false;
+      if (fileInput) fileInput.value = '';
+      if (started){
+        await openAndRender();
+        setHUD();
+      }
     }
 
     // Start viewer
     startBtn.addEventListener('click', async ()=>{
       if (!pdfData) return;
+      hideCenterPrompt();
+      if (gameOptions) gameOptions.style.display = 'none';
+      if (gameContainer) gameContainer.style.display = 'block';
       await goFullscreen();
       started = true;
       speakingAllowed = true;
+      awaitingAdvanceConfirm = false;
       enterPlayingUI();          // hide all UI now
       await openAndRender();
     });
@@ -252,7 +441,7 @@
         const loadingTask = pdfjs.getDocument({ data: pdfData });
         pdfDoc = await loadingTask.promise;
         totalPages = pdfDoc.numPages;
-        currentPageNum = 1;
+        if (currentPageNum < 1 || currentPageNum > totalPages) currentPageNum = 1;
         await renderPage(currentPageNum);
         setHUD();
       }catch(err){
@@ -323,8 +512,13 @@
         const cleaned = reflowOcrText(text || '');
         textOut.textContent = cleaned;
         setOcrProgress(1);
+        awaitingAdvanceConfirm = false;
 
-        if (autoRead.checked && cleaned){ stopSpeak(); speak(cleaned); } else { stopSpeak(); }
+        if (advanceMode === 'direct'){
+          if (autoRead.checked && cleaned){ stopSpeak(); speak(cleaned); } else { stopSpeak(); }
+        } else {
+          stopSpeak();
+        }
       }catch(err){
         console.error('Render/OCR error:', err);
       }finally{
@@ -333,29 +527,22 @@
     }
 
     // Advance on click/tap anywhere
-    stage.addEventListener('click', async ()=>{
-      if (!started || !pdfDoc || loading) return;
-      stopSpeak();
-      currentPageNum = (currentPageNum % totalPages) + 1;
-      await renderPage(currentPageNum);
-      setHUD();
-    });
+    stage.addEventListener('click', ()=>{ handleForwardAdvance(); });
 
     // Keyboard controls
     window.addEventListener('keydown', async (e)=>{
       if (!started || !pdfDoc || loading) return;
-      if (e.code === 'Space' || e.code === 'ArrowRight'){
+      if (e.code === 'Space' && e.shiftKey){
         e.preventDefault();
-        stopSpeak();
-        currentPageNum = (currentPageNum % totalPages) + 1;
-        await renderPage(currentPageNum);
-        setHUD();
-      } else if (e.code === 'ArrowLeft' || (e.code==='Space' && e.shiftKey)){
+        awaitingAdvanceConfirm = false;
+        await goToPreviousPage();
+      } else if (e.code === 'ArrowLeft'){
         e.preventDefault();
-        stopSpeak();
-        currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
-        await renderPage(currentPageNum);
-        setHUD();
+        awaitingAdvanceConfirm = false;
+        await goToPreviousPage();
+      } else if (e.code === 'Space' || e.code === 'ArrowRight'){
+        e.preventDefault();
+        await handleForwardAdvance();
       }
     });
 
