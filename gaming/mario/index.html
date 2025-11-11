@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title class="translate" data-fr="Super Mario (Mode normal / difficile)" data-en="Super Mario (Normal / Hard)">
+    Super Mario (Normal / Hard)
+  </title>
+
+  <!-- Fonts & site CSS -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+  <link rel="stylesheet" href="../../css/control-panel.css">
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/gaming.css">
+  <link rel="stylesheet" href="../../css/layout.css">
+
+  <!-- Aspect ratio fix (letterbox instead of cropping) -->
+  <style>
+    /* Make the video stage fill the screen without cropping */
+    .video-container {
+      position: fixed;           /* sit on top like a stage */
+      inset: 0;                  /* top:0; right:0; bottom:0; left:0 */
+      width: 100vw;
+      height: 100vh;
+      background: #000;          /* letterbox bars */
+      display: none;             /* your JS toggles this to block */
+    }
+    .video-player {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;       /* <-- key: no cropping, preserve AR */
+      background: #000;          /* in case of smaller video frame */
+    }
+  </style>
+
+  <!-- Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+
+<body
+  data-media-type="video"
+  data-video-source="https://bucket.adaptatech.org/mario-clip.mp4"
+  data-timestamps-easy=""
+  data-timestamps-hard=""
+  data-prompt-text="Press the space bar to continue!"
+  data-pause-sound="/sounds/piano.mp3"
+>
+  <!-- We keep EASY/HARD attribute names to match the existing controller’s expectations. -->
+
+  <div id="control-panel" style="background-image: url('../../images/donkeykong.jpg');">
+    <div id="control-panel-options" class="control-panel-options">
+      <div id="control-panel-title" class="control-panel-title translate"
+           data-fr="Super Mario" data-en="Super Mario">Super Mario</div>
+
+      <div id="control-panel-instructions" class="control-panel-instructions translate"
+           data-fr="Jeu interactif pour Switch adaptée. Utiliser en plein écran (F11). Appuyez sur F5 pour revenir."
+           data-en="Interactive game for Switch. Use in fullscreen (F11). Press F5 to return.">
+        Jeu interactif pour Switch adaptée. Utiliser en plein écran (F11). Appuyez sur F5 pour revenir.
+      </div>
+
+      <div id="options-grid" class="options-grid">
+        <!-- LEVEL SELECT -->
+        <div>
+          <select id="level-select" class="control-panel-custom-select">
+            <option value="" disabled>-- Select Level --</option>
+
+            <option value="mario2"
+              data-video-source="https://bucket.adaptatech.org/supermario.mp4"
+              data-timestamps-easy="5.7,15.1,28,42.1,53.1"
+              data-timestamps-hard="5.7,11.5,15.1,19.4,28,33,42.1,46.4,53.1"
+            >DK2 — Bramble Blast (timestamps)</option>
+          </select>
+        </div>
+
+        <!-- DIFFICULTY (Normal/Hard; values stay easy/hard) -->
+        <div>
+          <select id="control-panel-play-mode" class="control-panel-custom-select">
+            <option value="easy" disabled selected class="translate" data-fr="Mode" data-en="Mode">Mode</option>
+            <option value="easy" class="translate" data-fr="Normal" data-en="Normal">Normal</option>
+            <option value="hard" class="translate" data-fr="Difficile" data-en="Hard">Hard</option>
+          </select>
+        </div>
+
+        <div>
+          <select id="sound-options-select" class="control-panel-custom-select"></select>
+        </div>
+
+        <div>
+          <button id="select-space-prompt-button" class="button translate"
+                  data-fr="Image indicatrice" data-en="Indicator Image">Image indicatrice</button>
+        </div>
+
+        <div>
+          <button id="misc-options-button" class="button translate"
+                  data-fr="Options Diverses" data-en="Miscellaneous Options">Options Diverses</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="button-container" class="button-container">
+      <div id="control-panel-loading-bar-container" class="loading-bar-container">
+        <div id="control-panel-loading-bar" class="loading-bar"></div>
+      </div>
+      <button id="control-panel-start-button" class="button hidden translate"
+              data-fr="Commencer" data-en="Start">Commencer</button>
+    </div>
+  </div>
+
+  <!-- Overlay -->
+  <div id="overlay-screen" class="overlay-screen hidden">
+    <img id="space-prompt-image" class="space-prompt-image hidden" src="" alt="Press Space">
+  </div>
+
+  <!-- Video -->
+  <div id="video-container" class="video-container hidden">
+    <video id="video-player" class="video-player" controls="false" preload="auto" playsinline>
+      <source id="video-source" src="https://bucket.adaptatech.org/mario-clip.mp4" type="video/mp4">
+      Votre navigateur ne supporte pas la balise vidéo.
+    </video>
+  </div>
+
+  <!-- Space Prompt Selection Modal -->
+  <div id="space-prompt-selection-modal" class="modal hidden">
+    <div class="modal-content">
+      <span id="close-space-prompt-modal" class="close">&times;</span>
+      <h2 class="translate" data-fr="Sélectionner l'image indicatrice" data-en="Select the indicator image">Sélectionner l'image indicatrice</h2>
+      <div id="space-prompt-selection" class="space-prompt-images-container"></div>
+      <h3 class="translate" data-fr="Remplacer l'image par du texte:" data-en="Replace image with text:">Remplacer l'image par du texte:</h3>
+      <input type="text" id="text-prompt-input" placeholder="Texte personnalisé"
+             style="width: 100%; padding: 10px; margin-top: 15px;"
+             class="control-panel-input">
+      <button id="apply-space-prompt" class="button translate" data-fr="OK" data-en="OK">OK</button>
+    </div>
+  </div>
+
+  <!-- Record Modal -->
+  <div id="record-modal" class="modal hidden">
+    <div class="modal-content">
+      <span id="close-record-modal" class="close">&times;</span>
+      <h2 class="translate" data-fr="Enregistrez Votre Son" data-en="Record Your Sound">Enregistrez Votre Son</h2>
+      <p id="record-status" class="translate"
+         data-fr="Cliquez sur &quot;Enregistrer&quot; pour commencer."
+         data-en="Click on &quot;Record&quot; to start.">Cliquez sur "Enregistrer" pour commencer.</p>
+      <button id="record-button" class="button translate" data-fr="Enregistrer" data-en="Record">Enregistrer</button>
+      <button id="stop-recording-button" class="button hidden translate" data-fr="Arrêter" data-en="Stop">Arrêter</button>
+      <button id="ok-recording-button" class="button hidden translate" data-fr="OK" data-en="OK">OK</button>
+    </div>
+  </div>
+
+  <!-- Misc Options Modal -->
+  <div id="misc-options-modal" class="modal hidden">
+    <div class="modal-content">
+      <span id="close-misc-options-modal" class="close">&times;</span>
+      <h2 class="translate" data-fr="Options Diverses (désactivées pour test)"
+          data-en="Miscellaneous Options (disabled for testing)">
+        Options Diverses (désactivées pour test)
+      </h2>
+      <div id="misc-options-container"></div>
+      <button id="misc-options-ok-button" class="button translate" data-fr="OK" data-en="OK">OK</button>
+    </div>
+  </div>
+
+  <!-- Debug counter -->
+  <div id="space-bar-attempts"
+       style="position: fixed; bottom:10px; right:10px; background: rgba(0,0,0,0.7);
+              color:white; padding:5px 10px; border-radius:5px; display:none;">
+    Space Bar Attempts: 0
+  </div>
+
+  <!-- Translation + config -->
+  <script src="../../js/translationonly.js"></script>
+  <script src="../../js/config.js"></script>
+
+  <!-- Helper: Interval → Timestamps (run BEFORE controller) -->
+  <script>
+    (function () {
+      const levelSelect = document.getElementById('level-select');
+      const modeSelect  = document.getElementById('control-panel-play-mode');
+      const video      = document.getElementById('video-player');
+      const body       = document.body;
+
+      function generateTimestamps(duration, interval, startOffset = 0.1, endGuard = 0.6) {
+        const out = [];
+        if (!interval || interval <= 0 || !isFinite(duration)) return "";
+        for (let t = Math.max(startOffset, interval); t < duration - endGuard; t += interval) {
+          out.push(Number(t.toFixed(2)));
+        }
+        return out.join(',');
+      }
+
+      function applyLevelSource() {
+        const opt = levelSelect.options[levelSelect.selectedIndex];
+        const src = opt?.getAttribute('data-video-source');
+        if (src) {
+          document.getElementById('video-source').setAttribute('src', src);
+          video.load();
+          body.setAttribute('data-video-source', src);
+        }
+      }
+
+      function prepareModeTimestamps() {
+        const opt = levelSelect.options[levelSelect.selectedIndex];
+        if (!opt) return;
+
+        const easyTimestamps = opt.getAttribute('data-timestamps-easy');
+        const hardTimestamps = opt.getAttribute('data-timestamps-hard');
+
+        const easyInterval = parseFloat(opt.getAttribute('data-interval-easy') || '0');
+        const hardInterval = parseFloat(opt.getAttribute('data-interval-hard') || '0');
+
+        const duration = isFinite(video.duration) ? video.duration : NaN;
+
+        let finalEasy = (easyTimestamps && easyTimestamps.trim()) ? easyTimestamps.trim() : "";
+        let finalHard = (hardTimestamps && hardTimestamps.trim()) ? hardTimestamps.trim() : "";
+
+        if (!finalEasy && isFinite(duration) && easyInterval > 0) {
+          finalEasy = generateTimestamps(duration, easyInterval);
+        }
+        if (!finalHard && isFinite(duration) && hardInterval > 0) {
+          finalHard = generateTimestamps(duration, hardInterval);
+        }
+
+        body.setAttribute('data-timestamps-easy', finalEasy);
+        body.setAttribute('data-timestamps-hard', finalHard);
+      }
+
+      levelSelect.addEventListener('change', applyLevelSource);
+      video.addEventListener('loadedmetadata', prepareModeTimestamps);
+
+      // Initial
+      applyLevelSource();
+
+      modeSelect.addEventListener('change', () => {
+        if (isFinite(video.duration)) prepareModeTimestamps();
+      });
+
+      document.addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'control-panel-start-button') {
+          if (!body.getAttribute('data-timestamps-easy') && isFinite(video.duration)) {
+            prepareModeTimestamps();
+          }
+        }
+      });
+    })();
+  </script>
+
+  <!-- Controller -->
+  <script src="../../js/gamecontroller-no-score.js"></script>
+</body>
+</html>
