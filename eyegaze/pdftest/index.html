@@ -96,6 +96,7 @@
       flex-direction:column;
       gap:6px;
     }
+    body.playing #ocrHud { display:none !important; }
     #ocrHud .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     #ocrHud select, #ocrHud label { font-size:13px; }
     #ocrProg { height:6px; background:#111; border-radius:999px; overflow:hidden; }
@@ -204,12 +205,77 @@
       font-weight:600;
     }
 
-    #options-inline-container > .options-column { align-items:flex-start; }
+    #options-inline-container > .options-column {
+      align-items:flex-start;
+      min-width:0;
+    }
     #options-inline-container > .options-column:nth-child(2) { align-items:center; }
     #options-inline-container > .options-column:nth-child(2) .option-item { align-items:center; text-align:center; }
     #options-inline-container > .options-column:nth-child(2) .teal-label { justify-content:center; }
 
     #options-inline-container > .options-column:nth-child(3) { align-items:flex-start; }
+
+    select.styled-select {
+      width:100%;
+      padding:10px 14px;
+      font-size:16px;
+      border-radius:14px;
+      border:2px solid var(--teal);
+      background:#fff;
+      color:#004d40;
+      font-weight:600;
+      appearance:none;
+      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23009688"><path d="M7 10l5 5 5-5z"/></svg>');
+      background-repeat:no-repeat;
+      background-position:right 12px center;
+      background-size:18px;
+    }
+
+    .library-container {
+      width:100%;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .library-status {
+      font-size:15px;
+      color:#00695c;
+      text-align:center;
+    }
+
+    .library-list {
+      list-style:none;
+      padding:0;
+      margin:0;
+      width:100%;
+      max-height:220px;
+      overflow:auto;
+      display:grid;
+      grid-template-columns:1fr;
+      gap:8px;
+    }
+
+    .library-item-button {
+      width:100%;
+      background:#fff;
+      color:#004d40;
+      border:2px solid var(--teal);
+      border-radius:16px;
+      padding:10px 12px;
+      font-size:15px;
+      font-weight:600;
+      text-align:left;
+      cursor:pointer;
+      transition:background .2s,color .2s,box-shadow .2s;
+    }
+
+    .library-item-button:hover,
+    .library-item-button.selected {
+      background:var(--teal);
+      color:#fff;
+      box-shadow:0 4px 8px rgba(0,0,0,.25);
+    }
   </style>
 </head>
 <body>
@@ -227,11 +293,14 @@
         <!-- LEFT COLUMN -->
         <div class="options-column">
           <div class="option-item">
-            <p class="teal-label label-block translate" data-fr="Langue" data-en="Language">Langue</p>
-            <div class="button-row">
-              <button type="button" class="button lang-btn" data-lang="fr">Français</button>
-              <button type="button" class="button lang-btn" data-lang="en">English</button>
-            </div>
+            <label for="ttsLangSelect" class="teal-label label-block translate" data-fr="Voix de lecture" data-en="Reading voice">Voix de lecture</label>
+            <select id="ttsLangSelect" class="styled-select">
+              <option class="translate" value="fr-CA" data-fr="Français" data-en="French">Français</option>
+              <option class="translate" value="en-US" data-fr="Anglais" data-en="English">Anglais</option>
+              <option class="translate" value="es-ES" data-fr="Espagnol" data-en="Spanish">Espagnol</option>
+              <option class="translate" value="de-DE" data-fr="Allemand" data-en="German">Allemand</option>
+            </select>
+            <p class="tip-text translate" data-fr="Par défaut, la voix suit la langue de l’interface. Changez-la ici pour la modifier." data-en="By default, the voice follows the interface language. Use this menu to override it.">Par défaut, la voix suit la langue de l’interface. Changez-la ici pour la modifier.</p>
           </div>
           <div class="option-item instructions translate" data-fr="Utilisez la colonne centrale pour choisir le fichier PDF et la colonne de droite pour définir le mode de lecture." data-en="Use the middle column to choose the PDF file and the right column to set the reading mode.">Utilisez la colonne centrale pour choisir le fichier PDF et la colonne de droite pour définir le mode de lecture.</div>
         </div>
@@ -246,7 +315,10 @@
           </div>
           <div class="option-item">
             <label class="teal-label label-block translate" data-fr="Bibliothèque PDF" data-en="PDF library">Bibliothèque PDF</label>
-            <div id="libraryPlaceholder" class="scroll-placeholder translate" data-fr="(Menu défilant à venir)" data-en="(Scrolling menu coming soon)">(Menu défilant à venir)</div>
+            <div class="library-container">
+              <p id="libraryStatus" class="library-status"></p>
+              <ul id="pdfLibraryList" class="library-list" hidden></ul>
+            </div>
           </div>
         </div>
 
@@ -310,7 +382,9 @@
 
     const LS_LANG_KEY = 'siteLanguage';
     const langToggle = document.getElementById('langToggle');
-    const langButtons = document.querySelectorAll('.lang-btn');
+    const ttsSelect = document.getElementById('ttsLangSelect');
+    const pdfLibraryList = document.getElementById('pdfLibraryList');
+    const libraryStatusEl = document.getElementById('libraryStatus');
 
     const chooseBtn = document.getElementById('chooseBtn');
     const fileInput = document.getElementById('fileInput');
@@ -336,6 +410,16 @@
     let confirmState = CONFIRM_STATES.READY;
     let currentLang = 'fr';
     let lastFileName = '';
+    let lastFileSource = '';
+    let ttsManualOverride = false;
+    let selectedLibraryButton = null;
+    const LIBRARY_STATUS_TEXT = {
+      loading: { fr: 'Chargement de la bibliothèque…', en: 'Loading library…' },
+      empty: { fr: 'Aucun PDF disponible pour le moment.', en: 'No PDFs available yet.' },
+      ready: { fr: 'Sélectionnez un PDF dans la liste.', en: 'Pick a PDF from the list.' },
+      error: { fr: 'Impossible de charger la bibliothèque.', en: 'Unable to load the library.' }
+    };
+    let libraryStatusKey = 'loading';
 
     function applyTranslationsForLang(lang) {
       document.querySelectorAll('.translate').forEach(el => {
@@ -345,17 +429,29 @@
         }
       });
       updateFileStatusText();
+      renderLibraryStatus();
     }
 
-    function updateLangButtons(lang) {
-      langButtons.forEach(btn => {
-        btn.classList.toggle('selected', btn.dataset.lang === lang);
-      });
+    function renderLibraryStatus() {
+      if (!libraryStatusEl) return;
+      const copy = LIBRARY_STATUS_TEXT[libraryStatusKey] || LIBRARY_STATUS_TEXT.loading;
+      libraryStatusEl.textContent = copy?.[currentLang] || copy?.fr || '';
+      libraryStatusEl.hidden = libraryStatusKey === 'ready' && pdfLibraryList && pdfLibraryList.children.length > 0;
+    }
+
+    function setLibraryStatus(key) {
+      libraryStatusKey = key;
+      renderLibraryStatus();
     }
 
     function updateFileStatusText() {
       if (lastFileName) {
-        const label = (currentLang === 'fr') ? 'Fichier sélectionné : ' : 'Selected file: ';
+        let label;
+        if (lastFileSource === 'library') {
+          label = (currentLang === 'fr') ? 'Bibliothèque : ' : 'Library: ';
+        } else {
+          label = (currentLang === 'fr') ? 'Fichier sélectionné : ' : 'Selected file: ';
+        }
         fileStatus.innerHTML = `${label}<strong>${escapeHtml(lastFileName)}</strong>`;
       } else {
         const fallback = fileStatus.dataset?.[currentLang];
@@ -377,7 +473,9 @@
       document.documentElement.lang = safe;
       try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e) {}
       applyTranslationsForLang(safe);
-      updateLangButtons(safe);
+      if (!ttsManualOverride) {
+        syncTtsSelectToLang(safe);
+      }
     }
 
     (function initializeLanguage(){
@@ -400,11 +498,23 @@
       setLang(getLang() === 'fr' ? 'en' : 'fr');
     });
 
-    langButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        setLang(btn.dataset.lang);
+    function defaultTtsForLang(lang) {
+      return lang === 'fr' ? 'fr-CA' : 'en-US';
+    }
+
+    function syncTtsSelectToLang(lang) {
+      if (!ttsSelect) return;
+      const desired = defaultTtsForLang(lang);
+      if ([...ttsSelect.options].some(opt => opt.value === desired)) {
+        ttsSelect.value = desired;
+      }
+    }
+
+    if (ttsSelect) {
+      ttsSelect.addEventListener('change', () => {
+        ttsManualOverride = true;
       });
-    });
+    }
 
     function escapeHtml(str) {
       const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"};
@@ -477,17 +587,167 @@
       if (!speakingAllowed || !text || !('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      const l = ocrLangSel.value;
-      if (l.includes('fra')) utterance.lang = 'fr-CA';
-      else if (l.includes('spa')) utterance.lang = 'es-ES';
-      else if (l.includes('deu')) utterance.lang = 'de-DE';
-      else utterance.lang = 'en-US';
+      let voiceLang = defaultTtsForLang(currentLang);
+      if (ttsSelect && ttsSelect.value) {
+        voiceLang = ttsSelect.value;
+      }
+      utterance.lang = voiceLang;
       window.speechSynthesis.speak(utterance);
     }
 
     function stopSpeak() {
       window.speechSynthesis?.cancel();
     }
+
+    function setSelectedLibraryButton(button) {
+      if (selectedLibraryButton) {
+        selectedLibraryButton.classList.remove('selected');
+      }
+      selectedLibraryButton = button || null;
+      if (selectedLibraryButton) {
+        selectedLibraryButton.classList.add('selected');
+      }
+    }
+
+    const PDF_BASE_PATH = '../../pdf/';
+
+    async function fetchPdfEntries() {
+      const manifestFiles = ['manifest.json', 'index.json', 'list.json', 'library.json'];
+      for (const file of manifestFiles) {
+        try {
+          const res = await fetch(PDF_BASE_PATH + file, { cache: 'no-store' });
+          if (!res.ok) continue;
+          const data = await res.json();
+          const entries = normalizePdfEntries(data);
+          if (entries.length) return dedupeEntries(entries);
+        } catch(_) {}
+      }
+      const listing = await fetchPdfDirectoryListing();
+      return dedupeEntries(listing);
+    }
+
+    function normalizePdfEntries(raw) {
+      if (!raw) return [];
+      const arr = Array.isArray(raw) ? raw : Array.isArray(raw.files) ? raw.files : [];
+      return arr.map(item => {
+        if (typeof item === 'string') {
+          return buildEntryFromPath(item);
+        }
+        if (item && typeof item === 'object') {
+          const path = item.path || item.url || item.href || '';
+          const name = item.name || item.title || '';
+          if (!path) return null;
+          const entry = buildEntryFromPath(path);
+          if (name) entry.name = name;
+          return entry;
+        }
+        return null;
+      }).filter(Boolean);
+    }
+
+    function buildEntryFromPath(path) {
+      const cleanPath = String(path).trim();
+      const normalized = cleanPath
+        .replace(/^\.\/+/, '')
+        .replace(/^\/+/, '');
+      const url = cleanPath.match(/^https?:/i) ? cleanPath : PDF_BASE_PATH + normalized;
+      const baseRaw = cleanPath.split('/').filter(Boolean).pop() || cleanPath;
+      let base;
+      try { base = decodeURIComponent(baseRaw); }
+      catch(_) { base = baseRaw; }
+      const display = base
+        .replace(/\.pdf$/i, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return { name: display || base, url };
+    }
+
+    function dedupeEntries(entries) {
+      const seen = new Set();
+      return entries.filter(entry => {
+        if (!entry || !entry.url) return false;
+        const key = entry.url.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).filter(entry => entry.url.toLowerCase().endsWith('.pdf'));
+    }
+
+    async function fetchPdfDirectoryListing() {
+      try {
+        const res = await fetch(PDF_BASE_PATH, { cache: 'no-store' });
+        if (!res.ok) return [];
+        const text = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'text/html');
+        const anchors = Array.from(doc.querySelectorAll('a[href]'));
+        return anchors
+          .map(a => a.getAttribute('href') || '')
+          .filter(href => !href.includes('..'))
+          .filter(href => href.toLowerCase().endsWith('.pdf'))
+          .map(href => buildEntryFromPath(href));
+      } catch(_) {
+        return [];
+      }
+    }
+
+    async function loadPresetPdf(entry, button) {
+      try {
+        const res = await fetch(entry.url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const arrBuf = await res.arrayBuffer();
+        pdfData = new Uint8Array(arrBuf);
+        lastFileName = entry.name || '';
+        lastFileSource = 'library';
+        setSelectedLibraryButton(button);
+        updateFileStatusText();
+        updateStartButtonState();
+        if (!document.body.classList.contains('playing')) {
+          try { startButton.focus({ preventScroll:true }); }
+          catch(_) { startButton.focus(); }
+        }
+      } catch(err) {
+        console.error('Library PDF load error:', err);
+        const msg = currentLang === 'fr'
+          ? 'Échec du chargement du PDF de la bibliothèque.'
+          : 'Failed to load the library PDF.';
+        alert(msg);
+      }
+    }
+
+    async function populatePdfLibrary() {
+      if (!pdfLibraryList || !libraryStatusEl) return;
+      setLibraryStatus('loading');
+      setSelectedLibraryButton(null);
+      try {
+        const entries = await fetchPdfEntries();
+        pdfLibraryList.innerHTML = '';
+        if (!entries.length) {
+          pdfLibraryList.hidden = true;
+          setLibraryStatus('empty');
+          return;
+        }
+        entries.forEach(entry => {
+          const li = document.createElement('li');
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'library-item-button';
+          btn.textContent = entry.name;
+          btn.addEventListener('click', () => loadPresetPdf(entry, btn));
+          li.appendChild(btn);
+          pdfLibraryList.appendChild(li);
+        });
+        pdfLibraryList.hidden = false;
+        setLibraryStatus('ready');
+      } catch(err) {
+        console.error('PDF library load error:', err);
+        pdfLibraryList.hidden = true;
+        setLibraryStatus('error');
+      }
+    }
+
+    populatePdfLibrary();
 
     chooseBtn.addEventListener('click', () => fileInput.click());
 
@@ -513,6 +773,8 @@
       const arrBuf = await file.arrayBuffer();
       pdfData = new Uint8Array(arrBuf);
       lastFileName = file.name || '';
+      lastFileSource = 'upload';
+      setSelectedLibraryButton(null);
       updateFileStatusText();
       updateStartButtonState();
       if (!document.body.classList.contains('playing')) {
