@@ -24,7 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlayScreen = document.getElementById('overlay-screen');
     const playModeSelect = document.getElementById('control-panel-play-mode');
     const soundOptionsSelect = document.getElementById('sound-options-select');
+    const soundVolumeSlider = document.getElementById('sound-volume-slider');
     const levelSelect = document.getElementById('level-select');
+    const selectedDifficultyLabel = document.getElementById('selected-difficulty-label');
+    const selectedSoundLabel = document.getElementById('selected-sound-label');
     const videoContainer = document.getElementById('video-container');
 
     let mediaPlayer = null;
@@ -47,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let recordedAudio = null;
     let mediaRecorder;
     let audioChunks = [];
+    let soundVolume = soundVolumeSlider ? Math.min(Math.max((Number(soundVolumeSlider.value) || 50) / 100, 0.01), 1) : 1;
 
     const selectSpacePromptButton = document.getElementById('select-space-prompt-button');
     const spacePromptModal = document.getElementById('space-prompt-selection-modal');
@@ -108,13 +112,36 @@ document.addEventListener('DOMContentLoaded', () => {
     
     
 
+    function getSelectedOptionLabel(selectElement) {
+        if (!selectElement) {
+            return '';
+        }
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        return selectedOption ? selectedOption.textContent.trim() : '';
+    }
+
+    function updateSummaryTexts() {
+        if (selectedDifficultyLabel) {
+            selectedDifficultyLabel.textContent = getSelectedOptionLabel(playModeSelect);
+        }
+        if (selectedSoundLabel) {
+            selectedSoundLabel.textContent = getSelectedOptionLabel(soundOptionsSelect);
+        }
+    }
+
     function populateSoundOptions() {
+        if (!soundOptionsSelect) {
+            return;
+        }
+
+        const previousValue = soundOptionsSelect.value || selectedSound || 'piano-sound';
+
         // Clear existing options
         soundOptionsSelect.innerHTML = '';
-        
+
         // Determine the current language; default to 'en'
         const currentLang = document.documentElement.lang || "en";
-        
+
         // Loop through the sound options and create option elements
         spacePromptSounds.forEach((option) => {
             const soundOption = document.createElement('option');
@@ -127,11 +154,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             soundOptionsSelect.appendChild(soundOption);
         });
-        
-        // Set the default selected value to 'piano-sound'
-        soundOptionsSelect.value = 'piano-sound';
-        // Also update the selectedSound variable so playPauseSound() knows which sound to play
-        selectedSound = 'piano-sound';
+
+        const hasPreviousValue = spacePromptSounds.some(option => option.value === previousValue);
+        if (hasPreviousValue) {
+            soundOptionsSelect.value = previousValue;
+            selectedSound = previousValue;
+        } else if (spacePromptSounds.length > 0) {
+            soundOptionsSelect.value = spacePromptSounds[0].value;
+            selectedSound = soundOptionsSelect.value;
+        } else {
+            selectedSound = 'none';
+        }
+
+        updateSummaryTexts();
     }
     
     
@@ -155,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
             default:
                 timestamps = [];
         }
+        updateSummaryTexts();
     }
 
     playModeSelect.addEventListener('change', () => {
@@ -172,15 +208,26 @@ document.addEventListener('DOMContentLoaded', () => {
             default:
                 timestamps = [];
         }
+        updateSummaryTexts();
     });
 
     soundOptionsSelect.addEventListener('change', () => {
-        if (soundOptionsSelect.value === 'record-own') {
+        selectedSound = soundOptionsSelect.value;
+        if (selectedSound === 'record-own') {
             openRecordModal();
-        } else {
-            selectedSound = soundOptionsSelect.value;
         }
+        updateSummaryTexts();
     });
+
+    if (soundVolumeSlider) {
+        soundVolumeSlider.addEventListener('input', () => {
+            const sliderValue = Number(soundVolumeSlider.value);
+            soundVolume = Math.min(Math.max((isNaN(sliderValue) ? 50 : sliderValue) / 100, 0.01), 1);
+            if (currentSound) {
+                currentSound.volume = soundVolume;
+            }
+        });
+    }
 
     function openRecordModal() {
         recordModal.style.display = 'block';
@@ -261,6 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (currentSound) {
+                currentSound.volume = soundVolume;
                 currentSound.play().catch(() => {});
             }
         }
@@ -274,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Please select a game mode to start.");
             return;
         }
-        if (!levelSelect.value) {
+        if (levelSelect && !levelSelect.value) {
             alert("Please select a level to start.");
             return;
         }
@@ -302,7 +350,10 @@ document.addEventListener('DOMContentLoaded', () => {
         currentTimestampIndex = 0;
         if (mediaPlayer) {
             mediaPlayer.currentTime = 0;
-            videoContainer.style.display = 'block';
+            if (videoContainer) {
+                videoContainer.classList.remove('hidden');
+                videoContainer.style.display = 'block';
+            }
             mediaPlayer.addEventListener('timeupdate', handleTimeUpdate);
             mediaPlayer.addEventListener('ended', handleMediaEnd);
             mediaPlayer.play().catch(() => {});
@@ -530,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const miscOptionsState = {};
 
     function populateMiscOptions() {
-        if (!Array.isArray(miscOptions) || miscOptions.length === 0) {
+        if (!miscOptionsContainer || !Array.isArray(miscOptions) || miscOptions.length === 0) {
             return;
         }
         miscOptions.forEach(option => {
@@ -562,26 +613,28 @@ document.addEventListener('DOMContentLoaded', () => {
         populateMiscOptions();
     }
 
-    miscOptionsButton.addEventListener('click', () => {
-        miscOptionsModal.style.display = 'block';
-    });
-    closeMiscOptionsModal.addEventListener('click', () => {
-        miscOptionsModal.style.display = 'none';
-    });
-    miscOptionsOkButton.addEventListener('click', () => {
-        miscOptionsModal.style.display = 'none';
-        // Example toggles from checkboxes:
-        if (miscOptionsState['mouse-click-option']) {
-            document.addEventListener('click', handleSpacebarPressEquivalent);
-        } else {
-            document.removeEventListener('click', handleSpacebarPressEquivalent);
-        }
-        if (miscOptionsState['right-click-next-option']) {
-            document.addEventListener('contextmenu', handleRightClickNextVideo);
-        } else {
-            document.removeEventListener('contextmenu', handleRightClickNextVideo);
-        }
-    });
+    if (miscOptionsModal && closeMiscOptionsModal && miscOptionsOkButton && miscOptionsButton && miscOptionsContainer) {
+        miscOptionsButton.addEventListener('click', () => {
+            miscOptionsModal.style.display = 'block';
+        });
+        closeMiscOptionsModal.addEventListener('click', () => {
+            miscOptionsModal.style.display = 'none';
+        });
+        miscOptionsOkButton.addEventListener('click', () => {
+            miscOptionsModal.style.display = 'none';
+            // Example toggles from checkboxes:
+            if (miscOptionsState['mouse-click-option']) {
+                document.addEventListener('click', handleSpacebarPressEquivalent);
+            } else {
+                document.removeEventListener('click', handleSpacebarPressEquivalent);
+            }
+            if (miscOptionsState['right-click-next-option']) {
+                document.addEventListener('contextmenu', handleRightClickNextVideo);
+            } else {
+                document.removeEventListener('contextmenu', handleRightClickNextVideo);
+            }
+        });
+    }
 
     function handleRightClickNextVideo(event) {
         event.preventDefault();
@@ -613,6 +666,31 @@ document.addEventListener('DOMContentLoaded', () => {
         showOverlayScreen();
     }
 
+    if (levelSelect) {
+        levelSelect.addEventListener('change', () => {
+            const selectedOption = levelSelect.options[levelSelect.selectedIndex];
+            if (selectedOption) {
+                const newVideoSource = selectedOption.getAttribute('data-video-source');
+                if (mediaPlayer) {
+                    mediaPlayer.src = newVideoSource;
+                    mediaPlayer.load();
+                    timestampsEasy   = selectedOption.getAttribute('data-timestamps-easy').split(',').map(Number);
+                    timestampsMedium = selectedOption.getAttribute('data-timestamps-medium').split(',').map(Number);
+                    timestampsHard   = selectedOption.getAttribute('data-timestamps-hard').split(',').map(Number);
+
+                    switch (selectedDifficulty) {
+                        case 'easy':
+                            timestamps = timestampsEasy;
+                            break;
+                        case 'medium':
+                            timestamps = timestampsMedium;
+                            break;
+                        case 'hard':
+                            timestamps = timestampsHard;
+                            break;
+                        default:
+                            timestamps = [];
+                    }
     levelSelect.addEventListener('change', () => {
         const selectedOption = levelSelect.options[levelSelect.selectedIndex];
         if (selectedOption) {
@@ -639,11 +717,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     default:
                         timestamps = [];
                 }
+                startButton.classList.remove('hidden');
+                videoContainer.classList.add('hidden');
             }
-            startButton.classList.remove('hidden');
-            videoContainer.classList.add('hidden');
-        }
-    });
+        });
+    } else {
+        startButton.classList.remove('hidden');
+    }
 
     selectSpacePromptButton.addEventListener('click', () => {
         populateSpacePromptImages();
@@ -661,8 +741,8 @@ document.addEventListener('DOMContentLoaded', () => {
     populateSpacePromptImages();
     loadMiscOptions();
     loadConfig();
-    if(levelSelect.value) {
+    if (levelSelect && levelSelect.value) {
         const event = new Event('change');
         levelSelect.dispatchEvent(event);
-      }
+    }
 });
