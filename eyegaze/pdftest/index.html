@@ -362,6 +362,7 @@
   <div id="hud"><span id="pageLabel">—</span></div>
 
   <pre id="textOut"></pre>
+  <audio id="pageTurnAudio" src="../../sounds/pageturned.mp3" preload="auto" aria-hidden="true"></audio>
   <div id="ocrHud">
     <div class="row">
       <label for="ocrLang">OCR:</label>
@@ -403,6 +404,7 @@
     const canvas = document.getElementById('pageCanvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const hudLabel = document.getElementById('pageLabel');
+    const pageTurnAudio = document.getElementById('pageTurnAudio');
     const ocrLangSel = document.getElementById('ocrLang');
     const autoRead = document.getElementById('autoRead');
     const ocrBar = document.getElementById('ocrBar');
@@ -453,6 +455,7 @@
     let currentTtsRate = DEFAULT_TTS_RATE;
     let allowTtsRateSave = false;
     let ttsOverride = false;
+    let allowPageTurnSound = false;
     let libraryEntries = [];
     let libraryMessageKey = 'loading';
 
@@ -1181,6 +1184,17 @@
       window.speechSynthesis?.cancel();
     }
 
+    function playPageTurnSound() {
+      if (!allowPageTurnSound || !pageTurnAudio) return;
+      try {
+        pageTurnAudio.currentTime = 0;
+        const playPromise = pageTurnAudio.play();
+        if (playPromise?.catch) {
+          playPromise.catch(() => {});
+        }
+      } catch (_) {}
+    }
+
     ['pagehide', 'beforeunload'].forEach(evt => {
       window.addEventListener(evt, () => {
         try { stopSpeak(); } catch (_) {}
@@ -1260,8 +1274,10 @@
         totalPages = pdfDoc.numPages;
         currentPageNum = 1;
         textOut.textContent = '';
+        allowPageTurnSound = false;
         await renderPage(currentPageNum);
         setHUD();
+        allowPageTurnSound = true;
       } catch(err) {
         console.error('PDF load error:', err);
         const msg = (currentLang === 'fr' ? 'Erreur de chargement du PDF: ' : 'PDF load error: ')
@@ -1370,6 +1386,7 @@
       currentPageNum = (currentPageNum % totalPages) + 1;
       await renderPage(currentPageNum);
       setHUD();
+      playPageTurnSound();
     }
 
     async function goToPreviousPage() {
@@ -1377,6 +1394,7 @@
       currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
       await renderPage(currentPageNum);
       setHUD();
+      playPageTurnSound();
     }
 
     async function handleAdvanceRequest(direction = 1) {
