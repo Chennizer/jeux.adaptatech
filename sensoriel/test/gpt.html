@@ -1,1038 +1,264 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Routine matinale — Reveal BYOL (stable viewport sizing)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/reveal.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/theme/white.css" id="theme">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/highlight/monokai.css">
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Candle of Memory — Single Switch</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
   <style>
-    :root{
-      --ink:#1a1a1a; --muted:#52606d; --green:#294936; --mint:#ADF1D2; --card-br:#e6eaef; --shadow:0 4px 18px rgba(0,0,0,.10);
-      --shell-gap:  clamp(10px, 2vmin, 22px);
-      --grid-gap:   clamp(10px, 2vmin, 22px);
-      --content-inset: clamp(10px, 3vmin, 36px);
-
-      --safe-top:    max(env(safe-area-inset-top), 18px);
-      --safe-bottom: max(env(safe-area-inset-bottom), 18px);
-      --ui-reserve:  clamp(48px, 7vh, 84px);
-
-      --side-w:    clamp(120px, 14vw, 220px);
-      --side-pad:  clamp(8px, 2vmin, 18px);
-      --title-h:   clamp(52px, 9vh, 120px);
-
-      --rows: 2; --cols: 2;
-      --tile-min: 160px; --tile-max: 520px;
-
-      --bottom-ui: var(--ui-reserve);
+    html,body{margin:0;height:100%;background:#0b0b12;color:#fff;overflow:hidden;font-family:system-ui, Segoe UI, Arial;}
+    #hint{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:20px; padding:10px 14px; border-radius:12px;
+      background:rgba(255,255,255,0.1); backdrop-filter:blur(4px);
+      border:1px solid rgba(255,255,255,0.2); font-size:14px; letter-spacing:.2px;
+      user-select:none
     }
-
-    *,*::before,*::after{ box-sizing:border-box; }
-    html,body{ height:100%; margin:0; }
-    body{ overflow:hidden; }
-    .reveal, .reveal .slides { height:100vh; width:100vw; }
-    .reveal .slides > section { height:100vh; width:100vw; padding:0; }
-    .reveal .slides{ color:var(--ink); text-align:left; }
-
-    .reveal h1, .reveal h2{
-      text-align:center; margin:0; color:var(--green); text-transform:uppercase; font-weight:800; letter-spacing:.5px;
-      line-height:1.1;
+    #topbar{
+      position:fixed; top:10px; left:50%; transform:translateX(-50%);
+      display:flex; gap:10px; align-items:center;
+      background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2);
+      border-radius:12px; padding:6px 10px; font-size:13px
     }
-    .reveal h1{ font-size:clamp(2.6rem,6vw,5rem) }
-    .reveal h2{ font-size:clamp(2.0rem,4.6vw,3.6rem) }
-    .note-tip{ font-size:.95rem; color:var(--muted); }
-    a{ color:#D36135; }
-
-    .slide-shell{
-      display:grid; height:100vh; width:100vw; overflow:hidden;
-      grid-template-columns: calc(100vw - var(--side-w) - var(--shell-gap)) var(--side-w);
-      gap: var(--shell-gap);
-      padding: var(--safe-top) var(--shell-gap) calc(var(--safe-bottom) + var(--ui-reserve)) var(--shell-gap);
-    }
-    .shell-main{
-      display:flex;
-      flex-direction:column;
-      gap: var(--main-gap, var(--shell-gap));
-      min-width:0;
-      min-height:0;
-    }
-    .title-row{ height:var(--title-h); display:flex; align-items:center; justify-content:center; }
-    .grid-wrap{ flex:1 1 auto; min-height:0; min-width:0; }
-    .inset{ padding: 0 var(--content-inset) var(--content-inset); }
-
-    .shell-side{
-      display:grid;
-      grid-template-rows: auto auto;
-      align-content:start;
-      gap: clamp(8px, 1.6vmin, 14px);
-      padding: var(--side-pad);
-      min-height:0;
-      justify-items:stretch;
-      align-items:start;
-    }
-    .side-card, .side-btn{
-      background: transparent; border: none; box-shadow:none; padding:0;
-      display:flex; align-items:center; justify-content:center; min-height:0;
-    }
-    .side-btn{ cursor:pointer; }
-    .side-card img, .side-btn img{
-      width: 100%; height: auto; max-height: min(28vh, 40svh); object-fit: contain; display: block; border-radius:14px;
-      transform-origin:center center;
-    }
-    .side-btn:focus-visible{ outline:3px solid var(--mint); outline-offset:4px; border-radius:14px; }
-
-    /* ========= Smart grid with scale knob ========= */
-    .sized-grid{
-      width:100%; height:100%;
-      display:grid; gap: var(--grid-gap);
-
-      --tile-scale: 1;
-      --avail-w: calc(100vw - var(--side-w) - 3 * var(--shell-gap) - 2 * var(--content-inset));
-      --avail-h: calc(100vh - var(--safe-top) - var(--title-h) - var(--shell-gap) - var(--bottom-ui));
-
-      --tile-w: calc(((var(--avail-w) - (var(--cols) - 1) * var(--grid-gap)) / var(--cols)) * var(--tile-scale));
-      --tile-h: calc(((var(--avail-h) - (var(--rows) - 1) * var(--grid-gap)) / var(--rows)) * var(--tile-scale));
-
-      --tile-size: clamp(var(--tile-min), min(var(--tile-w), var(--tile-h)), var(--tile-max));
-
-      grid-template-columns: repeat(var(--cols), var(--tile-size));
-      grid-template-rows:    repeat(var(--rows), var(--tile-size));
-      place-content:center;
-      min-width:0; min-height:0;
-    }
-
-    .tile{
-      width:100%; height:100%; border:2px solid var(--card-br); border-radius:18px; background:#fff; box-shadow:var(--shadow);
-      display:flex; align-items:center; justify-content:center; overflow:hidden; aspect-ratio:1/1;
-      transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; cursor:pointer;
-    }
-    .tile:hover{ transform:translateY(-1px); border-color:#ADF1D2; box-shadow:0 4px 14px rgba(0,0,0,.12); }
-    .tile img{ width:92%; height:92%; object-fit:contain; display:block; }
-
-    .badge{ display:inline-block; padding:1rem 1.6rem; border-radius:16px; border:1px solid #294936; color:#fff; background:#294936; font-weight:700; }
-
-    .vid-slide{ padding:0 !important; background:#000; }
-    .vid-wrap{ position:relative; width:100%; height:100%; background:#000; }
-    .vid{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
-    .vid-overlay{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.55); color:#fff; padding:.6rem 1rem; border-radius:10px; font-size:1rem; display:none; z-index:2; cursor:pointer; }
-
-    body.immersive .reveal .controls, body.immersive .reveal .progress, body.immersive .reveal .slide-number { display:none !important; }
-    :focus-visible{ outline:3px solid var(--mint); outline-offset:2px; border-radius:10px; }
-
-    @media (max-width: 900px){
-      .slide-shell{ grid-template-columns: 1fr; }
-      .shell-side{ grid-template-rows: auto auto; grid-auto-rows: 1fr; }
-    }
-
-    /* ===== Drag & transfer ===== */
-    .transfer-wrap{
-      height:100%;
-      display:grid;
-      grid-template-columns: 1fr 1fr; /* adjust if you want asymmetric columns */
-      gap: var(--grid-gap);
-      align-items:stretch;
-      padding-bottom: calc(var(--content-inset) * 0.5);
-      column-gap: clamp(24px, 4vmin, 60px);
-      row-gap: clamp(16px, 3vmin, 40px);
-      padding-inline: clamp(12px, 3vmin, 36px);
-      min-height:0;
-    }
-    .bin{
-      border: 3px solid color-mix(in srgb, var(--bin-accent, #294936) 18%, var(--card-br));
-      border-radius: 16px;
-      padding: clamp(8px, 1.6vmin, 16px);
-      background:#fff;
-      box-shadow: var(--shadow);
-      position: relative;
-      overflow: hidden;           /* no scrollbars; we'll scale inside */
-      display: grid;
-      place-items: start center;  /* center scaled grid horizontally */
-    }
-    .bin.drag-over{
-      border: 3px solid color-mix(in srgb, var(--bin-accent, #294936) 65%, var(--card-br));
-      box-shadow:
-        0 0 0 4px color-mix(in srgb, var(--bin-accent, #294936) 20%, transparent) inset,
-        0 6px 22px rgba(0,0,0,.10);
-    }
-
-    /* Inner grid that gets scaled to fit */
-    #drag-transfer .bin-grid{
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 18vmin, 220px), 1fr));
-      gap: var(--grid-gap);
-      transform-origin: top left;
-      will-change: transform;
-      justify-self: center; /* keep it centered after scaling */
-    }
-
-    .draggable{ background: transparent; border: none; padding: 0; display:flex; align-items:center; justify-content:center; cursor: grab; border-radius: 14px; }
-    .draggable:active{ cursor: grabbing; }
-    .draggable img{ width: 100%; height: auto; aspect-ratio: 1/1; object-fit: contain; display: block; border-radius: 14px; }
-    .transfer-controls{ margin-bottom: clamp(8px, 1.6vmin, 16px); display:flex; gap:.6rem; align-items:center; justify-content:flex-end; }
-    .btn{ border:1px solid var(--card-br); background:#f9fafb; padding:.5em .8em; border-radius:10px; cursor:pointer; font-weight:600; }
-    .btn:hover{ background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.08); }
-
-    /* BIG date slide */
-    .date-giant{
-      display:flex;
-      gap: .6em;
-      align-items: baseline;
-      justify-content: center;
-      flex-wrap: wrap;
-      color: var(--green);
-      text-align: center;
-    }
-    .date-giant .weekday{ font-weight: 900; font-size: clamp(2rem, 6vw, 5rem); text-transform: capitalize; }
-    .date-giant .day    { font-weight: 900; font-size: clamp(2.4rem, 8vw, 6rem); }
-    .date-giant .month  { font-weight: 800; font-size: clamp(2rem, 6vw, 5rem); text-transform: lowercase; }
-
-    .step-group{ display:inline-flex; gap:.35em; align-items:baseline; }
-    .reveal-step{ opacity:0; transform: translateY(6px); transition: opacity .22s ease, transform .22s ease; }
-    .reveal-step.show{ opacity:1; transform:none; }
-    .dot{ font-weight:900; font-size: clamp(2rem, 5vw, 4rem); opacity:.6; }
-
-    /* ===== Clean "tap" activation animation for side buttons ===== */
-    @keyframes tap-scale { 0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)} }
-    @media (prefers-reduced-motion: reduce){ .side-btn.activate-pulse img { animation: none !important; } }
-    .side-btn.activate-pulse img { animation: tap-scale 220ms ease-out; will-change: transform; }
-
-    /* ===== Fullscreen blackout overlay during remote waits ===== */
-    #waitOverlay{
-      position:fixed;
-      inset:0;
-      background:#000;
-      color:#fff;
-      z-index: 20000;
-      display:none;
-      align-items:center;
-      justify-content:center;
-      text-align:center;
-      padding: 2rem;
-    }
-    #waitOverlay.show{ display:flex; }
-    #waitOverlay .msg{
-      font-size: clamp(1.2rem, 3.5vw, 2rem);
-      font-weight: 800;
-      letter-spacing:.5px;
-    }
-    #waitOverlay .sub{
-      margin-top:.75rem;
-      font-size: clamp(.9rem, 2.3vw, 1.1rem);
-      opacity:.8;
-    }
+    #topbar label{display:flex; gap:6px; align-items:center; cursor:pointer;}
+    input[type="checkbox"]{transform:scale(1.2)}
   </style>
 </head>
 <body>
-
-<div id="playerPortal" aria-hidden="true" style="position:fixed; inset:0; background:#000; z-index:10000; display:none;"></div>
-
-<!-- Blackout overlay -->
-<div id="waitOverlay" aria-hidden="true" role="status">
-  <div>
-    <div class="msg">en attente d'une réponse</div>
-    <div class="sub">Appuyez sur Q pour revenir au menu, R pour aller au début</div>
+  <div id="topbar">
+    <label><input id="highContrast" type="checkbox"> High contrast</label>
+    <label><input id="reducedMotion" type="checkbox"> Reduced motion</label>
   </div>
-</div>
+  <div id="hint">Press SPACE (or click/tap) to brighten the flame and release memories</div>
 
-<div class="reveal">
-  <div class="slides">
-    <!-- Intro -->
-    <section data-background-color="#DFF3E4">
-      <div class="slide-shell">
-        <div class="shell-main">
-          <div class="title-row"><h1>Routine matinale</h1></div>
-          <div class="grid-wrap" style="display:flex; align-items:center; justify-content:center; flex-direction:column;">
-            <p class="note-tip">← → ↑ ↓ • <kbd>Esc</kbd> plan • <kbd>S</kbd> notes • Espace = interaction</p>
-            <p class="badge" id="startDeckBtn" style="cursor:pointer; font-size:clamp(1rem,2.4vw,1.6rem);">Plein écran & commencer ➡️</p>
-          </div>
-        </div>
-        <aside class="shell-side">
-          <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-        </aside>
-      </div>
-    </section>
+  <script>
+    // --- Scene state ---
+    let embers = [];
+    let glow = 0;
+    let baseFlicker = 0.15;
+    let t = 0;
+    let hc = false, rm = false;
+    let metrics = null;
 
-    <!-- BIG DATE (progressive) -->
-    <section id="date-slide">
-      <div class="slide-shell">
-        <div class="shell-main">
-          <div class="title-row"><h2>Date du jour</h2></div>
-          <div class="grid-wrap inset" style="display:flex; align-items:center; justify-content:center; flex-direction:column; gap:1rem;">
-            <div id="dateBig" class="date-giant" aria-live="polite">
-              <span id="d-weekday" class="weekday reveal-step"></span>
-              <span class="step-group reveal-step"><span class="dot">•</span><span id="d-day" class="day"></span></span>
-              <span class="step-group reveal-step"><span class="dot">•</span><span id="d-month" class="month"></span></span>
-            </div>
-            <p id="dateHint" class="note-tip" aria-live="polite">Appuyez sur <kbd>Espace</kbd> pour révéler la date</p>
-          </div>
-        </div>
-        <aside class="shell-side">
-          <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- Plan -->
-    <section>
-      <div class="slide-shell">
-        <div class="shell-main">
-          <div class="title-row"><h2>Plan du jour</h2></div>
-          <div class="grid-wrap inset">
-            <ul style="font-size:clamp(1.1rem,2.2vw,1.6rem); line-height:1.6;">
-              <li class="fragment">Accueil &amp; météo</li>
-              <li class="fragment">Choix d’activités</li>
-              <li class="fragment">Pause sensorielle</li>
-              <li class="fragment">Ateliers</li>
-            </ul>
-          </div>
-        </div>
-        <aside class="shell-side">
-          <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- Weather group -->
-    <section>
-      <section id="weather-menu" style="--title-h:9vh; --main-gap:40px;">
-        <div class="slide-shell">
-          <div class="shell-main">
-            <div class="title-row"><h2>Météo</h2></div>
-            <div class="grid-wrap inset">
-              <div id="weatherGrid" class="sized-grid" style="--rows:2; --cols:2; --tile-scale:0.8; --grid-gap:60px;">
-                <button class="tile" data-goto="1" aria-label="Soleil"><img src="../../images/sun.png" alt="Soleil"/></button>
-                <button class="tile" data-goto="2" aria-label="Nuages"><img src="../../images/cloud.png" alt="Nuages"/></button>
-                <button class="tile" data-goto="3" aria-label="Pluie"><img src="../../images/rain.png" alt="Pluie"/></button>
-                <button class="tile" data-goto="4" aria-label="Neige"><img src="../../images/snow.png" alt="Neige"/></button>
-              </div>
-            </div>
-          </div>
-          <aside class="shell-side">
-            <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-            <button id="remoteBtnWeather" class="side-btn" title="Demander (contrôleur)"><img src="../../images/ch.png" alt="Contrôleur"/></button>
-          </aside>
-        </div>
-      </section>
-
-      <section id="weather-sun">
-        <div class="slide-shell">
-          <div class="shell-main"><div class="title-row"><h2>☀️ Il fait soleil</h2></div><div class="grid-wrap inset" style="display:flex;align-items:center;">Prévoyez chapeau et lunettes de soleil 😎</div></div>
-          <aside class="shell-side"><div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div></aside>
-        </div>
-      </section>
-      <section id="weather-cloud">
-        <div class="slide-shell">
-          <div class="shell-main"><div class="title-row"><h2>☁️ Ciel nuageux</h2></div><div class="grid-wrap inset" style="display:flex;align-items:center;">Temps gris, mais parfait pour une promenade rapide.</div></div>
-          <aside class="shell-side"><div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div></aside>
-        </div>
-      </section>
-      <section id="weather-rain">
-        <div class="slide-shell">
-          <div class="shell-main"><div class="title-row"><h2>🌧️ Il pleut</h2></div><div class="grid-wrap inset" style="display:flex;align-items:center;">Parapluie conseillé !</div></div>
-          <aside class="shell-side"><div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div></aside>
-        </div>
-      </section>
-      <section id="weather-snow">
-        <div class="slide-shell">
-          <div class="shell-main"><div class="title-row"><h2>❄️ Il neige</h2></div><div class="grid-wrap inset" style="display:flex;align-items:center;">On s’habille chaudement, bottes et gants !</div></div>
-          <aside class="shell-side"><div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div></aside>
-        </div>
-      </section>
-
-      <section id="slide-game" class="vid-slide">
-        <div class="slide-shell">
-          <div class="shell-main">
-            <div class="title-row"><h2>Activité intégrée</h2></div>
-            <div class="grid-wrap inset">
-              <div class="vid-wrap">
-                <div class="note-tip" id="overlayHint" style="position:absolute;left:12px;bottom:12px;background:rgba(0,0,0,.45);color:#fff;padding:.35em .6em;border-radius:8px;">Astuce: ⛶ pour plein écran</div>
-                <iframe id="gameFrame" src="../../gaming/cloud/index.html?requiredPresses=5" title="Activité intégrée"
-                        allow="autoplay; fullscreen; clipboard-read; clipboard-write; gamepad; accelerometer; gyroscope"
-                        style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#000" allowfullscreen referrerpolicy="no-referrer"></iframe>
-              </div>
-            </div>
-          </div>
-          <aside class="shell-side">
-            <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-          </aside>
-        </div>
-      </section>
-    </section>
-
-    <!-- Branching videos -->
-    <section id="branch-group">
-      <section id="branch-root">
-        <div class="slide-shell">
-          <div class="shell-main">
-            <div class="title-row"><h2>Choisis une activité vidéo</h2></div>
-            <div class="grid-wrap inset" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;align-content:start;">
-              <button class="badge" id="localOpt1" style="padding:1rem;font-size:1.05rem;">🎵 Slippery Fish (local)</button>
-              <button class="badge" id="localOpt2" style="padding:1rem;font-size:1.05rem;">🥁 Africa (local)</button>
-              <div id="remoteStatus" class="note-tip" aria-live="polite" style="grid-column:1/-1;margin-top:.75rem;"></div>
-            </div>
-          </div>
-          <aside class="shell-side">
-            <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-            <button id="remoteBtnVideos" class="side-btn" title="Demander (contrôleur)"><img src="../../images/ch.png" alt="Contrôleur"/></button>
-          </aside>
-        </div>
-      </section>
-
-      <section id="video1" class="vid-slide"><div class="vid-wrap"><div id="overlay1" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div><video id="vid1" class="vid" preload="auto" playsinline></video></div></section>
-      <section id="video2" class="vid-slide"><div class="vid-wrap"><div id="overlay2" class="vid-overlay">Cliquez pour lancer en plein écran — appuyez sur <b>Q</b> pour quitter</div><video id="vid2" class="vid" preload="auto" playsinline></video></div></section>
-    </section>
-
-    <!-- Drag & transfer -->
-    <section id="drag-transfer">
-      <div class="slide-shell">
-        <div class="shell-main">
-          <div class="title-row"><h2>Choisis et déplace les images</h2></div>
-          <div class="grid-wrap inset" style="display:flex;flex-direction:column;min-height:0;">
-            <div class="transfer-controls">
-              <button id="resetTransfer" class="btn">Réinitialiser</button>
-            </div>
-
-            <!-- Optional labels/images above boxes -->
-            <div class="note-tip" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--grid-gap);align-items:end;margin-bottom:.5rem;">
-              <div style="display:flex;align-items:center;gap:.6rem;justify-content:center;">
-                <img src="https://placehold.co/48x48" alt="Maison" width="48" height="48" style="border-radius:8px;">
-                <span>À la maison</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:.6rem;justify-content:center;">
-                <img src="https://placehold.co/48x48" alt="École" width="48" height="48" style="border-radius:8px;">
-                <span>À l’école</span>
-              </div>
-            </div>
-
-            <div class="transfer-wrap">
-              <div id="bin-left"  class="bin" aria-label="Colonne gauche (source)"><!-- .bin-grid is inserted by JS --></div>
-              <div id="bin-right" class="bin" aria-label="Colonne droite (cible)"><!-- .bin-grid is inserted by JS --></div>
-            </div>
-          </div>
-        </div>
-        <aside class="shell-side">
-          <div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- Code -->
-    <section>
-      <div class="slide-shell">
-        <div class="shell-main">
-          <div class="title-row"><h2>Extrait de code</h2></div>
-          <div class="grid-wrap inset">
-            <pre><code class="language-js">
-function startMorningRoutine(){["Météo","Choix","Pause","Ateliers"].forEach((s,i)=>console.log(`#${i+1}:`,s));}
-startMorningRoutine();
-            </code></pre>
-          </div>
-        </div>
-        <aside class="shell-side"><div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div></aside>
-      </div>
-    </section>
-
-    <!-- End -->
-    <section data-background-color="#ADF1D2">
-      <div class="slide-shell">
-        <div class="shell-main">
-          <div class="title-row"><h2>Merci!</h2></div>
-          <div class="grid-wrap inset" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;">
-            <p>Docs Reveal.js : <a href="https://revealjs.com" target="_blank" rel="noreferrer">revealjs.com</a></p>
-            <p class="note-tip">Impression PDF : ajoutez <code>?print-pdf</code> à l’URL.</p>
-          </div>
-        </div>
-        <aside class="shell-side"><div class="side-card"><img src="../../images/owlval.png" alt="Hibou"></div></aside>
-      </div>
-    </section>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/reveal.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/markdown/markdown.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/markdown/marked.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/notes/notes.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@4/plugin/highlight/highlight.js"></script>
-<script>
-  const qs = new URL(location.href).searchParams;
-  const room = qs.get('room') || 'test';
-  const WS_URL = `wss://ws-relay.gui98789.workers.dev/ws/${encodeURIComponent(room)}`;
-  const deckTitle = 'Routine matinale';
-  const KNOWN_VIDEOS = { v1: 'https://bucket.adaptatech.org/amyliz-slipperyfish.mp4', v2: 'https://bucket.adaptatech.org/africa.mp4' };
-  const PICTO_SRC = '../../images/pictos/';
-  const TRANSFER_PICTOS = ['apple.png','banana.png','basketball.png','boat.png','book.png','brush.png','bowl.png','broccoli.png'];
-
-  Reveal.initialize({
-    disableLayout: true,
-    hash: true, slideNumber: true, controls: true, progress: true,
-    center: false, history: true, transition: 'slide',
-    keyboard: { 32: null }, // keep Space free for our custom handler
-    plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
-  });
-
-  // Start button
-  document.getElementById("startDeckBtn").addEventListener("click", async ()=>{
-    try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch {}
-    Reveal.next();
-  });
-
-  // Weather buttons
-  document.querySelectorAll('#weatherGrid .tile[data-goto]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const v = parseInt(btn.dataset.goto,10) || 0;
-      const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
-      const sun = document.getElementById('weather-sun');
-      const h = sun ? sections.findIndex(s => s.contains(sun)) : 0;
-      if (h >= 0) Reveal.slide(h, v);
-    });
-  });
-
-  // Game fullscreen handling
-  const gameFrame=document.getElementById('gameFrame');
-  const overlayHint=document.getElementById('overlayHint');
-  function callGame(fnName, ...args){ try{ const cw=gameFrame?.contentWindow; if(cw && typeof cw[fnName]==='function') cw[fnName](...args);}catch{} }
-  function enterGameMode(){
-    document.body.classList.add('immersive');
-    callGame('ADAPTATECH_game_onResume');
-    if(gameFrame?.requestFullscreen){
-      gameFrame.requestFullscreen().then(()=>{ overlayHint.style.display='none'; }).catch(()=>{ overlayHint.style.display=''; });
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      noStroke();
+      document.getElementById('highContrast').addEventListener('change', e => hc = e.target.checked);
+      document.getElementById('reducedMotion').addEventListener('change', e => rm = e.target.checked);
     }
-  }
-  function exitGameMode(){
-    document.body.classList.remove('immersive');
-    callGame('ADAPTATECH_game_onPause');
-    if(document.fullscreenElement===gameFrame) document.exitFullscreen().catch(()=>{});
-  }
-  window.ADAPTATECH_exitAndNext=async function(){
-    exitGameMode();
-    try{
-      if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
-      else if(document.fullscreenElement!==document.documentElement){ await document.exitFullscreen(); await document.documentElement.requestFullscreen(); }
-    }catch{}
-    Reveal.next();
-  };
-  Reveal.on('slidechanged',(evt)=>{
-    const now=evt.currentSlide, prev=evt.previousSlide;
-    if(now && now.id==='slide-game') enterGameMode();
-    else if(prev && prev.id==='slide-game') exitGameMode();
-  });
+    function windowResized(){ resizeCanvas(windowWidth, windowHeight); }
 
-  // Video logic
-  const remoteStatus = document.getElementById('remoteStatus');
-  const videoElems = { v1: document.getElementById('vid1'), v2: document.getElementById('vid2') };
-  const overlays  = { v1: document.getElementById('overlay1'), v2: document.getElementById('overlay2') };
-  const portal = document.getElementById('playerPortal');
-  const placeholders = { v1: videoElems.v1?.parentElement, v2: videoElems.v2?.parentElement };
-  let inputsLocked=false, currentVidKey=null, stickRAF=null, stickTarget=null;
-  const blockKeys=new Set([' ','Spacebar','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','PageUp','PageDown','Home','End','Escape','Tab']);
+    function computeMetrics(){
+      const cx = width/2;
+      const cy = height*0.74;                 // sits a little lower
+      const w  = min(170, width*0.12);
+      const h  = min(420, height*0.52);       // TALLER candle
+      const r  = 20;
 
-  function onKeyCapture(e){
-    if (!inputsLocked) return;
-    if (e.key === 'q' || e.key === 'Q'){ e.preventDefault(); e.stopImmediatePropagation(); stopCurrentVideoAndReturn(branchHIndex()); return; }
-    if (blockKeys.has(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); }
-  }
-  function onWheelCapture(e){ if(inputsLocked){ e.preventDefault(); e.stopImmediatePropagation(); } }
-  function onTouchMoveCapture(e){ if (inputsLocked){ e.preventDefault(); e.stopImmediatePropagation(); } }
-  function onPointerDownCapture(e){
-    if (!inputsLocked) return;
-    if (e.target.closest('video') || e.target.closest('.vid-overlay')) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-  }
-  function lockDeckInputs(){
-    inputsLocked=true;
-    Reveal.configure({ keyboard:false, touch:false, controls:false, overview:false });
-    window.addEventListener('keydown', onKeyCapture, true);
-    window.addEventListener('keyup', onKeyCapture, true);
-    window.addEventListener('wheel', onWheelCapture, {capture:true, passive:false});
-    window.addEventListener('touchmove', onTouchMoveCapture, {capture:true, passive:false});
-    window.addEventListener('pointerdown', onPointerDownCapture, true);
-  }
-  function unlockDeckInputs(){
-    inputsLocked=false;
-    Reveal.configure({ keyboard:true, touch:true, controls:true, overview:true });
-    window.removeEventListener('keydown', onKeyCapture, true);
-    window.removeEventListener('keyup', onKeyCapture, true);
-    window.removeEventListener('wheel', onWheelCapture, true);
-    window.removeEventListener('touchmove', onTouchMoveCapture, true);
-    window.removeEventListener('pointerdown', onPointerDownCapture, true);
-    stopStickToSlide();
-  }
-  function branchHIndex(){
-    const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
-    return sections.findIndex(s => s.id === 'branch-group');
-  }
-  async function enterFullscreen(el){ try{ if(el?.requestFullscreen) await el.requestFullscreen(); }catch{} }
-  async function exitFullscreenIfOwned(el){ try{ if(document.fullscreenElement===el) await document.exitFullscreen(); }catch{} }
-  function startStickToSlide(h, v){
-    stickTarget = {h, v};
-    const tick = ()=>{
-      if (!inputsLocked || !stickTarget) return;
-      const cur = Reveal.getIndices();
-      if (cur.h !== stickTarget.h || cur.v !== stickTarget.v) Reveal.slide(stickTarget.h, stickTarget.v);
-      stickRAF = requestAnimationFrame(tick);
-    };
-    stopStickToSlide(); stickRAF = requestAnimationFrame(tick);
-  }
-  function stopStickToSlide(){ if (stickRAF) cancelAnimationFrame(stickRAF); stickRAF = null; stickTarget = null; }
-  function usePortal(key){
-    const vid = videoElems[key];
-    if (!portal.contains(vid)) portal.appendChild(vid);
-    portal.style.display = 'block'; portal.setAttribute('aria-hidden','false');
-  }
-  function restoreFromPortal(key){
-    const vid = videoElems[key]; const wrap = placeholders[key];
-    if (wrap && !wrap.contains(vid)) wrap.appendChild(vid);
-    portal.style.display = 'none'; portal.setAttribute('aria-hidden','true');
-  }
-  async function playVideoUnderBranch(key, url, {forcePortal=false}={}){
-    const h = branchHIndex(); if(h < 0) return;
-    const vid = videoElems[key]; const other = videoElems[key === 'v1' ? 'v2' : 'v1'];
-    try { other.pause(); } catch {}
-    vid.src = url || KNOWN_VIDEOS[key]; vid.currentTime = 0;
-    lockDeckInputs();
-    const vIndex = (key === 'v1') ? 1 : 2;
-    Reveal.slide(h, vIndex); startStickToSlide(h, vIndex);
-    await new Promise(r => requestAnimationFrame(r)); try { vid.load(); } catch {}
-    currentVidKey = key; const overlay = overlays[key];
-    const tryNative = async ()=>{ try { await enterFullscreen(vid); await vid.play(); if(overlay) overlay.style.display='none'; return true; } catch { return false; } };
-    const startInPortal = async ()=>{ usePortal(key); await new Promise(r => setTimeout(r, 0)); try { await vid.play(); } catch {} };
-    if (forcePortal) { await startInPortal(); }
-    else {
-      const ok = await tryNative();
-      if (!ok){
-        if (overlay){ overlay.textContent = 'Cliquez pour lancer la vidéo (plein écran) — appuyez sur Q pour quitter'; overlay.style.display = 'block'; }
-        const onFirstPointer = async ()=>{ overlay?.removeEventListener('pointerup', onFirstPointer); vid.removeEventListener('pointerup', onFirstPointer); if (!(await tryNative())) { await startInPortal(); if (overlay) overlay.style.display='none'; } };
-        overlay?.addEventListener('pointerup', onFirstPointer, { once:true });
-        vid.addEventListener('pointerup', onFirstPointer, { once:true });
-        setTimeout(async ()=>{ if (inputsLocked && currentVidKey === key && !document.fullscreenElement) { await startInPortal(); if (overlay) overlay.style.display='none'; } }, 100);
-      }
-    }
-  }
-  async function stopCurrentVideoAndReturn(targetH = branchHIndex()){
-    stopStickToSlide();
-    if(currentVidKey){
-      const vid = videoElems[currentVidKey];
-      try { await exitFullscreenIfOwned(vid); } catch {}
-      try { vid.pause(); } catch {}
-      try { vid.removeAttribute('src'); } catch {}
-      try { vid.src = ''; vid.load(); vid.currentTime = 0; } catch {}
-      restoreFromPortal(currentVidKey);
-    }
-    if (typeof targetH === 'number' && targetH >= 0){ Reveal.slide(targetH, 0); }
-    else { const h = branchHIndex(); if (h >= 0) Reveal.slide(h, 0); }
-    currentVidKey = null; unlockDeckInputs(); if(remoteStatus) remoteStatus.textContent = '';
-  }
-  document.getElementById('localOpt1')?.addEventListener('click', ()=> playVideoUnderBranch('v1', KNOWN_VIDEOS.v1, {forcePortal:false}));
-  document.getElementById('localOpt2')?.addEventListener('click', ()=> playVideoUnderBranch('v2', KNOWN_VIDEOS.v2, {forcePortal:false}));
-  videoElems.v1.addEventListener('ended', ()=> stopCurrentVideoAndReturn(branchHIndex()));
-  videoElems.v2.addEventListener('ended', ()=> stopCurrentVideoAndReturn(branchHIndex()));
-  videoElems.v1.addEventListener('pause', ()=>{ if(inputsLocked && !videoElems.v1.ended) videoElems.v1.play().catch(()=>{}); });
-  videoElems.v2.addEventListener('pause', ()=>{ if (inputsLocked && !videoElems.v2.ended) videoElems.v2.play().catch(()=>{}); });
-  document.addEventListener('fullscreenchange', async ()=>{
-    if(!inputsLocked || !currentVidKey) return;
-    const vid = videoElems[currentVidKey]; const overlay = overlays[currentVidKey];
-    if(!document.fullscreenElement && !vid.ended){
-      try { await enterFullscreen(vid); if(overlay) overlay.style.display='none'; }
-      catch { usePortal(currentVidKey); if(overlay){ overlay.textContent='Cliquez pour reprendre — Q pour quitter'; overlay.style.display='none'; } }
-    }
-  });
+      const topY = cy - h;
+      const wickHeight = h * 0.12;
+      const wickBaseY  = topY + 14;
+      const wickTopY   = wickBaseY - wickHeight;
 
-  // ===== Blackout overlay helpers =====
-  const waitOverlay = document.getElementById('waitOverlay');
-  function showWait(msg){
-    if (!waitOverlay) return;
-    const m = waitOverlay.querySelector('.msg');
-    if (m) m.textContent = msg || "en attente d'une réponse";
-    waitOverlay.classList.add('show');
-    waitOverlay.setAttribute('aria-hidden','false');
-  }
-  function hideWait(){
-    if (!waitOverlay) return;
-    waitOverlay.classList.remove('show');
-    waitOverlay.setAttribute('aria-hidden','true');
-  }
+      const flameY = wickTopY - h * 0.04;
 
-  // WebSocket remote
-  const remoteBtnWeather = document.getElementById('remoteBtnWeather');
-  const remoteBtnVideos  = document.getElementById('remoteBtnVideos');
-  let WS=null, hbInterval=null, watchdogInterval=null, lastActivity=0, backoffMs=1000, reconnectTimer=null, connecting=false;
-  let lastPending=null;
-  function setRemoteStatus(txt){ if(remoteStatus) remoteStatus.textContent = txt || ''; }
-  function clearWsTimers(){ if(hbInterval){clearInterval(hbInterval); hbInterval=null;} if(watchdogInterval){clearInterval(watchdogInterval); watchdogInterval=null;} if(reconnectTimer){clearTimeout(reconnectTimer); reconnectTimer=null;} }
-  function scheduleReconnect(){ if(connecting) return; if(reconnectTimer) return; reconnectTimer=setTimeout(()=>{reconnectTimer=null;connectWS();}, backoffMs); backoffMs=Math.min(backoffMs*2,15000); }
-  function wsSend(obj){ const payload=JSON.stringify(obj); if(WS && WS.readyState===1) WS.send(payload); else if(WS) WS.addEventListener('open', ()=> WS.send(payload), {once:true}); }
-  function connectWS(){
-    if (connecting) return; connecting=true;
-    try { WS = new WebSocket(WS_URL); } catch { connecting=false; scheduleReconnect(); return; }
-    WS.onopen = ()=>{ connecting=false; lastActivity=Date.now(); clearWsTimers(); setRemoteStatus('Connecté au canal '+room);
-      wsSend({ type:'hello', role:'slides', deckTitle });
-      hbInterval=setInterval(()=>{ try{ WS.readyState===1 && WS.send(JSON.stringify({type:'ping'})); lastActivity=Date.now(); }catch{} }, 20000);
-      if (lastPending) setTimeout(()=> wsSend(lastPending.msg), 200);
-      backoffMs=1000;
-    };
-    WS.onmessage = (e)=>{
-      lastActivity=Date.now(); let msg; try{ msg=JSON.parse(e.data);}catch{return;}
-      if (msg.type==='ping'){ try{ WS.send(JSON.stringify({type:'pong'})); }catch{} return; }
-
-      if (msg.type==='play_video' && msg.url){
-        hideWait();
-        setRemoteStatus('Commande reçue : lecture…');
-        const key = msg.url.includes('africa') ? 'v2' : 'v1';
-        playVideoUnderBranch(key, msg.url, {forcePortal:true});
-        return;
-      }
-      if (msg.type==='stop_video'){
-        hideWait();
-        stopCurrentVideoAndReturn(branchHIndex()); return;
-      }
-      if (msg.type==='weather_choice'){
-        hideWait();
-        const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
-        const sun = document.getElementById('weather-sun'); const h = sun ? sections.findIndex(s => s.contains(sun)) : 0;
-        const map = { sun:1, cloud:2, rain:3, snow:4 }; const v = map[String(msg.key||'').toLowerCase()] ?? 0;
-        Reveal.slide(h, v); if (lastPending?.kind==='weather') lastPending=null; return;
-      }
-    };
-    WS.onerror = ()=> setRemoteStatus('Erreur WebSocket');
-    WS.onclose  = ()=>{ clearWsTimers(); setRemoteStatus('WebSocket fermé'); connecting=false; scheduleReconnect(); };
-    watchdogInterval=setInterval(()=>{ if(Date.now()-lastActivity>60000){ try{ WS.close(); }catch{} } }, 5000);
-  }
-  connectWS();
-  window.addEventListener('online', ()=>{ if(!WS || WS.readyState !== 1) connectWS(); });
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && (!WS || WS.readyState !== 1)) connectWS(); });
-
-  function weatherHIndex(){
-    const sections = Array.from(document.querySelectorAll('.reveal .slides > section'));
-    const sun = document.getElementById('weather-sun');
-    return sun ? sections.findIndex(s => s.contains(sun)) : 0;
-  }
-  function sendWeatherRequest(){
-    const h = weatherHIndex();
-    const msg = { type:'request_weather', from:'slides', deckTitle,
-      options:[
-        { title:'Soleil', key:'sun',   thumb:'../../images/sun.png',   goto:{h, v:1} },
-        { title:'Nuages', key:'cloud', thumb:'../../images/cloud.png', goto:{h, v:2} },
-        { title:'Pluie',  key:'rain',  thumb:'../../images/rain.png',  goto:{h, v:3} },
-        { title:'Neige',  key:'snow',  thumb:'../../images/snow.png',  goto:{h, v:4} }
-      ],
-      note:"en attente d'une réponse" };
-    lastPending = { kind:'weather', msg };
-    wsSend(msg);
-    setRemoteStatus('Demande envoyée…');
-    showWait("en attente d'une réponse");
-    if (h >= 0) Reveal.slide(h, 0);
-  }
-  function sendVideoRequest(){
-    const msg = {
-      type: 'request_video',
-      from: 'slides',
-      deckTitle,
-      options: [
-        { title:'Slippery Fish', url: KNOWN_VIDEOS.v1, thumb: '../../images/binou.png' },
-        { title:'Africa',        url: KNOWN_VIDEOS.v2, thumb: '../../images/africa-image.png' }
-      ],
-      note: "en attente d'une réponse"
-    };
-    lastPending = { kind:'video', msg };
-    wsSend(msg);
-    setRemoteStatus('Demande envoyée. En attente du choix distant…');
-    showWait("en attente d'une réponse");
-  }
-  document.getElementById('remoteBtnWeather')?.addEventListener('click', sendWeatherRequest);
-  document.getElementById('remoteBtnVideos')?.addEventListener('click', sendVideoRequest);
-
-  // Activation animation helper + click binding
-  function activateBtn(el){
-    if(!el) return;
-    el.classList.remove('activate-pulse');
-    el.offsetWidth; // restart animation
-    el.classList.add('activate-pulse');
-    setTimeout(()=> el && el.classList && el.classList.remove('activate-pulse'), 260);
-  }
-  document.addEventListener('click', (e)=>{
-    const btn = e.target && e.target.closest && e.target.closest('.side-btn');
-    if (btn) activateBtn(btn);
-  }, true);
-
-  // 'C' hotkey (videos OR weather)
-  (function enableKidsPictureHotkey(){
-    const isTyping = (el) => el && (el.closest && el.closest('input, textarea, select, [contenteditable="true"]'));
-    const currentSlide = () => { try{ return Reveal.getCurrentSlide?.(); } catch { return null; } };
-    const onVideoChoiceSlide = () => {
-      const cur = currentSlide(); if (!cur) return false;
-      if (cur.id === 'branch-root') return true;
-      return !!cur.closest?.('#branch-group') && (Reveal.getIndices?.().v ?? 0) === 0;
-    };
-    const onWeatherMenuSlide = () => { const cur = currentSlide(); return !!cur && cur.id === 'weather-menu'; };
-
-    function clickVisibleSideBtnIn(slideEl){
-      if (!slideEl) return false;
-      const btn = slideEl.querySelector?.('.side-btn');
-      if (btn){ try{ btn.focus({preventScroll:true}); }catch{} activateBtn(btn); btn.click(); return true; }
-      return false;
+      return {cx, cy, w, h, r, topY, wickBaseY, wickTopY, flameY};
     }
 
-    function triggerAction(){
-      const cur = currentSlide();
+    function draw(){
+      t += 0.01;
+      metrics = computeMetrics();
 
-      if (onVideoChoiceSlide()){
-        if (clickVisibleSideBtnIn(cur)) return;
-        if (typeof remoteBtnVideos !== 'undefined' && remoteBtnVideos){ try{ remoteBtnVideos.focus({preventScroll:true}); }catch{} activateBtn(remoteBtnVideos); remoteBtnVideos.click(); return; }
-        try { sendVideoRequest(); } catch {}
-        return;
+      // background gradient
+      for(let y=0; y<height; y+=4){
+        const p = y/height;
+        const c1 = color(10,12,24), c2 = color(24,10,36);
+        const c = lerpColor(c1, c2, p);
+        fill(c); rect(0,y,width,4);
       }
 
-      if (onWeatherMenuSlide()){
-        if (clickVisibleSideBtnIn(cur)) return;
-        if (typeof remoteBtnWeather !== 'undefined' && remoteBtnWeather){ try{ remoteBtnWeather.focus({preventScroll:true}); }catch{} activateBtn(remoteBtnWeather); remoteBtnWeather.click(); return; }
-        try { sendWeatherRequest(); } catch {}
-        return;
+      // candle body / wick
+      drawCandleBody(metrics);
+      drawWick(metrics);
+
+      // flame sizing and tilt
+      const flicker = rm ? 0.05 : baseFlicker;
+      const noiseF = map(noise(t*2), 0,1, -flicker, flicker);
+      const size = lerp(height*0.12, height*0.16, constrain(glow,0,1)) * (1 + noiseF);
+      const tilt = (rm ? 0.02 : 0.06) * sin(t*2.0);
+
+      // flame
+      drawFlame(metrics.cx, metrics.flameY, size, tilt);
+
+      // aura — raised so it centers near the **tip** of the flame
+      const auraCenterY = metrics.flameY - size*0.35;
+      drawAura(metrics.cx, auraCenterY, size);
+
+      if(!rm) drawWaxDrips(metrics);
+
+      updateEmbers();
+      glow = max(0, glow - (rm ? 0.01 : 0.02));
+    }
+
+    function drawCandleBody(m){
+      const {cx, cy, w, h, r, topY} = m;
+      push();
+      translate(cx, cy);
+
+      // White candle body
+      const front = hc ? color(255) : color(248,248,246);
+      fill(front);
+      rectMode(CENTER);
+      drawingContext.save();
+      roundRect(-w/2, -h, w, h, r);
+      drawingContext.restore();
+
+      // Gentle vertical sheen
+      const g = drawingContext.createLinearGradient(-w/2,0, w/2,0);
+      g.addColorStop(0.0, 'rgba(255,255,255,0.15)');
+      g.addColorStop(0.5, 'rgba(255,255,255,0.0)');
+      g.addColorStop(1.0, 'rgba(0,0,0,0.08)');
+      drawingContext.fillStyle = g;
+      roundRect(-w/2, -h, w, h, r);
+
+      // Top rim (white)
+      fill(hc ? 255 : 252, hc ? 255 : 252, hc ? 255 : 250, 230);
+      ellipse(0, -h, w*0.98, 24);
+
+      // --- Wax pool ---
+      // (KEEP it neutral/white; remove the previous warm base glow ellipse)
+      const waxTop  = -h + 10;
+      const waxBot  = -h + h*0.62;
+      const waxR    = r * 1.1;
+
+      // subtle warm band near the top of the wax for depth (light, not yellow)
+      fill(255, 230, 210, 70);
+      ellipse(0, waxTop + 20, w*0.95, 16);
+
+      // solid wax (very light)
+      fill(255, 248, 244, 210);
+      drawingContext.save();
+      roundRect(-w/2, waxTop + (waxBot - waxTop)*0.15, w, (waxBot - waxTop), waxR);
+      drawingContext.restore();
+
+      pop();
+    }
+
+    function roundRect(x,y,w,h,r){
+      drawingContext.beginPath();
+      drawingContext.moveTo(x+r, y);
+      drawingContext.lineTo(x+w-r, y);
+      drawingContext.quadraticCurveTo(x+w, y, x+w, y+r);
+      drawingContext.lineTo(x+w, y+h-r);
+      drawingContext.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+      drawingContext.lineTo(x+r, y+h);
+      drawingContext.quadraticCurveTo(x, y+h, x, y+h-r);
+      drawingContext.lineTo(x, y+r);
+      drawingContext.quadraticCurveTo(x, y, x+r, y);
+      drawingContext.closePath();
+      drawingContext.fill();
+    }
+
+    function drawWick(m){
+      const {cx, wickBaseY, wickTopY} = m;
+      push();
+      fill(80);
+      rectMode(CORNERS);
+      rect(cx-2, wickTopY, cx+2, wickBaseY, 2);
+      pop();
+    }
+
+    function drawFlame(x, y, s, tilt){
+      push();
+      translate(x, y);
+      rotate(tilt);
+
+      const core  = hc ? color(255,255,255, 240) : color(255, 245, 200, 240);
+      const mid   = hc ? color(255,200,0, 200)   : color(255, 180, 70, 200);
+      const outer = hc ? color(255,120,0, 150)   : color(255, 120, 40, 150);
+
+      fill(outer); flameShape(0, 0, s*0.95);
+      fill(mid);   flameShape(0, 0, s*0.70);
+      fill(core);  flameShape(0, s*0.05, s*0.44);
+      pop();
+    }
+
+    function flameShape(cx, cy, size){
+      beginShape();
+      const h = size;
+      const w = size*0.55;
+      vertex(cx, cy+h*0.05);
+      bezierVertex(cx-w*0.5, cy+h*0.0, cx-w*0.6, cy-h*0.35, cx, cy-h*0.95);
+      bezierVertex(cx+w*0.6, cy-h*0.35, cx+w*0.5, cy+h*0.0, cx, cy+h*0.05);
+      endShape(CLOSE);
+    }
+
+    function drawAura(x, y, s){
+      push();
+      translate(x, y);
+      const base = s*1.9;
+      const rings = 5;
+      for(let i=0; i<rings; i++){
+        const a = map(i,0,rings-1, 70, 6) * (1 + glow*0.6);
+        fill(255, 180, 80, a);
+        ellipse(0, 0, base*(1+(i+1)/rings*0.9), base*(0.6+(i+1)/rings*0.6));
       }
-
-      if (cur && clickVisibleSideBtnIn(cur)) return;
-      if (typeof remoteBtnVideos !== 'undefined' && remoteBtnVideos){ try{ remoteBtnVideos.focus({preventScroll:true}); }catch{} activateBtn(remoteBtnVideos); remoteBtnVideos.click(); return; }
-      if (typeof remoteBtnWeather !== 'undefined' && remoteBtnWeather){ try{ remoteBtnWeather.focus({preventScroll:true}); }catch{} activateBtn(remoteBtnWeather); remoteBtnWeather.click(); return; }
+      pop();
     }
 
-    const handler = (e) => {
-      if (typeof inputsLocked !== 'undefined' && inputsLocked) return;
-      if (isTyping(e.target)) return;
-      if (Reveal.isOverview && Reveal.isOverview()) return;
-      if (e.key === 'c' || e.key === 'C'){ e.preventDefault(); e.stopImmediatePropagation(); triggerAction(); }
-    };
-
-    window.addEventListener('keydown', handler, true);
-    document.addEventListener('keydown', handler, true);
-  })();
-
-  // Hotkeys Q (top of stack) & R (first slide) — still work even during blackout
-  (function enableHotkeys(){
-    const isTyping = (el) => el && (el.closest && el.closest('input, textarea, select, [contenteditable="true"]'));
-    window.addEventListener('keydown', (e) => {
-      if (isTyping(e.target)) return;
-      if (Reveal.isOverview && Reveal.isOverview()) return;
-
-      if (e.key === 'q' || e.key === 'Q') {
-        e.preventDefault(); e.stopImmediatePropagation();
-        hideWait();
-        const idx = Reveal.getIndices && Reveal.getIndices();
-        if (idx && Number.isInteger(idx.h)) { Reveal.slide(idx.h, 0); }
-      } else if (e.key === 'r' || e.key === 'R') {
-        e.preventDefault(); e.stopImmediatePropagation();
-        hideWait();
-        Reveal.slide(0, 0);
+    function drawWaxDrips(m){
+      const {cx, topY, h} = m;
+      push();
+      translate(cx, topY + h*0.54);
+      fill(255,255,255,28);
+      const count = 4;
+      for(let i=0;i<count;i++){
+        const x = sin((t*0.4 + i)*1.7) * 40 + (i-1.5)*12;
+        const hl = 10 + 12*(0.5+0.5*sin(t*0.7 + i));
+        rect(x, -20, 6, hl, 3);
       }
-    }, true);
-  })();
+      pop();
+    }
 
-  // ===== Auto-scaling for drag bins (no scroll) =====
-  function computeScaleToFit(container, content){
-    if (!container || !content) return 1;
-    const prev = content.style.transform;
-    content.style.transform = 'none';
-    const cw = content.scrollWidth;
-    const ch = content.scrollHeight;
-    content.style.transform = prev;
-    if (cw === 0 || ch === 0) return 1;
-    const scaleW = container.clientWidth  / cw;
-    const scaleH = container.clientHeight / ch;
-    return Math.min(1, scaleW, scaleH); // don't upscale above 1
-  }
-
-  function scaleBins(){
-    const left  = document.querySelector('#drag-transfer #bin-left');
-    const right = document.querySelector('#drag-transfer #bin-right');
-    [left, right].forEach(bin=>{
-      if (!bin) return;
-      const inner = bin.querySelector('.bin-grid');
-      if (!inner) return;
-      const s = computeScaleToFit(bin, inner);
-      inner.style.transform = `scale(${s})`;
-    });
-  }
-
-  let scaleTimer = null;
-  function scheduleScale(){
-    if (scaleTimer) cancelAnimationFrame(scaleTimer);
-    scaleTimer = requestAnimationFrame(scaleBins);
-  }
-  window.addEventListener('resize', scheduleScale);
-  Reveal.on('slidechanged', (e)=>{ if (e.currentSlide?.id === 'drag-transfer') scheduleScale(); });
-  Reveal.on('ready', ()=>{ if (Reveal.getCurrentSlide()?.id === 'drag-transfer') scheduleScale(); });
-
-  // Drag & transfer setup (with inner grids)
-  let transferInitialized = false;
-  function setupTransfer(){
-    if (transferInitialized) return;
-    transferInitialized = true;
-
-    const left  = document.getElementById('bin-left');
-    const right = document.getElementById('bin-right');
-    const resetBtn = document.getElementById('resetTransfer');
-
-    function ensureInner(bin){
-      let inner = bin.querySelector('.bin-grid');
-      if (!inner){
-        inner = document.createElement('div');
-        inner.className = 'bin-grid';
-        // move any stray children into it (first run)
-        const kids = Array.from(bin.children);
-        kids.forEach(k => inner.appendChild(k));
-        bin.appendChild(inner);
+    // --- Embers (memories) ---
+    function spawnEmbers(n=12){
+      const x = metrics.cx;
+      const y = metrics.flameY;
+      for(let i=0;i<n;i++){
+        embers.push({
+          x: x + random(-6,6),
+          y: y + random(-6,6),
+          vx: random(-0.25,0.25),
+          vy: random(-1.4,-0.8),
+          r: random(2,5),
+          a: 255
+        });
       }
-      return inner;
     }
-    const innerLeft  = ensureInner(left);
-    const innerRight = ensureInner(right);
-
-    function createItem(name){
-      const btn = document.createElement('button');
-      btn.className = 'draggable';
-      btn.setAttribute('draggable','true');
-      btn.setAttribute('aria-label', name.replace('.png',''));
-      btn.dataset.name = name;
-
-      const img = new Image();
-      img.src = PICTO_SRC + name;
-      img.alt = name.replace('.png','');
-      btn.appendChild(img);
-
-      btn.addEventListener('dragstart', (e)=>{
-        e.dataTransfer.setData('text/plain', name);
-        e.dataTransfer.effectAllowed = 'move';
-        btn.classList.add('dragging');
-      });
-      btn.addEventListener('dragend', ()=>{
-        btn.classList.remove('dragging');
-        scheduleScale();
-      });
-      btn.addEventListener('click', ()=>{
-        const inLeft = btn.closest('#bin-left') !== null;
-        (inLeft ? innerRight : innerLeft).appendChild(btn);
-        scheduleScale();
-      });
-
-      return btn;
-    }
-
-    innerLeft.innerHTML = '';
-    innerRight.innerHTML = '';
-    TRANSFER_PICTOS.forEach(n => innerLeft.appendChild(createItem(n)));
-
-    function bindDnD(bin, inner){
-      bin.addEventListener('dragover', (e)=>{ e.preventDefault(); bin.classList.add('drag-over'); e.dataTransfer.dropEffect='move'; });
-      bin.addEventListener('dragleave', ()=> bin.classList.remove('drag-over'));
-      bin.addEventListener('drop', (e)=>{
-        e.preventDefault(); bin.classList.remove('drag-over');
-        const dragging = document.querySelector('.draggable.dragging');
-        if (dragging) { inner.appendChild(dragging); dragging.classList.remove('dragging'); scheduleScale(); }
-      });
-    }
-    bindDnD(left, innerLeft);
-    bindDnD(right, innerRight);
-
-    resetBtn?.addEventListener('click', ()=>{
-      const items = Array.from(innerRight.querySelectorAll('.draggable'));
-      items.forEach(el => innerLeft.appendChild(el));
-      const order = new Map(TRANSFER_PICTOS.map((n,i)=>[n,i]));
-      const children = Array.from(innerLeft.querySelectorAll('.draggable'));
-      children.sort((a,b)=> (order.get(a.dataset.name)||0) - (order.get(b.dataset.name)||0));
-      children.forEach(el => innerLeft.appendChild(el));
-      scheduleScale();
-    });
-
-    // First fit
-    scheduleScale();
-    window.addEventListener('load', scheduleScale);
-  }
-
-  Reveal.on('slidechanged', (e)=>{
-    if (e.currentSlide && e.currentSlide.id === 'drag-transfer') setupTransfer();
-  });
-  Reveal.on('ready', ()=>{
-    const cur = Reveal.getCurrentSlide();
-    if (cur && cur.id === 'drag-transfer') setupTransfer();
-    if (window.hljs) hljs.highlightAll();
-  });
-
-  // BIG DATE progressive reveal
-  (function setupBigDate(){
-    const elWeekday = document.getElementById('d-weekday');
-    const elDay     = document.getElementById('d-day');
-    const elMonth   = document.getElementById('d-month');
-    const steps     = Array.from(document.querySelectorAll('#dateBig .reveal-step'));
-    const hintEl    = document.getElementById('dateHint');
-    let dateProgress = 0;
-
-    const cap = (s)=> s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-
-    function render(){
-      const now     = new Date();
-      const weekday = new Intl.DateTimeFormat('fr-CA', { weekday:'long' }).format(now);
-      const day     = new Intl.DateTimeFormat('fr-CA', { day:'2-digit' }).format(now);
-      const month   = new Intl.DateTimeFormat('fr-CA', { month:'long' }).format(now);
-
-      if (elWeekday) elWeekday.textContent = cap(weekday);
-      if (elDay)     elDay.textContent     = day;
-      if (elMonth)   elMonth.textContent   = month.toLowerCase();
-    }
-
-    function updateHint(){
-      if (!hintEl) return;
-      if (dateProgress >= steps.length){
-        hintEl.textContent = 'Appuyez sur Espace pour passer à la suite';
-        hintEl.style.opacity = '0.75';
-      } else {
-        hintEl.textContent = 'Appuyez sur Espace pour révéler la date';
-        hintEl.style.opacity = '1';
+    function updateEmbers(){
+      for(let i=embers.length-1; i>=0; i--){
+        const e = embers[i];
+        e.x += e.vx + (rm?0:0.15*sin((e.y+t)*0.05));
+        e.y += e.vy;
+        e.vy -= rm ? 0.002 : 0.004;
+        e.a -= rm ? 1.5 : 2.2;
+        if(e.a <= 0){ embers.splice(i,1); continue; }
+        noStroke();
+        fill(255, 180, 60, e.a*0.25);
+        ellipse(e.x, e.y, e.r*4, e.r*4);
+        fill(255, 200, 120, e.a);
+        ellipse(e.x, e.y, e.r, e.r);
       }
     }
 
-    function resetDateReveal(){
-      dateProgress = 0;
-      steps.forEach(s => s.classList.remove('show'));
-      updateHint();
+    // --- Input: single switch / press ---
+    function triggerPress(){
+      glow = min(1, glow + 0.45);
+      spawnEmbers(rm ? 6 : 12);
     }
-
-    function isOnDateSlide(){
-      const cur = Reveal.getCurrentSlide?.();
-      return !!cur && cur.id === 'date-slide';
-    }
-
-    function revealNext(){
-      if (dateProgress < steps.length){
-        steps[dateProgress].classList.add('show');
-        dateProgress++;
-        updateHint();
-      } else {
-        Reveal.next();
-      }
-    }
-
-    Reveal.on('ready', ()=>{ render(); if (isOnDateSlide()) resetDateReveal(); });
-    document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ render(); if (isOnDateSlide()) resetDateReveal(); } });
-
-    Reveal.on('slidechanged', (e)=>{
-      if (e.currentSlide && e.currentSlide.id === 'date-slide'){
-        render();
-        resetDateReveal();
-      }
-    });
-
-    const isTyping = (el) => el && (el.closest && el.closest('input, textarea, select, [contenteditable="true"]'));
-    window.addEventListener('keydown', (e)=>{
-      if (typeof inputsLocked !== 'undefined' && inputsLocked) return;
-      if (!isOnDateSlide()) return;
-      if (isTyping(e.target)) return;
-
-      if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter'){
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        revealNext();
-      }
-    }, true);
-  })();
-</script>
+    function keyPressed(){ if(key === ' ' || key === 'Enter') triggerPress(); }
+    function mousePressed(){ triggerPress(); }
+    function touchStarted(){ triggerPress(); }
+  </script>
 </body>
 </html>
