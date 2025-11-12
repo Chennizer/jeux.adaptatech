@@ -153,18 +153,27 @@
     let sfxMuted = false;
     let pointerEnabled = true;
 
+    const playlistPaths = [
+      '../../songs/space/space1.mp3',
+      '../../songs/space/spacebest2.mp3',
+      '../../songs/space/spacevortex3.mp3'
+    ];
+    const musicPlaylist = [];
+    let currentTrackIndex = -1;
+    let currentTrack = null;
+
     muteMusicToggle.addEventListener('change', () => {
       musicMuted = muteMusicToggle.checked;
-      if (ambience && ambience.isLoaded()) {
-        ambience.setVolume(musicMuted ? 0 : musicVolume, 0.2);
+      if (musicMuted) {
+        stopCurrentTrack();
+      } else {
+        ensureMusicPlaying(true);
       }
     });
     musicVolumeSlider.addEventListener('input', () => {
       musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
       musicVolumeValue.textContent = musicVolumeSlider.value;
-      if (!musicMuted && ambience && ambience.isLoaded()) {
-        ambience.setVolume(musicVolume, 0.1);
-      }
+      updateMusicVolume(0.1);
     });
     muteSFXToggle.addEventListener('change', () => {
       sfxMuted = muteSFXToggle.checked;
@@ -216,22 +225,31 @@
         console.warn('Audio context could not start:', err);
       }
 
+      if (document.documentElement) {
+        if (document.documentElement.requestFullscreen) {
+          try {
+            await document.documentElement.requestFullscreen();
+          } catch (err) {
+            console.warn('Fullscreen request failed:', err);
+          }
+        } else if (document.documentElement.webkitRequestFullscreen) {
+          try {
+            document.documentElement.webkitRequestFullscreen();
+          } catch (err) {
+            console.warn('Fullscreen request failed:', err);
+          }
+        }
+      }
+
       started = true;
       document.getElementById('promptOverlay').style.display = 'none';
       settingsIcon.style.display = 'flex';
       fullscreenBtn.style.display = 'inline-flex';
       menu.classList.remove('show');
 
-      if (ambience && ambience.isLoaded()) {
-        ambience.setLoop(true);
-        ambience.setVolume(musicMuted ? 0 : musicVolume, 0.2);
-        if (!ambience.isPlaying()) ambience.play();
-      }
-
-      requestAurora();
+      ensureMusicPlaying(true);
     });
 
-    let ambience;
     const shimmerSounds = [];
     const swellSounds = [];
     let started = false;
@@ -242,7 +260,10 @@
 
     function preload() {
       soundFormats('mp3', 'wav');
-      ambience = loadSound('../../sounds/winterambiance.mp3');
+      musicPlaylist.length = 0;
+      for (const path of playlistPaths) {
+        musicPlaylist.push(loadSound(path));
+      }
       shimmerSounds.push(
         loadSound('../../sounds/space/twinklingstar1.mp3'),
         loadSound('../../sounds/space/twinklingstar2.mp3'),
@@ -310,6 +331,56 @@
       return false;
     }
 
+    function stopCurrentTrack() {
+      if (currentTrack && currentTrack.isPlaying()) {
+        currentTrack.stop();
+      }
+      currentTrack = null;
+      currentTrackIndex = -1;
+    }
+
+    function updateMusicVolume(transition = 0.2) {
+      if (!currentTrack || !currentTrack.isLoaded()) return;
+      currentTrack.setVolume(musicMuted ? 0 : musicVolume, transition);
+    }
+
+    function playNextTrack(forceRandomStart = false) {
+      if (!musicPlaylist.length || musicMuted) {
+        stopCurrentTrack();
+        return;
+      }
+
+      if (currentTrack && currentTrack.isPlaying()) {
+        currentTrack.stop();
+      }
+
+      if (forceRandomStart || currentTrackIndex < 0) {
+        currentTrackIndex = Math.floor(random(musicPlaylist.length));
+      } else {
+        currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+      }
+
+      currentTrack = musicPlaylist[currentTrackIndex];
+      if (!currentTrack) return;
+
+      currentTrack.setLoop(false);
+      currentTrack.setVolume(musicVolume, 0);
+      currentTrack.onended(() => {
+        setTimeout(() => playNextTrack(false), 400);
+      });
+      currentTrack.play();
+    }
+
+    function ensureMusicPlaying(forceRandomStart = false) {
+      if (musicMuted) return;
+      if (!musicPlaylist.length) return;
+      if (!currentTrack || !currentTrack.isPlaying()) {
+        playNextTrack(forceRandomStart);
+        return;
+      }
+      updateMusicVolume(0.3);
+    }
+
     function clearScene() {
       ribbons = [];
       sparks = [];
@@ -339,16 +410,17 @@
     }
 
     function drawSky() {
-      skyPulse += 0.0025 * (deltaTime || 16.6);
+      skyPulse += 0.0018 * (deltaTime || 16.6);
       const horizonShift = (Math.sin(skyPulse * 0.25) + 1) * 0.5;
       skyHue = lerp(skyHue, targetSkyHue, 0.01);
       const topHue = (skyHue + 320) % 360;
       const bottomHue = (skyHue + 40) % 360;
       const ctx = drawingContext;
       const gradient = ctx.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, hsla(topHue, 74, 24 + 6 * horizonShift, 1));
-      gradient.addColorStop(0.55, hsla(skyHue, 68, 16 + 10 * horizonShift, 1));
-      gradient.addColorStop(1, hsla(bottomHue, 72, 10, 1));
+      gradient.addColorStop(0, hsla(topHue, 72, 28 + 6 * horizonShift, 1));
+      gradient.addColorStop(0.45, hsla(skyHue, 68, 18 + 10 * horizonShift, 1));
+      gradient.addColorStop(0.9, hsla((skyHue + 26) % 360, 60, 12, 1));
+      gradient.addColorStop(1, hsla(bottomHue, 64, 8, 1));
       ctx.save();
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
@@ -384,19 +456,20 @@
         const boundsTop = height * 0.34;
         const boundsBottom = height * 0.6;
         this.baseY = constrain(centerY + random(-height * 0.05, height * 0.05), boundsTop, boundsBottom);
-        this.amplitude = random(height * 0.16, height * 0.24);
-        this.noiseScale = random(0.0012, 0.0022);
-        this.waveSpeed = random(0.00032, 0.0009) * (random() > 0.5 ? 1 : -1);
+        this.amplitude = random(height * 0.22, height * 0.34);
+        this.noiseScale = random(0.0008, 0.0016);
+        this.waveSpeed = random(0.00018, 0.00042) * (random() > 0.5 ? 1 : -1);
         this.phase = random(1000);
         this.tilt = random(-0.28, 0.28);
         this.alpha = 0;
-        this.targetAlpha = random(0.55, 0.85);
+        this.targetAlpha = random(0.58, 0.88);
         this.life = 1;
-        this.fadeInRate = random(0.018, 0.032);
-        this.fadeOutRate = random(0.002, 0.0036);
-        this.holdTime = random(3400, 5200);
+        this.fadeInRate = random(0.0015, 0.004);
+        this.fadeOutRate = random(0.0005, 0.0012);
+        this.holdTime = random(5200, 7600);
         this.createdAt = millis();
         this.glow = random(0.55, 1.1);
+        this.gradientStops = this.buildGradientStops();
       }
 
       update() {
@@ -419,7 +492,7 @@
         if (points[points.length - 1].x < width) {
           points.push({ x: width, y: this.sampleY(width) });
         }
-        const thickness = this.amplitude * 0.42 + height * 0.015;
+        const thickness = this.amplitude * 0.52 + height * 0.018;
 
         ctx.save();
         ctx.beginPath();
@@ -438,10 +511,15 @@
           0,
           this.baseY + this.amplitude * 1.2
         );
-        grad.addColorStop(0, hsla((this.baseHue + 360) % 360, 85, 68, this.alpha * 0.85));
-        grad.addColorStop(0.35, hsla((this.secondaryHue + 360) % 360, 92, 76, this.alpha));
-        grad.addColorStop(0.68, hsla((this.highlightHue + 360) % 360, 90, 74, this.alpha * 0.95));
-        grad.addColorStop(1, hsla((this.glintHue + 360) % 360, 80, 62, this.alpha * 0.8));
+        const stops = this.gradientStops;
+        const stopCount = stops.length - 1;
+        stops.forEach((hue, index) => {
+          const position = stopCount <= 0 ? 0 : index / stopCount;
+          const saturation = 86 - index * 6;
+          const brightness = 72 - index * 8;
+          const alpha = this.alpha * (0.95 - index * 0.12);
+          grad.addColorStop(position, hsla((hue + 360) % 360, saturation, brightness, Math.max(alpha, 0.05)));
+        });
 
         ctx.globalCompositeOperation = 'screen';
         ctx.globalAlpha = 0.95;
@@ -452,15 +530,21 @@
 
       sampleY(x) {
         const nx = this.phase + x * this.noiseScale;
-        const nz = frameCount * 0.0025;
+        const nz = frameCount * 0.0016;
         const noiseVal = noise(nx, nz) * 2 - 1;
-        const wave = Math.sin((x / width) * TAU * 0.6 + nz * 2.2 + this.tilt);
-        const mix = lerp(wave, noiseVal, 0.6);
+        const wave = Math.sin((x / width) * TAU * 0.52 + nz * 1.6 + this.tilt);
+        const mix = lerp(wave, noiseVal, 0.55);
         return this.baseY + mix * this.amplitude;
       }
 
       isDead() {
         return this.alpha <= 0.01;
+      }
+
+      buildGradientStops() {
+        const extended = this.hues.map(h => (h + random([-48, -28, 28, 48, 72, 88])) % 360);
+        const combined = shuffle([...this.hues, ...extended]);
+        return combined.slice(0, 5);
       }
     }
 
@@ -468,25 +552,25 @@
       constructor(huePool, centerY = height * 0.5) {
         this.x = random(width);
         this.y = constrain(centerY + random(-height * 0.08, height * 0.08), height * 0.3, height * 0.7);
-        this.vx = random(-0.25, 0.25);
-        this.vy = random(-0.3, 0.5);
-        this.size = random(2, 6);
-        this.life = random(0.8, 1.5);
+        this.vx = random(-0.16, 0.16);
+        this.vy = random(-0.18, 0.36);
+        this.size = random(2.6, 7.2);
+        this.life = random(1.1, 1.9);
         this.huePool = huePool;
         this.hue = this.pickHue();
         this.alpha = 1;
-        this.spin = random(-0.08, 0.09);
+        this.spin = random(-0.05, 0.06);
         this.angle = random(TWO_PI);
       }
 
       update(dt) {
         this.x += this.vx * dt * 60;
         this.y += this.vy * dt * 60;
-        this.vy += 0.0045 * dt * 60;
+        this.vy += 0.0032 * dt * 60;
         this.angle += this.spin * dt * 60;
-        this.life -= 0.45 * dt;
+        this.life -= 0.26 * dt;
         this.alpha = constrain(this.life, 0, 1);
-        if (random() < 0.01) {
+        if (random() < 0.018) {
           this.hue = this.pickHue();
         }
       }
@@ -495,9 +579,9 @@
         push();
         translate(this.x, this.y);
         rotate(this.angle);
-        const brightness = 80 + 20 * (1 - this.alpha);
-        fill(this.hue, 72, brightness, this.alpha * 0.9);
-        ellipse(0, 0, this.size * 1.4, this.size * 2.3);
+        const brightness = 82 + 18 * (1 - this.alpha);
+        fill(this.hue, 78, brightness, this.alpha * 0.85);
+        ellipse(0, 0, this.size * 1.5, this.size * 2.6);
         pop();
       }
 
@@ -509,7 +593,7 @@
         if (!Array.isArray(this.huePool) || !this.huePool.length) {
           return random(360);
         }
-        return (random(this.huePool) + random(-18, 18) + 360) % 360;
+        return (random(this.huePool) + random(-28, 28) + 360) % 360;
       }
     }
 
@@ -536,12 +620,12 @@
         this.hues = hues;
         this.centerX = width / 2 + random(-width * 0.12, width * 0.12);
         this.centerY = constrain(centerY + random(-height * 0.035, height * 0.035), height * 0.36, height * 0.62);
-        this.radius = random(height * 0.3, height * 0.46);
+        this.radius = random(height * 0.36, height * 0.54);
         this.alpha = 0;
-        this.targetAlpha = random(0.22, 0.34);
-        this.fadeInRate = random(0.0009, 0.0015);
-        this.fadeOutRate = random(0.00035, 0.00055);
-        this.holdTime = random(3200, 4600);
+        this.targetAlpha = random(0.26, 0.38);
+        this.fadeInRate = random(0.00045, 0.00085);
+        this.fadeOutRate = random(0.00018, 0.00032);
+        this.holdTime = random(5200, 7800);
         this.createdAt = millis();
       }
 
@@ -565,9 +649,10 @@
           this.centerY,
           this.radius
         );
-        gradient.addColorStop(0, hsla(this.hues[0], 70, 75, this.alpha));
-        gradient.addColorStop(0.45, hsla(this.hues[1 % this.hues.length], 65, 58, this.alpha * 0.6));
-        gradient.addColorStop(1, hsla(this.hues[2 % this.hues.length], 55, 30, 0));
+        gradient.addColorStop(0, hsla(this.hues[0], 72, 78, this.alpha));
+        gradient.addColorStop(0.38, hsla(this.hues[1 % this.hues.length], 64, 60, this.alpha * 0.58));
+        gradient.addColorStop(0.72, hsla(this.hues[2 % this.hues.length], 58, 42, this.alpha * 0.28));
+        gradient.addColorStop(1, hsla(this.hues[3 % this.hues.length] || this.hues[0], 48, 24, 0));
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, width, height);
         ctx.restore();
@@ -588,17 +673,20 @@
     }
 
     function createAuroraPalette() {
-      const coreHue = random([135, 148, 162, 178, 196, 212, 228, 244, 272, 296, 318]);
-      const companion = (coreHue + random([24, 32, 42])) % 360;
-      const highNote = (coreHue + random([82, 94, 112])) % 360;
-      const deepNote = (coreHue + random([180, 196, 208])) % 360;
-      const sparkle = (coreHue + random([-90, -60, 60, 90])) % 360;
-      const huePool = [coreHue, companion, highNote, deepNote, sparkle, (coreHue + 330) % 360];
-      const ribbonCount = Math.floor(random(2, 4));
-      const ribbons = Array.from({ length: ribbonCount }, () => shuffle(huePool).slice(0, 4));
+      const baseChoices = [128, 140, 152, 164, 176, 188, 202, 216, 232, 248, 264, 282, 298, 312, 328];
+      const coreHue = random(baseChoices);
+      const offsets = shuffle([22, 34, 46, 58, 74, 96, 122, 148, 182, 214, -32, -48, -66, -92, -118, -146]);
+      const huePool = [coreHue];
+      for (let i = 0; i < offsets.length; i++) {
+        huePool.push((coreHue + offsets[i] + 360) % 360);
+      }
+      const uniqueHuePool = [...new Set(huePool.map(h => ((h % 360) + 360) % 360))];
+      const ribbonCount = Math.floor(random(3, 6));
+      const ribbons = Array.from({ length: ribbonCount }, () => shuffle(uniqueHuePool).slice(0, 5));
+      const skyHueShift = random([-18, -8, 0, 12, 24]);
       return {
-        skyHue: coreHue,
-        huePool,
+        skyHue: (coreHue + skyHueShift + 360) % 360,
+        huePool: uniqueHuePool,
         ribbons
       };
     }
@@ -635,11 +723,15 @@
       for (const hues of palette.ribbons) {
         ribbons.push(new Ribbon(hues, centerY));
       }
-      const burstCount = Math.floor(random(80, 130));
+      const burstPalette = shuffle([...palette.huePool]).slice(0, 7);
+      const burstCount = Math.floor(random(110, 170));
       for (let i = 0; i < burstCount; i++) {
-        sparks.push(new Spark(palette.huePool, centerY));
+        sparks.push(new Spark(burstPalette, centerY));
       }
-      glows.push(new Glow(shuffle([...palette.huePool]).slice(0, 3), centerY));
+      glows.push(new Glow(shuffle([...palette.huePool]).slice(0, 4), centerY));
+      if (random() < 0.4) {
+        glows.push(new Glow(shuffle([...palette.huePool]).slice(0, 4), centerY + random(-height * 0.02, height * 0.02)));
+      }
 
       if (!sfxMuted) {
         const shimmer = pickLoaded(shimmerSounds);
