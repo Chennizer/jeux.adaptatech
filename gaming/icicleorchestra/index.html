@@ -113,27 +113,30 @@
     }
 
     function buildScene() {
-      topLine = height * 0.18;
+      topLine = 0;
       icicles = [];
       pulses = [];
-      const count = floor(map(width, 480, 1920, 20, 70));
+      const count = width < 720 ? 6 : 7;
       const spacing = width / (count + 1);
       const baseNoise = random(1000);
       for (let i = 0; i < count; i++) {
         const n = noise(baseNoise + i * 0.12);
-        const baseX = (i + 1) * spacing + map(n, 0, 1, -spacing * 0.4, spacing * 0.4);
+        const baseX = (i + 1) * spacing + map(n, 0, 1, -spacing * 0.3, spacing * 0.3);
         const heightNoise = noise(1000 + i * 0.15);
-        const h = map(heightNoise, 0, 1, height * 0.3, height * 0.78);
-        const baseWidth = map(noise(2000 + i * 0.18), 0, 1, 18, 46);
-        const segments = max(10, floor(map(h, height * 0.3, height * 0.78, 14, 28)));
+        const h = min(height * 0.9, map(heightNoise, 0, 1, height * 0.38, height * 0.84));
+        const baseWidth = map(noise(2000 + i * 0.18), 0, 1, 48, 86);
+        const segments = max(8, floor(map(h, height * 0.38, height * 0.84, 10, 18)));
         const geometry = [];
+        const jaggedSeed = random(1000);
         for (let s = 0; s < segments; s++) {
           const t = s / (segments - 1);
           const y = t * h;
-          const taper = pow(1 - t, 1.1);
-          const widthNoise = noise(3000 + i * 0.2 + s * 0.2);
-          const halfWidth = (baseWidth * map(widthNoise, 0, 1, 0.65, 1.25) * (0.2 + 0.8 * taper)) / 2;
-          geometry.push({ y, halfWidth, t });
+          const taper = pow(1 - t, 1.18);
+          const widthNoise = noise(3000 + i * 0.35 + s * 0.45);
+          const halfWidth = (baseWidth * map(widthNoise, 0, 1, 0.65, 1.15) * (0.25 + 0.75 * taper)) / 2;
+          const jaggedLeft = map(noise(jaggedSeed + s * 0.62), 0, 1, -halfWidth * 0.35, halfWidth * 0.35);
+          const jaggedRight = map(noise(jaggedSeed + 500 + s * 0.62), 0, 1, -halfWidth * 0.35, halfWidth * 0.35);
+          geometry.push({ y, left: -halfWidth + jaggedLeft, right: halfWidth + jaggedRight, t });
         }
         const hue = map(noise(4000 + i * 0.05), 0, 1, 180, 220);
         const saturation = map(noise(5000 + i * 0.05), 0, 1, 32, 60);
@@ -141,16 +144,12 @@
         const alpha = map(noise(7000 + i * 0.11), 0, 1, 60, 88);
         icicles.push({
           baseX,
-          topOffset: map(noise(8000 + i * 0.14), 0, 1, -28, 36),
           height: h,
           geometry,
           hue,
           saturation,
           brightness,
-          alpha,
-          swing: map(noise(9000 + i * 0.2), 0, 1, 5, 14),
-          swaySpeed: random(0.006, 0.014),
-          phase: random(TWO_PI)
+          alpha
         });
       }
 
@@ -247,14 +246,10 @@
     function drawIcicles() {
       noStroke();
       for (const icicle of icicles) {
-        const sway = sin(frameCount * icicle.swaySpeed + icicle.phase) * icicle.swing;
         for (let i = 0; i < icicle.geometry.length - 1; i++) {
           const segA = icicle.geometry[i];
           const segB = icicle.geometry[i + 1];
           const midT = (segA.t + segB.t) * 0.5;
-          const ripple = cos(frameCount * (icicle.swaySpeed * 1.7) + icicle.phase + midT * 3.2) * icicle.swing * 0.25;
-          const offsetA = sway + ripple;
-          const offsetB = sway + ripple * 1.2;
 
           let brightness = icicle.brightness - midT * 28;
           let alpha = icicle.alpha - midT * 18;
@@ -269,13 +264,13 @@
           }
 
           fill(icicle.hue, icicle.saturation, constrain(brightness, 0, 100), constrain(alpha, 0, 100));
-          const topY = topLine + icicle.topOffset + segA.y;
-          const bottomY = topLine + icicle.topOffset + segB.y;
+          const topY = topLine + segA.y;
+          const bottomY = topLine + segB.y;
           beginShape();
-          vertex(icicle.baseX - segA.halfWidth + offsetA, topY);
-          vertex(icicle.baseX + segA.halfWidth + offsetA, topY);
-          vertex(icicle.baseX + segB.halfWidth + offsetB, bottomY);
-          vertex(icicle.baseX - segB.halfWidth + offsetB, bottomY);
+          vertex(icicle.baseX + segA.left, topY);
+          vertex(icicle.baseX + segA.right, topY);
+          vertex(icicle.baseX + segB.right, bottomY);
+          vertex(icicle.baseX + segB.left, bottomY);
           endShape(CLOSE);
         }
       }
@@ -284,8 +279,8 @@
     function drawLedge() {
       push();
       noStroke();
-      fill(210, 30, 40, 45);
-      rect(-10, topLine - 18, width + 20, 28, 12);
+      fill(210, 30, 40, 55);
+      rect(-10, -6, width + 20, 24, 12);
       pop();
     }
 
