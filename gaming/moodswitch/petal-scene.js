@@ -3,6 +3,7 @@ const BACK_COLORS = [
   { y: 0.45, color: [46, 20, 44] },
   { y: 1, color: [80, 34, 52] }
 ];
+const INTENSITY_MULTIPLIER = 3;
 
 class Petal {
   constructor(p, spawnAnywhere = true) {
@@ -120,7 +121,9 @@ export function createPetalScene(p) {
       sparkles = [];
     }
     const base = Math.floor(p.width * p.height * 0.000022) + 26;
-    const count = reset ? base : Math.ceil(base * 0.5);
+    const scaledBase = Math.max(1, Math.ceil(base * INTENSITY_MULTIPLIER));
+    const pulseBase = Math.max(1, Math.ceil(base * 0.5 * INTENSITY_MULTIPLIER));
+    const count = reset ? scaledBase : pulseBase;
     for (let i = 0; i < count; i++) {
       sparkles.push(new PetalSparkle(p));
     }
@@ -177,7 +180,8 @@ export function createPetalScene(p) {
       const elapsed = p.millis() - highlightStart;
       const glow = p.constrain(1 - elapsed / 2000, 0, 1);
       if (glow > 0) {
-        p.fill(255, 200, 220, 80 * glow);
+        const maxGlow = Math.min(255, 80 * INTENSITY_MULTIPLIER);
+        p.fill(255, 200, 220, maxGlow * glow);
         p.rect(0, 0, p.width, p.height);
       }
     }
