@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Candle of Memory — Single Switch</title>
+  <title>Candle of Memory — Night Sky</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
   <style>
-    html,body{margin:0;height:100%;background:#0b0b12;color:#fff;overflow:hidden;font-family:system-ui, Segoe UI, Arial;}
+    html,body{margin:0;height:100%;background:#000;color:#fff;overflow:hidden;font-family:system-ui, Segoe UI, Arial;}
     #hint{
       position:fixed; left:50%; transform:translateX(-50%);
       bottom:20px; padding:10px 14px; border-radius:12px;
-      background:rgba(255,255,255,0.1); backdrop-filter:blur(4px);
-      border:1px solid rgba(255,255,255,0.2); font-size:14px; letter-spacing:.2px;
+      background:rgba(255,255,255,0.08); backdrop-filter:blur(4px);
+      border:1px solid rgba(255,255,255,0.18); font-size:14px; letter-spacing:.2px;
       user-select:none
     }
     #topbar{
       position:fixed; top:10px; left:50%; transform:translateX(-50%);
       display:flex; gap:10px; align-items:center;
-      background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2);
+      background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18);
       border-radius:12px; padding:6px 10px; font-size:13px
     }
     #topbar label{display:flex; gap:6px; align-items:center; cursor:pointer;}
@@ -40,19 +40,45 @@
     let hc = false, rm = false;
     let metrics = null;
 
+    // --- Stars ---
+    let stars = [];
+    const STAR_DENSITY = 0.00025; // stars per pixel (gentle amount)
+
     function setup(){
       createCanvas(windowWidth, windowHeight);
       noStroke();
       document.getElementById('highContrast').addEventListener('change', e => hc = e.target.checked);
       document.getElementById('reducedMotion').addEventListener('change', e => rm = e.target.checked);
+      initStars();
     }
-    function windowResized(){ resizeCanvas(windowWidth, windowHeight); }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+      initStars();
+    }
+
+    function initStars(){
+      // Create a starfield proportional to the canvas size
+      const count = max(80, floor(width * height * STAR_DENSITY));
+      stars = [];
+      for(let i=0;i<count;i++){
+        stars.push({
+          x: random(width),
+          y: random(height),
+          r: random(0.6, 1.8),               // radius
+          base: random(60, 140),             // base alpha
+          tw: random(0.2, 0.6),              // twinkle magnitude
+          spd: random(0.15, 0.5),            // twinkle speed
+          phase: random(TWO_PI)
+        });
+      }
+    }
 
     function computeMetrics(){
       const cx = width/2;
       const cy = height*0.74;                 // sits a little lower
       const w  = min(170, width*0.12);
-      const h  = min(420, height*0.52);       // TALLER candle
+      const h  = min(420, height*0.52);       // tall candle
       const r  = 20;
 
       const topY = cy - h;
@@ -69,15 +95,8 @@
       t += 0.01;
       metrics = computeMetrics();
 
-      // background gradient
-      for(let y=0; y<height; y+=4){
-        const p = y/height;
-        const c1 = color(10,12,24), c2 = color(24,10,36);
-        const c = lerpColor(c1, c2, p);
-        fill(c); rect(0,y,width,4);
-      }
+      drawNightSky();
 
-      // candle body / wick
       drawCandleBody(metrics);
       drawWick(metrics);
 
@@ -87,10 +106,9 @@
       const size = lerp(height*0.12, height*0.16, constrain(glow,0,1)) * (1 + noiseF);
       const tilt = (rm ? 0.02 : 0.06) * sin(t*2.0);
 
-      // flame
       drawFlame(metrics.cx, metrics.flameY, size, tilt);
 
-      // aura — raised so it centers near the **tip** of the flame
+      // aura centered higher (near tip)
       const auraCenterY = metrics.flameY - size*0.35;
       drawAura(metrics.cx, auraCenterY, size);
 
@@ -100,8 +118,27 @@
       glow = max(0, glow - (rm ? 0.01 : 0.02));
     }
 
+    // ---------- Background: Black with shimmering stars ----------
+    function drawNightSky(){
+      // very dark gradient to avoid flat black
+      for(let y=0; y<height; y+=4){
+        const p = y/height;
+        const c1 = color(5,6,10), c2 = color(8,6,14);
+        const c = lerpColor(c1, c2, p);
+        fill(c); rect(0,y,width,4);
+      }
+      // stars (gentle twinkle)
+      for(const s of stars){
+        const twinkle = rm ? 0 : s.tw * 50 * (0.5 + 0.5*sin((t*s.spd) + s.phase));
+        const a = constrain(s.base + twinkle, 40, 200);
+        fill(255, 255, 255, hc ? min(255, a+30) : a);
+        ellipse(s.x, s.y, s.r, s.r);
+      }
+    }
+
+    // ---------- Candle ----------
     function drawCandleBody(m){
-      const {cx, cy, w, h, r, topY} = m;
+      const {cx, cy, w, h, r} = m;
       push();
       translate(cx, cy);
 
@@ -125,17 +162,14 @@
       fill(hc ? 255 : 252, hc ? 255 : 252, hc ? 255 : 250, 230);
       ellipse(0, -h, w*0.98, 24);
 
-      // --- Wax pool ---
-      // (KEEP it neutral/white; remove the previous warm base glow ellipse)
+      // Neutral/white wax pool (no yellow base circle)
       const waxTop  = -h + 10;
       const waxBot  = -h + h*0.62;
       const waxR    = r * 1.1;
 
-      // subtle warm band near the top of the wax for depth (light, not yellow)
-      fill(255, 230, 210, 70);
+      fill(255, 230, 210, 60);
       ellipse(0, waxTop + 20, w*0.95, 16);
 
-      // solid wax (very light)
       fill(255, 248, 244, 210);
       drawingContext.save();
       roundRect(-w/2, waxTop + (waxBot - waxTop)*0.15, w, (waxBot - waxTop), waxR);
@@ -162,7 +196,7 @@
     function drawWick(m){
       const {cx, wickBaseY, wickTopY} = m;
       push();
-      fill(80);
+      fill(120);
       rectMode(CORNERS);
       rect(cx-2, wickTopY, cx+2, wickBaseY, 2);
       pop();
@@ -210,7 +244,7 @@
       const {cx, topY, h} = m;
       push();
       translate(cx, topY + h*0.54);
-      fill(255,255,255,28);
+      fill(255,255,255,26);
       const count = 4;
       for(let i=0;i<count;i++){
         const x = sin((t*0.4 + i)*1.7) * 40 + (i-1.5)*12;
@@ -235,6 +269,7 @@
         });
       }
     }
+
     function updateEmbers(){
       for(let i=embers.length-1; i>=0; i--){
         const e = embers[i];
