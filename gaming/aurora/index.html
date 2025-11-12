@@ -552,48 +552,80 @@
       constructor(huePool, centerY = height * 0.5) {
         this.x = random(width);
         this.y = constrain(centerY + random(-height * 0.08, height * 0.08), height * 0.3, height * 0.7);
-        this.vx = random(-0.16, 0.16);
-        this.vy = random(-0.18, 0.36);
-        this.size = random(2.6, 7.2);
-        this.life = random(1.1, 1.9);
+        this.vx = random(-0.06, 0.06);
+        this.vy = random(-0.05, 0.1);
+        this.size = random(2.2, 5.8);
+        this.life = random(1.6, 2.9);
         this.huePool = huePool;
         this.hue = this.pickHue();
         this.alpha = 1;
-        this.spin = random(-0.05, 0.06);
-        this.angle = random(TWO_PI);
+        this.flickerRate = random(0.06, 0.14);
+        this.flickerPhase = random(TWO_PI);
       }
 
       update(dt) {
-        this.x += this.vx * dt * 60;
-        this.y += this.vy * dt * 60;
-        this.vy += 0.0032 * dt * 60;
-        this.angle += this.spin * dt * 60;
+        const speedScale = dt * 60;
+        this.x += this.vx * speedScale;
+        this.y += this.vy * speedScale;
+        this.vy += 0.0009 * speedScale;
         this.life -= 0.26 * dt;
         this.alpha = constrain(this.life, 0, 1);
-        if (random() < 0.018) {
+        if (random() < 0.012) {
           this.hue = this.pickHue();
         }
       }
 
       draw() {
-        push();
-        translate(this.x, this.y);
-        rotate(this.angle);
-        const brightness = 82 + 18 * (1 - this.alpha);
-        fill(this.hue, 78, brightness, this.alpha * 0.85);
-        ellipse(0, 0, this.size * 1.5, this.size * 2.6);
-        pop();
+        const ctx = drawingContext;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.globalCompositeOperation = 'screen';
+
+        const baseFlicker = 0.6 + 0.4 * Math.sin(frameCount * this.flickerRate + this.flickerPhase);
+        const intensity = Math.min(1, this.alpha * baseFlicker);
+        const radius = this.size * (1.15 + 0.15 * baseFlicker);
+
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.4);
+        glow.addColorStop(0, hsla(this.hue, 82, 96, intensity));
+        glow.addColorStop(0.35, hsla(this.hue, 70, 76, intensity * 0.65));
+        glow.addColorStop(1, hsla(this.hue, 52, 32, 0));
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.4, 0, TAU);
+        ctx.fill();
+
+        const rayColor = hsla(this.hue, 84, 88, intensity * 0.7);
+        const rayLength = radius * 2.6;
+        ctx.strokeStyle = rayColor;
+        ctx.lineWidth = Math.max(0.6, radius * 0.18);
+        ctx.beginPath();
+        ctx.moveTo(-rayLength, 0);
+        ctx.lineTo(rayLength, 0);
+        ctx.moveTo(0, -rayLength);
+        ctx.lineTo(0, rayLength);
+        ctx.stroke();
+
+        ctx.rotate(Math.PI / 4);
+        ctx.lineWidth = Math.max(0.5, radius * 0.14);
+        ctx.beginPath();
+        ctx.moveTo(-rayLength * 0.75, 0);
+        ctx.lineTo(rayLength * 0.75, 0);
+        ctx.moveTo(0, -rayLength * 0.75);
+        ctx.lineTo(0, rayLength * 0.75);
+        ctx.stroke();
+
+        ctx.restore();
       }
 
       isDead() {
-        return this.alpha <= 0.02 || this.y > height + 40;
+        return this.alpha <= 0.02 || this.y > height + 60;
       }
 
       pickHue() {
         if (!Array.isArray(this.huePool) || !this.huePool.length) {
           return random(360);
         }
-        return (random(this.huePool) + random(-28, 28) + 360) % 360;
+        return (random(this.huePool) + random(-24, 24) + 360) % 360;
       }
     }
 
