@@ -59,17 +59,68 @@ class Petal {
   }
 }
 
+class PetalSparkle {
+  constructor(p) {
+    this.p = p;
+    this.reset();
+  }
+
+  reset() {
+    const p = this.p;
+    this.x = p.random(p.width);
+    this.y = p.random(p.height * 0.7);
+    this.size = p.random(2, 4.2);
+    this.life = p.random(80, 140);
+    this.vx = p.random(-0.25, 0.25);
+    this.vy = p.random(-0.05, 0.18);
+    this.alpha = p.random(110, 190);
+    this.tint = p.random([0, 1, 2]);
+  }
+
+  update(speedMultiplier = 1) {
+    this.x += this.vx * speedMultiplier;
+    this.y += this.vy * speedMultiplier;
+    this.life -= speedMultiplier;
+    this.alpha *= 0.97;
+    return this.life > 0 && this.alpha > 12;
+  }
+
+  draw() {
+    const p = this.p;
+    let color;
+    if (this.tint === 0) {
+      color = [236, 184, 210];
+    } else if (this.tint === 1) {
+      color = [255, 220, 236];
+    } else {
+      color = [208, 160, 198];
+    }
+    p.noStroke();
+    p.fill(color[0], color[1], color[2], this.alpha);
+    p.circle(this.x, this.y, this.size * 2.2);
+  }
+}
+
 export function createPetalScene(p) {
   const petals = [];
   let highlightStart = 0;
   let targetCount = 0;
   let speedMultiplier = 1;
+  let sparkles = [];
 
   function ensurePetals() {
     const desired = Math.floor((p.width * p.height) * 0.00018);
     targetCount = desired;
     while (petals.length < desired) petals.push(new Petal(p, true));
     if (petals.length > desired) petals.length = desired;
+  }
+
+  function spawnSparkles() {
+    sparkles = [];
+    const count = Math.floor(p.width * p.height * 0.000022) + 26;
+    for (let i = 0; i < count; i++) {
+      sparkles.push(new PetalSparkle(p));
+    }
   }
 
   function drawBackground() {
@@ -95,6 +146,7 @@ export function createPetalScene(p) {
     description: 'Souffle pastel et souvenirs flottants',
     enter() {
       highlightStart = p.millis();
+      spawnSparkles();
     },
     resize() {
       ensurePetals();
@@ -105,6 +157,13 @@ export function createPetalScene(p) {
     draw() {
       if (petals.length !== targetCount) ensurePetals();
       drawBackground();
+
+      for (let i = sparkles.length - 1; i >= 0; i--) {
+        const sparkle = sparkles[i];
+        const alive = sparkle.update(speedMultiplier);
+        sparkle.draw();
+        if (!alive) sparkles.splice(i, 1);
+      }
 
       petals.forEach(pt => pt.update(speedMultiplier));
       petals.forEach(pt => pt.draw());

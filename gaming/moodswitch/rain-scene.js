@@ -41,17 +41,63 @@ class Drop {
   }
 }
 
+class RainSparkle {
+  constructor(p) {
+    this.p = p;
+    this.reset();
+  }
+
+  reset() {
+    const p = this.p;
+    this.x = p.random(p.width);
+    this.y = p.random(p.height * 0.6);
+    this.radius = p.random(2, 5);
+    this.life = p.random(70, 120);
+    this.vx = p.random(-0.25, 0.25);
+    this.vy = p.random(0.15, 0.4);
+    this.alpha = p.random(130, 200);
+  }
+
+  update(speedMultiplier = 1) {
+    const p = this.p;
+    this.x += this.vx * speedMultiplier;
+    this.y += this.vy * speedMultiplier;
+    this.life -= speedMultiplier;
+    this.alpha *= 0.97;
+    if (this.y > p.height * 0.9) {
+      this.alpha *= 0.92;
+    }
+    return this.life > 0 && this.alpha > 10;
+  }
+
+  draw() {
+    const p = this.p;
+    p.noStroke();
+    p.fill(180, 210, 255, this.alpha);
+    p.ellipse(this.x, this.y, this.radius * 2, this.radius * 1.2);
+  }
+}
+
 export function createRainScene(p) {
   const drops = [];
   let flashStart = 0;
   let targetCount = 0;
   let speedMultiplier = 1;
+  let sparkles = [];
 
   function ensureDrops() {
     const desired = Math.floor((p.width * p.height) * 0.00055);
     targetCount = desired;
     while (drops.length < desired) drops.push(new Drop(p, true));
     if (drops.length > desired) drops.length = desired;
+  }
+
+  function spawnSparkles() {
+    sparkles = [];
+    const count = Math.floor(p.width * p.height * 0.00003) + 18;
+    for (let i = 0; i < count; i++) {
+      sparkles.push(new RainSparkle(p));
+    }
   }
 
   function drawGradient() {
@@ -77,6 +123,7 @@ export function createRainScene(p) {
     description: 'Gouttes fines et reflets dans la nuit',
     enter() {
       flashStart = p.millis();
+      spawnSparkles();
     },
     resize() {
       ensureDrops();
@@ -87,6 +134,13 @@ export function createRainScene(p) {
     draw() {
       if (drops.length !== targetCount) ensureDrops();
       drawGradient();
+
+      for (let i = sparkles.length - 1; i >= 0; i--) {
+        const sparkle = sparkles[i];
+        const alive = sparkle.update(speedMultiplier);
+        sparkle.draw();
+        if (!alive) sparkles.splice(i, 1);
+      }
 
       drops.forEach(d => d.update(speedMultiplier));
       drops.forEach(d => d.draw());

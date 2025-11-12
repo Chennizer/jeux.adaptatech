@@ -41,6 +41,48 @@ class Snowflake {
   }
 }
 
+class SnowGlitter {
+  constructor(p) {
+    this.p = p;
+    this.reset();
+  }
+
+  reset() {
+    const p = this.p;
+    this.x = p.random(p.width);
+    this.y = p.random(p.height);
+    this.size = p.random(1.5, 3.5);
+    this.life = p.random(90, 150);
+    this.vx = p.random(-0.3, 0.3);
+    this.vy = p.random(-0.2, 0.1);
+    this.alpha = p.random(120, 210);
+    this.twinkleSpeed = p.random(0.05, 0.12);
+    this.phase = p.random(p.TWO_PI);
+  }
+
+  update(speedMultiplier = 1) {
+    const p = this.p;
+    this.x += this.vx * speedMultiplier;
+    this.y += this.vy * speedMultiplier;
+    this.life -= speedMultiplier;
+    this.phase += this.twinkleSpeed * speedMultiplier;
+    this.alpha *= 0.98;
+    if (this.y < -20) this.y = p.height + 10;
+    if (this.x < -20) this.x = p.width + 20;
+    if (this.x > p.width + 20) this.x = -20;
+    return this.life > 0 && this.alpha > 15;
+  }
+
+  draw() {
+    const p = this.p;
+    const twinkle = (Math.sin(this.phase) + 1) * 0.5;
+    const size = this.size * (0.8 + twinkle * 0.6);
+    p.noStroke();
+    p.fill(255, 255, 255, this.alpha);
+    p.circle(this.x, this.y, size);
+  }
+}
+
 export function createSnowScene(p) {
   const flakes = [];
   let glowStart = 0;
@@ -48,12 +90,21 @@ export function createSnowScene(p) {
   let wind = 0;
   let targetWind = 0;
   let speedMultiplier = 1;
+  let glitter = [];
 
   function ensureFlakes() {
     const desired = Math.floor((p.width * p.height) * 0.00042);
     targetCount = desired;
     while (flakes.length < desired) flakes.push(new Snowflake(p, true));
     if (flakes.length > desired) flakes.length = desired;
+  }
+
+  function spawnGlitter() {
+    glitter = [];
+    const count = Math.floor(p.width * p.height * 0.000025) + 24;
+    for (let i = 0; i < count; i++) {
+      glitter.push(new SnowGlitter(p));
+    }
   }
 
   function updateWind() {
@@ -81,6 +132,7 @@ export function createSnowScene(p) {
       glowStart = p.millis();
       wind = p.random(-1.5, 1.5);
       targetWind = wind;
+      spawnGlitter();
     },
     resize() {
       ensureFlakes();
@@ -93,6 +145,13 @@ export function createSnowScene(p) {
       drawSky();
 
       updateWind();
+
+      for (let i = glitter.length - 1; i >= 0; i--) {
+        const sparkle = glitter[i];
+        const alive = sparkle.update(speedMultiplier);
+        sparkle.draw();
+        if (!alive) glitter.splice(i, 1);
+      }
 
       flakes.forEach(f => f.update(wind, speedMultiplier));
       flakes.forEach(f => f.draw());
