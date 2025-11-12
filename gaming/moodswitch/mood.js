@@ -1,6 +1,7 @@
 import { createRainScene } from './rain-scene.js';
 import { createSnowScene } from './snow-scene.js';
 import { createPetalScene } from './petal-scene.js';
+import { createCandleScene } from './candle-scene.js';
 
 const sceneNameEl = document.getElementById('scene-name');
 const sceneDescEl = document.getElementById('scene-desc');
@@ -133,7 +134,8 @@ const sketch = p => {
     scenes = [
       createRainScene(p),
       createSnowScene(p),
-      createPetalScene(p)
+      createPetalScene(p),
+      createCandleScene(p)
     ];
     scenes.forEach(scene => scene.resize?.());
     activeIndex = 0;
