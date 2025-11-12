@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title class="translate" data-fr="Lecteur Gemini Storybook" data-en="Gemini Storybook Switch Reader">Gemini Storybook Reader</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
+  <!-- pdf.js (stable UMD v3) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    window.__PDFJS__ = window.pdfjsLib;
+  </script>
+
+  <!-- tesseract.js -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <style>
+    :root { --teal:#009688; --bg:#000; --fg:#fff; }
+    html, body {
+      margin:0;
+      padding:0;
+      background:var(--bg);
+      color:var(--fg);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      height:100%;
+      overflow:hidden;
+    }
+
+    body {
+      display:block;
+    }
+
+    #langToggle {
+      position:fixed;
+      top:10px;
+      right:10px;
+      z-index:1100;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:10px;
+      border:2px solid var(--teal);
+      background:#fff;
+      color:var(--teal);
+      font-weight:700;
+      cursor:pointer;
+      user-select:none;
+    }
+
+    body.playing #langToggle { display:none !important; }
+
+    #stage {
+      position:fixed;
+      inset:0;
+      display:none;
+      place-items:center;
+      background:#000;
+      cursor:pointer;
+      z-index:1;
+    }
+    body.playing #stage { display:grid; }
+
+    canvas { display:block; max-width:100vw; max-height:100vh; }
+
+    #hud {
+      position:fixed;
+      left:12px;
+      bottom:12px;
+      padding:6px 10px;
+      background:rgba(0,0,0,.5);
+      border:1px solid rgba(255,255,255,.2);
+      border-radius:10px;
+      font-size:14px;
+      user-select:none;
+      z-index:5;
+    }
+
+    #ocrHud {
+      position:fixed;
+      right:12px;
+      bottom:12px;
+      z-index:6;
+      background:rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.2);
+      border-radius:10px;
+      padding:8px 10px;
+      font-size:13px;
+      min-width:220px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    #ocrHud .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    #ocrHud select, #ocrHud label { font-size:13px; }
+    #ocrProg { height:6px; background:#111; border-radius:999px; overflow:hidden; }
+    #ocrProg > div { height:100%; width:0%; background:linear-gradient(90deg,#60a5fa,#34d399); }
+    #ocrStatus { opacity:.85; }
+    #ocrHud label.disabled { opacity:0.55; }
+
+    #textOut {
+      display:none;
+      width:min(520px, 90vw);
+      max-height:30vh;
+      overflow:auto;
+      background:#0b0b0b;
+      color:#ddd;
+      border:1px solid #333;
+      border-radius:10px;
+      padding:8px;
+      margin:0;
+      position:fixed;
+      right:12px;
+      bottom:82px;
+      z-index:6;
+      white-space:pre-wrap;
+    }
+
+    body:not(.playing) #hud,
+    body:not(.playing) #ocrHud,
+    body:not(.playing) #textOut {
+      display:none !important;
+    }
+
+    body.playing #ocrHud,
+    body.playing #textOut {
+      display:none !important;
+    }
+
+    body.playing #game-options { display:none !important; }
+
+    /* ===== Menu enhancements ===== */
+    .button[disabled] {
+      opacity:0.5;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
+
+    .file-status {
+      margin-top:10px;
+      font-size:16px;
+      font-weight:600;
+      color:#004d40;
+      text-align:center;
+      transition:transform .2s ease, box-shadow .2s ease;
+    }
+
+    .file-status.is-loading {
+      color:#fff;
+      background:linear-gradient(120deg,rgba(0,150,136,0.95),rgba(0,188,212,0.95));
+      border-radius:14px;
+      padding:14px 18px;
+      box-shadow:0 0 18px rgba(0,188,212,0.45);
+      transform:scale(1.02);
+      letter-spacing:0.5px;
+      text-transform:uppercase;
+    }
+
+    .file-status.is-loading::before {
+      content:'⏳';
+      margin-right:8px;
+      font-size:18px;
+    }
+
+    .library-select-wrapper {
+      width:100%;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .library-select-wrapper select {
+      flex:1 1 auto;
+      border-radius:12px;
+      border:2px solid var(--teal);
+      padding:10px 12px;
+      background:#fff;
+      color:#00695c;
+      font-weight:600;
+      appearance:none;
+      min-height:48px;
+    }
+
+    .library-select-wrapper select:disabled {
+      opacity:0.6;
+      cursor:not-allowed;
+    }
+
+    .library-open-btn {
+      flex:0 0 auto;
+      padding:12px 18px;
+      min-width:120px;
+      white-space:nowrap;
+    }
+
+    .tts-rate-row {
+      width:100%;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-top:6px;
+    }
+
+    #ttsRate {
+      flex:1 1 auto;
+      accent-color:var(--teal);
+    }
+
+    #ttsRateDisplay {
+      min-width:48px;
+      text-align:right;
+      font-weight:600;
+      color:#00695c;
+      font-variant-numeric:tabular-nums;
+    }
+
+    .library-open-btn[disabled] {
+      opacity:0.5;
+      cursor:not-allowed;
+    }
+
+    .library-message {
+      margin-top:8px;
+      color:#00695c;
+      font-weight:600;
+      text-align:center;
+    }
+
+    .library-message strong {
+      font-weight:800;
+      text-transform:uppercase;
+    }
+
+    .mode-option {
+      display:grid;
+      grid-template-columns:20px 1fr;
+      align-items:flex-start;
+      column-gap:10px;
+      row-gap:6px;
+      margin-bottom:10px;
+      font-weight:600;
+      color:#004d40;
+    }
+    .mode-option input[type="radio"] {
+      margin:3px 0 0;
+      accent-color:var(--teal);
+      transform:scale(1.1);
+    }
+    .mode-option span { font-size:16px; }
+
+    .instructions {
+      font-size:16px;
+      color:#004d40;
+      text-align:left;
+    }
+
+    .tip-text {
+      font-size:16px;
+      color:#004d40;
+      margin:0;
+      line-height:1.3;
+    }
+
+    .menu-hint {
+      margin-top:12px;
+      color:#00695c;
+      font-weight:600;
+    }
+
+    #options-inline-container > .options-column { align-items:flex-start; }
+    #options-inline-container > .options-column:nth-child(2) { align-items:center; }
+    #options-inline-container > .options-column:nth-child(2) .option-item { align-items:center; text-align:center; }
+    #options-inline-container > .options-column:nth-child(2) .teal-label { justify-content:center; }
+
+    #options-inline-container > .options-column:nth-child(3) { align-items:flex-start; }
+  </style>
+</head>
+<body>
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate" data-fr="Lecteur Gemini Storybook pour switch adaptée" data-en="Gemini Storybook Switch Reader">PDF — Lecteur oculométrique</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <!-- LEFT COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <p class="teal-label label-block translate" data-fr="Voix TTS" data-en="TTS voice">Voix TTS</p>
+            <select id="ttsLang" class="styled-select compact-field">
+              <option value="fr-CA" data-interface="fr" class="translate" data-fr="Français (voix)" data-en="French (voice)">Français (voix)</option>
+              <option value="en-US" data-interface="en" class="translate" data-fr="Anglais (voix)" data-en="English (voice)">Anglais (voix)</option>
+              <option value="es-ES" class="translate" data-fr="Espagnol (voix)" data-en="Spanish (voice)">Espagnol (voix)</option>
+              <option value="de-DE" class="translate" data-fr="Allemand (voix)" data-en="German (voice)">Allemand (voix)</option>
+            </select>
+            <label for="ttsRate" class="teal-label label-block translate" data-fr="Vitesse TTS" data-en="TTS speed">Vitesse TTS</label>
+            <div class="tts-rate-row">
+              <input id="ttsRate" type="range" min="0.5" max="1.3" step="0.05" value="0.8" />
+              <span id="ttsRateDisplay">1×</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- MIDDLE COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label label-block translate" data-fr="Choisir une histoire" data-en="Choose a story">Choisir un PDF</label>
+            <button id="chooseBtn" type="button" class="button translate" data-fr="Depuis l’ordinateur…" data-en="From computer…">Depuis l’ordinateur…</button>
+            <input id="fileInput" type="file" accept="application/pdf" hidden />
+            <p id="fileStatus" class="file-status translate" data-fr="Aucun fichier sélectionné" data-en="No file selected">Aucun fichier sélectionné</p>
+          </div>
+          <div class="option-item">
+            <label class="teal-label label-block translate" data-fr="Bibliothèque d'histoires" data-en="Storybook library">Bibliothèque PDF</label>
+            <div class="library-select-wrapper">
+              <select id="librarySelect" disabled></select>
+              <button id="libraryOpen" type="button" class="button library-open-btn translate" data-fr="Ouvrir" data-en="Open" disabled>Ouvrir</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <p class="teal-label label-block translate" data-fr="Options de lecture" data-en="Reading options">Options de lecture</p>
+            <label class="teal-label mode-option">
+              <input type="radio" name="advanceMode" value="direct" checked />
+              <span class="translate" data-fr="Appuyer sur la switch tourne la page et lit." data-en="Switch turns the pages and reads.">Lecture automatique : espace ou clic avance immédiatement.</span>
+            </label>
+            <label class="teal-label mode-option">
+              <input type="radio" name="advanceMode" value="tts-confirm" />
+              <span class="translate" data-fr="Appuyer pour tourner la page et appuyer à nouveau pour la lecture." data-en="Press switch to turn the page, press again to read.">Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante.</span>
+            </label>
+          </div>
+          <div class="option-item">
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" disabled>Commencer</button>
+    </div>
+  </div>
+
+  <div id="stage" aria-label="Zone d’affichage PDF">
+    <canvas id="pageCanvas" aria-hidden="true"></canvas>
+  </div>
+
+  <div id="hud"><span id="pageLabel">—</span></div>
+
+  <pre id="textOut"></pre>
+  <audio id="pageTurnAudio" src="../../sounds/pageturned.mp3" preload="auto" aria-hidden="true"></audio>
+  <div id="ocrHud">
+    <div class="row">
+      <label for="ocrLang">OCR:</label>
+      <select id="ocrLang">
+        <option value="eng" selected>English (eng)</option>
+        <option value="fra">Français (fra)</option>
+        <option value="eng+fra">English + Français</option>
+        <option value="spa">Español (spa)</option>
+        <option value="deu">Deutsch (deu)</option>
+      </select>
+      <label class="teal-label auto-read-label">
+        <input type="checkbox" id="autoRead" checked />
+        <span class="translate" data-fr="Lecture auto" data-en="Auto-read">Lecture auto</span>
+      </label>
+    </div>
+    <div id="ocrProg" aria-hidden="true"><div id="ocrBar"></div></div>
+    <div id="ocrStatus">—</div>
+  </div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script>
+    if (typeof initEyegazeMenu === 'function') {
+      initEyegazeMenu();
+    }
+
+    const LS_LANG_KEY = 'siteLanguage';
+    const LS_TTS_KEY = 'pdftest.ttsVoice';
+    const LS_TTS_RATE_KEY = 'pdftest.ttsRate';
+    const langToggle = document.getElementById('langToggle');
+    const ttsLangSelect = document.getElementById('ttsLang');
+    const ttsRateInput = document.getElementById('ttsRate');
+    const ttsRateDisplay = document.getElementById('ttsRateDisplay');
+
+    const chooseBtn = document.getElementById('chooseBtn');
+    const fileInput = document.getElementById('fileInput');
+    const fileStatus = document.getElementById('fileStatus');
+    const startButton = document.getElementById('startButton');
+    const stage = document.getElementById('stage');
+    const canvas = document.getElementById('pageCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const hudLabel = document.getElementById('pageLabel');
+    const pageTurnAudio = document.getElementById('pageTurnAudio');
+    const ocrLangSel = document.getElementById('ocrLang');
+    const autoRead = document.getElementById('autoRead');
+    const ocrBar = document.getElementById('ocrBar');
+    const ocrStatus = document.getElementById('ocrStatus');
+    const textOut = document.getElementById('textOut');
+    const advanceRadios = Array.from(document.querySelectorAll('input[name="advanceMode"]'));
+    const librarySelect = document.getElementById('librarySelect');
+    const libraryOpenBtn = document.getElementById('libraryOpen');
+    const libraryMessage = document.getElementById('libraryMessage');
+
+    const CONFIRM_STATES = { LOADING:'loading', NEED_READ:'need-read', READY:'ready' };
+    const DEFAULT_TTS_BY_INTERFACE = { fr:'fr-CA', en:'en-US' };
+    const DEFAULT_TTS_RATE = 1;
+    const TTS_RATE_MIN = 0.5;
+    const TTS_RATE_MAX = 1.3;
+    const PDF_LIBRARY_PATH = '../../pdf/';
+    const PDF_MANIFEST_CANDIDATES = ['manifest.json', 'index.json', 'list.json'];
+    const pdfBaseUrl = new URL(PDF_LIBRARY_PATH, window.location.href);
+    const pdfRelativeBase = PDF_LIBRARY_PATH.endsWith('/') ? PDF_LIBRARY_PATH : `${PDF_LIBRARY_PATH}/`;
+
+    function makePdfRequestPath(target) {
+      try {
+        const candidate = target instanceof URL
+          ? target
+          : new URL(String(target || ''), pdfBaseUrl);
+
+        if (candidate.origin && candidate.origin !== pdfBaseUrl.origin) {
+          return candidate.href;
+        }
+
+        const path = candidate.pathname || '/';
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        const search = candidate.search || '';
+        const hash = candidate.hash || '';
+        return `${normalizedPath}${search}${hash}`;
+      } catch (err) {
+        return pdfRelativeBase;
+      }
+    }
+
+    let pdfDoc = null, currentPageNum = 1, totalPages = 0, started = false, loading = false, pdfData = null;
+    let speakingAllowed = false;
+    let currentRenderToken = 0;
+    let advanceMode = 'direct';
+    let confirmState = CONFIRM_STATES.READY;
+    let currentLang = 'fr';
+    let lastFileName = '';
+    let currentTtsRate = DEFAULT_TTS_RATE;
+    let allowTtsRateSave = false;
+    let ttsOverride = false;
+    let allowPageTurnSound = false;
+    let libraryEntries = [];
+    let libraryMessageKey = 'loading';
+    let ttsTimeoutId = null; // NEW: timeout handle for delayed TTS
+
+    const LIBRARY_MESSAGES = {
+      loading: {
+        fr: 'Chargement de la bibliothèque…',
+        en: 'Loading library…',
+      },
+      ready: {
+        fr: 'Sélectionnez un PDF puis cliquez sur <strong>Ouvrir</strong>.',
+        en: 'Select a PDF then press <strong>Open</strong>.',
+      },
+      empty: {
+        fr: 'Aucun PDF trouvé.',
+        en: 'No PDFs found.',
+      },
+      error: {
+        fr: 'Impossible de charger la bibliothèque.',
+        en: 'Unable to load the library.',
+      },
+    };
+
+    function applyLibraryMessage() {
+      if (!libraryMessage) return;
+      const msg = LIBRARY_MESSAGES[libraryMessageKey] || LIBRARY_MESSAGES.ready;
+      const text = msg?.[currentLang] ?? msg?.fr ?? '';
+      libraryMessage.innerHTML = text;
+    }
+
+    function setLibraryMessage(key) {
+      libraryMessageKey = key;
+      applyLibraryMessage();
+    }
+
+    function updateLibraryPlaceholder() {
+      if (!librarySelect) return;
+      const placeholder = librarySelect.querySelector('option[data-placeholder="true"]');
+      if (placeholder) {
+        placeholder.textContent = (currentLang === 'fr')
+          ? '— Choisir un PDF —'
+          : '— Choose a PDF —';
+      }
+    }
+
+    function updateLibraryControlsState() {
+      if (!librarySelect || !libraryOpenBtn) return;
+      const disabled = librarySelect.disabled;
+      const hasSelection = !disabled && librarySelect.value !== '';
+      libraryOpenBtn.disabled = disabled || !hasSelection;
+    }
+
+    setLibraryMessage('loading');
+    updateLibraryControlsState();
+    let allowTtsSave = false;
+
+    function normalizeInterfaceLangFromValue(value) {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      const lower = trimmed.toLowerCase();
+      const base = lower.split(/[-_]/)[0];
+      switch (base) {
+        case 'fr': return 'fr';
+        case 'en': return 'en';
+        case 'es': return 'es';
+        case 'de': return 'de';
+        default: return '';
+      }
+    }
+
+    function resolveVoicePreferenceFromRaw(raw) {
+      if (!raw || !ttsLangSelect) return null;
+      const text = (typeof raw === 'string') ? raw.trim() : '';
+      if (!text) return null;
+      const lowered = text.toLowerCase();
+      const options = Array.from(ttsLangSelect.options || []);
+      const direct = options.find(opt => opt.value.toLowerCase() === lowered);
+      const interfaceLang = normalizeInterfaceLangFromValue(lowered);
+
+      if (direct) {
+        return { voice: direct.value, interfaceLang: interfaceLang || normalizeInterfaceLangFromValue(direct.value) };
+      }
+
+      if (interfaceLang) {
+        const defaultVoice = getDefaultTtsFor(interfaceLang);
+        if (options.some(opt => opt.value === defaultVoice)) {
+          return { voice: defaultVoice, interfaceLang };
+        }
+      }
+
+      return null;
+    }
+
+    function applyLibraryEntryTtsPreference(entry) {
+      if (!entry) return;
+      const raw = entry.language || entry.lang || entry.locale || entry.voice || entry.tts;
+      const pref = resolveVoicePreferenceFromRaw(raw);
+      if (!pref || !ttsLangSelect) return;
+      const hasOption = Array.from(ttsLangSelect.options).some(opt => opt.value === pref.voice);
+      if (!hasOption) return;
+      ttsLangSelect.value = pref.voice;
+      updateTtsOverrideState();
+      if (allowTtsSave) {
+        saveTtsPreference();
+      }
+      refreshTtsRateUI();
+    }
+
+    function normalizeTtsRate(value) {
+      const parsed = Number.parseFloat(value);
+      if (!Number.isFinite(parsed)) return DEFAULT_TTS_RATE;
+      const clamped = Math.min(TTS_RATE_MAX, Math.max(TTS_RATE_MIN, parsed));
+      return Math.round(clamped * 100) / 100;
+    }
+
+    function formatTtsRateForDisplay(rate) {
+      const normalized = normalizeTtsRate(rate);
+      let str = normalized.toFixed(2);
+      str = str.replace(/\.00$/, '.0').replace(/(\.\d)0$/, '$1');
+      if (!str.includes('.')) {
+        str += '.0';
+      }
+      return `${str}×`;
+    }
+
+    function applyTtsRateToUi(rate) {
+      const normalized = normalizeTtsRate(rate);
+      currentTtsRate = normalized;
+      if (ttsRateInput) {
+        ttsRateInput.value = String(normalized);
+      }
+      if (ttsRateDisplay) {
+        ttsRateDisplay.textContent = formatTtsRateForDisplay(normalized);
+      }
+    }
+
+    function refreshTtsRateUI() {
+      applyTtsRateToUi(currentTtsRate);
+    }
+
+    function saveTtsRatePreference() {
+      if (!allowTtsRateSave) return;
+      try {
+        localStorage.setItem(LS_TTS_RATE_KEY, String(currentTtsRate));
+      } catch (e) {}
+    }
+
+    function tryRestoreTtsRatePreference() {
+      if (!ttsRateInput) return;
+      let target = DEFAULT_TTS_RATE;
+      try {
+        const stored = localStorage.getItem(LS_TTS_RATE_KEY);
+        if (stored != null) {
+          target = normalizeTtsRate(stored);
+        }
+      } catch (e) {}
+      applyTtsRateToUi(target);
+    }
+
+    function getEffectiveTtsRate() {
+      return normalizeTtsRate(currentTtsRate);
+    }
+
+    function applyTranslationsForLang(lang) {
+      document.querySelectorAll('.translate').forEach(el => {
+        const text = el.dataset?.[lang];
+        if (text != null) {
+          el.innerHTML = text;
+        }
+      });
+      updateFileStatusText();
+    }
+
+    function getDefaultTtsFor(lang) {
+      return DEFAULT_TTS_BY_INTERFACE[lang] || DEFAULT_TTS_BY_INTERFACE.en || 'en-US';
+    }
+
+    function syncTtsSelectionForInterface(force = false) {
+      if (!ttsLangSelect) return;
+      if (!ttsOverride || force) {
+        const target = getDefaultTtsFor(currentLang);
+        const optionExists = Array.from(ttsLangSelect.options).some(opt => opt.value === target);
+        if (optionExists) {
+          ttsLangSelect.value = target;
+        }
+      }
+      updateTtsOverrideState();
+    }
+
+    function updateTtsOverrideState() {
+      if (!ttsLangSelect) {
+        ttsOverride = false;
+        return;
+      }
+      const target = getDefaultTtsFor(currentLang);
+      ttsOverride = (ttsLangSelect.value && ttsLangSelect.value !== target);
+    }
+
+    function getEffectiveTtsLang() {
+      const target = getDefaultTtsFor(currentLang);
+      if (!ttsLangSelect) return target;
+      if (ttsOverride && ttsLangSelect.value) {
+        return ttsLangSelect.value;
+      }
+      return target;
+    }
+
+    function saveTtsPreference() {
+      if (!ttsLangSelect) return;
+      try {
+        const selected = ttsLangSelect.value;
+        const target = getDefaultTtsFor(currentLang);
+        if (selected && selected !== target) {
+          localStorage.setItem(LS_TTS_KEY, selected);
+        } else {
+          localStorage.removeItem(LS_TTS_KEY);
+        }
+      } catch (e) {}
+    }
+
+    function tryRestoreTtsPreference() {
+      if (!ttsLangSelect) return;
+      try {
+        const stored = localStorage.getItem(LS_TTS_KEY);
+        if (!stored) return;
+        const hasOption = Array.from(ttsLangSelect.options).some(opt => opt.value === stored);
+        if (!hasOption) return;
+        ttsLangSelect.value = stored;
+        updateTtsOverrideState();
+      } catch (e) {}
+    }
+
+    function renderLibraryEntries() {
+      if (!librarySelect) return;
+
+      const previousSelection = librarySelect.value;
+      librarySelect.innerHTML = '';
+
+      if (!libraryEntries.length) {
+        librarySelect.disabled = true;
+        setLibraryMessage('empty');
+        updateLibraryControlsState();
+        return;
+      }
+
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.dataset.placeholder = 'true';
+      placeholder.selected = true;
+      librarySelect.appendChild(placeholder);
+      updateLibraryPlaceholder();
+
+      const collator = new Intl.Collator(currentLang === 'fr' ? 'fr' : 'en', { sensitivity: 'base' });
+      const sorted = libraryEntries.map((entry, idx) => ({ entry, idx }))
+        .sort((a, b) => collator.compare(a.entry.label, b.entry.label));
+      sorted.forEach(({ entry, idx }) => {
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        opt.textContent = entry.label;
+        opt.title = entry.label;
+        if (entry.language) {
+          opt.dataset.language = entry.language;
+        }
+        librarySelect.appendChild(opt);
+      });
+
+      librarySelect.disabled = false;
+      if (previousSelection && librarySelect.querySelector(`option[value="${previousSelection}"]`)) {
+        librarySelect.value = previousSelection;
+      } else {
+        librarySelect.value = '';
+      }
+
+      setLibraryMessage('ready');
+      updateLibraryControlsState();
+    }
+
+    async function populateLibraryList() {
+      if (!librarySelect) return;
+      libraryEntries = [];
+      librarySelect.innerHTML = '';
+      librarySelect.disabled = true;
+      setLibraryMessage('loading');
+      updateLibraryControlsState();
+
+      try {
+        const entries = await fetchPdfLibraryEntries();
+        libraryEntries = entries;
+        renderLibraryEntries();
+      } catch (err) {
+        console.error('PDF library load error:', err);
+        libraryEntries = [];
+        if (librarySelect) {
+          librarySelect.innerHTML = '';
+          librarySelect.disabled = true;
+        }
+        setLibraryMessage('error');
+        updateLibraryControlsState();
+      }
+    }
+
+    function normalizePdfEntries(data) {
+      const entries = [];
+      if (!data) return entries;
+      const base = pdfBaseUrl;
+
+      const pushEntry = (raw) => {
+        if (!raw) return;
+        let href = '';
+        let label = '';
+        let language = '';
+
+        if (typeof raw === 'string') {
+          href = raw;
+          label = raw;
+        } else if (typeof raw === 'object') {
+          href = raw.url || raw.href || raw.path || raw.file || raw.name || '';
+          label = raw.label || raw.title || raw.name || '';
+          language = raw.language || raw.lang || raw.locale || raw.voice || raw.tts || '';
+        }
+
+        if (!href) return;
+        try {
+          const url = new URL(href, base);
+          if (!/\.pdf$/i.test(url.pathname)) return;
+          const name = decodeURIComponent(url.pathname.split('/').pop() || '').trim() || 'PDF';
+          const display = label?.trim() || name;
+          const lang = (typeof language === 'string') ? language.trim() : '';
+          entries.push({
+            url: url.href,
+            requestPath: makePdfRequestPath(url),
+            label: display,
+            fileName: name,
+            language: lang
+          });
+        } catch (e) {}
+      };
+
+      if (Array.isArray(data)) {
+        data.forEach(item => {
+          if (!item) return;
+          if (Array.isArray(item)) {
+            normalizePdfEntries(item).forEach(entry => entries.push(entry));
+            return;
+          }
+          if (typeof item === 'object' && !Array.isArray(item) && Array.isArray(item.files)) {
+            normalizePdfEntries(item.files).forEach(entry => entries.push(entry));
+            return;
+          }
+          pushEntry(item);
+        });
+      } else if (typeof data === 'object') {
+        if (Array.isArray(data.files)) {
+          normalizePdfEntries(data.files).forEach(entry => entries.push(entry));
+        } else {
+          pushEntry(data);
+        }
+      }
+
+      return entries;
+    }
+
+    async function fetchPdfLibraryEntries() {
+      const seen = new Set();
+      const results = [];
+
+      for (const manifest of PDF_MANIFEST_CANDIDATES) {
+        try {
+          const url = new URL(manifest, pdfBaseUrl);
+          const resp = await fetch(makePdfRequestPath(url), { cache: 'no-store' });
+          if (!resp.ok) continue;
+          const data = await resp.json();
+          const entries = normalizePdfEntries(data);
+          entries.forEach(entry => {
+            if (!seen.has(entry.url)) {
+              seen.add(entry.url);
+              results.push(entry);
+            }
+          });
+          if (results.length) {
+            return results;
+          }
+        } catch (err) {
+          console.debug('PDF manifest fetch failed', manifest, err);
+        }
+      }
+
+      try {
+        const resp = await fetch(makePdfRequestPath(pdfBaseUrl), { cache: 'no-store' });
+        if (resp.ok) {
+          const text = await resp.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(text, 'text/html');
+          const anchors = Array.from(doc.querySelectorAll('a[href]'));
+          anchors.forEach(a => {
+            const href = a.getAttribute('href');
+            const label = (a.textContent || '').trim();
+            try {
+              const url = new URL(href, resp.url);
+              if (url.href === resp.url) return;
+              if (!/\.pdf$/i.test(url.pathname)) return;
+              const name = decodeURIComponent(url.pathname.split('/').pop() || '').trim();
+              const display = label || name;
+              if (!seen.has(url.href)) {
+                seen.add(url.href);
+                results.push({
+                  url: url.href,
+                  requestPath: makePdfRequestPath(url),
+                  label: display || 'PDF',
+                  fileName: name || display || 'PDF'
+                });
+              }
+            } catch (e) {}
+          });
+        }
+      } catch (err) {
+        console.debug('PDF directory listing fetch failed', err);
+      }
+
+      return results;
+    }
+
+    async function fetchPdfArrayBuffer(entry) {
+      const attempts = [];
+      const errors = [];
+      const seen = new Set();
+
+      const addCandidate = (value, { normalize = false } = {}) => {
+        if (!value) return;
+        let candidate = '';
+        try {
+          candidate = normalize ? makePdfRequestPath(value) : String(value).trim();
+        } catch (err) {
+          errors.push(`${value}: ${err?.message || err}`);
+          return;
+        }
+        if (!candidate) return;
+        if (seen.has(candidate)) return;
+        seen.add(candidate);
+        attempts.push(candidate);
+      };
+
+      addCandidate(entry?.requestPath);
+      addCandidate(entry?.url);
+      addCandidate(entry?.url, { normalize: true });
+
+      if (entry?.fileName) {
+        addCandidate(entry.fileName, { normalize: true });
+        const trimmedBase = pdfRelativeBase.replace(/\/+$/, '');
+        addCandidate(`${trimmedBase}/${entry.fileName}`);
+        try {
+          addCandidate(new URL(entry.fileName, pdfBaseUrl).href);
+        } catch (err) {
+          errors.push(`${entry.fileName}: ${err?.message || err}`);
+        }
+      }
+
+      if (!attempts.length) {
+        throw new Error('No PDF URL candidates available');
+      }
+
+      for (const candidate of attempts) {
+        try {
+          const resp = await fetch(candidate, { cache: 'no-store' });
+          if (!resp.ok) {
+            errors.push(`${candidate}: HTTP ${resp.status}`);
+            continue;
+          }
+          return await resp.arrayBuffer();
+        } catch (err) {
+          errors.push(`${candidate}: ${err?.message || err}`);
+        }
+      }
+
+      throw new Error(errors.join(' | ') || 'Unknown PDF fetch failure');
+    }
+
+    async function loadPdfFromLibrary(entry) {
+      if (!entry || (!entry.url && !entry.requestPath)) return;
+      const previousPdfData = pdfData;
+      const previousFileName = lastFileName;
+      const label = entry.label || entry.fileName || '';
+      const entryIndex = libraryEntries.indexOf(entry);
+
+      if (librarySelect && entryIndex >= 0) {
+        librarySelect.value = String(entryIndex);
+      }
+      if (libraryOpenBtn) {
+        libraryOpenBtn.disabled = true;
+      }
+
+      applyLibraryEntryTtsPreference(entry);
+
+      try {
+        setFileStatusLoading(label);
+        startButton.disabled = true;
+        const buf = await fetchPdfArrayBuffer(entry);
+        await setPdfFromArrayBuffer(buf, entry.fileName || label || '');
+        setLibraryMessage('ready');
+      } catch (err) {
+        console.error('Library PDF load error:', err);
+        pdfData = previousPdfData;
+        lastFileName = previousFileName;
+        updateFileStatusText();
+        updateStartButtonState();
+        const msg = (currentLang === 'fr')
+          ? `Impossible de charger le PDF « ${label || 'inconnu'} » .`
+          : `Unable to load “${label || 'unknown'}”.`;
+        alert(msg);
+      } finally {
+        updateLibraryControlsState();
+      }
+    }
+
+    function updateFileStatusText() {
+      if (!fileStatus) return;
+      fileStatus.classList.remove('is-loading');
+      if (lastFileName) {
+        const label = (currentLang === 'fr') ? 'Fichier sélectionné : ' : 'Selected file: ';
+        fileStatus.innerHTML = `${label}<strong>${escapeHtml(lastFileName)}</strong>`;
+      } else {
+        const fallback = fileStatus.dataset?.[currentLang];
+        if (fallback != null) fileStatus.textContent = fallback;
+      }
+    }
+
+    function getLang() {
+      try {
+        const saved = localStorage.getItem(LS_LANG_KEY);
+        if (saved === 'en' || saved === 'fr') return saved;
+      } catch(e) {}
+      return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+    }
+
+    function setLang(lang) {
+      const safe = (lang === 'en') ? 'en' : 'fr';
+      currentLang = safe;
+      document.documentElement.lang = safe;
+      try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e) {}
+      applyTranslationsForLang(safe);
+      updateLibraryPlaceholder();
+      applyLibraryMessage();
+      if (libraryEntries.length) {
+        renderLibraryEntries();
+      }
+      syncTtsSelectionForInterface();
+      if (allowTtsSave) {
+        saveTtsPreference();
+      }
+      refreshTtsRateUI();
+      updateLibraryControlsState();
+    }
+
+    (function initializeLanguage(){
+      let initial = 'fr';
+      try {
+        const saved = localStorage.getItem(LS_LANG_KEY);
+        if (saved === 'en' || saved === 'fr') {
+          initial = saved;
+        } else {
+          initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+          localStorage.setItem(LS_LANG_KEY, initial);
+        }
+      } catch(e) {
+        initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      }
+      setLang(initial);
+      tryRestoreTtsPreference();
+      tryRestoreTtsRatePreference();
+      allowTtsSave = true;
+      saveTtsPreference();
+      allowTtsRateSave = true;
+      saveTtsRatePreference();
+    })();
+
+    langToggle.addEventListener('click', () => {
+      setLang(getLang() === 'fr' ? 'en' : 'fr');
+    });
+
+    if (ttsLangSelect) {
+      ttsLangSelect.addEventListener('change', () => {
+        updateTtsOverrideState();
+        saveTtsPreference();
+      });
+    }
+
+    if (ttsRateInput) {
+      ttsRateInput.addEventListener('input', () => {
+        applyTtsRateToUi(ttsRateInput.value);
+        saveTtsRatePreference();
+      });
+    }
+
+    if (librarySelect) {
+      librarySelect.addEventListener('change', () => {
+        updateLibraryControlsState();
+        const idx = Number.parseInt(librarySelect.value, 10);
+        if (!Number.isNaN(idx) && libraryEntries[idx]) {
+          applyLibraryEntryTtsPreference(libraryEntries[idx]);
+        }
+      });
+
+      librarySelect.addEventListener('keydown', evt => {
+        if (evt.key === 'Enter' && libraryOpenBtn && !libraryOpenBtn.disabled) {
+          evt.preventDefault();
+          libraryOpenBtn.click();
+        }
+      });
+    }
+
+    if (libraryOpenBtn) {
+      libraryOpenBtn.addEventListener('click', () => {
+        if (!librarySelect) return;
+        const idx = Number.parseInt(librarySelect.value, 10);
+        if (Number.isNaN(idx) || !libraryEntries[idx]) return;
+        loadPdfFromLibrary(libraryEntries[idx]);
+      });
+    }
+
+    function escapeHtml(str) {
+      const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"};
+      return str.replace(/[&<>"']/g, ch => map[ch]);
+    }
+
+    function setHUD() {
+      hudLabel.textContent = (pdfDoc && started) ? `${currentPageNum} / ${totalPages}` : '—';
+    }
+
+    async function goFullscreen() {
+      if (!document.fullscreenElement) {
+        try { await document.documentElement.requestFullscreen(); } catch(_) {}
+      }
+    }
+
+    function enterPlayingUI() {
+      document.body.classList.add('playing');
+    }
+
+    function exitPlayingUI() {
+      document.body.classList.remove('playing');
+      started = false;
+      speakingAllowed = false;
+      stopSpeak();
+      document.body.style.cursor = 'default';
+      setHUD();
+      updateStartButtonState();
+    }
+
+    function setOcrProgress(p) {
+      ocrBar.style.width = Math.max(0, Math.min(100, Math.round(p * 100))) + '%';
+    }
+
+    function updateStartButtonState() {
+      startButton.disabled = !pdfData;
+    }
+
+    function setFileStatusLoading(label = '') {
+      if (!fileStatus) return;
+      const base = (currentLang === 'fr') ? 'Chargement du PDF' : 'Loading PDF';
+      const suffix = label ? ` : ${label}` : '…';
+      fileStatus.textContent = base + suffix;
+      fileStatus.classList.add('is-loading');
+    }
+
+    function syncAutoReadWithMode() {
+      if (advanceMode === 'tts-confirm') {
+        autoRead.checked = false;
+        autoRead.disabled = true;
+        autoRead.parentElement.classList.add('disabled');
+      } else {
+        autoRead.disabled = false;
+        if (!autoRead.checked) autoRead.checked = true;
+        autoRead.parentElement.classList.remove('disabled');
+      }
+    }
+
+    advanceRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (!radio.checked) return;
+        advanceMode = (radio.value === 'tts-confirm') ? 'tts-confirm' : 'direct';
+        syncAutoReadWithMode();
+        const hasText = textOut.textContent.trim().length > 0;
+        prepareConfirmForCurrentPage(hasText);
+      });
+    });
+
+    function prepareConfirmForCurrentPage(hasText) {
+      if (advanceMode === 'tts-confirm') {
+        confirmState = hasText ? CONFIRM_STATES.NEED_READ : CONFIRM_STATES.READY;
+      } else {
+        confirmState = CONFIRM_STATES.READY;
+      }
+    }
+
+    function speak(text) {
+      if (!speakingAllowed || !text || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voiceLang = getEffectiveTtsLang();
+      utterance.lang = voiceLang;
+      const rate = getEffectiveTtsRate();
+      if (Number.isFinite(rate)) {
+        utterance.rate = rate;
+      }
+
+      try {
+        const voices = typeof window.speechSynthesis.getVoices === 'function'
+          ? window.speechSynthesis.getVoices()
+          : [];
+        const primaryMatch = voices.find(v => v.lang === voiceLang);
+        if (primaryMatch) {
+          utterance.voice = primaryMatch;
+        } else {
+          const base = voiceLang.split('-')[0];
+          const fallback = voices.find(v => v.lang?.startsWith(base));
+          if (fallback) utterance.voice = fallback;
+        }
+      } catch (e) {
+        console.debug('Voice selection unavailable', e);
+      }
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // UPDATED: stopSpeak also clears any pending delayed TTS
+    function stopSpeak() {
+      window.speechSynthesis?.cancel();
+      if (ttsTimeoutId != null) {
+        clearTimeout(ttsTimeoutId);
+        ttsTimeoutId = null;
+      }
+    }
+
+    function playPageTurnSound() {
+      if (!allowPageTurnSound || !pageTurnAudio) return;
+      try {
+        pageTurnAudio.currentTime = 0;
+        const playPromise = pageTurnAudio.play();
+        if (playPromise?.catch) {
+          playPromise.catch(() => {});
+        }
+      } catch (_) {}
+    }
+
+    ['pagehide', 'beforeunload'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        try { stopSpeak(); } catch (_) {}
+      });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        stopSpeak();
+      }
+    });
+
+    chooseBtn.addEventListener('click', () => fileInput.click());
+
+    ;['dragenter','dragover'].forEach(ev => {
+      window.addEventListener(ev, e => { e.preventDefault(); }, { passive:false });
+    });
+
+    window.addEventListener('drop', async e => {
+      e.preventDefault();
+      const file = [...(e.dataTransfer?.files || [])].find(f => f.type === 'application/pdf' || f.name?.toLowerCase().endsWith('.pdf'));
+      if (file) {
+        await loadPDFFile(file);
+      }
+    });
+
+    fileInput.addEventListener('change', async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      await loadPDFFile(file);
+    });
+
+    async function setPdfFromArrayBuffer(arrBuf, fileName) {
+      pdfData = new Uint8Array(arrBuf);
+      lastFileName = fileName || '';
+      updateFileStatusText();
+      updateStartButtonState();
+      stopSpeak();
+      if (started) {
+        await openAndRender();
+      } else if (!document.body.classList.contains('playing')) {
+        try { startButton.focus({ preventScroll:true }); }
+        catch(_) { startButton.focus(); }
+      }
+    }
+
+    async function loadPDFFile(file) {
+      const arrBuf = await file.arrayBuffer();
+      await setPdfFromArrayBuffer(arrBuf, file.name || '');
+    }
+
+    startButton.addEventListener('click', async () => {
+      if (!pdfData) return;
+      await goFullscreen();
+      started = true;
+      speakingAllowed = true;
+      enterPlayingUI();
+      scheduleCursorHide();
+      await openAndRender();
+    });
+
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        exitPlayingUI();
+        if (document.fullscreenElement) {
+          try { document.exitFullscreen(); } catch(_) {}
+        }
+      }
+    });
+
+    async function openAndRender() {
+      try {
+        const pdfjs = window.__PDFJS__ || window.pdfjsLib;
+        if (!pdfjs) throw new Error('pdf.js library not available on window.');
+        const loadingTask = pdfjs.getDocument({ data: pdfData });
+        pdfDoc = await loadingTask.promise;
+        totalPages = pdfDoc.numPages;
+        currentPageNum = 1;
+        textOut.textContent = '';
+        allowPageTurnSound = false;
+        await renderPage(currentPageNum);
+        setHUD();
+        allowPageTurnSound = true;
+      } catch(err) {
+        console.error('PDF load error:', err);
+        const msg = (currentLang === 'fr' ? 'Erreur de chargement du PDF: ' : 'PDF load error: ')
+                    + (err?.message || err?.toString() || '');
+        alert(msg);
+      }
+    }
+
+    // UPDATED: OCR zone now depends on page number
+    function getZoneRectPixels(pageNum) {
+      const W = canvas.width;
+      const H = canvas.height;
+
+      // Default zone (all pages except first)
+      let ZONE_W_PCT = 30;
+      let ZONE_H_PCT = 55;
+      let ZONE_CENTER_X_PCT = 75;
+      let ZONE_CENTER_Y_PCT = 50;
+
+      // Special OCR zone for the first page (title band at bottom-right)
+      if (pageNum === 1) {
+        ZONE_W_PCT = 24;       // narrower
+        ZONE_H_PCT = 24;       // short strip
+        ZONE_CENTER_X_PCT = 74; // slightly right of center
+        ZONE_CENTER_Y_PCT = 90; // closer to bottom
+      }
+
+      const w  = Math.round((ZONE_W_PCT / 100) * W);
+      const h  = Math.round((ZONE_H_PCT / 100) * H);
+      const cx = Math.round((ZONE_CENTER_X_PCT / 100) * W);
+      const cy = Math.round((ZONE_CENTER_Y_PCT / 100) * H);
+
+      const x = Math.max(0, Math.min(W - 1, cx - Math.floor(w / 2)));
+      const y = Math.max(0, Math.min(H - 1, cy - Math.floor(h / 2)));
+
+      return {
+        x,
+        y,
+        w: Math.max(1, Math.min(W - x, w)),
+        h: Math.max(1, Math.min(H - y, h)),
+      };
+    }
+
+    function cropCanvas(srcCanvas, rect) {
+      const c = document.createElement('canvas');
+      c.width = rect.w; c.height = rect.h;
+      const cx = c.getContext('2d');
+      cx.drawImage(srcCanvas, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+      return c;
+    }
+
+    // UPDATED: renderPage now passes pageNum into getZoneRectPixels
+    async function renderPage(pageNum) {
+      if (!pdfDoc || loading) return;
+      loading = true;
+      confirmState = CONFIRM_STATES.LOADING;
+      const myToken = ++currentRenderToken;
+
+      // Cancel any current or pending speech when starting a new render
+      stopSpeak();
+
+      try {
+        const page = await pdfDoc.getPage(pageNum);
+        const viewportUnscaled = page.getViewport({ scale: 1 });
+        const availW = window.innerWidth;
+        const availH = window.innerHeight;
+        const scale = Math.min(availW / viewportUnscaled.width, availH / viewportUnscaled.height);
+        const viewport = page.getViewport({ scale: scale * (window.devicePixelRatio || 1) });
+
+        canvas.width  = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width  = Math.floor(viewport.width  / (window.devicePixelRatio || 1)) + 'px';
+        canvas.style.height = Math.floor(viewport.height / (window.devicePixelRatio || 1)) + 'px';
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        const rect = getZoneRectPixels(pageNum);
+        const region = cropCanvas(canvas, rect);
+
+        setOcrProgress(0);
+        ocrStatus.textContent = (currentLang === 'fr' ? 'OCR…' : 'OCR…');
+
+        const lang = ocrLangSel.value || 'eng';
+        const { data: { text } } = await Tesseract.recognize(
+          region,
+          lang,
+          { logger: m => { if (m && typeof m.progress === 'number') { setOcrProgress(m.progress); } } }
+        );
+
+        if (myToken !== currentRenderToken) return;
+
+        const cleaned = reflowOcrText(text || '');
+        textOut.textContent = cleaned;
+        setOcrProgress(1);
+
+        const trimmed = cleaned.trim();
+
+        // Clear any previous delayed TTS
+        if (ttsTimeoutId != null) {
+          clearTimeout(ttsTimeoutId);
+          ttsTimeoutId = null;
+        }
+
+        if (autoRead.checked && trimmed) {
+          // 1-second delay so page-turn sound has time to play
+          ttsTimeoutId = setTimeout(() => {
+            // Make sure we're still on this render and still playing
+            if (myToken !== currentRenderToken) return;
+            if (!started || !pdfDoc) return;
+
+            stopSpeak();     // safety: cancel anything else
+            speak(trimmed);  // now read the page
+          }, 1000);
+        } else {
+          stopSpeak();
+        }
+
+        prepareConfirmForCurrentPage(trimmed.length > 0);
+      } catch(err) {
+        console.error('Render/OCR error:', err);
+      } finally {
+        loading = false;
+      }
+    }
+
+    function reflowOcrText(raw) {
+      if (!raw) return '';
+      let s = raw;
+      s = s.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
+      s = s.replace(/\u00AD/g, '');
+      s = s.replace(/\r\n/g, '\n');
+      s = s.replace(/([A-Za-zÀ-ÖØ-öø-ÿ])-\s*\n\s*([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1$2');
+      s = s.replace(/\n{2,}/g, '¶¶');
+      s = s.replace(/([^\n])\n(?!\n)/g, (m, prev) => {
+        return /[.!?;:)"'»\]]\s*$/.test(prev) ? prev + '\n' : prev + ' ';
+      });
+      s = s.replace(/¶¶/g, '\n\n');
+      s = s.replace(/[ \t]+/g, ' ').replace(/ +\n/g, '\n').trim();
+      return s;
+    }
+
+    async function goToNextPage() {
+      if (!pdfDoc) return;
+      playPageTurnSound();
+      currentPageNum = (currentPageNum % totalPages) + 1;
+      await renderPage(currentPageNum);
+      setHUD();
+
+    }
+
+    async function goToPreviousPage() {
+      if (!pdfDoc) return;
+      currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
+      await renderPage(currentPageNum);
+      setHUD();
+      playPageTurnSound();
+    }
+
+    async function handleAdvanceRequest(direction = 1) {
+      if (!started || !pdfDoc || loading) return;
+      if (direction < 0) {
+        stopSpeak();
+        await goToPreviousPage();
+        return;
+      }
+
+      if (advanceMode === 'tts-confirm') {
+        if (confirmState === CONFIRM_STATES.NEED_READ) {
+          const text = textOut.textContent.trim();
+          if (text) {
+            confirmState = CONFIRM_STATES.READY;
+            stopSpeak();
+            speak(text);
+            return;
+          }
+          confirmState = CONFIRM_STATES.READY;
+        }
+      }
+
+      stopSpeak();
+      await goToNextPage();
+    }
+
+    stage.addEventListener('click', async () => {
+      await handleAdvanceRequest(1);
+    });
+
+    window.addEventListener('keydown', async e => {
+      if (!started || !pdfDoc || loading) return;
+      if (e.code === 'Space' && e.shiftKey) {
+        e.preventDefault();
+        await handleAdvanceRequest(-1);
+      } else if (e.code === 'Space' || e.code === 'ArrowRight') {
+        e.preventDefault();
+        await handleAdvanceRequest(1);
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        await handleAdvanceRequest(-1);
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      if (!started || !pdfDoc) return;
+      clearTimeout(window.__resizeT);
+      window.__resizeT = setTimeout(() => renderPage(currentPageNum), 100);
+    });
+
+    let hideTimer = null;
+    function scheduleCursorHide() {
+      document.body.style.cursor = 'default';
+      clearTimeout(hideTimer);
+      if (!document.body.classList.contains('playing')) return;
+      hideTimer = setTimeout(() => {
+        if (document.body.classList.contains('playing')) {
+          document.body.style.cursor = 'none';
+        }
+      }, 1500);
+    }
+    ['mousemove','mousedown','touchstart','keydown'].forEach(ev => {
+      window.addEventListener(ev, scheduleCursorHide, { passive:true });
+    });
+    scheduleCursorHide();
+
+    ocrLangSel.addEventListener('change', () => {
+      if (!started || !pdfDoc) return;
+      renderPage(currentPageNum);
+    });
+
+    syncAutoReadWithMode();
+    updateStartButtonState();
+    setHUD();
+    populateLibraryList();
+  </script>
+</body>
+</html>

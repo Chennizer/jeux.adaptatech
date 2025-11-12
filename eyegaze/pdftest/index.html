@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title class="translate" data-fr="PDF — Lecteur oculométrique" data-en="PDF — Eye Gaze Reader">PDF — Lecteur oculométrique</title>
+  <title class="translate" data-fr="Lecteur Gemini Storybook" data-en="Gemini Storybook Switch Reader">Gemini Storybook Reader</title>
 
   <link rel="stylesheet" href="../../css/games.css" />
   <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
@@ -285,7 +285,7 @@
 
   <div id="game-options" class="modal">
     <div id="options-title-bar">
-      <h2 id="options-main-title" class="translate" data-fr="PDF — Lecteur oculométrique" data-en="PDF — Eye Gaze Reader">PDF — Lecteur oculométrique</h2>
+      <h2 id="options-main-title" class="translate" data-fr="Lecteur Gemini Storybook pour switch adaptée" data-en="Gemini Storybook Switch Reader">PDF — Lecteur oculométrique</h2>
     </div>
 
     <div id="control-panel-options">
@@ -304,7 +304,7 @@
             </select>
             <label for="ttsRate" class="teal-label label-block translate" data-fr="Vitesse TTS" data-en="TTS speed">Vitesse TTS</label>
             <div class="tts-rate-row">
-              <input id="ttsRate" type="range" min="0.7" max="1.3" step="0.05" value="1" />
+              <input id="ttsRate" type="range" min="0.5" max="1.3" step="0.05" value="0.8" />
               <span id="ttsRateDisplay">1×</span>
             </div>
           </div>
@@ -313,13 +313,13 @@
         <!-- MIDDLE COLUMN -->
         <div class="options-column">
           <div class="option-item">
-            <label class="teal-label label-block translate" data-fr="Choisir un PDF" data-en="Choose a PDF">Choisir un PDF</label>
+            <label class="teal-label label-block translate" data-fr="Choisir une histoire" data-en="Choose a story">Choisir un PDF</label>
             <button id="chooseBtn" type="button" class="button translate" data-fr="Depuis l’ordinateur…" data-en="From computer…">Depuis l’ordinateur…</button>
             <input id="fileInput" type="file" accept="application/pdf" hidden />
             <p id="fileStatus" class="file-status translate" data-fr="Aucun fichier sélectionné" data-en="No file selected">Aucun fichier sélectionné</p>
           </div>
           <div class="option-item">
-            <label class="teal-label label-block translate" data-fr="Bibliothèque PDF" data-en="PDF library">Bibliothèque PDF</label>
+            <label class="teal-label label-block translate" data-fr="Bibliothèque d'histoires" data-en="Storybook library">Bibliothèque PDF</label>
             <div class="library-select-wrapper">
               <select id="librarySelect" disabled></select>
               <button id="libraryOpen" type="button" class="button library-open-btn translate" data-fr="Ouvrir" data-en="Open" disabled>Ouvrir</button>
@@ -333,11 +333,11 @@
             <p class="teal-label label-block translate" data-fr="Options de lecture" data-en="Reading options">Options de lecture</p>
             <label class="teal-label mode-option">
               <input type="radio" name="advanceMode" value="direct" checked />
-              <span class="translate" data-fr="Switch tourner la page et lit." data-en="Switch turns the pages and reads.">Lecture automatique : espace ou clic avance immédiatement.</span>
+              <span class="translate" data-fr="Appuyer sur la switch tourne la page et lit." data-en="Switch turns the pages and reads.">Lecture automatique : espace ou clic avance immédiatement.</span>
             </label>
             <label class="teal-label mode-option">
               <input type="radio" name="advanceMode" value="tts-confirm" />
-              <span class="translate" data-fr="Appuyer pour tourner la page et appuyer à nouveau pour la lecture" data-en="Press switch to turn the page, press again to read.">Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante.</span>
+              <span class="translate" data-fr="Appuyer pour tourner la page et appuyer à nouveau pour la lecture." data-en="Press switch to turn the page, press again to read.">Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante.</span>
             </label>
           </div>
           <div class="option-item">
@@ -413,7 +413,7 @@
     const CONFIRM_STATES = { LOADING:'loading', NEED_READ:'need-read', READY:'ready' };
     const DEFAULT_TTS_BY_INTERFACE = { fr:'fr-CA', en:'en-US' };
     const DEFAULT_TTS_RATE = 1;
-    const TTS_RATE_MIN = 0.7;
+    const TTS_RATE_MIN = 0.5;
     const TTS_RATE_MAX = 1.3;
     const PDF_LIBRARY_PATH = '../../pdf/';
     const PDF_MANIFEST_CANDIDATES = ['manifest.json', 'index.json', 'list.json'];
@@ -1287,19 +1287,39 @@
       }
     }
 
-    function getZoneRectPixels() {
-      const W = canvas.width, H = canvas.height;
-      const ZONE_W_PCT = 30;
-      const ZONE_H_PCT = 55;
-      const ZONE_CENTER_X_PCT = 75;
-      const ZONE_CENTER_Y_PCT = 50;
-      const w = Math.round((ZONE_W_PCT/100) * W);
-      const h = Math.round((ZONE_H_PCT/100) * H);
-      const cx = Math.round((ZONE_CENTER_X_PCT/100) * W);
-      const cy = Math.round((ZONE_CENTER_Y_PCT/100) * H);
-      const x = Math.max(0, Math.min(W-1, cx - Math.floor(w/2)));
-      const y = Math.max(0, Math.min(H-1, cy - Math.floor(h/2)));
-      return { x, y, w: Math.max(1, Math.min(W - x, w)), h: Math.max(1, Math.min(H - y, h)) };
+    // UPDATED: OCR zone now depends on page number
+    function getZoneRectPixels(pageNum) {
+      const W = canvas.width;
+      const H = canvas.height;
+
+      // Default zone (all pages except first)
+      let ZONE_W_PCT = 30;
+      let ZONE_H_PCT = 55;
+      let ZONE_CENTER_X_PCT = 75;
+      let ZONE_CENTER_Y_PCT = 50;
+
+      // Special OCR zone for the first page (title band at bottom-right)
+      if (pageNum === 1) {
+        ZONE_W_PCT = 24;       // narrower
+        ZONE_H_PCT = 18;       // short strip
+        ZONE_CENTER_X_PCT = 76; // slightly right of center
+        ZONE_CENTER_Y_PCT = 84; // closer to bottom
+      }
+
+      const w  = Math.round((ZONE_W_PCT / 100) * W);
+      const h  = Math.round((ZONE_H_PCT / 100) * H);
+      const cx = Math.round((ZONE_CENTER_X_PCT / 100) * W);
+      const cy = Math.round((ZONE_CENTER_Y_PCT / 100) * H);
+
+      const x = Math.max(0, Math.min(W - 1, cx - Math.floor(w / 2)));
+      const y = Math.max(0, Math.min(H - 1, cy - Math.floor(h / 2)));
+
+      return {
+        x,
+        y,
+        w: Math.max(1, Math.min(W - x, w)),
+        h: Math.max(1, Math.min(H - y, h)),
+      };
     }
 
     function cropCanvas(srcCanvas, rect) {
@@ -1310,7 +1330,7 @@
       return c;
     }
 
-    // UPDATED: renderPage now clears any previous speech and uses delayed TTS
+    // UPDATED: renderPage now passes pageNum into getZoneRectPixels
     async function renderPage(pageNum) {
       if (!pdfDoc || loading) return;
       loading = true;
@@ -1335,7 +1355,7 @@
 
         await page.render({ canvasContext: ctx, viewport }).promise;
 
-        const rect = getZoneRectPixels();
+        const rect = getZoneRectPixels(pageNum);
         const region = cropCanvas(canvas, rect);
 
         setOcrProgress(0);
@@ -1363,7 +1383,7 @@
         }
 
         if (autoRead.checked && trimmed) {
-          // 2-second delay so page-turn sound has time to play
+          // 1-second delay so page-turn sound has time to play
           ttsTimeoutId = setTimeout(() => {
             // Make sure we're still on this render and still playing
             if (myToken !== currentRenderToken) return;
