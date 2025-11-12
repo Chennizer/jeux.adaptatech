@@ -1,4 +1,5 @@
 const FLASH_DURATION = 1600;
+const INTENSITY_MULTIPLIER = 3;
 const GRADIENT_STOPS = [
   { y: 0.0, color: [12, 16, 30] },
   { y: 0.35, color: [17, 24, 41] },
@@ -97,7 +98,9 @@ export function createRainScene(p) {
       sparkles = [];
     }
     const base = Math.floor(p.width * p.height * 0.00003) + 18;
-    const count = reset ? base : Math.ceil(base * 0.4);
+    const scaledBase = Math.max(1, Math.ceil(base * INTENSITY_MULTIPLIER));
+    const pulseBase = Math.max(1, Math.ceil(base * 0.4 * INTENSITY_MULTIPLIER));
+    const count = reset ? scaledBase : pulseBase;
     for (let i = 0; i < count; i++) {
       sparkles.push(new RainSparkle(p));
     }
@@ -153,7 +156,8 @@ export function createRainScene(p) {
 
       const elapsed = p.millis() - flashStart;
       if (elapsed < FLASH_DURATION) {
-        const intensity = p.map(Math.pow(1 - elapsed / FLASH_DURATION, 3), 0, 1, 0, 120, true);
+        const maxFlash = Math.min(255, 120 * INTENSITY_MULTIPLIER);
+        const intensity = p.map(Math.pow(1 - elapsed / FLASH_DURATION, 3), 0, 1, 0, maxFlash, true);
         p.noStroke();
         p.fill(180, 200, 255, intensity);
         p.rect(0, 0, p.width, p.height);

@@ -13,8 +13,8 @@ const modeInputs = document.querySelectorAll('input[name="mode"]');
 const MODE_DEFAULT = 'default';
 const MODE_SLOW = 'slow';
 const SLOW_SCENE_DURATION = 60_000;
-const SLOW_BASE_SPEED = 0.3;
-const SLOW_PEAK_SPEED = 1.15;
+const SLOW_BASE_SPEED = 0.21;
+const SLOW_PEAK_SPEED = 1.495;
 const SPEED_PHASES = {
   rampUp: 2_000,
   hold: 2_000,
