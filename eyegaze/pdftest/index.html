@@ -308,7 +308,6 @@
               <span id="ttsRateDisplay">1×</span>
             </div>
           </div>
-          <div class="option-item instructions translate" data-fr="Utilisez la colonne centrale pour choisir le fichier PDF et la colonne de droite pour définir le mode de lecture." data-en="Use the middle column to choose the PDF file and the right column to set the reading mode.">Utilisez la colonne centrale pour choisir le fichier PDF et la colonne de droite pour définir le mode de lecture.</div>
         </div>
 
         <!-- MIDDLE COLUMN -->
@@ -325,7 +324,6 @@
               <select id="librarySelect" disabled></select>
               <button id="libraryOpen" type="button" class="button library-open-btn translate" data-fr="Ouvrir" data-en="Open" disabled>Ouvrir</button>
             </div>
-            <p id="libraryMessage" class="library-message"></p>
           </div>
         </div>
 
@@ -335,23 +333,20 @@
             <p class="teal-label label-block translate" data-fr="Options de lecture" data-en="Reading options">Options de lecture</p>
             <label class="teal-label mode-option">
               <input type="radio" name="advanceMode" value="direct" checked />
-              <span class="translate" data-fr="Lecture automatique : espace ou clic avance immédiatement." data-en="Auto reading: space or click advances right away.">Lecture automatique : espace ou clic avance immédiatement.</span>
+              <span class="translate" data-fr="Switch tourner la page et lit." data-en="Switch turns the pages and reads.">Lecture automatique : espace ou clic avance immédiatement.</span>
             </label>
             <label class="teal-label mode-option">
               <input type="radio" name="advanceMode" value="tts-confirm" />
-              <span class="translate" data-fr="Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante." data-en="Guided reading: first press speaks the page, second press goes to the next.">Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante.</span>
+              <span class="translate" data-fr="Appuyer pour tourner la page et appuyer à nouveau pour la lecture" data-en="Press switch to turn the page, press again to read.">Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante.</span>
             </label>
           </div>
           <div class="option-item">
-            <p class="teal-label label-block translate" data-fr="Astuce" data-en="Tip">Astuce</p>
-            <p class="tip-text translate" data-fr="Vous pouvez aussi déposer un PDF directement dans la fenêtre." data-en="You can also drop a PDF directly into the window.">Vous pouvez aussi déposer un PDF directement dans la fenêtre.</p>
           </div>
         </div>
       </div>
 
       <div id="mode-divider"></div>
       <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" disabled>Commencer</button>
-      <p id="menuHint" class="menu-hint translate" data-fr="Le plein écran démarre après avoir choisi un PDF." data-en="Full screen starts after choosing a PDF.">Le plein écran démarre après avoir choisi un PDF.</p>
     </div>
   </div>
 
@@ -458,6 +453,7 @@
     let allowPageTurnSound = false;
     let libraryEntries = [];
     let libraryMessageKey = 'loading';
+    let ttsTimeoutId = null; // NEW: timeout handle for delayed TTS
 
     const LIBRARY_MESSAGES = {
       loading: {
@@ -962,7 +958,7 @@
         updateFileStatusText();
         updateStartButtonState();
         const msg = (currentLang === 'fr')
-          ? `Impossible de charger le PDF « ${label || 'inconnu'} ».`
+          ? `Impossible de charger le PDF « ${label || 'inconnu'} » .`
           : `Unable to load “${label || 'unknown'}”.`;
         alert(msg);
       } finally {
@@ -1180,8 +1176,13 @@
       window.speechSynthesis.speak(utterance);
     }
 
+    // UPDATED: stopSpeak also clears any pending delayed TTS
     function stopSpeak() {
       window.speechSynthesis?.cancel();
+      if (ttsTimeoutId != null) {
+        clearTimeout(ttsTimeoutId);
+        ttsTimeoutId = null;
+      }
     }
 
     function playPageTurnSound() {
@@ -1309,11 +1310,15 @@
       return c;
     }
 
+    // UPDATED: renderPage now clears any previous speech and uses delayed TTS
     async function renderPage(pageNum) {
       if (!pdfDoc || loading) return;
       loading = true;
       confirmState = CONFIRM_STATES.LOADING;
       const myToken = ++currentRenderToken;
+
+      // Cancel any current or pending speech when starting a new render
+      stopSpeak();
 
       try {
         const page = await pdfDoc.getPage(pageNum);
@@ -1350,9 +1355,23 @@
         setOcrProgress(1);
 
         const trimmed = cleaned.trim();
+
+        // Clear any previous delayed TTS
+        if (ttsTimeoutId != null) {
+          clearTimeout(ttsTimeoutId);
+          ttsTimeoutId = null;
+        }
+
         if (autoRead.checked && trimmed) {
-          stopSpeak();
-          speak(trimmed);
+          // 2-second delay so page-turn sound has time to play
+          ttsTimeoutId = setTimeout(() => {
+            // Make sure we're still on this render and still playing
+            if (myToken !== currentRenderToken) return;
+            if (!started || !pdfDoc) return;
+
+            stopSpeak();     // safety: cancel anything else
+            speak(trimmed);  // now read the page
+          }, 1000);
         } else {
           stopSpeak();
         }
@@ -1383,10 +1402,11 @@
 
     async function goToNextPage() {
       if (!pdfDoc) return;
+      playPageTurnSound();
       currentPageNum = (currentPageNum % totalPages) + 1;
       await renderPage(currentPageNum);
       setHUD();
-      playPageTurnSound();
+
     }
 
     async function goToPreviousPage() {
