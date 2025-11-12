@@ -125,6 +125,7 @@ export function createRainScene(p) {
   }
 
   return {
+    id: 'rain',
     name: 'Pluie nocturne',
     description: 'Gouttes fines et reflets dans la nuit',
     enter() {

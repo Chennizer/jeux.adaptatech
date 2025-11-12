@@ -135,6 +135,7 @@ export function createSnowScene(p) {
   }
 
   return {
+    id: 'snow',
     name: 'Tempête douce',
     description: 'Flocons tourbillonnants et rafales douces',
     enter() {

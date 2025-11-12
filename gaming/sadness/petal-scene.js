@@ -148,6 +148,7 @@ export function createPetalScene(p) {
   }
 
   return {
+    id: 'petal',
     name: 'Pétales en suspens',
     description: 'Souffle pastel et souvenirs flottants',
     enter() {
