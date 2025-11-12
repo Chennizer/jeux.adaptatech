@@ -13,13 +13,14 @@ const modeInputs = document.querySelectorAll('input[name="mode"]');
 const MODE_DEFAULT = 'default';
 const MODE_SLOW = 'slow';
 const SLOW_SCENE_DURATION = 60_000;
-const SLOW_BASE_SPEED = 0.3;
-const SLOW_PEAK_SPEED = 1.15;
+const SLOW_BASE_SPEED = 0.21;
+const SLOW_PEAK_SPEED = 1.495;
 const SPEED_PHASES = {
   rampUp: 2_000,
   hold: 2_000,
   rampDown: 2_000
 };
+const INTERACTION_BURST_DURATION = 1_300;
 
 let scenes = [];
 let activeIndex = 0;
@@ -29,6 +30,7 @@ let started = false;
 let mode = MODE_DEFAULT;
 let sceneStartedAt = 0;
 let speedBurst = null;
+const interactionBursts = [];
 
 const clamp01 = value => Math.min(1, Math.max(0, value));
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
@@ -53,6 +55,75 @@ function cycleScene(step = 1) {
   sceneStartedAt = performance.now();
   speedBurst = null;
   updateOverlay();
+}
+
+function createInteractionBurst(currentMode) {
+  interactionBursts.push({
+    start: performance.now(),
+    mode: currentMode
+  });
+}
+
+function drawInteractionBursts(p) {
+  if (!interactionBursts.length) return;
+  const now = performance.now();
+  for (let i = interactionBursts.length - 1; i >= 0; i--) {
+    const burst = interactionBursts[i];
+    const elapsed = now - burst.start;
+    if (elapsed >= INTERACTION_BURST_DURATION) {
+      interactionBursts.splice(i, 1);
+      continue;
+    }
+    const t = elapsed / INTERACTION_BURST_DURATION;
+    const eased = 1 - Math.pow(1 - t, 3);
+    const overlayAlpha = (1 - eased) * (burst.mode === MODE_SLOW ? 72 : 64);
+    const ringAlpha = (1 - eased) * (burst.mode === MODE_SLOW ? 165 : 155);
+    const accentAlpha = (1 - eased) * (burst.mode === MODE_SLOW ? 115 : 100);
+    const palette = burst.mode === MODE_SLOW
+      ? {
+          overlay: [38, 74, 132],
+          ring: [150, 210, 255]
+        }
+      : {
+          overlay: [120, 58, 34],
+          ring: [255, 210, 170]
+        };
+    const maxDim = Math.max(p.width, p.height);
+    const baseDiameter = maxDim * 0.35;
+    const diameter = baseDiameter + eased * maxDim * 0.9;
+    const secondaryDiameter = diameter * 0.62;
+    const crossLength = maxDim * (0.45 + eased * 0.25);
+
+    p.push();
+    p.blendMode(p.SCREEN);
+    p.noStroke();
+    p.fill(palette.overlay[0], palette.overlay[1], palette.overlay[2], overlayAlpha);
+    p.rect(0, 0, p.width, p.height);
+
+    p.noFill();
+    p.stroke(palette.ring[0], palette.ring[1], palette.ring[2], ringAlpha);
+    p.strokeWeight(burst.mode === MODE_SLOW ? 5 : 4);
+    p.circle(p.width / 2, p.height / 2, diameter);
+
+    p.stroke(palette.ring[0], palette.ring[1], palette.ring[2], ringAlpha * 0.7);
+    p.circle(p.width / 2, p.height / 2, secondaryDiameter);
+
+    p.stroke(palette.ring[0], palette.ring[1], palette.ring[2], accentAlpha);
+    p.strokeWeight(2.5);
+    p.line(
+      p.width / 2 - crossLength / 2,
+      p.height / 2,
+      p.width / 2 + crossLength / 2,
+      p.height / 2
+    );
+    p.line(
+      p.width / 2,
+      p.height / 2 - crossLength / 2,
+      p.width / 2,
+      p.height / 2 + crossLength / 2
+    );
+    p.pop();
+  }
 }
 
 function beginExperience() {
@@ -106,6 +177,8 @@ function getCurrentSpeedMultiplier() {
 }
 
 function triggerSpeedBurst() {
+  if (!activeScene) return;
+  createInteractionBurst(mode);
   if (mode !== MODE_SLOW) {
     cycleScene(1);
     return;
@@ -151,6 +224,7 @@ const sketch = p => {
     const multiplier = getCurrentSpeedMultiplier();
     activeScene.setSpeedMultiplier?.(multiplier);
     activeScene.draw?.(p);
+    drawInteractionBursts(p);
     if (mode === MODE_SLOW) {
       if (performance.now() - sceneStartedAt >= SLOW_SCENE_DURATION) {
         cycleScene(1);
