@@ -11,6 +11,7 @@ export function createCandleScene(p) {
   let t = 0;
   let metrics = null;
   let speedMultiplier = 1;
+  let entryGlow = 0;
 
   function initStars() {
     const count = Math.max(80, Math.floor(p.width * p.height * STAR_DENSITY));
@@ -170,6 +171,28 @@ export function createCandleScene(p) {
     p.pop();
   }
 
+  function drawEntryGlow(m) {
+    if (entryGlow <= 0 || !m) return;
+    const centerY = m.flameY - m.h * 0.25;
+    const maxRadius = Math.max(p.width, p.height) * 0.85;
+    const rings = 14;
+
+    p.push();
+    p.blendMode(p.SCREEN);
+    p.noStroke();
+    for (let i = 0; i < rings; i += 1) {
+      const tRing = i / (rings - 1);
+      const radius = p.lerp(maxRadius * 0.15, maxRadius, tRing) * (0.85 + entryGlow * 0.35);
+      const alpha = 120 * entryGlow * Math.pow(1 - tRing, 1.8);
+      const r = p.lerp(255, 255, tRing);
+      const g = p.lerp(180, 90, tRing);
+      const b = p.lerp(90, 40, tRing);
+      p.fill(r, g, b, alpha);
+      p.ellipse(m.cx, centerY, radius, radius * 0.65);
+    }
+    p.pop();
+  }
+
   function drawWaxDrips(m) {
     const { cx, topY, h } = m;
     p.push();
@@ -226,6 +249,7 @@ export function createCandleScene(p) {
     description: 'Ciel nocturne, flamme vacillante et braises qui voyagent',
     enter() {
       glow = 0;
+      entryGlow = 1;
       t = 0;
       embers = [];
       metrics = computeMetrics();
@@ -249,6 +273,7 @@ export function createCandleScene(p) {
       metrics = computeMetrics();
 
       drawNightSky();
+      drawEntryGlow(metrics);
       drawGround(metrics);
       drawCandleBody(metrics);
       drawWick(metrics);
@@ -270,6 +295,7 @@ export function createCandleScene(p) {
 
       updateEmbers();
       glow = Math.max(0, glow - (rm ? 0.01 : 0.02) * speedMultiplier);
+      entryGlow = Math.max(0, entryGlow - (rm ? 0.004 : 0.008) * speedMultiplier);
     }
   };
 }
