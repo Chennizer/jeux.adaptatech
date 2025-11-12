@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-fr="Chef d'orchestre des aurores" data-en="Aurora Conductor">Chef d'orchestre des aurores</title>
+
+  <link rel="stylesheet" href="../../css/otherswitch.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+
+  <style>
+    html, body { margin: 0; padding: 0; background: #040712; }
+    canvas { display: block; }
+
+    #promptOverlay {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; gap: 1.2rem;
+      align-items: center; justify-content: center;
+      background: radial-gradient(circle at top, rgba(22,38,76,0.95), rgba(3,7,18,0.95));
+      text-align: center; padding: 2rem; color: #f8fbff;
+    }
+    #promptOverlay p { font-size: clamp(1rem, 2.4vmin, 1.25rem); line-height: 1.5; max-width: min(760px, 90vw); }
+    #infoButton {
+      position: absolute; top: 16px; left: 16px;
+      background: rgba(12,24,44,0.6); border: 1px solid rgba(120,180,255,0.4);
+      color: #e7f1ff; border-radius: 999px; width: 44px; height: 44px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; cursor: pointer; transition: background 0.2s ease;
+    }
+    #infoButton:hover { background: rgba(28,48,88,0.75); }
+    #startButton { font-size: 1.1rem; padding: 0.75rem 1.8rem; border-radius: 999px; border: none; background: linear-gradient(120deg,#1bcdd1,#6d82ff); color:#fff; cursor:pointer; box-shadow:0 12px 24px rgba(20,40,110,0.4); }
+    #startButton:hover { filter: brightness(1.12); }
+
+    #infoModal {
+      position: fixed; inset: 0; display: none; place-items: center;
+      background: rgba(2,7,18,0.65); z-index: 20;
+    }
+    #infoModal .card {
+      background: linear-gradient(135deg,#0f1b33,#1c2d4d);
+      border: 1px solid rgba(116,189,255,0.3);
+      color: #f1f7ff; padding: 1.4rem; border-radius: 16px;
+      width: min(420px, 92vw); box-shadow: 0 22px 40px rgba(2,7,18,0.55);
+      text-align: center; line-height: 1.6; font-size: 1rem;
+    }
+    #closeModal { margin-top: 1rem; padding: 0.55rem 1.2rem; border-radius: 999px; border: none; background: #6d82ff; color:#fff; cursor:pointer; }
+
+    #settings-icon {
+      position: fixed; right: 16px; bottom: 18px;
+      width: 46px; height: 46px; border-radius: 50%;
+      background: rgba(12,22,40,0.82); color: #f4f9ff;
+      display: none; align-items: center; justify-content: center;
+      font-size: 1.2rem; box-shadow: 0 18px 30px rgba(0,0,0,0.35);
+      cursor: pointer; transition: transform 0.25s ease;
+      z-index: 2001;
+    }
+    #settings-icon:hover { transform: rotate(22deg); }
+
+    #fullscreen-btn {
+      position: fixed; right: 16px; bottom: 76px;
+      padding: 0.55rem 1rem; font-size: 0.95rem;
+      border-radius: 12px; border: none;
+      background: rgba(12,22,40,0.82); color: #f4f9ff;
+      display: none; cursor: pointer; box-shadow: 0 12px 24px rgba(0,0,0,0.35);
+      z-index: 2001;
+    }
+    #fullscreen-btn:hover { background: rgba(26,40,70,0.9); }
+
+    #menu { width: 280px; }
+    #menu h3 { margin-top: 0.6rem; }
+    #menu label.inline { background: rgba(19,36,66,0.85); }
+  </style>
+</head>
+
+<body>
+  <div id="promptOverlay">
+    <button id="infoButton" class="translate" data-fr="ⓘ" data-en="ⓘ" title="Plus d'informations">ⓘ</button>
+    <p class="translate"
+       data-fr="Appuyez sur ESPACE pour diriger le ciel. Chaque pression fait onduler une nouvelle aurore, accompagnée d'une montée musicale."
+       data-en="Press SPACE to conduct the sky. Each press releases a fresh aurora ripple with a musical swell.">
+      Appuyez sur ESPACE pour diriger le ciel. Chaque pression fait onduler une nouvelle aurore, accompagnée d'une montée musicale.
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+
+  <div id="infoModal">
+    <div class="card">
+      <p class="translate"
+         data-fr="Compétence&nbsp;: appuyer (cause → effet).<br>SENICT niveau&nbsp;1.<br>Switch Progression Roadmap niveaux&nbsp;8 à&nbsp;10."
+         data-en="Skill: press (cause → effect).<br>SENICT level&nbsp;1.<br>Switch Progression Roadmap levels&nbsp;8–10.">
+        Compétence&nbsp;: appuyer (cause → effet).<br>SENICT niveau&nbsp;1.<br>Switch Progression Roadmap niveaux&nbsp;8 à&nbsp;10.
+      </p>
+      <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+    </div>
+  </div>
+
+  <div id="settings-icon" class="translate" data-fr="⚙️" data-en="⚙️" title="Réglages">⚙️</div>
+  <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+
+  <div id="menu">
+    <h3 data-fr="Musique" data-en="Music">Musique</h3>
+    <label class="inline">
+      <span class="translate" data-fr="Couper la musique" data-en="Mute music">Couper la musique</span>
+      <input type="checkbox" id="muteMusicToggle" />
+    </label>
+    <label>
+      <span class="translate" data-fr="Volume de la musique" data-en="Music volume">Volume de la musique</span>
+      <span id="musicVolumeValue">50</span>
+      <input type="range" id="musicVolumeSlider" min="0" max="100" value="50" />
+    </label>
+
+    <h3 data-fr="Effets sonores" data-en="Sound effects">Effets sonores</h3>
+    <label class="inline">
+      <span class="translate" data-fr="Couper les effets" data-en="Mute effects">Couper les effets</span>
+      <input type="checkbox" id="muteSFXToggle" />
+    </label>
+    <label>
+      <span class="translate" data-fr="Volume des effets" data-en="Effects volume">Volume des effets</span>
+      <span id="sfxVolumeValue">70</span>
+      <input type="range" id="sfxVolumeSlider" min="0" max="100" value="70" />
+    </label>
+
+    <h3 data-fr="Interaction" data-en="Interaction">Interaction</h3>
+    <label class="inline">
+      <span class="translate"
+            data-fr="Autoriser le toucher / clic"
+            data-en="Allow tap / click">
+        Autoriser le toucher / clic
+      </span>
+      <input type="checkbox" id="allowPointerToggle" checked />
+    </label>
+  </div>
+
+  <script src="../../js/translationonly.js"></script>
+
+  <script>
+    const menu = document.getElementById('menu');
+    const settingsIcon = document.getElementById('settings-icon');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+    const muteMusicToggle = document.getElementById('muteMusicToggle');
+    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+    const musicVolumeValue = document.getElementById('musicVolumeValue');
+    const muteSFXToggle = document.getElementById('muteSFXToggle');
+    const sfxVolumeSlider = document.getElementById('sfxVolumeSlider');
+    const sfxVolumeValue = document.getElementById('sfxVolumeValue');
+    const allowPointerToggle = document.getElementById('allowPointerToggle');
+
+    let musicVolume = 0.5;
+    let sfxVolume = 0.7;
+    let musicMuted = false;
+    let sfxMuted = false;
+    let pointerEnabled = true;
+
+    muteMusicToggle.addEventListener('change', () => {
+      musicMuted = muteMusicToggle.checked;
+      if (ambience && ambience.isLoaded()) {
+        ambience.setVolume(musicMuted ? 0 : musicVolume, 0.2);
+      }
+    });
+    musicVolumeSlider.addEventListener('input', () => {
+      musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
+      musicVolumeValue.textContent = musicVolumeSlider.value;
+      if (!musicMuted && ambience && ambience.isLoaded()) {
+        ambience.setVolume(musicVolume, 0.1);
+      }
+    });
+    muteSFXToggle.addEventListener('change', () => {
+      sfxMuted = muteSFXToggle.checked;
+    });
+    sfxVolumeSlider.addEventListener('input', () => {
+      sfxVolume = parseInt(sfxVolumeSlider.value, 10) / 100;
+      sfxVolumeValue.textContent = sfxVolumeSlider.value;
+    });
+    allowPointerToggle.addEventListener('change', () => {
+      pointerEnabled = allowPointerToggle.checked;
+    });
+
+    settingsIcon.addEventListener('click', () => {
+      menu.classList.toggle('show');
+    });
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.();
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
+    document.addEventListener('click', (event) => {
+      if (!menu.classList.contains('show')) return;
+      if (menu.contains(event.target) || settingsIcon.contains(event.target)) return;
+      menu.classList.remove('show');
+    });
+
+    document.getElementById('infoButton').addEventListener('click', () => {
+      document.getElementById('infoModal').style.display = 'grid';
+    });
+    document.getElementById('closeModal').addEventListener('click', () => {
+      document.getElementById('infoModal').style.display = 'none';
+    });
+
+    const startButton = document.getElementById('startButton');
+    startButton.addEventListener('click', async () => {
+      musicMuted = muteMusicToggle.checked;
+      sfxMuted = muteSFXToggle.checked;
+      pointerEnabled = allowPointerToggle.checked;
+      musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
+      sfxVolume = parseInt(sfxVolumeSlider.value, 10) / 100;
+
+      try {
+        if (typeof getAudioContext === 'function') {
+          await userStartAudio();
+        }
+      } catch (err) {
+        console.warn('Audio context could not start:', err);
+      }
+
+      started = true;
+      document.getElementById('promptOverlay').style.display = 'none';
+      settingsIcon.style.display = 'flex';
+      fullscreenBtn.style.display = 'inline-flex';
+      menu.classList.remove('show');
+
+      if (ambience && ambience.isLoaded()) {
+        ambience.setLoop(true);
+        ambience.setVolume(musicMuted ? 0 : musicVolume, 0.2);
+        if (!ambience.isPlaying()) ambience.play();
+      }
+
+      requestAurora();
+    });
+
+    let ambience;
+    const shimmerSounds = [];
+    const swellSounds = [];
+    let started = false;
+
+    function preload() {
+      soundFormats('mp3', 'wav');
+      ambience = loadSound('../../sounds/winterambiance.mp3');
+      shimmerSounds.push(
+        loadSound('../../sounds/space/twinklingstar1.mp3'),
+        loadSound('../../sounds/space/twinklingstar2.mp3'),
+        loadSound('../../sounds/space/twinklingstar3.mp3'),
+        loadSound('../../sounds/space/twinklingstar4.mp3')
+      );
+      swellSounds.push(
+        loadSound('../../sounds/harp.mp3'),
+        loadSound('../../sounds/spacequestlaunch2.mp3'),
+        loadSound('../../sounds/spacequestwoosh.mp3')
+      );
+    }
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(HSB, 360, 100, 100, 1);
+      noStroke();
+      initStars();
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      initStars(true);
+    }
+
+    function draw() {
+      if (!started) return;
+      drawSky();
+      drawStars();
+      updateRibbons();
+      updateSparks();
+    }
+
+    function keyPressed() {
+      if (!started) return;
+      if (key === ' ') {
+        requestAurora();
+        return false;
+      }
+      if (key === 'Enter') {
+        clearScene();
+        requestAurora();
+        return false;
+      }
+    }
+
+    function mousePressed(event) {
+      if (!started || !pointerEnabled) return;
+      const target = event?.target || null;
+      if (target && (menu.contains(target) || settingsIcon.contains(target) || fullscreenBtn.contains(target))) {
+        return;
+      }
+      menu.classList.remove('show');
+      requestAurora();
+    }
+
+    function touchStarted(event) {
+      if (!started || !pointerEnabled) return false;
+      const target = event?.target || null;
+      if (target && (menu.contains(target) || settingsIcon.contains(target) || fullscreenBtn.contains(target))) {
+        return false;
+      }
+      menu.classList.remove('show');
+      requestAurora();
+      return false;
+    }
+
+    function clearScene() {
+      ribbons = [];
+      sparks = [];
+    }
+
+    let ribbons = [];
+    let sparks = [];
+    let stars = [];
+    let skyHue = 200;
+    let targetSkyHue = 200;
+    let skyPulse = 0;
+
+    function initStars(reset = false) {
+      if (!reset) stars = [];
+      const count = Math.floor((windowWidth * windowHeight) / 9000);
+      stars = Array.from({ length: count }, () => ({
+        x: random(width),
+        y: random(height),
+        size: random(1.2, 2.6),
+        base: random(40, 75),
+        range: random(18, 35),
+        speed: random(0.5, 1.4),
+        phase: random(TWO_PI)
+      }));
+    }
+
+    function drawSky() {
+      skyPulse += 0.0025 * (deltaTime || 16.6);
+      const horizonShift = (Math.sin(skyPulse * 0.25) + 1) * 0.5;
+      skyHue = lerp(skyHue, targetSkyHue, 0.01);
+      const topHue = (skyHue + 320) % 360;
+      const bottomHue = (skyHue + 40) % 360;
+      const ctx = drawingContext;
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, hsla(topHue, 74, 24 + 6 * horizonShift, 1));
+      gradient.addColorStop(0.55, hsla(skyHue, 68, 16 + 10 * horizonShift, 1));
+      gradient.addColorStop(1, hsla(bottomHue, 72, 10, 1));
+      ctx.save();
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+
+    function drawStars() {
+      fill(0, 0, 100, 0.8);
+      noStroke();
+      for (const star of stars) {
+        const twinkle = star.base + star.range * (0.5 + 0.5 * Math.sin(frameCount * 0.01 * star.speed + star.phase));
+        fill(skyHue, 10, twinkle, 0.8);
+        circle(star.x, star.y, star.size);
+      }
+    }
+
+    class Ribbon {
+      constructor(baseHue) {
+        this.baseHue = baseHue;
+        this.secondaryHue = (baseHue + random([-35, -20, 18, 40])) % 360;
+        this.baseY = random(height * 0.25, height * 0.65);
+        this.amplitude = random(height * 0.12, height * 0.22);
+        this.noiseScale = random(0.0014, 0.0026);
+        this.waveSpeed = random(0.00035, 0.0011) * (random() > 0.5 ? 1 : -1);
+        this.phase = random(1000);
+        this.tilt = random(-0.35, 0.35);
+        this.alpha = 0;
+        this.targetAlpha = random(0.45, 0.8);
+        this.life = 1;
+        this.fadeInRate = random(0.015, 0.028);
+        this.fadeOutRate = random(0.0025, 0.0045);
+        this.holdTime = random(2600, 4200);
+        this.createdAt = millis();
+        this.glow = random(0.4, 0.9);
+      }
+
+      update() {
+        const elapsed = millis() - this.createdAt;
+        this.phase += this.waveSpeed * (deltaTime || 16.6);
+        if (elapsed < this.holdTime) {
+          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * (deltaTime || 16.6));
+        } else {
+          this.alpha = max(0, this.alpha - this.fadeOutRate * (deltaTime || 16.6));
+        }
+        this.life = this.alpha / max(this.targetAlpha, 0.0001);
+      }
+
+      draw(ctx) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, this.sampleY(0));
+        const step = max(12, width / 40);
+        for (let x = step; x <= width; x += step) {
+          ctx.lineTo(x, this.sampleY(x));
+        }
+        ctx.lineTo(width, height);
+        ctx.lineTo(0, height);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, this.baseY - this.amplitude * 1.5, width, this.baseY + this.amplitude * 1.5);
+        grad.addColorStop(0, hsla((this.baseHue + 360) % 360, 85, 68, this.alpha * 0.9));
+        grad.addColorStop(0.5, hsla((this.secondaryHue + 360) % 360, 90, 74, this.alpha));
+        grad.addColorStop(1, hsla((this.baseHue + 30 + 360) % 360, 80, 64, this.alpha * 0.85));
+        ctx.fillStyle = grad;
+        ctx.globalCompositeOperation = 'screen';
+        ctx.globalAlpha = 0.9;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      sampleY(x) {
+        const nx = this.phase + x * this.noiseScale;
+        const nz = frameCount * 0.0025;
+        const noiseVal = noise(nx, nz) * 2 - 1;
+        const wave = Math.sin((x / width) * TAU * 0.6 + nz * 2.2 + this.tilt);
+        const mix = lerp(wave, noiseVal, 0.6);
+        return this.baseY + mix * this.amplitude;
+      }
+
+      isDead() {
+        return this.alpha <= 0.01;
+      }
+    }
+
+    class Spark {
+      constructor(baseHue) {
+        this.x = random(width);
+        this.y = random(height * 0.25, height * 0.65);
+        this.vx = random(-0.25, 0.25);
+        this.vy = random(-0.2, 0.45);
+        this.size = random(2, 6);
+        this.life = random(0.7, 1.4);
+        this.hue = (baseHue + random(-28, 32) + 360) % 360;
+        this.alpha = 1;
+        this.spin = random(-0.08, 0.08);
+        this.angle = random(TWO_PI);
+      }
+
+      update(dt) {
+        this.x += this.vx * dt * 60;
+        this.y += this.vy * dt * 60;
+        this.vy += 0.005 * dt * 60;
+        this.angle += this.spin * dt * 60;
+        this.life -= 0.45 * dt;
+        this.alpha = constrain(this.life, 0, 1);
+      }
+
+      draw() {
+        push();
+        translate(this.x, this.y);
+        rotate(this.angle);
+        const brightness = 80 + 20 * (1 - this.alpha);
+        fill(this.hue, 70, brightness, this.alpha * 0.9);
+        ellipse(0, 0, this.size * 1.2, this.size * 2);
+        pop();
+      }
+
+      isDead() {
+        return this.alpha <= 0.02 || this.y > height + 40;
+      }
+    }
+
+    function updateRibbons() {
+      const ctx = drawingContext;
+      for (const ribbon of ribbons) {
+        ribbon.update();
+        ribbon.draw(ctx);
+      }
+      ribbons = ribbons.filter(r => !r.isDead());
+    }
+
+    function updateSparks() {
+      const dt = (deltaTime || 16.6) / 1000;
+      for (const spark of sparks) {
+        spark.update(dt);
+        spark.draw();
+      }
+      sparks = sparks.filter(s => !s.isDead());
+    }
+
+    function requestAurora() {
+      const baseHue = random([120, 140, 160, 185, 200, 215, 260]);
+      targetSkyHue = baseHue;
+      ribbons.push(new Ribbon(baseHue));
+      if (random() < 0.6) ribbons.push(new Ribbon((baseHue + random(-25, 25) + 360) % 360));
+      const burstCount = Math.floor(random(50, 90));
+      for (let i = 0; i < burstCount; i++) {
+        sparks.push(new Spark(baseHue));
+      }
+
+      if (!sfxMuted) {
+        const shimmer = pickLoaded(shimmerSounds);
+        if (shimmer) {
+          shimmer.setVolume(sfxVolume * 0.7);
+          shimmer.play();
+        }
+        if (random() < 0.5) {
+          const swell = pickLoaded(swellSounds);
+          if (swell) {
+            swell.setVolume(sfxVolume * 0.9);
+            swell.play();
+          }
+        }
+      }
+    }
+
+    function pickLoaded(list) {
+      if (!Array.isArray(list) || !list.length) return null;
+      const pool = list.filter(s => s && s.isLoaded());
+      if (!pool.length) return null;
+      return random(pool);
+    }
+
+    function hsla(h, s, l, a) {
+      return `hsla(${((h % 360) + 360) % 360}, ${s}%, ${l}%, ${a})`;
+    }
+  </script>
+</body>
+</html>
