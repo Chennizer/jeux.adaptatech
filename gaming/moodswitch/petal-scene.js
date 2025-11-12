@@ -115,9 +115,12 @@ export function createPetalScene(p) {
     if (petals.length > desired) petals.length = desired;
   }
 
-  function spawnSparkles() {
-    sparkles = [];
-    const count = Math.floor(p.width * p.height * 0.000022) + 26;
+  function spawnSparkles({ reset = true } = {}) {
+    if (reset) {
+      sparkles = [];
+    }
+    const base = Math.floor(p.width * p.height * 0.000022) + 26;
+    const count = reset ? base : Math.ceil(base * 0.5);
     for (let i = 0; i < count; i++) {
       sparkles.push(new PetalSparkle(p));
     }
@@ -146,13 +149,16 @@ export function createPetalScene(p) {
     description: 'Souffle pastel et souvenirs flottants',
     enter() {
       highlightStart = p.millis();
-      spawnSparkles();
+      spawnSparkles({ reset: true });
     },
     resize() {
       ensurePetals();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
+    },
+    pulse() {
+      spawnSparkles({ reset: false });
     },
     draw() {
       if (petals.length !== targetCount) ensurePetals();

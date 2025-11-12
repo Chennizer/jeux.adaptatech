@@ -92,9 +92,12 @@ export function createRainScene(p) {
     if (drops.length > desired) drops.length = desired;
   }
 
-  function spawnSparkles() {
-    sparkles = [];
-    const count = Math.floor(p.width * p.height * 0.00003) + 18;
+  function spawnSparkles({ reset = true } = {}) {
+    if (reset) {
+      sparkles = [];
+    }
+    const base = Math.floor(p.width * p.height * 0.00003) + 18;
+    const count = reset ? base : Math.ceil(base * 0.4);
     for (let i = 0; i < count; i++) {
       sparkles.push(new RainSparkle(p));
     }
@@ -123,13 +126,16 @@ export function createRainScene(p) {
     description: 'Gouttes fines et reflets dans la nuit',
     enter() {
       flashStart = p.millis();
-      spawnSparkles();
+      spawnSparkles({ reset: true });
     },
     resize() {
       ensureDrops();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
+    },
+    pulse() {
+      spawnSparkles({ reset: false });
     },
     draw() {
       if (drops.length !== targetCount) ensureDrops();

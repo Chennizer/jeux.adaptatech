@@ -111,6 +111,7 @@ function triggerSpeedBurst() {
     return;
   }
   speedBurst = { start: performance.now() };
+  activeScene?.pulse?.();
 }
 
 function refreshMode() {

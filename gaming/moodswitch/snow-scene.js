@@ -99,9 +99,12 @@ export function createSnowScene(p) {
     if (flakes.length > desired) flakes.length = desired;
   }
 
-  function spawnGlitter() {
-    glitter = [];
-    const count = Math.floor(p.width * p.height * 0.000025) + 24;
+  function spawnGlitter({ reset = true } = {}) {
+    if (reset) {
+      glitter = [];
+    }
+    const base = Math.floor(p.width * p.height * 0.000025) + 24;
+    const count = reset ? base : Math.ceil(base * 0.45);
     for (let i = 0; i < count; i++) {
       glitter.push(new SnowGlitter(p));
     }
@@ -132,13 +135,16 @@ export function createSnowScene(p) {
       glowStart = p.millis();
       wind = p.random(-1.5, 1.5);
       targetWind = wind;
-      spawnGlitter();
+      spawnGlitter({ reset: true });
     },
     resize() {
       ensureFlakes();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
+    },
+    pulse() {
+      spawnGlitter({ reset: false });
     },
     draw() {
       if (flakes.length !== targetCount) ensureFlakes();
