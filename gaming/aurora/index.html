@@ -455,7 +455,10 @@
         this.glintHue = hues[3 % hues.length];
         const boundsTop = height * 0.34;
         const boundsBottom = height * 0.6;
-        this.baseY = constrain(centerY + random(-height * 0.05, height * 0.05), boundsTop, boundsBottom);
+        this.targetBaseY = constrain(centerY + random(-height * 0.05, height * 0.05), boundsTop, boundsBottom);
+        this.entryStartY = this.targetBaseY - random(height * 0.22, height * 0.32);
+        this.exitTargetY = this.targetBaseY + random(height * 0.18, height * 0.28);
+        this.baseY = this.entryStartY;
         this.amplitude = random(height * 0.22, height * 0.34);
         this.noiseScale = random(0.0008, 0.0016);
         this.waveSpeed = random(0.00018, 0.00042) * (random() > 0.5 ? 1 : -1);
@@ -464,22 +467,39 @@
         this.alpha = 0;
         this.targetAlpha = random(0.58, 0.88);
         this.life = 1;
-        this.fadeInRate = random(0.0015, 0.004);
-        this.fadeOutRate = random(0.0005, 0.0012);
-        this.holdTime = random(5200, 7600);
+        this.fadeInRate = random(0.00045, 0.001);
+        this.fadeOutRate = random(0.00028, 0.00054);
+        this.entryDuration = random(2200, 3200);
+        this.holdDuration = random(3600, 5200);
+        this.exitDuration = random(2600, 3600);
         this.createdAt = millis();
+        this.driftPhase = random(TWO_PI);
+        this.driftSpeed = random(0.00008, 0.00014);
         this.glow = random(0.55, 1.1);
         this.gradientStops = this.buildGradientStops();
       }
 
       update() {
         const elapsed = millis() - this.createdAt;
-        this.phase += this.waveSpeed * (deltaTime || 16.6);
-        if (elapsed < this.holdTime) {
-          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * (deltaTime || 16.6));
+        const dt = (deltaTime || 16.6);
+        this.phase += this.waveSpeed * dt;
+
+        if (elapsed < this.entryDuration) {
+          const progress = easeOutCubic(constrain(elapsed / this.entryDuration, 0, 1));
+          this.baseY = lerp(this.entryStartY, this.targetBaseY, progress);
+          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * dt * 0.8);
+        } else if (elapsed < this.entryDuration + this.holdDuration) {
+          const holdElapsed = elapsed - this.entryDuration;
+          const drift = Math.sin(holdElapsed * this.driftSpeed + this.driftPhase) * this.amplitude * 0.05;
+          this.baseY = this.targetBaseY + drift;
+          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * dt);
         } else {
-          this.alpha = max(0, this.alpha - this.fadeOutRate * (deltaTime || 16.6));
+          const exitElapsed = elapsed - this.entryDuration - this.holdDuration;
+          const exitProgress = easeInCubic(constrain(exitElapsed / this.exitDuration, 0, 1));
+          this.baseY = lerp(this.targetBaseY, this.exitTargetY, exitProgress);
+          this.alpha = max(0, this.alpha - this.fadeOutRate * dt * (1.1 + exitProgress));
         }
+
         this.life = this.alpha / max(this.targetAlpha, 0.0001);
       }
 
@@ -713,13 +733,10 @@
         huePool.push((coreHue + offsets[i] + 360) % 360);
       }
       const uniqueHuePool = [...new Set(huePool.map(h => ((h % 360) + 360) % 360))];
-      const ribbonCount = Math.floor(random(3, 6));
-      const ribbons = Array.from({ length: ribbonCount }, () => shuffle(uniqueHuePool).slice(0, 5));
       const skyHueShift = random([-18, -8, 0, 12, 24]);
       return {
         skyHue: (coreHue + skyHueShift + 360) % 360,
-        huePool: uniqueHuePool,
-        ribbons
+        huePool: uniqueHuePool
       };
     }
 
@@ -752,9 +769,8 @@
       const palette = createAuroraPalette();
       targetSkyHue = palette.skyHue;
       const centerY = height * 0.48 + random(-height * 0.04, height * 0.04);
-      for (const hues of palette.ribbons) {
-        ribbons.push(new Ribbon(hues, centerY));
-      }
+      const ribbonHues = shuffle([...palette.huePool]).slice(0, 5);
+      ribbons.push(new Ribbon(ribbonHues, centerY));
       const burstPalette = shuffle([...palette.huePool]).slice(0, 7);
       const burstCount = Math.floor(random(110, 170));
       for (let i = 0; i < burstCount; i++) {
@@ -786,6 +802,14 @@
       const pool = list.filter(s => s && s.isLoaded());
       if (!pool.length) return null;
       return random(pool);
+    }
+
+    function easeOutCubic(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function easeInCubic(t) {
+      return t * t * t;
     }
 
     function hsla(h, s, l, a) {
