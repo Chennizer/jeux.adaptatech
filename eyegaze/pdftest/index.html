@@ -380,28 +380,19 @@
 
     function makePdfRequestPath(target) {
       try {
-        const candidate = target instanceof URL ? target : new URL(String(target || ''), pdfBaseUrl);
+        const candidate = target instanceof URL
+          ? target
+          : new URL(String(target || ''), pdfBaseUrl);
+
         if (candidate.origin && candidate.origin !== pdfBaseUrl.origin) {
           return candidate.href;
         }
 
-        let suffix = '';
-        if (candidate.href.startsWith(pdfBaseUrl.href)) {
-          suffix = candidate.href.slice(pdfBaseUrl.href.length);
-        } else if (candidate.pathname) {
-          const basePath = pdfBaseUrl.pathname.replace(/\/$/, '');
-          if (candidate.pathname.startsWith(basePath + '/')) {
-            suffix = candidate.pathname.slice(basePath.length + 1);
-          } else {
-            suffix = candidate.pathname.replace(/^\/+/, '');
-          }
-        }
-
-        if (!suffix) {
-          return pdfRelativeBase;
-        }
-
-        return pdfRelativeBase + suffix.replace(/^\/+/, '');
+        const path = candidate.pathname || '/';
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        const search = candidate.search || '';
+        const hash = candidate.hash || '';
+        return `${normalizedPath}${search}${hash}`;
       } catch (err) {
         return pdfRelativeBase;
       }
@@ -634,11 +625,39 @@
 
     async function loadPdfFromLibrary(entry) {
       if (!entry || !entry.url) return;
+
+      const candidates = [];
+      const tried = new Set();
+
+      const pushCandidate = value => {
+        if (!value) return;
+        if (tried.has(value)) return;
+        tried.add(value);
+        candidates.push(value);
+      };
+
+      pushCandidate(entry.requestPath);
+      pushCandidate(entry.url);
+
       try {
-        const target = entry.requestPath || entry.url;
-        const resp = await fetch(target, { cache: 'no-store' });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const buf = await resp.arrayBuffer();
+        let buf = null;
+        let lastErr = null;
+
+        for (const target of candidates) {
+          try {
+            const resp = await fetch(target, { cache: 'no-store' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            buf = await resp.arrayBuffer();
+            break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+
+        if (!buf) {
+          throw lastErr || new Error('PDF fetch failed');
+        }
+
         await setPdfFromArrayBuffer(buf, entry.fileName || entry.label || '');
       } catch (err) {
         console.error('Library PDF load error:', err);
