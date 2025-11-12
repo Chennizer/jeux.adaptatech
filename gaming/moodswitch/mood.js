@@ -3,13 +3,10 @@ import { createSnowScene } from './snow-scene.js';
 import { createPetalScene } from './petal-scene.js';
 import { createCandleScene } from './candle-scene.js';
 
-const sceneNameEl = document.getElementById('scene-name');
-const sceneDescEl = document.getElementById('scene-desc');
-const statusEl = document.getElementById('status-hint');
-const overlayEl = document.getElementById('overlay');
 const startOverlayEl = document.getElementById('promptOverlay');
 const startButtonEl = document.getElementById('startButton');
-const modeInputs = document.querySelectorAll('input[name="mode"]');
+const modeButtons = document.querySelectorAll('#modeSelect button');
+const langToggleEl = document.getElementById('langToggle');
 
 const MODE_DEFAULT = 'default';
 const MODE_SLOW = 'slow';
@@ -28,20 +25,12 @@ let activeScene = null;
 let lastSwitch = 0;
 let started = false;
 let mode = MODE_DEFAULT;
+let selectedMode = MODE_DEFAULT;
 let sceneStartedAt = 0;
 let speedBurst = null;
 
 const clamp01 = value => Math.min(1, Math.max(0, value));
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
-
-function updateOverlay() {
-  if (!activeScene) return;
-  if (sceneNameEl) sceneNameEl.textContent = activeScene.name;
-  if (sceneDescEl) sceneDescEl.textContent = activeScene.description;
-  if (statusEl) {
-    statusEl.textContent = `${activeIndex + 1} / ${scenes.length}`;
-  }
-}
 
 function cycleScene(step = 1) {
   if (!started || !scenes.length) return;
@@ -53,7 +42,6 @@ function cycleScene(step = 1) {
   activeScene.enter?.();
   sceneStartedAt = performance.now();
   speedBurst = null;
-  updateOverlay();
 }
 
 function beginExperience() {
@@ -62,12 +50,11 @@ function beginExperience() {
   sceneStartedAt = performance.now();
   speedBurst = null;
   activeScene.enter?.();
-  updateOverlay();
   if (startOverlayEl) {
     startOverlayEl.style.display = 'none';
   }
-  if (overlayEl) {
-    overlayEl.style.display = 'none';
+  if (langToggleEl) {
+    langToggleEl.style.display = 'none';
   }
 }
 
@@ -116,8 +103,7 @@ function triggerSpeedBurst() {
 }
 
 function refreshMode() {
-  const selected = document.querySelector('input[name="mode"]:checked');
-  const value = selected?.value === MODE_SLOW ? MODE_SLOW : MODE_DEFAULT;
+  const value = selectedMode === MODE_SLOW ? MODE_SLOW : MODE_DEFAULT;
   if (value !== mode) {
     mode = value;
     sceneStartedAt = performance.now();
@@ -140,7 +126,6 @@ const sketch = p => {
     scenes.forEach(scene => scene.resize?.());
     activeIndex = 0;
     activeScene = scenes[activeIndex];
-    updateOverlay();
     p.frameRate(60);
   };
 
@@ -203,10 +188,23 @@ startButtonEl?.addEventListener('touchend', evt => {
   startInteraction();
 });
 
-modeInputs.forEach(input => {
-  input.addEventListener('change', () => {
-    if (input.checked) {
-      refreshMode();
-    }
+const setModeSelection = (value, { refresh = true } = {}) => {
+  selectedMode = value === MODE_SLOW ? MODE_SLOW : MODE_DEFAULT;
+  modeButtons.forEach(button => {
+    const isActive = button.dataset.mode === selectedMode;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+  if (refresh) {
+    refreshMode();
+  }
+};
+
+setModeSelection(selectedMode, { refresh: false });
+
+modeButtons.forEach(button => {
+  button.addEventListener('click', evt => {
+    evt.preventDefault();
+    setModeSelection(button.dataset.mode);
   });
 });
