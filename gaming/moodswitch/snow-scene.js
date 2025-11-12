@@ -12,18 +12,19 @@ class Snowflake {
     this.x = p.random(p.width);
     this.y = spawnAnywhere ? p.random(-p.height, p.height) : p.random(-p.height * 0.3, 0);
     this.size = p.random(1.8, 4.6);
-    this.speed = p.random(0.6, 1.8);
-    this.sway = p.random(1.0, 2.4);
+    this.baseSpeed = p.random(0.6, 1.8);
+    this.baseSway = p.random(1.0, 2.4);
     this.phase = p.random(p.TWO_PI);
     this.alpha = p.random(140, 220);
     this.windFactor = p.random(0.6, 1.4);
   }
 
-  update(wind = 0) {
+  update(wind = 0, speedMultiplier = 1) {
     const p = this.p;
-    this.phase += 0.012;
-    this.y += this.speed;
-    this.x += Math.sin(this.phase) * this.sway + wind * this.windFactor;
+    this.phase += 0.012 * speedMultiplier;
+    this.y += this.baseSpeed * speedMultiplier;
+    const sway = Math.sin(this.phase) * this.baseSway * speedMultiplier;
+    this.x += sway + wind * this.windFactor * speedMultiplier;
     if (this.y > p.height) {
       this.reset();
       this.y = -20;
@@ -46,6 +47,7 @@ export function createSnowScene(p) {
   let targetCount = 0;
   let wind = 0;
   let targetWind = 0;
+  let speedMultiplier = 1;
 
   function ensureFlakes() {
     const desired = Math.floor((p.width * p.height) * 0.00042);
@@ -83,13 +85,16 @@ export function createSnowScene(p) {
     resize() {
       ensureFlakes();
     },
+    setSpeedMultiplier(multiplier = 1) {
+      speedMultiplier = multiplier;
+    },
     draw() {
       if (flakes.length !== targetCount) ensureFlakes();
       drawSky();
 
       updateWind();
 
-      flakes.forEach(f => f.update(wind));
+      flakes.forEach(f => f.update(wind, speedMultiplier));
       flakes.forEach(f => f.draw());
 
       const elapsed = p.millis() - glowStart;

@@ -17,15 +17,16 @@ class Drop {
     this.y = spawnAnywhere ? p.random(-p.height, p.height) : p.random(-p.height * 0.2, 0);
     this.depth = p.random(0.3, 1);
     this.len = p.lerp(8, 18, this.depth);
-    this.speed = p.lerp(2.4, 7.2, this.depth);
+    this.baseSpeed = p.lerp(2.4, 7.2, this.depth);
     this.weight = p.lerp(0.8, 2.2, this.depth);
     this.alpha = p.lerp(90, 190, this.depth);
   }
 
-  update() {
+  update(speedMultiplier = 1) {
     const p = this.p;
-    this.y += this.speed;
-    this.x += p.sin((p.frameCount + this.y) * 0.01) * 0.6 * this.depth;
+    const drift = p.sin((p.frameCount + this.y) * 0.01) * 0.6 * this.depth;
+    this.y += this.baseSpeed * speedMultiplier;
+    this.x += drift * speedMultiplier;
     if (this.y - this.len > p.height) {
       this.reset(true);
       this.y -= p.height;
@@ -44,6 +45,7 @@ export function createRainScene(p) {
   const drops = [];
   let flashStart = 0;
   let targetCount = 0;
+  let speedMultiplier = 1;
 
   function ensureDrops() {
     const desired = Math.floor((p.width * p.height) * 0.00055);
@@ -79,11 +81,14 @@ export function createRainScene(p) {
     resize() {
       ensureDrops();
     },
+    setSpeedMultiplier(multiplier = 1) {
+      speedMultiplier = multiplier;
+    },
     draw() {
       if (drops.length !== targetCount) ensureDrops();
       drawGradient();
 
-      drops.forEach(d => d.update());
+      drops.forEach(d => d.update(speedMultiplier));
       drops.forEach(d => d.draw());
 
       const elapsed = p.millis() - flashStart;

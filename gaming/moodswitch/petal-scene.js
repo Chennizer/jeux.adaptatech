@@ -15,9 +15,9 @@ class Petal {
     this.x = p.random(p.width);
     this.y = spawnAnywhere ? p.random(-p.height, p.height) : -p.random(p.height * 0.2);
     this.size = p.random(26, 48);
-    this.vx = p.random(-0.35, 0.35);
-    this.vy = p.random(0.35, 0.9);
-    this.spin = p.random(-0.02, 0.02);
+    this.baseVx = p.random(-0.35, 0.35);
+    this.baseVy = p.random(0.35, 0.9);
+    this.baseSpin = p.random(-0.02, 0.02);
     this.angle = p.random(p.TWO_PI);
     this.life = 0;
     this.alpha = p.random(90, 170);
@@ -25,12 +25,13 @@ class Petal {
     this.offset = p.random(p.TWO_PI);
   }
 
-  update() {
+  update(speedMultiplier = 1) {
     const p = this.p;
-    this.life += 1;
-    this.x += this.vx + Math.sin(this.offset + this.life * 0.025) * this.wobble;
-    this.y += this.vy;
-    this.angle += this.spin;
+    this.life += speedMultiplier;
+    const wobble = Math.sin(this.offset + this.life * 0.025) * this.wobble;
+    this.x += (this.baseVx * speedMultiplier) + wobble * speedMultiplier;
+    this.y += this.baseVy * speedMultiplier;
+    this.angle += this.baseSpin * speedMultiplier;
     if (this.y > p.height + this.size) this.reset();
   }
 
@@ -62,6 +63,7 @@ export function createPetalScene(p) {
   const petals = [];
   let highlightStart = 0;
   let targetCount = 0;
+  let speedMultiplier = 1;
 
   function ensurePetals() {
     const desired = Math.floor((p.width * p.height) * 0.00018);
@@ -97,11 +99,14 @@ export function createPetalScene(p) {
     resize() {
       ensurePetals();
     },
+    setSpeedMultiplier(multiplier = 1) {
+      speedMultiplier = multiplier;
+    },
     draw() {
       if (petals.length !== targetCount) ensurePetals();
       drawBackground();
 
-      petals.forEach(pt => pt.update());
+      petals.forEach(pt => pt.update(speedMultiplier));
       petals.forEach(pt => pt.draw());
 
       const elapsed = p.millis() - highlightStart;
