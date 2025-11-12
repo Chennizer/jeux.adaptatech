@@ -20,13 +20,13 @@ class Snowflake {
     this.windFactor = p.random(0.6, 1.4);
   }
 
-  update(wind = 0, speedMultiplier = 1) {
+  update(wind = 0, speedMultiplier = 1, groundY = this.p.height) {
     const p = this.p;
     this.phase += 0.012 * speedMultiplier;
     this.y += this.baseSpeed * speedMultiplier;
     const sway = Math.sin(this.phase) * this.baseSway * speedMultiplier;
     this.x += sway + wind * this.windFactor * speedMultiplier;
-    if (this.y > p.height) {
+    if (this.y >= groundY - this.size * 0.4) {
       this.reset();
       this.y = -20;
     }
@@ -34,8 +34,11 @@ class Snowflake {
     if (this.x > p.width + 40) this.x = -40;
   }
 
-  draw() {
+  draw(groundY = this.p.height) {
     const p = this.p;
+    if (this.y >= groundY - this.size * 0.4) {
+      return;
+    }
     p.noStroke();
     p.fill(230, 240, 255, this.alpha);
     p.circle(this.x, this.y, this.size * 2);
@@ -162,8 +165,11 @@ export function createSnowScene(p) {
         if (!alive) glitter.splice(i, 1);
       }
 
-      flakes.forEach(f => f.update(wind, speedMultiplier));
-      flakes.forEach(f => f.draw());
+      const groundHeight = p.height * 0.18;
+      const groundStartY = p.height - groundHeight;
+
+      flakes.forEach(f => f.update(wind, speedMultiplier, groundStartY));
+      flakes.forEach(f => f.draw(groundStartY));
 
       const elapsed = p.millis() - glowStart;
       const fade = p.constrain(1 - elapsed / 2200, 0, 1);
@@ -173,7 +179,6 @@ export function createSnowScene(p) {
         p.rect(0, 0, p.width, p.height);
       }
 
-      const groundHeight = p.height * 0.18;
       p.fill(240, 244, 255, 220);
       p.rect(0, p.height - groundHeight, p.width, groundHeight);
     }
