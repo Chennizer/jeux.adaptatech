@@ -174,20 +174,9 @@ const sketch = p => {
     return undefined;
   };
 
-  p.mousePressed = () => {
-    if (!started) return;
-    triggerSpeedBurst();
-  };
 };
 
 new p5(sketch);
-
-overlayEl?.addEventListener('click', () => triggerSpeedBurst());
-overlayEl?.addEventListener('touchstart', evt => {
-  if (!started) return;
-  evt.preventDefault();
-  triggerSpeedBurst();
-}, { passive: false });
 
 window.addEventListener('keydown', evt => {
   if (!started && (evt.code === 'Enter' || evt.code === 'NumpadEnter')) {
