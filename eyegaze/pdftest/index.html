@@ -380,28 +380,11 @@
 
     function makePdfRequestPath(target) {
       try {
-        const candidate = target instanceof URL ? target : new URL(String(target || ''), pdfBaseUrl);
-        if (candidate.origin && candidate.origin !== pdfBaseUrl.origin) {
-          return candidate.href;
-        }
+        const candidate = target instanceof URL
+          ? target
+          : new URL(String(target || ''), pdfBaseUrl);
 
-        let suffix = '';
-        if (candidate.href.startsWith(pdfBaseUrl.href)) {
-          suffix = candidate.href.slice(pdfBaseUrl.href.length);
-        } else if (candidate.pathname) {
-          const basePath = pdfBaseUrl.pathname.replace(/\/$/, '');
-          if (candidate.pathname.startsWith(basePath + '/')) {
-            suffix = candidate.pathname.slice(basePath.length + 1);
-          } else {
-            suffix = candidate.pathname.replace(/^\/+/, '');
-          }
-        }
-
-        if (!suffix) {
-          return pdfRelativeBase;
-        }
-
-        return pdfRelativeBase + suffix.replace(/^\/+/, '');
+        return candidate.href;
       } catch (err) {
         return pdfRelativeBase;
       }
@@ -632,19 +615,65 @@
       return results;
     }
 
+    function buildPdfFetchCandidates(entry) {
+      const seen = new Set();
+      const out = [];
+      const push = value => {
+        if (!value) return;
+        const str = String(value).trim();
+        if (!str) return;
+        if (seen.has(str)) return;
+        seen.add(str);
+        out.push(str);
+      };
+
+      push(entry?.requestPath);
+      push(entry?.url);
+
+      const fileName = (entry?.fileName || '').replace(/^[./]+/, '');
+      if (fileName) {
+        push(`${pdfRelativeBase}${fileName}`);
+        try {
+          push(new URL(fileName, pdfBaseUrl).href);
+        } catch (_) {}
+      }
+
+      return out;
+    }
+
+    async function fetchFirstPdfCandidate(entry) {
+      const candidates = buildPdfFetchCandidates(entry);
+      let lastError = null;
+
+      for (const candidate of candidates) {
+        try {
+          const resp = await fetch(candidate, { cache: 'no-store' });
+          if (!resp.ok) {
+            lastError = new Error(`HTTP ${resp.status} for ${candidate}`);
+            continue;
+          }
+          return resp;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      const error = lastError || new Error('No valid PDF request candidate');
+      error.candidates = candidates;
+      throw error;
+    }
+
     async function loadPdfFromLibrary(entry) {
-      if (!entry || !entry.url) return;
+      if (!entry) return;
       try {
-        const target = entry.requestPath || entry.url;
-        const resp = await fetch(target, { cache: 'no-store' });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const resp = await fetchFirstPdfCandidate(entry);
         const buf = await resp.arrayBuffer();
         await setPdfFromArrayBuffer(buf, entry.fileName || entry.label || '');
       } catch (err) {
         console.error('Library PDF load error:', err);
         const msg = (currentLang === 'fr')
-          ? `Impossible de charger le PDF « ${entry.label} ».`
-          : `Unable to load “${entry.label}”.`;
+          ? `Impossible de charger le PDF « ${entry?.label || ''} ».`
+          : `Unable to load “${entry?.label || ''}”.`;
         alert(msg);
       }
     }
