@@ -235,6 +235,10 @@
     const shimmerSounds = [];
     const swellSounds = [];
     let started = false;
+    const REFRESH_DELAY = 2000;
+    let lastAuroraTime = -REFRESH_DELAY;
+    let pendingAuroraTimeout = null;
+    let pendingAuroraReset = false;
 
     function preload() {
       soundFormats('mp3', 'wav');
@@ -267,6 +271,7 @@
     function draw() {
       if (!started) return;
       drawSky();
+      updateGlows();
       drawStars();
       updateRibbons();
       updateSparks();
@@ -279,8 +284,7 @@
         return false;
       }
       if (key === 'Enter') {
-        clearScene();
-        requestAurora();
+        requestAurora(true);
         return false;
       }
     }
@@ -309,10 +313,12 @@
     function clearScene() {
       ribbons = [];
       sparks = [];
+      glows = [];
     }
 
     let ribbons = [];
     let sparks = [];
+    let glows = [];
     let stars = [];
     let skyHue = 200;
     let targetSkyHue = 200;
@@ -346,6 +352,15 @@
       ctx.save();
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
+
+      const haloY = height * 0.48 + Math.sin(skyPulse * 0.12) * height * 0.03;
+      const haloGradient = ctx.createRadialGradient(width / 2, haloY, height * 0.05, width / 2, haloY, height * 0.55);
+      haloGradient.addColorStop(0, hsla((skyHue + 40) % 360, 60, 55, 0.42));
+      haloGradient.addColorStop(0.45, hsla((skyHue + 70) % 360, 55, 40, 0.18));
+      haloGradient.addColorStop(1, hsla((skyHue + 110) % 360, 50, 22, 0));
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = haloGradient;
+      ctx.fillRect(0, 0, width, height);
       ctx.restore();
     }
 
@@ -360,23 +375,28 @@
     }
 
     class Ribbon {
-      constructor(baseHue) {
-        this.baseHue = baseHue;
-        this.secondaryHue = (baseHue + random([-35, -20, 18, 40])) % 360;
-        this.baseY = random(height * 0.25, height * 0.65);
-        this.amplitude = random(height * 0.12, height * 0.22);
-        this.noiseScale = random(0.0014, 0.0026);
-        this.waveSpeed = random(0.00035, 0.0011) * (random() > 0.5 ? 1 : -1);
+      constructor(hues, centerY = height * 0.5) {
+        this.hues = hues;
+        this.baseHue = hues[0];
+        this.secondaryHue = hues[1 % hues.length];
+        this.highlightHue = hues[2 % hues.length];
+        this.glintHue = hues[3 % hues.length];
+        const boundsTop = height * 0.35;
+        const boundsBottom = height * 0.65;
+        this.baseY = constrain(centerY + random(-height * 0.05, height * 0.05), boundsTop, boundsBottom);
+        this.amplitude = random(height * 0.18, height * 0.28);
+        this.noiseScale = random(0.0012, 0.0022);
+        this.waveSpeed = random(0.00032, 0.0009) * (random() > 0.5 ? 1 : -1);
         this.phase = random(1000);
-        this.tilt = random(-0.35, 0.35);
+        this.tilt = random(-0.28, 0.28);
         this.alpha = 0;
-        this.targetAlpha = random(0.45, 0.8);
+        this.targetAlpha = random(0.55, 0.85);
         this.life = 1;
-        this.fadeInRate = random(0.015, 0.028);
-        this.fadeOutRate = random(0.0025, 0.0045);
-        this.holdTime = random(2600, 4200);
+        this.fadeInRate = random(0.018, 0.032);
+        this.fadeOutRate = random(0.002, 0.0036);
+        this.holdTime = random(3400, 5200);
         this.createdAt = millis();
-        this.glow = random(0.4, 0.9);
+        this.glow = random(0.55, 1.1);
       }
 
       update() {
@@ -401,10 +421,11 @@
         ctx.lineTo(width, height);
         ctx.lineTo(0, height);
         ctx.closePath();
-        const grad = ctx.createLinearGradient(0, this.baseY - this.amplitude * 1.5, width, this.baseY + this.amplitude * 1.5);
+        const grad = ctx.createLinearGradient(0, this.baseY - this.amplitude * 1.65, width, this.baseY + this.amplitude * 1.65);
         grad.addColorStop(0, hsla((this.baseHue + 360) % 360, 85, 68, this.alpha * 0.9));
-        grad.addColorStop(0.5, hsla((this.secondaryHue + 360) % 360, 90, 74, this.alpha));
-        grad.addColorStop(1, hsla((this.baseHue + 30 + 360) % 360, 80, 64, this.alpha * 0.85));
+        grad.addColorStop(0.35, hsla((this.secondaryHue + 360) % 360, 92, 76, this.alpha));
+        grad.addColorStop(0.68, hsla((this.highlightHue + 360) % 360, 90, 74, this.alpha * 0.95));
+        grad.addColorStop(1, hsla((this.glintHue + 360) % 360, 80, 62, this.alpha * 0.82));
         ctx.fillStyle = grad;
         ctx.globalCompositeOperation = 'screen';
         ctx.globalAlpha = 0.9;
@@ -427,26 +448,30 @@
     }
 
     class Spark {
-      constructor(baseHue) {
+      constructor(huePool, centerY = height * 0.5) {
         this.x = random(width);
-        this.y = random(height * 0.25, height * 0.65);
+        this.y = constrain(centerY + random(-height * 0.08, height * 0.08), height * 0.3, height * 0.7);
         this.vx = random(-0.25, 0.25);
-        this.vy = random(-0.2, 0.45);
+        this.vy = random(-0.3, 0.5);
         this.size = random(2, 6);
-        this.life = random(0.7, 1.4);
-        this.hue = (baseHue + random(-28, 32) + 360) % 360;
+        this.life = random(0.8, 1.5);
+        this.huePool = huePool;
+        this.hue = this.pickHue();
         this.alpha = 1;
-        this.spin = random(-0.08, 0.08);
+        this.spin = random(-0.08, 0.09);
         this.angle = random(TWO_PI);
       }
 
       update(dt) {
         this.x += this.vx * dt * 60;
         this.y += this.vy * dt * 60;
-        this.vy += 0.005 * dt * 60;
+        this.vy += 0.0045 * dt * 60;
         this.angle += this.spin * dt * 60;
         this.life -= 0.45 * dt;
         this.alpha = constrain(this.life, 0, 1);
+        if (random() < 0.01) {
+          this.hue = this.pickHue();
+        }
       }
 
       draw() {
@@ -454,13 +479,20 @@
         translate(this.x, this.y);
         rotate(this.angle);
         const brightness = 80 + 20 * (1 - this.alpha);
-        fill(this.hue, 70, brightness, this.alpha * 0.9);
-        ellipse(0, 0, this.size * 1.2, this.size * 2);
+        fill(this.hue, 72, brightness, this.alpha * 0.9);
+        ellipse(0, 0, this.size * 1.4, this.size * 2.3);
         pop();
       }
 
       isDead() {
         return this.alpha <= 0.02 || this.y > height + 40;
+      }
+
+      pickHue() {
+        if (!Array.isArray(this.huePool) || !this.huePool.length) {
+          return random(360);
+        }
+        return (random(this.huePool) + random(-18, 18) + 360) % 360;
       }
     }
 
@@ -482,15 +514,115 @@
       sparks = sparks.filter(s => !s.isDead());
     }
 
-    function requestAurora() {
-      const baseHue = random([120, 140, 160, 185, 200, 215, 260]);
-      targetSkyHue = baseHue;
-      ribbons.push(new Ribbon(baseHue));
-      if (random() < 0.6) ribbons.push(new Ribbon((baseHue + random(-25, 25) + 360) % 360));
-      const burstCount = Math.floor(random(50, 90));
-      for (let i = 0; i < burstCount; i++) {
-        sparks.push(new Spark(baseHue));
+    class Glow {
+      constructor(hues, centerY = height * 0.5) {
+        this.hues = hues;
+        this.centerX = width / 2 + random(-width * 0.12, width * 0.12);
+        this.centerY = constrain(centerY + random(-height * 0.04, height * 0.04), height * 0.32, height * 0.68);
+        this.radius = random(height * 0.38, height * 0.55);
+        this.alpha = 0;
+        this.targetAlpha = random(0.22, 0.34);
+        this.fadeInRate = random(0.0009, 0.0015);
+        this.fadeOutRate = random(0.00035, 0.00055);
+        this.holdTime = random(3200, 4600);
+        this.createdAt = millis();
       }
+
+      update() {
+        const elapsed = millis() - this.createdAt;
+        if (elapsed < this.holdTime) {
+          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * (deltaTime || 16.6));
+        } else {
+          this.alpha = max(0, this.alpha - this.fadeOutRate * (deltaTime || 16.6));
+        }
+      }
+
+      draw(ctx) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const gradient = ctx.createRadialGradient(
+          this.centerX,
+          this.centerY,
+          this.radius * 0.1,
+          this.centerX,
+          this.centerY,
+          this.radius
+        );
+        gradient.addColorStop(0, hsla(this.hues[0], 70, 75, this.alpha));
+        gradient.addColorStop(0.45, hsla(this.hues[1 % this.hues.length], 65, 58, this.alpha * 0.6));
+        gradient.addColorStop(1, hsla(this.hues[2 % this.hues.length], 55, 30, 0));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+
+      isDead() {
+        return this.alpha <= 0.01;
+      }
+    }
+
+    function updateGlows() {
+      const ctx = drawingContext;
+      for (const glow of glows) {
+        glow.update();
+        glow.draw(ctx);
+      }
+      glows = glows.filter(g => !g.isDead());
+    }
+
+    function createAuroraPalette() {
+      const coreHue = random([135, 148, 162, 178, 196, 212, 228, 244, 272, 296, 318]);
+      const companion = (coreHue + random([24, 32, 42])) % 360;
+      const highNote = (coreHue + random([82, 94, 112])) % 360;
+      const deepNote = (coreHue + random([180, 196, 208])) % 360;
+      const sparkle = (coreHue + random([-90, -60, 60, 90])) % 360;
+      const huePool = [coreHue, companion, highNote, deepNote, sparkle, (coreHue + 330) % 360];
+      const ribbonCount = Math.floor(random(2, 4));
+      const ribbons = Array.from({ length: ribbonCount }, () => shuffle(huePool).slice(0, 4));
+      return {
+        skyHue: coreHue,
+        huePool,
+        ribbons
+      };
+    }
+
+    function requestAurora(resetScene = false) {
+      const now = millis();
+      const elapsed = now - lastAuroraTime;
+      if (elapsed < REFRESH_DELAY) {
+        pendingAuroraReset = pendingAuroraReset || resetScene;
+        if (pendingAuroraTimeout) {
+          clearTimeout(pendingAuroraTimeout);
+        }
+        pendingAuroraTimeout = setTimeout(() => {
+          pendingAuroraTimeout = null;
+          const shouldReset = pendingAuroraReset;
+          pendingAuroraReset = false;
+          requestAurora(shouldReset);
+        }, REFRESH_DELAY - elapsed);
+        return;
+      }
+      if (pendingAuroraTimeout) {
+        clearTimeout(pendingAuroraTimeout);
+        pendingAuroraTimeout = null;
+        pendingAuroraReset = false;
+      }
+      if (resetScene) {
+        clearScene();
+      }
+      lastAuroraTime = now;
+
+      const palette = createAuroraPalette();
+      targetSkyHue = palette.skyHue;
+      const centerY = height * 0.48 + random(-height * 0.04, height * 0.04);
+      for (const hues of palette.ribbons) {
+        ribbons.push(new Ribbon(hues, centerY));
+      }
+      const burstCount = Math.floor(random(80, 130));
+      for (let i = 0; i < burstCount; i++) {
+        sparks.push(new Spark(palette.huePool, centerY));
+      }
+      glows.push(new Glow(shuffle([...palette.huePool]).slice(0, 3), centerY));
 
       if (!sfxMuted) {
         const shimmer = pickLoaded(shimmerSounds);
