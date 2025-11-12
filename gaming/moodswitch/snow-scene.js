@@ -1,5 +1,6 @@
 const SKY_TOP = [8, 14, 32];
 const SKY_BOTTOM = [28, 36, 62];
+const EFFECT_INTENSITY = 3;
 
 class Snowflake {
   constructor(p, spawnAnywhere = true) {
@@ -104,7 +105,10 @@ export function createSnowScene(p) {
       glitter = [];
     }
     const base = Math.floor(p.width * p.height * 0.000025) + 24;
-    const count = reset ? base : Math.ceil(base * 0.45);
+    const multiplier = EFFECT_INTENSITY;
+    const count = reset
+      ? Math.ceil(base * multiplier)
+      : Math.ceil(base * 0.45 * multiplier);
     for (let i = 0; i < count; i++) {
       glitter.push(new SnowGlitter(p));
     }
@@ -165,7 +169,8 @@ export function createSnowScene(p) {
       const elapsed = p.millis() - glowStart;
       const fade = p.constrain(1 - elapsed / 2200, 0, 1);
       if (fade > 0) {
-        p.fill(220, 240, 255, 80 * fade);
+        const alpha = Math.min(255, 80 * fade * EFFECT_INTENSITY);
+        p.fill(220, 240, 255, alpha);
         p.rect(0, 0, p.width, p.height);
       }
 
