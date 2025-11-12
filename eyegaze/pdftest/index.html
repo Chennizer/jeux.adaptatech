@@ -474,6 +474,58 @@
     updateLibraryControlsState();
     let allowTtsSave = false;
 
+    function normalizeInterfaceLangFromValue(value) {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      const lower = trimmed.toLowerCase();
+      const base = lower.split(/[-_]/)[0];
+      switch (base) {
+        case 'fr': return 'fr';
+        case 'en': return 'en';
+        case 'es': return 'es';
+        case 'de': return 'de';
+        default: return '';
+      }
+    }
+
+    function resolveVoicePreferenceFromRaw(raw) {
+      if (!raw || !ttsLangSelect) return null;
+      const text = (typeof raw === 'string') ? raw.trim() : '';
+      if (!text) return null;
+      const lowered = text.toLowerCase();
+      const options = Array.from(ttsLangSelect.options || []);
+      const direct = options.find(opt => opt.value.toLowerCase() === lowered);
+      const interfaceLang = normalizeInterfaceLangFromValue(lowered);
+
+      if (direct) {
+        return { voice: direct.value, interfaceLang: interfaceLang || normalizeInterfaceLangFromValue(direct.value) };
+      }
+
+      if (interfaceLang) {
+        const defaultVoice = getDefaultTtsFor(interfaceLang);
+        if (options.some(opt => opt.value === defaultVoice)) {
+          return { voice: defaultVoice, interfaceLang };
+        }
+      }
+
+      return null;
+    }
+
+    function applyLibraryEntryTtsPreference(entry) {
+      if (!entry) return;
+      const raw = entry.language || entry.lang || entry.locale || entry.voice || entry.tts;
+      const pref = resolveVoicePreferenceFromRaw(raw);
+      if (!pref || !ttsLangSelect) return;
+      const hasOption = Array.from(ttsLangSelect.options).some(opt => opt.value === pref.voice);
+      if (!hasOption) return;
+      ttsLangSelect.value = pref.voice;
+      updateTtsOverrideState();
+      if (allowTtsSave) {
+        saveTtsPreference();
+      }
+    }
+
     function applyTranslationsForLang(lang) {
       document.querySelectorAll('.translate').forEach(el => {
         const text = el.dataset?.[lang];
@@ -571,6 +623,9 @@
         opt.value = String(idx);
         opt.textContent = entry.label;
         opt.title = entry.label;
+        if (entry.language) {
+          opt.dataset.language = entry.language;
+        }
         librarySelect.appendChild(opt);
       });
 
@@ -614,35 +669,56 @@
       if (!data) return entries;
       const base = pdfBaseUrl;
 
-      const pushEntry = (href, label) => {
+      const pushEntry = (raw) => {
+        if (!raw) return;
+        let href = '';
+        let label = '';
+        let language = '';
+
+        if (typeof raw === 'string') {
+          href = raw;
+          label = raw;
+        } else if (typeof raw === 'object') {
+          href = raw.url || raw.href || raw.path || raw.file || raw.name || '';
+          label = raw.label || raw.title || raw.name || '';
+          language = raw.language || raw.lang || raw.locale || raw.voice || raw.tts || '';
+        }
+
         if (!href) return;
         try {
           const url = new URL(href, base);
           if (!/\.pdf$/i.test(url.pathname)) return;
           const name = decodeURIComponent(url.pathname.split('/').pop() || '').trim() || 'PDF';
           const display = label?.trim() || name;
+          const lang = (typeof language === 'string') ? language.trim() : '';
           entries.push({
             url: url.href,
             requestPath: makePdfRequestPath(url),
             label: display,
-            fileName: name
+            fileName: name,
+            language: lang
           });
         } catch (e) {}
       };
 
       if (Array.isArray(data)) {
         data.forEach(item => {
-          if (typeof item === 'string') {
-            pushEntry(item, item);
-          } else if (item && typeof item === 'object') {
-            const href = item.url || item.href || item.path || item.file || item.name;
-            const label = item.label || item.title || item.name;
-            pushEntry(href, label);
+          if (!item) return;
+          if (Array.isArray(item)) {
+            normalizePdfEntries(item).forEach(entry => entries.push(entry));
+            return;
           }
+          if (typeof item === 'object' && !Array.isArray(item) && Array.isArray(item.files)) {
+            normalizePdfEntries(item.files).forEach(entry => entries.push(entry));
+            return;
+          }
+          pushEntry(item);
         });
       } else if (typeof data === 'object') {
         if (Array.isArray(data.files)) {
           normalizePdfEntries(data.files).forEach(entry => entries.push(entry));
+        } else {
+          pushEntry(data);
         }
       }
 
@@ -778,6 +854,8 @@
         libraryOpenBtn.disabled = true;
       }
 
+      applyLibraryEntryTtsPreference(entry);
+
       try {
         setFileStatusLoading(label);
         startButton.disabled = true;
@@ -870,6 +948,10 @@
     if (librarySelect) {
       librarySelect.addEventListener('change', () => {
         updateLibraryControlsState();
+        const idx = Number.parseInt(librarySelect.value, 10);
+        if (!Number.isNaN(idx) && libraryEntries[idx]) {
+          applyLibraryEntryTtsPreference(libraryEntries[idx]);
+        }
       });
 
       librarySelect.addEventListener('keydown', evt => {
