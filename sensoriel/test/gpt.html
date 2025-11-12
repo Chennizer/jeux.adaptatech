@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Candle of Memory — Night Sky</title>
+  <title>Candle of Memory — Night Sky (Bottom)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
   <style>
     html,body{margin:0;height:100%;background:#000;color:#fff;overflow:hidden;font-family:system-ui, Segoe UI, Arial;}
@@ -42,7 +42,7 @@
 
     // --- Stars ---
     let stars = [];
-    const STAR_DENSITY = 0.00025; // stars per pixel (gentle amount)
+    const STAR_DENSITY = 0.00025; // stars per pixel
 
     function setup(){
       createCanvas(windowWidth, windowHeight);
@@ -58,37 +58,44 @@
     }
 
     function initStars(){
-      // Create a starfield proportional to the canvas size
       const count = max(80, floor(width * height * STAR_DENSITY));
       stars = [];
       for(let i=0;i<count;i++){
         stars.push({
           x: random(width),
           y: random(height),
-          r: random(0.6, 1.8),               // radius
-          base: random(60, 140),             // base alpha
-          tw: random(0.2, 0.6),              // twinkle magnitude
-          spd: random(0.15, 0.5),            // twinkle speed
+          r: random(0.6, 1.8),
+          base: random(60, 140),
+          tw: random(0.2, 0.6),
+          spd: random(0.15, 0.5),
           phase: random(TWO_PI)
         });
       }
     }
 
+    // -------- Geometry anchored to the bottom --------
     function computeMetrics(){
+      const groundMargin = max(24, min(60, height*0.06));   // space above bottom
       const cx = width/2;
-      const cy = height*0.74;                 // sits a little lower
-      const w  = min(170, width*0.12);
-      const h  = min(420, height*0.52);       // tall candle
-      const r  = 20;
 
+      // Candle width/height
+      const w  = min(170, width*0.12);
+      const h  = min(420, height*0.58);                     // tall, but keeps tip in view
+
+      // Base sits on "floor" (canvas bottom - margin)
+      const baseY = height - groundMargin;
+      const cy = baseY;                                     // translate center y for our rectMode(CENTER)
+
+      const r  = 20;
       const topY = cy - h;
+
       const wickHeight = h * 0.12;
       const wickBaseY  = topY + 14;
       const wickTopY   = wickBaseY - wickHeight;
 
       const flameY = wickTopY - h * 0.04;
 
-      return {cx, cy, w, h, r, topY, wickBaseY, wickTopY, flameY};
+      return {cx, cy, w, h, r, topY, wickBaseY, wickTopY, flameY, baseY};
     }
 
     function draw(){
@@ -96,11 +103,11 @@
       metrics = computeMetrics();
 
       drawNightSky();
+      drawGround(metrics);          // subtle floor + shadow
 
       drawCandleBody(metrics);
       drawWick(metrics);
 
-      // flame sizing and tilt
       const flicker = rm ? 0.05 : baseFlicker;
       const noiseF = map(noise(t*2), 0,1, -flicker, flicker);
       const size = lerp(height*0.12, height*0.16, constrain(glow,0,1)) * (1 + noiseF);
@@ -108,7 +115,7 @@
 
       drawFlame(metrics.cx, metrics.flameY, size, tilt);
 
-      // aura centered higher (near tip)
+      // Aura centered near the tip of the flame
       const auraCenterY = metrics.flameY - size*0.35;
       drawAura(metrics.cx, auraCenterY, size);
 
@@ -120,14 +127,12 @@
 
     // ---------- Background: Black with shimmering stars ----------
     function drawNightSky(){
-      // very dark gradient to avoid flat black
       for(let y=0; y<height; y+=4){
         const p = y/height;
-        const c1 = color(5,6,10), c2 = color(8,6,14);
+        const c1 = color(3,3,6), c2 = color(10,8,14);
         const c = lerpColor(c1, c2, p);
         fill(c); rect(0,y,width,4);
       }
-      // stars (gentle twinkle)
       for(const s of stars){
         const twinkle = rm ? 0 : s.tw * 50 * (0.5 + 0.5*sin((t*s.spd) + s.phase));
         const a = constrain(s.base + twinkle, 40, 200);
@@ -136,13 +141,29 @@
       }
     }
 
+    // ---------- Ground + shadow (so candle sits on a surface) ----------
+    function drawGround(m){
+      const {cx, baseY, w} = m;
+      // soft horizontal ground gradient
+      noStroke();
+      for(let i=0;i<14;i++){
+        const a = map(i,0,13, 40, 0);
+        fill(40, 30, 40, a);
+        rect(0, baseY + i*2, width, 2);
+      }
+      // soft shadow under candle
+      fill(30, 20, 30, 120);
+      ellipse(cx, baseY+6, w*1.8, w*0.5);
+      fill(30, 20, 30, 70);
+      ellipse(cx, baseY+6, w*2.2, w*0.7);
+    }
+
     // ---------- Candle ----------
     function drawCandleBody(m){
       const {cx, cy, w, h, r} = m;
       push();
       translate(cx, cy);
 
-      // White candle body
       const front = hc ? color(255) : color(248,248,246);
       fill(front);
       rectMode(CENTER);
@@ -150,7 +171,6 @@
       roundRect(-w/2, -h, w, h, r);
       drawingContext.restore();
 
-      // Gentle vertical sheen
       const g = drawingContext.createLinearGradient(-w/2,0, w/2,0);
       g.addColorStop(0.0, 'rgba(255,255,255,0.15)');
       g.addColorStop(0.5, 'rgba(255,255,255,0.0)');
@@ -158,11 +178,10 @@
       drawingContext.fillStyle = g;
       roundRect(-w/2, -h, w, h, r);
 
-      // Top rim (white)
       fill(hc ? 255 : 252, hc ? 255 : 252, hc ? 255 : 250, 230);
       ellipse(0, -h, w*0.98, 24);
 
-      // Neutral/white wax pool (no yellow base circle)
+      // Neutral wax pool (no yellow base)
       const waxTop  = -h + 10;
       const waxBot  = -h + h*0.62;
       const waxR    = r * 1.1;
