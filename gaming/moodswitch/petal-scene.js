@@ -101,16 +101,6 @@ export function createPetalScene(p) {
       if (petals.length !== targetCount) ensurePetals();
       drawBackground();
 
-      const focusX = p.width * 0.35 + Math.sin(p.millis() * 0.0004) * p.width * 0.08;
-      const focusY = p.height * 0.45 + Math.cos(p.millis() * 0.0006) * p.height * 0.06;
-      for (let i = 6; i >= 0; i--) {
-        const radius = (i + 1) * 80;
-        const alpha = p.map(i, 6, 0, 10, 80);
-        p.noStroke();
-        p.fill(150, 80, 120, alpha);
-        p.ellipse(focusX, focusY, radius * 1.3, radius);
-      }
-
       petals.forEach(pt => pt.update());
       petals.forEach(pt => pt.draw());
 
@@ -119,18 +109,6 @@ export function createPetalScene(p) {
       if (glow > 0) {
         p.fill(255, 200, 220, 80 * glow);
         p.rect(0, 0, p.width, p.height);
-      }
-
-      p.noStroke();
-      const mistCount = Math.min(18, Math.floor(targetCount * 0.05));
-      for (let i = 0; i < mistCount; i++) {
-        const seed = i * 519.2;
-        const x = p.noise(seed, p.millis() * 0.0006) * p.width;
-        const y = p.noise(seed * 1.9, p.millis() * 0.0004) * p.height;
-        const w = p.lerp(120, 260, p.noise(seed * 2.3));
-        const h = p.lerp(40, 120, p.noise(seed * 3.1));
-        p.fill(120, 60, 100, 12);
-        p.ellipse(x, y, w, h);
       }
     }
   };

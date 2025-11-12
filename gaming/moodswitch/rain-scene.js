@@ -98,18 +98,6 @@ export function createRainScene(p) {
       p.noStroke();
       p.fill(10, 12, 24, 180);
       p.rect(0, horizon, p.width, p.height - horizon);
-
-      const rippleCount = Math.min(6, Math.floor(targetCount * 0.015));
-      const time = p.millis() * 0.001;
-      for (let i = 0; i < rippleCount; i++) {
-        const seed = i * 733.1;
-        const rx = (p.noise(seed, time * 0.1) * 1.2 - 0.1) * p.width;
-        const rw = p.lerp(60, 200, p.noise(seed * 1.3, time * 0.2));
-        const rh = 10 + p.noise(seed * 2.1, time * 0.5) * 18;
-        const pulse = 80 * p.noise(seed * 3.7, time * 0.6);
-        p.fill(40, 60, 90, pulse);
-        p.ellipse(rx, horizon + rh * 0.5, rw, rh);
-      }
     }
   };
 }
