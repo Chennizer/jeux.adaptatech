@@ -147,65 +147,72 @@
       font-weight:600;
       color:#004d40;
       text-align:center;
+      transition:transform .2s ease, box-shadow .2s ease;
     }
 
-    .scroll-placeholder {
+    .file-status.is-loading {
+      color:#fff;
+      background:linear-gradient(120deg,rgba(0,150,136,0.95),rgba(0,188,212,0.95));
+      border-radius:14px;
+      padding:14px 18px;
+      box-shadow:0 0 18px rgba(0,188,212,0.45);
+      transform:scale(1.02);
+      letter-spacing:0.5px;
+      text-transform:uppercase;
+    }
+
+    .file-status.is-loading::before {
+      content:'⏳';
+      margin-right:8px;
+      font-size:18px;
+    }
+
+    .library-select-wrapper {
       width:100%;
-      min-height:120px;
-      border:2px dashed var(--teal);
-      border-radius:12px;
-      padding:16px;
-      background:rgba(0,150,136,0.08);
-      color:#004d40;
       display:flex;
       align-items:center;
-      justify-content:center;
-      text-align:center;
-      font-weight:600;
-      box-sizing:border-box;
+      gap:12px;
     }
 
-    .scroll-list {
-      width:100%;
-      max-height:220px;
-      border:2px solid var(--teal);
+    .library-select-wrapper select {
+      flex:1 1 auto;
       border-radius:12px;
-      padding:8px;
-      background:rgba(0,150,136,0.08);
-      color:#004d40;
-      box-sizing:border-box;
-      overflow:auto;
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-    }
-
-    .scroll-list button {
-      width:100%;
-      border-radius:10px;
-      border:2px solid transparent;
+      border:2px solid var(--teal);
       padding:10px 12px;
       background:#fff;
       color:#00695c;
       font-weight:600;
-      cursor:pointer;
-      text-align:left;
-      transition:background .2s, border-color .2s;
+      appearance:none;
+      min-height:48px;
     }
 
-    .scroll-list button:hover,
-    .scroll-list button:focus {
-      outline:none;
-      border-color:var(--teal);
-      background:#e0f2f1;
+    .library-select-wrapper select:disabled {
+      opacity:0.6;
+      cursor:not-allowed;
     }
 
-    .scroll-list .empty,
-    .scroll-list .error {
-      text-align:center;
+    .library-open-btn {
+      flex:0 0 auto;
+      padding:12px 18px;
+      min-width:120px;
+      white-space:nowrap;
+    }
+
+    .library-open-btn[disabled] {
+      opacity:0.5;
+      cursor:not-allowed;
+    }
+
+    .library-message {
+      margin-top:8px;
       color:#00695c;
       font-weight:600;
-      padding:16px 8px;
+      text-align:center;
+    }
+
+    .library-message strong {
+      font-weight:800;
+      text-transform:uppercase;
     }
 
     .mode-option {
@@ -288,7 +295,11 @@
           </div>
           <div class="option-item">
             <label class="teal-label label-block translate" data-fr="Bibliothèque PDF" data-en="PDF library">Bibliothèque PDF</label>
-            <div id="libraryList" class="scroll-list"></div>
+            <div class="library-select-wrapper">
+              <select id="librarySelect" disabled></select>
+              <button id="libraryOpen" type="button" class="button library-open-btn translate" data-fr="Ouvrir" data-en="Open" disabled>Ouvrir</button>
+            </div>
+            <p id="libraryMessage" class="library-message"></p>
           </div>
         </div>
 
@@ -369,7 +380,9 @@
     const ocrStatus = document.getElementById('ocrStatus');
     const textOut = document.getElementById('textOut');
     const advanceRadios = Array.from(document.querySelectorAll('input[name="advanceMode"]'));
-    const libraryList = document.getElementById('libraryList');
+    const librarySelect = document.getElementById('librarySelect');
+    const libraryOpenBtn = document.getElementById('libraryOpen');
+    const libraryMessage = document.getElementById('libraryMessage');
 
     const CONFIRM_STATES = { LOADING:'loading', NEED_READ:'need-read', READY:'ready' };
     const DEFAULT_TTS_BY_INTERFACE = { fr:'fr-CA', en:'en-US' };
@@ -407,6 +420,58 @@
     let lastFileName = '';
     let ttsOverride = false;
     let libraryEntries = [];
+    let libraryMessageKey = 'loading';
+
+    const LIBRARY_MESSAGES = {
+      loading: {
+        fr: 'Chargement de la bibliothèque…',
+        en: 'Loading library…',
+      },
+      ready: {
+        fr: 'Sélectionnez un PDF puis cliquez sur <strong>Ouvrir</strong>.',
+        en: 'Select a PDF then press <strong>Open</strong>.',
+      },
+      empty: {
+        fr: 'Aucun PDF trouvé.',
+        en: 'No PDFs found.',
+      },
+      error: {
+        fr: 'Impossible de charger la bibliothèque.',
+        en: 'Unable to load the library.',
+      },
+    };
+
+    function applyLibraryMessage() {
+      if (!libraryMessage) return;
+      const msg = LIBRARY_MESSAGES[libraryMessageKey] || LIBRARY_MESSAGES.ready;
+      const text = msg?.[currentLang] ?? msg?.fr ?? '';
+      libraryMessage.innerHTML = text;
+    }
+
+    function setLibraryMessage(key) {
+      libraryMessageKey = key;
+      applyLibraryMessage();
+    }
+
+    function updateLibraryPlaceholder() {
+      if (!librarySelect) return;
+      const placeholder = librarySelect.querySelector('option[data-placeholder="true"]');
+      if (placeholder) {
+        placeholder.textContent = (currentLang === 'fr')
+          ? '— Choisir un PDF —'
+          : '— Choose a PDF —';
+      }
+    }
+
+    function updateLibraryControlsState() {
+      if (!librarySelect || !libraryOpenBtn) return;
+      const disabled = librarySelect.disabled;
+      const hasSelection = !disabled && librarySelect.value !== '';
+      libraryOpenBtn.disabled = disabled || !hasSelection;
+    }
+
+    setLibraryMessage('loading');
+    updateLibraryControlsState();
     let allowTtsSave = false;
 
     function applyTranslationsForLang(lang) {
@@ -478,38 +543,55 @@
       } catch (e) {}
     }
 
-    function makeTranslateDiv(className, fr, en) {
-      const div = document.createElement('div');
-      div.className = `${className} translate`;
-      div.dataset.fr = fr;
-      div.dataset.en = en;
-      div.textContent = (currentLang === 'fr') ? fr : en;
-      return div;
-    }
-
     function renderLibraryEntries() {
-      if (!libraryList) return;
-      libraryList.innerHTML = '';
+      if (!librarySelect) return;
+
+      const previousSelection = librarySelect.value;
+      librarySelect.innerHTML = '';
+
       if (!libraryEntries.length) {
-        libraryList.appendChild(makeTranslateDiv('empty', 'Aucun PDF trouvé.', 'No PDFs found.'));
+        librarySelect.disabled = true;
+        setLibraryMessage('empty');
+        updateLibraryControlsState();
         return;
       }
 
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.dataset.placeholder = 'true';
+      placeholder.selected = true;
+      librarySelect.appendChild(placeholder);
+      updateLibraryPlaceholder();
+
       const collator = new Intl.Collator(currentLang === 'fr' ? 'fr' : 'en', { sensitivity: 'base' });
-      [...libraryEntries].sort((a, b) => collator.compare(a.label, b.label)).forEach(entry => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = entry.label;
-        btn.title = entry.label;
-        btn.addEventListener('click', () => loadPdfFromLibrary(entry));
-        libraryList.appendChild(btn);
+      const sorted = libraryEntries.map((entry, idx) => ({ entry, idx }))
+        .sort((a, b) => collator.compare(a.entry.label, b.entry.label));
+      sorted.forEach(({ entry, idx }) => {
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        opt.textContent = entry.label;
+        opt.title = entry.label;
+        librarySelect.appendChild(opt);
       });
+
+      librarySelect.disabled = false;
+      if (previousSelection && librarySelect.querySelector(`option[value="${previousSelection}"]`)) {
+        librarySelect.value = previousSelection;
+      } else {
+        librarySelect.value = '';
+      }
+
+      setLibraryMessage('ready');
+      updateLibraryControlsState();
     }
 
     async function populateLibraryList() {
-      if (!libraryList) return;
-      libraryList.innerHTML = '';
-      libraryList.appendChild(makeTranslateDiv('empty', 'Chargement…', 'Loading…'));
+      if (!librarySelect) return;
+      libraryEntries = [];
+      librarySelect.innerHTML = '';
+      librarySelect.disabled = true;
+      setLibraryMessage('loading');
+      updateLibraryControlsState();
 
       try {
         const entries = await fetchPdfLibraryEntries();
@@ -518,8 +600,12 @@
       } catch (err) {
         console.error('PDF library load error:', err);
         libraryEntries = [];
-        libraryList.innerHTML = '';
-        libraryList.appendChild(makeTranslateDiv('empty', 'Aucun PDF trouvé.', 'No PDFs found.'));
+        if (librarySelect) {
+          librarySelect.innerHTML = '';
+          librarySelect.disabled = true;
+        }
+        setLibraryMessage('error');
+        updateLibraryControlsState();
       }
     }
 
@@ -683,12 +769,21 @@
       const previousPdfData = pdfData;
       const previousFileName = lastFileName;
       const label = entry.label || entry.fileName || '';
+      const entryIndex = libraryEntries.indexOf(entry);
+
+      if (librarySelect && entryIndex >= 0) {
+        librarySelect.value = String(entryIndex);
+      }
+      if (libraryOpenBtn) {
+        libraryOpenBtn.disabled = true;
+      }
 
       try {
         setFileStatusLoading(label);
         startButton.disabled = true;
         const buf = await fetchPdfArrayBuffer(entry);
         await setPdfFromArrayBuffer(buf, entry.fileName || label || '');
+        setLibraryMessage('ready');
       } catch (err) {
         console.error('Library PDF load error:', err);
         pdfData = previousPdfData;
@@ -699,10 +794,14 @@
           ? `Impossible de charger le PDF « ${label || 'inconnu'} ».`
           : `Unable to load “${label || 'unknown'}”.`;
         alert(msg);
+      } finally {
+        updateLibraryControlsState();
       }
     }
 
     function updateFileStatusText() {
+      if (!fileStatus) return;
+      fileStatus.classList.remove('is-loading');
       if (lastFileName) {
         const label = (currentLang === 'fr') ? 'Fichier sélectionné : ' : 'Selected file: ';
         fileStatus.innerHTML = `${label}<strong>${escapeHtml(lastFileName)}</strong>`;
@@ -726,10 +825,16 @@
       document.documentElement.lang = safe;
       try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e) {}
       applyTranslationsForLang(safe);
+      updateLibraryPlaceholder();
+      applyLibraryMessage();
+      if (libraryEntries.length) {
+        renderLibraryEntries();
+      }
       syncTtsSelectionForInterface();
       if (allowTtsSave) {
         saveTtsPreference();
       }
+      updateLibraryControlsState();
     }
 
     (function initializeLanguage(){
@@ -759,6 +864,28 @@
       ttsLangSelect.addEventListener('change', () => {
         updateTtsOverrideState();
         saveTtsPreference();
+      });
+    }
+
+    if (librarySelect) {
+      librarySelect.addEventListener('change', () => {
+        updateLibraryControlsState();
+      });
+
+      librarySelect.addEventListener('keydown', evt => {
+        if (evt.key === 'Enter' && libraryOpenBtn && !libraryOpenBtn.disabled) {
+          evt.preventDefault();
+          libraryOpenBtn.click();
+        }
+      });
+    }
+
+    if (libraryOpenBtn) {
+      libraryOpenBtn.addEventListener('click', () => {
+        if (!librarySelect) return;
+        const idx = Number.parseInt(librarySelect.value, 10);
+        if (Number.isNaN(idx) || !libraryEntries[idx]) return;
+        loadPdfFromLibrary(libraryEntries[idx]);
       });
     }
 
@@ -804,6 +931,7 @@
       const base = (currentLang === 'fr') ? 'Chargement du PDF' : 'Loading PDF';
       const suffix = label ? ` : ${label}` : '…';
       fileStatus.textContent = base + suffix;
+      fileStatus.classList.add('is-loading');
     }
 
     function syncAutoReadWithMode() {
