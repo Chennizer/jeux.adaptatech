@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title class="translate" data-fr="PDF — Avancer en cliquant" data-en="PDF — Click to Advance">PDF — Avancer en cliquant</title>
+  <title class="translate" data-fr="PDF — Lecteur oculométrique" data-en="PDF — Eye Gaze Reader">PDF — Lecteur oculométrique</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
 
   <!-- pdf.js (stable UMD v3) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -17,75 +20,325 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <style>
-    :root{ --teal:#009688; --bg:#000; --fg:#fff; }
-    html,body{ margin:0; height:100%; background:var(--bg); color:var(--fg);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; overflow:hidden; }
+    :root { --teal:#009688; --bg:#000; --fg:#fff; }
+    html, body {
+      margin:0;
+      padding:0;
+      background:var(--bg);
+      color:var(--fg);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      height:100%;
+      overflow:hidden;
+    }
 
-    #stage{ position:fixed; inset:0; display:grid; place-items:center; background:#000; cursor:pointer; z-index:1; }
-    canvas{ display:block; max-width:100vw; max-height:100vh; }
+    body {
+      display:block;
+    }
 
-    /* UI */
-    #topbar{ position:fixed; top:10px; left:10px; right:10px; display:flex; gap:10px; align-items:center; justify-content:space-between; z-index:5; }
-    #pickerRow{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .btn{ background:var(--teal); color:#fff; border:none; border-radius:12px; padding:12px 16px; font-weight:800; cursor:pointer; font-size:16px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
-    .btn:disabled{ opacity:.5; cursor:not-allowed; }
-    #fileInput{ padding:8px; border-radius:10px; border:1px solid #333; background:#111; color:#ddd; }
-    #tips{ display:inline-flex; gap:8px; align-items:center; padding:8px 10px; border:1px dashed #444; border-radius:10px; background:#0a0a0a; color:#ddd; font-size:14px; z-index:5; }
+    #langToggle {
+      position:fixed;
+      top:10px;
+      right:10px;
+      z-index:1100;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:10px;
+      border:2px solid var(--teal);
+      background:#fff;
+      color:var(--teal);
+      font-weight:700;
+      cursor:pointer;
+      user-select:none;
+    }
 
-    #centerPrompt{ position:fixed; inset:0; display:grid; place-items:center; z-index:6; background: radial-gradient(transparent, rgba(0,0,0,.35) 60%); }
-    #centerPrompt .card{ text-align:center; background:#111; border:1px solid #333; border-radius:16px; padding:20px; max-width:min(700px,90vw); box-shadow:0 10px 30px rgba(0,0,0,.4); }
-    #chooseBtnBig{ font-size:18px; padding:14px 18px; }
+    body.playing #langToggle { display:none !important; }
 
-    #hud{ position:fixed; left:12px; bottom:12px; padding:6px 10px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.2); border-radius:10px; font-size:14px; user-select:none; z-index:5; }
+    #stage {
+      position:fixed;
+      inset:0;
+      display:none;
+      place-items:center;
+      background:#000;
+      cursor:pointer;
+      z-index:1;
+    }
+    body.playing #stage { display:grid; }
 
-    #langToggle{ position:fixed; top:10px; right:10px; z-index:7; display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:10px; border:2px solid var(--teal); background:#111; color:#fff; cursor:pointer; user-select:none; }
+    canvas { display:block; max-width:100vw; max-height:100vh; }
 
-    #ocrHud{ position:fixed; right:12px; bottom:12px; z-index:6; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:8px 10px; font-size:13px; min-width:220px; display:flex; flex-direction:column; gap:6px; }
-    #ocrHud .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    #ocrHud select, #ocrHud label{ font-size:13px; }
-    #ocrProg{ height:6px; background:#111; border-radius:999px; overflow:hidden; }
-    #ocrProg > div{ height:100%; width:0%; background:linear-gradient(90deg,#60a5fa,#34d399); }
-    #ocrStatus{ opacity:.85; }
-    #textOut{ display:none; width:min(520px, 90vw); max-height:30vh; overflow:auto; background:#0b0b0b; color:#ddd; border:1px solid #333; border-radius:10px; padding:8px; margin:0; position:fixed; right:12px; bottom:82px; z-index:6; white-space:pre-wrap; }
+    #hud {
+      position:fixed;
+      left:12px;
+      bottom:12px;
+      padding:6px 10px;
+      background:rgba(0,0,0,.5);
+      border:1px solid rgba(255,255,255,.2);
+      border-radius:10px;
+      font-size:14px;
+      user-select:none;
+      z-index:5;
+    }
 
-    /* Hide ALL UI when playing */
-    .playing #topbar,
-    .playing #langToggle,
-    .playing #ocrHud,
-    .playing #hud,
-    .playing #centerPrompt,
-    .playing #textOut { display:none !important; }
+    #ocrHud {
+      position:fixed;
+      right:12px;
+      bottom:12px;
+      z-index:6;
+      background:rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.2);
+      border-radius:10px;
+      padding:8px 10px;
+      font-size:13px;
+      min-width:220px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    #ocrHud .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    #ocrHud select, #ocrHud label { font-size:13px; }
+    #ocrProg { height:6px; background:#111; border-radius:999px; overflow:hidden; }
+    #ocrProg > div { height:100%; width:0%; background:linear-gradient(90deg,#60a5fa,#34d399); }
+    #ocrStatus { opacity:.85; }
+    #ocrHud label.disabled { opacity:0.55; }
+
+    #textOut {
+      display:none;
+      width:min(520px, 90vw);
+      max-height:30vh;
+      overflow:auto;
+      background:#0b0b0b;
+      color:#ddd;
+      border:1px solid #333;
+      border-radius:10px;
+      padding:8px;
+      margin:0;
+      position:fixed;
+      right:12px;
+      bottom:82px;
+      z-index:6;
+      white-space:pre-wrap;
+    }
+
+    body:not(.playing) #hud,
+    body:not(.playing) #ocrHud,
+    body:not(.playing) #textOut {
+      display:none !important;
+    }
+
+    body.playing #game-options { display:none !important; }
+
+    /* ===== Menu enhancements ===== */
+    .button[disabled] {
+      opacity:0.5;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
+
+    select {
+      font-size:16px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:2px solid var(--teal);
+      background:#fff;
+      color:#004d40;
+      font-weight:600;
+      width:100%;
+      box-sizing:border-box;
+      appearance:none;
+      background-image:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none"%3E%3Cpath d="M5 7l5 6 5-6" stroke="%23009688" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E');
+      background-repeat:no-repeat;
+      background-position:right 12px center;
+      background-size:16px 16px;
+      padding-right:42px;
+    }
+
+    select:focus {
+      outline:none;
+      box-shadow:0 0 0 3px rgba(0,150,136,0.2);
+    }
+
+    .file-status {
+      margin-top:10px;
+      font-size:16px;
+      font-weight:600;
+      color:#004d40;
+      text-align:center;
+    }
+
+    .library-container {
+      width:100%;
+      max-width:100%;
+      border:2px dashed var(--teal);
+      border-radius:12px;
+      padding:12px;
+      background:rgba(0,150,136,0.08);
+      color:#004d40;
+      box-sizing:border-box;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      max-height:220px;
+      overflow-y:auto;
+    }
+
+    .library-status {
+      margin:0;
+      font-weight:600;
+      text-align:center;
+    }
+
+    .library-list {
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin:0;
+      padding:0;
+      list-style:none;
+    }
+
+    .library-button {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px 14px;
+      border-radius:10px;
+      border:2px solid transparent;
+      background:#fff;
+      color:#004d40;
+      font-weight:600;
+      cursor:pointer;
+      transition:background 0.2s,border-color 0.2s;
+    }
+
+    .library-button:hover,
+    .library-button:focus {
+      background:rgba(0,150,136,0.12);
+      border-color:rgba(0,150,136,0.6);
+      outline:none;
+    }
+
+    .library-button.selected {
+      border-color:var(--teal);
+      background:rgba(0,150,136,0.2);
+      box-shadow:0 0 0 2px rgba(0,150,136,0.25);
+    }
+
+    .mode-option {
+      display:grid;
+      grid-template-columns:20px 1fr;
+      align-items:flex-start;
+      column-gap:10px;
+      row-gap:6px;
+      margin-bottom:10px;
+      font-weight:600;
+      color:#004d40;
+    }
+    .mode-option input[type="radio"] {
+      margin:3px 0 0;
+      accent-color:var(--teal);
+      transform:scale(1.1);
+    }
+    .mode-option span { font-size:16px; }
+
+    .instructions {
+      font-size:16px;
+      color:#004d40;
+      text-align:left;
+    }
+
+    .tip-text {
+      font-size:16px;
+      color:#004d40;
+      margin:0;
+      line-height:1.3;
+    }
+
+    .menu-hint {
+      margin-top:12px;
+      color:#00695c;
+      font-weight:600;
+    }
+
+    #options-inline-container > .options-column { align-items:flex-start; }
+    #options-inline-container > .options-column:nth-child(2) { align-items:center; }
+    #options-inline-container > .options-column:nth-child(2) .option-item { align-items:center; text-align:center; }
+    #options-inline-container > .options-column:nth-child(2) .teal-label { justify-content:center; }
+
+    #options-inline-container > .options-column:nth-child(3) { align-items:flex-start; }
+
+    body.playing #ocrHud { display:none !important; }
   </style>
 </head>
 <body>
-  <div id="langToggle" title="Basculer la langue / Toggle language">FR / EN</div>
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
 
-  <div id="topbar">
-    <div id="pickerRow">
-      <button id="chooseBtn" class="btn"><span class="translate" data-fr="Choisir un PDF" data-en="Choose PDF">Choisir un PDF</span></button>
-      <input id="fileInput" type="file" accept="application/pdf" />
-      <button id="startBtn" class="btn" disabled><span class="translate" data-fr="Démarrer (plein écran)" data-en="Start (Fullscreen)">Démarrer (plein écran)</span></button>
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate" data-fr="PDF — Lecteur oculométrique" data-en="PDF — Eye Gaze Reader">PDF — Lecteur oculométrique</h2>
     </div>
-    <div id="tips">
-      <span>🖱️</span>
-      <span class="translate" data-fr="Cliquez ou espace pour avancer. ← / → reculent / avancent. Reboucle à la fin."
-            data-en="Click or Space to advance. ← / → navigate. Loops at the end.">
-        Cliquez ou espace pour avancer. ← / → reculent / avancent. Reboucle à la fin.
-      </span>
-    </div>
-  </div>
 
-  <div id="centerPrompt">
-    <div class="card">
-      <h2 class="translate" data-fr="Charger un PDF" data-en="Load a PDF">Charger un PDF</h2>
-      <p class="translate" data-fr="Appuyez sur le bouton ci-dessous pour choisir un fichier PDF multi-pages."
-         data-en="Press the button below to choose a multi-page PDF file.">
-        Appuyez sur le bouton ci-dessous pour choisir un fichier PDF multi-pages.
-      </p>
-      <button id="chooseBtnBig" class="btn"><span class="translate" data-fr="Choisir un PDF…" data-en="Choose PDF…">Choisir un PDF…</span></button>
-      <p style="opacity:.8; margin-top:10px" class="translate" data-fr="Astuce : vous pouvez aussi déposer un PDF dans la fenêtre." data-en="Tip: you can also drop a PDF into the window.">
-         Astuce : vous pouvez aussi déposer un PDF dans la fenêtre.
-      </p>
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <!-- LEFT COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <label for="ttsLang" class="teal-label label-block translate" data-fr="Voix de lecture" data-en="Reading voice">Voix de lecture</label>
+            <select id="ttsLang">
+              <option value="fr-CA" class="translate" data-fr="Français (Canada)" data-en="French (Canada)">Français (Canada)</option>
+              <option value="en-US" class="translate" data-fr="Anglais (États-Unis)" data-en="English (United States)">Anglais (États-Unis)</option>
+              <option value="en-GB" class="translate" data-fr="Anglais (Royaume-Uni)" data-en="English (United Kingdom)">Anglais (Royaume-Uni)</option>
+              <option value="fr-FR" class="translate" data-fr="Français (France)" data-en="French (France)">Français (France)</option>
+              <option value="es-ES" class="translate" data-fr="Espagnol" data-en="Spanish">Espagnol</option>
+              <option value="de-DE" class="translate" data-fr="Allemand" data-en="German">Allemand</option>
+            </select>
+          </div>
+          <div class="option-item instructions translate" data-fr="Utilisez la colonne centrale pour choisir le fichier PDF et la colonne de droite pour définir le mode de lecture." data-en="Use the middle column to choose the PDF file and the right column to set the reading mode.">Utilisez la colonne centrale pour choisir le fichier PDF et la colonne de droite pour définir le mode de lecture.</div>
+        </div>
+
+        <!-- MIDDLE COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label label-block translate" data-fr="Choisir un PDF" data-en="Choose a PDF">Choisir un PDF</label>
+            <button id="chooseBtn" type="button" class="button translate" data-fr="Depuis l’ordinateur…" data-en="From computer…">Depuis l’ordinateur…</button>
+            <input id="fileInput" type="file" accept="application/pdf" hidden />
+            <p id="fileStatus" class="file-status translate" data-fr="Aucun fichier sélectionné" data-en="No file selected">Aucun fichier sélectionné</p>
+          </div>
+          <div class="option-item">
+            <label class="teal-label label-block translate" data-fr="Bibliothèque PDF" data-en="PDF library">Bibliothèque PDF</label>
+            <div id="libraryContainer" class="library-container">
+              <p id="libraryStatus" class="library-status translate" data-fr="Chargement…" data-en="Loading…">Chargement…</p>
+              <ul id="libraryList" class="library-list" hidden></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN -->
+        <div class="options-column">
+          <div class="option-item">
+            <p class="teal-label label-block translate" data-fr="Options de lecture" data-en="Reading options">Options de lecture</p>
+            <label class="teal-label mode-option">
+              <input type="radio" name="advanceMode" value="direct" checked />
+              <span class="translate" data-fr="Lecture automatique : espace ou clic avance immédiatement." data-en="Auto reading: space or click advances right away.">Lecture automatique : espace ou clic avance immédiatement.</span>
+            </label>
+            <label class="teal-label mode-option">
+              <input type="radio" name="advanceMode" value="tts-confirm" />
+              <span class="translate" data-fr="Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante." data-en="Guided reading: first press speaks the page, second press goes to the next.">Lecture guidée : premier appui lit la page, deuxième appui passe à la suivante.</span>
+            </label>
+          </div>
+          <div class="option-item">
+            <p class="teal-label label-block translate" data-fr="Astuce" data-en="Tip">Astuce</p>
+            <p class="tip-text translate" data-fr="Vous pouvez aussi déposer un PDF directement dans la fenêtre." data-en="You can also drop a PDF directly into the window.">Vous pouvez aussi déposer un PDF directement dans la fenêtre.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" disabled>Commencer</button>
+      <p id="menuHint" class="menu-hint translate" data-fr="Le plein écran démarre après avoir choisi un PDF." data-en="Full screen starts after choosing a PDF.">Le plein écran démarre après avoir choisi un PDF.</p>
     </div>
   </div>
 
@@ -106,166 +359,491 @@
         <option value="spa">Español (spa)</option>
         <option value="deu">Deutsch (deu)</option>
       </select>
-      <label><input type="checkbox" id="autoRead" checked> <span class="translate" data-fr="Lecture auto" data-en="Auto-read">Lecture auto</span></label>
+      <label class="teal-label auto-read-label">
+        <input type="checkbox" id="autoRead" checked />
+        <span class="translate" data-fr="Lecture auto" data-en="Auto-read">Lecture auto</span>
+      </label>
     </div>
     <div id="ocrProg" aria-hidden="true"><div id="ocrBar"></div></div>
     <div id="ocrStatus">—</div>
   </div>
 
+  <script src="../../js/eyegaze-menu.js"></script>
   <script>
-    // ===== Fixed OCR zone (percent of page) =====
-    const ZONE_W_PCT = 30;   // width of OCR zone as % of page width
-    const ZONE_H_PCT = 40;   // height of OCR zone as % of page height
-    const ZONE_CENTER_X_PCT = 75; // center of right half (50–100%)
-    const ZONE_CENTER_Y_PCT = 50;
+    if (typeof initEyegazeMenu === 'function') {
+      initEyegazeMenu();
+    }
 
-    // ===== Language toggle =====
+    const LS_LANG_KEY = 'siteLanguage';
+    const LS_TTS_KEY = 'pdfTtsLang';
     const langToggle = document.getElementById('langToggle');
-    let currentLang = 'fr';
-    function applyLang(){ document.querySelectorAll('.translate').forEach(el=>{ const t = el.dataset[currentLang]; if(t) el.textContent = t; }); }
-    langToggle.addEventListener('click', ()=>{ currentLang = (currentLang==='fr') ? 'en' : 'fr'; applyLang(); });
-    applyLang();
 
-    // ===== Elements =====
     const chooseBtn = document.getElementById('chooseBtn');
-    const chooseBtnBig = document.getElementById('chooseBtnBig');
     const fileInput = document.getElementById('fileInput');
-    const startBtn  = document.getElementById('startBtn');
-    const stage     = document.getElementById('stage');
-    const canvas    = document.getElementById('pageCanvas');
-    const ctx       = canvas.getContext('2d', { willReadFrequently: true });
-    const hudLabel  = document.getElementById('pageLabel');
-    const centerPrompt = document.getElementById('centerPrompt');
-
-    // OCR controls
+    const fileStatus = document.getElementById('fileStatus');
+    const startButton = document.getElementById('startButton');
+    const stage = document.getElementById('stage');
+    const canvas = document.getElementById('pageCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const hudLabel = document.getElementById('pageLabel');
     const ocrLangSel = document.getElementById('ocrLang');
-    const autoRead   = document.getElementById('autoRead');
-    const ocrBar     = document.getElementById('ocrBar');
-    const ocrStatus  = document.getElementById('ocrStatus');
-    const textOut    = document.getElementById('textOut');
+    const autoRead = document.getElementById('autoRead');
+    const ocrBar = document.getElementById('ocrBar');
+    const ocrStatus = document.getElementById('ocrStatus');
+    const textOut = document.getElementById('textOut');
+    const advanceRadios = Array.from(document.querySelectorAll('input[name="advanceMode"]'));
+    const ttsLangSel = document.getElementById('ttsLang');
+    const libraryStatus = document.getElementById('libraryStatus');
+    const libraryList = document.getElementById('libraryList');
 
-    // ===== State =====
+    const CONFIRM_STATES = { LOADING:'loading', NEED_READ:'need-read', READY:'ready' };
+
     let pdfDoc = null, currentPageNum = 1, totalPages = 0, started = false, loading = false, pdfData = null;
     let speakingAllowed = false;
     let currentRenderToken = 0;
+    let advanceMode = 'direct';
+    let confirmState = CONFIRM_STATES.READY;
+    let currentLang = 'fr';
+    let lastFileName = '';
+    let ttsLangManual = false;
+    let selectedLibraryPath = '';
 
-    function setHUD(){ hudLabel.textContent = pdfDoc ? `${currentPageNum} / ${totalPages}` : '—'; }
-    async function goFullscreen(){ if (!document.fullscreenElement){ try{ await document.documentElement.requestFullscreen(); }catch(_){ } } }
-    function hideCenterPrompt(){ centerPrompt.style.display = 'none'; }
-    function setOcrProgress(p){ ocrBar.style.width = Math.max(0, Math.min(100, Math.round(p*100))) + '%'; }
-
-    // Show/hide all UI
-    function enterPlayingUI(){ document.body.classList.add('playing'); }
-    function exitPlayingUI(){ document.body.classList.remove('playing'); }
-
-    // ===== Paragraph reflow for OCR text =====
-    function reflowOcrText(raw) {
-      if (!raw) return '';
-      let s = raw;
-
-      // Remove zero-width/soft hyphen & normalize newlines
-      s = s.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
-      s = s.replace(/\u00AD/g, '');
-      s = s.replace(/\r\n/g, '\n');
-
-      // De-hyphenate line-end splits: "trans-\nform" -> "transform"
-      s = s.replace(/([A-Za-zÀ-ÖØ-öø-ÿ])-\s*\n\s*([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1$2');
-
-      // Preserve paragraph breaks temporarily
-      s = s.replace(/\n{2,}/g, '¶¶');
-
-      // Merge single line breaks into spaces unless previous char ends a sentence
-      s = s.replace(/([^\n])\n(?!\n)/g, (m, prev) => {
-        return /[.!?;:)"'»\]]\s*$/.test(prev) ? prev + '\n' : prev + ' ';
+    function applyTranslationsForLang(lang) {
+      document.querySelectorAll('.translate').forEach(el => {
+        const text = el.dataset?.[lang];
+        if (text != null) {
+          el.innerHTML = text;
+        }
       });
-
-      // Restore paragraph breaks
-      s = s.replace(/¶¶/g, '\n\n');
-
-      // Whitespace tidy
-      s = s.replace(/[ \t]+/g, ' ').replace(/ +\n/g, '\n').trim();
-
-      return s;
+      updateFileStatusText();
     }
 
-    // Speech helpers
-    function speak(text){
-      if(!speakingAllowed || !text || !('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      const l = ocrLangSel.value;
-      if(l.includes('fra')) u.lang = 'fr-CA';
-      else if(l.includes('spa')) u.lang = 'es-ES';
-      else if(l.includes('deu')) u.lang = 'de-DE';
-      else u.lang = 'en-US';
-      window.speechSynthesis.speak(u);
+    function updateFileStatusText() {
+      if (lastFileName) {
+        const label = (currentLang === 'fr') ? 'Fichier sélectionné : ' : 'Selected file: ';
+        fileStatus.innerHTML = `${label}<strong>${escapeHtml(lastFileName)}</strong>`;
+      } else {
+        const fallback = fileStatus.dataset?.[currentLang];
+        if (fallback != null) fileStatus.textContent = fallback;
+      }
     }
-    function stopSpeak(){ window.speechSynthesis?.cancel(); }
 
-    // Choose file
-    chooseBtn.addEventListener('click', ()=> fileInput.click());
-    chooseBtnBig.addEventListener('click', ()=> fileInput.click());
+    function getInterfaceTtsVoice() {
+      return currentLang === 'fr' ? 'fr-CA' : 'en-US';
+    }
 
-    // Drag & drop
-    ;['dragenter','dragover'].forEach(ev=>{ window.addEventListener(ev, e=>{ e.preventDefault(); }, {passive:false}); });
-    window.addEventListener('drop', async e=>{
-      e.preventDefault();
-      const file = [...(e.dataTransfer?.files||[])].find(f=>f.type==='application/pdf' || f.name?.toLowerCase().endsWith('.pdf'));
-      if (file){ await loadPDFFile(file); }
+    function syncTtsSelectionWithInterface() {
+      if (!ttsLangSel) return;
+      const defaultVoice = getInterfaceTtsVoice();
+      if (!ttsLangManual) {
+        ttsLangSel.value = defaultVoice;
+        try { localStorage.removeItem(LS_TTS_KEY); } catch(e) {}
+      } else if (ttsLangSel.value === defaultVoice) {
+        ttsLangManual = false;
+        try { localStorage.removeItem(LS_TTS_KEY); } catch(e) {}
+      }
+    }
+
+    function setLibraryStatusMessage(frText, enText) {
+      if (!libraryStatus) return;
+      libraryStatus.dataset.fr = frText;
+      libraryStatus.dataset.en = enText;
+      libraryStatus.textContent = currentLang === 'fr' ? frText : enText;
+      libraryStatus.hidden = false;
+      if (libraryList) libraryList.hidden = true;
+    }
+
+    function showLibraryList() {
+      if (!libraryStatus) return;
+      libraryStatus.hidden = true;
+      if (libraryList) libraryList.hidden = false;
+    }
+
+    function updateLibrarySelectionHighlight() {
+      if (!libraryList) return;
+      const buttons = libraryList.querySelectorAll('.library-button');
+      buttons.forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.url === selectedLibraryPath);
+      });
+    }
+
+    function getLang() {
+      try {
+        const saved = localStorage.getItem(LS_LANG_KEY);
+        if (saved === 'en' || saved === 'fr') return saved;
+      } catch(e) {}
+      return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+    }
+
+    function setLang(lang) {
+      const safe = (lang === 'en') ? 'en' : 'fr';
+      currentLang = safe;
+      document.documentElement.lang = safe;
+      try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e) {}
+      applyTranslationsForLang(safe);
+      syncTtsSelectionWithInterface();
+      updateFileStatusText();
+      if (!libraryStatus.hidden) {
+        const text = libraryStatus.dataset?.[safe];
+        if (text != null) libraryStatus.textContent = text;
+      }
+    }
+
+    (function initializeLanguage(){
+      let initial = 'fr';
+      try {
+        const saved = localStorage.getItem(LS_LANG_KEY);
+        if (saved === 'en' || saved === 'fr') {
+          initial = saved;
+        } else {
+          initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+          localStorage.setItem(LS_LANG_KEY, initial);
+        }
+      } catch(e) {
+        initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      }
+      setLang(initial);
+    })();
+
+    (function initializeTtsLanguage(){
+      if (!ttsLangSel) return;
+      const defaultVoice = getInterfaceTtsVoice();
+      let stored = null;
+      try {
+        stored = localStorage.getItem(LS_TTS_KEY);
+      } catch(e) {}
+      const valid = Array.from(ttsLangSel.options).map(opt => opt.value);
+      if (stored && valid.includes(stored)) {
+        ttsLangSel.value = stored;
+        ttsLangManual = stored !== defaultVoice;
+      } else {
+        ttsLangSel.value = defaultVoice;
+        ttsLangManual = false;
+      }
+      if (!ttsLangManual) {
+        try { localStorage.removeItem(LS_TTS_KEY); } catch(e) {}
+      }
+    })();
+
+    langToggle.addEventListener('click', () => {
+      setLang(getLang() === 'fr' ? 'en' : 'fr');
     });
 
-    // File selection
-    fileInput.addEventListener('change', async (e)=>{
+    if (ttsLangSel) {
+      ttsLangSel.addEventListener('change', () => {
+        const voice = ttsLangSel.value;
+        const matchesDefault = voice === getInterfaceTtsVoice();
+        ttsLangManual = !matchesDefault;
+        try {
+          if (ttsLangManual) {
+            localStorage.setItem(LS_TTS_KEY, voice);
+          } else {
+            localStorage.removeItem(LS_TTS_KEY);
+          }
+        } catch(e) {}
+      });
+    }
+
+    function escapeHtml(str) {
+      const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"};
+      return str.replace(/[&<>"']/g, ch => map[ch]);
+    }
+
+    function buildPdfUrl(path) {
+      const cleaned = String(path || '').replace(/^\.\//, '');
+      if (!cleaned) return null;
+      const parts = cleaned.split('/').filter(Boolean);
+      const encoded = parts.map(seg => encodeURIComponent(seg));
+      return '../../pdf/' + encoded.join('/');
+    }
+
+    function displayNameFromPath(path) {
+      if (!path) return '';
+      const parts = path.split('/');
+      return decodeURIComponent(parts[parts.length - 1] || path);
+    }
+
+    async function fetchPdfLibraryEntries() {
+      const manifestCandidates = ['../../pdf/list.json', '../../pdf/manifest.json'];
+      for (const candidate of manifestCandidates) {
+        try {
+          const res = await fetch(candidate, { cache:'no-store' });
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            return data
+              .map(item => {
+                if (typeof item === 'string') {
+                  return { path:item, name: displayNameFromPath(item) };
+                }
+                if (item && typeof item === 'object') {
+                  const path = item.path || item.url || '';
+                  const name = item.name || item.title || displayNameFromPath(path);
+                  return { path, name };
+                }
+                return null;
+              })
+              .filter(entry => typeof entry?.path === 'string' && entry.path.toLowerCase().endsWith('.pdf'))
+              .map(entry => {
+                const url = buildPdfUrl(entry.path);
+                if (!url) return null;
+                const name = entry.name || displayNameFromPath(entry.path);
+                return { url, name, path: entry.path };
+              })
+              .filter(Boolean);
+          }
+        } catch(err) {
+          console.warn('Failed to load PDF manifest', candidate, err);
+        }
+      }
+
+      try {
+        const res = await fetch('../../pdf/', { cache:'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        const temp = document.createElement('div');
+        temp.innerHTML = text;
+        const anchors = Array.from(temp.querySelectorAll('a'));
+        const entries = anchors
+          .map(a => a.getAttribute('href') || '')
+          .filter(href => href && !href.startsWith('?') && !href.includes('../'))
+          .filter(href => href.toLowerCase().endsWith('.pdf'))
+          .map(href => {
+            const url = buildPdfUrl(href);
+            if (!url) return null;
+            return { url, name: displayNameFromPath(href), path: href };
+          })
+          .filter(Boolean);
+        return entries;
+      } catch(err) {
+        console.warn('Failed to load PDF directory listing', err);
+      }
+
+      return [];
+    }
+
+    function populateLibraryList(entries) {
+      libraryList.innerHTML = '';
+      if (!entries.length) {
+        setLibraryStatusMessage('Aucun PDF trouvé.', 'No PDF files found.');
+        return;
+      }
+
+      entries.forEach(entry => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'library-button';
+        btn.dataset.url = entry.url;
+        btn.innerHTML = `<span>${escapeHtml(entry.name)}</span>`;
+        btn.addEventListener('click', async () => {
+          await loadPdfFromLibrary(entry, btn);
+        });
+        li.appendChild(btn);
+        libraryList.appendChild(li);
+      });
+
+      setLibraryStatusMessage('Choisissez un PDF dans la liste ci-dessous.', 'Choose a PDF from the list below.');
+      showLibraryList();
+      updateLibrarySelectionHighlight();
+    }
+
+    async function loadPdfFromLibrary(entry, buttonEl) {
+      if (!entry?.url) return;
+      try {
+        const res = await fetch(entry.url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const buffer = await res.arrayBuffer();
+        await applyPdfBuffer(buffer, entry.name || displayNameFromPath(entry.path));
+        selectedLibraryPath = entry.url;
+        updateLibrarySelectionHighlight();
+        if (buttonEl) {
+          try { buttonEl.focus({ preventScroll:true }); }
+          catch(_) { buttonEl.focus(); }
+        }
+      } catch(err) {
+        console.error('Failed to load PDF from library', err);
+        const msg = currentLang === 'fr'
+          ? "Impossible de charger ce PDF dans la bibliothèque."
+          : 'Unable to load this library PDF.';
+        alert(msg);
+      }
+    }
+
+    async function initializeLibrary() {
+      if (!libraryList) return;
+      setLibraryStatusMessage('Chargement…', 'Loading…');
+      const entries = await fetchPdfLibraryEntries();
+      populateLibraryList(entries);
+    }
+
+    function setHUD() {
+      hudLabel.textContent = (pdfDoc && started) ? `${currentPageNum} / ${totalPages}` : '—';
+    }
+
+    async function goFullscreen() {
+      if (!document.fullscreenElement) {
+        try { await document.documentElement.requestFullscreen(); } catch(_) {}
+      }
+    }
+
+    function enterPlayingUI() {
+      document.body.classList.add('playing');
+    }
+
+    function exitPlayingUI() {
+      document.body.classList.remove('playing');
+      started = false;
+      speakingAllowed = false;
+      stopSpeak();
+      document.body.style.cursor = 'default';
+      setHUD();
+      updateStartButtonState();
+    }
+
+    function setOcrProgress(p) {
+      ocrBar.style.width = Math.max(0, Math.min(100, Math.round(p * 100))) + '%';
+    }
+
+    function updateStartButtonState() {
+      startButton.disabled = !pdfData;
+    }
+
+    function syncAutoReadWithMode() {
+      if (advanceMode === 'tts-confirm') {
+        autoRead.checked = false;
+        autoRead.disabled = true;
+        autoRead.parentElement.classList.add('disabled');
+      } else {
+        autoRead.disabled = false;
+        if (!autoRead.checked) autoRead.checked = true;
+        autoRead.parentElement.classList.remove('disabled');
+      }
+    }
+
+    advanceRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (!radio.checked) return;
+        advanceMode = (radio.value === 'tts-confirm') ? 'tts-confirm' : 'direct';
+        syncAutoReadWithMode();
+        const hasText = textOut.textContent.trim().length > 0;
+        prepareConfirmForCurrentPage(hasText);
+      });
+    });
+
+    function prepareConfirmForCurrentPage(hasText) {
+      if (advanceMode === 'tts-confirm') {
+        confirmState = hasText ? CONFIRM_STATES.NEED_READ : CONFIRM_STATES.READY;
+      } else {
+        confirmState = CONFIRM_STATES.READY;
+      }
+    }
+
+    function speak(text) {
+      if (!speakingAllowed || !text || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      let voiceLang = getInterfaceTtsVoice();
+      if (ttsLangSel) {
+        const selected = ttsLangSel.value;
+        if (selected) voiceLang = selected;
+      }
+      utterance.lang = voiceLang;
+      const voices = typeof speechSynthesis.getVoices === 'function' ? speechSynthesis.getVoices() : [];
+      if (voices && voices.length) {
+        const exact = voices.find(v => v.lang === voiceLang);
+        const fallback = voices.find(v => v.lang && v.lang.startsWith(voiceLang.split('-')[0]));
+        utterance.voice = exact || fallback || null;
+      }
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function stopSpeak() {
+      window.speechSynthesis?.cancel();
+    }
+
+    chooseBtn.addEventListener('click', () => fileInput.click());
+
+    ;['dragenter','dragover'].forEach(ev => {
+      window.addEventListener(ev, e => { e.preventDefault(); }, { passive:false });
+    });
+
+    window.addEventListener('drop', async e => {
+      e.preventDefault();
+      const file = [...(e.dataTransfer?.files || [])].find(f => f.type === 'application/pdf' || f.name?.toLowerCase().endsWith('.pdf'));
+      if (file) {
+        await loadPDFFile(file);
+      }
+    });
+
+    fileInput.addEventListener('change', async e => {
       const file = e.target.files?.[0];
-      if(!file) return;
+      if (!file) return;
       await loadPDFFile(file);
     });
 
-    async function loadPDFFile(file){
-      const arrBuf = await file.arrayBuffer();
-      pdfData = new Uint8Array(arrBuf);
-      startBtn.disabled = false;
-      hideCenterPrompt();
+    async function applyPdfBuffer(buffer, name) {
+      pdfData = new Uint8Array(buffer);
+      lastFileName = name || '';
+      updateFileStatusText();
+      updateStartButtonState();
+      if (!document.body.classList.contains('playing')) {
+        try { startButton.focus({ preventScroll:true }); }
+        catch(_) { startButton.focus(); }
+      }
     }
 
-    // Start viewer
-    startBtn.addEventListener('click', async ()=>{
+    async function loadPDFFile(file) {
+      const arrBuf = await file.arrayBuffer();
+      await applyPdfBuffer(arrBuf, file.name || '');
+      selectedLibraryPath = '';
+      updateLibrarySelectionHighlight();
+    }
+
+    startButton.addEventListener('click', async () => {
       if (!pdfData) return;
       await goFullscreen();
       started = true;
       speakingAllowed = true;
-      enterPlayingUI();          // hide all UI now
+      enterPlayingUI();
+      scheduleCursorHide();
       await openAndRender();
     });
 
-    // Allow ESC to bring UI back (and exit fullscreen)
-    window.addEventListener('keydown', (e)=>{
-      if (e.key === 'Escape'){
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
         exitPlayingUI();
+        if (document.fullscreenElement) {
+          try { document.exitFullscreen(); } catch(_) {}
+        }
       }
     });
 
-    async function openAndRender(){
-      try{
+    async function openAndRender() {
+      try {
         const pdfjs = window.__PDFJS__ || window.pdfjsLib;
         if (!pdfjs) throw new Error('pdf.js library not available on window.');
         const loadingTask = pdfjs.getDocument({ data: pdfData });
         pdfDoc = await loadingTask.promise;
         totalPages = pdfDoc.numPages;
         currentPageNum = 1;
+        textOut.textContent = '';
         await renderPage(currentPageNum);
         setHUD();
-      }catch(err){
+      } catch(err) {
         console.error('PDF load error:', err);
-        const msg = (currentLang==='fr' ? 'Erreur de chargement du PDF: ' : 'PDF load error: ')
+        const msg = (currentLang === 'fr' ? 'Erreur de chargement du PDF: ' : 'PDF load error: ')
                     + (err?.message || err?.toString() || '');
         alert(msg);
       }
     }
 
-    // ===== Zone helpers =====
-    function getZoneRectPixels(){
+    function getZoneRectPixels() {
       const W = canvas.width, H = canvas.height;
+      const ZONE_W_PCT = 30;
+      const ZONE_H_PCT = 40;
+      const ZONE_CENTER_X_PCT = 75;
+      const ZONE_CENTER_Y_PCT = 50;
       const w = Math.round((ZONE_W_PCT/100) * W);
       const h = Math.round((ZONE_H_PCT/100) * H);
       const cx = Math.round((ZONE_CENTER_X_PCT/100) * W);
@@ -274,7 +852,8 @@
       const y = Math.max(0, Math.min(H-1, cy - Math.floor(h/2)));
       return { x, y, w: Math.max(1, Math.min(W - x, w)), h: Math.max(1, Math.min(H - y, h)) };
     }
-    function cropCanvas(srcCanvas, rect){
+
+    function cropCanvas(srcCanvas, rect) {
       const c = document.createElement('canvas');
       c.width = rect.w; c.height = rect.h;
       const cx = c.getContext('2d');
@@ -282,13 +861,13 @@
       return c;
     }
 
-    // Render page + OCR (fixed zone)
-    async function renderPage(pageNum){
+    async function renderPage(pageNum) {
       if (!pdfDoc || loading) return;
       loading = true;
+      confirmState = CONFIRM_STATES.LOADING;
       const myToken = ++currentRenderToken;
 
-      try{
+      try {
         const page = await pdfDoc.getPage(pageNum);
         const viewportUnscaled = page.getViewport({ scale: 1 });
         const availW = window.innerWidth;
@@ -303,86 +882,145 @@
 
         await page.render({ canvasContext: ctx, viewport }).promise;
 
-        // OCR only the fixed zone
         const rect = getZoneRectPixels();
         const region = cropCanvas(canvas, rect);
 
         setOcrProgress(0);
-        ocrStatus.textContent = (currentLang==='fr' ? 'OCR…' : 'OCR…');
+        ocrStatus.textContent = (currentLang === 'fr' ? 'OCR…' : 'OCR…');
 
         const lang = ocrLangSel.value || 'eng';
         const { data: { text } } = await Tesseract.recognize(
           region,
           lang,
-          { logger: m => { if(m && typeof m.progress === 'number'){ setOcrProgress(m.progress); } } }
+          { logger: m => { if (m && typeof m.progress === 'number') { setOcrProgress(m.progress); } } }
         );
 
-        if(myToken !== currentRenderToken) return;
+        if (myToken !== currentRenderToken) return;
 
-        // >>> Reflow paragraph lines here <<<
         const cleaned = reflowOcrText(text || '');
         textOut.textContent = cleaned;
         setOcrProgress(1);
 
-        if (autoRead.checked && cleaned){ stopSpeak(); speak(cleaned); } else { stopSpeak(); }
-      }catch(err){
+        const trimmed = cleaned.trim();
+        if (autoRead.checked && trimmed) {
+          stopSpeak();
+          speak(trimmed);
+        } else {
+          stopSpeak();
+        }
+
+        prepareConfirmForCurrentPage(trimmed.length > 0);
+      } catch(err) {
         console.error('Render/OCR error:', err);
-      }finally{
+      } finally {
         loading = false;
       }
     }
 
-    // Advance on click/tap anywhere
-    stage.addEventListener('click', async ()=>{
-      if (!started || !pdfDoc || loading) return;
-      stopSpeak();
+    function reflowOcrText(raw) {
+      if (!raw) return '';
+      let s = raw;
+      s = s.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
+      s = s.replace(/\u00AD/g, '');
+      s = s.replace(/\r\n/g, '\n');
+      s = s.replace(/([A-Za-zÀ-ÖØ-öø-ÿ])-\s*\n\s*([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1$2');
+      s = s.replace(/\n{2,}/g, '¶¶');
+      s = s.replace(/([^\n])\n(?!\n)/g, (m, prev) => {
+        return /[.!?;:)"'»\]]\s*$/.test(prev) ? prev + '\n' : prev + ' ';
+      });
+      s = s.replace(/¶¶/g, '\n\n');
+      s = s.replace(/[ \t]+/g, ' ').replace(/ +\n/g, '\n').trim();
+      return s;
+    }
+
+    async function goToNextPage() {
+      if (!pdfDoc) return;
       currentPageNum = (currentPageNum % totalPages) + 1;
       await renderPage(currentPageNum);
       setHUD();
+    }
+
+    async function goToPreviousPage() {
+      if (!pdfDoc) return;
+      currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
+      await renderPage(currentPageNum);
+      setHUD();
+    }
+
+    async function handleAdvanceRequest(direction = 1) {
+      if (!started || !pdfDoc || loading) return;
+      if (direction < 0) {
+        stopSpeak();
+        await goToPreviousPage();
+        return;
+      }
+
+      if (advanceMode === 'tts-confirm') {
+        if (confirmState === CONFIRM_STATES.NEED_READ) {
+          const text = textOut.textContent.trim();
+          if (text) {
+            confirmState = CONFIRM_STATES.READY;
+            stopSpeak();
+            speak(text);
+            return;
+          }
+          confirmState = CONFIRM_STATES.READY;
+        }
+      }
+
+      stopSpeak();
+      await goToNextPage();
+    }
+
+    stage.addEventListener('click', async () => {
+      await handleAdvanceRequest(1);
     });
 
-    // Keyboard controls
-    window.addEventListener('keydown', async (e)=>{
+    window.addEventListener('keydown', async e => {
       if (!started || !pdfDoc || loading) return;
-      if (e.code === 'Space' || e.code === 'ArrowRight'){
+      if (e.code === 'Space' && e.shiftKey) {
         e.preventDefault();
-        stopSpeak();
-        currentPageNum = (currentPageNum % totalPages) + 1;
-        await renderPage(currentPageNum);
-        setHUD();
-      } else if (e.code === 'ArrowLeft' || (e.code==='Space' && e.shiftKey)){
+        await handleAdvanceRequest(-1);
+      } else if (e.code === 'Space' || e.code === 'ArrowRight') {
         e.preventDefault();
-        stopSpeak();
-        currentPageNum = (currentPageNum - 2 + totalPages) % totalPages + 1;
-        await renderPage(currentPageNum);
-        setHUD();
+        await handleAdvanceRequest(1);
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        await handleAdvanceRequest(-1);
       }
     });
 
-    // Re-fit on resize
-    window.addEventListener('resize', ()=>{
+    window.addEventListener('resize', () => {
       if (!started || !pdfDoc) return;
       clearTimeout(window.__resizeT);
-      window.__resizeT = setTimeout(()=>renderPage(currentPageNum), 100);
+      window.__resizeT = setTimeout(() => renderPage(currentPageNum), 100);
     });
 
-    // Auto-hide cursor after inactivity
     let hideTimer = null;
-    function scheduleCursorHide(){
+    function scheduleCursorHide() {
       document.body.style.cursor = 'default';
       clearTimeout(hideTimer);
-      hideTimer = setTimeout(()=>{ document.body.style.cursor = 'none'; }, 1500);
+      if (!document.body.classList.contains('playing')) return;
+      hideTimer = setTimeout(() => {
+        if (document.body.classList.contains('playing')) {
+          document.body.style.cursor = 'none';
+        }
+      }, 1500);
     }
-    ['mousemove','mousedown','touchstart','keydown'].forEach(ev=>{
-      window.addEventListener(ev, scheduleCursorHide, {passive:true});
+    ['mousemove','mousedown','touchstart','keydown'].forEach(ev => {
+      window.addEventListener(ev, scheduleCursorHide, { passive:true });
     });
     scheduleCursorHide();
 
-    // Re-OCR current page if OCR language changes (only when UI visible)
-    ocrLangSel.addEventListener('change', ()=>{
-      if(!started || !pdfDoc) return;
+    ocrLangSel.addEventListener('change', () => {
+      if (!started || !pdfDoc) return;
       renderPage(currentPageNum);
     });
+
+    syncAutoReadWithMode();
+    initializeLibrary();
+    updateStartButtonState();
+    setHUD();
   </script>
 </body>
 </html>
