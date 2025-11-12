@@ -3,6 +3,21 @@ import { createSnowScene } from './snow-scene.js';
 import { createPetalScene } from './petal-scene.js';
 import { createCandleScene } from './candle-scene.js';
 
+const PLAYLIST_TRACKS = [
+  '../../songs/sadness/v5sadviolinmusic1.mp3',
+  '../../songs/sadness/v5sadviolinmusic2.mp3',
+  '../../songs/sadness/v5sadviolinmusic3.mp3',
+  '../../songs/sadness/v5sadviolinmusic4.mp3',
+  '../../songs/sadness/v5sadviolinmusic5.mp3'
+];
+
+const SCENE_SOUNDTRACKS = {
+  rain: '../../sounds/sadness/softrain.mp3',
+  snow: '../../sounds/sadness/windandsnow.mp3',
+  candle: '../../sounds/sadness/candle.mp3',
+  petal: '../../sounds/sadness/subtlewind.mp3'
+};
+
 const startOverlayEl = document.getElementById('promptOverlay');
 const startButtonEl = document.getElementById('startButton');
 const modeButtons = document.querySelectorAll('#modeSelect button');
@@ -28,9 +43,87 @@ let mode = MODE_DEFAULT;
 let selectedMode = MODE_DEFAULT;
 let sceneStartedAt = 0;
 let speedBurst = null;
+let playlistStarted = false;
+let playlistAudio = null;
+let playlistIndex = 0;
+let activeSceneAudio = null;
+const sceneAudioCache = new Map();
 
 const clamp01 = value => Math.min(1, Math.max(0, value));
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
+
+function createAudioElement(src, { volume = 1, loop = false } = {}) {
+  const audio = new Audio(src);
+  audio.loop = loop;
+  audio.volume = volume;
+  audio.preload = 'auto';
+  audio.crossOrigin = 'anonymous';
+  audio.setAttribute('playsinline', 'playsinline');
+  return audio;
+}
+
+function startPlaylistIfNeeded() {
+  if (playlistStarted || !PLAYLIST_TRACKS.length) return;
+  playlistStarted = true;
+
+  const playTrack = index => {
+    if (!PLAYLIST_TRACKS.length) return;
+    playlistIndex = index % PLAYLIST_TRACKS.length;
+    if (playlistAudio) {
+      playlistAudio.pause();
+    }
+    const audio = createAudioElement(PLAYLIST_TRACKS[playlistIndex], { volume: 1 });
+    audio.addEventListener('ended', () => {
+      playTrack((playlistIndex + 1) % PLAYLIST_TRACKS.length);
+    });
+    playlistAudio = audio;
+    audio.play().catch(() => {});
+  };
+
+  playTrack(playlistIndex);
+}
+
+function stopActiveSceneAudio() {
+  if (activeSceneAudio) {
+    activeSceneAudio.pause();
+    activeSceneAudio.currentTime = 0;
+    activeSceneAudio = null;
+  }
+}
+
+function ensureSceneAudio(sceneId) {
+  if (!sceneId || !(sceneId in SCENE_SOUNDTRACKS)) {
+    return null;
+  }
+  if (!sceneAudioCache.has(sceneId)) {
+    const audio = createAudioElement(SCENE_SOUNDTRACKS[sceneId], { volume: 0.6, loop: true });
+    sceneAudioCache.set(sceneId, audio);
+  }
+  return sceneAudioCache.get(sceneId);
+}
+
+function playSceneSoundtrack(sceneId) {
+  const audio = ensureSceneAudio(sceneId);
+  if (!audio) {
+    stopActiveSceneAudio();
+    return;
+  }
+  if (activeSceneAudio === audio) {
+    if (audio.paused) {
+      audio.play().catch(() => {});
+    }
+    return;
+  }
+  stopActiveSceneAudio();
+  activeSceneAudio = audio;
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
+function handleSceneAudio(scene) {
+  if (!started || !scene) return;
+  playSceneSoundtrack(scene.id);
+}
 
 function cycleScene(step = 1) {
   if (!started || !scenes.length) return;
@@ -40,6 +133,7 @@ function cycleScene(step = 1) {
   activeIndex = (activeIndex + step + scenes.length) % scenes.length;
   activeScene = scenes[activeIndex];
   activeScene.enter?.();
+  handleSceneAudio(activeScene);
   sceneStartedAt = performance.now();
   speedBurst = null;
 }
@@ -50,6 +144,8 @@ function beginExperience() {
   sceneStartedAt = performance.now();
   speedBurst = null;
   activeScene.enter?.();
+  handleSceneAudio(activeScene);
+  startPlaylistIfNeeded();
   if (startOverlayEl) {
     startOverlayEl.style.display = 'none';
   }

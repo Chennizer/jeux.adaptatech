@@ -245,6 +245,7 @@ export function createCandleScene(p) {
   }
 
   return {
+    id: 'candle',
     name: 'Veilleuse mémoire',
     description: 'Ciel nocturne, flamme vacillante et braises qui voyagent',
     enter() {
