@@ -96,7 +96,7 @@ function ensureSceneAudio(sceneId) {
     return null;
   }
   if (!sceneAudioCache.has(sceneId)) {
-    const audio = createAudioElement(SCENE_SOUNDTRACKS[sceneId], { volume: 0.6, loop: true });
+    const audio = createAudioElement(SCENE_SOUNDTRACKS[sceneId], { volume: 0.4, loop: true });
     sceneAudioCache.set(sceneId, audio);
   }
   return sceneAudioCache.get(sceneId);
