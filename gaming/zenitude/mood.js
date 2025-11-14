@@ -1,4 +1,4 @@
-import { createLanternScene } from './zen-lantern-scene.js';
+import { createMountainScene } from './zen-mountain-scene.js';
 import { createLotusScene } from './zen-lotus-scene.js';
 import { createBambooScene } from './zen-bamboo-scene.js';
 import { createCloudScene } from './zen-cloud-scene.js';
@@ -13,7 +13,7 @@ const PLAYLIST_TRACKS = [
 ];
 
 const SCENE_SOUNDTRACKS = {
-  lantern: '../../sounds/sadness/softrain.mp3',
+  mountain: '../../sounds/sadness/subtlewind.mp3',
   lotus: '../../sounds/sadness/windandsnow.mp3',
   bamboo: '../../sounds/sadness/candle.mp3',
   clouds: '../../sounds/sadness/subtlewind.mp3',
@@ -216,7 +216,7 @@ const sketch = p => {
     const canvas = p.createCanvas(window.innerWidth, window.innerHeight);
     canvas.id('mood-canvas');
     scenes = [
-      createLanternScene(p),
+      createMountainScene(p),
       createLotusScene(p),
       createBambooScene(p),
       createCloudScene(p),

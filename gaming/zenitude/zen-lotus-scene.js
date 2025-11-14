@@ -62,6 +62,7 @@ class Lotus {
 export function createLotusScene(p) {
   let ripples = [];
   let lotusFlowers = [];
+  let lilyPadShadows = [];
   let speedMultiplier = 1;
   let currentTime = 0;
 
@@ -69,15 +70,25 @@ export function createLotusScene(p) {
     ripples.push(new Ripple(p, x, y));
   }
 
-  function ensureLotus() {
-    if (!lotusFlowers.length) {
-      const count = Math.max(4, Math.floor(p.width / 320));
-      for (let i = 0; i < count; i++) {
-        const x = p.map(i, 0, count - 1, p.width * 0.2, p.width * 0.8);
-        const y = p.random(p.height * 0.65, p.height * 0.78);
-        const scale = p.random(0.8, 1.35);
-        lotusFlowers.push(new Lotus(p, x, y, scale));
-      }
+  function rebuildLotus() {
+    lotusFlowers = [];
+    lilyPadShadows = [];
+    const count = Math.max(5, Math.floor(p.width / 300));
+    for (let i = 0; i < count; i++) {
+      const x = p.map(i, 0, count - 1, p.width * 0.15, p.width * 0.85);
+      const y = p.random(p.height * 0.45, p.height * 0.8);
+      const scale = p.random(0.8, 1.3);
+      lotusFlowers.push(new Lotus(p, x, y, scale));
+    }
+    const padCount = Math.max(8, Math.floor(p.width / 180));
+    for (let i = 0; i < padCount; i++) {
+      lilyPadShadows.push({
+        x: p.random(p.width * 0.05, p.width * 0.95),
+        y: p.random(p.height * 0.3, p.height * 0.9),
+        w: p.random(80, 150),
+        h: p.random(24, 44),
+        rotation: p.random(-0.2, 0.2)
+      });
     }
   }
 
@@ -87,13 +98,11 @@ export function createLotusScene(p) {
     description: 'Ondulations calmes et fleurs flottantes',
     enter() {
       ripples = [];
-      lotusFlowers = [];
-      ensureLotus();
+      rebuildLotus();
     },
     resize() {
       ripples = [];
-      lotusFlowers = [];
-      ensureLotus();
+      rebuildLotus();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
@@ -104,40 +113,38 @@ export function createLotusScene(p) {
       });
     },
     draw() {
-      ensureLotus();
       currentTime += 16 * speedMultiplier;
-      const horizon = p.height * 0.62;
-
+      const waterSteps = 220;
+      const heightStep = p.height / waterSteps;
       p.noStroke();
-      const gradientSteps = 160;
-      for (let i = 0; i < gradientSteps; i++) {
-        const t = i / (gradientSteps - 1);
-        const r = p.lerp(8, 20, t);
-        const g = p.lerp(28, 74, t);
-        const b = p.lerp(38, 122, t);
-        p.fill(r, g, b);
-        p.rect(0, t * horizon, p.width, horizon / gradientSteps + 1);
-      }
-
-      const waterSteps = 160;
       for (let i = 0; i < waterSteps; i++) {
         const t = i / (waterSteps - 1);
-        const r = p.lerp(8, 18, t);
-        const g = p.lerp(46, 120, t);
-        const b = p.lerp(66, 150, t);
-        const alpha = p.lerp(220, 160, t);
-        p.fill(r, g, b, alpha);
-        p.rect(0, horizon + t * (p.height - horizon), p.width, (p.height - horizon) / waterSteps + 1);
+        const r = p.lerp(10, 30, t);
+        const g = p.lerp(48, 116, t);
+        const b = p.lerp(70, 150, t);
+        p.fill(r, g, b);
+        p.rect(0, i * heightStep, p.width, heightStep + 1);
       }
 
-      p.noStroke();
-      p.fill(4, 40, 60, 160);
-      for (let i = 0; i < 12; i++) {
-        const x = (i / 11) * p.width;
-        const width = p.random(60, 140);
-        const height = p.random(6, 18);
-        p.ellipse(x, horizon + p.random(-6, 6), width, height);
+      p.strokeWeight(1);
+      p.stroke(180, 220, 240, 28);
+      const waveBands = Math.max(2, Math.floor(p.height / 24));
+      for (let i = 0; i < waveBands; i++) {
+        const y = (i / (waveBands - 1)) * p.height;
+        const noiseVal = p.noise(i * 0.08, currentTime * 0.0002);
+        const offset = (noiseVal - 0.5) * 18;
+        p.line(0, y + offset, p.width, y + offset);
       }
+      p.noStroke();
+
+      lilyPadShadows.forEach(pad => {
+        p.push();
+        p.translate(pad.x, pad.y);
+        p.rotate(pad.rotation);
+        p.fill(12, 60, 70, 120);
+        p.ellipse(0, 0, pad.w, pad.h);
+        p.pop();
+      });
 
       ripples = ripples.filter(ripple => {
         const alive = ripple.update(speedMultiplier);
@@ -146,8 +153,8 @@ export function createLotusScene(p) {
       });
 
       lotusFlowers.forEach(flower => {
-        p.fill(8, 80, 70, 180);
-        p.ellipse(flower.x, flower.y + 10, 80 * flower.scale, 24 * flower.scale);
+        p.fill(20, 96, 90, 180);
+        p.ellipse(flower.x, flower.y + 10, 86 * flower.scale, 28 * flower.scale);
         flower.draw(currentTime);
         if (p.random() < 0.005 * speedMultiplier) {
           spawnRipple(flower.x + p.random(-20, 20), flower.y + p.random(-8, 8));
