@@ -20,7 +20,7 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <style>
-    :root { --teal:#009688; --bg:#000; --fg:#fff; }
+    :root { --teal:#009688; --bg:#000; --fg:#fff; --gaze-button-scale:1; }
     html, body {
       margin:0;
       padding:0;
@@ -144,18 +144,19 @@
 
     .gaze-button {
       position:absolute;
-      width:clamp(92px, 12vw, 150px);
-      height:clamp(92px, 12vw, 150px);
+      --gaze-button-base:clamp(92px, 12vw, 150px);
+      width:calc(var(--gaze-button-base) * var(--gaze-button-scale, 1));
+      height:calc(var(--gaze-button-base) * var(--gaze-button-scale, 1));
       border:none;
-      border-radius:26px;
+      border-radius:calc(26px * var(--gaze-button-scale, 1));
       background:rgba(0,0,0,0.65);
       box-shadow:0 10px 24px rgba(0,0,0,0.45);
       display:flex;
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      gap:10px;
-      padding:12px;
+      gap:calc(10px * var(--gaze-button-scale, 1));
+      padding:calc(12px * var(--gaze-button-scale, 1));
       cursor:default;
       pointer-events:auto;
       overflow:hidden;
@@ -212,10 +213,10 @@
 
     @media (max-width: 720px) {
       .gaze-button {
-        width:clamp(80px, 22vw, 120px);
-        height:clamp(80px, 22vw, 120px);
-        border-radius:20px;
-        gap:6px;
+        --gaze-button-base:clamp(80px, 22vw, 120px);
+        border-radius:calc(20px * var(--gaze-button-scale, 1));
+        gap:calc(6px * var(--gaze-button-scale, 1));
+        padding:calc(10px * var(--gaze-button-scale, 1));
       }
 
       .gaze-button img { width:64%; }
@@ -293,12 +294,14 @@
       margin-top:6px;
     }
 
-    #ttsRate {
+    #ttsRate,
+    #gazeSize {
       flex:1 1 auto;
       accent-color:var(--teal);
     }
 
-    #ttsRateDisplay {
+    #ttsRateDisplay,
+    #gazeSizeDisplay {
       min-width:48px;
       text-align:right;
       font-weight:600;
@@ -438,6 +441,12 @@
             </label>
           </div>
           <div class="option-item">
+            <label for="gazeSize" class="teal-label label-block translate" data-fr="Taille des boutons oculométriques" data-en="Eye-gaze button size">Taille des boutons oculométriques</label>
+            <div class="tts-rate-row">
+              <input id="gazeSize" type="range" min="0.6" max="3" step="0.1" value="1" />
+              <span id="gazeSizeDisplay">1.0×</span>
+            </div>
+            <p class="tip-text translate" data-fr="Ajustez la taille des cibles de survol pour le suivi oculaire." data-en="Adjust the hover targets for eye gaze.">Ajustez la taille des cibles de survol pour le suivi oculaire.</p>
           </div>
         </div>
       </div>
@@ -494,10 +503,13 @@
     const LS_LANG_KEY = 'siteLanguage';
     const LS_TTS_KEY = 'pdftest.ttsVoice';
     const LS_TTS_RATE_KEY = 'pdftest.ttsRate';
+    const LS_GAZE_SCALE_KEY = 'pdftest.gazeScale';
     const langToggle = document.getElementById('langToggle');
     const ttsLangSelect = document.getElementById('ttsLang');
     const ttsRateInput = document.getElementById('ttsRate');
     const ttsRateDisplay = document.getElementById('ttsRateDisplay');
+    const gazeSizeInput = document.getElementById('gazeSize');
+    const gazeSizeDisplay = document.getElementById('gazeSizeDisplay');
     const skipFirstPageTtsCheckbox = document.getElementById('skipFirstPageTts'); // NEW
 
     const chooseBtn = document.getElementById('chooseBtn');
@@ -527,6 +539,9 @@
     const DEFAULT_TTS_RATE = 0.8;   // UPDATED to match slider default
     const TTS_RATE_MIN = 0.5;
     const TTS_RATE_MAX = 1.3;
+    const DEFAULT_GAZE_SCALE = 1;
+    const GAZE_SCALE_MIN = 0.6;
+    const GAZE_SCALE_MAX = 3;
     const PDF_LIBRARY_PATH = '../../pdf/';
     const PDF_MANIFEST_CANDIDATES = ['manifest.json', 'index.json', 'list.json'];
     const pdfBaseUrl = new URL(PDF_LIBRARY_PATH, window.location.href);
@@ -560,6 +575,7 @@
     let currentLang = 'fr';
     let lastFileName = '';
     let currentTtsRate = DEFAULT_TTS_RATE;
+    let currentGazeScale = DEFAULT_GAZE_SCALE;
     let allowTtsRateSave = false;
     let ttsOverride = false;
     let allowPageTurnSound = false;
@@ -726,6 +742,54 @@
 
     function getEffectiveTtsRate() {
       return normalizeTtsRate(currentTtsRate);
+    }
+
+    function normalizeGazeScale(value) {
+      const parsed = Number.parseFloat(value);
+      if (!Number.isFinite(parsed)) return DEFAULT_GAZE_SCALE;
+      const clamped = Math.min(GAZE_SCALE_MAX, Math.max(GAZE_SCALE_MIN, parsed));
+      return Math.round(clamped * 10) / 10;
+    }
+
+    function formatGazeScaleForDisplay(scale) {
+      const normalized = normalizeGazeScale(scale);
+      return `${normalized.toFixed(1)}×`;
+    }
+
+    function applyGazeScale(scale, { persist = false } = {}) {
+      const normalized = normalizeGazeScale(scale);
+      currentGazeScale = normalized;
+      document.documentElement.style.setProperty('--gaze-button-scale', String(normalized));
+      if (gazeSizeInput) {
+        const currentValue = Number.parseFloat(gazeSizeInput.value);
+        if (!Number.isFinite(currentValue) || Math.abs(currentValue - normalized) > 0.0001) {
+          gazeSizeInput.value = normalized.toFixed(1);
+        }
+      }
+      if (gazeSizeDisplay) {
+        gazeSizeDisplay.textContent = formatGazeScaleForDisplay(normalized);
+      }
+      if (persist) {
+        saveGazeScalePreference();
+      }
+      return normalized;
+    }
+
+    function saveGazeScalePreference() {
+      try {
+        localStorage.setItem(LS_GAZE_SCALE_KEY, String(currentGazeScale));
+      } catch (e) {}
+    }
+
+    function tryRestoreGazeScalePreference() {
+      let target = DEFAULT_GAZE_SCALE;
+      try {
+        const stored = localStorage.getItem(LS_GAZE_SCALE_KEY);
+        if (stored != null) {
+          target = normalizeGazeScale(stored);
+        }
+      } catch (e) {}
+      applyGazeScale(target);
     }
 
     function applyTranslationsForLang(lang) {
@@ -1140,6 +1204,7 @@
       setLang(initial);
       tryRestoreTtsPreference();
       tryRestoreTtsRatePreference();
+      tryRestoreGazeScalePreference();
       allowTtsSave = true;
       saveTtsPreference();
       allowTtsRateSave = true;
@@ -1161,6 +1226,16 @@
       ttsRateInput.addEventListener('input', () => {
         applyTtsRateToUi(ttsRateInput.value);
         saveTtsRatePreference();
+      });
+    }
+
+    if (gazeSizeInput) {
+      const updateGazeScale = () => {
+        applyGazeScale(gazeSizeInput.value);
+      };
+      gazeSizeInput.addEventListener('input', updateGazeScale);
+      gazeSizeInput.addEventListener('change', () => {
+        applyGazeScale(gazeSizeInput.value, { persist: true });
       });
     }
 
