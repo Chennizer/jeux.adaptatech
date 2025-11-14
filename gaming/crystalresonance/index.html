@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title data-fr="Observatoire de Résonance Cristalline" data-en="Crystal Resonance Observatory">
+    Observatoire de Résonance Cristalline
+  </title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+  <script src="../../js/stonermusic.js"></script>
+  <script src="../../js/transitionSounds.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #03060f;
+      color: #e0f2ff;
+      font-family: 'Montserrat', Arial, sans-serif;
+    }
+    canvas { display: block; }
+
+    #auroraGradient {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 50% 20%, rgba(90, 140, 255, 0.25), transparent 55%),
+                  radial-gradient(circle at 20% 80%, rgba(255, 120, 220, 0.18), transparent 60%),
+                  radial-gradient(circle at 80% 70%, rgba(0, 240, 255, 0.18), transparent 65%);
+      pointer-events: none;
+      mix-blend-mode: screen;
+      z-index: 0;
+    }
+
+    #promptOverlay, #infoModal, #menu, #settings-icon, #fullscreen-btn {
+      z-index: 5;
+    }
+
+    #startButton {
+      background: linear-gradient(135deg, #3f51b5, #00acc1);
+      border: none;
+      color: #fff;
+      padding: 12px 26px;
+      font-size: 1.2rem;
+      border-radius: 999px;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(0, 172, 193, 0.35);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    #startButton:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 26px rgba(63, 81, 181, 0.45);
+    }
+
+    #infoButton {
+      background: rgba(22, 30, 60, 0.65);
+      border: 1px solid rgba(120, 150, 255, 0.5);
+      color: #a8c5ff;
+      backdrop-filter: blur(6px);
+    }
+
+    #settings-icon {
+      background: rgba(8, 16, 32, 0.65);
+      border-radius: 50%;
+      padding: 6px 10px;
+      border: 1px solid rgba(120, 180, 255, 0.45);
+      box-shadow: 0 0 12px rgba(0, 180, 255, 0.35);
+      color: #d4e9ff;
+    }
+
+    #fullscreen-btn {
+      background: rgba(8, 16, 32, 0.55);
+      border: 1px solid rgba(120, 180, 255, 0.35);
+      color: #d4e9ff;
+      padding: 8px 16px;
+      border-radius: 999px;
+      box-shadow: 0 0 14px rgba(0, 180, 255, 0.25);
+    }
+
+    #menu {
+      backdrop-filter: blur(12px);
+      background: rgba(3, 10, 28, 0.88);
+      border: 1px solid rgba(130, 175, 255, 0.22);
+      box-shadow: 0 18px 36px rgba(15, 40, 120, 0.45);
+    }
+
+    #menu h3 {
+      color: #a6d8ff;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    #menu span, #menu label {
+      color: #e0f6ff;
+    }
+
+    input[type="range"] {
+      accent-color: #40c8ff;
+    }
+
+    .aurora-glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 50%, rgba(120, 200, 255, 0.08), transparent 70%);
+      animation: pulseGlow 6s ease-in-out infinite;
+      z-index: 1;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 0.75; }
+    }
+  </style>
+</head>
+<body>
+  <div id="auroraGradient"></div>
+  <div class="aurora-glow"></div>
+
+  <div id="promptOverlay">
+    <button id="infoButton" class="translate" title="Plus d'informations" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+    <p class="translate"
+       data-fr="Appuie sur la switch pour lancer une onde de lumière cristalline et écouter la résonance qui s'amplifie."
+       data-en="Press the switch to unleash crystalline waves of light and let the resonance bloom.">
+      Appuie sur la switch pour lancer une onde de lumière cristalline et écouter la résonance qui s'amplifie.
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+
+  <div id="infoModal">
+    <p class="translate"
+       data-fr="Compétence : appuyer et maintenir<br>SENICT : niveau 2<br>Switch Progression Roadmap : niveaux 13 à 15"
+       data-en="Skill: press and hold<br>SENICT: level 2<br>Switch Progression Roadmap: levels 13 to 15">
+      Compétence : appuyer et maintenir<br>SENICT : niveau 2<br>Switch Progression Roadmap : niveaux 13 à 15
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+  </div>
+
+  <div id="settings-icon" class="translate" data-fr="⚙️" data-en="⚙️" title="Paramètres">⚙️</div>
+  <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+
+  <div id="menu">
+    <h3 data-fr="Musique" data-en="Music">Musique</h3>
+    <label class="inline">
+      <span data-fr="Désactiver la musique" data-en="Disable music">Désactiver la musique</span>
+      <input type="checkbox" id="muteToggle">
+    </label>
+    <label>
+      <span data-fr="Volume de la musique" data-en="Music volume">Volume de la musique</span>
+      <span id="musicVolumeValue">60</span>
+      <input type="range" id="musicVolumeSlider" min="1" max="100" value="60">
+    </label>
+
+    <h3 data-fr="Effets sonores" data-en="Sound effects">Effets sonores</h3>
+    <label class="inline">
+      <span data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+      <input type="checkbox" id="muteSFXToggle">
+    </label>
+    <label>
+      <span data-fr="Volume des sons" data-en="Sound volume">Volume des sons</span>
+      <span id="sfxVolumeValue">70</span>
+      <input type="range" id="sfxVolumeSlider" min="1" max="100" value="70">
+    </label>
+
+    <h3 data-fr="Interactions" data-en="Interaction">Interactions</h3>
+    <label class="inline">
+      <span data-fr="Appui tactile / souris" data-en="Enable touch / mouse">Appui tactile / souris</span>
+      <input type="checkbox" id="clickToggle" checked>
+    </label>
+  </div>
+
+  <script src="../../js/translationonly.js"></script>
+  <script>
+    let started = false;
+    let canvas;
+    let crystals = [];
+    let halos = [];
+    let shockwaves = [];
+    let resonanceCooldown = false;
+    const RESONANCE_COOLDOWN_MS = 480;
+    let pressStartTime = null;
+    let isHolding = false;
+    let baseRotation = 0;
+    let globalDrift = 0;
+
+    let musicFiles = [];
+    let currentMusic = null;
+    let transitionSoundFiles = [];
+    let isMusicMuted = false;
+    let isSFXMuted = false;
+    let musicVolume = 0.6;
+    let sfxVolume = 0.7;
+
+    let clickEnabled = true;
+    let overlayParticles = [];
+
+    const infoButton = document.getElementById('infoButton');
+    const closeModal = document.getElementById('closeModal');
+    const infoModal = document.getElementById('infoModal');
+    const promptOverlay = document.getElementById('promptOverlay');
+    const startButton = document.getElementById('startButton');
+    const settingsIcon = document.getElementById('settings-icon');
+    const menu = document.getElementById('menu');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+    const muteToggle = document.getElementById('muteToggle');
+    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+    const musicVolumeValue = document.getElementById('musicVolumeValue');
+    const muteSFXToggle = document.getElementById('muteSFXToggle');
+    const sfxVolumeSlider = document.getElementById('sfxVolumeSlider');
+    const sfxVolumeValue = document.getElementById('sfxVolumeValue');
+    const clickToggle = document.getElementById('clickToggle');
+
+    infoButton.addEventListener('click', () => {
+      infoModal.style.display = 'flex';
+    });
+
+    closeModal.addEventListener('click', () => {
+      infoModal.style.display = 'none';
+    });
+
+    startButton.addEventListener('click', () => {
+      promptOverlay.style.display = 'none';
+      infoModal.style.display = 'none';
+      started = true;
+      triggerResonance();
+      playRandomMusic();
+    });
+
+    settingsIcon.addEventListener('click', () => {
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    fullscreenBtn.addEventListener('click', () => {
+      const docEl = document.documentElement;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch(() => {});
+      }
+    });
+
+    muteToggle.addEventListener('change', () => {
+      isMusicMuted = muteToggle.checked;
+      if (currentMusic) {
+        currentMusic.setVolume(isMusicMuted ? 0 : musicVolume, 0.2);
+      }
+    });
+
+    musicVolumeSlider.addEventListener('input', () => {
+      const value = parseInt(musicVolumeSlider.value, 10);
+      musicVolume = value / 100;
+      musicVolumeValue.textContent = value;
+      if (currentMusic && !isMusicMuted) {
+        currentMusic.setVolume(musicVolume, 0.1);
+      }
+    });
+
+    muteSFXToggle.addEventListener('change', () => {
+      isSFXMuted = muteSFXToggle.checked;
+    });
+
+    sfxVolumeSlider.addEventListener('input', () => {
+      const value = parseInt(sfxVolumeSlider.value, 10);
+      sfxVolume = value / 100;
+      sfxVolumeValue.textContent = value;
+    });
+
+    clickToggle.addEventListener('change', () => {
+      clickEnabled = clickToggle.checked;
+    });
+
+    function preload() {
+      if (window.stonerMusicArray && window.stonerMusicArray.length) {
+        musicFiles = window.stonerMusicArray.map(item => loadSound(item.src));
+      }
+      if (window.transitionSoundsArray && window.transitionSoundsArray.length) {
+        transitionSoundFiles = window.transitionSoundsArray.map(item => loadSound(item.src));
+      }
+    }
+
+    function setup() {
+      canvas = createCanvas(windowWidth, windowHeight, WEBGL);
+      canvas.elt.setAttribute('aria-label', 'Crystal Resonance Observatory canvas');
+      canvas.elt.setAttribute('role', 'img');
+      canvas.mousePressed(() => {
+        if (!started || !clickEnabled) return;
+        startHold();
+      });
+      canvas.mouseReleased(() => {
+        if (!started || !clickEnabled) return;
+        endHold();
+      });
+
+      colorMode(RGB, 255, 255, 255, 1);
+      angleMode(RADIANS);
+      noStroke();
+
+      overlayParticles = Array.from({ length: 110 }, () => new OverlayParticle());
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      overlayParticles = Array.from({ length: 110 }, () => new OverlayParticle());
+    }
+
+    function draw() {
+      background(3, 6, 16);
+      if (!started) {
+        return;
+      }
+
+      const t = millis() * 0.0002;
+      baseRotation += 0.0007;
+      globalDrift = sin(t) * 40;
+
+      ambientLight(10, 20, 40);
+      pointLight(120, 160, 255, 0, -height, 400);
+      pointLight(180, 90, 255, -400, 200, 220);
+      pointLight(80, 255, 240, 420, -120, 260);
+
+      push();
+      rotateY(baseRotation * 0.8);
+      rotateX(sin(baseRotation * 0.5) * 0.2);
+      translate(0, sin(t * 3) * 10, 0);
+
+      blendMode(ADD);
+      for (let i = crystals.length - 1; i >= 0; i--) {
+        const crystal = crystals[i];
+        crystal.update();
+        crystal.draw();
+        if (crystal.life > crystal.maxLife) {
+          crystals.splice(i, 1);
+        }
+      }
+      blendMode(BLEND);
+
+      for (let i = halos.length - 1; i >= 0; i--) {
+        const halo = halos[i];
+        halo.update();
+        halo.draw();
+        if (halo.alpha <= 0) {
+          halos.splice(i, 1);
+        }
+      }
+
+      pop();
+
+      drawShockwaves();
+      drawOverlayParticles();
+    }
+
+    class Crystal {
+      constructor(anchor) {
+        const radius = random(80, 220);
+        this.position = createVector(
+          anchor.x + random(-140, 140),
+          anchor.y + random(-120, 120),
+          anchor.z + random(-180, 180)
+        );
+        this.size = radius;
+        this.thickness = random(16, 45);
+        this.rotation = createVector(random(TWO_PI), random(TWO_PI), random(TWO_PI));
+        this.rotationSpeed = createVector(random(-0.01, 0.01), random(-0.01, 0.01), random(-0.01, 0.01));
+        this.hueShift = random(0.25, 1);
+        this.life = 0;
+        this.maxLife = random(1600, 4200);
+        this.opacity = random(0.35, 0.75);
+        this.glimmerOffset = random(1000);
+        this.depthScale = random(0.45, 0.85);
+      }
+
+      update() {
+        this.rotation.add(this.rotationSpeed);
+        this.life += deltaTime;
+        const pulse = sin((millis() + this.glimmerOffset) * 0.003) * 0.25 + 0.75;
+        this.opacity = constrain(pulse, 0.2, 0.85);
+      }
+
+      draw() {
+        push();
+        translate(this.position.x, this.position.y, this.position.z + globalDrift);
+        rotateX(this.rotation.x);
+        rotateY(this.rotation.y);
+        rotateZ(this.rotation.z);
+
+        const baseColor = color(90 + this.hueShift * 80, 160 + this.hueShift * 60, 255, this.opacity);
+        emissiveMaterial(red(baseColor), green(baseColor), blue(baseColor));
+        box(this.size, this.thickness, this.size * this.depthScale);
+
+        const edgeColor = color(255, 255, 255, this.opacity * 0.45);
+        stroke(edgeColor);
+        strokeWeight(1.2);
+        noFill();
+        box(this.size * 1.05, this.thickness * 0.6, this.size * 0.9);
+        noStroke();
+
+        pop();
+      }
+    }
+
+    class Halo {
+      constructor() {
+        this.radius = random(160, 320);
+        this.rotation = random(TWO_PI);
+        this.rotationSpeed = random(-0.004, 0.004);
+        this.alpha = 0.75;
+        this.growth = random(0.4, 1.1);
+        this.z = random(-200, 200);
+      }
+
+      update() {
+        this.rotation += this.rotationSpeed;
+        this.radius += this.growth;
+        this.alpha -= 0.002;
+      }
+
+      draw() {
+        push();
+        rotateY(this.rotation * 0.4);
+        rotateX(this.rotation * 0.25);
+        translate(0, 0, this.z + globalDrift * 0.35);
+        noFill();
+        stroke(150, 210, 255, this.alpha * 255);
+        strokeWeight(2);
+        torus(this.radius, 3, 36, 24);
+        pop();
+      }
+    }
+
+    class Shockwave {
+      constructor(intensity) {
+        this.radius = 0;
+        this.intensity = intensity;
+        this.alpha = 1;
+        this.lineWidth = map(intensity, 0.4, 3.6, 2, 12);
+        this.expansion = map(intensity, 0.4, 3.6, 6, 36);
+        this.glow = [];
+        for (let i = 0; i < 24; i++) {
+          this.glow.push({
+            angle: random(TWO_PI),
+            distance: random(40, 260) * intensity,
+            size: random(8, 26) * intensity,
+            life: random(420, 880),
+            age: 0
+          });
+        }
+      }
+
+      update() {
+        this.radius += this.expansion;
+        this.alpha -= 0.015;
+        this.glow.forEach((spark) => {
+          spark.age += deltaTime;
+        });
+      }
+
+      draw() {
+        push();
+        resetMatrix();
+        translate(-width / 2, -height / 2, 0);
+        blendMode(ADD);
+        noFill();
+        stroke(150, 220, 255, this.alpha * 180);
+        strokeWeight(this.lineWidth);
+        const outerDiameter = this.radius * 2 + 10;
+        ellipse(width / 2, height / 2, outerDiameter, outerDiameter);
+
+        stroke(60, 180, 255, this.alpha * 120);
+        strokeWeight(this.lineWidth * 0.45);
+        const innerDiameter = this.radius * 1.4;
+        ellipse(width / 2, height / 2, innerDiameter, innerDiameter);
+
+        noStroke();
+        this.glow.forEach((spark) => {
+          const lifeFactor = 1 - constrain(spark.age / spark.life, 0, 1);
+          const sparkAlpha = lifeFactor * this.alpha;
+          const x = width / 2 + cos(spark.angle) * (spark.distance + this.radius * 0.3);
+          const y = height / 2 + sin(spark.angle) * (spark.distance + this.radius * 0.3);
+          fill(120, 200, 255, sparkAlpha * 255);
+          ellipse(x, y, spark.size, spark.size);
+        });
+        blendMode(BLEND);
+        pop();
+      }
+
+      isFinished() {
+        return this.alpha <= 0;
+      }
+    }
+
+    class OverlayParticle {
+      constructor() {
+        this.x = random(-width / 2, width / 2);
+        this.y = random(-height / 2, height / 2);
+        this.size = random(2, 6);
+        this.speed = random(0.05, 0.25);
+        this.alpha = random(0.15, 0.45);
+        this.shift = random(TWO_PI);
+      }
+
+      update() {
+        this.y -= this.speed * 20 * deltaTime / 16;
+        this.x += sin(millis() * 0.001 + this.shift) * 0.15;
+        if (this.y < -height / 2 - 40) {
+          this.y = height / 2 + 40;
+        }
+      }
+
+      draw() {
+        push();
+        resetMatrix();
+        translate(width / 2 + this.x, height / 2 + this.y, 0);
+        noStroke();
+        fill(200, 240, 255, this.alpha * 255);
+        ellipse(0, 0, this.size, this.size);
+        pop();
+      }
+    }
+
+    function drawOverlayParticles() {
+      overlayParticles.forEach((particle) => {
+        particle.update();
+        particle.draw();
+      });
+    }
+
+    function drawShockwaves() {
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const wave = shockwaves[i];
+        wave.update();
+        wave.draw();
+        if (wave.isFinished()) {
+          shockwaves.splice(i, 1);
+        }
+      }
+    }
+
+    function triggerResonance() {
+      if (resonanceCooldown) return;
+      resonanceCooldown = true;
+      setTimeout(() => { resonanceCooldown = false; }, RESONANCE_COOLDOWN_MS);
+
+      const anchor = createVector(
+        random(-width * 0.25, width * 0.25),
+        random(-height * 0.25, height * 0.25),
+        random(-220, 180)
+      );
+
+      const clusterCount = floor(random(3, 6));
+      for (let i = 0; i < clusterCount; i++) {
+        crystals.push(new Crystal(anchor));
+      }
+      halos.push(new Halo());
+      halos.push(new Halo());
+
+      if (!isSFXMuted && transitionSoundFiles.length) {
+        const chosen = random(transitionSoundFiles);
+        if (chosen && chosen.isLoaded()) {
+          chosen.setVolume(sfxVolume);
+          chosen.play();
+        }
+      }
+    }
+
+    function startHold() {
+      if (isHolding) return;
+      isHolding = true;
+      pressStartTime = millis();
+      triggerResonance();
+    }
+
+    function endHold() {
+      if (!isHolding) return;
+      isHolding = false;
+      const duration = millis() - (pressStartTime || millis());
+      const intensity = constrain(map(duration, 120, 3200, 0.4, 3.6), 0.4, 3.6);
+      shockwaves.push(new Shockwave(intensity));
+      halos.push(new Halo());
+      halos.push(new Halo());
+    }
+
+    function touchStarted() {
+      if (!started || !clickEnabled) return;
+      startHold();
+      return false;
+    }
+
+    function touchEnded() {
+      if (!started || !clickEnabled) return;
+      endHold();
+      return false;
+    }
+
+    function playRandomMusic() {
+      if (!musicFiles.length) return;
+      if (currentMusic) {
+        currentMusic.stop();
+      }
+      const next = random(musicFiles);
+      if (next && next.isLoaded()) {
+        next.setLoop(true);
+        next.setVolume(isMusicMuted ? 0 : musicVolume);
+        next.play();
+        currentMusic = next;
+      }
+    }
+
+    window.addEventListener('keydown', (event) => {
+      if (!started) return;
+      if (event.code === 'Space') {
+        event.preventDefault();
+        if (!isHolding) {
+          startHold();
+        }
+      }
+      if (event.code === 'Enter') {
+        event.preventDefault();
+        triggerResonance();
+      }
+    });
+
+    window.addEventListener('keyup', (event) => {
+      if (!started) return;
+      if (event.code === 'Space') {
+        event.preventDefault();
+        endHold();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!started || !clickEnabled) return;
+      if (isHolding) {
+        endHold();
+      }
+    });
+
+    window.addEventListener('touchend', () => {
+      if (!started || !clickEnabled) return;
+      if (isHolding) {
+        endHold();
+      }
+    });
+
+    window.addEventListener('touchcancel', () => {
+      if (!started || !clickEnabled) return;
+      if (isHolding) {
+        endHold();
+      }
+    });
+
+  </script>
+</body>
+</html>
