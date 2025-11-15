@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title
+    class="translate"
+    data-fr="Scènes apaisantes"
+    data-en="Soothing Scenes"
+  >
+    Scènes apaisantes
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #02070c;
+      color: #fff;
+      font-family: 'Nunito', 'Segoe UI', sans-serif;
+    }
+
+    #mood-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 0;
+    }
+
+#promptOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  background: rgba(1, 6, 14, 0.92);
+  padding: clamp(24px, 4vw, 72px);
+  padding-top: clamp(60px, 20vh, 140px);
+  gap: clamp(18px, 3vw, 32px);
+  backdrop-filter: blur(18px);
+}
+
+
+    #promptOverlay h1 {
+      margin: 0;
+      font-size: clamp(1.2rem, 2.4vw, 2.4rem);
+      letter-spacing: 0.04em;
+    }
+
+    #promptOverlay p {
+      margin: 0;
+      font-size: clamp(1rem, 2.1vw, 1.35rem);
+      line-height: 1.5;
+      max-width: min(640px, 90vw);
+      opacity: 0.95;
+    }
+
+    #modeSelect {
+      display: flex;
+      flex-wrap: wrap;
+      gap: clamp(10px, 2vw, 20px);
+      justify-content: center;
+    }
+
+    #modeSelect button {
+      min-width: 11rem;
+      padding: clamp(12px, 1.6vw, 18px) clamp(18px, 3vw, 30px);
+      border: none;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: clamp(0.95rem, 1.8vw, 1.1rem);
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.05s ease;
+    }
+
+    #modeSelect button.active {
+      background: #8bd5c7;
+      color: #02242a;
+      font-weight: 700;
+    }
+
+    #modeSelect button:focus-visible {
+      outline: 2px solid #8bd5c7;
+      outline-offset: 3px;
+    }
+
+    #startButton {
+      padding: clamp(14px, 2.2vw, 22px) clamp(40px, 6vw, 60px);
+      font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+      border: none;
+      border-radius: 16px;
+      background: #04c8bb;
+      color: #001f1f;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      box-shadow: 0 14px 36px rgba(4, 200, 187, 0.45);
+      transition: filter 0.2s ease, transform 0.1s ease;
+    }
+
+    #startButton:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 11;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 2px solid #8bd5c7;
+      background: rgba(1, 9, 16, 0.8);
+      color: #8bd5c7;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 0 0 0 rgba(139, 213, 199, 0);
+      transition: box-shadow 0.2s ease, transform 0.05s ease, background 0.2s ease;
+    }
+
+    #langToggle:hover {
+      box-shadow: 0 0 0 3px rgba(139, 213, 199, 0.25);
+    }
+
+    #langToggle:active {
+      transform: translateY(1px);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+</head>
+<body>
+  <button id="langToggle" title="Changer de langue / Change language">FR / EN</button>
+  <div id="promptOverlay">
+    <h1 class="translate"
+        data-fr="Respiration et calme"
+        data-en="Breathing and Calm">
+      Respiration et calme
+    </h1>
+    <p class="translate"
+       data-fr="<small>Standard : le switch change de scène · Contemplatif : les scènes tournent seules, le switch déclenche une respiration visuelle</small>"
+       data-en="<small>Standard: switch press changes scenes · Contemplative: scenes rotate automatically, switch press triggers a visual breath</small>">
+      Choisis un mode puis appuie sur <strong>Commencer</strong> pour explorer les paysages apaisants.<br><small>Standard : le switch change de scène · Contemplatif : les scènes tournent seules, le switch déclenche une respiration visuelle</small>
+    </p>
+    <div id="modeSelect">
+      <button class="translate"
+              data-mode="default"
+              aria-pressed="false"
+              data-fr="Mode standard"
+              data-en="Standard mode">
+        Mode standard
+      </button>
+      <button class="active translate"
+              data-mode="slow"
+              aria-pressed="true"
+              data-fr="Mode contemplatif"
+              data-en="Contemplative mode">
+        Mode contemplatif
+      </button>
+    </div>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+
+  <script>
+    const LS_LANG_KEY = 'siteLanguage';
+
+    function documentLangFallback() {
+      const htmlLang = (document.documentElement.lang || '').toLowerCase();
+      return htmlLang === 'en' ? 'en' : 'fr';
+    }
+
+    function applyTranslations(lang) {
+      const safeLang = lang === 'en' ? 'en' : 'fr';
+      document.querySelectorAll('.translate').forEach(el => {
+        const fr = el.getAttribute('data-fr');
+        const en = el.getAttribute('data-en');
+        const value = safeLang === 'fr' ? fr : en;
+        if (value == null) return;
+        if (['P', 'BUTTON', 'DIV', 'H1', 'H2', 'H3'].includes(el.tagName)) {
+          el.innerHTML = value;
+        } else {
+          el.textContent = value;
+        }
+      });
+      document.documentElement.lang = safeLang;
+      const titleEl = document.querySelector('title');
+      if (titleEl) {
+        const frTitle = titleEl.getAttribute('data-fr');
+        const enTitle = titleEl.getAttribute('data-en');
+        const nextTitle = safeLang === 'fr' ? frTitle : enTitle;
+        if (nextTitle) {
+          titleEl.textContent = nextTitle;
+          document.title = nextTitle;
+        }
+      }
+    }
+
+    function setLang(lang) {
+      const safeLang = lang === 'en' ? 'en' : 'fr';
+      try {
+        localStorage.setItem(LS_LANG_KEY, safeLang);
+      } catch (e) {}
+      applyTranslations(safeLang);
+    }
+
+    function getInitialLang() {
+      let initial = documentLangFallback();
+      try {
+        const stored = localStorage.getItem(LS_LANG_KEY);
+        if (stored === 'en' || stored === 'fr') {
+          initial = stored;
+        } else {
+          localStorage.setItem(LS_LANG_KEY, initial);
+        }
+      } catch (e) {}
+      return initial;
+    }
+
+    function getCurrentLang() {
+      return (document.documentElement.lang || '').toLowerCase() === 'en' ? 'en' : 'fr';
+    }
+
+    document.getElementById('langToggle')?.addEventListener('click', () => {
+      const nextLang = getCurrentLang() === 'fr' ? 'en' : 'fr';
+      setLang(nextLang);
+    });
+
+    setLang(getInitialLang());
+  </script>
+  <script type="module" src="./mood.js"></script>
+</body>
+</html>
