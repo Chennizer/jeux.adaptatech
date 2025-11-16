@@ -2,6 +2,7 @@ import { createRainScene } from './rain-scene.js';
 import { createSnowScene } from './snow-scene.js';
 import { createPetalScene } from './petal-scene.js';
 import { createCandleScene } from './candle-scene.js';
+import { createMaskScene } from './mask-scene.js';
 
 const PLAYLIST_TRACKS = [
   '../../songs/sadness/v5sadviolinmusic1.mp3',
@@ -12,6 +13,7 @@ const PLAYLIST_TRACKS = [
 ];
 
 const SCENE_SOUNDTRACKS = {
+  mask: '../../sounds/sadness/subtlewind.mp3',
   rain: '../../sounds/sadness/softrain.mp3',
   snow: '../../sounds/sadness/windandsnow.mp3',
   candle: '../../sounds/sadness/candle.mp3',
@@ -240,6 +242,7 @@ const sketch = p => {
     const canvas = p.createCanvas(window.innerWidth, window.innerHeight);
     canvas.id('mood-canvas');
     scenes = [
+      createMaskScene(p),
       createRainScene(p),
       createSnowScene(p),
       createPetalScene(p),
