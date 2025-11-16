@@ -40,13 +40,15 @@ export function createShoreScene(p) {
         { r: 178, g: 206, b: 232 }
       ]);
 
-      drawBands(waterTop, waterBottom, [
+      const waterPalette = [
         { r: 28, g: 121, b: 165 },
         { r: 44, g: 145, b: 182 },
         { r: 64, g: 168, b: 198 },
         { r: 88, g: 188, b: 207 },
         { r: 120, g: 207, b: 215 }
-      ]);
+      ];
+
+      drawBands(waterTop, waterBottom, waterPalette);
 
       const shorelineBase = p.height * 0.62;
       const shorelineAmplitude = 26;
@@ -63,12 +65,33 @@ export function createShoreScene(p) {
 
       const shorelineY = baseShoreline.map((y) => y + verticalSwell);
 
-      p.noStroke();
-      drawBands(shorelineBase + verticalSwell, p.height, [
+      const sandPalette = [
         { r: 230, g: 205, b: 170 },
         { r: 220, g: 193, b: 157 },
         { r: 211, g: 182, b: 146 }
-      ]);
+      ];
+
+      const minShoreline = Math.min(...shorelineY);
+      const sandHeight = p.height - minShoreline;
+      const bandHeight = sandHeight / sandPalette.length;
+
+      sandPalette.forEach((color, index) => {
+        const topOffset = bandHeight * index;
+        const bottomOffset = bandHeight * (index + 1);
+
+        p.noStroke();
+        p.fill(color.r, color.g, color.b);
+        p.beginShape();
+        for (let i = 0; i <= segments; i++) {
+          const x = (i / segments) * p.width;
+          p.vertex(x, shorelineY[i] + topOffset);
+        }
+        for (let i = segments; i >= 0; i--) {
+          const x = (i / segments) * p.width;
+          p.vertex(x, shorelineY[i] + bottomOffset + 1);
+        }
+        p.endShape(p.CLOSE);
+      });
 
       p.noStroke();
       p.fill(233, 214, 175, 210);
