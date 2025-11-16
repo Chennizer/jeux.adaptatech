@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-fr="Orchestre de stalactites" data-en="Icicle Orchestra">Orchestre de stalactites</title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0a1426;
+      color: #fff;
+      font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      position: fixed;
+      inset: 0;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 0;
+    }
+    #settings-icon,
+    #fullscreen-btn,
+    #menu {
+      z-index: 10001;
+    }
+    #promptOverlay, #infoModal {
+      z-index: 10002;
+    }
+  </style>
+</head>
+<body>
+  <div id="promptOverlay">
+    <button id="infoButton" title="Plus d'informations" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+    <p class="translate"
+       data-fr="Appuyez sur la touche ESPACE pour déclencher une vague lumineuse qui descend le long des stalactites."
+       data-en="Press the SPACE key to send a ribbon of light through the icicles.">
+      Appuyez sur la touche ESPACE pour déclencher une vague lumineuse qui descend le long des stalactites.
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+
+  <div id="infoModal">
+    <p class="translate"
+       data-fr="Compétence : appuyer<br>SENICT : niveau 1-2<br>Roadmap : niveaux 9 à 11"
+       data-en="Skill: press<br>SENICT: level 1-2<br>Roadmap: levels 9 to 11">
+      Compétence : appuyer<br>SENICT : niveau 1-2<br>Roadmap : niveaux 9 à 11
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+  </div>
+
+  <div id="settings-icon" title="Paramètres" class="translate" data-fr="⚙️" data-en="⚙️">⚙️</div>
+  <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+
+  <div id="menu">
+    <h3 class="translate" data-fr="Musique et son" data-en="Music &amp; sound">Musique et son</h3>
+    <label class="inline">
+      <span class="translate" data-fr="Couper la musique" data-en="Mute ambience">Couper la musique</span>
+      <input type="checkbox" id="muteToggle">
+    </label>
+    <label>
+      <span class="translate" data-fr="Volume de la musique" data-en="Ambience volume">Volume de la musique</span>
+      <span id="musicVolumeValue">50</span>
+      <input type="range" id="musicVolumeSlider" min="0" max="100" value="50">
+    </label>
+    <label class="inline">
+      <span class="translate" data-fr="Couper les sons" data-en="Mute chimes">Couper les sons</span>
+      <input type="checkbox" id="muteSFXToggle">
+    </label>
+    <label>
+      <span class="translate" data-fr="Volume des sons" data-en="Chime volume">Volume des sons</span>
+      <span id="sfxVolumeValue">70</span>
+      <input type="range" id="sfxVolumeSlider" min="0" max="100" value="70">
+    </label>
+  </div>
+
+  <script src="../../js/translationonly.js"></script>
+  <script>
+    let started = false;
+    let icicles = [];
+    let auroraLayers = [];
+    let stars = [];
+    let pulses = [];
+    let topLine = 0;
+    let windSound, chimeSound;
+    let musicVolume = 0.5;
+    let sfxVolume = 0.7;
+    let musicMuted = false;
+    let sfxMuted = false;
+
+    const ambiencePath = '../../sounds/winterambiance.mp3';
+    const chimePath = '../../sounds/harp.mp3';
+
+    function preload() {
+      soundFormats('mp3', 'wav', 'ogg');
+      windSound = loadSound(ambiencePath);
+      chimeSound = loadSound(chimePath);
+    }
+
+    function setup() {
+      const canvas = createCanvas(windowWidth, windowHeight);
+      canvas.id('icicle-canvas');
+      pixelDensity(min(2, window.devicePixelRatio || 1));
+      colorMode(HSB, 360, 100, 100, 100);
+      angleMode(RADIANS);
+      buildScene();
+      wireOverlay();
+    }
+
+    function buildScene() {
+      topLine = 0;
+      icicles = [];
+      pulses = [];
+      const count = width < 720 ? 6 : 7;
+      const spacing = width / (count + 1);
+      const baseNoise = random(1000);
+      for (let i = 0; i < count; i++) {
+        const n = noise(baseNoise + i * 0.12);
+        const baseX = (i + 1) * spacing + map(n, 0, 1, -spacing * 0.3, spacing * 0.3);
+        const heightNoise = noise(1000 + i * 0.15);
+        const h = min(height * 0.9, map(heightNoise, 0, 1, height * 0.38, height * 0.84));
+        const baseWidth = map(
+          noise(2000 + i * 0.18),
+          0,
+          1,
+          spacing * 0.9,
+          spacing * 1.45
+        );
+        const segments = max(8, floor(map(h, height * 0.38, height * 0.84, 10, 18)));
+        const geometry = [];
+        const jaggedSeed = random(1000);
+        for (let s = 0; s < segments; s++) {
+          const t = s / (segments - 1);
+          const y = t * h;
+          if (s === segments - 1) {
+            geometry.push({ y, left: 0, right: 0, t });
+            continue;
+          }
+          const envelope = pow(1 - t, 2.8);
+          const widthNoise = noise(3000 + i * 0.35 + s * 0.45);
+          const widthFactor = 0.02 + 0.98 * envelope;
+          const halfWidth = (baseWidth * map(widthNoise, 0, 1, 0.6, 1.25) * widthFactor) / 2;
+          const jaggedSpan = halfWidth * map(envelope, 0, 1, 0.18, 0.46);
+          const jaggedLeft = map(
+            noise(jaggedSeed + s * 0.62),
+            0,
+            1,
+            -jaggedSpan,
+            jaggedSpan
+          );
+          const jaggedRight = map(
+            noise(jaggedSeed + 500 + s * 0.62),
+            0,
+            1,
+            -jaggedSpan,
+            jaggedSpan
+          );
+          geometry.push({ y, left: -halfWidth + jaggedLeft, right: halfWidth + jaggedRight, t });
+        }
+        const hue = map(noise(4000 + i * 0.05), 0, 1, 180, 220);
+        const saturation = map(noise(5000 + i * 0.05), 0, 1, 32, 60);
+        const brightness = map(noise(6000 + i * 0.08), 0, 1, 58, 86);
+        const alpha = map(noise(7000 + i * 0.11), 0, 1, 60, 88);
+        icicles.push({
+          baseX,
+          height: h,
+          geometry,
+          hue,
+          saturation,
+          brightness,
+          alpha
+        });
+      }
+
+      auroraLayers = [];
+      for (let i = 0; i < 3; i++) {
+        auroraLayers.push({
+          baseY: height * (0.18 + i * 0.06),
+          amplitude: map(i, 0, 2, 80, 140),
+          hue: 160 + i * 18,
+          saturation: 60 - i * 8,
+          brightness: 80 - i * 3,
+          alpha: 24 - i * 5,
+          detail: floor(map(width, 400, 1600, 10, 18)),
+          offset: random(1000),
+          speed: random(0.0006, 0.0012),
+          scale: random(0.002, 0.004)
+        });
+      }
+
+      stars = [];
+      const starCount = floor(map(width * height, 200000, 2500000, 80, 220));
+      for (let i = 0; i < starCount; i++) {
+        stars.push({
+          x: random(width),
+          y: random(height * 0.5),
+          size: random(1.5, 3.4),
+          twinkleSpeed: random(0.012, 0.03),
+          phase: random(TWO_PI),
+          brightness: random(45, 75)
+        });
+      }
+    }
+
+    function draw() {
+      drawSkyGradient();
+      drawAurora();
+      drawStars();
+      drawIcicles();
+      drawLedge();
+      pulses = pulses.filter(p => frameCount - p.startFrame <= p.duration + 10);
+    }
+
+    function drawSkyGradient() {
+      push();
+      colorMode(RGB, 255);
+      for (let y = 0; y < height; y++) {
+        const t = y / max(1, height - 1);
+        const r = lerp(8, 30, t);
+        const g = lerp(15, 55, t);
+        const b = lerp(32, 95, t);
+        stroke(r, g, b);
+        line(0, y, width, y);
+      }
+      pop();
+    }
+
+    function drawAurora() {
+      noStroke();
+      for (const layer of auroraLayers) {
+        layer.offset += layer.speed;
+        fill(layer.hue, layer.saturation, layer.brightness, layer.alpha);
+        beginShape();
+        const left = -120;
+        const right = width + 120;
+        curveVertex(left, height);
+        curveVertex(left, height);
+        for (let i = 0; i <= layer.detail; i++) {
+          const x = map(i, 0, layer.detail, left, right);
+          const noiseVal = noise(layer.offset + i * layer.scale + frameCount * layer.speed * 12);
+          const y = layer.baseY + map(noiseVal, 0, 1, -layer.amplitude, layer.amplitude);
+          curveVertex(x, y);
+        }
+        curveVertex(right, height);
+        curveVertex(right, height);
+        endShape(CLOSE);
+      }
+    }
+
+    function drawStars() {
+      push();
+      blendMode(ADD);
+      noStroke();
+      for (const star of stars) {
+        const tw = (sin(frameCount * star.twinkleSpeed + star.phase) + 1) * 0.5;
+        const alpha = constrain(star.brightness + tw * 35, 0, 100);
+        fill(210, 25, 100, alpha);
+        const size = star.size + tw * 1.5;
+        circle(star.x, star.y, size);
+      }
+      pop();
+      blendMode(BLEND);
+    }
+
+    function drawIcicles() {
+      noStroke();
+      for (const icicle of icicles) {
+        for (let i = 0; i < icicle.geometry.length - 1; i++) {
+          const segA = icicle.geometry[i];
+          const segB = icicle.geometry[i + 1];
+          const midT = (segA.t + segB.t) * 0.5;
+
+          let brightness = icicle.brightness - midT * 28;
+          let alpha = icicle.alpha - midT * 18;
+          for (const pulse of pulses) {
+            const progress = (frameCount - pulse.startFrame) / pulse.duration;
+            const dist = abs(midT - progress);
+            if (progress >= -pulse.width && progress <= 1 + pulse.width) {
+              const influence = max(0, 1 - dist / pulse.width);
+              brightness += influence * pulse.boost;
+              alpha += influence * pulse.alphaBoost;
+            }
+          }
+
+          fill(icicle.hue, icicle.saturation, constrain(brightness, 0, 100), constrain(alpha, 0, 100));
+          const topY = topLine + segA.y;
+          const bottomY = topLine + segB.y;
+          beginShape();
+          vertex(icicle.baseX + segA.left, topY);
+          vertex(icicle.baseX + segA.right, topY);
+          vertex(icicle.baseX + segB.right, bottomY);
+          vertex(icicle.baseX + segB.left, bottomY);
+          endShape(CLOSE);
+        }
+      }
+    }
+
+    function drawLedge() {
+      push();
+      noStroke();
+      fill(210, 30, 40, 55);
+      rect(-10, -6, width + 20, 24, 12);
+      pop();
+    }
+
+    function triggerPulse() {
+      if (!started) return;
+      pulses.push({
+        startFrame: frameCount,
+        duration: 150,
+        width: 0.18,
+        boost: 26,
+        alphaBoost: 32
+      });
+      if (pulses.length > 12) {
+        pulses.shift();
+      }
+      if (chimeSound && chimeSound.isLoaded() && !sfxMuted) {
+        chimeSound.setVolume(sfxVolume);
+        chimeSound.play();
+      }
+    }
+
+    function keyPressed() {
+      if (!started) return;
+      if (key === ' ' || keyCode === 32) {
+        triggerPulse();
+        return false;
+      }
+    }
+
+    function mousePressed(event) {
+      const menu = document.getElementById('menu');
+      const settingsIcon = document.getElementById('settings-icon');
+      const fullscreenBtn = document.getElementById('fullscreen-btn');
+      if (menu?.contains(event.target) || settingsIcon?.contains(event.target) || fullscreenBtn?.contains(event.target)) {
+        return;
+      }
+      triggerPulse();
+    }
+
+    function touchStarted(event) {
+      mousePressed(event);
+      return false;
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      buildScene();
+    }
+
+    function startExperience() {
+      if (started) return;
+      started = true;
+      document.getElementById('promptOverlay').style.display = 'none';
+      document.getElementById('infoModal').style.display = 'none';
+      document.getElementById('settings-icon').style.display = 'flex';
+      updateAmbienceVolume();
+      if (!musicMuted && windSound && windSound.isLoaded() && !windSound.isPlaying()) {
+        windSound.loop();
+        windSound.setVolume(musicVolume);
+      }
+    }
+
+    function wireOverlay() {
+      document.getElementById('startButton').addEventListener('click', () => {
+        startExperience();
+        requestFullscreenSafe();
+      });
+      document.getElementById('infoButton').addEventListener('click', () => {
+        document.getElementById('infoModal').style.display = 'block';
+      });
+      document.getElementById('closeModal').addEventListener('click', () => {
+        document.getElementById('infoModal').style.display = 'none';
+      });
+      document.getElementById('settings-icon').addEventListener('click', () => {
+        document.getElementById('menu').classList.toggle('show');
+      });
+      document.getElementById('fullscreen-btn').addEventListener('click', () => {
+        requestFullscreenSafe();
+      });
+      const muteMusic = document.getElementById('muteToggle');
+      const muteSFX = document.getElementById('muteSFXToggle');
+      const musicSlider = document.getElementById('musicVolumeSlider');
+      const sfxSlider = document.getElementById('sfxVolumeSlider');
+      const musicValue = document.getElementById('musicVolumeValue');
+      const sfxValue = document.getElementById('sfxVolumeValue');
+
+      muteMusic.addEventListener('change', (e) => {
+        musicMuted = e.target.checked;
+        updateAmbienceVolume();
+      });
+      muteSFX.addEventListener('change', (e) => {
+        sfxMuted = e.target.checked;
+      });
+      musicSlider.addEventListener('input', (e) => {
+        musicVolume = Number(e.target.value) / 100;
+        musicValue.textContent = e.target.value;
+        updateAmbienceVolume();
+      });
+      sfxSlider.addEventListener('input', (e) => {
+        sfxVolume = Number(e.target.value) / 100;
+        sfxValue.textContent = e.target.value;
+      });
+      musicValue.textContent = musicSlider.value;
+      sfxValue.textContent = sfxSlider.value;
+    }
+
+    function updateAmbienceVolume() {
+      if (!windSound || !windSound.isLoaded()) return;
+      const target = musicMuted ? 0 : musicVolume;
+      if (started && !windSound.isPlaying() && target > 0) {
+        windSound.loop();
+      }
+      windSound.setVolume(target);
+    }
+
+    function requestFullscreenSafe() {
+      const docEl = document.documentElement;
+      if (!document.fullscreenElement && docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch(() => {});
+      }
+    }
+  </script>
+</body>
+</html>
