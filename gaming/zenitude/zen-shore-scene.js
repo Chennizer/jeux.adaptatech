@@ -19,6 +19,7 @@ export function createShoreScene(p) {
   let lastWaveStart = 0;
   let time = 0;
   let speedMultiplier = 1;
+  let wetness = [];
 
   function easeOutCubic(t) {
     return 1 - Math.pow(1 - t, 3);
@@ -32,6 +33,7 @@ export function createShoreScene(p) {
     ];
     waveFronts = [];
     lastWaveStart = 0;
+    wetness = new Array(241).fill(0);
   }
 
   return {
@@ -105,31 +107,48 @@ export function createShoreScene(p) {
       const amplitudeScale = 1;
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
-        const slowDrift = p.sin((time * 0.00006) + x * 0.0002) * 10;
-        const largeCurves = p.noise(x * 0.00035, time * 0.00004) * 180 - 90;
-        const mediumUndulation = p.noise(x * 0.0012, time * 0.00008) * 60 - 30;
+        const slowDrift = p.sin((time * 0.00006) + x * 0.0002) * 14;
+        const sweepingCurves = p.noise(x * 0.00022, time * 0.00003) * 240 - 120;
+        const largeCurves = p.noise(x * 0.00055, time * 0.00004) * 180 - 90;
+        const mediumUndulation = p.noise(x * 0.0013, time * 0.00008) * 72 - 36;
         const fineRipples = p.noise(x * 0.003, time * 0.0001) * 24 - 12;
-        const y = shorelineBase + largeCurves + mediumUndulation + fineRipples + slowDrift;
+        const y = shorelineBase + sweepingCurves + largeCurves + mediumUndulation + fineRipples + slowDrift;
         shorelineY[i] = y + waves.reduce((sum, wave) => sum + wave.sample(x, time), 0) * amplitudeScale * 0.35;
       }
 
-      const wetBand = 30;
-      p.fill(214, 198, 160, 90);
+      wetness = wetness.map(w => w * 0.985);
+
+      const wetBand = 48;
+      p.noStroke();
       p.beginShape();
+      p.fill(214, 198, 160, 90);
       p.vertex(0, shorelineY[0]);
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
-        p.vertex(x, shorelineY[i] + wetBand * 0.35);
+        p.vertex(x, shorelineY[i] + wetBand * 0.4);
       }
       p.vertex(p.width, shorelineY[segments] + wetBand);
       p.vertex(p.width, shorelineY[segments] + wetBand * 1.5);
       p.vertex(0, shorelineY[0] + wetBand * 1.5);
       p.endShape(p.CLOSE);
 
+      p.noStroke();
+      for (let i = 0; i <= segments; i++) {
+        const x = (i / segments) * p.width;
+        const damp = p.constrain(wetness[i], 0, 1);
+        if (damp > 0.01) {
+          const top = shorelineY[i];
+          const fade = p.lerp(0, wetBand * 1.2, damp);
+          const alpha = p.lerp(0, 120, damp);
+          p.fill(196, 182, 150, alpha);
+          p.rect(x, top, p.width / segments + 2, fade);
+        }
+      }
+
       const now = time;
-      const desiredInterval = 2600 / speedMultiplier;
+      const desiredInterval = 1800 / speedMultiplier;
       if (waveFronts.length === 0 || now - lastWaveStart > desiredInterval) {
-        waveFronts.push({ start: now, duration: 9000 / speedMultiplier, foamSeed: p.random(1000) });
+        waveFronts.push({ start: now, duration: 7500 / speedMultiplier, foamSeed: p.random(1000) });
         lastWaveStart = now;
       }
 
@@ -137,10 +156,10 @@ export function createShoreScene(p) {
         const progress = (now - front.start) / front.duration;
         if (progress > 1.05) return false;
         const eased = easeOutCubic(p.constrain(progress, 0, 1));
-        const crestOffset = p.lerp(-60, 32, eased);
-        const foamThickness = p.lerp(46, 18, eased);
-        const waterAlpha = p.lerp(160, 40, eased);
-        const foamAlpha = p.lerp(200, 80, eased);
+        const crestOffset = p.lerp(-140, 60, eased);
+        const foamThickness = p.lerp(56, 20, eased);
+        const waterAlpha = p.lerp(170, 50, eased);
+        const foamAlpha = p.lerp(210, 90, eased);
 
         p.fill(90, 170, 210, waterAlpha);
         p.beginShape();
@@ -168,6 +187,15 @@ export function createShoreScene(p) {
           p.vertex(x, crest);
         }
         p.endShape(p.CLOSE);
+
+        const wetBoost = p.lerp(0.9, 0.35, eased);
+        const splashDepth = crestOffset + foamThickness + 30;
+        for (let i = 0; i <= segments; i++) {
+          const depth = shorelineY[i] + splashDepth;
+          if (depth > shorelineY[i]) {
+            wetness[i] = Math.max(wetness[i], wetBoost);
+          }
+        }
 
         return true;
       });
