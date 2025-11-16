@@ -1,39 +1,14 @@
-class Wave {
-  constructor(p, amplitude, speed, wavelength, phase) {
-    this.p = p;
-    this.amplitude = amplitude;
-    this.speed = speed;
-    this.wavelength = wavelength;
-    this.phase = phase;
-  }
-
-  sample(x, time) {
-    const p = this.p;
-    return this.amplitude * p.sin((x / this.wavelength) + time * this.speed + this.phase);
-  }
-}
-
 export function createShoreScene(p) {
-  let waves = [];
-  let waveFronts = [];
-  let wetness = [];
-  let lastWaveStart = 0;
   let time = 0;
   let speedMultiplier = 1;
 
-  function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-  }
-
-  function rebuildWaves() {
-    waves = [
-      new Wave(p, 6, 0.00018, 220, 0),
-      new Wave(p, 4, 0.00026, 340, p.PI / 3),
-      new Wave(p, 3, 0.00034, 480, p.PI / 6)
-    ];
-    wetness = Array.from({ length: 241 }, () => 0);
-    waveFronts = [];
-    lastWaveStart = 0;
+  function drawBands(yStart, yEnd, palette) {
+    const bandHeight = (yEnd - yStart) / palette.length;
+    palette.forEach((color, index) => {
+      p.noStroke();
+      p.fill(color.r, color.g, color.b);
+      p.rect(0, yStart + index * bandHeight, p.width, bandHeight + 1);
+    });
   }
 
   return {
@@ -41,158 +16,85 @@ export function createShoreScene(p) {
     name: 'Rivage paisible',
     description: 'Vagues douces sur le sable',
     enter() {
-      rebuildWaves();
       time = 0;
     },
     resize() {
-      rebuildWaves();
+      // No dynamic elements to rebuild on resize
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
-    pulse() {
-    },
+    pulse() {},
     draw() {
-      time += 12 * speedMultiplier;
+      time += 16 * speedMultiplier;
 
-      const sandTop = p.height * 0.55;
+      const skyHeight = p.height * 0.45;
+      const waterTop = skyHeight;
+      const waterBottom = p.height * 0.92;
 
-      const waterSteps = 200;
-      const waterHeight = sandTop + 80;
-      p.noStroke();
-      for (let i = 0; i < waterSteps; i++) {
-        const t = i / (waterSteps - 1);
-        const r = p.lerp(28, 66, t);
-        const g = p.lerp(120, 170, t);
-        const b = p.lerp(168, 214, t);
-        p.fill(r, g, b);
-        p.rect(0, (waterHeight / waterSteps) * i, p.width, waterHeight / waterSteps + 1);
-      }
+      drawBands(0, skyHeight, [
+        { r: 46, g: 79, b: 112 },
+        { r: 58, g: 102, b: 145 },
+        { r: 84, g: 132, b: 175 },
+        { r: 120, g: 164, b: 204 },
+        { r: 178, g: 206, b: 232 }
+      ]);
 
-      const shorelineBase = sandTop - 10;
-      const segments = 240;
+      drawBands(waterTop, waterBottom, [
+        { r: 28, g: 121, b: 165 },
+        { r: 44, g: 145, b: 182 },
+        { r: 64, g: 168, b: 198 },
+        { r: 88, g: 188, b: 207 },
+        { r: 120, g: 207, b: 215 }
+      ]);
+
+      const shorelineBase = p.height * 0.62;
+      const shorelineAmplitude = 26;
+      const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
+      const verticalSwell = p.sin(time * 0.0006) * 16;
+
+      const segments = 160;
       const shorelineY = [];
-      const amplitudeScale = 1;
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
-        const slowDrift = p.sin((time * 0.00006) + x * 0.00018) * 18;
-        const longSwell = p.sin(x * 0.001 + time * 0.00004) * 90;
-        const largeCurves = p.noise(x * 0.00028, time * 0.00005) * 220 - 110;
-        const mediumUndulation = p.noise(x * 0.0012, time * 0.00008) * 70 - 35;
-        const fineRipples = p.noise(x * 0.0035, time * 0.0001) * 26 - 13;
-        const y = shorelineBase + longSwell + largeCurves + mediumUndulation + fineRipples + slowDrift;
-        shorelineY[i] = y + waves.reduce((sum, wave) => sum + wave.sample(x, time), 0) * amplitudeScale * 0.35;
+        const sine = p.sin(x * shorelineFrequency);
+        shorelineY[i] = shorelineBase + verticalSwell + sine * shorelineAmplitude;
       }
 
       p.noStroke();
-      p.fill(227, 205, 162, 200);
+      drawBands(shorelineBase, p.height, [
+        { r: 230, g: 205, b: 170 },
+        { r: 220, g: 193, b: 157 },
+        { r: 211, g: 182, b: 146 }
+      ]);
+
+      p.noStroke();
+      p.fill(233, 214, 175, 210);
       p.beginShape();
+      p.vertex(0, waterTop);
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
         p.vertex(x, shorelineY[i]);
       }
-      p.vertex(p.width, p.height);
-      p.vertex(0, p.height);
+      p.vertex(p.width, shorelineY[segments]);
+      p.vertex(p.width, waterTop);
       p.endShape(p.CLOSE);
 
-      const sandHeight = p.height - sandTop;
-      for (let x = 0; x <= p.width; x += 2) {
-        const idx = Math.floor((x / p.width) * segments);
-        const startY = shorelineY[idx];
-        for (let y = startY; y < p.height; y += 2) {
-          const t = (y - startY) / Math.max(1, sandHeight);
-          p.fill(227, 205, 162, p.lerp(210, 150, t));
-          p.rect(x, y, 2, 2);
-        }
-      }
-
-      p.stroke(196, 176, 138, 45);
-      p.strokeWeight(1.2);
-      for (let y = sandTop + 8; y < p.height; y += 22) {
-        p.beginShape();
-        for (let x = 0; x <= p.width; x += 18) {
-          const jitter = p.noise(x * 0.03, y * 0.02) * 8 - 4;
-          const idx = Math.floor((x / p.width) * segments);
-          const offset = p.max(0, y - shorelineY[idx]);
-          const undulation = p.noise(y * 0.012, time * 0.00009) * 24;
-          p.vertex(x, y + undulation + jitter + offset);
-        }
-        p.endShape();
-      }
-
-      p.noStroke();
-      for (let y = sandTop; y < p.height; y += 3) {
-        for (let x = 0; x < p.width; x += 4) {
-          const idx = Math.floor((x / p.width) * segments);
-          if (y < shorelineY[idx]) continue;
-          const grain = p.noise(x * 0.018, y * 0.02, time * 0.00008);
-          if (grain > 0.55) {
-            const alpha = p.map(grain, 0.55, 1, 12, 42, true);
-            p.fill(200, 182, 145, alpha);
-            p.rect(x, y, 2, 2);
-          }
-        }
-      }
-
-      wetness = wetness.map(w => w * 0.985);
-      p.fill(200, 184, 150, 110);
+      p.stroke(255, 245, 225, 200);
+      p.strokeWeight(1.4);
+      p.noFill();
       p.beginShape();
-      p.vertex(0, shorelineY[0]);
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
-        const wetHeight = wetness[i] * 60 + 22;
-        p.vertex(x, shorelineY[i] + wetHeight);
+        p.vertex(x, shorelineY[i] - 1.5);
       }
-      p.vertex(p.width, shorelineY[segments] + wetness[segments] * 60 + 40);
-      p.vertex(0, shorelineY[0] + wetness[0] * 60 + 40);
-      p.endShape(p.CLOSE);
+      p.endShape();
 
-      const now = time;
-      const desiredInterval = 2000 / speedMultiplier;
-      if (waveFronts.length === 0 || now - lastWaveStart > desiredInterval) {
-        waveFronts.push({ start: now, duration: 6500 / speedMultiplier, foamSeed: p.random(1000) });
-        lastWaveStart = now;
-      }
-
-      waveFronts = waveFronts.filter(front => {
-        const progress = (now - front.start) / front.duration;
-        if (progress > 1.05) return false;
-        const eased = easeOutCubic(p.constrain(progress, 0, 1));
-        const crestOffset = p.lerp(-150, 40, eased);
-        const foamThickness = p.lerp(52, 16, eased);
-        const waterAlpha = p.lerp(170, 30, eased);
-        const foamAlpha = p.lerp(210, 70, eased);
-
-        p.fill(90, 170, 210, waterAlpha);
-        p.beginShape();
-        for (let i = 0; i <= segments; i++) {
-          const x = (i / segments) * p.width;
-          const crest = shorelineY[i] + crestOffset + p.sin(x * 0.008 + now * 0.0006) * 3 * (1 - eased);
-          p.vertex(x, crest);
-          wetness[i] = Math.min(1, Math.max(wetness[i], 0.85 - eased * 0.5));
-        }
-        p.vertex(p.width, shorelineY[segments] + crestOffset + foamThickness + 50);
-        p.vertex(0, shorelineY[0] + crestOffset + foamThickness + 50);
-        p.endShape(p.CLOSE);
-
-        p.fill(255, 255, 255, foamAlpha);
-        p.beginShape();
-        for (let i = 0; i <= segments; i++) {
-          const x = (i / segments) * p.width;
-          const wobble = p.noise(x * 0.012, front.foamSeed) * 10 - 5;
-          const crest = shorelineY[i] + crestOffset + wobble;
-          p.vertex(x, crest);
-        }
-        for (let i = segments; i >= 0; i--) {
-          const x = (i / segments) * p.width;
-          const wobble = p.noise(x * 0.015, front.foamSeed + 40) * 10 - 5;
-          const crest = shorelineY[i] + crestOffset + foamThickness + wobble;
-          p.vertex(x, crest);
-        }
-        p.endShape(p.CLOSE);
-
-        return true;
-      });
+      const reflectionX = p.width * 0.6 + p.sin(time * 0.00025) * 60;
+      const reflectionY = waterTop + (waterBottom - waterTop) * 0.35 + p.sin(time * 0.0003) * 10;
+      p.noStroke();
+      p.fill(255, 236, 210, 170);
+      p.ellipse(reflectionX, reflectionY, p.width * 0.18, p.height * 0.04);
     }
   };
 }
