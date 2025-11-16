@@ -56,7 +56,6 @@ export function createShoreScene(p) {
       time += 12 * speedMultiplier;
 
       const sandTop = p.height * 0.55;
-      const sandHeight = p.height - sandTop;
 
       const waterSteps = 200;
       const waterHeight = sandTop + 80;
@@ -68,37 +67,6 @@ export function createShoreScene(p) {
         const b = p.lerp(168, 214, t);
         p.fill(r, g, b);
         p.rect(0, (waterHeight / waterSteps) * i, p.width, waterHeight / waterSteps + 1);
-      }
-
-      const sandSteps = Math.max(1, Math.floor(sandHeight));
-      for (let i = 0; i < sandSteps; i++) {
-        const t = i / Math.max(1, sandSteps - 1);
-        p.fill(227, 205, 162, p.lerp(210, 150, t));
-        p.rect(0, sandTop + i, p.width, 1.2);
-      }
-
-      p.noStroke();
-      for (let y = sandTop; y < p.height; y += 3) {
-        for (let x = 0; x < p.width; x += 4) {
-          const grain = p.noise(x * 0.018, y * 0.02, time * 0.00008);
-          if (grain > 0.55) {
-            const alpha = p.map(grain, 0.55, 1, 12, 42, true);
-            p.fill(200, 182, 145, alpha);
-            p.rect(x, y, 2, 2);
-          }
-        }
-      }
-
-      p.stroke(196, 176, 138, 45);
-      p.strokeWeight(1.2);
-      for (let y = sandTop + 8; y < p.height; y += 22) {
-        const undulation = p.noise(y * 0.012, time * 0.00009) * 24;
-        p.beginShape();
-        for (let x = 0; x <= p.width; x += 18) {
-          const jitter = p.noise(x * 0.03, y * 0.02) * 8 - 4;
-          p.vertex(x, y + undulation + jitter);
-        }
-        p.endShape();
       }
 
       const shorelineBase = sandTop - 10;
@@ -114,6 +82,56 @@ export function createShoreScene(p) {
         const fineRipples = p.noise(x * 0.0035, time * 0.0001) * 26 - 13;
         const y = shorelineBase + longSwell + largeCurves + mediumUndulation + fineRipples + slowDrift;
         shorelineY[i] = y + waves.reduce((sum, wave) => sum + wave.sample(x, time), 0) * amplitudeScale * 0.35;
+      }
+
+      p.noStroke();
+      p.fill(227, 205, 162, 200);
+      p.beginShape();
+      for (let i = 0; i <= segments; i++) {
+        const x = (i / segments) * p.width;
+        p.vertex(x, shorelineY[i]);
+      }
+      p.vertex(p.width, p.height);
+      p.vertex(0, p.height);
+      p.endShape(p.CLOSE);
+
+      const sandHeight = p.height - sandTop;
+      for (let x = 0; x <= p.width; x += 2) {
+        const idx = Math.floor((x / p.width) * segments);
+        const startY = shorelineY[idx];
+        for (let y = startY; y < p.height; y += 2) {
+          const t = (y - startY) / Math.max(1, sandHeight);
+          p.fill(227, 205, 162, p.lerp(210, 150, t));
+          p.rect(x, y, 2, 2);
+        }
+      }
+
+      p.stroke(196, 176, 138, 45);
+      p.strokeWeight(1.2);
+      for (let y = sandTop + 8; y < p.height; y += 22) {
+        p.beginShape();
+        for (let x = 0; x <= p.width; x += 18) {
+          const jitter = p.noise(x * 0.03, y * 0.02) * 8 - 4;
+          const idx = Math.floor((x / p.width) * segments);
+          const offset = p.max(0, y - shorelineY[idx]);
+          const undulation = p.noise(y * 0.012, time * 0.00009) * 24;
+          p.vertex(x, y + undulation + jitter + offset);
+        }
+        p.endShape();
+      }
+
+      p.noStroke();
+      for (let y = sandTop; y < p.height; y += 3) {
+        for (let x = 0; x < p.width; x += 4) {
+          const idx = Math.floor((x / p.width) * segments);
+          if (y < shorelineY[idx]) continue;
+          const grain = p.noise(x * 0.018, y * 0.02, time * 0.00008);
+          if (grain > 0.55) {
+            const alpha = p.map(grain, 0.55, 1, 12, 42, true);
+            p.fill(200, 182, 145, alpha);
+            p.rect(x, y, 2, 2);
+          }
+        }
       }
 
       wetness = wetness.map(w => w * 0.985);
