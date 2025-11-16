@@ -40,14 +40,6 @@ export function createShoreScene(p) {
         { r: 178, g: 206, b: 232 }
       ]);
 
-      const waterPalette = [
-        { r: 28, g: 121, b: 165 },
-        { r: 44, g: 145, b: 182 },
-        { r: 64, g: 168, b: 198 },
-        { r: 88, g: 188, b: 207 },
-        { r: 120, g: 207, b: 215 }
-      ];
-
       const shorelineBase = p.height * 0.62;
       const shorelineAmplitude = 26;
       const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
@@ -64,29 +56,31 @@ export function createShoreScene(p) {
       const shorelineY = baseShoreline.map((y) => y + verticalSwell);
 
       const maxShoreline = Math.max(...shorelineY);
-      const waterDepth = Math.max(1, maxShoreline - waterTop);
-      const waterBandHeight = waterDepth / waterPalette.length;
 
-      for (let band = waterPalette.length - 1; band >= 0; band--) {
-        const color = waterPalette[band];
-        const topOffset = waterBandHeight * band;
-        const bottomOffset = waterBandHeight * (band + 1);
+      const deepWaterColor = { r: 28, g: 121, b: 165 };
+      const shoreWaterColor = { r: 120, g: 207, b: 215 };
+      const ctx = p.drawingContext;
+      const waterGradient = ctx.createLinearGradient(0, waterTop, 0, maxShoreline);
+      waterGradient.addColorStop(
+        0,
+        `rgba(${deepWaterColor.r}, ${deepWaterColor.g}, ${deepWaterColor.b}, 1)`
+      );
+      waterGradient.addColorStop(
+        1,
+        `rgba(${shoreWaterColor.r}, ${shoreWaterColor.g}, ${shoreWaterColor.b}, 1)`
+      );
 
-        p.noStroke();
-        p.fill(color.r, color.g, color.b);
-        p.beginShape();
-        for (let i = 0; i <= segments; i++) {
-          const x = (i / segments) * p.width;
-          const lowerY = Math.max(waterTop, shorelineY[i] - topOffset);
-          p.vertex(x, lowerY);
-        }
-        for (let i = segments; i >= 0; i--) {
-          const x = (i / segments) * p.width;
-          const upperY = Math.max(waterTop, shorelineY[i] - bottomOffset) - 1;
-          p.vertex(x, upperY);
-        }
-        p.endShape(p.CLOSE);
+      ctx.fillStyle = waterGradient;
+      ctx.beginPath();
+      ctx.moveTo(0, waterTop);
+      ctx.lineTo(p.width, waterTop);
+      for (let i = segments; i >= 0; i--) {
+        const x = (i / segments) * p.width;
+        const y = Math.max(waterTop, shorelineY[i]);
+        ctx.lineTo(x, y);
       }
+      ctx.closePath();
+      ctx.fill();
 
       p.noStroke();
       p.fill(224, 199, 160);
