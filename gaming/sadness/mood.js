@@ -46,11 +46,27 @@ let speedBurst = null;
 let playlistStarted = false;
 let playlistAudio = null;
 let playlistIndex = 0;
+let playlistOrder = [];
 let activeSceneAudio = null;
 const sceneAudioCache = new Map();
 
 const clamp01 = value => Math.min(1, Math.max(0, value));
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
+const shuffleInPlace = array => {
+  for (let i = array.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+};
+
+function resetPlaylistOrder(previousTrackIndex = null) {
+  playlistOrder = PLAYLIST_TRACKS.map((_, index) => index);
+  shuffleInPlace(playlistOrder);
+  if (previousTrackIndex !== null && playlistOrder[0] === previousTrackIndex && playlistOrder.length > 1) {
+    [playlistOrder[0], playlistOrder[1]] = [playlistOrder[1], playlistOrder[0]];
+  }
+}
 
 function createAudioElement(src, { volume = 1, loop = false } = {}) {
   const audio = new Audio(src);
@@ -66,15 +82,25 @@ function startPlaylistIfNeeded() {
   if (playlistStarted || !PLAYLIST_TRACKS.length) return;
   playlistStarted = true;
 
+  resetPlaylistOrder();
+
   const playTrack = index => {
     if (!PLAYLIST_TRACKS.length) return;
-    playlistIndex = index % PLAYLIST_TRACKS.length;
+    if (!playlistOrder.length) {
+      resetPlaylistOrder();
+    }
+    playlistIndex = index % playlistOrder.length;
+    const trackIndex = playlistOrder[playlistIndex];
     if (playlistAudio) {
       playlistAudio.pause();
     }
-    const audio = createAudioElement(PLAYLIST_TRACKS[playlistIndex], { volume: 1 });
+    const audio = createAudioElement(PLAYLIST_TRACKS[trackIndex], { volume: 1 });
     audio.addEventListener('ended', () => {
-      playTrack((playlistIndex + 1) % PLAYLIST_TRACKS.length);
+      const isLoopRestart = playlistIndex + 1 >= playlistOrder.length;
+      if (isLoopRestart) {
+        resetPlaylistOrder(trackIndex);
+      }
+      playTrack((playlistIndex + 1) % playlistOrder.length);
     });
     playlistAudio = audio;
     audio.play().catch(() => {});
