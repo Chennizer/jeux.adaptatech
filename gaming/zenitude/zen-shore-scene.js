@@ -15,12 +15,10 @@ class Wave {
 
 export function createShoreScene(p) {
   let waves = [];
-  let foamOffsets = [];
   let waveFronts = [];
   let lastWaveStart = 0;
   let time = 0;
   let speedMultiplier = 1;
-  let sparklePhase = 0;
 
   function easeOutCubic(t) {
     return 1 - Math.pow(1 - t, 3);
@@ -32,12 +30,6 @@ export function createShoreScene(p) {
       new Wave(p, 4, 0.00026, 340, p.PI / 3),
       new Wave(p, 3, 0.00034, 480, p.PI / 6)
     ];
-    foamOffsets = Array.from({ length: 120 }, () => ({
-      x: p.random(p.width),
-      y: p.random(-16, 8),
-      size: p.random(22, 36),
-      alpha: p.random(70, 130)
-    }));
     waveFronts = [];
     lastWaveStart = 0;
   }
@@ -49,7 +41,6 @@ export function createShoreScene(p) {
     enter() {
       rebuildWaves();
       time = 0;
-      sparklePhase = 0;
     },
     resize() {
       rebuildWaves();
@@ -58,11 +49,9 @@ export function createShoreScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      sparklePhase = 1;
     },
     draw() {
       time += 12 * speedMultiplier;
-      sparklePhase = p.max(0, sparklePhase - 0.004 * speedMultiplier);
 
       const sandTop = p.height * 0.55;
       const sandHeight = p.height - sandTop;
@@ -89,12 +78,13 @@ export function createShoreScene(p) {
       const shorelineBase = sandTop - 10;
       const segments = 240;
       const shorelineY = [];
-      const amplitudeScale = p.lerp(0.85, 1.1, sparklePhase);
+      const amplitudeScale = 1;
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
         const slowDrift = p.sin((time * 0.00006) + x * 0.0002) * 6;
-        const irregularity = p.noise(x * 0.002, time * 0.00008) * 28 - 14;
-        const y = shorelineBase + irregularity + slowDrift;
+        const largeCurves = p.noise(x * 0.0006, time * 0.00005) * 90 - 45;
+        const fineRipples = p.noise(x * 0.003, time * 0.0001) * 24 - 12;
+        const y = shorelineBase + largeCurves + fineRipples + slowDrift;
         shorelineY[i] = y + waves.reduce((sum, wave) => sum + wave.sample(x, time), 0) * amplitudeScale * 0.35;
       }
 
@@ -154,24 +144,8 @@ export function createShoreScene(p) {
         }
         p.endShape(p.CLOSE);
 
-        foamOffsets.forEach(foam => {
-          const foamY = shorelineY[Math.floor((foam.x / p.width) * segments)] + crestOffset + p.random(-4, 6);
-          p.fill(255, 255, 255, foam.alpha * p.lerp(1, 0.4, eased));
-          p.ellipse(foam.x, foamY, foam.size * 0.8, foam.size * 0.5);
-        });
-
         return true;
       });
-
-      p.noStroke();
-      p.fill(255, 255, 255, 30 + sparklePhase * 30);
-      const sparkleCount = Math.floor(30 + sparklePhase * 30);
-      for (let i = 0; i < sparkleCount; i++) {
-        const x = p.random(p.width);
-        const y = shorelineY[Math.floor((x / p.width) * segments)] + p.random(-14, 20);
-        const size = p.random(1.5, 3.5);
-        p.ellipse(x, y, size, size);
-      }
     }
   };
 }
