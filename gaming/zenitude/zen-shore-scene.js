@@ -48,8 +48,6 @@ export function createShoreScene(p) {
         { r: 120, g: 207, b: 215 }
       ];
 
-      drawBands(waterTop, waterBottom, waterPalette);
-
       const shorelineBase = p.height * 0.62;
       const shorelineAmplitude = 26;
       const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
@@ -65,36 +63,44 @@ export function createShoreScene(p) {
 
       const shorelineY = baseShoreline.map((y) => y + verticalSwell);
 
-      const sandPalette = [
-        { r: 230, g: 205, b: 170 },
-        { r: 220, g: 193, b: 157 },
-        { r: 211, g: 182, b: 146 }
-      ];
+      const maxShoreline = Math.max(...shorelineY);
+      const waterDepth = Math.max(1, maxShoreline - waterTop);
+      const waterBandHeight = waterDepth / waterPalette.length;
 
-      const minShoreline = Math.min(...shorelineY);
-      const sandHeight = p.height - minShoreline;
-      const bandHeight = sandHeight / sandPalette.length;
-
-      sandPalette.forEach((color, index) => {
-        const topOffset = bandHeight * index;
-        const bottomOffset = bandHeight * (index + 1);
+      for (let band = waterPalette.length - 1; band >= 0; band--) {
+        const color = waterPalette[band];
+        const topOffset = waterBandHeight * band;
+        const bottomOffset = waterBandHeight * (band + 1);
 
         p.noStroke();
         p.fill(color.r, color.g, color.b);
         p.beginShape();
         for (let i = 0; i <= segments; i++) {
           const x = (i / segments) * p.width;
-          p.vertex(x, shorelineY[i] + topOffset);
+          const lowerY = Math.max(waterTop, shorelineY[i] - topOffset);
+          p.vertex(x, lowerY);
         }
         for (let i = segments; i >= 0; i--) {
           const x = (i / segments) * p.width;
-          p.vertex(x, shorelineY[i] + bottomOffset + 1);
+          const upperY = Math.max(waterTop, shorelineY[i] - bottomOffset) - 1;
+          p.vertex(x, upperY);
         }
         p.endShape(p.CLOSE);
-      });
+      }
 
       p.noStroke();
-      p.fill(233, 214, 175, 210);
+      p.fill(224, 199, 160);
+      p.beginShape();
+      for (let i = 0; i <= segments; i++) {
+        const x = (i / segments) * p.width;
+        p.vertex(x, shorelineY[i]);
+      }
+      p.vertex(p.width, p.height);
+      p.vertex(0, p.height);
+      p.endShape(p.CLOSE);
+
+      p.noStroke();
+      p.fill(170, 218, 230, 165);
       p.beginShape();
       p.vertex(0, waterTop);
       for (let i = 0; i <= segments; i++) {
