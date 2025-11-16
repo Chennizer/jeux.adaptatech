@@ -2,6 +2,7 @@ import { createRainScene } from './rain-scene.js';
 import { createSnowScene } from './snow-scene.js';
 import { createPetalScene } from './petal-scene.js';
 import { createCandleScene } from './candle-scene.js';
+import { createFaceMaskScene } from './facemask-scene.js';
 
 const PLAYLIST_TRACKS = [
   '../../songs/sadness/v5sadviolinmusic1.mp3',
@@ -15,7 +16,8 @@ const SCENE_SOUNDTRACKS = {
   rain: '../../sounds/sadness/softrain.mp3',
   snow: '../../sounds/sadness/windandsnow.mp3',
   candle: '../../sounds/sadness/candle.mp3',
-  petal: '../../sounds/sadness/subtlewind.mp3'
+  petal: '../../sounds/sadness/subtlewind.mp3',
+  mask: '../../sounds/sadness/subtlewind.mp3'
 };
 
 const startOverlayEl = document.getElementById('promptOverlay');
@@ -240,6 +242,7 @@ const sketch = p => {
     const canvas = p.createCanvas(window.innerWidth, window.innerHeight);
     canvas.id('mood-canvas');
     scenes = [
+      createFaceMaskScene(p),
       createRainScene(p),
       createSnowScene(p),
       createPetalScene(p),
