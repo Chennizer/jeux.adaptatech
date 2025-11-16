@@ -110,11 +110,6 @@ export function createShoreScene(p) {
       }
       p.endShape();
 
-      const reflectionX = p.width * 0.6 + p.sin(time * 0.00025) * 60;
-      const reflectionY = waterTop + (waterBottom - waterTop) * 0.35 + p.sin(time * 0.0003) * 10;
-      p.noStroke();
-      p.fill(255, 236, 210, 170);
-      p.ellipse(reflectionX, reflectionY, p.width * 0.18, p.height * 0.04);
     }
   };
 }
