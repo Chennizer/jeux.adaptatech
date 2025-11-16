@@ -1,302 +1,143 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Candle of Memory — Night Sky (Bottom Flush)</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
-  <style>
-    html,body{margin:0;height:100%;background:#000;color:#fff;overflow:hidden;font-family:system-ui, Segoe UI, Arial;}
-    #hint{
-      position:fixed; left:50%; transform:translateX(-50%);
-      bottom:20px; padding:10px 14px; border-radius:12px;
-      background:rgba(255,255,255,0.08); backdrop-filter:blur(4px);
-      border:1px solid rgba(255,255,255,0.18); font-size:14px; letter-spacing:.2px;
-      user-select:none
-    }
-    #topbar{
-      position:fixed; top:10px; left:50%; transform:translateX(-50%);
-      display:flex; gap:10px; align-items:center;
-      background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18);
-      border-radius:12px; padding:6px 10px; font-size:13px
-    }
-    #topbar label{display:flex; gap:6px; align-items:center; cursor:pointer;}
-    input[type="checkbox"]{transform:scale(1.2)}
-  </style>
+  <meta charset="UTF-8" />
+  <title>Face with Blue Tears - p5.js</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
 </head>
 <body>
-  <div id="topbar">
-    <label><input id="highContrast" type="checkbox"> High contrast</label>
-    <label><input id="reducedMotion" type="checkbox"> Reduced motion</label>
-  </div>
-  <div id="hint">Press SPACE (or click/tap) to brighten the flame and release memories</div>
+<script>
+let tears = [];
 
-  <script>
-    let embers = [];
-    let glow = 0, baseFlicker = 0.15, t = 0;
-    let hc = false, rm = false;
-    let metrics = null;
+function setup() {
+  createCanvas(800, 600);
+  for (let i = 0; i < 120; i++) {
+    tears.push(new Tear(random(['left', 'right'])));
+  }
+  strokeJoin(ROUND);
+}
 
-    // Stars
-    let stars = [];
-    const STAR_DENSITY = 0.00025;
+function draw() {
+  background(255); // white
+  drawFace();
+  for (let t of tears) {
+    t.update();
+    t.show();
+  }
+}
 
-    function setup(){
-      createCanvas(windowWidth, windowHeight);
-      noStroke();
-      document.getElementById('highContrast').addEventListener('change', e => hc = e.target.checked);
-      document.getElementById('reducedMotion').addEventListener('change', e => rm = e.target.checked);
-      initStars();
-    }
-    function windowResized(){ resizeCanvas(windowWidth, windowHeight); initStars(); }
+function drawFace() {
+  push();
+  translate(width / 2, height / 2);
 
-    function initStars(){
-      const count = max(80, floor(width * height * STAR_DENSITY));
-      stars = [];
-      for(let i=0;i<count;i++){
-        stars.push({
-          x: random(width),
-          y: random(height),
-          r: random(0.6, 1.8),
-          base: random(60, 140),
-          tw: random(0.2, 0.6),
-          spd: random(0.15, 0.5),
-          phase: random(TWO_PI)
-        });
-      }
-    }
+  stroke(0);
+  noFill();
 
-    // -------- Geometry anchored to very bottom --------
-    function computeMetrics(){
-      const cx = width/2;
+  // Head outline (big "grand plan" face)
+  strokeWeight(3);
+  ellipse(0, 0, 260, 340);
 
-      const w  = min(170, width*0.12);
-      const h  = min(420, height*0.58);     // tall but keeps tip visible
+  // Jaw and chin (extra contour)
+  arc(0, 60, 220, 180, PI + QUARTER_PI, TWO_PI - QUARTER_PI);
 
-      const baseY = height;                 // flush with canvas bottom
-      const cy = baseY;                     // our body rect uses CENTER around cy
-      const r  = 20;
-      const topY = cy - h;
+  // Nose
+  strokeWeight(2);
+  line(0, -40, -5, 10);
+  arc(-5, 15, 20, 16, 0, PI);
 
-      const wickHeight = h * 0.12;
-      const wickBaseY  = topY + 14;
-      const wickTopY   = wickBaseY - wickHeight;
-      const flameY     = wickTopY - h * 0.04;
+  // Eyes (just above center)
+  let eyeY = -40;
+  let eyeOffsetX = 80;
 
-      return {cx, cy, w, h, r, topY, wickBaseY, wickTopY, flameY, baseY};
-    }
+  // Left eye
+  strokeWeight(2.2);
+  arc(-eyeOffsetX, eyeY, 60, 28, 0, PI);
+  // Lower lid hint
+  arc(-eyeOffsetX, eyeY + 4, 40, 16, PI, TWO_PI);
 
-    function draw(){
-      t += 0.01;
-      metrics = computeMetrics();
+  // Right eye
+  arc(eyeOffsetX, eyeY, 60, 28, 0, PI);
+  arc(eyeOffsetX, eyeY + 4, 40, 16, PI, TWO_PI);
 
-      drawNightSky();
-      drawGround(metrics);           // floor/shadow just above bottom
+  // Pupils (simple abstract dots)
+  fill(0);
+  noStroke();
+  circle(-eyeOffsetX, eyeY, 6);
+  circle(eyeOffsetX, eyeY, 6);
 
-      drawCandleBody(metrics);
-      drawWick(metrics);
+  // Eyebrows
+  noFill();
+  stroke(0);
+  strokeWeight(3);
+  arc(-eyeOffsetX, eyeY - 25, 80, 30, PI + 0.4, TWO_PI - 0.2);
+  arc(eyeOffsetX, eyeY - 25, 80, 30, PI + 0.2, TWO_PI - 0.4);
 
-      const flicker = rm ? 0.05 : baseFlicker;
-      const noiseF = map(noise(t*2), 0,1, -flicker, flicker);
-      const size = lerp(height*0.12, height*0.16, constrain(glow,0,1)) * (1 + noiseF);
-      const tilt = (rm ? 0.02 : 0.06) * sin(t*2.0);
+  // Mouth
+  strokeWeight(2.5);
+  let mouthY = 60;
+  arc(0, mouthY, 90, 40, 0.1 * PI, 0.9 * PI); // neutral / slightly sad
+  // Under-lip shadow line
+  strokeWeight(1.5);
+  arc(0, mouthY + 15, 60, 20, 0.1 * PI, 0.9 * PI);
 
-      drawFlame(metrics.cx, metrics.flameY, size, tilt);
+  // Minimal neck lines
+  strokeWeight(2);
+  line(-40, 150, -30, 220);
+  line(40, 150, 30, 220);
 
-      const auraCenterY = metrics.flameY - size*0.35;
-      drawAura(metrics.cx, auraCenterY, size);
+  pop();
+}
 
-      if(!rm) drawWaxDrips(metrics);
+// Tear particle class
+class Tear {
+  constructor(side) {
+    this.side = side;
+    this.reset(true);
+  }
 
-      updateEmbers();
-      glow = max(0, glow - (rm ? 0.01 : 0.02));
-    }
+  reset(first = false) {
+    // Eye positions (must match drawFace)
+    const eyeYCanvas = height / 2 - 40;
+    const eyeOffsetX = 80;
 
-    // ---------- Background ----------
-    function drawNightSky(){
-      for(let y=0; y<height; y+=4){
-        const p = y/height;
-        const c1 = color(3,3,6), c2 = color(10,8,14);
-        const c = lerpColor(c1, c2, p);
-        fill(c); rect(0,y,width,4);
-      }
-      for(const s of stars){
-        const twinkle = rm ? 0 : s.tw * 50 * (0.5 + 0.5*sin((t*s.spd) + s.phase));
-        const a = constrain(s.base + twinkle, 40, 200);
-        fill(255, 255, 255, hc ? min(255, a+30) : a);
-        ellipse(s.x, s.y, s.r, s.r);
-      }
+    if (this.side === 'left') {
+      this.baseX = width / 2 - eyeOffsetX;
+    } else {
+      this.baseX = width / 2 + eyeOffsetX;
     }
 
-    // ---------- Ground + shadow (kept inside canvas) ----------
-    function drawGround(m){
-      const {cx, baseY, w} = m;
-      // small gradient band at bottom to suggest ground
-      noStroke();
-      for(let i=0;i<10;i++){
-        const a = map(i,0,9, 35, 0);
-        fill(40, 30, 40, a);
-        const y = baseY - 10 + i;      // start just above bottom
-        if (y < height) rect(0, y, width, 1);
-      }
-      // shadow (slightly above bottom so it's visible)
-      fill(30, 20, 30, 120);
-      ellipse(cx, baseY-4, w*1.8, w*0.5);
-      fill(30, 20, 30, 70);
-      ellipse(cx, baseY-4, w*2.2, w*0.7);
+    this.y = first
+      ? random(eyeYCanvas, height + 40)
+      : eyeYCanvas;
+
+    this.speed = random(1.5, 3);
+    this.noiseOffset = random(1000);
+    this.size = random(8, 14);
+  }
+
+  update() {
+    this.y += this.speed;
+
+    // Horizontal sway using Perlin noise
+    const sway = map(
+      noise(this.noiseOffset + this.y * 0.005),
+      0, 1,
+      -6, 6
+    );
+
+    this.x = this.baseX + sway;
+
+    if (this.y > height + 30) {
+      this.reset();
     }
+  }
 
-    // ---------- Candle ----------
-    function drawCandleBody(m){
-      const {cx, cy, w, h, r} = m;
-      push();
-      translate(cx, cy);
-
-      const front = hc ? color(255) : color(248,248,246);
-      fill(front);
-      rectMode(CENTER);
-      drawingContext.save();
-      roundRect(-w/2, -h, w, h, r);        // bottom at y=0 -> flush to canvas bottom
-      drawingContext.restore();
-
-      const g = drawingContext.createLinearGradient(-w/2,0, w/2,0);
-      g.addColorStop(0.0, 'rgba(255,255,255,0.15)');
-      g.addColorStop(0.5, 'rgba(255,255,255,0.0)');
-      g.addColorStop(1.0, 'rgba(0,0,0,0.08)');
-      drawingContext.fillStyle = g;
-      roundRect(-w/2, -h, w, h, r);
-
-      fill(hc ? 255 : 252, hc ? 255 : 252, hc ? 255 : 250, 230);
-      ellipse(0, -h, w*0.98, 24);
-
-      // Neutral wax pool
-      const waxTop  = -h + 10;
-      const waxBot  = -h + h*0.62;
-      const waxR    = r * 1.1;
-
-      fill(255, 230, 210, 60);
-      ellipse(0, waxTop + 20, w*0.95, 16);
-
-      fill(255, 248, 244, 210);
-      drawingContext.save();
-      roundRect(-w/2, waxTop + (waxBot - waxTop)*0.15, w, (waxBot - waxTop), waxR);
-      drawingContext.restore();
-
-      pop();
-    }
-
-    function roundRect(x,y,w,h,r){
-      drawingContext.beginPath();
-      drawingContext.moveTo(x+r, y);
-      drawingContext.lineTo(x+w-r, y);
-      drawingContext.quadraticCurveTo(x+w, y, x+w, y+r);
-      drawingContext.lineTo(x+w, y+h-r);
-      drawingContext.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-      drawingContext.lineTo(x+r, y+h);
-      drawingContext.quadraticCurveTo(x, y+h, x, y+h-r);
-      drawingContext.lineTo(x, y+r);
-      drawingContext.quadraticCurveTo(x, y, x+r, y);
-      drawingContext.closePath();
-      drawingContext.fill();
-    }
-
-    function drawWick(m){
-      const {cx, wickBaseY, wickTopY} = m;
-      push();
-      fill(120);
-      rectMode(CORNERS);
-      rect(cx-2, wickTopY, cx+2, wickBaseY, 2);
-      pop();
-    }
-
-    function drawFlame(x, y, s, tilt){
-      push();
-      translate(x, y);
-      rotate(tilt);
-
-      const core  = hc ? color(255,255,255, 240) : color(255, 245, 200, 240);
-      const mid   = hc ? color(255,200,0, 200)   : color(255, 180, 70, 200);
-      const outer = hc ? color(255,120,0, 150)   : color(255, 120, 40, 150);
-
-      fill(outer); flameShape(0, 0, s*0.95);
-      fill(mid);   flameShape(0, 0, s*0.70);
-      fill(core);  flameShape(0, s*0.05, s*0.44);
-      pop();
-    }
-
-    function flameShape(cx, cy, size){
-      beginShape();
-      const h = size;
-      const w = size*0.55;
-      vertex(cx, cy+h*0.05);
-      bezierVertex(cx-w*0.5, cy+h*0.0, cx-w*0.6, cy-h*0.35, cx, cy-h*0.95);
-      bezierVertex(cx+w*0.6, cy-h*0.35, cx+w*0.5, cy+h*0.0, cx, cy+h*0.05);
-      endShape(CLOSE);
-    }
-
-    function drawAura(x, y, s){
-      push();
-      translate(x, y);
-      const base = s*1.9;
-      const rings = 5;
-      for(let i=0; i<rings; i++){
-        const a = map(i,0,rings-1, 70, 6) * (1 + glow*0.6);
-        fill(255, 180, 80, a);
-        ellipse(0, 0, base*(1+(i+1)/rings*0.9), base*(0.6+(i+1)/rings*0.6));
-      }
-      pop();
-    }
-
-    function drawWaxDrips(m){
-      const {cx, topY, h} = m;
-      push();
-      translate(cx, topY + h*0.54);
-      fill(255,255,255,26);
-      const count = 4;
-      for(let i=0;i<count;i++){
-        const x = sin((t*0.4 + i)*1.7) * 40 + (i-1.5)*12;
-        const hl = 10 + 12*(0.5+0.5*sin(t*0.7 + i));
-        rect(x, -20, 6, hl, 3);
-      }
-      pop();
-    }
-
-    // --- Embers ---
-    function spawnEmbers(n=12){
-      const x = metrics.cx;
-      const y = metrics.flameY;
-      for(let i=0;i<n;i++){
-        embers.push({
-          x: x + random(-6,6),
-          y: y + random(-6,6),
-          vx: random(-0.25,0.25),
-          vy: random(-1.4,-0.8),
-          r: random(2,5),
-          a: 255
-        });
-      }
-    }
-    function updateEmbers(){
-      for(let i=embers.length-1; i>=0; i--){
-        const e = embers[i];
-        e.x += e.vx + (rm?0:0.15*sin((e.y+t)*0.05));
-        e.y += e.vy;
-        e.vy -= rm ? 0.002 : 0.004;
-        e.a -= rm ? 1.5 : 2.2;
-        if(e.a <= 0){ embers.splice(i,1); continue; }
-        noStroke();
-        fill(255, 180, 60, e.a*0.25);
-        ellipse(e.x, e.y, e.r*4, e.r*4);
-        fill(255, 200, 120, e.a);
-        ellipse(e.x, e.y, e.r, e.r);
-      }
-    }
-
-    // Input
-    function triggerPress(){ glow = min(1, glow + 0.45); spawnEmbers(rm ? 6 : 12); }
-    function keyPressed(){ if(key === ' ' || key === 'Enter') triggerPress(); }
-    function mousePressed(){ triggerPress(); }
-    function touchStarted(){ triggerPress(); }
-  </script>
+  show() {
+    noStroke();
+    fill(60, 140, 255, 210); // blue tears, slightly transparent
+    ellipse(this.x, this.y, this.size * 0.8, this.size * 1.2);
+  }
+}
+</script>
 </body>
 </html>
