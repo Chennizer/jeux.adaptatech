@@ -1,21 +1,52 @@
 
-// Update every element with data-fr attribute based on the stored language.
-function updateLanguage() {
-  var lang = localStorage.getItem('siteLanguage') || 'en';
-  document.documentElement.lang = lang;
-  document.querySelectorAll('[data-fr]').forEach(function(el) {
-    el.innerHTML = el.getAttribute('data-' + lang);
-  });
-  var toggleBtn = document.getElementById('language-toggle');
-  if (toggleBtn) {
-    toggleBtn.textContent = (lang === 'fr') ? 'English' : 'Français';
-  }
+const SUPPORTED_LANGUAGES = ['en', 'fr', 'ja'];
+const LANGUAGE_LABELS = { en: 'English', fr: 'Français', ja: '日本語' };
+
+function getStoredLanguage() {
+  const stored = localStorage.getItem('siteLanguage') || document.documentElement.lang || 'en';
+  return SUPPORTED_LANGUAGES.includes(stored) ? stored : 'en';
 }
-// Toggle language between French and English.
+
+function nextLanguage(lang) {
+  const currentIndex = SUPPORTED_LANGUAGES.indexOf(lang);
+  return SUPPORTED_LANGUAGES[(currentIndex + 1) % SUPPORTED_LANGUAGES.length];
+}
+
+function getElementContent(el, lang) {
+  const languageOrder = [lang, ...SUPPORTED_LANGUAGES.filter(code => code !== lang)];
+  for (const code of languageOrder) {
+    const text = el.getAttribute('data-' + code);
+    if (text != null) {
+      return text;
+    }
+  }
+  return null;
+}
+
+// Update every element with data-fr/data-en/data-ja attribute based on the stored language.
+function updateLanguage() {
+  const lang = getStoredLanguage();
+  document.documentElement.lang = lang;
+
+  document.querySelectorAll('[data-fr], [data-en], [data-ja]').forEach(function(el) {
+    const content = getElementContent(el, lang);
+    if (content != null) {
+      el.innerHTML = content;
+    }
+  });
+
+  document.querySelectorAll('#language-toggle, #langToggle').forEach(function(toggleBtn) {
+    const label = LANGUAGE_LABELS[nextLanguage(lang)] || nextLanguage(lang).toUpperCase();
+    toggleBtn.textContent = label;
+  });
+}
+
+// Cycle language between English, French, and Japanese.
 function toggleLanguage() {
-  var current = localStorage.getItem('siteLanguage') || 'en';
-  var newLang = (current === 'fr') ? 'en' : 'fr';
+  const current = getStoredLanguage();
+  const newLang = nextLanguage(current);
   localStorage.setItem('siteLanguage', newLang);
   updateLanguage();
 }
+
 document.addEventListener('DOMContentLoaded', updateLanguage);
