@@ -1,5 +1,5 @@
 
-const SUPPORTED_LANGUAGES = ['en', 'fr', 'ja'];
+const SUPPORTED_LANGUAGES = ['en', 'ja', 'fr'];
 const LANGUAGE_LABELS = { en: 'EN', fr: 'FR', ja: '日本語' };
 
 function getStoredLanguage() {
