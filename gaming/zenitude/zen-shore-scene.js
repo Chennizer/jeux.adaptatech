@@ -75,6 +75,16 @@ export function createShoreScene(p) {
         p.rect(0, sandTop + i, p.width, 1.2);
       }
 
+      p.noStroke();
+      for (let y = sandTop; y < p.height; y += 5) {
+        for (let x = 0; x < p.width; x += 5) {
+          const grain = p.noise(x * 0.08, y * 0.08, time * 0.0001);
+          const alpha = p.map(grain, 0, 1, 6, 30);
+          p.fill(210, 180, 140, alpha);
+          p.rect(x, y, 3, 3);
+        }
+      }
+
       const shorelineBase = sandTop - 10;
       const segments = 240;
       const shorelineY = [];
@@ -82,9 +92,10 @@ export function createShoreScene(p) {
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
         const slowDrift = p.sin((time * 0.00006) + x * 0.0002) * 6;
-        const largeCurves = p.noise(x * 0.0006, time * 0.00005) * 90 - 45;
+        const sweepingBends = (p.noise(x * 0.00018, time * 0.00002) * 220) - 110;
+        const largeCurves = p.noise(x * 0.00065, time * 0.00005) * 120 - 60;
         const fineRipples = p.noise(x * 0.003, time * 0.0001) * 24 - 12;
-        const y = shorelineBase + largeCurves + fineRipples + slowDrift;
+        const y = shorelineBase + sweepingBends + largeCurves + fineRipples + slowDrift;
         shorelineY[i] = y + waves.reduce((sum, wave) => sum + wave.sample(x, time), 0) * amplitudeScale * 0.35;
       }
 
