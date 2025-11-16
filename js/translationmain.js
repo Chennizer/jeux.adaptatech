@@ -1,6 +1,6 @@
 
 const SUPPORTED_LANGUAGES = ['en', 'fr', 'ja'];
-const LANGUAGE_LABELS = { en: 'English', fr: 'Français', ja: '日本語' };
+const LANGUAGE_LABELS = { en: 'EN', fr: 'FR', ja: '日本語' };
 
 function getStoredLanguage() {
   const stored = localStorage.getItem('siteLanguage') || document.documentElement.lang || 'en';
