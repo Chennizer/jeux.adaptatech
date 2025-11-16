@@ -38,6 +38,7 @@ function updateLanguage() {
   document.querySelectorAll('#language-toggle, #langToggle').forEach(function(toggleBtn) {
     const label = LANGUAGE_LABELS[nextLanguage(lang)] || nextLanguage(lang).toUpperCase();
     toggleBtn.textContent = label;
+    toggleBtn.classList.toggle('lang-ja-label', label === LANGUAGE_LABELS.ja);
   });
 }
 
