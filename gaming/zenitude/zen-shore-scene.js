@@ -51,18 +51,20 @@ export function createShoreScene(p) {
       const shorelineBase = p.height * 0.62;
       const shorelineAmplitude = 26;
       const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
-      const verticalSwell = p.sin(time * 0.0006) * 16;
+      const verticalSwell = p.sin(time * 0.00075) * 22;
 
       const segments = 160;
-      const shorelineY = [];
+      const baseShoreline = [];
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
         const sine = p.sin(x * shorelineFrequency);
-        shorelineY[i] = shorelineBase + verticalSwell + sine * shorelineAmplitude;
+        baseShoreline[i] = shorelineBase + sine * shorelineAmplitude;
       }
 
+      const shorelineY = baseShoreline.map((y) => y + verticalSwell);
+
       p.noStroke();
-      drawBands(shorelineBase, p.height, [
+      drawBands(shorelineBase + verticalSwell, p.height, [
         { r: 230, g: 205, b: 170 },
         { r: 220, g: 193, b: 157 },
         { r: 211, g: 182, b: 146 }
