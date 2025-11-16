@@ -2,15 +2,6 @@ export function createShoreScene(p) {
   let time = 0;
   let speedMultiplier = 1;
 
-  function drawBands(yStart, yEnd, palette) {
-    const bandHeight = (yEnd - yStart) / palette.length;
-    palette.forEach((color, index) => {
-      p.noStroke();
-      p.fill(color.r, color.g, color.b);
-      p.rect(0, yStart + index * bandHeight, p.width, bandHeight + 1);
-    });
-  }
-
   return {
     id: 'shore',
     name: 'Rivage paisible',
@@ -32,13 +23,13 @@ export function createShoreScene(p) {
       const waterTop = skyHeight;
       const waterBottom = p.height * 0.92;
 
-      drawBands(0, skyHeight, [
-        { r: 46, g: 79, b: 112 },
-        { r: 58, g: 102, b: 145 },
-        { r: 84, g: 132, b: 175 },
-        { r: 120, g: 164, b: 204 },
-        { r: 178, g: 206, b: 232 }
-      ]);
+      const ctx = p.drawingContext;
+
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, skyHeight);
+      skyGradient.addColorStop(0, 'rgba(46, 79, 112, 1)');
+      skyGradient.addColorStop(1, 'rgba(178, 206, 232, 1)');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, p.width, skyHeight);
 
       const shorelineBase = p.height * 0.62;
       const shorelineAmplitude = 26;
@@ -58,12 +49,16 @@ export function createShoreScene(p) {
       const maxShoreline = Math.max(...shorelineY);
 
       const deepWaterColor = { r: 28, g: 121, b: 165 };
+      const midWaterColor = { r: 74, g: 160, b: 191 };
       const shoreWaterColor = { r: 120, g: 207, b: 215 };
-      const ctx = p.drawingContext;
       const waterGradient = ctx.createLinearGradient(0, waterTop, 0, maxShoreline);
       waterGradient.addColorStop(
         0,
         `rgba(${deepWaterColor.r}, ${deepWaterColor.g}, ${deepWaterColor.b}, 1)`
+      );
+      waterGradient.addColorStop(
+        0.45,
+        `rgba(${midWaterColor.r}, ${midWaterColor.g}, ${midWaterColor.b}, 1)`
       );
       waterGradient.addColorStop(
         1,
