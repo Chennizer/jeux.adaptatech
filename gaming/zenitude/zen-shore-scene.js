@@ -26,8 +26,10 @@ export function createShoreScene(p) {
       const ctx = p.drawingContext;
 
       const skyGradient = ctx.createLinearGradient(0, 0, 0, skyHeight);
-      skyGradient.addColorStop(0, 'rgba(46, 79, 112, 1)');
-      skyGradient.addColorStop(1, 'rgba(178, 206, 232, 1)');
+      skyGradient.addColorStop(0, 'rgba(34, 62, 110, 1)');
+      skyGradient.addColorStop(0.35, 'rgba(82, 116, 168, 1)');
+      skyGradient.addColorStop(0.7, 'rgba(146, 176, 204, 1)');
+      skyGradient.addColorStop(1, 'rgba(212, 214, 214, 1)');
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, p.width, skyHeight);
 
@@ -48,17 +50,22 @@ export function createShoreScene(p) {
 
       const maxShoreline = Math.max(...shorelineY);
 
-      const deepWaterColor = { r: 28, g: 121, b: 165 };
-      const midWaterColor = { r: 74, g: 160, b: 191 };
-      const shoreWaterColor = { r: 120, g: 207, b: 215 };
+      const deepWaterColor = { r: 18, g: 102, b: 146 };
+      const midWaterColor = { r: 44, g: 146, b: 176 };
+      const lagoonColor = { r: 66, g: 188, b: 184 };
+      const shoreWaterColor = { r: 140, g: 216, b: 214 };
       const waterGradient = ctx.createLinearGradient(0, waterTop, 0, maxShoreline);
       waterGradient.addColorStop(
         0,
         `rgba(${deepWaterColor.r}, ${deepWaterColor.g}, ${deepWaterColor.b}, 1)`
       );
       waterGradient.addColorStop(
-        0.45,
+        0.42,
         `rgba(${midWaterColor.r}, ${midWaterColor.g}, ${midWaterColor.b}, 1)`
+      );
+      waterGradient.addColorStop(
+        0.7,
+        `rgba(${lagoonColor.r}, ${lagoonColor.g}, ${lagoonColor.b}, 1)`
       );
       waterGradient.addColorStop(
         1,

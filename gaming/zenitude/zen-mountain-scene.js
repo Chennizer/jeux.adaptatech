@@ -1,7 +1,9 @@
 const SKY_COLORS = [
-  { y: 0, cold: [18, 34, 52], warm: [52, 70, 92] },
-  { y: 0.5, cold: [46, 80, 120], warm: [106, 132, 152] },
-  { y: 1, cold: [128, 164, 180], warm: [190, 176, 168] }
+  { y: 0, cold: [16, 30, 58], warm: [60, 78, 110] },
+  { y: 0.28, cold: [42, 72, 118], warm: [94, 124, 154] },
+  { y: 0.55, cold: [88, 118, 148], warm: [156, 154, 160] },
+  { y: 0.78, cold: [128, 156, 168], warm: [206, 172, 162] },
+  { y: 1, cold: [156, 178, 186], warm: [230, 194, 170] }
 ];
 
 class MistLayer {
@@ -59,8 +61,8 @@ function drawMountains(p, layers, sunPosition, warmth, multiplier) {
     const depth = i / layers;
     const baseY = p.height * (0.35 + depth * 0.45);
     const height = p.height * (0.25 + (1 - depth) * 0.35);
-    const coolColor = [30 + depth * 90, 60 + depth * 80, 90 + depth * 60];
-    const warmColor = [50 + depth * 100, 78 + depth * 86, 92 + depth * 64];
+    const coolColor = [28 + depth * 88, 58 + depth * 86, 96 + depth * 74];
+    const warmColor = [70 + depth * 112, 92 + depth * 102, 88 + depth * 76];
     const col = p.color(
       p.lerp(coolColor[0], warmColor[0], warmth),
       p.lerp(coolColor[1], warmColor[1], warmth),
@@ -82,7 +84,7 @@ function drawMountains(p, layers, sunPosition, warmth, multiplier) {
 
   const sunRadius = p.height * 0.15;
   const { x: sunX, y: sunY } = sunPosition;
-  const glow = p.lerp(60, 160, warmth);
+  const glow = p.lerp(90, 200, warmth);
   const sunCoreCool = [240, 220, 200];
   const sunCoreWarm = [255, 215, 150];
   const sunHaloCool = [230, 210, 190];
@@ -90,7 +92,7 @@ function drawMountains(p, layers, sunPosition, warmth, multiplier) {
   p.noStroke();
   for (let i = 5; i >= 1; i--) {
     const radius = sunRadius * (1 + i * 0.28);
-    const alpha = glow / (i * 1.6);
+    const alpha = glow / (i * 1.15);
     const haloR = p.lerp(sunHaloCool[0], sunHaloWarm[0], warmth);
     const haloG = p.lerp(sunHaloCool[1], sunHaloWarm[1], warmth);
     const haloB = p.lerp(sunHaloCool[2], sunHaloWarm[2], warmth);
@@ -100,8 +102,8 @@ function drawMountains(p, layers, sunPosition, warmth, multiplier) {
   const coreR = p.lerp(sunCoreCool[0], sunCoreWarm[0], warmth);
   const coreG = p.lerp(sunCoreCool[1], sunCoreWarm[1], warmth);
   const coreB = p.lerp(sunCoreCool[2], sunCoreWarm[2], warmth);
-  p.fill(coreR, coreG, coreB, 220);
-  p.ellipse(sunX, sunY, sunRadius * 1.4);
+  p.fill(coreR, coreG, coreB, 250);
+  p.ellipse(sunX, sunY, sunRadius * 1.45);
 }
 
 export function createMountainScene(p) {
