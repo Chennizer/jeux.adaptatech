@@ -2,145 +2,719 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Feather Scene – Textured p5.js</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- p5.js CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <title>Cricut Sticker Layout — Vector SVG</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- ImageTracer.js: PNG → SVG paths -->
+<script src="https://cdn.jsdelivr.net/gh/jankovicsandras/imagetracerjs/dist/imagetracer_v1.2.6.min.js"></script>
+
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      background: #000; /* fallback if canvas doesn't fill */
+    :root {
+      --bg: #020617;
+      --panel-bg: #020617;
+      --accent: #22c55e;
+      --accent-soft: rgba(34, 197, 94, 0.2);
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
     }
+
+    * { box-sizing: border-box; }
+
     body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(270px, 360px) 1fr;
+      background: radial-gradient(circle at top, #111827, #020617 60%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (max-width: 880px) {
+      body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto;
+      }
+    }
+
+    #sidebar {
+      padding: 1.5rem 1.25rem 1.5rem 1.5rem;
+      border-right: 1px solid var(--border);
+      background: radial-gradient(circle at top left, #020617, #020617);
       display: flex;
-      justify-content: center;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    @media (max-width: 880px) {
+      #sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    form {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.85rem;
+    }
+
+    .field label {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      color: var(--muted);
+    }
+
+    .field input[type="number"],
+    .field input[type="color"],
+    .field textarea,
+    .field select {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.35rem 0.6rem;
+      color: var(--text);
+      font: inherit;
+      outline: none;
+    }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 2.5rem;
+    }
+
+    .field input[type="range"] {
+      width: 100%;
+    }
+
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+    }
+
+    .row {
+      display: flex;
+      gap: 0.5rem;
       align-items: center;
     }
-    canvas {
+
+    .row > * { flex: 1; }
+
+    .buttons {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    button,
+    .button-link {
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: linear-gradient(135deg, #16a34a, #22c55e);
+      color: #022c22;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.4rem 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+    }
+
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+    }
+
+    button.danger {
+      background: transparent;
+      color: #f97373;
+      border-color: #f97373;
+    }
+
+    button:hover,
+    .button-link:hover {
+      filter: brightness(1.05);
+      box-shadow: 0 5px 14px rgba(0, 0, 0, 0.5);
+      transform: translateY(-1px);
+    }
+
+    button:active,
+    .button-link:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+
+    button:disabled,
+    .button-link.disabled {
+      opacity: 0.5;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    small.hint {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    #main {
+      position: relative;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    #previewFrame {
+      position: relative;
+      flex: 1;
+      min-height: 280px;
+      border-radius: 1.25rem;
+      background: repeating-conic-gradient(#444 0 25%, #555 0 50%) 50% / 16px 16px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #svgPreview {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 0.75rem;
+      background: transparent;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9) inset;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 1.5rem;
+    }
+
+    #svgPreview svg {
       display: block;
+      background: transparent;
+      cursor: move;
+      touch-action: none;
+    }
+
+    #codePanel {
+      border-radius: 0.75rem;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 0.75rem 0.85rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+      font-size: 0.75rem;
+      max-height: 240px;
+      overflow: auto;
+      white-space: pre;
+      color: #e5e7eb;
+      display: none;
+    }
+
+    #codeToggle {
+      font-size: 0.8rem;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      user-select: none;
+    }
+
+    #codeToggle span.chevron {
+      display: inline-block;
+      transition: transform 0.15s ease;
+    }
+
+    #codeToggle.open span.chevron {
+      transform: rotate(90deg);
     }
   </style>
 </head>
 <body>
-<script>
-  let t = 0;
+  <aside id="sidebar">
+    <div>
+      <h1>Cricut Sticker Layout</h1>
+      <div class="subtitle">
+        Upload PNGs (with transparency), vectorize them, drag to position, export a pure-path SVG for Cricut.
+      </div>
+    </div>
 
-  function setup() {
-    createCanvas(windowWidth, windowHeight);
-    noStroke();
-    noiseSeed(1234); // keep the feather shape stable
-  }
+    <form id="controls">
+      <div class="field">
+        <label for="maskFiles">Sticker PNGs (you can select several)</label>
+        <input type="file" id="maskFiles" accept="image/*" multiple />
+        <small class="hint">
+          Best results with clean icons / silhouettes on transparent background.
+        </small>
+      </div>
 
-  function draw() {
-    drawBackground();
-    drawGround();
+      <div class="row">
+        <div class="field">
+          <label for="svgWidth">SVG width (px)</label>
+          <input type="number" id="svgWidth" value="800" min="100" max="4000" />
+        </div>
+        <div class="field">
+          <label for="svgHeight">SVG height (px)</label>
+          <input type="number" id="svgHeight" value="800" min="100" max="4000" />
+        </div>
+      </div>
 
-    // subtle "breathing" motion for the feather
-    const bob = sin(t) * 2;
-    push();
-    translate(width * 0.5, height * 0.65 + bob);
-    drawFeather();
-    pop();
+      <div class="field">
+        <label for="layerSelect">Stickers / layers</label>
+        <select id="layerSelect" size="4"></select>
+        <small class="hint">
+          Click a sticker in the preview or select here to choose it. Drag to move it.
+        </small>
+      </div>
 
-    t += 0.02;
-  }
+      <div class="field">
+        <label for="shapeColor">Sticker color (for preview / Cricut cut)</label>
+        <input type="color" id="shapeColor" value="#000000" />
+        <small class="hint">
+          In Cricut you can recolor by selecting the layer; black is a good default.
+        </small>
+      </div>
 
-  function drawBackground() {
-    // soft blue-grey vertical gradient
-    for (let y = 0; y < height; y++) {
-      const inter = map(y, 0, height, 0, 1);
-      const c = lerpColor(
-        color(130, 145, 160),  // top
-        color(100, 115, 130),  // bottom
-        inter
+      <div class="buttons">
+        <button type="button" id="removeLayer" class="danger">
+          Remove selected sticker
+        </button>
+      </div>
+
+      <div class="field">
+        <label for="textContent">Optional text (label, title…)</label>
+        <textarea id="textContent" placeholder="Optional text">
+Sticker text</textarea>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="textColor">Text color</label>
+          <input type="color" id="textColor" value="#000000" />
+        </div>
+        <div class="field">
+          <label for="fontSize">Font size</label>
+          <input type="number" id="fontSize" value="42" min="8" max="200" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="textY">
+          Text vertical position
+          <span id="textYValue">90%</span>
+        </label>
+        <input type="range" id="textY" min="0" max="100" value="90" />
+        <small class="hint">0% = top, 50% = center, 100% = bottom.</small>
+      </div>
+
+      <div class="buttons">
+        <button type="button" id="regenerate">Update preview</button>
+        <a id="downloadBtn" class="button-link disabled"
+           download="cricut-stickers.svg" href="#">
+          Download SVG
+        </a>
+        <button type="button" id="copyCode" class="secondary">Copy code</button>
+      </div>
+    </form>
+  </aside>
+
+  <main id="main">
+    <section id="previewFrame">
+      <div id="svgPreview">
+        Upload one or more PNGs with transparency to start.  
+        They’ll be traced to vector paths and can be arranged like a sticker sheet.
+      </div>
+    </section>
+
+    <div>
+      <div id="codeToggle">
+        <span class="chevron">▶</span>
+        <span>Show SVG code</span>
+      </div>
+      <pre id="codePanel"></pre>
+    </div>
+  </main>
+
+  <script>
+    const maskFilesEl = document.getElementById("maskFiles");
+    const svgWidthEl = document.getElementById("svgWidth");
+    const svgHeightEl = document.getElementById("svgHeight");
+    const layerSelectEl = document.getElementById("layerSelect");
+    const shapeColorEl = document.getElementById("shapeColor");
+    const removeLayerBtn = document.getElementById("removeLayer");
+
+    const textContentEl = document.getElementById("textContent");
+    const textColorEl = document.getElementById("textColor");
+    const fontSizeEl = document.getElementById("fontSize");
+    const textYEl = document.getElementById("textY");
+    const textYValueEl = document.getElementById("textYValue");
+
+    const svgPreviewEl = document.getElementById("svgPreview");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const regenerateBtn = document.getElementById("regenerate");
+    const copyCodeBtn = document.getElementById("copyCode");
+    const codePanel = document.getElementById("codePanel");
+    const codeToggle = document.getElementById("codeToggle");
+
+    let layers = []; // {id, name, paths: string[], offsetX, offsetY}
+    let nextLayerId = 1;
+    let selectedLayerId = null;
+
+    let currentBlobUrl = null;
+    let showCode = false;
+
+    function getState() {
+      const width = Math.max(100, parseInt(svgWidthEl.value, 10) || 800);
+      const height = Math.max(100, parseInt(svgHeightEl.value, 10) || 800);
+
+      const textYPercent = Math.min(
+        100,
+        Math.max(0, parseInt(textYEl.value, 10) || 90)
       );
-      stroke(c);
-      line(0, y, width, y);
-    }
-  }
+      textYValueEl.textContent = textYPercent + "%";
 
-  function drawGround() {
-    noStroke();
-    fill(80, 90, 100, 220);
-    beginShape();
-    vertex(0, height);
-    vertex(0, height * 0.7);
-    bezierVertex(
-      width * 0.25, height * 0.68,
-      width * 0.75, height * 0.72,
-      width,        height * 0.7
-    );
-    vertex(width, height);
-    endShape(CLOSE);
-  }
-
-  // stylized feather with textured edges
-  function drawFeather() {
-    push();
-    rotate(radians(-8));
-
-    const L = 260;        // feather length
-    const halfWBase = 36; // base half-width
-
-    // shadow
-    fill(0, 0, 0, 45);
-    ellipse(20, 26, 230, 24);
-
-    // feather body with noisy outline
-    noStroke();
-    fill(245);
-
-    const steps = 42;
-
-    beginShape();
-    // top edge left -> right
-    for (let i = 0; i <= steps; i++) {
-      const x = map(i, 0, steps, -L / 2, L / 2);
-      const tipFactor = map(abs(x), 0, L / 2, 0, 1);     // 0 center, 1 tip
-      const halfW = lerp(halfWBase, 4, tipFactor);       // taper toward tip
-      const n = noise(x * 0.05 + 100);                   // 0..1
-      const offset = (n - 0.5) * 7;                      // small irregularity
-      const y = -halfW + offset;
-      vertex(x, y);
-    }
-    // bottom edge right -> left
-    for (let i = steps; i >= 0; i--) {
-      const x = map(i, 0, steps, -L / 2, L / 2);
-      const tipFactor = map(abs(x), 0, L / 2, 0, 1);
-      const halfW = lerp(halfWBase, 4, tipFactor);
-      const n = noise(x * 0.05 + 200);
-      const offset = (n - 0.5) * 7;
-      const y = halfW + offset;
-      vertex(x, y);
-    }
-    endShape(CLOSE);
-
-    // center vein
-    stroke(160);
-    strokeWeight(2);
-    line(-L / 2 - 12, 0, L / 2 - 24, 0);
-
-    // small barbs lines, very subtle
-    stroke(155);
-    strokeWeight(1);
-    const barbTop = [-90, -60, -30, 0, 30, 60];
-    for (let x of barbTop) {
-      line(x, 0, x + 6, -10);
-    }
-    const barbBottom = [-110, -80, -50, -10, 20, 50];
-    for (let x of barbBottom) {
-      line(x, 0, x + 6, 10);
+      return {
+        width,
+        height,
+        text: (textContentEl.value || "").trim(),
+        textColor: textColorEl.value || "#000000",
+        fontSize: Math.max(8, parseInt(fontSizeEl.value, 10) || 42),
+        textYPercent,
+        layers: layers.slice(),
+        shapeColor: shapeColorEl.value || "#000000"
+      };
     }
 
-    pop();
-  }
+    function buildSvgString(state) {
+      const {
+        width,
+        height,
+        text,
+        textColor,
+        fontSize,
+        textYPercent,
+        layers,
+        shapeColor
+      } = state;
 
-  function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-  }
-</script>
+      const stickerGroups = layers
+        .map((layer) => {
+          const pathsStr = layer.paths
+            .map(
+              (d) =>
+                `<path d="${d}" fill="${shapeColor}" stroke="none" />`
+            )
+            .join("\n      ");
+          return `
+  <g data-layer-id="${layer.id}" transform="translate(${layer.offsetX} ${layer.offsetY})">
+      ${pathsStr}
+  </g>`;
+        })
+        .join("\n");
+
+      const textBlock = text
+        ? `
+  <text x="50%" y="${textYPercent}%"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        fill="${textColor}"
+        font-size="${fontSize}"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+    ${escapeHtml(text)}
+  </text>`
+        : "";
+
+      return `
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="${width}" height="${height}"
+     viewBox="0 0 ${width} ${height}">
+  ${stickerGroups}${textBlock}
+</svg>`.trim();
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function render() {
+      const state = getState();
+      const svgString = buildSvgString(state);
+
+      svgPreviewEl.innerHTML = svgString;
+
+      const svgEl = svgPreviewEl.querySelector("svg");
+      if (svgEl) setupDrag(svgEl, state);
+
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+      const blob = new Blob([svgString], { type: "image/svg+xml" });
+      currentBlobUrl = URL.createObjectURL(blob);
+      downloadBtn.href = currentBlobUrl;
+      downloadBtn.classList.remove("disabled");
+
+      codePanel.textContent = svgString;
+    }
+
+    // ---- Dragging logic: drag whole <g data-layer-id="..."> ---------------
+    function setupDrag(svgEl, state) {
+      const svgWidth = state.width;
+      const svgHeight = state.height;
+
+      const groups = svgEl.querySelectorAll("g[data-layer-id]");
+      if (!groups.length) return;
+
+      groups.forEach((group) => {
+        group.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+
+          const layerId = parseInt(
+            group.getAttribute("data-layer-id"),
+            10
+          );
+          const layer = layers.find((l) => l.id === layerId);
+          if (!layer) return;
+
+          selectedLayerId = layerId;
+          syncLayerSelect();
+
+          let dragging = true;
+          const rect = svgEl.getBoundingClientRect();
+          const scaleX = svgWidth / rect.width;
+          const scaleY = svgHeight / rect.height;
+
+          const startClientX = e.clientX;
+          const startClientY = e.clientY;
+          const startOffsetX = layer.offsetX;
+          const startOffsetY = layer.offsetY;
+
+          function onPointerMove(ev) {
+            if (!dragging) return;
+            const dxCanvas = (ev.clientX - startClientX) * scaleX;
+            const dyCanvas = (ev.clientY - startClientY) * scaleY;
+
+            layer.offsetX = startOffsetX + dxCanvas;
+            layer.offsetY = startOffsetY + dyCanvas;
+
+            group.setAttribute(
+              "transform",
+              `translate(${layer.offsetX} ${layer.offsetY})`
+            );
+          }
+
+          function onPointerUp() {
+            if (!dragging) return;
+            dragging = false;
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", onPointerUp);
+            render(); // re-generate SVG string / download with updated positions
+          }
+
+          window.addEventListener("pointermove", onPointerMove);
+          window.addEventListener("pointerup", onPointerUp);
+        });
+      });
+    }
+
+    // ---- Layers UI helpers -------------------------------------------------
+    function updateLayerSelectOptions() {
+      layerSelectEl.innerHTML = "";
+      layers.forEach((layer) => {
+        const opt = document.createElement("option");
+        opt.value = String(layer.id);
+        opt.textContent = layer.name || `Sticker ${layer.id}`;
+        layerSelectEl.appendChild(opt);
+      });
+
+      if (!layers.length) {
+        selectedLayerId = null;
+        return;
+      }
+
+      if (
+        selectedLayerId === null ||
+        !layers.some((l) => l.id === selectedLayerId)
+      ) {
+        selectedLayerId = layers[0].id;
+      }
+
+      layerSelectEl.value = String(selectedLayerId);
+    }
+
+    function syncLayerSelect() {
+      if (selectedLayerId == null) return;
+      layerSelectEl.value = String(selectedLayerId);
+    }
+
+    // ---- SVG tracing helpers (PNG → paths[]) ------------------------------
+    function extractPathsFromSVG(svgstr) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgstr, "image/svg+xml");
+      const paths = [];
+      doc.querySelectorAll("path").forEach((p) => {
+        const d = p.getAttribute("d");
+        if (d) paths.push(d);
+      });
+      return paths;
+    }
+
+    function traceImageToPaths(dataUrl, callback) {
+      if (!window.ImageTracer) {
+        alert("ImageTracer.js not loaded. Check your internet connection.");
+        callback([]);
+        return;
+      }
+
+      // You can tweak options for more / less detail
+      const options = {
+        // fewer colors and simpler paths help keep Cricut files light
+        ltres: 1,       // line threshold
+        qtres: 1,       // curve threshold
+        pathomit: 8,    // omit small paths
+        numberofcolors: 2,
+        strokewidth: 0
+      };
+
+      ImageTracer.imageToSVG(
+        dataUrl,
+        function (svgstr) {
+          const paths = extractPathsFromSVG(svgstr);
+          callback(paths);
+        },
+        options
+      );
+    }
+
+    function addLayerFromDataUrl(dataUrl, name) {
+      traceImageToPaths(dataUrl, (paths) => {
+        if (!paths.length) {
+          alert("Tracing produced no paths for " + name + ". Is the image mostly transparent?");
+          return;
+        }
+
+        const layer = {
+          id: nextLayerId++,
+          name,
+          paths,
+          offsetX: 0,
+          offsetY: 0
+        };
+        layers.push(layer);
+        selectedLayerId = layer.id;
+        updateLayerSelectOptions();
+        render();
+      });
+    }
+
+    // ---- Event handlers ----------------------------------------------------
+
+    // Upload PNGs
+    maskFilesEl.addEventListener("change", (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+
+      files.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataUrl = ev.target.result;
+          addLayerFromDataUrl(dataUrl, file.name);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    // Change selected layer
+    layerSelectEl.addEventListener("change", () => {
+      const id = parseInt(layerSelectEl.value, 10);
+      selectedLayerId = isNaN(id) ? null : id;
+      render();
+    });
+
+    // Remove selected layer
+    removeLayerBtn.addEventListener("click", () => {
+      if (selectedLayerId == null) return;
+      layers = layers.filter((l) => l.id !== selectedLayerId);
+      if (!layers.length) {
+        selectedLayerId = null;
+      } else {
+        selectedLayerId = layers[0].id;
+      }
+      updateLayerSelectOptions();
+      render();
+    });
+
+    [
+      svgWidthEl,
+      svgHeightEl,
+      shapeColorEl,
+      textContentEl,
+      textColorEl,
+      fontSizeEl,
+      textYEl
+    ].forEach((el) => {
+      el.addEventListener("input", render);
+    });
+
+    regenerateBtn.addEventListener("click", render);
+
+    copyCodeBtn.addEventListener("click", async () => {
+      const text = codePanel.textContent || "";
+      try {
+        await navigator.clipboard.writeText(text);
+        const original = copyCodeBtn.textContent;
+        copyCodeBtn.textContent = "Copied!";
+        setTimeout(() => {
+          copyCodeBtn.textContent = original;
+        }, 900);
+      } catch {
+        alert("Clipboard copy failed; please copy manually.");
+      }
+    });
+
+    codeToggle.addEventListener("click", () => {
+      showCode = !showCode;
+      codePanel.style.display = showCode ? "block" : "none";
+      codeToggle.classList.toggle("open", showCode);
+    });
+
+    // Initial render
+    render();
+  </script>
 </body>
 </html>
