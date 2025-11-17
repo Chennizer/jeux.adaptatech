@@ -57,8 +57,8 @@ function drawSky(p, warmth) {
 }
 
 function mountainHeightAt(p, x, depth) {
-  const baseY = p.height * (0.35 + depth * 0.45);
-  const height = p.height * (0.25 + (1 - depth) * 0.35);
+  const baseY = p.height * (0.62 + depth * 0.18);
+  const height = p.height * (0.1 + (1 - depth) * 0.18);
   const noiseVal = p.noise(x * 0.0008 + depth * 3.3, depth * 2.1);
   return baseY - noiseVal * height;
 }
@@ -72,18 +72,19 @@ function ridgeHeightAt(p, layers, x) {
   return ridge;
 }
 
-function drawSun(p, sunPosition, warmth, visibility) {
+function drawSun(p, sunPosition, warmth, visibility, ridgeDelta) {
   const sunRadius = p.height * 0.15;
   const { x: sunX, y: sunY } = sunPosition;
-  const glow = p.lerp(90, 200, warmth) * (0.35 + 0.65 * visibility);
-  const sunCoreCool = [240, 220, 200];
-  const sunCoreWarm = [255, 215, 150];
-  const sunHaloCool = [230, 210, 190];
-  const sunHaloWarm = [255, 200, 140];
+  const brightPass = p.map(Math.abs(ridgeDelta), 0, sunRadius * 0.6, 1.35, 1, true);
+  const glow = p.lerp(120, 240, warmth) * (0.45 + 0.55 * visibility) * brightPass;
+  const sunCoreCool = [242, 210, 170];
+  const sunCoreWarm = [255, 170, 80];
+  const sunHaloCool = [242, 196, 150];
+  const sunHaloWarm = [255, 160, 70];
   p.noStroke();
-  for (let i = 5; i >= 1; i--) {
+  for (let i = 6; i >= 1; i--) {
     const radius = sunRadius * (1 + i * 0.28);
-    const alpha = glow / (i * 1.15);
+    const alpha = glow / (i * 1.08);
     const haloR = p.lerp(sunHaloCool[0], sunHaloWarm[0], warmth);
     const haloG = p.lerp(sunHaloCool[1], sunHaloWarm[1], warmth);
     const haloB = p.lerp(sunHaloCool[2], sunHaloWarm[2], warmth);
@@ -93,8 +94,8 @@ function drawSun(p, sunPosition, warmth, visibility) {
   const coreR = p.lerp(sunCoreCool[0], sunCoreWarm[0], warmth);
   const coreG = p.lerp(sunCoreCool[1], sunCoreWarm[1], warmth);
   const coreB = p.lerp(sunCoreCool[2], sunCoreWarm[2], warmth);
-  p.fill(coreR, coreG, coreB, 230 + 25 * visibility);
-  p.ellipse(sunX, sunY, sunRadius * 1.45);
+  p.fill(coreR, coreG, coreB, 245 + 10 * visibility);
+  p.ellipse(sunX, sunY, sunRadius * 1.35);
 }
 
 function drawMountains(p, layers, warmth) {
@@ -106,7 +107,7 @@ function drawMountains(p, layers, warmth) {
       p.lerp(coolColor[0], warmColor[0], warmth),
       p.lerp(coolColor[1], warmColor[1], warmth),
       p.lerp(coolColor[2], warmColor[2], warmth),
-      220 - depth * 120
+      255
     );
     p.fill(col);
     p.noStroke();
@@ -125,6 +126,8 @@ export function createMountainScene(p) {
   let mistLayers = [];
   let speedMultiplier = 1;
   let breathePulse = 0;
+  const startDelay = 3.2;
+  const cycleSpeed = 0.5;
 
   function resize() {
     const count = 4;
@@ -146,21 +149,23 @@ export function createMountainScene(p) {
       breathePulse = 1;
     },
     draw() {
-      const time = p.millis() * 0.00003 * speedMultiplier;
-      const swing = (Math.sin(time) + 1) * 0.5; // left → right → left
-      const arcHeight = 1 - Math.pow(2 * swing - 1, 2); // highest at center of swing
-      const warmth = swing;
+      const seconds = p.millis() * 0.001 * speedMultiplier;
+      const t = Math.max(0, seconds - startDelay) * cycleSpeed;
+      const swell = Math.sin(t * Math.PI * 2);
+      const warmth = p.map(swell, -1, 1, 0.2, 1, true);
 
-      const sunY = p.lerp(p.height * 0.8, p.height * 0.24, arcHeight);
-      const sunX = p.lerp(p.width * 0.35, p.width * 0.85, swing);
+      const sunCenterY = p.height * 0.68;
+      const sunLift = p.height * 0.2;
+      const sunY = seconds < startDelay ? p.height * 0.76 : sunCenterY - swell * sunLift;
+      const sunX = p.width * 0.56;
       const sunRadius = p.height * 0.15;
       const ridgeHeight = ridgeHeightAt(p, 5, sunX);
       const delta = sunY - ridgeHeight;
-      const sunVisibility = p.map(delta, -sunRadius, sunRadius, 1, 0, true);
+      const sunVisibility = seconds < startDelay ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
       const darkness = Math.pow(1 - sunVisibility, 1.3);
 
       drawSky(p, warmth);
-      drawSun(p, { x: sunX, y: sunY }, warmth, sunVisibility);
+      drawSun(p, { x: sunX, y: sunY }, warmth, sunVisibility, delta);
       drawMountains(p, 5, warmth);
 
       mistLayers.forEach(layer => layer.draw(speedMultiplier));
