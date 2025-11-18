@@ -127,7 +127,7 @@ export function createMountainScene(p) {
   let speedMultiplier = 1;
   let breathePulse = 0;
   const startDelay = 1.5;
-  const cycleDuration = 78; // seconds for a full left-to-right sunset arc
+  const cycleDuration = 30; // seconds for a full left-to-right sunset arc
 
   function resize() {
     const count = 4;
@@ -155,10 +155,10 @@ export function createMountainScene(p) {
       const eased = 0.5 - 0.5 * Math.cos(Math.min(1, loopProgress) * Math.PI);
       const arcRise = Math.sin(eased * Math.PI);
 
-      const warmth = p.constrain(p.map(eased, 0, 0.65, 0.25, 1), 0.25, 1);
+      const baseWarmth = p.constrain(p.map(eased, 0, 0.65, 0.25, 1), 0.25, 1);
       const sunRadius = p.height * 0.15;
       const sunPathY = p.height * 0.64;
-      const sunLift = p.height * 0.23;
+      const sunLift = p.height * 0.3;
       const sunY = seconds < startDelay ? p.height * 0.76 : sunPathY - arcRise * sunLift;
       const sunX = p.lerp(-sunRadius * 0.8, p.width + sunRadius * 0.8, eased);
       const ridgeHeight = ridgeHeightAt(p, 5, sunX);
@@ -166,6 +166,8 @@ export function createMountainScene(p) {
       const visibilityBase = seconds < startDelay ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
       const intensityRamp = p.map(eased, 0, 0.75, 0.65, 1.15, true);
       const sunVisibility = p.constrain(visibilityBase * intensityRamp, 0, 1);
+      const warmthLift = p.map(sunVisibility, 0.35, 0.75, 0, 0.2, true);
+      const warmth = p.constrain(baseWarmth + warmthLift, 0.25, 1);
       const darkness = Math.pow(1 - sunVisibility, 1.25);
 
       drawSky(p, warmth);
