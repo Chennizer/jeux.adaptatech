@@ -18,6 +18,12 @@ const SCENE_SOUNDTRACKS = {
   petal: '../../sounds/sadness/subtlewind.mp3'
 };
 
+const DEFAULT_SCENE_VOLUME = 0.4;
+const SCENE_SOUNDTRACK_VOLUMES = {
+  rain: 0.12,
+  snow: 0.6
+};
+
 const startOverlayEl = document.getElementById('promptOverlay');
 const startButtonEl = document.getElementById('startButton');
 const modeButtons = document.querySelectorAll('#modeSelect button');
@@ -122,7 +128,8 @@ function ensureSceneAudio(sceneId) {
     return null;
   }
   if (!sceneAudioCache.has(sceneId)) {
-    const audio = createAudioElement(SCENE_SOUNDTRACKS[sceneId], { volume: 0.4, loop: true });
+    const volume = SCENE_SOUNDTRACK_VOLUMES[sceneId] ?? DEFAULT_SCENE_VOLUME;
+    const audio = createAudioElement(SCENE_SOUNDTRACKS[sceneId], { volume, loop: true });
     sceneAudioCache.set(sceneId, audio);
   }
   return sceneAudioCache.get(sceneId);
