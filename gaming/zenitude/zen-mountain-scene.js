@@ -75,8 +75,8 @@ function ridgeHeightAt(p, layers, x) {
 function drawSun(p, sunPosition, warmth, visibility, ridgeDelta) {
   const sunRadius = p.height * 0.15;
   const { x: sunX, y: sunY } = sunPosition;
-  const brightPass = p.map(Math.abs(ridgeDelta), 0, sunRadius * 0.6, 1.35, 1, true);
-  const glow = p.lerp(120, 240, warmth) * (0.45 + 0.55 * visibility) * brightPass;
+  const brightPass = p.map(Math.abs(ridgeDelta), 0, sunRadius * 0.6, 1.4, 1, true);
+  const glow = p.lerp(120, 240, warmth) * (0.45 + 0.65 * visibility) * brightPass;
   const sunCoreCool = [242, 210, 170];
   const sunCoreWarm = [255, 170, 80];
   const sunHaloCool = [242, 196, 150];
@@ -126,8 +126,8 @@ export function createMountainScene(p) {
   let mistLayers = [];
   let speedMultiplier = 1;
   let breathePulse = 0;
-  const startDelay = 3.2;
-  const cycleSpeed = 0.5;
+  const startDelay = 1.5;
+  const cycleDuration = 78; // seconds for a full left-to-right sunset arc
 
   function resize() {
     const count = 4;
@@ -150,19 +150,23 @@ export function createMountainScene(p) {
     },
     draw() {
       const seconds = p.millis() * 0.001 * speedMultiplier;
-      const t = Math.max(0, seconds - startDelay) * cycleSpeed;
-      const swell = Math.sin(t * Math.PI * 2);
-      const warmth = p.map(swell, -1, 1, 0.2, 1, true);
+      const rawProgress = (seconds - startDelay) / cycleDuration;
+      const loopProgress = ((rawProgress % 1) + 1) % 1; // wrap safely for negatives
+      const eased = 0.5 - 0.5 * Math.cos(Math.min(1, loopProgress) * Math.PI);
+      const arcRise = Math.sin(eased * Math.PI);
 
-      const sunCenterY = p.height * 0.68;
-      const sunLift = p.height * 0.2;
-      const sunY = seconds < startDelay ? p.height * 0.76 : sunCenterY - swell * sunLift;
-      const sunX = p.width * 0.56;
+      const warmth = p.constrain(p.map(eased, 0, 0.65, 0.25, 1), 0.25, 1);
       const sunRadius = p.height * 0.15;
+      const sunPathY = p.height * 0.64;
+      const sunLift = p.height * 0.23;
+      const sunY = seconds < startDelay ? p.height * 0.76 : sunPathY - arcRise * sunLift;
+      const sunX = p.lerp(-sunRadius * 0.8, p.width + sunRadius * 0.8, eased);
       const ridgeHeight = ridgeHeightAt(p, 5, sunX);
       const delta = sunY - ridgeHeight;
-      const sunVisibility = seconds < startDelay ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
-      const darkness = Math.pow(1 - sunVisibility, 1.3);
+      const visibilityBase = seconds < startDelay ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
+      const intensityRamp = p.map(eased, 0, 0.75, 0.65, 1.15, true);
+      const sunVisibility = p.constrain(visibilityBase * intensityRamp, 0, 1);
+      const darkness = Math.pow(1 - sunVisibility, 1.25);
 
       drawSky(p, warmth);
       drawSun(p, { x: sunX, y: sunY }, warmth, sunVisibility, delta);
