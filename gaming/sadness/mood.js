@@ -20,7 +20,8 @@ const SCENE_SOUNDTRACKS = {
 
 const DEFAULT_SCENE_VOLUME = 0.4;
 const SCENE_SOUNDTRACK_VOLUMES = {
-  rain: 0.2
+  rain: 0.12,
+  snow: 0.6
 };
 
 const startOverlayEl = document.getElementById('promptOverlay');
