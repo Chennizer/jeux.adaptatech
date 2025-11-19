@@ -73,18 +73,18 @@ function ridgeHeightAt(p, layers, x) {
 }
 
 function drawSun(p, sunPosition, warmth, visibility, ridgeDelta) {
-  const sunRadius = p.height * 0.15;
+  const sunRadius = p.height * 0.12;
   const { x: sunX, y: sunY } = sunPosition;
   const brightPass = p.map(Math.abs(ridgeDelta), 0, sunRadius * 0.6, 1.4, 1, true);
-  const glow = p.lerp(120, 240, warmth) * (0.45 + 0.65 * visibility) * brightPass;
-  const sunCoreCool = [242, 210, 170];
-  const sunCoreWarm = [255, 170, 80];
-  const sunHaloCool = [242, 196, 150];
-  const sunHaloWarm = [255, 160, 70];
+  const glow = p.lerp(160, 255, warmth) * (0.5 + 0.75 * visibility) * brightPass;
+  const sunCoreCool = [248, 204, 148];
+  const sunCoreWarm = [255, 152, 68];
+  const sunHaloCool = [240, 180, 130];
+  const sunHaloWarm = [255, 140, 60];
   p.noStroke();
-  for (let i = 6; i >= 1; i--) {
-    const radius = sunRadius * (1 + i * 0.28);
-    const alpha = glow / (i * 1.08);
+  for (let i = 4; i >= 1; i--) {
+    const radius = sunRadius * (1 + i * 0.24);
+    const alpha = glow / (i * 0.95);
     const haloR = p.lerp(sunHaloCool[0], sunHaloWarm[0], warmth);
     const haloG = p.lerp(sunHaloCool[1], sunHaloWarm[1], warmth);
     const haloB = p.lerp(sunHaloCool[2], sunHaloWarm[2], warmth);
@@ -94,15 +94,15 @@ function drawSun(p, sunPosition, warmth, visibility, ridgeDelta) {
   const coreR = p.lerp(sunCoreCool[0], sunCoreWarm[0], warmth);
   const coreG = p.lerp(sunCoreCool[1], sunCoreWarm[1], warmth);
   const coreB = p.lerp(sunCoreCool[2], sunCoreWarm[2], warmth);
-  p.fill(coreR, coreG, coreB, 245 + 10 * visibility);
-  p.ellipse(sunX, sunY, sunRadius * 1.35);
+  p.fill(coreR, coreG, coreB, 250 + 12 * visibility);
+  p.ellipse(sunX, sunY, sunRadius * 1.25);
 }
 
 function drawMountains(p, layers, warmth) {
   for (let i = 0; i < layers; i++) {
     const depth = i / layers;
-    const coolColor = [28 + depth * 88, 58 + depth * 86, 96 + depth * 74];
-    const warmColor = [70 + depth * 112, 92 + depth * 102, 88 + depth * 76];
+    const coolColor = [32 + depth * 78, 72 + depth * 82, 88 + depth * 60];
+    const warmColor = [84 + depth * 96, 128 + depth * 82, 72 + depth * 70];
     const col = p.color(
       p.lerp(coolColor[0], warmColor[0], warmth),
       p.lerp(coolColor[1], warmColor[1], warmth),
@@ -155,8 +155,8 @@ export function createMountainScene(p) {
       const eased = 0.5 - 0.5 * Math.cos(Math.min(1, loopProgress) * Math.PI);
       const arcRise = Math.sin(eased * Math.PI);
 
-      const baseWarmth = p.constrain(p.map(eased, 0, 0.65, 0.25, 1), 0.25, 1);
-      const sunRadius = p.height * 0.15;
+      const baseWarmth = p.constrain(p.map(eased, 0, 0.65, 0.4, 1), 0.4, 1);
+      const sunRadius = p.height * 0.12;
       const sunPathY = p.height * 0.64;
       const sunLift = p.height * 0.3;
       const sunY = seconds < startDelay ? p.height * 0.76 : sunPathY - arcRise * sunLift;
