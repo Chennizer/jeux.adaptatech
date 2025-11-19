@@ -1,7 +1,6 @@
 import { createMountainScene } from './zen-mountain-scene.js';
 import { createLotusScene } from './zen-lotus-scene.js';
 import { createBambooScene } from './zen-bamboo-scene.js';
-import { createCloudScene } from './zen-cloud-scene.js';
 import { createShoreScene } from './zen-shore-scene.js';
 
 const PLAYLIST_TRACKS = [
@@ -16,7 +15,6 @@ const SCENE_SOUNDTRACKS = {
   mountain: '../../sounds/sadness/subtlewind.mp3',
   lotus: '../../sounds/sadness/windandsnow.mp3',
   bamboo: '../../sounds/sadness/candle.mp3',
-  clouds: '../../sounds/sadness/subtlewind.mp3',
   shore: '../../sounds/sadness/softrain.mp3'
 };
 
@@ -219,7 +217,6 @@ const sketch = p => {
       createMountainScene(p),
       createLotusScene(p),
       createBambooScene(p),
-      createCloudScene(p),
       createShoreScene(p)
     ];
     scenes.forEach(scene => scene.resize?.());

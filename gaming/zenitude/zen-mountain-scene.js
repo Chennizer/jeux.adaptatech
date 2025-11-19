@@ -1,7 +1,9 @@
 const SKY_COLORS = [
-  { y: 0, color: [18, 34, 52] },
-  { y: 0.5, color: [46, 80, 120] },
-  { y: 1, color: [128, 164, 180] }
+  { y: 0, cold: [16, 30, 58], warm: [60, 78, 110] },
+  { y: 0.28, cold: [42, 72, 118], warm: [94, 124, 154] },
+  { y: 0.55, cold: [88, 118, 148], warm: [156, 154, 160] },
+  { y: 0.78, cold: [128, 156, 168], warm: [206, 172, 162] },
+  { y: 1, cold: [156, 178, 186], warm: [230, 194, 170] }
 ];
 
 class MistLayer {
@@ -30,7 +32,7 @@ class MistLayer {
   }
 }
 
-function drawSky(p) {
+function drawSky(p, warmth) {
   const h = p.height;
   for (let i = 0; i < SKY_COLORS.length - 1; i++) {
     const a = SKY_COLORS[i];
@@ -39,54 +41,109 @@ function drawSky(p) {
     const end = b.y * h;
     for (let y = start; y <= end; y++) {
       const t = (y - start) / Math.max(1, end - start);
-      const r = p.lerp(a.color[0], b.color[0], t);
-      const g = p.lerp(a.color[1], b.color[1], t);
-      const bl = p.lerp(a.color[2], b.color[2], t);
+      const coldR = p.lerp(a.cold[0], b.cold[0], t);
+      const coldG = p.lerp(a.cold[1], b.cold[1], t);
+      const coldB = p.lerp(a.cold[2], b.cold[2], t);
+      const warmR = p.lerp(a.warm[0], b.warm[0], t);
+      const warmG = p.lerp(a.warm[1], b.warm[1], t);
+      const warmB = p.lerp(a.warm[2], b.warm[2], t);
+      const r = p.lerp(coldR, warmR, warmth);
+      const g = p.lerp(coldG, warmG, warmth);
+      const bl = p.lerp(coldB, warmB, warmth);
       p.stroke(r, g, bl);
       p.line(0, y, p.width, y);
     }
   }
 }
 
-function drawMountains(p, layers, sunHeight, multiplier) {
+function mountainHeightAt(p, x, depth) {
+  const baseY = p.height * (0.62 + depth * 0.18);
+  const height = p.height * (0.1 + (1 - depth) * 0.18);
+  const noiseVal = p.noise(x * 0.0008 + depth * 3.3, depth * 2.1);
+  return baseY - noiseVal * height;
+}
+
+function ridgeHeightAt(p, layers, x) {
+  let ridge = p.height;
   for (let i = 0; i < layers; i++) {
     const depth = i / layers;
-    const baseY = p.height * (0.35 + depth * 0.45);
-    const height = p.height * (0.25 + (1 - depth) * 0.35);
-    const col = p.color(30 + depth * 90, 60 + depth * 80, 90 + depth * 60, 220 - depth * 120);
-    p.fill(col);
-    p.noStroke();
-    p.beginShape();
-    p.vertex(0, p.height);
-    for (let x = 0; x <= p.width; x += 18) {
-      const noiseVal = p.noise(x * 0.0008 + depth * 3.3, depth * 2.1);
-      const y = baseY - noiseVal * height;
-      p.vertex(x, y);
-    }
-    p.vertex(p.width, p.height);
-    p.endShape(p.CLOSE);
+    ridge = Math.min(ridge, mountainHeightAt(p, x, depth));
   }
+  return ridge;
+}
 
-  const sunRadius = p.height * 0.15;
-  const sunY = p.lerp(p.height * 0.75, p.height * 0.28, sunHeight);
-  const sunX = p.width * 0.5;
-  const glow = p.lerp(50, 160, sunHeight);
+function drawSun(p, sunPosition, warmth, visibility, ridgeDelta) {
+  const sunRadius = p.height * 0.12;
+  const { x: sunX, y: sunY } = sunPosition;
+  const brightPass = p.map(Math.abs(ridgeDelta), 0, sunRadius * 0.6, 1.4, 1, true);
+  const glow = p.lerp(160, 255, warmth) * (0.5 + 0.75 * visibility) * brightPass;
+  const sunCoreCool = [248, 204, 148];
+  const sunCoreWarm = [255, 152, 68];
+  const sunHaloCool = [240, 180, 130];
+  const sunHaloWarm = [255, 140, 60];
   p.noStroke();
-  for (let i = 5; i >= 1; i--) {
-    const radius = sunRadius * (1 + i * 0.28);
-    const alpha = glow / (i * 1.6);
-    p.fill(255, 220, 160, alpha);
+  for (let i = 4; i >= 1; i--) {
+    const radius = sunRadius * (1 + i * 0.24);
+    const alpha = glow / (i * 0.95);
+    const haloR = p.lerp(sunHaloCool[0], sunHaloWarm[0], warmth);
+    const haloG = p.lerp(sunHaloCool[1], sunHaloWarm[1], warmth);
+    const haloB = p.lerp(sunHaloCool[2], sunHaloWarm[2], warmth);
+    p.fill(haloR, haloG, haloB, alpha);
     p.ellipse(sunX, sunY, radius * 2);
   }
-  p.fill(255, 230, 190, 220);
-  p.ellipse(sunX, sunY, sunRadius * 1.4);
+  const coreR = p.lerp(sunCoreCool[0], sunCoreWarm[0], warmth);
+  const coreG = p.lerp(sunCoreCool[1], sunCoreWarm[1], warmth);
+  const coreB = p.lerp(sunCoreCool[2], sunCoreWarm[2], warmth);
+  p.fill(coreR, coreG, coreB, 250 + 12 * visibility);
+  p.ellipse(sunX, sunY, sunRadius * 1.25);
+}
+
+function drawMountains(p, layers, warmth) {
+  for (let i = 0; i < layers; i++) {
+    const depth = i / layers;
+    const coolColor = [36 + depth * 48, 92 + depth * 64, 62 + depth * 44];
+    const warmColor = [66 + depth * 70, 140 + depth * 60, 86 + depth * 40];
+    const ridge = [];
+
+    p.noStroke();
+    p.beginShape();
+    p.vertex(-24, p.height);
+    for (let x = -24; x <= p.width + 24; x += 18) {
+      const y = mountainHeightAt(p, x, depth);
+      ridge.push({ x, y });
+      p.vertex(x, y);
+    }
+    p.vertex(p.width + 24, p.height);
+    const baseCol = p.color(
+      p.lerp(coolColor[0], warmColor[0], warmth),
+      p.lerp(coolColor[1], warmColor[1], warmth),
+      p.lerp(coolColor[2], warmColor[2], warmth),
+      255
+    );
+    p.fill(baseCol);
+    p.endShape(p.CLOSE);
+
+    // Snow cap overlay for higher sections
+    const snowDepth = p.height * (0.04 + 0.045 * (1 - depth));
+    const snowWarm = p.lerpColor(p.color(230, 236, 240), p.color(255, 248, 238), warmth);
+    p.fill(snowWarm.levels[0], snowWarm.levels[1], snowWarm.levels[2], 230);
+    p.beginShape();
+    ridge.forEach(pt => p.vertex(pt.x, pt.y));
+    for (let i = ridge.length - 1; i >= 0; i--) {
+      const pt = ridge[i];
+      const snowLine = pt.y + snowDepth;
+      p.vertex(pt.x, Math.min(snowLine, p.height * 0.78));
+    }
+    p.endShape(p.CLOSE);
+  }
 }
 
 export function createMountainScene(p) {
   let mistLayers = [];
-  let sunHeight = 0;
   let speedMultiplier = 1;
   let breathePulse = 0;
+  const startDelay = 1.5;
+  const cycleDuration = 60; // seconds for a full left-to-right sunset arc
 
   function resize() {
     const count = 4;
@@ -108,10 +165,31 @@ export function createMountainScene(p) {
       breathePulse = 1;
     },
     draw() {
-      drawSky(p);
+      const seconds = p.millis() * 0.001 * speedMultiplier;
+      const rawProgress = (seconds - startDelay) / cycleDuration;
+      const loopProgress = ((rawProgress % 1) + 1) % 1; // wrap safely for negatives
+      const eased = 0.5 - 0.5 * Math.cos(Math.min(1, loopProgress) * Math.PI);
+      const arcRise = Math.sin(eased * Math.PI);
 
-      sunHeight = (Math.sin(p.millis() * 0.00005 * speedMultiplier) + 1) * 0.5;
-      drawMountains(p, 5, sunHeight, speedMultiplier);
+      const baseWarmth = p.constrain(p.map(eased, 0, 0.65, 0.4, 1), 0.4, 1);
+      const sunRadius = p.height * 0.12;
+      const sunPathY = p.height * 0.72;
+      const sunLift = p.height * 0.6;
+      const targetY = sunPathY - arcRise * sunLift;
+      const sunY = seconds < startDelay ? p.height * 0.78 : Math.max(sunRadius * 0.65, targetY);
+      const sunX = p.lerp(-sunRadius * 0.8, p.width + sunRadius * 0.8, eased);
+      const ridgeHeight = ridgeHeightAt(p, 5, sunX);
+      const delta = sunY - ridgeHeight;
+      const visibilityBase = seconds < startDelay ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
+      const intensityRamp = p.map(eased, 0, 0.75, 0.65, 1.15, true);
+      const sunVisibility = p.constrain(visibilityBase * intensityRamp, 0, 1);
+      const warmthLift = p.map(sunVisibility, 0.35, 0.75, 0, 0.2, true);
+      const warmth = p.constrain(baseWarmth + warmthLift, 0.25, 1);
+      const darkness = Math.pow(1 - sunVisibility, 1.25);
+
+      drawSky(p, warmth);
+      drawSun(p, { x: sunX, y: sunY }, warmth, sunVisibility, delta);
+      drawMountains(p, 5, warmth);
 
       mistLayers.forEach(layer => layer.draw(speedMultiplier));
 
@@ -123,8 +201,15 @@ export function createMountainScene(p) {
         breathePulse *= 0.9;
       }
 
+      if (darkness > 0.01) {
+        const nightTone = p.lerpColor(p.color(12, 18, 26, 0), p.color(6, 10, 14, 220), darkness);
+        p.noStroke();
+        p.fill(nightTone);
+        p.rect(0, 0, p.width, p.height);
+      }
+
       p.noStroke();
-      p.fill(28, 52, 60, 180);
+      p.fill(34, 82, 52, 200);
       p.rect(0, p.height * 0.9, p.width, p.height * 0.12);
     }
   };
