@@ -771,14 +771,28 @@
       const res=await fetch('../../images/pictos/index.json',{cache:'no-store'});
       if(!res.ok) throw new Error(res.status+' '+res.statusText);
       const data=await res.json();
-      const base = new URL('.', res.url).pathname;
+      const rawBase = typeof data.base === 'string' ? data.base : '.';
+      const base = new URL(rawBase, res.url).pathname;
       let cats = [];
       if (data.categories && typeof data.categories === 'object'){
-        cats = Object.entries(data.categories).map(([key,arr])=>({
-          key, label: pretty(key), files:Array.isArray(arr)?arr:[]
-        }));
+        cats = Object.entries(data.categories).map(([key,val])=>{
+          const files = Array.isArray(val)
+            ? val.filter(Boolean)
+            : Array.isArray(val?.items)
+              ? val.items.map(it=> typeof it === 'string' ? it : it?.file).filter(Boolean)
+              : [];
+          const frLabel = (!Array.isArray(val) && val?.label?.fr) || (typeof val?.label === 'string' ? val.label : null);
+          const enLabel = (!Array.isArray(val) && val?.label?.en) || (typeof val?.label === 'string' ? val.label : null);
+          return {
+            key,
+            label: frLabel || enLabel || pretty(key),
+            labels: { fr: frLabel, en: enLabel },
+            files
+          };
+        }).filter(c=>c.files.length>0);
       } else if (Array.isArray(data.files)) {
-        cats = [{ key:'__all', label:'All', files:data.files }];
+        const files = data.files.filter(Boolean);
+        cats = [{ key:'__all', label:'All', labels:{ fr:'Toutes', en:'All' }, files }];
       } else {
         throw new Error('Invalid manifest format');
       }
@@ -795,11 +809,13 @@
         options.push(opt);
       }
       categoryIndex.forEach(c=>{
-        const baseLabel = `${c.label} (${c.files.length})`;
+        const frLabel = c.labels?.fr || c.label;
+        const enLabel = c.labels?.en || c.label;
+        const baseLabel = `${frLabel} (${c.files.length})`;
         const opt = new Option(baseLabel, c.key, false, false);
         // mirror label in both langs (best effort)
-        opt.setAttribute('data-fr', `${c.label} (${c.files.length})`);
-        opt.setAttribute('data-en', `${c.label} (${c.files.length})`);
+        opt.setAttribute('data-fr', `${frLabel} (${c.files.length})`);
+        opt.setAttribute('data-en', `${enLabel} (${c.files.length})`);
         options.push(opt);
       });
       gmCategory.innerHTML = '';
