@@ -54,7 +54,7 @@
     .gm-toolbar{ display:flex; gap:.5rem; align-items:center; margin-bottom:.6rem; flex-wrap:wrap; }
     .gm-grid{ --cell:120px; display:grid; grid-template-columns:repeat(auto-fill,minmax(var(--cell),1fr)); gap:10px; }
     .gm-item{ border:1px solid var(--line); border-radius:8px; background:#fff; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-    .gm-item img{ width:100%; height:100%; object-fit:contain; }
+    .gm-item img{ width:100%; height:100%; object-fit:contain; transition:opacity .2s ease; }
 
     /* NEW: visual highlight when current image is found */
     .gm-item.is-selected { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -768,7 +768,7 @@
     const pretty = (s)=> String(s).replaceAll('_',' ');
 
     async function fetchManifest(){
-      const res=await fetch('../../images/pictos/index.json',{cache:'no-store'});
+      const res=await fetch('../../images/pictos/index.json',{cache:'force-cache'});
       if(!res.ok) throw new Error(res.status+' '+res.statusText);
       const data=await res.json();
       const rawBase = typeof data.base === 'string' ? data.base : '.';
@@ -851,12 +851,43 @@
       renderGrid(list);
     }
 
+    let gmObserver = null;
+
     function renderGrid(list){
       gridItems = list;
       gmGrid.innerHTML='';
+      if (gmObserver){ gmObserver.disconnect(); }
+
+      if ('IntersectionObserver' in window){
+        gmObserver = new IntersectionObserver((entries)=>{
+          entries.forEach(entry=>{
+            if (!entry.isIntersecting) return;
+            const target = entry.target;
+            if (target.dataset && target.dataset.src){
+              target.src = target.dataset.src;
+              target.removeAttribute('data-src');
+            }
+            gmObserver?.unobserve(target);
+          });
+        }, { root: gmGrid, rootMargin: '200px 0px', threshold: 0.01 });
+      } else {
+        gmObserver = null;
+      }
+
       list.forEach(item=>{
         const cell=document.createElement('button'); cell.className='gm-item'; cell.title=item.name;
-        const im=document.createElement('img'); im.loading='lazy'; im.alt=item.name; im.src=item.src; cell.appendChild(im);
+        const im=document.createElement('img');
+        im.loading='lazy';
+        im.decoding='async';
+        im.alt=item.name;
+        im.dataset.src=item.src;
+        im.style.opacity='0';
+        im.addEventListener('load', ()=>{ im.style.opacity='1'; });
+
+        if (gmObserver){ gmObserver.observe(im); }
+        else { im.src=item.src; }
+
+        cell.appendChild(im);
         cell.onclick=()=>{
           const imageEl=new Image(); imageEl.crossOrigin='anonymous';
           imageEl.onload=()=>{ img=imageEl; currentImageMeta = { type:'gallery', src:item.src, name:item.name }; render(); hideModal(); saveDebounced(); };
