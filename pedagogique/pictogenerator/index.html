@@ -54,7 +54,7 @@
     .gm-toolbar{ display:flex; gap:.5rem; align-items:center; margin-bottom:.6rem; flex-wrap:wrap; }
     .gm-grid{ --cell:120px; display:grid; grid-template-columns:repeat(auto-fill,minmax(var(--cell),1fr)); gap:10px; }
     .gm-item{ border:1px solid var(--line); border-radius:8px; background:#fff; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-    .gm-item img{ width:100%; height:100%; object-fit:contain; }
+    .gm-item img{ width:100%; height:100%; object-fit:contain; transition:opacity .2s ease; }
 
     /* NEW: visual highlight when current image is found */
     .gm-item.is-selected { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -768,17 +768,31 @@
     const pretty = (s)=> String(s).replaceAll('_',' ');
 
     async function fetchManifest(){
-      const res=await fetch('../../images/pictos/index.json',{cache:'no-store'});
+      const res=await fetch('../../images/pictos/index.json',{cache:'force-cache'});
       if(!res.ok) throw new Error(res.status+' '+res.statusText);
       const data=await res.json();
-      const base = new URL('.', res.url).pathname;
+      const rawBase = typeof data.base === 'string' ? data.base : '.';
+      const base = new URL(rawBase, res.url).pathname;
       let cats = [];
       if (data.categories && typeof data.categories === 'object'){
-        cats = Object.entries(data.categories).map(([key,arr])=>({
-          key, label: pretty(key), files:Array.isArray(arr)?arr:[]
-        }));
+        cats = Object.entries(data.categories).map(([key,val])=>{
+          const files = Array.isArray(val)
+            ? val.filter(Boolean)
+            : Array.isArray(val?.items)
+              ? val.items.map(it=> typeof it === 'string' ? it : it?.file).filter(Boolean)
+              : [];
+          const frLabel = (!Array.isArray(val) && val?.label?.fr) || (typeof val?.label === 'string' ? val.label : null);
+          const enLabel = (!Array.isArray(val) && val?.label?.en) || (typeof val?.label === 'string' ? val.label : null);
+          return {
+            key,
+            label: frLabel || enLabel || pretty(key),
+            labels: { fr: frLabel, en: enLabel },
+            files
+          };
+        }).filter(c=>c.files.length>0);
       } else if (Array.isArray(data.files)) {
-        cats = [{ key:'__all', label:'All', files:data.files }];
+        const files = data.files.filter(Boolean);
+        cats = [{ key:'__all', label:'All', labels:{ fr:'Toutes', en:'All' }, files }];
       } else {
         throw new Error('Invalid manifest format');
       }
@@ -795,11 +809,13 @@
         options.push(opt);
       }
       categoryIndex.forEach(c=>{
-        const baseLabel = `${c.label} (${c.files.length})`;
+        const frLabel = c.labels?.fr || c.label;
+        const enLabel = c.labels?.en || c.label;
+        const baseLabel = `${frLabel} (${c.files.length})`;
         const opt = new Option(baseLabel, c.key, false, false);
         // mirror label in both langs (best effort)
-        opt.setAttribute('data-fr', `${c.label} (${c.files.length})`);
-        opt.setAttribute('data-en', `${c.label} (${c.files.length})`);
+        opt.setAttribute('data-fr', `${frLabel} (${c.files.length})`);
+        opt.setAttribute('data-en', `${enLabel} (${c.files.length})`);
         options.push(opt);
       });
       gmCategory.innerHTML = '';
@@ -835,18 +851,72 @@
       renderGrid(list);
     }
 
+    let gmObserver = null;
+
     function renderGrid(list){
       gridItems = list;
       gmGrid.innerHTML='';
+      if (gmObserver){ gmObserver.disconnect(); }
+
+      if ('IntersectionObserver' in window){
+        gmObserver = new IntersectionObserver((entries)=>{
+          entries.forEach(entry=>{
+            if (!entry.isIntersecting) return;
+            const target = entry.target;
+            if (target.dataset && target.dataset.src){
+              target.src = target.dataset.src;
+              target.removeAttribute('data-src');
+            }
+            gmObserver?.unobserve(target);
+          });
+        }, { root: gmGrid, rootMargin: '200px 0px', threshold: 0.01 });
+      } else {
+        gmObserver = null;
+      }
+
       list.forEach(item=>{
         const cell=document.createElement('button'); cell.className='gm-item'; cell.title=item.name;
-        const im=document.createElement('img'); im.loading='lazy'; im.alt=item.name; im.src=item.src; cell.appendChild(im);
+        const im=document.createElement('img');
+        im.loading='lazy';
+        im.decoding='async';
+        im.alt=item.name;
+        im.dataset.src=item.src;
+        im.style.opacity='0';
+        im.addEventListener('load', ()=>{ im.style.opacity='1'; });
+
+        cell.appendChild(im);
+        gmGrid.appendChild(cell);
+
+        // Observe only after the element is in the DOM to ensure an intersection fires.
+        // Also add a short fallback timer to eagerly load if the observer never triggers
+        // (e.g., Safari quirks or async timing during fast scrolls).
+        requestAnimationFrame(()=>{
+          let fallbackTimer = null;
+
+          const loadNow = ()=>{
+            if (!im.dataset.src) return;
+            im.src = im.dataset.src;
+            im.removeAttribute('data-src');
+            if (gmObserver) gmObserver.unobserve(im);
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+          };
+
+          if (gmObserver){
+            gmObserver.observe(im);
+            fallbackTimer = setTimeout(loadNow, 1200);
+          } else {
+            loadNow();
+          }
+
+          im.addEventListener('load', ()=>{ if (fallbackTimer) clearTimeout(fallbackTimer); });
+          im.addEventListener('error', ()=>{ if (fallbackTimer) clearTimeout(fallbackTimer); });
+        });
+
         cell.onclick=()=>{
           const imageEl=new Image(); imageEl.crossOrigin='anonymous';
           imageEl.onload=()=>{ img=imageEl; currentImageMeta = { type:'gallery', src:item.src, name:item.name }; render(); hideModal(); saveDebounced(); };
           imageEl.src=item.src;
         };
-        gmGrid.appendChild(cell);
       });
     }
 
