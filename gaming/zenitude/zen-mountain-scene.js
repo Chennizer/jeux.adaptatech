@@ -173,9 +173,10 @@ export function createMountainScene(p) {
 
       const baseWarmth = p.constrain(p.map(eased, 0, 0.65, 0.4, 1), 0.4, 1);
       const sunRadius = p.height * 0.12;
-      const sunPathY = p.height * 0.64;
-      const sunLift = p.height * 0.3;
-      const sunY = seconds < startDelay ? p.height * 0.76 : sunPathY - arcRise * sunLift;
+      const sunPathY = p.height * 0.72;
+      const sunLift = p.height * 0.6;
+      const targetY = sunPathY - arcRise * sunLift;
+      const sunY = seconds < startDelay ? p.height * 0.78 : Math.max(sunRadius * 0.65, targetY);
       const sunX = p.lerp(-sunRadius * 0.8, p.width + sunRadius * 0.8, eased);
       const ridgeHeight = ridgeHeightAt(p, 5, sunX);
       const delta = sunY - ridgeHeight;
