@@ -884,16 +884,39 @@
         im.style.opacity='0';
         im.addEventListener('load', ()=>{ im.style.opacity='1'; });
 
-        if (gmObserver){ gmObserver.observe(im); }
-        else { im.src=item.src; }
-
         cell.appendChild(im);
+        gmGrid.appendChild(cell);
+
+        // Observe only after the element is in the DOM to ensure an intersection fires.
+        // Also add a short fallback timer to eagerly load if the observer never triggers
+        // (e.g., Safari quirks or async timing during fast scrolls).
+        requestAnimationFrame(()=>{
+          let fallbackTimer = null;
+
+          const loadNow = ()=>{
+            if (!im.dataset.src) return;
+            im.src = im.dataset.src;
+            im.removeAttribute('data-src');
+            if (gmObserver) gmObserver.unobserve(im);
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+          };
+
+          if (gmObserver){
+            gmObserver.observe(im);
+            fallbackTimer = setTimeout(loadNow, 1200);
+          } else {
+            loadNow();
+          }
+
+          im.addEventListener('load', ()=>{ if (fallbackTimer) clearTimeout(fallbackTimer); });
+          im.addEventListener('error', ()=>{ if (fallbackTimer) clearTimeout(fallbackTimer); });
+        });
+
         cell.onclick=()=>{
           const imageEl=new Image(); imageEl.crossOrigin='anonymous';
           imageEl.onload=()=>{ img=imageEl; currentImageMeta = { type:'gallery', src:item.src, name:item.name }; render(); hideModal(); saveDebounced(); };
           imageEl.src=item.src;
         };
-        gmGrid.appendChild(cell);
       });
     }
 
