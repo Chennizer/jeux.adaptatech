@@ -101,23 +101,39 @@ function drawSun(p, sunPosition, warmth, visibility, ridgeDelta) {
 function drawMountains(p, layers, warmth) {
   for (let i = 0; i < layers; i++) {
     const depth = i / layers;
-    const coolColor = [32 + depth * 78, 72 + depth * 82, 88 + depth * 60];
-    const warmColor = [84 + depth * 96, 128 + depth * 82, 72 + depth * 70];
-    const col = p.color(
+    const coolColor = [36 + depth * 48, 92 + depth * 64, 62 + depth * 44];
+    const warmColor = [66 + depth * 70, 140 + depth * 60, 86 + depth * 40];
+    const ridge = [];
+
+    p.noStroke();
+    p.beginShape();
+    p.vertex(-24, p.height);
+    for (let x = -24; x <= p.width + 24; x += 18) {
+      const y = mountainHeightAt(p, x, depth);
+      ridge.push({ x, y });
+      p.vertex(x, y);
+    }
+    p.vertex(p.width + 24, p.height);
+    const baseCol = p.color(
       p.lerp(coolColor[0], warmColor[0], warmth),
       p.lerp(coolColor[1], warmColor[1], warmth),
       p.lerp(coolColor[2], warmColor[2], warmth),
       255
     );
-    p.fill(col);
-    p.noStroke();
+    p.fill(baseCol);
+    p.endShape(p.CLOSE);
+
+    // Snow cap overlay for higher sections
+    const snowDepth = p.height * (0.04 + 0.045 * (1 - depth));
+    const snowWarm = p.lerpColor(p.color(230, 236, 240), p.color(255, 248, 238), warmth);
+    p.fill(snowWarm.levels[0], snowWarm.levels[1], snowWarm.levels[2], 230);
     p.beginShape();
-    p.vertex(0, p.height);
-    for (let x = 0; x <= p.width; x += 18) {
-      const y = mountainHeightAt(p, x, depth);
-      p.vertex(x, y);
+    ridge.forEach(pt => p.vertex(pt.x, pt.y));
+    for (let i = ridge.length - 1; i >= 0; i--) {
+      const pt = ridge[i];
+      const snowLine = pt.y + snowDepth;
+      p.vertex(pt.x, Math.min(snowLine, p.height * 0.78));
     }
-    p.vertex(p.width, p.height);
     p.endShape(p.CLOSE);
   }
 }
@@ -127,7 +143,7 @@ export function createMountainScene(p) {
   let speedMultiplier = 1;
   let breathePulse = 0;
   const startDelay = 1.5;
-  const cycleDuration = 30; // seconds for a full left-to-right sunset arc
+  const cycleDuration = 60; // seconds for a full left-to-right sunset arc
 
   function resize() {
     const count = 4;
@@ -192,7 +208,7 @@ export function createMountainScene(p) {
       }
 
       p.noStroke();
-      p.fill(28, 52, 60, 180);
+      p.fill(34, 82, 52, 200);
       p.rect(0, p.height * 0.9, p.width, p.height * 0.12);
     }
   };
