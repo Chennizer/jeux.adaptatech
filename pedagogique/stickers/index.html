@@ -292,7 +292,7 @@
 
     .sprite-text {
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      font-weight: 800;              /* MUCH BOLDER BY DEFAULT */
+      font-weight: 800;              /* VERY BOLD BY DEFAULT */
       letter-spacing: 0.03em;
       white-space: pre;
       width: 100%;
@@ -369,13 +369,13 @@
     #presetStrip {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.25rem;
+      gap: 0.35rem;
       margin-top: 0.25rem;
     }
 
     .preset-thumb {
-      width: 80px;    /* doubled from 40px */
-      height: 80px;   /* doubled from 40px */
+      width: 72px;
+      height: 72px;
       border-radius: 6px;
       border: 1px solid var(--line);
       background: #fff;
@@ -482,16 +482,7 @@
 
         <div id="presetStripWrapper">
           <div id="presetStrip">
-            <!-- Remplace les src par tes propres icônes -->
-            <div class="preset-thumb" data-src="stickers/heart.png" title="Heart">
-              <img src="../../images/16sensoryscenes.png" alt="Heart" />
-            </div>
-            <div class="preset-thumb" data-src="stickers/star.png" title="Star">
-              <img src="stickers/star.png" alt="Star" />
-            </div>
-            <div class="preset-thumb" data-src="stickers/smiley.png" title="Smiley">
-              <img src="stickers/smiley.png" alt="Smiley" />
-            </div>
+            <!-- Thumbnails from stickers.json will be injected here -->
           </div>
         </div>
       </div>
@@ -546,7 +537,7 @@
 
       <!-- ADVANCED PANEL -->
       <div id="advPanel">
-        <!-- Planche (avancé) -->
+        <!-- Planche (advanced sizing) -->
         <div class="group">
           <h3>Planche (avancé)</h3>
           <div class="row">
@@ -669,13 +660,17 @@
 
     const spriteListEl = document.getElementById("spriteList");
 
+    // Paths for JSON manifest
+    const STICKER_BASE_PATH = "../../images/stickers/";
+    const STICKER_MANIFEST_URL = STICKER_BASE_PATH + "stickers.json";
+
     if (toggleAdvancedEl && advPanelEl) {
       toggleAdvancedEl.addEventListener("change", () => {
         advPanelEl.style.display = toggleAdvancedEl.checked ? "block" : "none";
       });
     }
 
-    // Folder gallery button: just toggle visibility of preset thumbnails
+    // Folder gallery button: toggle visibility of preset thumbnails
     if (openGalleryBtn && presetStripWrapperEl) {
       openGalleryBtn.addEventListener("click", () => {
         const isVisible = presetStripWrapperEl.style.display === "block";
@@ -744,7 +739,6 @@
         leftGroup.style.minWidth = "0";
 
         if (s.type === "text") {
-          // Inline editable text for text sprites
           const input = document.createElement("input");
           input.type = "text";
           input.className = "sprite-list-text-input";
@@ -753,19 +747,19 @@
           input.value = currentFirstLine;
 
           input.addEventListener("click", (ev) => {
-            ev.stopPropagation(); // avoid also triggering selection click twice
+            ev.stopPropagation();
           });
 
           input.addEventListener("input", () => {
-            // Update sprite text (single line here)
             s.text = input.value;
             if (s.textEl) {
               s.textEl.textContent = s.text;
             }
-            // Also sync the text panel if this sprite is selected
             if (selectedSpriteId === s.id && textSpriteContentEl) {
               textSpriteContentEl.value = s.text;
             }
+            s.name = (s.text || "").split(/\r?\n/)[0] || ("Texte " + s.id);
+            refreshSpriteList();
           });
 
           leftGroup.appendChild(input);
@@ -828,7 +822,6 @@
 
       const flipFactor = sprite.flipH ? -1 : 1;
       const rot = sprite.rotation || 0;
-      // Only flip horizontally here; scaling is handled via width/height and font-size
       sprite.wrapper.style.transform = `rotate(${rot}deg) scale(${flipFactor}, 1)`;
 
       if (sprite.type === "text" && sprite.textEl) {
@@ -1170,31 +1163,6 @@
       }
     }
 
-    // === NEW: helper to delete currently selected sprite ===
-    function deleteSelectedSprite() {
-      if (selectedSpriteId == null) return;
-
-      const idx = sprites.findIndex((s) => s.id === selectedSpriteId);
-      if (idx === -1) return;
-
-      const sprite = sprites[idx];
-
-      // Remove from DOM
-      if (sprite.wrapper && sprite.wrapper.parentNode) {
-        sprite.wrapper.parentNode.removeChild(sprite.wrapper);
-      }
-
-      // Remove from array
-      sprites.splice(idx, 1);
-
-      // Clear selection
-      selectedSpriteId = null;
-
-      // Refresh UI panels
-      refreshSpriteList();
-      refreshObjectControls();
-    }
-
     sizePercentEl.addEventListener("input", () => {
       const sprite = selectedSpriteId ? getSpriteById(selectedSpriteId) : null;
       const val = parseInt(sizePercentEl.value, 10) || 100;
@@ -1216,11 +1184,9 @@
       const sprite = selectedSpriteId ? getSpriteById(selectedSpriteId) : null;
       if (!sprite || sprite.type !== "text") return;
       sprite.text = textSpriteContentEl.value;
-      // update DOM
       if (sprite.textEl) {
         sprite.textEl.textContent = sprite.text;
       }
-      // update list input (first line)
       const firstLine = (sprite.text || "").split(/\r?\n/)[0];
       sprite.name = firstLine || ("Texte " + sprite.id);
       refreshSpriteList();
@@ -1287,7 +1253,6 @@
       const rotRad = (sprite.rotation || 0) * (Math.PI / 180);
       ctx.rotate(rotRad);
       const flipFactor = sprite.flipH ? -1 : 1;
-      // only flip horizontally; scale is in font size
       ctx.scale(flipFactor, 1);
 
       ctx.fillStyle = sprite.textColor || "#000000";
@@ -1371,19 +1336,93 @@
       imageFilesEl.value = "";
     });
 
+    // Load preset stickers from JSON (with id + file)
+    async function loadStickerPresets() {
+      if (!presetStripEl) return;
+      try {
+        const res = await fetch(STICKER_MANIFEST_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error(res.status + " " + res.statusText);
+        const data = await res.json();
+
+        let stickers = Array.isArray(data.stickers) ? data.stickers : [];
+
+        // Backward compatibility if needed
+        if (!stickers.length && Array.isArray(data.files)) {
+          stickers = data.files.map((f) => ({ id: f, file: f }));
+        }
+
+        presetStripEl.innerHTML = "";
+
+        stickers.forEach((sticker) => {
+          if (!sticker || !sticker.file) return;
+
+          const src = STICKER_BASE_PATH + sticker.file;
+          const label = sticker.id || sticker.file;
+
+          const thumb = document.createElement("div");
+          thumb.className = "preset-thumb";
+          thumb.dataset.src = src;
+          thumb.dataset.label = label;
+          thumb.title = label;
+
+          const img = document.createElement("img");
+          img.src = src;
+          img.alt = label;
+
+          thumb.appendChild(img);
+          presetStripEl.appendChild(thumb);
+        });
+      } catch (err) {
+        console.error("Erreur de chargement des autocollants prédéfinis:", err);
+      }
+    }
+
+    // Click on preset thumb => add sprite with nice label
     presetStripEl.addEventListener("click", (e) => {
       const thumb = e.target.closest(".preset-thumb");
       if (!thumb) return;
 
-      // Use the actual <img> src so the browser resolves the correct absolute path
       const imgEl = thumb.querySelector("img");
       if (!imgEl || !imgEl.src) return;
 
-      addImageSpriteFromDataUrl(imgEl.src, thumb.title || "Preset");
+      const label = thumb.dataset.label || thumb.title || "Sticker";
+      addImageSpriteFromDataUrl(imgEl.src, label);
     });
 
     [sheetWidthEl, sheetHeightEl].forEach((el) => {
       el.addEventListener("input", applySheetSize);
+    });
+
+    function deleteSelectedSprite() {
+      if (selectedSpriteId == null) return;
+      const sprite = getSpriteById(selectedSpriteId);
+      if (!sprite) return;
+      if (sprite.wrapper && sprite.wrapper.parentNode) {
+        sprite.wrapper.parentNode.removeChild(sprite.wrapper);
+      }
+      sprites = sprites.filter((s) => s.id !== selectedSpriteId);
+      selectedSpriteId = null;
+      refreshSpriteList();
+      refreshObjectControls();
+    }
+
+    // Delete key removes selected sprite (but not when typing in inputs/textarea)
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+         active.tagName === "TEXTAREA" ||
+         active.isContentEditable)
+      ) {
+        // Let normal text editing happen
+        return;
+      }
+
+      e.preventDefault();
+      deleteSelectedSprite();
     });
 
     clearAllBtn.addEventListener("click", () => {
@@ -1403,21 +1442,9 @@
     addTextBtn.addEventListener("click", addTextSprite);
     addArrowBtn.addEventListener("click", addArrowSprite);
 
-    // === NEW: keyboard Delete / Backspace removes selected sprite ===
-    document.addEventListener("keydown", (e) => {
-      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
-      if (tag === "input" || tag === "textarea") return;
-
-      if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedSpriteId != null) {
-          e.preventDefault();
-          deleteSelectedSprite();
-        }
-      }
-    });
-
     applySheetSize();
     refreshSpriteList();
+    loadStickerPresets();
   </script>
 </body>
 </html>

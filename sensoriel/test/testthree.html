@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Image to 3D Relief (three.js)</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #eee;
+    }
+
+    #ui {
+      position: absolute;
+      z-index: 10;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.6);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    #imageUpload {
+      margin-top: 6px;
+      display: block;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div><strong>Steps</strong></div>
+    <ol style="margin: 4px 0 6px 18px; padding: 0;">
+      <li>Upload an image</li>
+      <li>A 3D relief object is generated</li>
+      <li>Press <strong>Space</strong> to rotate around it</li>
+    </ol>
+    <input type="file" id="imageUpload" accept="image/*">
+  </div>
+
+  <canvas id="threeCanvas"></canvas>
+
+  <!-- three.js from CDN -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+  <script>
+    let scene, camera, renderer;
+    let reliefMesh = null;
+    let isRotating = false;
+    let angle = 0;
+    let radius = 8;
+    const target = new THREE.Vector3(0, 0, 0);
+
+    // Parameters for relief generation
+    const SEGMENTS_X = 128;      // horizontal segments of the mesh
+    const SEGMENTS_Y = 128;      // vertical segments of the mesh
+    const MAX_HEIGHT = 1.5;      // max relief height in world units
+
+    init();
+    animate();
+
+    function init() {
+      const canvas = document.getElementById('threeCanvas');
+
+      // Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111111);
+
+      // Camera
+      const aspect = window.innerWidth / window.innerHeight;
+      camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
+      camera.position.set(0, 2, radius);
+      camera.lookAt(target);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      // Lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+      dirLight.position.set(5, 10, 7);
+      scene.add(dirLight);
+
+      // A subtle floor for context (optional)
+      const floorGeo = new THREE.PlaneGeometry(50, 50);
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x222222,
+        roughness: 1,
+        metalness: 0
+      });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = -3;
+      scene.add(floor);
+
+      // Events
+      window.addEventListener('resize', onWindowResize);
+      window.addEventListener('keydown', onKeyDown);
+
+      const input = document.getElementById('imageUpload');
+      input.addEventListener('change', onImageUpload);
+    }
+
+    function onWindowResize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(width, height);
+    }
+
+    function onKeyDown(event) {
+      if (event.code === 'Space') {
+        event.preventDefault();
+        if (reliefMesh) {
+          isRotating = !isRotating;
+        }
+      }
+    }
+
+    function onImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+
+      const img = new Image();
+      img.onload = function () {
+        const imgAspect = img.width / img.height || 1;
+
+        // Create the texture from the image
+        const loader = new THREE.TextureLoader();
+        loader.load(
+          url,
+          function (texture) {
+            texture.colorSpace = THREE.SRGBColorSpace;
+
+            // Build the relief geometry based on the image
+            createReliefFromImage(img, texture, imgAspect);
+          },
+          undefined,
+          function (err) {
+            console.error('Texture loading error:', err);
+          }
+        );
+      };
+      img.src = url;
+    }
+
+    function createReliefFromImage(image, texture, aspect) {
+      // Remove previous mesh if any
+      if (reliefMesh) {
+        scene.remove(reliefMesh);
+        reliefMesh.geometry.dispose();
+        if (reliefMesh.material.map) reliefMesh.material.map.dispose();
+        reliefMesh.material.dispose();
+        reliefMesh = null;
+      }
+
+      // Base width/height in world units (scale object size here)
+      const baseHeight = 4;
+      const baseWidth = baseHeight * aspect;
+
+      // Create a plane with many segments (for displacement)
+      const geometry = new THREE.PlaneGeometry(
+        baseWidth,
+        baseHeight,
+        SEGMENTS_X,
+        SEGMENTS_Y
+      );
+
+      // Use an offscreen canvas to get brightness data
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const sampleWidth = SEGMENTS_X + 1;
+      const sampleHeight = SEGMENTS_Y + 1;
+      canvas.width = sampleWidth;
+      canvas.height = sampleHeight;
+
+      // Draw the image scaled to our sample resolution
+      ctx.drawImage(image, 0, 0, sampleWidth, sampleHeight);
+      const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+
+      const position = geometry.attributes.position;
+      const vertexCount = position.count;
+
+      // For each vertex, calculate height from brightness
+      for (let i = 0; i < vertexCount; i++) {
+        const ix = i % (SEGMENTS_X + 1);
+        const iy = Math.floor(i / (SEGMENTS_X + 1));
+
+        const index = (iy * sampleWidth + ix) * 4;
+        const r = imageData[index];
+        const g = imageData[index + 1];
+        const b = imageData[index + 2];
+
+        // Simple luminance
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b; // 0–255
+        const height = (brightness / 255) * MAX_HEIGHT; // 0–MAX_HEIGHT
+
+        const z = height - MAX_HEIGHT / 2; // center around 0
+        position.setZ(i, z);
+      }
+
+      position.needsUpdate = true;
+      geometry.computeVertexNormals();
+
+      const material = new THREE.MeshStandardMaterial({
+        map: texture,
+        side: THREE.DoubleSide,
+        roughness: 0.6,
+        metalness: 0.1
+      });
+
+      reliefMesh = new THREE.Mesh(geometry, material);
+
+      // Lift slightly so it’s above the floor
+      reliefMesh.position.set(0, 0.5, 0);
+
+      // Rotate so we see it from a slightly angled view
+      reliefMesh.rotation.x = -0.4;
+
+      scene.add(reliefMesh);
+
+      // Reset camera orbit
+      angle = 0;
+      radius = 8;
+      camera.position.set(0, 2, radius);
+      camera.lookAt(target);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (isRotating && reliefMesh) {
+        angle += 0.01; // rotation speed
+        const yOffset = 2; // keep the camera slightly above center
+        camera.position.x = radius * Math.cos(angle);
+        camera.position.z = radius * Math.sin(angle);
+        camera.position.y = yOffset;
+        camera.lookAt(target);
+      }
+
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>
