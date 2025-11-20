@@ -16,15 +16,35 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
 
   <style>
-    /* Language pill */
-    #langToggle{
-      position: fixed; top:10px; right:10px; z-index:99999;
-      display:inline-flex; align-items:center; gap:6px;
-      padding:6px 10px; border-radius:10px; border:2px solid #009688;
-      background:#fff; color:#009688; font-weight:700; cursor:pointer;
-      user-select:none;
+    /* Language pill – unified style */
+    #langToggle {
+      position: fixed;
+      top: 14px;
+      right: 44px; /* same horizontal offset as the other games */
+      z-index: 11;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 2px solid #04c8bb;
+      background: #0b0f12;
+      color: #04c8bb;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 0 0 0 rgba(4, 200, 187, 0);
+      transition: box-shadow 0.2s ease, transform 0.05s ease, background 0.2s ease;
+      user-select: none;
     }
-    body.dark #langToggle { background:#111; color:#00b3a4; border-color:#00b3a4; }
+
+    #langToggle:hover {
+      box-shadow: 0 0 0 3px rgba(4, 200, 187, 0.2);
+    }
+
+    #langToggle:active {
+      transform: translateY(1px);
+    }
 
     /* Info toggle top-left (hidden after Start) */
     #infoButton{
@@ -125,56 +145,94 @@
     <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
   </div>
 
-  <!-- (Settings icon/menu removed) -->
-
   <script>
-    /* ===== Translations (supports HTML) ===== */
+    /* ===== Translation system (single language code in button, like Melancholic Scenes) ===== */
     const LS_LANG_KEY = 'siteLanguage';
-    const SUPPORTED_LANGS = ['fr','en','ja'];
-    const langToggle  = document.getElementById('langToggle');
+    const SUPPORTED_LANGS = ['en', 'ja', 'fr'];
+    const langToggle = document.getElementById('langToggle');
 
-    function nextLang(current){
-      const idx = SUPPORTED_LANGS.indexOf(current);
-      return SUPPORTED_LANGS[(idx + 1) % SUPPORTED_LANGS.length];
+    function documentLangFallback() {
+      const htmlLang = (document.documentElement.lang || '').toLowerCase();
+      return SUPPORTED_LANGS.includes(htmlLang) ? htmlLang : 'en';
     }
-    function getLang(){
-      try{
-        const s=localStorage.getItem(LS_LANG_KEY);
-        if(SUPPORTED_LANGS.includes(s)) return s;
-      }catch(e){}
-      const htmlLang = document.documentElement.lang;
-      return SUPPORTED_LANGS.includes(htmlLang) ? htmlLang : 'fr';
+
+    function getText(el, lang) {
+      // Try requested lang first, then fall back in SUPPORTED_LANGS order
+      for (const code of [lang, ...SUPPORTED_LANGS.filter(c => c !== lang)]) {
+        const val = el.getAttribute(`data-${code}`);
+        if (val != null) return val;
+      }
+      return null;
     }
-    function updateLangToggleLabel(){
-      const map={ fr:'EN / JA', en:'JA / FR', ja:'FR / EN' };
-      if(langToggle){ langToggle.textContent = map[getLang()] || 'FR / EN / JA'; }
-    }
-    function setLang(lang){
-      const safe = SUPPORTED_LANGS.includes(lang) ? lang : 'fr';
-      document.documentElement.lang = safe;
-      try{ localStorage.setItem(LS_LANG_KEY, safe);}catch(e){}
-      document.querySelectorAll('.translate').forEach(el=>{
-        const fr=el.getAttribute('data-fr');
-        const en=el.getAttribute('data-en');
-        const ja=el.getAttribute('data-ja');
-        const wantsHTML = el.classList.contains('translate-html');
-        let val = fr;
-        if(safe==='en') val = en;
-        else if(safe==='ja') val = ja;
-        if(val!=null){ wantsHTML ? el.innerHTML = val : el.textContent = val; }
+
+    function applyTranslations(lang) {
+      const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
+
+      document.querySelectorAll('.translate').forEach(el => {
+        const value = getText(el, safeLang);
+        if (value == null) return;
+
+        // Allow HTML where needed (P, BUTTON, DIV, H1/2/3)
+        if (['P', 'BUTTON', 'DIV', 'H1', 'H2', 'H3'].includes(el.tagName)) {
+          el.innerHTML = value;
+        } else {
+          el.textContent = value;
+        }
       });
-      updateLangToggleLabel();
+
+      // Update html lang
+      document.documentElement.lang = safeLang;
+
+      // Update <title>
+      const titleEl = document.querySelector('title');
+      if (titleEl) {
+        const nextTitle = getText(titleEl, safeLang);
+        if (nextTitle) {
+          titleEl.textContent = nextTitle;
+          document.title = nextTitle;
+        }
+      }
+
+      // Language pill shows ONLY the next language to cycle to
+      if (langToggle) {
+        const idx = SUPPORTED_LANGS.indexOf(safeLang);
+        const nextIdx = (idx + 1) % SUPPORTED_LANGS.length;
+        langToggle.textContent = SUPPORTED_LANGS[nextIdx].toUpperCase();
+      }
     }
-    (function(){
-      let initial='fr';
-      try{
-        const s=localStorage.getItem(LS_LANG_KEY);
-        initial=SUPPORTED_LANGS.includes(s)?s:(SUPPORTED_LANGS.includes(document.documentElement.lang)?document.documentElement.lang:'fr');
-        localStorage.setItem(LS_LANG_KEY, initial);
-      }catch(e){ initial=SUPPORTED_LANGS.includes(document.documentElement.lang)?document.documentElement.lang:'fr'; }
-      setLang(initial);
-    })();
-    langToggle.addEventListener('click', ()=> setLang(nextLang(getLang())));
+
+    function setLang(lang) {
+      const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
+      try {
+        localStorage.setItem(LS_LANG_KEY, safeLang);
+      } catch (e) {}
+      applyTranslations(safeLang);
+    }
+
+    function getInitialLang() {
+      let initial = documentLangFallback();
+      try {
+        const stored = localStorage.getItem(LS_LANG_KEY);
+        if (SUPPORTED_LANGS.includes(stored)) {
+          initial = stored;
+        }
+      } catch (e) {}
+      return initial;
+    }
+
+    langToggle?.addEventListener('click', () => {
+      const currentRaw =
+        (typeof localStorage !== 'undefined' && localStorage.getItem(LS_LANG_KEY)) ||
+        document.documentElement.lang ||
+        'en';
+      const current = currentRaw.toLowerCase();
+      const idx = SUPPORTED_LANGS.indexOf(current);
+      const nextLang = SUPPORTED_LANGS[(idx + 1) % SUPPORTED_LANGS.length];
+      setLang(nextLang);
+    });
+
+    // Initialize language on load
+    setLang(getInitialLang());
 
     // ===== Game state =====
     let started=false;
@@ -347,7 +405,7 @@
     function windowResized(){ resizeCanvas(windowWidth,windowHeight); }
     function goFullscreen(){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen().catch(()=>{}); } }
     
-    // ===== Entities (unchanged except math fixes) =====
+    // ===== Entities (unchanged) =====
     class Star{
       constructor(){this.reset();}
       reset(){this.x=random(-width/2,width/2);this.y=random(-height/2,height/2);this.z=random(width);}
