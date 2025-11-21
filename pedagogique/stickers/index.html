@@ -373,6 +373,19 @@
       margin-top: 0.25rem;
     }
 
+    /* CVI gallery */
+    #cviGalleryWrapper {
+      display: none; /* toggled by CVI button */
+      margin-top: 0.75rem;
+    }
+
+    #cviGallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.25rem;
+    }
+
     .preset-thumb {
       width: 72px;
       height: 72px;
@@ -474,6 +487,9 @@
           <button id="openGalleryBtn" class="export-btn">
             Galerie d’autocollants
           </button>
+          <button id="openCviGalleryBtn" class="export-btn alt">
+            Pictos CVI
+          </button>
           <input id="imageFiles" type="file" accept="image/png,image/*" multiple style="display:none;">
           <button id="uploadBtn" class="export-btn alt">
             Importer PNG…
@@ -484,6 +500,14 @@
           <div id="presetStrip">
             <!-- Thumbnails from stickers.json will be injected here -->
           </div>
+        </div>
+
+        <div id="cviGalleryWrapper">
+          <div class="field">
+            <label for="cviCategory">Catégorie de pictos</label>
+            <select id="cviCategory"></select>
+          </div>
+          <div id="cviGallery"></div>
         </div>
       </div>
 
@@ -624,12 +648,17 @@
   </div>
 
   <!-- JS -->
+  <script src="../../js/cviPngArray.js"></script>
   <script>
     const imageFilesEl = document.getElementById("imageFiles");
     const openGalleryBtn = document.getElementById("openGalleryBtn");
+    const openCviGalleryBtn = document.getElementById("openCviGalleryBtn");
     const uploadBtn = document.getElementById("uploadBtn");
     const presetStripWrapperEl = document.getElementById("presetStripWrapper");
     const presetStripEl = document.getElementById("presetStrip");
+    const cviGalleryWrapperEl = document.getElementById("cviGalleryWrapper");
+    const cviGalleryEl = document.getElementById("cviGallery");
+    const cviCategoryEl = document.getElementById("cviCategory");
 
     const sheetWidthEl = document.getElementById("sheetWidth");
     const sheetHeightEl = document.getElementById("sheetHeight");
@@ -663,6 +692,7 @@
     // Paths for JSON manifest
     const STICKER_BASE_PATH = "../../images/stickers/";
     const STICKER_MANIFEST_URL = STICKER_BASE_PATH + "stickers.json";
+    let cviGalleryInitialized = false;
 
     if (toggleAdvancedEl && advPanelEl) {
       toggleAdvancedEl.addEventListener("change", () => {
@@ -676,6 +706,91 @@
         const isVisible = presetStripWrapperEl.style.display === "block";
         presetStripWrapperEl.style.display = isVisible ? "none" : "block";
       });
+    }
+
+    function buildCviCategoryOptions() {
+      if (!cviCategoryEl) return;
+      const cviList = Array.isArray(window.PNG_ARRAY) ? window.PNG_ARRAY : [];
+      const categories = Array.from(
+        new Set(
+          cviList
+            .map((item) => item && item.category)
+            .filter((cat) => typeof cat === "string" && cat.trim().length)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+
+      cviCategoryEl.innerHTML = "";
+
+      const allOption = document.createElement("option");
+      allOption.value = "all";
+      allOption.textContent = "Toutes les catégories";
+      cviCategoryEl.appendChild(allOption);
+
+      categories.forEach((cat) => {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat;
+        cviCategoryEl.appendChild(opt);
+      });
+    }
+
+    function renderCviGallery() {
+      if (!cviGalleryEl) return;
+
+      const cviList = Array.isArray(window.PNG_ARRAY) ? window.PNG_ARRAY : [];
+      if (!cviList.length) {
+        cviGalleryEl.textContent = "Aucun picto CVI trouvé.";
+        return;
+      }
+
+      const selectedCategory = cviCategoryEl ? cviCategoryEl.value : "all";
+      const filtered = cviList.filter((item) => {
+        if (!item || !item.file) return false;
+        if (!selectedCategory || selectedCategory === "all") return true;
+        return item.category === selectedCategory;
+      });
+
+      cviGalleryEl.innerHTML = "";
+
+      filtered.forEach((item) => {
+        const src = item.file;
+        const label = item.name || "Picto CVI";
+
+        const thumb = document.createElement("div");
+        thumb.className = "preset-thumb";
+        thumb.dataset.src = src;
+        thumb.dataset.label = label;
+        thumb.title = label + (item.category ? ` (${item.category})` : "");
+
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = label;
+
+        thumb.appendChild(img);
+        cviGalleryEl.appendChild(thumb);
+      });
+    }
+
+    function initCviGallery() {
+      if (cviGalleryInitialized) return;
+      cviGalleryInitialized = true;
+      buildCviCategoryOptions();
+      renderCviGallery();
+    }
+
+    // CVI gallery button: toggle visibility and lazy-init content
+    if (openCviGalleryBtn && cviGalleryWrapperEl) {
+      openCviGalleryBtn.addEventListener("click", () => {
+        const isVisible = cviGalleryWrapperEl.style.display === "block";
+        cviGalleryWrapperEl.style.display = isVisible ? "none" : "block";
+        if (!isVisible) {
+          initCviGallery();
+        }
+      });
+    }
+
+    if (cviCategoryEl) {
+      cviCategoryEl.addEventListener("change", renderCviGallery);
     }
 
     // Upload button triggers hidden file input
@@ -1388,6 +1503,19 @@
       const label = thumb.dataset.label || thumb.title || "Sticker";
       addImageSpriteFromDataUrl(imgEl.src, label);
     });
+
+    if (cviGalleryEl) {
+      cviGalleryEl.addEventListener("click", (e) => {
+        const thumb = e.target.closest(".preset-thumb");
+        if (!thumb) return;
+
+        const src = thumb.dataset.src || (thumb.querySelector("img") || {}).src;
+        if (!src) return;
+
+        const label = thumb.dataset.label || thumb.title || "Picto CVI";
+        addImageSpriteFromDataUrl(src, label);
+      });
+    }
 
     [sheetWidthEl, sheetHeightEl].forEach((el) => {
       el.addEventListener("input", applySheetSize);
