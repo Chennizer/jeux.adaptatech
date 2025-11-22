@@ -50,11 +50,11 @@
       z-index: 9999;
     }
 
-    /* Bouton langue */
+    /* Bouton langue – top-right on landing */
     #langToggle {
       position: fixed;
       top: 16px;
-      left: 16px;
+      right: 46px;
       z-index: 10000;
       padding: 8px 14px;
       border-radius: 12px;
@@ -119,10 +119,10 @@
           data-fr="ⓘ" data-en="ⓘ" data-ja="ⓘ">ⓘ</button>
 
   <p class="translate"
-     data-fr="Barre d’espace : fait apparaître une bulle qui monte s’accumuler en haut. Entrée : fait éclater toutes les bulles."
-     data-en="Space: creates a bubble that rises and gathers at the top. Enter: pops all bubbles."
-     data-ja="スペース：上にたまるシャボン玉を出します。エンター：すべてのシャボン玉を割ります。">
-    Barre d’espace : fait apparaître une bulle qui monte s’accumuler en haut. Entrée : fait éclater toutes les bulles.
+     data-fr="Pour un ou deux joueurs; la première switch crée des bulles et la seconde les fait éclater."
+     data-en="For one or two players: the first switch creates bubbles and the second pops them."
+     data-ja="1人または2人のプレイヤー向け：1つ目のスイッチでシャボン玉を作り、2つ目のスイッチで割ります。">
+    Pour un ou deux joueurs; la première switch crée des bulles et la seconde les fait éclater.
   </p>
 
   <div id="modeSelect">
@@ -143,12 +143,13 @@
 
 <!-- ────────── Modal info ────────── -->
 <div id="infoModal" style="display:none;">
-  <p class="translate"
-     data-fr="Compétence&nbsp;: appui simple, cause-à-effet<br>SENICT niveau&nbsp;1 · Roadmap 8-10<br>Espace = apparition/accumulation, Entrée = éclatement de toutes les bulles."
-     data-en="Skill: single press, cause-and-effect<br>SENICT level 1 · Roadmap 8-10<br>Space = appear/accumulate, Enter = pop all bubbles."
-     data-ja="スキル：単押し・原因と結果<br>SENICT レベル1・ロードマップ 8-10<br>スペース＝出現・蓄積、エンター＝全て割る。">
-    Compétence : appui simple, cause-à-effet<br>SENICT niveau 1 · Roadmap 8-10<br>Espace = apparition/accumulation, Entrée = éclatement de toutes les bulles.
-  </p>
+<p class="translate"
+   data-fr="Différentiation de l'effet de deux switchs (niveau 20) pour l'activité individuelle et exploration individuelle et maintien pour l'activité en équipe (niveau 10 et 17)"
+   data-en="Differentiating the effect of two switches (level 20) for individual activities, and individual exploration and sustaining for team activities (levels 10 and 17)."
+   data-ja="個別活動では2つのスイッチの効果を区別する（レベル20）。集団活動では、個別探索と活動の維持（レベル10・17）をねらいます。">
+  Différentiation de l'effet de deux switchs (niveau 20) pour l'activité individuelle et exploration individuelle et maintien pour l'activité en équipe (niveau 10 et 17)
+</p>
+
   <button id="closeModal"
           class="translate"
           data-fr="Fermer"
@@ -217,12 +218,38 @@
 
 <!-- ────────── JS : logique du jeu ────────── -->
 <script>
-/* === AUDIO ================================================== */
-const musicPath = '../../songs/space/spacebest1.mp3';   // à ajuster
-const popPaths = [
-  '../../sounds/woosh.mp3'
+/* === AUDIO : PLAYLISTS + SFX =============================== */
+const PLAYLISTS = {
+  aqua: [
+    '../../songs/bubbles/waterbubble1.mp3',
+    '../../songs/bubbles/waterbubble2.mp3'
+  ],
+  rainbow: [
+    '../../songs/bubbles/coloredbubbles1.mp3',
+    '../../songs/bubbles/coloredbubbles2.mp3'
+  ]
+};
+
+/* Deux familles de SFX */
+const APPEAR_SFX_PATHS = [
+  '../../sounds/bubbles/bubble1.mp3',
+  '../../sounds/bubbles/bubble2.mp3',
+  '../../sounds/bubbles/bubble3.mp3'
 ];
 
+const POP_SFX_PATHS = [
+  '../../sounds/bubbles/bubbleexplosion1.mp3',
+  '../../sounds/bubbles/bubbleexplosion2.mp3'
+];
+
+let musicPlaylists = {};    // { mode: [p5.SoundFile | null, ...] }
+let currentTrackIndex = 0;
+let currentMusic = null;
+
+let appearSounds = [];
+let popSounds   = [];
+
+/* === VISUEL ================================================= */
 const THEMES = {
   aqua: {
     background: [5, 15, 40],
@@ -263,19 +290,16 @@ const THEMES = {
   }
 };
 
-let popSounds = [];
-let musicSound;
-
-/* === VISUEL ================================================= */
-let bgBubbles = [];     // petites bulles de fond (très subtiles)
-let bigBubbles = [];    // bulles géantes déclenchées
-let popBursts  = [];    // effets d’éclatement
+let bgBubbles = [];
+let bigBubbles = [];
+let popBursts  = [];
 const NUM_BG_BUBBLES = 60;
 
 /* === ÉTAT =================================================== */
 let tapDelay = 2000;
 let lastTap  = -Infinity;
 let currentTheme = 'aqua';
+let isGameStarted = false;
 
 /* === VOLUMES =============================================== */
 let isMusicMuted = false, isSFXMuted = false;
@@ -283,11 +307,52 @@ let volMusic = 0.5, volSFX = 0.5;
 
 /* === p5 : PRELOAD ========================================== */
 function preload() {
-  popSounds  = popPaths.map(p => loadSound(p));
-  musicSound = loadSound(musicPath);
+  // Formats supportés
+  soundFormats('mp3', 'wav', 'ogg');
+
+  // Charger playlists
+  for (const mode in PLAYLISTS) {
+    musicPlaylists[mode] = PLAYLISTS[mode].map(path =>
+      loadSound(
+        path,
+        () => {
+          console.log('[OK] music loaded:', path);
+        },
+        err => {
+          console.error('[ERROR] unable to decode music file:', path, err);
+        }
+      )
+    );
+  }
+
+  // Charger SFX apparition
+  appearSounds = APPEAR_SFX_PATHS.map(path =>
+    loadSound(
+      path,
+      () => {
+        console.log('[OK] appear SFX loaded:', path);
+      },
+      err => {
+        console.error('[ERROR] unable to decode appear SFX:', path, err);
+      }
+    )
+  );
+
+  // Charger SFX pop
+  popSounds = POP_SFX_PATHS.map(path =>
+    loadSound(
+      path,
+      () => {
+        console.log('[OK] pop SFX loaded:', path);
+      },
+      err => {
+        console.error('[ERROR] unable to decode pop SFX:', path, err);
+      }
+    )
+  );
 }
 
-/* === BULLES FOND (plus petites et plus pâles) ============== */
+/* === BULLES FOND ============================================ */
 class BackgroundBubble {
   constructor() {
     this.reset(true);
@@ -296,9 +361,9 @@ class BackgroundBubble {
   reset(randomY = false) {
     this.x = random(width);
     this.y = randomY ? random(height) : height + random(20, 200);
-    this.r = random(4, 14);                 // plus petites
-    this.speed = random(0.2, 0.8);          // très lent
-    this.alpha = random(15, 60);            // très pâle
+    this.r = random(4, 14);
+    this.speed = random(0.2, 0.8);
+    this.alpha = random(15, 60);
     this.paletteIndex = floor(random((THEMES[currentTheme].palette || []).length || 1));
   }
 
@@ -356,15 +421,15 @@ function createBubbleColors(theme) {
   };
 }
 
-/* === BULLES GÉANTES AVEC "PHYSIQUE" ======================== */
+/* === BULLES GÉANTES ======================================== */
 class BigBubble {
   constructor(x, baseRadiusMult = 1, theme = 'aqua') {
     this.x = x;
     this.y = height + 80;
     this.baseR = random(90, 180) * baseRadiusMult;
     this.r = this.baseR;
-    this.vx = random(-0.3, 0.3);            // petite dérive horizontale
-    this.vy = random(-1.2, -0.6);           // monte vers le haut
+    this.vx = random(-0.3, 0.3);
+    this.vy = random(-1.2, -0.6);
     this.wobblePhase = random(TWO_PI);
     this.colors = createBubbleColors(theme);
   }
@@ -372,21 +437,18 @@ class BigBubble {
   update(dt) {
     const k = dt / 16.67;
 
-    // Légère dérive et amortissement
     this.vx *= 0.99;
-    this.vy = lerp(this.vy, -1.2, 0.01);    // tend vers une vitesse de montée
+    this.vy = lerp(this.vy, -1.2, 0.01);
 
     this.x += this.vx * k;
     this.y += this.vy * k;
 
-    // "Plafond" : la bulle s'accumule près du haut
     const topMargin = 12;
     if (this.y - this.r < topMargin) {
       this.y = this.r + topMargin;
       this.vy = 0;
     }
 
-    // Bords gauche/droite
     if (this.x - this.r < 0) {
       this.x = this.r;
       this.vx *= -0.5;
@@ -396,7 +458,6 @@ class BigBubble {
       this.vx *= -0.5;
     }
 
-    // Légère "respiration" de la bulle
     this.wobblePhase += 0.005 * dt;
     const wobble = sin(this.wobblePhase) * 0.04;
     this.r = this.baseR * (1 + wobble);
@@ -456,33 +517,40 @@ class BigBubble {
   }
 }
 
-/* === EFFET D’ÉCLATEMENT "POPPY" ============================ */
+/* === EFFET D’ÉCLATEMENT – VERSION PLUS POPPY =============== */
 class PopBurst {
   constructor(x, y, baseR, colors) {
     this.x = x;
     this.y = y;
-    this.r0 = baseR * 0.5;
-    this.r = this.r0;
-    this.maxR = baseR * 1.6;
+
+    // Rayon de départ et rayon maximum plus grand
+    this.r0 = baseR * 0.7;
+    this.r  = this.r0;
+    this.maxR = baseR * 2.6;      // encore plus large
+
     this.life = 0;
-    this.maxLife = 500;   // anneau principal
-    this.flashLife = 220; // flash blanc
+    this.maxLife = 2300;          // ~2.3 s pour l’anneau principal
+    this.flashLife = 900;         // flash blanc plus long
+
+    this.innerPulsePhase = random(TWO_PI);
 
     this.particles = [];
     this.colors = colors || createBubbleColors(currentTheme);
-    const count = 16;
+
+    // Plus de particules, plus rapides et plus durables
+    const count = 36;
     for (let i = 0; i < count; i++) {
-      const ang = random(TWO_PI);
-      const speed = random(2, 5);
+      const ang   = random(TWO_PI);
+      const speed = random(3, 7);
       this.particles.push({
         x: x,
         y: y,
         vx: cos(ang) * speed,
         vy: sin(ang) * speed,
-        r: random(baseR * 0.04, baseR * 0.08),
+        r: random(baseR * 0.035, baseR * 0.09),
         life: 0,
-        maxLife: random(350, 650),
-        alpha: 220
+        maxLife: random(1300, 2600),  // 1.3 à 2.6 s
+        alpha: 230
       });
     }
   }
@@ -490,19 +558,22 @@ class PopBurst {
   update(dt) {
     this.life += dt;
     const t = constrain(this.life / this.maxLife, 0, 1);
-    this.r = lerp(this.r0, this.maxR, t);
+    this.r = lerp(this.r0, this.maxR, easeOutQuad(t));
     this.alpha = map(1 - t, 0, 1, 0, 255);
 
     const k = dt / 16.67;
 
+    // Particules
     for (let p of this.particles) {
       p.life += dt;
       const pt = constrain(p.life / p.maxLife, 0, 1);
       p.x += p.vx * k;
       p.y += p.vy * k;
-      p.vy += 0.02 * k; // légère "gravité"
-      p.alpha = map(1 - pt, 0, 1, 0, 220);
+      p.vy += 0.02 * k;              // légère gravité
+      p.alpha = map(1 - pt, 0, 1, 0, 230);
     }
+
+    this.innerPulsePhase += 0.004 * dt;  // pulsation plus lente
   }
 
   isDead() {
@@ -511,35 +582,55 @@ class PopBurst {
   }
 
   draw() {
-    // Flash blanc court
+    const c = this.colors;
+
+    push();
+    drawingContext.save();
+    drawingContext.globalCompositeOperation = 'lighter';
+
+    // Flash blanc central
     const flashT = 1 - constrain(this.life / this.flashLife, 0, 1);
     if (flashT > 0) {
       noStroke();
-      const [fr, fg, fb] = this.colors.popFlash;
-      fill(fr, fg, fb, 180 * flashT);
-      ellipse(this.x, this.y, this.r * 1.4);
+      const [fr, fg, fb] = c.popFlash;
+      fill(fr, fg, fb, 220 * flashT);
+      ellipse(this.x, this.y, this.r * 1.7);
     }
 
-    // Anneau principal
+    // Anneau extérieur principal
     noFill();
-    const [rr, rg, rb] = this.colors.popRing;
+    const [rr, rg, rb] = c.popRing;
     stroke(rr, rg, rb, this.alpha);
-    strokeWeight(4);
+    strokeWeight(7);
     ellipse(this.x, this.y, this.r * 2);
 
-    // Particules
+    // Anneau intérieur pulsant
+    const innerR = this.r * (0.55 + 0.08 * sin(this.innerPulsePhase));
+    stroke(rr, rg, rb, this.alpha * 0.9);
+    strokeWeight(3);
+    ellipse(this.x, this.y, innerR * 2);
+
+    // Petites étincelles
     noStroke();
     for (let p of this.particles) {
-      if (p.life < p.maxLife) {
-        const [pr, pg, pb] = this.colors.popParticle;
+      if (p.life < p.maxLife && p.alpha > 0) {
+        const [pr, pg, pb] = c.popParticle;
         fill(pr, pg, pb, p.alpha);
         ellipse(p.x, p.y, p.r * 2);
       }
     }
+
+    drawingContext.restore();
+    pop();
   }
 }
 
-/* === COLLISIONS ENTRE GROSSES BULLES ======================= */
+// petite fonction d’easing pour un agrandissement plus "explosif"
+function easeOutQuad(t) {
+  return 1 - (1 - t) * (1 - t);
+}
+
+/* === COLLISIONS ============================================ */
 function resolveBubbleCollisions() {
   const topMargin = 12;
   for (let i = 0; i < bigBubbles.length; i++) {
@@ -587,7 +678,6 @@ function setup() {
 function draw() {
   drawBackground();
 
-  // Fond : petites bulles
   bgBubbles.forEach(b => {
     b.update();
     b.draw();
@@ -595,7 +685,6 @@ function draw() {
 
   const dt = deltaTime;
 
-  // Grosses bulles
   for (let i = 0; i < bigBubbles.length; i++) {
     bigBubbles[i].update(dt);
   }
@@ -604,7 +693,6 @@ function draw() {
     bigBubbles[i].draw();
   }
 
-  // Effets de pop
   for (let i = popBursts.length - 1; i >= 0; i--) {
     const pb = popBursts[i];
     pb.update(dt);
@@ -615,7 +703,7 @@ function draw() {
   }
 }
 
-/* === FOND SANS LIGNES (juste une couleur lisse) ============ */
+/* === FOND ================================================== */
 function drawBackground() {
   const theme = THEMES[currentTheme];
   if (currentTheme === 'rainbow') {
@@ -651,7 +739,6 @@ function drawBackground() {
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, width, height);
 
-    // Lueur colorée supplémentaire
     const secondary = ctx.createRadialGradient(
       width * 0.75,
       height * 0.65,
@@ -663,6 +750,7 @@ function drawBackground() {
     secondary.addColorStop(0, `rgba(255,120,220,${0.28 * pulse})`);
     secondary.addColorStop(0.65, 'rgba(120,200,255,0.12)');
     secondary.addColorStop(1, 'rgba(0,0,0,0)');
+
     ctx.fillStyle = secondary;
     ctx.fillRect(0, 0, width, height);
     ctx.restore();
@@ -673,16 +761,76 @@ function drawBackground() {
   background(bg[0], bg[1], bg[2]);
 }
 
-/* === ACTIONS SWITCHS ======================================= */
+/* === AUDIO HELPERS ========================================= */
+function isSoundReady(s) {
+  return s && typeof s.isLoaded === 'function' && s.isLoaded();
+}
 
-// Joueur 1 (espace) : bulle standard
+function startMusicForCurrentMode() {
+  if (isMusicMuted) return;
+  const tracks = musicPlaylists[currentTheme];
+  if (!tracks || !tracks.length) return;
+
+  if (currentMusic && isSoundReady(currentMusic)) {
+    currentMusic.stop();
+    currentMusic.onended(null);
+  }
+
+  currentTrackIndex = 0;
+  currentMusic = tracks[currentTrackIndex];
+
+  if (isSoundReady(currentMusic)) {
+    currentMusic.setVolume(volMusic);
+    currentMusic.play();
+    currentMusic.onended(handleTrackEnded);
+  } else {
+    console.warn('[WARN] first track for mode', currentTheme, 'not ready or failed to load');
+  }
+}
+
+function handleTrackEnded() {
+  const tracks = musicPlaylists[currentTheme];
+  if (!tracks || !tracks.length) return;
+
+  currentTrackIndex = (currentTrackIndex + 1) % tracks.length;
+  currentMusic = tracks[currentTrackIndex];
+
+  if (!isMusicMuted && isSoundReady(currentMusic)) {
+    currentMusic.setVolume(volMusic);
+    currentMusic.play();
+    currentMusic.onended(handleTrackEnded);
+  } else {
+    console.warn('[WARN] next track not ready or failed to load for mode', currentTheme);
+  }
+}
+
+function playAppearSFX() {
+  if (!isSFXMuted && appearSounds.length) {
+    const s = random(appearSounds);
+    if (isSoundReady(s)) {
+      s.setVolume(volSFX);
+      s.play();
+    }
+  }
+}
+
+function playPopSFX() {
+  if (!isSFXMuted && popSounds.length) {
+    const s = random(popSounds);
+    if (isSoundReady(s)) {
+      s.setVolume(volSFX);
+      s.play();
+    }
+  }
+}
+
+/* === ACTIONS SWITCHS ======================================= */
 function triggerPlayer1(mult = 1) {
   const cx = width * 0.5;
   bigBubbles.push(new BigBubble(cx, mult, currentTheme));
-  playPop();
+  playAppearSFX();
 }
 
-// Joueur 2 (Entrée) : éclatement de toutes les bulles
 function triggerPlayer2() {
   if (bigBubbles.length === 0) return;
 
@@ -691,26 +839,17 @@ function triggerPlayer2() {
   });
   bigBubbles = [];
 
-  playPop();
+  playPopSFX();
 }
 
-/* === AUDIO TRIGGER ======================================== */
-function playPop() {
-  if (!isSFXMuted && popSounds.length) {
-    const s = random(popSounds);
-    s.setVolume(volSFX);
-    s.play();
-  }
-}
-
-/* === CLAVIER : BARRE ESPACE + ENTRÉE ====================== */
+/* === CLAVIER =============================================== */
 function keyPressed() {
   const now = millis();
 
   if (key === ' ') {
     if (now - lastTap < tapDelay) return;
     lastTap = now;
-    triggerPlayer1(1);     // mult fixe
+    triggerPlayer1(1);
   } else if (keyCode === ENTER) {
     if (now - lastTap < tapDelay) return;
     lastTap = now;
@@ -735,7 +874,8 @@ window.addEventListener('load', () => {
         infoBtn    = document.getElementById('infoButton'),
         infoModal  = document.getElementById('infoModal'),
         closeModal = document.getElementById('closeModal'),
-        modeButtons = document.querySelectorAll('#modeSelect button');
+        modeButtons = document.querySelectorAll('#modeSelect button'),
+        langToggle = document.getElementById('langToggle');
 
   modeButtons.forEach(b => {
     b.addEventListener('pointerup', () => {
@@ -745,10 +885,13 @@ window.addEventListener('load', () => {
       bgBubbles.forEach(bub => {
         bub.paletteIndex = floor(random((THEMES[currentTheme].palette || []).length || 1));
       });
+
+      if (isGameStarted && !isMusicMuted) {
+        startMusicForCurrentMode();
+      }
     });
   });
 
-  // Sliders & mute
   tapSlider.oninput = e => {
     tapDelay = parseInt(e.target.value, 10);
     tapVal.textContent = e.target.value;
@@ -757,44 +900,47 @@ window.addEventListener('load', () => {
   musicVol.oninput = e => {
     volMusic = e.target.value / 100;
     musicVal.textContent = e.target.value;
-    if (!isMusicMuted && musicSound && musicSound.isLoaded()) {
-      musicSound.setVolume(volMusic);
+    if (!isMusicMuted && isSoundReady(currentMusic)) {
+      currentMusic.setVolume(volMusic);
     }
   };
 
   sfxVol.oninput = e => {
     volSFX = e.target.value / 100;
     sfxVal.textContent = e.target.value;
-    if (!isSFXMuted && popSounds.length) {
-      popSounds.forEach(s => s.setVolume(volSFX));
+    if (!isSFXMuted) {
+      appearSounds.forEach(s => { if (isSoundReady(s)) s.setVolume(volSFX); });
+      popSounds.forEach(s => { if (isSoundReady(s)) s.setVolume(volSFX); });
     }
   };
 
   muteMusic.onchange = e => {
     isMusicMuted = e.target.checked;
-    if (musicSound && musicSound.isLoaded()) {
-      musicSound.setVolume(isMusicMuted ? 0 : volMusic);
+    if (isSoundReady(currentMusic)) {
+      currentMusic.setVolume(isMusicMuted ? 0 : volMusic);
+      if (isMusicMuted) {
+        currentMusic.stop();
+      } else {
+        startMusicForCurrentMode();
+      }
     }
   };
 
   muteSFX.onchange = e => {
     isSFXMuted = e.target.checked;
-    if (popSounds.length) {
-      popSounds.forEach(s => s.setVolume(isSFXMuted ? 0 : volSFX));
-    }
+    const targetVol = isSFXMuted ? 0 : volSFX;
+    appearSounds.forEach(s => { if (isSoundReady(s)) s.setVolume(targetVol); });
+    popSounds.forEach(s => { if (isSoundReady(s)) s.setVolume(targetVol); });
   };
 
-  function startMusic() {
-    if (musicSound && musicSound.isLoaded() && !isMusicMuted) {
-      musicSound.setLoop(true);
-      musicSound.setVolume(volMusic);
-      musicSound.play();
-    }
-  }
-
-  // Commencer
   btn.addEventListener('pointerup', () => {
     overlay.remove();
+    isGameStarted = true;
+
+    // hide language toggle once the game starts
+    if (langToggle) {
+      langToggle.style.display = 'none';
+    }
 
     const docEl = document.documentElement;
     if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
@@ -807,10 +953,9 @@ window.addEventListener('load', () => {
 
     icon.style.visibility = 'visible';
 
-    startMusic();
+    startMusicForCurrentMode();
   });
 
-  // Menu toggle
   icon.onclick = () => menu.classList.toggle('show');
   document.onclick = e => {
     if (!menu.contains(e.target) && !icon.contains(e.target)) {
@@ -818,7 +963,6 @@ window.addEventListener('load', () => {
     }
   };
 
-  // Info modal
   infoBtn.onclick = () => { infoModal.style.display = 'block'; };
   closeModal.onclick = () => { infoModal.style.display = 'none'; };
 
