@@ -13,6 +13,15 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
+        /* Wrapper for camera shake */
+        #scene-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            will-change: transform;
+        }
+
         #wall-canvas, #game-canvas, #fx-canvas {
             position: absolute;
             top: 0;
@@ -136,9 +145,11 @@
 </head>
 <body>
 
-    <canvas id="wall-canvas"></canvas>
-    <canvas id="game-canvas"></canvas>
-    <canvas id="fx-canvas"></canvas>
+    <div id="scene-wrapper">
+        <canvas id="wall-canvas"></canvas>
+        <canvas id="game-canvas"></canvas>
+        <canvas id="fx-canvas"></canvas>
+    </div>
 
     <div id="overlay">
         <h1>WILD STYLE TAGS</h1>
@@ -173,6 +184,8 @@
         const ctx  = gameCanvas.getContext('2d');
         const wCtx = wallCanvas.getContext('2d');
         const fxCtx = fxCanvas.getContext('2d');
+
+        const sceneWrapper = document.getElementById('scene-wrapper');
 
         const overlay = document.getElementById('overlay');
         const inputField = document.getElementById('user-input');
@@ -291,6 +304,30 @@
             } else if (element.msRequestFullscreen) {
                 element.msRequestFullscreen();
             }
+        }
+
+        // --- CAMERA SHAKE ---
+        function shakeCamera(duration = 1000, magnitude = 12) {
+            const start = performance.now();
+
+            function frame(now) {
+                const elapsed = now - start;
+                const t = Math.min(elapsed / duration, 1);
+                const damping = 1 - t; // fade out
+
+                const offsetX = (Math.random() * 2 - 1) * magnitude * damping;
+                const offsetY = (Math.random() * 2 - 1) * magnitude * damping;
+
+                sceneWrapper.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+
+                if (t < 1) {
+                    requestAnimationFrame(frame);
+                } else {
+                    sceneWrapper.style.transform = 'translate(0, 0)';
+                }
+            }
+
+            requestAnimationFrame(frame);
         }
 
         // --- WALL (clay bricks with texture) ---
@@ -633,46 +670,108 @@
             });
         }
 
-        // --- COP LIGHTS FX (slower, pure alternating red/blue) ---
+        // --- COP LIGHTS FX (sweeping across whole screen + camera shake at end) ---
         function startCopLights() {
             if (copLightsRunning) return;
             copLightsRunning = true;
 
-            let flashes = 0;
-            const maxFlashes = 8;
-            const flashDelay = 240; // slower timing
+            const totalFlashes = 6;        // total sweeps (red/blue alternating)
+            const flashDuration = 700;     // ms per sweep (slower)
+            const totalDuration = totalFlashes * flashDuration;
 
-            function doFlash() {
-                fxCtx.clearRect(0, 0, width, height);
+            let startTime = null;
 
-                if (flashes >= maxFlashes) {
-                    copLightsRunning = false;
+            function frame(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const elapsed = timestamp - startTime;
+
+                if (elapsed >= totalDuration) {
+                    // End of light effect
                     fxCtx.clearRect(0, 0, width, height);
+                    copLightsRunning = false;
 
-                    // Reset text so they can tag again
-                    textCharIndex = 0;
-                    currentWordRow = 0;
-                    letterDrawOrigin.x = 0;
-                    letterDrawOrigin.y = 0;
-                    currentStrokes = [];
-                    currentStrokeIndex = 0;
-                    currentPointIndex = 0;
+                    // Camera shake for 1 second (like we are fleeing)
+                    shakeCamera(1000, 12);
+
+                    // Reset state AFTER the shake completes
+                    setTimeout(() => {
+                        textCharIndex = 0;
+                        currentWordRow = 0;
+                        letterDrawOrigin.x = 0;
+                        letterDrawOrigin.y = 0;
+                        currentStrokes = [];
+                        currentStrokeIndex = 0;
+                        currentPointIndex = 0;
+                    }, 1000);
+
                     return;
                 }
 
-                const isRed = (flashes % 2 === 0);
+                fxCtx.clearRect(0, 0, width, height);
+
+                // Which flash index are we in, and how far into that flash?
+                const flashIndex = Math.floor(elapsed / flashDuration);
+                const tInFlash = (elapsed % flashDuration) / flashDuration; // 0..1
+
+                // Alternating color: red, blue, red, blue...
+                const isRed = (flashIndex % 2 === 0);
+
+                // Intensity curve: smooth pulse like a rotating bar (0 -> 1 -> 0)
+                let intensity = Math.sin(tInFlash * Math.PI);
+                intensity = Math.max(0, Math.min(1, intensity));
+
+                const baseAlpha = 0.18;
+                const extraAlpha = 0.35;
+                const alpha = baseAlpha + extraAlpha * intensity;
+
                 fxCtx.save();
                 fxCtx.globalCompositeOperation = 'screen';
 
-                // Full-screen tint: red or blue, never both at once
-                if (isRed) {
-                    fxCtx.fillStyle = 'rgba(255, 60, 60, 0.45)';
-                } else {
-                    fxCtx.fillStyle = 'rgba(60, 120, 255, 0.45)';
-                }
+                // Sweep across entire wall
+                const marginFactor = 0.25; // start/end offscreen
+                const startX = isRed ? -width * marginFactor : width * (1 + marginFactor);
+                const endX   = isRed ? width * (1 + marginFactor) : -width * marginFactor;
+                const centerX = startX + (endX - startX) * tInFlash;
+
+                const centerY = height * 0.22;
+                const radius = Math.max(width, height) * 0.45;
+
+                const colorMain = isRed
+                    ? `rgba(255, 60, 60, ${alpha})`
+                    : `rgba(60, 120, 255, ${alpha})`;
+
+                const colorSoft = isRed
+                    ? `rgba(255, 60, 60, ${alpha * 0.4})`
+                    : `rgba(60, 120, 255, ${alpha * 0.4})`;
+
+                // 1) Moving hotspot (radial) crossing the wall
+                const radial = fxCtx.createRadialGradient(
+                    centerX, centerY, radius * 0.05,
+                    centerX, centerY, radius
+                );
+                radial.addColorStop(0.0, colorMain);
+                radial.addColorStop(0.25, colorMain);
+                radial.addColorStop(1.0, 'rgba(0,0,0,0)');
+                fxCtx.fillStyle = radial;
                 fxCtx.fillRect(0, 0, width, height);
 
-                // Slight vignette darkening at bottom to keep it moody
+                // 2) Horizontal wash for reflections
+                const horiz = fxCtx.createLinearGradient(0, centerY, width, centerY);
+                if (isRed) {
+                    horiz.addColorStop(0.0, colorSoft);
+                    horiz.addColorStop(0.4, 'rgba(255,60,60,0.06)');
+                    horiz.addColorStop(0.7, 'rgba(255,60,60,0.02)');
+                    horiz.addColorStop(1.0, 'rgba(0,0,0,0)');
+                } else {
+                    horiz.addColorStop(0.0, 'rgba(0,0,0,0)');
+                    horiz.addColorStop(0.3, 'rgba(60,120,255,0.02)');
+                    horiz.addColorStop(0.6, 'rgba(60,120,255,0.06)');
+                    horiz.addColorStop(1.0, colorSoft);
+                }
+                fxCtx.fillStyle = horiz;
+                fxCtx.fillRect(0, 0, width, height);
+
+                // 3) Slight bottom vignette
                 const vGrad = fxCtx.createLinearGradient(0, 0, 0, height);
                 vGrad.addColorStop(0,   'rgba(0, 0, 0, 0.0)');
                 vGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.0)');
@@ -682,11 +781,10 @@
 
                 fxCtx.restore();
 
-                flashes++;
-                setTimeout(doFlash, flashDelay);
+                requestAnimationFrame(frame);
             }
 
-            doFlash();
+            requestAnimationFrame(frame);
         }
 
         // --- TEXT MODE MAIN ---
@@ -1052,7 +1150,7 @@
 
         document.addEventListener('keydown', handleInput);
         document.addEventListener('mousedown', handleInput);
-        document.addEventListener('touchstart', handleInput, {passive: false});
+        document.addEventListener('touchstart', handleInput, {passive:false});
 
     </script>
 </body>
