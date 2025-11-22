@@ -71,7 +71,8 @@
   </div>
 
   <script>
-    // —— Music asset paths —— 
+    // —— Music asset paths ——
+    soundFormats('mp3');
     const musicPaths = [
       '../../songs/synth/synth1.mp3',
       '../../songs/synth/synth2.mp3',
@@ -473,21 +474,35 @@
         fullscreen(true);
 
         // Ensure the AudioContext is unlocked before trying to play music.
-        userStartAudio().then(() => {
-          if (bgMusics.length) {
-            // Prefer an already-loaded track to avoid a silent first play.
-            const loadedTracks = bgMusics.filter(s => s.isLoaded());
-            bgMusic = loadedTracks.length ? random(loadedTracks) : random(bgMusics);
-            bgMusic.setLoop(true);
-            let initVol = parseInt(musicVolSlider.value) / 100;
-            if (!muteMusicCheckbox.checked) {
-              bgMusic.setVolume(initVol);
-            } else {
-              bgMusic.setVolume(0);
+        userStartAudio()
+          .then(async () => {
+            if (getAudioContext().state !== 'running') {
+              try { await getAudioContext().resume(); } catch (err) { console.warn(err); }
             }
-            bgMusic.play();
-          }
-        });
+            if (bgMusics.length === 0) return;
+
+            const startIfReady = () => {
+              if (bgMusic) return true; // already started
+              const loadedTracks = bgMusics.filter(s => s.isLoaded());
+              if (!loadedTracks.length) return false;
+              bgMusic = random(loadedTracks);
+              bgMusic.setLoop(true);
+              let initVol = parseInt(musicVolSlider.value) / 100;
+              bgMusic.setVolume(muteMusicCheckbox.checked ? 0 : initVol);
+              bgMusic.play();
+              return true;
+            };
+
+            // Try immediately if anything is ready.
+            if (startIfReady()) return;
+
+            // Otherwise, start as soon as the first track finishes loading.
+            bgMusics.forEach(sound => {
+              sound.once('load', () => {
+                startIfReady();
+              });
+            });
+          });
         icon.style.display = 'flex';
       });
 
