@@ -127,40 +127,43 @@ class Flower {
     if (this.type === 'tulip') {
       const cupWidth = size * 0.95;
       const cupHeight = size * 1.55;
+      p.push();
+      p.scale(1, -1);
       p.fill(this.petalColor);
       p.beginShape();
       p.vertex(-cupWidth * 0.4, 0);
       p.bezierVertex(
         -cupWidth * 0.9,
-        -cupHeight * 0.1,
+        cupHeight * 0.1,
         -cupWidth * 0.85,
-        -cupHeight * 0.75,
+        cupHeight * 0.75,
         -cupWidth * 0.15,
-        -cupHeight
+        cupHeight
       );
-      p.vertex(-cupWidth * 0.04, -cupHeight * 0.85);
-      p.vertex(0, -cupHeight);
-      p.vertex(cupWidth * 0.04, -cupHeight * 0.85);
+      p.vertex(-cupWidth * 0.04, cupHeight * 0.85);
+      p.vertex(0, cupHeight);
+      p.vertex(cupWidth * 0.04, cupHeight * 0.85);
       p.bezierVertex(
         cupWidth * 0.85,
-        -cupHeight * 0.75,
+        cupHeight * 0.75,
         cupWidth * 0.9,
-        -cupHeight * 0.1,
+        cupHeight * 0.1,
         cupWidth * 0.4,
         0
       );
       p.bezierVertex(
         cupWidth * 0.22,
-        -cupHeight * 0.28,
+        cupHeight * 0.28,
         -cupWidth * 0.22,
-        -cupHeight * 0.28,
+        cupHeight * 0.28,
         -cupWidth * 0.4,
         0
       );
       p.endShape(p.CLOSE);
 
       p.fill(255, 230, 180, 160);
-      p.ellipse(0, -cupHeight * 0.45, size * 0.4, size * 0.32);
+      p.ellipse(0, cupHeight * 0.45, size * 0.4, size * 0.32);
+      p.pop();
     } else {
       for (let i = 0; i < 6; i += 1) {
         const angle = (p.TWO_PI / 6) * i;
