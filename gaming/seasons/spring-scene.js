@@ -45,6 +45,7 @@ class Flower {
     this.p = p;
     this.palette = palette;
     this.groundFn = groundFn;
+    this.type = 'daisy';
     this.reset();
   }
 
@@ -58,6 +59,7 @@ class Flower {
     this.growSpeed = p.random(0.18, 0.25);
     this.bloomSpeed = p.random(0.32, 0.52);
     this.swaySeed = p.random(p.TWO_PI);
+    this.type = p.random(['daisy', 'tulip']);
     this.petalColor = p.color(this.palette[p.floor(p.random(this.palette.length))]);
   }
 
@@ -122,16 +124,47 @@ class Flower {
     p.push();
     p.translate(tipX, tipY);
     p.rotate(sway * 0.03);
-    for (let i = 0; i < 6; i += 1) {
-      const angle = (p.TWO_PI / 6) * i;
-      p.push();
-      p.rotate(angle);
-      p.fill(p.red(this.petalColor), p.green(this.petalColor), p.blue(this.petalColor), 150);
-      p.ellipse(size, 0, size * 1.2, size * 0.9);
-      p.pop();
+    if (this.type === 'tulip') {
+      p.fill(this.petalColor);
+      const petalWidth = size * 0.8;
+      const petalHeight = size * 1.3;
+      p.beginShape();
+      p.vertex(-petalWidth * 0.4, 0);
+      p.bezierVertex(
+        -petalWidth * 0.8,
+        -petalHeight * 0.2,
+        -petalWidth * 0.8,
+        -petalHeight * 0.9,
+        0,
+        -petalHeight
+      );
+      p.bezierVertex(
+        petalWidth * 0.8,
+        -petalHeight * 0.9,
+        petalWidth * 0.8,
+        -petalHeight * 0.2,
+        petalWidth * 0.4,
+        0
+      );
+      p.vertex(petalWidth * 0.25, -petalHeight * 0.25);
+      p.vertex(0, -petalHeight * 0.05);
+      p.vertex(-petalWidth * 0.25, -petalHeight * 0.25);
+      p.endShape(p.CLOSE);
+
+      p.fill(255, 230, 180, 180);
+      p.ellipse(0, -petalHeight * 0.4, size * 0.35, size * 0.28);
+    } else {
+      for (let i = 0; i < 6; i += 1) {
+        const angle = (p.TWO_PI / 6) * i;
+        p.push();
+        p.rotate(angle);
+        p.fill(p.red(this.petalColor), p.green(this.petalColor), p.blue(this.petalColor), 150);
+        p.ellipse(size, 0, size * 1.2, size * 0.9);
+        p.pop();
+      }
+      p.fill(250, 230, 120, 220);
+      p.ellipse(0, 0, size * 0.8);
     }
-    p.fill(250, 230, 120, 220);
-    p.ellipse(0, 0, size * 0.8);
     p.pop();
   }
 
