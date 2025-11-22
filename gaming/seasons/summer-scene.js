@@ -192,6 +192,57 @@ class Leaf {
   }
 }
 
+class Swift {
+  constructor(p, horizonY, palette) {
+    this.p = p;
+    this.horizonY = horizonY;
+    this.palette = palette;
+    this.reset();
+  }
+
+  reset(startX = null) {
+    const p = this.p;
+    this.direction = p.random([1, -1]);
+    this.speed = p.random(2.4, 3.8) * this.direction;
+    this.amplitude = p.random(12, 28);
+    this.wobble = p.random(0.8, 1.8) * (this.direction > 0 ? 1 : -1);
+    this.baseY = this.horizonY + p.random(-40, 10);
+    this.x = startX !== null ? startX : (this.direction > 0 ? -60 : p.width + 60);
+    this.phase = p.random(p.TWO_PI);
+    this.bodyLength = p.random(14, 20);
+    this.wingSpan = p.random(20, 32);
+  }
+
+  update(stillness) {
+    const p = this.p;
+    this.phase += 0.12 + stillness * 0.06;
+    this.x += this.speed * (1.1 + stillness * 0.4);
+    this.y = this.baseY + Math.sin(this.phase) * this.amplitude + Math.sin(this.phase * 0.7) * 8;
+
+    if (this.direction > 0 && this.x > p.width + 80) this.reset(-60);
+    if (this.direction < 0 && this.x < -80) this.reset(p.width + 60);
+  }
+
+  draw() {
+    const p = this.p;
+    p.push();
+    p.translate(this.x, this.y);
+    p.rotate(Math.atan2(0, this.speed) + Math.sin(this.phase) * 0.05 + (this.direction < 0 ? Math.PI : 0));
+
+    const bodyColor = p.color(...this.palette.shadow);
+    bodyColor.setAlpha(210);
+    p.stroke(bodyColor);
+    p.strokeWeight(2.2);
+    p.line(-this.bodyLength * 0.4, 0, this.bodyLength * 0.6, 0);
+
+    p.strokeWeight(2.6);
+    p.line(0, 0, Math.cos(0.6) * this.wingSpan, Math.sin(0.6) * this.wingSpan * 0.3);
+    p.line(0, 0, Math.cos(-0.6) * this.wingSpan, Math.sin(-0.6) * this.wingSpan * 0.3);
+
+    p.pop();
+  }
+}
+
 class Dragonfly {
   constructor(p, horizonY, palette) {
     this.p = p;
@@ -205,30 +256,36 @@ class Dragonfly {
     const p = this.p;
     this.x = p.random(-60, p.width + 60);
     this.y = p.random(this.horizonY - 60, this.horizonY + 30);
-    this.vx = p.random(-0.4, 0.4);
-    this.vy = p.random(-0.2, 0.2);
+    this.vx = p.random(-0.9, 0.9);
+    this.vy = p.random(-0.6, 0.6);
     this.wingPhase = p.random(p.TWO_PI);
     this.scale = p.random(0.7, 1.2);
-    this.dashCooldown = p.random(40, 160);
+    this.dashCooldown = p.random(20, 120);
+    this.loopPhase = p.random(p.TWO_PI);
   }
 
   update({ movement, stillness, playerX }) {
     const p = this.p;
-    this.wingPhase += 0.25 + movement * 1.4;
+    this.wingPhase += 0.3 + movement * 1.7;
 
-    const drift = (p.noise(this.seed, p.frameCount * 0.003) - 0.5) * 0.3;
-    this.vy += drift * (0.6 + stillness * 0.8);
+    const thermalDrift = (p.noise(this.seed, p.frameCount * 0.002) - 0.5) * 0.5;
+    this.vy += thermalDrift * (0.8 + stillness * 0.6);
 
-    const follow = p.map(movement, 0, 1, 0.001, 0.015);
+    const follow = p.map(movement, 0, 1, 0.002, 0.02);
     this.vx += (playerX - this.x) * follow;
 
+    this.loopPhase += 0.03 + movement * 0.05;
+    const orbitRadius = 14 + movement * 12;
+    this.vx += Math.cos(this.loopPhase) * 0.12 * orbitRadius;
+    this.vy += Math.sin(this.loopPhase) * 0.08 * orbitRadius;
+
     this.dashCooldown -= 1;
-    if (this.dashCooldown <= 0 && movement > 0.25) {
-      const dashAngle = p.random(-0.6, 0.6) + (playerX - this.x) * 0.0009;
-      const dashSpeed = p.random(2.2, 3.4) * (0.6 + movement);
+    if (this.dashCooldown <= 0 && (movement > 0.12 || stillness < 0.6)) {
+      const dashAngle = p.random(-0.8, 0.8) + (playerX - this.x) * 0.0012;
+      const dashSpeed = p.random(2.6, 4) * (0.7 + movement * 0.6);
       this.vx += Math.cos(dashAngle) * dashSpeed;
-      this.vy += Math.sin(dashAngle) * dashSpeed * 0.4;
-      this.dashCooldown = p.random(70, 140);
+      this.vy += Math.sin(dashAngle) * dashSpeed * 0.5;
+      this.dashCooldown = p.random(50, 120);
     }
 
     this.vx *= 0.96;
@@ -238,7 +295,7 @@ class Dragonfly {
 
     if (this.x < -80) this.x = p.width + 60;
     if (this.x > p.width + 80) this.x = -60;
-    this.y = p.constrain(this.y, this.horizonY - 90, this.horizonY + 60);
+    this.y = p.constrain(this.y, this.horizonY - 110, this.horizonY + 80);
   }
 
   draw() {
@@ -281,6 +338,7 @@ export function createSummerScene(p) {
   const cicadas = [];
   const heat = [];
   const dragonflies = [];
+  const swifts = [];
   let shimmerVeil;
   const leaves = [];
   const palette = {
@@ -332,6 +390,16 @@ export function createSummerScene(p) {
     }
   }
 
+  function populateSwifts(horizonY) {
+    swifts.length = 0;
+    const count = Math.floor(p.width / 260) + 2;
+    for (let i = 0; i < count; i += 1) {
+      const startX = i % 2 === 0 ? -80 - i * 30 : p.width + 80 + i * 30;
+      swifts.push(new Swift(p, horizonY, palette));
+      swifts[i].reset(startX);
+    }
+  }
+
   function spawnLeaves(count = 8) {
     const treeBaseX = p.width * 0.78;
     const baseY = groundY(treeBaseX) - p.height * 0.02;
@@ -347,6 +415,7 @@ export function createSummerScene(p) {
     populateCicadas(horizonY);
     populateHeat(horizonY);
     populateDragonflies(horizonY);
+    populateSwifts(horizonY);
     shimmerVeil = new HeatShimmer(p, horizonY);
     shimmerVeil.regenerate(p.width);
     leaves.length = 0;
@@ -421,6 +490,11 @@ export function createSummerScene(p) {
       dragonflies.forEach(flyer => {
         flyer.update(flyerInput);
         flyer.draw();
+      });
+
+      swifts.forEach(swift => {
+        swift.update(stillness);
+        swift.draw();
       });
 
       for (let i = leaves.length - 1; i >= 0; i -= 1) {
