@@ -37,6 +37,56 @@ class GrassBlade {
   }
 }
 
+class MeadowPlant {
+  constructor(p, x, groundY, scale, depth, palette) {
+    this.p = p;
+    this.x = x;
+    this.groundY = groundY;
+    this.scale = scale;
+    this.depth = depth;
+    this.palette = palette;
+    this.seed = p.random(2000);
+    this.stems = Array.from({ length: p.floor(p.random(3, 6)) }, () => ({
+      lean: p.random(-0.35, 0.35),
+      height: p.random(80, 140) * this.scale * p.lerp(1.1, 0.75, depth),
+      taper: p.random(0.6, 0.9)
+    }));
+  }
+
+  draw({ movement, playerX, shadowTint }) {
+    const p = this.p;
+    const breeze = (p.noise(this.seed, p.frameCount * 0.003) - 0.5) * 14;
+    const parting = movement * 28 * Math.exp(-Math.abs(this.x - playerX) / 120) * Math.sign(this.x - playerX);
+    const alpha = p.map(this.depth, 0, 1, 170, 110);
+
+    p.push();
+    p.translate(this.x, this.groundY);
+    p.strokeWeight(p.lerp(3, 1.4, this.depth));
+    this.stems.forEach((stem, index) => {
+      const sway = breeze * (0.6 + index * 0.08) + parting;
+      const tipX = sway + stem.height * stem.lean * 0.2;
+      const tipY = -stem.height;
+
+      const stemColor = p.color(p.lerpColor(p.color(this.palette.meadowLight), p.color(this.palette.meadowDeep), this.depth));
+      stemColor.setAlpha(alpha);
+      p.stroke(stemColor);
+      p.noFill();
+      p.bezier(0, 0, 0, tipY * 0.35, tipX * 0.4, tipY * 0.7, tipX, tipY);
+
+      p.noStroke();
+      const plume = p.color(255, 236, 200, alpha * 0.9);
+      p.fill(plume);
+      p.ellipse(tipX, tipY, 10 * stem.taper, 18 * stem.taper);
+
+      const leafX = tipX * 0.3;
+      const leafY = tipY * 0.55;
+      p.fill(shadowTint.levels[0], shadowTint.levels[1], shadowTint.levels[2], 80);
+      p.ellipse(leafX, leafY, 14 * stem.taper, 6 * stem.taper);
+    });
+    p.pop();
+  }
+}
+
 class CicadaShimmer {
   constructor(p, horizonY) {
     this.p = p;
@@ -416,6 +466,7 @@ export function createSummerScene(p) {
   let lastTouchAt = 0;
 
   const grass = [];
+  const meadowPlants = [];
   const cicadas = [];
   const heat = [];
   const dragonflies = [];
@@ -436,7 +487,7 @@ export function createSummerScene(p) {
 
   function populateGrass() {
     grass.length = 0;
-    const count = Math.floor(Math.max(180, p.width / 5));
+    const count = Math.floor(Math.max(260, p.width / 3));
     for (let i = 0; i < count; i += 1) {
       const x = (i / count) * (p.width + 40) - 20;
       const depth = p.random(0, 1);
@@ -445,6 +496,24 @@ export function createSummerScene(p) {
         base: p.lerpColor(p.color(palette.meadowLight), p.color(palette.meadowDeep), depth)
       });
       grass.push(blade);
+    }
+  }
+
+  function populatePlants() {
+    meadowPlants.length = 0;
+    const count = Math.floor(p.width / 80) + 14;
+    for (let i = 0; i < count; i += 1) {
+      const depth = p.random(0.05, 0.9);
+      const x = p.random(-20, p.width + 20);
+      const plant = new MeadowPlant(
+        p,
+        x,
+        groundY(x),
+        p.lerp(1, 1.6, 1 - depth),
+        depth,
+        palette
+      );
+      meadowPlants.push(plant);
     }
   }
 
@@ -492,6 +561,7 @@ export function createSummerScene(p) {
     playerX = p.width * 0.4;
     const horizonY = p.height * 0.48;
     populateGrass();
+    populatePlants();
     populateCicadas(horizonY);
     populateHeat(horizonY);
     populateDragonflies(horizonY);
@@ -538,6 +608,15 @@ export function createSummerScene(p) {
     });
   }
 
+  function drawPlants(movement) {
+    const shadowTint = p.color(...palette.shadow);
+    meadowPlants
+      .sort((a, b) => a.depth - b.depth)
+      .forEach(plant => {
+        plant.draw({ movement, playerX, shadowTint });
+      });
+  }
+
   return {
     id: 'summer',
     name: 'Été',
@@ -563,6 +642,7 @@ export function createSummerScene(p) {
       const targetX = (p.mouseIsPressed && p.mouseX) ? p.mouseX : p.width * 0.4 + drift;
       playerX = p.lerp(playerX, targetX, 0.03 + movement * 0.07);
 
+      drawPlants(movement);
       drawGrass(stillness, movement);
 
       seedTufts.forEach(tuft => {
