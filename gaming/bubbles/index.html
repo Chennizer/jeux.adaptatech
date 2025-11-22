@@ -227,6 +227,7 @@ const THEMES = {
   aqua: {
     background: [5, 15, 40],
     bgStroke: [180, 210, 255],
+    palette: [[180, 210, 255]],
     halo: 'rgba(150,210,255,0.5)',
     ring: [200, 230, 255, 200],
     outline: [230, 240, 255, 220],
@@ -237,17 +238,24 @@ const THEMES = {
     popFlash: [255, 255, 255]
   },
   rainbow: {
-    background: [12, 6, 22],
-    bgStroke: [210, 160, 255],
+    background: [20, 8, 34],
+    bgStroke: [230, 200, 255],
     palette: [
-      [255, 119, 195],
-      [141, 222, 255],
-      [255, 192, 105],
-      [126, 255, 199],
-      [255, 132, 132],
-      [186, 160, 255]
+      [255, 72, 160],
+      [0, 245, 255],
+      [255, 210, 64],
+      [125, 255, 167],
+      [112, 135, 255],
+      [255, 137, 79]
     ],
-    haloAlpha: 0.55
+    haloAlpha: 0.78,
+    gradient: [
+      [255, 77, 196],
+      [66, 212, 255],
+      [255, 221, 77],
+      [102, 255, 195],
+      [167, 123, 255]
+    ]
   }
 };
 
@@ -287,6 +295,7 @@ class BackgroundBubble {
     this.r = random(4, 14);                 // plus petites
     this.speed = random(0.2, 0.8);          // très lent
     this.alpha = random(15, 60);            // très pâle
+    this.paletteIndex = floor(random((THEMES[currentTheme].palette || []).length || 1));
   }
 
   update() {
@@ -298,8 +307,10 @@ class BackgroundBubble {
 
   draw() {
     noFill();
-    const [r, g, b] = THEMES[currentTheme].bgStroke;
-    stroke(r, g, b, this.alpha);
+    const theme = THEMES[currentTheme];
+    const palette = theme.palette || [theme.bgStroke];
+    const colorChoice = palette[this.paletteIndex % palette.length];
+    stroke(colorChoice[0], colorChoice[1], colorChoice[2], this.alpha);
     strokeWeight(1);
     ellipse(this.x, this.y, this.r * 2);
   }
@@ -311,12 +322,13 @@ function createBubbleColors(theme) {
     const main = random(palette);
     const accent = random(palette);
     const highlightAccent = random(palette);
+    const glow = random(palette);
     return {
-      halo: `rgba(${main[0]},${main[1]},${main[2]},${THEMES.rainbow.haloAlpha})`,
-      ring: [accent[0], accent[1], accent[2], 220],
-      outline: [main[0], main[1], main[2], 230],
-      highlight1: [255, 255, 255, 190],
-      highlight2: [highlightAccent[0], highlightAccent[1], highlightAccent[2], 170],
+      halo: `rgba(${glow[0]},${glow[1]},${glow[2]},${THEMES.rainbow.haloAlpha})`,
+      ring: [accent[0], accent[1], accent[2], 235],
+      outline: [main[0], main[1], main[2], 245],
+      highlight1: [255, 255, 255, 205],
+      highlight2: [highlightAccent[0], highlightAccent[1], highlightAccent[2], 190],
       popRing: [accent[0], accent[1], accent[2]],
       popParticle: [main[0], main[1], main[2]],
       popFlash: [255, 255, 255]
@@ -577,7 +589,44 @@ function draw() {
 
 /* === FOND SANS LIGNES (juste une couleur lisse) ============ */
 function drawBackground() {
-  const bg = THEMES[currentTheme].background;
+  const theme = THEMES[currentTheme];
+  if (currentTheme === 'rainbow') {
+    const ctx = drawingContext;
+    const t = millis() * 0.0006;
+    const grad = ctx.createLinearGradient(0, 0, width, height);
+    const stops = theme.gradient || theme.palette;
+    stops.forEach((stop, i) => {
+      const wobble = 0.12 + 0.12 * Math.sin(t + i * 1.2);
+      const r = constrain(stop[0] + wobble * 80, 0, 255);
+      const g = constrain(stop[1] + wobble * 80, 0, 255);
+      const b = constrain(stop[2] + wobble * 80, 0, 255);
+      grad.addColorStop(i / (stops.length - 1), `rgba(${r},${g},${b},0.9)`);
+    });
+
+    ctx.save();
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+    const glow = ctx.createRadialGradient(
+      width * 0.3,
+      height * 0.25,
+      0,
+      width * 0.3,
+      height * 0.25,
+      width * 0.8
+    );
+    glow.addColorStop(0, `rgba(255,255,255,${0.22 * pulse})`);
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+    return;
+  }
+
+  const bg = theme.background;
   background(bg[0], bg[1], bg[2]);
 }
 
@@ -650,6 +699,9 @@ window.addEventListener('load', () => {
       modeButtons.forEach(btn => btn.classList.remove('active'));
       b.classList.add('active');
       currentTheme = b.dataset.mode;
+      bgBubbles.forEach(bub => {
+        bub.paletteIndex = floor(random((THEMES[currentTheme].palette || []).length || 1));
+      });
     });
   });
 
