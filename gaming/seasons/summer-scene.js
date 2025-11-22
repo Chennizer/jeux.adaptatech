@@ -192,6 +192,85 @@ class Leaf {
   }
 }
 
+class Dragonfly {
+  constructor(p, horizonY, palette) {
+    this.p = p;
+    this.horizonY = horizonY;
+    this.palette = palette;
+    this.seed = p.random(5000);
+    this.reset();
+  }
+
+  reset() {
+    const p = this.p;
+    this.x = p.random(-60, p.width + 60);
+    this.y = p.random(this.horizonY - 60, this.horizonY + 30);
+    this.vx = p.random(-0.4, 0.4);
+    this.vy = p.random(-0.2, 0.2);
+    this.wingPhase = p.random(p.TWO_PI);
+    this.scale = p.random(0.7, 1.2);
+    this.dashCooldown = p.random(40, 160);
+  }
+
+  update({ movement, stillness, playerX }) {
+    const p = this.p;
+    this.wingPhase += 0.25 + movement * 1.4;
+
+    const drift = (p.noise(this.seed, p.frameCount * 0.003) - 0.5) * 0.3;
+    this.vy += drift * (0.6 + stillness * 0.8);
+
+    const follow = p.map(movement, 0, 1, 0.001, 0.015);
+    this.vx += (playerX - this.x) * follow;
+
+    this.dashCooldown -= 1;
+    if (this.dashCooldown <= 0 && movement > 0.25) {
+      const dashAngle = p.random(-0.6, 0.6) + (playerX - this.x) * 0.0009;
+      const dashSpeed = p.random(2.2, 3.4) * (0.6 + movement);
+      this.vx += Math.cos(dashAngle) * dashSpeed;
+      this.vy += Math.sin(dashAngle) * dashSpeed * 0.4;
+      this.dashCooldown = p.random(70, 140);
+    }
+
+    this.vx *= 0.96;
+    this.vy *= 0.95;
+    this.x += this.vx;
+    this.y += this.vy;
+
+    if (this.x < -80) this.x = p.width + 60;
+    if (this.x > p.width + 80) this.x = -60;
+    this.y = p.constrain(this.y, this.horizonY - 90, this.horizonY + 60);
+  }
+
+  draw() {
+    const p = this.p;
+    p.push();
+    p.translate(this.x, this.y);
+    p.scale(this.scale, this.scale);
+
+    const wingFlap = Math.sin(this.wingPhase) * 8 + 10;
+    p.stroke(255, 255, 255, 180);
+    p.strokeWeight(1.6);
+    p.noFill();
+    p.push();
+    p.rotate(0.15);
+    p.ellipse(4, 0, wingFlap, 10);
+    p.rotate(-0.3);
+    p.ellipse(-4, 0, wingFlap, 10);
+    p.pop();
+
+    p.strokeWeight(2.2);
+    const body = p.color(...this.palette.shadow);
+    body.setAlpha(200);
+    p.stroke(body);
+    p.line(-6, 0, 6, 0);
+
+    p.strokeWeight(3.2);
+    p.point(6, 0);
+
+    p.pop();
+  }
+}
+
 export function createSummerScene(p) {
   let speedMultiplier = 1;
   let shimmer = 0;
@@ -201,6 +280,7 @@ export function createSummerScene(p) {
   const grass = [];
   const cicadas = [];
   const heat = [];
+  const dragonflies = [];
   let shimmerVeil;
   const leaves = [];
   const palette = {
@@ -244,6 +324,14 @@ export function createSummerScene(p) {
     }
   }
 
+  function populateDragonflies(horizonY) {
+    dragonflies.length = 0;
+    const count = Math.floor(p.width / 180) + 3;
+    for (let i = 0; i < count; i += 1) {
+      dragonflies.push(new Dragonfly(p, horizonY, palette));
+    }
+  }
+
   function spawnLeaves(count = 8) {
     const treeBaseX = p.width * 0.78;
     const baseY = groundY(treeBaseX) - p.height * 0.02;
@@ -258,6 +346,7 @@ export function createSummerScene(p) {
     populateGrass();
     populateCicadas(horizonY);
     populateHeat(horizonY);
+    populateDragonflies(horizonY);
     shimmerVeil = new HeatShimmer(p, horizonY);
     shimmerVeil.regenerate(p.width);
     leaves.length = 0;
@@ -327,6 +416,12 @@ export function createSummerScene(p) {
         spawnLeaves(8);
         lastTouchAt = p.millis();
       }
+
+      const flyerInput = { movement, stillness, playerX };
+      dragonflies.forEach(flyer => {
+        flyer.update(flyerInput);
+        flyer.draw();
+      });
 
       for (let i = leaves.length - 1; i >= 0; i -= 1) {
         leaves[i].update(speedMultiplier);
