@@ -51,15 +51,12 @@ class Flower {
   reset() {
     const p = this.p;
     this.x = p.random(p.width * 0.05, p.width * 0.95);
-    this.stemHeight = p.random(p.height * 0.13, p.height * 0.22);
-    this.headSize = p.random(16, 28);
+    this.stemHeight = p.random(p.height * 0.36, p.height * 0.66);
+    this.headSize = p.random(48, 84);
     this.progress = 0;
     this.bloom = 0;
-    this.fade = 1;
     this.growSpeed = p.random(0.18, 0.25);
     this.bloomSpeed = p.random(0.32, 0.52);
-    this.fadeSpeed = p.random(0.25, 0.35);
-    this.holdTime = p.random(5, 9);
     this.swaySeed = p.random(p.TWO_PI);
     this.petalColor = p.color(this.palette[p.floor(p.random(this.palette.length))]);
   }
@@ -67,19 +64,18 @@ class Flower {
   encourage() {
     this.progress = Math.min(1, this.progress + 0.2);
     this.bloom = Math.min(1, this.bloom + 0.25);
-    this.holdTime = Math.max(this.holdTime, 2.2);
   }
 
   drawStem(baseX, baseY, tipX, tipY) {
     const p = this.p;
-    p.stroke(60, 130, 80, 190 * this.fade);
-    p.strokeWeight(4);
+    p.stroke(60, 130, 80, 190);
+    p.strokeWeight(8);
     p.line(baseX, baseY, tipX, tipY);
 
     if (this.progress > 0.3) {
-      const leafSize = 14 * Math.min(1, this.progress);
+      const leafSize = 42 * Math.min(1, this.progress);
       const leafOffset = (baseY - tipY) * 0.4;
-      p.fill(90, 170, 110, 180 * this.fade);
+      p.fill(90, 170, 110, 180);
       p.noStroke();
       p.push();
       p.translate(baseX, baseY - leafOffset);
@@ -106,11 +102,11 @@ class Flower {
       const angle = (p.TWO_PI / 6) * i;
       p.push();
       p.rotate(angle);
-      p.fill(p.red(this.petalColor), p.green(this.petalColor), p.blue(this.petalColor), 150 * this.fade);
+      p.fill(p.red(this.petalColor), p.green(this.petalColor), p.blue(this.petalColor), 150);
       p.ellipse(size, 0, size * 1.2, size * 0.9);
       p.pop();
     }
-    p.fill(250, 230, 120, 220 * this.fade);
+    p.fill(250, 230, 120, 220);
     p.ellipse(0, 0, size * 0.8);
     p.pop();
   }
@@ -122,14 +118,6 @@ class Flower {
       this.progress = Math.min(1, this.progress + this.growSpeed * dt * multiplier);
     } else if (this.bloom < 1) {
       this.bloom = Math.min(1, this.bloom + this.bloomSpeed * dt * multiplier);
-    } else {
-      this.holdTime -= dt * multiplier;
-      if (this.holdTime <= 0) {
-        this.fade = Math.max(0, this.fade - this.fadeSpeed * dt * multiplier);
-        if (this.fade <= 0.01) {
-          this.reset();
-        }
-      }
     }
   }
 
@@ -177,7 +165,7 @@ export function createSpringScene(p) {
     }
 
     flowers.length = 0;
-    targetFlowerCount = Math.floor(Math.max(18, p.width / 70));
+    targetFlowerCount = Math.floor(Math.max(40, p.width / 25));
     const initial = Math.min(2, targetFlowerCount);
     for (let i = 0; i < initial; i += 1) {
       flowers.push(new Flower(p, palette, groundY));
