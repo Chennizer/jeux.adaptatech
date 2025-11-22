@@ -38,7 +38,7 @@ class GrassBlade {
 }
 
 class MeadowPlant {
-  constructor(p, x, groundY, height, depth, palette) {
+  constructor(p, x, groundY, height, depth, palette, options = {}) {
     this.p = p;
     this.x = x;
     this.groundY = groundY;
@@ -48,13 +48,16 @@ class MeadowPlant {
     this.seed = p.random(4000);
     this.stemCount = Math.floor(p.random(3, 7));
     this.tuftLean = p.random(-0.2, 0.2);
+    this.motionScale = options.motionScale ?? 1;
+    const headOptions = options.headOptions || [palette.headWarm, palette.headCool];
+    this.headOptions = headOptions.map(color => p.color(color));
   }
 
   draw({ playerX, movement, stillness, shadowTint }) {
     const p = this.p;
-    const sway = (p.noise(this.seed, p.frameCount * 0.003) - 0.5) * this.height * 0.12;
-    const breeze = Math.sin((p.frameCount * 0.012 + this.seed) * (0.6 + movement)) * this.height * 0.1;
-    const parting = movement * 30 * Math.exp(-Math.abs(this.x - playerX) / 160) * Math.sign(this.x - playerX);
+    const sway = (p.noise(this.seed, p.frameCount * 0.003) - 0.5) * this.height * 0.12 * this.motionScale;
+    const breeze = Math.sin((p.frameCount * 0.012 + this.seed) * (0.6 + movement)) * this.height * 0.1 * this.motionScale;
+    const parting = movement * 30 * Math.exp(-Math.abs(this.x - playerX) / 160) * Math.sign(this.x - playerX) * this.motionScale;
 
     const baseWidth = p.lerp(6, 2.5, this.depth);
     const stemColor = p.color(this.palette.stem);
@@ -72,7 +75,7 @@ class MeadowPlant {
       p.bezier(this.x + offset, this.groundY, this.x + offset, midY, midX, midY, tipX, tipY);
 
       p.noStroke();
-      const headColor = p.random([this.palette.headWarm, this.palette.headCool]);
+      const headColor = p.color(p.random(this.headOptions));
       headColor.setAlpha(p.map(this.depth, 0, 1, 170, 110));
       p.fill(headColor);
       p.ellipse(tipX, tipY, p.lerp(10, 6, this.depth), p.lerp(12, 7, this.depth));
@@ -526,6 +529,9 @@ export function createSummerScene(p) {
         stem: p.lerpColor(p.color(palette.meadowLight), p.color(palette.meadowDeep), depth),
         headWarm: p.color(...palette.accentWarm),
         headCool: p.color(...palette.accentCool)
+      }, {
+        motionScale: 0.25,
+        headOptions: [p.color(...palette.accentWarm)]
       }));
     }
   }
