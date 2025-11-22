@@ -71,7 +71,8 @@
   </div>
 
   <script>
-    // —— Music asset paths —— 
+    // —— Music asset paths ——
+    soundFormats('mp3');
     const musicPaths = [
       '../../songs/synth/synth1.mp3',
       '../../songs/synth/synth2.mp3',
@@ -472,17 +473,36 @@
         overlay.remove();
         fullscreen(true);
 
-        if (bgMusics.length) {
-          bgMusic = random(bgMusics);
-          bgMusic.setLoop(true);
-          let initVol = parseInt(musicVolSlider.value) / 100;
-          if (!muteMusicCheckbox.checked) {
-            bgMusic.setVolume(initVol);
-          } else {
-            bgMusic.setVolume(0);
-          }
-          bgMusic.play();
-        }
+        // Ensure the AudioContext is unlocked before trying to play music.
+        userStartAudio()
+          .then(async () => {
+            if (getAudioContext().state !== 'running') {
+              try { await getAudioContext().resume(); } catch (err) { console.warn(err); }
+            }
+            if (bgMusics.length === 0) return;
+
+            const startIfReady = () => {
+              if (bgMusic) return true; // already started
+              const loadedTracks = bgMusics.filter(s => s.isLoaded());
+              if (!loadedTracks.length) return false;
+              bgMusic = random(loadedTracks);
+              bgMusic.setLoop(true);
+              let initVol = parseInt(musicVolSlider.value) / 100;
+              bgMusic.setVolume(muteMusicCheckbox.checked ? 0 : initVol);
+              bgMusic.play();
+              return true;
+            };
+
+            // Try immediately if anything is ready.
+            if (startIfReady()) return;
+
+            // Otherwise, poll until any track finishes loading.
+            const pollInterval = setInterval(() => {
+              if (startIfReady()) {
+                clearInterval(pollInterval);
+              }
+            }, 100);
+          });
         icon.style.display = 'flex';
       });
 
