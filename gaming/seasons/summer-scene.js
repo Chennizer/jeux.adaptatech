@@ -98,6 +98,54 @@ class HeatRibbon {
   }
 }
 
+class HeatShimmer {
+  constructor(p, horizonY) {
+    this.p = p;
+    this.horizonY = horizonY;
+    this.seed = p.random(5000);
+    this.columns = [];
+  }
+
+  regenerate(width) {
+    const p = this.p;
+    this.columns = [];
+    const count = Math.max(12, Math.floor(width / 60));
+    for (let i = 0; i < count; i += 1) {
+      this.columns.push({
+        x: p.map(i, 0, count - 1, -20, p.width + 20) + p.random(-10, 10),
+        width: p.random(12, 24),
+        wobble: p.random(0.4, 1.1)
+      });
+    }
+  }
+
+  draw(stillness) {
+    const p = this.p;
+    if (stillness <= 0.05) return;
+
+    p.noStroke();
+    p.push();
+    p.blendMode(p.SOFT_LIGHT);
+    const alphaBase = p.map(stillness, 0, 1, 0, 70);
+    this.columns.forEach(col => {
+      const shimmer = (p.noise(this.seed + col.x * 0.01, p.frameCount * 0.01) - 0.5);
+      const sway = shimmer * 18 * col.wobble * stillness;
+      const top = this.horizonY - p.height * 0.06 + shimmer * 20;
+      const height = p.height * 0.5 + shimmer * 28 * stillness;
+      const gradientSteps = 5;
+      for (let i = 0; i < gradientSteps; i += 1) {
+        const stepAlpha = alphaBase * p.lerp(0.18, 0.65, i / (gradientSteps - 1));
+        const tint = p.color(255, 235, 190, stepAlpha);
+        p.fill(tint);
+        const stepTop = p.lerp(top, top + height, i / gradientSteps);
+        const stepHeight = height / gradientSteps;
+        p.rect(col.x + sway * 0.3, stepTop, col.width + shimmer * 6, stepHeight, 8);
+      }
+    });
+    p.pop();
+  }
+}
+
 class Leaf {
   constructor(p, originX, originY) {
     this.p = p;
@@ -153,6 +201,7 @@ export function createSummerScene(p) {
   const grass = [];
   const cicadas = [];
   const heat = [];
+  let shimmerVeil;
   const leaves = [];
   const palette = {
     skyTop: [248, 226, 178],
@@ -209,6 +258,8 @@ export function createSummerScene(p) {
     populateGrass();
     populateCicadas(horizonY);
     populateHeat(horizonY);
+    shimmerVeil = new HeatShimmer(p, horizonY);
+    shimmerVeil.regenerate(p.width);
     leaves.length = 0;
   }
 
@@ -235,47 +286,7 @@ export function createSummerScene(p) {
     if (stillness > 0.02) {
       heat.forEach(band => band.draw(stillness));
     }
-  }
-
-  function drawOak(stillness) {
-    const trunkBaseX = p.width * 0.78;
-    const trunkBaseY = groundY(trunkBaseX);
-    const shadeLength = p.width * 0.3;
-    const shadeAngle = -0.15;
-    const shadowColor = p.color(...palette.shadow);
-    shadowColor.setAlpha(70);
-
-    p.noStroke();
-    p.fill(shadowColor);
-    p.beginShape();
-    p.vertex(trunkBaseX, trunkBaseY);
-    p.vertex(trunkBaseX + shadeLength, trunkBaseY + Math.tan(shadeAngle) * shadeLength * 0.5);
-    p.vertex(trunkBaseX + shadeLength * 0.6, trunkBaseY + 18);
-    p.vertex(trunkBaseX - 18, trunkBaseY + 26);
-    p.endShape(p.CLOSE);
-
-    p.fill(118, 96, 78);
-    p.rect(trunkBaseX - 12, trunkBaseY - p.height * 0.18, 26, p.height * 0.18, 8);
-
-    p.push();
-    p.translate(trunkBaseX + 4, trunkBaseY - p.height * 0.18);
-    p.noStroke();
-    const canopy = [
-      [p.height * 0.22, 0.55],
-      [p.height * 0.18, 0.44],
-      [p.height * 0.15, 0.33]
-    ];
-    canopy.forEach(([radius, alpha]) => {
-      const tint = p.color(...palette.shadow);
-      tint.setAlpha(140 * alpha);
-      p.fill(tint);
-      p.ellipse(0, -radius * 0.4, radius * 1.4, radius);
-      p.ellipse(-radius * 0.6, -radius * 0.2, radius * 1.2, radius * 0.9);
-      p.ellipse(radius * 0.5, -radius * 0.1, radius * 1.2, radius * 0.85);
-    });
-    p.fill(122, 150, 140, 70 + stillness * 40);
-    p.ellipse(0, -p.height * 0.04, p.height * 0.34, p.height * 0.24);
-    p.pop();
+    shimmerVeil.draw(stillness);
   }
 
   function drawGrass(stillness, movement) {
@@ -311,7 +322,6 @@ export function createSummerScene(p) {
       playerX = p.lerp(playerX, targetX, 0.03 + movement * 0.07);
 
       drawGrass(stillness, movement);
-      drawOak(stillness);
 
       if (p.mouseIsPressed && p.millis() - lastTouchAt > 350) {
         spawnLeaves(8);
