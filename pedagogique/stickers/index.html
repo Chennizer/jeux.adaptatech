@@ -106,6 +106,7 @@
     .field input[type="number"],
     .field input[type="text"],
     .field input[type="color"],
+    .field select,
     .field textarea {
       padding: .6rem .75rem;
       border: 1px solid var(--line);
@@ -363,7 +364,7 @@
     /* Preset strip */
     #presetStripWrapper {
       margin-top: 0.5rem;
-      display: none; /* toggled by Galerie button */
+      display: block;
     }
 
     #presetStrip {
@@ -457,6 +458,25 @@
     #advPanel {
       display: none;
     }
+
+    /* CVI pictogrammes */
+    #cviPanel {
+      margin-top: 0.6rem;
+      border-top: 1px solid var(--line);
+      padding-top: 0.6rem;
+    }
+
+    #cviStrip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.35rem;
+    }
+
+    .preset-thumb.is-selected {
+      box-shadow: 0 0 0 2px var(--accent);
+      transform: translateY(-2px);
+    }
   </style>
 </head>
 <body>
@@ -467,23 +487,37 @@
         Ajouter des images, flèches et textes, puis exporter un PNG transparent.
       </div>
 
-      <!-- BASIC: images (galerie + upload) -->
-      <div class="group">
-        <h3>Images</h3>
+      <div class="group" style="margin-top: 1rem;">
+        <h3>Importer un pictogramme PNG</h3>
         <div class="row" style="justify-content:center;">
-          <button id="openGalleryBtn" class="export-btn">
-            Galerie d’autocollants
-          </button>
           <input id="imageFiles" type="file" accept="image/png,image/*" multiple style="display:none;">
-          <button id="uploadBtn" class="export-btn alt">
+          <button id="uploadBtn" class="export-btn alt" style="width:100%;">
             Importer PNG…
           </button>
         </div>
+      </div>
 
+      <!-- BASIC: images (galerie + upload) -->
+      <div class="group">
+        <h3>Basic pictograms</h3>
         <div id="presetStripWrapper">
           <div id="presetStrip">
             <!-- Thumbnails from stickers.json will be injected here -->
           </div>
+        </div>
+
+        <div id="cviPanel">
+          <div class="row">
+            <div class="field" style="flex: 0 1 180px;">
+              <label for="cviCategory">Catégorie des pictogrammes</label>
+              <select id="cviCategory"></select>
+            </div>
+            <div class="field" style="flex: 1 1 auto;">
+              <label>Additional pictograms</label>
+              <small class="hint">Cliquer pour ajouter un pictogramme.</small>
+            </div>
+          </div>
+          <div id="cviStrip"></div>
         </div>
       </div>
 
@@ -624,9 +658,9 @@
   </div>
 
   <!-- JS -->
+  <script src="../../js/cviPngArray.js"></script>
   <script>
     const imageFilesEl = document.getElementById("imageFiles");
-    const openGalleryBtn = document.getElementById("openGalleryBtn");
     const uploadBtn = document.getElementById("uploadBtn");
     const presetStripWrapperEl = document.getElementById("presetStripWrapper");
     const presetStripEl = document.getElementById("presetStrip");
@@ -659,22 +693,21 @@
     const advPanelEl = document.getElementById("advPanel");
 
     const spriteListEl = document.getElementById("spriteList");
+    const cviCategoryEl = document.getElementById("cviCategory");
+    const cviStripEl = document.getElementById("cviStrip");
 
     // Paths for JSON manifest
     const STICKER_BASE_PATH = "../../images/stickers/";
     const STICKER_MANIFEST_URL = STICKER_BASE_PATH + "stickers.json";
 
+    // CVI pictograms (see js/cviPngArray.js)
+    const CVI_PNG_LIST = Array.isArray(window.PNG_ARRAY)
+      ? window.PNG_ARRAY.filter((item) => item && item.file)
+      : [];
+
     if (toggleAdvancedEl && advPanelEl) {
       toggleAdvancedEl.addEventListener("change", () => {
         advPanelEl.style.display = toggleAdvancedEl.checked ? "block" : "none";
-      });
-    }
-
-    // Folder gallery button: toggle visibility of preset thumbnails
-    if (openGalleryBtn && presetStripWrapperEl) {
-      openGalleryBtn.addEventListener("click", () => {
-        const isVisible = presetStripWrapperEl.style.display === "block";
-        presetStripWrapperEl.style.display = isVisible ? "none" : "block";
       });
     }
 
@@ -1377,6 +1410,100 @@
       }
     }
 
+    function populateCviCategories() {
+      if (!cviCategoryEl) return;
+      const categories = Array.from(
+        new Set(CVI_PNG_LIST.map((item) => item.category || "Divers"))
+      ).sort((a, b) => a.localeCompare(b, "fr"));
+
+      cviCategoryEl.innerHTML = "";
+
+      const allOption = document.createElement("option");
+      allOption.value = "__all";
+      allOption.textContent = "Toutes les catégories";
+      cviCategoryEl.appendChild(allOption);
+
+      categories.forEach((cat) => {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat;
+        cviCategoryEl.appendChild(opt);
+      });
+
+      let initialValue = "";
+      let highlightFile = null;
+
+      if (CVI_PNG_LIST.length) {
+        const randomItem = CVI_PNG_LIST[Math.floor(Math.random() * CVI_PNG_LIST.length)];
+        initialValue = randomItem.category || "Divers";
+        highlightFile = randomItem.file;
+      } else if (categories.length) {
+        initialValue = categories[0];
+      }
+
+      cviCategoryEl.value = initialValue || "";
+      renderCviStrip(initialValue, highlightFile);
+
+      cviCategoryEl.addEventListener("change", () => {
+        renderCviStrip(cviCategoryEl.value);
+      });
+    }
+
+    function renderCviStrip(categoryValue, highlightFile = null) {
+      if (!cviStripEl) return;
+
+      cviStripEl.innerHTML = "";
+      if (!CVI_PNG_LIST.length) {
+        const msg = document.createElement("small");
+        msg.className = "hint";
+        msg.textContent = "Aucun pictogramme CVI disponible.";
+        cviStripEl.appendChild(msg);
+        return;
+      }
+
+      const filtered = CVI_PNG_LIST.filter((item) => {
+        if (!item) return false;
+        const cat = item.category || "Divers";
+        if (!categoryValue || categoryValue === "__all") return true;
+        return cat === categoryValue;
+      });
+
+      filtered.forEach((item) => {
+        const src = item.file;
+        const label = item.name || item.file;
+
+        const thumb = document.createElement("div");
+        thumb.className = "preset-thumb";
+        thumb.dataset.src = src;
+        thumb.dataset.label = label;
+        thumb.title = `${label} (${item.category || "Divers"})`;
+
+        if (highlightFile && highlightFile === item.file) {
+          thumb.classList.add("is-selected");
+        }
+
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = label;
+
+        thumb.appendChild(img);
+        cviStripEl.appendChild(thumb);
+      });
+    }
+
+    if (cviStripEl) {
+      cviStripEl.addEventListener("click", (e) => {
+        const thumb = e.target.closest(".preset-thumb");
+        if (!thumb) return;
+
+        const src = thumb.dataset.src;
+        if (!src) return;
+
+        const label = thumb.dataset.label || thumb.title || "Sticker";
+        addImageSpriteFromDataUrl(src, label);
+      });
+    }
+
     // Click on preset thumb => add sprite with nice label
     presetStripEl.addEventListener("click", (e) => {
       const thumb = e.target.closest(".preset-thumb");
@@ -1445,6 +1572,7 @@
     applySheetSize();
     refreshSpriteList();
     loadStickerPresets();
+    populateCviCategories();
   </script>
 </body>
 </html>
