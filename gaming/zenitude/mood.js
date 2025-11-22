@@ -4,11 +4,10 @@ import { createBambooScene } from './zen-bamboo-scene.js';
 import { createShoreScene } from './zen-shore-scene.js';
 
 const PLAYLIST_TRACKS = [
-  '../../songs/sadness/v5sadviolinmusic1.mp3',
-  '../../songs/sadness/v5sadviolinmusic2.mp3',
-  '../../songs/sadness/v5sadviolinmusic3.mp3',
-  '../../songs/sadness/v5sadviolinmusic4.mp3',
-  '../../songs/sadness/v5sadviolinmusic5.mp3'
+  '../../songs/zenitude/v5calmmusic1.mp3',
+  '../../songs/zenitude/v5calmmusic2.mp3',
+  '../../songs/zenitude/v5calmmusic3.mp3',
+  '../../songs/zenitude/v5calmmusic4.mp3'
 ];
 
 const SCENE_SOUNDTRACKS = {
