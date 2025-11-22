@@ -70,6 +70,32 @@
     #menu {
       z-index: 10000;
     }
+
+    /* Sélecteur de mode (reprend le style du xylophone) */
+    #modeSelect {
+      display: flex;
+      gap: 1rem;
+      margin: 1.5rem 0 1.25rem;
+    }
+    #modeSelect button {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      border-radius: 8px;
+      color: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #modeSelect button:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    #modeSelect button.active {
+      background: #00bfff;
+      color: #000;
+      font-weight: bold;
+    }
   </style>
 
   <!-- Analytics -->
@@ -98,6 +124,13 @@
      data-ja="スペース：上にたまるシャボン玉を出します。エンター：すべてのシャボン玉を割ります。">
     Barre d’espace : fait apparaître une bulle qui monte s’accumuler en haut. Entrée : fait éclater toutes les bulles.
   </p>
+
+  <div id="modeSelect">
+    <button data-mode="aqua" class="active translate"
+            data-fr="Mode Océan" data-en="Ocean mode" data-ja="オーシャンモード">Mode Océan</button>
+    <button data-mode="rainbow" class="translate"
+            data-fr="Mode Multicolore" data-en="Multicolor mode" data-ja="マルチカラー">Mode Multicolore</button>
+  </div>
 
   <button id="startButton"
           class="translate"
@@ -190,6 +223,34 @@ const popPaths = [
   '../../sounds/woosh.mp3'
 ];
 
+const THEMES = {
+  aqua: {
+    background: [5, 15, 40],
+    bgStroke: [180, 210, 255],
+    halo: 'rgba(150,210,255,0.5)',
+    ring: [200, 230, 255, 200],
+    outline: [230, 240, 255, 220],
+    highlight1: [255, 255, 255, 170],
+    highlight2: [200, 230, 255, 150],
+    popRing: [230, 240, 255],
+    popParticle: [230, 240, 255],
+    popFlash: [255, 255, 255]
+  },
+  rainbow: {
+    background: [12, 6, 22],
+    bgStroke: [210, 160, 255],
+    palette: [
+      [255, 119, 195],
+      [141, 222, 255],
+      [255, 192, 105],
+      [126, 255, 199],
+      [255, 132, 132],
+      [186, 160, 255]
+    ],
+    haloAlpha: 0.55
+  }
+};
+
 let popSounds = [];
 let musicSound;
 
@@ -202,6 +263,7 @@ const NUM_BG_BUBBLES = 60;
 /* === ÉTAT =================================================== */
 let tapDelay = 2000;
 let lastTap  = -Infinity;
+let currentTheme = 'aqua';
 
 /* === VOLUMES =============================================== */
 let isMusicMuted = false, isSFXMuted = false;
@@ -236,15 +298,46 @@ class BackgroundBubble {
 
   draw() {
     noFill();
-    stroke(180, 210, 255, this.alpha);
+    const [r, g, b] = THEMES[currentTheme].bgStroke;
+    stroke(r, g, b, this.alpha);
     strokeWeight(1);
     ellipse(this.x, this.y, this.r * 2);
   }
 }
 
+function createBubbleColors(theme) {
+  if (theme === 'rainbow') {
+    const palette = THEMES.rainbow.palette;
+    const main = random(palette);
+    const accent = random(palette);
+    const highlightAccent = random(palette);
+    return {
+      halo: `rgba(${main[0]},${main[1]},${main[2]},${THEMES.rainbow.haloAlpha})`,
+      ring: [accent[0], accent[1], accent[2], 220],
+      outline: [main[0], main[1], main[2], 230],
+      highlight1: [255, 255, 255, 190],
+      highlight2: [highlightAccent[0], highlightAccent[1], highlightAccent[2], 170],
+      popRing: [accent[0], accent[1], accent[2]],
+      popParticle: [main[0], main[1], main[2]],
+      popFlash: [255, 255, 255]
+    };
+  }
+
+  return {
+    halo: THEMES.aqua.halo,
+    ring: [...THEMES.aqua.ring],
+    outline: [...THEMES.aqua.outline],
+    highlight1: [...THEMES.aqua.highlight1],
+    highlight2: [...THEMES.aqua.highlight2],
+    popRing: [...THEMES.aqua.popRing],
+    popParticle: [...THEMES.aqua.popParticle],
+    popFlash: [...THEMES.aqua.popFlash]
+  };
+}
+
 /* === BULLES GÉANTES AVEC "PHYSIQUE" ======================== */
 class BigBubble {
-  constructor(x, baseRadiusMult = 1) {
+  constructor(x, baseRadiusMult = 1, theme = 'aqua') {
     this.x = x;
     this.y = height + 80;
     this.baseR = random(90, 180) * baseRadiusMult;
@@ -252,6 +345,7 @@ class BigBubble {
     this.vx = random(-0.3, 0.3);            // petite dérive horizontale
     this.vy = random(-1.2, -0.6);           // monte vers le haut
     this.wobblePhase = random(TWO_PI);
+    this.colors = createBubbleColors(theme);
   }
 
   update(dt) {
@@ -291,15 +385,16 @@ class BigBubble {
     const cx = this.x;
     const cy = this.y;
     const r  = this.r;
+    const c  = this.colors;
 
     // Halo flou
     push();
     drawingContext.save();
     drawingContext.shadowBlur  = 40;
-    drawingContext.shadowColor = 'rgba(150,210,255,0.5)';
+    drawingContext.shadowColor = c.halo;
 
     noFill();
-    stroke(200, 230, 255, 200);
+    stroke(c.ring[0], c.ring[1], c.ring[2], c.ring[3] ?? 255);
     strokeWeight(6);
     ellipse(cx, cy, r * 2.1);
 
@@ -308,22 +403,22 @@ class BigBubble {
 
     // Contour principal
     noFill();
-    stroke(230, 240, 255, 220);
+    stroke(c.outline[0], c.outline[1], c.outline[2], c.outline[3] ?? 255);
     strokeWeight(4);
     ellipse(cx, cy, r * 2);
 
     // Reflets internes
     noStroke();
-    fill(255, 255, 255, 170);
+    fill(c.highlight1[0], c.highlight1[1], c.highlight1[2], c.highlight1[3] ?? 255);
     ellipse(cx - r * 0.25, cy - r * 0.25, r * 0.6, r * 0.45);
-    fill(200, 230, 255, 150);
+    fill(c.highlight2[0], c.highlight2[1], c.highlight2[2], c.highlight2[3] ?? 255);
     ellipse(cx + r * 0.15, cy + r * 0.2, r * 0.4, r * 0.35);
   }
 }
 
 /* === EFFET D’ÉCLATEMENT "POPPY" ============================ */
 class PopBurst {
-  constructor(x, y, baseR) {
+  constructor(x, y, baseR, colors) {
     this.x = x;
     this.y = y;
     this.r0 = baseR * 0.5;
@@ -334,6 +429,7 @@ class PopBurst {
     this.flashLife = 220; // flash blanc
 
     this.particles = [];
+    this.colors = colors || createBubbleColors(currentTheme);
     const count = 16;
     for (let i = 0; i < count; i++) {
       const ang = random(TWO_PI);
@@ -379,13 +475,15 @@ class PopBurst {
     const flashT = 1 - constrain(this.life / this.flashLife, 0, 1);
     if (flashT > 0) {
       noStroke();
-      fill(255, 255, 255, 180 * flashT);
+      const [fr, fg, fb] = this.colors.popFlash;
+      fill(fr, fg, fb, 180 * flashT);
       ellipse(this.x, this.y, this.r * 1.4);
     }
 
     // Anneau principal
     noFill();
-    stroke(230, 240, 255, this.alpha);
+    const [rr, rg, rb] = this.colors.popRing;
+    stroke(rr, rg, rb, this.alpha);
     strokeWeight(4);
     ellipse(this.x, this.y, this.r * 2);
 
@@ -393,7 +491,8 @@ class PopBurst {
     noStroke();
     for (let p of this.particles) {
       if (p.life < p.maxLife) {
-        fill(230, 240, 255, p.alpha);
+        const [pr, pg, pb] = this.colors.popParticle;
+        fill(pr, pg, pb, p.alpha);
         ellipse(p.x, p.y, p.r * 2);
       }
     }
@@ -478,8 +577,8 @@ function draw() {
 
 /* === FOND SANS LIGNES (juste une couleur lisse) ============ */
 function drawBackground() {
-  // couleur profonde bleu nuit
-  background(5, 15, 40);
+  const bg = THEMES[currentTheme].background;
+  background(bg[0], bg[1], bg[2]);
 }
 
 /* === ACTIONS SWITCHS ======================================= */
@@ -487,7 +586,7 @@ function drawBackground() {
 // Joueur 1 (espace) : bulle standard
 function triggerPlayer1(mult = 1) {
   const cx = width * 0.5;
-  bigBubbles.push(new BigBubble(cx, mult));
+  bigBubbles.push(new BigBubble(cx, mult, currentTheme));
   playPop();
 }
 
@@ -496,7 +595,7 @@ function triggerPlayer2() {
   if (bigBubbles.length === 0) return;
 
   bigBubbles.forEach(b => {
-    popBursts.push(new PopBurst(b.x, b.y, b.r));
+    popBursts.push(new PopBurst(b.x, b.y, b.r, b.colors));
   });
   bigBubbles = [];
 
@@ -543,7 +642,16 @@ window.addEventListener('load', () => {
         tapVal     = document.getElementById('tapDelayVal'),
         infoBtn    = document.getElementById('infoButton'),
         infoModal  = document.getElementById('infoModal'),
-        closeModal = document.getElementById('closeModal');
+        closeModal = document.getElementById('closeModal'),
+        modeButtons = document.querySelectorAll('#modeSelect button');
+
+  modeButtons.forEach(b => {
+    b.addEventListener('pointerup', () => {
+      modeButtons.forEach(btn => btn.classList.remove('active'));
+      b.classList.add('active');
+      currentTheme = b.dataset.mode;
+    });
+  });
 
   // Sliders & mute
   tapSlider.oninput = e => {
