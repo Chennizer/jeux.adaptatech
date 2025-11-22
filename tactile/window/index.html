@@ -72,6 +72,7 @@
 
   <script>
     const SOUND_ENABLED = typeof loadSound === 'function';
+    const HAS_AUDIO_CONTEXT = SOUND_ENABLED && typeof getAudioContext === 'function' && typeof userStartAudio === 'function';
     if (SOUND_ENABLED && typeof soundFormats === 'function') {
       soundFormats('mp3');
     }
@@ -82,7 +83,7 @@
       '../../songs/synth/synth3.mp3',
       '../../songs/synth/synth4.mp3'
     ];
-    let bgMusics = [], bgMusic = null;
+    let bgMusics = [], bgMusic = null, fallbackBgMusic = null;
 
     // —— Configuration —— 
     const PALETTE = ['#FF00EA','#00F5FF','#FFD300','#39FF14','#CC00FF','#FF0033','#00CFFF','#00FF66'];
@@ -101,6 +102,8 @@
     ];
 
     let crackSounds = [], explosionSounds = [];
+    let musicVolume = 0.3, sfxVolume = 0.5;
+    let musicMuted = false, sfxMuted = false;
 
     // —— State for animation/gameplay —— 
     let shards = [], explosionShards = [];
@@ -280,16 +283,16 @@
         spawnShards(targetX, targetY);
         stage = 1;
         stageStartTime = millis();
-        crackSounds[0]?.play();
+        playCrackSound(0);
       } else if (stage < 3) {
         stage++;
         stageStartTime = millis();
-        crackSounds[stage - 1]?.play();
+        playCrackSound(stage - 1);
       } else if (stage === 3) {
         stage = 4;
         spawnExplosion(targetX, targetY);
         explosionStartTime = millis();
-        explosionSounds[0]?.play();
+        playExplosionSound();
       }
     }
 
@@ -432,42 +435,33 @@
 
       // 2) “Mute Music” checkbox
       muteMusicCheckbox.addEventListener('change', e => {
-        if (!bgMusic) return;
-        if (e.target.checked) {
-          bgMusic.setVolume(0);
-        } else {
-          let vol = parseInt(musicVolSlider.value) / 100;
-          bgMusic.setVolume(vol);
-        }
+        musicMuted = e.target.checked;
+        applyMusicVolume();
         resetMenuTimer();
       });
 
       // 3) Music volume slider
       musicVolSlider.addEventListener('input', e => {
         let vol = parseInt(e.target.value);
+        musicVolume = vol / 100;
         musicVolValLabel.textContent = vol;
-        if (bgMusic && !muteMusicCheckbox.checked) {
-          bgMusic.setVolume(vol / 100);
-        }
+        applyMusicVolume();
         resetMenuTimer();
       });
 
       // 4) “Mute SFX” checkbox
       muteSFXCheckbox.addEventListener('change', e => {
-        const isMuted = e.target.checked;
-        crackSounds.forEach(s => s.setVolume(isMuted ? 0 : (parseInt(sfxVolSlider.value) / 100)));
-        explosionSounds.forEach(s => s.setVolume(isMuted ? 0 : (parseInt(sfxVolSlider.value) / 100)));
+        sfxMuted = e.target.checked;
+        applySfxVolume();
         resetMenuTimer();
       });
 
       // 5) SFX volume slider
       sfxVolSlider.addEventListener('input', e => {
         let vol = parseInt(e.target.value);
+        sfxVolume = vol / 100;
         sfxVolValLabel.textContent = vol;
-        if (!muteSFXCheckbox.checked) {
-          crackSounds.forEach(s => s.setVolume(vol / 100));
-          explosionSounds.forEach(s => s.setVolume(vol / 100));
-        }
+        applySfxVolume();
         resetMenuTimer();
       });
 
@@ -477,39 +471,14 @@
         overlay.remove();
         fullscreen(true);
 
-        if (SOUND_ENABLED && typeof userStartAudio === 'function' && typeof getAudioContext === 'function') {
-          // Ensure the AudioContext is unlocked before trying to play music.
-          userStartAudio()
-            .then(async () => {
-              if (getAudioContext().state !== 'running') {
-                try { await getAudioContext().resume(); } catch (err) { console.warn(err); }
-              }
-              if (bgMusics.length === 0) return;
+        // Sync state with UI on first start
+        musicMuted = muteMusicCheckbox.checked;
+        sfxMuted   = muteSFXCheckbox.checked;
+        musicVolume = parseInt(musicVolSlider.value) / 100;
+        sfxVolume   = parseInt(sfxVolSlider.value) / 100;
+        applySfxVolume();
 
-              const startIfReady = () => {
-                if (bgMusic) return true; // already started
-                const loadedTracks = bgMusics.filter(s => s?.isLoaded?.());
-                if (!loadedTracks.length) return false;
-                bgMusic = random(loadedTracks);
-                bgMusic.setLoop(true);
-                let initVol = parseInt(musicVolSlider.value) / 100;
-                bgMusic.setVolume(muteMusicCheckbox.checked ? 0 : initVol);
-                bgMusic.play();
-                return true;
-              };
-
-              // Try immediately if anything is ready.
-              if (startIfReady()) return;
-
-              // Otherwise, poll until any track finishes loading.
-              const pollInterval = setInterval(() => {
-                if (startIfReady()) {
-                  clearInterval(pollInterval);
-                }
-              }, 100);
-            })
-            .catch(err => console.warn('Audio start failed:', err));
-        }
+        startBackgroundMusic();
         icon.style.display = 'flex';
       });
 
@@ -556,8 +525,105 @@
         }
       });
 
-      // —— Fin de la partie “disparition automatique du menu” —— 
+      // —— Fin de la partie “disparition automatique du menu” ——
     });
+
+    function ensureP5Sounds() {
+      if (!SOUND_ENABLED) return;
+      if (crackSounds.length === 0) {
+        crackSounds = crackSoundPaths.map(p => loadSound(p));
+      }
+      if (explosionSounds.length === 0) {
+        explosionSounds = explosionSoundPaths.map(p => loadSound(p));
+      }
+      if (bgMusics.length === 0) {
+        bgMusics = musicPaths.map(p => loadSound(p));
+      }
+    }
+
+    function startBackgroundMusic() {
+      if (HAS_AUDIO_CONTEXT) {
+        ensureP5Sounds();
+        userStartAudio()
+          .then(async () => {
+            if (getAudioContext().state !== 'running') {
+              try { await getAudioContext().resume(); } catch (err) { console.warn(err); }
+            }
+
+            const startIfReady = () => {
+              if (bgMusic) return true; // already started
+              const loadedTracks = bgMusics.filter(s => s?.isLoaded?.());
+              if (!loadedTracks.length) return false;
+              bgMusic = random(loadedTracks);
+              bgMusic.setLoop(true);
+              applyMusicVolume();
+              bgMusic.play();
+              return true;
+            };
+
+            if (startIfReady()) return;
+
+            const pollInterval = setInterval(() => {
+              if (startIfReady()) {
+                clearInterval(pollInterval);
+              }
+            }, 100);
+          })
+          .catch(err => {
+            console.warn('Audio start failed, using HTMLAudio fallback:', err);
+            startFallbackMusic();
+          });
+      } else {
+        startFallbackMusic();
+      }
+    }
+
+    function startFallbackMusic() {
+      if (fallbackBgMusic) {
+        fallbackBgMusic.pause();
+      }
+      const track = musicPaths[Math.floor(Math.random() * musicPaths.length)];
+      fallbackBgMusic = new Audio(track);
+      fallbackBgMusic.loop = true;
+      applyMusicVolume();
+      fallbackBgMusic.play().catch(err => console.warn('Fallback music failed:', err));
+    }
+
+    function applyMusicVolume() {
+      const vol = musicMuted ? 0 : musicVolume;
+      if (bgMusic?.setVolume) bgMusic.setVolume(vol);
+      if (fallbackBgMusic) fallbackBgMusic.volume = vol;
+    }
+
+    function applySfxVolume() {
+      const vol = sfxMuted ? 0 : sfxVolume;
+      crackSounds.forEach(s => s?.setVolume?.(vol));
+      explosionSounds.forEach(s => s?.setVolume?.(vol));
+    }
+
+    function playCrackSound(stageIdx) {
+      const vol = sfxMuted ? 0 : sfxVolume;
+      if (SOUND_ENABLED && crackSounds[stageIdx]) {
+        crackSounds[stageIdx].setVolume(vol);
+        crackSounds[stageIdx].play();
+        return;
+      }
+      const audio = new Audio(crackSoundPaths[stageIdx % crackSoundPaths.length]);
+      audio.volume = vol;
+      audio.play().catch(err => console.warn('Crack sound failed:', err));
+    }
+
+    function playExplosionSound() {
+      const vol = sfxMuted ? 0 : sfxVolume;
+      if (SOUND_ENABLED && explosionSounds[0]) {
+        explosionSounds[0].setVolume(vol);
+        explosionSounds[0].play();
+        return;
+      }
+      const audio = new Audio(explosionSoundPaths[0]);
+      audio.volume = vol;
+      audio.play().catch(err => console.warn('Explosion sound failed:', err));
+    }
   </script>
 
   <script src="../../js/translationonly.js"></script>
