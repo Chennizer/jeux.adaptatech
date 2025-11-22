@@ -71,8 +71,11 @@
   </div>
 
   <script>
+    const SOUND_ENABLED = typeof loadSound === 'function';
+    if (SOUND_ENABLED && typeof soundFormats === 'function') {
+      soundFormats('mp3');
+    }
     // —— Music asset paths ——
-    soundFormats('mp3');
     const musicPaths = [
       '../../songs/synth/synth1.mp3',
       '../../songs/synth/synth2.mp3',
@@ -117,6 +120,7 @@
     let lastTap = -Infinity, tapDelay = 2000;
 
     function preload() {
+      if (!SOUND_ENABLED) return;
       crackSounds     = crackSoundPaths.map(p => loadSound(p));
       explosionSounds = explosionSoundPaths.map(p => loadSound(p));
       bgMusics        = musicPaths.map(p => loadSound(p));
@@ -473,36 +477,39 @@
         overlay.remove();
         fullscreen(true);
 
-        // Ensure the AudioContext is unlocked before trying to play music.
-        userStartAudio()
-          .then(async () => {
-            if (getAudioContext().state !== 'running') {
-              try { await getAudioContext().resume(); } catch (err) { console.warn(err); }
-            }
-            if (bgMusics.length === 0) return;
-
-            const startIfReady = () => {
-              if (bgMusic) return true; // already started
-              const loadedTracks = bgMusics.filter(s => s.isLoaded());
-              if (!loadedTracks.length) return false;
-              bgMusic = random(loadedTracks);
-              bgMusic.setLoop(true);
-              let initVol = parseInt(musicVolSlider.value) / 100;
-              bgMusic.setVolume(muteMusicCheckbox.checked ? 0 : initVol);
-              bgMusic.play();
-              return true;
-            };
-
-            // Try immediately if anything is ready.
-            if (startIfReady()) return;
-
-            // Otherwise, poll until any track finishes loading.
-            const pollInterval = setInterval(() => {
-              if (startIfReady()) {
-                clearInterval(pollInterval);
+        if (SOUND_ENABLED && typeof userStartAudio === 'function' && typeof getAudioContext === 'function') {
+          // Ensure the AudioContext is unlocked before trying to play music.
+          userStartAudio()
+            .then(async () => {
+              if (getAudioContext().state !== 'running') {
+                try { await getAudioContext().resume(); } catch (err) { console.warn(err); }
               }
-            }, 100);
-          });
+              if (bgMusics.length === 0) return;
+
+              const startIfReady = () => {
+                if (bgMusic) return true; // already started
+                const loadedTracks = bgMusics.filter(s => s?.isLoaded?.());
+                if (!loadedTracks.length) return false;
+                bgMusic = random(loadedTracks);
+                bgMusic.setLoop(true);
+                let initVol = parseInt(musicVolSlider.value) / 100;
+                bgMusic.setVolume(muteMusicCheckbox.checked ? 0 : initVol);
+                bgMusic.play();
+                return true;
+              };
+
+              // Try immediately if anything is ready.
+              if (startIfReady()) return;
+
+              // Otherwise, poll until any track finishes loading.
+              const pollInterval = setInterval(() => {
+                if (startIfReady()) {
+                  clearInterval(pollInterval);
+                }
+              }, 100);
+            })
+            .catch(err => console.warn('Audio start failed:', err));
+        }
         icon.style.display = 'flex';
       });
 
