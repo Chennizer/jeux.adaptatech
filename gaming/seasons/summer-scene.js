@@ -171,10 +171,10 @@ class CicadaGlint {
 
 export function createSummerScene(p) {
   const palette = {
-    skyTop: [248, 226, 178],
-    skyBottom: [214, 203, 177],
-    meadowLight: [235, 212, 153],
-    meadowDeep: [203, 181, 123],
+    skyTop: [222, 236, 245],
+    skyBottom: [196, 214, 223],
+    meadowLight: [244, 205, 126],
+    meadowDeep: [196, 150, 82],
     shadow: [76, 124, 132],
     veil: [255, 235, 190]
   };
