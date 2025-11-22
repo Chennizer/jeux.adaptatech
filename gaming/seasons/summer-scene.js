@@ -146,6 +146,77 @@ class HeatShimmer {
   }
 }
 
+class SunGlyph {
+  constructor(p, palette) {
+    this.p = p;
+    this.palette = palette;
+    this.seed = p.random(8000);
+    this.setCanvasSize(p.width, p.height);
+  }
+
+  setCanvasSize(width, height) {
+    this.centerX = width * 0.78;
+    this.centerY = height * 0.18;
+    this.baseRadius = Math.min(width, height) * 0.08;
+  }
+
+  draw(stillness) {
+    const p = this.p;
+    p.push();
+    p.translate(this.centerX, this.centerY);
+
+    const pulse = (Math.sin(p.frameCount * 0.01) + 1) * 0.5;
+    const shimmer = p.noise(this.seed, p.frameCount * 0.008);
+    const radius = this.baseRadius * p.lerp(0.92, 1.12, pulse * 0.5 + stillness * 0.4 + shimmer * 0.2);
+
+    p.push();
+    p.blendMode(p.SOFT_LIGHT);
+    const ringColors = [
+      [255, 226, 170, 110],
+      [248, 214, 150, 120],
+      [234, 200, 140, 95]
+    ];
+    ringColors.forEach((col, idx) => {
+      const fade = p.map(idx, 0, ringColors.length - 1, 1, 0.5);
+      const c = p.color(...col);
+      c.setAlpha(col[3] * fade);
+      p.noStroke();
+      p.ellipse(0, 0, radius * (1.4 + idx * 0.25), radius * (1.35 + idx * 0.22));
+    });
+    p.pop();
+
+    p.noStroke();
+    const core = p.color(255, 232, 184);
+    core.setAlpha(230);
+    p.fill(core);
+    p.ellipse(0, 0, radius * 1.1, radius * 1.08);
+
+    p.push();
+    p.rotate(0.12);
+    p.noFill();
+    const rayCount = 12;
+    for (let i = 0; i < rayCount; i += 1) {
+      const angle = (p.TWO_PI / rayCount) * i;
+      const wobble = p.noise(this.seed + i * 20, p.frameCount * 0.01) - 0.5;
+      const len = radius * p.lerp(0.5, 0.82, wobble + stillness * 0.4 + pulse * 0.2);
+      const col = p.color(...this.palette.shadow);
+      col.setAlpha(85 + wobble * 40);
+      p.stroke(col);
+      p.strokeWeight(p.lerp(1.2, 1.8, pulse));
+      const inner = radius * 0.65;
+      p.line(
+        Math.cos(angle) * inner,
+        Math.sin(angle) * inner,
+        Math.cos(angle) * (inner + len),
+        Math.sin(angle) * (inner + len)
+      );
+    }
+    p.pop();
+
+    p.pop();
+  }
+}
+
 class Leaf {
   constructor(p, originX, originY) {
     this.p = p;
@@ -348,13 +419,6 @@ export function createSummerScene(p) {
   let playerX = 0;
   let lastTouchAt = 0;
 
-  const grass = [];
-  const cicadas = [];
-  const heat = [];
-  const dragonflies = [];
-  const seedTufts = [];
-  let shimmerVeil;
-  const leaves = [];
   const palette = {
     skyTop: [248, 226, 178],
     skyBottom: [212, 204, 178],
@@ -362,6 +426,15 @@ export function createSummerScene(p) {
     meadowDeep: [202, 180, 120],
     shadow: [70, 120, 130]
   };
+
+  const grass = [];
+  const cicadas = [];
+  const heat = [];
+  const dragonflies = [];
+  const seedTufts = [];
+  let shimmerVeil;
+  const leaves = [];
+  const sun = new SunGlyph(p, palette);
 
   const groundSeed = p.random(1000);
   const groundY = x => p.height * 0.64 + (p.noise(groundSeed + x * 0.001) - 0.5) * 40;
@@ -423,6 +496,7 @@ export function createSummerScene(p) {
   function resize() {
     playerX = p.width * 0.4;
     const horizonY = p.height * 0.48;
+    sun.setCanvasSize(p.width, p.height);
     populateGrass();
     populateCicadas(horizonY);
     populateHeat(horizonY);
@@ -442,6 +516,8 @@ export function createSummerScene(p) {
       p.stroke(col);
       p.line(0, y, p.width, y);
     }
+
+    sun.draw(stillness);
 
     p.noStroke();
     const light = p.color(...palette.meadowLight);
