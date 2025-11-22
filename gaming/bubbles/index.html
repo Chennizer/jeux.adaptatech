@@ -229,6 +229,8 @@ const THEMES = {
     bgStroke: [180, 210, 255],
     palette: [[180, 210, 255]],
     halo: 'rgba(150,210,255,0.5)',
+    fillCore: [120, 190, 255, 80],
+    fillEdge: [60, 120, 200, 30],
     ring: [200, 230, 255, 200],
     outline: [230, 240, 255, 220],
     highlight1: [255, 255, 255, 170],
@@ -238,7 +240,7 @@ const THEMES = {
     popFlash: [255, 255, 255]
   },
   rainbow: {
-    background: [20, 8, 34],
+    background: [12, 4, 28],
     bgStroke: [230, 200, 255],
     palette: [
       [255, 72, 160],
@@ -248,7 +250,9 @@ const THEMES = {
       [112, 135, 255],
       [255, 137, 79]
     ],
-    haloAlpha: 0.78,
+    haloAlpha: 0.9,
+    fillCoreAlpha: 0.65,
+    fillEdgeAlpha: 0.5,
     gradient: [
       [255, 77, 196],
       [66, 212, 255],
@@ -323,8 +327,11 @@ function createBubbleColors(theme) {
     const accent = random(palette);
     const highlightAccent = random(palette);
     const glow = random(palette);
+    const fillAccent = random(palette);
     return {
       halo: `rgba(${glow[0]},${glow[1]},${glow[2]},${THEMES.rainbow.haloAlpha})`,
+      fillCore: [main[0], main[1], main[2], THEMES.rainbow.fillCoreAlpha * 255],
+      fillEdge: [fillAccent[0], fillAccent[1], fillAccent[2], THEMES.rainbow.fillEdgeAlpha * 255],
       ring: [accent[0], accent[1], accent[2], 235],
       outline: [main[0], main[1], main[2], 245],
       highlight1: [255, 255, 255, 205],
@@ -337,6 +344,8 @@ function createBubbleColors(theme) {
 
   return {
     halo: THEMES.aqua.halo,
+    fillCore: [...THEMES.aqua.fillCore],
+    fillEdge: [...THEMES.aqua.fillEdge],
     ring: [...THEMES.aqua.ring],
     outline: [...THEMES.aqua.outline],
     highlight1: [...THEMES.aqua.highlight1],
@@ -398,6 +407,25 @@ class BigBubble {
     const cy = this.y;
     const r  = this.r;
     const c  = this.colors;
+
+    // Remplissage coloré (dégradé radial)
+    push();
+    drawingContext.save();
+    const grad = drawingContext.createRadialGradient(
+      cx - r * 0.25, cy - r * 0.25, r * 0.1,
+      cx, cy, r * 1.05
+    );
+    const fc = c.fillCore;
+    const fe = c.fillEdge;
+    grad.addColorStop(0, `rgba(${fc[0]},${fc[1]},${fc[2]},${(fc[3] ?? 255) / 255})`);
+    grad.addColorStop(0.55, `rgba(${fe[0]},${fe[1]},${fe[2]},${(fe[3] ?? 255) / 255})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0.05)');
+    drawingContext.fillStyle = grad;
+    drawingContext.beginPath();
+    drawingContext.ellipse(cx, cy, r, r, 0, 0, Math.PI * 2);
+    drawingContext.fill();
+    drawingContext.restore();
+    pop();
 
     // Halo flou
     push();
@@ -596,18 +624,18 @@ function drawBackground() {
     const grad = ctx.createLinearGradient(0, 0, width, height);
     const stops = theme.gradient || theme.palette;
     stops.forEach((stop, i) => {
-      const wobble = 0.12 + 0.12 * Math.sin(t + i * 1.2);
-      const r = constrain(stop[0] + wobble * 80, 0, 255);
-      const g = constrain(stop[1] + wobble * 80, 0, 255);
-      const b = constrain(stop[2] + wobble * 80, 0, 255);
-      grad.addColorStop(i / (stops.length - 1), `rgba(${r},${g},${b},0.9)`);
+      const wobble = 0.2 + 0.2 * Math.sin(t + i * 1.3);
+      const r = constrain(stop[0] + wobble * 120, 0, 255);
+      const g = constrain(stop[1] + wobble * 120, 0, 255);
+      const b = constrain(stop[2] + wobble * 120, 0, 255);
+      grad.addColorStop(i / (stops.length - 1), `rgba(${r},${g},${b},0.98)`);
     });
 
     ctx.save();
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
-    const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+    const pulse = 0.6 + 0.4 * Math.sin(t * 3.2);
     const glow = ctx.createRadialGradient(
       width * 0.3,
       height * 0.25,
@@ -616,11 +644,26 @@ function drawBackground() {
       height * 0.25,
       width * 0.8
     );
-    glow.addColorStop(0, `rgba(255,255,255,${0.22 * pulse})`);
+    glow.addColorStop(0, `rgba(255,255,255,${0.32 * pulse})`);
     glow.addColorStop(1, 'rgba(255,255,255,0)');
 
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
+
+    // Lueur colorée supplémentaire
+    const secondary = ctx.createRadialGradient(
+      width * 0.75,
+      height * 0.65,
+      0,
+      width * 0.75,
+      height * 0.65,
+      width
+    );
+    secondary.addColorStop(0, `rgba(255,120,220,${0.28 * pulse})`);
+    secondary.addColorStop(0.65, 'rgba(120,200,255,0.12)');
+    secondary.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = secondary;
     ctx.fillRect(0, 0, width, height);
     ctx.restore();
     return;
