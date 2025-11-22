@@ -70,6 +70,32 @@
     #menu {
       z-index: 10000;
     }
+
+    /* Sélecteur de mode (reprend le style du xylophone) */
+    #modeSelect {
+      display: flex;
+      gap: 1rem;
+      margin: 1.5rem 0 1.25rem;
+    }
+    #modeSelect button {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      border-radius: 8px;
+      color: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #modeSelect button:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    #modeSelect button.active {
+      background: #00bfff;
+      color: #000;
+      font-weight: bold;
+    }
   </style>
 
   <!-- Analytics -->
@@ -98,6 +124,13 @@
      data-ja="スペース：上にたまるシャボン玉を出します。エンター：すべてのシャボン玉を割ります。">
     Barre d’espace : fait apparaître une bulle qui monte s’accumuler en haut. Entrée : fait éclater toutes les bulles.
   </p>
+
+  <div id="modeSelect">
+    <button data-mode="aqua" class="active translate"
+            data-fr="Mode Océan" data-en="Ocean mode" data-ja="オーシャンモード">Mode Océan</button>
+    <button data-mode="rainbow" class="translate"
+            data-fr="Mode Multicolore" data-en="Multicolor mode" data-ja="マルチカラー">Mode Multicolore</button>
+  </div>
 
   <button id="startButton"
           class="translate"
@@ -190,6 +223,46 @@ const popPaths = [
   '../../sounds/woosh.mp3'
 ];
 
+const THEMES = {
+  aqua: {
+    background: [5, 15, 40],
+    bgStroke: [180, 210, 255],
+    palette: [[180, 210, 255]],
+    halo: 'rgba(150,210,255,0.5)',
+    fillCore: [120, 190, 255, 80],
+    fillEdge: [60, 120, 200, 30],
+    ring: [200, 230, 255, 200],
+    outline: [230, 240, 255, 220],
+    highlight1: [255, 255, 255, 170],
+    highlight2: [200, 230, 255, 150],
+    popRing: [230, 240, 255],
+    popParticle: [230, 240, 255],
+    popFlash: [255, 255, 255]
+  },
+  rainbow: {
+    background: [12, 4, 28],
+    bgStroke: [230, 200, 255],
+    palette: [
+      [255, 72, 160],
+      [0, 245, 255],
+      [255, 210, 64],
+      [125, 255, 167],
+      [112, 135, 255],
+      [255, 137, 79]
+    ],
+    haloAlpha: 0.9,
+    fillCoreAlpha: 0.65,
+    fillEdgeAlpha: 0.5,
+    gradient: [
+      [255, 77, 196],
+      [66, 212, 255],
+      [255, 221, 77],
+      [102, 255, 195],
+      [167, 123, 255]
+    ]
+  }
+};
+
 let popSounds = [];
 let musicSound;
 
@@ -202,6 +275,7 @@ const NUM_BG_BUBBLES = 60;
 /* === ÉTAT =================================================== */
 let tapDelay = 2000;
 let lastTap  = -Infinity;
+let currentTheme = 'aqua';
 
 /* === VOLUMES =============================================== */
 let isMusicMuted = false, isSFXMuted = false;
@@ -225,6 +299,7 @@ class BackgroundBubble {
     this.r = random(4, 14);                 // plus petites
     this.speed = random(0.2, 0.8);          // très lent
     this.alpha = random(15, 60);            // très pâle
+    this.paletteIndex = floor(random((THEMES[currentTheme].palette || []).length || 1));
   }
 
   update() {
@@ -236,15 +311,54 @@ class BackgroundBubble {
 
   draw() {
     noFill();
-    stroke(180, 210, 255, this.alpha);
+    const theme = THEMES[currentTheme];
+    const palette = theme.palette || [theme.bgStroke];
+    const colorChoice = palette[this.paletteIndex % palette.length];
+    stroke(colorChoice[0], colorChoice[1], colorChoice[2], this.alpha);
     strokeWeight(1);
     ellipse(this.x, this.y, this.r * 2);
   }
 }
 
+function createBubbleColors(theme) {
+  if (theme === 'rainbow') {
+    const palette = THEMES.rainbow.palette;
+    const main = random(palette);
+    const accent = random(palette);
+    const highlightAccent = random(palette);
+    const glow = random(palette);
+    const fillAccent = random(palette);
+    return {
+      halo: `rgba(${glow[0]},${glow[1]},${glow[2]},${THEMES.rainbow.haloAlpha})`,
+      fillCore: [main[0], main[1], main[2], THEMES.rainbow.fillCoreAlpha * 255],
+      fillEdge: [fillAccent[0], fillAccent[1], fillAccent[2], THEMES.rainbow.fillEdgeAlpha * 255],
+      ring: [accent[0], accent[1], accent[2], 235],
+      outline: [main[0], main[1], main[2], 245],
+      highlight1: [255, 255, 255, 205],
+      highlight2: [highlightAccent[0], highlightAccent[1], highlightAccent[2], 190],
+      popRing: [accent[0], accent[1], accent[2]],
+      popParticle: [main[0], main[1], main[2]],
+      popFlash: [255, 255, 255]
+    };
+  }
+
+  return {
+    halo: THEMES.aqua.halo,
+    fillCore: [...THEMES.aqua.fillCore],
+    fillEdge: [...THEMES.aqua.fillEdge],
+    ring: [...THEMES.aqua.ring],
+    outline: [...THEMES.aqua.outline],
+    highlight1: [...THEMES.aqua.highlight1],
+    highlight2: [...THEMES.aqua.highlight2],
+    popRing: [...THEMES.aqua.popRing],
+    popParticle: [...THEMES.aqua.popParticle],
+    popFlash: [...THEMES.aqua.popFlash]
+  };
+}
+
 /* === BULLES GÉANTES AVEC "PHYSIQUE" ======================== */
 class BigBubble {
-  constructor(x, baseRadiusMult = 1) {
+  constructor(x, baseRadiusMult = 1, theme = 'aqua') {
     this.x = x;
     this.y = height + 80;
     this.baseR = random(90, 180) * baseRadiusMult;
@@ -252,6 +366,7 @@ class BigBubble {
     this.vx = random(-0.3, 0.3);            // petite dérive horizontale
     this.vy = random(-1.2, -0.6);           // monte vers le haut
     this.wobblePhase = random(TWO_PI);
+    this.colors = createBubbleColors(theme);
   }
 
   update(dt) {
@@ -291,15 +406,35 @@ class BigBubble {
     const cx = this.x;
     const cy = this.y;
     const r  = this.r;
+    const c  = this.colors;
+
+    // Remplissage coloré (dégradé radial)
+    push();
+    drawingContext.save();
+    const grad = drawingContext.createRadialGradient(
+      cx - r * 0.25, cy - r * 0.25, r * 0.1,
+      cx, cy, r * 1.05
+    );
+    const fc = c.fillCore;
+    const fe = c.fillEdge;
+    grad.addColorStop(0, `rgba(${fc[0]},${fc[1]},${fc[2]},${(fc[3] ?? 255) / 255})`);
+    grad.addColorStop(0.55, `rgba(${fe[0]},${fe[1]},${fe[2]},${(fe[3] ?? 255) / 255})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0.05)');
+    drawingContext.fillStyle = grad;
+    drawingContext.beginPath();
+    drawingContext.ellipse(cx, cy, r, r, 0, 0, Math.PI * 2);
+    drawingContext.fill();
+    drawingContext.restore();
+    pop();
 
     // Halo flou
     push();
     drawingContext.save();
     drawingContext.shadowBlur  = 40;
-    drawingContext.shadowColor = 'rgba(150,210,255,0.5)';
+    drawingContext.shadowColor = c.halo;
 
     noFill();
-    stroke(200, 230, 255, 200);
+    stroke(c.ring[0], c.ring[1], c.ring[2], c.ring[3] ?? 255);
     strokeWeight(6);
     ellipse(cx, cy, r * 2.1);
 
@@ -308,22 +443,22 @@ class BigBubble {
 
     // Contour principal
     noFill();
-    stroke(230, 240, 255, 220);
+    stroke(c.outline[0], c.outline[1], c.outline[2], c.outline[3] ?? 255);
     strokeWeight(4);
     ellipse(cx, cy, r * 2);
 
     // Reflets internes
     noStroke();
-    fill(255, 255, 255, 170);
+    fill(c.highlight1[0], c.highlight1[1], c.highlight1[2], c.highlight1[3] ?? 255);
     ellipse(cx - r * 0.25, cy - r * 0.25, r * 0.6, r * 0.45);
-    fill(200, 230, 255, 150);
+    fill(c.highlight2[0], c.highlight2[1], c.highlight2[2], c.highlight2[3] ?? 255);
     ellipse(cx + r * 0.15, cy + r * 0.2, r * 0.4, r * 0.35);
   }
 }
 
 /* === EFFET D’ÉCLATEMENT "POPPY" ============================ */
 class PopBurst {
-  constructor(x, y, baseR) {
+  constructor(x, y, baseR, colors) {
     this.x = x;
     this.y = y;
     this.r0 = baseR * 0.5;
@@ -334,6 +469,7 @@ class PopBurst {
     this.flashLife = 220; // flash blanc
 
     this.particles = [];
+    this.colors = colors || createBubbleColors(currentTheme);
     const count = 16;
     for (let i = 0; i < count; i++) {
       const ang = random(TWO_PI);
@@ -379,13 +515,15 @@ class PopBurst {
     const flashT = 1 - constrain(this.life / this.flashLife, 0, 1);
     if (flashT > 0) {
       noStroke();
-      fill(255, 255, 255, 180 * flashT);
+      const [fr, fg, fb] = this.colors.popFlash;
+      fill(fr, fg, fb, 180 * flashT);
       ellipse(this.x, this.y, this.r * 1.4);
     }
 
     // Anneau principal
     noFill();
-    stroke(230, 240, 255, this.alpha);
+    const [rr, rg, rb] = this.colors.popRing;
+    stroke(rr, rg, rb, this.alpha);
     strokeWeight(4);
     ellipse(this.x, this.y, this.r * 2);
 
@@ -393,7 +531,8 @@ class PopBurst {
     noStroke();
     for (let p of this.particles) {
       if (p.life < p.maxLife) {
-        fill(230, 240, 255, p.alpha);
+        const [pr, pg, pb] = this.colors.popParticle;
+        fill(pr, pg, pb, p.alpha);
         ellipse(p.x, p.y, p.r * 2);
       }
     }
@@ -478,8 +617,60 @@ function draw() {
 
 /* === FOND SANS LIGNES (juste une couleur lisse) ============ */
 function drawBackground() {
-  // couleur profonde bleu nuit
-  background(5, 15, 40);
+  const theme = THEMES[currentTheme];
+  if (currentTheme === 'rainbow') {
+    const ctx = drawingContext;
+    const t = millis() * 0.0006;
+    const grad = ctx.createLinearGradient(0, 0, width, height);
+    const stops = theme.gradient || theme.palette;
+    stops.forEach((stop, i) => {
+      const wobble = 0.2 + 0.2 * Math.sin(t + i * 1.3);
+      const r = constrain(stop[0] + wobble * 120, 0, 255);
+      const g = constrain(stop[1] + wobble * 120, 0, 255);
+      const b = constrain(stop[2] + wobble * 120, 0, 255);
+      grad.addColorStop(i / (stops.length - 1), `rgba(${r},${g},${b},0.98)`);
+    });
+
+    ctx.save();
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    const pulse = 0.6 + 0.4 * Math.sin(t * 3.2);
+    const glow = ctx.createRadialGradient(
+      width * 0.3,
+      height * 0.25,
+      0,
+      width * 0.3,
+      height * 0.25,
+      width * 0.8
+    );
+    glow.addColorStop(0, `rgba(255,255,255,${0.32 * pulse})`);
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
+
+    // Lueur colorée supplémentaire
+    const secondary = ctx.createRadialGradient(
+      width * 0.75,
+      height * 0.65,
+      0,
+      width * 0.75,
+      height * 0.65,
+      width
+    );
+    secondary.addColorStop(0, `rgba(255,120,220,${0.28 * pulse})`);
+    secondary.addColorStop(0.65, 'rgba(120,200,255,0.12)');
+    secondary.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = secondary;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+    return;
+  }
+
+  const bg = theme.background;
+  background(bg[0], bg[1], bg[2]);
 }
 
 /* === ACTIONS SWITCHS ======================================= */
@@ -487,7 +678,7 @@ function drawBackground() {
 // Joueur 1 (espace) : bulle standard
 function triggerPlayer1(mult = 1) {
   const cx = width * 0.5;
-  bigBubbles.push(new BigBubble(cx, mult));
+  bigBubbles.push(new BigBubble(cx, mult, currentTheme));
   playPop();
 }
 
@@ -496,7 +687,7 @@ function triggerPlayer2() {
   if (bigBubbles.length === 0) return;
 
   bigBubbles.forEach(b => {
-    popBursts.push(new PopBurst(b.x, b.y, b.r));
+    popBursts.push(new PopBurst(b.x, b.y, b.r, b.colors));
   });
   bigBubbles = [];
 
@@ -543,7 +734,19 @@ window.addEventListener('load', () => {
         tapVal     = document.getElementById('tapDelayVal'),
         infoBtn    = document.getElementById('infoButton'),
         infoModal  = document.getElementById('infoModal'),
-        closeModal = document.getElementById('closeModal');
+        closeModal = document.getElementById('closeModal'),
+        modeButtons = document.querySelectorAll('#modeSelect button');
+
+  modeButtons.forEach(b => {
+    b.addEventListener('pointerup', () => {
+      modeButtons.forEach(btn => btn.classList.remove('active'));
+      b.classList.add('active');
+      currentTheme = b.dataset.mode;
+      bgBubbles.forEach(bub => {
+        bub.paletteIndex = floor(random((THEMES[currentTheme].palette || []).length || 1));
+      });
+    });
+  });
 
   // Sliders & mute
   tapSlider.oninput = e => {
