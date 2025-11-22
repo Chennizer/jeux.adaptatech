@@ -519,20 +519,25 @@ export function createSummerScene(p) {
 
   function populateHerbFloor() {
     herbFloor.length = 0;
-    const count = Math.floor(p.width / 18) + 120;
-    for (let i = 0; i < count; i += 1) {
-      const depth = p.random(0, 1);
-      const x = p.random(-60, p.width + 60);
-      const baseY = p.lerp(p.height * 0.72, p.height * 0.99, depth) + p.random(-8, 10);
-      const height = p.lerp(p.height * 0.2, p.height * 0.38, 1 - depth) * p.random(0.85, 1.05);
-      herbFloor.push(new MeadowPlant(p, x, baseY, height, depth, {
-        stem: p.lerpColor(p.color(palette.meadowLight), p.color(palette.meadowDeep), depth),
-        headWarm: p.color(...palette.accentWarm),
-        headCool: p.color(...palette.accentCool)
-      }, {
-        motionScale: 0.25,
-        headOptions: [p.color(...palette.accentWarm)]
-      }));
+    const columns = Math.floor(p.width / 16) + 80;
+    const rows = Math.max(6, Math.floor((p.height * 0.5) / 42));
+    for (let r = 0; r < rows; r += 1) {
+      const rowMix = r / Math.max(1, rows - 1);
+      const baseY = p.lerp(p.height * 0.52, p.height * 0.99, rowMix);
+      for (let c = 0; c < columns; c += 1) {
+        const depth = p.lerp(0.05, 1, rowMix) + p.random(-0.06, 0.06);
+        const x = p.map(c, 0, columns - 1, -60, p.width + 60) + p.random(-6, 6);
+        const jitterY = p.random(-10, 10);
+        const height = p.lerp(p.height * 0.22, p.height * 0.4, 1 - depth) * p.random(0.9, 1.05);
+        herbFloor.push(new MeadowPlant(p, x, baseY + jitterY, height, p.constrain(depth, 0, 1), {
+          stem: p.lerpColor(p.color(palette.meadowLight), p.color(palette.meadowDeep), p.constrain(depth, 0, 1)),
+          headWarm: p.color(...palette.accentWarm),
+          headCool: p.color(...palette.accentWarm)
+        }, {
+          motionScale: 0.18,
+          headOptions: [p.color(...palette.accentWarm)]
+        }));
+      }
     }
   }
 
