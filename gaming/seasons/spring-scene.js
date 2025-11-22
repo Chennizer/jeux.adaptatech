@@ -51,7 +51,7 @@ class Flower {
   reset() {
     const p = this.p;
     this.x = p.random(p.width * 0.05, p.width * 0.95);
-    this.stemHeight = p.random(p.height * 0.36, p.height * 0.66);
+    this.stemHeight = p.random(p.height * 0.12, p.height * 0.22);
     this.headSize = p.random(48, 84);
     this.progress = 0;
     this.bloom = 0;
@@ -75,15 +75,39 @@ class Flower {
     if (this.progress > 0.3) {
       const leafSize = 42 * Math.min(1, this.progress);
       const leafOffset = (baseY - tipY) * 0.4;
-      p.fill(90, 170, 110, 180);
-      p.noStroke();
-      p.push();
-      p.translate(baseX, baseY - leafOffset);
-      p.rotate(-0.6);
-      p.ellipse(0, 0, leafSize * 0.7, leafSize);
-      p.rotate(1.2);
-      p.ellipse(0, 0, leafSize * 0.7, leafSize);
-      p.pop();
+      const drawLeaf = direction => {
+        p.push();
+        p.translate(baseX, baseY - leafOffset);
+        p.rotate(direction * 0.55);
+        p.fill(96, 176, 116, 200);
+        p.noStroke();
+        p.beginShape();
+        p.vertex(0, 0);
+        p.bezierVertex(
+          leafSize * 0.9,
+          leafSize * -0.15,
+          leafSize * 0.95,
+          leafSize * -0.8,
+          0,
+          leafSize * -1.35
+        );
+        p.bezierVertex(
+          leafSize * -0.95,
+          leafSize * -0.8,
+          leafSize * -0.9,
+          leafSize * -0.15,
+          0,
+          0
+        );
+        p.endShape(p.CLOSE);
+        p.stroke(60, 130, 80, 160);
+        p.strokeWeight(2);
+        p.line(0, 0, 0, leafSize * -1.25);
+        p.pop();
+      };
+
+      drawLeaf(-1);
+      drawLeaf(1);
     }
   }
 
