@@ -51,8 +51,8 @@ class Flower {
   reset() {
     const p = this.p;
     this.x = p.random(p.width * 0.05, p.width * 0.95);
-    this.stemHeight = p.random(p.height * 0.09, p.height * 0.17);
-    this.headSize = p.random(10, 18);
+    this.stemHeight = p.random(p.height * 0.13, p.height * 0.22);
+    this.headSize = p.random(16, 28);
     this.progress = 0;
     this.bloom = 0;
     this.fade = 1;
@@ -73,11 +73,11 @@ class Flower {
   drawStem(baseX, baseY, tipX, tipY) {
     const p = this.p;
     p.stroke(60, 130, 80, 190 * this.fade);
-    p.strokeWeight(3);
+    p.strokeWeight(4);
     p.line(baseX, baseY, tipX, tipY);
 
     if (this.progress > 0.3) {
-      const leafSize = 12 * Math.min(1, this.progress);
+      const leafSize = 14 * Math.min(1, this.progress);
       const leafOffset = (baseY - tipY) * 0.4;
       p.fill(90, 170, 110, 180 * this.fade);
       p.noStroke();
@@ -150,8 +150,11 @@ class Flower {
 export function createSpringScene(p) {
   const petals = [];
   const flowers = [];
+  let palette = [];
   let speedMultiplier = 1;
   let bloom = 0;
+  let targetFlowerCount = 0;
+  let nextSpawnAt = 0;
 
   const groundY = x => {
     const hillHeight = p.height * 0.22;
@@ -163,7 +166,7 @@ export function createSpringScene(p) {
   function resize() {
     petals.length = 0;
     const count = Math.floor(Math.max(60, (p.width * p.height) / 12000));
-    const palette = [
+    palette = [
       [255, 219, 240],
       [250, 187, 215],
       [204, 238, 210],
@@ -174,10 +177,12 @@ export function createSpringScene(p) {
     }
 
     flowers.length = 0;
-    const flowerCount = Math.floor(Math.max(10, p.width / 140));
-    for (let i = 0; i < flowerCount; i += 1) {
+    targetFlowerCount = Math.floor(Math.max(18, p.width / 70));
+    const initial = Math.min(2, targetFlowerCount);
+    for (let i = 0; i < initial; i += 1) {
       flowers.push(new Flower(p, palette, groundY));
     }
+    nextSpawnAt = p.millis() + 400;
   }
 
   return {
@@ -226,6 +231,16 @@ export function createSpringScene(p) {
         }
         p.vertex(p.width + 20, p.height);
         p.endShape(p.CLOSE);
+      }
+
+      const now = p.millis();
+      if (flowers.length < targetFlowerCount && now >= nextSpawnAt) {
+        const remaining = targetFlowerCount - flowers.length;
+        const spawnCount = Math.min(remaining, p.random([1, 2]));
+        for (let i = 0; i < spawnCount; i += 1) {
+          flowers.push(new Flower(p, palette, groundY));
+        }
+        nextSpawnAt = now + p.random(1600, 3200);
       }
 
       flowers.forEach(flower => {
