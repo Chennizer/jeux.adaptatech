@@ -115,7 +115,7 @@ class AuroraRibbon {
     this.baseY = p.random(p.height * 0.14, p.height * 0.32);
     this.amplitude = p.random(p.height * 0.02, p.height * 0.05);
     this.thickness = p.random(p.height * 0.05, p.height * 0.08);
-    this.speed = p.random(0.08, 0.16);
+    this.speed = p.random(0.016, 0.032);
     this.phase = p.random(p.TWO_PI);
     this.tint = p.color(120 + p.random(20), 210 + p.random(25), 255, 120);
   }
