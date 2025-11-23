@@ -160,8 +160,8 @@
     <h1>Gentle Bees</h1>
     <p>
       A calm cause-and-effect activity: press the big button (or SPACE) to send the bees to the
-      flowers. Watch pollen drift, honey glow, and hear the soft response so learners can link action
-      and outcome.
+      flowers. Each return grows the honeycomb filling the left side of the meadow, with warm glow
+      and gentle chimes to link action and outcome.
     </p>
   </header>
 
@@ -171,8 +171,8 @@
     <div class="instruction-card" aria-live="polite">
       <h2>How it works</h2>
       <p>
-        Press once. Bees fly out, gather nectar, and light up the hive with a warm honey glow.
-        Pause, then press again whenever you want a new burst.
+        Press once. Bees fly out, gather nectar, and light up the hive with a warm honey glow while
+        new honeycombs rise on the left. Pause, then press again whenever you want a new burst.
       </p>
     </div>
 
@@ -189,22 +189,25 @@
     const ctx = canvas.getContext("2d");
     const button = document.getElementById("sendButton");
 
+    const bees = [];
+    const pollenBursts = [];
+    const honeyCells = [];
+    const honeyGrid = [];
+    let builtCells = 0;
+
     function resizeCanvas() {
       const { width, height } = canvas.getBoundingClientRect();
       const ratio = window.devicePixelRatio || 1;
       canvas.width = width * ratio;
       canvas.height = height * ratio;
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      setupHoneyGrid(true);
     }
 
     const resizeObserver = new ResizeObserver(resizeCanvas);
     resizeObserver.observe(canvas);
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
-
-    const bees = [];
-    const pollenBursts = [];
-    const honeyCells = [];
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const chime = audioCtx.createOscillator();
@@ -258,18 +261,42 @@
     function setupHoneyCells() {
       honeyCells.length = 0;
       const { x, y } = hiveCenter();
-      const radius = Math.min(canvas.width, canvas.height) / (window.devicePixelRatio || 1) * 0.04;
+      const radius = (Math.min(canvas.width, canvas.height) / (window.devicePixelRatio || 1)) * 0.04;
       for (let r = -1; r <= 1; r++) {
         for (let c = -1; c <= 1; c++) {
           if (Math.abs(r) + Math.abs(c) <= 1) {
             honeyCells.push({
               x: x + c * radius * 1.8,
               y: y + r * radius * 1.6,
-              fill: 0,
+              fill: 0.2,
             });
           }
         }
       }
+    }
+
+    function setupHoneyGrid(keepProgress = false) {
+      const previousRatio = keepProgress && honeyGrid.length > 0 ? builtCells / honeyGrid.length : 0.08;
+      const w = canvas.width / (window.devicePixelRatio || 1);
+      const h = canvas.height / (window.devicePixelRatio || 1);
+      const areaWidth = w * 0.5;
+      const radius = Math.min(w, h) * 0.035;
+      const horiz = radius * 1.8;
+      const vert = radius * 1.55;
+      const margin = radius * 1.2;
+
+      honeyGrid.length = 0;
+      let row = 0;
+      for (let y = margin; y <= h - margin; y += vert) {
+        const offset = row % 2 === 0 ? 0 : horiz * 0.5;
+        for (let x = margin + offset; x <= areaWidth - margin; x += horiz) {
+          honeyGrid.push({ x, y, fill: 0.15 + Math.random() * 0.05 });
+        }
+        row++;
+      }
+
+      const baseRatio = Math.max(previousRatio, 0.08);
+      builtCells = Math.min(honeyGrid.length, Math.max(4, Math.round(honeyGrid.length * baseRatio)));
     }
 
     function createFlowers() {
@@ -349,6 +376,52 @@
       }
     }
 
+    function drawHoneyField(t) {
+      const w = canvas.width / (window.devicePixelRatio || 1);
+      const h = canvas.height / (window.devicePixelRatio || 1);
+      const areaWidth = w * 0.5;
+
+      const honeyGrad = ctx.createLinearGradient(0, 0, areaWidth, 0);
+      honeyGrad.addColorStop(0, "rgba(255, 251, 235, 0.8)");
+      honeyGrad.addColorStop(1, "rgba(255, 247, 209, 0.5)");
+      ctx.fillStyle = honeyGrad;
+      ctx.fillRect(0, 0, areaWidth, h);
+
+      const radius = Math.min(w, h) * 0.035;
+      const wobble = Math.sin(t * 0.002) * 0.08;
+
+      function drawHex(x, y, r) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const ang = Math.PI / 3 * i + Math.PI / 6 + wobble;
+          const px = x + Math.cos(ang) * r;
+          const py = y + Math.sin(ang) * r;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      }
+
+      honeyGrid.forEach((cell, idx) => {
+        const built = idx < builtCells;
+        if (built) {
+          cell.fill = Math.max(0.25, cell.fill * 0.985);
+        }
+        const alpha = built ? 0.18 + cell.fill * 0.55 : 0.06;
+        ctx.fillStyle = `rgba(250, 204, 21, ${alpha})`;
+        drawHex(cell.x, cell.y, radius);
+        ctx.fill();
+
+        if (built) {
+          ctx.strokeStyle = "rgba(245, 158, 11, 0.5)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      });
+
+      ctx.globalAlpha = 1;
+    }
+
     function drawHive(t) {
       const { x, y } = hiveCenter();
       const baseR = Math.min(canvas.width, canvas.height) / (window.devicePixelRatio || 1) * 0.08;
@@ -379,6 +452,7 @@
         ctx.globalAlpha = 0.3 + fill * 0.7;
         ctx.fill();
         ctx.globalAlpha = 1;
+        cell.fill = Math.max(0.2, cell.fill * 0.97);
       });
     }
 
@@ -553,8 +627,20 @@
     }
 
     function feedHive() {
-      const cell = honeyCells[Math.floor(Math.random() * honeyCells.length)];
-      cell.fill = Math.min(1, cell.fill + 0.45);
+      if (honeyGrid.length > 0) {
+        if (builtCells < honeyGrid.length) {
+          honeyGrid[builtCells].fill = 1;
+          builtCells++;
+        } else {
+          const cell = honeyGrid[Math.floor(Math.random() * honeyGrid.length)];
+          cell.fill = Math.min(1, cell.fill + 0.35);
+        }
+      }
+
+      if (honeyCells.length > 0) {
+        const hiveCell = honeyCells[Math.floor(Math.random() * honeyCells.length)];
+        hiveCell.fill = Math.min(1, hiveCell.fill + 0.35);
+      }
     }
 
     function spawnPollen(x, y, bright) {
@@ -577,6 +663,7 @@
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       drawBackground(now);
+      drawHoneyField(now);
       updateBees(dt);
       drawHive(now);
       drawFlowers(now);
