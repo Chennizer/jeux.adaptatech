@@ -27,8 +27,8 @@ class SunGlyph {
     this.longLen = base * 2.2;
     this.shortLen = base * 2;
     this.strokeW = base * 0.08;
-    this.cx = width * 0.5;
-    this.cy = height * 0.32;
+    this.cx = width * 0.82;
+    this.cy = height * 0.28;
     this.buildHaloBuffer();
     this.rays.forEach((ray, i) => {
       ray.currLen = this.innerR;
@@ -115,7 +115,7 @@ export function createSummerScene(p) {
 
   function drawSky() {
     const ctx = p.drawingContext;
-    const skyHeight = p.height * 0.45;
+    const skyHeight = p.height * 0.55;
     const skyGradient = ctx.createLinearGradient(0, 0, 0, skyHeight);
     skyGradient.addColorStop(0, 'rgba(34, 62, 110, 1)');
     skyGradient.addColorStop(0.35, 'rgba(82, 116, 168, 1)');
@@ -128,14 +128,14 @@ export function createSummerScene(p) {
   }
 
   function drawShore() {
-    const skyHeight = p.height * 0.45;
+    const skyHeight = p.height * 0.55;
     const waterTop = skyHeight;
     const ctx = p.drawingContext;
 
-    const shorelineBase = p.height * 0.62;
-    const shorelineAmplitude = 26;
+    const shorelineBase = p.height * 0.7;
+    const shorelineAmplitude = 22;
     const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
-    const verticalSwell = p.sin(time * 0.00075) * 22;
+    const verticalSwell = p.sin(time * 0.00075) * 18;
 
     const segments = 160;
     const baseShoreline = [];
