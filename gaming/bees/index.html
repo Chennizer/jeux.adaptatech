@@ -326,7 +326,6 @@
         this.bees = [];
         this.occupiedMap = new Set();
         this.reservedMap = new Set();
-        this.launchPulse = 0;
 
         // Initial Cell
         this.addCell(0,0);
@@ -409,7 +408,6 @@
           if (b.state === 'idle' && flowers.length > 0) {
             b.state = 'outbound';
             b.wingSpeed = 3.5;
-            this.launchPulse = 1;
             const flower = flowers[Math.floor(Math.random() * flowers.length)];
             const bloom = getFlowerBloom(flower);
             b.target = {
@@ -425,8 +423,6 @@
         this.cells.forEach(c => {
           if (c.scale < 1) c.scale += (1 - c.scale) * 0.1;
         });
-
-        this.launchPulse = Math.max(0, this.launchPulse - dt * 0.8);
 
         // Update Bees
         const homeCenter = this.hexToPixel(0,0);
@@ -637,71 +633,9 @@
         drawFieldBackdrop(leftEdge, rightEdge - leftEdge);
       }
 
-      drawLaunchTransitions(layoutInfo);
       drawFlowers();
       hives.forEach(h => h.draw(ctx));
       drawParticles();
-    }
-
-    // --- Rendering Helpers ---
-    function drawLaunchTransitions(layoutInfo) {
-      if (!layoutInfo) return;
-
-      const groundY = height * 0.86;
-      const t = performance.now() * 0.001;
-
-      const renderTransition = (edgeX, facesRight, pulse = 0) => {
-        const dir = facesRight ? 1 : -1;
-        const bandWidth = 140 + pulse * 90;
-        const topY = groundY - 200 - Math.sin(t * 1.6 + edgeX * 0.02) * 12;
-        const bottomY = groundY + 40;
-        const shimmer = 0.35 + pulse * 0.55;
-
-        // Soft wedge that suggests a tunnel without a doorway
-        const grad = ctx.createLinearGradient(edgeX - dir * bandWidth, topY, edgeX, bottomY);
-        grad.addColorStop(0, `rgba(255, 228, 170, 0)`);
-        grad.addColorStop(0.45, `rgba(255, 219, 150, ${0.15 + shimmer * 0.35})`);
-        grad.addColorStop(1, `rgba(255, 198, 110, ${0.35 + shimmer * 0.4})`);
-
-        ctx.save();
-        ctx.translate(edgeX, 0);
-        ctx.beginPath();
-        ctx.moveTo(0, topY);
-        ctx.quadraticCurveTo(dir * bandWidth * 0.3, topY - 30, dir * bandWidth, topY + 30);
-        ctx.lineTo(dir * bandWidth, bottomY);
-        ctx.quadraticCurveTo(dir * bandWidth * 0.6, groundY + 4, 0, groundY + 16);
-        ctx.closePath();
-        ctx.fillStyle = grad;
-        ctx.fill();
-
-        // Light streaks to guide the bees through the transition
-        ctx.lineWidth = 3;
-        for (let i = 0; i < 4; i++) {
-          const offset = dir * (bandWidth * 0.15 + i * 18 + Math.sin(t * 2 + i) * 6);
-          ctx.strokeStyle = `rgba(255, 240, 190, ${0.18 + shimmer * 0.3})`;
-          ctx.beginPath();
-          ctx.moveTo(offset, groundY - 30 - i * 12);
-          ctx.quadraticCurveTo(dir * bandWidth * 0.65, groundY - 120 - i * 10, dir * bandWidth * 0.1, topY + 40);
-          ctx.stroke();
-        }
-
-        // Ambient glow spilling into the field
-        ctx.shadowColor = `rgba(255, 205, 120, ${0.4 + shimmer * 0.4})`;
-        ctx.shadowBlur = 36;
-        ctx.shadowOffsetX = dir * 12;
-        ctx.fillStyle = `rgba(255, 213, 140, ${0.2 + shimmer * 0.3})`;
-        ctx.beginPath();
-        ctx.ellipse(dir * 34, groundY - 22, 64, 32, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      };
-
-      if (layoutInfo.type === '1p') {
-        renderTransition(layoutInfo.splitX, true, hives[0]?.launchPulse || 0);
-      } else {
-        renderTransition(layoutInfo.leftEdge, true, hives[0]?.launchPulse || 0);
-        renderTransition(layoutInfo.rightEdge, false, hives[1]?.launchPulse || 0);
-      }
     }
 
     function drawFieldBackdrop(startX, zoneWidth) {
