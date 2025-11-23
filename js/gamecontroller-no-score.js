@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const pauseSoundSrc = document.body.getAttribute('data-pause-sound');
 
   const startButton = document.getElementById('control-panel-start-button');
+  const languageToggle = document.getElementById('language-toggle');
   const overlayScreen = document.getElementById('overlay-screen');
   const playModeSelect = document.getElementById('control-panel-play-mode');
   const soundOptionsSelect = document.getElementById('sound-options-select');
@@ -502,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const cp = document.getElementById('control-panel');
       if (cp) cp.style.display = 'none';
+      if (languageToggle) languageToggle.style.display = 'none';
 
       currentTimestampIndex = 0;
       if (mediaPlayer) {
