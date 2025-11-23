@@ -326,6 +326,7 @@
         this.bees = [];
         this.occupiedMap = new Set();
         this.reservedMap = new Set();
+        this.entranceGlow = 0;
 
         // Initial Cell
         this.addCell(0,0);
@@ -408,6 +409,7 @@
           if (b.state === 'idle' && flowers.length > 0) {
             b.state = 'outbound';
             b.wingSpeed = 3.5;
+            this.entranceGlow = 1;
             const flower = flowers[Math.floor(Math.random() * flowers.length)];
             const bloom = getFlowerBloom(flower);
             b.target = {
@@ -423,6 +425,8 @@
         this.cells.forEach(c => {
           if (c.scale < 1) c.scale += (1 - c.scale) * 0.1;
         });
+
+        this.entranceGlow = Math.max(0, this.entranceGlow - dt * 0.8);
 
         // Update Bees
         const homeCenter = this.hexToPixel(0,0);
@@ -608,8 +612,10 @@
     // ----- Drawing -----
     function draw() {
       // 1. Draw Background Zones
+      let layoutInfo;
       if (gameMode === '1p') {
         const splitX = width * 0.4;
+        layoutInfo = { type: '1p', splitX };
         ctx.fillStyle = COLORS.bgLeft;
         ctx.fillRect(0, 0, splitX, height);
         drawFieldBackdrop(splitX, width - splitX);
@@ -617,6 +623,7 @@
         // 2 Player Background: Dark | Lush Field | Dark
         const leftEdge = width * 0.3;
         const rightEdge = width * 0.7;
+        layoutInfo = { type: '2p', leftEdge, rightEdge };
 
         // Left Hive
         ctx.fillStyle = COLORS.bgDark;
@@ -630,12 +637,92 @@
         drawFieldBackdrop(leftEdge, rightEdge - leftEdge);
       }
 
+      drawHiveEntrances(layoutInfo);
       drawFlowers();
       hives.forEach(h => h.draw(ctx));
       drawParticles();
     }
 
     // --- Rendering Helpers ---
+    function drawHiveEntrances(layoutInfo) {
+      if (!layoutInfo) return;
+
+      const groundY = height * 0.86;
+      const t = performance.now() * 0.001;
+
+      const renderEntrance = (x, facesRight, glow = 0) => {
+        const archHeight = 170;
+        const baseY = groundY + 16;
+        const depth = facesRight ? -70 : 70;
+        const pulse = 0.25 + glow * 0.6 + Math.sin(t * 2.6 + x * 0.01) * 0.08;
+
+        ctx.save();
+        ctx.translate(x, 0);
+
+        // Honey tunnel
+        const tunnelGrad = ctx.createLinearGradient(-140, baseY, 140, groundY - archHeight);
+        tunnelGrad.addColorStop(0, 'rgba(30, 18, 5, 0.85)');
+        tunnelGrad.addColorStop(0.5, `rgba(120, 70, 15, ${0.55 + pulse * 0.25})`);
+        tunnelGrad.addColorStop(1, `rgba(210, 150, 35, ${0.45 + pulse * 0.25})`);
+        ctx.fillStyle = tunnelGrad;
+        ctx.beginPath();
+        ctx.moveTo(depth, baseY);
+        ctx.quadraticCurveTo(depth * 0.8, groundY - archHeight * 0.28, depth * 0.28, groundY - archHeight);
+        ctx.quadraticCurveTo(depth * 0.1, groundY - archHeight - 12, 0, groundY - archHeight - 8);
+        ctx.quadraticCurveTo(-depth * 0.1, groundY - archHeight - 12, -depth * 0.28, groundY - archHeight);
+        ctx.quadraticCurveTo(-depth * 0.8, groundY - archHeight * 0.28, -depth, baseY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Entrance rim
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = `rgba(255, 199, 44, ${0.55 + pulse * 0.35})`;
+        ctx.stroke();
+
+        // Landing plank toward the flowers
+        const plankLength = facesRight ? 110 : -110;
+        ctx.fillStyle = 'rgba(110, 75, 28, 0.7)';
+        ctx.fillRect(0, groundY - 6, plankLength, 14);
+        ctx.fillStyle = `rgba(255, 210, 90, ${0.28 + pulse * 0.45})`;
+        ctx.fillRect(0, groundY - 4, plankLength, 8);
+
+        // Honey shimmer to suggest traffic
+        ctx.strokeStyle = `rgba(255, 235, 150, ${0.35 + pulse * 0.35})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(facesRight ? 6 : -6, groundY - 38);
+        ctx.quadraticCurveTo(facesRight ? 46 : -46, groundY - 70, facesRight ? 78 : -78, groundY - 24);
+        ctx.stroke();
+
+        for (let i = 0; i < 5; i++) {
+          const bx = (facesRight ? 1 : -1) * (22 + i * 18);
+          const by = groundY - 14 - Math.sin(t * 3 + i) * 6;
+          ctx.fillStyle = `rgba(255, 200, 80, ${0.25 + pulse * 0.5})`;
+          ctx.beginPath();
+          ctx.ellipse(bx, by, 6, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Glow into the field side
+        ctx.shadowColor = `rgba(255, 190, 70, ${0.45 + pulse * 0.4})`;
+        ctx.shadowBlur = 25;
+        ctx.shadowOffsetX = facesRight ? 12 : -12;
+        ctx.fillStyle = `rgba(255, 210, 90, ${0.18 + pulse * 0.35})`;
+        ctx.beginPath();
+        ctx.ellipse(facesRight ? 38 : -38, groundY - 18, 56, 28, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      };
+
+      if (layoutInfo.type === '1p') {
+        renderEntrance(layoutInfo.splitX, true, hives[0]?.entranceGlow || 0);
+      } else {
+        renderEntrance(layoutInfo.leftEdge, true, hives[0]?.entranceGlow || 0);
+        renderEntrance(layoutInfo.rightEdge, false, hives[1]?.entranceGlow || 0);
+      }
+    }
+
     function drawFieldBackdrop(startX, zoneWidth) {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
       skyGrad.addColorStop(0, '#cde9ff');
