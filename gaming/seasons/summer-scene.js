@@ -55,7 +55,7 @@ class SunGlyph {
     }
   }
 
-  draw() {
+  draw(scale = 1) {
     const p = this.p;
     this.basePulse = 1 + 0.05 * p.sin(p.frameCount * 0.03);
     this.sunRot += 0.003;
@@ -67,6 +67,7 @@ class SunGlyph {
 
     p.push();
     p.translate(this.cx, this.cy);
+    p.scale(scale);
     p.imageMode(p.CENTER);
     p.push();
     p.scale(haloScale);
@@ -107,6 +108,16 @@ export function createSummerScene(p) {
   let time = 0;
   let speedMultiplier = 1;
   let sunGlyph;
+  let contemplativeMode = false;
+  let neutralFrames = 0;
+  let sunScale = 1;
+  let sunFlash = 0;
+  let sunPulse = null;
+
+  const SUN_BASE_SCALE = 0.5;
+  const SUN_GROW_DURATION = 2000;
+  const SUN_SHRINK_DURATION = 2000;
+  const SUN_FLASH_DURATION = 220;
 
   function resize() {
     sunGlyph = new SunGlyph(p);
@@ -124,7 +135,7 @@ export function createSummerScene(p) {
     ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, p.width, skyHeight);
 
-    sunGlyph.draw();
+    sunGlyph.draw(sunScale);
   }
 
   function drawShore() {
@@ -214,12 +225,69 @@ export function createSummerScene(p) {
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
+      if (multiplier < 0.95) {
+        contemplativeMode = true;
+        neutralFrames = 0;
+      } else if (multiplier >= 0.95 && multiplier <= 1.05) {
+        neutralFrames += 1;
+        if (neutralFrames > 20) {
+          contemplativeMode = false;
+        }
+      } else {
+        neutralFrames = 0;
+      }
+
+      if (!contemplativeMode) {
+        sunScale = 1;
+        sunFlash = 0;
+        sunPulse = null;
+      }
     },
-    pulse() {},
+    pulse() {
+      if (contemplativeMode) {
+        sunPulse = { start: p.millis() };
+        sunFlash = 0;
+      }
+    },
     draw() {
+      if (contemplativeMode) {
+        const now = p.millis();
+        if (sunPulse) {
+          const elapsed = now - sunPulse.start;
+          if (elapsed < SUN_GROW_DURATION) {
+            sunScale = p.map(elapsed, 0, SUN_GROW_DURATION, SUN_BASE_SCALE, 1, true);
+            sunFlash = 0;
+          } else if (elapsed < SUN_GROW_DURATION + SUN_FLASH_DURATION) {
+            sunScale = 1;
+            const t = (elapsed - SUN_GROW_DURATION) / SUN_FLASH_DURATION;
+            sunFlash = 1 - p.constrain(t, 0, 1);
+          } else if (elapsed < SUN_GROW_DURATION + SUN_FLASH_DURATION + SUN_SHRINK_DURATION) {
+            const t = (elapsed - SUN_GROW_DURATION - SUN_FLASH_DURATION) / SUN_SHRINK_DURATION;
+            sunScale = p.map(t, 0, 1, 1, SUN_BASE_SCALE, true);
+            sunFlash = 0;
+          } else {
+            sunPulse = null;
+            sunScale = SUN_BASE_SCALE;
+            sunFlash = 0;
+          }
+        } else {
+          sunScale = SUN_BASE_SCALE;
+          sunFlash = 0;
+        }
+      } else {
+        sunScale = 1;
+        sunFlash = 0;
+      }
+
       time += 16 * speedMultiplier;
       drawSky();
       drawShore();
+
+      if (sunFlash > 0.001) {
+        p.noStroke();
+        p.fill(255, 245, 230, 180 * sunFlash);
+        p.rect(0, 0, p.width, p.height);
+      }
     }
   };
 }

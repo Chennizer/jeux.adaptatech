@@ -124,7 +124,7 @@ class AuroraRibbon {
     this.phase += this.speed * multiplier;
   }
 
-  draw() {
+  draw(overrideColor = null) {
     const p = this.p;
     const ctx = p.drawingContext;
     const top = this.baseY - this.thickness * 0.6;
@@ -132,8 +132,9 @@ class AuroraRibbon {
 
     ctx.save();
     const grad = ctx.createLinearGradient(0, top, 0, bottom);
+    const tint = overrideColor || this.tint;
     grad.addColorStop(0, 'rgba(120, 230, 255, 0)');
-    grad.addColorStop(0.5, `rgba(${p.red(this.tint)}, ${p.green(this.tint)}, ${p.blue(this.tint)}, ${p.alpha(this.tint) / 255})`);
+    grad.addColorStop(0.5, `rgba(${p.red(tint)}, ${p.green(tint)}, ${p.blue(tint)}, ${p.alpha(tint) / 255})`);
     grad.addColorStop(1, 'rgba(120, 230, 255, 0)');
     ctx.fillStyle = grad;
 
@@ -164,6 +165,27 @@ export function createWinterScene(p) {
   const aurorae = [];
   let horizonY = 0;
   let speedMultiplier = 1;
+  let contemplativeMode = false;
+  let neutralFrames = 0;
+  let auroraBurst = null;
+
+  const AURORA_BURST_DURATION = 4000;
+  const vividAuroraPalette = () => [
+    p.color(120, 240, 190, 180),
+    p.color(150, 220, 255, 180),
+    p.color(210, 160, 255, 180),
+    p.color(255, 170, 210, 180),
+    p.color(120, 200, 255, 180)
+  ];
+
+  const currentVividTint = now => {
+    const palette = vividAuroraPalette();
+    const cycle = (now % 3200) / 3200;
+    const idx = Math.floor(cycle * palette.length);
+    const next = (idx + 1) % palette.length;
+    const blend = (cycle * palette.length) % 1;
+    return p.lerpColor(palette[idx], palette[next], blend);
+  };
 
   const gradientRect = (x, y, w, h, stops) => {
     const ctx = p.drawingContext;
@@ -282,8 +304,27 @@ export function createWinterScene(p) {
     enter() {},
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
+      if (multiplier < 0.95) {
+        contemplativeMode = true;
+        neutralFrames = 0;
+      } else if (multiplier >= 0.95 && multiplier <= 1.05) {
+        neutralFrames += 1;
+        if (neutralFrames > 20) {
+          contemplativeMode = false;
+        }
+      } else {
+        neutralFrames = 0;
+      }
+
+      if (!contemplativeMode) {
+        auroraBurst = null;
+      }
     },
-    pulse() {},
+    pulse() {
+      if (contemplativeMode) {
+        auroraBurst = { start: p.millis() };
+      }
+    },
     draw() {
       p.colorMode(p.RGB);
       gradientRect(0, 0, p.width, p.height, [
@@ -292,9 +333,16 @@ export function createWinterScene(p) {
         { at: 1, color: 'rgb(46, 76, 110)' }
       ]);
 
+      const now = p.millis();
+      const burstActive = auroraBurst && now - auroraBurst.start < AURORA_BURST_DURATION;
+      const vividTint = burstActive ? currentVividTint(now) : null;
+      if (auroraBurst && !burstActive) {
+        auroraBurst = null;
+      }
+
       aurorae.forEach(ribbon => {
         ribbon.update(speedMultiplier);
-        ribbon.draw();
+        ribbon.draw(vividTint);
       });
 
       stars.forEach(star => {

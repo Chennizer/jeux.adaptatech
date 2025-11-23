@@ -18,9 +18,13 @@ class Petal {
 
   update(multiplier) {
     const p = this.p;
-    this.angle += 0.01 * multiplier;
-    this.x += Math.cos(this.angle) * this.swing * multiplier;
-    this.y += this.speed * 1.5 * multiplier;
+    const isContemplative = multiplier < 1;
+    const driftMultiplier = isContemplative ? multiplier * 0.6 : multiplier;
+    const fallMultiplier = isContemplative ? 0.4 : 1;
+
+    this.angle += 0.01 * driftMultiplier;
+    this.x += Math.cos(this.angle) * this.swing * driftMultiplier;
+    this.y += this.speed * 1.5 * driftMultiplier * fallMultiplier;
     if (this.y > p.height + this.size) {
       this.reset();
       this.y = -this.size;
