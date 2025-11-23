@@ -527,11 +527,15 @@
     // ----- Flower Generation -----
     function generateFlowers(minX, maxX) {
       const count = 25;
+      const groundY = height - 70;
       for(let i=0; i<count; i++) {
         const type = Math.random() > 0.5 ? 'daisy' : 'tulip';
+        const stemHeight = 90 + Math.random() * 110;
         flowers.push({
           x: minX + Math.random() * (maxX - minX),
-          y: height * 0.2 + Math.random() * (height * 0.7),
+          y: groundY - stemHeight,
+          groundY,
+          stemHeight,
           type: type,
           colorMain: type === 'daisy'
             ? `hsl(${Math.random()*50+35}, 95%, 60%)`
@@ -606,13 +610,8 @@
         const splitX = width * 0.4;
         ctx.fillStyle = COLORS.bgLeft;
         ctx.fillRect(0, 0, splitX, height);
-        ctx.fillStyle = COLORS.bgRight;
-        ctx.fillRect(splitX, 0, width - splitX, height);
 
-        // Simple Grass Texture
-        ctx.fillStyle = 'rgba(0,0,0,0.1)';
-        for(let i=0; i<width-splitX; i+=20) ctx.fillRect(splitX + i, height-20, 10, 20);
-
+        drawPlantField(splitX, width);
       } else {
         // 2 Player Background: Dark | Green | Dark
         const leftEdge = width * 0.3;
@@ -627,12 +626,7 @@
         ctx.fillRect(rightEdge, 0, width - rightEdge, height);
 
         // Middle Field
-        ctx.fillStyle = COLORS.bgRight;
-        ctx.fillRect(leftEdge, 0, rightEdge - leftEdge, height);
-
-        // Grass
-        ctx.fillStyle = 'rgba(0,0,0,0.1)';
-        for(let i=0; i< (rightEdge-leftEdge); i+=20) ctx.fillRect(leftEdge + i, height-20, 10, 20);
+        drawPlantField(leftEdge, rightEdge);
       }
 
       drawFlowers();
@@ -643,80 +637,130 @@
     // --- Rendering Helpers ---
     function drawFlowers() {
       flowers.forEach(f => {
-        ctx.beginPath();
-        ctx.moveTo(f.x, f.y + 10);
-        ctx.bezierCurveTo(
-          f.x + f.stemCurve, f.y + f.size*4,
-          f.x - f.stemCurve/2, f.y + f.size*8,
-          f.x, height
-        );
-        ctx.strokeStyle = '#2d4a08';
+        const leafLength = f.size * 3;
+        const leafWidth = f.size * 1.5;
+
+        const stemTopX = f.x;
+        const stemTopY = f.y;
+        const stemBottomX = f.x + f.stemCurve * 0.15;
+        const stemBottomY = f.groundY;
+
+        // Stem
+        ctx.strokeStyle = '#2f6c1c';
         ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(stemTopX, stemTopY);
+        ctx.bezierCurveTo(
+          f.x + f.stemCurve * 0.4, stemTopY + f.stemHeight * 0.4,
+          f.x - f.stemCurve * 0.2, stemTopY + f.stemHeight * 0.8,
+          stemBottomX, stemBottomY
+        );
         ctx.stroke();
 
-        ctx.fillStyle = '#3d6a18';
+        // Leaves
+        ctx.fillStyle = '#3f8c2a';
         ctx.beginPath();
         ctx.ellipse(
-          f.x + f.stemCurve/3,
-          height - f.size*5,
-          f.size*2,
-          f.size,
-          Math.PI/3,
+          f.x + f.stemCurve * 0.25,
+          stemTopY + f.stemHeight * 0.55,
+          leafLength,
+          leafWidth,
+          Math.PI/4,
           0, Math.PI*2
         );
         ctx.fill();
 
+        ctx.beginPath();
+        ctx.ellipse(
+          f.x - f.stemCurve * 0.15,
+          stemTopY + f.stemHeight * 0.35,
+          leafLength * 0.75,
+          leafWidth,
+          -Math.PI/3,
+          0, Math.PI*2
+        );
+        ctx.fill();
+
+        // Flower heads
         if (f.type === 'daisy') {
-          const petalCount = 10;
+          const petalCount = 12;
           for(let i=0; i<petalCount; i++) {
             const angle = (Math.PI*2 / petalCount) * i;
             ctx.fillStyle = f.colorMain;
             ctx.beginPath();
             ctx.ellipse(
-              f.x + Math.cos(angle)*f.size,
-              f.y + Math.sin(angle)*f.size,
-              f.size,
-              f.size*0.5,
+              f.x + Math.cos(angle)*f.size*1.2,
+              f.y + Math.sin(angle)*f.size*1.1,
+              f.size*1.1,
+              f.size*0.6,
               angle,
               0, Math.PI*2
             );
             ctx.fill();
           }
-          ctx.fillStyle = f.colorCenter;
+          const centerGrad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.size*1.2);
+          centerGrad.addColorStop(0, '#ffe184');
+          centerGrad.addColorStop(1, f.colorCenter);
+          ctx.fillStyle = centerGrad;
           ctx.beginPath();
-          ctx.arc(f.x, f.y, f.size*0.7, 0, Math.PI*2);
-          ctx.fill();
-          ctx.fillStyle = 'rgba(255,255,255,0.3)';
-          ctx.beginPath();
-          ctx.arc(f.x - f.size*0.2, f.y - f.size*0.2, f.size*0.2, 0, Math.PI*2);
+          ctx.arc(f.x, f.y, f.size*0.8, 0, Math.PI*2);
           ctx.fill();
         }
         else if (f.type === 'tulip') {
           ctx.fillStyle = f.colorMain;
           ctx.beginPath();
-          ctx.moveTo(f.x, f.y + f.size*1.2);
+          ctx.moveTo(f.x, f.y + f.size*1.4);
           ctx.bezierCurveTo(
-            f.x - f.size*2, f.y,
-            f.x - f.size,   f.y - f.size*2,
-            f.x,            f.y - f.size
+            f.x - f.size*2.3, f.y + f.size*0.2,
+            f.x - f.size*1.2, f.y - f.size*2.4,
+            f.x,             f.y - f.size*0.2
           );
           ctx.bezierCurveTo(
-            f.x + f.size,   f.y - f.size*2,
-            f.x + f.size*2, f.y,
-            f.x,            f.y + f.size*1.2
+            f.x + f.size*1.2, f.y - f.size*2.4,
+            f.x + f.size*2.3, f.y + f.size*0.2,
+            f.x,             f.y + f.size*1.4
           );
           ctx.fill();
 
           ctx.fillStyle = f.colorCenter;
           ctx.beginPath();
           ctx.ellipse(
-            f.x, f.y - f.size,
-            f.size*0.6, f.size*0.3,
+            f.x, f.y - f.size*0.2,
+            f.size*0.8, f.size*0.45,
             0, 0, Math.PI*2
           );
           ctx.fill();
         }
       });
+    }
+
+    function drawPlantField(startX, endX) {
+      const fieldWidth = endX - startX;
+      const horizonY = height * 0.62;
+
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
+      skyGrad.addColorStop(0, '#87cefa');
+      skyGrad.addColorStop(1, '#bce3ff');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(startX, 0, fieldWidth, horizonY);
+
+      const groundGrad = ctx.createLinearGradient(0, horizonY, 0, height);
+      groundGrad.addColorStop(0, '#66b032');
+      groundGrad.addColorStop(1, '#2f6c1c');
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(startX, horizonY, fieldWidth, height - horizonY);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      for(let i = 0; i < fieldWidth; i += 120) {
+        const cloudWidth = 140 + 20 * Math.sin(i * 0.05);
+        const cloudHeight = 40 + 10 * Math.cos(i * 0.08);
+        ctx.beginPath();
+        ctx.ellipse(startX + i + 80, horizonY * 0.35, cloudWidth, cloudHeight, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillRect(startX, horizonY - 12, fieldWidth, 24);
     }
 
     function getHexPath(x, y, r, wobbleOffset) {
