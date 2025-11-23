@@ -1,4 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // ----- Scoring Constants -----
+  const MAX_AVG_PAUSE_TIME = 60;
+  const WEIGHT_RPA = 300;
+  const WEIGHT_APT = 500;
+  const WEIGHT_NSP = 10;
+  const NSP_CAP = 50;
+
+  const TIME_THRESHOLD = 30; // For cause-effect calculation
+
   // ----- State -----
   let preventInput = false;
   let spaceBarAttemptCount = 0;
@@ -6,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let pauseStartTime = null;
   let sessionStartTime = null;
   let sessionCompleted = false;
+  let medianPauseTime = 0;
+  let trendOfPauseDurations = 'N/A';
 
   // ----- DOM / Config -----
   const mediaType = document.body.getAttribute('data-media-type');
@@ -617,6 +628,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleMediaEnd() {
+    const resultsScreen = document.getElementById('results-screen');
+    const spaceBarAttemptsResult = document.getElementById('space-bar-attempts-result');
+    const timeRatioElem = document.getElementById('time-ratio');
+    const finalScoreElem = document.getElementById('final-score');
+
+    sessionCompleted = true;
+    if (videoContainer) videoContainer.style.display = 'none';
+
     const vc = document.getElementById('video-container');
     if (vc) vc.style.display = 'none';
 
@@ -624,8 +643,155 @@ document.addEventListener('DOMContentLoaded', () => {
       try { document.exitFullscreen().catch(function(){}); } catch (e) {}
     }
 
-    const cp = document.getElementById('control-panel');
-    if (cp) cp.style.display = '';
+    // Basic stats
+    const totalPauseTimeMs = pauseDurations.reduce((a, b) => a + b, 0);
+    const totalPauseTime = totalPauseTimeMs / 1000;
+    const sessionEndTime = Date.now();
+    const totalSessionTimeMs = sessionEndTime - sessionStartTime;
+    const totalSessionTime = totalSessionTimeMs / 1000;
+    const totalActiveTime = totalSessionTime - totalPauseTime;
+
+    if (spaceBarAttemptsResult) {
+      spaceBarAttemptsResult.textContent =
+        "Fréquence d'appuis au mauvais moment: " + spaceBarAttemptCount;
+    }
+
+    if (timeRatioElem) {
+      let pausePercentageText = "Impossible de calculer le pourcentage.";
+      if (totalSessionTime > 0) {
+        const pausePercentage = (totalPauseTime / totalSessionTime) * 100;
+        pausePercentageText = `Temps de pause ${pausePercentage.toFixed(2)}%`;
+      }
+      timeRatioElem.textContent = pausePercentageText;
+    }
+
+    // Compute median, average, std. dev., etc.
+    const median = computeMedian(pauseDurations);
+    medianPauseTime = median;
+    const stats = computeStatistics(pauseDurations);
+
+    const pdfMedian = document.getElementById('pdf-median-pause');
+    if (pdfMedian) pdfMedian.textContent = medianPauseTime.toFixed(2);
+
+    const pdfAveragePause = document.getElementById('pdf-average-pause');
+    if (pdfAveragePause) pdfAveragePause.textContent = stats.average.toFixed(2);
+
+    const pdfStdDev = document.getElementById('pdf-std-dev');
+    if (pdfStdDev) pdfStdDev.textContent = stats.stdDev.toFixed(2);
+
+    const pdfSessionDuration = document.getElementById('pdf-session-duration');
+    if (pdfSessionDuration) pdfSessionDuration.textContent = totalSessionTime.toFixed(2);
+
+    trendOfPauseDurations = computePauseTrend(pauseDurations);
+    const pdfPauseTrend = document.getElementById('pdf-pause-trend');
+    if (pdfPauseTrend) pdfPauseTrend.textContent = trendOfPauseDurations;
+
+    const finalScore = calculateFinalScore(
+      totalPauseTime,
+      totalActiveTime,
+      pauseDurations.length,
+      spaceBarAttemptCount
+    );
+    if (finalScoreElem) finalScoreElem.textContent = `Score: ${finalScore.toFixed(2)}`;
+    const pdfFinalScore = document.getElementById('pdf-final-score');
+    if (pdfFinalScore) pdfFinalScore.textContent = `${finalScore.toFixed(2)} / 1000`;
+
+    const currentDate = new Date();
+    const formattedDate = currentDate.toLocaleDateString();
+    const formattedTime = currentDate.toLocaleTimeString();
+    const pdfDate = document.getElementById('pdf-date');
+    const pdfTime = document.getElementById('pdf-time');
+    if (pdfDate) pdfDate.textContent = formattedDate;
+    if (pdfTime) pdfTime.textContent = formattedTime;
+
+    const levelLabel = levelSelect && levelSelect.options[levelSelect.selectedIndex]
+      ? levelSelect.options[levelSelect.selectedIndex].textContent.trim()
+      : '';
+    const pdfLevel = document.getElementById('pdf-level');
+    if (pdfLevel) pdfLevel.textContent = levelLabel;
+    const pdfDifficulty = document.getElementById('pdf-difficulty');
+    if (pdfDifficulty) {
+      pdfDifficulty.textContent =
+        selectedDifficulty.charAt(0).toUpperCase() + selectedDifficulty.slice(1);
+    }
+
+    const pdfPauseDurations = document.getElementById('pdf-pause-durations');
+    if (pdfPauseDurations) {
+      if (pauseDurations.length > 0) {
+        pdfPauseDurations.textContent = pauseDurations
+          .map((d) => (d / 1000).toFixed(2))
+          .join(', ');
+      } else {
+        pdfPauseDurations.textContent = 'Aucune pause enregistrée.';
+      }
+    }
+
+    const pdfAttempts = document.getElementById('pdf-space-bar-attempts');
+    if (pdfAttempts) pdfAttempts.textContent = spaceBarAttemptCount;
+
+    const pdfTimeRatio = document.getElementById('pdf-time-ratio');
+    if (pdfTimeRatio) {
+      if (totalSessionTime > 0) {
+        const pausePercentage = (totalPauseTime / totalSessionTime) * 100;
+        pdfTimeRatio.textContent = ` ${pausePercentage.toFixed(2)}%`;
+      } else {
+        pdfTimeRatio.textContent = 'Impossible de calculer le pourcentage.';
+      }
+    }
+
+    const imgs = getSpacePromptImages();
+    const chosenImgObj = imgs.find((img) => img.src === selectedSpacePromptImage);
+    const pdfChosenImage = document.getElementById('pdf-chosen-image');
+    if (pdfChosenImage) pdfChosenImage.src = chosenImgObj ? chosenImgObj.src : '';
+
+    const sounds = getSpacePromptSounds();
+    const chosenSoundObj = sounds.find((s) => s.value === selectedSound);
+    const pdfChosenSound = document.getElementById('pdf-chosen-sound');
+    if (pdfChosenSound) {
+      pdfChosenSound.textContent = chosenSoundObj && chosenSoundObj.label
+        ? (typeof chosenSoundObj.label === 'string' ? chosenSoundObj.label : chosenSoundObj.label.en || '')
+        : 'Aucun son choisi.';
+    }
+
+    const sessionLengthSec = totalSessionTime;
+    const sessionLengthMin = sessionLengthSec / 60;
+    const tieredWrongCount = adjustedWrongCountTiered(spaceBarAttemptCount, sessionLengthMin);
+
+    let totalPresses = pauseDurations.length + spaceBarAttemptCount;
+    let wrongPressRatio = 0;
+    if (totalPresses > 0) {
+      wrongPressRatio = tieredWrongCount / totalPresses;
+    }
+
+    let ratioPart = medianPauseTime / TIME_THRESHOLD;
+    if (ratioPart > 1) ratioPart = 1;
+
+    let baseCauseEffectScore =
+      0.5 * (1 - ratioPart) +
+      0.5 * (1 - wrongPressRatio);
+
+    const baseAllowed = sessionLengthSec / 10;
+    const maxAllowed  = sessionLengthSec / 3;
+    const x = spaceBarAttemptCount;
+    let overPressPenalty = 0;
+    if (x > baseAllowed) {
+      overPressPenalty = (x - baseAllowed) / (maxAllowed - baseAllowed);
+    }
+
+    const penaltyWeight = 0.3;
+    let finalCauseEffectScore =
+      baseCauseEffectScore - penaltyWeight * overPressPenalty;
+
+    if (finalCauseEffectScore < 0) finalCauseEffectScore = 0;
+    if (finalCauseEffectScore > 1) finalCauseEffectScore = 1;
+
+    const pdfCauseEffect = document.getElementById('pdf-cause-effect-score');
+    if (pdfCauseEffect) pdfCauseEffect.textContent = (finalCauseEffectScore * 100).toFixed(2) + '%';
+
+    if (resultsScreen) {
+      resultsScreen.style.display = 'flex';
+      resultsScreen.classList.add('show');
+    }
   }
 
   // -------------------------
@@ -795,6 +961,107 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // -------------------------
+  // Statistics helpers
+  // -------------------------
+  function computeStatistics(arr) {
+    if (!arr.length) return { average: 0, stdDev: 0 };
+    const pausesInSeconds = arr.map((d) => d / 1000);
+    const N = pausesInSeconds.length;
+    const sum = pausesInSeconds.reduce((a, b) => a + b, 0);
+    const average = sum / N;
+    let stdDev = 0;
+    if (N > 1) {
+      const variance = pausesInSeconds.reduce(
+        (acc, val) => acc + Math.pow(val - average, 2),
+        0
+      ) / (N - 1);
+      stdDev = Math.sqrt(variance);
+    }
+    return { average, stdDev };
+  }
+
+  function computeMedian(arr) {
+    if (!arr.length) return 0;
+    const sorted = arr
+      .slice()
+      .sort((a, b) => a - b)
+      .map((d) => d / 1000);
+    const mid = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 0) return (sorted[mid - 1] + sorted[mid]) / 2;
+    return sorted[mid];
+  }
+
+  function computePauseTrend(arr) {
+    if (arr.length < 2) return 'Insufficient data';
+    let increasing = 0;
+    let decreasing = 0;
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i] > arr[i - 1]) increasing++;
+      else if (arr[i] < arr[i - 1]) decreasing++;
+    }
+    if (increasing > decreasing) return 'Croissant';
+    if (decreasing > increasing) return 'Décroissant';
+    return 'Stable';
+  }
+
+  function adjustedWrongCountTiered(x, sessionLengthMin) {
+    const TIER_SIZE = 2 * sessionLengthMin;
+    const tier1Max = TIER_SIZE;
+    const tier2Max = 2 * TIER_SIZE;
+    const tier3Max = 3 * TIER_SIZE;
+
+    let adjusted = 0;
+    let remaining = x;
+
+    const tier1Presses = Math.min(remaining, tier1Max);
+    adjusted += tier1Presses * 0;
+    remaining -= tier1Presses;
+
+    const tier2Presses = Math.min(remaining, tier2Max - tier1Max);
+    adjusted += tier2Presses * 0.34;
+    remaining -= tier2Presses;
+
+    const tier3Presses = Math.min(remaining, tier3Max - tier2Max);
+    adjusted += tier3Presses * 0.67;
+    remaining -= tier3Presses;
+
+    adjusted += remaining * 1.0;
+
+    return adjusted;
+  }
+
+  function calculateRPA(totalPauseTime, totalActiveTime) {
+    if (totalActiveTime === 0) return 0;
+    return totalPauseTime / totalActiveTime;
+  }
+
+  function calculateAveragePauseTime(totalPauseTime, numberOfPauses) {
+    if (numberOfPauses === 0) return 0;
+    return totalPauseTime / numberOfPauses;
+  }
+
+  function calculateNormalizedAPT(apt) {
+    const normalizedAPT = (apt / MAX_AVG_PAUSE_TIME) * 100;
+    return Math.min(normalizedAPT, 100);
+  }
+
+  function calculateNSPPenalty(nsp) {
+    const cappedNSP = Math.min(nsp, NSP_CAP);
+    return cappedNSP * WEIGHT_NSP;
+  }
+
+  function calculateFinalScore(totalPauseTime, totalActiveTime, numberOfPauses, nsp) {
+    const rpa = calculateRPA(totalPauseTime, totalActiveTime);
+    const apt = calculateAveragePauseTime(totalPauseTime, numberOfPauses);
+    const normalizedAPT = calculateNormalizedAPT(apt);
+    const aptPenalty = (normalizedAPT / 100) * WEIGHT_APT;
+    const rpaPenalty = rpa * WEIGHT_RPA;
+    const nspPenalty = calculateNSPPenalty(nsp);
+    const finalScore = 1000 - rpaPenalty - aptPenalty - nspPenalty;
+    return Math.max(finalScore, 0);
+  }
+
+  // -------------------------
   // Space prompt picker wiring
   // -------------------------
   if (selectSpacePromptButton) {
@@ -856,6 +1123,73 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   } else {
     if (startButton) startButton.classList.remove('hidden');
+  }
+
+  // -------------------------
+  // PDF generation
+  // -------------------------
+  const downloadPdfButton = document.getElementById('download-pdf-button');
+  const pdfInfoModal = document.getElementById('pdf-info-modal');
+  const closePdfInfoModal = document.getElementById('close-pdf-info-modal');
+  const pdfInfoOkButton = document.getElementById('pdf-info-ok-button');
+
+  if (downloadPdfButton) {
+    downloadPdfButton.addEventListener('click', () => {
+      preventInput = false;
+      if (pdfInfoModal) pdfInfoModal.style.display = 'block';
+    });
+  }
+
+  if (closePdfInfoModal) {
+    closePdfInfoModal.addEventListener('click', () => {
+      if (pdfInfoModal) pdfInfoModal.style.display = 'none';
+    });
+  }
+
+  if (pdfInfoOkButton) {
+    pdfInfoOkButton.addEventListener('click', async () => {
+      const studentNameInput = (document.getElementById('pdf-student-name-input') || {}).value || '';
+      const switchTypeInput = (document.getElementById('pdf-switch-type-input') || {}).value || '';
+      const switchPositionInput = (document.getElementById('pdf-switch-position-input') || {}).value || '';
+
+      const pdfStudentName = document.getElementById('pdf-student-name');
+      const pdfSwitchType = document.getElementById('pdf-switch-type');
+      const pdfSwitchPosition = document.getElementById('pdf-switch-position');
+
+      if (pdfStudentName) pdfStudentName.textContent = studentNameInput.trim() || 'Not Provided';
+      if (pdfSwitchType) pdfSwitchType.textContent = switchTypeInput.trim() || 'Not Provided';
+      if (pdfSwitchPosition) pdfSwitchPosition.textContent = switchPositionInput.trim() || 'Not Provided';
+
+      if (pdfInfoModal) pdfInfoModal.style.display = 'none';
+
+      const pdfSectionPage1 = document.getElementById('pdf-summary-page1');
+      const pdfSectionPage2 = document.getElementById('pdf-summary-page2');
+
+      if (!(pdfSectionPage1 && pdfSectionPage2)) return;
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'pt', 'a4');
+
+      const canvas1 = await html2canvas(pdfSectionPage1, { scale: 2, useCORS: true, allowTaint: false });
+      const imgData1 = canvas1.toDataURL('image/png');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const imgWidth = pageWidth - 80;
+      const aspectRatio = canvas1.width / canvas1.height;
+      const imgHeight = imgWidth / aspectRatio;
+      pdf.addImage(imgData1, 'PNG', 40, 40, imgWidth, imgHeight);
+
+      pdf.addPage();
+
+      const canvas2 = await html2canvas(pdfSectionPage2, { scale: 2, useCORS: true, allowTaint: false });
+      const imgData2 = canvas2.toDataURL('image/png');
+      const pageWidth2 = pdf.internal.pageSize.getWidth();
+      const imgWidth2 = pageWidth2 - 80;
+      const aspectRatio2 = canvas2.width / canvas2.height;
+      const imgHeight2 = imgWidth2 / aspectRatio2;
+      pdf.addImage(imgData2, 'PNG', 40, 40, imgWidth2, imgHeight2);
+
+      pdf.save('Rapport_Switch.pdf');
+    });
   }
 
   // -------------------------
