@@ -9,7 +9,7 @@ class Snowflake {
     this.x = p.random(-p.width * 0.1, p.width * 1.1);
     this.y = p.random(-p.height, -10);
     this.size = p.random(2, 5);
-    this.speed = p.random(0.7, 1.2);
+    this.speed = p.random(1.0, 1.8);
     this.drift = p.random(-0.6, 0.6);
     this.phase = p.random(p.TWO_PI);
   }
@@ -18,7 +18,7 @@ class Snowflake {
     const p = this.p;
     this.phase += 0.01 * multiplier;
     this.x += Math.sin(this.phase) * this.drift * multiplier;
-    this.y += this.speed * 2.2 * multiplier;
+    this.y += this.speed * 2.6 * multiplier;
     if (this.y > p.height + this.size) {
       this.reset();
       this.y = -this.size;
@@ -104,10 +104,64 @@ class FogBand {
   }
 }
 
+class AuroraRibbon {
+  constructor(p) {
+    this.p = p;
+    this.reset();
+  }
+
+  reset() {
+    const p = this.p;
+    this.baseY = p.random(p.height * 0.14, p.height * 0.32);
+    this.amplitude = p.random(p.height * 0.02, p.height * 0.05);
+    this.thickness = p.random(p.height * 0.05, p.height * 0.08);
+    this.speed = p.random(0.08, 0.16);
+    this.phase = p.random(p.TWO_PI);
+    this.tint = p.color(120 + p.random(20), 210 + p.random(25), 255, 120);
+  }
+
+  update(multiplier) {
+    this.phase += this.speed * multiplier;
+  }
+
+  draw() {
+    const p = this.p;
+    const ctx = p.drawingContext;
+    const top = this.baseY - this.thickness * 0.6;
+    const bottom = this.baseY + this.thickness * 0.6;
+
+    ctx.save();
+    const grad = ctx.createLinearGradient(0, top, 0, bottom);
+    grad.addColorStop(0, 'rgba(120, 230, 255, 0)');
+    grad.addColorStop(0.5, `rgba(${p.red(this.tint)}, ${p.green(this.tint)}, ${p.blue(this.tint)}, ${p.alpha(this.tint) / 255})`);
+    grad.addColorStop(1, 'rgba(120, 230, 255, 0)');
+    ctx.fillStyle = grad;
+
+    ctx.beginPath();
+    const step = 24;
+    for (let x = -step; x <= p.width + step; x += step) {
+      const y = this.baseY + Math.sin(this.phase + x * 0.006) * this.amplitude * 0.8 + Math.cos(this.phase * 0.6 + x * 0.003) * this.amplitude * 0.4;
+      if (x === -step) {
+        ctx.moveTo(x, y - this.thickness * 0.5);
+      } else {
+        ctx.lineTo(x, y - this.thickness * 0.5);
+      }
+    }
+    for (let x = p.width + step; x >= -step; x -= step) {
+      const y = this.baseY + Math.sin(this.phase + x * 0.006) * this.amplitude * 0.8 + Math.cos(this.phase * 0.6 + x * 0.003) * this.amplitude * 0.4;
+      ctx.lineTo(x, y + this.thickness * 0.5);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 export function createWinterScene(p) {
   const snowflakes = [];
   const stars = [];
   const fogBands = [];
+  const aurorae = [];
   let horizonY = 0;
   let speedMultiplier = 1;
 
@@ -194,7 +248,7 @@ export function createWinterScene(p) {
 
   function resize() {
     snowflakes.length = 0;
-    const snowCount = Math.floor(Math.max(180, (p.width * p.height) / 5000));
+    const snowCount = Math.floor(Math.max(320, (p.width * p.height) / 3200));
     for (let i = 0; i < snowCount; i += 1) {
       snowflakes.push(new Snowflake(p));
     }
@@ -209,6 +263,12 @@ export function createWinterScene(p) {
     const fogCount = Math.max(3, Math.floor(p.width / 260));
     for (let i = 0; i < fogCount; i += 1) {
       fogBands.push(new FogBand(p));
+    }
+
+    aurorae.length = 0;
+    const auroraCount = 2;
+    for (let i = 0; i < auroraCount; i += 1) {
+      aurorae.push(new AuroraRibbon(p));
     }
 
     horizonY = p.height * 0.58;
@@ -231,6 +291,11 @@ export function createWinterScene(p) {
         { at: 0.45, color: 'rgb(24, 46, 78)' },
         { at: 1, color: 'rgb(46, 76, 110)' }
       ]);
+
+      aurorae.forEach(ribbon => {
+        ribbon.update(speedMultiplier);
+        ribbon.draw();
+      });
 
       stars.forEach(star => {
         star.update(speedMultiplier);
