@@ -3,12 +3,24 @@ import { createSummerScene } from './summer-scene.js';
 import { createAutumnScene } from './autumn-scene.js';
 import { createWinterScene } from './winter-scene.js';
 
-const PLAYLIST_TRACKS = [
-  '../../songs/spring/spring2.mp3',
-  '../../songs/spring/spring4.mp3',
-  '../../songs/winter/wintersong1.mp3',
-  '../../songs/soie.mp3'
-];
+const SCENE_PLAYLISTS = {
+  spring: [
+    '../../songs/spring/spring2.mp3',
+    '../../songs/spring/spring4.mp3'
+  ],
+  summer: [
+    '../../songs/zenitude/v5calmmusic2.mp3',
+    '../../songs/zenitude/v5calmmusic3.mp3'
+  ],
+  autumn: [
+    '../../songs/funkysong3.mp3',
+    '../../songs/soie.mp3'
+  ],
+  winter: [
+    '../../songs/winter/wintersong2.mp3',
+    '../../songs/winter/wintersong5.mp3'
+  ]
+};
 
 const SCENE_SOUNDTRACKS = {
   spring: '../../sounds/rain1.mp3',
@@ -49,12 +61,10 @@ let mode = MODE_SLOW;
 let selectedMode = MODE_SLOW;
 let sceneStartedAt = 0;
 let speedBurst = null;
-let playlistStarted = false;
-let playlistAudio = null;
-let playlistIndex = 0;
-let playlistOrder = [];
 let activeSceneAudio = null;
 const sceneAudioCache = new Map();
+const playlistStates = new Map();
+let activePlaylistSceneId = null;
 
 const clamp01 = value => Math.min(1, Math.max(0, value));
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
@@ -66,14 +76,6 @@ const shuffleInPlace = array => {
   return array;
 };
 
-function resetPlaylistOrder(previousTrackIndex = null) {
-  playlistOrder = PLAYLIST_TRACKS.map((_, index) => index);
-  shuffleInPlace(playlistOrder);
-  if (previousTrackIndex !== null && playlistOrder[0] === previousTrackIndex && playlistOrder.length > 1) {
-    [playlistOrder[0], playlistOrder[1]] = [playlistOrder[1], playlistOrder[0]];
-  }
-}
-
 function createAudioElement(src, { volume = 1, loop = false } = {}) {
   const audio = new Audio(src);
   audio.loop = loop;
@@ -84,35 +86,100 @@ function createAudioElement(src, { volume = 1, loop = false } = {}) {
   return audio;
 }
 
-function startPlaylistIfNeeded() {
-  if (playlistStarted || !PLAYLIST_TRACKS.length) return;
-  playlistStarted = true;
+function resetScenePlaylistOrder(state, previousTrackIndex = null) {
+  state.order = state.tracks.map((_, index) => index);
+  shuffleInPlace(state.order);
+  if (previousTrackIndex !== null && state.order[0] === previousTrackIndex && state.order.length > 1) {
+    [state.order[0], state.order[1]] = [state.order[1], state.order[0]];
+  }
+}
 
-  resetPlaylistOrder();
+function getPlaylistState(sceneId) {
+  if (!playlistStates.has(sceneId)) {
+    const tracks = SCENE_PLAYLISTS[sceneId] ?? [];
+    const state = {
+      sceneId,
+      tracks,
+      order: [],
+      index: 0,
+      audio: null,
+      started: false,
+      lastTime: 0
+    };
+    resetScenePlaylistOrder(state);
+    playlistStates.set(sceneId, state);
+  }
+  return playlistStates.get(sceneId);
+}
 
-  const playTrack = index => {
-    if (!PLAYLIST_TRACKS.length) return;
-    if (!playlistOrder.length) {
-      resetPlaylistOrder();
-    }
-    playlistIndex = index % playlistOrder.length;
-    const trackIndex = playlistOrder[playlistIndex];
-    if (playlistAudio) {
-      playlistAudio.pause();
-    }
-    const audio = createAudioElement(PLAYLIST_TRACKS[trackIndex], { volume: 1 });
+function pauseActivePlaylist() {
+  if (!activePlaylistSceneId) return;
+  const state = playlistStates.get(activePlaylistSceneId);
+  if (state?.audio) {
+    state.lastTime = state.audio.currentTime;
+    state.audio.pause();
+  }
+  activePlaylistSceneId = null;
+}
+
+function playScenePlaylist(sceneId) {
+  if (!sceneId || !(sceneId in SCENE_PLAYLISTS)) {
+    pauseActivePlaylist();
+    return;
+  }
+  if (activePlaylistSceneId && activePlaylistSceneId !== sceneId) {
+    pauseActivePlaylist();
+  }
+  const state = getPlaylistState(sceneId);
+  activePlaylistSceneId = sceneId;
+  if (!state.tracks.length) return;
+
+  if (!state.order.length) {
+    resetScenePlaylistOrder(state);
+  }
+
+  const orderIndex = state.index % state.order.length;
+  const trackIndex = state.order[orderIndex];
+  const trackSrc = state.tracks[trackIndex];
+  const needsNewAudio = !state.audio || state.audio.dataset.trackIndex !== String(trackIndex);
+
+  if (needsNewAudio) {
+    const audio = createAudioElement(trackSrc, { volume: 1 });
+    audio.dataset.trackIndex = String(trackIndex);
     audio.addEventListener('ended', () => {
-      const isLoopRestart = playlistIndex + 1 >= playlistOrder.length;
-      if (isLoopRestart) {
-        resetPlaylistOrder(trackIndex);
+      state.lastTime = 0;
+      const prevTrackIndex = state.order[orderIndex];
+      state.index = (state.index + 1) % state.order.length;
+      if (state.index === 0) {
+        resetScenePlaylistOrder(state, prevTrackIndex);
       }
-      playTrack((playlistIndex + 1) % playlistOrder.length);
+      state.audio = null;
+      if (activePlaylistSceneId === sceneId) {
+        playScenePlaylist(sceneId);
+      }
     });
-    playlistAudio = audio;
-    audio.play().catch(() => {});
-  };
+    state.audio = audio;
+  }
 
-  playTrack(playlistIndex);
+  const audio = state.audio;
+  if (!audio) return;
+
+  const seekTo = state.lastTime ?? 0;
+  if (seekTo > 0) {
+    const setTime = () => {
+      const target = Math.min(seekTo, Number.isFinite(audio.duration) ? audio.duration - 0.05 : seekTo);
+      audio.currentTime = target < 0 ? 0 : target;
+      audio.removeEventListener('loadedmetadata', setTime);
+    };
+    if (audio.readyState >= 1) {
+      setTime();
+    } else {
+      audio.addEventListener('loadedmetadata', setTime);
+    }
+  }
+
+  audio.play().catch(() => {});
+  state.started = true;
 }
 
 function stopActiveSceneAudio() {
@@ -163,10 +230,12 @@ function cycleScene(step = 1) {
   const now = performance.now();
   if (now - lastSwitch < 300) return;
   lastSwitch = now;
+  pauseActivePlaylist();
   activeIndex = (activeIndex + step + scenes.length) % scenes.length;
   activeScene = scenes[activeIndex];
   activeScene.enter?.();
   handleSceneAudio(activeScene);
+  playScenePlaylist(activeScene?.id);
   sceneStartedAt = performance.now();
   speedBurst = null;
 }
@@ -178,7 +247,7 @@ function beginExperience() {
   speedBurst = null;
   activeScene.enter?.();
   handleSceneAudio(activeScene);
-  startPlaylistIfNeeded();
+  playScenePlaylist(activeScene?.id);
   if (startOverlayEl) {
     startOverlayEl.style.display = 'none';
   }

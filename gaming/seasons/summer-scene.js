@@ -1,125 +1,293 @@
-class Wave {
-  constructor(p, depth) {
-    this.p = p;
-    this.depth = depth;
-    this.offset = p.random(1000);
-  }
+const TWO_PI = Math.PI * 2;
 
-  draw(speedMultiplier) {
-    const p = this.p;
-    const h = p.height;
-    const baseline = h * (0.6 + this.depth * 0.12);
-    const amp = h * 0.02 * (1 - this.depth);
-    const yScale = h * 0.03;
-    p.noStroke();
-    const brightness = p.map(this.depth, 0, 1, 220, 120, true);
-    p.fill(30, 144, brightness, p.map(1 - this.depth, 0, 1, 80, 180));
-    p.beginShape();
-    p.vertex(-20, h);
-    for (let x = -20; x <= p.width + 20; x += 12) {
-      const y = baseline + Math.sin((x + this.offset + p.frameCount * 0.8 * speedMultiplier) * 0.015) * yScale;
-      const wobble = p.noise((x + this.offset) * 0.002, this.depth * 2, p.frameCount * 0.005 * speedMultiplier) * amp;
-      p.vertex(x, y - wobble);
-    }
-    p.vertex(p.width + 20, h);
-    p.endShape(p.CLOSE);
-  }
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }
 
-class Sparkle {
+class SunGlyph {
   constructor(p) {
     this.p = p;
-    this.reset();
+    this.rays = Array.from({ length: 8 }, (_, i) => ({
+      angle: (i * TWO_PI) / 8,
+      currLen: 0,
+      targetLen: 0,
+      alpha: 0,
+      seed: p.random(10000)
+    }));
+    this.basePulse = 1;
+    this.sunRot = 0;
+    this.haloBuffer = null;
+    this.resize(p.width, p.height);
   }
 
-  reset() {
+  resize(width, height) {
+    const base = Math.min(width, height) * 0.12;
+    this.sunRadius = base;
+    this.innerR = base * 1.2;
+    this.longLen = base * 2.2;
+    this.shortLen = base * 2;
+    this.strokeW = base * 0.08;
+    this.cx = width * 0.82;
+    this.cy = height * 0.28;
+    this.buildHaloBuffer();
+    this.rays.forEach((ray, i) => {
+      ray.currLen = this.innerR;
+      ray.targetLen = i % 2 ? this.shortLen : this.longLen;
+      ray.alpha = 0;
+    });
+  }
+
+  buildHaloBuffer() {
     const p = this.p;
-    this.x = p.random(p.width);
-    this.y = p.random(p.height * 0.35, p.height * 0.7);
-    this.speed = p.random(0.5, 1.2);
-    this.size = p.random(2, 6);
-    this.life = p.random(120, 220);
-  }
-
-  update(multiplier) {
-    this.life -= 1.2 * multiplier;
-    this.x += 0.3 * multiplier;
-    if (this.life <= 0 || this.x > this.p.width + 10) {
-      this.reset();
-      this.x = -10;
+    const sz = Math.floor(Math.min(p.width, p.height) * 0.5);
+    this.haloBuffer = p.createGraphics(sz, sz);
+    const g = this.haloBuffer;
+    g.noStroke();
+    const cx = sz / 2;
+    const cy = sz / 2;
+    const maxR = sz / 2;
+    for (let i = 0; i < 80; i += 1) {
+      const t = i / 79;
+      const alpha = 80 * (1 - t) * (1 - t);
+      g.fill(255, 220, 120, alpha);
+      const r = maxR * t;
+      g.ellipse(cx, cy, r * 2, r * 2);
     }
   }
 
-  draw() {
+  draw(scale = 1) {
     const p = this.p;
+    this.basePulse = 1 + 0.05 * p.sin(p.frameCount * 0.03);
+    this.sunRot += 0.003;
+
+    const breathe = 0.995 + 0.01 * p.sin(p.frameCount * 0.02);
+    const tightness = 2.2;
+    const s = (this.sunRadius * tightness) / (this.haloBuffer.width / 2);
+    const haloScale = s * breathe;
+
+    p.push();
+    p.translate(this.cx, this.cy);
+    p.scale(scale);
+    p.imageMode(p.CENTER);
+    p.push();
+    p.scale(haloScale);
+    p.image(this.haloBuffer, 0, 0);
+    p.pop();
+
+    p.rotate(this.sunRot);
+    p.scale(this.basePulse);
     p.noStroke();
-    p.fill(255, 255, 200, p.map(this.life, 0, 200, 0, 140, true));
-    p.ellipse(this.x, this.y, this.size, this.size * 0.7);
+    p.fill(255, 180, 50);
+    p.ellipse(0, 0, this.sunRadius * 2, this.sunRadius * 2);
+
+    p.stroke(255, 210, 100);
+    p.strokeWeight(this.strokeW);
+    for (const ray of this.rays) {
+      const n1 = p.noise(ray.seed, p.frameCount * 0.01);
+      const n2 = p.noise(ray.seed + 1000, p.frameCount * 0.015);
+      const angOff = p.radians(-3 + 6 * n1);
+      const lenJit = -3 + 6 * n2;
+      const angle = ray.angle + angOff;
+      const target = ray.targetLen + lenJit;
+
+      ray.currLen = lerp(ray.currLen, target, 0.06);
+      ray.alpha = lerp(ray.alpha, 255, 0.12);
+      p.stroke(255, 210, 100, ray.alpha);
+      p.line(
+        this.innerR * Math.cos(angle),
+        this.innerR * Math.sin(angle),
+        ray.currLen * Math.cos(angle),
+        ray.currLen * Math.sin(angle)
+      );
+    }
+    p.pop();
   }
 }
 
 export function createSummerScene(p) {
+  let time = 0;
   let speedMultiplier = 1;
-  let shimmer = 0;
-  const waves = [];
-  const sparkles = [];
+  let sunGlyph;
+  let contemplativeMode = false;
+  let neutralFrames = 0;
+  let sunScale = 1;
+  let sunFlash = 0;
+  let sunPulse = null;
+
+  const SUN_BASE_SCALE = 0.5;
+  const SUN_GROW_DURATION = 2000;
+  const SUN_SHRINK_DURATION = 2000;
+  const SUN_FLASH_DURATION = 220;
 
   function resize() {
-    waves.length = 0;
-    sparkles.length = 0;
-    const layers = 4;
-    for (let i = 0; i < layers; i += 1) {
-      waves.push(new Wave(p, i / layers));
+    sunGlyph = new SunGlyph(p);
+    sunGlyph.resize(p.width, p.height);
+  }
+
+  function drawSky() {
+    const ctx = p.drawingContext;
+    const skyHeight = p.height * 0.55;
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, skyHeight);
+    skyGradient.addColorStop(0, 'rgba(34, 62, 110, 1)');
+    skyGradient.addColorStop(0.35, 'rgba(82, 116, 168, 1)');
+    skyGradient.addColorStop(0.7, 'rgba(146, 176, 204, 1)');
+    skyGradient.addColorStop(1, 'rgba(212, 214, 214, 1)');
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, p.width, skyHeight);
+
+    sunGlyph.draw(sunScale);
+  }
+
+  function drawShore() {
+    const skyHeight = p.height * 0.55;
+    const waterTop = skyHeight;
+    const ctx = p.drawingContext;
+
+    const shorelineBase = p.height * 0.7;
+    const shorelineAmplitude = 22;
+    const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
+    const verticalSwell = p.sin(time * 0.00075) * 18;
+
+    const segments = 120;
+    const baseShoreline = [];
+    for (let i = 0; i <= segments; i += 1) {
+      const x = (i / segments) * p.width;
+      const sine = p.sin(x * shorelineFrequency);
+      baseShoreline[i] = shorelineBase + sine * shorelineAmplitude;
     }
-    const sparkleCount = Math.floor(Math.max(40, (p.width * p.height) / 18000));
-    for (let i = 0; i < sparkleCount; i += 1) {
-      sparkles.push(new Sparkle(p));
+
+    const shorelineY = baseShoreline.map(y => y + verticalSwell);
+    const maxShoreline = Math.max(...shorelineY);
+
+    const deepWaterColor = { r: 18, g: 102, b: 146 };
+    const midWaterColor = { r: 44, g: 146, b: 176 };
+    const lagoonColor = { r: 66, g: 188, b: 184 };
+    const shoreWaterColor = { r: 140, g: 216, b: 214 };
+    const waterGradient = ctx.createLinearGradient(0, waterTop, 0, maxShoreline);
+    waterGradient.addColorStop(0, `rgba(${deepWaterColor.r}, ${deepWaterColor.g}, ${deepWaterColor.b}, 1)`);
+    waterGradient.addColorStop(0.42, `rgba(${midWaterColor.r}, ${midWaterColor.g}, ${midWaterColor.b}, 1)`);
+    waterGradient.addColorStop(0.7, `rgba(${lagoonColor.r}, ${lagoonColor.g}, ${lagoonColor.b}, 1)`);
+    waterGradient.addColorStop(1, `rgba(${shoreWaterColor.r}, ${shoreWaterColor.g}, ${shoreWaterColor.b}, 1)`);
+
+    ctx.fillStyle = waterGradient;
+    ctx.beginPath();
+    ctx.moveTo(0, waterTop);
+    ctx.lineTo(p.width, waterTop);
+    for (let i = segments; i >= 0; i -= 1) {
+      const x = (i / segments) * p.width;
+      const y = Math.max(waterTop, shorelineY[i]);
+      ctx.lineTo(x, y);
     }
+    ctx.closePath();
+    ctx.fill();
+
+    p.noStroke();
+    p.fill(224, 199, 160);
+    p.beginShape();
+    for (let i = 0; i <= segments; i += 1) {
+      const x = (i / segments) * p.width;
+      p.vertex(x, shorelineY[i]);
+    }
+    p.vertex(p.width, p.height);
+    p.vertex(0, p.height);
+    p.endShape(p.CLOSE);
+
+    p.noStroke();
+    p.fill(170, 218, 230, 165);
+    p.beginShape();
+    p.vertex(0, waterTop);
+    for (let i = 0; i <= segments; i += 1) {
+      const x = (i / segments) * p.width;
+      p.vertex(x, shorelineY[i]);
+    }
+    p.vertex(p.width, shorelineY[segments]);
+    p.vertex(p.width, waterTop);
+    p.endShape(p.CLOSE);
+
+    p.stroke(255, 245, 225, 200);
+    p.strokeWeight(1.4);
+    p.noFill();
+    p.beginShape();
+    for (let i = 0; i <= segments; i += 1) {
+      const x = (i / segments) * p.width;
+      p.vertex(x, shorelineY[i] - 1.5);
+    }
+    p.endShape();
   }
 
   return {
     id: 'summer',
     name: 'Été',
-    description: 'Soleil et vagues calmes',
+    description: 'Grand soleil sur rivage paisible',
     resize,
     enter() {
-      shimmer = 1;
+      time = 0;
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
+      if (multiplier < 0.95) {
+        contemplativeMode = true;
+        neutralFrames = 0;
+      } else if (multiplier >= 0.95 && multiplier <= 1.05) {
+        neutralFrames += 1;
+        if (neutralFrames > 20) {
+          contemplativeMode = false;
+        }
+      } else {
+        neutralFrames = 0;
+      }
+
+      if (!contemplativeMode) {
+        sunScale = 1;
+        sunFlash = 0;
+        sunPulse = null;
+      }
     },
     pulse() {
-      shimmer = 1.2;
+      if (contemplativeMode) {
+        sunPulse = { start: p.millis() };
+        sunFlash = 0;
+      }
     },
     draw() {
-      const skyTop = p.color(34, 178, 255);
-      const skyBottom = p.color(176, 232, 255);
-      for (let y = 0; y < p.height; y += 2) {
-        const mix = p.map(y, 0, p.height, 0, 1, true);
-        const col = p.lerpColor(skyTop, skyBottom, mix);
-        p.stroke(col);
-        p.line(0, y, p.width, y);
+      if (contemplativeMode) {
+        const now = p.millis();
+        if (sunPulse) {
+          const elapsed = now - sunPulse.start;
+          if (elapsed < SUN_GROW_DURATION) {
+            sunScale = p.map(elapsed, 0, SUN_GROW_DURATION, SUN_BASE_SCALE, 1, true);
+            sunFlash = 0;
+          } else if (elapsed < SUN_GROW_DURATION + SUN_FLASH_DURATION) {
+            sunScale = 1;
+            const t = (elapsed - SUN_GROW_DURATION) / SUN_FLASH_DURATION;
+            sunFlash = 1 - p.constrain(t, 0, 1);
+          } else if (elapsed < SUN_GROW_DURATION + SUN_FLASH_DURATION + SUN_SHRINK_DURATION) {
+            const t = (elapsed - SUN_GROW_DURATION - SUN_FLASH_DURATION) / SUN_SHRINK_DURATION;
+            sunScale = p.map(t, 0, 1, 1, SUN_BASE_SCALE, true);
+            sunFlash = 0;
+          } else {
+            sunPulse = null;
+            sunScale = SUN_BASE_SCALE;
+            sunFlash = 0;
+          }
+        } else {
+          sunScale = SUN_BASE_SCALE;
+          sunFlash = 0;
+        }
+      } else {
+        sunScale = 1;
+        sunFlash = 0;
       }
 
-      const sunRadius = p.height * 0.12;
-      const sunY = p.height * 0.28;
-      const sunX = p.width * 0.22;
-      const glow = Math.max(0, shimmer - 0.05);
-      shimmer = p.lerp(shimmer, 0, 0.01 * speedMultiplier);
-      for (let i = 3; i >= 0; i -= 1) {
-        const alpha = 120 / (i + 1) + glow * 80;
+      time += 16 * speedMultiplier;
+      drawSky();
+      drawShore();
+
+      if (sunFlash > 0.001) {
         p.noStroke();
-        p.fill(255, 240, 160, alpha);
-        p.ellipse(sunX, sunY, sunRadius * 2.2 + i * 40);
+        p.fill(255, 245, 230, 180 * sunFlash);
+        p.rect(0, 0, p.width, p.height);
       }
-      p.fill(255, 220, 120);
-      p.ellipse(sunX, sunY, sunRadius * 1.4);
-
-      waves.forEach(layer => layer.draw(speedMultiplier));
-      sparkles.forEach(sparkle => {
-        sparkle.update(speedMultiplier);
-        sparkle.draw();
-      });
     }
   };
 }
