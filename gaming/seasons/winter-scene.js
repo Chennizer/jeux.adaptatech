@@ -183,18 +183,31 @@ export function createWinterScene(p) {
     p.endShape(p.CLOSE);
   };
 
+  const drawMoon = () => {
+    const moonX = p.width * 0.76;
+    const moonY = p.height * 0.18;
+
+    // Halo
+    p.noStroke();
+    p.fill(255, 255, 255, 24);
+    p.circle(moonX, moonY, p.width * 0.14);
+    p.fill(255, 255, 255, 36);
+    p.circle(moonX, moonY, p.width * 0.09);
+
+    // Core
+    p.fill(240, 246, 255, 220);
+    p.circle(moonX, moonY, p.width * 0.05);
+
+    // Subtle highlight
+    p.fill(255, 255, 255, 180);
+    p.circle(moonX - p.width * 0.008, moonY - p.height * 0.01, p.width * 0.018);
+  };
+
   const drawSnowField = () => {
     gradientRect(0, horizonY, p.width, p.height - horizonY, [
       { at: 0, color: 'rgba(214, 224, 232, 0.9)' },
       { at: 1, color: 'rgba(184, 200, 214, 0.96)' }
     ]);
-
-    p.noStroke();
-    p.fill(255, 255, 255, 24);
-    for (let i = 0; i < 6; i += 1) {
-      const y = horizonY + p.height * 0.08 + i * p.height * 0.05;
-      p.rect(0, y, p.width, 2);
-    }
   };
 
   function resize() {
@@ -236,6 +249,8 @@ export function createWinterScene(p) {
         { at: 0.45, color: 'rgb(24, 46, 78)' },
         { at: 1, color: 'rgb(46, 76, 110)' }
       ]);
+
+      drawMoon();
 
       stars.forEach(star => {
         star.update(speedMultiplier);
