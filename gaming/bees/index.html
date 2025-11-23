@@ -260,6 +260,7 @@
     const canvas = document.getElementById("simCanvas");
     const ctx = canvas.getContext("2d");
     let width, height, waxPattern;
+    let groundHeight = 100;
 
     // ----- Game State -----
     let gameRunning = false;
@@ -306,6 +307,7 @@
     function resize() {
       width = window.innerWidth;
       height = window.innerHeight;
+      groundHeight = Math.max(90, height * 0.16);
       canvas.width = width * window.devicePixelRatio;
       canvas.height = height * window.devicePixelRatio;
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
@@ -527,18 +529,20 @@
     // ----- Flower Generation -----
     function generateFlowers(minX, maxX) {
       const count = 25;
+      const groundY = height - groundHeight;
       for(let i=0; i<count; i++) {
         const type = Math.random() > 0.5 ? 'daisy' : 'tulip';
+        const size = 12 + Math.random() * 10;
         flowers.push({
           x: minX + Math.random() * (maxX - minX),
-          y: height * 0.2 + Math.random() * (height * 0.7),
+          y: groundY - (Math.random() * 35 + 18),
           type: type,
           colorMain: type === 'daisy'
-            ? `hsl(${Math.random()*50+35}, 95%, 60%)`
-            : `hsl(${Math.random()*40+320}, 90%, 55%)`,
-          colorCenter: type === 'daisy' ? '#f59e0b' : '#fbbf24',
-          size: 10 + Math.random() * 8,
-          stemCurve: (Math.random() - 0.5) * 60
+            ? '#ffffff'
+            : `hsl(${Math.random()*30+320}, 80%, 55%)`,
+          colorCenter: type === 'daisy' ? '#f2c94c' : '#fdd85d',
+          size,
+          stemCurve: (Math.random() - 0.5) * 50
         });
       }
     }
@@ -601,65 +605,116 @@
 
     // ----- Drawing -----
     function draw() {
-      // 1. Draw Background Zones
-      if (gameMode === '1p') {
-        const splitX = width * 0.4;
-        ctx.fillStyle = COLORS.bgLeft;
-        ctx.fillRect(0, 0, splitX, height);
-        ctx.fillStyle = COLORS.bgRight;
-        ctx.fillRect(splitX, 0, width - splitX, height);
-
-        // Simple Grass Texture
-        ctx.fillStyle = 'rgba(0,0,0,0.1)';
-        for(let i=0; i<width-splitX; i+=20) ctx.fillRect(splitX + i, height-20, 10, 20);
-
-      } else {
-        // 2 Player Background: Dark | Green | Dark
-        const leftEdge = width * 0.3;
-        const rightEdge = width * 0.7;
-
-        // Left Hive
-        ctx.fillStyle = COLORS.bgDark;
-        ctx.fillRect(0, 0, leftEdge, height);
-
-        // Right Hive
-        ctx.fillStyle = COLORS.bgDark;
-        ctx.fillRect(rightEdge, 0, width - rightEdge, height);
-
-        // Middle Field
-        ctx.fillStyle = COLORS.bgRight;
-        ctx.fillRect(leftEdge, 0, rightEdge - leftEdge, height);
-
-        // Grass
-        ctx.fillStyle = 'rgba(0,0,0,0.1)';
-        for(let i=0; i< (rightEdge-leftEdge); i+=20) ctx.fillRect(leftEdge + i, height-20, 10, 20);
-      }
+      drawSkyAndField();
 
       drawFlowers();
       hives.forEach(h => h.draw(ctx));
       drawParticles();
     }
 
+    function drawSkyAndField() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Sky inspired by Plant game
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+      skyGrad.addColorStop(0, '#c9f0ff');
+      skyGrad.addColorStop(1, '#7fc8ff');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Sun + rays (top-left like Plant)
+      const sunX = width * 0.08;
+      const sunY = height * 0.12;
+      const sunR = Math.min(width, height) * 0.08;
+      ctx.save();
+      ctx.translate(sunX, sunY);
+      ctx.strokeStyle = 'rgba(255, 223, 0, 0.35)';
+      ctx.lineWidth = 4;
+      for (let i = 0; i < 14; i++) {
+        const angle = (Math.PI * 2 / 14) * i;
+        const inner = sunR * 0.6;
+        const outer = sunR * 1.6;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+        ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ffd93b';
+      ctx.beginPath();
+      ctx.arc(0, 0, sunR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Ground
+      const groundY = height - groundHeight;
+      const groundGrad = ctx.createLinearGradient(0, groundY, 0, height);
+      groundGrad.addColorStop(0, '#9ce27c');
+      groundGrad.addColorStop(1, '#4f8f2f');
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, groundY, width, groundHeight);
+
+      // Grass strokes
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      for (let i = 0; i < width; i += 28) {
+        const blade = groundHeight * 0.25 + Math.sin(i * 0.15) * 6;
+        ctx.fillRect(i, groundY + groundHeight * 0.7 - blade, 2, blade);
+      }
+
+      // Zone overlays
+      if (gameMode === '1p') {
+        const hiveZone = width * 0.35;
+        const hiveGrad = ctx.createLinearGradient(0, 0, hiveZone, 0);
+        hiveGrad.addColorStop(0, 'rgba(10, 10, 10, 0.55)');
+        hiveGrad.addColorStop(1, 'rgba(10, 10, 10, 0.05)');
+        ctx.fillStyle = hiveGrad;
+        ctx.fillRect(0, 0, hiveZone, height);
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(hiveZone, 0);
+        ctx.lineTo(hiveZone, height);
+        ctx.stroke();
+      } else {
+        const leftEdge = width * 0.3;
+        const rightEdge = width * 0.7;
+
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.5)';
+        ctx.fillRect(0, 0, leftEdge, height);
+        ctx.fillRect(rightEdge, 0, width - rightEdge, height);
+
+        const fieldHighlight = ctx.createLinearGradient(leftEdge, 0, rightEdge, 0);
+        fieldHighlight.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
+        fieldHighlight.addColorStop(0.5, 'rgba(255, 255, 255, 0.25)');
+        fieldHighlight.addColorStop(1, 'rgba(255, 255, 255, 0.12)');
+        ctx.fillStyle = fieldHighlight;
+        ctx.fillRect(leftEdge, 0, rightEdge - leftEdge, height);
+      }
+    }
+
     // --- Rendering Helpers ---
     function drawFlowers() {
+      const groundY = height - groundHeight;
+      const stemBase = groundY + groundHeight * 0.1;
+
       flowers.forEach(f => {
         ctx.beginPath();
-        ctx.moveTo(f.x, f.y + 10);
+        ctx.moveTo(f.x, stemBase);
         ctx.bezierCurveTo(
-          f.x + f.stemCurve, f.y + f.size*4,
-          f.x - f.stemCurve/2, f.y + f.size*8,
-          f.x, height
+          f.x + f.stemCurve, stemBase - f.size * 3,
+          f.x - f.stemCurve/2, f.y + f.size * 1.5,
+          f.x, f.y
         );
-        ctx.strokeStyle = '#2d4a08';
+        ctx.strokeStyle = '#2f5b15';
         ctx.lineWidth = 5;
         ctx.stroke();
 
-        ctx.fillStyle = '#3d6a18';
+        ctx.fillStyle = '#3f7a1c';
         ctx.beginPath();
         ctx.ellipse(
           f.x + f.stemCurve/3,
-          height - f.size*5,
-          f.size*2,
+          stemBase - f.size * 0.8,
+          f.size * 2,
           f.size,
           Math.PI/3,
           0, Math.PI*2
