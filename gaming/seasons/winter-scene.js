@@ -99,6 +99,40 @@ class GroundSparkle {
   }
 }
 
+class LightPillar {
+  constructor(p) {
+    this.p = p;
+    this.reset();
+  }
+
+  reset() {
+    const p = this.p;
+    this.x = p.random(p.width * 0.1, p.width * 0.9);
+    this.width = p.random(p.width * 0.03, p.width * 0.06);
+    this.height = p.random(p.height * 0.22, p.height * 0.3);
+    this.alphaBase = p.random(24, 48);
+    this.flicker = p.random(0.004, 0.012);
+    this.phase = p.random(p.TWO_PI);
+  }
+
+  update(multiplier) {
+    this.phase += this.flicker * multiplier;
+  }
+
+  draw(horizon, glow) {
+    const p = this.p;
+    const twinkle = (Math.sin(this.phase) + 1) * 0.5;
+    const alpha = (this.alphaBase + twinkle * 36) * glow;
+    const grad = p.drawingContext.createLinearGradient(this.x, horizon - this.height, this.x, horizon + this.height * 0.15);
+    grad.addColorStop(0, `rgba(180, 230, 255, ${alpha / 255})`);
+    grad.addColorStop(0.45, `rgba(170, 210, 255, ${(alpha * 0.6) / 255})`);
+    grad.addColorStop(1, 'rgba(200, 240, 255, 0)');
+    p.noStroke();
+    p.drawingContext.fillStyle = grad;
+    p.rect(this.x - this.width * 0.5, horizon - this.height, this.width, this.height * 1.15);
+  }
+}
+
 class Moon {
   constructor(p) {
     this.p = p;
@@ -107,10 +141,10 @@ class Moon {
 
   resize() {
     const p = this.p;
-    const r = Math.min(p.width, p.height) * 0.08;
+    const r = Math.min(p.width, p.height) * 0.07;
     this.position = {
-      x: p.width * 0.18,
-      y: p.height * 0.18,
+      x: p.width * 0.2,
+      y: p.height * 0.2,
       r
     };
   }
@@ -143,15 +177,15 @@ class AuroraRibbon {
 
   draw(multiplier) {
     const p = this.p;
-    const baseY = p.height * 0.3 + Math.sin(p.frameCount * 0.01 * multiplier + this.offset) * p.height * 0.04;
+    const baseY = p.height * 0.28 + Math.sin(p.frameCount * 0.008 * multiplier + this.offset) * p.height * 0.035;
     p.noFill();
     for (let i = 0; i < 8; i += 1) {
-      const alpha = 28 + i * 4;
+      const alpha = 24 + i * 4;
       const hue = p.map(Math.sin(this.offset + i), -1, 1, 140, 220);
       p.stroke(hue, 220, 255, alpha);
       p.beginShape();
-      for (let x = -20; x <= p.width + 20; x += 32) {
-        const y = baseY + Math.sin((x * 0.004) + this.offset + i * 0.3 + p.frameCount * 0.006 * multiplier) * p.height * 0.05;
+      for (let x = -20; x <= p.width + 20; x += 34) {
+        const y = baseY + Math.sin((x * 0.004) + this.offset + i * 0.3 + p.frameCount * 0.005 * multiplier) * p.height * 0.05;
         p.vertex(x, y + Math.sin(x * 0.008 + this.offset) * 10);
       }
       p.endShape();
@@ -163,8 +197,11 @@ export function createWinterScene(p) {
   const snowflakes = [];
   const stars = [];
   const sparkles = [];
+  const pillars = [];
   const moon = new Moon(p);
   let ribbons = [];
+  let groundProfile = [];
+  let horizonY = 0;
   let speedMultiplier = 1;
   let glow = 0;
 
@@ -192,13 +229,30 @@ export function createWinterScene(p) {
       sparkles.push(new GroundSparkle(p));
     }
 
+    pillars.length = 0;
+    const pillarCount = Math.max(3, Math.floor(p.width / 200));
+    for (let i = 0; i < pillarCount; i += 1) {
+      pillars.push(new LightPillar(p));
+    }
+
+    horizonY = p.height * 0.63;
+    groundProfile = [];
+    const segments = Math.max(24, Math.floor(p.width / 30));
+    const base = p.height * 0.8;
+    const amp = p.height * 0.03;
+    for (let i = 0; i <= segments; i += 1) {
+      const x = p.map(i, 0, segments, -20, p.width + 20);
+      const y = base + Math.sin(i * 0.6) * amp * 0.2 + (p.noise(i * 0.12) - 0.5) * amp;
+      groundProfile.push({ x, y });
+    }
+
     moon.resize();
   }
 
   return {
     id: 'winter',
     name: 'Hiver',
-    description: 'Neige légère et aurore',
+    description: 'Nuit glacée, reflets et piliers de lumière',
     resize,
     enter() {
       glow = 1;
@@ -211,14 +265,14 @@ export function createWinterScene(p) {
     },
     draw() {
       p.colorMode(p.RGB);
-      const top = p.color(12, 22, 46);
-      const bottom = p.color(48, 84, 120);
-      for (let y = 0; y < p.height; y += 2) {
-        const mix = p.map(y, 0, p.height, 0, 1, true);
-        const col = p.lerpColor(top, bottom, mix);
-        p.stroke(col);
-        p.line(0, y, p.width, y);
-      }
+      const ctx = p.drawingContext;
+      const sky = ctx.createLinearGradient(0, 0, 0, p.height);
+      sky.addColorStop(0, 'rgb(8, 18, 44)');
+      sky.addColorStop(0.45, 'rgb(14, 40, 74)');
+      sky.addColorStop(0.78, 'rgb(26, 80, 116)');
+      sky.addColorStop(1, 'rgb(18, 46, 68)');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, p.width, p.height);
 
       stars.forEach(star => {
         star.update(speedMultiplier);
@@ -229,29 +283,44 @@ export function createWinterScene(p) {
 
       p.colorMode(p.RGB);
       p.noStroke();
-      p.fill(255, 255, 255, 12);
-      const halo = Math.max(0, glow - 0.02);
+      const halo = Math.max(0, glow - 0.05);
       glow = p.lerp(glow, 0, 0.01 * speedMultiplier);
       if (halo > 0.01) {
+        p.fill(255, 255, 255, 10 * halo);
         p.rect(0, 0, p.width, p.height);
       }
 
-      p.colorMode(p.RGB);
+      pillars.forEach(pillar => {
+        pillar.update(speedMultiplier);
+        pillar.draw(horizonY, Math.max(0.7, glow));
+      });
+
       p.strokeWeight(2);
       ribbons.forEach(ribbon => ribbon.draw(speedMultiplier));
       p.strokeWeight(1);
 
-      p.noStroke();
-      const snowTop = p.height * 0.82;
-      const snowHeight = p.height - snowTop;
-      p.fill(230, 238, 248);
-      p.rect(0, snowTop, p.width, snowHeight);
+      ctx.save();
+      const iceGrad = ctx.createLinearGradient(0, horizonY, 0, p.height);
+      iceGrad.addColorStop(0, 'rgba(180, 210, 240, 0.18)');
+      iceGrad.addColorStop(0.35, 'rgba(140, 180, 220, 0.22)');
+      iceGrad.addColorStop(1, 'rgba(200, 220, 240, 0.35)');
+      ctx.fillStyle = iceGrad;
+      ctx.fillRect(0, horizonY, p.width, p.height - horizonY);
 
-      const sheen = p.drawingContext.createLinearGradient(0, snowTop, 0, p.height);
-      sheen.addColorStop(0, 'rgba(255,255,255,0.18)');
-      sheen.addColorStop(1, 'rgba(210,228,240,0.12)');
-      p.drawingContext.fillStyle = sheen;
-      p.rect(0, snowTop, p.width, snowHeight);
+      ctx.beginPath();
+      ctx.moveTo(groundProfile[0].x, groundProfile[0].y);
+      for (let i = 1; i < groundProfile.length; i += 1) {
+        ctx.lineTo(groundProfile[i].x, groundProfile[i].y);
+      }
+      ctx.lineTo(p.width + 30, p.height + 10);
+      ctx.lineTo(-30, p.height + 10);
+      ctx.closePath();
+      const snowGrad = ctx.createLinearGradient(0, horizonY, 0, p.height);
+      snowGrad.addColorStop(0, 'rgb(224, 234, 246)');
+      snowGrad.addColorStop(1, 'rgb(210, 224, 238)');
+      ctx.fillStyle = snowGrad;
+      ctx.fill();
+      ctx.restore();
 
       sparkles.forEach(sparkle => {
         sparkle.update(speedMultiplier);
