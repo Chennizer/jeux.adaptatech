@@ -21,7 +21,7 @@ class SunGlyph {
   }
 
   resize(width, height) {
-    const base = Math.min(width, height) * 0.15;
+    const base = Math.min(width, height) * 0.12;
     this.sunRadius = base;
     this.innerR = base * 1.2;
     this.longLen = base * 2.2;
@@ -39,7 +39,7 @@ class SunGlyph {
 
   buildHaloBuffer() {
     const p = this.p;
-    const sz = Math.floor(Math.min(p.width, p.height) * 0.6);
+    const sz = Math.floor(Math.min(p.width, p.height) * 0.5);
     this.haloBuffer = p.createGraphics(sz, sz);
     const g = this.haloBuffer;
     g.noStroke();
@@ -137,7 +137,7 @@ export function createSummerScene(p) {
     const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
     const verticalSwell = p.sin(time * 0.00075) * 18;
 
-    const segments = 160;
+    const segments = 120;
     const baseShoreline = [];
     for (let i = 0; i <= segments; i += 1) {
       const x = (i / segments) * p.width;

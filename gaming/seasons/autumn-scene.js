@@ -57,7 +57,7 @@ export function createAutumnScene(p) {
       [189, 90, 53],
       [255, 229, 180]
     ];
-    const count = Math.floor(Math.max(60, (p.width * p.height) / 11000));
+    const count = Math.floor(Math.max(50, (p.width * p.height) / 13000));
     for (let i = 0; i < count; i += 1) {
       leaves.push(new Leaf(p, palette));
     }
@@ -80,14 +80,12 @@ export function createAutumnScene(p) {
     draw() {
       const fog = Math.max(0, pulse - 0.02);
       pulse = p.lerp(pulse, 0, 0.01 * speedMultiplier);
-      const skyTop = p.color(70, 44, 27);
-      const skyBottom = p.color(142, 94, 62);
-      for (let y = 0; y < p.height; y += 2) {
-        const mix = p.map(y, 0, p.height, 0, 1, true);
-        const col = p.lerpColor(skyTop, skyBottom, mix);
-        p.stroke(col);
-        p.line(0, y, p.width, y);
-      }
+      const ctx = p.drawingContext;
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, p.height);
+      skyGradient.addColorStop(0, 'rgba(70, 44, 27, 1)');
+      skyGradient.addColorStop(1, 'rgba(142, 94, 62, 1)');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, p.width, p.height);
 
       if (fog > 0.01) {
         p.noStroke();
