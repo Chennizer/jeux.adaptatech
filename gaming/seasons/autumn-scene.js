@@ -2,10 +2,9 @@ class Leaf {
   constructor(p, palette) {
     this.p = p;
     this.palette = palette;
-    this.reset();
   }
 
-  reset() {
+  reset(groundY, settleBandTop = groundY) {
     const p = this.p;
     this.x = p.random(-p.width * 0.1, p.width * 1.1);
     this.y = p.random(-p.height * 0.2, -10);
@@ -15,15 +14,17 @@ class Leaf {
     this.speed = p.random(0.6, 1.2);
     this.sway = p.random(0.6, 1.4);
     this.color = p.color(this.palette[p.floor(p.random(this.palette.length))]);
+    const bandBottom = this.p.height - this.size * 0.5;
+    this.settleY = this.p.random(settleBandTop, bandBottom);
   }
 
-  update(multiplier, groundY, landedLeaves) {
+  update(multiplier, groundY, landedLeaves, settleBandTop) {
     const p = this.p;
     this.rotation += this.spin * multiplier;
     this.x += Math.sin(this.rotation * 1.2) * this.sway * multiplier;
     this.y += this.speed * 1.7 * multiplier;
 
-    const settleY = groundY - this.size * 0.25;
+    const settleY = Math.min(Math.max(this.settleY, settleBandTop), p.height - this.size * 0.25);
     if (this.y >= settleY) {
       landedLeaves.push({
         x: this.x,
@@ -32,10 +33,10 @@ class Leaf {
         rotation: this.rotation,
         color: this.color
       });
-      this.reset();
+      this.reset(groundY, settleBandTop);
       this.y = -this.size;
     } else if (this.y > p.height + this.size) {
-      this.reset();
+      this.reset(groundY, settleBandTop);
       this.y = -this.size;
     }
   }
@@ -60,6 +61,8 @@ export function createAutumnScene(p) {
   const leaves = [];
   const landedLeaves = [];
   const trunks = [];
+  let groundY = 0;
+  let settleBandTop = 0;
   let speedMultiplier = 1;
   let pulse = 0;
 
@@ -73,12 +76,18 @@ export function createAutumnScene(p) {
       [189, 90, 53],
       [255, 229, 180]
     ];
+
+    groundY = p.height * 0.82;
+    const groundHeight = p.height - groundY;
+    settleBandTop = groundY - groundHeight * 0.9;
+
     const count = Math.floor(Math.max(50, (p.width * p.height) / 13000));
     for (let i = 0; i < count; i += 1) {
-      leaves.push(new Leaf(p, palette));
+      const leaf = new Leaf(p, palette);
+      leaf.reset(groundY, settleBandTop);
+      leaves.push(leaf);
     }
 
-    const groundY = p.height * 0.82;
     const trunkCount = Math.max(3, Math.floor(p.width / 200));
     for (let i = 0; i < trunkCount; i += 1) {
       const x = p.random(-20, p.width + 20);
@@ -126,8 +135,6 @@ export function createAutumnScene(p) {
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, p.width, p.height);
 
-      const groundY = p.height * 0.82;
-
       if (fog > 0.01) {
         p.noStroke();
         p.fill(255, 210, 170, 80 * fog);
@@ -149,14 +156,14 @@ export function createAutumnScene(p) {
       p.beginShape();
       p.vertex(-20, p.height);
       for (let x = -20; x <= p.width + 20; x += 18) {
-        const elevation = p.noise(x * 0.002, p.frameCount * 0.002) * p.height * 0.05;
+        const elevation = p.noise(x * 0.002, 0.5) * p.height * 0.05;
         p.vertex(x, groundY - elevation);
       }
       p.vertex(p.width + 20, p.height);
       p.endShape(p.CLOSE);
 
       leaves.forEach(leaf => {
-        leaf.update(speedMultiplier, groundY, landedLeaves);
+        leaf.update(speedMultiplier, groundY, landedLeaves, settleBandTop);
         leaf.draw();
       });
 
