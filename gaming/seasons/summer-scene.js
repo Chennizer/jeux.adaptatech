@@ -190,15 +190,15 @@ export function createSummerScene(p) {
 
   function populateGrass() {
     grass.length = 0;
-    const rows = 6;
-    const cols = Math.floor(p.width / 28) + 30;
+    const rows = 12;
+    const cols = Math.floor(p.width / 12) + 80;
     for (let r = 0; r < rows; r += 1) {
       const rowMix = r / Math.max(rows - 1, 1);
       const depth = p.constrain(lerp(0.12, 0.9, rowMix) + p.random(-0.05, 0.05), 0, 1);
-      const baseY = lerp(p.height * 0.56, p.height * 0.98, rowMix) + p.random(-6, 6);
+      const baseY = lerp(p.height * 0.56, p.height * 0.98, rowMix) + p.random(-4, 4);
       for (let c = 0; c < cols; c += 1) {
-        const x = p.map(c, 0, cols - 1, -50, p.width + 50) + p.random(-8, 8);
-        const height = lerp(p.height * 0.18, p.height * 0.36, 1 - depth) * p.random(0.9, 1.05);
+        const x = p.map(c, 0, cols - 1, -40, p.width + 40) + p.random(-4, 4);
+        const height = lerp(p.height * 0.18, p.height * 0.36, 1 - depth) * p.random(0.92, 1.08);
         grass.push(new GrassBlade(p, x, baseY + p.random(-6, 6), height, depth, {
           base: lerpColor(p, palette.meadowLight, palette.meadowDeep, depth)
         }));
