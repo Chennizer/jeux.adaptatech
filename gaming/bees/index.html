@@ -116,6 +116,9 @@
     const honeyGrid = [];
     let builtCells = 0;
     let pendingBuilds = 0;
+    let flowers = [];
+    let actionLocked = false;
+    let lastSceneSize = { w: 1, h: 1 };
 
     function resizeCanvas() {
       const { width, height } = canvas.getBoundingClientRect();
@@ -124,6 +127,20 @@
       canvas.height = height * ratio;
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       setupHoneyGrid(true);
+      if (flowers.length === 0) {
+        flowers = createFlowers();
+      } else {
+        const w = canvas.width / (window.devicePixelRatio || 1);
+        const h = canvas.height / (window.devicePixelRatio || 1);
+        const scaleX = w / lastSceneSize.w;
+        const scaleY = h / lastSceneSize.h;
+        flowers = flowers.map((f) => ({
+          x: f.x * scaleX,
+          y: f.y * scaleY,
+          sway: f.sway,
+        }));
+        lastSceneSize = { w, h };
+      }
     }
 
     const resizeObserver = new ResizeObserver(resizeCanvas);
@@ -236,6 +253,7 @@
       const positions = [];
       const w = canvas.width / (window.devicePixelRatio || 1);
       const h = canvas.height / (window.devicePixelRatio || 1);
+      lastSceneSize = { w, h };
       const baseX = w * 0.65;
       const spread = Math.min(w, h) * 0.18;
       for (let i = 0; i < 5; i++) {
@@ -248,8 +266,6 @@
       }
       return positions;
     }
-
-    let flowers = createFlowers();
 
     function drawBackground(t) {
       const w = canvas.width / (window.devicePixelRatio || 1);
@@ -315,9 +331,13 @@
       const areaWidth = w * 0.5;
 
       const honeyGrad = ctx.createLinearGradient(0, 0, areaWidth, 0);
-      honeyGrad.addColorStop(0, "rgba(255, 251, 235, 0.8)");
-      honeyGrad.addColorStop(1, "rgba(255, 247, 209, 0.5)");
+      honeyGrad.addColorStop(0, "rgba(119, 63, 0, 0.14)");
+      honeyGrad.addColorStop(0.35, "rgba(149, 88, 10, 0.14)");
+      honeyGrad.addColorStop(1, "rgba(196, 128, 24, 0.08)");
       ctx.fillStyle = honeyGrad;
+      ctx.fillRect(0, 0, areaWidth, h);
+
+      ctx.fillStyle = "rgba(255, 193, 7, 0.06)";
       ctx.fillRect(0, 0, areaWidth, h);
 
       const radius = Math.min(w, h) * 0.035;
@@ -443,29 +463,29 @@
 
       ctx.fillStyle = "#facc15";
       ctx.beginPath();
-      ctx.ellipse(0, 0, 16, 10, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, 22, 14, 0, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.strokeStyle = "#0f172a";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.6;
       ctx.beginPath();
-      ctx.moveTo(-4, -10);
-      ctx.lineTo(-4, 10);
-      ctx.moveTo(6, -9);
-      ctx.lineTo(6, 9);
+      ctx.moveTo(-6, -14);
+      ctx.lineTo(-6, 14);
+      ctx.moveTo(8, -12);
+      ctx.lineTo(8, 12);
       ctx.stroke();
 
       ctx.fillStyle = "#0f172a";
       ctx.beginPath();
-      ctx.arc(12, 0, 6, 0, Math.PI * 2);
+      ctx.arc(16, 0, 8, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = "rgba(191, 219, 254, 0.9)";
       ctx.beginPath();
-      ctx.ellipse(-4, -10, 10, 6, -0.3, 0, Math.PI * 2);
+      ctx.ellipse(-6, -12, 12, 7, -0.3, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.ellipse(-4, 10, 10, 6, 0.3, 0, Math.PI * 2);
+      ctx.ellipse(-6, 12, 12, 7, 0.3, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -491,8 +511,11 @@
     }
 
     function activateBees() {
+      if (actionLocked) return;
+
       playChime();
-      flowers = createFlowers();
+      actionLocked = true;
+      button.disabled = true;
       const { x, y } = hiveCenter();
       bees.forEach((bee, i) => {
         const flower = flowers[i % flowers.length];
@@ -602,6 +625,13 @@
       }
     }
 
+    function checkIdle() {
+      if (actionLocked && bees.every((b) => !b.target)) {
+        actionLocked = false;
+        button.disabled = false;
+      }
+    }
+
     function spawnPollen(x, y, bright) {
       for (let i = 0; i < 14; i++) {
         const ang = (Math.PI * 2 * i) / 14 + Math.random() * 0.3;
@@ -624,6 +654,7 @@
       drawBackground(now);
       drawHoneyField(now);
       updateBees(dt);
+      checkIdle();
       drawHive(now);
       drawFlowers(now);
       bees.forEach((bee) => drawBee(bee, now));
