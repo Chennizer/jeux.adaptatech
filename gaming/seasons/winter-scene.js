@@ -104,42 +104,46 @@ class FogBand {
   }
 }
 
-class Lantern {
+class FrostBeacon {
   constructor(p, x, y) {
     this.p = p;
     this.x = x;
     this.y = y;
     this.height = p.random(p.height * 0.08, p.height * 0.12);
-    this.flicker = p.random(p.TWO_PI);
-    this.flickerSpeed = p.random(0.01, 0.018);
+    this.width = this.height * 0.28;
+    this.phase = p.random(p.TWO_PI);
+    this.twinkleSpeed = p.random(0.01, 0.02);
   }
 
   update(multiplier) {
-    this.flicker += this.flickerSpeed * multiplier;
+    this.phase += this.twinkleSpeed * multiplier;
   }
 
   draw() {
     const p = this.p;
-    const light = (Math.sin(this.flicker) + 1) * 0.5;
-    const glow = p.map(light, 0, 1, 90, 140);
-
-    p.stroke(90, 70, 50, 200);
-    p.strokeWeight(3);
-    p.line(this.x, this.y, this.x, this.y - this.height);
+    const shimmer = (Math.sin(this.phase) + 1) * 0.5;
+    const topY = this.y - this.height;
 
     p.noStroke();
-    p.fill(255, 220, 180, 220);
-    const cageY = this.y - this.height - 6;
-    p.rect(this.x - 8, cageY - 6, 16, 12, 3);
+    p.fill(182, 210, 232, 140);
+    p.beginShape();
+    p.vertex(this.x, topY);
+    p.vertex(this.x - this.width, this.y);
+    p.vertex(this.x + this.width, this.y);
+    p.endShape(p.CLOSE);
 
-    p.fill(255, 200, 120, glow);
-    p.circle(this.x, cageY, 10 + light * 2);
+    p.fill(210, 234, 255, 90 + shimmer * 50);
+    p.beginShape();
+    p.vertex(this.x, topY - 6);
+    p.vertex(this.x - this.width * 0.6, this.y - this.height * 0.4);
+    p.vertex(this.x + this.width * 0.6, this.y - this.height * 0.4);
+    p.endShape(p.CLOSE);
 
-    for (let i = 0; i < 3; i += 1) {
-      const r = (18 + i * 10) + light * 3;
-      p.fill(255, 200, 130, glow * (0.5 - i * 0.12));
-      p.circle(this.x, cageY, r);
-    }
+    const haloRadius = 14 + shimmer * 6;
+    p.fill(210, 240, 255, 120);
+    p.circle(this.x, topY - 4, haloRadius);
+    p.fill(255, 255, 255, 180);
+    p.circle(this.x, topY - 4, 6 + shimmer * 3);
   }
 }
 
@@ -147,7 +151,7 @@ export function createWinterScene(p) {
   const snowflakes = [];
   const stars = [];
   const fogBands = [];
-  const lanterns = [];
+  const frostBeacons = [];
   let horizonY = 0;
   let speedMultiplier = 1;
 
@@ -256,13 +260,13 @@ export function createWinterScene(p) {
       fogBands.push(new FogBand(p));
     }
 
-    lanterns.length = 0;
-    const laneCount = 7;
-    for (let i = 0; i < laneCount; i += 1) {
-      const t = i / (laneCount - 1);
-      const x = p.lerp(p.width * 0.34, p.width * 0.66, t);
-      const y = p.height - t * p.height * 0.32;
-      lanterns.push(new Lantern(p, x, y));
+    frostBeacons.length = 0;
+    const markerCount = 8;
+    for (let i = 0; i < markerCount; i += 1) {
+      const t = i / (markerCount - 1);
+      const x = p.lerp(p.width * 0.3, p.width * 0.7, t);
+      const y = p.height - t * p.height * 0.34;
+      frostBeacons.push(new FrostBeacon(p, x, y));
     }
 
     horizonY = p.height * 0.58;
@@ -271,7 +275,7 @@ export function createWinterScene(p) {
   return {
     id: 'winter',
     name: 'Hiver',
-    description: 'Sentier nocturne et lanternes',
+    description: 'Sentier nocturne aux balises givrées',
     resize,
     enter() {},
     setSpeedMultiplier(multiplier = 1) {
@@ -301,9 +305,9 @@ export function createWinterScene(p) {
         fog.draw();
       });
 
-      lanterns.forEach(lantern => {
-        lantern.update(speedMultiplier);
-        lantern.draw();
+      frostBeacons.forEach(beacon => {
+        beacon.update(speedMultiplier);
+        beacon.draw();
       });
 
       snowflakes.forEach(flake => {
