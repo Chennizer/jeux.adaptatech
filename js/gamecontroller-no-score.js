@@ -1,4 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // ----- Scoring constants -----
+  const MAX_AVG_PAUSE_TIME = 60;
+  const WEIGHT_RPA = 300;
+  const WEIGHT_APT = 500;
+  const WEIGHT_NSP = 10;
+  const NSP_CAP = 50;
+  const TIME_THRESHOLD = 30;
   // ----- State -----
   let preventInput = false;
   let spaceBarAttemptCount = 0;
@@ -41,6 +48,38 @@ document.addEventListener('DOMContentLoaded', () => {
   );
   const selectedSoundLabel = document.getElementById('selected-sound-label');
   const videoContainer = document.getElementById('video-container');
+  const resultsScreen = document.getElementById('results-screen');
+  const continueButton = document.getElementById('continue-button');
+  const finalScoreElem = document.getElementById('final-score');
+  const spaceBarAttemptsResult = document.getElementById(
+    'space-bar-attempts-result'
+  );
+  const timeRatioElem = document.getElementById('time-ratio');
+  const pdfPauseDurations = document.getElementById('pdf-pause-durations');
+  const pdfAveragePause = document.getElementById('pdf-average-pause');
+  const pdfStdDev = document.getElementById('pdf-std-dev');
+  const pdfMedianPause = document.getElementById('pdf-median-pause');
+  const pdfTimeRatio = document.getElementById('pdf-time-ratio');
+  const pdfCauseEffectScore = document.getElementById('pdf-cause-effect-score');
+  const pdfFinalScore = document.getElementById('pdf-final-score');
+  const pdfSpaceBarAttempts = document.getElementById('pdf-space-bar-attempts');
+  const pdfSessionDuration = document.getElementById('pdf-session-duration');
+  const pdfLevel = document.getElementById('pdf-level');
+  const pdfDifficulty = document.getElementById('pdf-difficulty');
+  const pdfDate = document.getElementById('pdf-date');
+  const pdfTime = document.getElementById('pdf-time');
+  const pdfChosenImage = document.getElementById('pdf-chosen-image');
+  const pdfChosenSound = document.getElementById('pdf-chosen-sound');
+  const pdfStudentName = document.getElementById('pdf-student-name');
+  const pdfSwitchType = document.getElementById('pdf-switch-type');
+  const pdfSwitchPosition = document.getElementById('pdf-switch-position');
+  const pdfStudentNameInput = document.getElementById('pdf-student-name-input');
+  const pdfSwitchTypeInput = document.getElementById('pdf-switch-type-input');
+  const pdfSwitchPositionInput = document.getElementById('pdf-switch-position-input');
+  const downloadPdfButton = document.getElementById('download-pdf-button');
+  const pdfInfoModal = document.getElementById('pdf-info-modal');
+  const closePdfInfoModal = document.getElementById('close-pdf-info-modal');
+  const pdfInfoOkButton = document.getElementById('pdf-info-ok-button');
 
   let mediaPlayer = null;
   if (mediaType === 'video') {
@@ -620,6 +659,145 @@ document.addEventListener('DOMContentLoaded', () => {
     const vc = document.getElementById('video-container');
     if (vc) vc.style.display = 'none';
 
+    sessionCompleted = true;
+
+    const totalPauseTimeMs = pauseDurations.reduce((a, b) => a + b, 0);
+    const totalPauseTime = totalPauseTimeMs / 1000;
+    const sessionEndTime = Date.now();
+    const totalSessionTimeMs = sessionStartTime ? sessionEndTime - sessionStartTime : 0;
+    const totalSessionTime = totalSessionTimeMs / 1000;
+    const totalActiveTime = Math.max(totalSessionTime - totalPauseTime, 0);
+
+    if (spaceBarAttemptsResult) {
+      spaceBarAttemptsResult.textContent =
+        "Fréquence d'appuis au mauvais moment: " + spaceBarAttemptCount;
+    }
+
+    if (timeRatioElem) {
+      if (totalSessionTime > 0) {
+        const pausePercentage = (totalPauseTime / totalSessionTime) * 100;
+        timeRatioElem.textContent = `Temps de pause: ${pausePercentage.toFixed(2)}%`;
+      } else {
+        timeRatioElem.textContent = 'Impossible de calculer le pourcentage.';
+      }
+    }
+
+    const { average, stdDev } = computeStatistics(pauseDurations);
+    if (pdfAveragePause) pdfAveragePause.textContent = average.toFixed(2);
+    if (pdfStdDev) pdfStdDev.textContent = stdDev.toFixed(2);
+
+    const median = computeMedian(pauseDurations);
+    const pauseTrend = computePauseTrend(pauseDurations);
+    if (pdfMedianPause) pdfMedianPause.textContent = median.toFixed(2);
+    const pdfPauseTrend = document.getElementById('pdf-pause-trend');
+    if (pdfPauseTrend) pdfPauseTrend.textContent = pauseTrend;
+
+    if (pdfSessionDuration)
+      pdfSessionDuration.textContent = totalSessionTime.toFixed(2);
+    if (pdfPauseDurations) {
+      pdfPauseDurations.textContent = pauseDurations.length
+        ? pauseDurations.map((d) => (d / 1000).toFixed(2)).join(', ')
+        : 'Aucune pause enregistrée.';
+    }
+
+    if (pdfSpaceBarAttempts)
+      pdfSpaceBarAttempts.textContent = spaceBarAttemptCount;
+
+    if (totalSessionTime > 0 && pdfTimeRatio) {
+      const pausePercentage = (totalPauseTime / totalSessionTime) * 100;
+      pdfTimeRatio.textContent = ` ${pausePercentage.toFixed(2)}%`;
+    }
+
+    const finalScore = calculateFinalScore(
+      totalPauseTime,
+      totalActiveTime,
+      pauseDurations.length,
+      spaceBarAttemptCount
+    );
+
+    if (finalScoreElem) {
+      finalScoreElem.textContent = `Score: ${finalScore.toFixed(2)} / 1000`;
+    }
+    if (pdfFinalScore) pdfFinalScore.textContent = `${finalScore.toFixed(2)} / 1000`;
+
+    const sessionLengthMin = totalSessionTime / 60;
+    const tieredWrongCount = adjustedWrongCountTiered(
+      spaceBarAttemptCount,
+      sessionLengthMin
+    );
+    const totalPresses = pauseDurations.length + spaceBarAttemptCount;
+    const wrongPressRatio = totalPresses > 0 ? tieredWrongCount / totalPresses : 0;
+    let ratioPart = median / TIME_THRESHOLD;
+    if (ratioPart > 1) ratioPart = 1;
+    let baseCauseEffectScore =
+      0.5 * (1 - ratioPart) + 0.5 * (1 - wrongPressRatio);
+    const baseAllowed = totalSessionTime / 10;
+    const maxAllowed = totalSessionTime / 3;
+    let overPressPenalty = 0;
+    if (spaceBarAttemptCount > baseAllowed) {
+      overPressPenalty =
+        (spaceBarAttemptCount - baseAllowed) / (maxAllowed - baseAllowed);
+    }
+    const penaltyWeight = 0.3;
+    let finalCauseEffectScore =
+      baseCauseEffectScore - penaltyWeight * overPressPenalty;
+    if (finalCauseEffectScore < 0) finalCauseEffectScore = 0;
+    if (finalCauseEffectScore > 1) finalCauseEffectScore = 1;
+    if (pdfCauseEffectScore)
+      pdfCauseEffectScore.textContent = `${(finalCauseEffectScore * 100).toFixed(
+        2
+      )}%`;
+
+    const currentDate = new Date();
+    if (pdfDate) pdfDate.textContent = currentDate.toLocaleDateString();
+    if (pdfTime) pdfTime.textContent = currentDate.toLocaleTimeString();
+    if (pdfLevel && levelSelect && levelSelect.selectedIndex >= 0) {
+      pdfLevel.textContent = levelSelect.options[
+        levelSelect.selectedIndex
+      ].textContent.trim();
+    }
+    if (pdfDifficulty) {
+      pdfDifficulty.textContent =
+        selectedDifficulty.charAt(0).toUpperCase() + selectedDifficulty.slice(1);
+    }
+
+    let chosenImageObj = null;
+    const imgs = getSpacePromptImages();
+    for (let i = 0; i < imgs.length; i++) {
+      if (imgs[i].src === selectedSpacePromptImage) {
+        chosenImageObj = imgs[i];
+        break;
+      }
+    }
+    if (pdfChosenImage && chosenImageObj) {
+      pdfChosenImage.src = chosenImageObj.src;
+    }
+
+    const sounds = getSpacePromptSounds();
+    let chosenSoundObj = null;
+    for (let j = 0; j < sounds.length; j++) {
+      if (sounds[j].value === selectedSound) {
+        chosenSoundObj = sounds[j];
+        break;
+      }
+    }
+    if (pdfChosenSound) {
+      if (chosenSoundObj && chosenSoundObj.label) {
+        const lbl =
+          typeof chosenSoundObj.label === 'object'
+            ? chosenSoundObj.label.en || ''
+            : chosenSoundObj.label;
+        pdfChosenSound.textContent = lbl;
+      } else {
+        pdfChosenSound.textContent = 'Aucun son choisi.';
+      }
+    }
+
+    if (resultsScreen) {
+      resultsScreen.style.display = 'flex';
+      resultsScreen.classList.add('show');
+    }
+
     if (document.fullscreenElement) {
       try { document.exitFullscreen().catch(function(){}); } catch (e) {}
     }
@@ -856,6 +1034,183 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   } else {
     if (startButton) startButton.classList.remove('hidden');
+  }
+
+  // -------------------------
+  // Statistics helpers
+  // -------------------------
+  function computeStatistics(durations) {
+    if (!durations.length) return { average: 0, stdDev: 0 };
+    const pausesInSeconds = durations.map((d) => d / 1000);
+    const N = pausesInSeconds.length;
+    const sum = pausesInSeconds.reduce((a, b) => a + b, 0);
+    const average = sum / N;
+    let stdDev = 0;
+    if (N > 1) {
+      const variance =
+        pausesInSeconds.reduce((acc, val) => acc + Math.pow(val - average, 2), 0) /
+        (N - 1);
+      stdDev = Math.sqrt(variance);
+    }
+    return { average, stdDev };
+  }
+
+  function computeMedian(durations) {
+    if (!durations.length) return 0;
+    const sorted = durations
+      .slice()
+      .sort((a, b) => a - b)
+      .map((d) => d / 1000);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+  }
+
+  function computePauseTrend(durations) {
+    if (durations.length < 2) return 'Insufficient data';
+    let increasing = 0;
+    let decreasing = 0;
+    for (let i = 1; i < durations.length; i++) {
+      if (durations[i] > durations[i - 1]) increasing++;
+      else if (durations[i] < durations[i - 1]) decreasing++;
+    }
+    if (increasing > decreasing) return 'Croissant';
+    if (decreasing > increasing) return 'Décroissant';
+    return 'Stable';
+  }
+
+  function adjustedWrongCountTiered(x, sessionLengthMin) {
+    const TIER_SIZE = 2 * sessionLengthMin;
+    const tier1Max = TIER_SIZE;
+    const tier2Max = 2 * TIER_SIZE;
+    const tier3Max = 3 * TIER_SIZE;
+
+    let adjusted = 0;
+    let remaining = x;
+
+    const tier1Presses = Math.min(remaining, tier1Max);
+    adjusted += tier1Presses * 0;
+    remaining -= tier1Presses;
+
+    const tier2Presses = Math.min(remaining, tier2Max - tier1Max);
+    adjusted += tier2Presses * 0.34;
+    remaining -= tier2Presses;
+
+    const tier3Presses = Math.min(remaining, tier3Max - tier2Max);
+    adjusted += tier3Presses * 0.67;
+    remaining -= tier3Presses;
+
+    adjusted += remaining;
+
+    return adjusted;
+  }
+
+  function calculateRPA(totalPauseTime, totalActiveTime) {
+    if (totalActiveTime === 0) return 0;
+    return totalPauseTime / totalActiveTime;
+  }
+
+  function calculateAveragePauseTime(totalPauseTime, numberOfPauses) {
+    if (numberOfPauses === 0) return 0;
+    return totalPauseTime / numberOfPauses;
+  }
+
+  function calculateNormalizedAPT(apt) {
+    const normalizedAPT = (apt / MAX_AVG_PAUSE_TIME) * 100;
+    return Math.min(normalizedAPT, 100);
+  }
+
+  function calculateNSPPenalty(nsp) {
+    const cappedNSP = Math.min(nsp, NSP_CAP);
+    return cappedNSP * WEIGHT_NSP;
+  }
+
+  function calculateFinalScore(totalPauseTime, totalActiveTime, numberOfPauses, nsp) {
+    const rpa = calculateRPA(totalPauseTime, totalActiveTime);
+    const apt = calculateAveragePauseTime(totalPauseTime, numberOfPauses);
+    const normalizedAPT = calculateNormalizedAPT(apt);
+    const aptPenalty = (normalizedAPT / 100) * WEIGHT_APT;
+    const rpaPenalty = rpa * WEIGHT_RPA;
+    const nspPenalty = calculateNSPPenalty(nsp);
+    const finalScore = 1000 - rpaPenalty - aptPenalty - nspPenalty;
+    return Math.max(finalScore, 0);
+  }
+
+  // -------------------------
+  // Results actions
+  // -------------------------
+  if (continueButton) {
+    continueButton.addEventListener('click', () => {
+      location.reload();
+    });
+  }
+
+  // -------------------------
+  // PDF generation logic
+  // -------------------------
+  if (downloadPdfButton && pdfInfoOkButton && pdfInfoModal) {
+    downloadPdfButton.addEventListener('click', () => {
+      preventInput = false;
+      pdfInfoModal.style.display = 'block';
+    });
+
+    if (closePdfInfoModal) {
+      closePdfInfoModal.addEventListener('click', () => {
+        pdfInfoModal.style.display = 'none';
+      });
+    }
+
+    pdfInfoOkButton.addEventListener('click', async () => {
+      if (pdfStudentName)
+        pdfStudentName.textContent =
+          (pdfStudentNameInput && pdfStudentNameInput.value.trim()) || 'Not Provided';
+      if (pdfSwitchType)
+        pdfSwitchType.textContent =
+          (pdfSwitchTypeInput && pdfSwitchTypeInput.value.trim()) || 'Not Provided';
+      if (pdfSwitchPosition)
+        pdfSwitchPosition.textContent =
+          (pdfSwitchPositionInput && pdfSwitchPositionInput.value.trim()) || 'Not Provided';
+
+      pdfInfoModal.style.display = 'none';
+
+      const pdfSectionPage1 = document.getElementById('pdf-summary-page1');
+      const pdfSectionPage2 = document.getElementById('pdf-summary-page2');
+      if (!pdfSectionPage1 || !pdfSectionPage2 || !window.jspdf || !window.html2canvas) {
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'pt', 'a4');
+
+      const canvas1 = await html2canvas(pdfSectionPage1, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+      });
+      const imgData1 = canvas1.toDataURL('image/png');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const imgWidth = pageWidth - 80;
+      const aspectRatio = canvas1.width / canvas1.height;
+      const imgHeight = imgWidth / aspectRatio;
+      pdf.addImage(imgData1, 'PNG', 40, 40, imgWidth, imgHeight);
+
+      pdf.addPage();
+
+      const canvas2 = await html2canvas(pdfSectionPage2, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+      });
+      const imgData2 = canvas2.toDataURL('image/png');
+      const pageWidth2 = pdf.internal.pageSize.getWidth();
+      const imgWidth2 = pageWidth2 - 80;
+      const aspectRatio2 = canvas2.width / canvas2.height;
+      const imgHeight2 = imgWidth2 / aspectRatio2;
+      pdf.addImage(imgData2, 'PNG', 40, 40, imgWidth2, imgHeight2);
+
+      pdf.save('Rapport_Switch.pdf');
+    });
   }
 
   // -------------------------
