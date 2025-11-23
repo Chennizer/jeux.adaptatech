@@ -5,27 +5,27 @@ import { createWinterScene } from './winter-scene.js';
 
 const SCENE_PLAYLISTS = {
   spring: [
-    '../../songs/spring/spring2.mp3',
-    '../../songs/spring/spring4.mp3'
+    '../../songs/season/spring1.mp3',
+    '../../songs/season/spring2.mp3'
   ],
   summer: [
-    '../../songs/zenitude/v5calmmusic2.mp3',
-    '../../songs/zenitude/v5calmmusic3.mp3'
+    '../../songs/season/summer1.mp3',
+    '../../songs/season/summer2.mp3'
   ],
   autumn: [
-    '../../songs/funkysong3.mp3',
-    '../../songs/soie.mp3'
+    '../../songs/season/autumn1.mp3',
+    '../../songs/season/autumn2.mp3'
   ],
   winter: [
-    '../../songs/winter/wintersong2.mp3',
-    '../../songs/winter/wintersong5.mp3'
+    '../../songs/season/winter1.mp3',
+    '../../songs/season/winter2.mp3'
   ]
 };
 
 const SCENE_SOUNDTRACKS = {
   spring: '../../sounds/rain1.mp3',
   summer: '../../sounds/sun/sunnyday.mp3',
-  autumn: '../../sounds/cloudswind.mp3',
+  autumn: '../../sounds/sadness/subtlewind.mp3',
   winter: '../../sounds/winterambiance.mp3'
 };
 
