@@ -326,7 +326,7 @@
         this.bees = [];
         this.occupiedMap = new Set();
         this.reservedMap = new Set();
-        this.entranceGlow = 0;
+        this.launchPulse = 0;
 
         // Initial Cell
         this.addCell(0,0);
@@ -409,7 +409,7 @@
           if (b.state === 'idle' && flowers.length > 0) {
             b.state = 'outbound';
             b.wingSpeed = 3.5;
-            this.entranceGlow = 1;
+            this.launchPulse = 1;
             const flower = flowers[Math.floor(Math.random() * flowers.length)];
             const bloom = getFlowerBloom(flower);
             b.target = {
@@ -426,7 +426,7 @@
           if (c.scale < 1) c.scale += (1 - c.scale) * 0.1;
         });
 
-        this.entranceGlow = Math.max(0, this.entranceGlow - dt * 0.8);
+        this.launchPulse = Math.max(0, this.launchPulse - dt * 0.8);
 
         // Update Bees
         const homeCenter = this.hexToPixel(0,0);
@@ -637,89 +637,70 @@
         drawFieldBackdrop(leftEdge, rightEdge - leftEdge);
       }
 
-      drawHiveEntrances(layoutInfo);
+      drawLaunchTransitions(layoutInfo);
       drawFlowers();
       hives.forEach(h => h.draw(ctx));
       drawParticles();
     }
 
     // --- Rendering Helpers ---
-    function drawHiveEntrances(layoutInfo) {
+    function drawLaunchTransitions(layoutInfo) {
       if (!layoutInfo) return;
 
       const groundY = height * 0.86;
       const t = performance.now() * 0.001;
 
-      const renderEntrance = (x, facesRight, glow = 0) => {
-        const archHeight = 170;
-        const baseY = groundY + 16;
-        const depth = facesRight ? -70 : 70;
-        const pulse = 0.25 + glow * 0.6 + Math.sin(t * 2.6 + x * 0.01) * 0.08;
+      const renderTransition = (edgeX, facesRight, pulse = 0) => {
+        const dir = facesRight ? 1 : -1;
+        const bandWidth = 140 + pulse * 90;
+        const topY = groundY - 200 - Math.sin(t * 1.6 + edgeX * 0.02) * 12;
+        const bottomY = groundY + 40;
+        const shimmer = 0.35 + pulse * 0.55;
+
+        // Soft wedge that suggests a tunnel without a doorway
+        const grad = ctx.createLinearGradient(edgeX - dir * bandWidth, topY, edgeX, bottomY);
+        grad.addColorStop(0, `rgba(255, 228, 170, 0)`);
+        grad.addColorStop(0.45, `rgba(255, 219, 150, ${0.15 + shimmer * 0.35})`);
+        grad.addColorStop(1, `rgba(255, 198, 110, ${0.35 + shimmer * 0.4})`);
 
         ctx.save();
-        ctx.translate(x, 0);
-
-        // Honey tunnel
-        const tunnelGrad = ctx.createLinearGradient(-140, baseY, 140, groundY - archHeight);
-        tunnelGrad.addColorStop(0, 'rgba(30, 18, 5, 0.85)');
-        tunnelGrad.addColorStop(0.5, `rgba(120, 70, 15, ${0.55 + pulse * 0.25})`);
-        tunnelGrad.addColorStop(1, `rgba(210, 150, 35, ${0.45 + pulse * 0.25})`);
-        ctx.fillStyle = tunnelGrad;
+        ctx.translate(edgeX, 0);
         ctx.beginPath();
-        ctx.moveTo(depth, baseY);
-        ctx.quadraticCurveTo(depth * 0.8, groundY - archHeight * 0.28, depth * 0.28, groundY - archHeight);
-        ctx.quadraticCurveTo(depth * 0.1, groundY - archHeight - 12, 0, groundY - archHeight - 8);
-        ctx.quadraticCurveTo(-depth * 0.1, groundY - archHeight - 12, -depth * 0.28, groundY - archHeight);
-        ctx.quadraticCurveTo(-depth * 0.8, groundY - archHeight * 0.28, -depth, baseY);
+        ctx.moveTo(0, topY);
+        ctx.quadraticCurveTo(dir * bandWidth * 0.3, topY - 30, dir * bandWidth, topY + 30);
+        ctx.lineTo(dir * bandWidth, bottomY);
+        ctx.quadraticCurveTo(dir * bandWidth * 0.6, groundY + 4, 0, groundY + 16);
         ctx.closePath();
+        ctx.fillStyle = grad;
         ctx.fill();
 
-        // Entrance rim
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = `rgba(255, 199, 44, ${0.55 + pulse * 0.35})`;
-        ctx.stroke();
-
-        // Landing plank toward the flowers
-        const plankLength = facesRight ? 110 : -110;
-        ctx.fillStyle = 'rgba(110, 75, 28, 0.7)';
-        ctx.fillRect(0, groundY - 6, plankLength, 14);
-        ctx.fillStyle = `rgba(255, 210, 90, ${0.28 + pulse * 0.45})`;
-        ctx.fillRect(0, groundY - 4, plankLength, 8);
-
-        // Honey shimmer to suggest traffic
-        ctx.strokeStyle = `rgba(255, 235, 150, ${0.35 + pulse * 0.35})`;
+        // Light streaks to guide the bees through the transition
         ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(facesRight ? 6 : -6, groundY - 38);
-        ctx.quadraticCurveTo(facesRight ? 46 : -46, groundY - 70, facesRight ? 78 : -78, groundY - 24);
-        ctx.stroke();
-
-        for (let i = 0; i < 5; i++) {
-          const bx = (facesRight ? 1 : -1) * (22 + i * 18);
-          const by = groundY - 14 - Math.sin(t * 3 + i) * 6;
-          ctx.fillStyle = `rgba(255, 200, 80, ${0.25 + pulse * 0.5})`;
+        for (let i = 0; i < 4; i++) {
+          const offset = dir * (bandWidth * 0.15 + i * 18 + Math.sin(t * 2 + i) * 6);
+          ctx.strokeStyle = `rgba(255, 240, 190, ${0.18 + shimmer * 0.3})`;
           ctx.beginPath();
-          ctx.ellipse(bx, by, 6, 4, 0, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.moveTo(offset, groundY - 30 - i * 12);
+          ctx.quadraticCurveTo(dir * bandWidth * 0.65, groundY - 120 - i * 10, dir * bandWidth * 0.1, topY + 40);
+          ctx.stroke();
         }
 
-        // Glow into the field side
-        ctx.shadowColor = `rgba(255, 190, 70, ${0.45 + pulse * 0.4})`;
-        ctx.shadowBlur = 25;
-        ctx.shadowOffsetX = facesRight ? 12 : -12;
-        ctx.fillStyle = `rgba(255, 210, 90, ${0.18 + pulse * 0.35})`;
+        // Ambient glow spilling into the field
+        ctx.shadowColor = `rgba(255, 205, 120, ${0.4 + shimmer * 0.4})`;
+        ctx.shadowBlur = 36;
+        ctx.shadowOffsetX = dir * 12;
+        ctx.fillStyle = `rgba(255, 213, 140, ${0.2 + shimmer * 0.3})`;
         ctx.beginPath();
-        ctx.ellipse(facesRight ? 38 : -38, groundY - 18, 56, 28, 0, 0, Math.PI * 2);
+        ctx.ellipse(dir * 34, groundY - 22, 64, 32, 0, 0, Math.PI * 2);
         ctx.fill();
-
         ctx.restore();
       };
 
       if (layoutInfo.type === '1p') {
-        renderEntrance(layoutInfo.splitX, true, hives[0]?.entranceGlow || 0);
+        renderTransition(layoutInfo.splitX, true, hives[0]?.launchPulse || 0);
       } else {
-        renderEntrance(layoutInfo.leftEdge, true, hives[0]?.entranceGlow || 0);
-        renderEntrance(layoutInfo.rightEdge, false, hives[1]?.entranceGlow || 0);
+        renderTransition(layoutInfo.leftEdge, true, hives[0]?.launchPulse || 0);
+        renderTransition(layoutInfo.rightEdge, false, hives[1]?.launchPulse || 0);
       }
     }
 
