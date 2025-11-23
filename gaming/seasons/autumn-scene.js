@@ -71,15 +71,15 @@ export function createAutumnScene(p) {
     landedLeaves.length = 0;
     trunks.length = 0;
     const palette = [
-      [255, 196, 112],
-      [227, 133, 66],
-      [189, 90, 53],
-      [255, 229, 180]
+      [255, 204, 86],
+      [246, 150, 60],
+      [227, 96, 58],
+      [201, 65, 73],
+      [255, 224, 122]
     ];
 
     groundY = p.height * 0.82;
-    const groundHeight = p.height - groundY;
-    settleBandTop = groundY - groundHeight * 0.9;
+    settleBandTop = groundY;
 
     const count = Math.floor(Math.max(50, (p.width * p.height) / 13000));
     for (let i = 0; i < count; i += 1) {
