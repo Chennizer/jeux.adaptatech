@@ -218,7 +218,7 @@
     if (!youtubePlayer) {
       youtubePlayer = new YT.Player(youtubeContainer, {
         videoId,
-        playerVars: { rel: 0, modestbranding: 1, controls: 0, autoplay: 1, start: startSeconds },
+        playerVars: { rel: 0, modestbranding: 1, controls: 0, autoplay: 1, start: startSeconds, disablekb: 1 },
         events: {
           onReady: () => {
             try { youtubePlayer.playVideo(); } catch (err) { console.error(err); }
