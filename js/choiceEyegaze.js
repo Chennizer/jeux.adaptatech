@@ -47,6 +47,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const remotePlaybackOverlay = document.getElementById('remote-playback-overlay');
+  const remotePlaybackText    = document.getElementById('remote-playback-text');
+  const remotePlaybackHint    = document.getElementById('remote-playback-hint');
+  const useRemotePlayerCheckbox = document.getElementById('use-remote-player');
+  const openRemotePageButton  = document.getElementById('open-remote-page-button');
+  const videoShareChannel = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-local-video') : null;
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -80,6 +86,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastPointerPosition = null;
   let pointerMotionOrigin = null;
   let pendingGuardedHover = null;
+  let remotePlayerReady = false;
+  let pendingRemoteUrl = null;
+  let remotePlayerWindow = null;
 
   function ensurePointerOverlay() {
     if (!gazePointer) return null;
@@ -195,6 +204,45 @@ document.addEventListener('DOMContentLoaded', () => {
         setPointerPos(lastPointerPosition.x, lastPointerPosition.y);
       }
     });
+  }
+
+  function usingRemotePlayer() {
+    return !!(useRemotePlayerCheckbox?.checked && videoShareChannel);
+  }
+
+  function showRemoteOverlay(text, hint) {
+    if (!remotePlaybackOverlay) return;
+    remotePlaybackOverlay.style.display = 'flex';
+    if (remotePlaybackText && text) remotePlaybackText.textContent = text;
+    if (remotePlaybackHint && hint) remotePlaybackHint.textContent = hint;
+  }
+
+  function hideRemoteOverlay() {
+    if (remotePlaybackOverlay) {
+      remotePlaybackOverlay.style.display = 'none';
+    }
+  }
+
+  function openRemotePlayerPage() {
+    try {
+      remotePlayerWindow = window.open('./remote.html', 'eyegaze-remote-player');
+      videoShareChannel?.postMessage({ type: 'ping' });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function requestRemotePlay(videoUrl) {
+    if (!usingRemotePlayer()) return false;
+    pendingRemoteUrl = videoUrl;
+    const hint = remotePlayerReady ? 'La vidéo démarre sur le lecteur plein écran.' : 'Ouvrez la page lecteur et appuyez sur "Ready ?".';
+    showRemoteOverlay('Lecture sur le lecteur plein écran...', hint);
+    try {
+      videoShareChannel?.postMessage({ type: 'play', url: videoUrl });
+    } catch (err) {
+      console.error(err);
+    }
+    return true;
   }
 
   function clearHoverState() {
@@ -628,6 +676,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    hideRemoteOverlay();
+    try {
+      if (usingRemotePlayer()) {
+        videoShareChannel?.postMessage({ type: 'stop' });
+      }
+    } catch (err) {
+      console.error(err);
+    }
     ensureFullscreen();
     refreshPointerStyles();
   }
@@ -640,39 +696,97 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  if (useRemotePlayerCheckbox) {
+    if (openRemotePageButton) {
+      openRemotePageButton.disabled = !useRemotePlayerCheckbox.checked;
+    }
+    useRemotePlayerCheckbox.addEventListener('change', () => {
+      const enabled = useRemotePlayerCheckbox.checked;
+      if (openRemotePageButton) {
+        openRemotePageButton.disabled = !enabled;
+      }
+      if (!enabled) {
+        hideRemoteOverlay();
+      } else {
+        try {
+          videoShareChannel?.postMessage({
+            type: 'media-list',
+            items: mediaChoices.map(item => ({ name: item.name, video: item.video, image: item.image }))
+          });
+          videoShareChannel?.postMessage({ type: 'ping' });
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  }
+
+  if (openRemotePageButton) {
+    openRemotePageButton.addEventListener('click', () => {
+      openRemotePlayerPage();
+    });
+  }
+
+  if (videoShareChannel) {
+    videoShareChannel.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type === 'player-ready') {
+        remotePlayerReady = true;
+        if (pendingRemoteUrl) {
+          requestRemotePlay(pendingRemoteUrl);
+          pendingRemoteUrl = null;
+        }
+      } else if (data.type === 'playback-ended') {
+        videoPlaying = false;
+        resetToChoicesScreen();
+      } else if (data.type === 'player-closed') {
+        remotePlayerReady = false;
+        remotePlayerWindow = null;
+        hideRemoteOverlay();
+      }
+    });
+  }
+
   /* ----------------------------------------------------------------
      (F) PLAY VIDEO (time limit, resume)
      ---------------------------------------------------------------- */
   function playVideo(videoUrl) {
     stopPreview();
     clearHoverState();
+    const remoteUsed = requestRemotePlay(videoUrl);
     videoPlaying = true;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
-    videoContainer.style.display = "flex";
-    videoSource.src = videoUrl;
+    videoContainer.style.display = remoteUsed ? "none" : "flex";
+    if (!remoteUsed) {
+      videoSource.src = videoUrl;
+      videoPlayer.removeAttribute('controls');
+      videoPlayer.load();
+      videoPlayer.onloadedmetadata = () => {
+        if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
+          videoPlayer.currentTime = videoResumePositions[videoUrl];
+        }
+        videoPlayer.play();
+      };
+    }
     refreshPointerStyles();
-    videoPlayer.removeAttribute('controls');
-    videoPlayer.load();
-    videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
-      }
-      videoPlayer.play();
-    };
     ensureFullscreen();
     if (enableTimeLimitCheckbox.checked) {
       const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
       if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
-          if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
+          if (!remoteUsed) {
+            if (enableResumeVideoCheckbox.checked) {
+              videoResumePositions[videoUrl] = videoPlayer.currentTime;
+            } else {
+              delete videoResumePositions[videoUrl];
+            }
+            videoPlayer.pause();
           } else {
-            delete videoResumePositions[videoUrl];
+            videoShareChannel?.postMessage({ type: 'stop' });
           }
-          videoPlayer.pause();
           resetToChoicesScreen();
         }
       }, limitSeconds * 1000);
