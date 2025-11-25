@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lecteur plein écran</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0a;
+      color: #f5f5f5;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    #container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      text-align: center;
+      padding: 24px;
+      width: min(720px, 90vw);
+    }
+    button {
+      font-size: 22px;
+      padding: 16px 24px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      background: #22c1c3;
+      color: #0a0a0a;
+      font-weight: bold;
+      transition: transform 150ms ease, box-shadow 150ms ease;
+    }
+    button:active { transform: scale(0.98); }
+    #status {
+      font-size: 18px;
+      opacity: 0.9;
+      max-width: 640px;
+    }
+    video {
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <button id="ready-button">Ready ?</button>
+    <div id="status">Cliquez sur "Ready ?" pour lancer le lecteur plein écran.</div>
+  </div>
+  <video id="remote-video" controls style="display:none;"></video>
+  <script>
+    const channel = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-local-video') : null;
+    const readyButton = document.getElementById('ready-button');
+    const statusEl = document.getElementById('status');
+    const videoEl = document.getElementById('remote-video');
+    const container = document.getElementById('container');
+
+    let isReady = false;
+    let pendingUrl = null;
+
+    function updateStatus(text) {
+      if (statusEl) statusEl.textContent = text;
+    }
+
+    function sendMessage(message) {
+      try {
+        channel?.postMessage(message);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function enterFullscreen() {
+      if (document.fullscreenElement) return;
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function showVideo(url) {
+      if (!url) return;
+      videoEl.src = url;
+      videoEl.style.display = 'block';
+      container.style.display = 'none';
+      videoEl.load();
+      videoEl.play().catch(() => {
+        updateStatus('Impossible de lancer la vidéo automatiquement.');
+        container.style.display = 'flex';
+        videoEl.style.display = 'none';
+      });
+    }
+
+    readyButton.addEventListener('click', async () => {
+      await enterFullscreen();
+      isReady = true;
+      updateStatus('Lecteur prêt. En attente d\'une vidéo...');
+      sendMessage({ type: 'player-ready' });
+      if (pendingUrl) {
+        showVideo(pendingUrl);
+        pendingUrl = null;
+      }
+    });
+
+    videoEl.addEventListener('ended', () => {
+      videoEl.pause();
+      videoEl.currentTime = 0;
+      videoEl.style.display = 'none';
+      container.style.display = 'flex';
+      updateStatus('Vidéo terminée. En attente d\'une nouvelle sélection.');
+      sendMessage({ type: 'playback-ended' });
+    });
+
+    channel?.addEventListener('message', async (event) => {
+      const data = event.data || {};
+      if (data.type === 'play') {
+        pendingUrl = data.url;
+        if (isReady) {
+          await enterFullscreen();
+          showVideo(pendingUrl);
+          pendingUrl = null;
+          updateStatus('Lecture en cours...');
+        } else {
+          updateStatus('Cliquez sur "Ready ?" pour lire la vidéo en plein écran.');
+        }
+      } else if (data.type === 'stop') {
+        if (!videoEl.paused) {
+          videoEl.pause();
+        }
+        videoEl.currentTime = 0;
+        videoEl.style.display = 'none';
+        container.style.display = 'flex';
+        updateStatus('Lecture arrêtée.');
+      } else if (data.type === 'media-list') {
+        const count = Array.isArray(data.items) ? data.items.length : 0;
+        if (!isReady) {
+          updateStatus(count ? `Lecteur non prêt. ${count} vidéo(s) prête(s).` : 'Lecteur non prêt.');
+        }
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      sendMessage({ type: 'player-closed' });
+    });
+  </script>
+</body>
+</html>

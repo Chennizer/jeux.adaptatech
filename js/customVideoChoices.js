@@ -1,5 +1,6 @@
 // Builds mediaChoices from local video files
 const mediaChoices = [];
+const videoShareChannel = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-local-video') : null;
 
 // Persistent directory handle storage (mirrors switch/custom-videos-local)
 const FS_DB_NAME = 'choice-video-handles';
@@ -163,6 +164,21 @@ function revokeAllVideos() {
   }
 }
 
+function broadcastMediaList() {
+  try {
+    videoShareChannel?.postMessage({
+      type: 'media-list',
+      items: mediaChoices.map(item => ({
+        name: item.name,
+        video: item.video,
+        image: item.image
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 async function addFiles(files) {
   let addedAny = false;
   for (const file of files) {
@@ -188,6 +204,7 @@ async function addFiles(files) {
   if (addedAny) {
     notifyEyegazeGuard();
     window.choiceEyegaze?.ensureFullscreen?.();
+    broadcastMediaList();
   }
   return addedAny;
 }
@@ -207,6 +224,7 @@ async function addFolderToChoices(dirHandle) {
   if (!addedAny) {
     window.choiceEyegaze?.ensureFullscreen?.();
   }
+  broadcastMediaList();
   return addedAny;
 }
 
@@ -262,6 +280,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!restoredFromFolder && !restoredFromFiles && typeof populateTilePickerGrid === 'function') {
     populateTilePickerGrid();
   }
+
+  broadcastMediaList();
 
   if (addVideoButton) {
     addVideoButton.addEventListener('click', async () => {
@@ -343,6 +363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
       notifyEyegazeGuard({ clearSelection: true });
+      broadcastMediaList();
     });
   }
 });
