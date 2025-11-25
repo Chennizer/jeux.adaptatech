@@ -47,6 +47,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const remotePlaybackMessage = document.getElementById('remote-playback-message');
+
+  const playbackChannel = typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel('eyegaze-local-videos')
+    : null;
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -80,6 +85,43 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastPointerPosition = null;
   let pointerMotionOrigin = null;
   let pendingGuardedHover = null;
+  let playbackPageConnected = false;
+
+  function broadcastChoicesToPlayer() {
+    if (!playbackChannel || typeof mediaChoices === 'undefined') return;
+    try {
+      const payload = mediaChoices.map(({ name, video, image }) => ({ name, video, image }));
+      playbackChannel.postMessage({ type: 'choices', choices: payload });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function handlePlaybackMessage(event) {
+    playbackPageConnected = true;
+    const data = event.data || {};
+    if (data.type === 'request-choices') {
+      broadcastChoicesToPlayer();
+      return;
+    }
+
+    if (data.type === 'ended') {
+      if (data.videoUrl) {
+        if (enableResumeVideoCheckbox?.checked && typeof data.position === 'number' && data.position > 0) {
+          videoResumePositions[data.videoUrl] = data.position;
+        } else {
+          delete videoResumePositions[data.videoUrl];
+        }
+      }
+      resetToChoicesScreen();
+    }
+  }
+
+  if (playbackChannel) {
+    playbackChannel.addEventListener('message', handlePlaybackMessage);
+    window.addEventListener('mediaChoicesUpdated', broadcastChoicesToPlayer);
+    broadcastChoicesToPlayer();
+  }
 
   function ensurePointerOverlay() {
     if (!gazePointer) return null;
@@ -627,6 +669,10 @@ document.addEventListener('DOMContentLoaded', () => {
     preventAutoPreview = true;
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
+    videoContainer.classList.remove('remote-waiting');
+    if (remotePlaybackMessage) {
+      remotePlaybackMessage.style.display = 'none';
+    }
     videoContainer.style.display = "none";
     ensureFullscreen();
     refreshPointerStyles();
@@ -646,25 +692,63 @@ document.addEventListener('DOMContentLoaded', () => {
   function playVideo(videoUrl) {
     stopPreview();
     clearHoverState();
+    if (videoTimeLimitTimeout) {
+      clearTimeout(videoTimeLimitTimeout);
+      videoTimeLimitTimeout = null;
+    }
+
+    const resumeFrom = enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]
+      ? videoResumePositions[videoUrl]
+      : 0;
+    const timeLimitSeconds = enableTimeLimitCheckbox.checked
+      ? (parseInt(timeLimitInput.value, 10) || 60)
+      : null;
+
+    if (playbackChannel && playbackPageConnected) {
+      videoPlaying = true;
+      tileContainer.style.display = "none";
+      tilePickerModal.style.display = "none";
+      gameOptionsModal.style.display = "none";
+      videoContainer.style.display = "flex";
+      videoContainer.classList.add('remote-waiting');
+      if (remotePlaybackMessage) {
+        remotePlaybackMessage.style.display = 'block';
+      }
+      try { videoPlayer.pause(); } catch {}
+      videoSource.src = '';
+      refreshPointerStyles();
+      ensureFullscreen();
+      playbackChannel.postMessage({
+        type: 'play',
+        videoUrl,
+        name: hoveredChoice?.name,
+        timeLimitSeconds,
+        resumeFrom
+      });
+      return;
+    }
+
     videoPlaying = true;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "flex";
+    videoContainer.classList.remove('remote-waiting');
+    if (remotePlaybackMessage) {
+      remotePlaybackMessage.style.display = 'none';
+    }
     videoSource.src = videoUrl;
     refreshPointerStyles();
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
     videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+      if (resumeFrom) {
+        videoPlayer.currentTime = resumeFrom;
       }
       videoPlayer.play();
     };
     ensureFullscreen();
-    if (enableTimeLimitCheckbox.checked) {
-      const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
-      if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
+    if (timeLimitSeconds) {
       videoTimeLimitTimeout = setTimeout(() => {
         if (videoPlaying) {
           if (enableResumeVideoCheckbox.checked) {
@@ -675,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
           videoPlayer.pause();
           resetToChoicesScreen();
         }
-      }, limitSeconds * 1000);
+      }, timeLimitSeconds * 1000);
     }
   }
 
