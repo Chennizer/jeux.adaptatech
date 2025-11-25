@@ -3,6 +3,8 @@
   const videoElement = document.getElementById('player-video');
   const sourceElement = document.getElementById('player-video-source');
   const statusElement = document.getElementById('player-status');
+  const startButton = document.getElementById('player-start');
+  const containerElement = document.getElementById('player-container');
 
   let activeObjectUrl = '';
   let timeLimitTimeout = null;
@@ -11,6 +13,11 @@
   function updateStatus(message) {
     if (!statusElement) return;
     statusElement.textContent = message;
+  }
+
+  function toggleStartButton(visible) {
+    if (!startButton) return;
+    startButton.style.display = visible ? 'block' : 'none';
   }
 
   function revokeActiveUrl() {
@@ -39,6 +46,7 @@
     if (!target.requestFullscreen) return;
     try {
       await target.requestFullscreen();
+      toggleStartButton(false);
     } catch (err) {
       console.error(err);
     }
@@ -49,6 +57,21 @@
       clearTimeout(timeLimitTimeout);
       timeLimitTimeout = null;
     }
+  }
+
+  function setReadyView(message = 'Ready') {
+    clearTimers();
+    videoElement.pause();
+    videoElement.removeAttribute('src');
+    sourceElement.removeAttribute('src');
+    videoElement.load();
+    revokeActiveUrl();
+    currentChoiceKey = '';
+    updateStatus(message);
+    if (containerElement) {
+      containerElement.style.background = '#000';
+    }
+    toggleStartButton(!document.fullscreenElement);
   }
 
   function notifyComplete(channel, reason, resumeTime) {
@@ -64,6 +87,7 @@
   async function handlePlayMessage(channel, message) {
     clearTimers();
     revokeActiveUrl();
+    toggleStartButton(false);
     currentChoiceKey = message.choiceKey || '';
     updateStatus('Préparation de la vidéo…');
 
@@ -94,6 +118,7 @@
           const resumeTime = videoElement.currentTime;
           videoElement.pause();
           notifyComplete(channel, 'timeout', resumeTime);
+          setReadyView();
         }, message.timeLimit * 1000);
       }
     };
@@ -101,12 +126,14 @@
     videoElement.onended = () => {
       clearTimers();
       notifyComplete(channel, 'ended', 0);
+      setReadyView();
     };
 
     videoElement.onerror = () => {
       clearTimers();
       updateStatus('Une erreur est survenue pendant la lecture.');
       notifyComplete(channel, 'error', 0);
+      setReadyView();
     };
   }
 
@@ -125,8 +152,23 @@
     }
   });
 
+  if (startButton) {
+    startButton.addEventListener('click', () => {
+      requestFullscreen();
+      updateStatus('Ready');
+    });
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) {
+      toggleStartButton(false);
+    } else {
+      toggleStartButton(true);
+    }
+  });
+
   window.addEventListener('beforeunload', revokeActiveUrl);
 
   channel.postMessage({ type: 'player-ready' });
-  updateStatus('En attente du choix vidéo…');
+  setReadyView();
 })();
