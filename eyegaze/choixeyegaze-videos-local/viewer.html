@@ -10,11 +10,19 @@
       margin: 0;
       background: #000;
       color: #fff;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+
+    #viewer-shell {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      font-family: Arial, sans-serif;
     }
 
     #ready-container {
@@ -28,6 +36,7 @@
       max-width: 720px;
       padding: 2rem;
       box-sizing: border-box;
+      z-index: 2;
     }
 
     #ready-button {
@@ -49,22 +58,40 @@
       color: #b3e5fc;
     }
 
+    #idle-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: #000;
+      color: #b3e5fc;
+      padding: 2rem;
+      box-sizing: border-box;
+      z-index: 1;
+    }
+
     #viewer-video {
       width: 100%;
-      height: 100vh;
+      height: 100%;
       object-fit: contain;
       display: none;
       background: #000;
+      z-index: 0;
     }
   </style>
 </head>
 <body>
-  <div id="ready-container">
-    <h1>Page lecteur</h1>
-    <p id="status-text">Cliquez sur « Ready? » puis passez en plein écran.</p>
-    <button id="ready-button">Ready?</button>
+  <div id="viewer-shell">
+    <div id="ready-container">
+      <h1>Page lecteur</h1>
+      <p id="status-text">Cliquez sur « Ready? » puis passez en plein écran.</p>
+      <button id="ready-button">Ready?</button>
+    </div>
+    <div id="idle-overlay" aria-live="polite">En attente d'une vidéo...</div>
+    <video id="viewer-video" playsinline></video>
   </div>
-  <video id="viewer-video" playsinline controls></video>
 
   <script>
     const playbackChannel = new BroadcastChannel('eyegaze-video-bridge');
@@ -72,6 +99,7 @@
     const statusText = document.getElementById('status-text');
     const viewerVideo = document.getElementById('viewer-video');
     const readyContainer = document.getElementById('ready-container');
+    const idleOverlay = document.getElementById('idle-overlay');
 
     let isReady = false;
 
@@ -81,6 +109,22 @@
 
     function updateStatus(text) {
       statusText.textContent = text;
+    }
+
+    function showIdleScreen(message) {
+      if (idleOverlay) {
+        idleOverlay.textContent = message || "En attente d'une vidéo...";
+        idleOverlay.style.display = 'flex';
+      }
+      viewerVideo.style.display = 'block';
+      viewerVideo.removeAttribute('src');
+      viewerVideo.load();
+    }
+
+    function hideIdleScreen() {
+      if (idleOverlay) {
+        idleOverlay.style.display = 'none';
+      }
     }
 
     async function ensureFullscreen() {
@@ -97,14 +141,14 @@
       readyContainer.style.display = 'none';
       viewerVideo.style.display = 'block';
       sendMessage({ type: 'viewer-ready' });
+      showIdleScreen("En attente d'une vidéo...");
       updateStatus('En attente d\'une vidéo...');
     });
 
     viewerVideo.addEventListener('ended', () => {
       sendMessage({ type: 'playback-ended', position: viewerVideo.currentTime });
-      viewerVideo.style.display = 'none';
-      readyContainer.style.display = 'flex';
-      updateStatus('Prêt pour une autre vidéo.');
+      showIdleScreen('Lecture terminée. En attente d\'une vidéo...');
+      updateStatus('Lecture terminée.');
       isReady = true;
     });
 
@@ -119,6 +163,7 @@
           return;
         }
         await ensureFullscreen();
+        hideIdleScreen();
         viewerVideo.src = data.url;
         viewerVideo.currentTime = data.resume || 0;
         try {
@@ -127,6 +172,7 @@
         } catch (e) {
           console.error(e);
           updateStatus('Impossible de lire la vidéo.');
+          showIdleScreen('Impossible de lire la vidéo.');
           sendMessage({ type: 'playback-error', message: e?.message || 'playback failed' });
         }
       }
@@ -136,9 +182,8 @@
         }
         sendMessage({ type: 'playback-ended', position: viewerVideo.currentTime });
         viewerVideo.currentTime = 0;
-        viewerVideo.style.display = 'none';
-        readyContainer.style.display = 'flex';
-        updateStatus('Lecture stoppée. Cliquez sur Ready? pour repartir en plein écran.');
+        showIdleScreen('Lecture stoppée. En attente d\'une vidéo...');
+        updateStatus('Lecture stoppée.');
         isReady = true;
       }
     });

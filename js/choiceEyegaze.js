@@ -47,7 +47,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
-  const externalPlaybackToggle = document.getElementById('enable-external-playback');
   const openViewerPageButton = document.getElementById('open-viewer-page');
   const externalPlaybackStatus = document.getElementById('external-playback-status');
   const remotePlaybackOverlay = document.getElementById('remote-playback-overlay');
@@ -769,12 +768,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = event.data || {};
       if (data.type === 'viewer-ready') {
         viewerReady = true;
+        externalPlaybackEnabled = true;
         updateExternalPlaybackStatus('Page lecteur prête', true);
         hideRemoteOverlay();
         return;
       }
       if (data.type === 'viewer-awaiting' || data.type === 'viewer-opened') {
         viewerReady = false;
+        externalPlaybackEnabled = true;
         updateExternalPlaybackStatus('Page lecteur ouverte : appuyez sur Ready?', false);
         hideRemoteOverlay();
         return;
@@ -797,30 +798,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     playbackChannel.postMessage({ type: 'host-handshake' });
-  } else if (externalPlaybackToggle) {
-    externalPlaybackToggle.disabled = true;
+  } else {
     updateExternalPlaybackStatus('BroadcastChannel non supporté');
-  }
-
-  if (externalPlaybackToggle) {
-    externalPlaybackToggle.addEventListener('change', (event) => {
-      externalPlaybackEnabled = !!event.target.checked && !!playbackChannel;
-      if (!externalPlaybackEnabled) {
-        hideRemoteOverlay();
-        updateExternalPlaybackStatus('Lecture sur cette page.');
-      } else {
-        updateExternalPlaybackStatus('Lecture possible sur la page lecteur.', viewerReady);
-      }
-    });
   }
 
   if (openViewerPageButton) {
     openViewerPageButton.addEventListener('click', () => {
       if (!playbackChannel) return;
       externalPlaybackEnabled = true;
-      if (externalPlaybackToggle && !externalPlaybackToggle.checked) {
-        externalPlaybackToggle.checked = true;
-      }
       updateExternalPlaybackStatus('Ouverture de la page lecteur...');
       window.open('viewer.html', 'eyegaze-video-viewer');
       setTimeout(() => playbackChannel.postMessage({ type: 'host-handshake' }), 200);
