@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lecteur vidéo (Contrôle oculaire)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: black;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+      gap: 20px;
+      flex-direction: column;
+    }
+
+    #status {
+      font-size: 26px;
+      line-height: 1.4;
+      max-width: 960px;
+    }
+
+    #player {
+      max-width: 100%;
+      max-height: 85vh;
+      background: black;
+      border: 2px solid #444;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="status" class="translate" data-fr="En attente du choix..." data-en="Waiting for selection..." data-ja="選択を待っています...">
+    Waiting for selection...
+  </div>
+  <video id="player" controls autoplay playsinline></video>
+
+  <script>
+    (function() {
+      const statusEl = document.getElementById('status');
+      const videoEl = document.getElementById('player');
+      const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('eyegaze-local-videos') : null;
+      let timeLimitTimeout = null;
+      let currentVideoUrl = '';
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function clearTimeLimit() {
+        if (timeLimitTimeout) {
+          clearTimeout(timeLimitTimeout);
+          timeLimitTimeout = null;
+        }
+      }
+
+      function notifyEnded(position = 0) {
+        if (channel) {
+          channel.postMessage({ type: 'ended', videoUrl: currentVideoUrl, position });
+        }
+      }
+
+      function requestFullscreen() {
+        const target = document.documentElement;
+        if (!document.fullscreenElement && target.requestFullscreen) {
+          target.requestFullscreen().catch(() => {});
+        }
+      }
+
+      function resetPlayer() {
+        clearTimeLimit();
+        try { videoEl.pause(); } catch {}
+        videoEl.removeAttribute('src');
+        videoEl.load();
+      }
+
+      function playSelection(data) {
+        resetPlayer();
+        currentVideoUrl = data.videoUrl || '';
+        if (!currentVideoUrl) {
+          setStatus('Aucune vidéo reçue.');
+          videoEl.style.display = 'none';
+          return;
+        }
+
+        videoEl.style.display = 'block';
+        videoEl.src = currentVideoUrl;
+        setStatus(data.name ? `Lecture: ${data.name}` : 'Lecture en cours...');
+
+        const resumeAt = typeof data.resumeFrom === 'number' ? data.resumeFrom : 0;
+        const startPlayback = () => {
+          if (resumeAt > 0 && !isNaN(resumeAt)) {
+            try { videoEl.currentTime = resumeAt; } catch {}
+          }
+          videoEl.play().catch(() => {});
+          requestFullscreen();
+        };
+
+        if (videoEl.readyState >= 1) {
+          startPlayback();
+        } else {
+          videoEl.onloadedmetadata = startPlayback;
+        }
+
+        if (data.timeLimitSeconds) {
+          timeLimitTimeout = setTimeout(() => {
+            videoEl.pause();
+            notifyEnded(videoEl.currentTime || 0);
+            setStatus('Temps écoulé. En attente du choix...');
+          }, data.timeLimitSeconds * 1000);
+        }
+      }
+
+      if (!channel) {
+        setStatus('BroadcastChannel non disponible.');
+        return;
+      }
+
+      channel.addEventListener('message', (event) => {
+        const msg = event.data || {};
+        if (msg.type === 'play') {
+          playSelection(msg);
+        } else if (msg.type === 'choices') {
+          if (!msg.choices || !msg.choices.length) {
+            setStatus('En attente du choix...');
+          }
+        }
+      });
+
+      channel.postMessage({ type: 'request-choices' });
+
+      videoEl.addEventListener('ended', () => {
+        clearTimeLimit();
+        notifyEnded(0);
+        setStatus('Vidéo terminée. En attente du choix...');
+      });
+    })();
+  </script>
+</body>
+</html>

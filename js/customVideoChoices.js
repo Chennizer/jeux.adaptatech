@@ -7,6 +7,12 @@ const FS_STORE = 'handles';
 const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
 const FILES_KEY = 'video-files';
 
+function emitMediaChoicesUpdated() {
+  try {
+    window.dispatchEvent(new CustomEvent('mediaChoicesUpdated'));
+  } catch {}
+}
+
 function notifyEyegazeGuard(options) {
   const tileContainer = document.getElementById('tile-container');
   if (!tileContainer) {
@@ -188,6 +194,7 @@ async function addFiles(files) {
   if (addedAny) {
     notifyEyegazeGuard();
     window.choiceEyegaze?.ensureFullscreen?.();
+    emitMediaChoicesUpdated();
   }
   return addedAny;
 }
@@ -207,6 +214,7 @@ async function addFolderToChoices(dirHandle) {
   if (!addedAny) {
     window.choiceEyegaze?.ensureFullscreen?.();
   }
+  emitMediaChoicesUpdated();
   return addedAny;
 }
 
@@ -261,6 +269,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (!restoredFromFolder && !restoredFromFiles && typeof populateTilePickerGrid === 'function') {
     populateTilePickerGrid();
+  }
+
+  if (restoredFromFolder || restoredFromFiles) {
+    emitMediaChoicesUpdated();
   }
 
   if (addVideoButton) {
@@ -343,6 +355,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
       notifyEyegazeGuard({ clearSelection: true });
+      emitMediaChoicesUpdated();
     });
   }
 });
