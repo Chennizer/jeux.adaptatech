@@ -1,7 +1,6 @@
 (function() {
   const CHANNEL_NAME = 'eyegaze-local-video';
   const videoElement = document.getElementById('player-video');
-  const sourceElement = document.getElementById('player-video-source');
   const statusElement = document.getElementById('player-status');
   const startButton = document.getElementById('player-start');
   const containerElement = document.getElementById('player-container');
@@ -102,7 +101,6 @@
     if (videoElement) {
       videoElement.pause();
       videoElement.removeAttribute('src');
-      sourceElement.removeAttribute('src');
       videoElement.load();
       videoElement.style.display = 'none';
     }
@@ -137,7 +135,7 @@
     toggleStartButton(false);
     currentChoiceKey = message.choiceKey || '';
     activeObjectUrl = playableUrl;
-    sourceElement.src = playableUrl;
+    videoElement.src = playableUrl;
     if (youtubeContainer) youtubeContainer.style.display = 'none';
     videoElement.style.display = 'block';
     videoElement.load();
