@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lecteur vidéo (page secondaire)</title>
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+
+    #ready-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      width: 100%;
+      max-width: 720px;
+      padding: 2rem;
+      box-sizing: border-box;
+    }
+
+    #ready-button {
+      font-size: 2rem;
+      padding: 1rem 2rem;
+      background: #00bcd4;
+      border: none;
+      color: #000;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    #ready-button:focus-visible {
+      outline: 3px solid #fff;
+    }
+
+    #status-text {
+      font-size: 1.1rem;
+      color: #b3e5fc;
+    }
+
+    #status-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #b3e5fc;
+      font-size: 1.4rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    #status-overlay.visible {
+      opacity: 1;
+    }
+
+    #viewer-video {
+      width: 100%;
+      height: 100vh;
+      object-fit: contain;
+      display: none;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="ready-container">
+    <h1>Page lecteur</h1>
+    <p id="status-text">Cliquez sur « Ready? » puis passez en plein écran.</p>
+    <button id="ready-button">Ready?</button>
+  </div>
+  <video id="viewer-video" playsinline controls></video>
+  <div id="status-overlay" aria-live="polite"></div>
+
+  <script>
+    const playbackChannel = new BroadcastChannel('eyegaze-video-bridge');
+    const readyButton = document.getElementById('ready-button');
+    const statusText = document.getElementById('status-text');
+    const viewerVideo = document.getElementById('viewer-video');
+    const readyContainer = document.getElementById('ready-container');
+    const statusOverlay = document.getElementById('status-overlay');
+
+    let isReady = false;
+
+    function sendMessage(data) {
+      try { playbackChannel.postMessage(data); } catch (e) { console.error(e); }
+    }
+
+    function updateStatus(text) {
+      statusText.textContent = text;
+      if (statusOverlay) {
+        statusOverlay.textContent = text;
+        statusOverlay.classList.toggle('visible', !!text);
+      }
+    }
+
+    function showIdleBlackScreen(message) {
+      viewerVideo.style.display = 'block';
+      viewerVideo.pause();
+      viewerVideo.removeAttribute('src');
+      viewerVideo.load();
+      viewerVideo.currentTime = 0;
+      updateStatus(message);
+    }
+
+    async function ensureFullscreen() {
+      if (document.fullscreenElement) return;
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        try { await elem.requestFullscreen(); } catch (e) { console.warn(e); }
+      }
+    }
+
+    readyButton.addEventListener('click', async () => {
+      await ensureFullscreen();
+      isReady = true;
+      readyContainer.style.display = 'none';
+      showIdleBlackScreen('En attente d\'une vidéo...');
+      sendMessage({ type: 'viewer-ready' });
+    });
+
+    viewerVideo.addEventListener('ended', () => {
+      sendMessage({ type: 'playback-ended', position: viewerVideo.currentTime });
+      isReady = true;
+      showIdleBlackScreen('Prêt pour une autre vidéo.');
+    });
+
+    playbackChannel.addEventListener('message', async (event) => {
+      const data = event.data || {};
+      if (data.type === 'host-handshake') {
+        sendMessage({ type: 'viewer-awaiting' });
+      }
+      if (data.type === 'play-video' && data.url) {
+        if (!isReady) {
+          updateStatus('Cliquez sur Ready? pour lancer la vidéo.');
+          return;
+        }
+        await ensureFullscreen();
+        viewerVideo.src = data.url;
+        viewerVideo.currentTime = data.resume || 0;
+        try {
+          await viewerVideo.play();
+          updateStatus('');
+        } catch (e) {
+          console.error(e);
+          updateStatus('Impossible de lire la vidéo.');
+          sendMessage({ type: 'playback-error', message: e?.message || 'playback failed' });
+        }
+      }
+      if (data.type === 'stop-video') {
+        if (!viewerVideo.paused) {
+          viewerVideo.pause();
+        }
+        sendMessage({ type: 'playback-ended', position: viewerVideo.currentTime });
+        if (!isReady) {
+          viewerVideo.style.display = 'none';
+          readyContainer.style.display = 'flex';
+          updateStatus('Lecture stoppée. Cliquez sur Ready? pour repartir en plein écran.');
+          return;
+        }
+        showIdleBlackScreen('Lecture stoppée. Prêt pour une autre vidéo.');
+      }
+    });
+
+    sendMessage({ type: 'viewer-opened' });
+  </script>
+</body>
+</html>
