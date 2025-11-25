@@ -1,5 +1,14 @@
 // Builds mediaChoices from local video files
 const mediaChoices = [];
+const videoBridgeChannel = typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('eyegaze-video-bridge')
+  : null;
+
+function broadcastMediaChoices() {
+  if (!videoBridgeChannel) return;
+  const payload = mediaChoices.map(({ name, image, video, category }) => ({ name, image, video, category }));
+  videoBridgeChannel.postMessage({ type: 'media-list', mediaChoices: payload });
+}
 
 // Persistent directory handle storage (mirrors switch/custom-videos-local)
 const FS_DB_NAME = 'choice-video-handles';
@@ -189,6 +198,7 @@ async function addFiles(files) {
     notifyEyegazeGuard();
     window.choiceEyegaze?.ensureFullscreen?.();
   }
+  broadcastMediaChoices();
   return addedAny;
 }
 
@@ -207,6 +217,7 @@ async function addFolderToChoices(dirHandle) {
   if (!addedAny) {
     window.choiceEyegaze?.ensureFullscreen?.();
   }
+  broadcastMediaChoices();
   return addedAny;
 }
 
@@ -343,6 +354,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
       notifyEyegazeGuard({ clearSelection: true });
+      broadcastMediaChoices();
     });
+  }
+
+  if (videoBridgeChannel) {
+    videoBridgeChannel.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type === 'request-media-list') {
+        broadcastMediaChoices();
+      }
+    });
+    broadcastMediaChoices();
   }
 });
