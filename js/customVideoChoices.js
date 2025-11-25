@@ -1,6 +1,14 @@
 // Builds mediaChoices from local video files
 const mediaChoices = [];
 
+function emitMediaChoicesChanged() {
+  try {
+    window.dispatchEvent(new CustomEvent('mediaChoicesChanged', { detail: mediaChoices.slice() }));
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 // Persistent directory handle storage (mirrors switch/custom-videos-local)
 const FS_DB_NAME = 'choice-video-handles';
 const FS_STORE = 'handles';
@@ -165,20 +173,26 @@ function revokeAllVideos() {
 
 async function addFiles(files) {
   let addedAny = false;
-  for (const file of files) {
-    if (!VIDEO_RX.test(file.name)) continue;
+  for (const raw of files) {
+    const file = raw?.file instanceof File ? raw.file : raw;
+    const fileHandle = raw?.handle ?? null;
+    if (!file || !VIDEO_RX.test(file.name)) continue;
     const url = URL.createObjectURL(file);
     const thumb = await makeThumbnailFromVideo(file);
     const audio = document.createElement('audio');
     audio.src = url;
     audio.preload = 'auto';
     audio.load();
+    const id = `${file.name}-${file.size}-${file.lastModified}`;
     mediaChoices.push({
+      id,
       name: file.name,
       image: thumb,
       video: url,
       audioElement: audio,
-      category: 'custom'
+      category: 'custom',
+      fileHandle,
+      file
     });
     addedAny = true;
     if (typeof populateTilePickerGrid === 'function') {
@@ -186,6 +200,7 @@ async function addFiles(files) {
     }
   }
   if (addedAny) {
+    emitMediaChoicesChanged();
     notifyEyegazeGuard();
     window.choiceEyegaze?.ensureFullscreen?.();
   }
@@ -200,7 +215,7 @@ async function addFolderToChoices(dirHandle) {
     if (entry.kind !== 'file') continue;
     if (!VIDEO_RX.test(entry.name)) continue;
     const file = await entry.getFile();
-    if (await addFiles([file])) {
+    if (await addFiles([{ file, handle: entry }])) {
       addedAny = true;
     }
   }
@@ -250,7 +265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (perm === 'granted') {
           const file = await handle.getFile();
-          await addFiles([file]);
+          await addFiles([{ file, handle }]);
           restoredFromFiles = true;
         }
       }
@@ -278,7 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           for (const h of handles) {
             try {
               const f = await h.getFile();
-              if (await addFiles([f])) {
+              if (await addFiles([{ file: f, handle: h }])) {
                 addedAny = true;
               }
             } catch (innerErr) {
@@ -303,7 +318,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         await clearRepoHandle();
         await clearFileHandles();
-        const addedAny = await addFiles(addVideoInput.files);
+        const addedAny = await addFiles(Array.from(addVideoInput.files || []).map(file => ({ file })));
         if (!addedAny) {
           window.choiceEyegaze?.ensureFullscreen?.();
         }
@@ -342,6 +357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await clearRepoHandle();
       await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+      emitMediaChoicesChanged();
       notifyEyegazeGuard({ clearSelection: true });
     });
   }

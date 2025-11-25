@@ -47,12 +47,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const externalPlaybackMessage = document.getElementById('external-playback-message');
+  const openPlayerButton  = document.getElementById('open-player-page');
+  const videoChannel      = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-local-video') : null;
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
   let selectedTileIndices   = [];
   let desiredTileCount      = 0;
 
+  let currentChoice         = null;
+  
   let currentPreview        = null;
   let previewTimeout        = null;
   let previewDelayTimeout   = null;
@@ -60,6 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let preventAutoPreview    = false;
   let inactivityTimer       = null;
   let videoTimeLimitTimeout = null;
+
+  let externalPlayerReady   = false;
+  let currentPlaybackMode   = 'local';
 
   // For "resume video" logic
   let videoResumePositions  = {};
@@ -102,6 +110,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   ensurePointerOverlay();
+
+  function getChoiceKey(choice) {
+    if (!choice) return '';
+    return choice.id || choice.video || choice.name || '';
+  }
+
+  function setExternalPlaybackMessage(active) {
+    if (!videoContainer || !externalPlaybackMessage || !videoPlayer) return;
+    externalPlaybackMessage.style.display = active ? 'block' : 'none';
+    videoPlayer.style.display = active ? 'none' : '';
+  }
 
   function isElementShown(el) {
     if (!el) return false;
@@ -236,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hoverTimeoutId = setTimeout(() => {
       if (!videoPlaying && hoveredTile && hoveredChoice) {
         stopPreview();
-        playVideo(hoveredChoice.video);
+        playVideo(hoveredChoice);
       }
     }, fixationDelay);
     setPointerDwell(true);
@@ -621,6 +640,8 @@ document.addEventListener('DOMContentLoaded', () => {
       clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = null;
     }
+    currentChoice = null;
+    currentPlaybackMode = 'local';
     videoPlaying = false;
     clearHoverState();
     requirePointerMotionBeforeHover({ clearSelection: false });
@@ -628,6 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    setExternalPlaybackMessage(false);
     ensureFullscreen();
     refreshPointerStyles();
   }
@@ -643,21 +665,31 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------------
      (F) PLAY VIDEO (time limit, resume)
      ---------------------------------------------------------------- */
-  function playVideo(videoUrl) {
+  function enterPlayback(choice, mode = 'local') {
     stopPreview();
     clearHoverState();
+    currentChoice = choice || null;
+    currentPlaybackMode = mode;
     videoPlaying = true;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "flex";
-    videoSource.src = videoUrl;
+    setExternalPlaybackMessage(mode === 'external');
     refreshPointerStyles();
+  }
+
+  function playVideoLocally(choice) {
+    const videoUrl = choice?.video;
+    if (!videoUrl) return;
+    enterPlayback(choice, 'local');
+    videoSource.src = videoUrl;
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
     videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+      const resumeKey = getChoiceKey(choice);
+      if (enableResumeVideoCheckbox.checked && resumeKey && videoResumePositions[resumeKey]) {
+        videoPlayer.currentTime = videoResumePositions[resumeKey];
       }
       videoPlayer.play();
     };
@@ -666,11 +698,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
       if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
       videoTimeLimitTimeout = setTimeout(() => {
-        if (videoPlaying) {
-          if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
-          } else {
-            delete videoResumePositions[videoUrl];
+        if (videoPlaying && currentPlaybackMode === 'local') {
+          const resumeKey = getChoiceKey(currentChoice);
+          if (enableResumeVideoCheckbox.checked && resumeKey) {
+            videoResumePositions[resumeKey] = videoPlayer.currentTime;
+          } else if (resumeKey) {
+            delete videoResumePositions[resumeKey];
           }
           videoPlayer.pause();
           resetToChoicesScreen();
@@ -679,10 +712,110 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function playVideoExternally(choice) {
+    if (!choice || !videoChannel || !externalPlayerReady) {
+      playVideoLocally(choice);
+      return;
+    }
+    enterPlayback(choice, 'external');
+    videoSource.removeAttribute('src');
+    videoPlayer.load();
+    const resumeKey = getChoiceKey(choice);
+    const resumeTime = enableResumeVideoCheckbox.checked && resumeKey
+      ? (videoResumePositions[resumeKey] || 0)
+      : 0;
+
+    ensureFullscreen();
+
+    const payload = {
+      type: 'play-video',
+      choiceKey: resumeKey,
+      resumeTime,
+      timeLimit: enableTimeLimitCheckbox.checked
+        ? (parseInt(timeLimitInput.value, 10) || 0)
+        : null,
+      name: choice.name
+    };
+
+    if (choice.fileHandle) {
+      payload.fileHandle = choice.fileHandle;
+    } else if (choice.file) {
+      payload.file = choice.file;
+    } else if (choice.video) {
+      payload.videoUrl = choice.video;
+    }
+
+    try {
+      videoChannel.postMessage(payload);
+    } catch (err) {
+      console.error(err);
+      playVideoLocally(choice);
+    }
+  }
+
+  function playVideo(choice) {
+    if (videoChannel && externalPlayerReady) {
+      playVideoExternally(choice);
+    } else {
+      playVideoLocally(choice);
+    }
+  }
+
+  function handleExternalPlaybackComplete(data) {
+    if (currentPlaybackMode !== 'external') return;
+    const resumeKey = data?.choiceKey || getChoiceKey(currentChoice);
+    if (enableResumeVideoCheckbox.checked && resumeKey && typeof data?.resumeTime === 'number' && data.resumeTime > 0) {
+      videoResumePositions[resumeKey] = data.resumeTime;
+    } else if (resumeKey) {
+      delete videoResumePositions[resumeKey];
+    }
+    resetToChoicesScreen();
+  }
+
   videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[videoSource.src];
+    const resumeKey = getChoiceKey(currentChoice);
+    if (resumeKey) delete videoResumePositions[resumeKey];
     resetToChoicesScreen();
   });
+
+  if (videoChannel) {
+    const broadcastMediaChoices = () => {
+      try {
+        const summary = mediaChoices.map(choice => ({
+          id: getChoiceKey(choice),
+          name: choice.name,
+          hasHandle: !!choice.fileHandle,
+          hasFile: !!choice.file
+        }));
+        videoChannel.postMessage({ type: 'library-summary', choices: summary });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    videoChannel.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type === 'player-ready') {
+        externalPlayerReady = true;
+        broadcastMediaChoices();
+      } else if (data.type === 'playback-complete') {
+        handleExternalPlaybackComplete(data);
+      }
+    });
+
+    window.addEventListener('mediaChoicesChanged', broadcastMediaChoices);
+    broadcastMediaChoices();
+  }
+
+  if (openPlayerButton) {
+    openPlayerButton.addEventListener('click', () => {
+      try {
+        window.open('player.html', '_blank', 'noopener');
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
 
   document.addEventListener('pointermove', event => {
     const { clientX, clientY } = event;
