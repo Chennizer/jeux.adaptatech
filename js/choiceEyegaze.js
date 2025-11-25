@@ -650,20 +650,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (externalPlaybackEnabled && playbackChannel) {
       playbackChannel.postMessage({ type: 'stop-video' });
     }
-    videoPlayer.pause();
+    if (!videoPlayer.paused) {
+      videoPlayer.pause();
+    }
     videoPlayer.currentTime = 0;
+    videoSource.src = '';
+    videoPlayer.load();
+    videoPlayer.onloadedmetadata = null;
     if (videoTimeLimitTimeout) {
       clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = null;
     }
     videoPlaying = false;
+    hideRemoteOverlay();
+    renderGameTiles();
     clearHoverState();
     requirePointerMotionBeforeHover({ clearSelection: false });
     preventAutoPreview = true;
     setTimeout(() => { preventAutoPreview = false; }, 1200);
-    tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
-    hideRemoteOverlay();
+    startInactivityTimer();
     ensureFullscreen();
     refreshPointerStyles();
   }
