@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const tilePickerGrid    = document.getElementById('tile-picker-grid');
   const tileCountDisplay  = document.getElementById('tile-count-display');
   const startGameButton   = document.getElementById('start-game-button');
+  const openPlayerButton  = document.getElementById('open-player-page');
+  const remotePlaybackMessage = document.getElementById('remote-playback-message');
 
   const categorySelect    = document.getElementById('categorySelect');
 
@@ -47,6 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const remoteChannel     = typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel('eyegaze-local-video')
+    : null;
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -65,6 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let videoResumePositions  = {};
 
   let currentCategory       = 'all';
+  let currentVideoUrl       = null;
+  let remotePlayerConnected = false;
+  let remotePlaybackActive  = false;
 
   // Global variable for fixation delay (in ms), default 2000ms
   let fixationDelay = 2000;
@@ -102,6 +110,64 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   ensurePointerOverlay();
+
+  if (openPlayerButton) {
+    openPlayerButton.addEventListener('click', () => {
+      window.open('player.html', '_blank', 'noopener');
+    });
+  }
+
+  function setRemotePlaybackUI(active) {
+    if (videoContainer) {
+      videoContainer.classList.toggle('remote-only', !!active);
+    }
+    if (remotePlaybackMessage) {
+      remotePlaybackMessage.style.display = active ? '' : 'none';
+    }
+    if (videoPlayer) {
+      videoPlayer.style.display = active ? 'none' : '';
+    }
+  }
+
+  setRemotePlaybackUI(false);
+
+  function handleRemoteStop(data) {
+    const src = data?.src || currentVideoUrl;
+    if (enableResumeVideoCheckbox?.checked && src && typeof data?.position === 'number') {
+      videoResumePositions[src] = data.position;
+    } else if (src) {
+      delete videoResumePositions[src];
+    }
+    remotePlaybackActive = false;
+    resetToChoicesScreen();
+  }
+
+  if (remoteChannel) {
+    remoteChannel.addEventListener('message', event => {
+      const data = event.data || {};
+      switch (data.type) {
+        case 'player-ready':
+          remotePlayerConnected = true;
+          break;
+        case 'player-unloaded':
+          remotePlayerConnected = false;
+          break;
+        case 'video-ended': {
+          const src = data.src || currentVideoUrl;
+          if (src) delete videoResumePositions[src];
+          remotePlaybackActive = false;
+          resetToChoicesScreen();
+          break;
+        }
+        case 'video-stopped':
+          handleRemoteStop(data);
+          break;
+        default:
+          break;
+      }
+    });
+    remoteChannel.postMessage({ type: 'controller-ready' });
+  }
 
   function isElementShown(el) {
     if (!el) return false;
@@ -614,6 +680,10 @@ document.addEventListener('DOMContentLoaded', () => {
      (E) BACKSPACE TO RESET TO CHOICES SCREEN
      ---------------------------------------------------------------- */
   function resetToChoicesScreen() {
+    if (remotePlaybackActive && remoteChannel) {
+      remoteChannel.postMessage({ type: 'stop-video' });
+    }
+    remotePlaybackActive = false;
     stopPreview();
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
@@ -622,12 +692,14 @@ document.addEventListener('DOMContentLoaded', () => {
       videoTimeLimitTimeout = null;
     }
     videoPlaying = false;
+    currentVideoUrl = null;
     clearHoverState();
     requirePointerMotionBeforeHover({ clearSelection: false });
     preventAutoPreview = true;
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    setRemotePlaybackUI(false);
     ensureFullscreen();
     refreshPointerStyles();
   }
@@ -646,18 +718,41 @@ document.addEventListener('DOMContentLoaded', () => {
   function playVideo(videoUrl) {
     stopPreview();
     clearHoverState();
+    currentVideoUrl = videoUrl;
     videoPlaying = true;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "flex";
+
+    const resumePosition = enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]
+      ? videoResumePositions[videoUrl]
+      : 0;
+
+    if (remoteChannel && remotePlayerConnected) {
+      remotePlaybackActive = true;
+      setRemotePlaybackUI(true);
+      refreshPointerStyles();
+      remoteChannel.postMessage({
+        type: 'play-video',
+        src: videoUrl,
+        resumePosition,
+        timeLimitSeconds: enableTimeLimitCheckbox.checked
+          ? (parseInt(timeLimitInput.value, 10) || 60)
+          : null
+      });
+      ensureFullscreen();
+      return;
+    }
+
+    setRemotePlaybackUI(false);
     videoSource.src = videoUrl;
     refreshPointerStyles();
     videoPlayer.removeAttribute('controls');
     videoPlayer.load();
     videoPlayer.onloadedmetadata = () => {
-      if (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) {
-        videoPlayer.currentTime = videoResumePositions[videoUrl];
+      if (enableResumeVideoCheckbox.checked && resumePosition) {
+        videoPlayer.currentTime = resumePosition;
       }
       videoPlayer.play();
     };
@@ -680,7 +775,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[videoSource.src];
+    if (currentVideoUrl) {
+      delete videoResumePositions[currentVideoUrl];
+    }
     resetToChoicesScreen();
   });
 
