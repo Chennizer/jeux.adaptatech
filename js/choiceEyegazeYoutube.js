@@ -48,8 +48,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
   const youtubeDiv        = document.getElementById('youtube-player');
+  const externalPlaybackMessage = document.getElementById('external-playback-message');
+  const openPlayerButton  = document.getElementById('open-player-page');
+  const videoChannel      = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-local-video') : null;
   let youtubePlayer       = null;
   let currentVideoUrl     = null;
+  let externalPlayerReady = false;
+  let currentPlaybackMode = 'local';
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -385,6 +390,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function setExternalPlaybackMessage(active) {
+    if (!videoContainer || !externalPlaybackMessage || !videoPlayer) return;
+    externalPlaybackMessage.style.display = active ? 'block' : 'none';
+    videoPlayer.style.display = active ? 'none' : '';
+    if (youtubeDiv) youtubeDiv.style.display = active ? 'none' : youtubeDiv.style.display;
+  }
+
   function ensureFullscreen() {
     if (!document.fullscreenElement) {
       const el = document.documentElement;
@@ -651,11 +663,16 @@ document.addEventListener('DOMContentLoaded', () => {
      ---------------------------------------------------------------- */
   function resetToChoicesScreen() {
     stopPreview();
+    if (currentPlaybackMode === 'external') {
+      setExternalPlaybackMessage(false);
+    }
     if (currentVideoUrl && isYouTubeUrl(currentVideoUrl)) {
       try { youtubePlayer.stopVideo(); } catch {}
     }
-    videoPlayer.pause();
-    videoPlayer.currentTime = 0;
+    if (videoPlayer) {
+      videoPlayer.pause();
+      videoPlayer.currentTime = 0;
+    }
     if (videoTimeLimitTimeout) {
       clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = null;
@@ -669,6 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = "none";
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     currentVideoUrl = null;
+    currentPlaybackMode = 'local';
     ensureFullscreen();
     refreshPointerStyles();
   }
@@ -684,10 +702,12 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------------
      (F) PLAY VIDEO (time limit, resume)
      ---------------------------------------------------------------- */
-  function playVideo(videoUrl) {
+  function playVideoLocally(videoUrl) {
     stopPreview();
     clearHoverState();
+    setExternalPlaybackMessage(false);
     videoPlaying = true;
+    currentPlaybackMode = 'local';
     currentVideoUrl = videoUrl;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
@@ -742,7 +762,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
       if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
       videoTimeLimitTimeout = setTimeout(() => {
-        if (videoPlaying) {
+        if (videoPlaying && currentPlaybackMode === 'local') {
           if (enableResumeVideoCheckbox.checked) {
             if (isYouTubeUrl(videoUrl) && youtubePlayer && youtubePlayer.getCurrentTime) {
               videoResumePositions[videoUrl] = youtubePlayer.getCurrentTime();
@@ -763,10 +783,94 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function playVideoExternally(videoUrl) {
+    if (!videoChannel || !externalPlayerReady) {
+      playVideoLocally(videoUrl);
+      return;
+    }
+    stopPreview();
+    clearHoverState();
+    videoPlaying = true;
+    currentPlaybackMode = 'external';
+    currentVideoUrl = videoUrl;
+    tileContainer.style.display = "none";
+    tilePickerModal.style.display = "none";
+    gameOptionsModal.style.display = "none";
+    videoContainer.style.display = "flex";
+    setExternalPlaybackMessage(true);
+    refreshPointerStyles();
+    ensureFullscreen();
+
+    const resumeTime = enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]
+      ? videoResumePositions[videoUrl]
+      : 0;
+
+    const payload = {
+      type: 'play-video',
+      choiceKey: videoUrl,
+      videoUrl,
+      resumeTime,
+      timeLimit: enableTimeLimitCheckbox.checked
+        ? (parseInt(timeLimitInput.value, 10) || 0)
+        : null,
+      isYouTube: isYouTubeUrl(videoUrl)
+    };
+
+    try {
+      videoChannel.postMessage(payload);
+    } catch (err) {
+      console.error(err);
+      currentPlaybackMode = 'local';
+      setExternalPlaybackMessage(false);
+      playVideoLocally(videoUrl);
+    }
+  }
+
+  function playVideo(videoUrl) {
+    if (videoChannel && externalPlayerReady) {
+      playVideoExternally(videoUrl);
+    } else {
+      playVideoLocally(videoUrl);
+    }
+  }
+
+  function handleExternalPlaybackComplete(data) {
+    if (currentPlaybackMode !== 'external') return;
+    const resumeKey = data?.choiceKey || currentVideoUrl;
+    if (enableResumeVideoCheckbox.checked && resumeKey && typeof data?.resumeTime === 'number' && data.resumeTime > 0) {
+      videoResumePositions[resumeKey] = data.resumeTime;
+    } else if (resumeKey) {
+      delete videoResumePositions[resumeKey];
+    }
+    resetToChoicesScreen();
+  }
+
   videoPlayer.addEventListener('ended', () => {
     delete videoResumePositions[currentVideoUrl || videoSource.src];
     resetToChoicesScreen();
   });
+
+  if (videoChannel) {
+    videoChannel.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type === 'player-ready') {
+        externalPlayerReady = true;
+      } else if (data.type === 'playback-complete') {
+        handleExternalPlaybackComplete(data);
+      }
+    });
+  }
+
+  if (openPlayerButton) {
+    openPlayerButton.addEventListener('click', () => {
+      try {
+        const targetUrl = openPlayerButton.dataset.playerUrl || '/eyegaze/choixeyegaze-videos-local/player.html';
+        window.open(targetUrl, '_blank', 'noopener');
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
 
   document.addEventListener('pointermove', event => {
     const { clientX, clientY } = event;

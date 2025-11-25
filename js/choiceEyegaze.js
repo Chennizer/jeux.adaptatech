@@ -810,7 +810,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (openPlayerButton) {
     openPlayerButton.addEventListener('click', () => {
       try {
-        window.open('player.html', '_blank', 'noopener');
+        const targetUrl = openPlayerButton.dataset.playerUrl || 'player.html';
+        window.open(targetUrl, '_blank', 'noopener');
       } catch (err) {
         console.error(err);
       }
