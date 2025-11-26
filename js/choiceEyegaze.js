@@ -385,6 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
     requirePointerMotion = false;
     pointerMotionOrigin = null;
     pendingGuardedHover = null;
+    lastPointerPosition = null;
     if (tileContainer) {
       tileContainer.classList.remove('pointer-motion-required');
     }
@@ -677,6 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
       videoSource.removeAttribute('src');
     }
     videoPlayer.removeAttribute('src');
+    videoPlayer.src = '';
     videoPlayer.load();
 
     hideRemoteOverlay();
@@ -687,16 +689,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resetHoverMechanics();
 
-    if (reRenderTiles) {
-      renderGameTiles();
-    } else {
-      tileContainer.querySelectorAll('.tile.selected').forEach(tile => tile.classList.remove('selected'));
-    }
+    const rebuildTiles = () => {
+      if (reRenderTiles) {
+        tileContainer.innerHTML = '';
+        renderGameTiles();
+      } else {
+        tileContainer.querySelectorAll('.tile.selected').forEach(tile => tile.classList.remove('selected'));
+      }
 
-    requirePointerMotionBeforeHover();
-    ensureFullscreen();
-    refreshPointerStyles();
-    startInactivityTimer();
+      requirePointerMotionBeforeHover();
+      refreshPointerStyles();
+      startInactivityTimer();
+    };
+
+    // Wait a frame to avoid capturing stale hover/enter events from the teardown state
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        rebuildTiles();
+        ensureFullscreen();
+      });
+    });
   }
 
   document.addEventListener('keydown', e => {
