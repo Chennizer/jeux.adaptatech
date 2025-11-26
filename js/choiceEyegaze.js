@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const externalPlayerCheckbox = document.getElementById('enable-external-player');
   const openExternalPlayerButton = document.getElementById('open-external-player');
   const externalPlayerStatus = document.getElementById('external-player-status');
   const externalOverlay    = document.getElementById('external-player-overlay');
@@ -83,10 +84,9 @@ document.addEventListener('DOMContentLoaded', () => {
     delete videoResumePositions[url];
   }
 
-  let currentCategory         = 'all';
-  let externalViewerReady     = false;
-  let externalPlaybackEnabled = false;
-  let externalWindow          = null;
+  let currentCategory       = 'all';
+  let externalViewerReady   = false;
+  let externalWindow        = null;
   const externalChannel = typeof BroadcastChannel !== 'undefined'
     ? new BroadcastChannel('eyegaze-video-player')
     : null;
@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function shouldUseExternalPlayer() {
-    return externalPlaybackEnabled && !!externalChannel;
+    return !!externalPlayerCheckbox?.checked && !!externalChannel;
   }
 
   function isElementShown(el) {
@@ -526,7 +526,6 @@ document.addEventListener('DOMContentLoaded', () => {
           break;
         case 'viewer-closed':
           externalViewerReady = false;
-          externalPlaybackEnabled = false;
           setExternalStatus('Lecteur fermé');
           break;
         case 'playback-stopped':
@@ -558,9 +557,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       externalViewerReady = false;
-      externalPlaybackEnabled = true;
       try {
         externalWindow = window.open('viewer.html', 'eyegaze-video-viewer');
+        if (externalPlayerCheckbox) {
+          externalPlayerCheckbox.checked = true;
+        }
         setExternalStatus('Page lecteur ouverte : cliquer sur Ready?');
         externalChannel.postMessage({ type: 'chooser-opened' });
       } catch (err) {
@@ -569,11 +570,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  if (externalPlayerCheckbox) {
+    externalPlayerCheckbox.addEventListener('change', () => {
+      if (!externalPlayerCheckbox.checked && usingExternalPlayback) {
+        resetToChoicesScreen();
+      }
+    });
+  }
+
   setInterval(() => {
     if (externalWindow && externalWindow.closed) {
       externalWindow = null;
       externalViewerReady = false;
-      externalPlaybackEnabled = false;
       setExternalStatus('Lecteur fermé');
     }
   }, 2500);
