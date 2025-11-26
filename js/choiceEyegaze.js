@@ -119,6 +119,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function clearTimeLimitTimer() {
+    if (videoTimeLimitTimeout) {
+      clearTimeout(videoTimeLimitTimeout);
+      videoTimeLimitTimeout = null;
+    }
+  }
+
+  function scheduleTimeLimit(videoUrl, { external = false } = {}) {
+    if (!enableTimeLimitCheckbox?.checked) return;
+    const limitSeconds = parseInt(timeLimitInput?.value, 10) || 60;
+    clearTimeLimitTimer();
+    videoTimeLimitTimeout = setTimeout(() => {
+      if (!videoPlaying) return;
+      if (!external) {
+        if (enableResumeVideoCheckbox?.checked) {
+          videoResumePositions[videoUrl] = videoPlayer.currentTime;
+        } else {
+          delete videoResumePositions[videoUrl];
+        }
+        videoPlayer.pause();
+      } else {
+        externalChannel?.postMessage({ type: 'stop-video' });
+      }
+      resetToChoicesScreen();
+    }, limitSeconds * 1000);
+  }
+
   function shouldUseExternalPlayer() {
     return !!externalPlayerCheckbox?.checked && !!externalChannel;
   }
@@ -707,6 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = "none";
     refreshPointerStyles();
     ensureFullscreen();
+    scheduleTimeLimit(videoUrl, { external: true });
     externalChannel?.postMessage({ type: 'play-video', url: videoUrl });
   }
 
@@ -717,10 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stopPreview();
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
-    if (videoTimeLimitTimeout) {
-      clearTimeout(videoTimeLimitTimeout);
-      videoTimeLimitTimeout = null;
-    }
+    clearTimeLimitTimer();
     videoPlaying = false;
     clearHoverState();
     requirePointerMotionBeforeHover({ clearSelection: false });
@@ -774,21 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.play();
     };
     ensureFullscreen();
-    if (enableTimeLimitCheckbox.checked) {
-      const limitSeconds = parseInt(timeLimitInput.value, 10) || 60;
-      if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
-      videoTimeLimitTimeout = setTimeout(() => {
-        if (videoPlaying) {
-          if (enableResumeVideoCheckbox.checked) {
-            videoResumePositions[videoUrl] = videoPlayer.currentTime;
-          } else {
-            delete videoResumePositions[videoUrl];
-          }
-          videoPlayer.pause();
-          resetToChoicesScreen();
-        }
-      }, limitSeconds * 1000);
-    }
+    scheduleTimeLimit(videoUrl);
   }
 
   videoPlayer.addEventListener('ended', () => {
