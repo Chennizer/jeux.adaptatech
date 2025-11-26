@@ -380,6 +380,17 @@ document.addEventListener('DOMContentLoaded', () => {
     startInactivityTimer();
   }
 
+  function resetHoverMechanics() {
+    clearHoverState();
+    requirePointerMotion = false;
+    pointerMotionOrigin = null;
+    pendingGuardedHover = null;
+    if (tileContainer) {
+      tileContainer.classList.remove('pointer-motion-required');
+    }
+    setPointerDwell(false);
+  }
+
   function playCycleSound() {
     if (enableCycleSoundCheckbox && enableCycleSoundCheckbox.checked) {
       const cycleSound = new Audio("../../sounds/woosh.mp3");
@@ -656,11 +667,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     videoPlaying = false;
-    clearHoverState();
     preventAutoPreview = true;
     setTimeout(() => { preventAutoPreview = false; }, 1200);
 
     videoPlayer.pause();
+    videoPlayer.onloadedmetadata = null;
     videoPlayer.currentTime = 0;
     if (videoSource) {
       videoSource.removeAttribute('src');
@@ -673,6 +684,8 @@ document.addEventListener('DOMContentLoaded', () => {
     gameOptionsModal.style.display = "none";
     videoContainer.style.display = "none";
     tileContainer.style.display = "flex";
+
+    resetHoverMechanics();
 
     if (reRenderTiles) {
       renderGameTiles();
