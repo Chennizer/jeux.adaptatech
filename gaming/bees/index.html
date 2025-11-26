@@ -114,6 +114,28 @@
       color: #000;
       font-weight: bold;
     }
+    .goal-setting {
+      margin: 0.5rem 0 1.25rem;
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .goal-setting label {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .goal-setting input[type="number"] {
+      width: 72px;
+      padding: 0.4rem 0.5rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-size: 1rem;
+      text-align: center;
+    }
     #editPlayers {
       display: none;
       padding: 0.65rem 1rem;
@@ -198,6 +220,42 @@
       gap: 0.75rem;
       justify-content: center;
     }
+    #goalDisplay {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 0.45rem 0.9rem;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 999px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      z-index: 9;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    }
+    #endBanner {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.92);
+      padding: 1rem 1.5rem;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      color: #fefefe;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 10;
+    }
+    #endBanner.visible {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
     .modal-actions button {
       padding: 0.75rem 1.6rem;
       border-radius: 10px;
@@ -259,6 +317,16 @@
               data-en="2 players"
               data-ja="2人プレイ">2 joueurs</span>
       </button>
+    </div>
+
+    <div class="goal-setting">
+      <label for="tripGoalInput" class="translate"
+             data-fr="Allers-retours requis :"
+             data-en="Flower trips needed:"
+             data-ja="花への往復回数：">
+        Allers-retours requis :
+      </label>
+      <input id="tripGoalInput" type="number" min="1" max="15" value="5">
     </div>
 
     <div id="controlsText" class="controls-hint">
@@ -323,6 +391,8 @@
   </div>
 
   <canvas id="simCanvas"></canvas>
+  <div id="goalDisplay"></div>
+  <div id="endBanner" aria-live="polite"></div>
 
   <script>
     /**
@@ -408,6 +478,8 @@
     // ----- Game State -----
     let gameRunning = false;
     let gameMode = '1p'; // '1p' or '2p'
+    let gameEnded = false;
+    let tripGoal = 5;
 
     // Hives and other entities
     let hives = [];
@@ -430,6 +502,19 @@
     const closeModalBtn = document.getElementById('closeModal');
     const savePlayersBtn = document.getElementById('savePlayers');
     const langToggle = document.getElementById('langToggle');
+    const tripGoalInput = document.getElementById('tripGoalInput');
+    const goalDisplay = document.getElementById('goalDisplay');
+    const endBanner = document.getElementById('endBanner');
+
+    // Audio placeholders
+    const buttonPlaylist = [
+      '../../sounds/startactivity.mp3',
+      '../../sounds/spacewalk.mp3'
+    ];
+    let buttonMusic;
+    let buttonTrackIndex = 0;
+    const finishSound = new Audio('../../sounds/victory.mp3');
+    finishSound.volume = 0.5;
 
     // ----- UI Logic -----
     function applyPlayerConfig() {
@@ -470,9 +555,63 @@
       closePlayerModal();
     });
 
+    function readTripGoal() {
+      const value = parseInt(tripGoalInput.value, 10);
+      if (isNaN(value)) return 5;
+      return Math.min(15, Math.max(1, value));
+    }
+
+    function updateGoalDisplay() {
+      if (!gameRunning) return;
+      const goalText = [];
+      if (gameMode === '1p' && hives[0]) {
+        goalText.push(`${playerConfigs[0].name}: ${Math.min(hives[0].tripsDone, tripGoal)}/${tripGoal}`);
+      }
+      if (gameMode === '2p' && hives.length === 2) {
+        goalText.push(`${playerConfigs[0].name}: ${Math.min(hives[0].tripsDone, tripGoal)}/${tripGoal}`);
+        goalText.push(`${playerConfigs[1].name}: ${Math.min(hives[1].tripsDone, tripGoal)}/${tripGoal}`);
+      }
+      goalDisplay.textContent = goalText.join('  •  ');
+    }
+
+    function endGame(message) {
+      gameEnded = true;
+      endBanner.textContent = message;
+      endBanner.className = 'visible';
+    }
+
+    function checkGameEnd() {
+      if (gameMode === '1p') {
+        if (hives[0] && hives[0].finished) {
+          endGame(`${playerConfigs[0].name} a terminé sa ruche !`);
+        }
+        return;
+      }
+      if (hives.length === 2 && hives[0].finished && hives[1].finished) {
+        endGame('Les deux ruches sont complètes !');
+      }
+    }
+
+    function startButtonMusic() {
+      if (!buttonMusic) {
+        buttonMusic = new Audio(buttonPlaylist[buttonTrackIndex]);
+        buttonMusic.volume = 0.35;
+        buttonMusic.addEventListener('ended', () => {
+          buttonTrackIndex = (buttonTrackIndex + 1) % buttonPlaylist.length;
+          buttonMusic.src = buttonPlaylist[buttonTrackIndex];
+          buttonMusic.play().catch(()=>{});
+        });
+      }
+      if (buttonMusic.paused) {
+        buttonMusic.play().catch(()=>{});
+      }
+    }
+
     startButton.addEventListener('click', (e) => {
       e.preventDefault();
       applyPlayerConfig();
+      tripGoal = readTripGoal();
+      tripGoalInput.value = tripGoal;
 
       // Fullscreen request (like your other games)
       if (document.documentElement.requestFullscreen) {
@@ -485,8 +624,11 @@
 
       overlay.style.display = 'none';
       gameRunning = true;
+      gameEnded = false;
+      endBanner.className = '';
       langToggle?.remove();
       initGame();
+      updateGoalDisplay();
     });
 
     function resize() {
@@ -518,6 +660,8 @@
         this.bees = [];
         this.occupiedMap = new Set();
         this.reservedMap = new Set();
+        this.tripsDone = 0;
+        this.finished = false;
 
         // Initial Cell
         this.addCell(0,0);
@@ -598,6 +742,7 @@
       }
 
       sendBees() {
+        if (this.finished) return;
         this.bees.forEach(b => {
           if (b.state === 'idle' && flowers.length > 0) {
             b.state = 'outbound';
@@ -649,6 +794,16 @@
 
             if (dist < 20) {
               if (b.state === 'outbound') {
+                if (!this.finished) {
+                  this.tripsDone = Math.min(tripGoal, this.tripsDone + 1);
+                  if (this.tripsDone >= tripGoal) {
+                    this.finished = true;
+                    finishSound.currentTime = 0;
+                    finishSound.play().catch(()=>{});
+                    checkGameEnd();
+                  }
+                  updateGoalDisplay();
+                }
                 b.state = 'returning';
                 const nextSpot = this.findNextBuildSpot();
                 if (nextSpot) {
@@ -763,24 +918,27 @@
 
     // ----- Controls -----
     window.addEventListener('keydown', (e) => {
-      if (!gameRunning) return;
+      if (!gameRunning || gameEnded) return;
 
       // Player 1 (Space)
       if (e.code === 'Space') {
         e.preventDefault();
+        startButtonMusic();
         hives[0].sendBees();
       }
 
       // Player 2 (Enter) - Only in 2p mode
       if (e.code === 'Enter' && gameMode === '2p') {
         e.preventDefault();
+        startButtonMusic();
         hives[1].sendBees();
       }
     });
 
     // Touch/Mouse fallback (Triggers both or P1)
     window.addEventListener('mousedown', () => {
-      if(!gameRunning) return;
+      if(!gameRunning || gameEnded) return;
+      startButtonMusic();
       hives[0].sendBees();
       if(gameMode === '2p') hives[1].sendBees();
     });
