@@ -77,6 +77,7 @@
     const video = document.getElementById('external-video');
 
     let viewerReady = false;
+    let currentUrl = null;
 
     function postMessage(payload) {
       if (channel) {
@@ -109,15 +110,47 @@
       markReady();
     }
 
+    function playIncomingVideo(url, startTime = 0) {
+      if (!url) return;
+      currentUrl = url;
+      const start = Math.max(0, Number(startTime) || 0);
+
+      const seekIfNeeded = () => {
+        if (start > 0) {
+          try {
+            video.currentTime = start;
+          } catch (err) {
+            console.warn('Seek failed', err);
+          }
+        }
+      };
+
+      video.onloadedmetadata = () => {
+        seekIfNeeded();
+        video.play().catch(err => console.error(err));
+      };
+
+      video.src = url;
+      video.load();
+    }
+
+    function stopAndReport(resetSource = true, reason = 'reset') {
+      const time = video.currentTime || 0;
+      postMessage({ type: 'playback-stopped', url: currentUrl, time, reason });
+      video.pause();
+      if (resetSource) {
+        video.removeAttribute('src');
+        video.load();
+      }
+    }
+
     if (channel) {
       channel.onmessage = (event) => {
         const data = event.data || {};
         if (data.type === 'play-video' && viewerReady && data.url) {
-          video.src = data.url;
-          video.play().catch(err => console.error(err));
+          playIncomingVideo(data.url, data.startTime);
         } else if (data.type === 'stop-video') {
-          video.pause();
-          video.currentTime = 0;
+          stopAndReport(data.reset !== false, data.reason || 'stop-video');
         } else if (data.type === 'chooser-opened') {
           if (viewerReady) {
             postMessage({ type: 'viewer-ready' });
@@ -135,7 +168,9 @@
     });
 
     video.addEventListener('ended', () => {
-      postMessage({ type: 'playback-ended' });
+      stopAndReport(true, 'ended');
+      postMessage({ type: 'playback-ended', url: currentUrl });
+      currentUrl = null;
     });
 
     window.addEventListener('beforeunload', () => {

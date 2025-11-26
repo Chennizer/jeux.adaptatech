@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
   let usingExternalPlayback = false;
+  let currentVideoUrl       = null;
+  let lastPlaybackEnded     = false;
   let selectedTileIndices   = [];
   let desiredTileCount      = 0;
 
@@ -68,6 +70,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // For "resume video" logic
   let videoResumePositions  = {};
+  function saveResumePosition(url, time = 0) {
+    if (!url) return;
+    if (enableResumeVideoCheckbox?.checked) {
+      videoResumePositions[url] = time;
+    } else {
+      delete videoResumePositions[url];
+    }
+  }
+
+  function clearResumePosition(url) {
+    if (!url) return;
+    delete videoResumePositions[url];
+  }
 
   let currentCategory       = 'all';
   let externalViewerReady   = false;
@@ -133,14 +148,6 @@ document.addEventListener('DOMContentLoaded', () => {
     clearVideoTimeLimit();
     videoTimeLimitTimeout = setTimeout(() => {
       if (!videoPlaying) return;
-
-      if (!usingExternalPlayback) {
-        if (enableResumeVideoCheckbox?.checked) {
-          videoResumePositions[videoUrl] = videoPlayer.currentTime;
-        } else {
-          delete videoResumePositions[videoUrl];
-        }
-      }
 
       if (typeof onExpire === 'function') {
         onExpire();
@@ -521,7 +528,16 @@ document.addEventListener('DOMContentLoaded', () => {
           externalViewerReady = false;
           setExternalStatus('Lecteur fermé');
           break;
+        case 'playback-stopped':
+          if (data.url) {
+            saveResumePosition(data.url, data.time || 0);
+          }
+          break;
         case 'playback-ended':
+          if (data.url) {
+            clearResumePosition(data.url);
+          }
+          lastPlaybackEnded = true;
           resetToChoicesScreen();
           break;
         default:
@@ -734,6 +750,8 @@ document.addEventListener('DOMContentLoaded', () => {
     clearHoverState();
     videoPlaying = true;
     usingExternalPlayback = true;
+    currentVideoUrl = videoUrl;
+    lastPlaybackEnded = false;
     tileContainer.style.display = "none";
     tilePickerModal.style.display = "none";
     gameOptionsModal.style.display = "none";
@@ -741,21 +759,42 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = "none";
     refreshPointerStyles();
     ensureFullscreen();
-    externalChannel?.postMessage({ type: 'play-video', url: videoUrl });
+    const startTime = enableResumeVideoCheckbox?.checked ? (videoResumePositions[videoUrl] || 0) : 0;
+    externalChannel?.postMessage({ type: 'play-video', url: videoUrl, startTime });
     scheduleVideoTimeLimit(videoUrl, () => {
-      resetToChoicesScreen();
+      resetToChoicesScreen({ reason: 'time-limit' });
     });
   }
 
   /* ----------------------------------------------------------------
      (E) BACKSPACE TO RESET TO CHOICES SCREEN
      ---------------------------------------------------------------- */
-  function resetToChoicesScreen() {
+  function resetToChoicesScreen(options = {}) {
+    const wasPlaying = videoPlaying;
+    const wasExternal = usingExternalPlayback;
+    const activeUrl = currentVideoUrl;
+
     stopPreview();
+
+    if (wasPlaying && wasExternal && externalChannel) {
+      externalChannel.postMessage({
+        type: 'stop-video',
+        url: activeUrl,
+        reason: options.reason || 'reset',
+        reset: true,
+      });
+    } else if (wasPlaying && !wasExternal && activeUrl && !lastPlaybackEnded) {
+      saveResumePosition(activeUrl, videoPlayer.currentTime);
+    }
+
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
     clearVideoTimeLimit();
     videoPlaying = false;
+    usingExternalPlayback = false;
+    currentVideoUrl = null;
+    lastPlaybackEnded = false;
+
     clearHoverState();
     requirePointerMotionBeforeHover({ clearSelection: false });
     preventAutoPreview = true;
@@ -765,10 +804,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (externalOverlay) {
       externalOverlay.style.display = "none";
     }
-    if (externalChannel) {
-      externalChannel.postMessage({ type: 'stop-video' });
-    }
-    usingExternalPlayback = false;
     ensureFullscreen();
     refreshPointerStyles();
   }
@@ -790,6 +825,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     usingExternalPlayback = false;
+    currentVideoUrl = videoUrl;
+    lastPlaybackEnded = false;
     stopPreview();
     clearHoverState();
     videoPlaying = true;
@@ -808,11 +845,14 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.play();
     };
     ensureFullscreen();
-    scheduleVideoTimeLimit(videoUrl);
+    scheduleVideoTimeLimit(videoUrl, () => {
+      resetToChoicesScreen({ reason: 'time-limit' });
+    });
   }
 
   videoPlayer.addEventListener('ended', () => {
-    delete videoResumePositions[videoSource.src];
+    clearResumePosition(videoSource.src);
+    lastPlaybackEnded = true;
     resetToChoicesScreen();
   });
 
