@@ -1,6 +1,8 @@
 // Builds mediaChoices from local video files
 const mediaChoices = [];
 
+const externalPlayerChannel = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-video-channel') : null;
+
 // Persistent directory handle storage (mirrors switch/custom-videos-local)
 const FS_DB_NAME = 'choice-video-handles';
 const FS_STORE = 'handles';
@@ -25,6 +27,20 @@ function notifyEyegazeGuard(options) {
   if (isVisible) {
     const guardOptions = options ?? { clearSelection: true };
     window.choiceEyegaze?.requirePointerMotionBeforeHover?.(guardOptions);
+  }
+}
+
+function broadcastChoiceLibrary() {
+  if (!externalPlayerChannel) return;
+  try {
+    const choices = mediaChoices.map(item => ({
+      name: item.name,
+      image: item.image,
+      video: item.video
+    }));
+    externalPlayerChannel.postMessage({ type: 'choices-update', choices });
+  } catch (err) {
+    console.error(err);
   }
 }
 
@@ -188,6 +204,7 @@ async function addFiles(files) {
   if (addedAny) {
     notifyEyegazeGuard();
     window.choiceEyegaze?.ensureFullscreen?.();
+    broadcastChoiceLibrary();
   }
   return addedAny;
 }
@@ -206,6 +223,8 @@ async function addFolderToChoices(dirHandle) {
   }
   if (!addedAny) {
     window.choiceEyegaze?.ensureFullscreen?.();
+  } else {
+    broadcastChoiceLibrary();
   }
   return addedAny;
 }
@@ -262,6 +281,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!restoredFromFolder && !restoredFromFiles && typeof populateTilePickerGrid === 'function') {
     populateTilePickerGrid();
   }
+
+  broadcastChoiceLibrary();
 
   if (addVideoButton) {
     addVideoButton.addEventListener('click', async () => {
@@ -343,6 +364,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await clearFileHandles();
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
       notifyEyegazeGuard({ clearSelection: true });
+      broadcastChoiceLibrary();
     });
   }
 });
