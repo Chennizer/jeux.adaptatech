@@ -393,6 +393,12 @@
   <canvas id="simCanvas"></canvas>
   <div id="goalDisplay"></div>
   <div id="endBanner" aria-live="polite"></div>
+  <div id="restartHint" class="controls-hint" style="display:none;">
+    <span class="translate"
+          data-fr="Maintenez votre contacteur pour recommencer"
+          data-en="Hold your switch to restart"
+          data-ja="スイッチを長押しして再スタート">Hold your switch to restart</span>
+  </div>
 
   <script>
     /**
@@ -505,6 +511,7 @@
     const tripGoalInput = document.getElementById('tripGoalInput');
     const goalDisplay = document.getElementById('goalDisplay');
     const endBanner = document.getElementById('endBanner');
+    const restartHint = document.getElementById('restartHint');
 
     // Audio placeholders
     const buttonPlaylist = [
@@ -578,6 +585,7 @@
       gameEnded = true;
       endBanner.textContent = message;
       endBanner.className = 'visible';
+      restartHint.style.display = 'block';
     }
 
     function checkGameEnd() {
@@ -607,6 +615,28 @@
       }
     }
 
+    let restartHoldTimer = null;
+    const RESTART_HOLD_MS = 3000;
+
+    function cancelRestartHold() {
+      if (restartHoldTimer) {
+        clearTimeout(restartHoldTimer);
+        restartHoldTimer = null;
+      }
+    }
+
+    function beginGame() {
+      overlay.style.display = 'none';
+      gameRunning = true;
+      gameEnded = false;
+      endBanner.className = '';
+      restartHint.style.display = 'none';
+      cancelRestartHold();
+      langToggle?.remove();
+      initGame();
+      updateGoalDisplay();
+    }
+
     startButton.addEventListener('click', (e) => {
       e.preventDefault();
       applyPlayerConfig();
@@ -621,14 +651,7 @@
       }
 
       closePlayerModal();
-
-      overlay.style.display = 'none';
-      gameRunning = true;
-      gameEnded = false;
-      endBanner.className = '';
-      langToggle?.remove();
-      initGame();
-      updateGoalDisplay();
+      beginGame();
     });
 
     function resize() {
@@ -935,8 +958,22 @@
     }
 
     // ----- Controls -----
+    function restartGame() {
+      if (!gameEnded) return;
+      beginGame();
+    }
+
     window.addEventListener('keydown', (e) => {
-      if (!gameRunning || gameEnded) return;
+      if (gameEnded) {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          if (!restartHoldTimer) {
+            restartHoldTimer = setTimeout(() => restartGame(), RESTART_HOLD_MS);
+          }
+        }
+        return;
+      }
+      if (!gameRunning) return;
 
       // Player 1 (Space)
       if (e.code === 'Space') {
@@ -950,6 +987,12 @@
         e.preventDefault();
         startButtonMusic();
         hives[1].sendBees();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (gameEnded && e.code === 'Space') {
+        cancelRestartHold();
       }
     });
 
