@@ -2,6 +2,7 @@ import { createRainScene } from './rain-scene.js';
 import { createSnowScene } from './snow-scene.js';
 import { createPetalScene } from './petal-scene.js';
 import { createCandleScene } from './candle-scene.js';
+import { createFacemaskScene } from './facemask-scene.js';
 
 const PLAYLIST_TRACKS = [
   '../../songs/sadness/v5sadviolinmusic1.mp3',
@@ -250,7 +251,8 @@ const sketch = p => {
       createRainScene(p),
       createSnowScene(p),
       createPetalScene(p),
-      createCandleScene(p)
+      createCandleScene(p),
+      createFacemaskScene(p)
     ];
     scenes.forEach(scene => scene.resize?.());
     activeIndex = 0;
