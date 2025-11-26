@@ -128,9 +128,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
   ensurePointerOverlay();
 
-  function setExternalStatus(message) {
-    if (externalPlayerStatus) {
-      externalPlayerStatus.textContent = message;
+  const externalStatusMessages = {
+    viewerOpened: {
+      fr: 'Page lecteur ouverte : cliquer sur Ready?',
+      en: 'Viewer page opened: click Ready?',
+      ja: 'ビューワーページが開きました：Ready? をクリックしてください',
+    },
+    viewerReady: {
+      fr: 'Lecteur prêt',
+      en: 'Viewer ready',
+      ja: 'ビューワーの準備完了',
+    },
+    viewerClosed: {
+      fr: 'Lecteur fermé',
+      en: 'Viewer closed',
+      ja: 'ビューワーが閉じられました',
+    },
+    viewerInactive: {
+      fr: 'Lecteur inactif',
+      en: 'Viewer inactive',
+      ja: 'ビューワーが未起動',
+    },
+    noBroadcast: {
+      fr: 'BroadcastChannel non pris en charge',
+      en: 'BroadcastChannel not supported',
+      ja: 'BroadcastChannel はサポートされていません',
+    },
+    cannotOpen: {
+      fr: "Impossible d'ouvrir la page lecteur",
+      en: 'Unable to open viewer page',
+      ja: 'ビューワーページを開けません',
+    },
+  };
+
+  function setExternalStatus(messageKey) {
+    if (!externalPlayerStatus) return;
+    const strings = externalStatusMessages[messageKey];
+    if (strings) {
+      externalPlayerStatus.textContent = strings.fr;
+      externalPlayerStatus.dataset.fr = strings.fr;
+      externalPlayerStatus.dataset.en = strings.en;
+      externalPlayerStatus.dataset.ja = strings.ja;
+      externalPlayerStatus.title = strings.fr;
+    } else if (typeof messageKey === 'string') {
+      externalPlayerStatus.textContent = messageKey;
+      externalPlayerStatus.title = messageKey;
     }
   }
 
@@ -519,17 +561,17 @@ document.addEventListener('DOMContentLoaded', () => {
         case 'viewer-loaded':
           externalViewerReady = false;
           externalModeEnabled = true;
-          setExternalStatus('Page lecteur ouverte : cliquer sur Ready?');
+          setExternalStatus('viewerOpened');
           break;
         case 'viewer-ready':
           externalModeEnabled = true;
           externalViewerReady = true;
-          setExternalStatus('Lecteur prêt');
+          setExternalStatus('viewerReady');
           break;
         case 'viewer-closed':
           externalModeEnabled = false;
           externalViewerReady = false;
-          setExternalStatus('Lecteur fermé');
+          setExternalStatus('viewerClosed');
           break;
         case 'playback-stopped':
           if (data.url) {
@@ -550,25 +592,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     externalChannel.postMessage({ type: 'chooser-opened' });
   } else if (externalPlayerStatus) {
-    setExternalStatus('BroadcastChannel non pris en charge');
+    setExternalStatus('noBroadcast');
   }
 
   if (openExternalPlayerButton) {
     openExternalPlayerButton.addEventListener('click', () => {
       if (!externalChannel) {
         externalModeEnabled = false;
-        setExternalStatus('BroadcastChannel non pris en charge');
+        setExternalStatus('noBroadcast');
         return;
       }
       externalViewerReady = false;
       try {
         externalWindow = window.open('viewer.html', 'eyegaze-video-viewer');
         externalModeEnabled = true;
-        setExternalStatus('Page lecteur ouverte : cliquer sur Ready?');
+        setExternalStatus('viewerOpened');
         externalChannel.postMessage({ type: 'chooser-opened' });
       } catch (err) {
         externalModeEnabled = false;
-        setExternalStatus("Impossible d'ouvrir la page lecteur");
+        setExternalStatus('cannotOpen');
       }
     });
   }
@@ -578,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
       externalWindow = null;
       externalModeEnabled = false;
       externalViewerReady = false;
-      setExternalStatus('Lecteur fermé');
+      setExternalStatus('viewerClosed');
     }
   }, 2500);
 
