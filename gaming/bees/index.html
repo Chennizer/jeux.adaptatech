@@ -256,6 +256,13 @@
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
     }
+    .restart-subtext {
+      display: block;
+      margin-top: 0.35rem;
+      font-size: 0.95rem;
+      font-weight: 650;
+      color: #d8e7f3;
+    }
     .modal-actions button {
       padding: 0.75rem 1.6rem;
       border-radius: 10px;
@@ -393,6 +400,10 @@
   <canvas id="simCanvas"></canvas>
   <div id="goalDisplay"></div>
   <div id="endBanner" aria-live="polite"></div>
+  <span id="restartHintTemplate" class="translate" aria-hidden="true" style="display:none;"
+        data-fr="Maintenez votre contacteur pour recommencer"
+        data-en="Hold your switch to restart"
+        data-ja="スイッチを長押しして再スタート">Hold your switch to restart</span>
 
   <script>
     /**
@@ -505,14 +516,11 @@
     const tripGoalInput = document.getElementById('tripGoalInput');
     const goalDisplay = document.getElementById('goalDisplay');
     const endBanner = document.getElementById('endBanner');
+    const restartHintTemplate = document.getElementById('restartHintTemplate');
 
     // Audio placeholders
-    const buttonPlaylist = [
-      '../../sounds/startactivity.mp3',
-      '../../sounds/spacewalk.mp3'
-    ];
+    const pressSoundSrc = '../../sounds/startactivity.mp3';
     let buttonMusic;
-    let buttonTrackIndex = 0;
     const finishSound = new Audio('../../sounds/victory.mp3');
     finishSound.volume = 0.5;
 
@@ -565,18 +573,26 @@
       if (!gameRunning) return;
       const goalText = [];
       if (gameMode === '1p' && hives[0]) {
-        goalText.push(`${playerConfigs[0].name}: ${Math.min(hives[0].tripsDone, tripGoal)}/${tripGoal}`);
+        goalText.push(`${playerConfigs[0].name}: ${Math.min(hives[0].voyagesCompleted, tripGoal)}/${tripGoal}`);
       }
       if (gameMode === '2p' && hives.length === 2) {
-        goalText.push(`${playerConfigs[0].name}: ${Math.min(hives[0].tripsDone, tripGoal)}/${tripGoal}`);
-        goalText.push(`${playerConfigs[1].name}: ${Math.min(hives[1].tripsDone, tripGoal)}/${tripGoal}`);
+        goalText.push(`${playerConfigs[0].name}: ${Math.min(hives[0].voyagesCompleted, tripGoal)}/${tripGoal}`);
+        goalText.push(`${playerConfigs[1].name}: ${Math.min(hives[1].voyagesCompleted, tripGoal)}/${tripGoal}`);
       }
       goalDisplay.textContent = goalText.join('  •  ');
     }
 
+    function getRestartHintText() {
+      const lang = (document.documentElement.lang || 'fr').split('-')[0];
+      return restartHintTemplate?.getAttribute(`data-${lang}`)
+        || restartHintTemplate?.getAttribute('data-en')
+        || 'Hold your switch to restart';
+    }
+
     function endGame(message) {
       gameEnded = true;
-      endBanner.textContent = message;
+      const restartCopy = getRestartHintText();
+      endBanner.innerHTML = `${message}<span class="restart-subtext">${restartCopy}</span>`;
       endBanner.className = 'visible';
     }
 
@@ -592,19 +608,36 @@
       }
     }
 
-    function startButtonMusic() {
+    function playPressSound() {
       if (!buttonMusic) {
-        buttonMusic = new Audio(buttonPlaylist[buttonTrackIndex]);
+        buttonMusic = new Audio(pressSoundSrc);
         buttonMusic.volume = 0.35;
-        buttonMusic.addEventListener('ended', () => {
-          buttonTrackIndex = (buttonTrackIndex + 1) % buttonPlaylist.length;
-          buttonMusic.src = buttonPlaylist[buttonTrackIndex];
-          buttonMusic.play().catch(()=>{});
-        });
+      } else {
+        buttonMusic.currentTime = 0;
       }
-      if (buttonMusic.paused) {
-        buttonMusic.play().catch(()=>{});
+      buttonMusic.play().catch(()=>{});
+    }
+
+    let restartHoldTimer = null;
+    const RESTART_HOLD_MS = 3000;
+
+    function cancelRestartHold() {
+      if (restartHoldTimer) {
+        clearTimeout(restartHoldTimer);
+        restartHoldTimer = null;
       }
+    }
+
+    function beginGame() {
+      overlay.style.display = 'none';
+      gameRunning = true;
+      gameEnded = false;
+      endBanner.className = '';
+      endBanner.textContent = '';
+      cancelRestartHold();
+      langToggle?.remove();
+      initGame();
+      updateGoalDisplay();
     }
 
     startButton.addEventListener('click', (e) => {
@@ -621,14 +654,7 @@
       }
 
       closePlayerModal();
-
-      overlay.style.display = 'none';
-      gameRunning = true;
-      gameEnded = false;
-      endBanner.className = '';
-      langToggle?.remove();
-      initGame();
-      updateGoalDisplay();
+      beginGame();
     });
 
     function resize() {
@@ -660,7 +686,8 @@
         this.bees = [];
         this.occupiedMap = new Set();
         this.reservedMap = new Set();
-        this.tripsDone = 0;
+        this.voyagesCompleted = 0;
+        this.voyageLogged = false;
         this.finishing = false;
         this.finished = false;
 
@@ -744,6 +771,7 @@
 
       sendBees() {
         if (this.finished || this.finishing) return;
+        let launched = false;
         this.bees.forEach(b => {
           if (b.state === 'idle' && flowers.length > 0) {
             b.state = 'outbound';
@@ -754,8 +782,14 @@
               x: bloom.x + (Math.random()-0.5)*10,
               y: bloom.y + (Math.random()-0.5)*10 - 15
             };
+            launched = true;
           }
         });
+
+        // A voyage counts once per launch input, not per individual bee.
+        if (launched) {
+          this.voyageLogged = false;
+        }
       }
 
       update(dt) {
@@ -795,9 +829,10 @@
 
             if (dist < 20) {
               if (b.state === 'outbound') {
-                if (!this.finished) {
-                  this.tripsDone = Math.min(tripGoal, this.tripsDone + 1);
-                  if (this.tripsDone >= tripGoal) {
+                if (!this.finished && !this.voyageLogged) {
+                  this.voyagesCompleted = Math.min(tripGoal, this.voyagesCompleted + 1);
+                  this.voyageLogged = true;
+                  if (this.voyagesCompleted >= tripGoal) {
                     this.finishing = true;
                   }
                   updateGoalDisplay();
@@ -926,28 +961,48 @@
     }
 
     // ----- Controls -----
+    function restartGame() {
+      if (!gameEnded) return;
+      beginGame();
+    }
+
     window.addEventListener('keydown', (e) => {
-      if (!gameRunning || gameEnded) return;
+      if (e.repeat) return;
+      if (gameEnded) {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          if (!restartHoldTimer) {
+            restartHoldTimer = setTimeout(() => restartGame(), RESTART_HOLD_MS);
+          }
+        }
+        return;
+      }
+      if (!gameRunning) return;
 
       // Player 1 (Space)
       if (e.code === 'Space') {
         e.preventDefault();
-        startButtonMusic();
+        playPressSound();
         hives[0].sendBees();
       }
 
       // Player 2 (Enter) - Only in 2p mode
       if (e.code === 'Enter' && gameMode === '2p') {
         e.preventDefault();
-        startButtonMusic();
+        playPressSound();
         hives[1].sendBees();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (gameEnded && e.code === 'Space') {
+        cancelRestartHold();
       }
     });
 
     // Touch/Mouse fallback (Triggers both or P1)
     window.addEventListener('mousedown', () => {
       if(!gameRunning || gameEnded) return;
-      startButtonMusic();
       hives[0].sendBees();
       if(gameMode === '2p') hives[1].sendBees();
     });
@@ -1485,8 +1540,12 @@
   <!-- Translation system wired exactly like the Window example -->
   <script src="../../js/translationmain.js"></script>
   <script>
-    document.getElementById('langToggle')?.addEventListener('pointerup', toggleLanguage);
-    document.addEventListener('DOMContentLoaded', updateLanguage);
+    document.getElementById('langToggle')?.addEventListener('pointerup', () => {
+      toggleLanguage();
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+      updateLanguage();
+    });
   </script>
   <script src="../../js/translationonly.js"></script>
 </body>
