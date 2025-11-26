@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lecteur externe - vidéos locales</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #000;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    #shell {
+      width: 100%;
+      max-width: 960px;
+      padding: 24px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    #ready-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+    #ready-button {
+      font-size: 32px;
+      padding: 16px 28px;
+      background: #009688;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    #ready-button:hover { background: #00bfa5; }
+    #status, #library-count { opacity: 0.8; }
+    #player-screen { display: none; }
+    #player-screen video {
+      width: 100%;
+      max-height: 75vh;
+      background: #000;
+    }
+    #now-playing { margin-top: 8px; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <div id="shell">
+    <div id="ready-screen">
+      <h1>Lecteur externe</h1>
+      <button id="ready-button">Ready?</button>
+      <div id="status">Cliquez sur Ready? pour autoriser le plein écran.</div>
+      <div id="library-count"></div>
+    </div>
+    <div id="player-screen">
+      <video id="external-video" controls playsinline></video>
+      <div id="now-playing"></div>
+    </div>
+  </div>
+  <script>
+    const channel = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-video-channel') : null;
+    const readyButton = document.getElementById('ready-button');
+    const statusEl = document.getElementById('status');
+    const libraryCount = document.getElementById('library-count');
+    const readyScreen = document.getElementById('ready-screen');
+    const playerScreen = document.getElementById('player-screen');
+    const videoEl = document.getElementById('external-video');
+    const nowPlaying = document.getElementById('now-playing');
+
+    let isReady = false;
+    let currentTimeout = null;
+    let currentVideoUrl = '';
+    let currentCanResume = false;
+
+    function notifyHost(type, payload = {}) {
+      try {
+        channel?.postMessage({ type, ...payload });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function requestFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      }
+    }
+
+    function showReady() {
+      playerScreen.style.display = 'none';
+      readyScreen.style.display = 'flex';
+      statusEl.textContent = 'Prêt à recevoir une vidéo.';
+      nowPlaying.textContent = '';
+    }
+
+    function finishPlayback(reason = 'ended') {
+      if (currentTimeout) {
+        clearTimeout(currentTimeout);
+        currentTimeout = null;
+      }
+      const resumeTime = currentCanResume ? videoEl.currentTime : 0;
+      notifyHost('play-finished', { videoUrl: currentVideoUrl, resumeTime, canResume: currentCanResume, reason });
+      videoEl.pause();
+      videoEl.removeAttribute('src');
+      videoEl.load();
+      currentVideoUrl = '';
+      currentCanResume = false;
+      showReady();
+    }
+
+    function startPlayback(data) {
+      if (!data || !data.videoUrl) return;
+      currentVideoUrl = data.videoUrl;
+      currentCanResume = !!data.canResume;
+      readyScreen.style.display = 'none';
+      playerScreen.style.display = 'block';
+      nowPlaying.textContent = data.name ? `Lecture: ${data.name}` : 'Lecture en cours';
+      videoEl.src = data.videoUrl;
+      videoEl.load();
+      const startAt = Number.isFinite(data.resumeTime) ? Math.max(0, data.resumeTime) : 0;
+      videoEl.onloadedmetadata = () => {
+        if (startAt > 0 && startAt < videoEl.duration) {
+          videoEl.currentTime = startAt;
+        }
+        videoEl.play().catch(() => {});
+      };
+      if (data.timeLimitSeconds) {
+        currentTimeout = setTimeout(() => finishPlayback('timeout'), data.timeLimitSeconds * 1000);
+      }
+    }
+
+    readyButton.addEventListener('click', () => {
+      isReady = true;
+      statusEl.textContent = 'Lecture en plein écran prête.';
+      requestFullscreen();
+      notifyHost('player-ready');
+    });
+
+    videoEl.addEventListener('ended', () => finishPlayback('ended'));
+
+    if (channel) {
+      channel.addEventListener('message', event => {
+        const data = event.data || {};
+        if (data.type === 'choices-update') {
+          const count = Array.isArray(data.choices) ? data.choices.length : 0;
+          libraryCount.textContent = count ? `${count} vidéo(s) disponibles` : '';
+          if (!isReady) {
+            statusEl.textContent = count ? 'Cliquez sur Ready? quand vous êtes prêt.' : 'En attente de vidéos...';
+          }
+        }
+        if (data.type === 'play') {
+          if (!isReady) {
+            statusEl.textContent = 'Cliquez sur Ready? pour commencer le plein écran.';
+            return;
+          }
+          startPlayback(data);
+        }
+      });
+      notifyHost('player-ready');
+    } else {
+      statusEl.textContent = 'BroadcastChannel non pris en charge.';
+    }
+
+    window.addEventListener('beforeunload', () => {
+      notifyHost('player-closed');
+    });
+  </script>
+</body>
+</html>

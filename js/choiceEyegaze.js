@@ -47,6 +47,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const externalPlayerCheckbox = document.getElementById('enable-external-player');
+  const openExternalPlayerButton = document.getElementById('open-external-player');
+  const externalPlayerStatus = document.getElementById('external-player-status');
+  const externalPlayerOverlay = document.getElementById('external-player-overlay');
+  const externalOverlayStatus = document.getElementById('external-overlay-status');
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -65,6 +70,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let videoResumePositions  = {};
 
   let currentCategory       = 'all';
+
+  const externalPlayerChannel = 'BroadcastChannel' in window ? new BroadcastChannel('eyegaze-video-channel') : null;
+  const externalPlayerUrl = new URL('player.html', window.location.href).toString();
+  let externalPlayerWindow = null;
+  let externalPlayerConnected = false;
+  let useExternalPlayer = false;
 
   // Global variable for fixation delay (in ms), default 2000ms
   let fixationDelay = 2000;
@@ -102,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   ensurePointerOverlay();
+  updateExternalPlayerStatus('Lecteur non connecté');
 
   function isElementShown(el) {
     if (!el) return false;
@@ -161,6 +173,48 @@ document.addEventListener('DOMContentLoaded', () => {
     gazePointer.style.opacity = pointerVisible ? opct : 0;
     if (pointerVisible && lastPointerPosition) {
       setPointerPos(lastPointerPosition.x, lastPointerPosition.y);
+    }
+  }
+
+  function updateExternalPlayerStatus(text, isConnected = false) {
+    if (externalPlayerStatus) {
+      externalPlayerStatus.textContent = text;
+      externalPlayerStatus.classList.toggle('connected', !!isConnected);
+    }
+  }
+
+  function markExternalConnected() {
+    externalPlayerConnected = true;
+    updateExternalPlayerStatus('Lecteur connecté', true);
+    if (externalPlayerCheckbox && externalPlayerCheckbox.checked) {
+      useExternalPlayer = true;
+    }
+  }
+
+  function markExternalDisconnected() {
+    externalPlayerConnected = false;
+    updateExternalPlayerStatus('Lecteur non connecté');
+    useExternalPlayer = false;
+    if (externalPlayerCheckbox) {
+      externalPlayerCheckbox.checked = false;
+    }
+  }
+
+  function showExternalOverlay(message) {
+    if (!externalPlayerOverlay) return;
+    videoContainer.style.display = 'none';
+    tileContainer.style.display = 'none';
+    gameOptionsModal.style.display = 'none';
+    tilePickerModal.style.display = 'none';
+    externalPlayerOverlay.style.display = 'flex';
+    if (externalOverlayStatus) {
+      externalOverlayStatus.textContent = message || '';
+    }
+  }
+
+  function hideExternalOverlay() {
+    if (externalPlayerOverlay) {
+      externalPlayerOverlay.style.display = 'none';
     }
   }
 
@@ -628,6 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { preventAutoPreview = false; }, 1200);
     tileContainer.style.display = "flex";
     videoContainer.style.display = "none";
+    hideExternalOverlay();
     ensureFullscreen();
     refreshPointerStyles();
   }
@@ -643,7 +698,50 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------------
      (F) PLAY VIDEO (time limit, resume)
      ---------------------------------------------------------------- */
+  function playVideoOnSecondPage(videoUrl) {
+    stopPreview();
+    clearHoverState();
+    videoPlaying = true;
+    showExternalOverlay('En attente du lecteur externe...');
+    refreshPointerStyles();
+    ensureFullscreen();
+
+    const resumeTime = enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]
+      ? videoResumePositions[videoUrl]
+      : 0;
+    const timeLimitSeconds = enableTimeLimitCheckbox.checked
+      ? (parseInt(timeLimitInput.value, 10) || 60)
+      : null;
+    const choiceMeta = Array.isArray(mediaChoices)
+      ? mediaChoices.find(item => item.video === videoUrl)
+      : null;
+
+    if (externalPlayerChannel && externalPlayerConnected) {
+      externalPlayerChannel.postMessage({
+        type: 'play',
+        videoUrl,
+        resumeTime,
+        timeLimitSeconds,
+        canResume: !!enableResumeVideoCheckbox.checked,
+        name: choiceMeta?.name || ''
+      });
+    } else {
+      videoPlaying = false;
+      hideExternalOverlay();
+      markExternalDisconnected();
+      playVideo(videoUrl);
+    }
+  }
+
   function playVideo(videoUrl) {
+    if (useExternalPlayer && externalPlayerChannel) {
+      if (!externalPlayerConnected) {
+        markExternalDisconnected();
+      } else {
+        playVideoOnSecondPage(videoUrl);
+        return;
+      }
+    }
     stopPreview();
     clearHoverState();
     videoPlaying = true;
@@ -683,6 +781,41 @@ document.addEventListener('DOMContentLoaded', () => {
     delete videoResumePositions[videoSource.src];
     resetToChoicesScreen();
   });
+
+  if (externalPlayerChannel) {
+    externalPlayerChannel.addEventListener('message', event => {
+      const data = event.data || {};
+      switch (data.type) {
+        case 'player-ready':
+          markExternalConnected();
+          break;
+        case 'player-closed':
+          markExternalDisconnected();
+          hideExternalOverlay();
+          if (videoPlaying) {
+            resetToChoicesScreen();
+          }
+          break;
+        case 'play-finished': {
+          const { videoUrl, resumeTime = 0, canResume = false } = data;
+          if (canResume && enableResumeVideoCheckbox.checked) {
+            videoResumePositions[videoUrl] = resumeTime;
+          } else if (videoUrl) {
+            delete videoResumePositions[videoUrl];
+          }
+          resetToChoicesScreen();
+          break;
+        }
+        case 'player-error':
+          markExternalDisconnected();
+          hideExternalOverlay();
+          if (videoPlaying) resetToChoicesScreen();
+          break;
+        default:
+          break;
+      }
+    });
+  }
 
   document.addEventListener('pointermove', event => {
     const { clientX, clientY } = event;
@@ -748,6 +881,33 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+
+  if (openExternalPlayerButton) {
+    openExternalPlayerButton.addEventListener('click', () => {
+      try {
+        externalPlayerWindow = window.open(externalPlayerUrl, 'eyegaze-external-player');
+        if (!externalPlayerWindow || externalPlayerWindow.closed) {
+          updateExternalPlayerStatus('Impossible d\'ouvrir le lecteur externe');
+          return;
+        }
+        updateExternalPlayerStatus('Connexion au lecteur...');
+        externalPlayerWindow.focus();
+        externalPlayerChannel?.postMessage({ type: 'host-ping' });
+      } catch (err) {
+        console.error(err);
+        updateExternalPlayerStatus('Impossible d\'ouvrir le lecteur externe');
+      }
+    });
+  }
+
+  if (externalPlayerCheckbox) {
+    externalPlayerCheckbox.addEventListener('change', () => {
+      useExternalPlayer = !!externalPlayerCheckbox.checked && externalPlayerConnected;
+      if (externalPlayerCheckbox.checked && !externalPlayerConnected) {
+        updateExternalPlayerStatus('Ouvrez le lecteur externe pour activer cette option');
+      }
+    });
+  }
 
   /* ----------------------------------------------------------------
      (G) EVENT HANDLERS: TILE PICKER & START GAME
