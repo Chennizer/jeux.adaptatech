@@ -47,6 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer    = document.getElementById('video-container');
   const videoPlayer       = document.getElementById('video-player');
   const videoSource       = document.getElementById('video-source');
+  const openViewerPageButton = document.getElementById('open-viewer-page');
+  const externalPlaybackStatus = document.getElementById('external-playback-status');
+  const remotePlaybackOverlay = document.getElementById('remote-playback-overlay');
 
   /* --- GAME VARIABLES --- */
   let videoPlaying          = false;
@@ -66,20 +69,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentCategory       = 'all';
 
+  const playbackChannel = typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel('eyegaze-video-bridge')
+    : null;
+  let externalPlaybackEnabled = false;
+  let viewerReady = false;
+  let lastPlayedUrl = '';
+
   // Global variable for fixation delay (in ms), default 2000ms
   let fixationDelay = 2000;
   // Global variable for tile size in vh; default 40
   let tileSize = 40;
 
   const tileChoiceMap = new WeakMap();
-  const POINTER_MOVE_THRESHOLD = 10;
   let hoveredTile = null;
   let hoveredChoice = null;
   let hoverTimeoutId = null;
-  let requirePointerMotion = false;
   let lastPointerPosition = null;
-  let pointerMotionOrigin = null;
-  let pendingGuardedHover = null;
 
   function ensurePointerOverlay() {
     if (!gazePointer) return null;
@@ -102,6 +108,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   ensurePointerOverlay();
+
+  function updateExternalPlaybackStatus(text, highlight = false) {
+    if (!externalPlaybackStatus) return;
+    externalPlaybackStatus.textContent = text;
+    externalPlaybackStatus.style.color = highlight ? '#00e676' : '';
+  }
+
+  function showRemoteOverlay(message) {
+    if (remotePlaybackOverlay) {
+      remotePlaybackOverlay.style.display = 'flex';
+      const msgEl = document.getElementById('remote-playback-message');
+      if (msgEl && message) {
+        msgEl.textContent = message;
+      }
+    }
+  }
+
+  function hideRemoteOverlay() {
+    if (remotePlaybackOverlay) {
+      remotePlaybackOverlay.style.display = 'none';
+    }
+  }
 
   function isElementShown(el) {
     if (!el) return false;
@@ -208,21 +236,15 @@ document.addEventListener('DOMContentLoaded', () => {
       hoveredTile = null;
     }
     hoveredChoice = null;
-    pendingGuardedHover = null;
   }
 
   function requirePointerMotionBeforeHover({ clearSelection = true } = {}) {
     if (clearSelection) {
       clearHoverState();
     }
-    requirePointerMotion = true;
-    pendingGuardedHover = null;
     if (tileContainer) {
-      tileContainer.classList.add('pointer-motion-required');
+      tileContainer.classList.remove('pointer-motion-required');
     }
-    pointerMotionOrigin = lastPointerPosition
-      ? { x: lastPointerPosition.x, y: lastPointerPosition.y }
-      : null;
   }
 
   function scheduleHoverCountdown() {
@@ -245,28 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleTileEnter(tile, choice, options = {}) {
     const { playSound = true } = options;
     if (videoPlaying) return;
-
-    if (requirePointerMotion) {
-      const tileChanged = hoveredTile !== tile;
-
-      if (hoverTimeoutId) {
-        clearTimeout(hoverTimeoutId);
-        hoverTimeoutId = null;
-        setPointerDwell(false);
-      }
-
-      if (hoveredTile) {
-        hoveredTile.classList.remove('selected');
-        hoveredTile = null;
-      }
-
-      hoveredChoice = null;
-      tile.classList.remove('selected');
-      pendingGuardedHover = { tile, choice, playSound: playSound && tileChanged };
-      return;
-    }
-
-    pendingGuardedHover = null;
 
     const tileChanged = hoveredTile !== tile;
 
@@ -291,10 +291,22 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleHoverCountdown();
   }
 
-  function handleTileLeave(tile) {
-    if (pendingGuardedHover && pendingGuardedHover.tile === tile) {
-      pendingGuardedHover = null;
+  function applyHoverFromPoint(x, y, { playSound = true } = {}) {
+    if (!tileContainer) return;
+    const target = document.elementFromPoint(x, y);
+    const tile = target ? target.closest('.tile') : null;
+    if (
+      tile &&
+      tileChoiceMap.has(tile) &&
+      tileContainer.contains(tile)
+    ) {
+      handleTileEnter(tile, tileChoiceMap.get(tile), { playSound });
+    } else if (hoveredTile) {
+      clearHoverState();
     }
+  }
+
+  function handleTileLeave(tile) {
     if (hoveredTile === tile) {
       clearHoverState();
     } else {
@@ -346,6 +358,24 @@ document.addEventListener('DOMContentLoaded', () => {
       previewDelayTimeout = null;
     }
     startInactivityTimer();
+  }
+
+  function resetHoverMechanics({ clearPointerPosition = false } = {}) {
+    clearHoverState();
+    if (clearPointerPosition) {
+      lastPointerPosition = null;
+    }
+    if (tileContainer) {
+      tileContainer.classList.remove('pointer-motion-required');
+    }
+    setPointerDwell(false);
+  }
+
+  function reapplyHoverFromLastPointer({ playSound = false } = {}) {
+    if (!lastPointerPosition || videoPlaying) return;
+    requestAnimationFrame(() => {
+      applyHoverFromPoint(lastPointerPosition.x, lastPointerPosition.y, { playSound });
+    });
   }
 
   function playCycleSound() {
@@ -608,28 +638,53 @@ document.addEventListener('DOMContentLoaded', () => {
       tileContainer.appendChild(secondRow);
     }
     requirePointerMotionBeforeHover();
+    reapplyHoverFromLastPointer({ playSound: false });
   }
 
   /* ----------------------------------------------------------------
      (E) BACKSPACE TO RESET TO CHOICES SCREEN
      ---------------------------------------------------------------- */
-  function resetToChoicesScreen() {
+  function resetToChoicesScreen({ reRenderTiles = true } = {}) {
     stopPreview();
-    videoPlayer.pause();
-    videoPlayer.currentTime = 0;
+    if (externalPlaybackEnabled && playbackChannel) {
+      playbackChannel.postMessage({ type: 'stop-video' });
+    }
     if (videoTimeLimitTimeout) {
       clearTimeout(videoTimeLimitTimeout);
       videoTimeLimitTimeout = null;
     }
+
     videoPlaying = false;
-    clearHoverState();
-    requirePointerMotionBeforeHover({ clearSelection: false });
-    preventAutoPreview = true;
-    setTimeout(() => { preventAutoPreview = false; }, 1200);
-    tileContainer.style.display = "flex";
+    videoPlayer.pause();
+    videoPlayer.onloadedmetadata = null;
+    videoPlayer.currentTime = 0;
+    if (videoSource) {
+      videoSource.removeAttribute('src');
+    }
+    videoPlayer.removeAttribute('src');
+    videoPlayer.src = '';
+    videoPlayer.load();
+
+    hideRemoteOverlay();
+    tilePickerModal.style.display = "none";
+    gameOptionsModal.style.display = "none";
     videoContainer.style.display = "none";
-    ensureFullscreen();
+    tileContainer.style.display = "flex";
+
+    resetHoverMechanics();
+
+    if (reRenderTiles) {
+      tileContainer.innerHTML = '';
+      renderGameTiles();
+    } else {
+      tileContainer.querySelectorAll('.tile.selected').forEach(tile => tile.classList.remove('selected'));
+    }
+
+    clearHoverState();
     refreshPointerStyles();
+    reapplyHoverFromLastPointer({ playSound: false });
+    startInactivityTimer();
+    ensureFullscreen();
   }
 
   document.addEventListener('keydown', e => {
@@ -643,7 +698,50 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------------
      (F) PLAY VIDEO (time limit, resume)
      ---------------------------------------------------------------- */
+  function startRemotePlayback(videoUrl) {
+    stopPreview();
+    clearHoverState();
+    videoPlaying = true;
+    lastPlayedUrl = videoUrl;
+    tileContainer.style.display = "none";
+    tilePickerModal.style.display = "none";
+    gameOptionsModal.style.display = "none";
+    refreshPointerStyles();
+    const limitSeconds = parseInt(timeLimitInput?.value, 10) || 60;
+    if (videoTimeLimitTimeout) { clearTimeout(videoTimeLimitTimeout); }
+    if (enableTimeLimitCheckbox?.checked) {
+      videoTimeLimitTimeout = setTimeout(() => {
+        playbackChannel?.postMessage({ type: 'stop-video' });
+      }, limitSeconds * 1000);
+    }
+
+    const payload = {
+      type: 'play-video',
+      url: videoUrl
+    };
+
+    if (enableResumeVideoCheckbox?.checked && videoResumePositions[videoUrl]) {
+      payload.resume = videoResumePositions[videoUrl];
+    }
+
+    if (viewerReady) {
+      showRemoteOverlay();
+      ensureFullscreen();
+      playbackChannel?.postMessage(payload);
+      updateExternalPlaybackStatus('Lecture sur la deuxième page...', true);
+    } else {
+      showRemoteOverlay('En attente de la page lecteur...');
+      updateExternalPlaybackStatus('En attente de la page lecteur...', false);
+      playbackChannel?.postMessage({ type: 'host-handshake' });
+      setTimeout(() => playbackChannel?.postMessage(payload), 400);
+    }
+  }
+
   function playVideo(videoUrl) {
+    if (externalPlaybackEnabled && playbackChannel) {
+      startRemotePlayback(videoUrl);
+      return;
+    }
     stopPreview();
     clearHoverState();
     videoPlaying = true;
@@ -684,68 +782,63 @@ document.addEventListener('DOMContentLoaded', () => {
     resetToChoicesScreen();
   });
 
+  if (playbackChannel) {
+    playbackChannel.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type === 'viewer-ready') {
+        viewerReady = true;
+        externalPlaybackEnabled = true;
+        updateExternalPlaybackStatus('Page lecteur prête', true);
+        hideRemoteOverlay();
+        return;
+      }
+      if (data.type === 'viewer-awaiting' || data.type === 'viewer-opened') {
+        viewerReady = false;
+        externalPlaybackEnabled = true;
+        updateExternalPlaybackStatus('Page lecteur ouverte : appuyez sur Ready?', false);
+        hideRemoteOverlay();
+        return;
+      }
+      if (data.type === 'playback-ended') {
+        if (enableResumeVideoCheckbox?.checked && lastPlayedUrl && typeof data.position === 'number') {
+          videoResumePositions[lastPlayedUrl] = data.position;
+        } else if (lastPlayedUrl) {
+          delete videoResumePositions[lastPlayedUrl];
+        }
+        resetToChoicesScreen();
+        return;
+      }
+      if (data.type === 'playback-error') {
+        videoPlaying = false;
+        hideRemoteOverlay();
+        updateExternalPlaybackStatus('Erreur de lecture sur la page lecteur', false);
+        resetToChoicesScreen();
+      }
+    });
+
+    playbackChannel.postMessage({ type: 'host-handshake' });
+  } else {
+    updateExternalPlaybackStatus('BroadcastChannel non supporté');
+  }
+
+  if (openViewerPageButton) {
+    openViewerPageButton.addEventListener('click', () => {
+      if (!playbackChannel) return;
+      externalPlaybackEnabled = true;
+      updateExternalPlaybackStatus('Ouverture de la page lecteur...');
+      window.open('viewer.html', 'eyegaze-video-viewer');
+      setTimeout(() => playbackChannel.postMessage({ type: 'host-handshake' }), 200);
+    });
+  }
+
+  updateExternalPlaybackStatus('Lecture sur cette page.');
+
   document.addEventListener('pointermove', event => {
     const { clientX, clientY } = event;
     setPointerPos(clientX, clientY);
-    const targetElement = event.target instanceof Element ? event.target : null;
-    const previousPosition = lastPointerPosition;
     lastPointerPosition = { x: clientX, y: clientY };
-
-    if (requirePointerMotion) {
-      if (!pointerMotionOrigin) {
-        if (previousPosition) {
-          pointerMotionOrigin = { x: previousPosition.x, y: previousPosition.y };
-        } else {
-          pointerMotionOrigin = { x: clientX, y: clientY };
-          return;
-        }
-      }
-
-      const dx = clientX - pointerMotionOrigin.x;
-      const dy = clientY - pointerMotionOrigin.y;
-
-      if (Math.hypot(dx, dy) >= POINTER_MOVE_THRESHOLD) {
-        requirePointerMotion = false;
-        pointerMotionOrigin = null;
-        if (tileContainer) {
-          tileContainer.classList.remove('pointer-motion-required');
-        }
-
-        const pending = pendingGuardedHover;
-        pendingGuardedHover = null;
-
-        if (
-          pending &&
-          tileChoiceMap.has(pending.tile) &&
-          tileContainer.contains(pending.tile) &&
-          tileContainer.style.display !== 'none'
-        ) {
-          handleTileEnter(pending.tile, pending.choice, { playSound: pending.playSound });
-        } else {
-          const tile = targetElement ? targetElement.closest('.tile') : null;
-          if (
-            tile &&
-            tileChoiceMap.has(tile) &&
-            tileContainer.contains(tile) &&
-            tileContainer.style.display !== 'none'
-          ) {
-            handleTileEnter(tile, tileChoiceMap.get(tile), { playSound: false });
-          }
-        }
-      }
-      return;
-    }
-
     if (!videoPlaying) {
-      const tile = targetElement ? targetElement.closest('.tile') : null;
-      if (
-        tile &&
-        tileChoiceMap.has(tile) &&
-        tileContainer.contains(tile) &&
-        tile !== hoveredTile
-      ) {
-        handleTileEnter(tile, tileChoiceMap.get(tile));
-      }
+      applyHoverFromPoint(clientX, clientY);
     }
   });
 
@@ -816,7 +909,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.choiceEyegaze.requirePointerMotionBeforeHover = (options) => {
     requirePointerMotionBeforeHover(options);
   };
-  window.choiceEyegaze.isPointerMotionRequired = () => requirePointerMotion;
+  window.choiceEyegaze.isPointerMotionRequired = () => false;
   window.choiceEyegaze.ensureFullscreen = ensureFullscreen;
 
   // Populate grid if choices already exist (e.g., restored from IndexedDB)
