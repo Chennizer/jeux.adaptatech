@@ -256,6 +256,13 @@
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
     }
+    .restart-subtext {
+      display: block;
+      margin-top: 0.35rem;
+      font-size: 0.95rem;
+      font-weight: 650;
+      color: #d8e7f3;
+    }
     .modal-actions button {
       padding: 0.75rem 1.6rem;
       border-radius: 10px;
@@ -393,12 +400,10 @@
   <canvas id="simCanvas"></canvas>
   <div id="goalDisplay"></div>
   <div id="endBanner" aria-live="polite"></div>
-  <div id="restartHint" class="controls-hint" style="display:none;">
-    <span class="translate"
-          data-fr="Maintenez votre contacteur pour recommencer"
-          data-en="Hold your switch to restart"
-          data-ja="スイッチを長押しして再スタート">Hold your switch to restart</span>
-  </div>
+  <span id="restartHintTemplate" class="translate" aria-hidden="true" style="display:none;"
+        data-fr="Maintenez votre contacteur pour recommencer"
+        data-en="Hold your switch to restart"
+        data-ja="スイッチを長押しして再スタート">Hold your switch to restart</span>
 
   <script>
     /**
@@ -511,15 +516,11 @@
     const tripGoalInput = document.getElementById('tripGoalInput');
     const goalDisplay = document.getElementById('goalDisplay');
     const endBanner = document.getElementById('endBanner');
-    const restartHint = document.getElementById('restartHint');
+    const restartHintTemplate = document.getElementById('restartHintTemplate');
 
     // Audio placeholders
-    const buttonPlaylist = [
-      '../../sounds/startactivity.mp3',
-      '../../sounds/spacewalk.mp3'
-    ];
+    const pressSoundSrc = '../../sounds/startactivity.mp3';
     let buttonMusic;
-    let buttonTrackIndex = 0;
     const finishSound = new Audio('../../sounds/victory.mp3');
     finishSound.volume = 0.5;
 
@@ -581,24 +582,18 @@
       goalDisplay.textContent = goalText.join('  •  ');
     }
 
-    const restartHintText = restartHint.querySelector('.translate');
-
-    function refreshRestartTooltip() {
-      if (!restartHintText) return;
+    function getRestartHintText() {
       const lang = (document.documentElement.lang || 'fr').split('-')[0];
-      const localized = restartHintText.getAttribute(`data-${lang}`)
-        || restartHintText.getAttribute('data-en')
-        || restartHintText.textContent.trim();
-      restartHint.setAttribute('title', localized);
-      restartHint.setAttribute('aria-label', localized);
+      return restartHintTemplate?.getAttribute(`data-${lang}`)
+        || restartHintTemplate?.getAttribute('data-en')
+        || 'Hold your switch to restart';
     }
 
     function endGame(message) {
       gameEnded = true;
-      endBanner.textContent = message;
+      const restartCopy = getRestartHintText();
+      endBanner.innerHTML = `${message}<span class="restart-subtext">${restartCopy}</span>`;
       endBanner.className = 'visible';
-      refreshRestartTooltip();
-      restartHint.style.display = 'block';
     }
 
     function checkGameEnd() {
@@ -613,19 +608,14 @@
       }
     }
 
-    function startButtonMusic() {
+    function playPressSound() {
       if (!buttonMusic) {
-        buttonMusic = new Audio(buttonPlaylist[buttonTrackIndex]);
+        buttonMusic = new Audio(pressSoundSrc);
         buttonMusic.volume = 0.35;
-        buttonMusic.addEventListener('ended', () => {
-          buttonTrackIndex = (buttonTrackIndex + 1) % buttonPlaylist.length;
-          buttonMusic.src = buttonPlaylist[buttonTrackIndex];
-          buttonMusic.play().catch(()=>{});
-        });
+      } else {
+        buttonMusic.currentTime = 0;
       }
-      if (buttonMusic.paused) {
-        buttonMusic.play().catch(()=>{});
-      }
+      buttonMusic.play().catch(()=>{});
     }
 
     let restartHoldTimer = null;
@@ -643,7 +633,7 @@
       gameRunning = true;
       gameEnded = false;
       endBanner.className = '';
-      restartHint.style.display = 'none';
+      endBanner.textContent = '';
       cancelRestartHold();
       langToggle?.remove();
       initGame();
@@ -977,6 +967,7 @@
     }
 
     window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
       if (gameEnded) {
         if (e.code === 'Space') {
           e.preventDefault();
@@ -991,14 +982,14 @@
       // Player 1 (Space)
       if (e.code === 'Space') {
         e.preventDefault();
-        startButtonMusic();
+        playPressSound();
         hives[0].sendBees();
       }
 
       // Player 2 (Enter) - Only in 2p mode
       if (e.code === 'Enter' && gameMode === '2p') {
         e.preventDefault();
-        startButtonMusic();
+        playPressSound();
         hives[1].sendBees();
       }
     });
@@ -1012,7 +1003,6 @@
     // Touch/Mouse fallback (Triggers both or P1)
     window.addEventListener('mousedown', () => {
       if(!gameRunning || gameEnded) return;
-      startButtonMusic();
       hives[0].sendBees();
       if(gameMode === '2p') hives[1].sendBees();
     });
@@ -1552,11 +1542,9 @@
   <script>
     document.getElementById('langToggle')?.addEventListener('pointerup', () => {
       toggleLanguage();
-      refreshRestartTooltip();
     });
     document.addEventListener('DOMContentLoaded', () => {
       updateLanguage();
-      refreshRestartTooltip();
     });
   </script>
   <script src="../../js/translationonly.js"></script>
