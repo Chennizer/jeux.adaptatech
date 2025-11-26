@@ -49,6 +49,7 @@ class SunGlyph {
     for (let i = 0; i < 80; i += 1) {
       const t = i / 79;
       const alpha = 80 * (1 - t) * (1 - t);
+      // Slightly warm halo
       g.fill(255, 220, 120, alpha);
       const r = maxR * t;
       g.ellipse(cx, cy, r * 2, r * 2);
@@ -114,10 +115,12 @@ export function createSummerScene(p) {
   let sunFlash = 0;
   let sunPulse = null;
 
-  const SUN_BASE_SCALE = 0.5;
-  const SUN_GROW_DURATION = 2000;
-  const SUN_SHRINK_DURATION = 2000;
-  const SUN_FLASH_DURATION = 220;
+  // Contemplative sun pulse parameters
+  const SUN_BASE_SCALE = 0.7;         // bigger base than before
+  const SUN_MAX_SCALE = 1.4;          // larger maximum size for a more impressive pulse
+  const SUN_GROW_DURATION = 3200;     // slower grow
+  const SUN_SHRINK_DURATION = 3200;   // slower shrink
+  const SUN_FLASH_DURATION = 1200;    // slower flash
 
   function resize() {
     sunGlyph = new SunGlyph(p);
@@ -254,16 +257,34 @@ export function createSummerScene(p) {
         const now = p.millis();
         if (sunPulse) {
           const elapsed = now - sunPulse.start;
+
           if (elapsed < SUN_GROW_DURATION) {
-            sunScale = p.map(elapsed, 0, SUN_GROW_DURATION, SUN_BASE_SCALE, 1, true);
+            // Slow, big growth
+            sunScale = p.map(
+              elapsed,
+              0,
+              SUN_GROW_DURATION,
+              SUN_BASE_SCALE,
+              SUN_MAX_SCALE,
+              true
+            );
             sunFlash = 0;
           } else if (elapsed < SUN_GROW_DURATION + SUN_FLASH_DURATION) {
-            sunScale = 1;
+            // Hold at max size, slow warm flash
+            sunScale = SUN_MAX_SCALE;
             const t = (elapsed - SUN_GROW_DURATION) / SUN_FLASH_DURATION;
             sunFlash = 1 - p.constrain(t, 0, 1);
           } else if (elapsed < SUN_GROW_DURATION + SUN_FLASH_DURATION + SUN_SHRINK_DURATION) {
+            // Slow shrink back down
             const t = (elapsed - SUN_GROW_DURATION - SUN_FLASH_DURATION) / SUN_SHRINK_DURATION;
-            sunScale = p.map(t, 0, 1, 1, SUN_BASE_SCALE, true);
+            sunScale = p.map(
+              t,
+              0,
+              1,
+              SUN_MAX_SCALE,
+              SUN_BASE_SCALE,
+              true
+            );
             sunFlash = 0;
           } else {
             sunPulse = null;
@@ -285,7 +306,8 @@ export function createSummerScene(p) {
 
       if (sunFlash > 0.001) {
         p.noStroke();
-        p.fill(255, 245, 230, 180 * sunFlash);
+        // Warmer, slower light flash
+        p.fill(255, 215, 160, 220 * sunFlash);
         p.rect(0, 0, p.width, p.height);
       }
     }

@@ -33,6 +33,14 @@
 body.hc{--green:#007700;--red:#b90000;}
 body.readable{--f-base:clamp(18px, 1.3rem + 0.8vmin, 24px);--lh-base:1.5;}
 
+/* ----- Mode avancé : jusqu'à 100$ (pièces plus petites) ----- */
+body.advanced-wallet{
+  --coinSize: calc(var(--uiScale) * clamp(40px, 4.2vmin, 80px));
+}
+body.advanced-wallet .counter{
+  font-size: calc(var(--coinFont) * 0.8);
+}
+
 html,body{
   height:100%;margin:0;
   font-family:Roboto, system-ui, -apple-system, Segoe UI, Arial, sans-serif;
@@ -179,11 +187,34 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
 .main-content{min-height:100vh;display:flex;justify-content:center;align-items:center;padding:clamp(8px,1.6vmin,20px);}
 .rows{display:flex;flex-direction:column;align-items:center;gap:clamp(1rem,2.6vmin,2rem);transform:translateY(2vh);}
 
-/* Wallet grids */
+/* Wallet grids – BASE (1–10) */
 .wallet{display:grid;width:100%;}
 #coinsRow{grid-template-columns:repeat(10, var(--coinSizeSnap));justify-content:space-between;align-items:center;}
 #countRow{grid-template-columns:repeat(10, var(--tileSize));justify-content:space-between;align-items:center;}
 .wallet>*{box-sizing:border-box;margin:0;justify-self:center;align-self:center;}
+
+/* Wallet – ADVANCED (0–99 en groupes de 10) */
+body.advanced-wallet .wallet{
+  display:flex;
+  width:100%;
+  justify-content:center;
+  align-items:flex-start;
+  gap:clamp(4px,0.7vw,10px);
+}
+body.advanced-wallet #coinsRow,
+body.advanced-wallet #countRow{
+  justify-content:center;
+}
+body.advanced-wallet .coin-cluster,
+body.advanced-wallet .counter-cluster{
+  display:grid;
+  grid-template-columns:repeat(5, minmax(0,1fr));
+  gap:2px;
+  justify-items:center;
+}
+body.advanced-wallet .counter-cluster{
+  grid-template-columns:1fr;
+}
 
 /* Coins */
 .coin{
@@ -276,7 +307,6 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
 #payBtn{background:#c65629;}
 #payBtn:disabled,#payBtn.dim{background:#d79a85;cursor:not-allowed;}
 
-/* bouton élève */
 #studentSetPriceBtn{
   margin:.5rem auto 0;
   min-height: calc(var(--tileSize) * 0.95);
@@ -426,21 +456,36 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
 .studentCalcBtn:active{
   background:#e0e4ff;
 }
-/* wide buttons for grid */
 .studentCalcBtn.wide{
   grid-column:span 3;
 }
-.studentCalcBtn.wide2{
-  grid-column:span 2;
+.studentCalcBtn.small{
+  font-size:1rem;
+  padding:8px 0;
 }
-/* red “clear all” button */
-.studentCalcBtn.danger{
-  background:#fde4e4;
-  border-color:#f29696;
-  color:#a32121;
+
+/* couleurs et placement pour EFFACER / OK */
+.studentCalcBtn.clear-btn{
+  background:#ffe3e3;
+  border-color:#f5a4a4;
+  color:#a40000;
 }
-.studentCalcBtn.danger:active{
-  background:#f9c2c2;
+.studentCalcBtn.clear-btn:active{
+  background:#f8caca;
+}
+.studentCalcBtn.ok-btn{
+  background:#e3f7e5;
+  border-color:#8bd49a;
+  color:#0a6b2b;
+}
+.studentCalcBtn.ok-btn:active{
+  background:#c2ebc7;
+}
+.studentCalcBtn.bottom-clear{
+  grid-column:1 / span 2;
+}
+.studentCalcBtn.bottom-ok{
+  grid-column:3 / span 1;
 }
   </style>
 </head>
@@ -497,6 +542,7 @@ body{font-size:var(--f-base);line-height:var(--lh-base);}
         <button id="setPriceBtn"         class="admin-option-btn">Fixer<br>le prix</button>
         <button id="studentPinToggleBtn" class="admin-option-btn toggle">NIP<br>élève</button>
         <button id="payDirectToggleBtn"  class="admin-option-btn toggle">Paiement<br>direct</button>
+        <button id="advancedModeToggleBtn" class="admin-option-btn toggle">Version<br>avancée</button>
       </div>
       <button id="resetAllBtn" class="admin-option-btn">Tout<br>réinitial.</button>
     </div>
@@ -573,6 +619,8 @@ let studentPin     = (localStorage.getItem('studentPin')||'').trim();
 let studentPinActive   = localStorage.getItem('studentPinActive')==='1';
 let payDirect          = localStorage.getItem('payDirect')==='1';
 let studentName        = (localStorage.getItem('studentName')||'').trim();
+let advancedMode       = localStorage.getItem('advancedMode')==='1';
+
 const selected = new Set();
 const BACKUP_PIN = '8204';
 const priceTagEl = $('priceTag');
@@ -694,24 +742,70 @@ $('setupOk').onclick = () => {
   else enterFS();
 };
 
-// COIN + COUNTERS
-for(let i=0;i<10;i++){
-  const coin=document.createElement('div');
-  coin.className='circle coin placeholder';
-  coin.dataset.idx=i;
-  coin.addEventListener('pointerdown',toggleSelect);
-  coin.setAttribute('aria-label','Pièce de 1 dollar');
-  $('coinsRow').appendChild(coin);
+/* ---------- COINS + COUNTERS GRID BUILDERS ---------- */
 
-  const counter=document.createElement('div');
-  counter.className='counter bad';
-  counter.textContent=i+1;
-  counter.addEventListener('pointerdown',()=>{
-    pulseCounter(counter);
-  });
-  $('countRow').appendChild(counter);
+// Base : 1–10 avec un compteur par pièce (1,2,3,...,10)
+function buildWalletSimple(){
+  const coinsRow = $('coinsRow');
+  const countRow = $('countRow');
+  coinsRow.innerHTML = '';
+  countRow.innerHTML = '';
+
+  for(let i=0;i<10;i++){
+    const coin=document.createElement('div');
+    coin.className='circle coin placeholder';
+    coin.dataset.idx=i;
+    coin.setAttribute('aria-label','Pièce de 1 dollar');
+    coin.addEventListener('pointerdown',toggleSelect);
+    coinsRow.appendChild(coin);
+
+    const counter=document.createElement('div');
+    counter.className='counter bad';
+    counter.dataset.threshold = (i+1).toString();  // 1,2,...,10
+    counter.textContent=i+1;
+    counter.addEventListener('pointerdown',()=>pulseCounter(counter));
+    countRow.appendChild(counter);
+  }
 }
 
+// Avancé : jusqu’à 100 pièces, en groupes de 10, compteurs par dizaines (10,20,...,100)
+function buildWalletAdvanced(){
+  const coinsRow = $('coinsRow');
+  const countRow = $('countRow');
+  coinsRow.innerHTML = '';
+  countRow.innerHTML = '';
+
+  const GROUPS = 10;
+  const PER_GROUP = 10;
+
+  for(let g=0; g<GROUPS; g++){
+    const coinCluster = document.createElement('div');
+    coinCluster.className = 'coin-cluster';
+    for(let j=0;j<PER_GROUP;j++){
+      const idx = g*PER_GROUP + j;
+      const coin = document.createElement('div');
+      coin.className = 'circle coin placeholder';
+      coin.dataset.idx = idx;
+      coin.setAttribute('aria-label','Pièce de 1 dollar');
+      coin.addEventListener('pointerdown',toggleSelect);
+      coinCluster.appendChild(coin);
+    }
+    coinsRow.appendChild(coinCluster);
+
+    const counterCluster = document.createElement('div');
+    counterCluster.className = 'counter-cluster';
+    const threshold = (g+1)*10; // 10,20,...,100
+    const counter = document.createElement('div');
+    counter.className = 'counter bad';
+    counter.dataset.threshold = threshold.toString();
+    counter.textContent = threshold;
+    counter.addEventListener('pointerdown', ()=>pulseCounter(counter));
+    counterCluster.appendChild(counter);
+    countRow.appendChild(counterCluster);
+  }
+}
+
+/* ---------- COIN INTERACTION ---------- */
 function deny(el){ el.style.animation='denyCoin .4s'; setTimeout(()=>el.style.animation='',400); }
 function toggleSelect(e){
   if(payDirect) return;
@@ -744,18 +838,25 @@ function updateSelectionStatus(){
 }
 
 function render(){
-  [...$('coinsRow').children].forEach((el,i)=>{
-    if(i<coins){
-      el.className='circle coin'+(selected.has(i)?' selected':'');
+  // Coins
+  document.querySelectorAll('.coin').forEach(el=>{
+    const idx = +el.dataset.idx;
+    if(idx < coins){
+      el.className='circle coin'+(selected.has(idx)?' selected':'');
       el.innerHTML='<span class="sr-only">Pièce de 1 dollar</span>';
     } else {
       el.className='circle coin placeholder';
       el.textContent='';
+      el.innerHTML='';
     }
   });
-  [...$('countRow').children].forEach((el,i)=>
-    el.className = 'counter '+(i<coins?'good':'bad')
-  );
+
+  // Counters: basés sur data-threshold
+  document.querySelectorAll('.counter').forEach(el=>{
+    const threshold = parseInt(el.dataset.threshold || '0',10);
+    el.className = 'counter ' + (coins >= threshold ? 'good' : 'bad');
+  });
+
   const [dStr,cStr]=price.toFixed(2).split('.');
   const cents=parseInt(cStr,10);
   const dollars=parseInt(dStr,10);
@@ -773,7 +874,6 @@ function save(){
   localStorage.setItem('itemPrice', price.toFixed(2));
 }
 function saveRender(){ save(); selected.clear(); render(); }
-render();
 
 // PAYMENT
 $('payBtn').onclick = ()=>{
@@ -961,12 +1061,24 @@ function handlePinInput(v){
 // ADMIN OPTIONS
 const studentPinToggleBtn = $('studentPinToggleBtn');
 const payDirectToggleBtn  = $('payDirectToggleBtn');
+const advancedModeToggleBtn = $('advancedModeToggleBtn');
 
 function updateToggles(){
   studentPinToggleBtn.classList.toggle('active',studentPinActive);
   payDirectToggleBtn.classList.toggle('active',payDirect);
+  if(advancedModeToggleBtn){
+    advancedModeToggleBtn.classList.toggle('active',advancedMode);
+  }
+}
+function applyAdvancedMode(){
+  document.body.classList.toggle('advanced-wallet', advancedMode);
+  selected.clear();
+  if(advancedMode) buildWalletAdvanced();
+  else buildWalletSimple();
+  render();
 }
 updateToggles();
+applyAdvancedMode();
 
 studentPinToggleBtn.onclick = ()=>{
   studentPinActive = !studentPinActive;
@@ -989,6 +1101,13 @@ payDirectToggleBtn.onclick = ()=>{
   localStorage.setItem('payDirect', payDirect?'1':'0');
   if(payDirect) selected.clear();
   updateToggles(); render();
+};
+
+advancedModeToggleBtn.onclick = ()=>{
+  advancedMode = !advancedMode;
+  localStorage.setItem('advancedMode', advancedMode ? '1' : '0');
+  updateToggles();
+  applyAdvancedMode();
 };
 
 $('resetAllBtn').onclick = ()=>confirmBox('Tout effacer et réinitialiser ?',()=>{
@@ -1128,11 +1247,6 @@ function handleStudentClear(){
   studentCalcEntry = '';
   updateStudentCalcDisplay();
 }
-function handleStudentAllClear(){
-  studentCalcEntry = '';
-  studentCalcSubtotal = 0;
-  updateStudentCalcDisplay();
-}
 function handleStudentOK(){
   const finalTotal = +(studentCalcSubtotal + entryToValue()).toFixed(2);
   if(finalTotal <= 0) return;
@@ -1147,7 +1261,7 @@ function openStudentPriceModal(){
   show($('studentPriceModal'));
 }
 
-// build student keypad (1-2-3 top row, EFF. + OK last row)
+// build student keypad
 (function initStudentKeypad(){
   const keypad = $('studentCalcKeypad');
   if(!keypad) return;
@@ -1165,16 +1279,16 @@ function openStudentPriceModal(){
     {label:'C', type:'clear'},
     {label:'+ ', type:'plus'},
     {label:'TAXES', type:'tax', wide:true},
-    {label:'EFF.', type:'allclear', danger:true},
-    {label:'OK', type:'ok', wide2:true},
+    {label:'EFFACER', type:'clear', small:true, clear:true},
+    {label:'OK', type:'ok', ok:true}
   ];
   let h='';
   buttons.forEach(btn=>{
-    const classes = ['studentCalcBtn'];
-    if(btn.wide)  classes.push('wide');
-    if(btn.wide2) classes.push('wide2');
-    if(btn.danger) classes.push('danger');
-    const cls = classes.join(' ');
+    const cls = 'studentCalcBtn'
+      + (btn.wide ? ' wide' : '')
+      + (btn.small ? ' small' : '')
+      + (btn.clear ? ' clear-btn bottom-clear' : '')
+      + (btn.ok ? ' ok-btn bottom-ok' : '');
     h += `<button class="${cls}" data-type="${btn.type}"${btn.value?` data-val="${btn.value}"`:''}>${btn.label}</button>`;
   });
   keypad.innerHTML = h;
@@ -1184,12 +1298,11 @@ function openStudentPriceModal(){
     const type = t.getAttribute('data-type');
     const val  = t.getAttribute('data-val') || '';
     switch(type){
-      case 'digit':    handleStudentDigit(val); break;
-      case 'plus':     handleStudentPlus(); break;
-      case 'tax':      handleStudentTaxes(); break;
-      case 'clear':    handleStudentClear(); break;
-      case 'allclear': handleStudentAllClear(); break;
-      case 'ok':       handleStudentOK(); break;
+      case 'digit': handleStudentDigit(val); break;
+      case 'plus':  handleStudentPlus(); break;
+      case 'tax':   handleStudentTaxes(); break;
+      case 'clear': handleStudentClear(); break;
+      case 'ok':    handleStudentOK(); break;
     }
   });
 })();
@@ -1214,10 +1327,10 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // COIN ANIMATION
-function animateCoins(idx,cb){
-  const els=[...$('coinsRow').children];
-  idx.forEach(i=>{
-    const el=els[i];
+function animateCoins(idxArr,cb){
+  const allCoins = document.querySelectorAll('.coin');
+  idxArr.forEach(i=>{
+    const el = Array.from(allCoins).find(c => +c.dataset.idx === i);
     if(el){
       el.classList.add('flyaway');
       setTimeout(()=>el.classList.remove('flyaway'),2000);
@@ -1225,6 +1338,117 @@ function animateCoins(idx,cb){
   });
   setTimeout(cb,2000);
 }
+
+// DRAG & DROP
+const dragSources = document.querySelectorAll('.dragSource');
+const walletDropAreaEl = $('walletDropArea');
+let ghostCoin=null, offsetX=0, offsetY=0;
+
+function onDragStart(e){
+  const src = e.currentTarget;
+  if(ghostCoin) return;
+  ghostCoin = src.cloneNode(true);
+  ghostCoin.classList.add('dragging');
+  ghostCoin.style.position='fixed';
+  ghostCoin.style.pointerEvents='none';
+  ghostCoin.style.zIndex='9999';
+  ghostCoin.dataset.value = src.dataset.value;
+  document.body.appendChild(ghostCoin);
+  const evt = e.touches ? e.touches[0] : e;
+  const rect = src.getBoundingClientRect();
+  offsetX = evt.clientX - rect.left;
+  offsetY = evt.clientY - rect.top;
+  ghostCoin.style.left = rect.left+'px';
+  ghostCoin.style.top  = rect.top+'px';
+  walletDropAreaEl.classList.add('droptarget');
+  if(e.type==='touchstart'){
+    document.addEventListener('touchmove',onDragMove);
+    document.addEventListener('touchend' ,onDragEnd);
+  } else {
+    document.addEventListener('mousemove',onDragMove);
+    document.addEventListener('mouseup',onDragEnd);
+  }
+  e.preventDefault();
+}
+function onDragMove(e){
+  if(!ghostCoin) return;
+  const evt = e.touches ? e.touches[0] : e;
+  ghostCoin.style.left = evt.clientX - offsetX + 'px';
+  ghostCoin.style.top  = evt.clientY - offsetY + 'px';
+}
+function onDragEnd(e){
+  if(!ghostCoin) return;
+  const evt = e.type==='touchend' ? e.changedTouches[0] : e;
+  walletDropAreaEl.classList.remove('droptarget');
+  const rect = walletDropAreaEl.getBoundingClientRect();
+  if(evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom){
+    const val = parseInt(ghostCoin.dataset.value,10);
+    const maxCoins = advancedMode ? 100 : 10;
+    if(coins + val <= maxCoins){
+      coins += val;
+      saveRender();
+      if(val===1){
+        playSound(sndAdd1);
+      }
+    } else alertBox('Porte-monnaie plein !');
+  }
+  document.body.removeChild(ghostCoin);
+  ghostCoin = null;
+  if(e.type==='touchend'){
+    document.removeEventListener('touchmove',onDragMove);
+    document.removeEventListener('touchend',onDragEnd);
+  } else {
+    document.removeEventListener('mousemove',onDragMove);
+    document.removeEventListener('mouseup',onDragEnd);
+  }
+}
+dragSources.forEach(el=>{
+  el.addEventListener('mousedown',onDragStart);
+  el.addEventListener('touchstart',onDragStart,{passive:false});
+});
+
+// PRICE MODAL (ADMIN)
+let priceSelection={dollar:1,cent:0};
+const setPriceBtn=$('setPriceBtn');
+let priceModalTriggerBtn=null;
+function openPriceModal(triggerBtn){
+  priceModalTriggerBtn = triggerBtn || null;
+  priceSelection.dollar=Math.floor(price);
+  priceSelection.cent=Math.round(price*100)%100;
+  let h='';
+  for(let i=1;i<=10;i++){
+    h+=`<button class="priceDollarBtn${priceSelection.dollar===i?' selected':''}" data-v="${i}">${i}$</button>`;
+  }
+  $('priceDollarGrid').innerHTML=h;
+  const cents=[0,25,50,75];
+  h=cents.map(c=>`<button class="priceCentBtn${priceSelection.cent===c?' selected':''}" data-v="${c}">.${c.toString().padStart(2,'0')}</button>`).join('');
+  $('priceCentGrid').innerHTML=h;
+  const upd=()=>{$('pricePreview').textContent=`Prix choisi : ${priceSelection.dollar}.${priceSelection.cent.toString().padStart(2,'0')}$`;};
+  document.querySelectorAll('.priceDollarBtn').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.priceDollarBtn').forEach(btn=>btn.classList.remove('selected'));
+    b.classList.add('selected');
+    priceSelection.dollar=+b.dataset.v; upd();
+  });
+  document.querySelectorAll('.priceCentBtn').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.priceCentBtn').forEach(btn=>btn.classList.remove('selected'));
+    b.classList.add('selected');
+    priceSelection.cent=+b.dataset.v; upd();
+  });
+  upd();
+  if(priceModalTriggerBtn) priceModalTriggerBtn.classList.add('active');
+  show($('priceModal'));
+}
+$('priceConfirm').onclick = ()=>{
+  price = +(priceSelection.dollar + priceSelection.cent/100).toFixed(2);
+  hide($('priceModal'));
+  if(priceModalTriggerBtn){ priceModalTriggerBtn.classList.remove('active'); priceModalTriggerBtn=null; }
+  saveRender();
+};
+$('priceCancel').onclick = ()=>{
+  hide($('priceModal'));
+  if(priceModalTriggerBtn){ priceModalTriggerBtn.classList.remove('active'); priceModalTriggerBtn=null; }
+};
+setPriceBtn.onclick = ()=>openPriceModal(setPriceBtn);
 
 // CLICK-OUTSIDE HANDLER
 const priceModalEl=$('priceModal');

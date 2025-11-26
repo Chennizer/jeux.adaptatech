@@ -23,7 +23,7 @@ const SCENE_PLAYLISTS = {
 };
 
 const SCENE_SOUNDTRACKS = {
-  spring: '../../sounds/rain1.mp3',
+  spring: '../../sounds/sadness/subtlewind.mp3',
   summer: '../../sounds/sun/sunnyday.mp3',
   autumn: '../../sounds/sadness/subtlewind.mp3',
   winter: '../../sounds/winterambiance.mp3'
@@ -43,7 +43,7 @@ const langToggleEl = document.getElementById('langToggle');
 
 const MODE_DEFAULT = 'default';
 const MODE_SLOW = 'slow';
-const SLOW_SCENE_DURATION = 60_000;
+const SLOW_SCENE_DURATION = 10000;
 const SLOW_BASE_SPEED = 0.21;
 const SLOW_PEAK_SPEED = 1.495;
 const SPEED_PHASES = {

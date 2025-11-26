@@ -69,7 +69,8 @@
             font-family: 'Permanent Marker', cursive;
         }
 
-        #mode-toggle {
+        #mode-toggle,
+        #music-toggle {
             display: flex;
             gap: 1.2rem;
             flex-wrap: wrap;
@@ -80,7 +81,8 @@
             font-size: 0.9rem;
         }
 
-        #mode-toggle label {
+        #mode-toggle label,
+        #music-toggle label {
             cursor: pointer;
             display: inline-flex;
             align-items: center;
@@ -89,6 +91,12 @@
             border-radius: 999px;
             background: rgba(255,255,255,0.06);
             border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        #music-toggle span {
+            font-size: 0.9rem;
+            opacity: 0.85;
+            margin-right: 6px;
         }
 
         input[type="text"] {
@@ -165,6 +173,18 @@
             </label>
         </div>
 
+        <div id="music-toggle">
+            <span>Ambiance:</span>
+            <label>
+                <input type="radio" name="music" value="punk" checked>
+                PUNK ROCK
+            </label>
+            <label>
+                <input type="radio" name="music" value="hiphop">
+                HIP HOP
+            </label>
+        </div>
+
         <input type="text" id="user-input" placeholder="YOUR TAG" maxlength="15" autocomplete="off"> 
 
         <select id="image-select">
@@ -195,7 +215,10 @@
         const modeRadios = document.querySelectorAll('input[name="mode"]');
         const imageSelect = document.getElementById('image-select');
 
+        const musicRadios = document.querySelectorAll('input[name="music"]');
+
         let currentMode = 'text';
+        let currentMusicStyle = 'punk';
 
         modeRadios.forEach(r => {
             r.addEventListener('change', () => {
@@ -210,8 +233,29 @@
             });
         });
 
+        musicRadios.forEach(r => {
+            r.addEventListener('change', () => {
+                currentMusicStyle = r.value;
+            });
+        });
+
         let width, height, audioCtx, sprayNode;
         let copLightsRunning = false;
+
+        // background music (ambiance)
+        let musicAudio = null;
+        let currentTrackIndex = 0;
+
+        // placeholder playlists: replace with your own file paths
+        const punkPlaylist = [
+             '../../songs/grafiti/grafitipunkrock1.mp3',
+            // '../../audio/punk-track2.mp3'
+        ];
+
+        const hipHopPlaylist = [
+              '../../songs/grafiti/grafitihiphop1.mp3',
+            // '../../audio/hiphop-track2.mp3'
+        ];
         
         // --- HIGHLY STYLIZED ALPHABET ---
         const alphabet = {
@@ -313,7 +357,7 @@
             function frame(now) {
                 const elapsed = now - start;
                 const t = Math.min(elapsed / duration, 1);
-                const damping = 1 - t; // fade out
+                const damping = 1 - t;
 
                 const offsetX = (Math.random() * 2 - 1) * magnitude * damping;
                 const offsetY = (Math.random() * 2 - 1) * magnitude * damping;
@@ -435,7 +479,7 @@
         }
         window.addEventListener('resize', generateWall);
 
-        // --- AUDIO ---
+        // --- AUDIO (effects) ---
         function initAudio() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -483,6 +527,31 @@
             osc.connect(gain).connect(audioCtx.destination);
             osc.start();
             osc.stop(audioCtx.currentTime + 0.3);
+        }
+
+        // --- AMBIANCE MUSIC HELPERS ---
+        function stopAmbiance() {
+            if (musicAudio) {
+                musicAudio.pause();
+                musicAudio = null;
+            }
+        }
+
+        function startAmbiance() {
+            const playlist = currentMusicStyle === 'hiphop' ? hipHopPlaylist : punkPlaylist;
+            if (!playlist || playlist.length === 0) {
+                // no tracks configured yet; silent ambiance
+                return;
+            }
+
+            stopAmbiance();
+
+            currentTrackIndex = 0;
+            musicAudio = new Audio(playlist[currentTrackIndex]);
+            musicAudio.loop = true; 
+            musicAudio.volume = 0.4;
+
+            musicAudio.play().catch(() => {});
         }
 
         // --- TEXT MODE HELPERS ---
@@ -670,13 +739,13 @@
             });
         }
 
-        // --- COP LIGHTS FX (sweeping across whole screen + camera shake at end) ---
+        // --- COP LIGHTS FX (with reset at end) ---
         function startCopLights() {
             if (copLightsRunning) return;
             copLightsRunning = true;
 
-            const totalFlashes = 6;        // total sweeps (red/blue alternating)
-            const flashDuration = 700;     // ms per sweep (slower)
+            const totalFlashes = 6;
+            const flashDuration = 700;
             const totalDuration = totalFlashes * flashDuration;
 
             let startTime = null;
@@ -686,17 +755,20 @@
                 const elapsed = timestamp - startTime;
 
                 if (elapsed >= totalDuration) {
-                    // End of light effect
                     fxCtx.clearRect(0, 0, width, height);
                     copLightsRunning = false;
 
-                    // Camera shake for 1 second (like we are fleeing)
                     shakeCamera(1000, 12);
 
-                    // Reset state AFTER the shake completes
+                    // reset canvas and text state after the shake
                     setTimeout(() => {
+                        ctx.clearRect(0, 0, width, height);
+                        generateWall();
+
                         textCharIndex = 0;
                         currentWordRow = 0;
+                        currentWordWidth = 0;
+                        wordStartX = 0;
                         letterDrawOrigin.x = 0;
                         letterDrawOrigin.y = 0;
                         currentStrokes = [];
@@ -709,14 +781,11 @@
 
                 fxCtx.clearRect(0, 0, width, height);
 
-                // Which flash index are we in, and how far into that flash?
                 const flashIndex = Math.floor(elapsed / flashDuration);
-                const tInFlash = (elapsed % flashDuration) / flashDuration; // 0..1
+                const tInFlash = (elapsed % flashDuration) / flashDuration;
 
-                // Alternating color: red, blue, red, blue...
                 const isRed = (flashIndex % 2 === 0);
 
-                // Intensity curve: smooth pulse like a rotating bar (0 -> 1 -> 0)
                 let intensity = Math.sin(tInFlash * Math.PI);
                 intensity = Math.max(0, Math.min(1, intensity));
 
@@ -727,8 +796,7 @@
                 fxCtx.save();
                 fxCtx.globalCompositeOperation = 'screen';
 
-                // Sweep across entire wall
-                const marginFactor = 0.25; // start/end offscreen
+                const marginFactor = 0.25;
                 const startX = isRed ? -width * marginFactor : width * (1 + marginFactor);
                 const endX   = isRed ? width * (1 + marginFactor) : -width * marginFactor;
                 const centerX = startX + (endX - startX) * tInFlash;
@@ -744,7 +812,6 @@
                     ? `rgba(255, 60, 60, ${alpha * 0.4})`
                     : `rgba(60, 120, 255, ${alpha * 0.4})`;
 
-                // 1) Moving hotspot (radial) crossing the wall
                 const radial = fxCtx.createRadialGradient(
                     centerX, centerY, radius * 0.05,
                     centerX, centerY, radius
@@ -755,7 +822,6 @@
                 fxCtx.fillStyle = radial;
                 fxCtx.fillRect(0, 0, width, height);
 
-                // 2) Horizontal wash for reflections
                 const horiz = fxCtx.createLinearGradient(0, centerY, width, centerY);
                 if (isRed) {
                     horiz.addColorStop(0.0, colorSoft);
@@ -771,7 +837,6 @@
                 fxCtx.fillStyle = horiz;
                 fxCtx.fillRect(0, 0, width, height);
 
-                // 3) Slight bottom vignette
                 const vGrad = fxCtx.createLinearGradient(0, 0, 0, height);
                 vGrad.addColorStop(0,   'rgba(0, 0, 0, 0.0)');
                 vGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.0)');
@@ -1112,16 +1177,17 @@
         generateWall();
 
         startBtn.addEventListener('click', async () => {
+            startAmbiance();
+            initAudio();
+            enterFullscreen(body); 
+            overlay.style.opacity = 0;
+            setTimeout(() => overlay.style.display = 'none', 500);
+
             if (currentMode === 'text') {
                 const txt = inputField.value.toUpperCase().trim();
                 if (txt.length > 0) {
                     targetText = txt.replace(/[^A-Z0-9 ]/g, '').substring(0, 15); 
                     if (targetText.length === 0) targetText = "TAGS";
-
-                    initAudio();
-                    enterFullscreen(body); 
-                    overlay.style.opacity = 0;
-                    setTimeout(() => overlay.style.display = 'none', 500);
                     
                     generateWall(); 
                     ctx.clearRect(0, 0, width, height); 
@@ -1152,6 +1218,7 @@
         document.addEventListener('mousedown', handleInput);
         document.addEventListener('touchstart', handleInput, {passive:false});
 
+        window.addEventListener('beforeunload', stopAmbiance);
     </script>
 </body>
 </html>
