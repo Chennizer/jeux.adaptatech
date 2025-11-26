@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lecteur plein écran</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #000;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Arial', sans-serif;
+    }
+    #ready-container {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.85);
+      flex-direction: column;
+      gap: 1rem;
+    }
+    #ready-button {
+      padding: 1rem 2rem;
+      font-size: 1.5rem;
+      border: none;
+      border-radius: 10px;
+      background: #00bcd4;
+      color: #002b36;
+      cursor: pointer;
+    }
+    #ready-button:hover {
+      background: #26c6da;
+    }
+    #waiting-message {
+      font-size: 1.2rem;
+      opacity: 0.8;
+      margin-top: 0.5rem;
+    }
+    #viewer-wrapper {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewer-wrapper">
+    <video id="external-video" playsinline></video>
+  </div>
+  <div id="ready-container">
+    <button id="ready-button">Ready?</button>
+    <div id="waiting-message">Cliquez sur Ready? pour passer en plein écran</div>
+  </div>
+  <script>
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('eyegaze-video-player') : null;
+    const readyContainer = document.getElementById('ready-container');
+    const readyButton = document.getElementById('ready-button');
+    const waitingMessage = document.getElementById('waiting-message');
+    const video = document.getElementById('external-video');
+
+    let viewerReady = false;
+    let currentUrl = null;
+
+    function postMessage(payload) {
+      if (channel) {
+        channel.postMessage(payload);
+      }
+    }
+
+    function markReady() {
+      viewerReady = true;
+      readyContainer.style.display = 'none';
+      waitingMessage.textContent = 'En attente d\'une vidéo...';
+      postMessage({ type: 'viewer-ready' });
+    }
+
+    async function requestFullscreen() {
+      const root = document.documentElement;
+      if (document.fullscreenElement) {
+        markReady();
+        return;
+      }
+      try {
+        if (root.requestFullscreen) {
+          await root.requestFullscreen();
+        } else if (root.webkitRequestFullscreen) {
+          root.webkitRequestFullscreen();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+      markReady();
+    }
+
+    function playIncomingVideo(url, startTime = 0) {
+      if (!url) return;
+      currentUrl = url;
+      const start = Math.max(0, Number(startTime) || 0);
+
+      const seekIfNeeded = () => {
+        if (start > 0) {
+          try {
+            video.currentTime = start;
+          } catch (err) {
+            console.warn('Seek failed', err);
+          }
+        }
+      };
+
+      video.onloadedmetadata = () => {
+        seekIfNeeded();
+        video.play().catch(err => console.error(err));
+      };
+
+      video.src = url;
+      video.load();
+    }
+
+    function stopAndReport(resetSource = true, reason = 'reset') {
+      const time = video.currentTime || 0;
+      postMessage({ type: 'playback-stopped', url: currentUrl, time, reason });
+      video.pause();
+      if (resetSource) {
+        video.removeAttribute('src');
+        video.load();
+      }
+    }
+
+    if (channel) {
+      channel.onmessage = (event) => {
+        const data = event.data || {};
+        if (data.type === 'play-video' && viewerReady && data.url) {
+          playIncomingVideo(data.url, data.startTime);
+        } else if (data.type === 'stop-video') {
+          stopAndReport(data.reset !== false, data.reason || 'stop-video');
+        } else if (data.type === 'chooser-opened') {
+          if (viewerReady) {
+            postMessage({ type: 'viewer-ready' });
+          }
+        }
+      };
+
+      postMessage({ type: 'viewer-loaded' });
+    } else {
+      waitingMessage.textContent = 'BroadcastChannel non pris en charge';
+    }
+
+    readyButton.addEventListener('click', () => {
+      requestFullscreen();
+    });
+
+    video.addEventListener('ended', () => {
+      stopAndReport(true, 'ended');
+      postMessage({ type: 'playback-ended', url: currentUrl });
+      currentUrl = null;
+    });
+
+    window.addEventListener('beforeunload', () => {
+      postMessage({ type: 'viewer-closed' });
+    });
+  </script>
+</body>
+</html>
