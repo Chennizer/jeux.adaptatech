@@ -291,6 +291,21 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleHoverCountdown();
   }
 
+  function applyHoverFromPoint(x, y, { playSound = true } = {}) {
+    if (!tileContainer) return;
+    const target = document.elementFromPoint(x, y);
+    const tile = target ? target.closest('.tile') : null;
+    if (
+      tile &&
+      tileChoiceMap.has(tile) &&
+      tileContainer.contains(tile)
+    ) {
+      handleTileEnter(tile, tileChoiceMap.get(tile), { playSound });
+    } else if (hoveredTile) {
+      clearHoverState();
+    }
+  }
+
   function handleTileLeave(tile) {
     if (hoveredTile === tile) {
       clearHoverState();
@@ -345,13 +360,22 @@ document.addEventListener('DOMContentLoaded', () => {
     startInactivityTimer();
   }
 
-  function resetHoverMechanics() {
+  function resetHoverMechanics({ clearPointerPosition = false } = {}) {
     clearHoverState();
-    lastPointerPosition = null;
+    if (clearPointerPosition) {
+      lastPointerPosition = null;
+    }
     if (tileContainer) {
       tileContainer.classList.remove('pointer-motion-required');
     }
     setPointerDwell(false);
+  }
+
+  function reapplyHoverFromLastPointer({ playSound = false } = {}) {
+    if (!lastPointerPosition || videoPlaying) return;
+    requestAnimationFrame(() => {
+      applyHoverFromPoint(lastPointerPosition.x, lastPointerPosition.y, { playSound });
+    });
   }
 
   function playCycleSound() {
@@ -614,6 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tileContainer.appendChild(secondRow);
     }
     requirePointerMotionBeforeHover();
+    reapplyHoverFromLastPointer({ playSound: false });
   }
 
   /* ----------------------------------------------------------------
@@ -657,6 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     clearHoverState();
     refreshPointerStyles();
+    reapplyHoverFromLastPointer({ playSound: false });
     startInactivityTimer();
     ensureFullscreen();
   }
@@ -810,21 +836,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('pointermove', event => {
     const { clientX, clientY } = event;
     setPointerPos(clientX, clientY);
-    const targetElement = event.target instanceof Element ? event.target : null;
     lastPointerPosition = { x: clientX, y: clientY };
-
     if (!videoPlaying) {
-      const tile = targetElement ? targetElement.closest('.tile') : null;
-      if (
-        tile &&
-        tileChoiceMap.has(tile) &&
-        tileContainer.contains(tile) &&
-        tile !== hoveredTile
-      ) {
-        handleTileEnter(tile, tileChoiceMap.get(tile));
-      } else if (!tile && hoveredTile) {
-        clearHoverState();
-      }
+      applyHoverFromPoint(clientX, clientY);
     }
   });
 
