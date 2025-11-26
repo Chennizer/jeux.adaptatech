@@ -82,14 +82,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let tileSize = 40;
 
   const tileChoiceMap = new WeakMap();
-  const POINTER_MOVE_THRESHOLD = 10;
   let hoveredTile = null;
   let hoveredChoice = null;
   let hoverTimeoutId = null;
-  let requirePointerMotion = false;
   let lastPointerPosition = null;
-  let pointerMotionOrigin = null;
-  let pendingGuardedHover = null;
 
   function ensurePointerOverlay() {
     if (!gazePointer) return null;
@@ -240,21 +236,15 @@ document.addEventListener('DOMContentLoaded', () => {
       hoveredTile = null;
     }
     hoveredChoice = null;
-    pendingGuardedHover = null;
   }
 
   function requirePointerMotionBeforeHover({ clearSelection = true } = {}) {
     if (clearSelection) {
       clearHoverState();
     }
-    requirePointerMotion = true;
-    pendingGuardedHover = null;
     if (tileContainer) {
-      tileContainer.classList.add('pointer-motion-required');
+      tileContainer.classList.remove('pointer-motion-required');
     }
-    pointerMotionOrigin = lastPointerPosition
-      ? { x: lastPointerPosition.x, y: lastPointerPosition.y }
-      : null;
   }
 
   function scheduleHoverCountdown() {
@@ -277,28 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleTileEnter(tile, choice, options = {}) {
     const { playSound = true } = options;
     if (videoPlaying) return;
-
-    if (requirePointerMotion) {
-      const tileChanged = hoveredTile !== tile;
-
-      if (hoverTimeoutId) {
-        clearTimeout(hoverTimeoutId);
-        hoverTimeoutId = null;
-        setPointerDwell(false);
-      }
-
-      if (hoveredTile) {
-        hoveredTile.classList.remove('selected');
-        hoveredTile = null;
-      }
-
-      hoveredChoice = null;
-      tile.classList.remove('selected');
-      pendingGuardedHover = { tile, choice, playSound: playSound && tileChanged };
-      return;
-    }
-
-    pendingGuardedHover = null;
 
     const tileChanged = hoveredTile !== tile;
 
@@ -324,9 +292,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleTileLeave(tile) {
-    if (pendingGuardedHover && pendingGuardedHover.tile === tile) {
-      pendingGuardedHover = null;
-    }
     if (hoveredTile === tile) {
       clearHoverState();
     } else {
@@ -382,9 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resetHoverMechanics() {
     clearHoverState();
-    requirePointerMotion = false;
-    pointerMotionOrigin = null;
-    pendingGuardedHover = null;
     lastPointerPosition = null;
     if (tileContainer) {
       tileContainer.classList.remove('pointer-motion-required');
@@ -668,9 +630,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     videoPlaying = false;
-    preventAutoPreview = true;
-    setTimeout(() => { preventAutoPreview = false; }, 1200);
-
     videoPlayer.pause();
     videoPlayer.onloadedmetadata = null;
     videoPlayer.currentTime = 0;
@@ -689,26 +648,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resetHoverMechanics();
 
-    const rebuildTiles = () => {
-      if (reRenderTiles) {
-        tileContainer.innerHTML = '';
-        renderGameTiles();
-      } else {
-        tileContainer.querySelectorAll('.tile.selected').forEach(tile => tile.classList.remove('selected'));
-      }
+    if (reRenderTiles) {
+      tileContainer.innerHTML = '';
+      renderGameTiles();
+    } else {
+      tileContainer.querySelectorAll('.tile.selected').forEach(tile => tile.classList.remove('selected'));
+    }
 
-      requirePointerMotionBeforeHover();
-      refreshPointerStyles();
-      startInactivityTimer();
-    };
-
-    // Wait a frame to avoid capturing stale hover/enter events from the teardown state
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        rebuildTiles();
-        ensureFullscreen();
-      });
-    });
+    clearHoverState();
+    refreshPointerStyles();
+    startInactivityTimer();
+    ensureFullscreen();
   }
 
   document.addEventListener('keydown', e => {
@@ -861,53 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { clientX, clientY } = event;
     setPointerPos(clientX, clientY);
     const targetElement = event.target instanceof Element ? event.target : null;
-    const previousPosition = lastPointerPosition;
     lastPointerPosition = { x: clientX, y: clientY };
-
-    if (requirePointerMotion) {
-      if (!pointerMotionOrigin) {
-        if (previousPosition) {
-          pointerMotionOrigin = { x: previousPosition.x, y: previousPosition.y };
-        } else {
-          pointerMotionOrigin = { x: clientX, y: clientY };
-          return;
-        }
-      }
-
-      const dx = clientX - pointerMotionOrigin.x;
-      const dy = clientY - pointerMotionOrigin.y;
-
-      if (Math.hypot(dx, dy) >= POINTER_MOVE_THRESHOLD) {
-        requirePointerMotion = false;
-        pointerMotionOrigin = null;
-        if (tileContainer) {
-          tileContainer.classList.remove('pointer-motion-required');
-        }
-
-        const pending = pendingGuardedHover;
-        pendingGuardedHover = null;
-
-        if (
-          pending &&
-          tileChoiceMap.has(pending.tile) &&
-          tileContainer.contains(pending.tile) &&
-          tileContainer.style.display !== 'none'
-        ) {
-          handleTileEnter(pending.tile, pending.choice, { playSound: pending.playSound });
-        } else {
-          const tile = targetElement ? targetElement.closest('.tile') : null;
-          if (
-            tile &&
-            tileChoiceMap.has(tile) &&
-            tileContainer.contains(tile) &&
-            tileContainer.style.display !== 'none'
-          ) {
-            handleTileEnter(tile, tileChoiceMap.get(tile), { playSound: false });
-          }
-        }
-      }
-      return;
-    }
 
     if (!videoPlaying) {
       const tile = targetElement ? targetElement.closest('.tile') : null;
@@ -918,6 +822,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tile !== hoveredTile
       ) {
         handleTileEnter(tile, tileChoiceMap.get(tile));
+      } else if (!tile && hoveredTile) {
+        clearHoverState();
       }
     }
   });
@@ -989,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.choiceEyegaze.requirePointerMotionBeforeHover = (options) => {
     requirePointerMotionBeforeHover(options);
   };
-  window.choiceEyegaze.isPointerMotionRequired = () => requirePointerMotion;
+  window.choiceEyegaze.isPointerMotionRequired = () => false;
   window.choiceEyegaze.ensureFullscreen = ensureFullscreen;
 
   // Populate grid if choices already exist (e.g., restored from IndexedDB)
