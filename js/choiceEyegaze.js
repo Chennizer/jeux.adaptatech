@@ -128,6 +128,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   ensurePointerOverlay();
 
+  const supportedLanguages = ['fr', 'en', 'ja'];
+  const preferredLanguage = (() => {
+    const stored = localStorage.getItem('siteLanguage');
+    return supportedLanguages.includes(stored) ? stored : 'en';
+  })();
+
   const externalStatusMessages = {
     viewerOpened: {
       fr: 'Page lecteur ouverte : cliquer sur Ready?',
@@ -161,15 +167,27 @@ document.addEventListener('DOMContentLoaded', () => {
     },
   };
 
+  function pickLocalizedText(bundle) {
+    if (!bundle) return '';
+    return (
+      bundle[preferredLanguage] ||
+      bundle.en ||
+      bundle.fr ||
+      bundle.ja ||
+      ''
+    );
+  }
+
   function setExternalStatus(messageKey) {
     if (!externalPlayerStatus) return;
     const strings = externalStatusMessages[messageKey];
     if (strings) {
-      externalPlayerStatus.textContent = strings.fr;
+      const localized = pickLocalizedText(strings);
+      externalPlayerStatus.textContent = localized;
       externalPlayerStatus.dataset.fr = strings.fr;
       externalPlayerStatus.dataset.en = strings.en;
       externalPlayerStatus.dataset.ja = strings.ja;
-      externalPlayerStatus.title = strings.fr;
+      externalPlayerStatus.title = localized;
     } else if (typeof messageKey === 'string') {
       externalPlayerStatus.textContent = messageKey;
       externalPlayerStatus.title = messageKey;
