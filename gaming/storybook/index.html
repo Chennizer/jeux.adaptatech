@@ -383,6 +383,13 @@
         <option value="spa">Español (spa)</option>
         <option value="deu">Deutsch (deu)</option>
       </select>
+      <label class="teal-label" for="textSourcePref">
+        <span class="translate" data-fr="Source texte" data-en="Text source">Source texte</span>
+      </label>
+      <select id="textSourcePref">
+        <option value="prefer-embedded" selected class="translate" data-fr="Préférer le texte intégré" data-en="Prefer embedded text">Préférer le texte intégré</option>
+        <option value="prefer-ocr" class="translate" data-fr="Préférer l'OCR" data-en="Prefer OCR">Préférer l'OCR</option>
+      </select>
       <label class="teal-label auto-read-label">
         <input type="checkbox" id="autoRead" checked />
         <span class="translate" data-fr="Lecture auto" data-en="Auto-read">Lecture auto</span>
@@ -406,6 +413,7 @@
     const ttsRateInput = document.getElementById('ttsRate');
     const ttsRateDisplay = document.getElementById('ttsRateDisplay');
     const skipFirstPageTtsCheckbox = document.getElementById('skipFirstPageTts'); // NEW
+    const textSourcePref = document.getElementById('textSourcePref');
 
     const chooseBtn = document.getElementById('chooseBtn');
     const fileInput = document.getElementById('fileInput');
@@ -431,6 +439,7 @@
     const DEFAULT_TTS_RATE = 0.8;   // UPDATED to match slider default
     const TTS_RATE_MIN = 0.5;
     const TTS_RATE_MAX = 1.3;
+    const MIN_EMBEDDED_TEXT_LENGTH = 18;
     const PDF_LIBRARY_PATH = '../../pdf/';
     const PDF_MANIFEST_CANDIDATES = ['manifest.json', 'index.json', 'list.json'];
     const pdfBaseUrl = new URL(PDF_LIBRARY_PATH, window.location.href);
@@ -1346,6 +1355,17 @@
       return c;
     }
 
+    async function extractEmbeddedText(page) {
+      try {
+        const textContent = await page.getTextContent();
+        const raw = (textContent.items || []).map(item => item.str).join(' ');
+        return reflowOcrText(raw);
+      } catch (err) {
+        console.warn('Unable to extract embedded text', err);
+        return '';
+      }
+    }
+
     async function renderPage(pageNum) {
       if (!pdfDoc || loading) return;
       loading = true;
@@ -1369,26 +1389,58 @@
 
         await page.render({ canvasContext: ctx, viewport }).promise;
 
+        const embeddedText = await extractEmbeddedText(page);
+        const embeddedTrimmed = embeddedText.trim();
+        const preferOcr = (textSourcePref?.value === 'prefer-ocr');
+        const shouldRunOcr = preferOcr || embeddedTrimmed.length < MIN_EMBEDDED_TEXT_LENGTH;
+
         const rect = getZoneRectPixels(pageNum);
         const region = cropCanvas(canvas, rect);
 
-        setOcrProgress(0);
-        ocrStatus.textContent = (currentLang === 'fr' ? 'OCR…' : 'OCR…');
+        let finalText = embeddedText;
+        let trimmed = embeddedTrimmed;
 
-        const lang = ocrLangSel.value || 'eng';
-        const { data: { text } } = await Tesseract.recognize(
-          region,
-          lang,
-          { logger: m => { if (m && typeof m.progress === 'number') { setOcrProgress(m.progress); } } }
-        );
+        if (shouldRunOcr) {
+          setOcrProgress(0);
+          ocrStatus.textContent = (currentLang === 'fr' ? 'OCR…' : 'OCR…');
 
-        if (myToken !== currentRenderToken) return;
+          const lang = ocrLangSel.value || 'eng';
+          const { data: { text } } = await Tesseract.recognize(
+            region,
+            lang,
+            { logger: m => { if (m && typeof m.progress === 'number') { setOcrProgress(m.progress); } } }
+          );
 
-        const cleaned = reflowOcrText(text || '');
-        textOut.textContent = cleaned;
-        setOcrProgress(1);
+          if (myToken !== currentRenderToken) return;
 
-        const trimmed = cleaned.trim();
+          const cleaned = reflowOcrText(text || '');
+          const trimmedOcr = cleaned.trim();
+          setOcrProgress(1);
+
+          if (preferOcr || embeddedTrimmed.length < MIN_EMBEDDED_TEXT_LENGTH) {
+            finalText = trimmedOcr || embeddedText;
+            trimmed = finalText.trim();
+          } else {
+            finalText = embeddedText;
+            trimmed = embeddedTrimmed;
+          }
+
+          if (trimmedOcr) {
+            ocrStatus.textContent = preferOcr
+              ? (currentLang === 'fr' ? 'Texte OCR utilisé' : 'Using OCR text')
+              : (currentLang === 'fr' ? 'Texte OCR (faible texte intégré)' : 'OCR text (low embedded text)');
+          } else if (!embeddedTrimmed) {
+            ocrStatus.textContent = (currentLang === 'fr' ? 'Aucun texte extrait' : 'No text extracted');
+          } else {
+            ocrStatus.textContent = (currentLang === 'fr' ? 'Texte intégré conservé' : 'Kept embedded text');
+          }
+
+          textOut.textContent = finalText || cleaned;
+        } else {
+          setOcrProgress(0);
+          ocrStatus.textContent = (currentLang === 'fr' ? 'Texte PDF intégré' : 'Embedded PDF text');
+          textOut.textContent = finalText;
+        }
 
         if (ttsTimeoutId != null) {
           clearTimeout(ttsTimeoutId);
@@ -1520,6 +1572,13 @@
       if (!started || !pdfDoc) return;
       renderPage(currentPageNum);
     });
+
+    if (textSourcePref) {
+      textSourcePref.addEventListener('change', () => {
+        if (!started || !pdfDoc) return;
+        renderPage(currentPageNum);
+      });
+    }
 
     syncAutoReadWithMode();
     updateStartButtonState();
