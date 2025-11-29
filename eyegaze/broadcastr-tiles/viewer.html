@@ -59,7 +59,7 @@
 </head>
 <body>
   <div id="status" class="sr-only" aria-live="polite">En attente des tuiles...</div>
-  <div id="tile-container" class="two-tiles"></div>
+  <div id="tile-container"></div>
 
   <script>
     const channelName = 'eyegaze-broadcastr-tiles';
@@ -78,31 +78,80 @@
       }
     }
 
+    function buildTileElement(tile) {
+      const element = document.createElement('div');
+      element.className = 'tile';
+      element.dataset.type = tile.type;
+      if (tile.type === 'image' && tile.url) {
+        element.style.backgroundImage = `url(${tile.url})`;
+      } else {
+        element.innerHTML = `<div class="content-text">${tile.label || ''}</div>`;
+      }
+      if (tile.label && tile.type === 'image') {
+        const caption = document.createElement('div');
+        caption.className = 'caption';
+        caption.textContent = tile.label;
+        element.appendChild(caption);
+      }
+      attachHoverSelection(element);
+      return element;
+    }
+
+    function getRowDistribution(count) {
+      if (count <= 3) return [count];
+      if (count === 4) return [2, 2];
+      if (count === 5) return [3, 2];
+
+      const rows = [];
+      let remaining = count;
+      while (remaining > 0) {
+        if (remaining === 4) {
+          rows.push(2, 2);
+          break;
+        }
+        if (remaining === 5) {
+          rows.push(3, 2);
+          break;
+        }
+        const take = Math.min(3, remaining);
+        rows.push(take);
+        remaining -= take;
+      }
+      return rows;
+    }
+
+    function makeRow(tilesInRow) {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.justifyContent = 'center';
+      row.style.gap = 'var(--tile-gap)';
+      tilesInRow.forEach((tile) => row.appendChild(buildTileElement(tile)));
+      return row;
+    }
+
     function renderTiles(tiles = []) {
       tileContainer.innerHTML = '';
       if (!tiles.length) {
         setStatus('En attente des tuiles...');
         return;
       }
+
       setStatus(`Réception de ${tiles.length} choix.`);
-      tileContainer.classList.toggle('two-tiles', tiles.length === 2);
-      tiles.forEach((tile) => {
-        const element = document.createElement('div');
-        element.className = 'tile';
-        element.dataset.type = tile.type;
-        if (tile.type === 'image' && tile.url) {
-          element.style.backgroundImage = `url(${tile.url})`;
-        } else {
-          element.innerHTML = `<div class="content-text">${tile.label || ''}</div>`;
-        }
-        if (tile.label && tile.type === 'image') {
-          const caption = document.createElement('div');
-          caption.className = 'caption';
-          caption.textContent = tile.label;
-          element.appendChild(caption);
-        }
-        attachHoverSelection(element);
-        tileContainer.appendChild(element);
+      const isPair = tiles.length === 2;
+      tileContainer.classList.toggle('two-tiles', isPair);
+      tileContainer.style.flexDirection = isPair ? '' : 'column';
+
+      if (isPair) {
+        tiles.forEach((tile) => tileContainer.appendChild(buildTileElement(tile)));
+        return;
+      }
+
+      const distribution = getRowDistribution(tiles.length);
+      let index = 0;
+      distribution.forEach((rowCount) => {
+        const rowTiles = tiles.slice(index, index + rowCount);
+        index += rowCount;
+        tileContainer.appendChild(makeRow(rowTiles));
       });
     }
 
