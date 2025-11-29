@@ -16,7 +16,7 @@
     }
 
     #options-inline-container {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       width: 100%;
       gap: 20px;
       margin-top: 10px;
@@ -94,7 +94,7 @@
 
     .choice-row {
       display: grid;
-      grid-template-columns: 150px 1fr;
+      grid-template-columns: 150px 1fr 140px;
       gap: 12px;
       align-items: center;
     }
@@ -140,6 +140,39 @@
       font-weight: bold;
       margin-top: 10px;
     }
+
+    .correct-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #004d40;
+      font-weight: 700;
+    }
+
+    .reinforcer-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .overlay video {
+      max-width: 90vw;
+      max-height: 90vh;
+      border: 4px solid #009688;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      background: #000;
+    }
   </style>
 </head>
 <body>
@@ -175,6 +208,19 @@
             <div id="viewer-status">En attente du viewer...</div>
           </div>
         </div>
+
+        <div class="options-column">
+          <div class="section-card reinforcer-card">
+            <h3>3. Choisir un renforçateur</h3>
+            <p class="muted">Sélectionnez la vidéo à jouer lorsque la bonne réponse est choisie.</p>
+            <label for="reinforcer" class="teal-label">Vidéo de renforçateur</label>
+            <select id="reinforcer" class="button" style="background: #fff; color: #004d40; font-weight: 700;">
+              <option value="https://bucket.adaptatech.org/constructionvehicles1.mp4">Camions de construction 1</option>
+              <option value="https://bucket.adaptatech.org/constructionvehicles2.mp4">Camions de construction 2</option>
+            </select>
+            <p class="muted">Cochez l'option correcte dans la liste des choix.</p>
+          </div>
+        </div>
       </div>
 
       <div class="option-item" style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
@@ -185,6 +231,10 @@
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>
+
+  <div id="reinforcer-overlay" class="overlay" aria-hidden="true">
+    <video id="reinforcer-video" controls></video>
+  </div>
 
   <script>
     const channelName = 'eyegaze-broadcastr-tiles';
@@ -200,10 +250,14 @@
     const sendChoicesBtn = document.getElementById('startButton');
     const toast = document.getElementById('toast');
     const viewerStatus = document.getElementById('viewer-status');
+    const reinforcerSelect = document.getElementById('reinforcer');
+    const reinforcerOverlay = document.getElementById('reinforcer-overlay');
+    const reinforcerVideo = document.getElementById('reinforcer-video');
 
     let viewerWindow = null;
     let viewerReady = false;
     let uploadedImages = [];
+    let lastSentTiles = [];
 
     function setStatus(message) {
       viewerStatus.textContent = message;
@@ -325,6 +379,24 @@
 
         row.appendChild(typeSelect);
         row.appendChild(contentWrapper);
+
+        const correctWrapper = document.createElement('label');
+        correctWrapper.className = 'correct-toggle';
+        const correctInput = document.createElement('input');
+        correctInput.type = 'checkbox';
+        correctInput.name = 'correct-choice';
+        correctInput.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            document.querySelectorAll('input[name="correct-choice"]').forEach((box) => {
+              if (box !== e.target) box.checked = false;
+            });
+          }
+        });
+        correctWrapper.appendChild(correctInput);
+        const correctLabel = document.createElement('span');
+        correctLabel.textContent = 'Bonne réponse';
+        correctWrapper.appendChild(correctLabel);
+        row.appendChild(correctWrapper);
         choicesContainer.appendChild(row);
       }
     }
@@ -338,16 +410,17 @@
       for (const row of rows) {
         const type = row.querySelector('select').value;
         const inputEl = row.querySelector('div').firstElementChild;
+        const correct = row.querySelector('input[type="checkbox"]').checked;
         if (type === 'image') {
           const imageId = inputEl.value;
           const selected = uploadedImages.find((img) => img.id === imageId);
           if (selected) {
-            tiles.push({ type: 'image', url: selected.dataUrl, label: selected.name });
+            tiles.push({ id: crypto.randomUUID(), type: 'image', url: selected.dataUrl, label: selected.name, correct });
           }
         } else {
           const value = inputEl.value?.trim();
           if (value) {
-            tiles.push({ type, label: value });
+            tiles.push({ id: crypto.randomUUID(), type, label: value, correct });
           }
         }
       }
@@ -364,6 +437,7 @@
         showToast('Ajoutez au moins un choix valide.');
         return;
       }
+      lastSentTiles = tiles;
       channel.postMessage({ type: 'tiles', tiles });
       showToast('Choix envoyés.');
     }
@@ -381,7 +455,7 @@
 
     if (channel) {
       channel.onmessage = (event) => {
-        const { type } = event.data || {};
+        const { type, tileId } = event.data || {};
         if (type === 'viewer-ready') {
           viewerReady = true;
           setStatus('Viewer connecté.');
@@ -391,6 +465,12 @@
           viewerReady = false;
           setStatus('Viewer fermé.');
         }
+        if (type === 'selection' && tileId) {
+          const selectedTile = lastSentTiles.find((tile) => tile.id === tileId);
+          if (selectedTile?.correct) {
+            playReinforcer();
+          }
+        }
       };
       setStatus('En attente du viewer...');
     } else {
@@ -399,6 +479,24 @@
 
     renderChoices();
     refreshUploadGrid();
+
+    function playReinforcer() {
+      const source = reinforcerSelect.value;
+      reinforcerVideo.src = source;
+      reinforcerOverlay.style.display = 'flex';
+      reinforcerOverlay.setAttribute('aria-hidden', 'false');
+      reinforcerVideo.currentTime = 0;
+      reinforcerVideo.play().catch(() => {
+        reinforcerOverlay.style.display = 'none';
+        reinforcerOverlay.setAttribute('aria-hidden', 'true');
+      });
+    }
+
+    reinforcerVideo.addEventListener('ended', () => {
+      reinforcerOverlay.style.display = 'none';
+      reinforcerOverlay.setAttribute('aria-hidden', 'true');
+      reinforcerVideo.pause();
+    });
   </script>
 </body>
 </html>
