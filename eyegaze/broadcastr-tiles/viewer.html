@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Broadcastr Student View</title>
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      margin: 0;
+      background: #001b1a;
+      color: #e0f2f1;
+      font-family: 'Arial', sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    #status-bar {
+      background: #004d40;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    #status-bar span {
+      font-weight: 600;
+    }
+    #tile-container {
+      flex: 1;
+    }
+    .tile .content-text {
+      font-size: clamp(1.4rem, 2vw + 1rem, 3rem);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #001b1a;
+      font-weight: 800;
+      text-shadow: 0 2px 4px rgba(255,255,255,0.35);
+    }
+    .tile[data-type="text"],
+    .tile[data-type="number"] {
+      background: linear-gradient(135deg, #b2dfdb, #80cbc4);
+    }
+    .tile .caption {
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="status-bar">
+    <span id="status">Waiting for tiles...</span>
+    <button id="reset" class="button" type="button">Clear selection</button>
+  </div>
+  <div id="tile-container" class="two-tiles"></div>
+
+  <script>
+    const channelName = 'eyegaze-broadcastr-tiles';
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
+    const statusLabel = document.getElementById('status');
+    const tileContainer = document.getElementById('tile-container');
+    const resetButton = document.getElementById('reset');
+    let hoverTimer = null;
+
+    function setStatus(text) {
+      statusLabel.textContent = text;
+    }
+
+    function announceReady() {
+      if (channel) {
+        channel.postMessage({ type: 'viewer-ready' });
+      }
+    }
+
+    function renderTiles(tiles = []) {
+      tileContainer.innerHTML = '';
+      if (!tiles.length) {
+        setStatus('Waiting for tiles...');
+        return;
+      }
+      setStatus(`Received ${tiles.length} choice${tiles.length > 1 ? 's' : ''}. Hover to select.`);
+      tileContainer.classList.toggle('two-tiles', tiles.length === 2);
+      tiles.forEach((tile) => {
+        const element = document.createElement('div');
+        element.className = 'tile';
+        element.dataset.type = tile.type;
+        if (tile.type === 'image' && tile.url) {
+          element.style.backgroundImage = `url(${tile.url})`;
+        } else {
+          element.innerHTML = `<div class="content-text">${tile.label || ''}</div>`;
+        }
+        if (tile.label && tile.type === 'image') {
+          const caption = document.createElement('div');
+          caption.className = 'caption';
+          caption.textContent = tile.label;
+          element.appendChild(caption);
+        }
+        attachHoverSelection(element);
+        tileContainer.appendChild(element);
+      });
+    }
+
+    function clearTimers() {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
+    }
+
+    function attachHoverSelection(tile) {
+      tile.addEventListener('mouseenter', () => {
+        clearTimers();
+        tileContainer.querySelectorAll('.tile').forEach((t) => t.classList.remove('selected'));
+        hoverTimer = setTimeout(() => {
+          tile.classList.add('selected');
+          setStatus(`Selected: ${tile.dataset.type === 'image' ? tile.querySelector('.caption')?.textContent || 'image' : tile.textContent.trim()}`);
+        }, 2000);
+      });
+      tile.addEventListener('mouseleave', clearTimers);
+    }
+
+    resetButton.addEventListener('click', () => {
+      clearTimers();
+      tileContainer.querySelectorAll('.tile').forEach((t) => t.classList.remove('selected'));
+      setStatus('Waiting for tiles...');
+    });
+
+    if (channel) {
+      channel.onmessage = (event) => {
+        const { type, tiles } = event.data || {};
+        if (type === 'tiles') {
+          renderTiles(tiles);
+        }
+      };
+      window.addEventListener('unload', () => channel.postMessage({ type: 'viewer-closed' }));
+      announceReady();
+    } else {
+      setStatus('BroadcastChannel unsupported.');
+    }
+  </script>
+</body>
+</html>
