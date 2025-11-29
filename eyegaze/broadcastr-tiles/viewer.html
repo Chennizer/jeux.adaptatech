@@ -10,13 +10,53 @@
       margin: 0;
       min-height: 100vh;
       background: #000;
+      color: #fff;
       display: flex;
       flex-direction: column;
+      cursor: none;
+    }
+
+    .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+
+    #stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 24px 16px 32px;
+      box-sizing: border-box;
+    }
+
+    #prompt-container {
+      width: min(900px, 92vw);
+      display: none;
+      padding: 16px 18px;
+      border: 3px solid #00e5ff;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(0, 150, 136, 0.85), rgba(0, 188, 212, 0.8));
+      box-shadow: 0 12px 28px rgba(0,0,0,0.55);
+      text-align: center;
+      font-size: clamp(1.6rem, 2vw + 1rem, 3rem);
+      font-weight: 800;
+      color: #021212;
+    }
+
+    #prompt-container img {
+      max-width: 100%;
+      max-height: 320px;
+      border-radius: 10px;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.55);
     }
 
     #tile-container {
       flex: 1;
       width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: var(--tile-gap);
     }
 
     .tile .content-text {
@@ -44,6 +84,29 @@
       letter-spacing: 0.3px;
     }
 
+    /* Red circle pointer */
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff0000;
+      box-shadow: 0 0 0 3px rgba(255,0,0,0.35);
+    }
+
     .sr-only {
       position: absolute;
       width: 1px;
@@ -57,15 +120,21 @@
     }
   </style>
 </head>
-<body>
+<body class="hide-native-cursor">
+  <div id="gazePointer" aria-hidden="true"></div>
   <div id="status" class="sr-only" aria-live="polite">En attente des tuiles...</div>
-  <div id="tile-container"></div>
+  <div id="stage">
+    <div id="prompt-container" aria-live="polite"></div>
+    <div id="tile-container"></div>
+  </div>
 
   <script>
     const channelName = 'eyegaze-broadcastr-tiles';
     const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
     const statusLabel = document.getElementById('status');
     const tileContainer = document.getElementById('tile-container');
+    const promptContainer = document.getElementById('prompt-container');
+    const gazePointer = document.getElementById('gazePointer');
     let hoverTimer = null;
 
     function setStatus(text) {
@@ -130,14 +199,35 @@
       return row;
     }
 
-    function renderTiles(tiles = []) {
+    function renderPrompt(prompt) {
+      if (!prompt) {
+        promptContainer.style.display = 'none';
+        return;
+      }
+
+      promptContainer.style.display = 'block';
+      promptContainer.innerHTML = '';
+
+      if (prompt.type === 'image' && prompt.url) {
+        const img = document.createElement('img');
+        img.src = prompt.url;
+        img.alt = prompt.label || 'prompt';
+        promptContainer.appendChild(img);
+      } else if (prompt.value) {
+        promptContainer.textContent = prompt.value;
+      }
+    }
+
+    function renderTiles(tiles = [], prompt = null) {
       tileContainer.innerHTML = '';
       if (!tiles.length) {
+        renderPrompt(null);
         setStatus('En attente des tuiles...');
         return;
       }
 
       setStatus(`Réception de ${tiles.length} choix.`);
+      renderPrompt(prompt);
       const isPair = tiles.length === 2;
       tileContainer.classList.toggle('two-tiles', isPair);
       tileContainer.style.flexDirection = isPair ? '' : 'column';
@@ -183,9 +273,9 @@
 
     if (channel) {
       channel.onmessage = (event) => {
-        const { type, tiles } = event.data || {};
+        const { type, tiles, prompt } = event.data || {};
         if (type === 'tiles') {
-          renderTiles(tiles);
+          renderTiles(tiles, prompt);
         }
       };
       window.addEventListener('unload', () => channel.postMessage({ type: 'viewer-closed' }));
@@ -193,6 +283,18 @@
     } else {
       setStatus('BroadcastChannel non pris en charge.');
     }
+
+    function movePointer(x, y) {
+      if (!gazePointer) return;
+      gazePointer.style.left = `${x}px`;
+      gazePointer.style.top = `${y}px`;
+      gazePointer.style.opacity = 1;
+    }
+
+    window.addEventListener('pointermove', (e) => movePointer(e.clientX, e.clientY));
+    window.addEventListener('pointerleave', () => {
+      if (gazePointer) gazePointer.style.opacity = 0;
+    });
   </script>
 </body>
 </html>

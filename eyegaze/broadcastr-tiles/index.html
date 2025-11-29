@@ -59,6 +59,35 @@
       margin-top: 10px;
     }
 
+    .prompt-block {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 10px;
+      border-top: 2px dashed rgba(0, 150, 136, 0.35);
+    }
+
+    .prompt-inline {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .prompt-controls {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .prompt-controls .button,
+    .prompt-controls select,
+    .prompt-controls input {
+      width: 100%;
+    }
+
     .upload-card {
       border: 2px solid #009688;
       border-radius: 8px;
@@ -209,6 +238,28 @@
             </div>
             <div id="upload-grid" class="upload-grid"></div>
             <p class="muted" id="no-images-hint">Aucune image téléversée.</p>
+
+            <div class="prompt-block">
+              <label class="teal-label">
+                <input type="checkbox" id="enable-prompt" />
+                <span>Afficher un prompt au-dessus des tuiles</span>
+              </label>
+              <div class="prompt-inline">
+                <label for="prompt-type" class="teal-label">Type de prompt</label>
+                <select id="prompt-type" class="button" style="background: #fff; color: #004d40; font-weight: 700;">
+                  <option value="text">Texte / nombre</option>
+                  <option value="image">Image</option>
+                </select>
+              </div>
+              <div class="prompt-controls" id="prompt-text-row">
+                <label for="prompt-text" class="teal-label">Contenu</label>
+                <input id="prompt-text" type="text" placeholder="Ex: 3 + 4" />
+              </div>
+              <div class="prompt-controls" id="prompt-image-row" style="display: none;">
+                <label for="prompt-image" class="teal-label">Image du prompt</label>
+                <select id="prompt-image" class="button" style="background: #fff; color: #004d40; font-weight: 700;"></select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -269,6 +320,12 @@
     const reinforcerSelect = document.getElementById('reinforcer');
     const reinforcerOverlay = document.getElementById('reinforcer-overlay');
     const reinforcerVideo = document.getElementById('reinforcer-video');
+    const enablePrompt = document.getElementById('enable-prompt');
+    const promptType = document.getElementById('prompt-type');
+    const promptText = document.getElementById('prompt-text');
+    const promptImage = document.getElementById('prompt-image');
+    const promptTextRow = document.getElementById('prompt-text-row');
+    const promptImageRow = document.getElementById('prompt-image-row');
 
     let viewerWindow = null;
     let viewerReady = false;
@@ -289,6 +346,7 @@
       uploadGrid.innerHTML = '';
       if (uploadedImages.length === 0) {
         noImagesHint.style.display = 'block';
+        refreshPromptImageSelect();
         return;
       }
       noImagesHint.style.display = 'none';
@@ -315,6 +373,7 @@
         card.appendChild(footer);
         uploadGrid.appendChild(card);
       });
+      refreshPromptImageSelect();
     }
 
     function fileToDataUrl(file) {
@@ -342,6 +401,20 @@
       refreshUploadGrid();
       renderChoices();
     });
+
+    function refreshPromptImageSelect() {
+      promptImage.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = uploadedImages.length ? 'Choisir une image' : 'Aucune image disponible';
+      promptImage.appendChild(placeholder);
+      uploadedImages.forEach((img) => {
+        const opt = document.createElement('option');
+        opt.value = img.id;
+        opt.textContent = img.name;
+        promptImage.appendChild(opt);
+      });
+    }
 
     function renderChoices() {
       const count = Math.max(1, Math.min(6, Number(choiceCountInput.value) || 1));
@@ -420,6 +493,14 @@
     choiceCountInput.addEventListener('input', renderChoices);
     choiceCountInput.addEventListener('change', renderChoices);
 
+    function syncPromptInputs() {
+      const wantsImage = promptType.value === 'image';
+      promptTextRow.style.display = wantsImage ? 'none' : 'grid';
+      promptImageRow.style.display = wantsImage ? 'grid' : 'none';
+    }
+
+    promptType.addEventListener('change', syncPromptInputs);
+
     function collectChoices() {
       const rows = Array.from(document.querySelectorAll('.choice-row'));
       const tiles = [];
@@ -443,6 +524,28 @@
       return tiles;
     }
 
+    function buildPromptPayload() {
+      if (!enablePrompt.checked) return null;
+      const type = promptType.value;
+
+      if (type === 'text') {
+        const value = promptText.value.trim();
+        if (!value) {
+          showToast('Ajoutez un prompt texte.');
+          return { error: true };
+        }
+        return { type: 'text', value };
+      }
+
+      const imageId = promptImage.value;
+      const selected = uploadedImages.find((img) => img.id === imageId);
+      if (!selected) {
+        showToast('Choisissez une image pour le prompt.');
+        return { error: true };
+      }
+      return { type: 'image', url: selected.dataUrl, label: selected.name };
+    }
+
     function sendTiles() {
       if (!channel) {
         showToast('BroadcastChannel indisponible.');
@@ -453,8 +556,10 @@
         showToast('Ajoutez au moins un choix valide.');
         return;
       }
+      const promptPayload = buildPromptPayload();
+      if (promptPayload?.error) return;
       lastSentTiles = tiles;
-      channel.postMessage({ type: 'tiles', tiles });
+      channel.postMessage({ type: 'tiles', tiles, prompt: promptPayload || null });
       showToast('Choix envoyés.');
     }
 
@@ -495,6 +600,7 @@
 
     renderChoices();
     refreshUploadGrid();
+    syncPromptInputs();
 
     function playReinforcer() {
       const source = reinforcerSelect.value;
