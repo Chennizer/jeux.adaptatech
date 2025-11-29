@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Broadcast Tiles Builder</title>
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      font-family: 'Arial', sans-serif;
+    }
+    #options-inline-container {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .actions-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #upload-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+      width: 100%;
+    }
+    .upload-card {
+      border: 2px solid #009688;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #f5fffd;
+    }
+    .upload-card img {
+      width: 100%;
+      height: 110px;
+      object-fit: cover;
+      display: block;
+    }
+    .upload-card footer {
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: #e0f2f1;
+      color: #004d40;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .upload-card button {
+      background: #c62828;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #no-images-hint {
+      color: #444;
+      font-size: 14px;
+      margin: 6px 0 0;
+    }
+    .choice-row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .choice-row select,
+    .choice-row input,
+    .choice-row textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 2px solid #00796B;
+      border-radius: 12px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    #viewer-status {
+      color: #0d47a1;
+      font-size: 0.95rem;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-options" class="modal" style="display: flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title">Activité de choix multiple pour Broadcastr</h2>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label">Connexion élève</label>
+            <div class="actions-row">
+              <button id="open-viewer" class="button" type="button">Ouvrir la page lecteur</button>
+              <div id="viewer-status">Lecteur inactif</div>
+            </div>
+          </div>
+          <div class="option-item">
+            <label class="teal-label" for="choice-count">Nombre de tuiles</label>
+            <input type="number" id="choice-count" class="control-panel-input" min="1" max="6" value="3" />
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label" for="image-input">Bibliothèque d'images</label>
+            <div class="actions-row">
+              <label class="button" for="image-input">Ajouter des images</label>
+              <input type="file" id="image-input" accept="image/*" multiple style="display:none" />
+              <button id="clear-images" class="button" type="button">Vider les images</button>
+            </div>
+            <div id="upload-grid"></div>
+            <p id="no-images-hint">Aucune image pour l'instant.</p>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label">Construire les choix</label>
+            <p style="margin: 0 0 8px; color: #444;">Choisissez texte, nombre ou image pour chaque tuile.</p>
+            <div id="choices"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <div style="text-align: center;">
+        <button id="send-choices" class="button" type="button">Envoyer les tuiles</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const channelName = 'eyegaze-broadcastr-tiles';
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
+    const viewerStatus = document.getElementById('viewer-status');
+    const imageInput = document.getElementById('image-input');
+    const uploadGrid = document.getElementById('upload-grid');
+    const noImagesHint = document.getElementById('no-images-hint');
+    const clearImagesBtn = document.getElementById('clear-images');
+    const choicesContainer = document.getElementById('choices');
+    const choiceCountInput = document.getElementById('choice-count');
+    const openViewerBtn = document.getElementById('open-viewer');
+    const sendChoicesBtn = document.getElementById('send-choices');
+
+    let viewerWindow = null;
+    let uploadedImages = [];
+
+    function setViewerStatus(message) {
+      viewerStatus.textContent = message;
+    }
+
+    function refreshUploadGrid() {
+      uploadGrid.innerHTML = '';
+      if (uploadedImages.length === 0) {
+        noImagesHint.style.display = 'block';
+        return;
+      }
+      noImagesHint.style.display = 'none';
+      uploadedImages.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'upload-card';
+        const img = document.createElement('img');
+        img.src = item.dataUrl;
+        img.alt = item.name;
+        const footer = document.createElement('footer');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = item.name;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = 'Supprimer';
+        removeBtn.addEventListener('click', () => {
+          uploadedImages = uploadedImages.filter((img) => img.id !== item.id);
+          refreshUploadGrid();
+          renderChoices();
+        });
+        footer.appendChild(nameSpan);
+        footer.appendChild(removeBtn);
+        card.appendChild(img);
+        card.appendChild(footer);
+        uploadGrid.appendChild(card);
+      });
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    imageInput.addEventListener('change', async (event) => {
+      const files = Array.from(event.target.files || []);
+      for (const file of files) {
+        const dataUrl = await fileToDataUrl(file);
+        uploadedImages.push({ id: crypto.randomUUID(), name: file.name, dataUrl });
+      }
+      imageInput.value = '';
+      refreshUploadGrid();
+      renderChoices();
+    });
+
+    clearImagesBtn.addEventListener('click', () => {
+      uploadedImages = [];
+      refreshUploadGrid();
+      renderChoices();
+    });
+
+    function renderChoices() {
+      const count = Math.max(1, Math.min(6, Number(choiceCountInput.value) || 1));
+      choiceCountInput.value = count;
+      choicesContainer.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const row = document.createElement('div');
+        row.className = 'choice-row';
+        const typeSelect = document.createElement('select');
+        typeSelect.innerHTML = `
+          <option value="image">Image</option>
+          <option value="number">Nombre</option>
+          <option value="text">Texte</option>
+        `;
+        const contentWrapper = document.createElement('div');
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.placeholder = 'Texte ou nombre';
+
+        const imageSelect = document.createElement('select');
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = uploadedImages.length ? 'Choisir une image' : 'Aucune image';
+        imageSelect.appendChild(emptyOption);
+        uploadedImages.forEach((img) => {
+          const opt = document.createElement('option');
+          opt.value = img.id;
+          opt.textContent = img.name;
+          imageSelect.appendChild(opt);
+        });
+
+        contentWrapper.appendChild(imageSelect);
+
+        function refreshContentInput() {
+          const type = typeSelect.value;
+          contentWrapper.innerHTML = '';
+          if (type === 'image') {
+            const selector = imageSelect.cloneNode(true);
+            contentWrapper.appendChild(selector);
+          } else {
+            const clone = textInput.cloneNode();
+            clone.type = type === 'number' ? 'number' : 'text';
+            clone.placeholder = type === 'number' ? 'Entrer un nombre' : 'Entrer du texte';
+            contentWrapper.appendChild(clone);
+          }
+        }
+
+        typeSelect.addEventListener('change', refreshContentInput);
+        refreshContentInput();
+
+        row.appendChild(typeSelect);
+        row.appendChild(contentWrapper);
+        choicesContainer.appendChild(row);
+      }
+    }
+
+    choiceCountInput.addEventListener('change', renderChoices);
+
+    function collectChoices() {
+      const rows = Array.from(document.querySelectorAll('.choice-row'));
+      const tiles = [];
+      for (const row of rows) {
+        const type = row.querySelector('select').value;
+        const inputEl = row.querySelector('div').firstElementChild;
+        if (type === 'image') {
+          const imageId = inputEl.value;
+          const selected = uploadedImages.find((img) => img.id === imageId);
+          if (selected) {
+            tiles.push({ type: 'image', url: selected.dataUrl, label: selected.name });
+          }
+        } else {
+          const value = inputEl.value?.trim();
+          if (value) {
+            tiles.push({ type, label: value });
+          }
+        }
+      }
+      return tiles;
+    }
+
+    function sendTiles() {
+      if (!channel) {
+        alert('BroadcastChannel non disponible dans ce navigateur.');
+        return;
+      }
+      const tiles = collectChoices();
+      if (!tiles.length) {
+        alert('Ajoutez au moins une tuile valide.');
+        return;
+      }
+      channel.postMessage({ type: 'tiles', tiles });
+      alert('Tuiles envoyées.');
+    }
+
+    sendChoicesBtn.addEventListener('click', sendTiles);
+
+    function openViewer() {
+      viewerWindow = window.open('viewer.html', '_blank');
+      if (!viewerWindow) {
+        alert('Impossible d\'ouvrir la fenêtre élève.');
+      }
+    }
+
+    openViewerBtn.addEventListener('click', openViewer);
+
+    if (channel) {
+      channel.onmessage = (event) => {
+        const { type } = event.data || {};
+        if (type === 'viewer-ready') {
+          setViewerStatus('Lecteur connecté');
+        }
+        if (type === 'viewer-closed') {
+          setViewerStatus('Lecteur inactif');
+        }
+      };
+      setViewerStatus('En attente du lecteur...');
+    } else {
+      setViewerStatus('BroadcastChannel non pris en charge');
+    }
+
+    renderChoices();
+    refreshUploadGrid();
+  </script>
+</body>
+</html>
