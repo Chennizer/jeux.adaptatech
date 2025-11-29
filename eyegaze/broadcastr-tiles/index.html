@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Broadcast Tiles Builder</title>
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #000;
+      color: #e0f2f1;
+      font-family: 'Arial', sans-serif;
+    }
+    header {
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #001f1d, #00332f);
+      color: #b2dfdb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      border-bottom: 2px solid #00bcd4;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.6);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.6rem;
+      letter-spacing: 0.5px;
+    }
+    #status-badge {
+      background: rgba(0, 188, 212, 0.2);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      color: #00e5ff;
+      border: 1px solid rgba(0, 188, 212, 0.5);
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .panel {
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 18px;
+      padding: 20px;
+      border: 1px solid rgba(0, 188, 212, 0.45);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
+    }
+    .panel h2 {
+      margin-top: 0;
+      color: #00e5ff;
+      letter-spacing: 0.5px;
+    }
+    .upload-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .upload-card {
+      border: 2px solid rgba(0, 188, 212, 0.5);
+      border-radius: 16px;
+      overflow: hidden;
+      background: linear-gradient(145deg, rgba(0, 150, 136, 0.35), rgba(0, 121, 107, 0.2));
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+    }
+    .upload-card img {
+      width: 100%;
+      height: 130px;
+      object-fit: cover;
+    }
+    .upload-card footer {
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    .upload-card button {
+      border: none;
+      background: #c62828;
+      color: white;
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .muted {
+      color: #9ad1cc;
+      font-size: 0.95rem;
+    }
+    .choices-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .choice-row {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 12px;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(0, 188, 212, 0.4);
+      padding: 12px;
+      border-radius: 14px;
+    }
+    .choice-row select,
+    .choice-row input,
+    .choice-row textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #009688;
+      border-radius: 12px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      background: rgba(0, 0, 0, 0.45);
+      color: #e0f2f1;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .button.secondary {
+      background: #263238;
+    }
+    .inline-note {
+      background: rgba(0, 188, 212, 0.12);
+      border: 1px solid rgba(0, 188, 212, 0.4);
+      padding: 10px 12px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #b2dfdb;
+    }
+    .label-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .label-row input[type="number"] {
+      width: 120px;
+    }
+    #toast {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(0, 150, 136, 0.92);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 10px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Broadcastr Tile Builder</h1>
+    <span id="status-badge">Waiting for viewer...</span>
+  </header>
+  <main>
+    <section class="panel" id="upload-panel">
+      <h2>Step 1: Upload images</h2>
+      <p class="muted">Add the pictures you want to reuse later when composing the choices.</p>
+      <div class="actions">
+        <label class="button" for="image-input">Add images</label>
+        <input type="file" id="image-input" accept="image/*" multiple style="display:none" />
+        <button id="clear-images" class="button secondary" type="button">Clear images</button>
+      </div>
+      <div id="upload-grid" class="upload-grid"></div>
+      <p class="muted" id="no-images-hint">No images uploaded yet.</p>
+    </section>
+
+    <section class="panel" id="builder-panel">
+      <div class="label-row">
+        <h2 style="margin:0;">Step 2: Build your choices</h2>
+        <div class="inline-note">Send text, numbers, or the uploaded images via BroadcastChannel.</div>
+      </div>
+      <p class="muted">Open the student page first, then compose the items you want to send.</p>
+      <div class="actions">
+        <button id="open-viewer" class="button" type="button">Open student page</button>
+        <button id="send-choices" class="button" type="button">Send to student</button>
+      </div>
+      <div class="label-row">
+        <label for="choice-count" class="teal-label">Number of choices</label>
+        <input type="number" id="choice-count" min="1" max="6" value="3" />
+      </div>
+      <div id="choices" class="choices-grid"></div>
+    </section>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const channelName = 'eyegaze-broadcastr-tiles';
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
+    const statusBadge = document.getElementById('status-badge');
+    const imageInput = document.getElementById('image-input');
+    const uploadGrid = document.getElementById('upload-grid');
+    const noImagesHint = document.getElementById('no-images-hint');
+    const clearImagesBtn = document.getElementById('clear-images');
+    const choicesContainer = document.getElementById('choices');
+    const choiceCountInput = document.getElementById('choice-count');
+    const openViewerBtn = document.getElementById('open-viewer');
+    const sendChoicesBtn = document.getElementById('send-choices');
+    const toast = document.getElementById('toast');
+
+    let viewerWindow = null;
+    let viewerReady = false;
+    let uploadedImages = [];
+
+    function setStatus(message, tone = 'muted') {
+      statusBadge.textContent = message;
+      statusBadge.style.background = tone === 'ok' ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.18)';
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 2400);
+    }
+
+    function refreshUploadGrid() {
+      uploadGrid.innerHTML = '';
+      if (uploadedImages.length === 0) {
+        noImagesHint.style.display = 'block';
+        return;
+      }
+      noImagesHint.style.display = 'none';
+      uploadedImages.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'upload-card';
+        const img = document.createElement('img');
+        img.src = item.dataUrl;
+        img.alt = item.name;
+        const footer = document.createElement('footer');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = item.name;
+        nameSpan.className = 'muted';
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = 'Remove';
+        removeBtn.addEventListener('click', () => {
+          uploadedImages = uploadedImages.filter((img) => img.id !== item.id);
+          refreshUploadGrid();
+          renderChoices();
+        });
+        footer.appendChild(nameSpan);
+        footer.appendChild(removeBtn);
+        card.appendChild(img);
+        card.appendChild(footer);
+        uploadGrid.appendChild(card);
+      });
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    imageInput.addEventListener('change', async (event) => {
+      const files = Array.from(event.target.files || []);
+      for (const file of files) {
+        const dataUrl = await fileToDataUrl(file);
+        uploadedImages.push({ id: crypto.randomUUID(), name: file.name, dataUrl });
+      }
+      imageInput.value = '';
+      refreshUploadGrid();
+      renderChoices();
+    });
+
+    clearImagesBtn.addEventListener('click', () => {
+      uploadedImages = [];
+      refreshUploadGrid();
+      renderChoices();
+    });
+
+    function renderChoices() {
+      const count = Math.max(1, Math.min(6, Number(choiceCountInput.value) || 1));
+      choiceCountInput.value = count;
+      choicesContainer.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const row = document.createElement('div');
+        row.className = 'choice-row';
+        const typeSelect = document.createElement('select');
+        typeSelect.innerHTML = `
+          <option value="image">Image</option>
+          <option value="number">Number</option>
+          <option value="text">Text</option>
+        `;
+        const contentWrapper = document.createElement('div');
+        const inputField = document.createElement('input');
+        inputField.type = 'text';
+        inputField.placeholder = 'Type the text or number';
+
+        const imageSelect = document.createElement('select');
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = uploadedImages.length ? 'Choose an uploaded image' : 'No images available';
+        imageSelect.appendChild(emptyOption);
+        uploadedImages.forEach((img) => {
+          const opt = document.createElement('option');
+          opt.value = img.id;
+          opt.textContent = img.name;
+          imageSelect.appendChild(opt);
+        });
+
+        contentWrapper.appendChild(imageSelect);
+
+        function refreshContentInput() {
+          const type = typeSelect.value;
+          contentWrapper.innerHTML = '';
+          if (type === 'image') {
+            const selector = imageSelect.cloneNode(true);
+            contentWrapper.appendChild(selector);
+          } else {
+            const clone = inputField.cloneNode();
+            clone.type = type === 'number' ? 'number' : 'text';
+            clone.placeholder = type === 'number' ? 'Enter a number' : 'Enter text';
+            contentWrapper.appendChild(clone);
+          }
+        }
+
+        typeSelect.addEventListener('change', refreshContentInput);
+        refreshContentInput();
+
+        row.appendChild(typeSelect);
+        row.appendChild(contentWrapper);
+        choicesContainer.appendChild(row);
+      }
+    }
+
+    choiceCountInput.addEventListener('change', renderChoices);
+
+    function collectChoices() {
+      const rows = Array.from(document.querySelectorAll('.choice-row'));
+      const tiles = [];
+      for (const row of rows) {
+        const type = row.querySelector('select').value;
+        const inputEl = row.querySelector('div').firstElementChild;
+        if (type === 'image') {
+          const imageId = inputEl.value;
+          const selected = uploadedImages.find((img) => img.id === imageId);
+          if (selected) {
+            tiles.push({ type: 'image', url: selected.dataUrl, label: selected.name });
+          }
+        } else {
+          const value = inputEl.value?.trim();
+          if (value) {
+            tiles.push({ type, label: value });
+          }
+        }
+      }
+      return tiles;
+    }
+
+    function sendTiles() {
+      if (!channel) {
+        showToast('BroadcastChannel not available in this browser.');
+        return;
+      }
+      const tiles = collectChoices();
+      if (!tiles.length) {
+        showToast('Add at least one valid choice first.');
+        return;
+      }
+      channel.postMessage({ type: 'tiles', tiles });
+      showToast('Choices sent.');
+    }
+
+    sendChoicesBtn.addEventListener('click', sendTiles);
+
+    function openViewer() {
+      viewerWindow = window.open('viewer.html', '_blank');
+      if (!viewerWindow) {
+        showToast('Unable to open viewer window.');
+      }
+    }
+
+    openViewerBtn.addEventListener('click', openViewer);
+
+    if (channel) {
+      channel.onmessage = (event) => {
+        const { type } = event.data || {};
+        if (type === 'viewer-ready') {
+          viewerReady = true;
+          setStatus('Viewer connected', 'ok');
+          showToast('Viewer is ready.');
+        }
+        if (type === 'viewer-closed') {
+          viewerReady = false;
+          setStatus('Viewer closed');
+        }
+      };
+      setStatus('Waiting for viewer...');
+    } else {
+      setStatus('BroadcastChannel unsupported');
+    }
+
+    renderChoices();
+    refreshUploadGrid();
+  </script>
+</body>
+</html>
