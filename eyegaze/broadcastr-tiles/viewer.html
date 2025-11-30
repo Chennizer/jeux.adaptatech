@@ -14,8 +14,7 @@
       display: flex;
       flex-direction: column;
       cursor: none;
-      overflow-x: hidden;
-      overflow-y: auto;
+      overflow: hidden;
       padding-top: calc(env(safe-area-inset-top, 0px) + 48px);
     }
 
@@ -30,6 +29,7 @@
       gap: 20px;
       padding: calc(env(safe-area-inset-top, 0px) + 120px) 20px 56px;
       box-sizing: border-box;
+      overflow: hidden;
     }
 
     .hidden {
@@ -69,6 +69,8 @@
       min-height: auto;
       padding: 0 10px 10px;
       box-sizing: border-box;
+      transform-origin: top center;
+      transform: scale(var(--tile-scale, 1));
     }
 
     .tile .content-text {
@@ -188,6 +190,7 @@
     const startButton = document.getElementById('start-button');
     let hoverTimer = null;
     let hasStarted = false;
+    let lastRowCount = 0;
 
     function setStatus(text) {
       statusLabel.textContent = text;
@@ -264,6 +267,29 @@
       return rows;
     }
 
+    function applyTileScaling(rowCount) {
+      lastRowCount = rowCount;
+
+      requestAnimationFrame(() => {
+        const promptHeight = promptContainer.offsetParent ? promptContainer.offsetHeight : 0;
+        const availableHeight = stage.clientHeight - promptHeight - 60; // account for gaps and padding
+        const tileHeight = tileContainer.scrollHeight;
+
+        if (!tileHeight || availableHeight <= 0) {
+          tileContainer.style.setProperty('--tile-scale', 1);
+          tileContainer.style.height = '';
+          return;
+        }
+
+        const fitScale = Math.min(1, availableHeight / tileHeight);
+        const baseScale = rowCount > 1 ? 0.9 : 1;
+        const finalScale = Math.min(baseScale, fitScale);
+
+        tileContainer.style.setProperty('--tile-scale', finalScale);
+        tileContainer.style.height = `${tileHeight * finalScale}px`;
+      });
+    }
+
     function makeRow(tilesInRow) {
       const row = document.createElement('div');
       row.style.display = 'flex';
@@ -297,6 +323,7 @@
       if (!tiles.length) {
         renderPrompt(null);
         setStatus('En attente des tuiles...');
+        applyTileScaling(0);
         return;
       }
 
@@ -308,6 +335,7 @@
 
       if (isPair) {
         tiles.forEach((tile) => tileContainer.appendChild(buildTileElement(tile)));
+        applyTileScaling(1);
         return;
       }
 
@@ -318,6 +346,8 @@
         index += rowCount;
         tileContainer.appendChild(makeRow(rowTiles));
       });
+
+      applyTileScaling(distribution.length);
     }
 
     function clearTimers() {
@@ -358,6 +388,8 @@
     }
 
     startButton.addEventListener('click', startExperience);
+
+    window.addEventListener('resize', () => applyTileScaling(lastRowCount));
 
     function movePointer(x, y) {
       if (!gazePointer) return;
