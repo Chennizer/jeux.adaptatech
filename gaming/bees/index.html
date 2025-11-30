@@ -41,7 +41,7 @@
       touch-action: manipulation;
     }
 
-    /* -------- LANG BUTTON (copied from Window example) -------- */
+    /* -------- LANG BUTTON -------- */
     #langToggle {
       position: fixed;
       top: 14px;
@@ -70,7 +70,7 @@
       transform: translateY(1px);
     }
 
-    /* -------- LANDING OVERLAY (same design as xylophone) -------- */
+    /* -------- LANDING OVERLAY -------- */
     #promptOverlay {
       position: absolute;
       top: 0; left: 0;
@@ -136,6 +136,13 @@
       font-size: 1rem;
       text-align: center;
     }
+    .goal-setting input[type="checkbox"] {
+      width: 1.2rem;
+      height: 1.2rem;
+      accent-color: #00bfff;
+      cursor: pointer;
+    }
+
     #editPlayers {
       display: none;
       padding: 0.65rem 1rem;
@@ -220,6 +227,14 @@
       gap: 0.75rem;
       justify-content: center;
     }
+    .modal-actions button {
+      padding: 0.75rem 1.6rem;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
     #goalDisplay {
       position: fixed;
       top: 12px;
@@ -262,13 +277,6 @@
       font-size: 0.95rem;
       font-weight: 650;
       color: #d8e7f3;
-    }
-    .modal-actions button {
-      padding: 0.75rem 1.6rem;
-      border-radius: 10px;
-      border: none;
-      cursor: pointer;
-      font-weight: 700;
     }
 
     /* -------- GAME CANVAS -------- */
@@ -336,31 +344,20 @@
       <input id="tripGoalInput" type="number" min="1" max="15" value="5">
     </div>
 
+    <!-- Timing mode checkbox -->
+    <div class="goal-setting">
+      <label for="timingModeInput" class="translate"
+             data-fr="Mode timing (fleurs qui apparaissent/disparaissent)"
+             data-en="Timing mode (flowers appear/disappear)"
+             data-ja="タイミングモード（花が出たり消えたり）">
+        Mode timing (fleurs qui apparaissent/disparaissent)
+      </label>
+      <input id="timingModeInput" type="checkbox">
+    </div>
+
     <div id="controlsText" class="controls-hint">
-      <span class="translate"
-            data-fr="Construisez la plus grande ruche !"
-            data-en="Build the biggest hive!"
-            data-ja="いちばん大きなハチの巣を作ろう！">
-        Construisez la plus grande ruche !
-      </span>
-      <br>
-      <span class="translate"
-            data-fr="Joueur 1 : appuyez sur"
-            data-en="Player 1: Press"
-            data-ja="プレイヤー1：押すキー">
-        Joueur 1 : appuyez sur
-      </span>
-      <span class="key">SPACE</span>
-      <br>
-      <span id="p2hint" style="display:none;">
-        <span class="translate"
-              data-fr="Joueur 2 : appuyez sur"
-              data-en="Player 2: Press"
-              data-ja="プレイヤー2：押すキー">
-          Joueur 2 : appuyez sur
-        </span>
-        <span class="key">ENTER</span>
-      </span>
+     <span id="p2hint" style="display:none;"></span>
+
     </div>
 
     <button id="editPlayers">Configurer les joueurs</button>
@@ -407,12 +404,12 @@
 
   <script>
     /**
-     * CONFIGURATION & ASSETS (original game logic)
+     * CONFIGURATION & ASSETS
      */
     const COLORS = {
       bgLeft: '#120a02',
-      bgRight: '#4a7c25', // Green
-      bgDark: '#120a02',  // Dark
+      bgRight: '#4a7c25',
+      bgDark: '#120a02',
       hexBorderLight: '#ffd700',
       hexBorderDark: '#b45309',
       waxBase: '#fbbf24',
@@ -426,6 +423,10 @@
       { name: 'Joueur 1', color: COLORS.waxBase },
       { name: 'Joueur 2', color: '#6a4c93' }
     ];
+
+    function randRange(min, max) {
+      return min + Math.random() * (max - min);
+    }
 
     // ----- Color helpers -----
     function hexToRgb(hex) {
@@ -492,6 +493,14 @@
     let gameEnded = false;
     let tripGoal = 5;
 
+    // Timing mode state
+    let timingMode = false;
+    let flowersActive = true;
+    let timingState = 'static'; // 'static', 'waiting', 'visible'
+    let timeUntilNextState = 0;
+    let timingSpentThisCycle = false;
+    let timingCapturedByPlayerIndex = null; // 0 or 1
+
     // Hives and other entities
     let hives = [];
     const flowers = [];
@@ -499,7 +508,7 @@
 
     let hexRadius = 45;
 
-    // ----- DOM Elements for Menu -----
+    // ----- DOM Elements -----
     const modeButtons = document.querySelectorAll('#modeSelect button');
     const p2Hint = document.getElementById('p2hint');
     const startButton = document.getElementById('startButton');
@@ -514,11 +523,12 @@
     const savePlayersBtn = document.getElementById('savePlayers');
     const langToggle = document.getElementById('langToggle');
     const tripGoalInput = document.getElementById('tripGoalInput');
+    const timingModeInput = document.getElementById('timingModeInput');
     const goalDisplay = document.getElementById('goalDisplay');
     const endBanner = document.getElementById('endBanner');
     const restartHintTemplate = document.getElementById('restartHintTemplate');
 
-    // Audio placeholders
+    // Audio
     const pressSoundSrc = '../../sounds/startactivity.mp3';
     let buttonMusic;
     const finishSound = new Audio('../../sounds/victory.mp3');
@@ -645,8 +655,8 @@
       applyPlayerConfig();
       tripGoal = readTripGoal();
       tripGoalInput.value = tripGoal;
+      timingMode = !!timingModeInput.checked;
 
-      // Fullscreen request (like your other games)
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(()=>{});
       } else if (document.documentElement.webkitRequestFullscreen) {
@@ -662,9 +672,8 @@
       height = window.innerHeight;
       canvas.width = width * window.devicePixelRatio;
       canvas.height = height * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
 
-      // If game is running, re-init to adjust positions
       if (gameRunning) initGame();
     }
     window.addEventListener('resize', resize);
@@ -677,6 +686,7 @@
         this.isRightSide = isRightSide;
         this.label = options.name || 'Joueur';
         this.waxColor = options.color || COLORS.waxBase;
+        this.index = options.index ?? 0;   // player index (0 or 1)
         this.waxPattern = createWaxTexture(this.waxColor);
         this.borderLight = mixHex(this.waxColor, '#ffffff', 0.35);
         this.borderDark = mixHex(this.waxColor, '#000000', 0.4);
@@ -690,16 +700,14 @@
         this.voyageLogged = false;
         this.finishing = false;
         this.finished = false;
+        this.ready = false; // visual "ready" state
 
-        // Initial Cell
         this.addCell(0,0);
 
-        // Initial Bees
         for(let i=0; i<6; i++) this.bees.push(this.createBee());
       }
 
       hexToPixel(q, r) {
-        // Pointy topped hex math
         const x = this.centerX + hexRadius * (3/2 * q);
         const y = this.centerY + hexRadius * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
         return { x, y };
@@ -724,7 +732,6 @@
           {q: -1, r: 0}, {q: -1, r: 1}, {q: 0, r: 1}
         ];
 
-        // Spiral search
         let queue = [{q:0, r:0}];
         let visited = new Set(['0,0']);
         let iterations = 0;
@@ -760,18 +767,54 @@
           state: 'idle',
           target: null,
           targetGrid: null,
-          angle: this.isRightSide ? Math.PI : 0, // Face center initially
+          angle: this.isRightSide ? Math.PI : 0,
           wobblePhase: Math.random() * Math.PI * 2,
           wingSpeed: 1,
           sizeScale: 1.3 + Math.random() * 0.4,
           accentLight: this.beeAccentLight,
-          accentDeep: this.beeAccentDeep
+          accentDeep: this.beeAccentDeep,
+          canScoreThisTrip: false,
+          canBuildThisTrip: false
         };
       }
 
+      /**
+       * Returns true only if at least one bee is launched AND canScoreThisTrip is true.
+       * Also enforces: can only launch when ALL bees are idle (all back home).
+       */
       sendBees() {
-        if (this.finished || this.finishing) return;
+        if (this.finished || this.finishing) return false;
+
+        // must wait until all bees are idle
+        const allIdle = this.bees.every(b => b.state === 'idle');
+        if (!allIdle) return false;
+
+        if (timingMode && !flowersActive) return false;
+
+        // Determine scoring/build permissions for this launch
+        let canScoreTrip = true;
+        let canBuildTrip = true;
+
+        if (timingMode && gameMode === '2p') {
+          if (!flowersActive || timingState !== 'visible') {
+            canScoreTrip = false;
+            canBuildTrip = false;
+          } else if (
+            timingCapturedByPlayerIndex !== null &&
+            timingCapturedByPlayerIndex !== this.index
+          ) {
+            // Other player already captured this cycle
+            canScoreTrip = false;
+            canBuildTrip = false;
+          } else {
+            canScoreTrip = true;
+            canBuildTrip = true;
+          }
+        }
+
         let launched = false;
+        let hasScoringBee = false;
+
         this.bees.forEach(b => {
           if (b.state === 'idle' && flowers.length > 0) {
             b.state = 'outbound';
@@ -782,23 +825,45 @@
               x: bloom.x + (Math.random()-0.5)*10,
               y: bloom.y + (Math.random()-0.5)*10 - 15
             };
+            b.canScoreThisTrip = canScoreTrip;
+            b.canBuildThisTrip = canBuildTrip;
             launched = true;
+            if (canScoreTrip) hasScoringBee = true;
           }
         });
 
-        // A voyage counts once per launch input, not per individual bee.
         if (launched) {
           this.voyageLogged = false;
+
+          // First player to send while visible captures this flower cycle
+          if (timingMode && gameMode === '2p' &&
+              flowersActive && timingState === 'visible' &&
+              timingCapturedByPlayerIndex === null &&
+              canScoreTrip) {
+            timingCapturedByPlayerIndex = this.index;
+          }
         }
+
+        // Only treat this as a "meaningful" press if at least one bee can score
+        return hasScoringBee;
       }
 
       update(dt) {
-        // Animate Cells
+        // Determine "ready" visual state:
+        // - all bees idle
+        // - not finishing/finished
+        // - in timing mode, flowers must be visible
+        const allIdle = this.bees.every(b => b.state === 'idle');
+        this.ready =
+          allIdle &&
+          !this.finished &&
+          !this.finishing &&
+          (!timingMode || flowersActive);
+
         this.cells.forEach(c => {
           if (c.scale < 1) c.scale += (1 - c.scale) * 0.1;
         });
 
-        // Update Bees
         const homeCenter = this.hexToPixel(0,0);
 
         this.bees.forEach(b => {
@@ -806,7 +871,6 @@
 
           if (b.state === 'idle') {
             b.wingSpeed = 1;
-            // Hover near center of hive
             const hoverX = homeCenter.x + Math.cos(b.wobblePhase*0.2)*70;
             const hoverY = homeCenter.y + Math.sin(b.wobblePhase*0.3)*50;
             const dx = hoverX - b.x;
@@ -814,7 +878,6 @@
             b.x += dx * 0.03;
             b.y += dy * 0.03;
 
-            // Face towards center (flowers)
             const desiredAngle = this.isRightSide ? Math.PI : 0;
             let angleDiff = desiredAngle - b.angle;
             if (angleDiff > Math.PI) angleDiff -= Math.PI*2;
@@ -829,7 +892,8 @@
 
             if (dist < 20) {
               if (b.state === 'outbound') {
-                if (!this.finished && !this.voyageLogged) {
+                // Score only if this bee is allowed to score for this trip
+                if (!this.finished && !this.voyageLogged && b.canScoreThisTrip) {
                   this.voyagesCompleted = Math.min(tripGoal, this.voyagesCompleted + 1);
                   this.voyageLogged = true;
                   if (this.voyagesCompleted >= tripGoal) {
@@ -848,12 +912,14 @@
                   b.targetGrid = null;
                 }
                 spawnParticles(b.x, b.y, ['#fff', this.borderLight]);
+
               } else if (b.state === 'returning') {
                 b.state = 'idle';
-                if (b.targetGrid) {
+                // Build cell only if allowed to build for this trip
+                if (b.targetGrid && b.canBuildThisTrip) {
                   this.addCell(b.targetGrid.q, b.targetGrid.r);
-                  b.targetGrid = null;
                 }
+                b.targetGrid = null;
                 spawnParticles(b.x, b.y, [this.borderLight, this.waxColor]);
               }
             } else {
@@ -870,9 +936,26 @@
           }
         });
 
+        // Timing competitive mode: hide flowers when the LAST outbound bee
+        // of the capturing player has finished
+        if (timingMode && gameMode === '2p' &&
+            timingState === 'visible' &&
+            !timingSpentThisCycle &&
+            timingCapturedByPlayerIndex === this.index) {
+
+          const anyOutbound = this.bees.some(b => b.state === 'outbound');
+          if (!anyOutbound) {
+            timingSpentThisCycle = true;
+            flowersActive = false;
+            timingState = 'waiting';
+            timeUntilNextState = randRange(2, 5); // reappear after 2–5 s
+            timingCapturedByPlayerIndex = null;
+          }
+        }
+
         if (this.finishing && !this.finished) {
-          const allHome = this.bees.every(b => b.state === 'idle');
-          if (allHome) {
+          const allHomeNow = this.bees.every(b => b.state === 'idle');
+          if (allHomeNow) {
             this.finished = true;
             this.finishing = false;
             finishSound.currentTime = 0;
@@ -883,7 +966,6 @@
       }
 
       draw(ctx) {
-        // Draw Shadows/Base
         ctx.save();
         ctx.shadowColor = 'rgba(0,0,0,0.8)';
         ctx.shadowBlur = 25;
@@ -892,7 +974,6 @@
         this.cells.forEach(c => drawOrganicHexBase(c.x, c.y, hexRadius * c.scale, c.wobble));
         ctx.restore();
 
-        // Draw Cells
         this.cells.forEach(c => drawOrganicHexDetail(
           c.x,
           c.y,
@@ -904,8 +985,8 @@
           this.borderDark
         ));
 
-        // Draw Bees
-        this.bees.forEach(b => drawBee(b));
+        // Pass "ready" state to bees for visual cue
+        this.bees.forEach(b => drawBee(b, this.ready));
       }
     }
 
@@ -916,14 +997,26 @@
       particles.length = 0;
 
       if (gameMode === '1p') {
-        // 1 Player: Hive Left (20%), Flowers Right
-        hives.push(new Hive(width * 0.2, false, playerConfigs[0]));
+        hives.push(new Hive(width * 0.2, false, { ...playerConfigs[0], index: 0 }));
         generateFlowers(width * 0.4, width * 0.95);
       } else {
-        // 2 Player: Hive Left (15%), Hive Right (85%), Flowers Middle
-        hives.push(new Hive(width * 0.15, false, playerConfigs[0])); // P1
-        hives.push(new Hive(width * 0.85, true, playerConfigs[1]));  // P2
+        hives.push(new Hive(width * 0.15, false, { ...playerConfigs[0], index: 0 }));
+        hives.push(new Hive(width * 0.85, true,  { ...playerConfigs[1], index: 1 }));
         generateFlowers(width * 0.35, width * 0.65);
+      }
+
+      if (timingMode) {
+        flowersActive = false;
+        timingState = 'waiting';
+        timeUntilNextState = randRange(2, 5);
+        timingSpentThisCycle = false;
+        timingCapturedByPlayerIndex = null;
+      } else {
+        flowersActive = true;
+        timingState = 'static';
+        timeUntilNextState = 0;
+        timingSpentThisCycle = false;
+        timingCapturedByPlayerIndex = null;
       }
     }
 
@@ -979,18 +1072,18 @@
       }
       if (!gameRunning) return;
 
-      // Player 1 (Space)
+      // Player 1
       if (e.code === 'Space') {
         e.preventDefault();
-        playPressSound();
-        hives[0].sendBees();
+        const meaningful = hives[0].sendBees();
+        if (meaningful) playPressSound();
       }
 
-      // Player 2 (Enter) - Only in 2p mode
+      // Player 2
       if (e.code === 'Enter' && gameMode === '2p') {
         e.preventDefault();
-        playPressSound();
-        hives[1].sendBees();
+        const meaningful = hives[1].sendBees();
+        if (meaningful) playPressSound();
       }
     });
 
@@ -1000,12 +1093,7 @@
       }
     });
 
-    // Touch/Mouse fallback (Triggers both or P1)
-    window.addEventListener('mousedown', () => {
-      if(!gameRunning || gameEnded) return;
-      hives[0].sendBees();
-      if(gameMode === '2p') hives[1].sendBees();
-    });
+    // No mouse/touch sending; only Space & Enter
 
     // ----- Particles -----
     function spawnParticles(x, y, colorPalette) {
@@ -1027,6 +1115,30 @@
 
     // ----- Main Update -----
     function update(dt) {
+      // Timing mode cycles
+      if (timingMode) {
+        if (timeUntilNextState > 0) {
+          timeUntilNextState -= dt;
+        }
+        if (timeUntilNextState <= 0) {
+          if (timingState === 'waiting') {
+            // Flowers appear
+            flowersActive = true;
+            timingState = 'visible';
+            timeUntilNextState = 10;
+            timingSpentThisCycle = false;
+            timingCapturedByPlayerIndex = null;
+          } else if (timingState === 'visible') {
+            // Timeout: flowers disappear
+            flowersActive = false;
+            timingState = 'waiting';
+            timeUntilNextState = randRange(2, 5);
+            timingSpentThisCycle = false;
+            timingCapturedByPlayerIndex = null;
+          }
+        }
+      }
+
       hives.forEach(h => h.update(dt));
 
       for (let i = particles.length - 1; i >= 0; i--) {
@@ -1041,7 +1153,6 @@
 
     // ----- Drawing -----
     function draw() {
-      // 1. Draw Background Zones
       let layoutInfo;
       if (gameMode === '1p') {
         const splitX = width * 0.4;
@@ -1050,20 +1161,16 @@
         ctx.fillRect(0, 0, splitX, height);
         drawFieldBackdrop(splitX, width - splitX);
       } else {
-        // 2 Player Background: Dark | Lush Field | Dark
         const leftEdge = width * 0.3;
         const rightEdge = width * 0.7;
         layoutInfo = { type: '2p', leftEdge, rightEdge };
 
-        // Left Hive
         ctx.fillStyle = COLORS.bgDark;
         ctx.fillRect(0, 0, leftEdge, height);
 
-        // Right Hive
         ctx.fillStyle = COLORS.bgDark;
         ctx.fillRect(rightEdge, 0, width - rightEdge, height);
 
-        // Middle Field
         drawFieldBackdrop(leftEdge, rightEdge - leftEdge);
       }
 
@@ -1100,7 +1207,6 @@
           ctx.textBaseline = 'middle';
           ctx.font = '700 18px "Segoe UI", "Nunito", sans-serif';
 
-          // Badge shell
           ctx.beginPath();
           ctx.moveTo(left + radius, top);
           ctx.lineTo(left + badgeWidth - radius, top);
@@ -1131,7 +1237,6 @@
           ctx.strokeStyle = accentBright;
           ctx.stroke();
 
-          // Accent circle
           ctx.beginPath();
           ctx.shadowColor = accentDark;
           ctx.shadowBlur = 8;
@@ -1143,7 +1248,6 @@
           ctx.strokeStyle = accentBright;
           ctx.stroke();
 
-          // Player name
           ctx.fillStyle = '#fdfdfd';
           ctx.shadowColor = 'rgba(0,0,0,0.45)';
           ctx.shadowBlur = 4;
@@ -1185,7 +1289,6 @@
       ctx.fillStyle = skyGrad;
       ctx.fillRect(startX, 0, zoneWidth, height);
 
-      // Sun glow
       const sunX = startX + zoneWidth * 0.18;
       const sunY = height * 0.18;
       const sunRadius = Math.min(120, zoneWidth * 0.25);
@@ -1198,7 +1301,6 @@
       ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Grass hill similar to the plants game
       const groundY = height * 0.86;
       ctx.save();
       ctx.translate(startX, 0);
@@ -1252,7 +1354,7 @@
         const controlY = groundY - f.stemHeight * 0.55;
         const sway = f.stemCurve;
 
-        // Stem
+        // Stem (always visible)
         ctx.beginPath();
         ctx.moveTo(f.x, groundY);
         ctx.quadraticCurveTo(f.x + sway * 0.35, controlY, f.x + sway, bloomY);
@@ -1261,12 +1363,16 @@
         ctx.lineCap = 'round';
         ctx.stroke();
 
-        // Leaves
+        // Leaves (always visible)
         const leafY = groundY - f.stemHeight * 0.45;
         drawLeaf(f.x + sway * 0.15, leafY, f.size * 2.2, f.size * 1.8, -0.9, leafColor);
         drawLeaf(f.x + sway * 0.05, leafY - f.size * 3, f.size * 2.4, f.size * 1.6, 1.1, leafColor);
 
-        // Flower heads inspired by the plants game
+        // Blossoms appear/disappear with timing
+        if (timingMode && !flowersActive) {
+          return;
+        }
+
         if (f.type === 'daisy') {
           const petalCount = 12;
           for(let i=0; i<petalCount; i++) {
@@ -1345,7 +1451,7 @@
     function drawOrganicHexBase(x, y, r, wobble) {
       if (r <= 1) return;
       const path = getHexPath(x, y, r, wobble);
-      ctx.fillStyle = COLORS.bgDark; // Use dark background for base
+      ctx.fillStyle = COLORS.bgDark;
       ctx.fill(path);
     }
 
@@ -1383,11 +1489,17 @@
       ctx.stroke(pathHighlight);
     }
 
-    function drawBee(b) {
+    // isReady = hive.ready
+    function drawBee(b, isReady = false) {
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.angle);
-      ctx.scale(b.sizeScale, b.sizeScale);
+
+      // Pulsing scale when hive is ready & bee idle
+      const readyPulse = (isReady && b.state === 'idle')
+        ? 1 + 0.15 * Math.sin(b.wobblePhase * 3)
+        : 1;
+      ctx.scale(b.sizeScale * readyPulse, b.sizeScale * readyPulse);
 
       const accentLight = b.accentLight || COLORS.beeYellowBright;
       const accentDeep = b.accentDeep || mixHex(accentLight, '#000000', 0.45);
@@ -1395,6 +1507,21 @@
       const abdomenDark = mixHex(accentDeep, COLORS.beeYellowDark, 0.5);
 
       const wingCycle = Math.sin(b.wobblePhase*1.5);
+
+      // Glowing halo when ready
+      if (isReady && b.state === 'idle') {
+        ctx.save();
+        const haloRadius = 24;
+        const haloGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, haloRadius);
+        haloGrad.addColorStop(0, 'rgba(255, 255, 200, 0.9)');
+        haloGrad.addColorStop(1, 'rgba(255, 255, 0, 0)');
+        ctx.fillStyle = haloGrad;
+        ctx.globalAlpha = 0.65;
+        ctx.beginPath();
+        ctx.arc(0, 0, haloRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
 
       // Legs/Antennae (Behind)
       ctx.strokeStyle = COLORS.beeBlack;
@@ -1537,7 +1664,7 @@
     loop(0);
   </script>
 
-  <!-- Translation system wired exactly like the Window example -->
+  <!-- Translation system -->
   <script src="../../js/translationmain.js"></script>
   <script>
     document.getElementById('langToggle')?.addEventListener('pointerup', () => {
