@@ -21,49 +21,62 @@
     .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
 
     #stage {
-      --stage-pad-top: calc(env(safe-area-inset-top, 0px) + 64px);
+      --stage-pad-top: calc(env(safe-area-inset-top, 0px) + 48px);
       flex: 1;
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 16px;
-      padding: var(--stage-pad-top) 20px 42px;
+      align-items: stretch;
+      justify-content: center;
+      gap: clamp(12px, 3vw, 48px);
+      padding: var(--stage-pad-top) clamp(16px, 3vw, 32px) clamp(26px, 4vw, 48px);
       box-sizing: border-box;
     }
 
     #stage.has-prompt {
-      --stage-pad-top: calc(env(safe-area-inset-top, 0px) + 36px);
-      gap: 12px;
+      --stage-pad-top: calc(env(safe-area-inset-top, 0px) + 32px);
     }
 
     .hidden {
       display: none !important;
     }
 
-    #prompt-container {
-      width: min(900px, 92vw);
+    #prompt-area {
+      flex: 0 0 30%;
+      max-width: 34%;
+      min-width: 220px;
       display: none;
-      padding: 18px 20px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #stage.has-prompt #prompt-area {
+      display: flex;
+    }
+
+    #prompt-container {
+      width: 100%;
+      display: none;
+      padding: clamp(12px, 2vw, 18px) clamp(14px, 2vw, 20px);
       border: 3px solid #00e5ff;
       border-radius: 14px;
       background: linear-gradient(135deg, rgba(0, 150, 136, 0.85), rgba(0, 188, 212, 0.8));
       box-shadow: 0 12px 28px rgba(0,0,0,0.55);
       text-align: center;
-      font-size: clamp(1.6rem, 2vw + 1rem, 3rem);
+      font-size: clamp(1.6rem, 1vw + 1.1rem, 3rem);
       font-weight: 800;
       color: #021212;
-      margin: 0 0 6px;
       box-sizing: border-box;
+      justify-content: center;
+      align-items: center;
     }
 
     #prompt-container img {
       max-width: 100%;
-      max-height: 42vh;
+      max-height: 82vh;
       border-radius: 12px;
       box-shadow: 0 10px 24px rgba(0,0,0,0.55);
       height: auto;
       width: auto;
+      object-fit: contain;
     }
 
     #prompt-container.image-prompt {
@@ -71,20 +84,29 @@
       border: none;
       background: transparent;
       box-shadow: none;
-      width: auto;
-      max-width: min(92vw, 980px);
-      margin-top: 0;
+    }
+
+    #grid-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 0;
     }
 
     #tile-container {
       flex: 1;
       width: 100%;
+      height: 100%;
       display: flex;
       justify-content: center;
       align-items: center;
+      flex-direction: column;
       gap: var(--tile-gap);
       min-height: 0;
-      padding: 0 12px 18px;
+      min-width: 0;
+      padding: clamp(6px, 1vw, 14px);
       box-sizing: border-box;
     }
 
@@ -111,6 +133,27 @@
     .tile .caption {
       font-size: 1.05rem;
       letter-spacing: 0.3px;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 12000;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    #reinforcer-video {
+      width: min(86vw, 1200px);
+      max-height: 86vh;
+      border-radius: 18px;
+      box-shadow: 0 18px 36px rgba(0,0,0,0.7);
+      border: 3px solid #00e5ff;
+      background: #000;
     }
 
     /* Red circle pointer */
@@ -189,8 +232,16 @@
   <div id="gazePointer" aria-hidden="true"></div>
   <div id="status" class="sr-only" aria-live="polite">En attente des tuiles...</div>
   <div id="stage" class="hidden">
-    <div id="prompt-container" aria-live="polite"></div>
-    <div id="tile-container"></div>
+    <div id="prompt-area">
+      <div id="prompt-container" aria-live="polite"></div>
+    </div>
+    <div id="grid-area">
+      <div id="tile-container"></div>
+    </div>
+  </div>
+
+  <div id="reinforcer-overlay" class="overlay" aria-hidden="true">
+    <video id="reinforcer-video" controls></video>
   </div>
 
   <script>
@@ -199,13 +250,21 @@
     const statusLabel = document.getElementById('status');
     const tileContainer = document.getElementById('tile-container');
     const promptContainer = document.getElementById('prompt-container');
+    const promptArea = document.getElementById('prompt-area');
+    const reinforcerOverlay = document.getElementById('reinforcer-overlay');
+    const reinforcerVideo = document.getElementById('reinforcer-video');
     const gazePointer = document.getElementById('gazePointer');
     const stage = document.getElementById('stage');
     const startScreen = document.getElementById('start-screen');
     const startButton = document.getElementById('start-button');
+    const hoverSound = new Audio('../../sounds/woosh.mp3');
+    hoverSound.preload = 'auto';
     let hoverTimer = null;
     let hasStarted = false;
     let lastDistribution = [];
+    let reinforcerSrc = null;
+    let tileLookup = {};
+    let lastHoveredId = null;
 
     function setStatus(text) {
       statusLabel.textContent = text;
@@ -293,8 +352,9 @@
 
     function renderPrompt(prompt) {
       const hasPrompt = Boolean(prompt);
-      promptContainer.style.display = hasPrompt ? 'block' : 'none';
       stage.classList.toggle('has-prompt', hasPrompt);
+      promptArea.style.display = hasPrompt ? 'flex' : 'none';
+      promptContainer.style.display = hasPrompt ? 'flex' : 'none';
 
       if (!hasPrompt) {
         promptContainer.classList.remove('image-prompt');
@@ -318,12 +378,18 @@
 
     function renderTiles(tiles = [], prompt = null) {
       tileContainer.innerHTML = '';
+      tileLookup = {};
+
       if (!tiles.length) {
         renderPrompt(null);
         setStatus('En attente des tuiles...');
         lastDistribution = [];
         return;
       }
+
+      tiles.forEach((t) => {
+        if (t?.id) tileLookup[t.id] = t;
+      });
 
       setStatus(`Réception de ${tiles.length} choix.`);
       renderPrompt(prompt);
@@ -333,7 +399,7 @@
 
       const isPair = tiles.length === 2;
       tileContainer.classList.toggle('two-tiles', isPair);
-      tileContainer.style.flexDirection = isPair ? '' : 'column';
+      tileContainer.style.flexDirection = isPair ? 'row' : 'column';
 
       if (isPair) {
         tiles.forEach((tile) => tileContainer.appendChild(buildTileElement(tile)));
@@ -353,25 +419,16 @@
 
       const rows = distribution.length;
       const maxRowCount = Math.max(...distribution);
-      const promptHeight = promptContainer.style.display === 'none'
-        ? 0
-        : promptContainer.getBoundingClientRect().height;
-      const stageRect = stage.getBoundingClientRect();
-      const stageStyles = getComputedStyle(stage);
-      const padTop = parseFloat(stageStyles.paddingTop) || 0;
-      const padBottom = parseFloat(stageStyles.paddingBottom) || 0;
-      const stageGap = parseFloat(stageStyles.rowGap || stageStyles.gap || 0) || 0;
+      const gridRect = tileContainer.getBoundingClientRect();
+      const fallbackWidth = window.innerWidth * (promptContainer.style.display === 'none' ? 0.9 : 0.62);
+      const measuredWidth = gridRect.width || fallbackWidth;
+      const availableWidth = Math.max(320, measuredWidth - 12);
+      const availableHeight = Math.max(260, (gridRect.height || window.innerHeight * 0.8) - 12);
 
-      const availableHeight = Math.max(
-        260,
-        stageRect.height - padTop - padBottom - promptHeight - stageGap - 24
-      );
-      const availableWidth = Math.max(320, window.innerWidth - 40);
-
-      const gap = Math.max(18, Math.min(48, Math.floor(Math.min(availableWidth, availableHeight) * 0.05)));
+      const gap = Math.max(12, Math.min(90, Math.round((measuredWidth || window.innerWidth) * 0.05)));
       const sizeFromWidth = (availableWidth - (maxRowCount - 1) * gap) / maxRowCount;
       const sizeFromHeight = (availableHeight - (rows - 1) * gap) / rows;
-      const tileSize = Math.max(140, Math.min(420, Math.min(sizeFromWidth, sizeFromHeight)));
+      const tileSize = Math.max(140, Math.min(440, Math.min(sizeFromWidth, sizeFromHeight)));
 
       tileContainer.style.setProperty('--tile-gap', `${gap}px`);
       tileContainer.style.setProperty('--tile-size', `${tileSize}px`);
@@ -389,6 +446,12 @@
       tile.addEventListener('mouseenter', () => {
         clearTimers();
         tileContainer.querySelectorAll('.tile').forEach((t) => t.classList.remove('selected'));
+        const tileChanged = lastHoveredId !== tile.dataset.id;
+        lastHoveredId = tile.dataset.id;
+        if (tileChanged) {
+          hoverSound.currentTime = 0;
+          hoverSound.play().catch(() => {});
+        }
         hoverTimer = setTimeout(() => {
           tile.classList.add('selected');
           const label = tile.dataset.type === 'image'
@@ -398,15 +461,44 @@
           if (channel && tile.dataset.id) {
             channel.postMessage({ type: 'selection', tileId: tile.dataset.id });
           }
+          const tileData = tileLookup[tile.dataset.id];
+          if (tileData?.correct && reinforcerSrc) {
+            playReinforcer();
+          }
         }, 2000);
       });
       tile.addEventListener('mouseleave', clearTimers);
     }
 
+    function playReinforcer() {
+      if (!reinforcerSrc) return;
+      reinforcerVideo.src = reinforcerSrc;
+      reinforcerOverlay.style.display = 'flex';
+      reinforcerOverlay.setAttribute('aria-hidden', 'false');
+      reinforcerVideo.currentTime = 0;
+      reinforcerVideo.play().catch(() => {
+        reinforcerOverlay.style.display = 'none';
+        reinforcerOverlay.setAttribute('aria-hidden', 'true');
+      });
+    }
+
+    reinforcerVideo.addEventListener('ended', () => {
+      reinforcerOverlay.style.display = 'none';
+      reinforcerOverlay.setAttribute('aria-hidden', 'true');
+      reinforcerVideo.pause();
+    });
+
+    reinforcerOverlay.addEventListener('click', () => {
+      reinforcerOverlay.style.display = 'none';
+      reinforcerOverlay.setAttribute('aria-hidden', 'true');
+      reinforcerVideo.pause();
+    });
+
     if (channel) {
       channel.onmessage = (event) => {
-        const { type, tiles, prompt } = event.data || {};
+        const { type, tiles, prompt, reinforcer } = event.data || {};
         if (type === 'tiles') {
+          reinforcerSrc = reinforcer || null;
           renderTiles(tiles, prompt);
         }
       };
