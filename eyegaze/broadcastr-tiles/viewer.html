@@ -14,6 +14,7 @@
       display: flex;
       flex-direction: column;
       cursor: none;
+      overflow: hidden;
     }
 
     .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
@@ -23,10 +24,14 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       gap: 18px;
-      padding: 24px 16px 32px;
+      padding: 48px 16px 40px;
       box-sizing: border-box;
+    }
+
+    .hidden {
+      display: none !important;
     }
 
     #prompt-container {
@@ -41,6 +46,7 @@
       font-size: clamp(1.6rem, 2vw + 1rem, 3rem);
       font-weight: 800;
       color: #021212;
+      margin-top: 8px;
     }
 
     #prompt-container img {
@@ -107,6 +113,39 @@
       box-shadow: 0 0 0 3px rgba(255,0,0,0.35);
     }
 
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20000;
+    }
+
+    #start-button {
+      font-size: clamp(1.4rem, 1vw + 1rem, 2rem);
+      font-weight: 800;
+      padding: 18px 32px;
+      border: 3px solid #ffcc80;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #ff9800, #ffc107);
+      color: #1a1100;
+      box-shadow: 0 16px 32px rgba(0,0,0,0.55), 0 0 0 6px rgba(255, 152, 0, 0.25);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    #start-button:hover, #start-button:focus-visible {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 36px rgba(0,0,0,0.6), 0 0 0 8px rgba(255, 193, 7, 0.28);
+      outline: none;
+    }
+
+    #start-button:active {
+      transform: translateY(0);
+    }
+
     .sr-only {
       position: absolute;
       width: 1px;
@@ -121,9 +160,12 @@
   </style>
 </head>
 <body class="hide-native-cursor">
+  <div id="start-screen">
+    <button id="start-button" type="button" aria-label="Démarrer en plein écran">Démarrer</button>
+  </div>
   <div id="gazePointer" aria-hidden="true"></div>
   <div id="status" class="sr-only" aria-live="polite">En attente des tuiles...</div>
-  <div id="stage">
+  <div id="stage" class="hidden">
     <div id="prompt-container" aria-live="polite"></div>
     <div id="tile-container"></div>
   </div>
@@ -135,7 +177,11 @@
     const tileContainer = document.getElementById('tile-container');
     const promptContainer = document.getElementById('prompt-container');
     const gazePointer = document.getElementById('gazePointer');
+    const stage = document.getElementById('stage');
+    const startScreen = document.getElementById('start-screen');
+    const startButton = document.getElementById('start-button');
     let hoverTimer = null;
+    let hasStarted = false;
 
     function setStatus(text) {
       statusLabel.textContent = text;
@@ -145,6 +191,28 @@
       if (channel) {
         channel.postMessage({ type: 'viewer-ready' });
       }
+    }
+
+    async function enterFullscreen() {
+      const element = document.documentElement;
+      if (element.requestFullscreen) return element.requestFullscreen();
+      if (element.webkitRequestFullscreen) return element.webkitRequestFullscreen();
+      return Promise.resolve();
+    }
+
+    async function startExperience() {
+      if (hasStarted) return;
+      hasStarted = true;
+      startScreen.style.display = 'none';
+      stage.classList.remove('hidden');
+
+      try {
+        await enterFullscreen();
+      } catch (err) {
+        console.warn('Fullscreen error', err);
+      }
+
+      announceReady();
     }
 
     function buildTileElement(tile) {
@@ -279,10 +347,11 @@
         }
       };
       window.addEventListener('unload', () => channel.postMessage({ type: 'viewer-closed' }));
-      announceReady();
     } else {
       setStatus('BroadcastChannel non pris en charge.');
     }
+
+    startButton.addEventListener('click', startExperience);
 
     function movePointer(x, y) {
       if (!gazePointer) return;
