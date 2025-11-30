@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Diffuseur de tuiles (Broadcastr)</title>
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background: black;
+      color: #111;
+      font-family: 'Arial', sans-serif;
+      overflow: hidden;
+    }
+
+    /* Match the roomy, three-column eyegaze menu layout */
+    #game-options #control-panel-options {
+      max-width: 1100px;
+      width: 95%;
+      padding: 24px;
+    }
+
+    #options-inline-container {
+      grid-template-columns: repeat(3, 1fr);
+      width: 100%;
+      gap: 20px;
+      margin-top: 10px;
+      align-items: stretch;
+    }
+
+    #options-inline-container .options-column {
+      align-items: stretch;
+    }
+
+    .section-card {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      padding: 0;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 100%;
+    }
+
+    .section-card h3 {
+      margin: 0 0 4px 0;
+      color: #00695c;
+    }
+
+    .upload-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .prompt-block {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 10px;
+      border-top: 2px dashed rgba(0, 150, 136, 0.35);
+    }
+
+    .prompt-inline {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .prompt-controls {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .prompt-controls .button,
+    .prompt-controls select,
+    .prompt-controls input {
+      width: 100%;
+    }
+
+    .upload-card {
+      border: 2px solid #009688;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .upload-card img {
+      width: 100%;
+      height: 100px;
+      object-fit: cover;
+    }
+
+    .upload-card footer {
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: #e0f2f1;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #004d40;
+    }
+
+    .upload-card button {
+      border: none;
+      background: #c62828;
+      color: white;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .muted {
+      color: #4f5b62;
+      font-size: 0.95rem;
+    }
+
+    .choices-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .choice-row {
+      display: grid;
+      grid-template-columns: 140px minmax(180px, 1fr) 120px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .choice-row > div {
+      min-width: 0;
+    }
+
+    .choice-row select,
+    .choice-row input,
+    .choice-row textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid #009688;
+      border-radius: 10px;
+      font-size: 1.05rem;
+      min-height: 48px;
+      color: #004d40;
+      box-sizing: border-box;
+    }
+
+    .choice-row select { background: #fff; }
+    .choice-row input { background: #fff; }
+
+    #toast {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: #009688;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 10px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+      z-index: 10;
+      font-weight: bold;
+    }
+
+    #toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #viewer-status {
+      color: #00695c;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    .correct-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #004d40;
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+
+    .correct-toggle input[type="checkbox"] {
+      transform: scale(0.9);
+      accent-color: #009688;
+    }
+
+    .reinforcer-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+  </style>
+</head>
+<body>
+  <div id="options-title-bar">
+    <h2>Activité de diffusion des tuiles</h2>
+  </div>
+  <div id="game-options" class="modal" style="display: flex;">
+    <div id="control-panel-options">
+      <div id="options-inline-container" class="options-inline-container">
+        <div class="options-column">
+          <div class="section-card">
+            <h3>1. Ajouter des images</h3>
+            <p class="muted">Chargez des images réutilisables pour les choix.</p>
+            <div>
+              <label class="button" for="image-input">Ajouter des images</label>
+              <input type="file" id="image-input" accept="image/*" multiple style="display:none" />
+              <button id="clear-images" class="button" type="button">Vider la liste</button>
+            </div>
+            <div id="upload-grid" class="upload-grid"></div>
+            <p class="muted" id="no-images-hint">Aucune image téléversée.</p>
+
+            <div class="prompt-block">
+              <label class="teal-label">
+                <input type="checkbox" id="enable-prompt" />
+                <span>Afficher un prompt au-dessus des tuiles</span>
+              </label>
+              <div class="prompt-inline">
+                <label for="prompt-type" class="teal-label">Type de prompt</label>
+                <select id="prompt-type" class="button" style="background: #fff; color: #004d40; font-weight: 700;">
+                  <option value="text">Texte / nombre</option>
+                  <option value="image">Image</option>
+                </select>
+              </div>
+              <div class="prompt-controls" id="prompt-text-row">
+                <label for="prompt-text" class="teal-label">Contenu</label>
+                <input id="prompt-text" type="text" placeholder="Ex: 3 + 4" />
+              </div>
+              <div class="prompt-controls" id="prompt-image-row" style="display: none;">
+                <label for="prompt-image" class="teal-label">Image du prompt</label>
+                <select id="prompt-image" class="button" style="background: #fff; color: #004d40; font-weight: 700;"></select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="section-card">
+            <h3>2. Préparer vos choix</h3>
+            <p class="muted">Ouvrez la page élève, puis composez les items à envoyer.</p>
+            <div class="option-item">
+              <label for="choice-count" class="teal-label">Nombre de choix: <span id="choice-count-value">3</span></label>
+              <input type="range" id="choice-count" min="1" max="6" value="3" class="styled-slider" />
+            </div>
+            <div id="choices" class="choices-grid"></div>
+            <div id="viewer-status">En attente du viewer...</div>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="section-card reinforcer-card">
+            <h3>3. Choisir un renforçateur</h3>
+            <p class="muted">Sélectionnez la vidéo à jouer lorsque la bonne réponse est choisie.</p>
+            <label for="reinforcer" class="teal-label">Vidéo de renforçateur</label>
+            <select id="reinforcer" class="button" style="background: #fff; color: #004d40; font-weight: 700;">
+              <option value="https://bucket.adaptatech.org/constructionvehicles1.mp4">Camions de construction 1</option>
+              <option value="https://bucket.adaptatech.org/constructionvehicles2.mp4">Camions de construction 2</option>
+            </select>
+            <p class="muted">Cochez l'option correcte dans la liste des choix.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="option-item" style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+        <button id="open-viewer" class="button" type="button">Ouvrir la page élève</button>
+        <button id="startButton" type="button">Envoyer les tuiles</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const channelName = 'eyegaze-broadcastr-tiles';
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
+    const imageInput = document.getElementById('image-input');
+    const uploadGrid = document.getElementById('upload-grid');
+    const noImagesHint = document.getElementById('no-images-hint');
+    const clearImagesBtn = document.getElementById('clear-images');
+    const choicesContainer = document.getElementById('choices');
+    const choiceCountInput = document.getElementById('choice-count');
+    const choiceCountValue = document.getElementById('choice-count-value');
+    const openViewerBtn = document.getElementById('open-viewer');
+    const sendChoicesBtn = document.getElementById('startButton');
+    const toast = document.getElementById('toast');
+    const viewerStatus = document.getElementById('viewer-status');
+    const reinforcerSelect = document.getElementById('reinforcer');
+    const enablePrompt = document.getElementById('enable-prompt');
+    const promptType = document.getElementById('prompt-type');
+    const promptText = document.getElementById('prompt-text');
+    const promptImage = document.getElementById('prompt-image');
+    const promptTextRow = document.getElementById('prompt-text-row');
+    const promptImageRow = document.getElementById('prompt-image-row');
+
+    let viewerWindow = null;
+    let viewerReady = false;
+    let uploadedImages = [];
+    let lastSentTiles = [];
+
+    function setStatus(message) {
+      viewerStatus.textContent = message;
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 2400);
+    }
+
+    function refreshUploadGrid() {
+      uploadGrid.innerHTML = '';
+      if (uploadedImages.length === 0) {
+        noImagesHint.style.display = 'block';
+        refreshPromptImageSelect();
+        return;
+      }
+      noImagesHint.style.display = 'none';
+      uploadedImages.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'upload-card';
+        const img = document.createElement('img');
+        img.src = item.dataUrl;
+        img.alt = item.name;
+        const footer = document.createElement('footer');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = item.name;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = 'Retirer';
+        removeBtn.addEventListener('click', () => {
+          uploadedImages = uploadedImages.filter((img) => img.id !== item.id);
+          refreshUploadGrid();
+          renderChoices();
+        });
+        footer.appendChild(nameSpan);
+        footer.appendChild(removeBtn);
+        card.appendChild(img);
+        card.appendChild(footer);
+        uploadGrid.appendChild(card);
+      });
+      refreshPromptImageSelect();
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    imageInput.addEventListener('change', async (event) => {
+      const files = Array.from(event.target.files || []);
+      for (const file of files) {
+        const dataUrl = await fileToDataUrl(file);
+        uploadedImages.push({ id: crypto.randomUUID(), name: file.name, dataUrl });
+      }
+      imageInput.value = '';
+      refreshUploadGrid();
+      renderChoices();
+    });
+
+    clearImagesBtn.addEventListener('click', () => {
+      uploadedImages = [];
+      refreshUploadGrid();
+      renderChoices();
+    });
+
+    function refreshPromptImageSelect() {
+      promptImage.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = uploadedImages.length ? 'Choisir une image' : 'Aucune image disponible';
+      promptImage.appendChild(placeholder);
+      uploadedImages.forEach((img) => {
+        const opt = document.createElement('option');
+        opt.value = img.id;
+        opt.textContent = img.name;
+        promptImage.appendChild(opt);
+      });
+    }
+
+    function renderChoices() {
+      const count = Math.max(1, Math.min(6, Number(choiceCountInput.value) || 1));
+      choiceCountInput.value = count;
+      choiceCountValue.textContent = count;
+      choicesContainer.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const row = document.createElement('div');
+        row.className = 'choice-row';
+        const typeSelect = document.createElement('select');
+        typeSelect.innerHTML = `
+          <option value="image">Image</option>
+          <option value="number">Nombre</option>
+          <option value="text">Texte</option>
+        `;
+        typeSelect.value = 'number';
+        const contentWrapper = document.createElement('div');
+        const inputField = document.createElement('input');
+        inputField.type = 'text';
+        inputField.placeholder = 'Saisir le texte ou le nombre';
+
+        const imageSelect = document.createElement('select');
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = uploadedImages.length ? 'Choisir une image' : 'Aucune image disponible';
+        imageSelect.appendChild(emptyOption);
+        uploadedImages.forEach((img) => {
+          const opt = document.createElement('option');
+          opt.value = img.id;
+          opt.textContent = img.name;
+          imageSelect.appendChild(opt);
+        });
+
+        contentWrapper.appendChild(imageSelect);
+
+        function refreshContentInput() {
+          const type = typeSelect.value;
+          contentWrapper.innerHTML = '';
+          if (type === 'image') {
+            const selector = imageSelect.cloneNode(true);
+            contentWrapper.appendChild(selector);
+          } else {
+            const clone = inputField.cloneNode();
+            clone.type = type === 'number' ? 'number' : 'text';
+            clone.placeholder = type === 'number' ? 'Entrer un nombre' : 'Entrer un texte';
+            contentWrapper.appendChild(clone);
+          }
+        }
+
+        typeSelect.addEventListener('change', refreshContentInput);
+        refreshContentInput();
+
+        row.appendChild(typeSelect);
+        row.appendChild(contentWrapper);
+
+        const correctWrapper = document.createElement('label');
+        correctWrapper.className = 'correct-toggle';
+        const correctInput = document.createElement('input');
+        correctInput.type = 'checkbox';
+        correctInput.name = 'correct-choice';
+        correctInput.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            document.querySelectorAll('input[name="correct-choice"]').forEach((box) => {
+              if (box !== e.target) box.checked = false;
+            });
+          }
+        });
+        correctWrapper.appendChild(correctInput);
+        const correctLabel = document.createElement('span');
+        correctLabel.textContent = 'Bonne réponse';
+        correctWrapper.appendChild(correctLabel);
+        row.appendChild(correctWrapper);
+        choicesContainer.appendChild(row);
+      }
+    }
+
+    choiceCountInput.addEventListener('input', renderChoices);
+    choiceCountInput.addEventListener('change', renderChoices);
+
+    function syncPromptInputs() {
+      const wantsImage = promptType.value === 'image';
+      promptTextRow.style.display = wantsImage ? 'none' : 'grid';
+      promptImageRow.style.display = wantsImage ? 'grid' : 'none';
+    }
+
+    promptType.addEventListener('change', syncPromptInputs);
+
+    function collectChoices() {
+      const rows = Array.from(document.querySelectorAll('.choice-row'));
+      const tiles = [];
+      for (const row of rows) {
+        const type = row.querySelector('select').value;
+        const inputEl = row.querySelector('div').firstElementChild;
+        const correct = row.querySelector('input[type="checkbox"]').checked;
+        if (type === 'image') {
+          const imageId = inputEl.value;
+          const selected = uploadedImages.find((img) => img.id === imageId);
+          if (selected) {
+            tiles.push({ id: crypto.randomUUID(), type: 'image', url: selected.dataUrl, label: selected.name, correct });
+          }
+        } else {
+          const value = inputEl.value?.trim();
+          if (value) {
+            tiles.push({ id: crypto.randomUUID(), type, label: value, correct });
+          }
+        }
+      }
+      return tiles;
+    }
+
+    function buildPromptPayload() {
+      if (!enablePrompt.checked) return null;
+      const type = promptType.value;
+
+      if (type === 'text') {
+        const value = promptText.value.trim();
+        if (!value) {
+          showToast('Ajoutez un prompt texte.');
+          return { error: true };
+        }
+        return { type: 'text', value };
+      }
+
+      const imageId = promptImage.value;
+      const selected = uploadedImages.find((img) => img.id === imageId);
+      if (!selected) {
+        showToast('Choisissez une image pour le prompt.');
+        return { error: true };
+      }
+      return { type: 'image', url: selected.dataUrl, label: selected.name };
+    }
+
+    function sendTiles() {
+      if (!channel) {
+        showToast('BroadcastChannel indisponible.');
+        return;
+      }
+      const tiles = collectChoices();
+      if (!tiles.length) {
+        showToast('Ajoutez au moins un choix valide.');
+        return;
+      }
+      const promptPayload = buildPromptPayload();
+      if (promptPayload?.error) return;
+      lastSentTiles = tiles;
+      channel.postMessage({
+        type: 'tiles',
+        tiles,
+        prompt: promptPayload || null,
+        reinforcer: reinforcerSelect.value || null,
+      });
+      showToast('Choix envoyés.');
+    }
+
+    sendChoicesBtn.addEventListener('click', sendTiles);
+
+    function openViewer() {
+      viewerWindow = window.open('viewer.html', '_blank');
+      if (!viewerWindow) {
+        showToast('Impossible d\'ouvrir la page élève.');
+      }
+    }
+
+    openViewerBtn.addEventListener('click', openViewer);
+
+    if (channel) {
+      channel.onmessage = (event) => {
+        const { type, tileId } = event.data || {};
+        if (type === 'viewer-ready') {
+          viewerReady = true;
+          setStatus('Viewer connecté.');
+          showToast('Le viewer est prêt.');
+        }
+        if (type === 'viewer-closed') {
+          viewerReady = false;
+          setStatus('Viewer fermé.');
+        }
+        if (type === 'selection' && tileId) {
+          const selectedTile = lastSentTiles.find((tile) => tile.id === tileId);
+          if (selectedTile) {
+            const status = selectedTile.correct ? 'Bonne réponse reçue.' : 'Réponse reçue.';
+            showToast(status);
+          }
+        }
+      };
+      setStatus('En attente du viewer...');
+    } else {
+      setStatus('BroadcastChannel non pris en charge.');
+    }
+
+    renderChoices();
+    refreshUploadGrid();
+    syncPromptInputs();
+  </script>
+</body>
+</html>
