@@ -13,12 +13,14 @@
       color: #fff;
       display: flex;
       flex-direction: column;
-      cursor: none;
       overflow: hidden;
       padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
     }
 
-    .hide-native-cursor, .hide-native-cursor * { cursor: none !important; }
+    .hide-native-cursor,
+    .hide-native-cursor * {
+      cursor: none !important;
+    }
 
     #stage {
       --stage-pad-top: calc(env(safe-area-inset-top, 0px) + 40px);
@@ -52,6 +54,7 @@
       box-sizing: border-box;
     }
 
+    /* 2-column layout when there is a prompt */
     #layout.has-prompt {
       grid-template-columns: minmax(260px, 30%) minmax(0, 1fr);
     }
@@ -59,20 +62,49 @@
     #prompt-container {
       display: none;
       flex-direction: column;
-      gap: 12px;
-      padding: clamp(12px, 2vw, 20px);
-      border: 3px solid #00e5ff;
-      border-radius: 14px;
-      background: linear-gradient(135deg, rgba(0, 150, 136, 0.85), rgba(0, 188, 212, 0.8));
-      box-shadow: 0 12px 28px rgba(0,0,0,0.55);
+      align-items: center;
+      justify-content: center;
+      padding: clamp(16px, 3vw, 28px) clamp(20px, 4vw, 32px);
+      border-radius: 18px;
       text-align: center;
-      font-size: clamp(1.5rem, 2vw + 1rem, 2.6rem);
+      font-size: clamp(2.2rem, 3vw + 1.2rem, 4.2rem);
       font-weight: 800;
       color: #021212;
       box-sizing: border-box;
-      min-height: 0;
-      height: 100%;
+
+      /* height just a bit taller than the tiles */
+      min-height: calc(var(--tile-size, 260px) * 1.1);
+      max-height: calc(var(--tile-size, 260px) * 1.6);
+      align-self: center;
       overflow: hidden;
+    }
+
+    /* Text/number prompt: orange card like "Envoyer les tuiles" */
+    #prompt-container.text-prompt {
+      border: 3px solid #ffcc80;
+      background: linear-gradient(135deg, #FF5722, #E64A19);
+      box-shadow: 0 16px 32px rgba(0,0,0,0.6);
+      color: #ffffff;
+      line-height: 1.05;
+    }
+
+    /* Inner text element; size is auto-scaled in JS */
+    #prompt-container .prompt-text {
+      display: inline-block;
+      max-width: 100%;
+      margin: 0 auto;
+      font-size: clamp(3.8rem, 5vw + 2rem, 7rem);
+      text-align: center;
+      white-space: normal;
+    }
+
+    /* Image prompt takes full column with transparent background */
+    #prompt-container.image-prompt {
+      padding: 0;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+      width: 100%;
     }
 
     #prompt-container img {
@@ -83,14 +115,6 @@
       height: auto;
       width: 100%;
       object-fit: contain;
-    }
-
-    #prompt-container.image-prompt {
-      padding: 0;
-      border: none;
-      background: transparent;
-      box-shadow: none;
-      width: 100%;
     }
 
     #tile-container {
@@ -108,7 +132,7 @@
     }
 
     .tile .content-text {
-      font-size: clamp(1.6rem, 2vw + 1rem, 3.2rem);
+      font-size: clamp(2rem, 3vw + 1rem, 4rem);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -130,6 +154,18 @@
     .tile .caption {
       font-size: 1.05rem;
       letter-spacing: 0.3px;
+    }
+
+    /* Hover-primed state: half-way growth as soon as gaze enters */
+    #tile-container .tile.hover-primed {
+      transform: scale(1.04);
+    }
+
+    /* Selected / grown state after dwell is finished */
+    #tile-container .tile.selected {
+      border-color: #ff1744;         /* red border */
+      transform: scale(1.08);        /* smaller growth so it does not clip */
+      animation: none !important;    /* cancel any pulsing from base CSS */
     }
 
     /* Red circle pointer */
@@ -178,7 +214,8 @@
       transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
-    #start-button:hover, #start-button:focus-visible {
+    #start-button:hover,
+    #start-button:focus-visible {
       transform: translateY(-2px);
       box-shadow: 0 18px 36px rgba(0,0,0,0.6), 0 0 0 8px rgba(255, 193, 7, 0.28);
       outline: none;
@@ -220,7 +257,7 @@
     }
   </style>
 </head>
-<body class="hide-native-cursor">
+<body>
   <div id="start-screen">
     <button id="start-button" type="button" aria-label="Démarrer en plein écran">Démarrer</button>
   </div>
@@ -250,11 +287,13 @@
     const reinforcerOverlay = document.getElementById('reinforcer-overlay');
     const reinforcerVideo = document.getElementById('reinforcer-video');
     const hoverSound = new Audio('../../sounds/woosh.mp3');
+
     let hoverTimer = null;
     let hasStarted = false;
     let lastDistribution = [];
     let lastHoveredId = null;
     let reinforcerUrl = null;
+    let dwellTimeMs = 1500; // default dwell time
 
     function setStatus(text) {
       statusLabel.textContent = text;
@@ -273,11 +312,20 @@
       return Promise.resolve();
     }
 
+    // Sync CSS animation duration with dwell time (for the red overlay)
+    function updateDwellCssVars() {
+      const root = document.documentElement;
+      root.style.setProperty('--hover-duration', dwellTimeMs + 'ms');
+    }
+
     async function startExperience() {
       if (hasStarted) return;
       hasStarted = true;
       startScreen.style.display = 'none';
       stage.classList.remove('hidden');
+
+      // Hide the cursor only once the experience starts
+      document.body.classList.add('hide-native-cursor');
 
       try {
         await enterFullscreen();
@@ -357,19 +405,71 @@
       return row;
     }
 
+    /**
+     * Scale text so that the BIGGEST word / contiguous string
+     * determines the font-size. Then restore the full phrase and
+     * let it wrap across lines with that font-size.
+     */
+    function fitPromptText(el, fullText) {
+      if (!el || !fullText) return;
+      const container = promptContainer;
+
+      // reset to base size first (from CSS)
+      el.style.fontSize = '';
+      el.style.whiteSpace = 'nowrap';  // measure a single line
+      el.textContent = fullText;
+
+      const computed = window.getComputedStyle(el);
+      let size = parseFloat(computed.fontSize) || 64;
+      const minSize = 20;
+      const step = 2;
+
+      // usable space inside the orange card, minus padding
+      const containerStyle = window.getComputedStyle(container);
+      const padLeft   = parseFloat(containerStyle.paddingLeft)   || 0;
+      const padRight  = parseFloat(containerStyle.paddingRight)  || 0;
+      const padTop    = parseFloat(containerStyle.paddingTop)    || 0;
+      const padBottom = parseFloat(containerStyle.paddingBottom) || 0;
+
+      const usableWidth  = Math.max(0, container.clientWidth  - padLeft - padRight  - 4);
+      const usableHeight = Math.max(0, container.clientHeight - padTop  - padBottom - 4);
+
+      // Find longest token (by characters) – if none, use full string
+      const tokens = fullText.split(/\s+/).filter(Boolean);
+      const longest = tokens.reduce(
+        (acc, t) => (t.length > acc.length ? t : acc),
+        tokens[0] || fullText
+      );
+
+      // Measure using only the longest word / string
+      el.textContent = longest;
+
+      for (let i = 0; i < 80; i++) {
+        const overflows =
+          el.scrollWidth > usableWidth ||
+          el.scrollHeight > usableHeight;
+
+        if (!overflows || size <= minSize) break;
+        size -= step;
+        el.style.fontSize = size + 'px';
+      }
+
+      // Apply that size to the full phrase and allow wrapping
+      el.textContent = fullText;
+      el.style.whiteSpace = 'normal';
+      el.style.textAlign = 'center';
+    }
+
     function renderPrompt(prompt) {
       const hasPrompt = Boolean(prompt);
       promptContainer.style.display = hasPrompt ? 'flex' : 'none';
       layout.classList.toggle('has-prompt', hasPrompt);
       stage.classList.toggle('has-prompt', hasPrompt);
 
-      if (!hasPrompt) {
-        promptContainer.classList.remove('image-prompt');
-        promptContainer.innerHTML = '';
-        return;
-      }
-
+      promptContainer.classList.remove('image-prompt', 'text-prompt');
       promptContainer.innerHTML = '';
+
+      if (!hasPrompt) return;
 
       if (prompt.type === 'image' && prompt.url) {
         promptContainer.classList.add('image-prompt');
@@ -378,8 +478,15 @@
         img.alt = prompt.label || 'prompt';
         promptContainer.appendChild(img);
       } else if (prompt.value) {
-        promptContainer.classList.remove('image-prompt');
-        promptContainer.textContent = prompt.value;
+        promptContainer.classList.add('text-prompt');
+        const textEl = document.createElement('div');
+        textEl.className = 'prompt-text';
+        textEl.textContent = prompt.value;
+        promptContainer.appendChild(textEl);
+
+        // Wait for layout, then fit based on longest word
+        const fullText = prompt.value;
+        requestAnimationFrame(() => fitPromptText(textEl, fullText));
       }
     }
 
@@ -435,6 +542,9 @@
       tileContainer.style.setProperty('--tile-gap', `${gap}px`);
       tileContainer.style.setProperty('--tile-size', `${tileSize}px`);
       tileContainer.style.setProperty('--two-tile-size', `${tileSize}px`);
+
+      /* expose same tile size to the rest of the page (prompt column) */
+      document.documentElement.style.setProperty('--tile-size', `${tileSize}px`);
     }
 
     function clearTimers() {
@@ -448,9 +558,23 @@
       tile.addEventListener('mouseenter', () => {
         clearTimers();
         playHoverSound(tile.dataset.id);
-        tileContainer.querySelectorAll('.tile').forEach((t) => t.classList.remove('selected'));
+
+        // Reset all tiles, then mark this one as "primed"
+        tileContainer.querySelectorAll('.tile').forEach((t) => {
+          t.classList.remove('selected', 'hover-primed');
+        });
+        tile.classList.add('hover-primed');   // 50% growth immediately
+
         hoverTimer = setTimeout(() => {
+          // grow to full selected state
+          tile.classList.remove('hover-primed');
           tile.classList.add('selected');
+
+          // automatically shrink back after 1 second
+          setTimeout(() => {
+            tile.classList.remove('selected');
+          }, 1000);
+
           const label = tile.dataset.type === 'image'
             ? tile.querySelector('.caption')?.textContent || 'image'
             : tile.textContent.trim();
@@ -461,18 +585,29 @@
           if (tile.dataset.correct === 'true' && reinforcerUrl) {
             playReinforcer();
           }
-        }, 2000);
+        }, dwellTimeMs);
       });
+
       tile.addEventListener('mouseleave', () => {
         clearTimers();
         lastHoveredId = null;
+        tile.classList.remove('hover-primed');
+        // don't forcibly remove 'selected' here so a just-selected tile
+        // can complete its 1s shrink animation; it will clear itself
       });
     }
 
     if (channel) {
       channel.onmessage = (event) => {
-        const { type, tiles, prompt, reinforcer } = event.data || {};
+        const { type, tiles, prompt, reinforcer, dwellTimeMs: incomingDwell } = event.data || {};
         if (type === 'tiles') {
+          if (typeof incomingDwell === 'number' && !Number.isNaN(incomingDwell)) {
+            dwellTimeMs = incomingDwell;
+          } else {
+            dwellTimeMs = 1500;
+          }
+
+          updateDwellCssVars();
           renderTiles(tiles, prompt, reinforcer);
         }
       };

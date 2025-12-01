@@ -302,7 +302,7 @@
 
     <button id="startButton">BEGIN</button>
     <p class="instruction">
-      SPACE / click: spray your tag, then spray the icons around (multiple presses per icon).<br>
+      SPACE / click: spray your tag, then spray the icons around (multiple presses per icon, by diagonal bands).<br>
       ENTER at the end: flash the police lights.
     </p>
   </div>
@@ -1163,6 +1163,7 @@
 
     // --- IMAGE MASKS AROUND CENTER ---
     function paintMaskPoint(pt, gradient, clusterRadiusBase) {
+      if (!pt) return;
       const dotsPerPoint = 3;
       for (let d = 0; d < dotsPerPoint; d++) {
         const angle = Math.random() * Math.PI * 2;
@@ -1248,13 +1249,9 @@
             }
           }
 
-          // Shuffle each band so it doesn't fill in obvious scanlines
+          // Sort each band diagonally (x + y) to get a diagonal sweep
           for (let b = 0; b < 3; b++) {
-            const arr = bands[b];
-            for (let i = arr.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [arr[i], arr[j]] = [arr[j], arr[i]];
-            }
+            bands[b].sort((p1, p2) => (p1.x + p1.y) - (p2.x + p2.y));
           }
 
           const style = colorCombos[Math.floor(Math.random() * colorCombos.length)];
@@ -1301,7 +1298,56 @@
       }
     }
 
-    // Each press paints a chunk; progression is left → middle → right
+    // Animate a slice of a band diagonally over time (robust indices)
+    function animateBandSlice(mask, bandIdx, startIndex, endIndex, gradient, clusterRadiusBase) {
+      return new Promise(resolve => {
+        const bandPoints = mask.bands[bandIdx] || [];
+        const maxLen = bandPoints.length;
+        const clampedStart = Math.min(Math.max(startIndex, 0), maxLen);
+        const clampedEnd   = Math.min(Math.max(endIndex,   0), maxLen);
+        const totalToPaint = Math.max(0, clampedEnd - clampedStart);
+
+        if (totalToPaint <= 0 || maxLen === 0) {
+          resolve();
+          return;
+        }
+
+        const duration = 600; // ms for a slice
+        const sliceStartTime = performance.now();
+
+        initAudio();
+        startSpraySound();
+
+        let lastPainted = clampedStart;
+
+        function frame(now) {
+          const elapsed = now - sliceStartTime;
+          const t = Math.min(elapsed / duration, 1);
+          const target = clampedStart + Math.floor(totalToPaint * t);
+          const safeTarget = Math.min(target, maxLen);
+
+          for (let i = lastPainted; i < safeTarget; i++) {
+            const pt = bandPoints[i];
+            if (!pt) continue;
+            paintMaskPoint(pt, gradient, clusterRadiusBase);
+          }
+
+          mask.bandPaintedCounts[bandIdx] = safeTarget;
+          lastPainted = safeTarget;
+
+          if (t < 1 && safeTarget < maxLen) {
+            requestAnimationFrame(frame);
+          } else {
+            stopSpraySound();
+            resolve();
+          }
+        }
+
+        requestAnimationFrame(frame);
+      });
+    }
+
+    // Each press paints a diagonally sweeping chunk; progression is left → middle → right
     function triggerImageMask() {
       if (copLightsRunning) return;
       if (maskIndex >= selectedMasks.length) {
@@ -1336,9 +1382,7 @@
         return;
       }
 
-      initAudio();
       mask.painting = true;
-      startSpraySound();
 
       const bandIdx = mask.bandIndex;
       const bandPoints = mask.bands[bandIdx];
@@ -1347,7 +1391,6 @@
       if (totalBandPoints === 0) {
         mask.bandIndex++;
         mask.painting = false;
-        stopSpraySound();
         if (mask.bandIndex >= 3) {
           mask.done = true;
           maskIndex++;
@@ -1372,37 +1415,37 @@
       gradient.addColorStop(0, mask.style.top);
       gradient.addColorStop(1, mask.style.bottom);
 
-      for (let i = startIndex; i < endIndex; i++) {
-        paintMaskPoint(bandPoints[i], gradient, clusterRadiusBase);
-      }
+      animateBandSlice(mask, bandIdx, startIndex, endIndex, gradient, clusterRadiusBase)
+        .then(() => {
+          // After animation ended for this slice
+          if (mask.bandPaintedCounts[bandIdx] >= totalBandPoints) {
+            // finished this band -> move to next
+            mask.bandIndex++;
+            playPopSound();
 
-      mask.bandPaintedCounts[bandIdx] = endIndex;
-      stopSpraySound();
+            // Skip empty bands if any
+            while (mask.bandIndex < 3 && mask.bands[mask.bandIndex].length === 0) {
+              mask.bandIndex++;
+            }
 
-      if (endIndex >= totalBandPoints) {
-        // finished this band -> move to next
-        mask.bandIndex++;
-        playPopSound();
-
-        // Skip empty bands if any
-        while (mask.bandIndex < 3 && mask.bands[mask.bandIndex].length === 0) {
-          mask.bandIndex++;
-        }
-
-        if (mask.bandIndex >= 3) {
-          mask.done = true;
-          mask.painting = false;
-          maskIndex++;
-          if (maskIndex >= selectedMasks.length) {
-            stage = 'finished';
+            if (mask.bandIndex >= 3) {
+              mask.done = true;
+              mask.painting = false;
+              maskIndex++;
+              if (maskIndex >= selectedMasks.length) {
+                stage = 'finished';
+              }
+            } else {
+              mask.painting = false;
+            }
+          } else {
+            // still some of this band left for next press
+            mask.painting = false;
           }
-        } else {
+        })
+        .catch(() => {
           mask.painting = false;
-        }
-      } else {
-        // still some of this band left for next press
-        mask.painting = false;
-      }
+        });
     }
 
     // --- INIT ---
@@ -1477,7 +1520,7 @@
         return;
       }
 
-      // While not finished, both SPACE and ENTER (and mouse/touch) spray
+      // While not finished, SPACE/ENTER/mouse/touch all act as "spray"
       if (stage === 'text') {
         triggerTextLetter();
       } else if (stage === 'images') {

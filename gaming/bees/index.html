@@ -355,9 +355,19 @@
       <input id="timingModeInput" type="checkbox">
     </div>
 
+    <!-- Penalty mode checkbox -->
+    <div class="goal-setting">
+      <label for="penaltyModeInput" class="translate"
+             data-fr="Pénalité si on appuie quand les abeilles ne sont pas prêtes"
+             data-en="Penalty if pressed when bees are not ready"
+             data-ja="ハチが準備できていない時に押すとペナルティ">
+        Pénalité si on appuie quand les abeilles ne sont pas prêtes
+      </label>
+      <input id="penaltyModeInput" type="checkbox">
+    </div>
+
     <div id="controlsText" class="controls-hint">
      <span id="p2hint" style="display:none;"></span>
-
     </div>
 
     <button id="editPlayers">Configurer les joueurs</button>
@@ -501,6 +511,8 @@
     let timingSpentThisCycle = false;
     let timingCapturedByPlayerIndex = null; // 0 or 1
 
+    const PENALTY_DURATION = 2.0;
+
     // Hives and other entities
     let hives = [];
     const flowers = [];
@@ -524,6 +536,7 @@
     const langToggle = document.getElementById('langToggle');
     const tripGoalInput = document.getElementById('tripGoalInput');
     const timingModeInput = document.getElementById('timingModeInput');
+    const penaltyModeInput = document.getElementById('penaltyModeInput');
     const goalDisplay = document.getElementById('goalDisplay');
     const endBanner = document.getElementById('endBanner');
     const restartHintTemplate = document.getElementById('restartHintTemplate');
@@ -702,6 +715,10 @@
         this.finished = false;
         this.ready = false; // visual "ready" state
 
+        // penalty state
+        this.penaltyTime = 0;
+        this.penaltyBeesState = null;
+
         this.addCell(0,0);
 
         for(let i=0; i<6; i++) this.bees.push(this.createBee());
@@ -774,8 +791,42 @@
           accentLight: this.beeAccentLight,
           accentDeep: this.beeAccentDeep,
           canScoreThisTrip: false,
-          canBuildThisTrip: false
+          canBuildThisTrip: false,
+          penaltyBase: null
         };
+      }
+
+      /**
+       * Trigger a 2s penalty animation: bees freeze & shake, then resume.
+       */
+      triggerPenalty() {
+        if (this.penaltyTime > 0) return;
+        if (!this.bees.length) return;
+
+        // Backup state for each bee to restore after penalty
+        this.penaltyBeesState = this.bees.map(b => ({
+          x: b.x,
+          y: b.y,
+          vx: b.vx,
+          vy: b.vy,
+          state: b.state,
+          target: b.target ? { x: b.target.x, y: b.target.y } : null,
+          targetGrid: b.targetGrid ? { q: b.targetGrid.q, r: b.targetGrid.r } : null,
+          angle: b.angle,
+          wobblePhase: b.wobblePhase,
+          wingSpeed: b.wingSpeed,
+          sizeScale: b.sizeScale,
+          accentLight: b.accentLight,
+          accentDeep: b.accentDeep,
+          canScoreThisTrip: b.canScoreThisTrip,
+          canBuildThisTrip: b.canBuildThisTrip
+        }));
+
+        this.bees.forEach(b => {
+          b.penaltyBase = { x: b.x, y: b.y, angle: b.angle };
+        });
+
+        this.penaltyTime = PENALTY_DURATION;
       }
 
       /**
@@ -784,6 +835,7 @@
        */
       sendBees() {
         if (this.finished || this.finishing) return false;
+        if (this.penaltyTime > 0) return false;
 
         // must wait until all bees are idle
         const allIdle = this.bees.every(b => b.state === 'idle');
@@ -852,17 +904,50 @@
         // Determine "ready" visual state:
         // - all bees idle
         // - not finishing/finished
+        // - penalty not active
         // - in timing mode, flowers must be visible
         const allIdle = this.bees.every(b => b.state === 'idle');
         this.ready =
           allIdle &&
           !this.finished &&
           !this.finishing &&
+          this.penaltyTime <= 0 &&
           (!timingMode || flowersActive);
 
+        // Animate cell growth
         this.cells.forEach(c => {
           if (c.scale < 1) c.scale += (1 - c.scale) * 0.1;
         });
+
+        // Penalty animation: bees shake in place, no movement/state changes
+        if (this.penaltyTime > 0) {
+          this.penaltyTime -= dt;
+          this.bees.forEach(b => {
+            if (!b.penaltyBase) {
+              b.penaltyBase = { x: b.x, y: b.y, angle: b.angle };
+            }
+            b.wobblePhase += dt * 12;
+            const shakeAmp = 4;
+            b.x = b.penaltyBase.x + Math.sin(b.wobblePhase * 25) * shakeAmp;
+            b.y = b.penaltyBase.y + Math.cos(b.wobblePhase * 30) * shakeAmp;
+            b.angle = b.penaltyBase.angle + Math.sin(b.wobblePhase * 20) * 0.3;
+          });
+
+          if (this.penaltyTime <= 0) {
+            if (this.penaltyBeesState) {
+              this.bees.forEach((b, i) => {
+                const s = this.penaltyBeesState[i];
+                Object.assign(b, s);
+                b.penaltyBase = null;
+              });
+              this.penaltyBeesState = null;
+            }
+            this.penaltyTime = 0;
+          }
+
+          // While in penalty, skip normal movement/logic
+          return;
+        }
 
         const homeCenter = this.hexToPixel(0,0);
 
@@ -1072,17 +1157,38 @@
       }
       if (!gameRunning) return;
 
+      const penaltyOn = penaltyModeInput && penaltyModeInput.checked;
+
       // Player 1
       if (e.code === 'Space') {
         e.preventDefault();
-        const meaningful = hives[0].sendBees();
+        const hive = hives[0];
+        if (!hive) return;
+
+        // Penalty if pressing when bees are not ready
+        if (penaltyOn && !hive.ready) {
+          hive.triggerPenalty();
+          playPressSound();
+          return;
+        }
+
+        const meaningful = hive.sendBees();
         if (meaningful) playPressSound();
       }
 
       // Player 2
       if (e.code === 'Enter' && gameMode === '2p') {
         e.preventDefault();
-        const meaningful = hives[1].sendBees();
+        const hive = hives[1];
+        if (!hive) return;
+
+        if (penaltyOn && !hive.ready) {
+          hive.triggerPenalty();
+          playPressSound();
+          return;
+        }
+
+        const meaningful = hive.sendBees();
         if (meaningful) playPressSound();
       }
     });
