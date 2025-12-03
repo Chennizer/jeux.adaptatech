@@ -426,23 +426,34 @@ body.advanced-wallet .counter-cluster{
   width:100%;
   text-align:center;
   margin-top:12px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  background:#f7f7fb;
+  border:1px solid #e0e0e0;
+  border-radius:10px;
+  padding:12px 10px;
 }
-#studentCalcExpression{
-  font-size:1.5rem;
-  font-weight:700;
-  margin-bottom:4px;
+#studentCalcTrail{
+  font-size:1rem;
+  color:#555;
+  min-height:1.4rem;
+  word-break:break-word;
 }
-#studentCalcSubtotal{
-  font-size:1.1rem;
-  margin-top:0;
-  color:#444;
+#studentCalcTotal{
+  font-size:2rem;
+  font-weight:800;
+}
+#studentCalcTaxNote{
+  font-size:0.95rem;
+  color:#666;
 }
 #studentCalcKeypad{
   width:100%;
-  max-width:260px;
-  margin:4px auto 4px;
+  max-width:320px;
+  margin:8px auto 4px;
   display:grid;
-  grid-template-columns:repeat(3, minmax(0,1fr));
+  grid-template-columns:repeat(4, minmax(0,1fr));
   gap:10px;
 }
 .studentCalcBtn{
@@ -482,10 +493,15 @@ body.advanced-wallet .counter-cluster{
   background:#c2ebc7;
 }
 .studentCalcBtn.bottom-clear{
-  grid-column:1 / span 2;
+  grid-column:span 2;
 }
 .studentCalcBtn.bottom-ok{
-  grid-column:3 / span 1;
+  grid-column:span 2;
+}
+.studentCalcBtn.toggle-btn{
+  width:100%;
+  max-width:320px;
+  margin:4px auto 0;
 }
   </style>
 </head>
@@ -502,7 +518,9 @@ body.advanced-wallet .counter-cluster{
 
   <button id="adminBtn" title="Admin">
     <svg viewBox="0 0 24 24" style="stroke:#fff;stroke-width:2;fill:none;">
-      <circle cx="12" cy="8" r="4"/><path d="M2 22c0-4 4-7 10-7s10 3 10 7"/>
+      <circle cx="12" cy="12" r="8"/>
+      <path d="M12 5v2M12 17v2M17 12h2M5 12H7M15.5 8.5l1.2-1.2M7.3 16.7l1.2-1.2M15.5 15.5l1.2 1.2M7.3 7.3l1.2 1.2"/>
+      <circle cx="12" cy="12" r="3"/>
     </svg>
   </button>
 
@@ -539,7 +557,7 @@ body.advanced-wallet .counter-cluster{
         <div class="dragSource" data-value="1" tabindex="0" aria-label="Ajouter une pièce de 1$"></div>
       </div>
       <div class="admin-main">
-        <button id="setPriceBtn"         class="admin-option-btn">Fixer<br>le prix</button>
+        <button id="setPriceBtn"         class="admin-option-btn">Combien<br>ça coûte?</button>
         <button id="studentPinToggleBtn" class="admin-option-btn toggle">NIP<br>élève</button>
         <button id="payDirectToggleBtn"  class="admin-option-btn toggle">Paiement<br>direct</button>
         <button id="advancedModeToggleBtn" class="admin-option-btn toggle">Version<br>avancée</button>
@@ -579,11 +597,13 @@ body.advanced-wallet .counter-cluster{
   <!-- ---------- STUDENT PRICE CALCULATOR MODAL ---------- -->
   <div id="studentPriceModal" class="modalBox">
     <p id="studentCalcTitle">Combien ça coûte?</p>
-    <div id="studentCalcKeypad"></div>
     <div id="studentCalcDisplay">
-      <div id="studentCalcExpression">Prix courant : 0,00 $</div>
-      <div id="studentCalcSubtotal">Sous-total : 0,00 $</div>
+      <div id="studentCalcTrail" aria-live="polite">0,00 =</div>
+      <div id="studentCalcTotal">0,00 $</div>
+      <div id="studentCalcTaxNote">Taxes incluses automatiquement</div>
     </div>
+    <div id="studentCalcKeypad"></div>
+    <button id="studentTaxToggle" class="studentCalcBtn wide toggle-btn" type="button">Montant sans taxes</button>
   </div>
 
   <!-- ---------- PRICE MODAL (ADMIN) ---------- -->
@@ -620,6 +640,8 @@ let studentPinActive   = localStorage.getItem('studentPinActive')==='1';
 let payDirect          = localStorage.getItem('payDirect')==='1';
 let studentName        = (localStorage.getItem('studentName')||'').trim();
 let advancedMode       = localStorage.getItem('advancedMode')==='1';
+let includeTaxes       = true;
+let studentCalcParts   = [];
 
 const selected = new Set();
 const BACKUP_PIN = '8204';
@@ -913,7 +935,8 @@ verifyBtn.addEventListener('click',()=>{
   const need=payNeeded();
   if(payDirect){
     if(coins>=need){
-      showStatus('Tu as assez d\'argent dans ton portefeuille.','success',{source:'verify',speakText:true});
+      const remainder = Math.max(0, coins - need);
+      showStatus(`Il te resterait ${remainder} $.`,'success',{source:'verify',speakText:true});
     } else {
       const diff=need-coins;
       const msg=diff===1?"Il te manque 1 dollar.":`Il te manque ${diff} dollars.`;
@@ -926,7 +949,8 @@ verifyBtn.addEventListener('click',()=>{
     return;
   }
   if(selected.size>=need){
-    showStatus('Tu as assez d\'argent.','success',{source:'verify',speakText:true});
+    const remainder = Math.max(0, selected.size - need);
+    showStatus(`Il te resterait ${remainder} $.`,'success',{source:'verify',speakText:true});
   } else {
     const diff=need-selected.size;
     const msg=diff===1?"Il te manque 1 dollar.":`Il te manque ${diff} dollars.`;
@@ -1063,6 +1087,13 @@ const studentPinToggleBtn = $('studentPinToggleBtn');
 const payDirectToggleBtn  = $('payDirectToggleBtn');
 const advancedModeToggleBtn = $('advancedModeToggleBtn');
 
+function ensureAdvancedForCoins(){
+  if(!advancedMode && coins>10){
+    advancedMode = true;
+    localStorage.setItem('advancedMode','1');
+  }
+}
+
 function updateToggles(){
   studentPinToggleBtn.classList.toggle('active',studentPinActive);
   payDirectToggleBtn.classList.toggle('active',payDirect);
@@ -1077,6 +1108,7 @@ function applyAdvancedMode(){
   else buildWalletSimple();
   render();
 }
+ensureAdvancedForCoins();
 updateToggles();
 applyAdvancedMode();
 
@@ -1209,19 +1241,40 @@ function handleStuInput(v){
 
 /* ---------- STUDENT CALCULATOR LOGIC ---------- */
 let studentCalcEntry = '';
-let studentCalcSubtotal = 0;
 
 function formatAmountFr(v){
   return v.toFixed(2).replace('.', ',') + ' $';
+}
+function formatTrailVal(v){
+  return v.toFixed(2).replace('.', ',');
 }
 function entryToValue(){
   const cents = parseInt(studentCalcEntry || '0', 10);
   return cents / 100;
 }
+function currentParts(){
+  const parts=[...studentCalcParts];
+  if(studentCalcEntry) parts.push(entryToValue());
+  return parts;
+}
+function calcSubtotal(){
+  const subtotal = currentParts().reduce((sum,v)=>sum+v,0);
+  return +subtotal.toFixed(2);
+}
 function updateStudentCalcDisplay(){
-  const currentVal = entryToValue();
-  $('studentCalcExpression').textContent = 'Prix courant : ' + formatAmountFr(currentVal);
-  $('studentCalcSubtotal').textContent  = 'Sous-total : ' + formatAmountFr(studentCalcSubtotal);
+  const parts=currentParts();
+  const trail = parts.length ? parts.map(formatTrailVal).join(' + ') + ' =' : '0,00 =';
+  const subtotal = calcSubtotal();
+  const total = includeTaxes ? +(subtotal * (1 + TAX_RATE)).toFixed(2) : subtotal;
+  $('studentCalcTrail').textContent = trail;
+  $('studentCalcTotal').textContent = formatAmountFr(total);
+  $('studentCalcTaxNote').textContent = includeTaxes ? 'Taxes incluses automatiquement' : 'Montant sans taxes';
+  $('studentTaxToggle').textContent = includeTaxes ? 'Voir sans taxes' : 'Ajouter les taxes';
+}
+function commitEntry(){
+  if(!studentCalcEntry) return;
+  studentCalcParts.push(entryToValue());
+  studentCalcEntry='';
 }
 function handleStudentDigit(d){
   if(studentCalcEntry.length >= 6) return;
@@ -1229,26 +1282,30 @@ function handleStudentDigit(d){
   updateStudentCalcDisplay();
 }
 function handleStudentPlus(){
-  const val = entryToValue();
-  studentCalcSubtotal = +(studentCalcSubtotal + val).toFixed(2);
-  studentCalcEntry = '';
+  commitEntry();
   updateStudentCalcDisplay();
 }
-function handleStudentTaxes(){
-  const currentVal = entryToValue();
-  let base = studentCalcSubtotal + currentVal;
-  if(base <= 0) return;
-  const totalWithTax = +(base * (1 + TAX_RATE)).toFixed(2);
-  studentCalcSubtotal = totalWithTax;
-  studentCalcEntry = '';
+function handleStudentEquals(){
+  commitEntry();
   updateStudentCalcDisplay();
 }
 function handleStudentClear(){
   studentCalcEntry = '';
   updateStudentCalcDisplay();
 }
+function handleStudentReset(){
+  studentCalcEntry = '';
+  studentCalcParts = [];
+  updateStudentCalcDisplay();
+}
+function handleStudentToggleTaxes(){
+  includeTaxes = !includeTaxes;
+  updateStudentCalcDisplay();
+}
 function handleStudentOK(){
-  const finalTotal = +(studentCalcSubtotal + entryToValue()).toFixed(2);
+  commitEntry();
+  const subtotal = calcSubtotal();
+  const finalTotal = includeTaxes ? +(subtotal * (1 + TAX_RATE)).toFixed(2) : subtotal;
   if(finalTotal <= 0) return;
   price = finalTotal;
   hide($('studentPriceModal'));
@@ -1256,7 +1313,8 @@ function handleStudentOK(){
 }
 function openStudentPriceModal(){
   studentCalcEntry = '';
-  studentCalcSubtotal = 0;
+  studentCalcParts = [];
+  includeTaxes = true;
   updateStudentCalcDisplay();
   show($('studentPriceModal'));
 }
@@ -1266,29 +1324,30 @@ function openStudentPriceModal(){
   const keypad = $('studentCalcKeypad');
   if(!keypad) return;
   const buttons = [
-    {label:'1', type:'digit', value:'1'},
-    {label:'2', type:'digit', value:'2'},
-    {label:'3', type:'digit', value:'3'},
-    {label:'4', type:'digit', value:'4'},
-    {label:'5', type:'digit', value:'5'},
-    {label:'6', type:'digit', value:'6'},
     {label:'7', type:'digit', value:'7'},
     {label:'8', type:'digit', value:'8'},
     {label:'9', type:'digit', value:'9'},
+    {label:'+', type:'plus'},
+    {label:'4', type:'digit', value:'4'},
+    {label:'5', type:'digit', value:'5'},
+    {label:'6', type:'digit', value:'6'},
+    {label:'=', type:'equals'},
+    {label:'1', type:'digit', value:'1'},
+    {label:'2', type:'digit', value:'2'},
+    {label:'3', type:'digit', value:'3'},
+    {label:'OK', type:'ok', ok:true, span2:true},
     {label:'0', type:'digit', value:'0'},
-    {label:'C', type:'clear'},
-    {label:'+ ', type:'plus'},
-    {label:'TAXES', type:'tax', wide:true},
-    {label:'EFFACER', type:'clear', small:true, clear:true},
-    {label:'OK', type:'ok', ok:true}
+    {label:'C', type:'clear', small:true},
+    {label:'EFFACER', type:'reset', clear:true, span2:true}
   ];
   let h='';
   buttons.forEach(btn=>{
     const cls = 'studentCalcBtn'
-      + (btn.wide ? ' wide' : '')
       + (btn.small ? ' small' : '')
-      + (btn.clear ? ' clear-btn bottom-clear' : '')
-      + (btn.ok ? ' ok-btn bottom-ok' : '');
+      + (btn.clear ? ' clear-btn' : '')
+      + (btn.ok ? ' ok-btn' : '')
+      + (btn.span2 && btn.clear ? ' bottom-clear' : '')
+      + (btn.span2 && btn.ok ? ' bottom-ok' : '');
     h += `<button class="${cls}" data-type="${btn.type}"${btn.value?` data-val="${btn.value}"`:''}>${btn.label}</button>`;
   });
   keypad.innerHTML = h;
@@ -1300,12 +1359,16 @@ function openStudentPriceModal(){
     switch(type){
       case 'digit': handleStudentDigit(val); break;
       case 'plus':  handleStudentPlus(); break;
-      case 'tax':   handleStudentTaxes(); break;
+      case 'equals':handleStudentEquals(); break;
       case 'clear': handleStudentClear(); break;
+      case 'reset': handleStudentReset(); break;
       case 'ok':    handleStudentOK(); break;
     }
   });
 })();
+
+// Taxes toggle button
+$('studentTaxToggle').addEventListener('click', handleStudentToggleTaxes);
 
 // wire student button
 studentSetPriceBtn.addEventListener('click',()=>{
@@ -1383,7 +1446,14 @@ function onDragEnd(e){
   const rect = walletDropAreaEl.getBoundingClientRect();
   if(evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom){
     const val = parseInt(ghostCoin.dataset.value,10);
-    const maxCoins = advancedMode ? 100 : 10;
+    let maxCoins = advancedMode ? 100 : 10;
+    if(!advancedMode && coins + val > 10){
+      advancedMode = true;
+      localStorage.setItem('advancedMode','1');
+      updateToggles();
+      applyAdvancedMode();
+      maxCoins = 100;
+    }
     if(coins + val <= maxCoins){
       coins += val;
       saveRender();
@@ -1448,7 +1518,7 @@ $('priceCancel').onclick = ()=>{
   hide($('priceModal'));
   if(priceModalTriggerBtn){ priceModalTriggerBtn.classList.remove('active'); priceModalTriggerBtn=null; }
 };
-setPriceBtn.onclick = ()=>openPriceModal(setPriceBtn);
+setPriceBtn.onclick = ()=>openStudentPriceModal();
 
 // CLICK-OUTSIDE HANDLER
 const priceModalEl=$('priceModal');
