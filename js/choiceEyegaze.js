@@ -40,6 +40,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const tileCountDisplay  = document.getElementById('tile-count-display');
   const startGameButton   = document.getElementById('start-game-button');
 
+  const languageToggle = document.getElementById('language-toggle') || document.getElementById('langToggle');
+
   const categorySelect    = document.getElementById('categorySelect');
 
   // Main Game
@@ -127,6 +129,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   ensurePointerOverlay();
+
+  function hideLanguageToggle() {
+    if (languageToggle) {
+      languageToggle.style.display = 'none';
+    }
+  }
 
   const supportedLanguages = ['fr', 'en', 'ja'];
   const preferredLanguage = (() => {
@@ -997,6 +1005,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   startGameButton.addEventListener('click', () => {
+    hideLanguageToggle();
     ensureFullscreen();
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';

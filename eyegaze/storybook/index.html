@@ -634,6 +634,7 @@
   <div id="gazePointer" aria-hidden="true"></div>
 
   <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationmain.js"></script>
   <script>
     if (typeof initEyegazeMenu === 'function') {
       initEyegazeMenu();
@@ -684,7 +685,7 @@
     const gazePointerEl = document.getElementById('gazePointer');
 
     const CONFIRM_STATES = { LOADING:'loading', NEED_READ:'need-read', READY:'ready' };
-    const DEFAULT_TTS_BY_INTERFACE = { fr:'fr-CA', en:'en-US' };
+    const DEFAULT_TTS_BY_INTERFACE = { fr:'fr-CA', en:'en-US', ja:'ja-JP' };
     const DEFAULT_TTS_RATE = 0.8;
     const TTS_RATE_MIN = 0.5;
     const TTS_RATE_MAX = 1.3;
@@ -738,18 +739,22 @@
       loading: {
         fr: 'Chargement de la bibliothèque…',
         en: 'Loading library…',
+        ja: 'ライブラリを読み込み中…',
       },
       ready: {
         fr: 'Sélectionnez un PDF puis cliquez sur <strong>Ouvrir</strong>.',
         en: 'Select a PDF then press <strong>Open</strong>.',
+        ja: 'PDFを選んで<strong>開く</strong>を押してください。',
       },
       empty: {
         fr: 'Aucun PDF trouvé.',
         en: 'No PDFs found.',
+        ja: 'PDFが見つかりません。',
       },
       error: {
         fr: 'Impossible de charger la bibliothèque.',
         en: 'Unable to load the library.',
+        ja: 'ライブラリを読み込めませんでした。',
       },
     };
 
@@ -968,20 +973,32 @@
 
     function applyTranslationsForLang(lang) {
       document.querySelectorAll('.translate').forEach(el => {
-        const text = el.dataset?.[lang];
+        const text = (typeof getElementContent === 'function')
+          ? getElementContent(el, lang)
+          : (el.dataset?.[lang] ?? el.dataset?.en ?? el.dataset?.fr);
         if (text != null) {
           el.innerHTML = text;
         }
       });
       updateFileStatusText();
       if (gazeAdvanceBtn) {
-        gazeAdvanceBtn.setAttribute('aria-label', lang === 'fr' ? 'Page suivante' : 'Next page');
+        const label = lang === 'fr' ? 'Page suivante' : (lang === 'ja' ? '次のページ' : 'Next page');
+        gazeAdvanceBtn.setAttribute('aria-label', label);
       }
       if (gazePreviousBtn) {
-        gazePreviousBtn.setAttribute('aria-label', lang === 'fr' ? 'Page précédente' : 'Previous page');
+        const label = lang === 'fr' ? 'Page précédente' : (lang === 'ja' ? '前のページ' : 'Previous page');
+        gazePreviousBtn.setAttribute('aria-label', label);
       }
       if (gazeReadBtn) {
-        gazeReadBtn.setAttribute('aria-label', lang === 'fr' ? 'Lire le texte' : 'Read text');
+        const label = lang === 'fr' ? 'Lire le texte' : (lang === 'ja' ? 'テキストを読む' : 'Read text');
+        gazeReadBtn.setAttribute('aria-label', label);
+      }
+    }
+
+    function hideLanguageToggle() {
+      const btn = document.getElementById('language-toggle') || document.getElementById('langToggle');
+      if (btn) {
+        btn.style.display = 'none';
       }
     }
 
@@ -1339,18 +1356,28 @@
     }
 
     function getLang() {
+      if (typeof getStoredLanguage === 'function') {
+        return getStoredLanguage();
+      }
       try {
         const saved = localStorage.getItem(LS_LANG_KEY);
-        if (saved === 'en' || saved === 'fr') return saved;
+        if (saved === 'en' || saved === 'fr' || saved === 'ja') return saved;
       } catch(e) {}
-      return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      return (['en','fr','ja'].includes(document.documentElement.lang)) ? document.documentElement.lang : 'fr';
     }
 
     function setLang(lang) {
-      const safe = (lang === 'en') ? 'en' : 'fr';
+      const supported = (typeof SUPPORTED_LANGUAGES !== 'undefined' && Array.isArray(SUPPORTED_LANGUAGES))
+        ? SUPPORTED_LANGUAGES
+        : ['en', 'ja', 'fr'];
+      const safe = supported.includes(lang) ? lang : 'en';
       currentLang = safe;
-      document.documentElement.lang = safe;
       try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e) {}
+      if (typeof updateLanguage === 'function') {
+        updateLanguage();
+      } else {
+        document.documentElement.lang = safe;
+      }
       applyTranslationsForLang(safe);
       updateFileStatusText();
       updateLibraryPlaceholder();
@@ -1367,18 +1394,7 @@
     }
 
     (function initializeLanguage(){
-      let initial = 'fr';
-      try {
-        const saved = localStorage.getItem(LS_LANG_KEY);
-        if (saved === 'en' || saved === 'fr') {
-          initial = saved;
-        } else {
-          initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
-          localStorage.setItem(LS_LANG_KEY, initial);
-        }
-      } catch(e) {
-        initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
-      }
+      let initial = getLang();
       setLang(initial);
       tryRestoreTtsPreference();
       tryRestoreTtsRatePreference();
@@ -1390,8 +1406,15 @@
       saveTtsRatePreference();
     })();
 
-    langToggle.addEventListener('click', () => {
-      setLang(getLang() === 'fr' ? 'en' : 'fr');
+    langToggle.addEventListener('pointerup', () => {
+      if (typeof toggleLanguage === 'function') {
+        toggleLanguage();
+        setLang(getLang());
+      } else {
+        const current = getLang();
+        const next = (current === 'fr') ? 'en' : (current === 'en' ? 'ja' : 'fr');
+        setLang(next);
+      }
     });
 
     if (ttsLangSelect) {
@@ -1770,6 +1793,7 @@
 
     startButton.addEventListener('click', async () => {
       if (!pdfData) return;
+      hideLanguageToggle();
       await goFullscreen();
       started = true;
       speakingAllowed = true;
