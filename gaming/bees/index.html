@@ -366,8 +366,19 @@
       <input id="penaltyModeInput" type="checkbox">
     </div>
 
+    <!-- Switch image checkbox -->
+    <div class="goal-setting">
+      <label for="showSwitchImageInput" class="translate"
+             data-fr="Afficher le pictogramme du contacteur en bas"
+             data-en="Show switch icon at the bottom"
+             data-ja="画面下部にスイッチ画像を表示">
+        Afficher le pictogramme du contacteur en bas
+      </label>
+      <input id="showSwitchImageInput" type="checkbox">
+    </div>
+
     <div id="controlsText" class="controls-hint">
-     <span id="p2hint" style="display:none;"></span>
+      <span id="p2hint" style="display:none;"></span>
     </div>
 
     <button id="editPlayers">Configurer les joueurs</button>
@@ -497,6 +508,9 @@
     const ctx = canvas.getContext("2d");
     let width, height;
 
+    // Track layout for switch placement
+    let currentLayoutInfo = null;
+
     // ----- Game State -----
     let gameRunning = false;
     let gameMode = '1p'; // '1p' or '2p'
@@ -537,15 +551,104 @@
     const tripGoalInput = document.getElementById('tripGoalInput');
     const timingModeInput = document.getElementById('timingModeInput');
     const penaltyModeInput = document.getElementById('penaltyModeInput');
+    const showSwitchImageInput = document.getElementById('showSwitchImageInput');
     const goalDisplay = document.getElementById('goalDisplay');
     const endBanner = document.getElementById('endBanner');
     const restartHintTemplate = document.getElementById('restartHintTemplate');
 
-    // Audio
+    // Switch image flag
+    let showSwitchImage = false;
+
+    // Audio: button, victory, honeycomb
     const pressSoundSrc = '../../sounds/startactivity.mp3';
     let buttonMusic;
     const finishSound = new Audio('../../sounds/victory.mp3');
     finishSound.volume = 0.5;
+
+    // Honeycomb spawn sound
+    const honeySpawnSound = new Audio('../../sounds/honeyspawn.mp3');
+    honeySpawnSound.volume = 0.6;
+
+    // Continuous ambient background sound (loop)
+    const bgLoopSoundSrc = '../../sounds/bees_ambient_loop.mp3';
+    let bgLoopSound = null;
+    const BG_LOOP_IDLE_VOLUME = 0.15;  // volume when bees are NOT ready
+    const BG_LOOP_READY_VOLUME = 0.35; // volume when at least one hive is ready
+
+    function startBackgroundLoopSound() {
+      if (!bgLoopSound) {
+        bgLoopSound = new Audio(bgLoopSoundSrc);
+        bgLoopSound.loop = true;
+        bgLoopSound.volume = BG_LOOP_IDLE_VOLUME;
+        bgLoopSound.play().catch(() => {});
+      } else if (bgLoopSound.paused) {
+        bgLoopSound.play().catch(() => {});
+      }
+    }
+
+    function stopBackgroundLoopSound() {
+      if (bgLoopSound) {
+        bgLoopSound.pause();
+      }
+    }
+
+    // Background music playlists (random)
+    const playlist1P = [
+      '../../songs/bees/beesmusic1.mp3',
+      '../../songs/bees/beesmusic2.mp3',
+      '../../songs/bees/beesmusic3.mp3'
+    ];
+
+    const playlist2P = [
+      '../../songs/bees/beescompetition1.mp3',
+      '../../songs/bees/beescompetition2.mp3',
+      '../../songs/bees/beescompetition3.mp3'
+    ];
+
+    let bgMusic = null;
+    let currentPlaylist = null;
+
+    function getRandomTrack(list) {
+      if (!list || !list.length) return null;
+      const idx = Math.floor(Math.random() * list.length);
+      return list[idx];
+    }
+
+    function stopBackgroundMusic() {
+      if (bgMusic) {
+        bgMusic.pause();
+        bgMusic = null;
+      }
+      currentPlaylist = null;
+    }
+
+    function handleBgEnded() {
+      if (!currentPlaylist || !currentPlaylist.length || !bgMusic) return;
+      const nextSrc = getRandomTrack(currentPlaylist);
+      if (!nextSrc) return;
+      bgMusic.src = nextSrc;
+      bgMusic.currentTime = 0;
+      bgMusic.play().catch(()=>{});
+    }
+
+    function startBackgroundMusicForMode() {
+      stopBackgroundMusic();
+      currentPlaylist = (gameMode === '1p') ? playlist1P : playlist2P;
+      if (!currentPlaylist || !currentPlaylist.length) return;
+
+      const src = getRandomTrack(currentPlaylist);
+      if (!src) return;
+
+      bgMusic = new Audio(src);
+      bgMusic.volume = 0.35;
+      bgMusic.loop = false;
+      bgMusic.addEventListener('ended', handleBgEnded);
+      bgMusic.play().catch(()=>{});
+    }
+
+    // Switch image asset
+    const switchImg = new Image();
+    switchImg.src = '../../images/redswitch.png';
 
     // ----- UI Logic -----
     function applyPlayerConfig() {
@@ -617,6 +720,7 @@
       const restartCopy = getRestartHintText();
       endBanner.innerHTML = `${message}<span class="restart-subtext">${restartCopy}</span>`;
       endBanner.className = 'visible';
+      // Background music keeps playing by design
     }
 
     function checkGameEnd() {
@@ -661,6 +765,8 @@
       langToggle?.remove();
       initGame();
       updateGoalDisplay();
+      startBackgroundMusicForMode();
+      startBackgroundLoopSound();
     }
 
     startButton.addEventListener('click', (e) => {
@@ -669,6 +775,7 @@
       tripGoal = readTripGoal();
       tripGoalInput.value = tripGoal;
       timingMode = !!timingModeInput.checked;
+      showSwitchImage = !!showSwitchImageInput.checked;
 
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(()=>{});
@@ -699,7 +806,7 @@
         this.isRightSide = isRightSide;
         this.label = options.name || 'Joueur';
         this.waxColor = options.color || COLORS.waxBase;
-        this.index = options.index ?? 0;   // player index (0 or 1)
+        this.index = options.index ?? 0;
         this.waxPattern = createWaxTexture(this.waxColor);
         this.borderLight = mixHex(this.waxColor, '#ffffff', 0.35);
         this.borderDark = mixHex(this.waxColor, '#000000', 0.4);
@@ -713,13 +820,17 @@
         this.voyageLogged = false;
         this.finishing = false;
         this.finished = false;
-        this.ready = false; // visual "ready" state
+        this.ready = false;
+
+        // switch appear animation (0 → 1 when ready becomes true)
+        this.switchAppear = 0;
 
         // penalty state
         this.penaltyTime = 0;
         this.penaltyBeesState = null;
 
-        this.addCell(0,0);
+        // initial cell (no sound)
+        this.addCell(0, 0, false);
 
         for(let i=0; i<6; i++) this.bees.push(this.createBee());
       }
@@ -730,7 +841,8 @@
         return { x, y };
       }
 
-      addCell(q, r) {
+      // playSound = true for in-game builds, false for initial cell at setup
+      addCell(q, r, playSound = true) {
         const pos = this.hexToPixel(q, r);
         this.cells.push({
           q, r, x: pos.x, y: pos.y,
@@ -741,6 +853,11 @@
         const key = `${q},${r}`;
         this.occupiedMap.add(key);
         if(this.reservedMap.has(key)) this.reservedMap.delete(key);
+
+        if (playSound && honeySpawnSound) {
+          honeySpawnSound.currentTime = 0;
+          honeySpawnSound.play().catch(()=>{});
+        }
       }
 
       findNextBuildSpot() {
@@ -803,7 +920,6 @@
         if (this.penaltyTime > 0) return;
         if (!this.bees.length) return;
 
-        // Backup state for each bee to restore after penalty
         this.penaltyBeesState = this.bees.map(b => ({
           x: b.x,
           y: b.y,
@@ -855,7 +971,6 @@
             timingCapturedByPlayerIndex !== null &&
             timingCapturedByPlayerIndex !== this.index
           ) {
-            // Other player already captured this cycle
             canScoreTrip = false;
             canBuildTrip = false;
           } else {
@@ -896,16 +1011,12 @@
           }
         }
 
-        // Only treat this as a "meaningful" press if at least one bee can score
         return hasScoringBee;
       }
 
       update(dt) {
-        // Determine "ready" visual state:
-        // - all bees idle
-        // - not finishing/finished
-        // - penalty not active
-        // - in timing mode, flowers must be visible
+        const prevReady = this.ready;
+
         const allIdle = this.bees.every(b => b.state === 'idle');
         this.ready =
           allIdle &&
@@ -914,23 +1025,36 @@
           this.penaltyTime <= 0 &&
           (!timingMode || flowersActive);
 
+        // Switch appear animation logic
+        if (!prevReady && this.ready) {
+          this.switchAppear = 0; // restart animation when hive becomes ready
+        }
+        if (this.ready) {
+          // Fast grow to 1 (about 0.25s)
+          this.switchAppear = Math.min(1, this.switchAppear + dt * 4);
+        } else {
+          this.switchAppear = 0;
+        }
+
         // Animate cell growth
         this.cells.forEach(c => {
           if (c.scale < 1) c.scale += (1 - c.scale) * 0.1;
         });
 
-        // Penalty animation: bees shake in place, no movement/state changes
+        // Penalty animation
         if (this.penaltyTime > 0) {
           this.penaltyTime -= dt;
           this.bees.forEach(b => {
             if (!b.penaltyBase) {
               b.penaltyBase = { x: b.x, y: b.y, angle: b.angle };
             }
-            b.wobblePhase += dt * 12;
-            const shakeAmp = 4;
-            b.x = b.penaltyBase.x + Math.sin(b.wobblePhase * 25) * shakeAmp;
-            b.y = b.penaltyBase.y + Math.cos(b.wobblePhase * 30) * shakeAmp;
-            b.angle = b.penaltyBase.angle + Math.sin(b.wobblePhase * 20) * 0.3;
+
+            b.wobblePhase += dt * 6;
+
+            const shakeAmp = 10;
+            b.x = b.penaltyBase.x + Math.sin(b.wobblePhase * 6) * shakeAmp;
+            b.y = b.penaltyBase.y + Math.cos(b.wobblePhase * 5) * (shakeAmp * 0.9);
+            b.angle = b.penaltyBase.angle + Math.sin(b.wobblePhase * 4) * 0.45;
           });
 
           if (this.penaltyTime <= 0) {
@@ -945,7 +1069,6 @@
             this.penaltyTime = 0;
           }
 
-          // While in penalty, skip normal movement/logic
           return;
         }
 
@@ -977,7 +1100,6 @@
 
             if (dist < 20) {
               if (b.state === 'outbound') {
-                // Score only if this bee is allowed to score for this trip
                 if (!this.finished && !this.voyageLogged && b.canScoreThisTrip) {
                   this.voyagesCompleted = Math.min(tripGoal, this.voyagesCompleted + 1);
                   this.voyageLogged = true;
@@ -1000,9 +1122,8 @@
 
               } else if (b.state === 'returning') {
                 b.state = 'idle';
-                // Build cell only if allowed to build for this trip
                 if (b.targetGrid && b.canBuildThisTrip) {
-                  this.addCell(b.targetGrid.q, b.targetGrid.r);
+                  this.addCell(b.targetGrid.q, b.targetGrid.r, true);
                 }
                 b.targetGrid = null;
                 spawnParticles(b.x, b.y, [this.borderLight, this.waxColor]);
@@ -1033,7 +1154,7 @@
             timingSpentThisCycle = true;
             flowersActive = false;
             timingState = 'waiting';
-            timeUntilNextState = randRange(2, 5); // reappear after 2–5 s
+            timeUntilNextState = randRange(2, 5);
             timingCapturedByPlayerIndex = null;
           }
         }
@@ -1070,7 +1191,6 @@
           this.borderDark
         ));
 
-        // Pass "ready" state to bees for visual cue
         this.bees.forEach(b => drawBee(b, this.ready));
       }
     }
@@ -1165,7 +1285,6 @@
         const hive = hives[0];
         if (!hive) return;
 
-        // Penalty if pressing when bees are not ready
         if (penaltyOn && !hive.ready) {
           hive.triggerPenalty();
           playPressSound();
@@ -1199,8 +1318,6 @@
       }
     });
 
-    // No mouse/touch sending; only Space & Enter
-
     // ----- Particles -----
     function spawnParticles(x, y, colorPalette) {
       for(let i=0; i<15; i++) {
@@ -1228,14 +1345,12 @@
         }
         if (timeUntilNextState <= 0) {
           if (timingState === 'waiting') {
-            // Flowers appear
             flowersActive = true;
             timingState = 'visible';
             timeUntilNextState = 10;
             timingSpentThisCycle = false;
             timingCapturedByPlayerIndex = null;
           } else if (timingState === 'visible') {
-            // Timeout: flowers disappear
             flowersActive = false;
             timingState = 'waiting';
             timeUntilNextState = randRange(2, 5);
@@ -1247,6 +1362,13 @@
 
       hives.forEach(h => h.update(dt));
 
+      // Ambient background sound volume based on readiness
+      const anyHiveReady = hives.some(h => h.ready);
+      const targetLoopVolume = anyHiveReady ? BG_LOOP_READY_VOLUME : BG_LOOP_IDLE_VOLUME;
+      if (bgLoopSound) {
+        bgLoopSound.volume += (targetLoopVolume - bgLoopSound.volume) * 0.05;
+      }
+
       for (let i = particles.length - 1; i >= 0; i--) {
         let p = particles[i];
         p.x += p.vx * dt;
@@ -1257,35 +1379,7 @@
       }
     }
 
-    // ----- Drawing -----
-    function draw() {
-      let layoutInfo;
-      if (gameMode === '1p') {
-        const splitX = width * 0.4;
-        layoutInfo = { type: '1p', splitX };
-        ctx.fillStyle = COLORS.bgLeft;
-        ctx.fillRect(0, 0, splitX, height);
-        drawFieldBackdrop(splitX, width - splitX);
-      } else {
-        const leftEdge = width * 0.3;
-        const rightEdge = width * 0.7;
-        layoutInfo = { type: '2p', leftEdge, rightEdge };
-
-        ctx.fillStyle = COLORS.bgDark;
-        ctx.fillRect(0, 0, leftEdge, height);
-
-        ctx.fillStyle = COLORS.bgDark;
-        ctx.fillRect(rightEdge, 0, width - rightEdge, height);
-
-        drawFieldBackdrop(leftEdge, rightEdge - leftEdge);
-      }
-
-      drawPlayerLabels(layoutInfo);
-      drawFlowers();
-      hives.forEach(h => h.draw(ctx));
-      drawParticles();
-    }
-
+    // ----- Drawing helpers -----
     function drawPlayerLabels(layoutInfo) {
       if (!layoutInfo) return;
       ctx.save();
@@ -1364,6 +1458,15 @@
       }
 
       ctx.restore();
+    }
+
+    function getFieldZone() {
+      if (gameMode === '1p') {
+        const startX = width * 0.4;
+        return { startX, zoneWidth: width - startX };
+      }
+      const startX = width * 0.3;
+      return { startX, zoneWidth: width * 0.4 };
     }
 
     function groundHeightAt(x) {
@@ -1457,13 +1560,12 @@
       flowers.forEach(f => {
         const groundY = groundHeightAt(f.x);
         const bloomY = groundY - f.stemHeight;
-        const controlY = groundY - f.stemHeight * 0.55;
         const sway = f.stemCurve;
 
         // Stem (always visible)
         ctx.beginPath();
         ctx.moveTo(f.x, groundY);
-        ctx.quadraticCurveTo(f.x + sway * 0.35, controlY, f.x + sway, bloomY);
+        ctx.quadraticCurveTo(f.x + sway * 0.35, groundY - f.stemHeight * 0.55, f.x + sway, bloomY);
         ctx.strokeStyle = '#2d5e1c';
         ctx.lineWidth = 6;
         ctx.lineCap = 'round';
@@ -1601,7 +1703,6 @@
       ctx.translate(b.x, b.y);
       ctx.rotate(b.angle);
 
-      // Pulsing scale when hive is ready & bee idle
       const readyPulse = (isReady && b.state === 'idle')
         ? 1 + 0.15 * Math.sin(b.wobblePhase * 3)
         : 1;
@@ -1691,7 +1792,7 @@
       ctx.fillStyle = abdomenGrad;
       ctx.fill();
 
-      ctx.fillStyle = accentDeep;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
       const stripeWidth = 4;
       const stripeSpacing = 4;
       let currentStripeX = abX + abRX - stripeWidth/2 - stripeSpacing;
@@ -1752,6 +1853,100 @@
         ctx.fill();
         ctx.globalAlpha = 1.0;
       });
+    }
+
+    // Draw switch image under each hive that is ready, with appear animation
+    function drawSwitchPrompt() {
+      if (!showSwitchImage) return;
+      if (!switchImg.complete || !switchImg.width || !switchImg.height) return;
+      if (!currentLayoutInfo) return;
+
+      const margin = 10;
+
+      hives.forEach(h => {
+        if (!h.ready) return;
+
+        let areaStart, areaEnd;
+        if (gameMode === '1p') {
+          const splitX = currentLayoutInfo.splitX || width * 0.4;
+          areaStart = 0;
+          areaEnd = splitX;
+        } else {
+          if (!h.isRightSide) {
+            areaStart = 0;
+            areaEnd = currentLayoutInfo.leftEdge;
+          } else {
+            areaStart = currentLayoutInfo.rightEdge;
+            areaEnd = width;
+          }
+        }
+
+        const areaWidth = areaEnd - areaStart;
+        const maxWidth = areaWidth * 0.5; // scale relative to hive "div"
+
+        const iw = switchImg.width;
+        const ih = switchImg.height;
+        const baseScale = maxWidth / iw;
+
+        // Appear factor: 0 → 1, eased (pop)
+        const rawT = (typeof h.switchAppear === 'number') ? h.switchAppear : (h.ready ? 1 : 0);
+        const t = Math.max(0, Math.min(1, rawT));
+        const ease = t * (2 - t); // ease-out quad
+
+        const finalScale = baseScale * ease;
+        if (finalScale <= 0.001) return;
+
+        const drawW = iw * finalScale;
+        const drawH = ih * finalScale;
+
+        // Center on hive, clamped inside its area horizontally
+        const centerX = Math.min(
+          areaEnd - margin - drawW / 2,
+          Math.max(areaStart + margin + drawW / 2, h.centerX)
+        );
+        const x = centerX - drawW / 2;
+
+        // Place under honeycomb, but not off screen
+        const desiredY = h.centerY + hexRadius * 2.2;
+        const y = Math.min(height - drawH - margin, desiredY);
+
+        ctx.save();
+        ctx.globalAlpha = 0.95;
+        ctx.drawImage(switchImg, x, y, drawW, drawH);
+        ctx.restore();
+      });
+    }
+
+    // ----- Main draw -----
+    function draw() {
+      let layoutInfo;
+      if (gameMode === '1p') {
+        const splitX = width * 0.4;
+        layoutInfo = { type: '1p', splitX };
+        ctx.fillStyle = COLORS.bgLeft;
+        ctx.fillRect(0, 0, splitX, height);
+        drawFieldBackdrop(splitX, width - splitX);
+      } else {
+        const leftEdge = width * 0.3;
+        const rightEdge = width * 0.7;
+        layoutInfo = { type: '2p', leftEdge, rightEdge };
+
+        ctx.fillStyle = COLORS.bgDark;
+        ctx.fillRect(0, 0, leftEdge, height);
+
+        ctx.fillStyle = COLORS.bgDark;
+        ctx.fillRect(rightEdge, 0, width - rightEdge, height);
+
+        drawFieldBackdrop(leftEdge, rightEdge - leftEdge);
+      }
+
+      currentLayoutInfo = layoutInfo;
+
+      drawPlayerLabels(layoutInfo);
+      drawFlowers();
+      hives.forEach(h => h.draw(ctx));
+      drawParticles();
+      drawSwitchPrompt();
     }
 
     let lastTime = 0;

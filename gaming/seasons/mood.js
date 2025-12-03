@@ -43,7 +43,7 @@ const langToggleEl = document.getElementById('langToggle');
 
 const MODE_DEFAULT = 'default';
 const MODE_SLOW = 'slow';
-const SLOW_SCENE_DURATION = 10000;
+const SLOW_SCENE_DURATION = 60000;
 const SLOW_BASE_SPEED = 0.21;
 const SLOW_PEAK_SPEED = 1.495;
 const SPEED_PHASES = {
