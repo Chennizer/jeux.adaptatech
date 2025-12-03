@@ -473,7 +473,7 @@
       'D': [[{x:0.1,y:0}, {x:0.15,y:1.1}, {x:0.1,y:0}], [{x:0.1,y:0}, {x:1.0,y:0.5}, {x:0.1,y:1.1}]],
       'E': [[{x:0.9,y:0}, {x:0.1,y:0}, {x:0.15,y:1.1}, {x:0.9,y:1.1}], [{x:0.1,y:0.5}, {x:0.8,y:0.5}]],
       'F': [[{x:0.1,y:1.1}, {x:0.15,y:0}, {x:0.9,y:0}], [{x:0.1,y:0.5}, {x:0.8,y:0.5}]],
-      'G': [[{x:0.9,y:0.2}, {x:0.5,y:-0.1}, {x:0.0,y:0.5}, {x:0.5,y:1.1}, {x:0.9,y:0.8}, {x:0.9,y:0.5}, {x:0.6,y:0.5}]],
+      'G': [[{x:0.9,y:0.2}, {x:0.5,y:-0.1}, {x:0.0,y:0.5}, {x:1.0,y:0.5}, {x:0.9,y:0.9}, {x:0.5,y:1.1}]],
       'H': [[{x:0.1,y:0}, {x:0.15,y:1.1}], [{x:0.9,y:0}, {x:0.85,y:1.1}], [{x:0.1,y:0.5}, {x:0.9,y:0.5}]],
       'I': [[{x:0.5,y:0}, {x:0.5,y:1.1}], [{x:0.3,y:0}, {x:0.7,y:0}], [{x:0.3,y:1.1}, {x:0.7,y:1.1}]],
       'J': [[{x:0.7,y:0}, {x:0.7,y:0.8}, {x:0.5,y:1.1}, {x:0.2,y:0.9}]],
@@ -539,12 +539,70 @@
     // For centering rows
     let rowCharCounts = [];
     let rowStartXs = [];
+    let rowWidths = [];
     let charRowIndices = [];
     let lastCharRow = 0;
+
+    // Approximated text bounds (to place images around it)
+    let textBounds = null;
 
     // Image masks around center
     let selectedMasks = [];
     let maskIndex = 0;
+
+    // --- HIGH-LEVEL RESET ---
+    function resetGame() {
+      // Stop music & SFX
+      stopMusic();
+      stopSpraySound();
+
+      gameStarted = false;
+      stage = 'text';
+      isSpraying = false;
+      copLightsRunning = false;
+      lightsStarted = false;
+
+      // Reset text state
+      targetText = "TAGS";
+      textCharIndex = 0;
+      currentWordRow = 0;
+      currentWordWidth = 0;
+      wordStartX = 0;
+      currentStrokes = [];
+      currentStrokeIndex = 0;
+      currentPointIndex = 0;
+      currentStyle = null;
+      letterDrawOrigin = { x: 0, y: 0 };
+      letterHeightScale = 0;
+      charSkew = 0;
+      charScaleFactor = 1;
+      startYOffset = 0;
+      fixedRowHeight = 0;
+      rowCharCounts = [];
+      rowStartXs = [];
+      rowWidths = [];
+      charRowIndices = [];
+      lastCharRow = 0;
+      textBounds = null;
+
+      // Reset image masks
+      selectedMasks = [];
+      maskIndex = 0;
+
+      // Clear canvases and regenerate wall
+      generateWall();
+      ctx.clearRect(0, 0, width, height);
+      fxCtx.clearRect(0, 0, width, height);
+
+      // UI: show overlay again, hide settings icon, close menu
+      settingsIcon.style.display = 'none';
+      menu.classList.remove('show');
+      overlay.style.display = 'flex';
+      // small async to ensure opacity transition
+      requestAnimationFrame(() => {
+        overlay.style.opacity = 1;
+      });
+    }
 
     // --- FULLSCREEN HELPER ---
     function enterFullscreen(element) {
@@ -596,6 +654,8 @@
 
       const baseLetterHeight = fixedRowHeight * 0.8;
       const approxLetterWidth = baseLetterHeight * 0.75;
+      const baseRowHeight = fixedRowHeight;
+      const avgGap = approxLetterWidth * 0.18;
 
       const leftMargin = width * 0.03;
       const rightLimit = width * 0.97;
@@ -606,12 +666,14 @@
       const rowsNeeded = Math.max(1, Math.ceil(totalChars / maxCharsPerRow));
       maxWordRows = rowsNeeded;
 
-      const totalTextHeight = fixedRowHeight * maxWordRows;
+      const totalTextHeight = baseRowHeight * maxWordRows;
       startYOffset = (height - totalTextHeight) / 2;
 
       rowCharCounts = [];
       charRowIndices = [];
       rowStartXs = [];
+      rowWidths = [];
+      textBounds = null;
 
       let idx = 0;
       for (let r = 0; r < maxWordRows; r++) {
@@ -625,14 +687,46 @@
         idx += count;
       }
 
-      const avgGap = approxLetterWidth * 0.18;
       for (let r = 0; r < maxWordRows; r++) {
         const count = rowCharCounts[r] || 0;
         let rowWidth = 0;
         if (count > 0) {
           rowWidth = count * approxLetterWidth + (count - 1) * avgGap;
         }
+        rowWidths[r] = rowWidth;
         rowStartXs[r] = (width - rowWidth) / 2;
+      }
+
+      // Approximate text bounding rectangle, to avoid with images
+      let minX = width, maxX = 0, minY = height, maxY = 0;
+      for (let r = 0; r < maxWordRows; r++) {
+        const count = rowCharCounts[r] || 0;
+        if (count === 0) continue;
+
+        const rowWidth = rowWidths[r];
+        const startX = rowStartXs[r];
+
+        minX = Math.min(minX, startX);
+        maxX = Math.max(maxX, startX + rowWidth);
+
+        const rowTop = startYOffset + r * baseRowHeight;
+        const rowBottom = rowTop + baseRowHeight;
+        minY = Math.min(minY, rowTop);
+        maxY = Math.max(maxY, rowBottom);
+      }
+
+      if (totalChars > 0) {
+        // Add a small margin to the bounds so text has some breathing room
+        const marginX = (maxX - minX) * 0.12;
+        const marginY = (maxY - minY) * 0.12;
+        textBounds = {
+          minX: Math.max(0, minX - marginX),
+          maxX: Math.min(width, maxX + marginX),
+          minY: Math.max(0, minY - marginY),
+          maxY: Math.min(height, maxY + marginY)
+        };
+      } else {
+        textBounds = null;
       }
 
       textCharIndex = 0;
@@ -820,6 +914,7 @@
     function calculateLetterPosition() {
       const baseRowHeight = fixedRowHeight;
       const baseLetterHeight = baseRowHeight * 0.8;
+      const approxLetterWidth = baseLetterHeight * 0.75;
 
       letterHeightScale = baseLetterHeight * (1 + (Math.random() - 0.5) * 0.15);
       const effectiveLetterWidth = letterHeightScale * 0.65;
@@ -1027,9 +1122,10 @@
           fxCtx.clearRect(0, 0, width, height);
           copLightsRunning = false;
 
+          // Shake camera, then fully reset the game to initial state
           shakeCamera(1000, 12);
           setTimeout(() => {
-            generateWall();
+            resetGame();
           }, 1000);
 
           return;
@@ -1232,13 +1328,37 @@
           const baseSize = Math.min(width, height) * 0.25;
           const scale = baseSize / maxDim;
 
-          const radius = Math.min(width, height) * 0.35;
+          // Place around the text bounds, if we have them
+          let textCenterX = width / 2;
+          let textCenterY = height / 2;
+          let baseRadius = Math.min(width, height) * 0.35;
+          if (textBounds) {
+            const bw = textBounds.maxX - textBounds.minX;
+            const bh = textBounds.maxY - textBounds.minY;
+            const textRadius = Math.sqrt((bw / 2) * (bw / 2) + (bh / 2) * (bh / 2));
+            // margin so icons stay clearly outside text
+            baseRadius = textRadius + baseSize * 0.8;
+            textCenterX = (textBounds.minX + textBounds.maxX) / 2;
+            textCenterY = (textBounds.minY + textBounds.maxY) / 2;
+          }
+
           const angleBase = (index / total) * Math.PI * 2;
           const jitter = (Math.random() - 0.5) * (Math.PI / 6);
           const angle = angleBase + jitter;
 
-          const cx = width  / 2 + Math.cos(angle) * radius;
-          const cy = height / 2 + Math.sin(angle) * radius;
+          // small outward jitter so it doesn't form a perfect circle
+          const radiusJitter = baseRadius * 0.15 * (Math.random() - 0.5);
+          let radius = baseRadius + radiusJitter;
+
+          // candidate center
+          let cx = textCenterX + Math.cos(angle) * radius;
+          let cy = textCenterY + Math.sin(angle) * radius;
+
+          // keep center safely inside screen so scaled silhouettes stay visible
+          const marginX = baseSize * 0.7;
+          const marginY = baseSize * 0.7;
+          cx = Math.max(marginX, Math.min(width  - marginX, cx));
+          cy = Math.max(marginY, Math.min(height - marginY, cy));
 
           const step = 2;
           const bands = [[], [], []];
@@ -1415,7 +1535,10 @@
         if (mask.bandIndex >= 3) {
           mask.done = true;
           maskIndex++;
-          if (maskIndex >= selectedMasks.length) stage = 'finished';
+          if (maskIndex >= selectedMasks.length) {
+            stage = 'finished';
+            startCopLights();
+          }
         }
         return;
       }
@@ -1454,7 +1577,9 @@
               mask.painting = false;
               maskIndex++;
               if (maskIndex >= selectedMasks.length) {
+                // Last band of last image just finished:
                 stage = 'finished';
+                startCopLights(); // police sirens + shake + reset
               }
             } else {
               mask.painting = false;
@@ -1534,7 +1659,7 @@
       if (e.type === 'touchstart') e.preventDefault();
 
       if (stage === 'finished') {
-        // At the end, ENTER triggers police lights
+        // At the end, ENTER can still trigger police lights (backup)
         if (e.type === 'keydown' && e.code === 'Enter') {
           startCopLights();
         }

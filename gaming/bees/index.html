@@ -600,6 +600,50 @@
     let overlayRect = null;
     let menuRect = null;
 
+    // Create one decorative bee for a side (left/right)
+    function makeMenuBee(side, playerIndex = 0) {
+      const overlayEl = document.getElementById('promptOverlay');
+      if (!overlayEl) return null;
+      const rect = overlayEl.getBoundingClientRect();
+      const w = rect.width || window.innerWidth;
+      const h = rect.height || window.innerHeight;
+
+      const centerX = side === 'left' ? w * 0.18 : w * 0.82;
+      const centerY = h * 0.35;
+      const radius = Math.min(w, h) * 0.08;
+
+      const baseColor = playerConfigs[playerIndex]?.color || COLORS.beeYellowBright;
+      const accentLight = baseColor;
+      const accentDeep = mixHex(baseColor, '#000000', 0.45);
+
+      return {
+        side,
+        playerIndex,
+        centerX,
+        centerY,
+        radius,
+        angle: Math.random() * Math.PI * 2,
+        angularSpeed: (side === 'left' ? -1 : 1) * (0.4 + Math.random() * 0.2), // slower
+        wobblePhase: Math.random() * Math.PI * 2,
+        wingSpeed: 2.0,
+        sizeScale: 1.6,                      // a bit bigger
+        accentLight,
+        accentDeep,
+        x: centerX + radius,
+        y: centerY
+      };
+    }
+
+    // Update colors of decorative bees when player colors change
+    function updateMenuBeeColors() {
+      if (!menuBees || !menuBees.length) return;
+      menuBees.forEach(bee => {
+        const baseColor = playerConfigs[bee.playerIndex]?.color || COLORS.beeYellowBright;
+        bee.accentLight = baseColor;
+        bee.accentDeep = mixHex(baseColor, '#000000', 0.45);
+      });
+    }
+
     // ----- Game State -----
     let gameRunning = false;
     let gameMode = '1p'; // '1p' or '2p'
@@ -621,7 +665,33 @@
     const flowers = [];
     const particles = [];
 
+    // GLOBAL HEX RADIUS (now scaled based on layout/mode)
     let hexRadius = 45;
+
+    function computeHexRadius() {
+      // use current width / mode / goal to adjust honeycomb size
+      const w = width || window.innerWidth || 1200;
+      const g = tripGoal || 5;
+
+      // approximate number of rings needed: 1 center + rings of 6, 12, 18...
+      // total cells up to ring R is 1 + 3 R (R+1)
+      // invert approximately: g ≈ 3R^2 + 3R + 1
+      const approxRings = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(g)))); // simple approx
+
+      if (gameMode === '1p') {
+        const sideWidth = w * 0.4;
+        const maxHorizontalSpace = sideWidth * 0.9; // keep some margin
+        const maxRadiusFromSpace = maxHorizontalSpace / (1.5 * approxRings * 2); 
+        const raw = Math.min(60, maxRadiusFromSpace);
+        hexRadius = Math.max(22, raw);
+      } else {
+        const sideWidth = w * 0.3;
+        const maxHorizontalSpace = sideWidth * 0.85;
+        const maxRadiusFromSpace = maxHorizontalSpace / (1.5 * approxRings * 2);
+        const raw = Math.min(40, maxRadiusFromSpace);
+        hexRadius = Math.max(20, raw);
+      }
+    }
 
     // ----- DOM Elements -----
     const modeButtons = document.querySelectorAll('#modeSelect button');
@@ -745,6 +815,7 @@
       playerConfigs[1].name = (p2NameInput.value || 'Joueur 2').trim() || 'Joueur 2';
       playerConfigs[0].color = p1ColorInput.value || playerConfigs[0].color;
       playerConfigs[1].color = p2ColorInput.value || playerConfigs[1].color;
+      updateMenuBeeColors();
     }
 
     function openPlayerModal() {
@@ -854,6 +925,11 @@
       endBanner.textContent = '';
       cancelRestartHold();
       langToggle?.remove();
+
+      // recompute hex size just before building the hives,
+      // so they are scaled to the current mode and viewport
+      computeHexRadius();
+
       initGame();
       updateGoalDisplay();
       startBackgroundMusicForMode();
@@ -884,8 +960,8 @@
       canvas.width = width * window.devicePixelRatio;
       canvas.height = height * window.devicePixelRatio;
       ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
-
-      if (gameRunning) initGame();
+      // Important: do NOT re-init the game on resize,
+      // otherwise leaving fullscreen (Escape) would reset the honeycomb.
     }
 
     function resizeMenuCanvas() {
@@ -1426,148 +1502,6 @@
       }
     });
 
-    // ----- Particles -----
-    function spawnParticles(x, y, colorPalette) {
-      for(let i=0; i<15; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 30 + Math.random() * 80;
-        const size = 2 + Math.random() * 4;
-        particles.push({
-          x, y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          life: 1.0,
-          decay: 0.8 + Math.random()*0.5,
-          color: colorPalette[Math.floor(Math.random()*colorPalette.length)],
-          size
-        });
-      }
-    }
-
-    // ----- Game Update -----
-    function updateGame(dt) {
-      // Timing mode cycles
-      if (timingMode) {
-        if (timeUntilNextState > 0) {
-          timeUntilNextState -= dt;
-        }
-        if (timeUntilNextState <= 0) {
-          if (timingState === 'waiting') {
-            flowersActive = true;
-            timingState = 'visible';
-            timeUntilNextState = 10;
-            timingSpentThisCycle = false;
-            timingCapturedByPlayerIndex = null;
-          } else if (timingState === 'visible') {
-            flowersActive = false;
-            timingState = 'waiting';
-            timeUntilNextState = randRange(2, 5);
-            timingSpentThisCycle = false;
-            timingCapturedByPlayerIndex = null;
-          }
-        }
-      }
-
-      hives.forEach(h => h.update(dt));
-
-      // Ambient background sound volume based on readiness
-      const anyHiveReady = hives.some(h => h.ready);
-      const targetLoopVolume = anyHiveReady ? BG_LOOP_READY_VOLUME : BG_LOOP_IDLE_VOLUME;
-      if (bgLoopSound) {
-        bgLoopSound.volume += (targetLoopVolume - bgLoopSound.volume) * 0.05;
-      }
-
-      for (let i = particles.length - 1; i >= 0; i--) {
-        let p = particles[i];
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.vy += 80 * dt;
-        p.life -= dt * p.decay;
-        if (p.life <= 0) particles.splice(i, 1);
-      }
-    }
-
-    // ----- Drawing helpers -----
-    function drawPlayerLabels(ctxDraw, layoutInfo) {
-      if (!layoutInfo) return;
-      ctxDraw.save();
-      ctxDraw.textAlign = 'center';
-      ctxDraw.textBaseline = 'top';
-      ctxDraw.font = '700 18px sans-serif';
-
-      if (layoutInfo.type === '2p') {
-        const padY = 16;
-        const leftX = layoutInfo.leftEdge * 0.5;
-        const rightX = layoutInfo.rightEdge + (width - layoutInfo.rightEdge) * 0.5;
-
-        [{x: leftX, config: playerConfigs[0]}, {x: rightX, config: playerConfigs[1]}].forEach(({x, config}) => {
-          const badgeWidth = 210;
-          const badgeHeight = 46;
-          const radius = 12;
-          const left = x - badgeWidth * 0.5;
-          const top = padY;
-          const labelY = top + badgeHeight * 0.5;
-          const accentBright = mixHex(config.color, '#ffffff', 0.35);
-          const accentDark = mixHex(config.color, '#000000', 0.45);
-
-          ctxDraw.save();
-          ctxDraw.textAlign = 'left';
-          ctxDraw.textBaseline = 'middle';
-          ctxDraw.font = '700 18px "Segoe UI", "Nunito", sans-serif';
-
-          ctxDraw.beginPath();
-          ctxDraw.moveTo(left + radius, top);
-          ctxDraw.lineTo(left + badgeWidth - radius, top);
-          ctxDraw.quadraticCurveTo(left + badgeWidth, top, left + badgeWidth, top + radius);
-          ctxDraw.lineTo(left + badgeWidth, top + badgeHeight - radius);
-          ctxDraw.quadraticCurveTo(left + badgeWidth, top + badgeHeight, left + badgeWidth - radius, top + badgeHeight);
-          ctxDraw.lineTo(left + radius, top + badgeHeight);
-          ctxDraw.quadraticCurveTo(left, top + badgeHeight, left, top + badgeHeight - radius);
-          ctxDraw.lineTo(left, top + radius);
-          ctxDraw.quadraticCurveTo(left, top, left + radius, top);
-          ctxDraw.closePath();
-
-          ctxDraw.shadowColor = 'rgba(0,0,0,0.35)';
-          ctxDraw.shadowBlur = 12;
-          ctxDraw.fillStyle = 'rgba(0,0,0,0.55)';
-          ctxDraw.fill();
-
-          const shine = ctxDraw.createLinearGradient(left, top, left + badgeWidth, top + badgeHeight);
-          shine.addColorStop(0, mixHex(config.color, '#ffffff', 0.18));
-          shine.addColorStop(1, mixHex(config.color, '#000000', 0.35));
-          ctxDraw.shadowBlur = 0;
-          ctxDraw.globalAlpha = 0.7;
-          ctxDraw.fillStyle = shine;
-          ctxDraw.fill();
-          ctxDraw.globalAlpha = 1;
-
-          ctxDraw.lineWidth = 2;
-          ctxDraw.strokeStyle = accentBright;
-          ctxDraw.stroke();
-
-          ctxDraw.beginPath();
-          ctxDraw.shadowColor = accentDark;
-          ctxDraw.shadowBlur = 8;
-          ctxDraw.fillStyle = config.color;
-          ctxDraw.arc(left + 22, labelY, 11, 0, Math.PI * 2);
-          ctxDraw.fill();
-          ctxDraw.shadowBlur = 0;
-          ctxDraw.lineWidth = 1.5;
-          ctxDraw.strokeStyle = accentBright;
-          ctxDraw.stroke();
-
-          ctxDraw.fillStyle = '#fdfdfd';
-          ctxDraw.shadowColor = 'rgba(0,0,0,0.45)';
-          ctxDraw.shadowBlur = 4;
-          ctxDraw.fillText(config.name, left + 44, labelY);
-          ctxDraw.shadowBlur = 0;
-          ctxDraw.restore();
-        });
-      }
-
-      ctxDraw.restore();
-    }
-
     function groundHeightAt(x) {
       const { startX, zoneWidth } = getFieldZone();
       const baseY = height * 0.86;
@@ -1589,55 +1523,22 @@
       return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * p1 + t * t * p2;
     }
 
-    function drawFieldBackdrop(ctxDraw, startX, zoneWidth) {
-      const skyGrad = ctxDraw.createLinearGradient(0, 0, 0, height);
-      skyGrad.addColorStop(0, '#cde9ff');
-      skyGrad.addColorStop(0.6, '#93d2ff');
-      skyGrad.addColorStop(1, '#7fc8ff');
-      ctxDraw.fillStyle = skyGrad;
-      ctxDraw.fillRect(startX, 0, zoneWidth, height);
-
-      const sunX = startX + zoneWidth * 0.18;
-      const sunY = height * 0.18;
-      const sunRadius = Math.min(120, zoneWidth * 0.25);
-      const sunGrad = ctxDraw.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunRadius);
-      sunGrad.addColorStop(0, 'rgba(255, 240, 180, 0.95)');
-      sunGrad.addColorStop(0.5, 'rgba(255, 220, 120, 0.75)');
-      sunGrad.addColorStop(1, 'rgba(255, 200, 80, 0)');
-      ctxDraw.fillStyle = sunGrad;
-      ctxDraw.beginPath();
-      ctxDraw.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
-      ctxDraw.fill();
-
-      const groundY = height * 0.86;
-      ctxDraw.save();
-      ctxDraw.translate(startX, 0);
-      ctxDraw.fillStyle = '#5fb34b';
-      ctxDraw.beginPath();
-      ctxDraw.moveTo(0, groundY + 20);
-      ctxDraw.quadraticCurveTo(zoneWidth * 0.25, groundY - 40, zoneWidth * 0.5, groundY);
-      ctxDraw.quadraticCurveTo(zoneWidth * 0.8, groundY + 40, zoneWidth, groundY - 10);
-      ctxDraw.lineTo(zoneWidth, height);
-      ctxDraw.lineTo(0, height);
-      ctxDraw.closePath();
-      ctxDraw.fill();
-
-      ctxDraw.fillStyle = 'rgba(255,255,255,0.18)';
-      for (let i = 0; i < zoneWidth; i += 80) {
-        const ripple = Math.sin((i + startX) * 0.01) * 8;
-        ctxDraw.beginPath();
-        ctxDraw.ellipse(i + 30, groundY - 25 + ripple, 50, 14, 0, 0, Math.PI * 2);
-        ctxDraw.fill();
+    // ----- Particles -----
+    function spawnParticles(x, y, colorPalette) {
+      for(let i=0; i<15; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 30 + Math.random() * 80;
+        const size = 2 + Math.random() * 4;
+        particles.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1.0,
+          decay: 0.8 + Math.random()*0.5,
+          color: colorPalette[Math.floor(Math.random()*colorPalette.length)],
+          size
+        });
       }
-      ctxDraw.restore();
-    }
-
-    function getFlowerBloom(f) {
-      const groundY = groundHeightAt(f.x);
-      return {
-        x: f.x + f.stemCurve,
-        y: groundY - f.stemHeight
-      };
     }
 
     function drawLeaf(ctxDraw, x, y, w, h, angle, color) {
@@ -1651,6 +1552,14 @@
       ctxDraw.quadraticCurveTo(w * 0.4, -h * 0.2, 0, 0);
       ctxDraw.fill();
       ctxDraw.restore();
+    }
+
+    function getFlowerBloom(f) {
+      const groundY = groundHeightAt(f.x);
+      return {
+        x: f.x + f.stemCurve,
+        y: groundY - f.stemHeight
+      };
     }
 
     function drawFlowers(ctxDraw) {
@@ -1943,6 +1852,172 @@
       ctxDraw.restore();
     }
 
+    function drawPlayerLabels(ctxDraw, layoutInfo) {
+      if (!layoutInfo) return;
+      ctxDraw.save();
+      ctxDraw.textAlign = 'center';
+      ctxDraw.textBaseline = 'top';
+      ctxDraw.font = '700 18px sans-serif';
+
+      if (layoutInfo.type === '2p') {
+        const padY = 16;
+        const leftX = layoutInfo.leftEdge * 0.5;
+        const rightX = layoutInfo.rightEdge + (width - layoutInfo.rightEdge) * 0.5;
+
+        [{x: leftX, config: playerConfigs[0]}, {x: rightX, config: playerConfigs[1]}].forEach(({x, config}) => {
+          const badgeWidth = 210;
+          const badgeHeight = 46;
+          const radius = 12;
+          const left = x - badgeWidth * 0.5;
+          const top = padY;
+          const labelY = top + badgeHeight * 0.5;
+          const accentBright = mixHex(config.color, '#ffffff', 0.35);
+          const accentDark = mixHex(config.color, '#000000', 0.45);
+
+          ctxDraw.save();
+          ctxDraw.textAlign = 'left';
+          ctxDraw.textBaseline = 'middle';
+          ctxDraw.font = '700 18px "Segoe UI", "Nunito", sans-serif';
+
+          ctxDraw.beginPath();
+          ctxDraw.moveTo(left + radius, top);
+          ctxDraw.lineTo(left + badgeWidth - radius, top);
+          ctxDraw.quadraticCurveTo(left + badgeWidth, top, left + badgeWidth, top + radius);
+          ctxDraw.lineTo(left + badgeWidth, top + badgeHeight - radius);
+          ctxDraw.quadraticCurveTo(left + badgeWidth, top + badgeHeight, left + badgeWidth - radius, top + badgeHeight);
+          ctxDraw.lineTo(left + radius, top + badgeHeight);
+          ctxDraw.quadraticCurveTo(left, top + badgeHeight, left, top + badgeHeight - radius);
+          ctxDraw.lineTo(left, top + radius);
+          ctxDraw.quadraticCurveTo(left, top, left + radius, top);
+          ctxDraw.closePath();
+
+          ctxDraw.shadowColor = 'rgba(0,0,0,0.35)';
+          ctxDraw.shadowBlur = 12;
+          ctxDraw.fillStyle = 'rgba(0,0,0,0.55)';
+          ctxDraw.fill();
+
+          const shine = ctxDraw.createLinearGradient(left, top, left + badgeWidth, top + badgeHeight);
+          shine.addColorStop(0, mixHex(config.color, '#ffffff', 0.18));
+          shine.addColorStop(1, mixHex(config.color, '#000000', 0.35));
+          ctxDraw.shadowBlur = 0;
+          ctxDraw.globalAlpha = 0.7;
+          ctxDraw.fillStyle = shine;
+          ctxDraw.fill();
+          ctxDraw.globalAlpha = 1;
+
+          ctxDraw.lineWidth = 2;
+          ctxDraw.strokeStyle = accentBright;
+          ctxDraw.stroke();
+
+          ctxDraw.beginPath();
+          ctxDraw.shadowColor = accentDark;
+          ctxDraw.shadowBlur = 8;
+          ctxDraw.fillStyle = config.color;
+          ctxDraw.arc(left + 22, labelY, 11, 0, Math.PI * 2);
+          ctxDraw.fill();
+          ctxDraw.shadowBlur = 0;
+          ctxDraw.lineWidth = 1.5;
+          ctxDraw.strokeStyle = accentBright;
+          ctxDraw.stroke();
+
+          ctxDraw.fillStyle = '#fdfdfd';
+          ctxDraw.shadowColor = 'rgba(0,0,0,0.45)';
+          ctxDraw.shadowBlur = 4;
+          ctxDraw.fillText(config.name, left + 44, labelY);
+          ctxDraw.shadowBlur = 0;
+          ctxDraw.restore();
+        });
+      }
+
+      ctxDraw.restore();
+    }
+
+    function drawFieldBackdrop(ctxDraw, startX, zoneWidth) {
+      const skyGrad = ctxDraw.createLinearGradient(0, 0, 0, height);
+      skyGrad.addColorStop(0, '#cde9ff');
+      skyGrad.addColorStop(0.6, '#93d2ff');
+      skyGrad.addColorStop(1, '#7fc8ff');
+      ctxDraw.fillStyle = skyGrad;
+      ctxDraw.fillRect(startX, 0, zoneWidth, height);
+
+      const sunX = startX + zoneWidth * 0.18;
+      const sunY = height * 0.18;
+      const sunRadius = Math.min(120, zoneWidth * 0.25);
+      const sunGrad = ctxDraw.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunRadius);
+      sunGrad.addColorStop(0, 'rgba(255, 240, 180, 0.95)');
+      sunGrad.addColorStop(0.5, 'rgba(255, 220, 120, 0.75)');
+      sunGrad.addColorStop(1, 'rgba(255, 200, 80, 0)');
+      ctxDraw.fillStyle = sunGrad;
+      ctxDraw.beginPath();
+      ctxDraw.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+      ctxDraw.fill();
+
+      const groundY = height * 0.86;
+      ctxDraw.save();
+      ctxDraw.translate(startX, 0);
+      ctxDraw.fillStyle = '#5fb34b';
+      ctxDraw.beginPath();
+      ctxDraw.moveTo(0, groundY + 20);
+      ctxDraw.quadraticCurveTo(zoneWidth * 0.25, groundY - 40, zoneWidth * 0.5, groundY);
+      ctxDraw.quadraticCurveTo(zoneWidth * 0.8, groundY + 40, zoneWidth, groundY - 10);
+      ctxDraw.lineTo(zoneWidth, height);
+      ctxDraw.lineTo(0, height);
+      ctxDraw.closePath();
+      ctxDraw.fill();
+
+      ctxDraw.fillStyle = 'rgba(255,255,255,0.18)';
+      for (let i = 0; i < zoneWidth; i += 80) {
+        const ripple = Math.sin((i + startX) * 0.01) * 8;
+        ctxDraw.beginPath();
+        ctxDraw.ellipse(i + 30, groundY - 25 + ripple, 50, 14, 0, 0, Math.PI * 2);
+        ctxDraw.fill();
+      }
+      ctxDraw.restore();
+    }
+
+    // Ambient + game update
+    function updateGame(dt) {
+      // Timing mode cycles
+      if (timingMode) {
+        if (timeUntilNextState > 0) {
+          timeUntilNextState -= dt;
+        }
+        if (timeUntilNextState <= 0) {
+          if (timingState === 'waiting') {
+            flowersActive = true;
+            timingState = 'visible';
+            timeUntilNextState = 10;
+            timingSpentThisCycle = false;
+            timingCapturedByPlayerIndex = null;
+          } else if (timingState === 'visible') {
+            flowersActive = false;
+            timingState = 'waiting';
+            timeUntilNextState = randRange(2, 5);
+            timingSpentThisCycle = false;
+            timingCapturedByPlayerIndex = null;
+          }
+        }
+      }
+
+      hives.forEach(h => h.update(dt));
+
+      // Ambient background sound volume based on readiness
+      const anyHiveReady = hives.some(h => h.ready);
+      const targetLoopVolume = anyHiveReady ? BG_LOOP_READY_VOLUME : BG_LOOP_IDLE_VOLUME;
+      if (bgLoopSound) {
+        bgLoopSound.volume += (targetLoopVolume - bgLoopSound.volume) * 0.05;
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 80 * dt;
+        p.life -= dt * p.decay;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+    }
+
     function drawParticles(ctxDraw) {
       particles.forEach(p => {
         ctxDraw.globalAlpha = p.life;
@@ -2016,7 +2091,6 @@
       });
     }
 
-    // ----- Game draw -----
     function drawGame() {
       let layoutInfo;
       if (gameMode === '1p') {
@@ -2048,7 +2122,7 @@
       drawSwitchPrompt(ctx);
     }
 
-    // ----- MENU BEES AROUND OVERLAY CARD -----
+    // ----- MENU BEES AROUND SCREEN (LEFT/RIGHT) -----
     function initMenuBees() {
       const overlayEl = document.getElementById('promptOverlay');
       const menuCardEl = document.querySelector('.menu-card');
@@ -2057,65 +2131,18 @@
       overlayRect = overlayEl.getBoundingClientRect();
       menuRect = menuCardEl.getBoundingClientRect();
 
+      // Two bees: one left, one right, tied to player 0 / player 1 colors
       menuBees = [];
-      const count = 10;
-      for (let i = 0; i < count; i++) {
-        menuBees.push({
-          t: Math.random(),                        // position along border
-          speed: 0.04 + Math.random() * 0.05,      // fraction of perimeter per second
-          wobblePhase: Math.random() * Math.PI*2,
-          wingSpeed: 2.5,
-          sizeScale: 0.8 + Math.random() * 0.4,
-          angle: Math.random() * Math.PI * 2,
-          accentLight: COLORS.beeYellowBright,
-          accentDeep: COLORS.beeYellowDark,
-          x: 0,
-          y: 0
-        });
-      }
-    }
-
-    function borderPointForT(t, margin) {
-      if (!overlayRect || !menuRect) return { x: 0, y: 0 };
-
-      const left = menuRect.left - overlayRect.left - margin;
-      const right = menuRect.right - overlayRect.left + margin;
-      const top = menuRect.top - overlayRect.top - margin;
-      const bottom = menuRect.bottom - overlayRect.top + margin;
-
-      const widthRect = right - left;
-      const heightRect = bottom - top;
-      const perimeter = 2 * (widthRect + heightRect);
-
-      let d = (t % 1) * perimeter;
-
-      // Top edge: left -> right
-      if (d <= widthRect) {
-        return { x: left + d, y: top };
-      }
-      d -= widthRect;
-
-      // Right edge: top -> bottom
-      if (d <= heightRect) {
-        return { x: right, y: top + d };
-      }
-      d -= heightRect;
-
-      // Bottom edge: right -> left
-      if (d <= widthRect) {
-        return { x: right - d, y: bottom };
-      }
-      d -= widthRect;
-
-      // Left edge: bottom -> top
-      return { x: left, y: bottom - d };
+      const leftBee = makeMenuBee('left', 0);
+      if (leftBee) menuBees.push(leftBee);
+      const rightBee = makeMenuBee('right', 1);
+      if (rightBee) menuBees.push(rightBee);
     }
 
     function updateMenuBees(dt) {
       const overlayStyle = window.getComputedStyle(overlay);
       if (overlayStyle.display === 'none') return;
 
-      // Update rects (handles resize/layout shifts)
       const overlayEl = document.getElementById('promptOverlay');
       const menuCardEl = document.querySelector('.menu-card');
       if (!overlayEl || !menuCardEl) return;
@@ -2123,42 +2150,40 @@
       overlayRect = overlayEl.getBoundingClientRect();
       menuRect = menuCardEl.getBoundingClientRect();
 
-      if (!menuBees.length) {
+      if (!menuBees || !menuBees.length) {
         initMenuBees();
       }
 
-      const margin = 40;
+      const w = overlayRect.width || window.innerWidth;
+      const h = overlayRect.height || window.innerHeight;
 
       menuBees.forEach(b => {
-        b.t = (b.t + b.speed * dt) % 1;
-        b.wobblePhase += dt * 4 * b.wingSpeed;
+        // Center & radius adapt to resize
+        b.centerX = b.side === 'left' ? w * 0.18 : w * 0.82;
+        b.centerY = h * 0.35;
+        b.radius = Math.min(w, h) * 0.08;
 
-        const base = borderPointForT(b.t, margin);
-        const wiggleX = Math.sin(b.wobblePhase * 1.7) * 12;
-        const wiggleY = Math.cos(b.wobblePhase * 1.3) * 9;
+        b.angle += b.angularSpeed * dt;                 // slower, smooth movement
+        b.wobblePhase += dt * 3 * b.wingSpeed;
 
-        b.x = base.x + wiggleX;
-        b.y = base.y + wiggleY;
+        const bob = Math.sin(b.wobblePhase * 0.9) * (b.radius * 0.15);
 
-        // Orient roughly tangentially to the path
-        const ahead = borderPointForT((b.t + 0.01) % 1, margin);
-        const dx = ahead.x - base.x;
-        const dy = ahead.y - base.y;
-        b.angle = Math.atan2(dy, dx);
+        b.x = b.centerX + Math.cos(b.angle) * b.radius;
+        b.y = b.centerY + Math.sin(b.angle) * b.radius + bob;
       });
     }
 
     function drawMenuBees() {
       const overlayStyle = window.getComputedStyle(overlay);
-      if (overlayStyle.display === 'none') {
-        // Clear just in case
-        menuBeesCtx.clearRect(0, 0, menuBeesCanvas.width / window.devicePixelRatio, menuBeesCanvas.height / window.devicePixelRatio);
-        return;
-      }
-
       const w = menuBeesCanvas.width / window.devicePixelRatio;
       const h = menuBeesCanvas.height / window.devicePixelRatio;
       menuBeesCtx.clearRect(0, 0, w, h);
+
+      if (overlayStyle.display === 'none') {
+        return;
+      }
+
+      if (!menuBees || !menuBees.length) return;
 
       menuBees.forEach(b => {
         // Decorative bees are never "ready"
