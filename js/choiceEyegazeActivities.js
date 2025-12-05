@@ -60,6 +60,8 @@
     const tilePickerGrid    = document.getElementById('tile-picker-grid');
     const tileCountDisplay  = document.getElementById('tile-count-display');
     const startGameButton   = document.getElementById('start-game-button');
+
+    const languageToggle = document.getElementById('language-toggle') || document.getElementById('langToggle');
     const categorySelect    = document.getElementById('categorySelect');
 
     const tileContainer     = document.getElementById('tile-container');
@@ -185,6 +187,12 @@
     }
 
     ensurePointerOverlay();
+
+    function hideLanguageToggle() {
+      if (languageToggle) {
+        languageToggle.style.display = 'none';
+      }
+    }
 
     if (gazePointer) {
       const rawHandler = (event) => {
@@ -702,6 +710,7 @@
     });
 
     startGameButton?.addEventListener('click', () => {
+      hideLanguageToggle();
       tilePickerModal.style.display = 'none';
       renderGameTiles();
     });
