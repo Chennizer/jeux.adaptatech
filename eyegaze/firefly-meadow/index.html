@@ -207,12 +207,107 @@
       }
     }
 
+    .mini-firefly {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95), var(--glow-color) 55%, rgba(255,255,255,0));
+      box-shadow: 0 0 12px var(--glow-color), 0 0 26px rgba(0, 0, 0, 0.25);
+      pointer-events: none;
+      opacity: 0.9;
+      animation:
+        miniFlight var(--dur, 2.4s) ease-out forwards,
+        twinkle calc(var(--dur, 2.4s) * 0.6) ease-in-out infinite alternate;
+      transform-origin: center;
+      filter: drop-shadow(0 0 12px var(--glow-color));
+    }
+
+    @keyframes miniFlight {
+      0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0.95;
+      }
+      45% {
+        transform: translate(calc(-50% + var(--dx) * 0.6), calc(-50% + var(--dy) * 0.6)) scale(1.05);
+      }
+      100% {
+        transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.85);
+        opacity: 0;
+      }
+    }
+
+    @keyframes twinkle {
+      from { opacity: 0.5; filter: drop-shadow(0 0 8px var(--glow-color)); }
+      to   { opacity: var(--twinkle, 0.9); filter: drop-shadow(0 0 18px var(--glow-color)); }
+    }
+
     .status {
       text-align: center;
       margin: 12px 0 18px;
       color: #cce7ff;
       font-weight: 600;
       letter-spacing: 0.6px;
+    }
+
+    .start-overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.06), rgba(0,0,0,0.8));
+      z-index: 20;
+      padding: 24px;
+      text-align: center;
+      backdrop-filter: blur(2px);
+    }
+
+    .start-card {
+      background: rgba(12, 18, 40, 0.85);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      padding: 24px 28px;
+      max-width: 520px;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+    }
+
+    .start-card h2 {
+      margin: 0 0 10px 0;
+      font-size: 26px;
+      letter-spacing: 0.6px;
+    }
+
+    .start-card p {
+      margin: 8px 0 18px 0;
+      line-height: 1.5;
+      opacity: 0.86;
+    }
+
+    #startBtn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 22px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(90deg, #8ef1e7, #7cc8ff);
+      color: #0c1530;
+      font-weight: 800;
+      font-size: 16px;
+      letter-spacing: 0.6px;
+      cursor: pointer;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.32);
+    }
+
+    #startBtn:active { transform: translateY(1px); }
+
+    body.playing header,
+    body.playing .title-block,
+    body.playing .controls,
+    body.playing .instruction-card,
+    body.playing .status {
+      display: none;
     }
 
     @media (max-width: 768px) {
@@ -227,6 +322,14 @@
   </style>
 </head>
 <body>
+  <div class="start-overlay" id="startOverlay">
+    <div class="start-card">
+      <h2>Prairie aux lucioles</h2>
+      <p>Réglez la durée de regard et le nombre de lucioles. Appuyez sur démarrer pour passer en plein écran, puis explorez seulement avec le regard.</p>
+      <button id="startBtn" type="button">Démarrer • Plein écran</button>
+    </div>
+  </div>
+
   <header>
     <a class="home-link" href="../index.html" aria-label="Retour au portail des jeux">
       <span>⬅</span>
@@ -279,6 +382,8 @@
     const densityInput = document.getElementById('density');
     const statusText = document.getElementById('status');
     const calmBtn = document.getElementById('calmMode');
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
     let dwellTime = Number(dwellInput.value);
     let calmInterval;
     let audioCtx;
@@ -360,7 +465,7 @@
 
       const freq = frequencies[Math.floor(Math.random() * frequencies.length)];
       playTone(freq);
-      burstSparkles(fly);
+      burstSwarm(fly);
       relocate(fly);
     }
 
@@ -389,23 +494,33 @@
       oscillator.stop(now + duration + 0.05);
     }
 
-    function burstSparkles(fly) {
-      const sparkleLayer = document.querySelector('.sparkles');
+    function burstSwarm(fly) {
       const rect = fly.getBoundingClientRect();
-      const size = rect.width;
-      const count = 6;
+      const fieldRect = field.getBoundingClientRect();
+      const cx = rect.left - fieldRect.left + rect.width / 2;
+      const cy = rect.top - fieldRect.top + rect.height / 2;
+      const count = 16 + Math.floor(Math.random() * 10);
 
       for (let i = 0; i < count; i++) {
-        const span = document.createElement('span');
-        const x = rect.left + size / 2 + (Math.random() - 0.5) * size;
-        const y = rect.top + size / 2 + (Math.random() - 0.5) * size;
-        span.style.width = span.style.height = `${Math.random() * 10 + 6}px`;
-        span.style.left = `${x}px`;
-        span.style.top = `${y}px`;
-        span.style.background = `radial-gradient(circle, hsl(${fly.dataset.hue}, 90%, 70%) 0%, rgba(255,255,255,0) 70%)`;
+        const mini = document.createElement('div');
+        mini.className = 'mini-firefly';
+        mini.style.left = `${cx}px`;
+        mini.style.top = `${cy}px`;
+        mini.style.setProperty('--glow-color', `hsl(${fly.dataset.hue}, 90%, ${60 + Math.random() * 12}%)`);
+        mini.style.setProperty('--twinkle', `${0.6 + Math.random() * 0.6}`);
 
-        sparkleLayer.appendChild(span);
-        setTimeout(() => span.remove(), 2600);
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 70 + Math.random() * 140;
+        const dx = Math.cos(angle) * distance;
+        const dy = Math.sin(angle) * distance;
+        mini.style.setProperty('--dx', `${dx}px`);
+        mini.style.setProperty('--dy', `${dy}px`);
+        const duration = 2 + Math.random() * 1.6;
+        mini.style.setProperty('--dur', `${duration}s`);
+        mini.style.animationDelay = `${Math.random() * 0.12}s`;
+
+        field.appendChild(mini);
+        setTimeout(() => mini.remove(), (duration + 0.3) * 1000);
       }
     }
 
@@ -449,6 +564,35 @@
         calmInterval = null;
       }
     }
+
+    function requestFullscreen() {
+      const el = document.documentElement;
+      const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if (fn) fn.call(el);
+    }
+
+    function startExperience() {
+      requestFullscreen();
+      document.body.classList.add('playing');
+      startOverlay.style.display = 'none';
+      statusText.textContent = '';
+    }
+
+    startBtn.addEventListener('click', startExperience);
+
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        document.body.classList.remove('playing');
+        startOverlay.style.display = 'grid';
+        statusText.textContent = 'Regardez une luciole jusqu\'au halo complet pour la réveiller.';
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && startOverlay.style.display !== 'none') {
+        startExperience();
+      }
+    });
 
     populate(Number(densityInput.value));
   </script>
