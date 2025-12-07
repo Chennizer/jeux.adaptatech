@@ -454,6 +454,8 @@
       pruneFireflies();
     }
 
+    let orbitState = null;
+    let orbitDone = false;
     let lastFrame = performance.now();
     function animateFireflies(now) {
       const dt = Math.min((now - lastFrame) / 1000, 0.05);
@@ -461,22 +463,54 @@
       const width = window.innerWidth;
       const height = window.innerHeight;
 
-      fireflies.forEach((fly) => {
-        fly.x += fly.vx * dt;
-        fly.y += fly.vy * dt;
+      if (orbitState) {
+        const { start, duration, centerX, centerY, turns } = orbitState;
+        const rawProgress = (now - start) / duration;
+        const clamped = Math.min(Math.max(rawProgress, 0), 1);
+        // ease in gently, glide, then ease out
+        const eased = clamped < 0.5
+          ? 2 * clamped * clamped
+          : -1 + (4 - 2 * clamped) * clamped;
+        const sweep = eased * (Math.PI * 2 * turns);
 
-        if (fly.x < 6 || fly.x > width - 6) {
-          fly.vx *= -1;
-          fly.x = Math.max(6, Math.min(width - 6, fly.x));
-        }
-        if (fly.y < 6 || fly.y > height - 6) {
-          fly.vy *= -1;
-          fly.y = Math.max(6, Math.min(height - 6, fly.y));
-        }
+        fireflies.forEach((fly, i) => {
+          const baseAngle = fly.orbitAngle || ((i / Math.max(fireflies.length, 1)) * Math.PI * 2);
+          const angle = baseAngle + sweep;
+          const radius = fly.orbitRadius || orbitState.radius;
+          fly.x = centerX + Math.cos(angle) * radius;
+          fly.y = centerY + Math.sin(angle) * radius;
+          fly.el.style.setProperty('--x', `${fly.x}px`);
+          fly.el.style.setProperty('--y', `${fly.y}px`);
+        });
 
-        fly.el.style.setProperty('--x', `${fly.x}px`);
-        fly.el.style.setProperty('--y', `${fly.y}px`);
-      });
+        if (clamped >= 1 && !orbitDone) {
+          orbitDone = true;
+          orbitState = null;
+          fireflies.forEach((fly) => {
+            fly.vx = randBetween(-26, 26);
+            fly.vy = randBetween(-22, 22);
+          });
+          if (typeof orbitCompletionCallback === 'function') orbitCompletionCallback();
+          orbitCompletionCallback = null;
+        }
+      } else {
+        fireflies.forEach((fly) => {
+          fly.x += fly.vx * dt;
+          fly.y += fly.vy * dt;
+
+          if (fly.x < 6 || fly.x > width - 6) {
+            fly.vx *= -1;
+            fly.x = Math.max(6, Math.min(width - 6, fly.x));
+          }
+          if (fly.y < 6 || fly.y > height - 6) {
+            fly.vy *= -1;
+            fly.y = Math.max(6, Math.min(height - 6, fly.y));
+          }
+
+          fly.el.style.setProperty('--x', `${fly.x}px`);
+          fly.el.style.setProperty('--y', `${fly.y}px`);
+        });
+      }
 
       requestAnimationFrame(animateFireflies);
     }
@@ -574,33 +608,33 @@
       }, 480);
     }
 
+    let orbitCompletionCallback = null;
     function playCompletionAnimation(done) {
-      const burst = document.createElement('div');
-      burst.className = 'completion-burst';
-      const color = palette[Math.floor(Math.random() * palette.length)];
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const radius = Math.min(width, height) * 0.34;
+      const duration = 6200;
 
-      const flare = document.createElement('div');
-      flare.className = 'completion-flare';
-      flare.style.setProperty('--ring-color', color.base);
-      flare.style.setProperty('--ring-color-soft', color.glow.replace('0.55', '0.22'));
-      burst.appendChild(flare);
-
-      for (let i = 0; i < 3; i++) {
-        const ring = document.createElement('div');
-        ring.className = 'completion-ring';
-        ring.style.setProperty('--ring-color', color.base);
-        ring.style.setProperty('--ring-color-soft', color.glow.replace('0.55', '0.25'));
-        ring.style.animationDelay = `${i * 80}ms`;
-        burst.appendChild(ring);
+      if (!fireflies.length) {
+        const fallbackColor = palette[Math.floor(Math.random() * palette.length)];
+        spawnFireflies(centerX, centerY, 10, fallbackColor);
       }
 
-      arena.appendChild(burst);
+      fireflies.forEach((fly, i) => {
+        fly.orbitAngle = (i / Math.max(fireflies.length, 1)) * Math.PI * 2;
+        fly.orbitRadius = radius * randBetween(0.82, 1.08);
+        fly.vx = 0;
+        fly.vy = 0;
+      });
 
-      setTimeout(() => {
-        burst.remove();
+      orbitState = { start: performance.now(), duration, centerX, centerY, turns: 1.1, radius };
+      orbitDone = false;
+      orbitCompletionCallback = () => {
         completionLock = false;
         if (typeof done === 'function') done();
-      }, 1050);
+      };
     }
 
     /* controls */
