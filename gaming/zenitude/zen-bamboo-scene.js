@@ -62,13 +62,22 @@ export function createBambooScene(p) {
   let stalks = [];
   let leaves = [];
   let time = 0;
-  let windTarget = 0.4;
-  let wind = 0.4;
+  let windTarget = 0.55;
+  let wind = 0.55;
   let speedMultiplier = 1;
+  let gustParticles = [];
+  let isContemplative = true;
+  let lastMode = 'slow';
+
+  const BASE_WIND = 0.36;
+  const BASE_TARGET = 0.48;
+  const CONTEMPLATIVE_WIND = 0.55;
+  const CONTEMPLATIVE_TARGET = 0.65;
 
   function rebuildElements() {
     stalks = [];
     leaves = [];
+    gustParticles = [];
     const count = Math.max(6, Math.floor(p.width / 160));
     for (let i = 0; i < count; i++) {
       const x = p.map(i, 0, count - 1, p.width * 0.05, p.width * 0.95);
@@ -90,28 +99,49 @@ export function createBambooScene(p) {
     }
   }
 
+  function spawnGustParticles() {
+    const screenScale = p.map(p.width * p.height, 200000, 1400000, 1, 1.8, true);
+    const count = Math.floor(p.random(100, 140) * screenScale);
+    const drift = p.random(0.9, 1.6);
+    for (let i = 0; i < count; i++) {
+      const spreadX = p.random(-0.12, 1.12) * p.width;
+      const spreadY = p.random(-0.08, 1.08) * p.height;
+      gustParticles.push({
+        x: spreadX,
+        y: spreadY,
+        vx: p.random(1.6, 3.6) * drift,
+        vy: p.random(-1.1, 1),
+        life: p.random(90, 150),
+        size: p.random(2.8, 7.6)
+      });
+    }
+  }
+
   return {
     id: 'bamboo',
     name: 'Forêt de bambous',
     description: 'Feuilles dans la brise du soir',
     enter() {
       rebuildElements();
-      wind = windTarget = 0.4;
+      wind = windTarget = isContemplative ? CONTEMPLATIVE_WIND : BASE_WIND;
       time = 0;
     },
     resize() {
       rebuildElements();
+      wind = windTarget = isContemplative ? CONTEMPLATIVE_WIND : BASE_WIND;
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      windTarget = 1.1;
+      if (!isContemplative) return;
+      windTarget = Math.min(2.8, windTarget + 1.8);
+      spawnGustParticles();
     },
     draw() {
       time += 16 * speedMultiplier;
-      wind = p.lerp(wind, windTarget, 0.02 * speedMultiplier);
-      windTarget = p.lerp(windTarget, 0.4, 0.01 * speedMultiplier);
+      wind = p.lerp(wind, windTarget, 0.05 * speedMultiplier);
+      windTarget = p.lerp(windTarget, isContemplative ? CONTEMPLATIVE_TARGET : BASE_TARGET, 0.012 * speedMultiplier);
 
       const gradientSteps = 160;
       for (let i = 0; i < gradientSteps; i++) {
@@ -128,6 +158,18 @@ export function createBambooScene(p) {
       p.fill(12, 46, 34, 180);
       p.rect(0, p.height * 0.9, p.width, p.height * 0.12);
 
+      gustParticles = gustParticles.filter(particle => {
+        particle.x += particle.vx * speedMultiplier;
+        particle.y += particle.vy * speedMultiplier;
+        particle.life -= 1.5 * speedMultiplier;
+        if (particle.life <= 0) return false;
+        const alpha = p.map(particle.life, 0, 85, 0, 120, true);
+        p.noStroke();
+        p.fill(200, 230, 220, alpha);
+        p.ellipse(particle.x, particle.y, particle.size, particle.size * 0.7);
+        return particle.x < p.width + 20;
+      });
+
       stalks.forEach(stalk => {
         stalk.draw(time, wind, speedMultiplier);
       });
@@ -139,6 +181,12 @@ export function createBambooScene(p) {
       p.noStroke();
       p.fill(0, 0, 0, 80);
       p.rect(0, p.height - 6, p.width, 12);
+    },
+    setMode(modeValue = 'slow') {
+      if (modeValue === lastMode) return;
+      lastMode = modeValue;
+      isContemplative = modeValue === 'slow';
+      windTarget = wind = isContemplative ? CONTEMPLATIVE_WIND : BASE_WIND;
     }
   };
 }
