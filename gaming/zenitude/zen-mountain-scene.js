@@ -145,6 +145,9 @@ export function createMountainScene(p) {
   let sunPulse = 0;
   let sunProgress = 0;
   let sunPulseBoost = 0;
+  let heatRipples = [];
+  let isContemplative = true;
+  let lastMode = 'slow';
   let lastFrameSeconds = null;
   const startDelay = 1.5;
   const cycleDuration = 60; // seconds for a full left-to-right sunset arc
@@ -159,9 +162,10 @@ export function createMountainScene(p) {
     name: 'Aube sur les sommets',
     description: 'Lever de soleil doux sur les montagnes',
     enter() {
-      breathePulse = 1;
+      breathePulse = isContemplative ? 0 : 1;
       sunProgress = -startDelay / cycleDuration;
       sunPulseBoost = 0;
+      heatRipples = [];
       lastFrameSeconds = null;
     },
     resize,
@@ -169,9 +173,27 @@ export function createMountainScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      breathePulse = 1;
+      if (!isContemplative) {
+        breathePulse = 1;
+      }
       sunPulse = 1;
       sunPulseBoost = Math.min(0.35, sunPulseBoost + 0.2);
+      if (isContemplative) {
+        const now = p.millis();
+        const sunRadius = p.height * 0.12;
+        const sunPathY = p.height * 0.72;
+        const sunLift = p.height * 0.6;
+        const eased = 0.5 - 0.5 * Math.cos(p.constrain(sunProgress, 0, 1) * Math.PI);
+        const arcRise = Math.sin(eased * Math.PI);
+        const sunY = sunProgress < 0 ? p.height * 0.78 : Math.max(sunRadius * 0.65, sunPathY - arcRise * sunLift);
+        const sunX = p.lerp(-sunRadius * 0.8, p.width + sunRadius * 0.8, eased);
+        const centerFactor = 1 - p.constrain(Math.abs(sunX - p.width * 0.5) / (p.width * 0.5), 0, 1);
+        const strength = 0.45 + 0.75 * centerFactor;
+        heatRipples.push({ start: now, sunX, sunY, strength });
+        if (heatRipples.length > 5) {
+          heatRipples.shift();
+        }
+      }
     },
     draw() {
       const nowSeconds = p.millis() * 0.001;
@@ -212,7 +234,25 @@ export function createMountainScene(p) {
       drawSun(p, { x: sunX, y: sunY }, warmth, sunVisibility, delta);
       drawMountains(p, 5, warmth);
 
-      mistLayers.forEach(layer => layer.draw(speedMultiplier));
+      mistLayers.forEach(layer => layer.draw(isContemplative ? 0 : speedMultiplier));
+
+      if (isContemplative && heatRipples.length) {
+        const nowMs = p.millis();
+        const rippleDuration = 1400;
+        heatRipples = heatRipples.filter(ripple => {
+          const elapsed = nowMs - ripple.start;
+          if (elapsed >= rippleDuration) return false;
+          const t = elapsed / rippleDuration;
+          const alpha = (1 - t) * (1 - t) * 160 * ripple.strength;
+          const radius = p.height * 0.12 * (1.4 + t * 4);
+          const wobble = p.sin(t * Math.PI * 3) * radius * 0.06 * ripple.strength;
+          p.noFill();
+          p.stroke(255, 200, 140, alpha);
+          p.strokeWeight(3.2 - t * 2.4);
+          p.ellipse(ripple.sunX, ripple.sunY + wobble, radius * 2.4, radius * 1.4);
+          return true;
+        });
+      }
 
       if (breathePulse > 0.01) {
         const alpha = p.map(breathePulse, 0, 1, 0, 90, true);
@@ -236,6 +276,15 @@ export function createMountainScene(p) {
       p.noStroke();
       p.fill(34, 82, 52, 200);
       p.rect(0, p.height * 0.9, p.width, p.height * 0.12);
+    },
+    setMode(modeValue = 'slow') {
+      if (modeValue === lastMode) return;
+      lastMode = modeValue;
+      isContemplative = modeValue === 'slow';
+      if (isContemplative) {
+        breathePulse = 0;
+      }
+      heatRipples = [];
     }
   };
 }

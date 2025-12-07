@@ -80,14 +80,30 @@ export function createLotusScene(p) {
   let isContemplative = true;
   let lastMode = 'slow';
   const maxLotusCount = 26;
-  const bloomDuration = 5200;
-  const bloomFadeIn = 1500;
-  const bloomFadeOut = 1900;
+  const baseBloomDuration = 5200;
+  const baseBloomFadeIn = 1500;
+  const baseBloomFadeOut = 1900;
+  const baseBloomHold = baseBloomDuration - (baseBloomFadeIn + baseBloomFadeOut);
+  let bloomDuration = baseBloomDuration;
+  let bloomFadeIn = baseBloomFadeIn;
+  let bloomFadeOut = baseBloomFadeOut;
   let bloomActive = false;
   let bloomCooldownUntil = 0;
 
   function spawnRipple(x, y) {
     ripples.push(new Ripple(p, x, y));
+  }
+
+  function syncBloomTimings() {
+    if (isContemplative) {
+      bloomFadeIn = baseBloomFadeIn * 2;
+      bloomFadeOut = baseBloomFadeOut * 2;
+      bloomDuration = bloomFadeIn + bloomFadeOut + baseBloomHold;
+    } else {
+      bloomFadeIn = baseBloomFadeIn;
+      bloomFadeOut = baseBloomFadeOut;
+      bloomDuration = baseBloomDuration;
+    }
   }
 
   function spawnLotus(x, y, scale, options = {}) {
@@ -148,6 +164,7 @@ export function createLotusScene(p) {
       bloomLotus = [];
       bloomActive = false;
       bloomCooldownUntil = 0;
+      syncBloomTimings();
       rebuildLotus();
     },
     resize() {
@@ -155,6 +172,7 @@ export function createLotusScene(p) {
       bloomLotus = [];
       bloomActive = false;
       bloomCooldownUntil = 0;
+      syncBloomTimings();
       rebuildLotus();
     },
     setSpeedMultiplier(multiplier = 1) {
@@ -299,6 +317,7 @@ export function createLotusScene(p) {
       lastMode = modeValue;
       isContemplative = modeValue === 'slow';
       bloomCooldownUntil = 0;
+      syncBloomTimings();
       rebuildLotus();
     }
   };
