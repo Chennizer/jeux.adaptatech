@@ -1,6 +1,40 @@
 export function createShoreScene(p) {
   let time = 0;
   let speedMultiplier = 1;
+  let clouds = [];
+  let foamBursts = [];
+  let wavePulse = 0;
+
+  function buildClouds() {
+    clouds = [];
+    const count = Math.max(5, Math.floor(p.width / 240));
+    for (let i = 0; i < count; i++) {
+      clouds.push({
+        x: p.random(p.width),
+        y: p.random(p.height * 0.05, p.height * 0.22),
+        w: p.random(p.width * 0.14, p.width * 0.28),
+        h: p.random(40, 82),
+        speed: p.random(0.18, 0.32),
+        alpha: p.random(120, 190),
+        offset: p.random(1000)
+      });
+    }
+  }
+
+  function spawnFoamBursts() {
+    const crest = p.height * 0.62 + Math.sin(time * 0.00075) * 22;
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+      foamBursts.push({
+        x: p.random(p.width),
+        y: crest + p.random(-8, 8),
+        vx: p.random(-0.4, 0.4),
+        vy: p.random(-0.6, -0.1),
+        life: p.random(55, 90),
+        size: p.random(4, 9)
+      });
+    }
+  }
 
   return {
     id: 'shore',
@@ -8,14 +42,20 @@ export function createShoreScene(p) {
     description: 'Vagues douces sur le sable',
     enter() {
       time = 0;
+      wavePulse = 0;
+      foamBursts = [];
+      buildClouds();
     },
     resize() {
-      // No dynamic elements to rebuild on resize
+      buildClouds();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
-    pulse() {},
+    pulse() {
+      wavePulse = 1;
+      spawnFoamBursts();
+    },
     draw() {
       time += 16 * speedMultiplier;
 
@@ -33,17 +73,34 @@ export function createShoreScene(p) {
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, p.width, skyHeight);
 
+      clouds.forEach(cloud => {
+        cloud.x += cloud.speed * speedMultiplier;
+        if (cloud.x - cloud.w * 0.6 > p.width) {
+          cloud.x = -cloud.w;
+          cloud.y = p.random(p.height * 0.05, p.height * 0.22);
+        }
+        const wobble = Math.sin(time * 0.0003 + cloud.offset) * 6;
+        p.noStroke();
+        p.fill(240, 248, 255, cloud.alpha);
+        p.ellipse(cloud.x, cloud.y + wobble, cloud.w, cloud.h);
+        p.ellipse(cloud.x - cloud.w * 0.24, cloud.y + wobble + 6, cloud.w * 0.6, cloud.h * 0.7);
+        p.ellipse(cloud.x + cloud.w * 0.22, cloud.y + wobble + 4, cloud.w * 0.5, cloud.h * 0.72);
+      });
+
       const shorelineBase = p.height * 0.62;
-      const shorelineAmplitude = 26;
-      const shorelineFrequency = (p.TWO_PI / p.width) * 1.1;
-      const verticalSwell = p.sin(time * 0.00075) * 22;
+      const waveEnergy = 1 + wavePulse * 0.8;
+      const shorelineAmplitude = 26 * waveEnergy;
+      const shorelineFrequency = (p.TWO_PI / p.width) * 1.1 * waveEnergy;
+      const verticalSwell = p.sin(time * 0.00075 * waveEnergy) * 22 * waveEnergy;
 
       const segments = 160;
       const baseShoreline = [];
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
         const sine = p.sin(x * shorelineFrequency);
-        baseShoreline[i] = shorelineBase + sine * shorelineAmplitude;
+        const jitter = p.sin(time * 0.0014 + i * 0.08) * 3.2 * waveEnergy;
+        const noise = (p.noise(time * 0.0002, i * 0.05) - 0.5) * 18 * waveEnergy;
+        baseShoreline[i] = shorelineBase + sine * shorelineAmplitude + jitter + noise;
       }
 
       const shorelineY = baseShoreline.map((y) => y + verticalSwell);
@@ -116,6 +173,32 @@ export function createShoreScene(p) {
         p.vertex(x, shorelineY[i] - 1.5);
       }
       p.endShape();
+
+      foamBursts = foamBursts.filter(foam => {
+        foam.x += foam.vx * speedMultiplier;
+        foam.y += foam.vy * speedMultiplier;
+        foam.vy *= 0.99;
+        foam.life -= 1.2 * speedMultiplier;
+        if (foam.life <= 0) return false;
+        const alpha = p.map(foam.life, 0, 90, 0, 150, true);
+        p.noStroke();
+        p.fill(255, 255, 245, alpha);
+        p.ellipse(foam.x, foam.y, foam.size * 1.3, foam.size * 0.9);
+        return foam.x >= -10 && foam.x <= p.width + 10;
+      });
+
+      for (let i = 0; i < 12; i++) {
+        const t = (i + (time * 0.001 % 1)) / 12;
+        const x = p.width * t;
+        const y = p.lerp(waterTop, maxShoreline, t) - 6;
+        p.stroke(255, 255, 255, 40);
+        p.strokeWeight(1);
+        p.line(x - 24, y + p.sin(time * 0.002 + i) * 3, x + 24, y + p.sin(time * 0.002 + i + 1) * 3);
+      }
+
+      if (wavePulse > 0.01) {
+        wavePulse *= 0.965;
+      }
 
     }
   };

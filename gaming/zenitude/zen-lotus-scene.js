@@ -76,9 +76,25 @@ export function createLotusScene(p) {
   let lilyPadShadows = [];
   let speedMultiplier = 1;
   let currentTime = 0;
+  const maxLotusCount = 26;
 
   function spawnRipple(x, y) {
     ripples.push(new Ripple(p, x, y));
+  }
+
+  function spawnLotus(x, y, scale) {
+    const flower = new Lotus(
+      p,
+      x ?? p.random(p.width * 0.08, p.width * 0.92),
+      y ?? p.random(p.height * 0.35, p.height * 0.85),
+      scale ?? p.random(0.7, 1.4)
+    );
+    flower.alpha = 0;
+    lotusFlowers.push(flower);
+    if (lotusFlowers.length > maxLotusCount) {
+      lotusFlowers.shift();
+    }
+    return flower;
   }
 
   function rebuildLotus() {
@@ -86,10 +102,7 @@ export function createLotusScene(p) {
     lilyPadShadows = [];
     const count = Math.max(10, Math.floor(p.width / 160));
     for (let i = 0; i < count; i++) {
-      const x = p.random(p.width * 0.08, p.width * 0.92);
-      const y = p.random(p.height * 0.35, p.height * 0.85);
-      const scale = p.random(0.7, 1.4);
-      lotusFlowers.push(new Lotus(p, x, y, scale));
+      spawnLotus();
     }
     const padCount = Math.max(14, Math.floor(p.width / 140));
     for (let i = 0; i < padCount; i++) {
@@ -122,6 +135,8 @@ export function createLotusScene(p) {
       lotusFlowers.forEach(flower => {
         spawnRipple(flower.x + p.random(-10, 10), flower.y + p.random(-4, 6));
       });
+      const freshLotus = spawnLotus();
+      spawnRipple(freshLotus.x, freshLotus.y + 4);
     },
     draw() {
       currentTime += 16 * speedMultiplier;

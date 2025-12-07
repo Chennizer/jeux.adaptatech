@@ -142,6 +142,7 @@ export function createMountainScene(p) {
   let mistLayers = [];
   let speedMultiplier = 1;
   let breathePulse = 0;
+  let sunPulse = 0;
   const startDelay = 1.5;
   const cycleDuration = 60; // seconds for a full left-to-right sunset arc
 
@@ -163,9 +164,11 @@ export function createMountainScene(p) {
     },
     pulse() {
       breathePulse = 1;
+      sunPulse = 1;
     },
     draw() {
-      const seconds = p.millis() * 0.001 * speedMultiplier;
+      const pulseSpeedBoost = 1 + sunPulse * 0.12;
+      const seconds = p.millis() * 0.001 * speedMultiplier * pulseSpeedBoost;
       const rawProgress = (seconds - startDelay) / cycleDuration;
       const loopProgress = ((rawProgress % 1) + 1) % 1; // wrap safely for negatives
       const eased = 0.5 - 0.5 * Math.cos(Math.min(1, loopProgress) * Math.PI);
@@ -181,7 +184,7 @@ export function createMountainScene(p) {
       const ridgeHeight = ridgeHeightAt(p, 5, sunX);
       const delta = sunY - ridgeHeight;
       const visibilityBase = seconds < startDelay ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
-      const intensityRamp = p.map(eased, 0, 0.75, 0.65, 1.15, true);
+      const intensityRamp = p.map(eased, 0, 0.75, 0.65, 1.15, true) * (1 + sunPulse * 0.65);
       const sunVisibility = p.constrain(visibilityBase * intensityRamp, 0, 1);
       const warmthLift = p.map(sunVisibility, 0.35, 0.75, 0, 0.2, true);
       const warmth = p.constrain(baseWarmth + warmthLift, 0.25, 1);
@@ -199,6 +202,10 @@ export function createMountainScene(p) {
         p.fill(255, 220, 180, alpha);
         p.rect(0, 0, p.width, p.height);
         breathePulse *= 0.9;
+      }
+
+      if (sunPulse > 0.01) {
+        sunPulse *= 0.94;
       }
 
       if (darkness > 0.01) {

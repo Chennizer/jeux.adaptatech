@@ -65,10 +65,12 @@ export function createBambooScene(p) {
   let windTarget = 0.4;
   let wind = 0.4;
   let speedMultiplier = 1;
+  let gustParticles = [];
 
   function rebuildElements() {
     stalks = [];
     leaves = [];
+    gustParticles = [];
     const count = Math.max(6, Math.floor(p.width / 160));
     for (let i = 0; i < count; i++) {
       const x = p.map(i, 0, count - 1, p.width * 0.05, p.width * 0.95);
@@ -90,6 +92,20 @@ export function createBambooScene(p) {
     }
   }
 
+  function spawnGustParticles() {
+    const count = Math.floor(p.random(18, 26));
+    for (let i = 0; i < count; i++) {
+      gustParticles.push({
+        x: p.random(-40, p.width * 0.35),
+        y: p.random(p.height * 0.2, p.height * 0.92),
+        vx: p.random(1.2, 2.6),
+        vy: p.random(-0.6, 0.4),
+        life: p.random(45, 85),
+        size: p.random(3, 7)
+      });
+    }
+  }
+
   return {
     id: 'bamboo',
     name: 'Forêt de bambous',
@@ -106,7 +122,8 @@ export function createBambooScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      windTarget = 1.1;
+      windTarget = 1.6;
+      spawnGustParticles();
     },
     draw() {
       time += 16 * speedMultiplier;
@@ -127,6 +144,18 @@ export function createBambooScene(p) {
       p.noStroke();
       p.fill(12, 46, 34, 180);
       p.rect(0, p.height * 0.9, p.width, p.height * 0.12);
+
+      gustParticles = gustParticles.filter(particle => {
+        particle.x += particle.vx * speedMultiplier;
+        particle.y += particle.vy * speedMultiplier;
+        particle.life -= 1.5 * speedMultiplier;
+        if (particle.life <= 0) return false;
+        const alpha = p.map(particle.life, 0, 85, 0, 120, true);
+        p.noStroke();
+        p.fill(200, 230, 220, alpha);
+        p.ellipse(particle.x, particle.y, particle.size, particle.size * 0.7);
+        return particle.x < p.width + 20;
+      });
 
       stalks.forEach(stalk => {
         stalk.draw(time, wind, speedMultiplier);
