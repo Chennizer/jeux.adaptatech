@@ -220,6 +220,46 @@
       100% { transform: translate3d(var(--x), var(--y), 0) scale(0.2); opacity: 0; }
     }
 
+    /* end-of-wave celebration */
+    .completion-burst {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      z-index: 500;
+    }
+
+    .completion-ring {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      border: 2px solid var(--ring-color);
+      box-shadow: 0 0 28px var(--ring-color-soft), 0 0 60px var(--ring-color-soft);
+      animation: ring-burst 1s ease-out forwards;
+    }
+
+    .completion-flare {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 50%, var(--ring-color), transparent 68%);
+      filter: blur(8px);
+      opacity: 0.75;
+      animation: flare-fade 1s ease-out forwards;
+    }
+
+    @keyframes ring-burst {
+      0% { transform: scale(0.2); opacity: 0.85; }
+      55% { opacity: 0.65; }
+      100% { transform: scale(6); opacity: 0; }
+    }
+
+    @keyframes flare-fade {
+      0% { transform: scale(0.8); opacity: 0.75; }
+      100% { transform: scale(3.6); opacity: 0; }
+    }
+
     /* released fireflies */
     .firefly {
       position: absolute;
@@ -342,6 +382,7 @@
     let bubbles = [];
     let fireflies = [];
     const MAX_FIREFLIES = 140;
+    let completionLock = false;
 
     const palette = [
       { base: '#ff6b6b', glow: 'rgba(255, 107, 107, 0.55)' },
@@ -477,6 +518,7 @@
     }
 
     function populate() {
+      completionLock = false;
       clearBubbles();
       for (let i = 0; i < bubbleCount; i++) {
         createBubble();
@@ -484,8 +526,12 @@
     }
 
     function checkRepopulate() {
+      if (completionLock) return;
       if (bubbles.length && bubbles.every(b => b.popped)) {
-        setTimeout(populate, 320);
+        completionLock = true;
+        playCompletionAnimation(() => {
+          populate();
+        });
       }
     }
 
@@ -526,6 +572,35 @@
         bubble.el.classList.remove('pop');
         checkRepopulate();
       }, 480);
+    }
+
+    function playCompletionAnimation(done) {
+      const burst = document.createElement('div');
+      burst.className = 'completion-burst';
+      const color = palette[Math.floor(Math.random() * palette.length)];
+
+      const flare = document.createElement('div');
+      flare.className = 'completion-flare';
+      flare.style.setProperty('--ring-color', color.base);
+      flare.style.setProperty('--ring-color-soft', color.glow.replace('0.55', '0.22'));
+      burst.appendChild(flare);
+
+      for (let i = 0; i < 3; i++) {
+        const ring = document.createElement('div');
+        ring.className = 'completion-ring';
+        ring.style.setProperty('--ring-color', color.base);
+        ring.style.setProperty('--ring-color-soft', color.glow.replace('0.55', '0.25'));
+        ring.style.animationDelay = `${i * 80}ms`;
+        burst.appendChild(ring);
+      }
+
+      arena.appendChild(burst);
+
+      setTimeout(() => {
+        burst.remove();
+        completionLock = false;
+        if (typeof done === 'function') done();
+      }, 1050);
     }
 
     /* controls */
