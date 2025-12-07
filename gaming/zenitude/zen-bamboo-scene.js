@@ -66,6 +66,13 @@ export function createBambooScene(p) {
   let wind = 0.55;
   let speedMultiplier = 1;
   let gustParticles = [];
+  let isContemplative = true;
+  let lastMode = 'slow';
+
+  const BASE_WIND = 0.36;
+  const BASE_TARGET = 0.48;
+  const CONTEMPLATIVE_WIND = 0.55;
+  const CONTEMPLATIVE_TARGET = 0.65;
 
   function rebuildElements() {
     stalks = [];
@@ -111,28 +118,30 @@ export function createBambooScene(p) {
   }
 
   return {
-      id: 'bamboo',
-      name: 'Forêt de bambous',
-      description: 'Feuilles dans la brise du soir',
-      enter() {
-        rebuildElements();
-        wind = windTarget = 0.55;
-        time = 0;
-      },
+    id: 'bamboo',
+    name: 'Forêt de bambous',
+    description: 'Feuilles dans la brise du soir',
+    enter() {
+      rebuildElements();
+      wind = windTarget = isContemplative ? CONTEMPLATIVE_WIND : BASE_WIND;
+      time = 0;
+    },
     resize() {
       rebuildElements();
+      wind = windTarget = isContemplative ? CONTEMPLATIVE_WIND : BASE_WIND;
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
     pulse() {
+      if (!isContemplative) return;
       windTarget = Math.min(2.8, windTarget + 1.8);
       spawnGustParticles();
     },
     draw() {
       time += 16 * speedMultiplier;
       wind = p.lerp(wind, windTarget, 0.05 * speedMultiplier);
-      windTarget = p.lerp(windTarget, 0.65, 0.012 * speedMultiplier);
+      windTarget = p.lerp(windTarget, isContemplative ? CONTEMPLATIVE_TARGET : BASE_TARGET, 0.012 * speedMultiplier);
 
       const gradientSteps = 160;
       for (let i = 0; i < gradientSteps; i++) {
@@ -172,6 +181,12 @@ export function createBambooScene(p) {
       p.noStroke();
       p.fill(0, 0, 0, 80);
       p.rect(0, p.height - 6, p.width, 12);
+    },
+    setMode(modeValue = 'slow') {
+      if (modeValue === lastMode) return;
+      lastMode = modeValue;
+      isContemplative = modeValue === 'slow';
+      windTarget = wind = isContemplative ? CONTEMPLATIVE_WIND : BASE_WIND;
     }
   };
 }

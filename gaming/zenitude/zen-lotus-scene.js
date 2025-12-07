@@ -77,10 +77,12 @@ export function createLotusScene(p) {
   let lilyPadShadows = [];
   let speedMultiplier = 1;
   let currentTime = 0;
+  let isContemplative = true;
+  let lastMode = 'slow';
   const maxLotusCount = 26;
-  const bloomDuration = 5000;
-  const bloomFadeIn = 800;
-  const bloomFadeOut = 1500;
+  const bloomDuration = 5200;
+  const bloomFadeIn = 1500;
+  const bloomFadeOut = 1900;
   let bloomActive = false;
   let bloomCooldownUntil = 0;
 
@@ -128,6 +130,13 @@ export function createLotusScene(p) {
         rotation: p.random(-0.2, 0.2)
       });
     }
+
+    if (!isContemplative) {
+      const baseCount = Math.max(12, Math.floor(p.width / 120));
+      for (let i = 0; i < baseCount; i++) {
+        spawnLotus();
+      }
+    }
   }
 
   return {
@@ -152,21 +161,33 @@ export function createLotusScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
+      if (!isContemplative) return;
       const now = p.millis();
       if (bloomActive || now < bloomCooldownUntil) return;
       bloomActive = true;
       bloomCooldownUntil = now + bloomDuration;
-      const clusterCenterX = p.random(p.width * 0.2, p.width * 0.8);
-      const clusterCenterY = p.random(p.height * 0.4, p.height * 0.8);
-      const clusterCount = Math.floor(p.random(5, 8));
-      for (let i = 0; i < clusterCount; i++) {
-        const offsetX = p.random(-80, 80);
-        const offsetY = p.random(-24, 24);
-        const newLotus = spawnLotus(clusterCenterX + offsetX, clusterCenterY + offsetY, p.random(0.85, 1.5), {
+      const bloomCount = Math.floor(p.random(5, 8));
+      const positions = [];
+      let attempts = 0;
+      const maxAttempts = bloomCount * 8;
+      while (positions.length < bloomCount && attempts < maxAttempts) {
+        const candidate = {
+          x: p.random(p.width * 0.12, p.width * 0.88),
+          y: p.random(p.height * 0.38, p.height * 0.88)
+        };
+        const separated = positions.every(pos => p.dist(pos.x, pos.y, candidate.x, candidate.y) > Math.min(p.width, p.height) * 0.18);
+        if (separated) {
+          positions.push(candidate);
+        }
+        attempts++;
+      }
+
+      positions.forEach(pos => {
+        const newLotus = spawnLotus(pos.x, pos.y, p.random(0.85, 1.5), {
           bloom: true
         });
         spawnRipple(newLotus.x + p.random(-10, 10), newLotus.y + p.random(-6, 8));
-      }
+      });
     },
     draw() {
       const delta = p.deltaTime || 16;
@@ -272,6 +293,13 @@ export function createLotusScene(p) {
       if (bloomActive && bloomLotus.length === 0) {
         bloomActive = false;
       }
+    },
+    setMode(modeValue = 'slow') {
+      if (modeValue === lastMode) return;
+      lastMode = modeValue;
+      isContemplative = modeValue === 'slow';
+      bloomCooldownUntil = 0;
+      rebuildLotus();
     }
   };
 }

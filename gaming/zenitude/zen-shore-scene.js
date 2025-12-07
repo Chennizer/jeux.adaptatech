@@ -5,6 +5,8 @@ export function createShoreScene(p) {
   let foamBursts = [];
   let wavePulse = 0;
   let cloudSpeedBoost = 0;
+  let isContemplative = true;
+  let lastMode = 'slow';
 
   function buildClouds() {
     clouds = [];
@@ -54,8 +56,9 @@ export function createShoreScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
+      if (!isContemplative) return;
       wavePulse = 1;
-      cloudSpeedBoost = 1;
+      cloudSpeedBoost = 1.35;
       spawnFoamBursts();
     },
     draw() {
@@ -76,7 +79,8 @@ export function createShoreScene(p) {
       ctx.fillRect(0, 0, p.width, skyHeight);
 
       clouds.forEach(cloud => {
-        const gust = cloud.speed * (1 + cloudSpeedBoost * 1.8);
+        const gustFactor = isContemplative ? 2.4 : 1.6;
+        const gust = cloud.speed * (1 + cloudSpeedBoost * gustFactor);
         cloud.x += gust * speedMultiplier;
         if (cloud.x - cloud.w * 0.6 > p.width) {
           cloud.x = -cloud.w;
@@ -204,9 +208,16 @@ export function createShoreScene(p) {
       }
 
       if (cloudSpeedBoost > 0.01) {
-        cloudSpeedBoost *= 0.94;
+        cloudSpeedBoost *= isContemplative ? 0.93 : 0.97;
       }
 
+    },
+    setMode(modeValue = 'slow') {
+      if (modeValue === lastMode) return;
+      lastMode = modeValue;
+      isContemplative = modeValue === 'slow';
+      cloudSpeedBoost = 0;
+      buildClouds();
     }
   };
 }
