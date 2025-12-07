@@ -143,6 +143,8 @@ export function createMountainScene(p) {
   let speedMultiplier = 1;
   let breathePulse = 0;
   let sunPulse = 0;
+  let sunClock = 0;
+  let lastFrameSeconds = null;
   const startDelay = 1.5;
   const cycleDuration = 60; // seconds for a full left-to-right sunset arc
 
@@ -157,6 +159,8 @@ export function createMountainScene(p) {
     description: 'Lever de soleil doux sur les montagnes',
     enter() {
       breathePulse = 1;
+      sunClock = 0;
+      lastFrameSeconds = null;
     },
     resize,
     setSpeedMultiplier(multiplier = 1) {
@@ -168,7 +172,15 @@ export function createMountainScene(p) {
     },
     draw() {
       const pulseSpeedBoost = 1 + sunPulse * 0.12;
-      const seconds = p.millis() * 0.001 * speedMultiplier * pulseSpeedBoost;
+      const nowSeconds = p.millis() * 0.001;
+      if (lastFrameSeconds === null) {
+        lastFrameSeconds = nowSeconds;
+      }
+      const frameDelta = Math.max(0, Math.min(nowSeconds - lastFrameSeconds, 0.5));
+      sunClock += frameDelta * speedMultiplier * pulseSpeedBoost;
+      lastFrameSeconds = nowSeconds;
+
+      const seconds = sunClock;
       const rawProgress = (seconds - startDelay) / cycleDuration;
       const loopProgress = ((rawProgress % 1) + 1) % 1; // wrap safely for negatives
       const eased = 0.5 - 0.5 * Math.cos(Math.min(1, loopProgress) * Math.PI);
