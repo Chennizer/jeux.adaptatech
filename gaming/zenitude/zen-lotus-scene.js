@@ -78,10 +78,11 @@ export function createLotusScene(p) {
   let speedMultiplier = 1;
   let currentTime = 0;
   const maxLotusCount = 26;
-  const bloomDuration = 5200;
-  const bloomFadeIn = 900;
-  const bloomFadeOut = 1400;
+  const bloomDuration = 5000;
+  const bloomFadeIn = 800;
+  const bloomFadeOut = 1500;
   let bloomActive = false;
+  let bloomCooldownUntil = 0;
 
   function spawnRipple(x, y) {
     ripples.push(new Ripple(p, x, y));
@@ -117,10 +118,6 @@ export function createLotusScene(p) {
     bloomLotus = [];
     bloomActive = false;
     lilyPadShadows = [];
-    const count = Math.floor(p.random(2, 4));
-    for (let i = 0; i < count; i++) {
-      spawnLotus();
-    }
     const padCount = Math.max(14, Math.floor(p.width / 140));
     for (let i = 0; i < padCount; i++) {
       lilyPadShadows.push({
@@ -141,23 +138,27 @@ export function createLotusScene(p) {
       ripples = [];
       bloomLotus = [];
       bloomActive = false;
+      bloomCooldownUntil = 0;
       rebuildLotus();
     },
     resize() {
       ripples = [];
       bloomLotus = [];
       bloomActive = false;
+      bloomCooldownUntil = 0;
       rebuildLotus();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      if (bloomActive) return;
+      const now = p.millis();
+      if (bloomActive || now < bloomCooldownUntil) return;
       bloomActive = true;
+      bloomCooldownUntil = now + bloomDuration;
       const clusterCenterX = p.random(p.width * 0.2, p.width * 0.8);
       const clusterCenterY = p.random(p.height * 0.4, p.height * 0.8);
-      const clusterCount = Math.floor(p.random(6, 8));
+      const clusterCount = Math.floor(p.random(5, 8));
       for (let i = 0; i < clusterCount; i++) {
         const offsetX = p.random(-80, 80);
         const offsetY = p.random(-24, 24);
@@ -168,7 +169,8 @@ export function createLotusScene(p) {
       }
     },
     draw() {
-      currentTime += 16 * speedMultiplier;
+      const delta = p.deltaTime || 16;
+      currentTime += delta * speedMultiplier;
       const waterSteps = 200;
       const heightStep = p.height / waterSteps;
       p.noStroke();
@@ -220,7 +222,7 @@ export function createLotusScene(p) {
       });
 
       bloomLotus = bloomLotus.filter(flower => {
-        flower.elapsed += 16 * speedMultiplier;
+        flower.elapsed += delta;
         const elapsed = flower.elapsed;
         const duration = flower.bloomDuration;
         const fadeIn = flower.fadeIn;

@@ -93,16 +93,19 @@ export function createBambooScene(p) {
   }
 
   function spawnGustParticles() {
-    const count = Math.floor(p.random(36, 52));
-    const drift = p.random(0.8, 1.4);
+    const screenScale = p.map(p.width * p.height, 200000, 1400000, 1, 1.8, true);
+    const count = Math.floor(p.random(100, 140) * screenScale);
+    const drift = p.random(0.9, 1.6);
     for (let i = 0; i < count; i++) {
+      const spreadX = p.random(-0.12, 1.12) * p.width;
+      const spreadY = p.random(-0.08, 1.08) * p.height;
       gustParticles.push({
-        x: p.random(-20, p.width * 1.05),
-        y: p.random(p.height * 0.08, p.height * 0.95),
-        vx: p.random(1.4, 3.2) * drift,
-        vy: p.random(-0.8, 0.6),
-        life: p.random(55, 105),
-        size: p.random(3, 7)
+        x: spreadX,
+        y: spreadY,
+        vx: p.random(1.6, 3.6) * drift,
+        vy: p.random(-1.1, 1),
+        life: p.random(90, 150),
+        size: p.random(2.8, 7.6)
       });
     }
   }
