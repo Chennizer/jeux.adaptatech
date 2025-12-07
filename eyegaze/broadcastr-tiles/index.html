@@ -528,6 +528,9 @@
     const openLogModalBtn = document.getElementById('open-log-modal');
     const closeLogModalBtn = document.getElementById('close-log-modal');
 
+    const correctSound = new Audio('../../sounds/success3.mp3');
+    const incorrectSound = new Audio('../../sounds/error.mp3');
+
     const LOCAL_CATEGORY_KEY = '__local_videos';
 
     const CATEGORY_LABELS = {
@@ -559,6 +562,7 @@
     let uploadedImages = [];
     let lastSentTiles = [];
     let lastTilesSentAt = null;
+    let lastAnswerCompletedAt = null;
     let allReinforcers = [];
     let localVideos = []; // { id, name, url }
     let selectionLog = [];
@@ -1002,6 +1006,7 @@
       if (promptPayload?.error) return;
       lastSentTiles = tiles;
       lastTilesSentAt = Date.now();
+      lastAnswerCompletedAt = lastTilesSentAt;
       updateLogMeta();
 
       const dwellTimeMs = Number(dwellTimeInput?.value) || 1500;
@@ -1059,7 +1064,10 @@
           const label = selectionLabel || selectedTile?.label || 'Tuile';
           const correct = typeof selectionCorrect === 'boolean' ? selectionCorrect : !!selectedTile?.correct;
           const eventTime = Date.now();
-          const delaySinceSendMs = typeof lastTilesSentAt === 'number' ? eventTime - lastTilesSentAt : null;
+          const baseline = typeof lastAnswerCompletedAt === 'number'
+            ? lastAnswerCompletedAt
+            : (typeof lastTilesSentAt === 'number' ? lastTilesSentAt : null);
+          const delaySinceSendMs = typeof baseline === 'number' ? eventTime - baseline : null;
 
           appendToSessionLog({
             tileId,
@@ -1070,9 +1078,18 @@
             timestamp: eventTime
           });
 
+          lastAnswerCompletedAt = eventTime;
+
           if (correct) {
             showToast('Bonne réponse envoyée.');
+            correctSound?.play?.().catch(() => {});
+          } else {
+            incorrectSound?.play?.().catch(() => {});
           }
+        }
+        if (type === 'reinforcer-ended' && typeof event.data?.endedAt === 'number') {
+          lastAnswerCompletedAt = event.data.endedAt;
+          updateLogMeta();
         }
       };
       setStatus('En attente du viewer...');
