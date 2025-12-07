@@ -14,7 +14,7 @@ const SCENE_SOUNDTRACKS = {
   mountain: '../../sounds/sadness/subtlewind.mp3',
   lotus: '../../sounds/sadness/windandsnow.mp3',
   bamboo: '../../sounds/sadness/candle.mp3',
-  shore: '../../sounds/sadness/softrain.mp3'
+  shore: '../../sounds/shore.mp3'
 };
 
 const startOverlayEl = document.getElementById('promptOverlay');
