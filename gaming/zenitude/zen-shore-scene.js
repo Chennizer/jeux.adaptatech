@@ -106,7 +106,7 @@ export function createShoreScene(p) {
       const waveEnergy = 1 + wavePulse * 0.8;
       const shorelineAmplitude = 26 * waveEnergy;
       const shorelineFrequency = (p.TWO_PI / p.width) * 1.1 * waveEnergy;
-      const travelPhase = pulseActive ? waveTravel : 0;
+      const travelPhase = isContemplative ? waveTravel : 0;
       const verticalSwell = p.sin(time * 0.00075 * waveEnergy * motionThrottle) * 22 * waveEnergy;
 
       const segments = 160;
@@ -215,8 +215,12 @@ export function createShoreScene(p) {
       if (wavePulse > 0.01) {
         wavePulse *= 0.965;
         waveTravel += 0.045 * speedMultiplier;
-      } else {
-        waveTravel *= 0.93;
+      } else if (isContemplative) {
+        waveTravel += 0.0025 * speedMultiplier;
+      }
+
+      if (waveTravel > p.TWO_PI * 8) {
+        waveTravel -= p.TWO_PI * 8;
       }
 
       if (cloudSpeedBoost > 0.01) {
