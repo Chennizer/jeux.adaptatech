@@ -73,24 +73,69 @@ class Lotus {
 export function createLotusScene(p) {
   let ripples = [];
   let lotusFlowers = [];
+  let bloomLotus = [];
   let lilyPadShadows = [];
   let speedMultiplier = 1;
   let currentTime = 0;
+  let isContemplative = true;
+  let lastMode = 'slow';
+  const maxLotusCount = 26;
+  const baseBloomDuration = 5200;
+  const baseBloomFadeIn = 1500;
+  const baseBloomFadeOut = 1900;
+  const baseBloomHold = baseBloomDuration - (baseBloomFadeIn + baseBloomFadeOut);
+  let bloomDuration = baseBloomDuration;
+  let bloomFadeIn = baseBloomFadeIn;
+  let bloomFadeOut = baseBloomFadeOut;
+  let bloomActive = false;
+  let bloomCooldownUntil = 0;
 
   function spawnRipple(x, y) {
     ripples.push(new Ripple(p, x, y));
   }
 
+  function syncBloomTimings() {
+    if (isContemplative) {
+      bloomFadeIn = baseBloomFadeIn * 2;
+      bloomFadeOut = baseBloomFadeOut * 2;
+      bloomDuration = bloomFadeIn + bloomFadeOut + baseBloomHold;
+    } else {
+      bloomFadeIn = baseBloomFadeIn;
+      bloomFadeOut = baseBloomFadeOut;
+      bloomDuration = baseBloomDuration;
+    }
+  }
+
+  function spawnLotus(x, y, scale, options = {}) {
+    const { bloom = false, duration = bloomDuration, fadeIn = bloomFadeIn, fadeOut = bloomFadeOut } = options;
+    const flower = new Lotus(
+      p,
+      x ?? p.random(p.width * 0.08, p.width * 0.92),
+      y ?? p.random(p.height * 0.35, p.height * 0.85),
+      scale ?? p.random(0.7, 1.4)
+    );
+    flower.alpha = bloom ? 0 : 1;
+    if (bloom) {
+      flower.isBloom = true;
+      flower.bloomDuration = duration;
+      flower.fadeIn = fadeIn;
+      flower.fadeOut = fadeOut;
+      flower.elapsed = 0;
+      bloomLotus.push(flower);
+    } else {
+      lotusFlowers.push(flower);
+      if (lotusFlowers.length > maxLotusCount) {
+        lotusFlowers.shift();
+      }
+    }
+    return flower;
+  }
+
   function rebuildLotus() {
     lotusFlowers = [];
+    bloomLotus = [];
+    bloomActive = false;
     lilyPadShadows = [];
-    const count = Math.max(10, Math.floor(p.width / 160));
-    for (let i = 0; i < count; i++) {
-      const x = p.random(p.width * 0.08, p.width * 0.92);
-      const y = p.random(p.height * 0.35, p.height * 0.85);
-      const scale = p.random(0.7, 1.4);
-      lotusFlowers.push(new Lotus(p, x, y, scale));
-    }
     const padCount = Math.max(14, Math.floor(p.width / 140));
     for (let i = 0; i < padCount; i++) {
       lilyPadShadows.push({
@@ -101,6 +146,13 @@ export function createLotusScene(p) {
         rotation: p.random(-0.2, 0.2)
       });
     }
+
+    if (!isContemplative) {
+      const baseCount = Math.max(12, Math.floor(p.width / 120));
+      for (let i = 0; i < baseCount; i++) {
+        spawnLotus();
+      }
+    }
   }
 
   return {
@@ -109,22 +161,55 @@ export function createLotusScene(p) {
     description: 'Ondulations calmes et fleurs flottantes',
     enter() {
       ripples = [];
+      bloomLotus = [];
+      bloomActive = false;
+      bloomCooldownUntil = 0;
+      syncBloomTimings();
       rebuildLotus();
     },
     resize() {
       ripples = [];
+      bloomLotus = [];
+      bloomActive = false;
+      bloomCooldownUntil = 0;
+      syncBloomTimings();
       rebuildLotus();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      lotusFlowers.forEach(flower => {
-        spawnRipple(flower.x + p.random(-10, 10), flower.y + p.random(-4, 6));
+      if (!isContemplative) return;
+      const now = p.millis();
+      if (bloomActive || now < bloomCooldownUntil) return;
+      bloomActive = true;
+      bloomCooldownUntil = now + bloomDuration;
+      const bloomCount = Math.floor(p.random(5, 8));
+      const positions = [];
+      let attempts = 0;
+      const maxAttempts = bloomCount * 8;
+      while (positions.length < bloomCount && attempts < maxAttempts) {
+        const candidate = {
+          x: p.random(p.width * 0.12, p.width * 0.88),
+          y: p.random(p.height * 0.38, p.height * 0.88)
+        };
+        const separated = positions.every(pos => p.dist(pos.x, pos.y, candidate.x, candidate.y) > Math.min(p.width, p.height) * 0.18);
+        if (separated) {
+          positions.push(candidate);
+        }
+        attempts++;
+      }
+
+      positions.forEach(pos => {
+        const newLotus = spawnLotus(pos.x, pos.y, p.random(0.85, 1.5), {
+          bloom: true
+        });
+        spawnRipple(newLotus.x + p.random(-10, 10), newLotus.y + p.random(-6, 8));
       });
     },
     draw() {
-      currentTime += 16 * speedMultiplier;
+      const delta = p.deltaTime || 16;
+      currentTime += delta * speedMultiplier;
       const waterSteps = 200;
       const heightStep = p.height / waterSteps;
       p.noStroke();
@@ -175,6 +260,34 @@ export function createLotusScene(p) {
         return alive;
       });
 
+      bloomLotus = bloomLotus.filter(flower => {
+        flower.elapsed += delta;
+        const elapsed = flower.elapsed;
+        const duration = flower.bloomDuration;
+        const fadeIn = flower.fadeIn;
+        const fadeOut = flower.fadeOut;
+
+        if (elapsed < fadeIn) {
+          flower.alpha = p.map(elapsed, 0, fadeIn, 0, 1, true);
+        } else if (elapsed > duration - fadeOut) {
+          flower.alpha = p.map(elapsed, duration - fadeOut, duration, 1, 0, true);
+        } else {
+          flower.alpha = 1;
+        }
+
+        const padAlpha = 70 + flower.alpha * 90;
+        const padT = flower.y / p.height;
+        const padR = p.lerp(30, 50, padT);
+        const padG = p.lerp(120, 150, padT);
+        const padB = p.lerp(120, 170, padT);
+        p.fill(padR, padG, padB, padAlpha);
+        p.ellipse(flower.x, flower.y + 12, 92 * flower.scale, 32 * flower.scale);
+
+        flower.draw(currentTime, flower.alpha);
+
+        return elapsed < duration;
+      });
+
       lotusFlowers.forEach(flower => {
         flower.update(currentTime, speedMultiplier);
         if (flower.alpha < 0.02) {
@@ -194,6 +307,18 @@ export function createLotusScene(p) {
           spawnRipple(flower.x + p.random(-18, 18), flower.y + p.random(-6, 8));
         }
       });
+
+      if (bloomActive && bloomLotus.length === 0) {
+        bloomActive = false;
+      }
+    },
+    setMode(modeValue = 'slow') {
+      if (modeValue === lastMode) return;
+      lastMode = modeValue;
+      isContemplative = modeValue === 'slow';
+      bloomCooldownUntil = 0;
+      syncBloomTimings();
+      rebuildLotus();
     }
   };
 }

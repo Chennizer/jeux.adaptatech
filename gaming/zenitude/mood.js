@@ -206,6 +206,8 @@ function refreshMode() {
   } else {
     mode = value;
   }
+
+  scenes.forEach(scene => scene.setMode?.(mode));
 }
 
 const sketch = p => {
@@ -219,6 +221,7 @@ const sketch = p => {
       createShoreScene(p)
     ];
     scenes.forEach(scene => scene.resize?.());
+    scenes.forEach(scene => scene.setMode?.(mode));
     activeIndex = 0;
     activeScene = scenes[activeIndex];
     p.frameRate(60);
