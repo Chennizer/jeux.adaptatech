@@ -143,7 +143,8 @@ export function createMountainScene(p) {
   let speedMultiplier = 1;
   let breathePulse = 0;
   let sunPulse = 0;
-  let sunClock = 0;
+  let sunProgress = 0;
+  let sunPulseBoost = 0;
   let lastFrameSeconds = null;
   const startDelay = 1.5;
   const cycleDuration = 60; // seconds for a full left-to-right sunset arc
@@ -159,7 +160,8 @@ export function createMountainScene(p) {
     description: 'Lever de soleil doux sur les montagnes',
     enter() {
       breathePulse = 1;
-      sunClock = 0;
+      sunProgress = -startDelay / cycleDuration;
+      sunPulseBoost = 0;
       lastFrameSeconds = null;
     },
     resize,
@@ -169,21 +171,25 @@ export function createMountainScene(p) {
     pulse() {
       breathePulse = 1;
       sunPulse = 1;
+      sunPulseBoost = Math.min(0.35, sunPulseBoost + 0.2);
     },
     draw() {
-      const pulseSpeedBoost = 1 + sunPulse * 0.12;
       const nowSeconds = p.millis() * 0.001;
       if (lastFrameSeconds === null) {
         lastFrameSeconds = nowSeconds;
       }
       const frameDelta = Math.max(0, Math.min(nowSeconds - lastFrameSeconds, 0.5));
-      sunClock += frameDelta * speedMultiplier * pulseSpeedBoost;
+      const baseSpeed = speedMultiplier / cycleDuration;
+      const appliedSpeed = baseSpeed * (1 + sunPulseBoost);
+      sunProgress += frameDelta * appliedSpeed;
+      if (sunProgress > 1) {
+        sunProgress -= Math.floor(sunProgress);
+      }
+      sunPulseBoost *= 0.92;
       lastFrameSeconds = nowSeconds;
 
-      const seconds = sunClock;
-      const rawProgress = (seconds - startDelay) / cycleDuration;
-      const loopProgress = ((rawProgress % 1) + 1) % 1; // wrap safely for negatives
-      const eased = 0.5 - 0.5 * Math.cos(Math.min(1, loopProgress) * Math.PI);
+      const clampedProgress = p.constrain(sunProgress, 0, 1);
+      const eased = 0.5 - 0.5 * Math.cos(clampedProgress * Math.PI);
       const arcRise = Math.sin(eased * Math.PI);
 
       const baseWarmth = p.constrain(p.map(eased, 0, 0.65, 0.4, 1), 0.4, 1);
@@ -191,12 +197,12 @@ export function createMountainScene(p) {
       const sunPathY = p.height * 0.72;
       const sunLift = p.height * 0.6;
       const targetY = sunPathY - arcRise * sunLift;
-      const sunY = seconds < startDelay ? p.height * 0.78 : Math.max(sunRadius * 0.65, targetY);
+      const sunY = sunProgress < 0 ? p.height * 0.78 : Math.max(sunRadius * 0.65, targetY);
       const sunX = p.lerp(-sunRadius * 0.8, p.width + sunRadius * 0.8, eased);
       const ridgeHeight = ridgeHeightAt(p, 5, sunX);
       const delta = sunY - ridgeHeight;
-      const visibilityBase = seconds < startDelay ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
-      const intensityRamp = p.map(eased, 0, 0.75, 0.65, 1.15, true) * (1 + sunPulse * 0.65);
+      const visibilityBase = sunProgress < 0 ? 0 : p.map(delta, -sunRadius, sunRadius, 1, 0, true);
+      const intensityRamp = p.map(eased, 0, 0.75, 0.65, 1.15, true) * (1 + sunPulse * 0.45);
       const sunVisibility = p.constrain(visibilityBase * intensityRamp, 0, 1);
       const warmthLift = p.map(sunVisibility, 0.35, 0.75, 0, 0.2, true);
       const warmth = p.constrain(baseWarmth + warmthLift, 0.25, 1);
