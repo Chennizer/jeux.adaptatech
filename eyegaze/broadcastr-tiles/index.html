@@ -267,7 +267,6 @@
         <div class="options-column">
           <div class="section-card">
             <h3>1. Ajouter des images</h3>
-            <p class="muted">Chargez des images réutilisables pour les choix.</p>
             <div>
               <label class="button" for="image-input">Ajouter des images</label>
               <input type="file" id="image-input" accept="image/*" multiple style="display:none" />
@@ -320,7 +319,6 @@
         <div class="options-column">
           <div class="section-card">
             <h3>2. Préparer vos choix</h3>
-            <p class="muted">Ouvrez la page élève, puis composez les items à envoyer.</p>
             <div class="option-item">
               <label for="choice-count" class="teal-label">Nombre de choix: <span id="choice-count-value">3</span></label>
               <input type="range" id="choice-count" min="1" max="6" value="3" class="styled-slider" />
@@ -334,7 +332,6 @@
         <div class="options-column">
           <div class="section-card reinforcer-card">
             <h3>3. Choisir un renforçateur</h3>
-            <p class="muted">Sélectionnez la vidéo à jouer lorsque la bonne réponse est choisie.</p>
 
             <!-- Category then video selector populated from bucketindex.json -->
             <label for="reinforcer-category" class="teal-label">Catégorie / thème</label>
@@ -347,8 +344,6 @@
               <option value="">Choisir d'abord une catégorie</option>
             </select>
 
-            <p class="muted">Cochez l'option correcte dans la liste des choix.</p>
-
             <!-- Local videos upload (no list, only dropdown) -->
             <div class="option-item video-upload">
               <label class="teal-label" for="video-input">Ajouter des vidéos locales (optionnel)</label>
@@ -356,10 +351,6 @@
                 <label class="button" for="video-input">Ajouter des vidéos</label>
                 <input type="file" id="video-input" accept="video/*" multiple style="display:none" />
               </div>
-              <p class="muted">
-                Elles apparaîtront dans la catégorie « Vidéos locales (cet appareil) ».
-                Recharger la page pour vider la liste.
-              </p>
             </div>
           </div>
         </div>
@@ -509,29 +500,10 @@
       });
     }
 
-    function applyChoicesFromState() {
-      if (!loadedState || !Array.isArray(loadedState.choices)) return;
-      const rows = Array.from(document.querySelectorAll('.choice-row'));
-      loadedState.choices.forEach((saved, index) => {
-        if (!rows[index] || !saved) return;
-        const row = rows[index];
-        const typeSelect = row.querySelector('select.choice-type');
-        if (!typeSelect) return;
-
-        // Set type and trigger re-render of input
-        typeSelect.value = saved.type || 'number';
-        typeSelect.dispatchEvent(new Event('change'));
-
-        const valueEl = row.querySelector('.choice-input');
-        if (valueEl && typeof saved.value === 'string') {
-          valueEl.value = saved.value;
-        }
-        const correctEl = row.querySelector('input[type="checkbox"][name="correct-choice"]');
-        if (correctEl) correctEl.checked = !!saved.correct;
-      });
-    }
-
     function renderChoices() {
+      const existingChoices = collectChoicesForState();
+      const shouldUseLoadedState = !stateAppliedToChoices && loadedState && Array.isArray(loadedState.choices);
+      const sourceChoices = shouldUseLoadedState ? loadedState.choices : existingChoices;
       const count = Math.max(1, Math.min(6, Number(choiceCountInput.value) || 1));
       choiceCountInput.value = count;
       choiceCountValue.textContent = count;
@@ -540,6 +512,9 @@
         const row = document.createElement('div');
         row.className = 'choice-row';
 
+        const savedChoice = sourceChoices?.[i];
+        const initialType = savedChoice?.type || 'number';
+
         const typeSelect = document.createElement('select');
         typeSelect.className = 'choice-type';
         typeSelect.innerHTML = `
@@ -547,7 +522,7 @@
           <option value="number">Nombre</option>
           <option value="text">Texte</option>
         `;
-        typeSelect.value = 'number';
+        typeSelect.value = initialType;
 
         const contentWrapper = document.createElement('div');
 
@@ -588,11 +563,12 @@
         }
 
         typeSelect.addEventListener('change', () => {
-          refreshContentInput();
+          const currentValue = contentWrapper.querySelector('.choice-input')?.value;
+          refreshContentInput(currentValue);
           saveState();
         });
 
-        refreshContentInput();
+        refreshContentInput(savedChoice?.value);
 
         row.appendChild(typeSelect);
         row.appendChild(contentWrapper);
@@ -602,6 +578,7 @@
         const correctInput = document.createElement('input');
         correctInput.type = 'checkbox';
         correctInput.name = 'correct-choice';
+        correctInput.checked = !!savedChoice?.correct;
         correctInput.addEventListener('change', (e) => {
           if (e.target.checked) {
             document.querySelectorAll('input[name="correct-choice"]').forEach((box) => {
@@ -618,9 +595,7 @@
         choicesContainer.appendChild(row);
       }
 
-      // Première application de l’état sauvegardé sur les lignes
-      if (loadedState && !stateAppliedToChoices && Array.isArray(loadedState.choices)) {
-        applyChoicesFromState();
+      if (shouldUseLoadedState) {
         stateAppliedToChoices = true;
       }
     }
