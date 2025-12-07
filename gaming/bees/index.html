@@ -321,6 +321,7 @@
       z-index: 9;
       box-shadow: 0 6px 18px rgba(0,0,0,0.45);
     }
+
     #endBanner {
       position: fixed;
       top: 50%;
@@ -338,26 +339,48 @@
       pointer-events: none;
       transition: opacity 0.2s ease, transform 0.2s ease;
       z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
     }
     #endBanner.visible {
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
     }
-    .restart-subtext {
-      display: block;
-      margin-top: 0.35rem;
-      font-size: 0.95rem;
-      font-weight: 650;
-      color: #d8e7f3;
+
+    .victory-text {
+      margin-bottom: 0.3rem;
     }
 
-    /* -------- GAME CANVAS -------- */
-    canvas {
-      display: block;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
+    .restart-visual {
+      margin-top: 0.35rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .restart-arrow {
+      width: 0;
+      height: 0;
+      border-left: 14px solid transparent;
+      border-right: 14px solid transparent;
+      border-top: 24px solid #fbbf24;
+      filter: drop-shadow(0 0 8px rgba(251,191,36,0.9));
+      animation: arrowBounce 0.9s ease-in-out infinite;
+    }
+
+.restart-switch-icon {
+  width: 320px;
+  max-width: 50vw;
+  image-rendering: auto;
+}
+
+    @keyframes arrowBounce {
+      0%   { transform: translateY(0); }
+      40%  { transform: translateY(6px); }
+      100% { transform: translateY(0); }
     }
 
     .controls-hint {
@@ -378,6 +401,15 @@
       font-family: monospace;
       font-size: 0.8rem;
       color: #fbbf24;
+    }
+
+    /* -------- GAME CANVAS -------- */
+    canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
     }
   </style>
 </head>
@@ -650,6 +682,10 @@
     let gameEnded = false;
     let tripGoal = 5;
 
+    // Victory animation state
+    let victoryPhase = false;
+    let victoryTimer = 0;
+
     // Timing mode state
     let timingMode = false;
     let flowersActive = true;
@@ -673,15 +709,12 @@
       const w = width || window.innerWidth || 1200;
       const g = tripGoal || 5;
 
-      // approximate number of rings needed: 1 center + rings of 6, 12, 18...
-      // total cells up to ring R is 1 + 3 R (R+1)
-      // invert approximately: g ≈ 3R^2 + 3R + 1
       const approxRings = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(g)))); // simple approx
 
       if (gameMode === '1p') {
         const sideWidth = w * 0.4;
         const maxHorizontalSpace = sideWidth * 0.9; // keep some margin
-        const maxRadiusFromSpace = maxHorizontalSpace / (1.5 * approxRings * 2); 
+        const maxRadiusFromSpace = maxHorizontalSpace / (1.5 * approxRings * 2);
         const raw = Math.min(60, maxRadiusFromSpace);
         hexRadius = Math.max(22, raw);
       } else {
@@ -805,7 +838,7 @@
       bgMusic.play().catch(()=>{});
     }
 
-    // Switch image asset
+    // Switch image asset (used both in game and victory overlay)
     const switchImg = new Image();
     switchImg.src = '../../images/redswitch.png';
 
@@ -870,18 +903,30 @@
       goalDisplay.textContent = goalText.join('  •  ');
     }
 
-    function getRestartHintText() {
-      const lang = (document.documentElement.lang || 'fr').split('-')[0];
-      return restartHintTemplate?.getAttribute(`data-${lang}`)
-        || restartHintTemplate?.getAttribute('data-en')
-        || 'Hold your switch to restart';
-    }
-
     function endGame(message) {
       gameEnded = true;
-      const restartCopy = getRestartHintText();
-      endBanner.innerHTML = `${message}<span class="restart-subtext">${restartCopy}</span>`;
+      victoryPhase = true;
+      victoryTimer = 0;
+
+      // Visual restart prompt: arrow + big switch image, no text
+      endBanner.innerHTML = `
+        <div class="restart-visual">
+          <div class="restart-arrow"></div>
+          <img class="restart-switch-icon" src="../../images/redswitch.png" alt="">
+        </div>
+      `;
       endBanner.className = 'visible';
+
+      // Honey burst particles around each finished hive
+      hives.forEach(h => {
+        if (!h.finished) return;
+        const baseX = h.centerX;
+        const baseY = h.centerY;
+        const bright = mixHex(h.waxColor, '#ffffff', 0.4);
+        const mid = h.waxColor;
+        spawnParticles(baseX, baseY, [bright, mid, '#ffffff']);
+      });
+
       // Background music keeps playing by design
     }
 
@@ -921,6 +966,8 @@
       overlay.style.display = 'none';
       gameRunning = true;
       gameEnded = false;
+      victoryPhase = false;
+      victoryTimer = 0;
       endBanner.className = '';
       endBanner.textContent = '';
       cancelRestartHold();
@@ -1200,6 +1247,24 @@
       update(dt) {
         const prevReady = this.ready;
 
+        // Victory orbit animation for finished hives
+        if (this.finished && victoryPhase) {
+          const orbitRadius = hexRadius * 2.2;
+          const verticalFactor = 0.65;
+          const orbitSpeed = 1.6;
+
+          this.bees.forEach((b, index) => {
+            const angle = orbitSpeed * victoryTimer + (index / this.bees.length) * Math.PI * 2;
+            b.wobblePhase += dt * 6;
+            b.x = this.centerX + Math.cos(angle) * orbitRadius;
+            b.y = this.centerY + Math.sin(angle) * orbitRadius * verticalFactor;
+            b.angle = angle + Math.PI / 2;
+          });
+
+          // During victory phase, no regular movement logic for this hive
+          return;
+        }
+
         const allIdle = this.bees.every(b => b.state === 'idle');
         this.ready =
           allIdle &&
@@ -1337,7 +1402,7 @@
             timingSpentThisCycle = true;
             flowersActive = false;
             timingState = 'waiting';
-            timeUntilNextState = randRange(2, 5);
+            timeUntilNextState = randRange(10, 20);
             timingCapturedByPlayerIndex = null;
           }
         }
@@ -1397,7 +1462,7 @@
       if (timingMode) {
         flowersActive = false;
         timingState = 'waiting';
-        timeUntilNextState = randRange(2, 5);
+        timeUntilNextState = randRange(10, 20);
         timingSpentThisCycle = false;
         timingCapturedByPlayerIndex = null;
       } else {
@@ -1426,8 +1491,8 @@
 
       for(let i=0; i<count; i++) {
         const type = Math.random() > 0.5 ? 'daisy' : 'tulip';
-        const size = 12 + Math.random() * 10;
-        const stemHeight = 90 + Math.random() * 70;
+        const size = (12 + Math.random() * 10) * 1.5;     // 50% bigger
+        const stemHeight = (90 + Math.random() * 70) * 1.5;
         flowers.push({
           x: minX + Math.random() * (maxX - minX),
           stemHeight,
@@ -1986,17 +2051,22 @@
           if (timingState === 'waiting') {
             flowersActive = true;
             timingState = 'visible';
-            timeUntilNextState = 10;
+            timeUntilNextState = 10; // time with flowers visible
             timingSpentThisCycle = false;
             timingCapturedByPlayerIndex = null;
           } else if (timingState === 'visible') {
             flowersActive = false;
             timingState = 'waiting';
-            timeUntilNextState = randRange(2, 5);
+            timeUntilNextState = randRange(10, 20); // 10–20 seconds with no flowers
             timingSpentThisCycle = false;
             timingCapturedByPlayerIndex = null;
           }
         }
+      }
+
+      // Victory timer for animation
+      if (victoryPhase) {
+        victoryTimer += dt;
       }
 
       hives.forEach(h => h.update(dt));
@@ -2118,6 +2188,31 @@
       drawPlayerLabels(ctx, layoutInfo);
       drawFlowers(ctx);
       hives.forEach(h => h.draw(ctx));
+
+      // Victory glow behind finished hives
+      if (victoryPhase) {
+        const t = Math.min(1, victoryTimer / 3);
+        const pulse = 0.5 + 0.5 * Math.sin(victoryTimer * 4);
+        hives.forEach(h => {
+          if (!h.finished) return;
+          const radius = hexRadius * (4 + t * 2);
+          const col = mixHex(h.waxColor, '#ffffff', 0.4);
+          const rgb = hexToRgb(col);
+          const grad = ctx.createRadialGradient(h.centerX, h.centerY, 0, h.centerX, h.centerY, radius);
+          grad.addColorStop(0, `rgba(255,255,255,${0.25 + 0.25 * pulse})`);
+          grad.addColorStop(0.5, `rgba(${rgb.r},${rgb.g},${rgb.b},${0.25 * pulse})`);
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(h.centerX, h.centerY, radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+
       drawParticles(ctx);
       drawSwitchPrompt(ctx);
     }
