@@ -7,6 +7,8 @@ export function createShoreScene(p) {
   let cloudSpeedBoost = 0;
   let isContemplative = true;
   let lastMode = 'slow';
+  let waveTravel = 0;
+  let cloudPulseHold = 0;
 
   function buildClouds() {
     clouds = [];
@@ -47,6 +49,8 @@ export function createShoreScene(p) {
       time = 0;
       wavePulse = 0;
       foamBursts = [];
+      waveTravel = 0;
+      cloudPulseHold = 0;
       buildClouds();
     },
     resize() {
@@ -58,11 +62,14 @@ export function createShoreScene(p) {
     pulse() {
       if (!isContemplative) return;
       wavePulse = 1;
-      cloudSpeedBoost = 1.35;
+      cloudSpeedBoost = 1.8;
+      cloudPulseHold = 1;
       spawnFoamBursts();
     },
     draw() {
-      time += 16 * speedMultiplier;
+      const pulseActive = isContemplative && wavePulse > 0.01;
+      const motionThrottle = pulseActive ? 0.35 : 1;
+      time += 16 * speedMultiplier * motionThrottle;
 
       const skyHeight = p.height * 0.45;
       const waterTop = skyHeight;
@@ -80,7 +87,8 @@ export function createShoreScene(p) {
 
       clouds.forEach(cloud => {
         const gustFactor = isContemplative ? 2.4 : 1.6;
-        const gust = cloud.speed * (1 + cloudSpeedBoost * gustFactor);
+        const pulseBoost = pulseActive ? Math.max(cloudPulseHold, wavePulse * 0.9) : 0;
+        const gust = cloud.speed * (1 + (cloudSpeedBoost + pulseBoost) * gustFactor);
         cloud.x += gust * speedMultiplier;
         if (cloud.x - cloud.w * 0.6 > p.width) {
           cloud.x = -cloud.w;
@@ -98,14 +106,15 @@ export function createShoreScene(p) {
       const waveEnergy = 1 + wavePulse * 0.8;
       const shorelineAmplitude = 26 * waveEnergy;
       const shorelineFrequency = (p.TWO_PI / p.width) * 1.1 * waveEnergy;
-      const verticalSwell = p.sin(time * 0.00075 * waveEnergy) * 22 * waveEnergy;
+      const travelPhase = pulseActive ? waveTravel : 0;
+      const verticalSwell = p.sin(time * 0.00075 * waveEnergy * motionThrottle) * 22 * waveEnergy;
 
       const segments = 160;
       const baseShoreline = [];
       for (let i = 0; i <= segments; i++) {
         const x = (i / segments) * p.width;
-        const sine = p.sin(x * shorelineFrequency);
-        const jitter = p.sin(time * 0.0014 + i * 0.08) * 3.2 * waveEnergy;
+        const sine = p.sin(x * shorelineFrequency - travelPhase);
+        const jitter = p.sin(time * 0.0014 * motionThrottle + i * 0.08) * 3.2 * waveEnergy;
         const noise = (p.noise(time * 0.0002, i * 0.05) - 0.5) * 18 * waveEnergy;
         baseShoreline[i] = shorelineBase + sine * shorelineAmplitude + jitter + noise;
       }
@@ -205,10 +214,17 @@ export function createShoreScene(p) {
 
       if (wavePulse > 0.01) {
         wavePulse *= 0.965;
+        waveTravel += 0.045 * speedMultiplier;
+      } else {
+        waveTravel *= 0.93;
       }
 
       if (cloudSpeedBoost > 0.01) {
-        cloudSpeedBoost *= isContemplative ? 0.93 : 0.97;
+        cloudSpeedBoost *= isContemplative ? 0.985 : 0.97;
+      }
+
+      if (cloudPulseHold > 0.01) {
+        cloudPulseHold *= 0.965;
       }
 
     },
@@ -217,6 +233,8 @@ export function createShoreScene(p) {
       lastMode = modeValue;
       isContemplative = modeValue === 'slow';
       cloudSpeedBoost = 0;
+      waveTravel = 0;
+      cloudPulseHold = 0;
       buildClouds();
     }
   };
