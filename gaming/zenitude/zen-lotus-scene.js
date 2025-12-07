@@ -73,34 +73,51 @@ class Lotus {
 export function createLotusScene(p) {
   let ripples = [];
   let lotusFlowers = [];
+  let bloomLotus = [];
   let lilyPadShadows = [];
   let speedMultiplier = 1;
   let currentTime = 0;
   const maxLotusCount = 26;
+  const bloomDuration = 5200;
+  const bloomFadeIn = 900;
+  const bloomFadeOut = 1400;
+  let bloomActive = false;
 
   function spawnRipple(x, y) {
     ripples.push(new Ripple(p, x, y));
   }
 
-  function spawnLotus(x, y, scale) {
+  function spawnLotus(x, y, scale, options = {}) {
+    const { bloom = false, duration = bloomDuration, fadeIn = bloomFadeIn, fadeOut = bloomFadeOut } = options;
     const flower = new Lotus(
       p,
       x ?? p.random(p.width * 0.08, p.width * 0.92),
       y ?? p.random(p.height * 0.35, p.height * 0.85),
       scale ?? p.random(0.7, 1.4)
     );
-    flower.alpha = 0;
-    lotusFlowers.push(flower);
-    if (lotusFlowers.length > maxLotusCount) {
-      lotusFlowers.shift();
+    flower.alpha = bloom ? 0 : 1;
+    if (bloom) {
+      flower.isBloom = true;
+      flower.bloomDuration = duration;
+      flower.fadeIn = fadeIn;
+      flower.fadeOut = fadeOut;
+      flower.elapsed = 0;
+      bloomLotus.push(flower);
+    } else {
+      lotusFlowers.push(flower);
+      if (lotusFlowers.length > maxLotusCount) {
+        lotusFlowers.shift();
+      }
     }
     return flower;
   }
 
   function rebuildLotus() {
     lotusFlowers = [];
+    bloomLotus = [];
+    bloomActive = false;
     lilyPadShadows = [];
-    const count = Math.max(10, Math.floor(p.width / 160));
+    const count = Math.floor(p.random(2, 4));
     for (let i = 0; i < count; i++) {
       spawnLotus();
     }
@@ -122,21 +139,33 @@ export function createLotusScene(p) {
     description: 'Ondulations calmes et fleurs flottantes',
     enter() {
       ripples = [];
+      bloomLotus = [];
+      bloomActive = false;
       rebuildLotus();
     },
     resize() {
       ripples = [];
+      bloomLotus = [];
+      bloomActive = false;
       rebuildLotus();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      lotusFlowers.forEach(flower => {
-        spawnRipple(flower.x + p.random(-10, 10), flower.y + p.random(-4, 6));
-      });
-      const freshLotus = spawnLotus();
-      spawnRipple(freshLotus.x, freshLotus.y + 4);
+      if (bloomActive) return;
+      bloomActive = true;
+      const clusterCenterX = p.random(p.width * 0.2, p.width * 0.8);
+      const clusterCenterY = p.random(p.height * 0.4, p.height * 0.8);
+      const clusterCount = Math.floor(p.random(6, 8));
+      for (let i = 0; i < clusterCount; i++) {
+        const offsetX = p.random(-80, 80);
+        const offsetY = p.random(-24, 24);
+        const newLotus = spawnLotus(clusterCenterX + offsetX, clusterCenterY + offsetY, p.random(0.85, 1.5), {
+          bloom: true
+        });
+        spawnRipple(newLotus.x + p.random(-10, 10), newLotus.y + p.random(-6, 8));
+      }
     },
     draw() {
       currentTime += 16 * speedMultiplier;
@@ -190,6 +219,34 @@ export function createLotusScene(p) {
         return alive;
       });
 
+      bloomLotus = bloomLotus.filter(flower => {
+        flower.elapsed += 16 * speedMultiplier;
+        const elapsed = flower.elapsed;
+        const duration = flower.bloomDuration;
+        const fadeIn = flower.fadeIn;
+        const fadeOut = flower.fadeOut;
+
+        if (elapsed < fadeIn) {
+          flower.alpha = p.map(elapsed, 0, fadeIn, 0, 1, true);
+        } else if (elapsed > duration - fadeOut) {
+          flower.alpha = p.map(elapsed, duration - fadeOut, duration, 1, 0, true);
+        } else {
+          flower.alpha = 1;
+        }
+
+        const padAlpha = 70 + flower.alpha * 90;
+        const padT = flower.y / p.height;
+        const padR = p.lerp(30, 50, padT);
+        const padG = p.lerp(120, 150, padT);
+        const padB = p.lerp(120, 170, padT);
+        p.fill(padR, padG, padB, padAlpha);
+        p.ellipse(flower.x, flower.y + 12, 92 * flower.scale, 32 * flower.scale);
+
+        flower.draw(currentTime, flower.alpha);
+
+        return elapsed < duration;
+      });
+
       lotusFlowers.forEach(flower => {
         flower.update(currentTime, speedMultiplier);
         if (flower.alpha < 0.02) {
@@ -209,6 +266,10 @@ export function createLotusScene(p) {
           spawnRipple(flower.x + p.random(-18, 18), flower.y + p.random(-6, 8));
         }
       });
+
+      if (bloomActive && bloomLotus.length === 0) {
+        bloomActive = false;
+      }
     }
   };
 }

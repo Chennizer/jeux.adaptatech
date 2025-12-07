@@ -62,8 +62,8 @@ export function createBambooScene(p) {
   let stalks = [];
   let leaves = [];
   let time = 0;
-  let windTarget = 0.4;
-  let wind = 0.4;
+  let windTarget = 0.55;
+  let wind = 0.55;
   let speedMultiplier = 1;
   let gustParticles = [];
 
@@ -93,28 +93,29 @@ export function createBambooScene(p) {
   }
 
   function spawnGustParticles() {
-    const count = Math.floor(p.random(18, 26));
+    const count = Math.floor(p.random(36, 52));
+    const drift = p.random(0.8, 1.4);
     for (let i = 0; i < count; i++) {
       gustParticles.push({
-        x: p.random(-40, p.width * 0.35),
-        y: p.random(p.height * 0.2, p.height * 0.92),
-        vx: p.random(1.2, 2.6),
-        vy: p.random(-0.6, 0.4),
-        life: p.random(45, 85),
+        x: p.random(-20, p.width * 1.05),
+        y: p.random(p.height * 0.08, p.height * 0.95),
+        vx: p.random(1.4, 3.2) * drift,
+        vy: p.random(-0.8, 0.6),
+        life: p.random(55, 105),
         size: p.random(3, 7)
       });
     }
   }
 
   return {
-    id: 'bamboo',
-    name: 'Forêt de bambous',
-    description: 'Feuilles dans la brise du soir',
-    enter() {
-      rebuildElements();
-      wind = windTarget = 0.4;
-      time = 0;
-    },
+      id: 'bamboo',
+      name: 'Forêt de bambous',
+      description: 'Feuilles dans la brise du soir',
+      enter() {
+        rebuildElements();
+        wind = windTarget = 0.55;
+        time = 0;
+      },
     resize() {
       rebuildElements();
     },
@@ -122,13 +123,13 @@ export function createBambooScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      windTarget = 1.6;
+      windTarget = Math.min(2.8, windTarget + 1.8);
       spawnGustParticles();
     },
     draw() {
       time += 16 * speedMultiplier;
-      wind = p.lerp(wind, windTarget, 0.02 * speedMultiplier);
-      windTarget = p.lerp(windTarget, 0.4, 0.01 * speedMultiplier);
+      wind = p.lerp(wind, windTarget, 0.05 * speedMultiplier);
+      windTarget = p.lerp(windTarget, 0.65, 0.012 * speedMultiplier);
 
       const gradientSteps = 160;
       for (let i = 0; i < gradientSteps; i++) {

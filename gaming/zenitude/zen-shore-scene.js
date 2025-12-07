@@ -4,6 +4,7 @@ export function createShoreScene(p) {
   let clouds = [];
   let foamBursts = [];
   let wavePulse = 0;
+  let cloudSpeedBoost = 0;
 
   function buildClouds() {
     clouds = [];
@@ -54,6 +55,7 @@ export function createShoreScene(p) {
     },
     pulse() {
       wavePulse = 1;
+      cloudSpeedBoost = 1;
       spawnFoamBursts();
     },
     draw() {
@@ -74,7 +76,8 @@ export function createShoreScene(p) {
       ctx.fillRect(0, 0, p.width, skyHeight);
 
       clouds.forEach(cloud => {
-        cloud.x += cloud.speed * speedMultiplier;
+        const gust = cloud.speed * (1 + cloudSpeedBoost * 1.8);
+        cloud.x += gust * speedMultiplier;
         if (cloud.x - cloud.w * 0.6 > p.width) {
           cloud.x = -cloud.w;
           cloud.y = p.random(p.height * 0.05, p.height * 0.22);
@@ -198,6 +201,10 @@ export function createShoreScene(p) {
 
       if (wavePulse > 0.01) {
         wavePulse *= 0.965;
+      }
+
+      if (cloudSpeedBoost > 0.01) {
+        cloudSpeedBoost *= 0.94;
       }
 
     }
