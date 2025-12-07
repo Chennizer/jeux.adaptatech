@@ -68,7 +68,8 @@ export function createShoreScene(p) {
     },
     draw() {
       const pulseActive = isContemplative && wavePulse > 0.01;
-      const motionThrottle = pulseActive ? 0.35 : 1;
+      const pulseThrottle = isContemplative ? Math.min(1, wavePulse) * 0.65 : 0;
+      const motionThrottle = 1 - pulseThrottle;
       time += 16 * speedMultiplier * motionThrottle;
 
       const skyHeight = p.height * 0.45;
@@ -214,9 +215,14 @@ export function createShoreScene(p) {
 
       if (wavePulse > 0.01) {
         wavePulse *= 0.965;
-        waveTravel += 0.045 * speedMultiplier;
-      } else if (isContemplative) {
-        waveTravel += 0.0025 * speedMultiplier;
+      }
+
+      if (isContemplative) {
+        const travelBoost = Math.min(1, wavePulse);
+        const baseTravel = 0.0025;
+        const pulseTravel = 0.045;
+        const travelStep = baseTravel + (pulseTravel - baseTravel) * travelBoost;
+        waveTravel += travelStep * speedMultiplier;
       }
 
       if (waveTravel > p.TWO_PI * 8) {
