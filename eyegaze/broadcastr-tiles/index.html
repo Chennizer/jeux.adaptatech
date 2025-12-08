@@ -201,6 +201,108 @@
       transform: translateY(0);
     }
 
+    /* Session log modal */
+    .log-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .log-modal.active {
+      display: flex;
+    }
+
+    .log-dialog {
+      width: min(960px, 96vw);
+      max-height: min(86vh, 900px);
+      overflow: hidden;
+      background: #f8fdfc;
+      border: 2px solid rgba(0, 150, 136, 0.25);
+      border-radius: 12px;
+      box-shadow: 0 18px 38px rgba(0, 0, 0, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px 16px;
+    }
+
+    .log-dialog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .log-dialog h3 {
+      margin: 0;
+      color: #00695c;
+    }
+
+    .log-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+
+    .log-actions .button {
+      background: #009688;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+
+    .log-table {
+      border: 1px solid rgba(0, 150, 136, 0.25);
+      border-radius: 6px;
+      overflow: hidden;
+      background: white;
+    }
+
+    .log-header,
+    .log-row {
+      display: grid;
+      grid-template-columns: 140px 1fr 80px 90px 140px;
+      gap: 6px;
+      padding: 6px 8px;
+      align-items: center;
+    }
+
+    .log-header {
+      background: rgba(0, 150, 136, 0.12);
+      font-weight: 800;
+      color: #004d40;
+      border-bottom: 1px solid rgba(0, 150, 136, 0.25);
+    }
+
+    .log-entries {
+      max-height: 60vh;
+      overflow: auto;
+    }
+
+    .log-row:nth-child(odd) {
+      background: #f5fbfa;
+    }
+
+    .log-row .correct-flag {
+      font-weight: 800;
+      color: #1b5e20;
+    }
+
+    .log-row .incorrect-flag {
+      font-weight: 800;
+      color: #b71c1c;
+    }
+
     #viewer-status {
       color: #00695c;
       font-weight: bold;
@@ -359,6 +461,33 @@
       <div class="option-item" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
         <button id="open-viewer" class="button" type="button">Ouvrir la page élève</button>
         <button id="startButton" type="button">Envoyer les tuiles</button>
+        <button id="open-log-modal" class="button" type="button">Journal</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="log-modal" class="log-modal" aria-hidden="true">
+    <div class="log-dialog" role="dialog" aria-modal="true" aria-labelledby="log-modal-title">
+      <div class="log-dialog-header">
+        <h3 id="log-modal-title">Journal de session</h3>
+        <button id="close-log-modal" class="button" type="button" style="background:#c62828;">Fermer</button>
+      </div>
+      <p class="muted" id="log-meta" aria-live="polite"></p>
+      <p class="muted" id="session-log-empty">Les sélections reçues apparaîtront ici.</p>
+      <div class="log-actions">
+        <button id="export-log-json" class="button" type="button">Exporter en JSON</button>
+        <button id="export-log-csv" class="button" type="button">Exporter en CSV</button>
+        <button id="clear-log" class="button" type="button" style="background:#c62828;">Vider le journal</button>
+      </div>
+      <div class="log-table" aria-live="polite">
+        <div class="log-header">
+          <span>Horodatage</span>
+          <span>Tuile</span>
+          <span>Correct</span>
+          <span>Dwell (ms)</span>
+          <span>Délai (ms)</span>
+        </div>
+        <div id="session-log-entries" class="log-entries"></div>
       </div>
     </div>
   </div>
@@ -389,6 +518,45 @@
     const dwellTimeInput = document.getElementById('dwell-time');
     const dwellTimeValue = document.getElementById('dwell-time-value');
     const videoInput = document.getElementById('video-input');
+    const sessionLogEntries = document.getElementById('session-log-entries');
+    const sessionLogEmpty = document.getElementById('session-log-empty');
+    const logMeta = document.getElementById('log-meta');
+    const exportJsonBtn = document.getElementById('export-log-json');
+    const exportCsvBtn = document.getElementById('export-log-csv');
+    const clearLogBtn = document.getElementById('clear-log');
+    const logModal = document.getElementById('log-modal');
+    const openLogModalBtn = document.getElementById('open-log-modal');
+    const closeLogModalBtn = document.getElementById('close-log-modal');
+
+    const correctSound = new Audio('../../sounds/success3.mp3');
+    const incorrectSound = new Audio('../../sounds/error.mp3');
+
+    correctSound.preload = 'auto';
+    incorrectSound.preload = 'auto';
+
+    let feedbackAudioPrimed = false;
+
+    function primeFeedbackAudio() {
+      if (feedbackAudioPrimed) return;
+      feedbackAudioPrimed = true;
+      const candidates = [correctSound, incorrectSound].filter(Boolean);
+      const playPromises = candidates
+        .map((clip) => clip.play?.().catch(() => {}))
+        .filter((p) => p && typeof p.then === 'function');
+
+      if (playPromises.length) {
+        Promise.allSettled(playPromises).finally(() => {
+          candidates.forEach((clip) => {
+            clip.pause?.();
+            clip.currentTime = 0;
+          });
+        });
+      }
+    }
+
+    ['click', 'keydown', 'touchstart'].forEach((evt) => {
+      document.addEventListener(evt, primeFeedbackAudio, { passive: true });
+    });
 
     const LOCAL_CATEGORY_KEY = '__local_videos';
 
@@ -420,8 +588,11 @@
     let viewerReady = false;
     let uploadedImages = [];
     let lastSentTiles = [];
+    let lastTilesSentAt = null;
+    let lastAnswerCompletedAt = null;
     let allReinforcers = [];
     let localVideos = []; // { id, name, url }
+    let selectionLog = [];
 
     function setStatus(message) {
       viewerStatus.textContent = message;
@@ -431,6 +602,140 @@
       toast.textContent = message;
       toast.classList.add('visible');
       setTimeout(() => toast.classList.remove('visible'), 2400);
+    }
+
+    function openLogModal() {
+      if (!logModal) return;
+      logModal.classList.add('active');
+      logModal.setAttribute('aria-hidden', 'false');
+      updateLogMeta();
+      renderSessionLog();
+    }
+
+    function closeLogModal() {
+      if (!logModal) return;
+      logModal.classList.remove('active');
+      logModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function formatTimestamp(ts) {
+      const date = new Date(ts);
+      if (Number.isNaN(date.getTime())) return '—';
+      return date.toLocaleTimeString('fr-FR', { hour12: false });
+    }
+
+    function formatDwell(ms) {
+      if (typeof ms !== 'number' || Number.isNaN(ms)) return '—';
+      return Math.round(ms).toString();
+    }
+
+    function formatDelay(ms) {
+      if (typeof ms !== 'number' || Number.isNaN(ms) || ms < 0) return '—';
+      return Math.round(ms).toString();
+    }
+
+    function updateLogMeta() {
+      if (!logMeta) return;
+      if (!lastTilesSentAt) {
+        logMeta.textContent = 'Dernier envoi : aucun (délai non calculé).';
+        return;
+      }
+      const elapsed = Date.now() - lastTilesSentAt;
+      logMeta.textContent = `Dernier envoi : ${formatTimestamp(lastTilesSentAt)} • Temps écoulé : ${(elapsed / 1000).toFixed(1)}s`;
+    }
+
+    function renderSessionLog() {
+      sessionLogEntries.innerHTML = '';
+      if (!selectionLog.length) {
+        sessionLogEmpty.style.display = 'block';
+        return;
+      }
+
+      sessionLogEmpty.style.display = 'none';
+      selectionLog.forEach((entry) => {
+        const row = document.createElement('div');
+        row.className = 'log-row';
+
+        const timeCell = document.createElement('span');
+        timeCell.textContent = formatTimestamp(entry.timestamp);
+
+        const labelCell = document.createElement('span');
+        labelCell.textContent = entry.label || 'Tuile';
+
+        const correctCell = document.createElement('span');
+        correctCell.textContent = entry.correct ? 'Oui' : 'Non';
+        correctCell.className = entry.correct ? 'correct-flag' : 'incorrect-flag';
+
+        const dwellCell = document.createElement('span');
+        dwellCell.textContent = formatDwell(entry.dwellTimeMs);
+        if (typeof entry.dwellTimeMs === 'number') {
+          dwellCell.title = `${(entry.dwellTimeMs / 1000).toFixed(2)}s`;
+        }
+
+        const delayCell = document.createElement('span');
+        delayCell.textContent = formatDelay(entry.delaySinceSendMs);
+        if (typeof entry.delaySinceSendMs === 'number') {
+          delayCell.title = `${(entry.delaySinceSendMs / 1000).toFixed(2)}s`;
+        }
+
+        row.appendChild(timeCell);
+        row.appendChild(labelCell);
+        row.appendChild(correctCell);
+        row.appendChild(dwellCell);
+        row.appendChild(delayCell);
+        sessionLogEntries.appendChild(row);
+      });
+    }
+
+    function appendToSessionLog(entry) {
+      selectionLog.push(entry);
+      updateLogMeta();
+      renderSessionLog();
+    }
+
+    function clearSessionLog() {
+      selectionLog = [];
+      renderSessionLog();
+    }
+
+    function downloadFile(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function exportLogAsJson() {
+      if (!selectionLog.length) {
+        showToast('Aucune sélection à exporter.');
+        return;
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      downloadFile(JSON.stringify(selectionLog, null, 2), `journal-selection-${timestamp}.json`, 'application/json');
+    }
+
+    function exportLogAsCsv() {
+      if (!selectionLog.length) {
+        showToast('Aucune sélection à exporter.');
+        return;
+      }
+      const header = ['timestamp', 'label', 'correct', 'dwellTimeMs', 'delaySinceSendMs', 'tileId'];
+      const rows = selectionLog.map((entry) => [
+        new Date(entry.timestamp).toISOString(),
+        `"${(entry.label || '').replace(/"/g, '""')}"`,
+        entry.correct ? 'true' : 'false',
+        typeof entry.dwellTimeMs === 'number' ? Math.round(entry.dwellTimeMs) : '',
+        typeof entry.delaySinceSendMs === 'number' ? Math.round(entry.delaySinceSendMs) : '',
+        entry.tileId || ''
+      ]);
+      const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      downloadFile(csvContent, `journal-selection-${timestamp}.csv`, 'text/csv');
     }
 
     function refreshUploadGrid() {
@@ -727,6 +1032,9 @@
       const promptPayload = buildPromptPayload();
       if (promptPayload?.error) return;
       lastSentTiles = tiles;
+      lastTilesSentAt = Date.now();
+      lastAnswerCompletedAt = lastTilesSentAt;
+      updateLogMeta();
 
       const dwellTimeMs = Number(dwellTimeInput?.value) || 1500;
 
@@ -743,6 +1051,19 @@
 
     sendChoicesBtn.addEventListener('click', sendTiles);
 
+    if (exportJsonBtn) exportJsonBtn.addEventListener('click', exportLogAsJson);
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportLogAsCsv);
+    if (clearLogBtn) clearLogBtn.addEventListener('click', clearSessionLog);
+    if (openLogModalBtn) openLogModalBtn.addEventListener('click', openLogModal);
+    if (closeLogModalBtn) closeLogModalBtn.addEventListener('click', closeLogModal);
+    if (logModal) {
+      logModal.addEventListener('click', (event) => {
+        if (event.target === logModal) {
+          closeLogModal();
+        }
+      });
+    }
+
     function openViewer() {
       viewerWindow = window.open('viewer.html', '_blank');
       if (!viewerWindow) {
@@ -754,7 +1075,7 @@
 
     if (channel) {
       channel.onmessage = (event) => {
-        const { type, tileId } = event.data || {};
+        const { type, tileId, dwellTimeMs: selectionDwell, label: selectionLabel, correct: selectionCorrect } = event.data || {};
         if (type === 'viewer-ready') {
           viewerReady = true;
           setStatus('Viewer connecté.');
@@ -766,9 +1087,36 @@
         }
         if (type === 'selection' && tileId) {
           const selectedTile = lastSentTiles.find((tile) => tile.id === tileId);
-          if (selectedTile?.correct) {
+          const dwellTimeMs = typeof selectionDwell === 'number' ? selectionDwell : Number(dwellTimeInput.value) || null;
+          const label = selectionLabel || selectedTile?.label || 'Tuile';
+          const correct = typeof selectionCorrect === 'boolean' ? selectionCorrect : !!selectedTile?.correct;
+          const eventTime = Date.now();
+          const baseline = typeof lastAnswerCompletedAt === 'number'
+            ? lastAnswerCompletedAt
+            : (typeof lastTilesSentAt === 'number' ? lastTilesSentAt : null);
+          const delaySinceSendMs = typeof baseline === 'number' ? eventTime - baseline : null;
+
+          appendToSessionLog({
+            tileId,
+            label,
+            correct,
+            dwellTimeMs,
+            delaySinceSendMs,
+            timestamp: eventTime
+          });
+
+          lastAnswerCompletedAt = eventTime;
+
+          if (correct) {
             showToast('Bonne réponse envoyée.');
+            correctSound?.play?.().catch(() => {});
+          } else {
+            incorrectSound?.play?.().catch(() => {});
           }
+        }
+        if (type === 'reinforcer-ended' && typeof event.data?.endedAt === 'number') {
+          lastAnswerCompletedAt = event.data.endedAt;
+          updateLogMeta();
         }
       };
       setStatus('En attente du viewer...');
@@ -925,6 +1273,8 @@
     syncPromptInputs();
     renderChoices();
     refreshUploadGrid();
+    updateLogMeta();
+    renderSessionLog();
   </script>
 </body>
 </html>
