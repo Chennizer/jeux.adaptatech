@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="translate" data-fr="Lucioles oculaires" data-en="Gaze Fireflies" data-ja="視線でホタル">Lucioles oculaires</title>
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+  <style>
+    body.game {
+      background: radial-gradient(circle at 20% 20%, rgba(15,94,94,0.16), transparent 32%),
+                  radial-gradient(circle at 82% 32%, rgba(204,255,170,0.14), transparent 34%),
+                  radial-gradient(circle at 36% 80%, rgba(56,189,248,0.16), transparent 38%),
+                  #02070d;
+      color: #e6fff7;
+      overflow: hidden;
+    }
+
+    #playfield {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #hud {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: rgba(0, 28, 26, 0.6);
+      border: 2px solid rgba(0,150,136,0.5);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+      z-index: 50;
+      max-width: min(92vw, 720px);
+      flex-wrap: wrap;
+      justify-content: center;
+      text-align: center;
+    }
+
+    #statusText {
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    #roundText {
+      color: #7de3c9;
+      font-weight: 600;
+      opacity: 0.9;
+    }
+
+    #celebrationBanner {
+      position: fixed;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 18px;
+      border-radius: 12px;
+      background: rgba(0,150,136,0.85);
+      color: #041412;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+      opacity: 0;
+      transition: opacity 220ms ease, transform 220ms ease;
+      z-index: 55;
+      pointer-events: none;
+    }
+
+    #celebrationBanner.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-6px);
+    }
+
+    .fire-circle {
+      position: absolute;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.36), 0 0 32px rgba(0,150,136,0.35);
+      transition: transform 180ms ease, box-shadow 240ms ease, opacity 240ms ease;
+      isolation: isolate;
+      --ring-color: rgba(126, 255, 234, 0.95);
+      --dwell: 1500ms;
+      --pct: 0deg;
+      overflow: visible;
+    }
+
+    .fire-circle::after {
+      content: "";
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      background: conic-gradient(var(--ring-color) var(--pct), transparent 0deg);
+      opacity: 0;
+      transform: scale(0.9);
+      pointer-events: none;
+      filter: drop-shadow(0 0 8px rgba(0, 255, 220, 0.35));
+    }
+
+    .fire-circle.charging::after {
+      animation: dwellSweep var(--dwell) linear forwards;
+      opacity: 0.85;
+    }
+
+    .fire-circle:hover {
+      transform: scale(1.02);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.38), 0 0 42px rgba(0,150,136,0.4);
+    }
+
+    .fire-circle.pop {
+      opacity: 0;
+      transform: scale(1.2);
+      box-shadow: none;
+    }
+
+    @keyframes dwellSweep {
+      from { --pct: 0deg; }
+      to { --pct: 360deg; }
+    }
+
+    .firefly {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fff7d6, var(--ff-color, #9bf6ff));
+      box-shadow: 0 0 14px var(--ff-color, rgba(155,246,255,0.8)), 0 0 28px rgba(255,255,255,0.3);
+      opacity: 0;
+      transform: scale(0.35);
+      transition: left 900ms ease, top 900ms ease, transform 900ms ease, opacity 900ms ease;
+      animation: flicker 2.2s ease-in-out infinite;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .firefly.celeb {
+      transition: left 1400ms ease, top 1400ms ease, transform 1400ms ease, opacity 1400ms ease;
+      animation-duration: 1.6s;
+    }
+
+    .firefly.fade-away {
+      opacity: 0;
+      transform: scale(0.4);
+      transition: opacity 500ms ease, transform 500ms ease;
+    }
+
+    @keyframes flicker {
+      0%, 100% { filter: drop-shadow(0 0 12px rgba(255,255,255,0.3)); }
+      45% { filter: drop-shadow(0 0 20px rgba(255,255,255,0.55)); }
+      70% { filter: drop-shadow(0 0 16px rgba(255,255,255,0.4)); }
+    }
+
+    .burst {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      pointer-events: none;
+      background: radial-gradient(circle, rgba(255,255,255,0.85), rgba(255,255,255,0));
+      mix-blend-mode: screen;
+      animation: burstOut 420ms ease-out forwards;
+      z-index: 5;
+    }
+
+    @keyframes burstOut {
+      from { transform: translate(-50%, -50%) scale(0.4); opacity: 0.9; }
+      to   { transform: translate(-50%, -50%) scale(14); opacity: 0; }
+    }
+
+    #gazePointer::before {
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 10%, rgba(0, 150, 136, 0.65) 65%, rgba(0, 0, 0, 0) 72%);
+      box-shadow: 0 0 8px rgba(126,255,234,0.75);
+    }
+
+    #gazePointer.gp-dwell::before {
+      animation: gpPulse 520ms ease-in-out infinite alternate;
+    }
+  </style>
+</head>
+<body class="game">
+  <div id="menu-placeholder"></div>
+
+  <div id="gazePointerOverlay" aria-hidden="true">
+    <div id="gazePointer"></div>
+  </div>
+
+  <div id="hud" role="status" aria-live="polite">
+    <div id="statusText" class="translate" data-fr="Fixe les cercles pour libérer les lucioles." data-en="Dwell on the circles to release fireflies." data-ja="円を見つめてホタルを解放しよう。">Fixe les cercles pour libérer les lucioles.</div>
+    <div id="roundText" class="translate" data-fr="Série 1" data-en="Round 1" data-ja="ラウンド 1">Série 1</div>
+  </div>
+
+  <div id="celebrationBanner" class="translate" data-fr="Les lucioles dansent !" data-en="The fireflies dance!" data-ja="ホタルが踊っている！">Les lucioles dansent !</div>
+
+  <div id="playfield" aria-label="Espace de jeu des lucioles"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/eyegazeMenuLoader.js"></script>
+  <script>
+    const playfield = document.getElementById('playfield');
+    const statusText = document.getElementById('statusText');
+    const roundText = document.getElementById('roundText');
+    const celebrationBanner = document.getElementById('celebrationBanner');
+    const gazePointer = document.getElementById('gazePointer');
+
+    let gameActive = false;
+    let roundNumber = 1;
+    let circleCount = 6;
+    let firefliesPerCircle = 10;
+    let dwellTimers = new Map();
+
+    function randBetween(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function paletteColor() {
+      const hues = [152, 186, 92, 42, 212, 330];
+      const hue = hues[Math.floor(Math.random() * hues.length)];
+      const sat = randBetween(68, 92);
+      const light = randBetween(58, 72);
+      return `hsl(${hue}, ${sat}%, ${light}%)`;
+    }
+
+    function updatePointerPosition(x, y) {
+      if (!gazePointer) return;
+      gazePointer.style.left = `${x}px`;
+      gazePointer.style.top = `${y}px`;
+      gazePointer.style.opacity = 0.9;
+    }
+
+    function setPointerDwell(active) {
+      if (!gazePointer) return;
+      gazePointer.classList.toggle('gp-dwell', !!active);
+    }
+
+    window.addEventListener('pointermove', (e) => {
+      updatePointerPosition(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('pointerleave', () => {
+      if (gazePointer) {
+        gazePointer._savedOpacity = gazePointer.style.opacity;
+        gazePointer.style.opacity = 0;
+      }
+      cancelAllDwells();
+    });
+
+    function startDwell(circle) {
+      if (!gameActive || !circle || dwellTimers.has(circle)) return;
+      const dwell = eyegazeSettings?.dwellTime || 1500;
+      circle.style.setProperty('--dwell', `${dwell}ms`);
+      circle.classList.add('charging');
+      setPointerDwell(true);
+      const timer = setTimeout(() => explodeCircle(circle), dwell);
+      dwellTimers.set(circle, timer);
+    }
+
+    function cancelDwell(circle) {
+      const timer = dwellTimers.get(circle);
+      if (timer) clearTimeout(timer);
+      dwellTimers.delete(circle);
+      if (circle) circle.classList.remove('charging');
+      if (dwellTimers.size === 0) setPointerDwell(false);
+    }
+
+    function cancelAllDwells() {
+      dwellTimers.forEach((t) => clearTimeout(t));
+      dwellTimers.clear();
+      document.querySelectorAll('.fire-circle.charging').forEach(c => c.classList.remove('charging'));
+      setPointerDwell(false);
+    }
+
+    function createBurst(x, y) {
+      const burst = document.createElement('div');
+      burst.className = 'burst';
+      burst.style.left = `${x}px`;
+      burst.style.top = `${y}px`;
+      playfield.appendChild(burst);
+      burst.addEventListener('animationend', () => burst.remove());
+    }
+
+    function releaseFireflies(x, y, baseColor) {
+      const fieldRect = playfield.getBoundingClientRect();
+      for (let i = 0; i < firefliesPerCircle; i++) {
+        const ff = document.createElement('div');
+        ff.className = 'firefly';
+        const hueShift = randBetween(-12, 12);
+        ff.style.setProperty('--ff-color', `hsla(${(parseFloat(baseColor.hue) + hueShift + 360) % 360}, ${baseColor.sat}%, ${baseColor.light}%, 0.85)`);
+
+        const startX = x;
+        const startY = y;
+        const dx = randBetween(-160, 160);
+        const dy = randBetween(-140, 140);
+        const endX = Math.min(fieldRect.width - 12, Math.max(12, startX + dx));
+        const endY = Math.min(fieldRect.height - 12, Math.max(12, startY + dy));
+
+        ff.style.left = `${startX}px`;
+        ff.style.top = `${startY}px`;
+        ff.dataset.endX = endX;
+        ff.dataset.endY = endY;
+
+        playfield.appendChild(ff);
+        requestAnimationFrame(() => {
+          ff.style.left = `${endX}px`;
+          ff.style.top = `${endY}px`;
+          ff.style.opacity = 1;
+          ff.style.transform = 'scale(1)';
+        });
+      }
+    }
+
+    function explodeCircle(circle) {
+      if (!circle || !playfield.contains(circle)) return;
+      cancelDwell(circle);
+      const rect = circle.getBoundingClientRect();
+      const fieldRect = playfield.getBoundingClientRect();
+      const cx = rect.left - fieldRect.left + rect.width / 2;
+      const cy = rect.top - fieldRect.top + rect.height / 2;
+      const color = circle.dataset.hue || '160';
+      const sat = circle.dataset.sat || '80';
+      const light = circle.dataset.light || '65';
+
+      createBurst(cx, cy);
+      releaseFireflies(cx, cy, { hue: parseFloat(color), sat, light });
+      circle.classList.add('pop');
+      setTimeout(() => circle.remove(), 220);
+
+      if (!playfield.querySelector('.fire-circle:not(.pop)')) {
+        setTimeout(() => celebrateFireflies(), 260);
+      }
+    }
+
+    function celebrateFireflies() {
+      const fireflies = Array.from(playfield.querySelectorAll('.firefly'));
+      if (!fireflies.length) { nextRound(); return; }
+      celebrationBanner.classList.add('show');
+      const fieldRect = playfield.getBoundingClientRect();
+      fireflies.forEach((ff, idx) => {
+        ff.classList.add('celeb');
+        const angle = (idx / fireflies.length) * Math.PI * 2;
+        const radius = 80 + (idx % 6) * 12;
+        const targetX = fieldRect.width / 2 + Math.cos(angle) * radius;
+        const targetY = fieldRect.height / 2 + Math.sin(angle) * radius;
+        ff.style.transitionDelay = `${idx * 30}ms`;
+        ff.style.left = `${targetX}px`;
+        ff.style.top = `${targetY}px`;
+        ff.style.transform = 'scale(1.2)';
+        ff.style.opacity = 0.95;
+      });
+
+      setTimeout(() => {
+        fireflies.forEach(ff => {
+          ff.classList.add('fade-away');
+          setTimeout(() => ff.remove(), 520);
+        });
+        celebrationBanner.classList.remove('show');
+        nextRound();
+      }, 1800);
+    }
+
+    function clearField() {
+      cancelAllDwells();
+      playfield.querySelectorAll('.fire-circle, .firefly, .burst').forEach(el => el.remove());
+    }
+
+    function createCircle() {
+      const circle = document.createElement('div');
+      circle.className = 'fire-circle';
+      const size = randBetween(90, 170);
+      const fieldRect = playfield.getBoundingClientRect();
+      const x = randBetween(size / 2 + 12, fieldRect.width - size / 2 - 12);
+      const y = randBetween(size / 2 + 12, fieldRect.height - size / 2 - 12);
+      const color = paletteColor();
+      const hueMatch = color.match(/hsl\(([-0-9.]+),\s*([0-9.]+)%?,\s*([0-9.]+)%\)/i);
+      if (hueMatch) {
+        circle.dataset.hue = parseFloat(hueMatch[1]);
+        circle.dataset.sat = hueMatch[2];
+        circle.dataset.light = hueMatch[3];
+      }
+      circle.style.width = `${size}px`;
+      circle.style.height = `${size}px`;
+      circle.style.left = `${x}px`;
+      circle.style.top = `${y}px`;
+      circle.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), ${color})`;
+      circle.style.boxShadow = `0 12px 34px rgba(0,0,0,0.38), 0 0 38px ${color}`;
+      circle.style.setProperty('--ring-color', color.replace('hsl', 'hsla').replace(')', ',0.9)'));
+
+      circle.addEventListener('pointerenter', () => startDwell(circle));
+      circle.addEventListener('pointerleave', () => cancelDwell(circle));
+
+      playfield.appendChild(circle);
+    }
+
+    function spawnCircles() {
+      for (let i = 0; i < circleCount; i++) {
+        createCircle();
+      }
+    }
+
+    function setRoundLabel() {
+      const lang = document.documentElement.lang || 'fr';
+      const label = lang === 'ja'
+        ? `ラウンド ${roundNumber}`
+        : (lang === 'en' ? `Round ${roundNumber}` : `Série ${roundNumber}`);
+      roundText.textContent = label;
+    }
+
+    function refreshStatus(newText) {
+      if (!statusText) return;
+      if (newText) {
+        statusText.textContent = newText;
+        return;
+      }
+      const lang = document.documentElement.lang || 'fr';
+      const base = {
+        fr: 'Fixe les cercles pour libérer les lucioles.',
+        en: 'Dwell on the circles to release fireflies.',
+        ja: '円を見つめてホタルを解放しよう。'
+      };
+      statusText.textContent = base[lang] || base.fr;
+    }
+
+    function nextRound() {
+      if (!gameActive) return;
+      roundNumber += 1;
+      setRoundLabel();
+      refreshStatus();
+      clearField();
+      spawnCircles();
+    }
+
+    function startGame() {
+      gameActive = true;
+      roundNumber = 1;
+      setRoundLabel();
+      refreshStatus();
+      document.body.classList.add('hide-native-cursor');
+      clearField();
+      spawnCircles();
+      eyegazeSettings.hideOverlay();
+    }
+
+    loadEyegazeMenu({
+      titleTranslations: {
+        fr: 'Lucioles oculaires',
+        en: 'Gaze Fireflies',
+        ja: '視線でホタル'
+      },
+      customOptions: `
+        <div class="option-item">
+          <label for="circle-count" class="teal-label">
+            <span class="translate" data-fr="Nombre de cercles:" data-en="Circles:" data-ja="円の数：">Nombre de cercles:</span>
+            <span id="circleCountVal">6</span>
+          </label>
+          <input type="range" id="circle-count" class="styled-slider" min="3" max="12" value="6">
+        </div>
+        <div class="option-item">
+          <label for="firefly-count" class="teal-label">
+            <span class="translate" data-fr="Lucioles par cercle:" data-en="Fireflies per circle:" data-ja="円ごとのホタル数：">Lucioles par cercle:</span>
+            <span id="fireflyCountVal">10</span>
+          </label>
+          <input type="range" id="firefly-count" class="styled-slider" min="6" max="18" value="10">
+        </div>
+      `
+    }).then(() => {
+      initEyegazeMenu();
+      const startButton = document.getElementById('startButton');
+      const circleSlider = document.getElementById('circle-count');
+      const circleVal = document.getElementById('circleCountVal');
+      const fireflySlider = document.getElementById('firefly-count');
+      const fireflyVal = document.getElementById('fireflyCountVal');
+
+      if (circleSlider && circleVal) {
+        circleVal.textContent = circleSlider.value;
+        circleSlider.addEventListener('input', () => {
+          circleVal.textContent = circleSlider.value;
+          circleCount = parseInt(circleSlider.value, 10) || 6;
+        });
+        circleCount = parseInt(circleSlider.value, 10) || 6;
+      }
+
+      if (fireflySlider && fireflyVal) {
+        fireflyVal.textContent = fireflySlider.value;
+        fireflySlider.addEventListener('input', () => {
+          fireflyVal.textContent = fireflySlider.value;
+          firefliesPerCircle = parseInt(fireflySlider.value, 10) || 10;
+        });
+        firefliesPerCircle = parseInt(fireflySlider.value, 10) || 10;
+      }
+
+      if (startButton) {
+        startButton.addEventListener('click', startGame);
+      }
+
+      const langToggleBtn = document.getElementById('langToggle');
+      if (langToggleBtn) {
+        langToggleBtn.addEventListener('click', () => {
+          setTimeout(() => {
+            setRoundLabel();
+            refreshStatus();
+          }, 30);
+        });
+      }
+
+      applyEyegazeTranslations(eyegazeMenuLang);
+      setRoundLabel();
+      refreshStatus();
+    });
+  </script>
+</body>
+</html>
