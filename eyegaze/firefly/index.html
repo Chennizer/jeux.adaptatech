@@ -79,23 +79,28 @@
 
     #gazePointer {
       position: fixed;
-      width: 40px;
-      height: 40px;
-      margin-left: -20px;
-      margin-top: -20px;
+      width: 44px;
+      height: 44px;
+      margin-left: -22px;
+      margin-top: -22px;
       border-radius: 50%;
-      border: 3px solid rgba(0, 191, 165, 0.8);
-      box-shadow: 0 0 18px rgba(0, 191, 165, 0.45);
+      border: 3px solid rgba(255, 75, 75, 0.9);
+      box-shadow: 0 0 22px rgba(255, 75, 75, 0.65), 0 0 38px rgba(255, 75, 75, 0.35);
       pointer-events: none;
       mix-blend-mode: screen;
       z-index: 12;
       transition: transform 0.16s ease, opacity 0.18s ease;
-      transform: scale(0.95);
+      transform: scale(0.98);
       opacity: 0;
+      background: radial-gradient(circle, rgba(255, 75, 75, 0.35) 0%, rgba(255, 75, 75, 0.08) 70%, transparent 90%);
     }
 
     body.playing #gazePointer {
       opacity: 1;
+    }
+
+    body.playing canvas {
+      cursor: none;
     }
 
     .dwell-ring {
@@ -304,7 +309,7 @@
       const burst = parseInt(fireflyBurstInput.value, 10);
       for (let i = 0; i < burst; i++) {
         const angle = rand(0, Math.PI * 2);
-        const speed = calmMode.checked ? rand(60, 140) : rand(140, 260);
+        const speed = calmMode.checked ? rand(70, 160) : rand(160, 280);
         fireflies.push({
           x: circle.x,
           y: circle.y,
@@ -315,6 +320,11 @@
           glow: rand(16, 28),
           color: circle.color,
           lively: true,
+          baseSpeed: speed,
+          heading: angle,
+          wanderTimer: rand(0.35, 0.9),
+          flickerSpeed: rand(2, 4),
+          flutterPhase: rand(0, Math.PI * 2),
           trail: []
         });
       }
@@ -340,6 +350,12 @@
           glow: rand(10, 18),
           color: burstColors[Math.floor(Math.random() * burstColors.length)],
           swirl: true,
+          lively: true,
+          baseSpeed: drift,
+          heading: angle,
+          wanderTimer: rand(0.8, 1.6),
+          flickerSpeed: rand(1.6, 3.2),
+          flutterPhase: rand(0, Math.PI * 2),
           trail: []
         });
       }
@@ -349,25 +365,48 @@
       for (let i = fireflies.length - 1; i >= 0; i--) {
         const f = fireflies[i];
         f.age += dt;
-        const damp = calmMode.checked ? 0.96 : 0.92;
+        const damp = calmMode.checked ? 0.985 : 0.97;
         f.vx *= damp;
         f.vy *= damp;
+
+        f.wanderTimer -= dt;
+        if (f.wanderTimer <= 0) {
+          f.heading += rand(-1.2, 1.2);
+          f.wanderTimer = calmMode.checked ? rand(0.8, 1.4) : rand(0.45, 1.05);
+        }
+
         if (f.lively) {
-          const wiggle = calmMode.checked ? 18 : 32;
+          const flutter = calmMode.checked ? 0.22 : 0.35;
+          const targetSpeed = (calmMode.checked ? f.baseSpeed * 0.55 : f.baseSpeed * 0.85) *
+            (1 + flutter * Math.sin(f.flutterPhase + f.age * (calmMode.checked ? 1.4 : 2.6)));
+          const desiredVx = Math.cos(f.heading) * targetSpeed;
+          const desiredVy = Math.sin(f.heading) * targetSpeed;
+          const chase = calmMode.checked ? 0.55 : 0.75;
+          f.vx += (desiredVx - f.vx) * chase * dt;
+          f.vy += (desiredVy - f.vy) * chase * dt;
+
+          const wiggle = calmMode.checked ? 16 : 30;
           f.vx += rand(-wiggle, wiggle) * dt;
           f.vy += rand(-wiggle, wiggle) * dt;
         }
+
         if (f.swirl) {
           const cx = width / 2;
           const cy = height / 2;
           const dx = f.x - cx;
           const dy = f.y - cy;
           const dist = Math.max(40, Math.hypot(dx, dy));
-          f.vx += (-dy / dist) * 20 * dt;
-          f.vy += (dx / dist) * 20 * dt;
+          f.vx += (-dy / dist) * 24 * dt;
+          f.vy += (dx / dist) * 24 * dt;
         }
+
         f.x += f.vx * dt;
         f.y += f.vy * dt;
+
+        if (f.x < -60) f.x = width + 60;
+        if (f.x > width + 60) f.x = -60;
+        if (f.y < -60) f.y = height + 60;
+        if (f.y > height + 60) f.y = -60;
 
         if (trailToggle.checked) {
           f.trail.push({ x: f.x, y: f.y, t: f.age });
@@ -394,7 +433,8 @@
         }
 
         const lifeAlpha = Math.max(0.3, 1 - f.age / Math.max(f.life, 1)); // keep a gentle glow
-        const glow = f.glow * (calmMode.checked ? 0.9 : 1.2);
+        const flicker = 0.8 + 0.35 * Math.sin(f.age * f.flickerSpeed * 2 + f.flutterPhase);
+        const glow = f.glow * (calmMode.checked ? 0.9 : 1.2) * flicker;
         const gradient = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, glow);
         gradient.addColorStop(0, `${f.color}cc`);
         gradient.addColorStop(1, `${f.color}00`);
