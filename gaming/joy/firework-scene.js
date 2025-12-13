@@ -51,7 +51,9 @@ class Trail {
       life: 16
     });
     if (this.sparks.length > 20) this.sparks.shift();
-    return this.speed > 1;
+    const slowEnough = this.speed < 1.1;
+    const reachedSky = this.y < p.height * 0.2;
+    return !(slowEnough || reachedSky);
   }
 
   draw() {
@@ -76,7 +78,8 @@ export function createFireworkScene(p) {
 
   function spawnFirework(fromTrail = null) {
     const x = fromTrail?.x ?? p.random(p.width * 0.1, p.width * 0.9);
-    const y = fromTrail?.y ?? p.random(p.height * 0.2, p.height * 0.45);
+    const yTarget = fromTrail?.y ?? p.random(p.height * 0.2, p.height * 0.45);
+    const y = p.constrain(yTarget, p.height * 0.15, p.height * 0.65);
     const baseHue = p.random(0, 360);
     const type = p.random(['burst', 'ring', 'palm', 'double']);
     const count = type === 'double' ? p.random(120, 160) : p.random(80, 130);

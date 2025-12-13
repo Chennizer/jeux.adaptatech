@@ -58,6 +58,16 @@ export function createBalloonScene(p) {
   let balloons = [];
   let confetti = [];
   let speedMultiplier = 1;
+  let bgGradient = null;
+
+  function updateGradient() {
+    const ctx = p.drawingContext;
+    const gradient = ctx.createLinearGradient(0, 0, 0, p.height);
+    gradient.addColorStop(0, p.color(205, 60, 96, 100).toString());
+    gradient.addColorStop(0.5, p.color(280, 25, 98, 100).toString());
+    gradient.addColorStop(1, p.color(330, 30, 90, 100).toString());
+    bgGradient = gradient;
+  }
 
   function initBalloons() {
     const count = Math.max(16, Math.floor(p.width * p.height * 0.00003));
@@ -82,10 +92,12 @@ export function createBalloonScene(p) {
       p.colorMode(p.HSB, 360, 100, 100, 100);
       initBalloons();
       initConfetti();
+      updateGradient();
     },
     resize() {
       initBalloons();
       initConfetti();
+      updateGradient();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
@@ -97,7 +109,14 @@ export function createBalloonScene(p) {
       if (balloons.length > 160) balloons.length = 160;
     },
     draw() {
-      p.background(48, 20, 98, 100);
+      if (!bgGradient) {
+        updateGradient();
+      }
+      const ctx = p.drawingContext;
+      ctx.save();
+      ctx.fillStyle = bgGradient;
+      ctx.fillRect(0, 0, p.width, p.height);
+      ctx.restore();
 
       confetti.forEach(piece => {
         piece.y += piece.speed * speedMultiplier;
