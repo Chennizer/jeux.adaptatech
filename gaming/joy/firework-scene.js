@@ -17,7 +17,8 @@ class Particle {
     this.x += this.vx * multiplier;
     this.y += this.vy * multiplier;
     this.vy += 0.1 * multiplier;
-    this.life -= 1 * multiplier;
+    const decay = multiplier >= 1 ? multiplier : 1;
+    this.life -= decay;
     return this.life > 0;
   }
 
@@ -180,6 +181,10 @@ export function createFireworkScene(p) {
         const alive = particle.update(speedMultiplier);
         particle.draw();
         if (!alive) particles.splice(i, 1);
+      }
+
+      if (particles.length > 1200) {
+        particles.splice(0, particles.length - 1200);
       }
 
       if (particles.length < 80 && Math.random() < 0.02 * speedMultiplier) {
