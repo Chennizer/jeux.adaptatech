@@ -42,6 +42,43 @@
       user-select: none;
     }
     body.dark #infoButton { background: #111; color: #00b3a4; border-color: #00b3a4; }
+    #infoModal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(0,0,0,0.6);
+      box-sizing: border-box;
+      z-index: 11500;
+    }
+    #infoModal .info-modal-card {
+      max-width: 520px;
+      width: min(520px, 90vw);
+      background: #fff;
+      color: #111;
+      border-radius: 12px;
+      padding: 18px 16px;
+      border: 2px solid #009688;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+      line-height: 1.5;
+      text-align: left;
+    }
+    #infoModal .info-modal-card p { margin: 0; }
+    #infoModal .info-modal-card .info-close {
+      margin-top: 14px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 0;
+      background: #009688;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-block;
+    }
+    body.dark #infoModal .info-modal-card { background: #111; color: #e8e8e8; border-color: #00b3a4; }
+    body.dark #infoModal .info-modal-card .info-close { background: #00b3a4; color: #111; }
   `;
 
   function ensureStyle() {
@@ -199,16 +236,51 @@
     return btn;
   }
 
-  function wireInfoModal(infoBtn) {
+  function normalizeInfoModal() {
     const modal = document.getElementById('infoModal');
-    const close = document.getElementById('closeModal');
+    if (!modal) return null;
+
+    modal.style.display = 'none';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('tabindex', '-1');
+
+    let card = modal.querySelector('.info-modal-card');
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'info-modal-card';
+      while (modal.firstChild) {
+        card.appendChild(modal.firstChild);
+      }
+      modal.appendChild(card);
+    }
+
+    const existingClose = card.querySelector('#closeModal') || card.querySelector('.info-close');
+    if (existingClose) {
+      existingClose.id = 'closeModal';
+      existingClose.classList.add('info-close');
+      existingClose.setAttribute('type', 'button');
+    }
+
+    return modal;
+  }
+
+  function wireInfoModal(infoBtn) {
+    const modal = normalizeInfoModal();
+    const close = modal ? modal.querySelector('#closeModal') : null;
     if (infoBtn && modal) {
       infoBtn.addEventListener('click', () => {
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
+        modal.focus({ preventScroll: true });
       });
     }
     if (close && modal) {
       close.addEventListener('click', () => { modal.style.display = 'none'; });
+    }
+    if (modal) {
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) modal.style.display = 'none';
+      });
     }
   }
 
