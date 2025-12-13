@@ -93,8 +93,12 @@ document.addEventListener('DOMContentLoaded', () => {
     ? new BroadcastChannel('eyegaze-video-player')
     : null;
 
+  const storedDwell = window.eyegazeSettings?.dwellTime;
+  const dwellFallback = parseInt(localStorage.getItem('eyegazeDwellTime'), 10);
   // Global variable for fixation delay (in ms), default 2000ms
-  let fixationDelay = 2000;
+  let fixationDelay = Number.isFinite(storedDwell)
+    ? storedDwell
+    : (Number.isFinite(dwellFallback) ? dwellFallback : 2000);
   // Global variable for tile size in vh; default 40
   let tileSize = 40;
 
@@ -561,11 +565,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Fixation Time Slider Setup (for hover delay)
   if (fixationTimeInput && fixationTimeValue) {
-    fixationTimeInput.addEventListener('input', () => {
-      fixationDelay = parseInt(fixationTimeInput.value, 10);
+    fixationTimeInput.value = fixationDelay;
+    fixationTimeValue.textContent = fixationDelay;
+    document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
+
+    const syncDwell = () => {
+      fixationDelay = parseInt(fixationTimeInput.value, 10) || 2000;
       fixationTimeValue.textContent = fixationDelay;
+      if (typeof setEyegazeDwellTime === 'function') {
+        setEyegazeDwellTime(fixationDelay);
+      } else if (window.eyegazeSettings) {
+        window.eyegazeSettings.dwellTime = fixationDelay;
+        try { localStorage.setItem('eyegazeDwellTime', fixationDelay); } catch (e) {}
+      }
       document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
-    });
+    };
+
+    fixationTimeInput.addEventListener('input', syncDwell);
+    fixationTimeInput.addEventListener('change', syncDwell);
   }
 
   // Tile Size Slider Setup (for final game tiles) with dynamic gap adjustment.
