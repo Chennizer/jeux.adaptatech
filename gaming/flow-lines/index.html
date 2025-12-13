@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-fr="Lignes fluides" data-en="Flow Lines" data-ja="流れるライン">Flow Lines</title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.7.0/lib/p5.js"></script>
+  <script src="../../js/translationmain.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, #0c1a24 0%, #050b10 50%, #020509 100%);
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #e6f1ff;
+      height: 100%;
+    }
+    canvas { display: block; position: fixed; inset: 0; }
+
+    #langToggle {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 10;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 2px solid #04c8bb;
+      background: rgba(0, 0, 0, 0.7);
+      color: #04c8bb;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: box-shadow 0.2s ease, transform 0.05s ease, background 0.2s ease;
+    }
+    #langToggle:hover { box-shadow: 0 0 0 3px rgba(4, 200, 187, 0.18); }
+    #langToggle:active { transform: translateY(1px); }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 9;
+    }
+
+    #instructions {
+      max-width: 900px;
+      width: min(90%, 900px);
+      background: rgba(5, 12, 18, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 1rem 1.25rem;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    #instructions h1 {
+      margin: 0 0 0.5rem 0;
+      font-size: clamp(1.25rem, 2vw, 1.7rem);
+      color: #9fdcff;
+      letter-spacing: 0.01em;
+    }
+    #instructions p {
+      margin: 0.35rem 0;
+      line-height: 1.55;
+    }
+    #instructions strong { color: #b6f09c; }
+    #instructions .hint { color: #9cc3ff; font-size: 0.95rem; }
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body>
+  <button id="langToggle" title="Changer de langue / Change language">FR / EN</button>
+
+  <div id="overlay">
+    <div id="instructions">
+      <h1 class="translate" data-fr="Lignes fluides (présence → direction)" data-en="Flow Lines (Presence → Direction)" data-ja="流れるライン（存在→方向）">Flow Lines (Presence → Direction)</h1>
+      <p class="translate"
+         data-fr="Un champ plein écran de longues lignes qui ondulent ensemble comme des herbes dans le vent."
+         data-en="A full-screen field of long, continuous lines that sway together like grass in wind."
+         data-ja="風に揺れる草のように、長い連続線が画面いっぱいに流れ続けます。">
+        A full-screen field of long, continuous lines that sway together like grass in wind.
+      </p>
+      <p class="translate"
+         data-fr="<strong>Regard :</strong> oriente localement le flux, les lignes se courbent vers le point visé."
+         data-en="<strong>Eye gaze:</strong> gently bends the flow toward the point you look at."
+         data-ja="<strong>視線：</strong>見つめる位置に向かって流れがゆるやかに曲がります。">
+        <strong>Eye gaze:</strong> gently bends the flow toward the point you look at.
+      </p>
+      <p class="translate"
+         data-fr="<strong>Switch (barre espace) :</strong> appui = vent plus fort, relâchement = le vent se calme lentement."
+         data-en="<strong>Switch (space bar):</strong> press = stronger wind, release = wind softly settles."
+         data-ja="<strong>スイッチ（スペース）：</strong>押すと風が強まり、離すとゆっくり弱まります。">
+        <strong>Switch (space bar):</strong> press = stronger wind, release = wind softly settles.
+      </p>
+      <p class="translate hint"
+         data-fr="Pas de particules, pas de peinture : seulement un mouvement cohérent et global, régulant et engageant."
+         data-en="No particles or painting—just one coherent global motion that is calming and engaging."
+         data-ja="粒子やペイントはなく、全体がまとまって動くので穏やかで集中しやすい体験です。">
+        No particles or painting—just one coherent global motion that is calming and engaging.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const flowLines = [];
+    const historyLength = 70;
+    const noiseScale = 0.0012;
+    const baseSpeed = 0.7;
+    const windDir = new p5.Vector(1, 0);
+    let windStrength = 0.15;
+    let windTarget = 0.15;
+    let timeZ = 0;
+    let gazePos = null;
+
+    function setup(){
+      const c = createCanvas(window.innerWidth, window.innerHeight);
+      c.canvas.setAttribute('aria-label', 'Flowing lines experience');
+      stroke(190, 230, 255, 170);
+      strokeWeight(1.2);
+      noFill();
+      initLines();
+      document.getElementById('langToggle')?.addEventListener('click', toggleLanguage);
+      if(typeof updateLanguage === 'function') updateLanguage();
+      window.addEventListener('resize', ()=>{
+        resizeCanvas(window.innerWidth, window.innerHeight);
+        flowLines.length = 0;
+        initLines();
+      });
+      window.addEventListener('pointermove', (e)=>{
+        gazePos = createVector(e.clientX, e.clientY);
+      });
+      window.addEventListener('keydown', (e)=>{
+        if(e.code === 'Space'){
+          windTarget = min(windTarget + 0.45, 3.2);
+        }
+      });
+      window.addEventListener('keyup', (e)=>{
+        if(e.code === 'Space'){
+          windTarget = 0.15;
+        }
+      });
+    }
+
+    function initLines(){
+      const spacing = 38;
+      const cols = floor(width / spacing) + 2;
+      const rows = floor(height / spacing) + 2;
+      const xOff = (width - cols * spacing) / 2;
+      const yOff = (height - rows * spacing) / 2;
+      for(let y = 0; y < rows; y++){
+        for(let x = 0; x < cols; x++){
+          const px = x * spacing + xOff + random(-6, 6);
+          const py = y * spacing + yOff + random(-6, 6);
+          flowLines.push(new FlowLine(px, py));
+        }
+      }
+    }
+
+    class FlowLine{
+      constructor(x, y){
+        this.pos = createVector(x, y);
+        this.history = [];
+      }
+      step(dt){
+        const v = field(this.pos);
+        v.mult(dt * 0.06);
+        this.pos.add(v);
+        wrap(this.pos);
+        this.history.push(this.pos.copy());
+        if(this.history.length > historyLength){
+          this.history.shift();
+        }
+      }
+      draw(idx){
+        if(this.history.length < 2) return;
+        const alpha = 120 + 80 * sin((idx * 0.7 + frameCount * 0.01));
+        stroke(130 + 70 * noise(idx * 0.02, timeZ * 0.0008), 210, 255, alpha);
+        beginShape();
+        for(const p of this.history){ vertex(p.x, p.y); }
+        endShape();
+      }
+    }
+
+    function field(p){
+      const angle = noise(p.x * noiseScale, p.y * noiseScale, timeZ) * TAU * 2;
+      const base = p5.Vector.fromAngle(angle).mult(baseSpeed);
+      const wind = windDir.copy().mult(windStrength);
+      const result = p5.Vector.add(base, wind);
+      if(gazePos){
+        const toGaze = p5.Vector.sub(gazePos, p);
+        const dist = toGaze.mag();
+        const influence = exp(-pow(dist / 260, 2)) * 1.4;
+        if(influence > 0.02){
+          result.add(toGaze.normalize().mult(influence));
+        }
+      }
+      result.limit(6);
+      return result;
+    }
+
+    function wrap(v){
+      const m = 12;
+      if(v.x < -m) v.x = width + m;
+      else if(v.x > width + m) v.x = -m;
+      if(v.y < -m) v.y = height + m;
+      else if(v.y > height + m) v.y = -m;
+    }
+
+    function draw(){
+      const dt = deltaTime;
+      background(4, 10, 16, 22);
+      timeZ += dt * 0.00025;
+      windStrength = lerp(windStrength, windTarget, 0.02);
+      for(let i = 0; i < flowLines.length; i++){
+        flowLines[i].step(dt);
+      }
+      for(let i = 0; i < flowLines.length; i++){
+        flowLines[i].draw(i);
+      }
+    }
+  </script>
+</body>
+</html>
