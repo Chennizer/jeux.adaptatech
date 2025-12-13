@@ -241,6 +241,14 @@
     if (!modal) return null;
 
     modal.style.display = 'none';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.padding = '16px';
+    modal.style.background = 'rgba(0,0,0,0.6)';
+    modal.style.boxSizing = 'border-box';
+    modal.style.zIndex = '11500';
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('tabindex', '-1');
@@ -254,6 +262,19 @@
       }
       modal.appendChild(card);
     }
+
+    Object.assign(card.style, {
+      maxWidth: '520px',
+      width: 'min(520px, 90vw)',
+      background: '#fff',
+      color: '#111',
+      borderRadius: '12px',
+      padding: '18px 16px',
+      border: '2px solid #009688',
+      boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
+      lineHeight: '1.5',
+      textAlign: 'left'
+    });
 
     const existingClose = card.querySelector('#closeModal') || card.querySelector('.info-close');
     if (existingClose) {
