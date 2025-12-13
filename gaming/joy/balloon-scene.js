@@ -1,0 +1,120 @@
+class Balloon {
+  constructor(p, { x, y }) {
+    this.p = p;
+    this.x = x;
+    this.y = y;
+    this.r = p.random(18, 36);
+    this.hue = p.random(300, 360);
+    this.saturation = p.random(55, 90);
+    this.brightness = p.random(80, 100);
+    this.speed = p.random(0.5, 1.2);
+    this.drift = p.random(-0.5, 0.5);
+    this.wave = p.random(0.005, 0.013);
+  }
+
+  update(multiplier = 1) {
+    const p = this.p;
+    this.y -= this.speed * multiplier;
+    this.x += p.sin(p.frameCount * this.wave) * 0.7 * multiplier + this.drift * multiplier;
+    if (this.y < -this.r * 2) {
+      this.reset(p.random(p.width), p.height + this.r * 2);
+    }
+  }
+
+  reset(x, y) {
+    const p = this.p;
+    this.x = x;
+    this.y = y;
+    this.r = p.random(18, 36);
+    this.hue = p.random(0, 360);
+    this.saturation = p.random(65, 95);
+    this.brightness = p.random(80, 100);
+    this.speed = p.random(0.5, 1.25);
+    this.drift = p.random(-0.4, 0.4);
+    this.wave = p.random(0.005, 0.012);
+  }
+
+  draw() {
+    const p = this.p;
+    p.noStroke();
+    p.fill(this.hue, this.saturation, this.brightness, 90);
+    p.ellipse(this.x, this.y, this.r * 1.1, this.r * 1.35);
+    p.fill(this.hue, this.saturation - 10, this.brightness + 5, 60);
+    p.ellipse(this.x - this.r * 0.25, this.y - this.r * 0.3, this.r * 0.45, this.r * 0.45);
+    p.stroke(this.hue, this.saturation, this.brightness - 10, 80);
+    p.strokeWeight(2);
+    p.noFill();
+    p.bezier(
+      this.x, this.y + this.r * 0.6,
+      this.x + this.r * 0.2, this.y + this.r * 1.4,
+      this.x - this.r * 0.3, this.y + this.r * 1.8,
+      this.x + p.sin(p.frameCount * 0.015 + this.x * 0.01) * this.r * 0.25,
+      this.y + this.r * 2.3
+    );
+  }
+}
+
+export function createBalloonScene(p) {
+  let balloons = [];
+  let confetti = [];
+  let speedMultiplier = 1;
+
+  function initBalloons() {
+    const count = Math.max(30, Math.floor(p.width * p.height * 0.00006));
+    balloons = Array.from({ length: count }, () => new Balloon(p, { x: p.random(p.width), y: p.random(p.height) }));
+  }
+
+  function initConfetti() {
+    const count = Math.max(60, Math.floor(p.width * p.height * 0.0001));
+    confetti = Array.from({ length: count }, () => ({
+      x: p.random(p.width),
+      y: p.random(p.height),
+      size: p.random(3, 7),
+      hue: p.random(0, 360),
+      speed: p.random(0.4, 1.1),
+      sway: p.random(0.008, 0.014)
+    }));
+  }
+
+  return {
+    id: 'balloons',
+    enter() {
+      p.colorMode(p.HSB, 360, 100, 100, 100);
+      initBalloons();
+      initConfetti();
+    },
+    resize() {
+      initBalloons();
+      initConfetti();
+    },
+    setSpeedMultiplier(multiplier = 1) {
+      speedMultiplier = multiplier;
+    },
+    pulse() {
+      for (let i = 0; i < 8; i++) {
+        balloons.unshift(new Balloon(p, { x: p.random(p.width), y: p.height + p.random(40, 140) }));
+      }
+      if (balloons.length > 160) balloons.length = 160;
+    },
+    draw() {
+      p.background(48, 20, 98, 100);
+
+      confetti.forEach(piece => {
+        piece.y += piece.speed * speedMultiplier;
+        piece.x += p.sin(p.frameCount * piece.sway) * 0.8 * speedMultiplier;
+        if (piece.y > p.height + piece.size) {
+          piece.y = -piece.size;
+          piece.x = p.random(p.width);
+        }
+        p.noStroke();
+        p.fill(piece.hue, 85, 95, 90);
+        p.rect(piece.x, piece.y, piece.size, piece.size * 1.4);
+      });
+
+      balloons.forEach(balloon => {
+        balloon.update(speedMultiplier);
+        balloon.draw();
+      });
+    }
+  };
+}
