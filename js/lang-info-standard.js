@@ -243,6 +243,12 @@
     modal.style.display = 'none';
     modal.style.position = 'fixed';
     modal.style.inset = '0';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.right = '0';
+    modal.style.bottom = '0';
+    modal.style.transform = 'none';
+    modal.style.margin = '0';
     modal.style.alignItems = 'center';
     modal.style.justifyContent = 'center';
     modal.style.padding = '16px';
