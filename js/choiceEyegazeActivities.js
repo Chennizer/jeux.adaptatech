@@ -79,7 +79,11 @@
     let desiredTileCount    = parseInt(tileCountInput?.value, 10) || 1;
     let currentCategory     = 'all';
 
-    let fixationDelay = parseInt(fixationTimeInput?.value, 10) || 2000;
+    const storedDwell = window.eyegazeSettings?.dwellTime;
+    const dwellFallback = parseInt(localStorage.getItem('eyegazeDwellTime'), 10);
+    let fixationDelay = Number.isFinite(storedDwell)
+      ? storedDwell
+      : (Number.isFinite(dwellFallback) ? dwellFallback : parseInt(fixationTimeInput?.value, 10) || 2000);
     let tileSize = parseInt(tileSizeInput?.value, 10) || 40;
     document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
     document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
@@ -611,12 +615,22 @@
     }
 
     if (fixationTimeInput && fixationTimeValue) {
+      fixationTimeInput.value = fixationDelay;
       fixationTimeValue.textContent = fixationDelay;
-      fixationTimeInput.addEventListener('input', () => {
-        fixationDelay = parseInt(fixationTimeInput.value, 10);
+      document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
+      const syncDwell = () => {
+        fixationDelay = parseInt(fixationTimeInput.value, 10) || 2000;
         fixationTimeValue.textContent = fixationDelay;
+        if (typeof setEyegazeDwellTime === 'function') {
+          setEyegazeDwellTime(fixationDelay);
+        } else if (window.eyegazeSettings) {
+          window.eyegazeSettings.dwellTime = fixationDelay;
+          try { localStorage.setItem('eyegazeDwellTime', fixationDelay); } catch (e) {}
+        }
         document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
-      });
+      };
+      fixationTimeInput.addEventListener('input', syncDwell);
+      fixationTimeInput.addEventListener('change', syncDwell);
     }
 
     if (tileSizeInput && tileSizeValue) {
