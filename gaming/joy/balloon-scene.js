@@ -3,13 +3,13 @@ class Balloon {
     this.p = p;
     this.x = x;
     this.y = y;
-    this.r = p.random(18, 36);
+    this.r = p.random(42, 72);
     this.hue = p.random(300, 360);
     this.saturation = p.random(55, 90);
     this.brightness = p.random(80, 100);
-    this.speed = p.random(0.5, 1.2);
-    this.drift = p.random(-0.5, 0.5);
-    this.wave = p.random(0.005, 0.013);
+    this.speed = p.random(0.35, 0.95);
+    this.drift = p.random(-0.4, 0.4);
+    this.wave = p.random(0.004, 0.01);
   }
 
   update(multiplier = 1) {
@@ -25,13 +25,13 @@ class Balloon {
     const p = this.p;
     this.x = x;
     this.y = y;
-    this.r = p.random(18, 36);
+    this.r = p.random(42, 78);
     this.hue = p.random(0, 360);
     this.saturation = p.random(65, 95);
     this.brightness = p.random(80, 100);
-    this.speed = p.random(0.5, 1.25);
-    this.drift = p.random(-0.4, 0.4);
-    this.wave = p.random(0.005, 0.012);
+    this.speed = p.random(0.35, 1.05);
+    this.drift = p.random(-0.35, 0.35);
+    this.wave = p.random(0.004, 0.01);
   }
 
   draw() {
@@ -60,7 +60,7 @@ export function createBalloonScene(p) {
   let speedMultiplier = 1;
 
   function initBalloons() {
-    const count = Math.max(30, Math.floor(p.width * p.height * 0.00006));
+    const count = Math.max(16, Math.floor(p.width * p.height * 0.00003));
     balloons = Array.from({ length: count }, () => new Balloon(p, { x: p.random(p.width), y: p.random(p.height) }));
   }
 

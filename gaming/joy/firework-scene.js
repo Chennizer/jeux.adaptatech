@@ -1,21 +1,22 @@
 class Particle {
-  constructor(p, { x, y, baseHue }) {
+  constructor(p, { x, y, vx, vy, baseHue, size, life, twinkle }) {
     this.p = p;
     this.x = x;
     this.y = y;
-    this.vx = p.random(-3, 3);
-    this.vy = p.random(-5, -2);
-    this.life = p.random(50, 90);
+    this.vx = vx;
+    this.vy = vy;
+    this.life = life;
     this.baseHue = baseHue;
-    this.hue = (baseHue + p.random(-20, 20) + 360) % 360;
-    this.size = p.random(2, 5);
+    this.hue = (baseHue + p.random(-24, 24) + 360) % 360;
+    this.size = size;
+    this.twinkle = twinkle;
   }
 
   update(multiplier = 1) {
     const p = this.p;
     this.x += this.vx * multiplier;
     this.y += this.vy * multiplier;
-    this.vy += 0.08 * multiplier;
+    this.vy += 0.1 * multiplier;
     this.life -= 1 * multiplier;
     return this.life > 0;
   }
@@ -23,9 +24,10 @@ class Particle {
   draw() {
     const p = this.p;
     p.noStroke();
-    const alpha = p.map(this.life, 0, 90, 0, 100);
-    p.fill(this.hue, 90, 100, alpha);
-    p.circle(this.x, this.y, this.size);
+    const alpha = p.map(this.life, 0, 120, 0, 100);
+    const flicker = this.twinkle ? (p.sin(p.frameCount * this.twinkle) + 1.2) * 0.6 : 1;
+    p.fill(this.hue, 92, 100, alpha * flicker);
+    p.circle(this.x, this.y, this.size * flicker);
   }
 }
 
@@ -76,16 +78,48 @@ export function createFireworkScene(p) {
     const x = fromTrail?.x ?? p.random(p.width * 0.1, p.width * 0.9);
     const y = fromTrail?.y ?? p.random(p.height * 0.2, p.height * 0.45);
     const baseHue = p.random(0, 360);
-    const count = p.random(45, 70);
+    const type = p.random(['burst', 'ring', 'palm', 'double']);
+    const count = type === 'double' ? p.random(120, 160) : p.random(80, 130);
+
     for (let i = 0; i < count; i++) {
-      particles.push(new Particle(p, { x, y, baseHue }));
+      const angle = p.random(p.TWO_PI);
+      const power = p.random(5, 11);
+      const size = p.random(3, 7);
+      let vx = Math.cos(angle) * power;
+      let vy = Math.sin(angle) * power;
+      let life = p.random(70, 120);
+      let twinkle = p.random(0.08, 0.16);
+
+      if (type === 'ring') {
+        const ringScale = p.random(8, 12);
+        vx = Math.cos(angle) * ringScale;
+        vy = Math.sin(angle) * ringScale * 0.85;
+        twinkle = p.random(0.06, 0.12);
+      } else if (type === 'palm') {
+        const tilt = p.random(-p.PI / 10, p.PI / 10);
+        const palmAngle = -p.HALF_PI + tilt + p.random(-0.25, 0.25);
+        const palmPower = p.random(9, 13);
+        vx = Math.cos(palmAngle) * palmPower * 0.65;
+        vy = Math.sin(palmAngle) * palmPower;
+        size = p.random(4, 8);
+        life = p.random(90, 140);
+      } else if (type === 'double') {
+        const stagger = i % 2 === 0 ? 1 : -1;
+        const doubleAngle = angle + stagger * 0.18;
+        const doublePower = p.random(7, 12);
+        vx = Math.cos(doubleAngle) * doublePower;
+        vy = Math.sin(doubleAngle) * doublePower;
+        size = p.random(3, 7.5);
+      }
+
+      particles.push(new Particle(p, { x, y, vx, vy, baseHue, size, life, twinkle }));
     }
   }
 
   function spawnTrail() {
     const hue = p.random(0, 360);
-    trails.push(new Trail(p, { x: p.random(p.width * 0.2, p.width * 0.8), hue }));
-    if (trails.length > 8) trails.shift();
+    trails.push(new Trail(p, { x: p.random(p.width * 0.15, p.width * 0.85), hue }));
+    if (trails.length > 10) trails.shift();
   }
 
   function spawnSparkles() {

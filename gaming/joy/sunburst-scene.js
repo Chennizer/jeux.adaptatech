@@ -24,12 +24,13 @@ function createOrbs(p, count) {
   const orbs = [];
   for (let i = 0; i < count; i++) {
     orbs.push({
-      x: p.random(p.width),
-      y: p.random(p.height),
-      r: p.random(20, 80),
+      angle: p.random(p.TWO_PI),
+      radius: p.random(p.width * 0.12, p.width * 0.34),
+      r: p.random(18, 70),
       hue: p.random(0, 360),
-      alpha: p.random(40, 90),
-      drift: p.random(0.1, 0.4)
+      alpha: p.random(45, 90),
+      speed: p.random(0.002, 0.01),
+      wobble: p.random(0.002, 0.006)
     });
   }
   return orbs;
@@ -73,17 +74,19 @@ export function createSunburstScene(p) {
 
   function drawOrbs() {
     p.noStroke();
+    const cx = p.width * 0.5;
+    const cy = p.height * 0.52;
     for (const orb of orbs) {
-      orb.y -= orb.drift * speedMultiplier;
-      if (orb.y < -orb.r) {
-        orb.y = p.height + orb.r;
-        orb.x = p.random(p.width);
-      }
+      orb.angle += orb.speed * speedMultiplier;
+      const breathing = p.sin(p.frameCount * orb.wobble) * 0.5;
+      const radius = orb.radius + breathing * 16;
+      const x = cx + p.cos(orb.angle) * radius;
+      const y = cy + p.sin(orb.angle) * radius * 0.85;
       const glow = orb.r * 1.5;
       p.fill((orb.hue + p.frameCount * 0.4) % 360, 70, 100, orb.alpha);
-      p.circle(orb.x, orb.y, glow);
+      p.circle(x, y, glow);
       p.fill((orb.hue + 20) % 360, 60, 90, orb.alpha + 20);
-      p.circle(orb.x, orb.y, orb.r);
+      p.circle(x, y, orb.r);
     }
   }
 

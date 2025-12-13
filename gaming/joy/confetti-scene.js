@@ -2,12 +2,15 @@ function createConfettiPiece(p) {
   return {
     x: p.random(p.width),
     y: p.random(-p.height, p.height),
-    size: p.random(6, 14),
+    size: p.random(7, 18),
     hue: p.random(0, 360),
-    speed: p.random(1.2, 2.4),
-    sway: p.random(0.004, 0.01),
+    shape: p.random(['rect', 'circle', 'triangle', 'streamer', 'star']),
+    speed: p.random(1.4, 2.9),
+    sway: p.random(0.006, 0.014),
+    drift: p.random(-0.6, 0.6),
     rotation: p.random(p.TWO_PI),
-    rotationSpeed: p.random(-0.08, 0.08)
+    rotationSpeed: p.random(-0.12, 0.12),
+    wiggle: p.random(0.005, 0.012)
   };
 }
 
@@ -64,7 +67,8 @@ export function createConfettiScene(p) {
 
       confetti.forEach(piece => {
         piece.y += piece.speed * speedMultiplier;
-        piece.x += p.sin(p.frameCount * piece.sway + piece.y * 0.02) * 1.6 * speedMultiplier;
+        piece.x += (p.sin(p.frameCount * piece.sway + piece.y * 0.015) * 2.2 + piece.drift) * speedMultiplier;
+        piece.y += p.sin(p.frameCount * piece.wiggle) * 0.4 * speedMultiplier;
         piece.rotation += piece.rotationSpeed * speedMultiplier;
         if (piece.y > p.height + piece.size) {
           Object.assign(piece, createConfettiPiece(p));
@@ -75,7 +79,36 @@ export function createConfettiScene(p) {
         p.rotate(piece.rotation);
         p.noStroke();
         p.fill(piece.hue, 90, 100, 85);
-        p.rect(0, 0, piece.size, piece.size * 0.6);
+        switch (piece.shape) {
+          case 'circle':
+            p.circle(0, 0, piece.size);
+            break;
+          case 'triangle':
+            p.triangle(
+              -piece.size * 0.6, piece.size * 0.5,
+              piece.size * 0.6, piece.size * 0.5,
+              0, -piece.size * 0.7
+            );
+            break;
+          case 'streamer':
+            p.rect(-piece.size * 0.3, -piece.size * 1.2, piece.size * 0.6, piece.size * 2, 4);
+            break;
+          case 'star': {
+            const spikes = 5;
+            const outer = piece.size * 0.6;
+            const inner = piece.size * 0.28;
+            p.beginShape();
+            for (let i = 0; i < spikes * 2; i++) {
+              const r = i % 2 === 0 ? outer : inner;
+              const a = i * p.PI / spikes;
+              p.vertex(Math.cos(a) * r, Math.sin(a) * r);
+            }
+            p.endShape(p.CLOSE);
+            break;
+          }
+          default:
+            p.rect(0, 0, piece.size, piece.size * 0.6);
+        }
         p.pop();
       });
 
