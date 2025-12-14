@@ -1,18 +1,18 @@
 const SKY_TOP = { h: 215, s: 55, b: 8 };
 const SKY_BOTTOM = { h: 215, s: 40, b: 4 };
-const MAX_LAUNCHES = 9;
-const MAX_PARTICLES = 2600;
-const STAR_COUNT = 120;
+const MAX_LAUNCHES = 7;
+const MAX_PARTICLES = 3200;
+const STAR_COUNT = 140;
 
 class Launch {
   constructor(p, x, color) {
     this.p = p;
     this.x = x;
     this.y = p.height + 20;
-    this.vx = p.random(-0.65, 0.65);
-    this.vy = p.random(-11.5, -15.5);
+    this.vx = p.random(-0.55, 0.55);
+    this.vy = p.random(-10.5, -14.5);
     this.color = color;
-    this.fuse = p.random(34, 48);
+    this.fuse = p.random(40, 56);
     this.sparkLife = [];
   }
 
@@ -20,8 +20,8 @@ class Launch {
     const p = this.p;
     this.x += this.vx * multiplier;
     this.y += this.vy * multiplier;
-    this.vy *= 0.99;
-    this.vy += 0.12 * multiplier;
+    this.vy *= 0.992;
+    this.vy += 0.1 * multiplier;
     this.fuse -= 1 * multiplier;
 
     // trail spark bookkeeping
@@ -56,10 +56,10 @@ class BurstParticle {
     Object.assign(
       this,
       {
-        drag: 0.99,
-        gravity: 0.12,
-        fade: 0.015,
-        twinkle: 0.4,
+        drag: 0.992,
+        gravity: 0.095,
+        fade: 0.011,
+        twinkle: 0.45,
         glow: 0
       },
       opts
@@ -155,34 +155,34 @@ export function createFireworkScene(p) {
     const type = p.random(['peony', 'chrysanthemum', 'ring', 'palm', 'willow', 'brocade', 'double']);
     const palette = choosePalette(hue);
     const heavyStyles = ['willow', 'brocade'];
-    const countBase = type === 'ring' ? 180 : type === 'double' ? 220 : heavyStyles.includes(type) ? 240 : 180;
-    const wobble = type === 'chrysanthemum' ? 0.5 : 0.12;
+    const countBase = type === 'ring' ? 240 : type === 'double' ? 280 : heavyStyles.includes(type) ? 320 : 240;
+    const wobble = type === 'chrysanthemum' ? 0.4 : 0.1;
     const glow = type === 'brocade' || type === 'willow' ? 1 : 0;
 
     for (let i = 0; i < countBase; i++) {
       const angle = p.random(p.TWO_PI);
-      const spread = type === 'palm' ? p.random(0.35, 1.15) : p.random(0.65, 1.1);
-      const speedBase = p.random(6.5, 11.5) * spread;
+      const spread = type === 'palm' ? p.random(0.4, 1.2) : p.random(0.65, 1.1);
+      const speedBase = p.random(6.5, 11.8) * spread;
       let speed = speedBase;
       if (type === 'willow' || type === 'brocade') speed = p.random(5.5, 10) * spread;
-      const vx = Math.cos(angle) * speed * (type === 'ring' ? 0.92 : 1);
+      const vx = Math.cos(angle) * speed * (type === 'ring' ? 0.88 : 1);
       const vy = Math.sin(angle) * speed;
       const hueChoice = p.random(palette);
       const hueShift = p.random(-14, 14);
       const sat = type === 'brocade' ? p.random(55, 80) : p.random(70, 100);
-      const size = type === 'palm' ? p.random(4.5, 7.5) : type === 'willow' ? p.random(3.6, 6.2) : p.random(3, 6.2);
-      const life = heavyStyles.includes(type) ? p.random(150, 220) : p.random(110, 170);
-      const fade = heavyStyles.includes(type) ? 0.01 : 0.013;
-      const drag = type === 'willow' ? 0.994 : type === 'brocade' ? 0.992 : 0.99;
-      const gravity = type === 'willow' ? 0.09 : 0.11;
-      const twinkle = type === 'ring' ? 0.25 : 0.45;
+      const size = type === 'palm' ? p.random(5.5, 8.8) : type === 'willow' ? p.random(4.4, 7.4) : p.random(3.8, 7);
+      const life = heavyStyles.includes(type) ? p.random(180, 260) : p.random(140, 210);
+      const fade = heavyStyles.includes(type) ? 0.008 : 0.011;
+      const drag = type === 'willow' ? 0.995 : type === 'brocade' ? 0.993 : 0.992;
+      const gravity = type === 'willow' ? 0.075 : 0.095;
+      const twinkle = type === 'ring' ? 0.3 : 0.5;
 
       particles.push(
         new BurstParticle(p, {
           x,
           y,
           vx: vx + p.random(-wobble, wobble),
-          vy: vy - (type === 'palm' ? 2.4 : 0),
+          vy: vy - (type === 'palm' ? 2.6 : 0),
           hue: (hueChoice + hueShift + 360) % 360,
           sat: p.constrain(sat, 25, 100),
           life,
@@ -207,17 +207,43 @@ export function createFireworkScene(p) {
             vy: Math.sin(angle) * innerSpeed,
             hue: innerHue,
             sat: p.random(60, 90),
-            life: life * 0.8,
-            maxLife: life * 0.8,
-            size: size * 0.65,
-            fade: fade * 1.2,
-            drag: 0.991,
-            gravity: 0.12,
-            twinkle: 0.5,
+            life: life * 0.95,
+            maxLife: life * 0.95,
+            size: size * 0.75,
+            fade: fade * 1.1,
+            drag: 0.993,
+            gravity: 0.1,
+            twinkle: 0.55,
             glow: 0
           })
         );
       }
+    }
+
+    // lingering embers to stretch the finale
+    const emberCount = 70;
+    for (let i = 0; i < emberCount; i++) {
+      const angle = p.random(p.TWO_PI);
+      const speed = p.random(1.4, 3.2);
+      const hueChoice = p.random(palette);
+      particles.push(
+        new BurstParticle(p, {
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          hue: (hueChoice + p.random(-10, 10) + 360) % 360,
+          sat: p.random(55, 95),
+          life: p.random(190, 260),
+          maxLife: 260,
+          size: p.random(2.4, 4.2),
+          fade: 0.006,
+          drag: 0.996,
+          gravity: 0.06,
+          twinkle: 0.6,
+          glow: 1
+        })
+      );
     }
 
     if (particles.length > MAX_PARTICLES) {
@@ -248,7 +274,7 @@ export function createFireworkScene(p) {
       drawStars();
 
       autoTimer += 1 * speedMultiplier;
-      if (autoTimer > 40) {
+      if (autoTimer > 75) {
         spawnLaunch();
         autoTimer = 0;
       }
