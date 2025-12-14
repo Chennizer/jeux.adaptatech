@@ -20,7 +20,7 @@
     #langToggle {
       position: fixed;
       top: 14px;
-      right: 44px; /* same horizontal offset as the other games */
+      right: 44px;
       z-index: 11;
       display: inline-flex;
       align-items: center;
@@ -37,14 +37,8 @@
       transition: box-shadow 0.2s ease, transform 0.05s ease, background 0.2s ease;
       user-select: none;
     }
-
-    #langToggle:hover {
-      box-shadow: 0 0 0 3px rgba(4, 200, 187, 0.2);
-    }
-
-    #langToggle:active {
-      transform: translateY(1px);
-    }
+    #langToggle:hover { box-shadow: 0 0 0 3px rgba(4, 200, 187, 0.2); }
+    #langToggle:active { transform: translateY(1px); }
 
     /* Info toggle top-left (hidden after Start) */
     #infoButton{
@@ -84,6 +78,58 @@
     body.dark #segSwitch{ border-color:#00b3a4; }
     body.dark #segSwitch .seg-btn{ background:#111; color:#00b3a4; }
     body.dark #segSwitch .seg-btn[aria-selected="true"]{ background:#00b3a4; color:#111; }
+
+    /* ===== Cockpit bars overlay (ONLY grey bars; everything else transparent) ===== */
+    #cockpitOverlay{
+      position: fixed;
+      inset: 0;
+      z-index: 6;            /* above canvas, below #promptOverlay */
+      pointer-events: none;
+      user-select: none;
+    }
+    body:not(.started) #cockpitOverlay{ display:none; }
+
+    .cockpit-svg{
+      position:absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /*
+      Improved “metal bar” look:
+      - A main thick stroke
+      - A darker edge stroke (under)
+      - A light highlight stroke (over)
+      These are separate paths stacked in SVG groups.
+    */
+    .cockpit-svg .bar-base{
+      fill: none;
+      stroke: rgba(105, 110, 120, 0.92);
+      stroke-width: 18;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+    .cockpit-svg .bar-edge{
+      fill: none;
+      stroke: rgba(25, 28, 32, 0.35);
+      stroke-width: 22;           /* slightly bigger = subtle “outline” */
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+    .cockpit-svg .bar-hi{
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.14);
+      stroke-width: 4;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+
+    /* Keep the outer border exactly on the screen edge */
+    .cockpit-svg .outerBorder{
+      vector-effect: non-scaling-stroke; /* keeps consistent thickness if SVG scales */
+      shape-rendering: geometricPrecision;
+    }
   </style>
 
   <!-- GA -->
@@ -95,6 +141,7 @@
     gtag('config', 'G-B45TJG4GBJ');
   </script>
 </head>
+
 <body>
   <!-- Language toggle -->
   <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN / JA</button>
@@ -145,6 +192,59 @@
     <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
   </div>
 
+  <!-- Cockpit overlay: only bars, transparent everywhere else -->
+  <div id="cockpitOverlay" aria-hidden="true">
+    <!-- ViewBox is 1000x700; we draw the outer border exactly on the edges (0..1000 and 0..700) -->
+    <svg class="cockpit-svg" viewBox="0 0 1000 700" preserveAspectRatio="none">
+      <!-- Define one “shape” as reusable path data, then draw it 3 times (edge/base/highlight) -->
+      <!-- Outer border (on the screen edge) -->
+      <g class="outerBorder">
+        <path class="bar-edge" d="M0,0 L1000,0 L1000,700 L0,700 Z" />
+        <path class="bar-base" d="M0,0 L1000,0 L1000,700 L0,700 Z" />
+        <path class="bar-hi"   d="M8,8 L992,8" /> <!-- small top highlight -->
+      </g>
+
+      <!-- Inner “window” rectangle (perspective) -->
+      <g>
+        <path class="bar-edge" d="M300,220 L700,220 L740,500 L260,500 Z" />
+        <path class="bar-base" d="M300,220 L700,220 L740,500 L260,500 Z" />
+        <!-- highlight line across the top edge of inner window -->
+        <path class="bar-hi"   d="M312,212 L688,212" />
+      </g>
+
+      <!-- Connecting diagonals -->
+      <g>
+        <!-- top-left -->
+        <path class="bar-edge" d="M0,0 L300,220" />
+        <path class="bar-base" d="M0,0 L300,220" />
+        <path class="bar-hi"   d="M18,10 L286,210" />
+
+        <!-- top-right -->
+        <path class="bar-edge" d="M1000,0 L700,220" />
+        <path class="bar-base" d="M1000,0 L700,220" />
+        <path class="bar-hi"   d="M982,10 L714,210" />
+
+        <!-- bottom-left -->
+        <path class="bar-edge" d="M0,700 L260,500" />
+        <path class="bar-base" d="M0,700 L260,500" />
+        <path class="bar-hi"   d="M18,690 L246,512" />
+
+        <!-- bottom-right -->
+        <path class="bar-edge" d="M1000,700 L740,500" />
+        <path class="bar-base" d="M1000,700 L740,500" />
+        <path class="bar-hi"   d="M982,690 L754,512" />
+      </g>
+
+      <!-- Optional: tiny corner “nodes” (still just grey bars; looks more “constructed”) -->
+      <g>
+        <path class="bar-edge" d="M300,220 L305,220" />
+        <path class="bar-edge" d="M700,220 L695,220" />
+        <path class="bar-edge" d="M260,500 L265,500" />
+        <path class="bar-edge" d="M740,500 L735,500" />
+      </g>
+    </svg>
+  </div>
+
   <script>
     /* ===== Translation system (single language code in button, like Melancholic Scenes) ===== */
     const LS_LANG_KEY = 'siteLanguage';
@@ -157,7 +257,6 @@
     }
 
     function getText(el, lang) {
-      // Try requested lang first, then fall back in SUPPORTED_LANGS order
       for (const code of [lang, ...SUPPORTED_LANGS.filter(c => c !== lang)]) {
         const val = el.getAttribute(`data-${code}`);
         if (val != null) return val;
@@ -172,7 +271,6 @@
         const value = getText(el, safeLang);
         if (value == null) return;
 
-        // Allow HTML where needed (P, BUTTON, DIV, H1/2/3)
         if (['P', 'BUTTON', 'DIV', 'H1', 'H2', 'H3'].includes(el.tagName)) {
           el.innerHTML = value;
         } else {
@@ -180,10 +278,8 @@
         }
       });
 
-      // Update html lang
       document.documentElement.lang = safeLang;
 
-      // Update <title>
       const titleEl = document.querySelector('title');
       if (titleEl) {
         const nextTitle = getText(titleEl, safeLang);
@@ -193,7 +289,6 @@
         }
       }
 
-      // Language pill shows ONLY the next language to cycle to
       if (langToggle) {
         const idx = SUPPORTED_LANGS.indexOf(safeLang);
         const nextIdx = (idx + 1) % SUPPORTED_LANGS.length;
@@ -203,9 +298,7 @@
 
     function setLang(lang) {
       const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
-      try {
-        localStorage.setItem(LS_LANG_KEY, safeLang);
-      } catch (e) {}
+      try { localStorage.setItem(LS_LANG_KEY, safeLang); } catch (e) {}
       applyTranslations(safeLang);
     }
 
@@ -213,9 +306,7 @@
       let initial = documentLangFallback();
       try {
         const stored = localStorage.getItem(LS_LANG_KEY);
-        if (SUPPORTED_LANGS.includes(stored)) {
-          initial = stored;
-        }
+        if (SUPPORTED_LANGS.includes(stored)) initial = stored;
       } catch (e) {}
       return initial;
     }
@@ -231,7 +322,6 @@
       setLang(nextLang);
     });
 
-    // Initialize language on load
     setLang(getInitialLang());
 
     // ===== Game state =====
@@ -337,7 +427,6 @@
     }
     function ftlActiveForUpdate(){ return (ftlMode==="fast"||ftlMode==="slow")?ftlStarSpeed:normalStarSpeed; }
 
-    // Keys
     function keyPressed(){
       if(!started) return;
       if(oneButtonMode && keyCode===32){
@@ -385,8 +474,8 @@
     // UI bindings
     document.getElementById("startButton").addEventListener("click", function() {
       started = true;
+      document.body.classList.add('started');
 
-      // Use segmented choice to set game flag
       oneButtonMode = (segChoice === 'one');
 
       document.getElementById("promptOverlay").style.display = "none";
@@ -395,6 +484,7 @@
 
       goFullscreen();
     });
+
     document.getElementById("infoButton").addEventListener("click", function() {
       document.getElementById("infoModal").style.display = "block";
     });
@@ -404,7 +494,7 @@
 
     function windowResized(){ resizeCanvas(windowWidth,windowHeight); }
     function goFullscreen(){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen().catch(()=>{}); } }
-    
+
     // ===== Entities (unchanged) =====
     class Star{
       constructor(){this.reset();}

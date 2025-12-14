@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title
+    class="translate"
+    data-fr="Lignes fluides"
+    data-en="Flow Lines"
+    data-ja="流れる線">
+    Lignes fluides (ESPACE = activer)
+  </title>
+
+  <!-- Styles / libs -->
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+
+  <style>
+    /* Language pill – unified style */
+    #langToggle {
+      position: fixed;
+      top: 14px;
+      right: 44px;
+      z-index: 11;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 2px solid #04c8bb;
+      background: #0b0f12;
+      color: #04c8bb;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 0 0 0 rgba(4, 200, 187, 0);
+      transition: box-shadow 0.2s ease, transform 0.05s ease, background 0.2s ease;
+      user-select: none;
+    }
+    #langToggle:hover { box-shadow: 0 0 0 3px rgba(4, 200, 187, 0.2); }
+    #langToggle:active { transform: translateY(1px); }
+
+    /* Info toggle top-left (hidden after Start) */
+    #infoButton{
+      position: fixed; top:10px; left:10px; z-index:99999;
+      display:inline-flex; align-items:center; justify-content:center;
+      width:40px; height:40px; border-radius:10px; border:2px solid #009688;
+      background:#fff; color:#009688; font-weight:700; cursor:pointer;
+      user-select:none;
+    }
+    body.dark #infoButton { background:#111; color:#00b3a4; border-color:#00b3a4; }
+
+    /* Start overlay layout helpers */
+    #startOptions{
+      display:flex; gap:12px; align-items:center; justify-content:center; margin:14px 0;
+      flex-wrap: wrap;
+    }
+
+    /* ===== Segmented two-button switch ===== */
+    #segSwitch{
+      display:inline-flex; align-items:center;
+      border:2px solid #009688; border-radius:999px; overflow:hidden;
+      box-shadow:0 2px 6px rgba(0,0,0,.12);
+    }
+    #segSwitch .seg-btn{
+      padding:8px 14px; border:0; background:#fff; color:#009688;
+      font-weight:700; cursor:pointer; user-select:none;
+    }
+    #segSwitch .seg-btn[aria-selected="true"]{
+      background:#009688; color:#fff;
+    }
+
+    /* Better contrast against overlay bg */
+    #promptOverlay #segSwitch{ border-color:#fff; }
+    #promptOverlay #segSwitch .seg-btn{ background:rgba(255,255,255,0.1); color:#fff; }
+    #promptOverlay #segSwitch .seg-btn[aria-selected="true"]{ background:#fff; color:#009688; }
+
+    /* Dark mode */
+    body.dark #segSwitch{ border-color:#00b3a4; }
+    body.dark #segSwitch .seg-btn{ background:#111; color:#00b3a4; }
+    body.dark #segSwitch .seg-btn[aria-selected="true"]{ background:#00b3a4; color:#111; }
+  </style>
+
+  <!-- GA (optional) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+
+<body>
+  <!-- Language toggle -->
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN / JA</button>
+
+  <!-- Info toggle (hidden after Start) -->
+  <button id="infoButton" title="Plus d'infos" class="translate" data-fr="ⓘ" data-en="ⓘ" data-ja="ⓘ">ⓘ</button>
+
+  <!-- Prompt Overlay -->
+  <div id="promptOverlay">
+    <p class="translate translate-html"
+       data-fr="<b>Mode 1 (maintenir)</b> : Maintenir ESPACE = les lignes accélèrent graduellement (rampe), relâcher = tout s’arrête.<br><b>Mode 2 (10 secondes)</b> : Appuyer ESPACE = mouvement pendant 10 secondes, puis arrêt. Appuyer de nouveau pour repartir."
+       data-en="<b>Mode 1 (hold)</b>: Hold SPACE = lines ramp up to a steady speed, release = everything stops.<br><b>Mode 2 (10 seconds)</b>: Press SPACE = movement for 10 seconds, then stop. Press again to restart."
+       data-ja="<b>モード1（押し続け）</b>：スペースを押し続けると徐々に加速、離すと停止。<br><b>モード2（10秒）</b>：スペースを押すと10秒動き、その後停止。もう一度押すと再開。">
+      Mode 1: maintenir ESPACE, relâcher = arrêt. Mode 2: 10 secondes par appui.
+    </p>
+
+    <!-- Mode chooser -->
+    <div id="startOptions">
+      <div id="segSwitch" role="tablist" aria-label="Control mode">
+        <button type="button" role="tab" id="segHold" aria-selected="true" class="seg-btn">
+          <span class="translate" data-fr="Mode 1 — maintenir" data-en="Mode 1 — hold" data-ja="モード1 — 押し続け">
+            Mode 1 — maintenir
+          </span>
+        </button>
+        <button type="button" role="tab" id="segTimed" aria-selected="false" class="seg-btn">
+          <span class="translate" data-fr="Mode 2 — 10 secondes" data-en="Mode 2 — 10 seconds" data-ja="モード2 — 10秒">
+            Mode 2 — 10 secondes
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+  </div>
+
+  <!-- Info Modal -->
+  <div id="infoModal" style="display:none;">
+    <p class="translate translate-html"
+       data-fr="Compétences: cause à effet, maintien (mode 1), anticipation/relance (mode 2), autorégulation par stimulation visuelle douce."
+       data-en="Skills: cause-and-effect, holding (mode 1), anticipation/restart (mode 2), self-regulation with gentle visuals."
+       data-ja="スキル：因果関係、保持（モード1）、再開の予測（モード2）、穏やかな視覚刺激による調整。">
+      Compétences: cause à effet, maintien, anticipation, autorégulation.
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
+  </div>
+
+  <script>
+    /* ===== Translation system ===== */
+    const LS_LANG_KEY = 'siteLanguage';
+    const SUPPORTED_LANGS = ['en', 'ja', 'fr'];
+    const langToggle = document.getElementById('langToggle');
+
+    function documentLangFallback() {
+      const htmlLang = (document.documentElement.lang || '').toLowerCase();
+      return SUPPORTED_LANGS.includes(htmlLang) ? htmlLang : 'en';
+    }
+    function getText(el, lang) {
+      for (const code of [lang, ...SUPPORTED_LANGS.filter(c => c !== lang)]) {
+        const val = el.getAttribute(`data-${code}`);
+        if (val != null) return val;
+      }
+      return null;
+    }
+    function applyTranslations(lang) {
+      const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
+
+      document.querySelectorAll('.translate').forEach(el => {
+        const value = getText(el, safeLang);
+        if (value == null) return;
+        if (['P', 'BUTTON', 'DIV', 'H1', 'H2', 'H3', 'SPAN'].includes(el.tagName)) el.innerHTML = value;
+        else el.textContent = value;
+      });
+
+      document.documentElement.lang = safeLang;
+
+      const titleEl = document.querySelector('title');
+      if (titleEl) {
+        const nextTitle = getText(titleEl, safeLang);
+        if (nextTitle) {
+          titleEl.textContent = nextTitle;
+          document.title = nextTitle;
+        }
+      }
+
+      if (langToggle) {
+        const idx = SUPPORTED_LANGS.indexOf(safeLang);
+        langToggle.textContent = SUPPORTED_LANGS[(idx + 1) % SUPPORTED_LANGS.length].toUpperCase();
+      }
+    }
+    function setLang(lang) {
+      const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
+      try { localStorage.setItem(LS_LANG_KEY, safeLang); } catch (e) {}
+      applyTranslations(safeLang);
+    }
+    function getInitialLang() {
+      let initial = documentLangFallback();
+      try {
+        const stored = localStorage.getItem(LS_LANG_KEY);
+        if (SUPPORTED_LANGS.includes(stored)) initial = stored;
+      } catch (e) {}
+      return initial;
+    }
+    langToggle?.addEventListener('click', () => {
+      const currentRaw =
+        (typeof localStorage !== 'undefined' && localStorage.getItem(LS_LANG_KEY)) ||
+        document.documentElement.lang ||
+        'en';
+      const current = currentRaw.toLowerCase();
+      const idx = SUPPORTED_LANGS.indexOf(current);
+      setLang(SUPPORTED_LANGS[(idx + 1) % SUPPORTED_LANGS.length]);
+    });
+    setLang(getInitialLang());
+
+    /* ===== Mode selection (pre-start) ===== */
+    let segChoice = 'hold'; // 'hold' | 'timed'
+    const segHold = document.getElementById('segHold');
+    const segTimed = document.getElementById('segTimed');
+
+    function selectSeg(which){
+      segChoice = which;
+      segHold.setAttribute('aria-selected', which === 'hold' ? 'true' : 'false');
+      segTimed.setAttribute('aria-selected', which === 'timed' ? 'true' : 'false');
+    }
+    segHold.addEventListener('click', ()=> selectSeg('hold'));
+    segTimed.addEventListener('click', ()=> selectSeg('timed'));
+
+    /* ===== Start / info UI ===== */
+    let started = false;
+
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+
+      document.getElementById("promptOverlay").style.display = "none";
+      const pill = document.getElementById('langToggle'); if (pill) pill.style.display = 'none';
+      const info = document.getElementById('infoButton'); if (info) info.style.display = 'none';
+
+      goFullscreen();
+    });
+
+    document.getElementById("infoButton").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "block";
+    });
+    document.getElementById("closeModal").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "none";
+    });
+
+    function goFullscreen(){
+      if(!document.fullscreenElement){
+        document.documentElement.requestFullscreen().catch(()=>{});
+      }
+    }
+  </script>
+
+  <script>
+    /* =========================================================
+       FLOW LINES – Updated control modes
+       Mode 1 (hold): hold SPACE => ramp up speed, release => freeze
+       Mode 2 (timed): press SPACE => run 10s then stop, press again
+       ========================================================= */
+
+    // Canvas + ribbons
+    let canvas;
+    let ribbons = [];
+    const RIBBON_COUNT = 70;
+    const RIBBON_LEN   = 60;
+
+    // Orientation (optional)
+    let currentAngle = 0;
+    let targetAngle  = 0;
+
+    // Influence point (mouse/gaze proxy)
+    let influence = { x: 0, y: 0 };
+
+    // Run state
+    let isHolding = false;               // only used in hold mode
+    let runActive = false;               // whether motion is currently active
+    let runStartMs = 0;                  // for timed mode and ramp
+    const RAMP_MS = 2400;                // "ramps up over a few seconds"
+    const TIMED_RUN_MS = 10000;          // 10 seconds
+
+    // Speed control (smoothed)
+    let speed = 0.0;                     // current motion multiplier
+    let speedTarget = 0.0;
+    const BASE_SPEED = 0.0;              // when stopped, truly frozen
+    const CRUISE_SPEED = 1.0;            // steady "good speed"
+    const WIND_BOOST = 1.35;             // optional extra at top end (kept mild)
+
+    // Flow field tuning
+    let noiseScale = 0.0028;
+    let timeScale  = 0.00025;
+    let coherence  = 0.70;               // 0..1 higher=smoother
+
+    function setup(){
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.position(0,0);
+
+      influence.x = width/2;
+      influence.y = height/2;
+
+      ribbons = [];
+      for (let i=0; i<RIBBON_COUNT; i++){
+        ribbons.push(new Ribbon());
+      }
+
+      strokeCap(ROUND);
+      noFill();
+    }
+
+    function draw(){
+      background(0, 18);
+
+      if(!started){
+        return;
+      }
+
+      // Update influence point
+      influence.x = mouseX;
+      influence.y = mouseY;
+
+      // Determine whether run should be active
+      if(segChoice === 'hold'){
+        runActive = isHolding;
+        if(!runActive){
+          // immediate freeze (no easing) on release
+          speed = 0.0;
+          speedTarget = 0.0;
+        } else {
+          // ramp while holding
+          const e = millis() - runStartMs;
+          const ramp = constrain(e / RAMP_MS, 0, 1);
+          // ramp into a stable speed; mild extra "alive" feel at top
+          speedTarget = lerp(0.0, CRUISE_SPEED, easeInOut(ramp));
+          // optional: slight boost once fully ramped
+          if(ramp >= 1) speedTarget *= WIND_BOOST;
+          speed = lerp(speed, speedTarget, 0.10);
+        }
+      } else {
+        // timed mode: runActive for 10 seconds after press
+        if(runActive){
+          const e = millis() - runStartMs;
+          if(e >= TIMED_RUN_MS){
+            runActive = false;
+            speed = 0.0;
+            speedTarget = 0.0;
+          } else {
+            // simple: start quickly then stabilize
+            const ramp = constrain(e / min(RAMP_MS, 1500), 0, 1);
+            speedTarget = lerp(0.0, CRUISE_SPEED, easeInOut(ramp));
+            speed = lerp(speed, speedTarget, 0.10);
+          }
+        } else {
+          speed = 0.0;
+          speedTarget = 0.0;
+        }
+      }
+
+      // Optional rotation
+      currentAngle = lerp(currentAngle, targetAngle, 0.10);
+
+      push();
+      translate(width/2, height/2);
+      rotate(radians(currentAngle));
+      translate(-width/2, -height/2);
+
+      // Update and draw ribbons
+      // If speed == 0, they will draw but not move (frozen)
+      for(const r of ribbons){
+        r.update(speed);
+        r.display(speed);
+      }
+
+      pop();
+    }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function keyPressed(){
+      if(!started) return;
+
+      // SPACE is the switch
+      if(keyCode === 32){
+        if(segChoice === 'hold'){
+          if(!isHolding){
+            isHolding = true;
+            runStartMs = millis(); // start ramp
+          }
+        } else {
+          // timed mode: press to start/restart 10s run
+          runActive = true;
+          runStartMs = millis();
+        }
+      }
+
+      // Optional rotation
+      if(keyCode === LEFT_ARROW)  targetAngle -= 90;
+      if(keyCode === RIGHT_ARROW) targetAngle += 90;
+    }
+
+    function keyReleased(){
+      if(!started) return;
+
+      if(keyCode === 32 && segChoice === 'hold'){
+        isHolding = false; // immediate freeze handled in draw()
+      }
+    }
+
+    // Smooth ramp curve
+    function easeInOut(t){
+      // smootherstep
+      return t*t*t*(t*(t*6 - 15) + 10);
+    }
+
+    // Angle lerp helper handling wrap
+    function lerpAngle(a, b, amt){
+      let diff = ((b - a + PI) % (TWO_PI)) - PI;
+      return a + diff * amt;
+    }
+
+    // Flow vector at position
+    function flowAt(x, y, t, spd){
+      const s = lerp(noiseScale * 1.8, noiseScale * 0.8, coherence);
+      const n = noise(x * s, y * s, t);
+      let a = n * TWO_PI * 2.0;
+
+      // Presence influence (gentle bend toward pointer)
+      const dx = influence.x - x;
+      const dy = influence.y - y;
+      const dist = sqrt(dx*dx + dy*dy) + 0.0001;
+      const influenceRadius = min(width, height) * 0.45;
+      const w = constrain(1.0 - (dist / influenceRadius), 0, 1);
+      const attractAngle = atan2(dy, dx);
+
+      // Bend increases slightly with speed so it feels "alive" when running
+      const bend = w * (0.10 + 0.22 * spd);
+      a = lerpAngle(a, attractAngle, bend);
+
+      const v = p5.Vector.fromAngle(a);
+      v.mult(1.8 * spd); // speed drives motion directly
+      return v;
+    }
+
+    class Ribbon{
+      constructor(){ this.reset(true); }
+
+      reset(first=false){
+        const side = floor(random(4));
+        if(side === 0){ this.head = createVector(random(width), -20); }
+        if(side === 1){ this.head = createVector(width+20, random(height)); }
+        if(side === 2){ this.head = createVector(random(width), height+20); }
+        if(side === 3){ this.head = createVector(-20, random(height)); }
+
+        this.points = [];
+        for(let i=0;i<RIBBON_LEN;i++) this.points.push(this.head.copy());
+
+        this.baseW = random(0.9, 2.6);
+        this.alpha = random(90, 170);
+        this.hueShift = random(0, 1);
+        this.seed = random(1000);
+
+        if(first){
+          for(let i=0;i<RIBBON_LEN;i++){
+            this.points[i].x += random(-3, 3);
+            this.points[i].y += random(-3, 3);
+          }
+        }
+      }
+
+      update(spd){
+        if(spd <= 0.0001){
+          // Frozen: do nothing (keeps exact stillness)
+          return;
+        }
+
+        const t = millis() * timeScale + this.seed;
+        const v = flowAt(this.head.x, this.head.y, t, spd);
+        v.limit(3.2 * spd);
+
+        this.head.add(v);
+
+        if(this.head.x < -80 || this.head.x > width+80 || this.head.y < -80 || this.head.y > height+80){
+          this.reset();
+          return;
+        }
+
+        this.points.unshift(this.head.copy());
+        this.points.pop();
+
+        // Gentle smoothing
+        for(let i=1;i<this.points.length-1;i++){
+          this.points[i].x = lerp(this.points[i].x, (this.points[i-1].x + this.points[i+1].x)/2, 0.08);
+          this.points[i].y = lerp(this.points[i].y, (this.points[i-1].y + this.points[i+1].y)/2, 0.08);
+        }
+      }
+
+      display(spd){
+        // Visibility responds to speed, but still visible when stopped
+        const w = this.baseW * (0.9 + 0.7 * spd);
+        const a = this.alpha * (0.55 + 0.65 * spd);
+
+        const tint = lerp(210, 255, this.hueShift);
+        stroke(tint, tint, 255, a);
+        strokeWeight(w);
+
+        beginShape();
+        for(const p of this.points) vertex(p.x, p.y);
+        endShape();
+      }
+    }
+  </script>
+</body>
+</html>
