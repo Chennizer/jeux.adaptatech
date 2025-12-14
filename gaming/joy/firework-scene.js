@@ -86,14 +86,15 @@ export function createFireworkScene(p) {
   let autoTimer = 0;
 
   function gradientBackground() {
-    p.noFill();
-    for (let y = 0; y <= p.height; y += 3) {
+    p.background(0, 0, 0, 100);
+    p.noStroke();
+    for (let y = 0; y <= p.height; y += 2) {
       const t = y / p.height;
       const h = p.lerp(SKY_TOP.h, SKY_BOTTOM.h, t);
       const s = p.lerp(SKY_TOP.s, SKY_BOTTOM.s, t);
       const b = p.lerp(SKY_TOP.b, SKY_BOTTOM.b, t);
-      p.stroke(h, s, b, 100);
-      p.line(0, y, p.width, y);
+      p.fill(h, s, b, 100);
+      p.rect(0, y, p.width, 2);
     }
   }
 
