@@ -1,17 +1,28 @@
 function createConfettiPiece(p) {
   return {
     x: p.random(p.width),
-    y: p.random(-p.height, p.height),
+    y: p.random(p.height),
     size: p.random(7, 18),
     hue: p.random(0, 360),
     shape: p.random(['rect', 'circle', 'triangle', 'streamer', 'star']),
-    speed: p.random(1.4, 2.9),
-    sway: p.random(0.006, 0.014),
-    drift: p.random(-0.6, 0.6),
+    vx: 0,
+    vy: 0,
     rotation: p.random(p.TWO_PI),
     rotationSpeed: p.random(-0.12, 0.12),
-    wiggle: p.random(0.005, 0.012)
+    popTimer: p.random(10, 90)
   };
+}
+
+function popPiece(p, piece) {
+  const angle = p.random(p.TWO_PI);
+  const speed = p.random(2.2, 4.6);
+  piece.x = p.random(p.width);
+  piece.y = p.random(p.height);
+  piece.vx = Math.cos(angle) * speed;
+  piece.vy = Math.sin(angle) * speed;
+  piece.rotationSpeed = p.random(-0.15, 0.15);
+  piece.popTimer = p.random(40, 100);
+  piece.hue = (piece.hue + p.random(-40, 40) + 360) % 360;
 }
 
 function createSpark(p) {
@@ -33,7 +44,11 @@ export function createConfettiScene(p) {
 
   function initConfetti() {
     const count = Math.max(120, Math.floor(p.width * p.height * 0.00015));
-    confetti = Array.from({ length: count }, () => createConfettiPiece(p));
+    confetti = Array.from({ length: count }, () => {
+      const piece = createConfettiPiece(p);
+      popPiece(p, piece);
+      return piece;
+    });
   }
 
   function initSparks() {
@@ -57,7 +72,11 @@ export function createConfettiScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      for (let i = 0; i < 40; i++) confetti.push(createConfettiPiece(p));
+      for (let i = 0; i < 20; i++) {
+        const piece = createConfettiPiece(p);
+        popPiece(p, piece);
+        confetti.push(piece);
+      }
       if (confetti.length > 320) confetti.splice(0, confetti.length - 320);
     },
     draw() {
@@ -66,14 +85,19 @@ export function createConfettiScene(p) {
       p.background(baseHue, 35, 98, 100);
 
       confetti.forEach(piece => {
-        piece.y += piece.speed * speedMultiplier;
-        piece.x += (p.sin(p.frameCount * piece.sway + piece.y * 0.015) * 2.2 + piece.drift) * speedMultiplier;
-        piece.y += p.sin(p.frameCount * piece.wiggle) * 0.4 * speedMultiplier;
+        piece.popTimer -= speedMultiplier;
+        piece.vx += p.noise(piece.x * 0.005, piece.y * 0.005, t * 30) * 0.2 - 0.1;
+        piece.vy += p.noise(piece.y * 0.005, piece.x * 0.005, (t + 100) * 30) * 0.2 - 0.1;
+        piece.vx *= 0.96;
+        piece.vy *= 0.96;
+        piece.x += piece.vx * speedMultiplier;
+        piece.y += piece.vy * speedMultiplier;
         piece.rotation += piece.rotationSpeed * speedMultiplier;
-        if (piece.y > p.height + piece.size) {
-          Object.assign(piece, createConfettiPiece(p));
-          piece.y = -piece.size;
+
+        if (piece.x < -20 || piece.x > p.width + 20 || piece.y < -20 || piece.y > p.height + 20 || piece.popTimer <= 0) {
+          popPiece(p, piece);
         }
+
         p.push();
         p.translate(piece.x, piece.y);
         p.rotate(piece.rotation);
