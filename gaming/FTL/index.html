@@ -79,56 +79,72 @@
     body.dark #segSwitch .seg-btn{ background:#111; color:#00b3a4; }
     body.dark #segSwitch .seg-btn[aria-selected="true"]{ background:#00b3a4; color:#111; }
 
-    /* ===== Cockpit bars overlay (ONLY grey bars; everything else transparent) ===== */
+    /* ===== Cockpit overlay (NO SVG) ===== */
     #cockpitOverlay{
       position: fixed;
       inset: 0;
-      z-index: 6;            /* above canvas, below #promptOverlay */
+      z-index: 6;            /* above canvas, below prompt overlay */
       pointer-events: none;
       user-select: none;
+      display: none;
     }
-    body:not(.started) #cockpitOverlay{ display:none; }
+    body.started #cockpitOverlay{ display:block; }
 
-    .cockpit-svg{
-      position:absolute;
+    /* Full-screen frames */
+    .cockpit-frame{
+      position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
+      box-sizing: border-box;
+      background: transparent;
+    }
+    .cockpit-frame.outer{
+      border: 26px solid rgba(105, 112, 125, 0.95);
+      box-shadow:
+        inset 0 0 0 6px rgba(10, 12, 15, 0.45),
+        inset 0 0 0 1px rgba(255,255,255,0.10);
+    }
+    .cockpit-frame.inset{
+      inset: 22px;
+      border: 12px solid rgba(105, 112, 125, 0.75);
+      box-shadow:
+        inset 0 0 0 4px rgba(10, 12, 15, 0.35),
+        inset 0 0 0 1px rgba(255,255,255,0.08);
     }
 
-    /*
-      Improved “metal bar” look:
-      - A main thick stroke
-      - A darker edge stroke (under)
-      - A light highlight stroke (over)
-      These are separate paths stacked in SVG groups.
-    */
-    .cockpit-svg .bar-base{
-      fill: none;
-      stroke: rgba(105, 110, 120, 0.92);
-      stroke-width: 18;
-      stroke-linecap: square;
-      stroke-linejoin: miter;
-    }
-    .cockpit-svg .bar-edge{
-      fill: none;
-      stroke: rgba(25, 28, 32, 0.35);
-      stroke-width: 22;           /* slightly bigger = subtle “outline” */
-      stroke-linecap: square;
-      stroke-linejoin: miter;
-    }
-    .cockpit-svg .bar-hi{
-      fill: none;
-      stroke: rgba(255, 255, 255, 0.14);
-      stroke-width: 4;
-      stroke-linecap: square;
-      stroke-linejoin: miter;
+    /* Lines (thick struts + thin diagonals + window edges) */
+    .cockpit-line{
+      position:absolute;
+      height: 10px; /* overwritten by JS */
+      width: 100px; /* overwritten by JS */
+      left: 0; top: 0;
+      transform-origin: 0 50%;
+      border-radius: 999px;
+      background: rgba(105, 112, 125, 0.95);
+      box-shadow:
+        0 0 0 4px rgba(10, 12, 15, 0.35),
+        0 0 0 1px rgba(255,255,255,0.06) inset;
+      opacity: 1;
     }
 
-    /* Keep the outer border exactly on the screen edge */
-    .cockpit-svg .outerBorder{
-      vector-effect: non-scaling-stroke; /* keeps consistent thickness if SVG scales */
-      shape-rendering: geometricPrecision;
+    /* Thin “highlight” lines */
+    .cockpit-line.thin{
+      background: rgba(210, 220, 235, 0.22);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.12);
+      border-radius: 999px;
+    }
+
+    /* Central window edges */
+    .window-edge{
+      background: rgba(105, 112, 125, 0.95);
+      box-shadow:
+        0 0 0 4px rgba(10, 12, 15, 0.45),
+        0 0 0 1px rgba(255,255,255,0.08) inset;
+      border-radius: 999px;
+    }
+    .window-edge.hi{
+      background: rgba(255,255,255,0.16);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.12);
+      border-radius: 999px;
     }
   </style>
 
@@ -160,7 +176,7 @@
       Deuxième switch pour le mode aventure (rapide) – Enter
     </p>
 
-    <!-- Mode chooser (between instructions and Start) -->
+    <!-- Mode chooser -->
     <div id="startOptions">
       <div id="segSwitch" role="tablist" aria-label="Control mode">
         <button type="button" role="tab" id="segTwo" aria-selected="true" class="seg-btn">
@@ -192,61 +208,37 @@
     <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
   </div>
 
-  <!-- Cockpit overlay: only bars, transparent everywhere else -->
+  <!-- Cockpit overlay (NO SVG) -->
   <div id="cockpitOverlay" aria-hidden="true">
-    <!-- ViewBox is 1000x700; we draw the outer border exactly on the edges (0..1000 and 0..700) -->
-    <svg class="cockpit-svg" viewBox="0 0 1000 700" preserveAspectRatio="none">
-      <!-- Define one “shape” as reusable path data, then draw it 3 times (edge/base/highlight) -->
-      <!-- Outer border (on the screen edge) -->
-      <g class="outerBorder">
-        <path class="bar-edge" d="M0,0 L1000,0 L1000,700 L0,700 Z" />
-        <path class="bar-base" d="M0,0 L1000,0 L1000,700 L0,700 Z" />
-        <path class="bar-hi"   d="M8,8 L992,8" /> <!-- small top highlight -->
-      </g>
+    <div class="cockpit-frame outer"></div>
+    <div class="cockpit-frame inset"></div>
 
-      <!-- Inner “window” rectangle (perspective) -->
-      <g>
-        <path class="bar-edge" d="M300,220 L700,220 L740,500 L260,500 Z" />
-        <path class="bar-base" d="M300,220 L700,220 L740,500 L260,500 Z" />
-        <!-- highlight line across the top edge of inner window -->
-        <path class="bar-hi"   d="M312,212 L688,212" />
-      </g>
+    <!-- Central trapezoid window: 4 thick edges + 4 thin highlights -->
+    <div class="cockpit-line window-edge" id="w1"></div>
+    <div class="cockpit-line window-edge" id="w2"></div>
+    <div class="cockpit-line window-edge" id="w3"></div>
+    <div class="cockpit-line window-edge" id="w4"></div>
 
-      <!-- Connecting diagonals -->
-      <g>
-        <!-- top-left -->
-        <path class="bar-edge" d="M0,0 L300,220" />
-        <path class="bar-base" d="M0,0 L300,220" />
-        <path class="bar-hi"   d="M18,10 L286,210" />
+    <div class="cockpit-line window-edge hi" id="wh1"></div>
+    <div class="cockpit-line window-edge hi" id="wh2"></div>
+    <div class="cockpit-line window-edge hi" id="wh3"></div>
+    <div class="cockpit-line window-edge hi" id="wh4"></div>
 
-        <!-- top-right -->
-        <path class="bar-edge" d="M1000,0 L700,220" />
-        <path class="bar-base" d="M1000,0 L700,220" />
-        <path class="bar-hi"   d="M982,10 L714,210" />
+    <!-- Thick corner struts -->
+    <div class="cockpit-line" id="d1"></div>
+    <div class="cockpit-line" id="d2"></div>
+    <div class="cockpit-line" id="d3"></div>
+    <div class="cockpit-line" id="d4"></div>
 
-        <!-- bottom-left -->
-        <path class="bar-edge" d="M0,700 L260,500" />
-        <path class="bar-base" d="M0,700 L260,500" />
-        <path class="bar-hi"   d="M18,690 L246,512" />
-
-        <!-- bottom-right -->
-        <path class="bar-edge" d="M1000,700 L740,500" />
-        <path class="bar-base" d="M1000,700 L740,500" />
-        <path class="bar-hi"   d="M982,690 L754,512" />
-      </g>
-
-      <!-- Optional: tiny corner “nodes” (still just grey bars; looks more “constructed”) -->
-      <g>
-        <path class="bar-edge" d="M300,220 L305,220" />
-        <path class="bar-edge" d="M700,220 L695,220" />
-        <path class="bar-edge" d="M260,500 L265,500" />
-        <path class="bar-edge" d="M740,500 L735,500" />
-      </g>
-    </svg>
+    <!-- Thin diagonals (inner trapezoid corners -> screen corners), on top -->
+    <div class="cockpit-line thin" id="td1"></div>
+    <div class="cockpit-line thin" id="td2"></div>
+    <div class="cockpit-line thin" id="td3"></div>
+    <div class="cockpit-line thin" id="td4"></div>
   </div>
 
   <script>
-    /* ===== Translation system (single language code in button, like Melancholic Scenes) ===== */
+    /* ===== Translation system ===== */
     const LS_LANG_KEY = 'siteLanguage';
     const SUPPORTED_LANGS = ['en', 'ja', 'fr'];
     const langToggle = document.getElementById('langToggle');
@@ -255,7 +247,6 @@
       const htmlLang = (document.documentElement.lang || '').toLowerCase();
       return SUPPORTED_LANGS.includes(htmlLang) ? htmlLang : 'en';
     }
-
     function getText(el, lang) {
       for (const code of [lang, ...SUPPORTED_LANGS.filter(c => c !== lang)]) {
         const val = el.getAttribute(`data-${code}`);
@@ -263,30 +254,20 @@
       }
       return null;
     }
-
     function applyTranslations(lang) {
       const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
-
       document.querySelectorAll('.translate').forEach(el => {
         const value = getText(el, safeLang);
         if (value == null) return;
-
-        if (['P', 'BUTTON', 'DIV', 'H1', 'H2', 'H3'].includes(el.tagName)) {
-          el.innerHTML = value;
-        } else {
-          el.textContent = value;
-        }
+        if (['P', 'BUTTON', 'DIV', 'H1', 'H2', 'H3'].includes(el.tagName)) el.innerHTML = value;
+        else el.textContent = value;
       });
-
       document.documentElement.lang = safeLang;
 
       const titleEl = document.querySelector('title');
       if (titleEl) {
         const nextTitle = getText(titleEl, safeLang);
-        if (nextTitle) {
-          titleEl.textContent = nextTitle;
-          document.title = nextTitle;
-        }
+        if (nextTitle) { titleEl.textContent = nextTitle; document.title = nextTitle; }
       }
 
       if (langToggle) {
@@ -295,13 +276,11 @@
         langToggle.textContent = SUPPORTED_LANGS[nextIdx].toUpperCase();
       }
     }
-
     function setLang(lang) {
       const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
       try { localStorage.setItem(LS_LANG_KEY, safeLang); } catch (e) {}
       applyTranslations(safeLang);
     }
-
     function getInitialLang() {
       let initial = documentLangFallback();
       try {
@@ -310,7 +289,6 @@
       } catch (e) {}
       return initial;
     }
-
     langToggle?.addEventListener('click', () => {
       const currentRaw =
         (typeof localStorage !== 'undefined' && localStorage.getItem(LS_LANG_KEY)) ||
@@ -321,8 +299,73 @@
       const nextLang = SUPPORTED_LANGS[(idx + 1) % SUPPORTED_LANGS.length];
       setLang(nextLang);
     });
-
     setLang(getInitialLang());
+
+    /* ===== Cockpit geometry (NO SVG) ===== */
+    function setLine(el, x1, y1, x2, y2, thicknessPx) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+
+      el.style.left = x1 + 'px';
+      el.style.top = y1 + 'px';
+      el.style.width = len + 'px';
+      el.style.height = thicknessPx + 'px';
+      el.style.transform = `translateY(${-thicknessPx/2}px) rotate(${ang}deg)`;
+    }
+
+    function updateCockpit() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      // Trapezoid proportions (window)
+      const topY = 0.26 * h;
+      const botY = 0.74 * h;
+      const topInset = 0.34 * w;
+      const botInset = 0.25 * w;
+
+      const P1 = { x: topInset,     y: topY }; // top-left
+      const P2 = { x: w - topInset, y: topY }; // top-right
+      const P3 = { x: w - botInset, y: botY }; // bottom-right
+      const P4 = { x: botInset,     y: botY }; // bottom-left
+
+      // Thickness hierarchy
+      const thickStrut = Math.max(18, Math.min(28, Math.round(0.022 * Math.min(w, h))));
+      const thinDiag   = Math.max(2,  Math.min(3,  Math.round(0.003 * Math.min(w, h))));
+      const winThick   = Math.max(14, Math.min(22, Math.round(0.018 * Math.min(w, h))));
+      const winHi      = Math.max(2,  Math.min(4,  Math.round(0.004 * Math.min(w, h))));
+
+      // ---- Central window edges (visible, always) ----
+      setLine(document.getElementById('w1'), P1.x, P1.y, P2.x, P2.y, winThick);
+      setLine(document.getElementById('w2'), P2.x, P2.y, P3.x, P3.y, winThick);
+      setLine(document.getElementById('w3'), P3.x, P3.y, P4.x, P4.y, winThick);
+      setLine(document.getElementById('w4'), P4.x, P4.y, P1.x, P1.y, winThick);
+
+      // Slightly inset highlight lines (toward center)
+      const cx = (P1.x + P2.x + P3.x + P4.x) / 4;
+      const cy = (P1.y + P2.y + P3.y + P4.y) / 4;
+      const inset = (p) => ({ x: p.x + (cx - p.x) * 0.06, y: p.y + (cy - p.y) * 0.06 });
+      const Q1 = inset(P1), Q2 = inset(P2), Q3 = inset(P3), Q4 = inset(P4);
+
+      setLine(document.getElementById('wh1'), Q1.x, Q1.y, Q2.x, Q2.y, winHi);
+      setLine(document.getElementById('wh2'), Q2.x, Q2.y, Q3.x, Q3.y, winHi);
+      setLine(document.getElementById('wh3'), Q3.x, Q3.y, Q4.x, Q4.y, winHi);
+      setLine(document.getElementById('wh4'), Q4.x, Q4.y, Q1.x, Q1.y, winHi);
+
+      // ---- Thick corner struts (screen corners -> window corners) ----
+      setLine(document.getElementById('d1'), 0, 0, P1.x, P1.y, thickStrut);
+      setLine(document.getElementById('d2'), w, 0, P2.x, P2.y, thickStrut);
+      setLine(document.getElementById('d3'), 0, h, P4.x, P4.y, thickStrut);
+      setLine(document.getElementById('d4'), w, h, P3.x, P3.y, thickStrut);
+
+      // ---- Thin diagonals (window corners -> screen corners), drawn last ----
+      setLine(document.getElementById('td1'), P1.x, P1.y, 0, 0, thinDiag);
+      setLine(document.getElementById('td2'), P2.x, P2.y, w, 0, thinDiag);
+      setLine(document.getElementById('td3'), P4.x, P4.y, 0, h, thinDiag);
+      setLine(document.getElementById('td4'), P3.x, P3.y, w, h, thinDiag);
+    }
+
+    window.addEventListener('resize', updateCockpit);
 
     // ===== Game state =====
     let started=false;
@@ -427,6 +470,7 @@
     }
     function ftlActiveForUpdate(){ return (ftlMode==="fast"||ftlMode==="slow")?ftlStarSpeed:normalStarSpeed; }
 
+    // Keys
     function keyPressed(){
       if(!started) return;
       if(oneButtonMode && keyCode===32){
@@ -482,9 +526,9 @@
       const pill = document.getElementById('langToggle'); if (pill) pill.style.display = 'none';
       const info = document.getElementById('infoButton'); if (info) info.style.display = 'none';
 
+      updateCockpit();
       goFullscreen();
     });
-
     document.getElementById("infoButton").addEventListener("click", function() {
       document.getElementById("infoModal").style.display = "block";
     });
@@ -492,7 +536,7 @@
       document.getElementById("infoModal").style.display = "none";
     });
 
-    function windowResized(){ resizeCanvas(windowWidth,windowHeight); }
+    function windowResized(){ resizeCanvas(windowWidth,windowHeight); updateCockpit(); }
     function goFullscreen(){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen().catch(()=>{}); } }
 
     // ===== Entities (unchanged) =====
@@ -512,6 +556,7 @@
       display(){ stroke(255,this.alpha); strokeWeight(2); line(this.x,this.y, this.x-this.vel.x*(this.trailLength/20), this.y-this.vel.y*(this.trailLength/20)); noStroke(); fill(255, this.alpha); ellipse(this.x,this.y,4);}
       isOffScreen(){ return this.x>width+50||this.x<-50||this.y>height+50||this.y<-50||this.alpha<=0; }
     }
+
     class FirePlanet{
       constructor(){this.x=random(-width/2,width/2);this.y=random(-height/2,height/2);this.z=random(width*1.5,width*2.5);this.baseSize=random(70,130);this.pgSize=this.baseSize*2;this.texture=createGraphics(this.pgSize,this.pgSize);this.drawTexture();this.passSoundPlayed=false;}
       drawTexture(){let pg=this.texture;pg.clear();pg.push();pg.translate(pg.width/2,pg.height/2);let R=this.baseSize*0.5;for(let r=R;r>0;r--){let t=r/R; pg.noStroke(); pg.fill(lerpColor(color(255,140,0),color(255,110,0),1-t)); pg.ellipse(0,0,r*2,r*2);} pg.pop();}
@@ -558,7 +603,7 @@
         let pg=this.texture;pg.clear();pg.push();pg.translate(pg.width/2,pg.height/2);
         let R=this.baseSize*0.5;
         for(let r=R;r>0;r--){let t=r/R; pg.noStroke(); pg.fill(lerpColor(color(100,150,255),color(20,50,150),1-t)); pg.ellipse(0,0,r*2,r*2);}
-        let n=6; for(let i=0;i<n;i++){ let y=map(i,0,n-1,-R,R); let w=2*sqrt(sq(R)-sq(y)); let h=R*0.1; pg.noStroke(); pg.fill(i%2? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)'); pg.ellipse(0,y,w,h);}
+        let n=6; for(let i=0;i<n;i++){ let y=map(i,0,n-1,-R,R); let ww=2*sqrt(sq(R)-sq(y)); let hh=R*0.1; pg.noStroke(); pg.fill(i%2? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)'); pg.ellipse(0,y,ww,hh);}
         pg.pop();
       }
       update(){const m=(ftlMode==="fast")?1.5:(ftlMode==="slow")?0.5:1; this.z -= ftlActiveForUpdate()*globalSpeedFactor*m;}

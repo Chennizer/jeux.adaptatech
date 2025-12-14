@@ -101,10 +101,10 @@
   <!-- Prompt Overlay -->
   <div id="promptOverlay">
     <p class="translate translate-html"
-       data-fr="<b>Mode 1 (maintenir)</b> : Maintenir ESPACE = les lignes accélèrent graduellement (rampe), relâcher = tout s’arrête.<br><b>Mode 2 (10 secondes)</b> : Appuyer ESPACE = mouvement pendant 10 secondes, puis arrêt. Appuyer de nouveau pour repartir."
-       data-en="<b>Mode 1 (hold)</b>: Hold SPACE = lines ramp up to a steady speed, release = everything stops.<br><b>Mode 2 (10 seconds)</b>: Press SPACE = movement for 10 seconds, then stop. Press again to restart."
-       data-ja="<b>モード1（押し続け）</b>：スペースを押し続けると徐々に加速、離すと停止。<br><b>モード2（10秒）</b>：スペースを押すと10秒動き、その後停止。もう一度押すと再開。">
-      Mode 1: maintenir ESPACE, relâcher = arrêt. Mode 2: 10 secondes par appui.
+       data-fr="<b>Mode 1 (maintenir)</b> : Maintenir ESPACE = les lignes accélèrent graduellement (rampe), relâcher = tout s’arrête.<br><b>Mode 2 (10 secondes)</b> : Appuyer ESPACE = mouvement pendant 10 secondes, puis arrêt. Appuyer de nouveau pour repartir.<br><br>Après <b>10 secondes de mouvement</b>, la couleur change (fondu + nouvelle couleur)."
+       data-en="<b>Mode 1 (hold)</b>: Hold SPACE = lines ramp up to a steady speed, release = everything stops.<br><b>Mode 2 (10 seconds)</b>: Press SPACE = movement for 10 seconds, then stop. Press again to restart.<br><br>After <b>10 seconds of movement</b>, the color changes (fade + new color)."
+       data-ja="<b>モード1（押し続け）</b>：スペースを押し続けると徐々に加速、離すと停止。<br><b>モード2（10秒）</b>：スペースで10秒動き、その後停止。もう一度押すと再開。<br><br><b>動いている時間が10秒</b>で色が変わります（フェード＋新色）。">
+      Mode 1: maintenir ESPACE, relâcher = arrêt. Mode 2: 10 secondes par appui. Après 10 secondes de mouvement, la couleur change.
     </p>
 
     <!-- Mode chooser -->
@@ -129,9 +129,9 @@
   <!-- Info Modal -->
   <div id="infoModal" style="display:none;">
     <p class="translate translate-html"
-       data-fr="Compétences: cause à effet, maintien (mode 1), anticipation/relance (mode 2), autorégulation par stimulation visuelle douce."
-       data-en="Skills: cause-and-effect, holding (mode 1), anticipation/restart (mode 2), self-regulation with gentle visuals."
-       data-ja="スキル：因果関係、保持（モード1）、再開の予測（モード2）、穏やかな視覚刺激による調整。">
+       data-fr="Compétences: cause à effet, maintien (mode 1), anticipation/relance (mode 2), autorégulation par stimulation visuelle douce.<br>Variabilité: changement de couleur toutes les 10 secondes de mouvement."
+       data-en="Skills: cause-and-effect, holding (mode 1), anticipation/restart (mode 2), self-regulation with gentle visuals.<br>Variation: color changes every 10 seconds of movement."
+       data-ja="スキル：因果関係、保持（モード1）、再開の予測（モード2）、穏やかな視覚刺激による調整。<br>変化：動作10秒ごとに色が変わります。">
       Compétences: cause à effet, maintien, anticipation, autorégulation.
     </p>
     <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
@@ -156,23 +156,18 @@
     }
     function applyTranslations(lang) {
       const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
-
       document.querySelectorAll('.translate').forEach(el => {
         const value = getText(el, safeLang);
         if (value == null) return;
         if (['P', 'BUTTON', 'DIV', 'H1', 'H2', 'H3', 'SPAN'].includes(el.tagName)) el.innerHTML = value;
         else el.textContent = value;
       });
-
       document.documentElement.lang = safeLang;
 
       const titleEl = document.querySelector('title');
       if (titleEl) {
         const nextTitle = getText(titleEl, safeLang);
-        if (nextTitle) {
-          titleEl.textContent = nextTitle;
-          document.title = nextTitle;
-        }
+        if (nextTitle) { titleEl.textContent = nextTitle; document.title = nextTitle; }
       }
 
       if (langToggle) {
@@ -246,108 +241,139 @@
 
   <script>
     /* =========================================================
-       FLOW LINES – Updated control modes
-       Mode 1 (hold): hold SPACE => ramp up speed, release => freeze
-       Mode 2 (timed): press SPACE => run 10s then stop, press again
+       FLOW LINES – single-color cycles with fade transitions
+       - Choose 1 color (from 7)
+       - After 10 seconds of ACTIVE movement, fade out, respawn new ribbons, new color, fade in
        ========================================================= */
 
-    // Canvas + ribbons
     let canvas;
     let ribbons = [];
-    const RIBBON_COUNT = 70;
-    const RIBBON_LEN   = 60;
+    const RIBBON_COUNT = 78;
+    const RIBBON_LEN   = 70;
 
-    // Orientation (optional)
     let currentAngle = 0;
     let targetAngle  = 0;
 
-    // Influence point (mouse/gaze proxy)
     let influence = { x: 0, y: 0 };
 
-    // Run state
-    let isHolding = false;               // only used in hold mode
-    let runActive = false;               // whether motion is currently active
-    let runStartMs = 0;                  // for timed mode and ramp
-    const RAMP_MS = 2400;                // "ramps up over a few seconds"
-    const TIMED_RUN_MS = 10000;          // 10 seconds
+    // Switch modes
+    let isHolding = false;
+    let runActive = false;
+    let runStartMs = 0;
+    const RAMP_MS = 2400;
+    const TIMED_RUN_MS = 10000;
 
-    // Speed control (smoothed)
-    let speed = 0.0;                     // current motion multiplier
+    // Speed control
+    let speed = 0.0;
     let speedTarget = 0.0;
-    const BASE_SPEED = 0.0;              // when stopped, truly frozen
-    const CRUISE_SPEED = 1.0;            // steady "good speed"
-    const WIND_BOOST = 1.35;             // optional extra at top end (kept mild)
+    const CRUISE_SPEED = 1.0;
 
-    // Flow field tuning
-    let noiseScale = 0.0028;
-    let timeScale  = 0.00025;
-    let coherence  = 0.70;               // 0..1 higher=smoother
+    // Flow field
+    let noiseScale = 0.0026;
+    let timeScale  = 0.00022;
+    let coherence  = 0.72;
+
+    // Glow layer
+    let glowG;
+
+    // === Color cycle system ===
+    const COLOR_BANK = [
+      [  60, 220, 140], // green
+      [  70, 160, 255], // blue
+      [ 190, 120, 255], // violet
+      [ 255, 150, 210], // pink
+      [ 255, 185, 110], // warm orange
+      [  80, 235, 235], // cyan
+      [ 255, 240, 150], // soft yellow
+    ];
+
+    const ACTIVE_MOVE_MS = 10000;  // 10 seconds of movement => change color
+    let activeMoveAccum = 0;       // accumulates only while moving
+
+    // Transition phases
+    // 0 = normal, 1 = fading out, 2 = fading in
+    let cyclePhase = 0;
+    let phaseStartMs = 0;
+    const FADE_OUT_MS = 1200;
+    const FADE_IN_MS  = 1000;
+
+    let colorIndex = 0;
+    let currentColor = [60,220,140];
+
+    // Global multiplier applied to all ribbon drawing during fade
+    let fadeMult = 1.0;
 
     function setup(){
       canvas = createCanvas(windowWidth, windowHeight);
       canvas.position(0,0);
 
+      glowG = createGraphics(windowWidth, windowHeight);
+      glowG.clear();
+      glowG.blendMode(ADD);
+
       influence.x = width/2;
       influence.y = height/2;
 
-      ribbons = [];
-      for (let i=0; i<RIBBON_COUNT; i++){
-        ribbons.push(new Ribbon());
-      }
+      // Start on a random color
+      colorIndex = floor(random(COLOR_BANK.length));
+      currentColor = COLOR_BANK[colorIndex];
+
+      spawnRibbons();
 
       strokeCap(ROUND);
       noFill();
     }
 
     function draw(){
-      background(0, 18);
-
       if(!started){
+        background(0);
         return;
       }
 
-      // Update influence point
+      drawGradientBackground();
+
       influence.x = mouseX;
       influence.y = mouseY;
 
-      // Determine whether run should be active
+      // Determine motion and speed based on mode
       if(segChoice === 'hold'){
         runActive = isHolding;
         if(!runActive){
-          // immediate freeze (no easing) on release
-          speed = 0.0;
-          speedTarget = 0.0;
+          speed = 0.0; speedTarget = 0.0;
         } else {
-          // ramp while holding
           const e = millis() - runStartMs;
           const ramp = constrain(e / RAMP_MS, 0, 1);
-          // ramp into a stable speed; mild extra "alive" feel at top
           speedTarget = lerp(0.0, CRUISE_SPEED, easeInOut(ramp));
-          // optional: slight boost once fully ramped
-          if(ramp >= 1) speedTarget *= WIND_BOOST;
           speed = lerp(speed, speedTarget, 0.10);
         }
       } else {
-        // timed mode: runActive for 10 seconds after press
         if(runActive){
           const e = millis() - runStartMs;
           if(e >= TIMED_RUN_MS){
             runActive = false;
-            speed = 0.0;
-            speedTarget = 0.0;
+            speed = 0.0; speedTarget = 0.0;
           } else {
-            // simple: start quickly then stabilize
             const ramp = constrain(e / min(RAMP_MS, 1500), 0, 1);
             speedTarget = lerp(0.0, CRUISE_SPEED, easeInOut(ramp));
             speed = lerp(speed, speedTarget, 0.10);
           }
         } else {
-          speed = 0.0;
-          speedTarget = 0.0;
+          speed = 0.0; speedTarget = 0.0;
         }
       }
 
-      // Optional rotation
+      // Accumulate “active movement time” only when speed is meaningfully > 0
+      // Use deltaTime (p5) so it’s frame-rate independent.
+      if(speed > 0.05 && cyclePhase === 0){
+        activeMoveAccum += deltaTime;
+        if(activeMoveAccum >= ACTIVE_MOVE_MS){
+          startFadeOut();
+        }
+      }
+
+      // Handle fade transitions
+      updateCyclePhase();
+
       currentAngle = lerp(currentAngle, targetAngle, 0.10);
 
       push();
@@ -355,69 +381,186 @@
       rotate(radians(currentAngle));
       translate(-width/2, -height/2);
 
-      // Update and draw ribbons
-      // If speed == 0, they will draw but not move (frozen)
+      // Fade glow buffer slightly each frame
+      glowG.noStroke();
+      glowG.fill(0, 0, 0, 35);
+      glowG.rect(0,0,width,height);
+
+      // Draw ribbons
       for(const r of ribbons){
         r.update(speed);
-        r.display(speed);
+        r.display(speed, fadeMult, currentColor);
+        r.displayGlow(speed, fadeMult, currentColor);
       }
-
       pop();
+
+      // Composite glow, also affected by fadeMult
+      const glowAlpha = lerp(70, 160, constrain(speed, 0, 1)) * fadeMult;
+      push();
+      tint(255, glowAlpha);
+      image(glowG, 0, 0);
+      pop();
+
+      // Optional: sparse spark points, but only when not fading out completely
+      if(speed > 0.15 && fadeMult > 0.25) maybeDrawSparks(speed, fadeMult, currentColor);
     }
 
     function windowResized(){
       resizeCanvas(windowWidth, windowHeight);
+      glowG = createGraphics(windowWidth, windowHeight);
+      glowG.clear();
+      glowG.blendMode(ADD);
     }
 
     function keyPressed(){
       if(!started) return;
 
-      // SPACE is the switch
       if(keyCode === 32){
         if(segChoice === 'hold'){
           if(!isHolding){
             isHolding = true;
-            runStartMs = millis(); // start ramp
+            runStartMs = millis();
           }
         } else {
-          // timed mode: press to start/restart 10s run
           runActive = true;
           runStartMs = millis();
         }
       }
 
-      // Optional rotation
       if(keyCode === LEFT_ARROW)  targetAngle -= 90;
       if(keyCode === RIGHT_ARROW) targetAngle += 90;
     }
 
     function keyReleased(){
       if(!started) return;
-
       if(keyCode === 32 && segChoice === 'hold'){
-        isHolding = false; // immediate freeze handled in draw()
+        isHolding = false;
       }
     }
 
-    // Smooth ramp curve
-    function easeInOut(t){
-      // smootherstep
-      return t*t*t*(t*(t*6 - 15) + 10);
+    // === Cycle helpers ===
+
+    function startFadeOut(){
+      cyclePhase = 1;
+      phaseStartMs = millis();
     }
 
-    // Angle lerp helper handling wrap
+    function updateCyclePhase(){
+      if(cyclePhase === 0){
+        fadeMult = 1.0;
+        return;
+      }
+
+      const now = millis();
+      const elapsed = now - phaseStartMs;
+
+      if(cyclePhase === 1){
+        // Fade OUT
+        const t = constrain(elapsed / FADE_OUT_MS, 0, 1);
+        fadeMult = 1.0 - easeInOut(t);
+
+        if(t >= 1){
+          // Pick a new color different from current
+          let next = colorIndex;
+          if(COLOR_BANK.length > 1){
+            while(next === colorIndex) next = floor(random(COLOR_BANK.length));
+          }
+          colorIndex = next;
+          currentColor = COLOR_BANK[colorIndex];
+
+          // Respawn ribbons so “new lines appear”
+          spawnRibbons(true);
+
+          // Reset active timer for next cycle
+          activeMoveAccum = 0;
+
+          // Start fade IN
+          cyclePhase = 2;
+          phaseStartMs = millis();
+        }
+      } else if(cyclePhase === 2){
+        // Fade IN
+        const t = constrain(elapsed / FADE_IN_MS, 0, 1);
+        fadeMult = easeInOut(t);
+
+        if(t >= 1){
+          cyclePhase = 0;
+          fadeMult = 1.0;
+        }
+      }
+    }
+
+    function spawnRibbons(first=false){
+      ribbons = [];
+      for (let i=0; i<RIBBON_COUNT; i++){
+        ribbons.push(new Ribbon(i, first));
+      }
+    }
+
+    // === Visual polish ===
+
+    function drawGradientBackground(){
+      const t = millis() * 0.00006;
+
+      const top = color(
+        10 + 10*sin(t*2.1),
+        14 + 10*sin(t*1.7 + 1),
+        22 + 12*sin(t*1.9 + 2)
+      );
+      const mid = color(
+        10,
+        20 + 20*sin(t*1.2 + 0.8),
+        35 + 25*sin(t*1.1 + 2.2)
+      );
+      const bot = color(
+        4,
+        8,
+        12 + 10*sin(t*1.6 + 1.4)
+      );
+
+      for(let y=0; y<height; y++){
+        const p = y / (height-1);
+        let c;
+        if(p < 0.55) c = lerpColor(top, mid, p/0.55);
+        else c = lerpColor(mid, bot, (p-0.55)/0.45);
+        stroke(c);
+        line(0, y, width, y);
+      }
+
+      noStroke();
+      fill(0, 40);
+      rect(0,0,width,height);
+    }
+
+    function maybeDrawSparks(spd, f, col){
+      const chance = 0.10 * spd * f;
+      if(random() > chance) return;
+
+      const x = random(width);
+      const y = random(height);
+      const r = random(1.5, 3.5);
+
+      noStroke();
+      fill(col[0], col[1], col[2], 120 * f);
+      ellipse(x, y, r, r);
+    }
+
+    // === Math/helpers ===
+
+    function easeInOut(t){
+      return t*t*t*(t*(t*6 - 15) + 10); // smootherstep
+    }
+
     function lerpAngle(a, b, amt){
       let diff = ((b - a + PI) % (TWO_PI)) - PI;
       return a + diff * amt;
     }
 
-    // Flow vector at position
     function flowAt(x, y, t, spd){
-      const s = lerp(noiseScale * 1.8, noiseScale * 0.8, coherence);
+      const s = lerp(noiseScale * 1.7, noiseScale * 0.85, coherence);
       const n = noise(x * s, y * s, t);
       let a = n * TWO_PI * 2.0;
 
-      // Presence influence (gentle bend toward pointer)
       const dx = influence.x - x;
       const dy = influence.y - y;
       const dist = sqrt(dx*dx + dy*dy) + 0.0001;
@@ -425,17 +568,30 @@
       const w = constrain(1.0 - (dist / influenceRadius), 0, 1);
       const attractAngle = atan2(dy, dx);
 
-      // Bend increases slightly with speed so it feels "alive" when running
-      const bend = w * (0.10 + 0.22 * spd);
+      const bend = w * (0.10 + 0.25 * spd);
       a = lerpAngle(a, attractAngle, bend);
 
       const v = p5.Vector.fromAngle(a);
-      v.mult(1.8 * spd); // speed drives motion directly
+      v.mult(2.0 * spd);
       return v;
     }
 
+    // === Ribbon entity ===
+
     class Ribbon{
-      constructor(){ this.reset(true); }
+      constructor(i, first=false){
+        this.index = i;
+        this.reset(first);
+
+        this.alpha = random(80, 150);
+        this.baseW = random(0.9, 2.6);
+
+        this.seed = random(1000);
+        this.wobble = random(0.2, 0.8);
+
+        // Small per-ribbon brightness variance so “one color” still feels rich
+        this.bright = random(0.85, 1.10);
+      }
 
       reset(first=false){
         const side = floor(random(4));
@@ -447,11 +603,6 @@
         this.points = [];
         for(let i=0;i<RIBBON_LEN;i++) this.points.push(this.head.copy());
 
-        this.baseW = random(0.9, 2.6);
-        this.alpha = random(90, 170);
-        this.hueShift = random(0, 1);
-        this.seed = random(1000);
-
         if(first){
           for(let i=0;i<RIBBON_LEN;i++){
             this.points[i].x += random(-3, 3);
@@ -462,13 +613,16 @@
 
       update(spd){
         if(spd <= 0.0001){
-          // Frozen: do nothing (keeps exact stillness)
-          return;
+          return; // true freeze
         }
 
         const t = millis() * timeScale + this.seed;
         const v = flowAt(this.head.x, this.head.y, t, spd);
         v.limit(3.2 * spd);
+
+        const wob = (noise(this.head.x*0.01, this.head.y*0.01, t) - 0.5) * this.wobble;
+        this.head.x += wob * 0.3;
+        this.head.y += wob * 0.3;
 
         this.head.add(v);
 
@@ -480,25 +634,35 @@
         this.points.unshift(this.head.copy());
         this.points.pop();
 
-        // Gentle smoothing
         for(let i=1;i<this.points.length-1;i++){
-          this.points[i].x = lerp(this.points[i].x, (this.points[i-1].x + this.points[i+1].x)/2, 0.08);
-          this.points[i].y = lerp(this.points[i].y, (this.points[i-1].y + this.points[i+1].y)/2, 0.08);
+          this.points[i].x = lerp(this.points[i].x, (this.points[i-1].x + this.points[i+1].x)/2, 0.09);
+          this.points[i].y = lerp(this.points[i].y, (this.points[i-1].y + this.points[i+1].y)/2, 0.09);
         }
       }
 
-      display(spd){
-        // Visibility responds to speed, but still visible when stopped
-        const w = this.baseW * (0.9 + 0.7 * spd);
-        const a = this.alpha * (0.55 + 0.65 * spd);
+      display(spd, f, col){
+        const w = this.baseW * (0.95 + 0.75 * spd);
+        const a = this.alpha * (0.55 + 0.75 * spd) * f;
 
-        const tint = lerp(210, 255, this.hueShift);
-        stroke(tint, tint, 255, a);
+        stroke(col[0]*this.bright, col[1]*this.bright, col[2]*this.bright, a);
         strokeWeight(w);
 
         beginShape();
         for(const p of this.points) vertex(p.x, p.y);
         endShape();
+      }
+
+      displayGlow(spd, f, col){
+        const w = this.baseW * (2.1 + 2.6 * spd);
+        const a = (30 + 70 * spd) * f;
+
+        glowG.stroke(col[0], col[1], col[2], a);
+        glowG.strokeWeight(w);
+        glowG.noFill();
+
+        glowG.beginShape();
+        for(const p of this.points) glowG.vertex(p.x, p.y);
+        glowG.endShape();
       }
     }
   </script>
