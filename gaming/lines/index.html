@@ -241,9 +241,9 @@
 
   <script>
     /* =========================================================
-       FLOW LINES – single-color cycles with fade transitions
-       - Choose 1 color (from 7)
-       - After 10 seconds of ACTIVE movement, fade out, respawn new ribbons, new color, fade in
+       FLOW LINES – single-color cycles with non-saturating color/glow
+       - Start with a random color (from 7)
+       - After 10 seconds of ACTIVE movement: fade out -> new ribbons -> new color -> fade in
        ========================================================= */
 
     let canvas;
@@ -276,7 +276,7 @@
     // Glow layer
     let glowG;
 
-    // === Color cycle system ===
+    // Color cycle
     const COLOR_BANK = [
       [  60, 220, 140], // green
       [  70, 160, 255], // blue
@@ -287,12 +287,11 @@
       [ 255, 240, 150], // soft yellow
     ];
 
-    const ACTIVE_MOVE_MS = 10000;  // 10 seconds of movement => change color
-    let activeMoveAccum = 0;       // accumulates only while moving
+    const ACTIVE_MOVE_MS = 10000;
+    let activeMoveAccum = 0;
 
     // Transition phases
-    // 0 = normal, 1 = fading out, 2 = fading in
-    let cyclePhase = 0;
+    let cyclePhase = 0; // 0 normal, 1 fade out, 2 fade in
     let phaseStartMs = 0;
     const FADE_OUT_MS = 1200;
     const FADE_IN_MS  = 1000;
@@ -300,7 +299,6 @@
     let colorIndex = 0;
     let currentColor = [60,220,140];
 
-    // Global multiplier applied to all ribbon drawing during fade
     let fadeMult = 1.0;
 
     function setup(){
@@ -309,12 +307,11 @@
 
       glowG = createGraphics(windowWidth, windowHeight);
       glowG.clear();
-      glowG.blendMode(ADD);
+      glowG.blendMode(SCREEN);
 
       influence.x = width/2;
       influence.y = height/2;
 
-      // Start on a random color
       colorIndex = floor(random(COLOR_BANK.length));
       currentColor = COLOR_BANK[colorIndex];
 
@@ -335,7 +332,7 @@
       influence.x = mouseX;
       influence.y = mouseY;
 
-      // Determine motion and speed based on mode
+      // Determine motion and speed
       if(segChoice === 'hold'){
         runActive = isHolding;
         if(!runActive){
@@ -362,8 +359,7 @@
         }
       }
 
-      // Accumulate “active movement time” only when speed is meaningfully > 0
-      // Use deltaTime (p5) so it’s frame-rate independent.
+      // Accumulate “active movement time” only when moving and not already cycling
       if(speed > 0.05 && cyclePhase === 0){
         activeMoveAccum += deltaTime;
         if(activeMoveAccum >= ACTIVE_MOVE_MS){
@@ -371,7 +367,6 @@
         }
       }
 
-      // Handle fade transitions
       updateCyclePhase();
 
       currentAngle = lerp(currentAngle, targetAngle, 0.10);
@@ -381,9 +376,9 @@
       rotate(radians(currentAngle));
       translate(-width/2, -height/2);
 
-      // Fade glow buffer slightly each frame
+      // Fade glow buffer each frame to avoid buildup
       glowG.noStroke();
-      glowG.fill(0, 0, 0, 35);
+      glowG.fill(0, 0, 0, 55);
       glowG.rect(0,0,width,height);
 
       // Draw ribbons
@@ -394,14 +389,14 @@
       }
       pop();
 
-      // Composite glow, also affected by fadeMult
-      const glowAlpha = lerp(70, 160, constrain(speed, 0, 1)) * fadeMult;
+      // Composite glow (subtle to preserve color)
+      const glowAlpha = lerp(35, 95, constrain(speed, 0, 1)) * fadeMult;
       push();
       tint(255, glowAlpha);
       image(glowG, 0, 0);
       pop();
 
-      // Optional: sparse spark points, but only when not fading out completely
+      // Sparse sparks
       if(speed > 0.15 && fadeMult > 0.25) maybeDrawSparks(speed, fadeMult, currentColor);
     }
 
@@ -409,7 +404,7 @@
       resizeCanvas(windowWidth, windowHeight);
       glowG = createGraphics(windowWidth, windowHeight);
       glowG.clear();
-      glowG.blendMode(ADD);
+      glowG.blendMode(SCREEN);
     }
 
     function keyPressed(){
@@ -451,16 +446,14 @@
         return;
       }
 
-      const now = millis();
-      const elapsed = now - phaseStartMs;
+      const elapsed = millis() - phaseStartMs;
 
       if(cyclePhase === 1){
-        // Fade OUT
         const t = constrain(elapsed / FADE_OUT_MS, 0, 1);
         fadeMult = 1.0 - easeInOut(t);
 
         if(t >= 1){
-          // Pick a new color different from current
+          // pick next color (different)
           let next = colorIndex;
           if(COLOR_BANK.length > 1){
             while(next === colorIndex) next = floor(random(COLOR_BANK.length));
@@ -468,18 +461,13 @@
           colorIndex = next;
           currentColor = COLOR_BANK[colorIndex];
 
-          // Respawn ribbons so “new lines appear”
           spawnRibbons(true);
-
-          // Reset active timer for next cycle
           activeMoveAccum = 0;
 
-          // Start fade IN
           cyclePhase = 2;
           phaseStartMs = millis();
         }
       } else if(cyclePhase === 2){
-        // Fade IN
         const t = constrain(elapsed / FADE_IN_MS, 0, 1);
         fadeMult = easeInOut(t);
 
@@ -520,9 +508,9 @@
 
       for(let y=0; y<height; y++){
         const p = y / (height-1);
-        let c;
-        if(p < 0.55) c = lerpColor(top, mid, p/0.55);
-        else c = lerpColor(mid, bot, (p-0.55)/0.45);
+        let c = (p < 0.55)
+          ? lerpColor(top, mid, p/0.55)
+          : lerpColor(mid, bot, (p-0.55)/0.45);
         stroke(c);
         line(0, y, width, y);
       }
@@ -533,22 +521,31 @@
     }
 
     function maybeDrawSparks(spd, f, col){
-      const chance = 0.10 * spd * f;
+      const chance = 0.08 * spd * f;
       if(random() > chance) return;
 
       const x = random(width);
       const y = random(height);
-      const r = random(1.5, 3.5);
+      const r = random(1.5, 3.0);
 
+      const c = safeColorVariant(col, 0.15);
       noStroke();
-      fill(col[0], col[1], col[2], 120 * f);
+      fill(c[0], c[1], c[2], 110 * f);
       ellipse(x, y, r, r);
+    }
+
+    // Safe variant: gently mix toward white (no multiplication/clipping)
+    function safeColorVariant(rgb, amtToWhite){
+      const r = lerp(rgb[0], 255, amtToWhite);
+      const g = lerp(rgb[1], 255, amtToWhite);
+      const b = lerp(rgb[2], 255, amtToWhite);
+      return [r, g, b];
     }
 
     // === Math/helpers ===
 
     function easeInOut(t){
-      return t*t*t*(t*(t*6 - 15) + 10); // smootherstep
+      return t*t*t*(t*(t*6 - 15) + 10);
     }
 
     function lerpAngle(a, b, amt){
@@ -589,8 +586,8 @@
         this.seed = random(1000);
         this.wobble = random(0.2, 0.8);
 
-        // Small per-ribbon brightness variance so “one color” still feels rich
-        this.bright = random(0.85, 1.10);
+        // controlled brightness variance (safe)
+        this.brightAmt = random(0.05, 0.28);
       }
 
       reset(first=false){
@@ -644,7 +641,9 @@
         const w = this.baseW * (0.95 + 0.75 * spd);
         const a = this.alpha * (0.55 + 0.75 * spd) * f;
 
-        stroke(col[0]*this.bright, col[1]*this.bright, col[2]*this.bright, a);
+        const c = safeColorVariant(col, this.brightAmt);
+
+        stroke(c[0], c[1], c[2], a);
         strokeWeight(w);
 
         beginShape();
@@ -653,10 +652,12 @@
       }
 
       displayGlow(spd, f, col){
-        const w = this.baseW * (2.1 + 2.6 * spd);
-        const a = (30 + 70 * spd) * f;
+        const w = this.baseW * (1.6 + 1.9 * spd);
+        const a = (12 + 34 * spd) * f;
 
-        glowG.stroke(col[0], col[1], col[2], a);
+        const c = safeColorVariant(col, 0.08);
+
+        glowG.stroke(c[0], c[1], c[2], a);
         glowG.strokeWeight(w);
         glowG.noFill();
 
