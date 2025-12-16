@@ -98,6 +98,52 @@
       cursor: pointer;
       margin-top: 20px;
     }
+
+    /* --- Hover video preview inside the tile (NEW) --- */
+    .tile-video-link{
+      position: relative;
+      display: block;
+      overflow: hidden;           /* keeps the video clipped to the tile */
+    }
+
+    /* Ensure the tile image fills normally */
+    .tile-video-link > img{
+      display: block;
+      width: 100%;
+      height: auto;
+      position: relative;
+      z-index: 1;                 /* layer: image */
+    }
+
+    /* Video sits on top of the image, same size as the tile */
+    .tile-preview-video{
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+
+      z-index: 2;                 /* layer: video above image */
+      opacity: 0;
+      pointer-events: none;       /* doesn’t interfere with clicking the tile */
+      transition: opacity 180ms ease;
+    }
+
+    /* Keep the title banner above BOTH image and video */
+    .tile-main-title{
+      z-index: 3;                 /* layer: title above video */
+      position: absolute;         /* explicit, even though it exists in styleghibli.css */
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      /* Optional: slightly stronger readability over video */
+      backdrop-filter: blur(2px);
+    }
+
+    /* When preview is active, fade video in */
+    .tile-video-link.is-previewing .tile-preview-video{
+      opacity: 1;
+    }
   </style>
 </head>
 <body class="menu">
@@ -132,7 +178,6 @@
       </div>
 
       <div class="tile-main">
-        <!-- POV tile now uses the same transition principle -->
         <a href="pov/index.html" class="tile-video-link" data-video="animations/pov.mp4">
           <img src="images/ghibli/8yearswitch.png" alt="Switch Games">
           <div class="tile-main-title" data-fr="Jeux pour switch (POV)" data-en="Switch games (POV)" data-ja="スイッチ用ゲーム（POV）"></div>
@@ -226,12 +271,6 @@
   </div>
   <div id="overlay"></div>
 
-  <!-- Transition overlay for tile video intros -->
-  <div id="tileTransitionOverlay" aria-hidden="true">
-    <img id="tileTransitionImage" alt="Tile preview" />
-    <video id="tileTransitionVideo" playsinline preload="auto"></video>
-  </div>
-
   <!-- Script to handle the modal for news -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -267,141 +306,110 @@
     });
   </script>
 
-  <!-- Script to handle the intro video transition for tiles (switch + POV) -->
+  <!-- NEW: Hover video preview inside tile -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const transitionLinks = Array.from(document.querySelectorAll('.tile-video-link'));
-      const overlay = document.getElementById('tileTransitionOverlay');
-      const overlayImage = document.getElementById('tileTransitionImage');
-      const overlayVideo = document.getElementById('tileTransitionVideo');
+      const links = Array.from(document.querySelectorAll('.tile-video-link'));
+      if (!links.length) return;
 
-      if (!transitionLinks.length || !overlay || !overlayImage || !overlayVideo) return;
+      const EXTRA_DELAY_AFTER_GROW_MS = 500;
+      const FALLBACK_TOTAL_DELAY_MS = 800;
 
-      const resetOverlay = () => {
-        overlay.classList.remove('is-active', 'video-visible');
-        overlayImage.classList.remove('expand');
-        overlayImage.src = '';
-        overlayVideo.pause();
-        overlayVideo.currentTime = 0;
-        overlayVideo.removeAttribute('src');
-        overlayVideo.load();
-        document.body.classList.remove('transition-lock');
-      };
+      const state = new WeakMap();
 
-      window.addEventListener('pageshow', resetOverlay);
-
-      const inferStorageKey = (url) => {
-        try {
-          const path = new URL(url, window.location.href).pathname.toLowerCase();
-          if (path.includes('/pov/')) return 'povTileIntroSeen';
-          if (path.includes('/switch/')) return 'switchTileIntroSeen';
-        } catch (e) { /* ignore */ }
-        return 'tileIntroSeen';
-      };
-
-      const hasSeenIntro = (key) => {
-        try {
-          return localStorage.getItem(key) === 'true';
-        } catch (error) {
-          return false;
+      const ensureVideoEl = (link) => {
+        let vid = link.querySelector('.tile-preview-video');
+        if (!vid) {
+          vid = document.createElement('video');
+          vid.className = 'tile-preview-video';
+          vid.muted = false;
+          vid.volume = 0.1
+          vid.playsInline = true;
+          vid.loop = true;
+          vid.preload = 'metadata';
+          link.appendChild(vid);
         }
+        return vid;
       };
 
-      const markSeen = (key) => {
-        try {
-          localStorage.setItem(key, 'true');
-        } catch (error) {
-          /* localStorage unavailable */
+      const stopPreview = (link) => {
+        const s = state.get(link);
+        if (!s) return;
+
+        clearTimeout(s.fallbackTimer);
+        clearTimeout(s.afterGrowTimer);
+
+        const vid = s.video;
+        if (vid) {
+          try { vid.pause(); } catch(e) {}
+          vid.removeAttribute('src');
+          vid.load();
         }
+
+        link.classList.remove('is-previewing');
+        state.delete(link);
       };
 
-      const shouldPlayIntro = (key) => {
-        if (!hasSeenIntro(key)) return true;
-        return Math.random() < 0.2;
+      const startPreview = (link) => {
+        const videoSrc = link.dataset.video;
+        if (!videoSrc) return;
+
+        const s = state.get(link) || {};
+        const vid = ensureVideoEl(link);
+        s.video = vid;
+        state.set(link, s);
+
+        let hasTriggered = false;
+
+        const trigger = () => {
+          if (hasTriggered) return;
+          hasTriggered = true;
+
+          link.classList.add('is-previewing');
+          vid.src = videoSrc;
+          vid.currentTime = 0;
+
+          const p = vid.play();
+          if (p && typeof p.then === 'function') {
+            p.catch(() => {
+              link.classList.remove('is-previewing');
+            });
+          }
+        };
+
+        const tile = link.closest('.tile-main') || link;
+
+        const onGrowEnd = (ev) => {
+          if (ev.propertyName !== 'transform') return;
+          tile.removeEventListener('transitionend', onGrowEnd);
+          s.afterGrowTimer = setTimeout(trigger, EXTRA_DELAY_AFTER_GROW_MS);
+        };
+
+        tile.addEventListener('transitionend', onGrowEnd);
+        s.fallbackTimer = setTimeout(trigger, FALLBACK_TOTAL_DELAY_MS);
       };
 
-      const goToLink = (url, key) => {
-        markSeen(key);
-        window.location.href = url;
-      };
+      links.forEach((link) => {
+        link.addEventListener('pointerenter', (e) => {
+          if (e.pointerType && e.pointerType !== 'mouse') return;
 
-      transitionLinks.forEach((transitionLink) => {
-        transitionLink.addEventListener('click', (event) => {
-          if (overlay.classList.contains('is-active')) {
-            event.preventDefault();
-            return;
-          }
-
-          const targetUrl = transitionLink.href;
-          const videoSrc = transitionLink.dataset.video;
-          const storageKey = inferStorageKey(targetUrl);
-
-          if (!videoSrc) return;
-
-          if (!shouldPlayIntro(storageKey)) {
-            return; // allow normal navigation
-          }
-
-          event.preventDefault();
-
-          const image = transitionLink.querySelector('img');
-          if (!image) {
-            goToLink(targetUrl, storageKey);
-            return;
-          }
-
-          const rect = image.getBoundingClientRect();
-
-          overlayImage.src = image.src;
-          overlayImage.style.width = `${rect.width}px`;
-          overlayImage.style.height = `${rect.height}px`;
-          overlayImage.style.left = `${rect.left}px`;
-          overlayImage.style.top = `${rect.top}px`;
-
-          overlayVideo.src = videoSrc;
-          overlayVideo.currentTime = 0;
-
-          overlay.classList.add('is-active');
-          document.body.classList.add('transition-lock');
-
-          let redirectTimeout;
-          let hasRevealed = false;
-
-          const startVideoPlayback = () => {
-            overlayVideo.currentTime = 0;
-            const playback = overlayVideo.play();
-            if (playback && typeof playback.then === 'function') {
-              playback.catch(() => {
-                goToLink(targetUrl, storageKey);
-              });
-            }
-          };
-
-          const revealVideo = () => {
-            if (hasRevealed) return;
-            hasRevealed = true;
-
-            overlay.classList.add('video-visible');
-            startVideoPlayback();
-
-            redirectTimeout = setTimeout(() => goToLink(targetUrl, storageKey), 12000);
-
-            overlayVideo.addEventListener('ended', () => {
-              clearTimeout(redirectTimeout);
-              goToLink(targetUrl, storageKey);
-            }, { once: true });
-          };
-
-          requestAnimationFrame(() => {
-            overlayImage.classList.add('expand');
-          });
-
-          overlayImage.addEventListener('transitionend', () => {
-            setTimeout(revealVideo, 800);
-          }, { once: true });
-
-          setTimeout(revealVideo, 2800);
+          stopPreview(link);
+          state.set(link, {});
+          startPreview(link);
         });
+
+        link.addEventListener('pointerleave', () => {
+          stopPreview(link);
+        });
+
+        link.addEventListener('focus', () => {
+          stopPreview(link);
+          state.set(link, {});
+          startPreview(link);
+        });
+        link.addEventListener('blur', () => stopPreview(link));
+
+        link.addEventListener('click', () => stopPreview(link));
       });
     });
   </script>
