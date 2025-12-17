@@ -1,5 +1,6 @@
 const MAX_LAUNCHES = 7;
 const MAX_PARTICLES = 3200;
+const SAND_CELL = 6;
 class Launch {
   constructor(p, x, color) {
     this.p = p;
@@ -92,11 +93,109 @@ class BurstParticle {
 export function createFireworkScene(p) {
   let launches = [];
   let particles = [];
+  let stuckEdges = [];
+  let settledSand = [];
+  let sandGrid = [];
+  let sandCols = 0;
+  let sandRows = 0;
   let speedMultiplier = 1;
   let autoTimer = 0;
 
   function paintBackdrop() {
     p.background(0, 0, 100);
+  }
+
+  function resetSand() {
+    sandCols = Math.max(1, Math.floor(p.width / SAND_CELL));
+    sandRows = Math.max(1, Math.floor(p.height / SAND_CELL));
+    sandGrid = Array.from({ length: sandCols }, () => Array(sandRows).fill(null));
+    settledSand = [];
+    stuckEdges = [];
+  }
+
+  function storeEdgeParticle(particle) {
+    stuckEdges.push({
+      x: particle.x,
+      y: particle.y,
+      hue: particle.hue,
+      sat: particle.sat,
+      size: p.constrain(particle.size * 0.9, 2.2, 8),
+      twinkle: particle.twinkle
+    });
+  }
+
+  function addSand(col, row, particle) {
+    const sand = {
+      x: (col + 0.5) * SAND_CELL,
+      y: (row + 0.5) * SAND_CELL,
+      hue: particle.hue,
+      sat: particle.sat,
+      size: p.constrain(particle.size, 3.2, 7.5),
+      twinkle: particle.twinkle
+    };
+    sandGrid[col][row] = sand;
+    settledSand.push(sand);
+  }
+
+  function tryStickOrSettle(particle) {
+    const r = particle.size * 0.5;
+
+    if (particle.x <= r) {
+      particle.x = r;
+      storeEdgeParticle(particle);
+      return true;
+    }
+    if (particle.x >= p.width - r) {
+      particle.x = p.width - r;
+      storeEdgeParticle(particle);
+      return true;
+    }
+    if (particle.y <= r) {
+      particle.y = r;
+      storeEdgeParticle(particle);
+      return true;
+    }
+
+    let col = Math.floor(particle.x / SAND_CELL);
+    let row = Math.floor(particle.y / SAND_CELL);
+    col = p.constrain(col, 0, sandCols - 1);
+    row = p.constrain(row, 0, sandRows - 1);
+
+    if (row >= sandRows - 1) {
+      addSand(col, sandRows - 1, particle);
+      return true;
+    }
+
+    const below = sandGrid[col][row + 1];
+    if (!below) return false;
+
+    const leftFree = col > 0 && !sandGrid[col - 1][row + 1];
+    const rightFree = col < sandCols - 1 && !sandGrid[col + 1][row + 1];
+
+    if (leftFree || rightFree) {
+      const dir = leftFree && rightFree ? (p.random() < 0.5 ? -1 : 1) : leftFree ? -1 : 1;
+      particle.x += dir * SAND_CELL * 0.7;
+      particle.y += SAND_CELL * 0.6;
+      return false;
+    }
+
+    addSand(col, row, particle);
+    return true;
+  }
+
+  function drawStuckPieces() {
+    p.noStroke();
+    for (const piece of stuckEdges) {
+      const flicker = 0.9 + piece.twinkle * 0.2 * p.noise(piece.x * 0.01, piece.y * 0.01, p.frameCount * 0.05);
+      p.fill(piece.hue, piece.sat, 100, 70 * flicker);
+      p.circle(piece.x, piece.y, piece.size * flicker);
+    }
+
+    for (const sand of settledSand) {
+      const flicker = 0.9 + sand.twinkle * 0.15 * p.noise(sand.x * 0.01, sand.y * 0.01, p.frameCount * 0.05);
+      p.fill(sand.hue, sand.sat, 95, 85 * flicker);
+      p.circle(sand.x, sand.y, sand.size * flicker);
+    }
   }
 
   function choosePalette(baseHue) {
@@ -223,9 +322,11 @@ export function createFireworkScene(p) {
       p.colorMode(p.HSB, 360, 100, 100, 100);
       launches = [];
       particles = [];
+      resetSand();
       autoTimer = 0;
     },
     resize() {
+      resetSand();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
@@ -235,6 +336,7 @@ export function createFireworkScene(p) {
     },
     draw() {
       paintBackdrop();
+      drawStuckPieces();
 
       autoTimer += 1 * speedMultiplier;
       if (autoTimer > 75) {
@@ -255,8 +357,9 @@ export function createFireworkScene(p) {
       for (let i = particles.length - 1; i >= 0; i--) {
         const particle = particles[i];
         const alive = particle.update(speedMultiplier);
-        particle.draw();
-        if (!alive) particles.splice(i, 1);
+        const stuck = alive ? tryStickOrSettle(particle) : false;
+        if (alive && !stuck) particle.draw();
+        if (!alive || stuck) particles.splice(i, 1);
       }
     }
   };
