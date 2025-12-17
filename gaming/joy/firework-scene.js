@@ -1,12 +1,10 @@
 const MAX_LAUNCHES = 7;
 const MAX_PARTICLES = 3200;
 const BACKDROP_PALETTE = [
-  { h: 318, s: 70, b: 10 },
-  { h: 287, s: 72, b: 16 },
-  { h: 248, s: 78, b: 22 },
-  { h: 202, s: 80, b: 28 },
-  { h: 158, s: 82, b: 24 },
-  { h: 38, s: 90, b: 36 }
+  { h: 42, s: 12, b: 96 },
+  { h: 26, s: 16, b: 92 },
+  { h: 350, s: 14, b: 90 },
+  { h: 210, s: 10, b: 88 }
 ];
 
 class Launch {
@@ -107,34 +105,34 @@ export function createFireworkScene(p) {
   let backdropTime = 0;
 
   function paintBackdrop() {
-    backdropTime += 0.4 * speedMultiplier;
+    backdropTime += 0.45 * speedMultiplier;
     p.noStroke();
 
-    // base vertical gradient with subtle pulsation
-    for (let y = 0; y <= p.height; y += 3) {
+    // bright vertical gradient with soft pulses
+    for (let y = 0; y <= p.height; y += 4) {
       const t = y / p.height;
       const band = BACKDROP_PALETTE[Math.floor(t * (BACKDROP_PALETTE.length - 1))];
       const nextBand = BACKDROP_PALETTE[Math.min(BACKDROP_PALETTE.length - 1, Math.floor(t * (BACKDROP_PALETTE.length - 1)) + 1)];
       const localT = (t * (BACKDROP_PALETTE.length - 1)) % 1;
-      const wave = p.sin(backdropTime * 0.012 + t * 6) * 4;
-      const h = p.lerp(band.h, nextBand.h, localT);
-      const s = p.lerp(band.s, nextBand.s, localT) + wave;
-      const b = p.lerp(band.b, nextBand.b, localT) + wave * 0.4;
-      p.fill((h + 360) % 360, p.constrain(s, 45, 95), p.constrain(b, 4, 42), 100);
-      p.rect(0, y, p.width, 3);
+      const wave = p.sin(backdropTime * 0.01 + t * 7) * 3;
+      const h = p.lerp(band.h, nextBand.h, localT) + wave * 0.6;
+      const s = p.lerp(band.s, nextBand.s, localT) + wave * 0.3;
+      const b = p.lerp(band.b, nextBand.b, localT) + wave * 0.6;
+      p.fill((h + 360) % 360, p.constrain(s, 6, 28), p.constrain(b, 78, 100), 100);
+      p.rect(0, y, p.width, 4);
     }
 
-    // layered color blooms that drift slowly
+    // drifting pastel blooms for extra color without darkening
     p.push();
-    p.blendMode(p.SCREEN);
+    p.blendMode(p.MULTIPLY);
     backdropBlobs.forEach(blob => {
       blob.angle += blob.drift * speedMultiplier;
-      const radius = blob.radius * (1 + 0.1 * p.sin(backdropTime * 0.01 + blob.seed));
-      const cx = p.width * (0.5 + 0.35 * p.cos(blob.angle));
-      const cy = p.height * (0.45 + 0.35 * p.sin(blob.angle * 0.8));
+      const radius = blob.radius * (1 + 0.12 * p.sin(backdropTime * 0.01 + blob.seed));
+      const cx = p.width * (0.5 + 0.4 * p.cos(blob.angle));
+      const cy = p.height * (0.48 + 0.4 * p.sin(blob.angle * 0.85));
       const hue = (blob.hue + backdropTime * blob.hueDrift) % 360;
       p.fill(hue, blob.sat, blob.bri, blob.alpha);
-      p.circle(cx, cy, radius * 2);
+      p.circle(cx, cy, radius * 2.3);
     });
     p.pop();
   }
@@ -259,15 +257,15 @@ export function createFireworkScene(p) {
 
   function setupBackdrop() {
     backdropTime = 0;
-    backdropBlobs = Array.from({ length: 7 }, () => ({
-      radius: p.random(160, 260),
-      hue: p.random([330, 20, 80, 140, 200, 260, 300]),
-      sat: p.random(55, 95),
-      bri: p.random(40, 80),
-      alpha: p.random(18, 36),
+    backdropBlobs = Array.from({ length: 8 }, () => ({
+      radius: p.random(140, 230),
+      hue: p.random([350, 30, 60, 120, 180, 230, 280, 320]),
+      sat: p.random(18, 36),
+      bri: p.random(70, 96),
+      alpha: p.random(12, 26),
       angle: p.random(p.TWO_PI),
-      drift: p.random(0.001, 0.004),
-      hueDrift: p.random(0.006, 0.02),
+      drift: p.random(0.0015, 0.0045),
+      hueDrift: p.random(0.004, 0.015),
       seed: p.random(1000)
     }));
   }
