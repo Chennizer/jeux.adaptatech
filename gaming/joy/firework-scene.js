@@ -1,12 +1,5 @@
 const MAX_LAUNCHES = 7;
 const MAX_PARTICLES = 3200;
-const BACKDROP_PALETTE = [
-  { h: 42, s: 12, b: 96 },
-  { h: 26, s: 16, b: 92 },
-  { h: 350, s: 14, b: 90 },
-  { h: 210, s: 10, b: 88 }
-];
-
 class Launch {
   constructor(p, x, color) {
     this.p = p;
@@ -101,40 +94,9 @@ export function createFireworkScene(p) {
   let particles = [];
   let speedMultiplier = 1;
   let autoTimer = 0;
-  let backdropBlobs = [];
-  let backdropTime = 0;
 
   function paintBackdrop() {
-    backdropTime += 0.45 * speedMultiplier;
-    p.noStroke();
-
-    // bright vertical gradient with soft pulses
-    for (let y = 0; y <= p.height; y += 4) {
-      const t = y / p.height;
-      const band = BACKDROP_PALETTE[Math.floor(t * (BACKDROP_PALETTE.length - 1))];
-      const nextBand = BACKDROP_PALETTE[Math.min(BACKDROP_PALETTE.length - 1, Math.floor(t * (BACKDROP_PALETTE.length - 1)) + 1)];
-      const localT = (t * (BACKDROP_PALETTE.length - 1)) % 1;
-      const wave = p.sin(backdropTime * 0.01 + t * 7) * 3;
-      const h = p.lerp(band.h, nextBand.h, localT) + wave * 0.6;
-      const s = p.lerp(band.s, nextBand.s, localT) + wave * 0.3;
-      const b = p.lerp(band.b, nextBand.b, localT) + wave * 0.6;
-      p.fill((h + 360) % 360, p.constrain(s, 6, 28), p.constrain(b, 78, 100), 100);
-      p.rect(0, y, p.width, 4);
-    }
-
-    // drifting pastel blooms for extra color without darkening
-    p.push();
-    p.blendMode(p.MULTIPLY);
-    backdropBlobs.forEach(blob => {
-      blob.angle += blob.drift * speedMultiplier;
-      const radius = blob.radius * (1 + 0.12 * p.sin(backdropTime * 0.01 + blob.seed));
-      const cx = p.width * (0.5 + 0.4 * p.cos(blob.angle));
-      const cy = p.height * (0.48 + 0.4 * p.sin(blob.angle * 0.85));
-      const hue = (blob.hue + backdropTime * blob.hueDrift) % 360;
-      p.fill(hue, blob.sat, blob.bri, blob.alpha);
-      p.circle(cx, cy, radius * 2.3);
-    });
-    p.pop();
+    p.background(0, 0, 100);
   }
 
   function choosePalette(baseHue) {
@@ -255,21 +217,6 @@ export function createFireworkScene(p) {
     }
   }
 
-  function setupBackdrop() {
-    backdropTime = 0;
-    backdropBlobs = Array.from({ length: 8 }, () => ({
-      radius: p.random(140, 230),
-      hue: p.random([350, 30, 60, 120, 180, 230, 280, 320]),
-      sat: p.random(18, 36),
-      bri: p.random(70, 96),
-      alpha: p.random(12, 26),
-      angle: p.random(p.TWO_PI),
-      drift: p.random(0.0015, 0.0045),
-      hueDrift: p.random(0.004, 0.015),
-      seed: p.random(1000)
-    }));
-  }
-
   return {
     id: 'fireworks',
     enter() {
@@ -277,10 +224,8 @@ export function createFireworkScene(p) {
       launches = [];
       particles = [];
       autoTimer = 0;
-      setupBackdrop();
     },
     resize() {
-      setupBackdrop();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
