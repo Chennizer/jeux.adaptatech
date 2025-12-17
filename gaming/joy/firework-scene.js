@@ -1,8 +1,13 @@
-const SKY_TOP = { h: 215, s: 55, b: 8 };
-const SKY_BOTTOM = { h: 215, s: 40, b: 4 };
 const MAX_LAUNCHES = 7;
 const MAX_PARTICLES = 3200;
-const STAR_COUNT = 140;
+const BACKDROP_PALETTE = [
+  { h: 318, s: 70, b: 10 },
+  { h: 287, s: 72, b: 16 },
+  { h: 248, s: 78, b: 22 },
+  { h: 202, s: 80, b: 28 },
+  { h: 158, s: 82, b: 24 },
+  { h: 38, s: 90, b: 36 }
+];
 
 class Launch {
   constructor(p, x, color) {
@@ -96,41 +101,42 @@ class BurstParticle {
 export function createFireworkScene(p) {
   let launches = [];
   let particles = [];
-  let stars = [];
   let speedMultiplier = 1;
   let autoTimer = 0;
+  let backdropBlobs = [];
+  let backdropTime = 0;
 
-  function gradientBackground() {
-    p.background(0, 0, 0, 100);
+  function paintBackdrop() {
+    backdropTime += 0.4 * speedMultiplier;
     p.noStroke();
-    for (let y = 0; y <= p.height; y += 2) {
+
+    // base vertical gradient with subtle pulsation
+    for (let y = 0; y <= p.height; y += 3) {
       const t = y / p.height;
-      const h = p.lerp(SKY_TOP.h, SKY_BOTTOM.h, t);
-      const s = p.lerp(SKY_TOP.s, SKY_BOTTOM.s, t);
-      const b = p.lerp(SKY_TOP.b, SKY_BOTTOM.b, t);
-      p.fill(h, s, b, 100);
-      p.rect(0, y, p.width, 2);
+      const band = BACKDROP_PALETTE[Math.floor(t * (BACKDROP_PALETTE.length - 1))];
+      const nextBand = BACKDROP_PALETTE[Math.min(BACKDROP_PALETTE.length - 1, Math.floor(t * (BACKDROP_PALETTE.length - 1)) + 1)];
+      const localT = (t * (BACKDROP_PALETTE.length - 1)) % 1;
+      const wave = p.sin(backdropTime * 0.012 + t * 6) * 4;
+      const h = p.lerp(band.h, nextBand.h, localT);
+      const s = p.lerp(band.s, nextBand.s, localT) + wave;
+      const b = p.lerp(band.b, nextBand.b, localT) + wave * 0.4;
+      p.fill((h + 360) % 360, p.constrain(s, 45, 95), p.constrain(b, 4, 42), 100);
+      p.rect(0, y, p.width, 3);
     }
-  }
 
-  function spawnStars() {
-    const count = STAR_COUNT + Math.floor(p.width * p.height * 0.00005);
-    stars = Array.from({ length: count }, () => ({
-      x: p.random(p.width),
-      y: p.random(p.height * 0.8),
-      tw: p.random(0.01, 0.05),
-      size: p.random(1.2, 2.6),
-      hue: p.random(180, 240)
-    }));
-  }
-
-  function drawStars() {
-    stars.forEach(star => {
-      const flicker = (p.sin(p.frameCount * star.tw) + 1.5) * 0.4;
-      p.noStroke();
-      p.fill(star.hue, 30, 100, 50 + flicker * 40);
-      p.circle(star.x, star.y, star.size + flicker);
+    // layered color blooms that drift slowly
+    p.push();
+    p.blendMode(p.SCREEN);
+    backdropBlobs.forEach(blob => {
+      blob.angle += blob.drift * speedMultiplier;
+      const radius = blob.radius * (1 + 0.1 * p.sin(backdropTime * 0.01 + blob.seed));
+      const cx = p.width * (0.5 + 0.35 * p.cos(blob.angle));
+      const cy = p.height * (0.45 + 0.35 * p.sin(blob.angle * 0.8));
+      const hue = (blob.hue + backdropTime * blob.hueDrift) % 360;
+      p.fill(hue, blob.sat, blob.bri, blob.alpha);
+      p.circle(cx, cy, radius * 2);
     });
+    p.pop();
   }
 
   function choosePalette(baseHue) {
@@ -251,6 +257,21 @@ export function createFireworkScene(p) {
     }
   }
 
+  function setupBackdrop() {
+    backdropTime = 0;
+    backdropBlobs = Array.from({ length: 7 }, () => ({
+      radius: p.random(160, 260),
+      hue: p.random([330, 20, 80, 140, 200, 260, 300]),
+      sat: p.random(55, 95),
+      bri: p.random(40, 80),
+      alpha: p.random(18, 36),
+      angle: p.random(p.TWO_PI),
+      drift: p.random(0.001, 0.004),
+      hueDrift: p.random(0.006, 0.02),
+      seed: p.random(1000)
+    }));
+  }
+
   return {
     id: 'fireworks',
     enter() {
@@ -258,10 +279,10 @@ export function createFireworkScene(p) {
       launches = [];
       particles = [];
       autoTimer = 0;
-      spawnStars();
+      setupBackdrop();
     },
     resize() {
-      spawnStars();
+      setupBackdrop();
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
@@ -270,8 +291,7 @@ export function createFireworkScene(p) {
       spawnLaunch();
     },
     draw() {
-      gradientBackground();
-      drawStars();
+      paintBackdrop();
 
       autoTimer += 1 * speedMultiplier;
       if (autoTimer > 75) {
