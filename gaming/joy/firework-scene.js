@@ -183,6 +183,23 @@ export function createFireworkScene(p) {
     return true;
   }
 
+  function settleOverflowParticle(particle) {
+    particle.size = Math.max(particle.size, 3.5);
+    particle.life = Math.max(particle.life, 8);
+    if (!tryStickOrSettle(particle)) {
+      const col = p.constrain(Math.floor(particle.x / SAND_CELL), 0, sandCols - 1);
+      addSand(col, sandRows - 1, particle);
+    }
+  }
+
+  function trimParticles() {
+    while (particles.length > MAX_PARTICLES) {
+      const particle = particles.shift();
+      if (!particle) break;
+      settleOverflowParticle(particle);
+    }
+  }
+
   function drawStuckPieces() {
     p.noStroke();
     for (const piece of stuckEdges) {
@@ -312,7 +329,7 @@ export function createFireworkScene(p) {
     }
 
     if (particles.length > MAX_PARTICLES) {
-      particles.splice(0, particles.length - MAX_PARTICLES);
+      trimParticles();
     }
   }
 
@@ -357,7 +374,7 @@ export function createFireworkScene(p) {
       for (let i = particles.length - 1; i >= 0; i--) {
         const particle = particles[i];
         const alive = particle.update(speedMultiplier);
-        const stuck = alive ? tryStickOrSettle(particle) : false;
+        const stuck = tryStickOrSettle(particle);
         if (alive && !stuck) particle.draw();
         if (!alive || stuck) particles.splice(i, 1);
       }
