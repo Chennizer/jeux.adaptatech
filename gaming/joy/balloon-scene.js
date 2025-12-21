@@ -1,12 +1,10 @@
 class Balloon {
-  constructor(p, { x, y }) {
+  constructor(p, { x, y, color }) {
     this.p = p;
     this.x = x;
     this.y = y;
     this.r = p.random(42, 72);
-    this.hue = p.random(300, 360);
-    this.saturation = p.random(55, 90);
-    this.brightness = p.random(80, 100);
+    this.assignColor(color);
     this.speed = p.random(0.35, 0.95);
     this.drift = p.random(-0.4, 0.4);
     this.wave = p.random(0.004, 0.01);
@@ -26,12 +24,19 @@ class Balloon {
     this.x = x;
     this.y = y;
     this.r = p.random(42, 78);
-    this.hue = p.random(0, 360);
-    this.saturation = p.random(65, 95);
-    this.brightness = p.random(80, 100);
+    this.assignColor();
     this.speed = p.random(0.35, 1.05);
     this.drift = p.random(-0.35, 0.35);
     this.wave = p.random(0.004, 0.01);
+  }
+
+  assignColor(color) {
+    const chosen = color || this.colorPicker?.();
+    if (chosen) {
+      this.hue = chosen.hue;
+      this.saturation = chosen.saturation;
+      this.brightness = chosen.brightness;
+    }
   }
 
   draw() {
@@ -59,6 +64,24 @@ export function createBalloonScene(p) {
   let confetti = [];
   let speedMultiplier = 1;
   let bgGradient = null;
+  const basePalette = [0, 25, 50, 70, 120, 150, 190, 220, 260, 300, 330];
+  let palettePool = [];
+
+  function resetPalette() {
+    palettePool = [];
+  }
+
+  function nextBalloonColor() {
+    if (palettePool.length === 0) {
+      palettePool = p.shuffle([...basePalette]);
+    }
+    const baseHue = palettePool.pop();
+    return {
+      hue: (baseHue + p.random(-6, 6) + 360) % 360,
+      saturation: p.random(70, 95),
+      brightness: p.random(82, 100)
+    };
+  }
 
   function updateGradient() {
     const ctx = p.drawingContext;
@@ -71,7 +94,12 @@ export function createBalloonScene(p) {
 
   function initBalloons() {
     const count = Math.max(16, Math.floor(p.width * p.height * 0.00003));
-    balloons = Array.from({ length: count }, () => new Balloon(p, { x: p.random(p.width), y: p.random(p.height) }));
+    balloons = Array.from({ length: count }, () =>
+      new Balloon(p, { x: p.random(p.width), y: p.random(p.height), color: nextBalloonColor() })
+    );
+    balloons.forEach(balloon => {
+      balloon.colorPicker = nextBalloonColor;
+    });
   }
 
   function initConfetti() {
@@ -90,11 +118,13 @@ export function createBalloonScene(p) {
     id: 'balloons',
     enter() {
       p.colorMode(p.HSB, 360, 100, 100, 100);
+      resetPalette();
       initBalloons();
       initConfetti();
       updateGradient();
     },
     resize() {
+      resetPalette();
       initBalloons();
       initConfetti();
       updateGradient();
@@ -104,7 +134,9 @@ export function createBalloonScene(p) {
     },
     pulse() {
       for (let i = 0; i < 8; i++) {
-        balloons.unshift(new Balloon(p, { x: p.random(p.width), y: p.height + p.random(40, 140) }));
+        const balloon = new Balloon(p, { x: p.random(p.width), y: p.height + p.random(40, 140), color: nextBalloonColor() });
+        balloon.colorPicker = nextBalloonColor;
+        balloons.unshift(balloon);
       }
       if (balloons.length > 160) balloons.length = 160;
     },
