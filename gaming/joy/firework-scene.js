@@ -104,7 +104,15 @@ export function createFireworkScene(p) {
   let autoTimer = 0;
 
   function paintBackdrop() {
-    p.background(0, 0, 100);
+    const ctx = p.drawingContext;
+    const gradient = ctx.createLinearGradient(0, 0, 0, p.height);
+    gradient.addColorStop(0, p.color(52, 40, 100, 100).toString());
+    gradient.addColorStop(0.5, p.color(32, 25, 98, 100).toString());
+    gradient.addColorStop(1, p.color(14, 10, 95, 100).toString());
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, p.width, p.height);
+    ctx.restore();
   }
 
   function resetSand() {
@@ -241,111 +249,8 @@ export function createFireworkScene(p) {
   }
 
   function spawnBurst(x, y, hue, { scale = 1, type: forcedType } = {}) {
-    const type = forcedType || p.random(['peony', 'chrysanthemum', 'ring', 'palm', 'willow', 'brocade', 'double', 'smile']);
+    const type = forcedType || p.random(['peony', 'chrysanthemum', 'ring', 'palm', 'willow', 'brocade', 'double']);
     const palette = choosePalette(hue);
-
-    if (type === 'smile') {
-      const faceHue = p.random(palette);
-      const radius = p.random(42, 68) * scale;
-      const life = p.random(160, 220) * p.lerp(0.75, 1.1, scale);
-      const ringCount = 140;
-      for (let i = 0; i < ringCount; i++) {
-        const angle = (p.TWO_PI / ringCount) * i + p.random(-0.02, 0.02);
-        const r = radius + p.random(-2, 2) * scale;
-        particles.push(
-          new BurstParticle(p, {
-            x: x + Math.cos(angle) * r,
-            y: y + Math.sin(angle) * r,
-            vx: p.random(-0.25, 0.25) * scale,
-            vy: p.random(-0.25, 0.25) * scale,
-            hue: (faceHue + p.random(-8, 8) + 360) % 360,
-            sat: p.random(70, 95),
-            life,
-            maxLife: life,
-            size: p.random(3.4, 5.2) * scale,
-            fade: 0.008,
-            drag: 0.994,
-            gravity: 0.04 * scale,
-            twinkle: 0.55,
-            glow: 1
-          })
-        );
-      }
-
-      const eyeOffsetX = radius * 0.35;
-      const eyeOffsetY = -radius * 0.25;
-      const eyeCount = 16;
-      for (let i = 0; i < eyeCount; i++) {
-        const jitterX = p.random(-3, 3);
-        const jitterY = p.random(-3, 3);
-        particles.push(
-          new BurstParticle(p, {
-            x: x - eyeOffsetX + jitterX,
-            y: y + eyeOffsetY + jitterY,
-            vx: p.random(-0.2, 0.2) * scale,
-            vy: p.random(-0.2, 0.2) * scale,
-            hue: (faceHue + 20 + p.random(-5, 5)) % 360,
-            sat: p.random(60, 90),
-            life: life * 0.9,
-            maxLife: life * 0.9,
-            size: p.random(4.2, 5.6) * scale,
-            fade: 0.0075,
-            drag: 0.995,
-            gravity: 0.03 * scale,
-            twinkle: 0.4,
-            glow: 0
-          })
-        );
-        particles.push(
-          new BurstParticle(p, {
-            x: x + eyeOffsetX + jitterX,
-            y: y + eyeOffsetY + jitterY,
-            vx: p.random(-0.2, 0.2) * scale,
-            vy: p.random(-0.2, 0.2) * scale,
-            hue: (faceHue + 20 + p.random(-5, 5)) % 360,
-            sat: p.random(60, 90),
-            life: life * 0.9,
-            maxLife: life * 0.9,
-            size: p.random(4.2, 5.6) * scale,
-            fade: 0.0075,
-            drag: 0.995,
-            gravity: 0.03 * scale,
-            twinkle: 0.4,
-            glow: 0
-          })
-        );
-      }
-
-      const smilePoints = 90;
-      const smileRadius = radius * 0.55;
-      for (let i = 0; i < smilePoints; i++) {
-        const t = i / (smilePoints - 1);
-        const angle = p.lerp(-p.PI * 0.7, -p.PI * 0.3, t);
-        const sx = x + Math.cos(angle) * smileRadius;
-        const sy = y + Math.sin(angle) * smileRadius + radius * 0.2;
-        particles.push(
-          new BurstParticle(p, {
-            x: sx + p.random(-1.8, 1.8) * scale,
-            y: sy + p.random(-1.8, 1.8) * scale,
-            vx: p.random(-0.25, 0.25) * scale,
-            vy: p.random(-0.1, 0.25) * scale,
-            hue: (faceHue + 10 + p.random(-6, 6) + 360) % 360,
-            sat: p.random(75, 95),
-            life: life * 0.95,
-            maxLife: life * 0.95,
-            size: p.random(3.2, 4.6) * scale,
-            fade: 0.007,
-            drag: 0.994,
-            gravity: 0.035 * scale,
-            twinkle: 0.6,
-            glow: 0
-          })
-        );
-      }
-      trimParticles();
-      return;
-    }
-
     const heavyStyles = ['willow', 'brocade'];
     const countBase = type === 'ring' ? 240 : type === 'double' ? 280 : heavyStyles.includes(type) ? 320 : 240;
     const wobble = type === 'chrysanthemum' ? 0.4 : 0.1;

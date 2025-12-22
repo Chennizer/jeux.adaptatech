@@ -13,7 +13,6 @@ const PLAYLIST_TRACKS = [
 
 const SCENE_SOUNDTRACKS = {
   sunburst: '../../sounds/sun/sunnyday.mp3',
-  balloons: '../../sounds/sun/sun2.mp3',
   confetti: '../../sounds/dancebeat.mp3',
   fireworks: '../../sounds/fireworks.mp3'
 };

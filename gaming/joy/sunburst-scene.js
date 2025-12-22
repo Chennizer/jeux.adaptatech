@@ -41,6 +41,7 @@ export function createSunburstScene(p) {
   let orbs = [];
   let speedMultiplier = 1;
   let pulseBoost = 0;
+  let pulses = [];
 
   function initRays() {
     const count = 120;
@@ -58,7 +59,8 @@ export function createSunburstScene(p) {
     p.noStroke();
     for (const ray of rays) {
       const wobble = p.sin(p.frameCount * ray.speed * 90) * 0.12;
-      const len = p.lerp(p.height * 0.2, p.height * 0.42, (p.sin(p.frameCount * ray.speed * 60) + 1) * 0.5);
+      const lenBase = p.lerp(p.height * 0.2, p.height * 0.42, (p.sin(p.frameCount * ray.speed * 60) + 1) * 0.5);
+      const len = lenBase * (1 + pulseBoost * 0.4);
       p.fill((ray.hue + wobble * 40) % 360, 82, 100, 0.65 * 100);
       p.beginShape();
       p.vertex(0, 0);
@@ -98,16 +100,19 @@ export function createSunburstScene(p) {
       p.colorMode(p.HSB, 360, 100, 100, 100);
       initRays();
       orbs = createOrbs(p, Math.max(20, Math.floor((p.width * p.height) * 0.00004)));
+      pulses = [];
     },
     resize() {
       orbs = createOrbs(p, Math.max(20, Math.floor((p.width * p.height) * 0.00004)));
+      pulses = [];
     },
     setSpeedMultiplier(multiplier = 1) {
       speedMultiplier = multiplier;
     },
     pulse() {
       pulseBoost = 1;
-      orbs.push(...createOrbs(p, 6));
+      pulses.push({ r: p.width * 0.05, alpha: 85 });
+      orbs.push(...createOrbs(p, 10));
       if (orbs.length > 120) {
         orbs.splice(0, orbs.length - 120);
       }
@@ -116,6 +121,19 @@ export function createSunburstScene(p) {
       createGradient(p);
       drawSun();
       drawOrbs();
+
+      // pulse ripples
+      p.noFill();
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const pulse = pulses[i];
+        p.stroke(48, 90, 100, pulse.alpha);
+        p.strokeWeight(4);
+        p.circle(p.width * 0.5, p.height * 0.52, pulse.r);
+        pulse.r += 24;
+        pulse.alpha -= 3;
+        if (pulse.alpha <= 0) pulses.splice(i, 1);
+      }
+
       pulseBoost = Math.max(0, pulseBoost - 0.08);
     }
   };

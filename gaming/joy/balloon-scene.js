@@ -66,6 +66,28 @@ export function createBalloonScene(p) {
   const basePalette = [0, 25, 50, 70, 120, 150, 190, 220, 260, 300, 330];
   let palettePool = [];
   let pulseGlow = 0;
+  let popBursts = [];
+
+  function createPopBurst(x, y, color) {
+    const pieces = [];
+    const count = 24;
+    for (let i = 0; i < count; i++) {
+      const angle = p.random(p.TWO_PI);
+      const speed = p.random(2, 6);
+      pieces.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: p.random(3, 8),
+        hue: (color.hue + p.random(-10, 10) + 360) % 360,
+        sat: color.saturation,
+        bri: color.brightness,
+        life: p.random(28, 48)
+      });
+    }
+    popBursts.push(pieces);
+  }
 
   function resetPalette() {
     palettePool = [];
@@ -119,14 +141,10 @@ export function createBalloonScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      pulseGlow = 1;
-      for (let i = 0; i < 14; i++) {
-        const balloon = new Balloon(p, { x: p.random(p.width), y: p.height + p.random(40, 140), color: nextBalloonColor() });
-        balloon.colorPicker = nextBalloonColor;
-        balloon.r *= 1.1;
-        balloons.unshift(balloon);
-      }
-      if (balloons.length > 160) balloons.length = 160;
+      if (!balloons.length) return;
+      const popped = balloons.shift();
+      createPopBurst(popped.x, popped.y, { hue: popped.hue, saturation: popped.saturation, brightness: popped.brightness });
+      pulseGlow = 0.8;
     },
     draw() {
       if (!bgGradient) {
@@ -148,6 +166,24 @@ export function createBalloonScene(p) {
         balloon.draw();
         p.pop();
       });
+
+      // pop bursts
+      for (let i = popBursts.length - 1; i >= 0; i--) {
+        const burst = popBursts[i];
+        for (let j = burst.length - 1; j >= 0; j--) {
+          const piece = burst[j];
+          piece.x += piece.vx * speedMultiplier;
+          piece.y += piece.vy * speedMultiplier;
+          piece.vx *= 0.96;
+          piece.vy *= 0.96;
+          piece.life -= speedMultiplier;
+          p.noStroke();
+          p.fill(piece.hue, piece.sat, piece.bri, p.map(piece.life, 0, 48, 0, 90));
+          p.circle(piece.x, piece.y, piece.size);
+          if (piece.life <= 0) burst.splice(j, 1);
+        }
+        if (!burst.length) popBursts.splice(i, 1);
+      }
 
       pulseGlow = Math.max(0, pulseGlow - 0.08);
     }

@@ -16,8 +16,8 @@ function createConfettiPiece(p) {
 function popPiece(p, piece, opts = {}) {
   const { originX, originY, burst = false } = opts;
   const angle = p.random(p.TWO_PI);
-  const baseMin = burst ? 3.2 : 2.2;
-  const baseMax = burst ? 6.4 : 4.6;
+  const baseMin = burst ? 8 : 2.2;
+  const baseMax = burst ? 12 : 4.6;
   const speed = p.random(baseMin, baseMax);
   piece.x = originX !== undefined ? originX : p.random(p.width);
   piece.y = originY !== undefined ? originY : p.random(p.height);
@@ -44,11 +44,12 @@ export function createConfettiScene(p) {
   let sparks = [];
   let speedMultiplier = 1;
   let baseSpeed = null;
+  let motionScale = 1;
   let t = 0;
   let burstTimer = 0;
 
   function initConfetti() {
-    const count = Math.max(120, Math.floor(p.width * p.height * 0.00015));
+    const count = Math.max(120, Math.floor(p.width * p.height * 0.00012));
     confetti = Array.from({ length: count }, () => {
       const piece = createConfettiPiece(p);
       popPiece(p, piece);
@@ -64,7 +65,7 @@ export function createConfettiScene(p) {
   function triggerBurst() {
     const cx = p.random(p.width * 0.15, p.width * 0.85);
     const cy = p.random(p.height * 0.15, p.height * 0.85);
-    const count = Math.floor(p.random(18, 42));
+    const count = Math.floor(p.random(32, 68));
     for (let i = 0; i < count; i++) {
       const piece = confetti.length < 360 ? createConfettiPiece(p) : confetti[i % confetti.length];
       popPiece(p, piece, { originX: cx + p.random(-15, 15), originY: cy + p.random(-15, 15), burst: true });
@@ -87,9 +88,9 @@ export function createConfettiScene(p) {
       initSparks();
     },
     setSpeedMultiplier(multiplier = 1) {
-      if (!baseSpeed) baseSpeed = multiplier;
-      if (baseSpeed === undefined || baseSpeed === null) baseSpeed = multiplier;
+      if (baseSpeed === null || baseSpeed === undefined) baseSpeed = multiplier;
       speedMultiplier = multiplier;
+      motionScale = baseSpeed < 0.9 ? 0.45 : 0.6;
     },
     pulse() {
       const slowMode = baseSpeed < 0.9;
@@ -102,27 +103,28 @@ export function createConfettiScene(p) {
       }
       if (confetti.length > 360) confetti.splice(0, confetti.length - 360);
       for (let r = 0; r < burstRepeats; r++) triggerBurst();
-      burstTimer = Math.max(burstTimer, 20);
+      burstTimer = 0;
     },
     draw() {
-      t += 0.006 * speedMultiplier;
+      const activeSpeed = speedMultiplier * motionScale;
+      t += 0.006 * activeSpeed;
       const baseHue = (t * 360) % 360;
       p.background(baseHue, 35, 98, 100);
 
-      burstTimer -= speedMultiplier;
+      burstTimer -= activeSpeed;
       if (burstTimer <= 0) {
         triggerBurst();
       }
 
       confetti.forEach(piece => {
-        piece.popTimer -= speedMultiplier;
+        piece.popTimer -= activeSpeed;
         piece.vx += p.noise(piece.x * 0.005, piece.y * 0.005, t * 30) * 0.2 - 0.1;
         piece.vy += p.noise(piece.y * 0.005, piece.x * 0.005, (t + 100) * 30) * 0.2 - 0.1;
         piece.vx *= 0.96;
         piece.vy *= 0.96;
-        piece.x += piece.vx * speedMultiplier;
-        piece.y += piece.vy * speedMultiplier;
-        piece.rotation += piece.rotationSpeed * speedMultiplier;
+        piece.x += piece.vx * activeSpeed;
+        piece.y += piece.vy * activeSpeed;
+        piece.rotation += piece.rotationSpeed * activeSpeed;
 
         if (piece.x < -20 || piece.x > p.width + 20 || piece.y < -20 || piece.y > p.height + 20 || piece.popTimer <= 0) {
           popPiece(p, piece);
