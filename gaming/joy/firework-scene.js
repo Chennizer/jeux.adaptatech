@@ -1,5 +1,5 @@
-const MAX_LAUNCHES = 7;
-const MAX_PARTICLES = 3200;
+const MAX_LAUNCHES = 6;
+const MAX_PARTICLES = 2600;
 const SAND_CELL = 6;
 class Launch {
   constructor(p, x, color) {
@@ -106,9 +106,9 @@ export function createFireworkScene(p) {
   function paintBackdrop() {
     const ctx = p.drawingContext;
     const gradient = ctx.createLinearGradient(0, 0, 0, p.height);
-    gradient.addColorStop(0, p.color(52, 40, 100, 100).toString());
-    gradient.addColorStop(0.5, p.color(32, 25, 98, 100).toString());
-    gradient.addColorStop(1, p.color(14, 10, 95, 100).toString());
+    gradient.addColorStop(0, p.color(52, 25, 100, 100).toString());
+    gradient.addColorStop(0.5, p.color(32, 18, 98, 100).toString());
+    gradient.addColorStop(1, p.color(14, 8, 96, 100).toString());
     ctx.save();
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, p.width, p.height);
@@ -252,24 +252,24 @@ export function createFireworkScene(p) {
     const type = forcedType || p.random(['peony', 'chrysanthemum', 'ring', 'palm', 'willow', 'brocade', 'double']);
     const palette = choosePalette(hue);
     const heavyStyles = ['willow', 'brocade'];
-    const countBase = type === 'ring' ? 240 : type === 'double' ? 280 : heavyStyles.includes(type) ? 320 : 240;
+    const countBase = type === 'ring' ? 200 : type === 'double' ? 240 : heavyStyles.includes(type) ? 260 : 210;
     const wobble = type === 'chrysanthemum' ? 0.4 : 0.1;
     const glow = type === 'brocade' || type === 'willow' ? 1 : 0;
-    const countScale = p.lerp(0.7, 1.4, scale);
+    const countScale = p.lerp(0.7, 1.15, scale);
 
     for (let i = 0; i < countBase * countScale; i++) {
       const angle = p.random(p.TWO_PI);
       const spread = type === 'palm' ? p.random(0.4, 1.2) : p.random(0.65, 1.1);
-      const speedBase = p.random(6.5, 11.8) * spread * p.lerp(0.8, 1.3, scale);
+      const speedBase = p.random(6.5, 11.2) * spread * p.lerp(0.8, 1.2, scale);
       let speed = speedBase;
-      if (type === 'willow' || type === 'brocade') speed = p.random(5.5, 10) * spread * p.lerp(0.85, 1.2, scale);
+      if (type === 'willow' || type === 'brocade') speed = p.random(5.5, 9.5) * spread * p.lerp(0.85, 1.1, scale);
       const vx = Math.cos(angle) * speed * (type === 'ring' ? 0.88 : 1);
       const vy = Math.sin(angle) * speed;
       const hueChoice = p.random(palette);
       const hueShift = p.random(-14, 14);
       const sat = type === 'brocade' ? p.random(55, 80) : p.random(70, 100);
       const size = (type === 'palm' ? p.random(5.5, 8.8) : type === 'willow' ? p.random(4.4, 7.4) : p.random(3.8, 7)) * scale;
-      const life = (heavyStyles.includes(type) ? p.random(180, 260) : p.random(140, 210)) * p.lerp(0.8, 1.3, scale);
+      const life = (heavyStyles.includes(type) ? p.random(160, 230) : p.random(130, 190)) * p.lerp(0.8, 1.15, scale);
       const fade = (heavyStyles.includes(type) ? 0.008 : 0.011) / p.lerp(0.9, 1.25, scale);
       const drag = type === 'willow' ? 0.995 : type === 'brocade' ? 0.993 : 0.992;
       const gravity = (type === 'willow' ? 0.075 : 0.095) * p.lerp(0.85, 1.2, scale);

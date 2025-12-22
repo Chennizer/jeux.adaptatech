@@ -45,6 +45,7 @@ export function createConfettiScene(p) {
   let speedMultiplier = 1;
   let baseSpeed = null;
   let motionScale = 1;
+  let flash = 0;
   let t = 0;
   let burstTimer = 0;
 
@@ -65,7 +66,7 @@ export function createConfettiScene(p) {
   function triggerBurst() {
     const cx = p.random(p.width * 0.15, p.width * 0.85);
     const cy = p.random(p.height * 0.15, p.height * 0.85);
-    const count = Math.floor(p.random(32, 68));
+    const count = Math.floor(p.random(48, 96));
     for (let i = 0; i < count; i++) {
       const piece = confetti.length < 360 ? createConfettiPiece(p) : confetti[i % confetti.length];
       popPiece(p, piece, { originX: cx + p.random(-15, 15), originY: cy + p.random(-15, 15), burst: true });
@@ -90,12 +91,12 @@ export function createConfettiScene(p) {
     setSpeedMultiplier(multiplier = 1) {
       if (baseSpeed === null || baseSpeed === undefined) baseSpeed = multiplier;
       speedMultiplier = multiplier;
-      motionScale = baseSpeed < 0.9 ? 0.45 : 0.6;
+      motionScale = baseSpeed < 0.9 ? 0.6 : 0.8;
     },
     pulse() {
       const slowMode = baseSpeed < 0.9;
-      const extra = slowMode ? 120 : 30;
-      const burstRepeats = slowMode ? 2 : 1;
+      const extra = slowMode ? 200 : 80;
+      const burstRepeats = slowMode ? 3 : 2;
       for (let i = 0; i < 20 + extra; i++) {
         const piece = createConfettiPiece(p);
         popPiece(p, piece);
@@ -104,10 +105,11 @@ export function createConfettiScene(p) {
       if (confetti.length > 360) confetti.splice(0, confetti.length - 360);
       for (let r = 0; r < burstRepeats; r++) triggerBurst();
       burstTimer = 0;
+      flash = 85;
     },
     draw() {
       const activeSpeed = speedMultiplier * motionScale;
-      t += 0.006 * activeSpeed;
+      t += 0.009 * activeSpeed;
       const baseHue = (t * 360) % 360;
       p.background(baseHue, 35, 98, 100);
 
@@ -179,6 +181,13 @@ export function createConfettiScene(p) {
         if (s.life <= 0) {
           sparks[i] = createSpark(p);
         }
+      }
+
+      if (flash > 0) {
+        p.noStroke();
+        p.fill((baseHue + 40) % 360, 80, 100, flash);
+        p.rect(0, 0, p.width, p.height);
+        flash = Math.max(0, flash - 4 * activeSpeed);
       }
     }
   };

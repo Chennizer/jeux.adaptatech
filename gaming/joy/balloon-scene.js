@@ -67,13 +67,14 @@ export function createBalloonScene(p) {
   let palettePool = [];
   let pulseGlow = 0;
   let popBursts = [];
+  let popTarget = null;
 
   function createPopBurst(x, y, color) {
     const pieces = [];
-    const count = 24;
+    const count = 46;
     for (let i = 0; i < count; i++) {
       const angle = p.random(p.TWO_PI);
-      const speed = p.random(2, 6);
+      const speed = p.random(3, 8);
       pieces.push({
         x,
         y,
@@ -144,6 +145,12 @@ export function createBalloonScene(p) {
       if (!balloons.length) return;
       const popped = balloons.shift();
       createPopBurst(popped.x, popped.y, { hue: popped.hue, saturation: popped.saturation, brightness: popped.brightness });
+      if (popTarget || !balloons.length) return;
+      const targetIndex = balloons.reduce(
+        (best, b, idx, arr) => (b.y < arr[best].y ? idx : best),
+        0
+      );
+      popTarget = { balloon: balloons.splice(targetIndex, 1)[0], scale: 1 };
       pulseGlow = 0.8;
     },
     draw() {
@@ -158,7 +165,7 @@ export function createBalloonScene(p) {
 
       balloons.forEach(balloon => {
         balloon.update(speedMultiplier);
-        const glow = 1 + pulseGlow * 0.4;
+        const glow = popTarget ? 1 : 1 + pulseGlow * 0.4;
         p.push();
         p.translate(balloon.x, balloon.y);
         p.scale(glow);
@@ -166,6 +173,24 @@ export function createBalloonScene(p) {
         balloon.draw();
         p.pop();
       });
+
+      if (popTarget) {
+        const { balloon } = popTarget;
+        balloon.update(speedMultiplier);
+        const growthRate = 0.12 * speedMultiplier;
+        popTarget.scale += (4 - popTarget.scale) * growthRate;
+        const scale = popTarget.scale;
+        p.push();
+        p.translate(balloon.x, balloon.y);
+        p.scale(scale);
+        p.translate(-balloon.x, -balloon.y);
+        balloon.draw();
+        p.pop();
+        if (popTarget.scale >= 3.9) {
+          createPopBurst(balloon.x, balloon.y, { hue: balloon.hue, saturation: balloon.saturation, brightness: balloon.brightness });
+          popTarget = null;
+        }
+      }
 
       // pop bursts
       for (let i = popBursts.length - 1; i >= 0; i--) {

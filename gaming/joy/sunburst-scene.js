@@ -130,11 +130,11 @@ export function createSunburstScene(p) {
         p.strokeWeight(4);
         p.circle(p.width * 0.5, p.height * 0.52, pulse.r);
         pulse.r += 24;
-        pulse.alpha -= 3;
+        pulse.alpha -= 1.2;
         if (pulse.alpha <= 0) pulses.splice(i, 1);
       }
 
-      pulseBoost = Math.max(0, pulseBoost - 0.08);
+      pulseBoost = Math.max(0, pulseBoost - 0.006);
     }
   };
 }
