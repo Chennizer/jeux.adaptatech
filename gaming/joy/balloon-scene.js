@@ -61,7 +61,6 @@ class Balloon {
 
 export function createBalloonScene(p) {
   let balloons = [];
-  let confetti = [];
   let speedMultiplier = 1;
   let bgGradient = null;
   const basePalette = [0, 25, 50, 70, 120, 150, 190, 220, 260, 300, 330];
@@ -102,31 +101,17 @@ export function createBalloonScene(p) {
     });
   }
 
-  function initConfetti() {
-    const count = Math.max(60, Math.floor(p.width * p.height * 0.0001));
-    confetti = Array.from({ length: count }, () => ({
-      x: p.random(p.width),
-      y: p.random(p.height),
-      size: p.random(3, 7),
-      hue: p.random(0, 360),
-      speed: p.random(0.4, 1.1),
-      sway: p.random(0.008, 0.014)
-    }));
-  }
-
   return {
     id: 'balloons',
     enter() {
       p.colorMode(p.HSB, 360, 100, 100, 100);
       resetPalette();
       initBalloons();
-      initConfetti();
       updateGradient();
     },
     resize() {
       resetPalette();
       initBalloons();
-      initConfetti();
       updateGradient();
     },
     setSpeedMultiplier(multiplier = 1) {
@@ -149,18 +134,6 @@ export function createBalloonScene(p) {
       ctx.fillStyle = bgGradient;
       ctx.fillRect(0, 0, p.width, p.height);
       ctx.restore();
-
-      confetti.forEach(piece => {
-        piece.y += piece.speed * speedMultiplier;
-        piece.x += p.sin(p.frameCount * piece.sway) * 0.8 * speedMultiplier;
-        if (piece.y > p.height + piece.size) {
-          piece.y = -piece.size;
-          piece.x = p.random(p.width);
-        }
-        p.noStroke();
-        p.fill(piece.hue, 85, 95, 90);
-        p.rect(piece.x, piece.y, piece.size, piece.size * 1.4);
-      });
 
       balloons.forEach(balloon => {
         balloon.update(speedMultiplier);
