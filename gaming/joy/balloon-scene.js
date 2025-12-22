@@ -66,29 +66,9 @@ export function createBalloonScene(p) {
   const basePalette = [0, 25, 50, 70, 120, 150, 190, 220, 260, 300, 330];
   let palettePool = [];
   let pulseGlow = 0;
-  let popBursts = [];
-  let popTarget = null;
-
-  function createPopBurst(x, y, color) {
-    const pieces = [];
-    const count = 46;
-    for (let i = 0; i < count; i++) {
-      const angle = p.random(p.TWO_PI);
-      const speed = p.random(3, 8);
-      pieces.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        size: p.random(3, 8),
-        hue: (color.hue + p.random(-10, 10) + 360) % 360,
-        sat: color.saturation,
-        bri: color.brightness,
-        life: p.random(28, 48)
-      });
-    }
-    popBursts.push(pieces);
-  }
+  let releaseQueue = [];
+  let baseSpeed = null;
+  let calmMode = false;
 
   function resetPalette() {
     palettePool = [];
@@ -116,7 +96,7 @@ export function createBalloonScene(p) {
   }
 
   function initBalloons() {
-    const count = Math.max(16, Math.floor(p.width * p.height * 0.00003));
+    const count = calmMode ? Math.floor(p.random(2, 4)) : Math.max(16, Math.floor(p.width * p.height * 0.00003));
     balloons = Array.from({ length: count }, () =>
       new Balloon(p, { x: p.random(p.width), y: p.random(p.height), color: nextBalloonColor() })
     );
@@ -139,19 +119,42 @@ export function createBalloonScene(p) {
       updateGradient();
     },
     setSpeedMultiplier(multiplier = 1) {
+      const previousCalm = calmMode;
+      if (baseSpeed === null) baseSpeed = multiplier;
+      calmMode = baseSpeed < 0.9;
+      if (calmMode !== previousCalm) {
+        resetPalette();
+        initBalloons();
+        releaseQueue = [];
+      }
       speedMultiplier = multiplier;
     },
     pulse() {
-      if (!balloons.length) return;
-      const popped = balloons.shift();
-      createPopBurst(popped.x, popped.y, { hue: popped.hue, saturation: popped.saturation, brightness: popped.brightness });
-      if (popTarget || !balloons.length) return;
-      const targetIndex = balloons.reduce(
-        (best, b, idx, arr) => (b.y < arr[best].y ? idx : best),
-        0
-      );
-      popTarget = { balloon: balloons.splice(targetIndex, 1)[0], scale: 1 };
-      pulseGlow = 0.8;
+      if (calmMode) {
+        const batch = Math.floor(p.random(6, 8));
+        releaseQueue.push(
+          ...Array.from({ length: batch }, (_, i) => ({
+            delay: i * 20,
+            balloon: new Balloon(p, {
+              x: p.random(p.width),
+              y: p.height + p.random(30, 120),
+              color: nextBalloonColor()
+            })
+          }))
+        );
+        releaseQueue.forEach(entry => {
+          entry.balloon.colorPicker = nextBalloonColor;
+        });
+        pulseGlow = 0.5;
+      } else {
+        for (let i = 0; i < 8; i++) {
+          const balloon = new Balloon(p, { x: p.random(p.width), y: p.height + p.random(40, 140), color: nextBalloonColor() });
+          balloon.colorPicker = nextBalloonColor;
+          balloons.unshift(balloon);
+        }
+        if (balloons.length > 160) balloons.length = 160;
+        pulseGlow = 0.8;
+      }
     },
     draw() {
       if (!bgGradient) {
@@ -163,9 +166,19 @@ export function createBalloonScene(p) {
       ctx.fillRect(0, 0, p.width, p.height);
       ctx.restore();
 
+      for (let i = releaseQueue.length - 1; i >= 0; i--) {
+        const entry = releaseQueue[i];
+        entry.delay -= speedMultiplier;
+        if (entry.delay <= 0) {
+          entry.balloon.colorPicker = nextBalloonColor;
+          balloons.unshift(entry.balloon);
+          releaseQueue.splice(i, 1);
+        }
+      }
+
       balloons.forEach(balloon => {
         balloon.update(speedMultiplier);
-        const glow = popTarget ? 1 : 1 + pulseGlow * 0.4;
+        const glow = 1 + pulseGlow * 0.4;
         p.push();
         p.translate(balloon.x, balloon.y);
         p.scale(glow);
@@ -173,42 +186,6 @@ export function createBalloonScene(p) {
         balloon.draw();
         p.pop();
       });
-
-      if (popTarget) {
-        const { balloon } = popTarget;
-        balloon.update(speedMultiplier);
-        const growthRate = 0.12 * speedMultiplier;
-        popTarget.scale += (4 - popTarget.scale) * growthRate;
-        const scale = popTarget.scale;
-        p.push();
-        p.translate(balloon.x, balloon.y);
-        p.scale(scale);
-        p.translate(-balloon.x, -balloon.y);
-        balloon.draw();
-        p.pop();
-        if (popTarget.scale >= 3.9) {
-          createPopBurst(balloon.x, balloon.y, { hue: balloon.hue, saturation: balloon.saturation, brightness: balloon.brightness });
-          popTarget = null;
-        }
-      }
-
-      // pop bursts
-      for (let i = popBursts.length - 1; i >= 0; i--) {
-        const burst = popBursts[i];
-        for (let j = burst.length - 1; j >= 0; j--) {
-          const piece = burst[j];
-          piece.x += piece.vx * speedMultiplier;
-          piece.y += piece.vy * speedMultiplier;
-          piece.vx *= 0.96;
-          piece.vy *= 0.96;
-          piece.life -= speedMultiplier;
-          p.noStroke();
-          p.fill(piece.hue, piece.sat, piece.bri, p.map(piece.life, 0, 48, 0, 90));
-          p.circle(piece.x, piece.y, piece.size);
-          if (piece.life <= 0) burst.splice(j, 1);
-        }
-        if (!burst.length) popBursts.splice(i, 1);
-      }
 
       pulseGlow = Math.max(0, pulseGlow - 0.08);
     }
