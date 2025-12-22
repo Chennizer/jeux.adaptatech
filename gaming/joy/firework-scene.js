@@ -99,6 +99,8 @@ export function createFireworkScene(p) {
   let sandCols = 0;
   let sandRows = 0;
   let speedMultiplier = 1;
+  let baseSpeed = null;
+  let calmMode = false;
   let autoTimer = 0;
 
   function paintBackdrop() {
@@ -226,40 +228,44 @@ export function createFireworkScene(p) {
     return p.random(palettes);
   }
 
-  function spawnLaunch() {
+  function spawnLaunch(scale = 1) {
     const hue = p.random(0, 360);
     const margin = p.width * 0.12;
     const x = p.random(margin, p.width - margin);
-    launches.push(new Launch(p, x, hue));
+    const launch = new Launch(p, x, hue);
+    launch.vx *= scale;
+    launch.vy *= scale;
+    launch.fuse *= p.lerp(0.65, 1, scale);
+    launches.push(launch);
     if (launches.length > MAX_LAUNCHES) launches.shift();
   }
 
-  function spawnBurst(x, y, hue) {
-    const type = p.random(['peony', 'chrysanthemum', 'ring', 'palm', 'willow', 'brocade', 'double', 'smile']);
+  function spawnBurst(x, y, hue, { scale = 1, type: forcedType } = {}) {
+    const type = forcedType || p.random(['peony', 'chrysanthemum', 'ring', 'palm', 'willow', 'brocade', 'double', 'smile']);
     const palette = choosePalette(hue);
 
     if (type === 'smile') {
       const faceHue = p.random(palette);
-      const radius = p.random(42, 68);
-      const life = p.random(160, 220);
+      const radius = p.random(42, 68) * scale;
+      const life = p.random(160, 220) * p.lerp(0.75, 1.1, scale);
       const ringCount = 140;
       for (let i = 0; i < ringCount; i++) {
         const angle = (p.TWO_PI / ringCount) * i + p.random(-0.02, 0.02);
-        const r = radius + p.random(-2, 2);
+        const r = radius + p.random(-2, 2) * scale;
         particles.push(
           new BurstParticle(p, {
             x: x + Math.cos(angle) * r,
             y: y + Math.sin(angle) * r,
-            vx: p.random(-0.25, 0.25),
-            vy: p.random(-0.25, 0.25),
+            vx: p.random(-0.25, 0.25) * scale,
+            vy: p.random(-0.25, 0.25) * scale,
             hue: (faceHue + p.random(-8, 8) + 360) % 360,
             sat: p.random(70, 95),
             life,
             maxLife: life,
-            size: p.random(3.4, 5.2),
+            size: p.random(3.4, 5.2) * scale,
             fade: 0.008,
             drag: 0.994,
-            gravity: 0.04,
+            gravity: 0.04 * scale,
             twinkle: 0.55,
             glow: 1
           })
@@ -276,16 +282,16 @@ export function createFireworkScene(p) {
           new BurstParticle(p, {
             x: x - eyeOffsetX + jitterX,
             y: y + eyeOffsetY + jitterY,
-            vx: p.random(-0.2, 0.2),
-            vy: p.random(-0.2, 0.2),
+            vx: p.random(-0.2, 0.2) * scale,
+            vy: p.random(-0.2, 0.2) * scale,
             hue: (faceHue + 20 + p.random(-5, 5)) % 360,
             sat: p.random(60, 90),
             life: life * 0.9,
             maxLife: life * 0.9,
-            size: p.random(4.2, 5.6),
+            size: p.random(4.2, 5.6) * scale,
             fade: 0.0075,
             drag: 0.995,
-            gravity: 0.03,
+            gravity: 0.03 * scale,
             twinkle: 0.4,
             glow: 0
           })
@@ -294,16 +300,16 @@ export function createFireworkScene(p) {
           new BurstParticle(p, {
             x: x + eyeOffsetX + jitterX,
             y: y + eyeOffsetY + jitterY,
-            vx: p.random(-0.2, 0.2),
-            vy: p.random(-0.2, 0.2),
+            vx: p.random(-0.2, 0.2) * scale,
+            vy: p.random(-0.2, 0.2) * scale,
             hue: (faceHue + 20 + p.random(-5, 5)) % 360,
             sat: p.random(60, 90),
             life: life * 0.9,
             maxLife: life * 0.9,
-            size: p.random(4.2, 5.6),
+            size: p.random(4.2, 5.6) * scale,
             fade: 0.0075,
             drag: 0.995,
-            gravity: 0.03,
+            gravity: 0.03 * scale,
             twinkle: 0.4,
             glow: 0
           })
@@ -319,18 +325,18 @@ export function createFireworkScene(p) {
         const sy = y + Math.sin(angle) * smileRadius + radius * 0.2;
         particles.push(
           new BurstParticle(p, {
-            x: sx + p.random(-1.8, 1.8),
-            y: sy + p.random(-1.8, 1.8),
-            vx: p.random(-0.25, 0.25),
-            vy: p.random(-0.1, 0.25),
+            x: sx + p.random(-1.8, 1.8) * scale,
+            y: sy + p.random(-1.8, 1.8) * scale,
+            vx: p.random(-0.25, 0.25) * scale,
+            vy: p.random(-0.1, 0.25) * scale,
             hue: (faceHue + 10 + p.random(-6, 6) + 360) % 360,
             sat: p.random(75, 95),
             life: life * 0.95,
             maxLife: life * 0.95,
-            size: p.random(3.2, 4.6),
+            size: p.random(3.2, 4.6) * scale,
             fade: 0.007,
             drag: 0.994,
-            gravity: 0.035,
+            gravity: 0.035 * scale,
             twinkle: 0.6,
             glow: 0
           })
@@ -344,23 +350,24 @@ export function createFireworkScene(p) {
     const countBase = type === 'ring' ? 240 : type === 'double' ? 280 : heavyStyles.includes(type) ? 320 : 240;
     const wobble = type === 'chrysanthemum' ? 0.4 : 0.1;
     const glow = type === 'brocade' || type === 'willow' ? 1 : 0;
+    const countScale = p.lerp(0.7, 1.4, scale);
 
-    for (let i = 0; i < countBase; i++) {
+    for (let i = 0; i < countBase * countScale; i++) {
       const angle = p.random(p.TWO_PI);
       const spread = type === 'palm' ? p.random(0.4, 1.2) : p.random(0.65, 1.1);
-      const speedBase = p.random(6.5, 11.8) * spread;
+      const speedBase = p.random(6.5, 11.8) * spread * p.lerp(0.8, 1.3, scale);
       let speed = speedBase;
-      if (type === 'willow' || type === 'brocade') speed = p.random(5.5, 10) * spread;
+      if (type === 'willow' || type === 'brocade') speed = p.random(5.5, 10) * spread * p.lerp(0.85, 1.2, scale);
       const vx = Math.cos(angle) * speed * (type === 'ring' ? 0.88 : 1);
       const vy = Math.sin(angle) * speed;
       const hueChoice = p.random(palette);
       const hueShift = p.random(-14, 14);
       const sat = type === 'brocade' ? p.random(55, 80) : p.random(70, 100);
-      const size = type === 'palm' ? p.random(5.5, 8.8) : type === 'willow' ? p.random(4.4, 7.4) : p.random(3.8, 7);
-      const life = heavyStyles.includes(type) ? p.random(180, 260) : p.random(140, 210);
-      const fade = heavyStyles.includes(type) ? 0.008 : 0.011;
+      const size = (type === 'palm' ? p.random(5.5, 8.8) : type === 'willow' ? p.random(4.4, 7.4) : p.random(3.8, 7)) * scale;
+      const life = (heavyStyles.includes(type) ? p.random(180, 260) : p.random(140, 210)) * p.lerp(0.8, 1.3, scale);
+      const fade = (heavyStyles.includes(type) ? 0.008 : 0.011) / p.lerp(0.9, 1.25, scale);
       const drag = type === 'willow' ? 0.995 : type === 'brocade' ? 0.993 : 0.992;
-      const gravity = type === 'willow' ? 0.075 : 0.095;
+      const gravity = (type === 'willow' ? 0.075 : 0.095) * p.lerp(0.85, 1.2, scale);
       const twinkle = type === 'ring' ? 0.3 : 0.5;
 
       particles.push(
@@ -398,7 +405,7 @@ export function createFireworkScene(p) {
             size: size * 0.75,
             fade: fade * 1.1,
             drag: 0.993,
-            gravity: 0.1,
+            gravity: 0.1 * p.lerp(0.85, 1.2, scale),
             twinkle: 0.55,
             glow: 0
           })
@@ -445,23 +452,46 @@ export function createFireworkScene(p) {
       particles = [];
       resetSand();
       autoTimer = 0;
+      baseSpeed = null;
+      calmMode = false;
     },
     resize() {
       resetSand();
     },
     setSpeedMultiplier(multiplier = 1) {
-      speedMultiplier = multiplier;
+      if (baseSpeed === null) baseSpeed = multiplier;
+      calmMode = baseSpeed !== null && baseSpeed < 0.9;
+      if (calmMode && multiplier > baseSpeed) {
+        speedMultiplier = baseSpeed;
+      } else {
+        speedMultiplier = multiplier;
+      }
     },
     pulse() {
-      spawnLaunch();
+      if (calmMode) {
+        const hue = p.random(0, 360);
+        const x = p.random(p.width * 0.2, p.width * 0.8);
+        const y = p.random(p.height * 0.25, p.height * 0.45);
+        spawnBurst(x, y, hue, { scale: 1.35 });
+      } else {
+        spawnLaunch();
+      }
     },
     draw() {
       paintBackdrop();
       drawStuckPieces();
 
       autoTimer += 1 * speedMultiplier;
-      if (autoTimer > 75) {
-        spawnLaunch();
+      const threshold = calmMode ? 50 : 75;
+      if (autoTimer > threshold) {
+        if (calmMode) {
+          const hue = p.random(0, 360);
+          const x = p.random(p.width * 0.2, p.width * 0.8);
+          const y = p.random(p.height * 0.2, p.height * 0.45);
+          spawnBurst(x, y, hue, { scale: 0.45, type: p.random(['peony', 'ring', 'chrysanthemum']) });
+        } else {
+          spawnLaunch();
+        }
         autoTimer = 0;
       }
 

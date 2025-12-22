@@ -65,6 +65,7 @@ export function createBalloonScene(p) {
   let bgGradient = null;
   const basePalette = [0, 25, 50, 70, 120, 150, 190, 220, 260, 300, 330];
   let palettePool = [];
+  let pulseGlow = 0;
 
   function resetPalette() {
     palettePool = [];
@@ -118,9 +119,11 @@ export function createBalloonScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
-      for (let i = 0; i < 8; i++) {
+      pulseGlow = 1;
+      for (let i = 0; i < 14; i++) {
         const balloon = new Balloon(p, { x: p.random(p.width), y: p.height + p.random(40, 140), color: nextBalloonColor() });
         balloon.colorPicker = nextBalloonColor;
+        balloon.r *= 1.1;
         balloons.unshift(balloon);
       }
       if (balloons.length > 160) balloons.length = 160;
@@ -137,8 +140,16 @@ export function createBalloonScene(p) {
 
       balloons.forEach(balloon => {
         balloon.update(speedMultiplier);
+        const glow = 1 + pulseGlow * 0.4;
+        p.push();
+        p.translate(balloon.x, balloon.y);
+        p.scale(glow);
+        p.translate(-balloon.x, -balloon.y);
         balloon.draw();
+        p.pop();
       });
+
+      pulseGlow = Math.max(0, pulseGlow - 0.08);
     }
   };
 }

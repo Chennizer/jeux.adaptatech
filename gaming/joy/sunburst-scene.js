@@ -40,6 +40,7 @@ export function createSunburstScene(p) {
   let rays = [];
   let orbs = [];
   let speedMultiplier = 1;
+  let pulseBoost = 0;
 
   function initRays() {
     const count = 120;
@@ -77,7 +78,8 @@ export function createSunburstScene(p) {
     const cx = p.width * 0.5;
     const cy = p.height * 0.52;
     for (const orb of orbs) {
-      orb.angle += orb.speed * speedMultiplier;
+      const boost = 1 + pulseBoost * 4.2;
+      orb.angle += orb.speed * speedMultiplier * boost;
       const breathing = p.sin(p.frameCount * orb.wobble) * 0.5;
       const radius = orb.radius + breathing * 16;
       const x = cx + p.cos(orb.angle) * radius;
@@ -104,6 +106,7 @@ export function createSunburstScene(p) {
       speedMultiplier = multiplier;
     },
     pulse() {
+      pulseBoost = 1;
       orbs.push(...createOrbs(p, 6));
       if (orbs.length > 120) {
         orbs.splice(0, orbs.length - 120);
@@ -113,6 +116,7 @@ export function createSunburstScene(p) {
       createGradient(p);
       drawSun();
       drawOrbs();
+      pulseBoost = Math.max(0, pulseBoost - 0.08);
     }
   };
 }

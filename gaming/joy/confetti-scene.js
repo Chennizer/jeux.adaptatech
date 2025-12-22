@@ -43,6 +43,7 @@ export function createConfettiScene(p) {
   let confetti = [];
   let sparks = [];
   let speedMultiplier = 1;
+  let baseSpeed = null;
   let t = 0;
   let burstTimer = 0;
 
@@ -86,15 +87,22 @@ export function createConfettiScene(p) {
       initSparks();
     },
     setSpeedMultiplier(multiplier = 1) {
+      if (!baseSpeed) baseSpeed = multiplier;
+      if (baseSpeed === undefined || baseSpeed === null) baseSpeed = multiplier;
       speedMultiplier = multiplier;
     },
     pulse() {
-      for (let i = 0; i < 20; i++) {
+      const slowMode = baseSpeed < 0.9;
+      const extra = slowMode ? 120 : 30;
+      const burstRepeats = slowMode ? 2 : 1;
+      for (let i = 0; i < 20 + extra; i++) {
         const piece = createConfettiPiece(p);
         popPiece(p, piece);
         confetti.push(piece);
       }
       if (confetti.length > 360) confetti.splice(0, confetti.length - 360);
+      for (let r = 0; r < burstRepeats; r++) triggerBurst();
+      burstTimer = Math.max(burstTimer, 20);
     },
     draw() {
       t += 0.006 * speedMultiplier;
