@@ -148,49 +148,7 @@ export function createFireworkScene(p) {
   }
 
   function tryStickOrSettle(particle) {
-    const r = particle.size * 0.5;
-
-    if (particle.x <= r) {
-      particle.x = r;
-      storeEdgeParticle(particle);
-      return true;
-    }
-    if (particle.x >= p.width - r) {
-      particle.x = p.width - r;
-      storeEdgeParticle(particle);
-      return true;
-    }
-    if (particle.y <= r) {
-      particle.y = r;
-      storeEdgeParticle(particle);
-      return true;
-    }
-
-    let col = Math.floor(particle.x / SAND_CELL);
-    let row = Math.floor(particle.y / SAND_CELL);
-    col = p.constrain(col, 0, sandCols - 1);
-    row = p.constrain(row, 0, sandRows - 1);
-
-    if (row >= sandRows - 1) {
-      addSand(col, sandRows - 1, particle);
-      return true;
-    }
-
-    const below = sandGrid[col][row + 1];
-    if (!below) return false;
-
-    const leftFree = col > 0 && !sandGrid[col - 1][row + 1];
-    const rightFree = col < sandCols - 1 && !sandGrid[col + 1][row + 1];
-
-    if (leftFree || rightFree) {
-      const dir = leftFree && rightFree ? (p.random() < 0.5 ? -1 : 1) : leftFree ? -1 : 1;
-      particle.x += dir * SAND_CELL * 0.7;
-      particle.y += SAND_CELL * 0.6;
-      return false;
-    }
-
-    addSand(col, row, particle);
-    return true;
+    return false;
   }
 
   function settleOverflowParticle(particle) {
@@ -211,18 +169,8 @@ export function createFireworkScene(p) {
   }
 
   function drawStuckPieces() {
-    p.noStroke();
-    for (const piece of stuckEdges) {
-      const flicker = 0.9 + piece.twinkle * 0.2 * p.noise(piece.x * 0.01, piece.y * 0.01, p.frameCount * 0.05);
-      p.fill(piece.hue, piece.sat, 100, 70 * flicker);
-      p.circle(piece.x, piece.y, piece.size * flicker);
-    }
-
-    for (const sand of settledSand) {
-      const flicker = 0.9 + sand.twinkle * 0.15 * p.noise(sand.x * 0.01, sand.y * 0.01, p.frameCount * 0.05);
-      p.fill(sand.hue, sand.sat, 95, 85 * flicker);
-      p.circle(sand.x, sand.y, sand.size * flicker);
-    }
+    stuckEdges.length = 0;
+    settledSand.length = 0;
   }
 
   function choosePalette(baseHue) {

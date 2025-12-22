@@ -134,7 +134,7 @@ export function createBalloonScene(p) {
         const batch = Math.floor(p.random(6, 8));
         releaseQueue.push(
           ...Array.from({ length: batch }, (_, i) => ({
-            delay: i * 20,
+            delay: i * 10,
             balloon: new Balloon(p, {
               x: p.random(p.width),
               y: p.height + p.random(30, 120),
