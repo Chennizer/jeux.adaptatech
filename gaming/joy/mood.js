@@ -13,13 +13,11 @@ const PLAYLIST_TRACKS = [
 
 const SCENE_SOUNDTRACKS = {
   sunburst: '../../sounds/sun/sunnyday.mp3',
-  confetti: '../../sounds/dancebeat.mp3',
   fireworks: '../../sounds/fireworks.mp3'
 };
 
 const DEFAULT_SCENE_VOLUME = 0.45;
 const SCENE_SOUNDTRACK_VOLUMES = {
-  confetti: 0.35,
   fireworks: 0.25
 };
 

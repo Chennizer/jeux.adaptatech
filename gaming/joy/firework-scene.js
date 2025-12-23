@@ -116,9 +116,9 @@ export function createFireworkScene(p) {
   }
 
   function resetSand() {
-    sandCols = Math.max(1, Math.floor(p.width / SAND_CELL));
-    sandRows = Math.max(1, Math.floor(p.height / SAND_CELL));
-    sandGrid = Array.from({ length: sandCols }, () => Array(sandRows).fill(null));
+    sandCols = 0;
+    sandRows = 0;
+    sandGrid = [];
     settledSand = [];
     stuckEdges = [];
   }
@@ -152,25 +152,17 @@ export function createFireworkScene(p) {
   }
 
   function settleOverflowParticle(particle) {
-    particle.size = Math.max(particle.size, 3.5);
-    particle.life = Math.max(particle.life, 8);
-    if (!tryStickOrSettle(particle)) {
-      const col = p.constrain(Math.floor(particle.x / SAND_CELL), 0, sandCols - 1);
-      addSand(col, sandRows - 1, particle);
-    }
+    return;
   }
 
   function trimParticles() {
     while (particles.length > MAX_PARTICLES) {
-      const particle = particles.shift();
-      if (!particle) break;
-      settleOverflowParticle(particle);
+      particles.shift();
     }
   }
 
   function drawStuckPieces() {
-    stuckEdges.length = 0;
-    settledSand.length = 0;
+    return;
   }
 
   function choosePalette(baseHue) {
