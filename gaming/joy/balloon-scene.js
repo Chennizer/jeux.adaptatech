@@ -145,12 +145,17 @@ export function createBalloonScene(p) {
         );
         releaseQueue.forEach(entry => {
           entry.balloon.colorPicker = nextBalloonColor;
+          entry.balloon.spawnPulse = RELEASE_PULSE_TIME;
         });
         pulseGlow = 0.5;
       } else {
+        balloons.forEach(b => {
+          b.spawnPulse = RELEASE_PULSE_TIME;
+        });
         for (let i = 0; i < 8; i++) {
           const balloon = new Balloon(p, { x: p.random(p.width), y: p.height + p.random(40, 140), color: nextBalloonColor() });
           balloon.colorPicker = nextBalloonColor;
+          balloon.spawnPulse = RELEASE_PULSE_TIME;
           balloons.unshift(balloon);
         }
         if (balloons.length > 160) balloons.length = 160;
