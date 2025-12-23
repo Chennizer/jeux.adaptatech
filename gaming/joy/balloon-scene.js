@@ -69,7 +69,7 @@ export function createBalloonScene(p) {
   let releaseQueue = [];
   let baseSpeed = null;
   let calmMode = false;
-  const RELEASE_PULSE_TIME = 240;
+  const RELEASE_PULSE_TIME = 480;
 
   function resetPalette() {
     palettePool = [];
@@ -182,7 +182,8 @@ export function createBalloonScene(p) {
         balloon.update(speedMultiplier);
         if (balloon.spawnPulse === undefined) balloon.spawnPulse = 0;
         const pulsePhase = Math.max(0, balloon.spawnPulse);
-        const swell = pulsePhase > 0 ? 1 + 0.35 * Math.sin(((RELEASE_PULSE_TIME - pulsePhase) / RELEASE_PULSE_TIME) * p.TWO_PI * 1.6) * p.lerp(1, 0.4, (RELEASE_PULSE_TIME - pulsePhase) / RELEASE_PULSE_TIME) : 1;
+        const progress = pulsePhase > 0 ? (RELEASE_PULSE_TIME - pulsePhase) / RELEASE_PULSE_TIME : 1;
+        const swell = pulsePhase > 0 ? 1 + 0.35 * Math.sin(progress * p.PI) * p.lerp(1, 0.5, progress) : 1;
         const glow = (calmMode ? swell : 1) + pulseGlow * 0.4;
         p.push();
         p.translate(balloon.x, balloon.y);
@@ -190,7 +191,7 @@ export function createBalloonScene(p) {
         p.translate(-balloon.x, -balloon.y);
         balloon.draw();
         p.pop();
-        balloon.spawnPulse = Math.max(0, pulsePhase - speedMultiplier * 2);
+        balloon.spawnPulse = Math.max(0, pulsePhase - speedMultiplier * 0.8);
       });
 
       pulseGlow = Math.max(0, pulseGlow - 0.08);
