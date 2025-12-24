@@ -242,21 +242,48 @@
       height = canvas.height = window.innerHeight;
     });
 
-    const pointer = { x: -1000, y: -1000, tx: -1000, ty: -1000, inside: false };
+    const pointer = { x: -1000, y: -1000, inside: false };
+    const lastPointer = { x: null, y: null };
 
-    canvas.addEventListener('pointermove', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      pointer.tx = (e.clientX - rect.left) * (canvas.width / rect.width);
-      pointer.ty = (e.clientY - rect.top) * (canvas.height / rect.height);
-      pointer.x = pointer.tx;
-      pointer.y = pointer.ty;
+    function setPointerPos(x, y) {
+      pointer.x = x;
+      pointer.y = y;
       pointer.inside = true;
+      if (pointerEl) {
+        pointerEl.style.left = `${x}px`;
+        pointerEl.style.top = `${y}px`;
+      }
+    }
+
+    const rawHandler = (e) => {
+      lastPointer.x = e.clientX;
+      lastPointer.y = e.clientY;
+      setPointerPos(e.clientX, e.clientY);
+    };
+
+    const moveHandler = (e) => {
+      lastPointer.x = e.clientX;
+      lastPointer.y = e.clientY;
+      setPointerPos(e.clientX, e.clientY);
+    };
+
+    if ('onpointerrawupdate' in window) window.addEventListener('pointerrawupdate', rawHandler, { passive: true });
+    window.addEventListener('pointermove', moveHandler, { passive: true });
+
+    window.addEventListener('pointerleave', () => {
+      pointer.inside = false;
+      pointer.x = -1000;
+      pointer.y = -1000;
+      if (pointerEl) pointerEl.style.opacity = 0;
     });
 
-    canvas.addEventListener('pointerleave', () => {
-      pointer.inside = false;
-      pointer.tx = -1000;
-      pointer.ty = -1000;
+    window.addEventListener('pointerenter', () => {
+      if (pointerEl && document.body.classList.contains('playing')) {
+        pointerEl.style.opacity = 1;
+      }
+      if (lastPointer.x != null && lastPointer.y != null) {
+        setPointerPos(lastPointer.x, lastPointer.y);
+      }
     });
 
     const circles = [];
@@ -661,10 +688,6 @@
       const dt = Math.min(0.05, (ts - lastTime) / 1000);
       lastTime = ts;
 
-      pointer.x = pointer.tx;
-      pointer.y = pointer.ty;
-      pointerEl.style.transform = `translate(${pointer.x}px, ${pointer.y}px)`;
-
       renderBackground();
       if (gameStarted) {
         updateCircles(dt);
@@ -702,6 +725,10 @@
       statusSubtitle.textContent = '';
       fireflies.length = 0;
       gameStarted = true;
+      if (lastPointer.x != null && lastPointer.y != null) {
+        setPointerPos(lastPointer.x, lastPointer.y);
+      }
+      if (pointerEl) pointerEl.style.opacity = 1;
       spawnCircles();
     }
 
