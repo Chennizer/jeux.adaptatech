@@ -262,6 +262,7 @@
 
     let celebrationTimer = 0;
     let celebrationActive = false;
+    let celebrationMode = null;
     let gameStarted = false;
     let lastTime = performance.now();
 
@@ -297,6 +298,7 @@
     function spawnCircles() {
       circles.length = 0;
       celebrationActive = false;
+      celebrationMode = null;
       celebrationTimer = 0;
       lastRemaining = null;
       const count = parseInt(circleCountInput.value, 10);
@@ -331,19 +333,91 @@
       }
     }
 
+    function buildSmileTargets(count) {
+      const cx = width / 2;
+      const cy = height / 2;
+      const faceR = Math.min(width, height) * 0.22;
+      const eyeR = faceR * 0.12;
+      const eyeOffsetX = faceR * 0.42;
+      const eyeOffsetY = faceR * -0.22;
+      const mouthR = faceR * 0.62;
+      const mouthStart = Math.PI * 1.15; // 207°
+      const mouthEnd = Math.PI * 1.85;   // 333°
+
+      const eyes = [];
+      const eyePoints = 12;
+      for (let i = 0; i < eyePoints; i++) {
+        const ang = (i / eyePoints) * Math.PI * 2;
+        const ex = Math.cos(ang) * eyeR;
+        const ey = Math.sin(ang) * eyeR;
+        eyes.push({ x: cx - eyeOffsetX + ex, y: cy + eyeOffsetY + ey });
+        eyes.push({ x: cx + eyeOffsetX + ex, y: cy + eyeOffsetY + ey });
+      }
+
+      const mouth = [];
+      const mouthPoints = 30;
+      for (let i = 0; i < mouthPoints; i++) {
+        const t = i / (mouthPoints - 1);
+        const ang = mouthStart + (mouthEnd - mouthStart) * t;
+        mouth.push({
+          x: cx + Math.cos(ang) * mouthR,
+          y: cy + Math.sin(ang) * mouthR
+        });
+      }
+
+      const ring = [];
+      const ringPoints = 36;
+      for (let i = 0; i < ringPoints; i++) {
+        const ang = (i / ringPoints) * Math.PI * 2;
+        ring.push({
+          x: cx + Math.cos(ang) * faceR,
+          y: cy + Math.sin(ang) * faceR * 0.95
+        });
+      }
+
+      const priority = [...eyes, ...mouth, ...ring];
+      const selected = [];
+
+      if (count <= priority.length) {
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(i * (priority.length / count));
+          selected.push(priority[idx]);
+        }
+      } else {
+        selected.push(...priority);
+        while (selected.length < count) {
+          selected.push({
+            x: cx + rand(-faceR * 0.35, faceR * 0.35),
+            y: cy + rand(-faceR * 0.2, faceR * 0.25)
+          });
+        }
+      }
+
+      return selected;
+    }
+
     function launchCelebration() {
+      if (!fireflies.length) {
+        spawnCircles();
+        return;
+      }
+
       celebrationActive = true;
-      celebrationTimer = 2.5;
-      fireflies.forEach(f => {
-        const drift = calmMode.checked ? rand(26, 60) : rand(70, 140);
-        f.swirl = true;
+      celebrationMode = 'smile';
+      celebrationTimer = 3.8;
+      const targets = buildSmileTargets(fireflies.length);
+
+      fireflies.forEach((f, i) => {
+        const target = targets[i % targets.length];
+        f.swirl = false;
         f.lively = true;
-        f.wanderTimer = rand(0.45, 1.1);
-        f.heading = Math.atan2((height / 2) - f.y, (width / 2) - f.x) + rand(-0.6, 0.6);
-        f.baseSpeed = Math.max(f.baseSpeed || drift, drift);
+        f.targetX = target.x + rand(-6, 6);
+        f.targetY = target.y + rand(-6, 6);
+        f.targetTimer = celebrationTimer;
+        f.heading = Math.atan2(f.targetY - f.y, f.targetX - f.x);
+        const boost = calmMode.checked ? 110 : 190;
+        f.baseSpeed = Math.max(f.baseSpeed || boost, boost);
         f.flutterPhase = rand(0, Math.PI * 2);
-        f.vx += Math.cos(f.heading + Math.PI / 2) * drift * 0.2;
-        f.vy += Math.sin(f.heading + Math.PI / 2) * drift * 0.2;
       });
     }
 
@@ -355,35 +429,55 @@
         f.vx *= damp;
         f.vy *= damp;
 
-        f.wanderTimer -= dt;
-        if (f.wanderTimer <= 0) {
-          f.heading += rand(-1.2, 1.2);
-          f.wanderTimer = calmMode.checked ? rand(0.8, 1.4) : rand(0.45, 1.05);
-        }
+        const targeting = celebrationMode === 'smile' && f.targetTimer > 0;
+        if (targeting) {
+          f.targetTimer -= dt;
+          const dx = f.targetX - f.x;
+          const dy = f.targetY - f.y;
+          const dist = Math.max(12, Math.hypot(dx, dy));
+          const targetSpeed = (calmMode.checked ? 90 : 160) * (1 + 0.08 * Math.sin(f.age * 3 + f.flutterPhase));
+          const desiredVx = (dx / dist) * targetSpeed;
+          const desiredVy = (dy / dist) * targetSpeed;
+          const steer = calmMode.checked ? 1.05 : 1.5;
+          f.vx += (desiredVx - f.vx) * steer * dt;
+          f.vy += (desiredVy - f.vy) * steer * dt;
 
-        if (f.lively) {
-          const flutter = calmMode.checked ? 0.22 : 0.35;
-          const targetSpeed = (calmMode.checked ? f.baseSpeed * 0.55 : f.baseSpeed * 0.85) *
-            (1 + flutter * Math.sin(f.flutterPhase + f.age * (calmMode.checked ? 1.4 : 2.6)));
-          const desiredVx = Math.cos(f.heading) * targetSpeed;
-          const desiredVy = Math.sin(f.heading) * targetSpeed;
-          const chase = calmMode.checked ? 0.55 : 0.75;
-          f.vx += (desiredVx - f.vx) * chase * dt;
-          f.vy += (desiredVy - f.vy) * chase * dt;
+          const buzz = calmMode.checked ? 14 : 26;
+          const tangentX = -dy / dist;
+          const tangentY = dx / dist;
+          f.vx += tangentX * buzz * dt;
+          f.vy += tangentY * buzz * dt;
+        } else {
+          f.wanderTimer -= dt;
+          if (f.wanderTimer <= 0) {
+            f.heading += rand(-1.2, 1.2);
+            f.wanderTimer = calmMode.checked ? rand(0.8, 1.4) : rand(0.45, 1.05);
+          }
 
-          const wiggle = calmMode.checked ? 16 : 30;
-          f.vx += rand(-wiggle, wiggle) * dt;
-          f.vy += rand(-wiggle, wiggle) * dt;
-        }
+          if (f.lively) {
+            const flutter = calmMode.checked ? 0.22 : 0.35;
+            const targetSpeed = (calmMode.checked ? f.baseSpeed * 0.55 : f.baseSpeed * 0.85) *
+              (1 + flutter * Math.sin(f.flutterPhase + f.age * (calmMode.checked ? 1.4 : 2.6)));
+            const desiredVx = Math.cos(f.heading) * targetSpeed;
+            const desiredVy = Math.sin(f.heading) * targetSpeed;
+            const chase = calmMode.checked ? 0.55 : 0.75;
+            f.vx += (desiredVx - f.vx) * chase * dt;
+            f.vy += (desiredVy - f.vy) * chase * dt;
 
-        if (f.swirl) {
-          const cx = width / 2;
-          const cy = height / 2;
-          const dx = f.x - cx;
-          const dy = f.y - cy;
-          const dist = Math.max(40, Math.hypot(dx, dy));
-          f.vx += (-dy / dist) * 24 * dt;
-          f.vy += (dx / dist) * 24 * dt;
+            const wiggle = calmMode.checked ? 16 : 30;
+            f.vx += rand(-wiggle, wiggle) * dt;
+            f.vy += rand(-wiggle, wiggle) * dt;
+          }
+
+          if (f.swirl) {
+            const cx = width / 2;
+            const cy = height / 2;
+            const dx = f.x - cx;
+            const dy = f.y - cy;
+            const dist = Math.max(40, Math.hypot(dx, dy));
+            f.vx += (-dy / dist) * 24 * dt;
+            f.vy += (dx / dist) * 24 * dt;
+          }
         }
 
         f.x += f.vx * dt;
@@ -557,7 +651,11 @@
         celebrationTimer -= dt;
         if (celebrationTimer <= 0) {
           celebrationActive = false;
-          fireflies.forEach(f => { f.swirl = false; });
+          celebrationMode = null;
+          fireflies.forEach(f => {
+            f.swirl = false;
+            f.targetTimer = 0;
+          });
           spawnCircles();
         }
       }
