@@ -235,6 +235,7 @@
 
     let width = canvas.width = window.innerWidth;
     let height = canvas.height = window.innerHeight;
+    let smileCenter = { x: width / 2, y: height / 2, r: Math.min(width, height) * 0.22 };
 
     window.addEventListener('resize', () => {
       width = canvas.width = window.innerWidth;
@@ -247,6 +248,8 @@
       const rect = canvas.getBoundingClientRect();
       pointer.tx = (e.clientX - rect.left) * (canvas.width / rect.width);
       pointer.ty = (e.clientY - rect.top) * (canvas.height / rect.height);
+      pointer.x = pointer.tx;
+      pointer.y = pointer.ty;
       pointer.inside = true;
     });
 
@@ -337,6 +340,7 @@
       const cx = width / 2;
       const cy = height / 2;
       const faceR = Math.min(width, height) * 0.22;
+      smileCenter = { x: cx, y: cy, r: faceR };
       const eyeR = faceR * 0.12;
       const eyeOffsetX = faceR * 0.42;
       const eyeOffsetY = faceR * -0.22;
@@ -418,6 +422,9 @@
         const boost = calmMode.checked ? 110 : 190;
         f.baseSpeed = Math.max(f.baseSpeed || boost, boost);
         f.flutterPhase = rand(0, Math.PI * 2);
+        f.orbitAngle = Math.atan2(f.y - smileCenter.y, f.x - smileCenter.x);
+        f.orbitRadius = smileCenter.r * rand(0.62, 1.05);
+        f.orbitSpeed = rand(0.8, 1.4) * (calmMode.checked ? 0.7 : 1.1);
       });
     }
 
@@ -430,6 +437,7 @@
         f.vy *= damp;
 
         const targeting = celebrationMode === 'smile' && f.targetTimer > 0;
+        const orbiting = celebrationMode === 'smile' && celebrationActive && f.targetTimer <= 0;
         if (targeting) {
           f.targetTimer -= dt;
           const dx = f.targetX - f.x;
@@ -447,6 +455,25 @@
           const tangentY = dx / dist;
           f.vx += tangentX * buzz * dt;
           f.vy += tangentY * buzz * dt;
+        } else if (orbiting) {
+          f.orbitAngle += f.orbitSpeed * dt;
+          const wobble = 1 + 0.08 * Math.sin(f.age * 2.8 + f.flutterPhase);
+          const orbitR = f.orbitRadius * wobble;
+          const desiredX = smileCenter.x + Math.cos(f.orbitAngle) * orbitR;
+          const desiredY = smileCenter.y + Math.sin(f.orbitAngle) * orbitR * 0.92;
+          const dx = desiredX - f.x;
+          const dy = desiredY - f.y;
+          const chase = calmMode.checked ? 1.1 : 1.55;
+          f.vx += dx * chase * dt;
+          f.vy += dy * chase * dt;
+
+          const swirlLift = calmMode.checked ? 10 : 20;
+          f.vx += -Math.sin(f.orbitAngle * 2) * swirlLift * dt;
+          f.vy += Math.cos(f.orbitAngle * 2) * swirlLift * dt;
+
+          const shimmer = calmMode.checked ? 10 : 18;
+          f.vx += rand(-shimmer, shimmer) * dt;
+          f.vy += rand(-shimmer, shimmer) * dt;
         } else {
           f.wanderTimer -= dt;
           if (f.wanderTimer <= 0) {
@@ -634,9 +661,8 @@
       const dt = Math.min(0.05, (ts - lastTime) / 1000);
       lastTime = ts;
 
-      const smoothing = Math.min(1, dt * 12);
-      pointer.x += (pointer.tx - pointer.x) * smoothing;
-      pointer.y += (pointer.ty - pointer.y) * smoothing;
+      pointer.x = pointer.tx;
+      pointer.y = pointer.ty;
       pointerEl.style.transform = `translate(${pointer.x}px, ${pointer.y}px)`;
 
       renderBackground();
