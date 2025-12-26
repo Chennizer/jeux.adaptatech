@@ -17,10 +17,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   grid.innerHTML = '';
   preset.students.forEach(stu => {
     const card = document.createElement('button');
-    card.className = 'card';
+    card.className = 'card student-card';
     card.dataset.activatable = 'true';
     card.setAttribute('data-i18n', 'hello');
-    card.innerHTML = `<img src="${stu.photoUrl}" alt="${stu.displayName}"><div>${stu.displayName}</div>`;
+    card.innerHTML = `<img src="${stu.photoUrl}" alt="${stu.displayName}"><div class="name-banner"><span>${stu.displayName}</span></div>`;
     const status = preset.attendance?.[stu.id] || 'unknown';
     if (attendanceMode) {
       card.classList.add(status);
