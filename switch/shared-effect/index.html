@@ -422,7 +422,8 @@
     const playScreen = document.getElementById('playScreen');
 
     const baseOrbColor = '#f8f8f8';
-    let orbTimeout;
+    let energyLevel = 0;
+    let energyDecay;
 
     centerOrb.style.setProperty('--orb-color', baseOrbColor);
 
@@ -474,19 +475,31 @@
       };
     }
 
-    function energizeCenter(color) {
+    function pulseCenter(color, increment = 0.16) {
       centerOrb.style.setProperty('--orb-color', color);
+      energyLevel = Math.min(1.35, energyLevel + increment);
+      const scaleBoost = 1 + energyLevel * 0.45;
+      centerOrb.animate([
+        { transform: 'translate(-50%, -50%) scale(1)', boxShadow: '0 0 24px rgba(255,255,255,0.4), 0 0 72px rgba(255,255,255,0.16)' },
+        { transform: `translate(-50%, -50%) scale(${scaleBoost})`, boxShadow: `0 0 36px ${color}, 0 0 110px color-mix(in srgb, ${color} 65%, transparent)` },
+        { transform: 'translate(-50%, -50%) scale(1)', boxShadow: '0 0 24px rgba(255,255,255,0.32), 0 0 72px rgba(255,255,255,0.12)' }
+      ], { duration: 920 + energyLevel * 220, easing: 'ease-out' });
+
       centerOrb.classList.add('energized');
-      clearTimeout(orbTimeout);
-      orbTimeout = setTimeout(() => {
-        centerOrb.classList.remove('energized');
-        centerOrb.style.setProperty('--orb-color', baseOrbColor);
-      }, 3200);
+      clearTimeout(energyDecay);
+      energyDecay = setTimeout(() => {
+        energyLevel = Math.max(0, energyLevel - 0.3);
+        if (energyLevel <= 0.05) {
+          centerOrb.classList.remove('energized');
+          centerOrb.style.setProperty('--orb-color', baseOrbColor);
+        }
+      }, 1800);
     }
 
     function triggerEffect(color, effect, side = 'left') {
-      const count = effect === 'wave' ? 28 : effect === 'pulse' ? 20 : 24;
-      const durationBase = effect === 'pulse' ? 3 : 3.6;
+      const count = effect === 'wave' ? 36 : effect === 'pulse' ? 28 : 32;
+      const durationBase = effect === 'pulse' ? 3.2 : 3.8;
+      let arrivals = 0;
       for (let i = 0; i < count; i += 1) {
         const particle = document.createElement('div');
         particle.className = 'particle';
@@ -501,16 +514,22 @@
         particle.style.animationDelay = `${i * 35}ms`;
         particle.style.opacity = `${0.55 + Math.random() * 0.35}`;
         stage.appendChild(particle);
-        setTimeout(() => particle.remove(), (durationBase + 1.2) * 1000);
+        const arrivalEnergy = 0.1 + (i % 5 === 0 ? 0.08 : 0);
+        particle.addEventListener('animationend', () => {
+          arrivals += 1;
+          pulseCenter(color, arrivalEnergy);
+          if (arrivals === count) {
+            const bloom = document.createElement('div');
+            bloom.className = 'bloom';
+            bloom.style.background = `radial-gradient(circle at 50% 50%, ${color} 0%, rgba(0,0,0,0) 70%)`;
+            bloom.style.animationDuration = `${2600 + Math.random() * 600}ms`;
+            stage.appendChild(bloom);
+            setTimeout(() => bloom.remove(), 3200);
+          }
+          particle.remove();
+        });
+        setTimeout(() => particle.remove(), (durationBase + 1.5) * 1000);
       }
-
-      const bloom = document.createElement('div');
-      bloom.className = 'bloom';
-      bloom.style.background = `radial-gradient(circle at 50% 50%, ${color} 0%, rgba(0,0,0,0) 62%)`;
-      stage.appendChild(bloom);
-      setTimeout(() => bloom.remove(), 3000);
-
-      energizeCenter(color);
     }
 
     // --------- Ably ---------
