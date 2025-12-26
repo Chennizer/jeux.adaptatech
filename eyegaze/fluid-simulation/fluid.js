@@ -30,14 +30,14 @@
 
   const config = {
     SIM_RESOLUTION: 128,
-    DYE_RESOLUTION: 384,
-    DENSITY_DISSIPATION: 0.99,
+    DYE_RESOLUTION: 640,
+    DENSITY_DISSIPATION: 0.985,
     VELOCITY_DISSIPATION: 0.98,
     PRESSURE: 0.8,
     CURL: 30,
-    SPLAT_RADIUS: 0.16,
-    SPLAT_FORCE: 1.2,
-    AUTO_SPLATS: 18,
+    SPLAT_RADIUS: 0.012,
+    SPLAT_FORCE: 0.6,
+    AUTO_SPLATS: 6,
     COLOR_SOFT: false,
   };
 
@@ -140,9 +140,10 @@
   uniform vec3 color;
   uniform vec2 point;
   uniform float radius;
+  uniform float aspectRatio;
   void main () {
     vec2 p = vUv - point;
-    p.x *= 1.0 + 0.3 * sin(point.y * 3.14159);
+    p.x *= aspectRatio;
     vec3 splat = color * exp(-dot(p, p) / radius);
     vec3 base = texture(uTarget, vUv).rgb;
     fragColor = vec4(base + splat, 1.0);
@@ -387,7 +388,7 @@
 
   function resizeCanvas() {
     const { clientWidth, clientHeight } = canvas.parentElement;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(clientWidth * dpr);
     canvas.height = Math.floor(clientHeight * dpr);
     canvas.style.width = `${clientWidth}px`;
@@ -413,6 +414,7 @@
     gl.useProgram(programs.splat.program);
     gl.uniform1i(programs.splat.uniform['uTarget'], 0);
     gl.uniform1f(programs.splat.uniform['radius'], config.SPLAT_RADIUS);
+    gl.uniform1f(programs.splat.uniform['aspectRatio'], canvas.width / canvas.height);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, velocity.write.fbo);
     gl.viewport(0, 0, velocity.write.width, velocity.write.height);
@@ -560,7 +562,13 @@
     // Auto splats
     colorAcc += dt * (config.AUTO_SPLATS / 60);
     while (colorAcc > 1) {
-      splat(Math.random(), Math.random(), 0.12 * (Math.random() - 0.5), 0.12 * (Math.random() - 0.5), generateColor());
+      splat(
+        Math.random(),
+        Math.random(),
+        0.08 * (Math.random() - 0.5),
+        0.08 * (Math.random() - 0.5),
+        generateColor()
+      );
       colorAcc -= 1;
     }
 
