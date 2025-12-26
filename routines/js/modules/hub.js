@@ -1,4 +1,4 @@
-import { renderTopbar } from '../engine/ui.js';
+import { renderTopbar, ensureFullscreen } from '../engine/ui.js';
 import { loadPreset } from '../engine/storage.js';
 import { t, getLang } from '../engine/i18n.js';
 import { applyLangToAria, makeActivatable } from '../engine/input.js';
@@ -22,7 +22,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }).join('');
   document.querySelectorAll('.tile').forEach((btn, idx) => {
     const item = tiles[idx];
-    makeActivatable(btn, () => {
+    makeActivatable(btn, async () => {
+      await ensureFullscreen();
       if (item.action) { item.action(); return; }
       window.location.href = item.href;
     });

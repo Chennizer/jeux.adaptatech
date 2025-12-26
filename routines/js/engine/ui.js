@@ -67,18 +67,22 @@ export function localizedLabel(item, lang = getLang()) {
 }
 
 let fullscreenHooked = false;
-function attemptFullscreen() {
+
+export async function ensureFullscreen() {
   const docEl = document.documentElement;
-  if (document.fullscreenElement || !docEl.requestFullscreen) return;
-  docEl.requestFullscreen().catch(() => {});
+  if (document.fullscreenElement || !docEl.requestFullscreen) return true;
+  try {
+    await docEl.requestFullscreen();
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 export function setupFullscreen() {
-  attemptFullscreen();
+  ensureFullscreen();
   if (fullscreenHooked) return;
-  const handler = () => {
-    attemptFullscreen();
-  };
+  const handler = () => { ensureFullscreen(); };
   ['pointerdown', 'touchstart', 'keydown'].forEach(evt => {
     window.addEventListener(evt, handler, { once: true });
   });
