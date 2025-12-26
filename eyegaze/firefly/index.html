@@ -295,6 +295,17 @@
     let celebrationDuration = 0;
     let celebrationActive = false;
     let celebrationMode = null;
+    let celebrationPhase = 'idle';
+    let celebrationPhaseTimer = 0;
+    let celebrationPhaseIndex = 0;
+    let celebrationTargets = [];
+
+    const CELEBRATION_STEPS = [
+      { name: 'gather', duration: 1.1 },
+      { name: 'orbit', duration: 2.2 },
+      { name: 'ribbons', duration: 1.3 },
+      { name: 'sparkle', duration: 1.4 },
+    ];
     let gameStarted = false;
     let lastTime = performance.now();
 
@@ -355,6 +366,7 @@
           life: Infinity,
           age: 0,
           glow: rand(16, 28),
+          baseColor: circle.color,
           color: circle.color,
           lively: true,
           baseSpeed: speed,
@@ -362,6 +374,7 @@
           wanderTimer: rand(0.35, 0.9),
           flickerSpeed: rand(2, 4),
           flutterPhase: rand(0, Math.PI * 2),
+          celebrationHue: rand(0, 360),
           trail: []
         });
       }
@@ -439,28 +452,34 @@
 
       celebrationActive = true;
       celebrationMode = 'smile';
-      celebrationDuration = 5.2;
-      celebrationTimer = celebrationDuration;
       celebrationElapsed = 0;
-      const targets = buildSmileTargets(fireflies.length);
+      celebrationPhaseIndex = 0;
+      celebrationPhase = CELEBRATION_STEPS[0].name;
+      celebrationDuration = CELEBRATION_STEPS.reduce((sum, step) => sum + step.duration, 0);
+      celebrationTimer = celebrationDuration;
+      celebrationPhaseTimer = CELEBRATION_STEPS[0].duration;
+
+      celebrationTargets = buildSmileTargets(fireflies.length);
 
       const spinDir = Math.random() > 0.5 ? 1 : -1;
 
       fireflies.forEach((f, i) => {
-        const target = targets[i % targets.length];
+        const target = celebrationTargets[i % celebrationTargets.length];
         f.swirl = false;
         f.lively = true;
         f.targetX = target.x + rand(-6, 6);
         f.targetY = target.y + rand(-6, 6);
-        f.targetTimer = celebrationTimer;
+        f.targetTimer = CELEBRATION_STEPS[0].duration;
         f.heading = Math.atan2(f.targetY - f.y, f.targetX - f.x);
         const boost = calmMode.checked ? 110 : 190;
         f.baseSpeed = Math.max(f.baseSpeed || boost, boost);
         f.flutterPhase = rand(0, Math.PI * 2);
         f.orbitAngle = Math.atan2(f.y - smileCenter.y, f.x - smileCenter.x);
-        f.orbitRadius = smileCenter.r * rand(0.62, 1.05);
-        f.orbitSpeed = rand(0.95, 1.55) * (calmMode.checked ? 0.65 : 1.25);
+        f.orbitRadius = smileCenter.r * rand(0.58, 1.1);
+        f.orbitSpeed = rand(1.05, 1.6) * (calmMode.checked ? 0.65 : 1.28);
         f.spinDir = spinDir;
+        f.ribbonAngle = f.orbitAngle;
+        f.ribbonLift = rand(0.75, 1.25);
       });
     }
 
@@ -472,52 +491,84 @@
         f.vx *= damp;
         f.vy *= damp;
 
-        const targeting = celebrationMode === 'smile' && f.targetTimer > 0;
-        const orbiting = celebrationMode === 'smile' && celebrationActive && f.targetTimer <= 0;
-        if (targeting) {
+        const gatherPhase = celebrationActive && celebrationPhase === 'gather';
+        const orbitPhase = celebrationActive && celebrationPhase === 'orbit';
+        const ribbonPhase = celebrationActive && celebrationPhase === 'ribbons';
+        const sparklePhase = celebrationActive && celebrationPhase === 'sparkle';
+
+        if (gatherPhase && f.targetTimer > 0) {
           f.targetTimer -= dt;
           const dx = f.targetX - f.x;
           const dy = f.targetY - f.y;
           const dist = Math.max(12, Math.hypot(dx, dy));
-          const targetSpeed = (calmMode.checked ? 90 : 160) * (1 + 0.08 * Math.sin(f.age * 3 + f.flutterPhase));
+          const targetSpeed = (calmMode.checked ? 90 : 165) * (1 + 0.14 * Math.sin(f.age * 3 + f.flutterPhase));
           const desiredVx = (dx / dist) * targetSpeed;
           const desiredVy = (dy / dist) * targetSpeed;
-          const steer = calmMode.checked ? 1.05 : 1.5;
+          const steer = calmMode.checked ? 1.05 : 1.65;
           f.vx += (desiredVx - f.vx) * steer * dt;
           f.vy += (desiredVy - f.vy) * steer * dt;
 
-          const buzz = calmMode.checked ? 14 : 26;
+          const buzz = calmMode.checked ? 14 : 28;
           const tangentX = -dy / dist;
           const tangentY = dx / dist;
           f.vx += tangentX * buzz * dt;
           f.vy += tangentY * buzz * dt;
-        } else if (orbiting) {
+        } else if (orbitPhase) {
           f.orbitAngle += f.orbitSpeed * dt;
 
-          const wobble = 1 + 0.12 * Math.sin(f.age * 3 + f.flutterPhase);
-          const orbitPulse = 1 + 0.14 * Math.sin((celebrationElapsed + f.flutterPhase) * 4.2);
+          const wobble = 1 + 0.16 * Math.sin(f.age * 3 + f.flutterPhase);
+          const orbitPulse = 1 + 0.2 * Math.sin((celebrationElapsed + f.flutterPhase) * 3.6);
           const orbitR = f.orbitRadius * wobble * orbitPulse;
 
-          const spinAround = (calmMode.checked ? 0.7 : 1.25) * f.spinDir;
-          const fastSpin = 0.35 + 0.4 * Math.sin((celebrationElapsed + f.flutterPhase) * 2.8);
+          const spinAround = (calmMode.checked ? 0.8 : 1.4) * f.spinDir;
+          const fastSpin = 0.35 + 0.6 * Math.sin((celebrationElapsed + f.flutterPhase) * 3.4);
           const angleOffset = (celebrationElapsed * spinAround) + fastSpin;
 
           const desiredX = smileCenter.x + Math.cos(f.orbitAngle + angleOffset) * orbitR;
           const desiredY = smileCenter.y + Math.sin(f.orbitAngle + angleOffset) * orbitR * 0.92;
           const dx = desiredX - f.x;
           const dy = desiredY - f.y;
-          const chase = calmMode.checked ? 1.18 : 1.7;
+          const chase = calmMode.checked ? 1.18 : 1.85;
           f.vx += dx * chase * dt;
           f.vy += dy * chase * dt;
 
-          const swirlLift = calmMode.checked ? 12 : 22;
-          const swirlSpin = calmMode.checked ? 18 : 32;
-          f.vx += (-Math.sin(f.orbitAngle * 2) * swirlLift + f.spinDir * swirlSpin) * dt;
-          f.vy += (Math.cos(f.orbitAngle * 2) * swirlLift) * dt;
+          const swirlLift = calmMode.checked ? 16 : 26;
+          const swirlSpin = calmMode.checked ? 18 : 36;
+          f.vx += (-Math.sin(f.orbitAngle * 2.2) * swirlLift + f.spinDir * swirlSpin) * dt;
+          f.vy += (Math.cos(f.orbitAngle * 2.2) * swirlLift) * dt;
 
-          const shimmer = calmMode.checked ? 12 : 22;
+          const shimmer = calmMode.checked ? 12 : 28;
           f.vx += rand(-shimmer, shimmer) * dt;
           f.vy += rand(-shimmer, shimmer) * dt;
+        } else if (ribbonPhase) {
+          f.ribbonAngle += (calmMode.checked ? 1.2 : 2.2) * f.spinDir * dt;
+          const ribbonR = smileCenter.r * (0.8 + 0.35 * Math.sin(f.ribbonAngle * 1.5 + f.flutterPhase));
+          const ribbonWave = Math.sin((celebrationElapsed + f.flutterPhase) * 4.2) * smileCenter.r * 0.12;
+          const desiredX = smileCenter.x + Math.cos(f.ribbonAngle) * ribbonR;
+          const desiredY = smileCenter.y + Math.sin(f.ribbonAngle) * ribbonR * 0.9 + ribbonWave * f.ribbonLift;
+          const dx = desiredX - f.x;
+          const dy = desiredY - f.y;
+          const chase = calmMode.checked ? 1.2 : 2.05;
+          f.vx += dx * chase * dt;
+          f.vy += dy * chase * dt;
+
+          const swirl = calmMode.checked ? 22 : 38;
+          f.vx += rand(-swirl, swirl) * dt;
+          f.vy += rand(-swirl, swirl) * dt;
+        } else if (sparklePhase) {
+          const sparkleR = smileCenter.r * (0.6 + 0.25 * Math.sin(f.age * 2 + f.flutterPhase));
+          const twirl = celebrationElapsed * (calmMode.checked ? 0.9 : 1.5) * f.spinDir;
+          const desiredX = smileCenter.x + Math.cos(f.orbitAngle + twirl) * sparkleR;
+          const desiredY = smileCenter.y + Math.sin(f.orbitAngle + twirl) * sparkleR * 0.95;
+          const dx = desiredX - f.x;
+          const dy = desiredY - f.y;
+          const chase = calmMode.checked ? 1.25 : 2.25;
+          f.vx += dx * chase * dt;
+          f.vy += dy * chase * dt;
+
+          const sparkleBurst = calmMode.checked ? 32 : 58;
+          f.vx += rand(-sparkleBurst, sparkleBurst) * dt;
+          f.vy += rand(-sparkleBurst, sparkleBurst) * dt;
         } else {
           f.wanderTimer -= dt;
           if (f.wanderTimer <= 0) {
@@ -590,10 +641,13 @@
 
         const lifeAlpha = Math.max(0.3, 1 - f.age / Math.max(f.life, 1)); // keep a gentle glow
         const flicker = 0.8 + 0.35 * Math.sin(f.age * f.flickerSpeed * 2 + f.flutterPhase);
-        const glow = f.glow * (calmMode.checked ? 0.9 : 1.2) * flicker;
+        const glow = f.glow * (calmMode.checked ? 0.9 : 1.3) * flicker;
+        const hueColor = celebrationActive
+          ? `hsl(${(f.celebrationHue + celebrationElapsed * 90) % 360}, 95%, 72%)`
+          : f.baseColor || f.color;
         const gradient = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, glow);
-        gradient.addColorStop(0, `${f.color}cc`);
-        gradient.addColorStop(1, `${f.color}00`);
+        gradient.addColorStop(0, `${hueColor}cc`);
+        gradient.addColorStop(1, `${hueColor}00`);
         ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.arc(f.x, f.y, glow, 0, Math.PI * 2);
@@ -718,9 +772,38 @@
       if (celebrationActive) {
         celebrationElapsed += dt;
         celebrationTimer -= dt;
+        celebrationPhaseTimer -= dt;
+
+        if (celebrationPhaseTimer <= 0) {
+          celebrationPhaseIndex++;
+          if (celebrationPhaseIndex < CELEBRATION_STEPS.length) {
+            celebrationPhase = CELEBRATION_STEPS[celebrationPhaseIndex].name;
+            celebrationPhaseTimer = CELEBRATION_STEPS[celebrationPhaseIndex].duration;
+
+            // retune motions between phases for extra spectacle
+            fireflies.forEach((f, i) => {
+              if (celebrationPhase === 'orbit') {
+                f.targetTimer = 0;
+                f.orbitRadius *= rand(0.95, 1.12);
+                f.orbitSpeed *= rand(0.95, 1.2);
+              } else if (celebrationPhase === 'ribbons') {
+                f.ribbonAngle = f.orbitAngle + (i % 2 === 0 ? Math.PI / 6 : -Math.PI / 6);
+                f.ribbonLift = rand(0.85, 1.35);
+              } else if (celebrationPhase === 'sparkle') {
+                f.orbitAngle += rand(-Math.PI, Math.PI);
+                f.ribbonLift = rand(0.6, 1.4);
+              }
+            });
+          } else {
+            celebrationPhaseTimer = celebrationTimer; // ride out the finale
+          }
+        }
+
         if (celebrationTimer <= 0) {
           celebrationActive = false;
           celebrationMode = null;
+          celebrationPhase = 'idle';
+          celebrationPhaseIndex = 0;
           fireflies.forEach(f => {
             f.swirl = false;
             f.targetTimer = 0;
