@@ -23,7 +23,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.querySelectorAll('.tile').forEach((btn, idx) => {
     const item = tiles[idx];
     makeActivatable(btn, async () => {
-      await ensureFullscreen();
+      ensureFullscreen();
       if (item.action) { item.action(); return; }
       window.location.href = item.href;
     });

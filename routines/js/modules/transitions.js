@@ -17,8 +17,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     makeActivatable(btn, () => handleTransition(tr, lang, preset.audio.volume));
     grid.appendChild(btn);
   });
-  document.getElementById('back').textContent = t('back', lang);
-  document.getElementById('back').addEventListener('click', () => location.href = './index.html');
 });
 
 let activeToggle = null;
