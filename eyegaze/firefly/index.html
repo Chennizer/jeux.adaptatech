@@ -291,6 +291,8 @@
     const burstColors = ['#7CF7E1', '#FFDE6F', '#FF8CC6', '#7DB2FF', '#C3FF8F', '#F7A35C'];
 
     let celebrationTimer = 0;
+    let celebrationElapsed = 0;
+    let celebrationDuration = 0;
     let celebrationActive = false;
     let celebrationMode = null;
     let gameStarted = false;
@@ -330,6 +332,8 @@
       celebrationActive = false;
       celebrationMode = null;
       celebrationTimer = 0;
+      celebrationElapsed = 0;
+      celebrationDuration = 0;
       lastRemaining = null;
       const count = parseInt(circleCountInput.value, 10);
       for (let i = 0; i < count; i++) {
@@ -435,8 +439,12 @@
 
       celebrationActive = true;
       celebrationMode = 'smile';
-      celebrationTimer = 3.8;
+      celebrationDuration = 5.2;
+      celebrationTimer = celebrationDuration;
+      celebrationElapsed = 0;
       const targets = buildSmileTargets(fireflies.length);
+
+      const spinDir = Math.random() > 0.5 ? 1 : -1;
 
       fireflies.forEach((f, i) => {
         const target = targets[i % targets.length];
@@ -451,7 +459,8 @@
         f.flutterPhase = rand(0, Math.PI * 2);
         f.orbitAngle = Math.atan2(f.y - smileCenter.y, f.x - smileCenter.x);
         f.orbitRadius = smileCenter.r * rand(0.62, 1.05);
-        f.orbitSpeed = rand(0.8, 1.4) * (calmMode.checked ? 0.7 : 1.1);
+        f.orbitSpeed = rand(0.95, 1.55) * (calmMode.checked ? 0.65 : 1.25);
+        f.spinDir = spinDir;
       });
     }
 
@@ -484,21 +493,29 @@
           f.vy += tangentY * buzz * dt;
         } else if (orbiting) {
           f.orbitAngle += f.orbitSpeed * dt;
-          const wobble = 1 + 0.08 * Math.sin(f.age * 2.8 + f.flutterPhase);
-          const orbitR = f.orbitRadius * wobble;
-          const desiredX = smileCenter.x + Math.cos(f.orbitAngle) * orbitR;
-          const desiredY = smileCenter.y + Math.sin(f.orbitAngle) * orbitR * 0.92;
+
+          const wobble = 1 + 0.12 * Math.sin(f.age * 3 + f.flutterPhase);
+          const orbitPulse = 1 + 0.14 * Math.sin((celebrationElapsed + f.flutterPhase) * 4.2);
+          const orbitR = f.orbitRadius * wobble * orbitPulse;
+
+          const spinAround = (calmMode.checked ? 0.7 : 1.25) * f.spinDir;
+          const fastSpin = 0.35 + 0.4 * Math.sin((celebrationElapsed + f.flutterPhase) * 2.8);
+          const angleOffset = (celebrationElapsed * spinAround) + fastSpin;
+
+          const desiredX = smileCenter.x + Math.cos(f.orbitAngle + angleOffset) * orbitR;
+          const desiredY = smileCenter.y + Math.sin(f.orbitAngle + angleOffset) * orbitR * 0.92;
           const dx = desiredX - f.x;
           const dy = desiredY - f.y;
-          const chase = calmMode.checked ? 1.1 : 1.55;
+          const chase = calmMode.checked ? 1.18 : 1.7;
           f.vx += dx * chase * dt;
           f.vy += dy * chase * dt;
 
-          const swirlLift = calmMode.checked ? 10 : 20;
-          f.vx += -Math.sin(f.orbitAngle * 2) * swirlLift * dt;
-          f.vy += Math.cos(f.orbitAngle * 2) * swirlLift * dt;
+          const swirlLift = calmMode.checked ? 12 : 22;
+          const swirlSpin = calmMode.checked ? 18 : 32;
+          f.vx += (-Math.sin(f.orbitAngle * 2) * swirlLift + f.spinDir * swirlSpin) * dt;
+          f.vy += (Math.cos(f.orbitAngle * 2) * swirlLift) * dt;
 
-          const shimmer = calmMode.checked ? 10 : 18;
+          const shimmer = calmMode.checked ? 12 : 22;
           f.vx += rand(-shimmer, shimmer) * dt;
           f.vy += rand(-shimmer, shimmer) * dt;
         } else {
@@ -699,6 +716,7 @@
       }
 
       if (celebrationActive) {
+        celebrationElapsed += dt;
         celebrationTimer -= dt;
         if (celebrationTimer <= 0) {
           celebrationActive = false;
