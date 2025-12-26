@@ -15,6 +15,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('mode-title').textContent = attendanceMode ? t('attendanceMode', lang) : t('helloMode', lang);
   const grid = document.getElementById('student-grid');
   grid.innerHTML = '';
+  const layout = computeGridLayout(preset.students.length);
+  grid.style.setProperty('--student-cols', layout.cols);
+  grid.style.setProperty('--student-rows', layout.rows);
   preset.students.forEach(stu => {
     const card = document.createElement('button');
     card.className = 'card student-card';
@@ -36,6 +39,24 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('back').addEventListener('click', () => location.href = './index.html');
   applyLangToAria();
 });
+
+function computeGridLayout(count) {
+  if (count <= 0) return { cols: 1, rows: 1 };
+  let cols;
+  if (count <= 4) {
+    cols = Math.min(4, count);
+  } else if (count <= 9) {
+    cols = 3;
+  } else {
+    cols = 4;
+  }
+  let rows = Math.ceil(count / cols);
+  if (rows > 4) {
+    rows = 4;
+    cols = Math.min(4, Math.ceil(count / rows));
+  }
+  return { cols, rows };
+}
 
 function handleStudent(stu, card, preset, attendanceMode, lang) {
   if (attendanceMode) {
