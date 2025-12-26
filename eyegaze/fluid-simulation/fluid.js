@@ -30,14 +30,14 @@
 
   const config = {
     SIM_RESOLUTION: 128,
-    DYE_RESOLUTION: 512,
-    DENSITY_DISSIPATION: 0.985,
+    DYE_RESOLUTION: 384,
+    DENSITY_DISSIPATION: 0.99,
     VELOCITY_DISSIPATION: 0.98,
     PRESSURE: 0.8,
-    CURL: 24,
-    SPLAT_RADIUS: 0.28,
+    CURL: 30,
+    SPLAT_RADIUS: 0.16,
     SPLAT_FORCE: 1.2,
-    AUTO_SPLATS: 25,
+    AUTO_SPLATS: 18,
     COLOR_SOFT: false,
   };
 
@@ -387,9 +387,12 @@
 
   function resizeCanvas() {
     const { clientWidth, clientHeight } = canvas.parentElement;
-    canvas.width = clientWidth;
-    canvas.height = clientHeight;
-    gl.viewport(0, 0, clientWidth, clientHeight);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.floor(clientWidth * dpr);
+    canvas.height = Math.floor(clientHeight * dpr);
+    canvas.style.width = `${clientWidth}px`;
+    canvas.style.height = `${clientHeight}px`;
+    gl.viewport(0, 0, canvas.width, canvas.height);
   }
 
   new ResizeObserver(resizeCanvas).observe(canvas.parentElement);
@@ -581,18 +584,30 @@
     };
   }
 
-  canvas.addEventListener('pointerdown', e => {
+  let pointerActive = false;
+
+  function primePointer(e) {
     const point = convertEventToPoint(e);
     const pointer = pointers[0];
-    pointer.down = true;
-    pointer.moved = true;
     pointer.prevX = pointer.posX = point.x;
     pointer.prevY = pointer.posY = point.y;
+    pointer.moved = false;
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    pointerActive = true;
+    primePointer(e);
+    pointers[0].down = true;
+  });
+
+  canvas.addEventListener('pointerenter', e => {
+    pointerActive = true;
+    primePointer(e);
   });
 
   canvas.addEventListener('pointermove', e => {
+    if (!pointerActive) return;
     const pointer = pointers[0];
-    if (!pointer.down) return;
     const point = convertEventToPoint(e);
     pointer.prevX = pointer.posX;
     pointer.prevY = pointer.posY;
@@ -601,8 +616,11 @@
     pointer.moved = true;
   });
 
-  window.addEventListener('pointerup', () => {
-    pointers[0].down = false;
+  ['pointerleave', 'pointerup', 'pointercancel'].forEach(eventName => {
+    window.addEventListener(eventName, () => {
+      pointerActive = false;
+      pointers[0].down = false;
+    });
   });
 
   // UI bindings
