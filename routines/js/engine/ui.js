@@ -53,6 +53,8 @@ export async function renderTopbar(options = {}) {
     if (options.confirmOnBack && !confirm(t('confirmExit', lang))) return;
     window.location.href = './index.html';
   });
+
+  setupFullscreen();
 }
 
 export function setHighContrast(enabled) {
@@ -62,4 +64,23 @@ export function setHighContrast(enabled) {
 export function localizedLabel(item, lang = getLang()) {
   if (item.labelKey) return t(item.labelKey, lang);
   return item.label?.[lang] || item.label?.en || '';
+}
+
+let fullscreenHooked = false;
+function attemptFullscreen() {
+  const docEl = document.documentElement;
+  if (document.fullscreenElement || !docEl.requestFullscreen) return;
+  docEl.requestFullscreen().catch(() => {});
+}
+
+export function setupFullscreen() {
+  attemptFullscreen();
+  if (fullscreenHooked) return;
+  const handler = () => {
+    attemptFullscreen();
+  };
+  ['pointerdown', 'touchstart', 'keydown'].forEach(evt => {
+    window.addEventListener(evt, handler, { once: true });
+  });
+  fullscreenHooked = true;
 }
