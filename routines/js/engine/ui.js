@@ -54,7 +54,6 @@ export async function renderTopbar(options = {}) {
     window.location.href = './index.html';
   });
 
-  setupFullscreen();
 }
 
 export function setHighContrast(enabled) {
@@ -66,25 +65,3 @@ export function localizedLabel(item, lang = getLang()) {
   return item.label?.[lang] || item.label?.en || '';
 }
 
-let fullscreenHooked = false;
-
-export async function ensureFullscreen() {
-  const docEl = document.documentElement;
-  if (document.fullscreenElement || !docEl.requestFullscreen) return true;
-  try {
-    await docEl.requestFullscreen();
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-export function setupFullscreen() {
-  ensureFullscreen();
-  if (fullscreenHooked) return;
-  const handler = () => { ensureFullscreen(); };
-  ['pointerdown', 'touchstart', 'keydown'].forEach(evt => {
-    window.addEventListener(evt, handler, { once: true });
-  });
-  fullscreenHooked = true;
-}
