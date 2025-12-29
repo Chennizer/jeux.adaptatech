@@ -147,21 +147,12 @@
         <!-- Left column (visual mode) -->
         <div class="options-column">
           <div class="option-item">
-            <label class="teal-label">
-              <input type="checkbox" id="blackWhiteMode">
-              <span class="translate"
-                    data-fr="Noir et blanc (fond noir, fluides blancs)"
-                    data-en="Black & white (black background, white fluid)"
-                    data-ja="白黒モード（黒背景に白いフルイド）">Noir et blanc (fond noir, fluides blancs)</span>
-            </label>
-          </div>
-
-          <div class="option-item">
             <label for="monoColorSelect" class="teal-label">
               <span class="translate" data-fr="Mode monochrome" data-en="Monocolor mode" data-ja="単色モード">Mode monochrome</span>
             </label>
             <select id="monoColorSelect" class="styled-select">
               <option value="normal" class="translate" data-fr="Normal" data-en="Normal" data-ja="ノーマル">Normal</option>
+              <option value="white" class="translate" data-fr="Blanc" data-en="White" data-ja="白">Blanc</option>
               <option value="red" class="translate" data-fr="Rouge" data-en="Red" data-ja="赤">Rouge</option>
               <option value="blue" class="translate" data-fr="Bleu" data-en="Blue" data-ja="青">Bleu</option>
               <option value="green" class="translate" data-fr="Vert" data-en="Green" data-ja="緑">Vert</option>
@@ -324,7 +315,6 @@
     const gazeOpacityVal = document.getElementById('gazeOpacityVal');
     const gpDetails = document.getElementById('gpDetails');
     const gazePointer = document.getElementById('gazePointer');
-    const blackWhiteToggle = document.getElementById('blackWhiteMode');
     const intensitySlider = document.getElementById('intensitySlider');
     const intensityVal = document.getElementById('intensityVal');
     const qualitySlider = document.getElementById('qualitySlider');
@@ -334,12 +324,10 @@
     const closeNoteModal = document.getElementById('closeNoteModal');
     const monoColorSelect = document.getElementById('monoColorSelect');
 
-    let monochromeMode = false;
     let intensityFactor = 1;
     let qualityFactor = 1;
     let monoColorChoice = 'normal';
 
-    let applyMonochromeSetting = null;
     let applyIntensitySetting = null;
     let applyQualitySetting = null;
     let applyColorOverrideSetting = null;
@@ -403,11 +391,6 @@
     gazeSize?.addEventListener('input', applyPointerToggle);
     gazeOpacity?.addEventListener('input', applyPointerToggle);
 
-    function syncMonochromeFromUI(){
-      monochromeMode = !!blackWhiteToggle?.checked;
-      if (applyMonochromeSetting) applyMonochromeSetting();
-    }
-
     function syncIntensityFromUI(){
       const raw = parseFloat(intensitySlider?.value);
       intensityFactor = Math.max(0.5, Math.min(2, isNaN(raw) ? 1 : raw));
@@ -426,13 +409,10 @@
       monoColorChoice = monoColorSelect?.value || 'normal';
       if (applyColorOverrideSetting) applyColorOverrideSetting();
     }
-
-    blackWhiteToggle?.addEventListener('change', syncMonochromeFromUI);
     intensitySlider?.addEventListener('input', syncIntensityFromUI);
     qualitySlider?.addEventListener('input', syncQualityFromUI);
     monoColorSelect?.addEventListener('change', syncMonoColorFromUI);
 
-    syncMonochromeFromUI();
     syncIntensityFromUI();
     syncQualityFromUI();
     syncMonoColorFromUI();
@@ -571,6 +551,7 @@
 
       function getColorOverride(){
         switch (monoColorChoice) {
+          case 'white': return { ...monoWhite };
           case 'red': return scaleColor({ r: 1, g: 0, b: 0 });
           case 'blue': return scaleColor({ r: 0.15, g: 0.4, b: 1 });
           case 'green': return scaleColor({ r: 0, g: 1, b: 0.25 });
@@ -581,14 +562,17 @@
         }
       }
 
-      applyMonochromeSetting = function(){
-        const colorfulAllowed = !monochromeMode && monoColorChoice === 'normal';
+      applyColorOverrideSetting = function(){
+        const allowed = ['normal', 'white', 'red', 'blue', 'green', 'yellow', 'purple', 'pink'];
+        if (!allowed.includes(monoColorChoice)) monoColorChoice = 'normal';
+
+        const colorfulAllowed = monoColorChoice === 'normal';
         config.COLORFUL = colorfulAllowed;
         config.BACK_COLOR = { r: 0, g: 0, b: 0 };
 
         if (Array.isArray(pointers) && pointers.length) {
           if (!colorfulAllowed) {
-            const forcedColor = monochromeMode ? monoWhite : getColorOverride();
+            const forcedColor = getColorOverride();
             if (forcedColor) {
               pointers.forEach(p => { p.color = { ...forcedColor }; });
             }
@@ -620,12 +604,6 @@
           initFramebuffers();
         }
         if (qualityVal) qualityVal.textContent = clamped.toFixed(2);
-      };
-
-      applyColorOverrideSetting = function(){
-        const allowed = ['normal', 'red', 'blue', 'green', 'yellow', 'purple', 'pink'];
-        if (!allowed.includes(monoColorChoice)) monoColorChoice = 'normal';
-        applyMonochromeSetting();
       };
 
       applyColorOverrideSetting();
@@ -1833,7 +1811,6 @@
       }
 
       function generateColor () {
-        if (monochromeMode) return { ...monoWhite };
         const forced = monoColorChoice !== 'normal' ? getColorOverride() : null;
         if (forced) return { ...forced };
         let c = HSVtoRGB(Math.random(), 1.0, 1.0);
