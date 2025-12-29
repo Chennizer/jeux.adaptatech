@@ -30,14 +30,14 @@
 
   const config = {
     SIM_RESOLUTION: 128,
-    DYE_RESOLUTION: 640,
-    DENSITY_DISSIPATION: 0.985,
+    DYE_RESOLUTION: 1024,
+    DENSITY_DISSIPATION: 0.995,
     VELOCITY_DISSIPATION: 0.98,
     PRESSURE: 0.8,
     CURL: 30,
-    SPLAT_RADIUS: 0.012,
-    SPLAT_FORCE: 0.6,
-    AUTO_SPLATS: 6,
+    SPLAT_RADIUS: 0.006,
+    SPLAT_FORCE: 0.35,
+    AUTO_SPLATS: 2,
     COLOR_SOFT: false,
   };
 
@@ -384,7 +384,7 @@
     pressure = createDoubleFBO(simRes, simRes, RG16F, RG, HALF_FLOAT);
   }
   initFramebuffers();
-  splatStack = 8;
+  splatStack = 5;
 
   function resizeCanvas() {
     const { clientWidth, clientHeight } = canvas.parentElement;
@@ -439,8 +439,8 @@
       const color = generateColor();
       const x = Math.random();
       const y = Math.random();
-      const dx = (Math.random() - 0.5) * config.SPLAT_FORCE;
-      const dy = (Math.random() - 0.5) * config.SPLAT_FORCE;
+      const dx = (Math.random() - 0.5) * config.SPLAT_FORCE * 0.6;
+      const dy = (Math.random() - 0.5) * config.SPLAT_FORCE * 0.6;
       splat(x, y, dx, dy, color);
     }
   }
@@ -565,8 +565,8 @@
       splat(
         Math.random(),
         Math.random(),
-        0.08 * (Math.random() - 0.5),
-        0.08 * (Math.random() - 0.5),
+        0.04 * (Math.random() - 0.5),
+        0.04 * (Math.random() - 0.5),
         generateColor()
       );
       colorAcc -= 1;
@@ -575,7 +575,8 @@
     pointers.forEach(p => {
       if (!p.moved) return;
       p.moved = false;
-      splat(p.posX, p.posY, (p.posX - p.prevX) * config.SPLAT_FORCE, (p.posY - p.prevY) * config.SPLAT_FORCE, p.color);
+      const influence = 0.6 * config.SPLAT_FORCE;
+      splat(p.posX, p.posY, (p.posX - p.prevX) * influence, (p.posY - p.prevY) * influence, p.color);
     });
 
     step(dt);
@@ -644,7 +645,7 @@
   const paletteBtn = document.getElementById('colorShift');
 
   function updateUI() {
-    forceValue.textContent = `${Number(config.SPLAT_FORCE).toFixed(1)}x`;
+    forceValue.textContent = `${Number(config.SPLAT_FORCE).toFixed(2)}x`;
     dyeValue.textContent = Number(config.DENSITY_DISSIPATION).toFixed(3);
     curlValue.textContent = `${config.CURL}`;
     splatValue.textContent = `${config.AUTO_SPLATS}`;
