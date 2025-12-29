@@ -1,265 +1,503 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Image to 3D Relief (three.js)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Magic Garden — Space Hold</title>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      font-family: system-ui, sans-serif;
-      background: #111;
-      color: #eee;
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; background: #07070c; overflow: hidden; }
+    canvas { width: 100vw; height: 100vh; display: block; }
+    .ui {
+      position: fixed; inset: 0; pointer-events: none;
+      font: 650 13px/1.25 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      letter-spacing: .2px;
     }
-
-    #ui {
-      position: absolute;
-      z-index: 10;
-      top: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.6);
+    .topbar {
+      position: fixed; top: 12px; left: 12px; right: 12px;
+      display: flex; justify-content: space-between; gap: 10px;
+      pointer-events: none;
+      opacity: .82;
+    }
+    .pill {
+      pointer-events: auto;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.22);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    }
+    .kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-weight: 900;
+      padding: 2px 6px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.08);
+    }
+    input[type="range"] { width: 170px; }
+    .bottom {
+      position: fixed; inset: auto 0 0 0;
+      display: grid; place-items: center;
+      padding: 14px;
+    }
+    .card {
+      pointer-events: auto;
+      width: min(760px, calc(100vw - 24px));
+      background: rgba(12, 14, 20, .58);
+      border: 1px solid rgba(255,255,255,.10);
+      backdrop-filter: blur(10px);
+      border-radius: 18px;
+      padding: 12px 14px;
+      box-shadow: 0 18px 60px rgba(0,0,0,.45);
+      display: flex; gap: 10px; align-items: center; justify-content: space-between;
+    }
+    .title { font-weight: 900; font-size: 14px; opacity: .95; }
+    .sub { font-weight: 600; font-size: 12px; opacity: .74; }
+    .btn {
+      pointer-events: auto;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.92);
+      border-radius: 12px;
       padding: 10px 12px;
-      border-radius: 6px;
-      font-size: 14px;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 850;
+      min-width: 90px;
     }
-
-    #imageUpload {
-      margin-top: 6px;
-      display: block;
-    }
-
-    canvas {
-      display: block;
-    }
+    .btn:active { transform: translateY(1px); }
   </style>
 </head>
 <body>
-  <div id="ui">
-    <div><strong>Steps</strong></div>
-    <ol style="margin: 4px 0 6px 18px; padding: 0;">
-      <li>Upload an image</li>
-      <li>A 3D relief object is generated</li>
-      <li>Press <strong>Space</strong> to rotate around it</li>
-    </ol>
-    <input type="file" id="imageUpload" accept="image/*">
+  <canvas id="c"></canvas>
+
+  <div class="ui">
+    <div class="topbar">
+      <div class="pill"><span>Hold</span> <span class="kbd">SPACE</span> <span style="opacity:.75;">to grow a glowing garden</span></div>
+      <div class="pill">
+        <span style="opacity:.8;">Intensity</span>
+        <input id="intensity" type="range" min="0.5" max="1.8" value="1.0" step="0.05">
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="card">
+        <div>
+          <div class="title">Magic Garden</div>
+          <div class="sub">Hold to sprout luminous flowers. Release to let them gently fall asleep.</div>
+        </div>
+        <button class="btn" id="holdBtn" aria-label="Hold to grow">Hold</button>
+      </div>
+    </div>
   </div>
 
-  <canvas id="threeCanvas"></canvas>
-
-  <!-- three.js from CDN -->
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-
   <script>
-    let scene, camera, renderer;
-    let reliefMesh = null;
-    let isRotating = false;
-    let angle = 0;
-    let radius = 8;
-    const target = new THREE.Vector3(0, 0, 0);
+    (() => {
+      const canvas = document.getElementById("c");
+      const ctx = canvas.getContext("2d", { alpha: false });
 
-    // Parameters for relief generation
-    const SEGMENTS_X = 128;      // horizontal segments of the mesh
-    const SEGMENTS_Y = 128;      // vertical segments of the mesh
-    const MAX_HEIGHT = 1.5;      // max relief height in world units
+      const intensityEl = document.getElementById("intensity");
+      const holdBtn = document.getElementById("holdBtn");
 
-    init();
-    animate();
+      const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+      const lerp = (a,b,t)=>a+(b-a)*t;
+      const smooth = (t)=>t*t*(3-2*t);
+      const rand = (a,b)=>a+Math.random()*(b-a);
+      const TAU = Math.PI*2;
 
-    function init() {
-      const canvas = document.getElementById('threeCanvas');
+      const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-      // Scene
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x111111);
+      let dpr = Math.min(2, window.devicePixelRatio || 1);
+      let W=0,H=0;
+      function resize(){
+        dpr = Math.min(2, window.devicePixelRatio || 1);
+        W = Math.floor(innerWidth * dpr);
+        H = Math.floor(innerHeight * dpr);
+        canvas.width = W; canvas.height = H;
+      }
+      addEventListener("resize", resize, {passive:true});
+      resize();
 
-      // Camera
-      const aspect = window.innerWidth / window.innerHeight;
-      camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
-      camera.position.set(0, 2, radius);
-      camera.lookAt(target);
+      // ===== Hold input =====
+      let holding = false;
+      let holdPower = 0;
 
-      // Renderer
-      renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true
+      function setHolding(v){ holding = v; }
+      addEventListener("keydown", (e)=>{
+        if(e.code==="Space"){ e.preventDefault(); setHolding(true); }
+      }, {passive:false});
+      addEventListener("keyup", (e)=>{
+        if(e.code==="Space"){ e.preventDefault(); setHolding(false); }
+      }, {passive:false});
+
+      holdBtn.addEventListener("pointerdown", (e)=>{
+        e.preventDefault();
+        holdBtn.setPointerCapture(e.pointerId);
+        setHolding(true);
       });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      holdBtn.addEventListener("pointerup", (e)=>{ e.preventDefault(); setHolding(false); });
+      holdBtn.addEventListener("pointercancel", ()=>setHolding(false));
+      holdBtn.addEventListener("pointerleave", ()=>setHolding(false));
 
-      // Lights
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-      scene.add(ambientLight);
+      // ===== World state =====
+      const groundY = () => H * 0.86;
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-      dirLight.position.set(5, 10, 7);
-      scene.add(dirLight);
+      // Soft floating "pollen" background
+      const POLLEN = reduceMotion ? 70 : 140;
+      const pollen = new Array(POLLEN).fill(0).map(()=>({
+        x: Math.random(), y: Math.random(),
+        r: rand(0.7, 2.2),
+        s: rand(0.15, 0.55),
+        ph: rand(0, TAU),
+        hue: rand(35, 70)
+      }));
 
-      // A subtle floor for context (optional)
-      const floorGeo = new THREE.PlaneGeometry(50, 50);
-      const floorMat = new THREE.MeshStandardMaterial({
-        color: 0x222222,
-        roughness: 1,
-        metalness: 0
-      });
-      const floor = new THREE.Mesh(floorGeo, floorMat);
-      floor.rotation.x = -Math.PI / 2;
-      floor.position.y = -3;
-      scene.add(floor);
+      // Flower sprouts
+      const MAX_FLOWERS = reduceMotion ? 28 : 48;
+      const flowers = [];
+      function spawnFlower(power){
+        if(flowers.length >= MAX_FLOWERS) return;
 
-      // Events
-      window.addEventListener('resize', onWindowResize);
-      window.addEventListener('keydown', onKeyDown);
+        const x = rand(W*0.12, W*0.88);
+        const y0 = groundY() + rand(-8, 10)*dpr;
 
-      const input = document.getElementById('imageUpload');
-      input.addEventListener('change', onImageUpload);
-    }
+        const height = rand(80, 210) * dpr * (0.75 + power*0.55);
+        const sway = rand(0.6, 1.5) * (0.7 + power*0.6);
+        const hue = (rand(180, 330) + power*40) % 360;
 
-    function onWindowResize() {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+        const petals = reduceMotion ? (Math.random()<0.5 ? 5 : 6) : (Math.random()<0.33 ? 5 : (Math.random()<0.66 ? 6 : 7));
+        const petalLen = rand(14, 26)*dpr*(0.85 + power*0.6);
+        const bloomSize = rand(7, 13)*dpr*(0.9 + power*0.7);
 
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
+        flowers.push({
+          x, y0,
+          height,
+          age: 0,
+          grow: 0,         // 0..1
+          sleep: 0,        // 0..1 (increases when released)
+          sway,
+          hue,
+          petals,
+          petalLen,
+          bloomSize,
+          seed: rand(0, 9999),
+          drift: rand(-0.15, 0.15)*dpr
+        });
+      }
 
-      renderer.setSize(width, height);
-    }
+      // Firefly-like "blessing" particles that orbit blooms while holding
+      const MAX_FIREFLIES = reduceMotion ? 160 : 320;
+      const flies = [];
+      function spawnFirefly(x, y, hue){
+        if(flies.length >= MAX_FIREFLIES) return;
+        const a = rand(0, TAU);
+        const r = rand(10, 80)*dpr;
+        flies.push({
+          cx: x, cy: y,
+          x: x + Math.cos(a)*r,
+          y: y + Math.sin(a)*r,
+          a, r,
+          va: rand(0.008, 0.02),
+          vr: rand(-0.25, 0.25)*dpr,
+          life: rand(90, 220),
+          age: 0,
+          hue: (hue + rand(-20, 20)) % 360
+        });
+      }
 
-    function onKeyDown(event) {
-      if (event.code === 'Space') {
-        event.preventDefault();
-        if (reliefMesh) {
-          isRotating = !isRotating;
+      // ===== Drawing helpers =====
+      function background(t, power){
+        // Night-to-magic gradient
+        const topHue = (230 + 40*Math.sin(t*0.00015)) % 360;
+        const midHue = (260 + 70*power) % 360;
+
+        const g = ctx.createLinearGradient(0,0,0,H);
+        g.addColorStop(0, `hsl(${topHue}, 60%, ${10 + 2*power}%)`);
+        g.addColorStop(0.50, `hsl(${midHue}, 60%, ${9 + 3*power}%)`);
+        g.addColorStop(1, `hsl(${(midHue+30)%360}, 60%, 7%)`);
+        ctx.fillStyle = g;
+        ctx.fillRect(0,0,W,H);
+
+        // Soft vignette
+        ctx.save();
+        ctx.globalCompositeOperation = "multiply";
+        const v = ctx.createRadialGradient(W*0.5,H*0.55,Math.min(W,H)*0.2, W*0.5,H*0.55, Math.max(W,H)*0.75);
+        v.addColorStop(0, "rgba(0,0,0,0)");
+        v.addColorStop(1, "rgba(0,0,0,0.55)");
+        ctx.fillStyle = v;
+        ctx.fillRect(0,0,W,H);
+        ctx.restore();
+
+        // Ground glow
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = 0.18 + 0.22*power;
+        const gg = ctx.createRadialGradient(W*0.5, groundY(), 0, W*0.5, groundY(), Math.max(W,H)*0.55);
+        gg.addColorStop(0, `hsla(${(150+80*power)%360}, 95%, 60%, 0.22)`);
+        gg.addColorStop(0.5, `hsla(${(260+80*power)%360}, 95%, 55%, 0.10)`);
+        gg.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = gg;
+        ctx.fillRect(0,0,W,H);
+        ctx.restore();
+      }
+
+      function drawPollen(t, power){
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        for(const p of pollen){
+          p.ph += (0.006 + p.s*0.01) * (0.7 + 0.5*power);
+          p.y -= (p.s * 0.12) * dpr * (0.7 + 0.7*power);
+          p.x += Math.sin(p.ph) * 0.08 * dpr;
+          if(p.y < -0.05) { p.y = 1.05; p.x = Math.random(); }
+
+          const x = p.x * W;
+          const y = p.y * H;
+          const r = p.r * dpr * (1.0 + 0.25*power);
+          const a = 0.10 + 0.10*Math.sin(p.ph*2);
+
+          ctx.globalAlpha = a;
+          ctx.fillStyle = `hsla(${p.hue}, 90%, 65%, 1)`;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function stemPath(f, t){
+        // a gentle bezier that sways with time; sway reduces as it "sleeps"
+        const swayAmt = (10 + 26*f.sway) * dpr * (0.35 + 0.65*f.grow) * (1 - 0.65*f.sleep);
+        const w = (0.0055 + 0.002*Math.sin(f.seed + t*0.0012)) * (1 + 0.6*holdPower);
+        const sx = f.x;
+        const sy = f.y0;
+        const ex = f.x + Math.sin(t*w + f.seed) * swayAmt;
+        const ey = f.y0 - f.height * f.grow;
+
+        const c1x = sx + Math.sin(t*w*0.9 + f.seed*1.2) * swayAmt * 0.55;
+        const c1y = sy - f.height * f.grow * 0.25;
+
+        const c2x = sx + Math.sin(t*w*1.1 + f.seed*0.8) * swayAmt * 0.85;
+        const c2y = sy - f.height * f.grow * 0.70;
+
+        return { sx,sy, c1x,c1y, c2x,c2y, ex,ey };
+      }
+
+      function drawFlowers(t, power){
+        // Draw stems then blooms; subtle glow, no flashing
+        for(const f of flowers){
+          const {sx,sy,c1x,c1y,c2x,c2y,ex,ey} = stemPath(f, t);
+
+          // Stem
+          ctx.save();
+          ctx.globalCompositeOperation = "screen";
+          const stemHue = (120 + 20*Math.sin(f.seed)) % 360;
+          ctx.lineCap = "round";
+          ctx.lineWidth = (2.2 + 1.4*f.grow) * dpr;
+          ctx.strokeStyle = `hsla(${stemHue}, 70%, 55%, ${0.35 + 0.25*power})`;
+          ctx.globalAlpha = 0.7*(0.35 + 0.65*f.grow)*(1-0.35*f.sleep);
+
+          ctx.beginPath();
+          ctx.moveTo(sx,sy);
+          ctx.bezierCurveTo(c1x,c1y,c2x,c2y,ex,ey);
+          ctx.stroke();
+
+          // Stem glow
+          ctx.globalAlpha *= 0.35;
+          ctx.lineWidth *= 2.6;
+          ctx.strokeStyle = `hsla(${(f.hue+120)%360}, 90%, 65%, 1)`;
+          ctx.stroke();
+          ctx.restore();
+
+          // Bloom
+          const bloomOpen = smooth(clamp((f.grow - 0.55)/0.45, 0, 1));
+          const sleepClose = 1 - smooth(clamp((f.sleep - 0.1)/0.9, 0, 1));
+          const open = bloomOpen * sleepClose;
+
+          if(open > 0.001){
+            const baseR = f.bloomSize * (0.9 + 0.25*Math.sin(f.seed + t*0.001));
+            const petalR = f.petalLen * (0.85 + 0.35*open);
+
+            ctx.save();
+            ctx.translate(ex, ey);
+            ctx.globalCompositeOperation = "screen";
+            ctx.globalAlpha = (0.25 + 0.35*power) * (0.55 + 0.45*open);
+
+            // Petal gradient
+            const pg = ctx.createRadialGradient(0,0, baseR*0.2, 0,0, petalR*1.15);
+            pg.addColorStop(0, `hsla(${(f.hue+30)%360}, 95%, 78%, 0.95)`);
+            pg.addColorStop(0.55, `hsla(${(f.hue)%360}, 95%, 62%, 0.55)`);
+            pg.addColorStop(1, "rgba(0,0,0,0)");
+
+            ctx.fillStyle = pg;
+
+            const rot = (t*0.00035 + f.seed*0.2) * (0.7 + 0.6*power);
+            for(let i=0;i<f.petals;i++){
+              const a = rot + (i/f.petals)*TAU;
+              const px = Math.cos(a) * petalR*0.42;
+              const py = Math.sin(a) * petalR*0.42;
+              const rr = petalR * (0.75 + 0.25*Math.sin(a*2 + f.seed));
+              ctx.beginPath();
+              ctx.ellipse(px, py, rr*0.62, rr*0.26, a, 0, TAU);
+              ctx.fill();
+            }
+
+            // Center
+            ctx.globalAlpha *= 1.05;
+            const cg = ctx.createRadialGradient(0,0,0, 0,0, baseR*2.8);
+            cg.addColorStop(0, `hsla(${(f.hue+90)%360}, 95%, 78%, 0.9)`);
+            cg.addColorStop(0.6, `hsla(${(f.hue+10)%360}, 95%, 66%, 0.35)`);
+            cg.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = cg;
+            ctx.beginPath();
+            ctx.arc(0,0, baseR*2.2, 0, TAU);
+            ctx.fill();
+
+            ctx.restore();
+          }
         }
       }
-    }
 
-    function onImageUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+      function drawFireflies(t, power){
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        for(let i=flies.length-1;i>=0;i--){
+          const f = flies[i];
+          f.age += 1;
+          if(f.age >= f.life) { flies.splice(i,1); continue; }
 
-      const url = URL.createObjectURL(file);
+          // orbit drift
+          f.a += f.va * (0.7 + 1.2*power);
+          f.r = clamp(f.r + f.vr*0.03, 10*dpr, 90*dpr);
 
-      const img = new Image();
-      img.onload = function () {
-        const imgAspect = img.width / img.height || 1;
+          // gently chase their assigned center
+          const tx = f.cx + Math.cos(f.a)*f.r;
+          const ty = f.cy + Math.sin(f.a)*f.r;
 
-        // Create the texture from the image
-        const loader = new THREE.TextureLoader();
-        loader.load(
-          url,
-          function (texture) {
-            texture.colorSpace = THREE.SRGBColorSpace;
+          f.x = lerp(f.x, tx, 0.18);
+          f.y = lerp(f.y, ty, 0.18);
 
-            // Build the relief geometry based on the image
-            createReliefFromImage(img, texture, imgAspect);
-          },
-          undefined,
-          function (err) {
-            console.error('Texture loading error:', err);
+          const lifeT = f.age / f.life;
+          const a = (0.16 + 0.22*power) * (1 - smooth(clamp((lifeT-0.55)/0.45,0,1)));
+
+          ctx.globalAlpha = a;
+          const r = (1.2 + 2.4*power) * dpr;
+          ctx.fillStyle = `hsla(${f.hue}, 95%, 72%, 1)`;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, r, 0, TAU);
+          ctx.fill();
+
+          // soft glow
+          ctx.globalAlpha *= 0.35;
+          const g = ctx.createRadialGradient(f.x,f.y,0, f.x,f.y, 30*dpr);
+          g.addColorStop(0, `hsla(${f.hue}, 95%, 70%, 0.25)`);
+          g.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = g;
+          ctx.fillRect(f.x-40*dpr, f.y-40*dpr, 80*dpr, 80*dpr);
+        }
+        ctx.restore();
+      }
+
+      function bloomOverlay(power, t){
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = 0.06 + 0.10*power;
+        const pulse = 0.6 + 0.4*Math.sin(t*0.0011);
+
+        const g = ctx.createRadialGradient(W*0.5, H*0.55, 0, W*0.5, H*0.55, Math.max(W,H)*0.70);
+        g.addColorStop(0, `hsla(${(280+70*power)%360}, 90%, 70%, ${0.10 + 0.10*pulse})`);
+        g.addColorStop(0.5, `hsla(${(160+90*power)%360}, 90%, 58%, ${0.05 + 0.06*pulse})`);
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0,0,W,H);
+        ctx.restore();
+      }
+
+      // ===== Animation loop =====
+      let last = performance.now();
+      let flowerClock = 0;
+
+      function tick(now){
+        const dt = clamp((now-last)/16.6667, 0.25, 2.0);
+        last = now;
+
+        const intensity = parseFloat(intensityEl.value || "1.0");
+        const target = holding ? 1 : 0;
+        holdPower = lerp(holdPower, target, holding ? 0.08 : 0.06);
+        holdPower = clamp(holdPower, 0, 1);
+
+        const power = clamp(holdPower * intensity, 0, 1.8);
+
+        // Background + floating pollen
+        background(now, power);
+        drawPollen(now, power);
+
+        // Spawn flowers while holding (gentle cadence)
+        flowerClock += dt;
+        if(power > 0.03){
+          const interval = reduceMotion ? lerp(26, 10, clamp(power/1.2,0,1)) : lerp(22, 8, clamp(power/1.2,0,1));
+          if(flowerClock >= interval){
+            flowerClock = 0;
+            spawnFlower(power);
           }
-        );
-      };
-      img.src = url;
-    }
+        } else {
+          // slow natural cadence when idle
+          if(flowers.length < (reduceMotion ? 8 : 12) && Math.random() < 0.015) spawnFlower(0.2);
+        }
 
-    function createReliefFromImage(image, texture, aspect) {
-      // Remove previous mesh if any
-      if (reliefMesh) {
-        scene.remove(reliefMesh);
-        reliefMesh.geometry.dispose();
-        if (reliefMesh.material.map) reliefMesh.material.map.dispose();
-        reliefMesh.material.dispose();
-        reliefMesh = null;
+        // Update flower growth/sleep
+        for(const f of flowers){
+          f.age += dt;
+
+          // Growth when holding, otherwise drift to sleep
+          const growTarget = holding ? 1 : 0.92;
+          const growRate = holding ? (0.010 + 0.020*power) : 0.004;
+          f.grow = clamp(lerp(f.grow, growTarget, growRate*dt*60), 0, 1);
+
+          const sleepTarget = holding ? 0 : 1;
+          const sleepRate = holding ? 0.010 : (0.004 + 0.010* (1-holdPower));
+          f.sleep = clamp(lerp(f.sleep, sleepTarget, sleepRate*dt*60), 0, 1);
+
+          // Gentle horizontal drift for a living scene
+          f.x += f.drift * 0.06 * dt * (1 - 0.65*f.sleep);
+        }
+
+        // Occasionally remove oldest fully-slept flowers to keep scene fresh
+        if(flowers.length > (reduceMotion ? 10 : 16)){
+          for(let i=0;i<flowers.length;i++){
+            const f = flowers[i];
+            if(f.sleep > 0.98 && f.grow > 0.92 && f.age > 300){
+              flowers.splice(i,1);
+              break;
+            }
+          }
+        }
+
+        // Draw flowers
+        drawFlowers(now, power);
+
+        // Spawn fireflies near blooms while holding
+        if(power > 0.05 && flowers.length){
+          const n = reduceMotion ? 1 : 2;
+          for(let j=0;j<n;j++){
+            const pick = flowers[(Math.random()*flowers.length)|0];
+            const {ex,ey} = stemPath(pick, now);
+            if(Math.random() < 0.55) spawnFirefly(ex, ey, pick.hue);
+          }
+        }
+
+        // Draw fireflies
+        drawFireflies(now, power);
+
+        // Bloom overlay
+        bloomOverlay(power, now);
+
+        requestAnimationFrame(tick);
       }
 
-      // Base width/height in world units (scale object size here)
-      const baseHeight = 4;
-      const baseWidth = baseHeight * aspect;
-
-      // Create a plane with many segments (for displacement)
-      const geometry = new THREE.PlaneGeometry(
-        baseWidth,
-        baseHeight,
-        SEGMENTS_X,
-        SEGMENTS_Y
-      );
-
-      // Use an offscreen canvas to get brightness data
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const sampleWidth = SEGMENTS_X + 1;
-      const sampleHeight = SEGMENTS_Y + 1;
-      canvas.width = sampleWidth;
-      canvas.height = sampleHeight;
-
-      // Draw the image scaled to our sample resolution
-      ctx.drawImage(image, 0, 0, sampleWidth, sampleHeight);
-      const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data;
-
-      const position = geometry.attributes.position;
-      const vertexCount = position.count;
-
-      // For each vertex, calculate height from brightness
-      for (let i = 0; i < vertexCount; i++) {
-        const ix = i % (SEGMENTS_X + 1);
-        const iy = Math.floor(i / (SEGMENTS_X + 1));
-
-        const index = (iy * sampleWidth + ix) * 4;
-        const r = imageData[index];
-        const g = imageData[index + 1];
-        const b = imageData[index + 2];
-
-        // Simple luminance
-        const brightness = 0.299 * r + 0.587 * g + 0.114 * b; // 0–255
-        const height = (brightness / 255) * MAX_HEIGHT; // 0–MAX_HEIGHT
-
-        const z = height - MAX_HEIGHT / 2; // center around 0
-        position.setZ(i, z);
-      }
-
-      position.needsUpdate = true;
-      geometry.computeVertexNormals();
-
-      const material = new THREE.MeshStandardMaterial({
-        map: texture,
-        side: THREE.DoubleSide,
-        roughness: 0.6,
-        metalness: 0.1
-      });
-
-      reliefMesh = new THREE.Mesh(geometry, material);
-
-      // Lift slightly so it’s above the floor
-      reliefMesh.position.set(0, 0.5, 0);
-
-      // Rotate so we see it from a slightly angled view
-      reliefMesh.rotation.x = -0.4;
-
-      scene.add(reliefMesh);
-
-      // Reset camera orbit
-      angle = 0;
-      radius = 8;
-      camera.position.set(0, 2, radius);
-      camera.lookAt(target);
-    }
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      if (isRotating && reliefMesh) {
-        angle += 0.01; // rotation speed
-        const yOffset = 2; // keep the camera slightly above center
-        camera.position.x = radius * Math.cos(angle);
-        camera.position.z = radius * Math.sin(angle);
-        camera.position.y = yOffset;
-        camera.lookAt(target);
-      }
-
-      renderer.render(scene, camera);
-    }
+      requestAnimationFrame(tick);
+    })();
   </script>
 </body>
 </html>

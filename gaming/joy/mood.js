@@ -4,15 +4,16 @@ import { createConfettiScene } from './confetti-scene.js';
 import { createFireworkScene } from './firework-scene.js';
 
 const PLAYLIST_TRACKS = [
-  '../../songs/funkysong1.mp3',
-  '../../songs/funkysong2.mp3',
-  '../../songs/funkysong3.mp3',
-  '../../songs/funkysong4.mp3',
-  '../../songs/funkysong5.mp3'
+  '../../songs/joy/joy1.mp3',
+  '../../songs/joy/joy2.mp3',
+  '../../songs/joy/joy3.mp3',
+  '../../songs/joy/joy4.mp3',
+  '../../songs/joy/joy5.mp3'
 ];
 
 const SCENE_SOUNDTRACKS = {
   sunburst: '../../sounds/sun/sunnyday.mp3',
+  balloon: '../../sounds/sadness/subtlewind.mp3',
   fireworks: '../../sounds/fireworks.mp3'
 };
 

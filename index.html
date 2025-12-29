@@ -190,18 +190,22 @@
           <div class="tile-main-title" data-fr="Jeux pour switch (divers)" data-en="Switch games (various)" data-ja="スイッチ用ゲーム（その他）"></div>
         </a>
       </div>
-      <div class="tile-main">
-        <a href="specialrequest/index.html">
-          <img src="images/ghibli/ghiblispecialrequest.png" alt="gaming">
-          <div class="tile-main-title" data-fr="Activités personnalisées (demandes spéciales)" data-en="Custom activity (special request)" data-ja="カスタム活動（特別リクエスト）"></div>
+
+
+      <div class="tile-main tile-video-link" data-video="animations/eyegaze.mp4">
+        <a href="eyegaze/index.html">
+          <img src="images/ghibli/ghiblieyegaze.png" alt="Eye Gaze Games">
+          <div class="tile-main-title" data-fr="Jeux pour contrôle oculaire" data-en="Eye control games" data-ja="視線入力ゲーム"></div>
         </a>
       </div>
-      <div class="tile-main">
+
+      <div class="tile-main tile-video-link" data-video="animations/documentation.mp4">
         <a href="documentation/index.html">
           <img src="images/ghibli/ghiblidocumentation.png" alt="Instructions">
           <div class="tile-main-title" data-fr="Documentation" data-en="Documentation" data-ja="ドキュメント"></div>
         </a>
       </div>
+
       <div class="tile-main">
         <a href="tactile/index.html">
           <img src="images/ghibli/ghiblitablette.png" alt="Jeux tactiles">
@@ -214,13 +218,13 @@
           <div class="tile-main-title" data-fr="Outils pédagogiques" data-en="Educational tools" data-ja="教育用ツール"></div>
         </a>
       </div>
-      <div class="tile-main">
-        <a href="eyegaze/index.html">
-          <img src="images/ghibli/ghiblieyegaze.png" alt="Eye Gaze Games">
-          <div class="tile-main-title" data-fr="Jeux pour contrôle oculaire" data-en="Eye control games" data-ja="視線入力ゲーム"></div>
+        <div class="tile-main">
+        <a href="specialrequest/index.html">
+          <img src="images/ghibli/ghiblispecialrequest.png" alt="gaming">
+          <div class="tile-main-title" data-fr="Activités personnalisées (demandes spéciales)" data-en="Custom activity (special request)" data-ja="カスタム活動（特別リクエスト）"></div>
         </a>
       </div>
-      <div class="tile-main">
+        <div class="tile-main tile-video-link" data-video="animations/contact.mp4">
         <a href="contact/index.html">
           <img src="images/ghibli/ghiblicontact.png" alt="Contact">
           <div class="tile-main-title" data-fr="Contact" data-en="Contact" data-ja="お問い合わせ"></div>
@@ -240,31 +244,6 @@
       <li data-fr="Activité de choix disponible pour switch, écran tactile et contrôle oculaire mise à jour."
           data-en="Updated choice activity available for switch, touchscreen, and eye-gaze control."
           data-ja="スイッチ、タッチスクリーン、視線入力向けの選択アクティビティを更新しました。">
-      </li>
-
-      <li data-fr="Choix vidéo pour switch et contrôle oculaire maintenant pour vidéos locales et youtube disponible."
-          data-en="Video choice activity for switch and eye-gaze now supports both local and YouTube videos."
-          data-ja="スイッチと視線入力のビデオ選択アクティビティが、ローカル動画とYouTubeの両方に対応しました。">
-      </li>
-
-      <li data-fr="Guide pour la création d'une interface ordinateur/switch simple à l'aide de l'Adafruit TRRS trinkey."
-          data-en="Guide to creating a simple computer/switch interface using the Adafruit TRRS Trinkey."
-          data-ja="Adafruit TRRS Trinkey を使って簡易なコンピューター／スイッチ インターフェースを作るためのガイド。">
-      </li>
-
-      <li data-fr="Traduction vers le japonais avec l'IA commencée (menus, section contrôle oculaire et POV)"
-          data-en="Japanese translation with AI has begun (menus, eye-gaze control section, and POV)."
-          data-ja="AI を用いた日本語翻訳を開始しました（メニュー、視線入力セクション、POV）。">
-      </li>
-
-      <li data-fr="Activité météo."
-          data-en="Weather activity."
-          data-ja="天気のアクティビティ。">
-      </li>
-
-      <li data-fr="Page de lecture pour Gemini Storybook pour switch et contrôle oculaire."
-          data-en="Reading page for Gemini Storybook for switch and eye-gaze control."
-          data-ja="スイッチと視線入力に対応した Gemini Storybook の読書ページ。">
       </li>
     </ul>
     <button id="closeModal" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
@@ -306,7 +285,7 @@
     });
   </script>
 
-  <!-- NEW: Hover video preview inside tile -->
+  <!-- NEW: Hover video preview inside tile (single-active + strict hover/focus gating) -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const links = Array.from(document.querySelectorAll('.tile-video-link'));
@@ -315,7 +294,11 @@
       const EXTRA_DELAY_AFTER_GROW_MS = 500;
       const FALLBACK_TOTAL_DELAY_MS = 800;
 
+      // Per-link state
       const state = new WeakMap();
+
+      // Only one preview may play at a time
+      let activeLink = null;
 
       const ensureVideoEl = (link) => {
         let vid = link.querySelector('.tile-preview-video');
@@ -323,10 +306,11 @@
           vid = document.createElement('video');
           vid.className = 'tile-preview-video';
           vid.muted = true;
-          vid.volume = 0.1
           vid.playsInline = true;
           vid.loop = true;
           vid.preload = 'metadata';
+          // Note: volume is ignored when muted, but keeping your intent is fine:
+          vid.volume = 0.1;
           link.appendChild(vid);
         }
         return vid;
@@ -336,23 +320,37 @@
         const s = state.get(link);
         if (!s) return;
 
-        clearTimeout(s.fallbackTimer);
-        clearTimeout(s.afterGrowTimer);
+        if (s.fallbackTimer) clearTimeout(s.fallbackTimer);
+        if (s.afterGrowTimer) clearTimeout(s.afterGrowTimer);
+
+        // Remove any transition listener we attached
+        if (s.tile && s.onGrowEnd) {
+          s.tile.removeEventListener('transitionend', s.onGrowEnd);
+        }
 
         const vid = s.video;
         if (vid) {
           try { vid.pause(); } catch(e) {}
+          // Free the resource and ensure it stops downloading/decoding
           vid.removeAttribute('src');
           vid.load();
         }
 
         link.classList.remove('is-previewing');
         state.delete(link);
+
+        if (activeLink === link) activeLink = null;
       };
 
       const startPreview = (link) => {
         const videoSrc = link.dataset.video;
         if (!videoSrc) return;
+
+        // Stop any other preview immediately (enforce 1-by-1)
+        if (activeLink && activeLink !== link) {
+          stopPreview(activeLink);
+        }
+        activeLink = link;
 
         const s = state.get(link) || {};
         const vid = ensureVideoEl(link);
@@ -361,8 +359,18 @@
 
         let hasTriggered = false;
 
+        const canTriggerNow = () => {
+          const st = state.get(link);
+          if (!st) return false;                         // already stopped
+          if (activeLink !== link) return false;          // another tile became active
+          if (!(st.isHovering || st.isFocused)) return false; // must still be hovered/focused
+          return true;
+        };
+
         const trigger = () => {
           if (hasTriggered) return;
+          if (!canTriggerNow()) return;
+
           hasTriggered = true;
 
           link.classList.add('is-previewing');
@@ -372,43 +380,74 @@
           const p = vid.play();
           if (p && typeof p.then === 'function') {
             p.catch(() => {
+              // Autoplay policies can still block occasionally; fail gracefully
               link.classList.remove('is-previewing');
             });
           }
         };
 
         const tile = link.closest('.tile-main') || link;
+        s.tile = tile;
 
+        // If a grow transition happens, start shortly after; otherwise fallback.
         const onGrowEnd = (ev) => {
           if (ev.propertyName !== 'transform') return;
           tile.removeEventListener('transitionend', onGrowEnd);
-          s.afterGrowTimer = setTimeout(trigger, EXTRA_DELAY_AFTER_GROW_MS);
+          s.onGrowEnd = null;
+
+          s.afterGrowTimer = setTimeout(() => {
+            trigger();
+          }, EXTRA_DELAY_AFTER_GROW_MS);
         };
+        s.onGrowEnd = onGrowEnd;
 
         tile.addEventListener('transitionend', onGrowEnd);
-        s.fallbackTimer = setTimeout(trigger, FALLBACK_TOTAL_DELAY_MS);
+
+        s.fallbackTimer = setTimeout(() => {
+          // If there was no grow transition, still only trigger if currently hovered/focused
+          trigger();
+        }, FALLBACK_TOTAL_DELAY_MS);
       };
 
       links.forEach((link) => {
+        // Pointer hover (mouse only)
         link.addEventListener('pointerenter', (e) => {
           if (e.pointerType && e.pointerType !== 'mouse') return;
 
-          stopPreview(link);
-          state.set(link, {});
+          // Mark as hovered first so delayed triggers are valid
+          const s = state.get(link) || {};
+          s.isHovering = true;
+          s.isFocused = s.isFocused || false;
+          state.set(link, s);
+
           startPreview(link);
         });
 
         link.addEventListener('pointerleave', () => {
+          const s = state.get(link);
+          if (s) s.isHovering = false;
+
+          // Stop immediately on leave (strict: only plays while hovered)
           stopPreview(link);
         });
 
+        // Keyboard accessibility: allow preview while focused
         link.addEventListener('focus', () => {
-          stopPreview(link);
-          state.set(link, {});
+          const s = state.get(link) || {};
+          s.isFocused = true;
+          s.isHovering = s.isHovering || false;
+          state.set(link, s);
+
           startPreview(link);
         });
-        link.addEventListener('blur', () => stopPreview(link));
 
+        link.addEventListener('blur', () => {
+          const s = state.get(link);
+          if (s) s.isFocused = false;
+          stopPreview(link);
+        });
+
+        // Ensure nothing keeps playing once you navigate
         link.addEventListener('click', () => stopPreview(link));
       });
     });

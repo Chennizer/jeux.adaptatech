@@ -90,9 +90,10 @@
 
       /* global cockpit tuning */
       --metal: rgba(105,112,125,0.95);
-      --metal2: rgba(105,112,125,0.72);
       --shadow: rgba(10,12,15,0.45);
-      --highlight: rgba(255,255,255,0.14);
+
+      /* IMPORTANT: keep this in sync with outer border thickness */
+      --frameInset: 26px;
 
       /* mode accent (only used by 2A fast rim glow) */
       --accent: rgba(4,200,187,0.0);
@@ -100,9 +101,20 @@
     }
     body.started #cockpitOverlay{ display:block; }
 
+    /* Layering: ensure the outer border stays visually continuous in the corners */
+    .cockpit-frame,
+    .cockpit-line,
+    .cockpit-cap,
+    #controlPanel { position:absolute; }
+
+    .cockpit-frame.outer{ z-index: 40; }
+    .cockpit-frame.inset{ z-index: 10; }
+    #controlPanel{ z-index: 5; }
+    .cockpit-line{ z-index: 20; }
+    .cockpit-cap{ z-index: 30; }
+
     /* full-screen frames: keep ONE dominant frame, make inset lighter */
     .cockpit-frame{
-      position: absolute;
       inset: 0;
       box-sizing: border-box;
       background: transparent;
@@ -113,16 +125,28 @@
         inset 0 0 0 6px rgba(10, 12, 15, 0.45),
         inset 0 0 0 1px rgba(255,255,255,0.09);
     }
+    /* A tiny “corner mask” so no diagonals peek into the very corners */
+    .cockpit-frame.outer::after{
+      content:"";
+      position:absolute;
+      inset: -26px; /* match border thickness so the mask hugs corners */
+      pointer-events:none;
+      background:
+        radial-gradient(44px 44px at 0 0, rgba(105,112,125,0.95) 0 70%, rgba(0,0,0,0) 71%),
+        radial-gradient(44px 44px at 100% 0, rgba(105,112,125,0.95) 0 70%, rgba(0,0,0,0) 71%),
+        radial-gradient(44px 44px at 0 100%, rgba(105,112,125,0.95) 0 70%, rgba(0,0,0,0) 71%),
+        radial-gradient(44px 44px at 100% 100%, rgba(105,112,125,0.95) 0 70%, rgba(0,0,0,0) 71%);
+      opacity: 1;
+    }
+
     .cockpit-frame.inset{
       inset: 22px;
-      border: 5px solid rgba(105, 112, 125, 0.28); /* much lighter */
-      box-shadow:
-        inset 0 0 0 1px rgba(0,0,0,0.28);
+      border: 5px solid rgba(105, 112, 125, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.28);
     }
 
     /* all bars */
     .cockpit-line{
-      position:absolute;
       height: 10px; /* overwritten by JS */
       width: 100px; /* overwritten by JS */
       left: 0; top: 0;
@@ -136,7 +160,7 @@
       overflow: hidden;
     }
 
-    /* bevel highlight strip (cleaner, consistent lighting) */
+    /* bevel highlight strip */
     .cockpit-line::before{
       content:"";
       position:absolute;
@@ -159,11 +183,9 @@
       background: rgba(210, 220, 235, 0.18);
       box-shadow: 0 0 0 2px rgba(0,0,0,0.12);
       border-radius: 999px;
-      opacity: 0.65; /* reduce visual noise */
+      opacity: 0.65;
     }
-    .cockpit-line.thin::before{
-      opacity: 0.25;
-    }
+    .cockpit-line.thin::before{ opacity: 0.25; }
 
     /* central window edges (main focal) */
     .window-edge{
@@ -173,9 +195,7 @@
         0 0 0 1px rgba(255,255,255,0.08) inset;
       border-radius: 999px;
     }
-    .window-edge::before{
-      opacity: 0.95;
-    }
+    .window-edge::before{ opacity: 0.95; }
 
     /* inner highlight edges (window rim) */
     .window-edge.hi{
@@ -201,7 +221,6 @@
 
     /* joint caps */
     .cockpit-cap{
-      position:absolute;
       width: 18px; height: 18px; /* overwritten by JS */
       left: 0; top: 0;
       border-radius: 50%;
@@ -220,10 +239,41 @@
       border: 1px solid rgba(255,255,255,0.10);
       opacity: 0.9;
     }
-    /* small accent ring in fast mode (subtle) */
     #cockpitOverlay[data-mode="fast"] .cockpit-cap::after{
       border-color: rgba(4,200,187,0.20);
       box-shadow: 0 0 10px rgba(4,200,187,0.12);
+    }
+
+    /* ===== Control panel (clipped to the red “trapezoid” zone) ===== */
+    #controlPanel{
+      inset: 0;
+      pointer-events:none;
+      clip-path: polygon(0 100%, 100% 100%, 70% 70%, 30% 70%);
+      background: transparent;
+    }
+
+    /* Make it uniform GREY and opaque (no fancy modules) */
+    #controlPanel .panel-body{
+      position:absolute;
+      inset: 0;
+      background: rgba(105,112,125,0.92); /* uniform grey */
+      box-shadow:
+        inset 0 2px 0 rgba(255,255,255,0.06),
+        inset 0 -12px 22px rgba(0,0,0,0.18);
+    }
+
+    /* Lip aligned to bottom window edge */
+    #controlPanel .panel-lip{
+      position:absolute;
+      left: 0;
+      right: 0;
+      height: 16px;
+      top: 0;
+      background: rgba(105,112,125,0.95);
+      box-shadow:
+        0 2px 0 rgba(0,0,0,0.35),
+        inset 0 1px 0 rgba(255,255,255,0.10);
+      opacity: 1;
     }
   </style>
 
@@ -289,8 +339,14 @@
 
   <!-- Cockpit overlay (NO SVG) -->
   <div id="cockpitOverlay" aria-hidden="true" data-mode="off">
-    <div class="cockpit-frame outer"></div>
+    <!-- Inset first (behind), then geometry, then OUTER last (on top) for continuous border -->
     <div class="cockpit-frame inset"></div>
+
+    <!-- Control panel clipped to the red zone (between bottom edge and the bottom window edge) -->
+    <div id="controlPanel" aria-hidden="true">
+      <div class="panel-body"></div>
+      <div class="panel-lip" id="panelLip"></div>
+    </div>
 
     <!-- Central trapezoid window: 4 thick edges + 4 inner highlights -->
     <div class="cockpit-line window-edge" id="w1"></div>
@@ -309,13 +365,13 @@
     <div class="cockpit-line" id="d3"></div>
     <div class="cockpit-line" id="d4"></div>
 
-    <!-- Thin diagonals (window corners -> screen corners), slightly shorter for cleanliness -->
+    <!-- Thin diagonals (window corners -> near-corners), slightly shorter for cleanliness -->
     <div class="cockpit-line thin" id="td1"></div>
     <div class="cockpit-line thin" id="td2"></div>
     <div class="cockpit-line thin" id="td3"></div>
     <div class="cockpit-line thin" id="td4"></div>
 
-    <!-- Joint caps (clean intersections) -->
+    <!-- Joint caps -->
     <div class="cockpit-cap" id="cap1"></div>
     <div class="cockpit-cap" id="cap2"></div>
     <div class="cockpit-cap" id="cap3"></div>
@@ -325,6 +381,9 @@
     <div class="cockpit-cap" id="cap6"></div>
     <div class="cockpit-cap" id="cap7"></div>
     <div class="cockpit-cap" id="cap8"></div>
+
+    <!-- OUTER frame last so it masks any corner peeking and reads continuous -->
+    <div class="cockpit-frame outer"></div>
   </div>
 
   <script>
@@ -393,6 +452,8 @@
 
     /* ===== Cockpit geometry (NO SVG) ===== */
     const cockpitOverlay = document.getElementById('cockpitOverlay');
+    const controlPanel = document.getElementById('controlPanel');
+    const panelLip = document.getElementById('panelLip');
 
     function setLine(el, x1, y1, x2, y2, thicknessPx) {
       const dx = x2 - x1, dy = y2 - y1;
@@ -419,7 +480,7 @@
       const w = window.innerWidth;
       const h = window.innerHeight;
 
-      // Slightly cleaner proportions: a touch wider top, and window slightly lower
+      // Keep consistent proportions
       const topY = 0.285 * h;
       const botY = 0.76  * h;
       const topInset = 0.31 * w;
@@ -430,20 +491,20 @@
       const P3 = { x: w - botInset, y: botY }; // bottom-right
       const P4 = { x: botInset,     y: botY }; // bottom-left
 
-      const thickOuter = 26; // matches CSS outer frame
-      const thickStrut = Math.max(16, Math.min(24, Math.round(0.019 * Math.min(w, h)))); // slightly thinner
-      const thinDiag   = Math.max(2,  Math.min(3,  Math.round(0.003 * Math.min(w, h))));
-      const winThick   = Math.max(14, Math.min(22, Math.round(0.018 * Math.min(w, h))));
-      const winHi      = Math.max(2,  Math.min(4,  Math.round(0.004 * Math.min(w, h))));
-      const capSize    = Math.max(14, Math.min(22, Math.round(0.018 * Math.min(w, h))));
+      const minSide = Math.min(w, h);
+      const thickStrut = Math.max(16, Math.min(24, Math.round(0.019 * minSide)));
+      const thinDiag   = Math.max(2,  Math.min(3,  Math.round(0.003 * minSide)));
+      const winThick   = Math.max(14, Math.min(22, Math.round(0.018 * minSide)));
+      const winHi      = Math.max(2,  Math.min(4,  Math.round(0.004 * minSide)));
+      const capSize    = Math.max(14, Math.min(22, Math.round(0.018 * minSide)));
 
-      // ---- Central window edges (always visible) ----
+      // ---- Central window edges ----
       setLine(document.getElementById('w1'), P1.x, P1.y, P2.x, P2.y, winThick);
       setLine(document.getElementById('w2'), P2.x, P2.y, P3.x, P3.y, winThick);
       setLine(document.getElementById('w3'), P3.x, P3.y, P4.x, P4.y, winThick);
       setLine(document.getElementById('w4'), P4.x, P4.y, P1.x, P1.y, winThick);
 
-      // Inner highlight edges inset slightly toward center
+      // Inner highlight edges
       const cx = (P1.x + P2.x + P3.x + P4.x) / 4;
       const cy = (P1.y + P2.y + P3.y + P4.y) / 4;
       const inset = (p) => ({ x: p.x + (cx - p.x) * 0.055, y: p.y + (cy - p.y) * 0.055 });
@@ -454,31 +515,39 @@
       setLine(document.getElementById('wh3'), Q3.x, Q3.y, Q4.x, Q4.y, winHi);
       setLine(document.getElementById('wh4'), Q4.x, Q4.y, Q1.x, Q1.y, winHi);
 
-      // ---- Thick corner struts (screen corners -> window corners) ----
-      setLine(document.getElementById('d1'), 0, 0, P1.x, P1.y, thickStrut);
-      setLine(document.getElementById('d2'), w, 0, P2.x, P2.y, thickStrut);
-      setLine(document.getElementById('d3'), 0, h, P4.x, P4.y, thickStrut);
-      setLine(document.getElementById('d4'), w, h, P3.x, P3.y, thickStrut);
+      // ===== Key fix for continuous corners =====
+      // Start struts FROM INSIDE the outer frame, not from (0,0)/(w,0)/...,
+      // so no bars ever “peek” into the corner region.
+      const frameInset = 26; // must match .cockpit-frame.outer border
+      const TL = { x: frameInset,     y: frameInset };
+      const TR = { x: w - frameInset, y: frameInset };
+      const BL = { x: frameInset,     y: h - frameInset };
+      const BR = { x: w - frameInset, y: h - frameInset };
 
-      // ---- Thin diagonals (slightly shorter for cleanliness) ----
+      // ---- Thick corner struts ----
+      setLine(document.getElementById('d1'), TL.x, TL.y, P1.x, P1.y, thickStrut);
+      setLine(document.getElementById('d2'), TR.x, TR.y, P2.x, P2.y, thickStrut);
+      setLine(document.getElementById('d3'), BL.x, BL.y, P4.x, P4.y, thickStrut);
+      setLine(document.getElementById('d4'), BR.x, BR.y, P3.x, P3.y, thickStrut);
+
+      // ---- Thin diagonals (also terminate near the frame corners) ----
       const tShort = 0.90;
-      const C1 = lerp2(P1, {x:0, y:0}, tShort);
-      const C2 = lerp2(P2, {x:w, y:0}, tShort);
-      const C3 = lerp2(P4, {x:0, y:h}, tShort);
-      const C4 = lerp2(P3, {x:w, y:h}, tShort);
+      const C1 = lerp2(P1, TL, tShort);
+      const C2 = lerp2(P2, TR, tShort);
+      const C3 = lerp2(P4, BL, tShort);
+      const C4 = lerp2(P3, BR, tShort);
 
       setLine(document.getElementById('td1'), P1.x, P1.y, C1.x, C1.y, thinDiag);
       setLine(document.getElementById('td2'), P2.x, P2.y, C2.x, C2.y, thinDiag);
       setLine(document.getElementById('td3'), P4.x, P4.y, C3.x, C3.y, thinDiag);
       setLine(document.getElementById('td4'), P3.x, P3.y, C4.x, C4.y, thinDiag);
 
-      // ---- Joint caps: window corners + strut/window junctions (same points here) ----
+      // ---- Joint caps ----
       setCap(document.getElementById('cap1'), P1.x, P1.y, capSize);
       setCap(document.getElementById('cap2'), P2.x, P2.y, capSize);
       setCap(document.getElementById('cap3'), P3.x, P3.y, capSize);
       setCap(document.getElementById('cap4'), P4.x, P4.y, capSize);
 
-      // Extra caps very slightly toward center to look like “two-piece” joints (cleaner)
       const J1 = lerp2(P1, {x:cx, y:cy}, 0.06);
       const J2 = lerp2(P2, {x:cx, y:cy}, 0.06);
       const J3 = lerp2(P3, {x:cx, y:cy}, 0.06);
@@ -488,6 +557,15 @@
       setCap(document.getElementById('cap6'), J2.x, J2.y, Math.max(12, capSize-4));
       setCap(document.getElementById('cap7'), J3.x, J3.y, Math.max(12, capSize-4));
       setCap(document.getElementById('cap8'), J4.x, J4.y, Math.max(12, capSize-4));
+
+      // ===== Control panel clip (ONLY the red zone) =====
+      if (controlPanel) {
+        controlPanel.style.clipPath =
+          `polygon(${BL.x}px ${BL.y}px, ${BR.x}px ${BR.y}px, ${P3.x}px ${P3.y}px, ${P4.x}px ${P4.y}px)`;
+      }
+      if (panelLip) {
+        panelLip.style.transform = `translateY(${P4.y}px)`;
+      }
     }
 
     function setCockpitMode(mode){ // "off" | "slow" | "fast"
