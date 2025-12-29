@@ -70,6 +70,59 @@
       0%, 100% { transform: scale(1); }
       50%      { transform: scale(1.12); }
     }
+
+    /* Note modal */
+    .note-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .note-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    .note-modal__dialog {
+      position: relative;
+      background: #fff;
+      padding: 16px;
+      border-radius: 12px;
+      width: min(80vw, 520px);
+      max-width: 90vw;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .note-modal__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .note-modal__close {
+      background: transparent;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .note-modal__body { display: flex; }
+    .note-modal__textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+      padding: 8px;
+      font-size: 16px;
+      border: 2px solid #009688;
+      border-radius: 10px;
+      outline: none;
+    }
   </style>
 </head>
 
@@ -100,6 +153,18 @@
                     data-ja="白黒モード（黒背景に白いフルイド）">Noir et blanc (fond noir, fluides blancs)</span>
             </label>
           </div>
+
+          <div class="option-item">
+            <label for="qualitySlider" class="teal-label">
+              <span class="translate" data-fr="Qualité" data-en="Quality" data-ja="クオリティ">Qualité</span> :
+              <span id="qualityVal">1.0</span>
+            </label>
+            <input type="range" id="qualitySlider" class="styled-slider" min="0.6" max="1.6" step="0.05" value="1">
+            <small class="translate"
+                   data-fr="Plus de qualité = plus de pixels (plus exigeant)"
+                   data-en="More quality = more pixels (heavier)"
+                   data-ja="品質を上げるとピクセル数が増え、負荷も増えます">Plus de qualité = plus de pixels (plus exigeant)</small>
+          </div>
         </div>
 
         <!-- Middle column (intensity) -->
@@ -110,6 +175,10 @@
               <span id="intensityVal">1.0</span>
             </label>
             <input type="range" id="intensitySlider" class="styled-slider" min="0.5" max="2" step="0.1" value="1">
+          </div>
+
+          <div class="option-item">
+            <button id="openNoteModal" class="button translate" data-fr="Ouvrir une note" data-en="Open note" data-ja="メモを開く">Ouvrir une note</button>
           </div>
         </div>
 
@@ -171,6 +240,20 @@
   <!-- Pointer overlay element -->
   <div id="gazePointer" aria-hidden="true"></div>
 
+  <!-- Blank note modal -->
+  <div id="noteModal" class="note-modal" role="dialog" aria-modal="true" aria-labelledby="noteModalTitle" style="display:none;">
+    <div class="note-modal__backdrop" data-close-note></div>
+    <div class="note-modal__dialog">
+      <div class="note-modal__header">
+        <h3 id="noteModalTitle" class="translate" data-fr="Note" data-en="Note" data-ja="メモ">Note</h3>
+        <button type="button" class="note-modal__close" id="closeNoteModal" aria-label="Fermer / Close">×</button>
+      </div>
+      <div class="note-modal__body">
+        <textarea id="noteContent" placeholder="" aria-label="Note" class="note-modal__textarea"></textarea>
+      </div>
+    </div>
+  </div>
+
   <script>
     /* =========================================================
        MENU: language toggle (same approach as your games)
@@ -227,12 +310,19 @@
     const blackWhiteToggle = document.getElementById('blackWhiteMode');
     const intensitySlider = document.getElementById('intensitySlider');
     const intensityVal = document.getElementById('intensityVal');
+    const qualitySlider = document.getElementById('qualitySlider');
+    const qualityVal = document.getElementById('qualityVal');
+    const openNoteModal = document.getElementById('openNoteModal');
+    const noteModal = document.getElementById('noteModal');
+    const closeNoteModal = document.getElementById('closeNoteModal');
 
     let monochromeMode = false;
     let intensityFactor = 1;
+    let qualityFactor = 1;
 
     let applyMonochromeSetting = null;
     let applyIntensitySetting = null;
+    let applyQualitySetting = null;
 
     let pointerLast = { x: null, y: null };
 
@@ -305,11 +395,36 @@
       if (applyIntensitySetting) applyIntensitySetting();
     }
 
+    function syncQualityFromUI(){
+      const raw = parseFloat(qualitySlider?.value);
+      qualityFactor = Math.max(0.6, Math.min(1.6, isNaN(raw) ? 1 : raw));
+      if (qualityVal) qualityVal.textContent = qualityFactor.toFixed(2);
+      if (applyQualitySetting) applyQualitySetting();
+    }
+
     blackWhiteToggle?.addEventListener('change', syncMonochromeFromUI);
     intensitySlider?.addEventListener('input', syncIntensityFromUI);
+    qualitySlider?.addEventListener('input', syncQualityFromUI);
 
     syncMonochromeFromUI();
     syncIntensityFromUI();
+    syncQualityFromUI();
+
+    function showNoteModal(){
+      if (!noteModal) return;
+      noteModal.style.display = 'block';
+    }
+
+    function hideNoteModal(){
+      if (!noteModal) return;
+      noteModal.style.display = 'none';
+    }
+
+    openNoteModal?.addEventListener('click', showNoteModal);
+    closeNoteModal?.addEventListener('click', hideNoteModal);
+    noteModal?.addEventListener('click', (evt)=>{
+      if (evt.target?.dataset?.closeNote !== undefined) hideNoteModal();
+    });
 
     /* =========================================================
        Start button: fullscreen + hide menu + show canvas
@@ -402,6 +517,8 @@
         SUNRAYS_WEIGHT: 0.85,
       };
 
+      let pixelRatioCap = 1.5;
+
       function isMobile () {
         return /Mobi|Android/i.test(navigator.userAgent);
       }
@@ -409,6 +526,11 @@
 
       const baseSplatForce = config.SPLAT_FORCE;
       const baseSplatRadius = config.SPLAT_RADIUS;
+      const baseSimResolution = config.SIM_RESOLUTION;
+      const baseDyeResolution = config.DYE_RESOLUTION;
+      const baseBloomResolution = config.BLOOM_RESOLUTION;
+      const baseSunraysResolution = config.SUNRAYS_RESOLUTION;
+      const basePixelRatioCap = pixelRatioCap;
 
       applyMonochromeSetting = function(){
         config.COLORFUL = !monochromeMode;
@@ -424,8 +546,24 @@
         if (intensityVal) intensityVal.textContent = clamped.toFixed(1);
       };
 
+      applyQualitySetting = function(){
+        const clamped = Math.max(0.6, Math.min(1.6, qualityFactor));
+        qualityFactor = clamped;
+        config.SIM_RESOLUTION = Math.max(32, Math.round(baseSimResolution * clamped));
+        config.DYE_RESOLUTION = Math.max(256, Math.round(baseDyeResolution * clamped));
+        config.BLOOM_RESOLUTION = Math.max(64, Math.round(baseBloomResolution * clamped));
+        config.SUNRAYS_RESOLUTION = Math.max(64, Math.round(baseSunraysResolution * clamped));
+        pixelRatioCap = Math.max(0.7, Math.min(basePixelRatioCap * clamped, 2));
+        if (fluidStarted) {
+          resizeCanvas();
+          initFramebuffers();
+        }
+        if (qualityVal) qualityVal.textContent = clamped.toFixed(2);
+      };
+
       applyMonochromeSetting();
       applyIntensitySetting();
+      applyQualitySetting();
 
       function pointerPrototype () {
         this.id = -1;
@@ -1681,7 +1819,7 @@
       }
 
       function scaleByPixelRatio (input) {
-        let pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+        let pixelRatio = Math.min(window.devicePixelRatio || 1, pixelRatioCap);
         return Math.floor(input * pixelRatio);
       }
 
