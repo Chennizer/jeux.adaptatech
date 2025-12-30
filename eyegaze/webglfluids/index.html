@@ -86,27 +86,53 @@
       <div id="mode-divider"></div>
 
       <div id="options-inline-container">
-        <!-- Left column (placeholder for future options) -->
+        <!-- Left column (fluid color + presets) -->
         <div class="options-column">
           <div class="option-item">
-            <label class="teal-label">
+            <label class="teal-label" for="monoColorSelect">
               <span class="translate"
-                    data-fr="(Options à venir)"
-                    data-en="(Options coming)"
-                    data-ja="（オプションは後で）">(Options à venir)</span>
+                    data-fr="Couleur des particules"
+                    data-en="Particle color"
+                    data-ja="パーティクルの色">Couleur des particules</span>
             </label>
+            <select id="monoColorSelect" class="styled-select">
+              <option value="rainbow" class="translate" data-fr="Multicolore" data-en="Multicolor" data-ja="マルチカラー">Multicolore</option>
+              <option value="blue" class="translate" data-fr="Bleu" data-en="Blue" data-ja="青">Bleu</option>
+              <option value="green" class="translate" data-fr="Vert" data-en="Green" data-ja="緑">Vert</option>
+              <option value="red" class="translate" data-fr="Rouge" data-en="Red" data-ja="赤">Rouge</option>
+              <option value="purple" class="translate" data-fr="Violet" data-en="Purple" data-ja="紫">Violet</option>
+              <option value="orange" class="translate" data-fr="Orange" data-en="Orange" data-ja="オレンジ">Orange</option>
+            </select>
+          </div>
+
+          <div class="option-item">
+            <label class="teal-label" for="qualitySlider">
+              <span class="translate" data-fr="Qualité" data-en="Quality" data-ja="クオリティ">Qualité</span> :
+              <span id="qualityValue">1024</span>
+            </label>
+            <input type="range" id="qualitySlider" class="styled-slider" min="256" max="1024" step="128" value="1024">
+            <div class="preset-buttons">
+              <button type="button" class="button" data-preset="calm">
+                <span class="translate" data-fr="Doux" data-en="Calm" data-ja="穏やか">Doux</span>
+              </button>
+              <button type="button" class="button" data-preset="vibrant">
+                <span class="translate" data-fr="Vivant" data-en="Vibrant" data-ja="鮮やか">Vivant</span>
+              </button>
+              <button type="button" class="button" data-preset="energy">
+                <span class="translate" data-fr="Énergie" data-en="Energy" data-ja="エナジー">Énergie</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Middle column (placeholder for future options) -->
+        <!-- Middle column (intensity slider) -->
         <div class="options-column">
           <div class="option-item">
-            <label class="teal-label">
-              <span class="translate"
-                    data-fr="(Options à venir)"
-                    data-en="(Options coming)"
-                    data-ja="（オプションは後で）">(Options à venir)</span>
+            <label class="teal-label" for="intensitySlider">
+              <span class="translate" data-fr="Intensité" data-en="Intensity" data-ja="強度">Intensité</span> :
+              <span id="intensityValue">6000</span>
             </label>
+            <input type="range" id="intensitySlider" class="styled-slider" min="2000" max="10000" step="500" value="6000">
           </div>
         </div>
 
@@ -210,6 +236,61 @@
       const next = languages[(languages.indexOf(current) + 1) % languages.length];
       setLang(next);
     });
+
+    /* =========================================================
+       Fluid controls: sliders + presets
+       ========================================================= */
+    const monoColorSelect = document.getElementById('monoColorSelect');
+    const qualitySlider = document.getElementById('qualitySlider');
+    const qualityValue = document.getElementById('qualityValue');
+    const intensitySlider = document.getElementById('intensitySlider');
+    const intensityValue = document.getElementById('intensityValue');
+
+    let syncMonoColorFromUI = () => {};
+    let syncQualityFromUI = () => {};
+    let syncIntensityFromUI = () => {};
+
+    const presets = {
+      calm: { color: 'blue', quality: 512, intensity: 3500 },
+      vibrant: { color: 'rainbow', quality: 896, intensity: 6500 },
+      energy: { color: 'orange', quality: 768, intensity: 8500 }
+    };
+
+    function updateQualityLabel(){
+      if (qualityValue && qualitySlider) qualityValue.textContent = qualitySlider.value;
+    }
+
+    function updateIntensityLabel(){
+      if (intensityValue && intensitySlider) intensityValue.textContent = intensitySlider.value;
+    }
+
+    function applyPreset(key){
+      const preset = presets[key];
+      if (!preset) return;
+      if (monoColorSelect) monoColorSelect.value = preset.color;
+      if (qualitySlider) {
+        qualitySlider.value = String(preset.quality);
+        updateQualityLabel();
+      }
+      if (intensitySlider) {
+        intensitySlider.value = String(preset.intensity);
+        updateIntensityLabel();
+      }
+      syncMonoColorFromUI();
+      syncQualityFromUI();
+      syncIntensityFromUI();
+    }
+
+    monoColorSelect?.addEventListener('change', ()=> syncMonoColorFromUI());
+    qualitySlider?.addEventListener('input', ()=> { updateQualityLabel(); syncQualityFromUI(); });
+    intensitySlider?.addEventListener('input', ()=> { updateIntensityLabel(); syncIntensityFromUI(); });
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+      btn.addEventListener('click', ()=> applyPreset(btn.getAttribute('data-preset')));
+    });
+
+    updateQualityLabel();
+    updateIntensityLabel();
 
     /* =========================================================
        Pointer UI (right column controls)
@@ -371,10 +452,32 @@
         SUNRAYS_WEIGHT: 1.0,
       };
 
+      const monoHueMap = {
+        rainbow: null,
+        blue: 0.6,
+        green: 0.33,
+        red: 0.0,
+        purple: 0.78,
+        orange: 0.08
+      };
+      let monoColorMode = monoColorSelect?.value || 'rainbow';
+
       function isMobile () {
         return /Mobi|Android/i.test(navigator.userAgent);
       }
       if (isMobile()) config.DYE_RESOLUTION = 512;
+
+      const startingQuality = parseInt(qualitySlider?.value || '', 10);
+      if (!Number.isNaN(startingQuality)) {
+        config.DYE_RESOLUTION = startingQuality;
+        config.SIM_RESOLUTION = Math.max(32, Math.round(startingQuality / 8));
+      }
+
+      const startingIntensity = parseInt(intensitySlider?.value || '', 10);
+      if (!Number.isNaN(startingIntensity)) config.SPLAT_FORCE = startingIntensity;
+
+      if (qualityValue) qualityValue.textContent = String(config.DYE_RESOLUTION);
+      if (intensityValue) intensityValue.textContent = String(config.SPLAT_FORCE);
 
       function pointerPrototype () {
         this.id = -1;
@@ -1194,6 +1297,29 @@
 
       updateKeywords();
       initFramebuffers();
+
+      syncMonoColorFromUI = () => {
+        monoColorMode = monoColorSelect?.value || 'rainbow';
+      };
+
+      syncQualityFromUI = () => {
+        if (!qualitySlider) return;
+        const dyeRes = parseInt(qualitySlider.value, 10);
+        if (Number.isNaN(dyeRes)) return;
+        config.DYE_RESOLUTION = dyeRes;
+        config.SIM_RESOLUTION = Math.max(32, Math.round(dyeRes / 8));
+        if (qualityValue) qualityValue.textContent = String(config.DYE_RESOLUTION);
+        initFramebuffers();
+      };
+
+      syncIntensityFromUI = () => {
+        if (!intensitySlider) return;
+        const force = parseInt(intensitySlider.value, 10);
+        if (Number.isNaN(force)) return;
+        config.SPLAT_FORCE = force;
+        if (intensityValue) intensityValue.textContent = String(config.SPLAT_FORCE);
+      };
+
       multipleSplats((Math.random() * 20 + 5) | 0);
 
       let lastUpdateTime = Date.now();
@@ -1577,7 +1703,10 @@
       }
 
       function generateColor () {
-        let c = HSVtoRGB(Math.random(), 1.0, 1.0);
+        const hue = monoColorMode === 'rainbow'
+          ? Math.random()
+          : (monoHueMap[monoColorMode] ?? Math.random());
+        let c = HSVtoRGB(hue, 1.0, 1.0);
         c.r *= 0.15;
         c.g *= 0.15;
         c.b *= 0.15;
