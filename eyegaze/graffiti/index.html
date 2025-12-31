@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Graffiti (Eyegaze)" data-en="Graffiti (Eyegaze)" data-ja="グラフィティ（視線入力）">Graffiti (Eyegaze)</title>
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap');
+
+    :root {
+      --ui-scale: 1;
+      --sidebar-w: clamp(120px, calc(144px * var(--ui-scale)), 200px);
+      --sidebar-pad: clamp(10px, calc(14px * var(--ui-scale)), 18px);
+      --swatch-size: clamp(64px, calc(84px * var(--ui-scale)), 120px);
+      --swatch-gap: clamp(10px, calc(14px * var(--ui-scale)), 18px);
+      --brush-btn: clamp(48px, calc(56px * var(--ui-scale)), 72px);
+      --brush-gap: clamp(10px, calc(12px * var(--ui-scale)), 16px);
+      --dwell-time: 900ms;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 30% 20%, rgba(255, 20, 147, 0.2), transparent 40%),
+                  radial-gradient(circle at 80% 10%, rgba(0, 191, 255, 0.18), transparent 32%),
+                  radial-gradient(circle at 70% 80%, rgba(50, 205, 50, 0.18), transparent 34%),
+                  #060606;
+      color: #fff;
+      font-family: 'Roboto', system-ui, sans-serif;
+    }
+
+    #app {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      height: 100vh;
+    }
+
+    #sidebar {
+      position: relative;
+      padding: var(--sidebar-pad);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(14px, calc(16px * var(--ui-scale)), 20px);
+      background: rgba(255, 255, 255, 0.06);
+      border-right: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(6px);
+      box-shadow: 10px 0 24px rgba(0, 0, 0, 0.35);
+    }
+
+    #logo {
+      font-family: 'Permanent Marker', cursive;
+      font-size: clamp(26px, 2.2vw, 34px);
+      color: #00d9ff;
+      text-shadow: 0 0 18px rgba(0, 217, 255, 0.65);
+      letter-spacing: 1px;
+      margin: 0;
+    }
+
+    .panel-title {
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #ffea00;
+      margin: 4px 0;
+    }
+
+    #palette {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--swatch-gap);
+      justify-items: center;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .swatch {
+      width: var(--swatch-size);
+      height: var(--swatch-size);
+      border-radius: 50%;
+      border: 4px solid rgba(255, 255, 255, 0.35);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      position: relative;
+      cursor: none;
+    }
+
+    .swatch::after {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.18);
+      opacity: 0;
+      transform: scale(0.8);
+      transition: opacity 0.16s ease, transform 0.2s ease;
+    }
+
+    .swatch.active::after {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .swatch .dwell-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: rgba(255, 64, 64, 0.35);
+      transform: scale(0);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .swatch.waiting .dwell-ring {
+      animation: dwell var(--dwell-time) linear forwards;
+    }
+
+    @keyframes dwell {
+      from { transform: scale(0); opacity: 0.6; }
+      to   { transform: scale(1); opacity: 0; }
+    }
+
+    #brushes {
+      display: flex;
+      flex-direction: column;
+      gap: var(--brush-gap);
+      align-items: center;
+    }
+
+    .brush {
+      width: var(--brush-btn);
+      height: var(--brush-btn);
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.55);
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.08);
+      position: relative;
+      cursor: none;
+    }
+
+    .brush span {
+      display: block;
+      background: #fff;
+      border-radius: 50%;
+    }
+
+    .brush.active {
+      box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.6);
+      border-color: #00d9ff;
+    }
+
+    #musicModes {
+      display: grid;
+      gap: 8px;
+    }
+
+    .music-btn {
+      border: 2px solid rgba(255,255,255,0.28);
+      background: rgba(0,0,0,0.35);
+      padding: 12px 10px;
+      color: #fff;
+      text-align: center;
+      border-radius: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      cursor: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .music-btn.active { border-color: #ffea00; box-shadow: 0 0 0 3px rgba(255, 234, 0, 0.45); }
+    .music-btn.waiting .dwell-ring { animation: dwell var(--dwell-time) linear forwards; }
+
+    #canvasWrap { position: relative; }
+    #wall {
+      position: absolute;
+      inset: 0;
+      background: url('../../images/graffiti/wall-texture.webp'),
+                  linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.65));
+      background-size: cover;
+      filter: brightness(0.9);
+      pointer-events: none;
+      mix-blend-mode: overlay;
+    }
+
+    #paintCanvas {
+      width: 100%;
+      height: 100vh;
+      display: block;
+      cursor: none;
+    }
+
+    #cursorPreview {
+      position: fixed;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.8);
+      pointer-events: none;
+      mix-blend-mode: screen;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 6px rgba(0,0,0,0.35));
+      z-index: 20;
+    }
+
+    #intro {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: grid;
+      place-items: center;
+      z-index: 15;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #introCard {
+      max-width: 540px;
+      background: rgba(30,30,30,0.9);
+      padding: clamp(18px, 4vw, 32px);
+      border-radius: 18px;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.45);
+      border: 2px solid rgba(255,255,255,0.08);
+    }
+
+    #startBtn {
+      margin-top: 16px;
+      padding: 14px 26px;
+      border-radius: 12px;
+      border: none;
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      background: linear-gradient(120deg, #ff4d4d, #ffae00);
+      color: #000;
+      cursor: pointer;
+      box-shadow: 0 12px 30px rgba(255, 77, 77, 0.35);
+    }
+
+    @media (max-width: 720px) {
+      #app { grid-template-columns: 1fr; }
+      #sidebar { position: absolute; width: 100%; height: auto; flex-direction: row; overflow-x: auto; }
+      #palette { grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); flex: unset; }
+      #wall { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <h1 id="logo">Wild Style</h1>
+      <div>
+        <div class="panel-title">Peinture</div>
+        <div id="palette"></div>
+      </div>
+      <div>
+        <div class="panel-title">Taille</div>
+        <div id="brushes"></div>
+      </div>
+      <div>
+        <div class="panel-title">Ambiance</div>
+        <div id="musicModes"></div>
+      </div>
+    </aside>
+    <div id="canvasWrap">
+      <canvas id="paintCanvas"></canvas>
+      <div id="wall" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <div id="cursorPreview"></div>
+
+  <div id="intro">
+    <div id="introCard">
+      <h2 class="translate" data-fr="Graffiti en regard" data-en="Eyegaze Graffiti" data-ja="視線でグラフィティ">Graffiti en regard</h2>
+      <p class="translate" data-fr="Survolez pour choisir une couleur et déplacez simplement votre regard pour peindre. La musique punk/hip hop reste là pour l'ambiance."
+         data-en="Hover to pick a color and just move your gaze to paint. Punk or hip hop keeps the vibe alive."
+         data-ja="色を見つめて選び、視線を動かすだけでペイント。パンクかヒップホップで雰囲気をキープ。"></p>
+      <button id="startBtn" class="translate" data-fr="Commencer" data-en="Start" data-ja="スタート">Commencer</button>
+    </div>
+  </div>
+
+  <script>
+    const paintCanvas = document.getElementById('paintCanvas');
+    const ctx = paintCanvas.getContext('2d');
+    const cursorPreview = document.getElementById('cursorPreview');
+    const paletteEl = document.getElementById('palette');
+    const brushesEl = document.getElementById('brushes');
+    const musicModesEl = document.getElementById('musicModes');
+    const intro = document.getElementById('intro');
+    const startBtn = document.getElementById('startBtn');
+
+    const swatches = [
+      '#ff4d4d', '#ffd166', '#00e0ff', '#7cf6a0', '#ff7be0', '#9c7bff', '#ffffff', '#111111'
+    ];
+
+    const brushSizes = [10, 18, 32];
+    let currentBrush = brushSizes[1];
+    let currentColor = swatches[0];
+
+    const playlists = {
+      punk: ['../../songs/grafiti/grafitipunkrock1.mp3'],
+      hiphop: ['../../songs/grafiti/grafitihiphop1.mp3']
+    };
+    let currentPlaylist = 'punk';
+    let audio = null;
+    let audioIndex = 0;
+
+    let lastPos = null;
+    let painting = false;
+
+    function resize() {
+      paintCanvas.width = window.innerWidth - document.getElementById('sidebar').offsetWidth;
+      paintCanvas.height = window.innerHeight;
+    }
+
+    function createSwatches() {
+      swatches.forEach((color, i) => {
+        const div = document.createElement('div');
+        div.className = 'swatch';
+        div.style.background = color;
+        div.innerHTML = '<div class="dwell-ring"></div>';
+        handleDwell(div, () => selectColor(color));
+        if (i === 0) div.classList.add('active');
+        paletteEl.appendChild(div);
+      });
+    }
+
+    function selectColor(color) {
+      currentColor = color;
+      document.querySelectorAll('.swatch').forEach(el => {
+        el.classList.toggle('active', el.style.background === color);
+        el.classList.remove('waiting');
+      });
+    }
+
+    function createBrushes() {
+      brushSizes.forEach((size, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'brush';
+        const dot = document.createElement('span');
+        dot.style.width = dot.style.height = `${size / 2}px`;
+        btn.appendChild(dot);
+        btn.innerHTML += '<div class="dwell-ring"></div>';
+        handleDwell(btn, () => selectBrush(size));
+        if (i === 1) btn.classList.add('active');
+        brushesEl.appendChild(btn);
+      });
+    }
+
+    function selectBrush(size) {
+      currentBrush = size;
+      document.querySelectorAll('.brush').forEach(el => {
+        const dot = el.querySelector('span');
+        const dSize = parseInt(dot.style.width) * 2;
+        el.classList.toggle('active', dSize === size);
+        el.classList.remove('waiting');
+      });
+    }
+
+    function createMusicButtons() {
+      ['punk', 'hiphop'].forEach((mode, i) => {
+        const btn = document.createElement('div');
+        btn.className = 'music-btn';
+        btn.textContent = mode === 'punk' ? 'PUNK ROCK' : 'HIP HOP';
+        btn.innerHTML += '<div class="dwell-ring"></div>';
+        handleDwell(btn, () => selectMusic(mode));
+        if (i === 0) btn.classList.add('active');
+        musicModesEl.appendChild(btn);
+      });
+    }
+
+    function selectMusic(mode) {
+      currentPlaylist = mode;
+      document.querySelectorAll('.music-btn').forEach(el => {
+        el.classList.toggle('active', el.textContent.trim().toUpperCase() === (mode === 'punk' ? 'PUNK ROCK' : 'HIP HOP'));
+        el.classList.remove('waiting');
+      });
+      startMusic(true);
+    }
+
+    function handleDwell(el, onSelect) {
+      let timer = null;
+      el.addEventListener('mouseenter', () => {
+        el.classList.add('waiting');
+        timer = setTimeout(() => {
+          el.classList.remove('waiting');
+          onSelect();
+        }, 900);
+      });
+      el.addEventListener('mouseleave', () => {
+        clearTimeout(timer);
+        el.classList.remove('waiting');
+      });
+    }
+
+    function startMusic(forceRestart = false) {
+      if (!audio || forceRestart) {
+        if (audio) { audio.pause(); }
+        audioIndex = 0;
+        audio = new Audio(playlists[currentPlaylist][audioIndex]);
+        audio.loop = true;
+      }
+      audio.volume = 0.55;
+      audio.play().catch(() => {});
+    }
+
+    function spray(from, to) {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const dist = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.floor(dist / (currentBrush * 0.6)));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = from.x + dx * t + (Math.random() - 0.5) * currentBrush * 0.35;
+        const y = from.y + dy * t + (Math.random() - 0.5) * currentBrush * 0.35;
+        const size = currentBrush * (0.6 + Math.random() * 0.6);
+        ctx.fillStyle = currentColor;
+        ctx.beginPath();
+        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function handleMove(evt) {
+      if (!painting) return;
+      const rect = paintCanvas.getBoundingClientRect();
+      const pos = { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+      cursorPreview.style.left = `${evt.clientX}px`;
+      cursorPreview.style.top = `${evt.clientY}px`;
+      cursorPreview.style.background = currentColor;
+      cursorPreview.style.width = `${currentBrush}px`;
+      cursorPreview.style.height = `${currentBrush}px`;
+      if (!lastPos) {
+        lastPos = pos;
+        return;
+      }
+      spray(lastPos, pos);
+      lastPos = pos;
+    }
+
+    function startPainting(evt) {
+      painting = true;
+      lastPos = null;
+      handleMove(evt);
+    }
+
+    function stopPainting() {
+      painting = false;
+      lastPos = null;
+    }
+
+    function init() {
+      resize();
+      createSwatches();
+      createBrushes();
+      createMusicButtons();
+      window.addEventListener('resize', resize);
+      paintCanvas.addEventListener('pointerenter', startPainting);
+      paintCanvas.addEventListener('pointermove', handleMove);
+      paintCanvas.addEventListener('pointerleave', stopPainting);
+    }
+
+    startBtn.addEventListener('click', () => {
+      intro.style.display = 'none';
+      painting = true;
+      startMusic();
+    });
+
+    init();
+  </script>
+</body>
+</html>
