@@ -278,6 +278,7 @@
       pointer.x = -1000;
       pointer.y = -1000;
       if (pointerEl) pointerEl.style.opacity = 0;
+      stopHoverTone();
     });
 
     window.addEventListener('pointerenter', () => {
@@ -293,6 +294,37 @@
     const fireflies = [];
     const burstColors = ['#7CF7E1', '#FFDE6F', '#FF8CC6', '#7DB2FF', '#C3FF8F', '#F7A35C'];
 
+    const audioCtx = 'AudioContext' in window ? new AudioContext() : null;
+    let bgAudio = null;
+    let celebrationAudio = null;
+    const hoverTone = { osc: null, gain: null, circle: null };
+
+    const hoverWaveform = 'sawtooth';
+    const hoverBaseFreq = 180;
+    const hoverFreqRange = 520;
+    const hoverBaseGain = 0.02;
+    const hoverGainRange = 0.08;
+
+    const backgroundTracks = [
+      '../../sounds/dancebeat.mp3',
+      '../../sounds/piano.mp3',
+      '../../sounds/kidsunited.mp3',
+      '../../sounds/encanto.mp3',
+      '../../sounds/moana.mp3'
+    ];
+
+    const popSounds = [
+      '../../sounds/success3.mp3',
+      '../../sounds/success4.mp3',
+      '../../sounds/victory.mp3'
+    ];
+
+    const celebrationSounds = [
+      '../../sounds/firework.mp3',
+      '../../sounds/spacequestlaunch2.mp3',
+      '../../sounds/startactivity.mp3'
+    ];
+
     let celebrationTimer = 0;
     let celebrationElapsed = 0;
     let celebrationDuration = 0;
@@ -305,16 +337,82 @@
     let activeCirclesRemaining = 0;
 
     const CELEBRATION_STEPS = [
-      { name: 'gather', duration: 1.6 },
-      { name: 'orbit', duration: 3.1 },
-      { name: 'ribbons', duration: 1.9 },
-      { name: 'sparkle', duration: 1.8 },
+      { name: 'gather', duration: 2.1 },
+      { name: 'orbit', duration: 3.3 },
+      { name: 'ribbons', duration: 2.3 },
+      { name: 'sparkle', duration: 2.3 },
     ];
+    const CELEBRATION_TOTAL = 10;
     let gameStarted = false;
     let lastTime = performance.now();
 
     function rand(min, max) {
       return Math.random() * (max - min) + min;
+    }
+
+    function ensureAudio() {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playOneShot(src, volume = 1) {
+      ensureAudio();
+      const audio = new Audio(src);
+      audio.volume = volume;
+      audio.play();
+      return audio;
+    }
+
+    function pickRandom(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function startBackgroundMusic() {
+      if (!backgroundTracks.length) return;
+      const track = pickRandom(backgroundTracks);
+      if (bgAudio) {
+        bgAudio.pause();
+      }
+      bgAudio = new Audio(track);
+      bgAudio.loop = true;
+      bgAudio.volume = 0.22;
+      bgAudio.play();
+    }
+
+    function stopHoverTone() {
+      if (hoverTone.osc) {
+        hoverTone.osc.stop();
+        hoverTone.osc.disconnect();
+      }
+      if (hoverTone.gain) hoverTone.gain.disconnect();
+      hoverTone.osc = null;
+      hoverTone.gain = null;
+      hoverTone.circle = null;
+    }
+
+    function startHoverTone(circle) {
+      ensureAudio();
+      stopHoverTone();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = hoverWaveform;
+      osc.frequency.value = hoverBaseFreq;
+      gain.gain.value = hoverBaseGain * 0.35;
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      hoverTone.osc = osc;
+      hoverTone.gain = gain;
+      hoverTone.circle = circle;
+    }
+
+    function updateHoverTone(focus) {
+      if (!audioCtx || !hoverTone.osc || !hoverTone.gain) return;
+      const freq = hoverBaseFreq + hoverFreqRange * focus;
+      const gain = hoverBaseGain + hoverGainRange * focus;
+      hoverTone.osc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.08);
+      hoverTone.gain.gain.setTargetAtTime(gain, audioCtx.currentTime, 0.08);
     }
 
     function spawnCircle() {
@@ -338,12 +436,17 @@
         color: burstColors[Math.floor(Math.random() * burstColors.length)],
         focus: 0,
         exploded: false,
-        ring: 0
+        ring: 0,
+        hovering: false
       });
     }
 
     function spawnCircles() {
       circles.length = 0;
+      stopHoverTone();
+      if (celebrationAudio) {
+        celebrationAudio.pause();
+      }
       celebrationActive = false;
       celebrationMode = null;
       celebrationTimer = 0;
@@ -360,6 +463,10 @@
 
     function explodeCircle(circle) {
       circle.exploded = true;
+      if (hoverTone.circle === circle) {
+        stopHoverTone();
+      }
+      playOneShot(pickRandom(popSounds), 0.7);
       const burst = parseInt(fireflyBurstInput.value, 10);
       for (let i = 0; i < burst; i++) {
         const angle = rand(0, Math.PI * 2);
@@ -461,13 +568,18 @@
       celebrationElapsed = 0;
       celebrationPhaseIndex = 0;
       celebrationPhase = CELEBRATION_STEPS[0].name;
-      celebrationDuration = CELEBRATION_STEPS.reduce((sum, step) => sum + step.duration, 0);
+      celebrationDuration = CELEBRATION_TOTAL;
       celebrationTimer = celebrationDuration;
       celebrationPhaseTimer = CELEBRATION_STEPS[0].duration;
 
       celebrationTargets = buildSmileTargets(fireflies.length);
 
       const spinDir = Math.random() > 0.5 ? 1 : -1;
+
+      if (celebrationAudio) {
+        celebrationAudio.pause();
+      }
+      celebrationAudio = playOneShot(pickRandom(celebrationSounds), 0.75);
 
       fireflies.forEach((f, i) => {
         const target = celebrationTargets[i % celebrationTargets.length];
@@ -747,11 +859,20 @@
         const hitRadius = c.r * focusScale;
         const over = pointer.inside && Math.hypot(pointer.x - c.x, pointer.y - c.y) <= hitRadius;
         if (over) {
+          if (!c.hovering) {
+            c.hovering = true;
+            startHoverTone(c);
+          }
           c.focus = Math.min(1, c.focus + dt / dwell);
+          updateHoverTone(c.focus);
           if (c.focus >= 1) {
             explodeCircle(c);
           }
         } else {
+          if (c.hovering) {
+            c.hovering = false;
+            stopHoverTone();
+          }
           c.focus = Math.max(0, c.focus - dt * 0.75);
         }
       });
@@ -868,6 +989,8 @@
       statusSubtitle.textContent = '';
       fireflies.length = 0;
       gameStarted = true;
+      ensureAudio();
+      startBackgroundMusic();
       if (lastPointer.x != null && lastPointer.y != null) {
         setPointerPos(lastPointer.x, lastPointer.y);
       }
