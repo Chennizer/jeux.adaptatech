@@ -18,7 +18,7 @@
       --swatch-outline: 6px;
       --dwell-color: rgba(255, 64, 64, 0.45);
       --cursor-size: clamp(16px, 3vw, 26px);
-      --brush: 36px;
+      --brush: 24px;
     }
 
     * { box-sizing: border-box; }
@@ -194,6 +194,69 @@
     }
 
     #musicLabel { font-weight: 700; letter-spacing: 0.05em; color: #8ae4ff; }
+
+    #settingsBtn {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 26;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.22);
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 26px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+
+    #settingsBtn:hover { border-color: #0af; }
+
+    #settingsModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 28;
+      padding: 20px;
+    }
+
+    #settingsModal .window {
+      background: #0b0c10;
+      border: 2px solid #0af;
+      border-radius: 16px;
+      width: min(420px, 90vw);
+      padding: 18px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+      color: #e8f4ff;
+    }
+
+    #settingsModal h3 { margin: 0 0 12px; font-size: 20px; letter-spacing: 0.08em; }
+
+    #settingsModal .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+
+    #settingsModal button, #settingsModal input[type="range"] {
+      cursor: pointer;
+    }
+
+    .closeSettings {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid #0af;
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    #brushSizeValue { font-weight: 700; color: #0af; }
   </style>
 </head>
 <body>
@@ -217,12 +280,24 @@
   <div id="sidebar" aria-label="Palette de couleurs">
     <h2 class="translate" data-fr="Couleurs" data-en="Colors" data-ja="カラー">Couleurs</h2>
     <div id="palette"></div>
-    <div class="translate" data-fr="Musique :" data-en="Music:" data-ja="音楽：">Musique :</div>
-    <div id="musicChips" aria-label="Choisir la musique"></div>
   </div>
 
   <canvas id="paint"></canvas>
   <div id="cursorPreview"></div>
+  <button id="settingsBtn" aria-label="Paramètres">⚙️</button>
+  <div id="settingsModal" role="dialog" aria-modal="true" aria-label="Paramètres">
+    <div class="window">
+      <h3 class="translate" data-fr="Options" data-en="Options" data-ja="オプション">Options</h3>
+      <div class="translate" data-fr="Ambiance musicale" data-en="Music vibe" data-ja="音楽の雰囲気">Ambiance musicale</div>
+      <div class="row" id="musicChips" aria-label="Choisir la musique"></div>
+      <div class="translate" data-fr="Taille du spray" data-en="Spray size" data-ja="スプレーの大きさ">Taille du spray</div>
+      <div class="row" style="align-items: center;">
+        <input type="range" id="brushSize" min="12" max="60" value="24" aria-label="Taille du spray">
+        <span id="brushSizeValue">24px</span>
+      </div>
+      <button class="closeSettings" id="closeSettings">OK</button>
+    </div>
+  </div>
   <div id="statusBar" aria-live="polite">
     <span id="statusColor">#00FFEA</span>
     <span id="musicLabel">PUNK ROCK</span>
@@ -240,6 +315,11 @@
     const statusColor = document.getElementById('statusColor');
     const musicLabel = document.getElementById('musicLabel');
     const musicChips = document.getElementById('musicChips');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettings = document.getElementById('closeSettings');
+    const brushSizeInput = document.getElementById('brushSize');
+    const brushSizeValue = document.getElementById('brushSizeValue');
 
     const COLORS = [
       '#ff1744', '#ff9100', '#ffd600', '#00e676', '#00e5ff', '#2979ff', '#651fff', '#f06292', '#ffffff', '#000000'
@@ -250,22 +330,11 @@
       hiphop: ['../../songs/grafiti/grafitihiphop1.mp3']
     };
 
-    const STICKERS = [
-      '../../images/graffiti/spraycan.png',
-      '../../images/graffiti/turntable.png',
-      '../../images/graffiti/headphones.png',
-      '../../images/graffiti/star.png',
-      '../../images/graffiti/punkhead.png',
-      '../../images/graffiti/cassette.png'
-    ];
-
     let currentColor = COLORS[4];
     let currentStyle = 'punk';
     let paintingEnabled = false;
     let musicEl = null;
     let overSidebar = false;
-
-    const stickers = [];
 
     function resize() {
       paint.width = window.innerWidth;
@@ -275,50 +344,40 @@
 
     function drawBackdrop() {
       const { width, height } = paint;
-      const grad = ctx.createLinearGradient(0, 0, width, height);
-      grad.addColorStop(0, '#0d0d0f');
-      grad.addColorStop(1, '#050509');
-      ctx.fillStyle = grad;
+      ctx.fillStyle = '#222';
       ctx.fillRect(0, 0, width, height);
 
-      ctx.globalAlpha = 0.35;
-      for (let i = 0; i < 1200; i++) {
-        const size = Math.random() * 2 + 0.4;
-        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.2)';
-        ctx.fillRect(Math.random() * width, Math.random() * height, size, size);
+      const brickH = 110;
+      const brickW = 220;
+      const mortar = 8;
+      const rows = Math.ceil(height / brickH) + 1;
+      const cols = Math.ceil(width / brickW) + 1;
+
+      for (let r = 0; r < rows; r++) {
+        const offset = (r % 2) * (brickW / 2);
+        for (let c = -1; c < cols; c++) {
+          const x = c * brickW + offset;
+          const y = r * brickH;
+          const hue = 6 + Math.random() * 4;
+          const sat = 38 + Math.random() * 6;
+          const light = 32 + Math.random() * 6;
+          ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
+          ctx.fillRect(x + mortar, y + mortar, brickW - mortar * 2, brickH - mortar * 2);
+        }
       }
-      ctx.globalAlpha = 1;
-
-      stickers.forEach(s => s.loaded && ctx.drawImage(s.img, s.x * width, s.y * height, s.w * width, s.h * height));
-    }
-
-    function loadStickers() {
-      STICKERS.forEach(src => {
-        const img = new Image();
-        img.src = src;
-        img.onload = () => { img.loaded = true; drawBackdrop(); };
-        stickers.push({
-          img,
-          x: Math.random() * 0.8 + 0.18,
-          y: Math.random() * 0.8,
-          w: Math.random() * 0.12 + 0.08,
-          h: Math.random() * 0.12 + 0.08,
-          get loaded() { return img.complete; }
-        });
-      });
     }
 
     function spray(x, y) {
-      const density = 32;
-      const radius = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--brush')) || 36;
+      const density = 26;
+      const radius = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--brush')) || 24;
       for (let i = 0; i < density; i++) {
         const angle = Math.random() * Math.PI * 2;
         const r = Math.random() * radius;
         const px = x + Math.cos(angle) * r;
         const py = y + Math.sin(angle) * r;
-        ctx.fillStyle = currentColor + '90';
+        ctx.fillStyle = currentColor + 'b0';
         ctx.beginPath();
-        ctx.arc(px, py, Math.random() * 6 + 2, 0, Math.PI * 2);
+        ctx.arc(px, py, Math.random() * 3 + 1, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -332,7 +391,8 @@
     function updateCursor(e) {
       cursorPreview.style.left = `${e.clientX}px`;
       cursorPreview.style.top = `${e.clientY}px`;
-      if (paintingEnabled && !overSidebar) {
+      const settingsOpen = settingsModal.style.display === 'flex';
+      if (paintingEnabled && !overSidebar && !settingsOpen) {
         spray(e.clientX, e.clientY);
       }
     }
@@ -398,6 +458,7 @@
     }
 
     function buildMusicChips() {
+      musicChips.innerHTML = '';
       PLAYLISTS_KEYS.forEach(style => {
         const btn = document.createElement('button');
         btn.textContent = style === 'punk' ? 'PUNK ROCK' : 'HIP HOP';
@@ -405,9 +466,9 @@
         btn.style.margin = '4px 0';
         btn.style.padding = '10px 12px';
         btn.style.borderRadius = '12px';
-        btn.style.border = '1px solid #ddd';
-        btn.style.background = style === currentStyle ? '#0af' : '#f5f5f5';
-        btn.style.color = style === currentStyle ? '#000' : '#111';
+        btn.style.border = '1px solid #0af';
+        btn.style.background = style === currentStyle ? '#0af' : 'rgba(255,255,255,0.08)';
+        btn.style.color = '#fff';
         btn.addEventListener('pointerenter', () => startDwell(btn, () => switchMusic(style)));
         btn.addEventListener('pointerleave', () => clearDwell(btn));
         btn.addEventListener('click', () => switchMusic(style));
@@ -422,10 +483,11 @@
       document.querySelectorAll('#musicModes button').forEach(btn => btn.classList.toggle('active', btn.dataset.style === style));
       Array.from(musicChips.children).forEach(btn => {
         const match = (btn.textContent.includes('PUNK') && style === 'punk') || (btn.textContent.includes('HIP') && style === 'hiphop');
-        btn.style.background = match ? '#0af' : '#f5f5f5';
-        btn.style.color = match ? '#000' : '#111';
+        btn.style.background = match ? '#0af' : 'rgba(255,255,255,0.08)';
+        btn.style.color = '#fff';
       });
       if (paintingEnabled) startMusic(style);
+      buildMusicChips();
     }
 
     musicButtons.forEach(btn => {
@@ -444,19 +506,54 @@
 
     window.addEventListener('pointermove', updateCursor);
 
+    function requestFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) return el.requestFullscreen();
+      if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+      if (el.msRequestFullscreen) return el.msRequestFullscreen();
+      return Promise.resolve();
+    }
+
     const beginGame = () => {
       overlay.style.display = 'none';
       paintingEnabled = true;
       startMusic(currentStyle);
+      requestFullscreen().catch(() => {});
     };
 
     startBtn.addEventListener('click', beginGame);
     startBtn.addEventListener('pointerenter', () => startDwell(startBtn, beginGame, 1200));
     startBtn.addEventListener('pointerleave', () => clearDwell(startBtn));
 
+    const openSettings = () => {
+      settingsModal.style.display = 'flex';
+    };
+
+    const closeSettingsModal = () => {
+      settingsModal.style.display = 'none';
+      clearAllDwells();
+    };
+
+    settingsBtn.addEventListener('click', openSettings);
+    settingsBtn.addEventListener('pointerenter', () => startDwell(settingsBtn, openSettings, 1200));
+    settingsBtn.addEventListener('pointerleave', () => clearDwell(settingsBtn));
+
+    closeSettings.addEventListener('click', closeSettingsModal);
+    closeSettings.addEventListener('pointerenter', () => startDwell(closeSettings, closeSettingsModal, 900));
+    closeSettings.addEventListener('pointerleave', () => clearDwell(closeSettings));
+
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) closeSettingsModal();
+    });
+
+    brushSizeInput.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      document.documentElement.style.setProperty('--brush', `${val}px`);
+      brushSizeValue.textContent = `${val}px`;
+    });
+
     window.addEventListener('resize', resize);
 
-    loadStickers();
     resize();
     buildPalette();
     buildMusicChips();
