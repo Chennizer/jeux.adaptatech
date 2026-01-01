@@ -788,28 +788,51 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ----------------------------------------------------------------
-     (D) RENDER MAIN GAME (Optimally distribute into 2 rows)
+     (D) RENDER MAIN GAME (responsive grid with 3 rows when >6 tiles)
      ---------------------------------------------------------------- */
   function renderGameTiles() {
     tileContainer.innerHTML = "";
     const tilesToDisplay = selectedTileIndices.map(i => mediaChoices[i]);
 
-    const makeRow = items => {
-      const row = document.createElement('div');
-      row.style.display = "flex";
-      row.style.justifyContent = "center";
-      row.style.gap = "var(--tile-gap)";
-      items.forEach(choice => row.appendChild(createTile(choice)));
-      return row;
+    const resetContainerLayout = () => {
+      tileContainer.style.display = 'flex';
+      tileContainer.style.flexDirection = 'column';
+      tileContainer.style.justifyContent = 'center';
+      tileContainer.style.alignItems = 'center';
+      tileContainer.style.gap = 'var(--tile-gap-clamped, var(--tile-gap))';
+      tileContainer.style.gridTemplateColumns = '';
+      tileContainer.style.width = '';
+      tileContainer.style.margin = '';
+      tileContainer.style.padding = '';
+      tileContainer.style.rowGap = '';
+      tileContainer.style.removeProperty('--tile-rows');
+      tileContainer.classList.remove('grid-layout');
     };
 
-    tileContainer.style.display = "flex";
-    tileContainer.style.justifyContent = "center";
-    tileContainer.style.alignItems = "center";
+    const applyGridLayout = (columns, rows) => {
+      const clampedColumns = Math.max(2, Math.min(3, columns || 3));
+      const resolvedRows = Math.max(2, rows || Math.ceil((tilesToDisplay.length || 0) / clampedColumns));
+      tileContainer.classList.add('grid-layout');
+      tileContainer.style.display = 'grid';
+      tileContainer.style.gridTemplateColumns = `repeat(${clampedColumns}, minmax(0, 1fr))`;
+      tileContainer.style.gap = 'var(--tile-gap-clamped, var(--tile-gap))';
+      tileContainer.style.rowGap = 'var(--tile-gap-clamped, var(--tile-gap))';
+      tileContainer.style.justifyItems = 'center';
+      tileContainer.style.alignItems = 'center';
+      tileContainer.style.alignContent = 'center';
+      tileContainer.style.justifyContent = 'center';
+      tileContainer.style.width = 'min(1100px, 96vw)';
+      tileContainer.style.margin = '0 auto';
+      tileContainer.style.padding = 'var(--tile-gap-clamped, 20px)';
+      tileContainer.style.setProperty('--tile-columns', clampedColumns);
+      tileContainer.style.setProperty('--tile-rows', resolvedRows);
+    };
+
+    resetContainerLayout();
 
     const isPair = tilesToDisplay.length === 2;
     tileContainer.classList.toggle('two-tiles', isPair);
-    tileContainer.style.flexDirection = isPair ? "" : "column";
+    tileContainer.classList.toggle('grid-layout', !isPair && tilesToDisplay.length > 2);
 
     if (!tilesToDisplay.length) {
       requirePointerMotionBeforeHover();
@@ -818,14 +841,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (isPair) {
       tilesToDisplay.forEach(choice => tileContainer.appendChild(createTile(choice)));
-    } else if (tilesToDisplay.length <= 2) {
-      tileContainer.appendChild(makeRow(tilesToDisplay));
     } else {
-      const row1Count = Math.ceil(tilesToDisplay.length / 2);
-      const firstRow = makeRow(tilesToDisplay.slice(0, row1Count));
-      const secondRow = makeRow(tilesToDisplay.slice(row1Count));
-      tileContainer.appendChild(firstRow);
-      tileContainer.appendChild(secondRow);
+      const columns = tilesToDisplay.length > 6
+        ? 3
+        : Math.min(3, Math.ceil(tilesToDisplay.length / 2));
+      const rows = Math.max(2, Math.ceil(tilesToDisplay.length / columns));
+      applyGridLayout(columns, rows);
+      tilesToDisplay.forEach(choice => tileContainer.appendChild(createTile(choice)));
     }
     requirePointerMotionBeforeHover();
   }
