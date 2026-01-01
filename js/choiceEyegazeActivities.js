@@ -86,7 +86,7 @@
     let tileSize = parseInt(tileSizeInput?.value, 10) || 40;
     document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
     document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-    const initialGap = 10 * (40 / tileSize);
+    const initialGap = 7 * (40 / tileSize);
     document.documentElement.style.setProperty('--tile-gap', initialGap + 'vh');
 
     const tileChoiceMap = new WeakMap();
@@ -533,9 +533,9 @@
         tileContainer.style.alignItems = 'center';
         tileContainer.style.alignContent = 'center';
         tileContainer.style.justifyContent = 'center';
-        tileContainer.style.width = 'min(1100px, 96vw)';
+        tileContainer.style.width = 'min(1200px, 98vw)';
         tileContainer.style.margin = '0 auto';
-        tileContainer.style.padding = 'var(--tile-gap-clamped, 20px)';
+        tileContainer.style.padding = 'calc(var(--tile-gap-clamped, 20px) * 0.75)';
         tileContainer.style.setProperty('--tile-columns', clampedColumns);
         tileContainer.style.setProperty('--tile-rows', resolvedRows);
       };
@@ -670,7 +670,7 @@
         tileSize = parseInt(tileSizeInput.value, 10);
         tileSizeValue.textContent = tileSize;
         document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-        const newGap = 10 * (40 / tileSize);
+        const newGap = 7 * (40 / tileSize);
         document.documentElement.style.setProperty('--tile-gap', newGap + 'vh');
       });
     }

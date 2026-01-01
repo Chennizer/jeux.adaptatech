@@ -590,13 +590,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Tile Size Slider Setup (for final game tiles) with dynamic gap adjustment.
-  // Base: when tile size is 40vh, gap is 10vh.
+  // Base: when tile size is 40vh, gap is 7vh.
   if (tileSizeInput && tileSizeValue) {
     tileSizeInput.addEventListener('input', () => {
       tileSize = parseInt(tileSizeInput.value, 10);
       tileSizeValue.textContent = tileSize;
       document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-      const newGap = 10 * (40 / tileSize);
+      const newGap = 7 * (40 / tileSize);
       document.documentElement.style.setProperty('--tile-gap', newGap + 'vh');
     });
   }
@@ -821,9 +821,9 @@ document.addEventListener('DOMContentLoaded', () => {
       tileContainer.style.alignItems = 'center';
       tileContainer.style.alignContent = 'center';
       tileContainer.style.justifyContent = 'center';
-      tileContainer.style.width = 'min(1100px, 96vw)';
+      tileContainer.style.width = 'min(1200px, 98vw)';
       tileContainer.style.margin = '0 auto';
-      tileContainer.style.padding = 'var(--tile-gap-clamped, 20px)';
+      tileContainer.style.padding = 'calc(var(--tile-gap-clamped, 20px) * 0.75)';
       tileContainer.style.setProperty('--tile-columns', clampedColumns);
       tileContainer.style.setProperty('--tile-rows', resolvedRows);
     };
