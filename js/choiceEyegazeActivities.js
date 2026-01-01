@@ -517,11 +517,13 @@
         tileContainer.style.margin = '';
         tileContainer.style.padding = '';
         tileContainer.style.rowGap = '';
+        tileContainer.style.removeProperty('--tile-rows');
         tileContainer.classList.remove('grid-layout');
       };
 
-      const applyGridLayout = (columns) => {
+      const applyGridLayout = (columns, rows) => {
         const clampedColumns = Math.max(2, Math.min(3, columns || 3));
+        const resolvedRows = Math.max(2, rows || Math.ceil((tilesToDisplay.length || 0) / clampedColumns));
         tileContainer.classList.add('grid-layout');
         tileContainer.style.display = 'grid';
         tileContainer.style.gridTemplateColumns = `repeat(${clampedColumns}, minmax(0, 1fr))`;
@@ -535,6 +537,7 @@
         tileContainer.style.margin = '0 auto';
         tileContainer.style.padding = 'var(--tile-gap-clamped, 20px)';
         tileContainer.style.setProperty('--tile-columns', clampedColumns);
+        tileContainer.style.setProperty('--tile-rows', resolvedRows);
       };
 
       resetContainerLayout();
@@ -561,7 +564,8 @@
         const columns = tilesToDisplay.length > 6
           ? 3
           : Math.min(3, Math.ceil(tilesToDisplay.length / 2));
-        applyGridLayout(columns);
+        const rows = Math.max(2, Math.ceil(tilesToDisplay.length / columns));
+        applyGridLayout(columns, rows);
         tilesToDisplay.forEach(choice => tileContainer.appendChild(createTile(choice)));
       }
       requirePointerMotionBeforeHover();
