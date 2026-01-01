@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Danse des lucioles" data-en="Firefly Bloom" data-ja="ホタルのダンス">Danse des lucioles</title>
+
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <style>
+    :root {
+      --firefly-teal: #00bfa5;
+      --firefly-deep: #0a1c1f;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 30% 30%, #0c2a33, #040b10 55%);
+      color: #e8f7f1;
+      font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid var(--firefly-teal);
+      background: #061115;
+      color: var(--firefly-teal);
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    #hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 2px solid rgba(0, 191, 165, 0.35);
+      background: rgba(0, 15, 19, 0.55);
+      color: #d5fff4;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(6px);
+    }
+
+    #statusTitle {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    #statusSubtitle {
+      opacity: 0.85;
+      font-size: 14px;
+    }
+
+    #gameCanvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    #gazePointer {
+      position: fixed;
+      width: 44px;
+      height: 44px;
+      margin-left: -22px;
+      margin-top: -22px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 75, 75, 0.9);
+      box-shadow: 0 0 22px rgba(255, 75, 75, 0.65), 0 0 38px rgba(255, 75, 75, 0.35);
+      pointer-events: none;
+      mix-blend-mode: screen;
+      z-index: 12;
+      transition: transform 0.16s ease, opacity 0.18s ease;
+      transform: scale(0.98);
+      opacity: 0;
+      background: radial-gradient(circle, rgba(255, 75, 75, 0.35) 0%, rgba(255, 75, 75, 0.08) 70%, transparent 90%);
+    }
+
+    body.playing #gazePointer {
+      opacity: 1;
+    }
+
+    body.playing canvas {
+      cursor: none;
+    }
+
+    .dwell-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    /* Keep the existing menu styling */
+    #game-options.modal {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #control-panel-options {
+      padding: 14px 20px 20px;
+    }
+
+    #options-inline-container {
+      margin-top: 12px;
+    }
+
+    #mode-divider {
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate"
+          data-fr="Danse des lucioles"
+          data-en="Firefly Bloom"
+          data-ja="ホタルのダンス">Danse des lucioles</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label for="circleCount" class="teal-label">
+              <span class="translate" data-fr="Nombre de bulles" data-en="Number of bubbles" data-ja="バブルの数">Nombre de bulles</span> :
+              <span id="circleCountVal">4</span>
+            </label>
+            <input type="range" id="circleCount" class="styled-slider" min="2" max="8" value="4">
+          </div>
+          <div class="option-item">
+            <label for="circleSize" class="teal-label">
+              <span class="translate" data-fr="Taille des cercles" data-en="Circle size" data-ja="円の大きさ">Taille des cercles</span> :
+              <span id="circleSizeVal">120</span> px
+            </label>
+            <input type="range" id="circleSize" class="styled-slider" min="90" max="180" value="120">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTime" class="teal-label">
+              <span class="translate" data-fr="Temps de fixation" data-en="Dwell time" data-ja="注視時間">Temps de fixation</span> :
+              <span id="dwellTimeVal">1500</span> ms
+            </label>
+            <input type="range" id="dwellTime" class="styled-slider" min="500" max="4000" step="100" value="1500">
+          </div>
+          <div class="option-item">
+            <label for="fireflyBurst" class="teal-label">
+              <span class="translate" data-fr="Lucioles libérées" data-en="Fireflies released" data-ja="放たれるホタル">Lucioles libérées</span> :
+              <span id="fireflyBurstVal">12</span>
+            </label>
+            <input type="range" id="fireflyBurst" class="styled-slider" min="6" max="24" value="12">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label" for="trailToggle">
+              <input type="checkbox" id="trailToggle" checked>
+              <span class="translate" data-fr="Traînée lumineuse" data-en="Glow trails" data-ja="光の軌跡">Traînée lumineuse</span>
+            </label>
+          </div>
+          <div class="option-item">
+            <label class="teal-label" for="calmMode">
+              <input type="checkbox" id="calmMode">
+              <span class="translate" data-fr="Mode calme (mouvements doux)" data-en="Calm mode (gentle motion)" data-ja="ゆったりモード">Mode calme</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="statusTitle" class="translate" data-fr="Attrape les bulles" data-en="Catch the orbs" data-ja="光るバブルを見つめて">Attrape les bulles</div>
+    <div id="statusSubtitle" class="translate" data-fr="Fixe-les jusqu'à ce qu'elles libèrent leurs lucioles." data-en="Dwell until each orb bursts into fireflies." data-ja="見つめるとホタルが飛び出すよ。">Fixe-les jusqu'à ce qu'elles libèrent leurs lucioles.</div>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationmain.js"></script>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const pointerEl = document.getElementById('gazePointer');
+
+    const circleCountInput = document.getElementById('circleCount');
+    const circleCountVal = document.getElementById('circleCountVal');
+    const circleSizeInput = document.getElementById('circleSize');
+    const circleSizeVal = document.getElementById('circleSizeVal');
+    const dwellTimeInput = document.getElementById('dwellTime');
+    const dwellTimeVal = document.getElementById('dwellTimeVal');
+    const fireflyBurstInput = document.getElementById('fireflyBurst');
+    const fireflyBurstVal = document.getElementById('fireflyBurstVal');
+    const trailToggle = document.getElementById('trailToggle');
+    const calmMode = document.getElementById('calmMode');
+    const startButton = document.getElementById('startButton');
+    const langToggle = document.getElementById('langToggle');
+
+    const statusTitle = document.getElementById('statusTitle');
+    const statusSubtitle = document.getElementById('statusSubtitle');
+    let lastRemaining = null;
+
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    let smileCenter = { x: width / 2, y: height / 2, r: Math.min(width, height) * 0.22 };
+
+    function resizeCanvas() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      smileCenter = { x: width / 2, y: height / 2, r: Math.min(width, height) * 0.22 };
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    const pointer = { x: -1000, y: -1000, inside: false };
+    const lastPointer = { x: null, y: null };
+
+    function setPointerPos(x, y) {
+      pointer.x = x;
+      pointer.y = y;
+      pointer.inside = true;
+      if (pointerEl) {
+        pointerEl.style.left = `${x}px`;
+        pointerEl.style.top = `${y}px`;
+      }
+    }
+
+    const rawHandler = (e) => {
+      lastPointer.x = e.clientX;
+      lastPointer.y = e.clientY;
+      setPointerPos(e.clientX, e.clientY);
+    };
+
+    const moveHandler = (e) => {
+      lastPointer.x = e.clientX;
+      lastPointer.y = e.clientY;
+      setPointerPos(e.clientX, e.clientY);
+    };
+
+    if ('onpointerrawupdate' in window) window.addEventListener('pointerrawupdate', rawHandler, { passive: true });
+    window.addEventListener('pointermove', moveHandler, { passive: true });
+
+    window.addEventListener('pointerleave', () => {
+      pointer.inside = false;
+      pointer.x = -1000;
+      pointer.y = -1000;
+      if (pointerEl) pointerEl.style.opacity = 0;
+      stopHoverTone();
+    });
+
+    window.addEventListener('pointerenter', () => {
+      if (pointerEl && document.body.classList.contains('playing')) {
+        pointerEl.style.opacity = 1;
+      }
+      if (lastPointer.x != null && lastPointer.y != null) {
+        setPointerPos(lastPointer.x, lastPointer.y);
+      }
+    });
+
+    const circles = [];
+    const fireflies = [];
+    const burstColors = ['#7CF7E1', '#FFDE6F', '#FF8CC6', '#7DB2FF', '#C3FF8F', '#F7A35C'];
+
+    const audioCtx = 'AudioContext' in window ? new AudioContext() : null;
+    let bgAudio = null;
+    let celebrationAudio = null;
+    const hoverTone = { osc: null, gain: null, circle: null };
+
+    const hoverWaveform = 'sawtooth';
+    const hoverBaseFreq = 180;
+    const hoverFreqRange = 520;
+    const hoverBaseGain = 0.02;
+    const hoverGainRange = 0.08;
+    const hoverVolume = 0.35; // Adjust this multiplier to change overall hover sound loudness.
+
+    const backgroundTrack = '/songs/space/spacebest1.mp3';
+
+    const popSounds = [
+      '../../sounds/success3.mp3',
+      '../../sounds/success4.mp3',
+      '../../sounds/victory.mp3'
+    ];
+
+    const celebrationSounds = [
+      '../../sounds/firework.mp3',
+      '../../sounds/spacequestlaunch2.mp3',
+      '../../sounds/startactivity.mp3'
+    ];
+
+    let celebrationTimer = 0;
+    let celebrationElapsed = 0;
+    let celebrationDuration = 0;
+    let celebrationActive = false;
+    let celebrationMode = null;
+    let celebrationPhase = 'idle';
+    let celebrationPhaseTimer = 0;
+    let celebrationPhaseIndex = 0;
+    let celebrationTargets = [];
+    let activeCirclesRemaining = 0;
+
+    const CELEBRATION_STEPS = [
+      { name: 'gather', duration: 2.1 },
+      { name: 'orbit', duration: 3.3 },
+      { name: 'ribbons', duration: 2.3 },
+      { name: 'sparkle', duration: 2.3 },
+    ];
+    const CELEBRATION_TOTAL = 10;
+    let gameStarted = false;
+    let lastTime = performance.now();
+
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function ensureAudio() {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playOneShot(src, volume = 1) {
+      ensureAudio();
+      const audio = new Audio(src);
+      audio.volume = volume;
+      audio.play();
+      return audio;
+    }
+
+    function pickRandom(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function startBackgroundMusic() {
+      if (!backgroundTrack) return;
+      ensureAudio();
+
+      if (bgAudio) {
+        bgAudio.pause();
+      }
+
+      bgAudio = new Audio();
+      bgAudio.src = backgroundTrack;
+      bgAudio.loop = true;
+      bgAudio.volume = 0.22;
+      bgAudio.play();
+    }
+
+    function stopHoverTone() {
+      if (hoverTone.osc) {
+        hoverTone.osc.stop();
+        hoverTone.osc.disconnect();
+      }
+      if (hoverTone.gain) hoverTone.gain.disconnect();
+      hoverTone.osc = null;
+      hoverTone.gain = null;
+      hoverTone.circle = null;
+    }
+
+    function startHoverTone(circle) {
+      ensureAudio();
+      stopHoverTone();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = hoverWaveform;
+      osc.frequency.value = hoverBaseFreq;
+      gain.gain.value = hoverBaseGain * hoverVolume;
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      hoverTone.osc = osc;
+      hoverTone.gain = gain;
+      hoverTone.circle = circle;
+    }
+
+    function updateHoverTone(focus) {
+      if (!audioCtx || !hoverTone.osc || !hoverTone.gain) return;
+      const freq = hoverBaseFreq + hoverFreqRange * focus;
+      const gain = (hoverBaseGain + hoverGainRange * focus) * hoverVolume;
+      hoverTone.osc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.08);
+      hoverTone.gain.gain.setTargetAtTime(gain, audioCtx.currentTime, 0.08);
+    }
+
+    function spawnCircle() {
+      const radius = parseInt(circleSizeInput.value, 10);
+      const margin = radius + 30;
+      let x = rand(margin, width - margin);
+      let y = rand(margin, height - margin);
+      let tries = 0;
+      while (tries < 20) {
+        const overlaps = circles.some(c => {
+          const dist = Math.hypot(c.x - x, c.y - y);
+          return dist < (c.r + radius + 20);
+        });
+        if (!overlaps) break;
+        x = rand(margin, width - margin);
+        y = rand(margin, height - margin);
+        tries++;
+      }
+      circles.push({
+        x, y, r: radius,
+        color: burstColors[Math.floor(Math.random() * burstColors.length)],
+        focus: 0,
+        exploded: false,
+        ring: 0,
+        hovering: false
+      });
+    }
+
+    function spawnCircles() {
+      circles.length = 0;
+      stopHoverTone();
+      if (celebrationAudio) {
+        celebrationAudio.pause();
+      }
+      celebrationActive = false;
+      celebrationMode = null;
+      celebrationTimer = 0;
+      celebrationElapsed = 0;
+      celebrationDuration = 0;
+      lastRemaining = null;
+      activeCirclesRemaining = 0;
+      const count = parseInt(circleCountInput.value, 10);
+      activeCirclesRemaining = count;
+      for (let i = 0; i < count; i++) {
+        spawnCircle();
+      }
+    }
+
+    function explodeCircle(circle) {
+      circle.exploded = true;
+      if (hoverTone.circle === circle) {
+        stopHoverTone();
+      }
+      playOneShot(pickRandom(popSounds), 0.7);
+      const burst = parseInt(fireflyBurstInput.value, 10);
+      for (let i = 0; i < burst; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = calmMode.checked ? rand(70, 160) : rand(160, 280);
+        fireflies.push({
+          x: circle.x,
+          y: circle.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: Infinity,
+          age: 0,
+          glow: rand(16, 28),
+          baseColor: circle.color,
+          color: circle.color,
+          lively: true,
+          baseSpeed: speed,
+          heading: angle,
+          wanderTimer: rand(0.35, 0.9),
+          flickerSpeed: rand(2, 4),
+          flutterPhase: rand(0, Math.PI * 2),
+          celebrationHue: rand(0, 360),
+          trail: []
+        });
+      }
+    }
+
+    function buildSmileTargets(count) {
+      const cx = width / 2;
+      const cy = height / 2;
+      const faceR = Math.min(width, height) * 0.22;
+      smileCenter = { x: cx, y: cy, r: faceR };
+      const eyeR = faceR * 0.12;
+      const eyeOffsetX = faceR * 0.42;
+      const eyeOffsetY = faceR * -0.22;
+      const mouthR = faceR * 0.62;
+      const mouthStart = Math.PI * 1.15; // 207°
+      const mouthEnd = Math.PI * 1.85;   // 333°
+
+      const eyes = [];
+      const eyePoints = 12;
+      for (let i = 0; i < eyePoints; i++) {
+        const ang = (i / eyePoints) * Math.PI * 2;
+        const ex = Math.cos(ang) * eyeR;
+        const ey = Math.sin(ang) * eyeR;
+        eyes.push({ x: cx - eyeOffsetX + ex, y: cy + eyeOffsetY + ey });
+        eyes.push({ x: cx + eyeOffsetX + ex, y: cy + eyeOffsetY + ey });
+      }
+
+      const mouth = [];
+      const mouthPoints = 30;
+      for (let i = 0; i < mouthPoints; i++) {
+        const t = i / (mouthPoints - 1);
+        const ang = mouthStart + (mouthEnd - mouthStart) * t;
+        mouth.push({
+          x: cx + Math.cos(ang) * mouthR,
+          y: cy + Math.sin(ang) * mouthR
+        });
+      }
+
+      const ring = [];
+      const ringPoints = 36;
+      for (let i = 0; i < ringPoints; i++) {
+        const ang = (i / ringPoints) * Math.PI * 2;
+        ring.push({
+          x: cx + Math.cos(ang) * faceR,
+          y: cy + Math.sin(ang) * faceR * 0.95
+        });
+      }
+
+      const priority = [...eyes, ...mouth, ...ring];
+      const selected = [];
+
+      if (count <= priority.length) {
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(i * (priority.length / count));
+          selected.push(priority[idx]);
+        }
+      } else {
+        selected.push(...priority);
+        while (selected.length < count) {
+          selected.push({
+            x: cx + rand(-faceR * 0.35, faceR * 0.35),
+            y: cy + rand(-faceR * 0.2, faceR * 0.25)
+          });
+        }
+      }
+
+      return selected;
+    }
+
+    function launchCelebration() {
+      if (!fireflies.length) {
+        spawnCircles();
+        return;
+      }
+
+      celebrationActive = true;
+      celebrationMode = 'smile';
+      celebrationElapsed = 0;
+      celebrationPhaseIndex = 0;
+      celebrationPhase = CELEBRATION_STEPS[0].name;
+      celebrationDuration = CELEBRATION_TOTAL;
+      celebrationTimer = celebrationDuration;
+      celebrationPhaseTimer = CELEBRATION_STEPS[0].duration;
+
+      celebrationTargets = buildSmileTargets(fireflies.length);
+
+      const spinDir = Math.random() > 0.5 ? 1 : -1;
+
+      if (celebrationAudio) {
+        celebrationAudio.pause();
+      }
+      celebrationAudio = playOneShot(pickRandom(celebrationSounds), 0.75);
+
+      fireflies.forEach((f, i) => {
+        const target = celebrationTargets[i % celebrationTargets.length];
+        f.swirl = false;
+        f.lively = true;
+        f.auraPulse = rand(0.6, 1.4);
+        f.targetX = target.x + rand(-6, 6);
+        f.targetY = target.y + rand(-6, 6);
+        f.targetTimer = CELEBRATION_STEPS[0].duration;
+        f.heading = Math.atan2(f.targetY - f.y, f.targetX - f.x);
+        const boost = calmMode.checked ? 110 : 190;
+        f.baseSpeed = Math.max(f.baseSpeed || boost, boost);
+        f.flutterPhase = rand(0, Math.PI * 2);
+        f.orbitAngle = Math.atan2(f.y - smileCenter.y, f.x - smileCenter.x);
+        f.orbitRadius = smileCenter.r * rand(0.62, 1.2);
+        f.orbitSpeed = rand(1.35, 2.1) * (calmMode.checked ? 0.58 : 1.4);
+        f.spinDir = spinDir;
+        f.ribbonAngle = f.orbitAngle;
+        f.ribbonLift = rand(0.75, 1.25);
+      });
+    }
+
+    function updateFireflies(dt) {
+      const focusOnCircles = !celebrationActive && activeCirclesRemaining > 0;
+      for (let i = fireflies.length - 1; i >= 0; i--) {
+        const f = fireflies[i];
+        f.age += dt;
+        const damp = focusOnCircles
+          ? (calmMode.checked ? 0.94 : 0.9)
+          : (calmMode.checked ? 0.985 : 0.97);
+        f.vx *= damp;
+        f.vy *= damp;
+
+        const gatherPhase = celebrationActive && celebrationPhase === 'gather';
+        const orbitPhase = celebrationActive && celebrationPhase === 'orbit';
+        const ribbonPhase = celebrationActive && celebrationPhase === 'ribbons';
+        const sparklePhase = celebrationActive && celebrationPhase === 'sparkle';
+
+        if (gatherPhase && f.targetTimer > 0) {
+          f.targetTimer -= dt;
+          const dx = f.targetX - f.x;
+          const dy = f.targetY - f.y;
+          const dist = Math.max(12, Math.hypot(dx, dy));
+          const targetSpeed = (calmMode.checked ? 90 : 165) * (1 + 0.14 * Math.sin(f.age * 3 + f.flutterPhase));
+          const desiredVx = (dx / dist) * targetSpeed;
+          const desiredVy = (dy / dist) * targetSpeed;
+          const steer = calmMode.checked ? 1.05 : 1.65;
+          f.vx += (desiredVx - f.vx) * steer * dt;
+          f.vy += (desiredVy - f.vy) * steer * dt;
+
+          const buzz = calmMode.checked ? 14 : 28;
+          const tangentX = -dy / dist;
+          const tangentY = dx / dist;
+          f.vx += tangentX * buzz * dt;
+          f.vy += tangentY * buzz * dt;
+        } else if (orbitPhase) {
+          f.orbitAngle += f.orbitSpeed * dt;
+
+          const wobble = 1 + 0.2 * Math.sin(f.age * 3.3 + f.flutterPhase);
+          const orbitPulse = 1 + 0.32 * Math.sin((celebrationElapsed + f.flutterPhase) * 4.2);
+          const orbitR = f.orbitRadius * wobble * orbitPulse;
+
+          const spinAround = (calmMode.checked ? 0.95 : 1.7) * f.spinDir;
+          const fastSpin = 0.5 + 0.8 * Math.sin((celebrationElapsed + f.flutterPhase) * 3.8);
+          const angleOffset = (celebrationElapsed * spinAround) + fastSpin;
+
+          const desiredX = smileCenter.x + Math.cos(f.orbitAngle + angleOffset) * orbitR;
+          const desiredY = smileCenter.y + Math.sin(f.orbitAngle + angleOffset) * orbitR * 0.92;
+          const dx = desiredX - f.x;
+          const dy = desiredY - f.y;
+          const chase = calmMode.checked ? 1.28 : 2.05;
+          f.vx += dx * chase * dt;
+          f.vy += dy * chase * dt;
+
+          const swirlLift = calmMode.checked ? 18 : 34;
+          const swirlSpin = calmMode.checked ? 22 : 46;
+          f.vx += (-Math.sin(f.orbitAngle * 2.2) * swirlLift + f.spinDir * swirlSpin) * dt;
+          f.vy += (Math.cos(f.orbitAngle * 2.2) * swirlLift) * dt;
+
+          const shimmer = calmMode.checked ? 16 : 34;
+          f.vx += rand(-shimmer, shimmer) * dt;
+          f.vy += rand(-shimmer, shimmer) * dt;
+        } else if (ribbonPhase) {
+          f.ribbonAngle += (calmMode.checked ? 1.35 : 2.5) * f.spinDir * dt;
+          const ribbonR = smileCenter.r * (0.82 + 0.4 * Math.sin(f.ribbonAngle * 1.8 + f.flutterPhase));
+          const ribbonWave = Math.sin((celebrationElapsed + f.flutterPhase) * 4.8) * smileCenter.r * 0.14;
+          const desiredX = smileCenter.x + Math.cos(f.ribbonAngle) * ribbonR;
+          const desiredY = smileCenter.y + Math.sin(f.ribbonAngle) * ribbonR * 0.9 + ribbonWave * f.ribbonLift;
+          const dx = desiredX - f.x;
+          const dy = desiredY - f.y;
+          const chase = calmMode.checked ? 1.35 : 2.35;
+          f.vx += dx * chase * dt;
+          f.vy += dy * chase * dt;
+
+          const swirl = calmMode.checked ? 26 : 46;
+          f.vx += rand(-swirl, swirl) * dt;
+          f.vy += rand(-swirl, swirl) * dt;
+        } else if (sparklePhase) {
+          const sparkleR = smileCenter.r * (0.6 + 0.25 * Math.sin(f.age * 2 + f.flutterPhase));
+          const twirl = celebrationElapsed * (calmMode.checked ? 1.1 : 1.9) * f.spinDir;
+          const desiredX = smileCenter.x + Math.cos(f.orbitAngle + twirl) * sparkleR;
+          const desiredY = smileCenter.y + Math.sin(f.orbitAngle + twirl) * sparkleR * 0.95;
+          const dx = desiredX - f.x;
+          const dy = desiredY - f.y;
+          const chase = calmMode.checked ? 1.35 : 2.45;
+          f.vx += dx * chase * dt;
+          f.vy += dy * chase * dt;
+
+          const sparkleBurst = calmMode.checked ? 38 : 66;
+          f.vx += rand(-sparkleBurst, sparkleBurst) * dt;
+          f.vy += rand(-sparkleBurst, sparkleBurst) * dt;
+        } else {
+          f.wanderTimer -= dt;
+          if (f.wanderTimer <= 0) {
+            f.heading += rand(-1.2, 1.2);
+            f.wanderTimer = calmMode.checked ? rand(0.8, 1.4) : rand(0.45, 1.05);
+          }
+
+          if (f.lively) {
+            const flutter = calmMode.checked ? 0.22 : 0.35;
+            const targetSpeed = (calmMode.checked ? f.baseSpeed * 0.55 : f.baseSpeed * 0.85) *
+              (1 + flutter * Math.sin(f.flutterPhase + f.age * (calmMode.checked ? 1.4 : 2.6))) *
+              (focusOnCircles ? 0.32 : 1);
+            const desiredVx = Math.cos(f.heading) * targetSpeed;
+            const desiredVy = Math.sin(f.heading) * targetSpeed;
+            const chase = (calmMode.checked ? 0.55 : 0.75) * (focusOnCircles ? 0.6 : 1);
+            f.vx += (desiredVx - f.vx) * chase * dt;
+            f.vy += (desiredVy - f.vy) * chase * dt;
+
+            const wiggle = (calmMode.checked ? 16 : 30) * (focusOnCircles ? 0.35 : 1);
+            f.vx += rand(-wiggle, wiggle) * dt;
+            f.vy += rand(-wiggle, wiggle) * dt;
+          }
+
+          if (f.swirl) {
+            const cx = width / 2;
+            const cy = height / 2;
+            const dx = f.x - cx;
+            const dy = f.y - cy;
+            const dist = Math.max(40, Math.hypot(dx, dy));
+            f.vx += (-dy / dist) * 24 * dt;
+            f.vy += (dx / dist) * 24 * dt;
+          }
+        }
+
+        f.x += f.vx * dt;
+        f.y += f.vy * dt;
+
+        if (focusOnCircles) {
+          const speed = Math.hypot(f.vx, f.vy);
+          const cap = calmMode.checked ? 60 : 85;
+          if (speed > cap) {
+            const scale = cap / speed;
+            f.vx *= scale;
+            f.vy *= scale;
+          }
+        }
+
+        if (f.x < -60 || f.x > width + 60 || f.y < -60 || f.y > height + 60) {
+          if (f.x < -60) f.x = width + 60;
+          if (f.x > width + 60) f.x = -60;
+          if (f.y < -60) f.y = height + 60;
+          if (f.y > height + 60) f.y = -60;
+          f.trail.length = 0;
+        }
+
+        if (trailToggle.checked) {
+          f.trail.push({ x: f.x, y: f.y, t: f.age });
+          if (f.trail.length > 12) f.trail.shift();
+        }
+
+      }
+    }
+
+    function drawFireflies() {
+      const focusOnCircles = !celebrationActive && activeCirclesRemaining > 0;
+      fireflies.forEach(f => {
+        if (trailToggle.checked) {
+          for (let i = 0; i < f.trail.length - 1; i++) {
+            const a = f.trail[i];
+            const b = f.trail[i + 1];
+            const segmentLen = Math.hypot(b.x - a.x, b.y - a.y);
+            if (segmentLen > 220) continue; // avoid wrap artifacts
+            const alpha = Math.max(0, 1 - (f.age - a.t) / f.life) * (focusOnCircles ? 0.3 : 1);
+            ctx.strokeStyle = `${f.color}${Math.floor(alpha * 255).toString(16).padStart(2, '0')}`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+
+        const lifeAlpha = Math.max(0.3, 1 - f.age / Math.max(f.life, 1)); // keep a gentle glow
+        const flicker = 0.8 + 0.35 * Math.sin(f.age * f.flickerSpeed * 2 + f.flutterPhase);
+        const glow = f.glow * (calmMode.checked ? 0.9 : 1.3) * flicker * (focusOnCircles ? 0.42 : 1);
+        const hueColor = celebrationActive
+          ? `hsl(${(f.celebrationHue + celebrationElapsed * 90) % 360}, 95%, 72%)`
+          : f.baseColor || f.color;
+        const gradient = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, glow);
+        const innerColor = celebrationActive
+          ? hueColor.replace('hsl', 'hsla').replace(')', ', 0.9)')
+          : `${hueColor}${focusOnCircles ? '66' : 'cc'}`;
+        const outerColor = celebrationActive ? hueColor.replace('hsl', 'hsla').replace(')', ', 0)') : `${hueColor}00`;
+        gradient.addColorStop(0, innerColor);
+        gradient.addColorStop(1, outerColor);
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, glow, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (celebrationActive) {
+          const auraR = glow * (1.6 + 0.7 * Math.sin((celebrationElapsed + f.flutterPhase) * 3.1 + f.auraPulse));
+          const auraHue = (f.celebrationHue + celebrationElapsed * 140) % 360;
+          const aura = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, auraR);
+          aura.addColorStop(0, `hsla(${auraHue}, 95%, 75%, 0.55)`);
+          aura.addColorStop(0.45, `hsla(${(auraHue + 40) % 360}, 92%, 70%, 0.35)`);
+          aura.addColorStop(1, `hsla(${(auraHue + 80) % 360}, 88%, 65%, 0)`);
+          ctx.fillStyle = aura;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, auraR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * lifeAlpha})`;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function drawCircles() {
+      circles.forEach(c => {
+        if (c.exploded) return;
+        const focusScale = 1 + c.focus * 0.75;
+        const glowBoost = 1 + c.focus * 1.05;
+        const radius = c.r * focusScale;
+        const gradient = ctx.createRadialGradient(
+          c.x - radius * 0.2,
+          c.y - radius * 0.2,
+          radius * 0.05,
+          c.x,
+          c.y,
+          radius * 1.2
+        );
+        gradient.addColorStop(0, `#ffffff${Math.floor(80 + 80 * c.focus).toString(16).padStart(2, '0')}`);
+        gradient.addColorStop(1, `${c.color}f0`);
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dwell ring
+        if (c.focus > 0) {
+          ctx.strokeStyle = '#ffffffdd';
+          ctx.lineWidth = 8 + c.focus * 7;
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, radius + 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c.focus);
+          ctx.stroke();
+        }
+
+        // subtle pulse
+        ctx.strokeStyle = `${c.color}aa`;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, radius + 20 * glowBoost * Math.abs(Math.sin(performance.now() / 600)), 0, Math.PI * 2);
+        ctx.stroke();
+      });
+    }
+
+    function updateCircles(dt) {
+      if (!gameStarted) return;
+      const dwell = parseInt(dwellTimeInput.value, 10) / 1000;
+      circles.forEach(c => {
+        if (c.exploded) return;
+        const focusScale = 1 + c.focus * 0.75;
+        const hitRadius = c.r * focusScale;
+        const over = pointer.inside && Math.hypot(pointer.x - c.x, pointer.y - c.y) <= hitRadius;
+        if (over) {
+          if (!c.hovering) {
+            c.hovering = true;
+            startHoverTone(c);
+          }
+          c.focus = Math.min(1, c.focus + dt / dwell);
+          updateHoverTone(c.focus);
+          if (c.focus >= 1) {
+            explodeCircle(c);
+          }
+        } else {
+          if (c.hovering) {
+            c.hovering = false;
+            stopHoverTone();
+          }
+          c.focus = Math.max(0, c.focus - dt * 0.75);
+        }
+      });
+
+      const remaining = circles.filter(c => !c.exploded).length;
+      activeCirclesRemaining = remaining;
+      if (remaining !== lastRemaining) {
+        statusTitle.dataset.fr = remaining > 0 ? 'Attrape les bulles' : 'Spectacle de lucioles !';
+        statusTitle.dataset.en = remaining > 0 ? 'Catch the orbs' : 'Firefly show!';
+        statusTitle.dataset.ja = remaining > 0 ? '光るバブルを見つめて' : 'ホタルのショー！';
+        statusSubtitle.dataset.fr = remaining > 0
+          ? `Plus que ${remaining} bulle${remaining > 1 ? 's' : ''}.`
+          : 'Regarde les lucioles danser.';
+        statusSubtitle.dataset.en = remaining > 0
+          ? `${remaining} orb${remaining > 1 ? 's' : ''} left.`
+          : 'Watch the fireflies dance.';
+        statusSubtitle.dataset.ja = remaining > 0
+          ? `${remaining}個のバブルが残っています。`
+          : 'ホタルのダンスを見よう。';
+
+        updateLanguage();
+        lastRemaining = remaining;
+      }
+
+      if (remaining === 0 && !celebrationActive) {
+        launchCelebration();
+      }
+    }
+
+    function renderBackground() {
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, '#03121a');
+      gradient.addColorStop(1, '#00050a');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      for (let i = 0; i < 40; i++) {
+        const size = Math.sin((lastTime * 0.001 + i) % Math.PI) * 1.5 + 1.5;
+        ctx.beginPath();
+        ctx.arc((i * 97) % width, (i * 53) % height, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function gameLoop(ts) {
+      const dt = Math.min(0.05, (ts - lastTime) / 1000);
+      lastTime = ts;
+
+      renderBackground();
+      if (gameStarted) {
+        updateCircles(dt);
+        updateFireflies(dt);
+        drawCircles();
+        drawFireflies();
+      }
+
+      if (celebrationActive) {
+        celebrationElapsed += dt;
+        celebrationTimer -= dt;
+        celebrationPhaseTimer -= dt;
+
+        if (celebrationPhaseTimer <= 0) {
+          celebrationPhaseIndex++;
+          if (celebrationPhaseIndex < CELEBRATION_STEPS.length) {
+            celebrationPhase = CELEBRATION_STEPS[celebrationPhaseIndex].name;
+            celebrationPhaseTimer = CELEBRATION_STEPS[celebrationPhaseIndex].duration;
+
+            // retune motions between phases for extra spectacle
+            fireflies.forEach((f, i) => {
+              if (celebrationPhase === 'orbit') {
+                f.targetTimer = 0;
+                f.orbitRadius *= rand(0.95, 1.12);
+                f.orbitSpeed *= rand(0.95, 1.2);
+              } else if (celebrationPhase === 'ribbons') {
+                f.ribbonAngle = f.orbitAngle + (i % 2 === 0 ? Math.PI / 6 : -Math.PI / 6);
+                f.ribbonLift = rand(0.85, 1.35);
+              } else if (celebrationPhase === 'sparkle') {
+                f.orbitAngle += rand(-Math.PI, Math.PI);
+                f.ribbonLift = rand(0.6, 1.4);
+              }
+            });
+          } else {
+            celebrationPhaseTimer = celebrationTimer; // ride out the finale
+          }
+        }
+
+        if (celebrationTimer <= 0) {
+          celebrationActive = false;
+          celebrationMode = null;
+          celebrationPhase = 'idle';
+          celebrationPhaseIndex = 0;
+          fireflies.forEach(f => {
+            f.swirl = false;
+            f.targetTimer = 0;
+          });
+          spawnCircles();
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    langToggle.addEventListener('click', () => {
+      toggleLanguage();
+    });
+
+    function startGame() {
+      document.body.classList.add('playing');
+      document.getElementById('game-options').style.display = 'none';
+      document.getElementById('hud').style.display = 'none';
+      langToggle.style.display = 'none';
+      statusTitle.textContent = '';
+      statusSubtitle.textContent = '';
+      fireflies.length = 0;
+      gameStarted = true;
+      ensureAudio();
+      startBackgroundMusic();
+      if (lastPointer.x != null && lastPointer.y != null) {
+        setPointerPos(lastPointer.x, lastPointer.y);
+      }
+      if (pointerEl) pointerEl.style.opacity = 1;
+      spawnCircles();
+    }
+
+    function updateValueLabels() {
+      circleCountVal.textContent = circleCountInput.value;
+      circleSizeVal.textContent = circleSizeInput.value;
+      dwellTimeVal.textContent = dwellTimeInput.value;
+      fireflyBurstVal.textContent = fireflyBurstInput.value;
+    }
+
+    circleCountInput.addEventListener('input', updateValueLabels);
+    circleSizeInput.addEventListener('input', updateValueLabels);
+    dwellTimeInput.addEventListener('input', updateValueLabels);
+    fireflyBurstInput.addEventListener('input', updateValueLabels);
+
+    startButton.addEventListener('click', startGame);
+
+    resizeCanvas();
+    updateLanguage();
+    updateValueLabels();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
