@@ -1,0 +1,529 @@
+  (() => {
+    /* =======================
+       CONFIG
+    ======================= */
+    const IMG_SRC = "../../images/samurai/cherryblossom.png";       // petal image
+    const BG_SRC  = "../../images/samurai/cherryblossombg.png";     // background image
+    const SLASH_SOUND = "../../sounds/blade.mp3";
+    const KATANA_SRC  = "../../images/samurai/katana.png";
+    const SONG_SRC    = "../../songs/samurai/cherryblossomsong2.mp3"; // bg song
+    const KATANA_DRAW_SRC = "../../sounds/katana.mp3";               // sword drawing SFX
+
+    // Cursor limits and hotspot (in ORIGINAL image pixels)
+    const CURSOR_MAX_PX = 124;
+    const HOTSPOT_ORIG = { x: 12, y: 28 };
+
+    // Play (normal game) settings
+    const SPAWN_EVERY_MS   = 1400;
+    const FALL_SPEED_MIN   = 40;
+    const FALL_SPEED_MAX   = 95;
+    const BLOSSOM_SIZE_MIN = 72 * 3;
+    const BLOSSOM_SIZE_MAX = 138 * 3;
+    const HOVER_CUT_RADIUS = 52;
+    const SHARD_SPREAD_SPEED = 190;
+    const SHARD_ROT_SPEED    = 1.2;
+    const SHARD_FADE_TIME    = 0.85;
+    const MAX_FALLING        = 5;
+
+    // Intro (tornado swirl) settings — fly-off
+    const INTRO_DURATION_MS = 5000;     // 5s total
+    const SWIRL_PETALS      = 50;       // keep it smooth
+    const SWIRL_SIZE_MIN    = 40;
+    const SWIRL_SIZE_MAX    = 100;
+    const SWIRL_RAD_MIN     = 20;       // starting radius
+    const SWIRL_RAD_MAX     = 220;
+    const SWIRL_DR_MIN      = 16;       // baseline radial expansion (px/s)
+    const SWIRL_DR_MAX      = 42;
+    const SWIRL_DA_MIN      = 2.2;      // angular vel (rad/s)
+    const SWIRL_DA_MAX      = 4.2;
+    const SWIRL_SPIN_MIN    = -1.6;     // self-rotation (rad/s)
+    const SWIRL_SPIN_MAX    =  1.6;
+    const SWIRL_CENTER_DRIFT_Y = 12;    // gentle downward drift (px/s)
+
+    // Strong outward burst controls
+    const BURST_START_T     = 0.60;     // fraction of intro when burst begins
+    const BURST_MAX_OUT_PX  = 1800;     // additional outward speed at peak (px/s)
+    const BURST_SPINUP_MUL  = 1.6;      // multiplies angular velocity during burst
+    const FINAL_BLAST_MS    = 350;      // last ms window for a final kick
+    const FINAL_BLAST_OUT   = 2200;     // extra outward speed (px/s) in last window
+
+    // Off-screen margin for culling
+    const OFF_MARGIN = 320;
+
+    /* =======================
+       SETUP
+    ======================= */
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width  = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+
+    let resizeRAF = 0;
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(resizeRAF);
+      resizeRAF = requestAnimationFrame(() => {
+        W = canvas.width  = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+      });
+    });
+
+    // Assets
+    const img = new Image(); img.src = IMG_SRC;
+    const bgImg = new Image(); bgImg.src = BG_SRC;
+
+    // Audio
+    const slashAudio = new Audio(SLASH_SOUND);
+    slashAudio.volume = 0.6;
+    function playSlash() {
+      const s = slashAudio.cloneNode(true);
+      s.volume = slashAudio.volume;
+      s.play().catch(()=>{});
+    }
+
+    // Background music
+    const bgSong = new Audio(SONG_SRC);
+    bgSong.volume = 0.75;   // 75%
+    bgSong.loop = true;
+
+    // Katana draw SFX (for the moment the sword cursor appears)
+    const katanaDraw = new Audio(KATANA_DRAW_SRC);
+    katanaDraw.volume = 0.9;
+
+    // Pointer / cursor flip
+    const pointer = { x: -9999, y: -9999, prevX: -9999, inside: false };
+    const MOVE_THRESH = 2;
+    let cursorOrient = 'left';
+
+    canvas.addEventListener('pointermove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top)  * (canvas.height / rect.height);
+      const dx = (pointer.prevX === -9999) ? 0 : (x - pointer.prevX);
+
+      pointer.x = x; pointer.y = y; pointer.inside = true;
+
+      if (gameState === 'play' && katanaReady && katanaRevealed) {
+        if (dx > MOVE_THRESH && cursorOrient !== 'right') { cursorOrient = 'right'; applyKatanaCursor(); }
+        else if (dx < -MOVE_THRESH && cursorOrient !== 'left') { cursorOrient = 'left'; applyKatanaCursor(); }
+      }
+      pointer.prevX = x;
+    });
+    canvas.addEventListener('pointerleave', () => pointer.inside = false);
+
+    const blossoms = [];
+    const shards = [];
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const nowSec = () => performance.now()/1000;
+
+    /* =======================
+       KATANA CURSOR
+    ======================= */
+    let katanaReady = false;
+    let katanaLeft = null;   // {url, hx, hy}
+    let katanaRight = null;  // {url, hx, hy}
+    let katanaRevealed = false; // becomes true once we show the katana cursor + play SFX
+
+    const katanaImg = new Image();
+    katanaImg.onload = () => {
+      const iw = katanaImg.width, ih = katanaImg.height;
+      const scale = Math.min(1, CURSOR_MAX_PX / Math.max(iw, ih));
+      const dw = Math.round(iw * scale);
+      const dh = Math.round(ih * scale);
+
+      const leftCanvas = document.createElement('canvas');
+      leftCanvas.width = dw; leftCanvas.height = dh;
+      const lctx = leftCanvas.getContext('2d');
+      lctx.imageSmoothingEnabled = true;
+      lctx.drawImage(katanaImg, 0, 0, dw, dh);
+
+      const rightCanvas = document.createElement('canvas');
+      rightCanvas.width = dw; rightCanvas.height = dh;
+      const rctx = rightCanvas.getContext('2d');
+      rctx.imageSmoothingEnabled = true;
+      rctx.translate(dw, 0); rctx.scale(-1, 1);
+      rctx.drawImage(katanaImg, 0, 0, dw, dh);
+
+      const hxLeft  = Math.max(0, Math.min(dw - 1, Math.round(HOTSPOT_ORIG.x * scale)));
+      const hyLeft  = Math.max(0, Math.min(dh - 1, Math.round(HOTSPOT_ORIG.y * scale)));
+      const hxRight = (dw - 1) - hxLeft;
+      const hyRight = hyLeft;
+
+      katanaLeft  = { url: leftCanvas.toDataURL('image/png'),  hx: hxLeft,  hy: hyLeft };
+      katanaRight = { url: rightCanvas.toDataURL('image/png'), hx: hxRight, hy: hyRight };
+      katanaReady = true;
+
+      // If we are already in play and haven't revealed yet, do it now
+      if (gameState === 'play' && !katanaRevealed) {
+        revealKatanaCursorWithSfx();
+      }
+    };
+    katanaImg.onerror = () => { katanaReady = false; };
+    katanaImg.src = KATANA_SRC;
+
+    function applyKatanaCursor() {
+      if (!katanaReady) return;
+      const k = (cursorOrient === 'right') ? katanaRight : katanaLeft;
+      canvas.style.cursor = `url("${k.url}") ${k.hx} ${k.hy}, crosshair`;
+    }
+
+    function revealKatanaCursorWithSfx() {
+      if (!katanaReady) return; // will be retried via onload above
+      applyKatanaCursor();
+      katanaRevealed = true;
+      // Play the katana drawing sound when the sword appears
+      try { katanaDraw.currentTime = 0; katanaDraw.play(); } catch(e) {}
+    }
+
+    /* =======================
+       HUD: SLICE COUNTER
+    ======================= */
+    let sliceCount = 0;
+    function drawHUD() {
+      const pad = Math.max(12, Math.min(20, Math.floor(W * 0.01 + H * 0.01)));
+      const iconSize = Math.max(24, Math.min(36, Math.floor((W + H) * 0.02)));
+      const textSize = Math.max(18, Math.min(28, Math.floor((W + H) * 0.018)));
+
+      const xRight = W - pad;
+      const yTop = pad + iconSize * 0.1;
+
+      ctx.save();
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${textSize}px ui-rounded, ui-sans-serif, system-ui, Segoe UI, Roboto, Arial`;
+      ctx.fillStyle = '#d40000';
+      ctx.shadowColor = 'rgba(0,0,0,0.25)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+
+      // Number
+      ctx.fillText(`${sliceCount}`, xRight, yTop + iconSize * 0.5);
+
+      // Icon left of the number
+      if (img.complete && img.naturalWidth > 0) {
+        const iconX = xRight - ctx.measureText(`${sliceCount}`).width - 10 - iconSize;
+        const iconY = pad;
+        ctx.shadowColor = 'rgba(0,0,0,0.18)';
+        ctx.drawImage(img, iconX, iconY, iconSize, iconSize);
+      }
+      ctx.restore();
+    }
+
+    /* =======================
+       GAME ENTITIES
+    ======================= */
+    function spawnBlossom() {
+      if (!img.complete) return;
+      const size = rand(BLOSSOM_SIZE_MIN, BLOSSOM_SIZE_MAX);
+      const aspect = img.width / img.height || 1;
+      const w = aspect >= 1 ? size*aspect : size;
+      const h = aspect >= 1 ? size : size/aspect;
+      blossoms.push({
+        x: rand(w * 0.5, W - w * 0.5),
+        y: -h - rand(0, 100),
+        w, h,
+        angle: rand(-Math.PI, Math.PI),
+        rot: rand(-0.5, 0.5),
+        vy: rand(FALL_SPEED_MIN, FALL_SPEED_MAX),
+        vx: rand(-12, 12),
+        cut: false
+      });
+    }
+
+    function cutBlossom(b) {
+      playSlash();
+      sliceCount++;
+
+      const leftRect  = { sx: 0, sy: 0, sw: img.width/2, sh: img.height };
+      const rightRect = { sx: img.width/2, sy: 0, sw: img.width/2, sh: img.height };
+      const tw = b.w, th = b.h, tBorn = nowSec();
+      shards.push({clip:leftRect,x:b.x-tw/4,y:b.y,w:tw/2,h:th,angle:b.angle,vx:-SHARD_SPREAD_SPEED*0.75,vy:-SHARD_SPREAD_SPEED*0.25,rot:-SHARD_ROT_SPEED,born:tBorn,life:SHARD_FADE_TIME});
+      shards.push({clip:rightRect,x:b.x+tw/4,y:b.y,w:tw/2,h:th,angle:b.angle,vx: SHARD_SPREAD_SPEED*0.75,vy:-SHARD_SPREAD_SPEED*0.25,rot: SHARD_ROT_SPEED,born:tBorn,life: SHARD_FADE_TIME});
+      b.cut = true;
+    }
+
+    /* =======================
+       INTRO: TORNADO SWIRL (FLY-OFF)
+    ======================= */
+    let gameState = 'idle';  // 'idle' | 'intro' | 'play'
+    let introStartMs = 0;
+    let started = false;
+    let rafId = 0;
+
+    let swirlCenter = { x: 0, y: 0 };
+    let swirlPetals = []; // {r,a,w,h,spin,dr,da,angle,done}
+
+    function smoothstep01(t){ return t*t*(3-2*t); } // 0..1 -> smooth 0..1
+
+    function initSwirl() {
+      swirlCenter.x = W * 0.5;
+      swirlCenter.y = H * 0.55;
+      swirlPetals = [];
+
+      for (let i = 0; i < SWIRL_PETALS; i++) {
+        const r  = rand(SWIRL_RAD_MIN, SWIRL_RAD_MAX);
+        const a  = rand(0, Math.PI * 2);
+        const size = rand(SWIRL_SIZE_MIN, SWIRL_SIZE_MAX);
+        const aspect = (img.width || 1) / (img.height || 1);
+        const w = aspect >= 1 ? size*aspect : size;
+        const h = aspect >= 1 ? size : size/aspect;
+
+        swirlPetals.push({
+          r, a, w, h,
+          spin: rand(SWIRL_SPIN_MIN, SWIRL_SPIN_MAX),              // self-rotation
+          dr:   rand(SWIRL_DR_MIN, SWIRL_DR_MAX),                  // base radial expansion
+          da:   rand(SWIRL_DA_MIN, SWIRL_DA_MAX) * (Math.random()<0.5?-1:1), // angular velocity
+          angle: rand(-Math.PI, Math.PI),
+          done: false
+        });
+      }
+    }
+
+    function updateSwirl(dt, t01) {
+      // gentle vertical drift of the whole column
+      swirlCenter.y += SWIRL_CENTER_DRIFT_Y * dt;
+
+      // ramped burst strength 0..1 after BURST_START_T
+      const burstPhase = Math.max(0, (t01 - BURST_START_T) / (1 - BURST_START_T));
+      const burst = smoothstep01(burstPhase); // smooth ramp-up
+
+      // final blast window
+      const remainingMs = INTRO_DURATION_MS * (1 - t01);
+      const finalBlast = remainingMs <= FINAL_BLAST_MS ? (1 - remainingMs / FINAL_BLAST_MS) : 0;
+
+      for (const p of swirlPetals) {
+        if (p.done) continue;
+
+        // spin-up during burst (tighter/twitchier swirl)
+        const daNow = p.da * (1 + (BURST_SPINUP_MUL - 1) * burst);
+
+        // strong outward push during burst + final blast
+        const outward = p.dr + (BURST_MAX_OUT_PX * burst) + (FINAL_BLAST_OUT * finalBlast);
+
+        // integrate polar motion
+        p.a     += daNow * dt;     // orbit
+        p.r     += outward * dt;   // spiral out faster and then explode
+        p.angle += p.spin * dt;    // petal self-rotation
+
+        // compute position for off-screen test
+        const x = swirlCenter.x + Math.cos(p.a) * p.r;
+        const y = swirlCenter.y + Math.sin(p.a) * p.r;
+
+        if (x < -OFF_MARGIN || x > W + OFF_MARGIN || y < -OFF_MARGIN || y > H + OFF_MARGIN) {
+          p.done = true; // out of view; stop drawing
+        }
+      }
+    }
+
+    function drawSwirl() {
+      drawBackgroundImage();
+      for (const p of swirlPetals) {
+        if (p.done) continue;
+        const x = swirlCenter.x + Math.cos(p.a) * p.r;
+        const y = swirlCenter.y + Math.sin(p.a) * p.r;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(p.angle);
+        ctx.drawImage(img, -p.w/2, -p.h/2, p.w, p.h);
+        ctx.restore();
+      }
+      // HUD during intro (shows 0)
+      drawHUD();
+    }
+
+    /* =======================
+       GAME LOOP STATE
+    ======================= */
+    let lastT = performance.now(), spawnTimer = 0;
+
+    function tick(tMs) {
+      if (!started) {
+        rafId = 0;
+        return;
+      }
+      const dt = Math.min(0.033, (tMs - lastT) / 1000);
+      lastT = tMs;
+
+      if (gameState === 'intro') {
+        const elapsed = tMs - introStartMs;
+        const t01 = Math.min(1, Math.max(0, elapsed / INTRO_DURATION_MS));
+        updateSwirl(dt, t01);
+        drawSwirl();
+
+        if (elapsed >= INTRO_DURATION_MS) {
+          gameState = 'play';
+
+          // Reveal sword cursor + SFX if ready, or as soon as it becomes ready
+          if (katanaReady) revealKatanaCursorWithSfx();
+
+          spawnTimer = SPAWN_EVERY_MS + 1; // seed first blossom soon
+        }
+      } else if (gameState === 'play') {
+        spawnTimer += dt * 1000;
+        if (spawnTimer > SPAWN_EVERY_MS && blossoms.length < MAX_FALLING) {
+          spawnTimer = 0;
+          spawnBlossom();
+        }
+        updateBlossoms(dt);
+        updateShards(dt);
+        render();
+      }
+
+      rafId = requestAnimationFrame(tick);
+    }
+
+    /* =======================
+       BACKGROUND IMAGE (cover)
+    ======================= */
+    function drawBackgroundImage() {
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        const iw = bgImg.width, ih = bgImg.height;
+        const scale = Math.max(W / iw, H / ih); // cover
+        const dw = iw * scale, dh = ih * scale;
+        const dx = (W - dw) * 0.5;
+        const dy = (H - dh) * 0.5;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(bgImg, dx, dy, dw, dh);
+      } else {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    /* =======================
+       PLAY RENDER/UPDATE
+    ======================= */
+    function updateBlossoms(dt) {
+      for (let i = blossoms.length-1; i>=0; i--) {
+        const b = blossoms[i];
+        b.y += b.vy * dt;
+        b.x += b.vx * dt;
+        b.angle += b.rot * dt;
+        const dx = pointer.x - b.x, dy = pointer.y - b.y;
+        if (pointer.inside && !b.cut && dx*dx+dy*dy<=HOVER_CUT_RADIUS*HOVER_CUT_RADIUS) cutBlossom(b);
+        if (b.cut || b.y - b.h/2 > H+40) blossoms.splice(i, 1);
+      }
+    }
+
+    function updateShards(dt) {
+      const t = nowSec();
+      for (let i = shards.length-1; i>=0; i--) {
+        const s = shards[i];
+        s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 420*dt; s.angle += s.rot * dt;
+        if (t - s.born > s.life) shards.splice(i, 1);
+      }
+    }
+
+    function render() {
+      drawBackgroundImage();
+      // Whole blossoms
+      for (const b of blossoms) {
+        ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle);
+        ctx.drawImage(img,-b.w/2,-b.h/2,b.w,b.h); ctx.restore();
+      }
+      // Shards
+      const t = nowSec();
+      for (const s of shards) {
+        const alpha = Math.max(0,1-(t-s.born)/s.life);
+        ctx.save(); ctx.globalAlpha = alpha;
+        ctx.translate(s.x,s.y); ctx.rotate(s.angle);
+        ctx.drawImage(img,s.clip.sx,s.clip.sy,s.clip.sw,s.clip.sh,-s.w/2,-s.h/2,s.w,s.h);
+        ctx.restore();
+      }
+      // HUD over everything
+      drawHUD();
+    }
+
+    /* ===== FULLSCREEN START ===== */
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
+
+    async function enterFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+    }
+
+    function scheduleTick() {
+      if (!started || rafId) return;
+      const begin = () => {
+        if (!started) return;
+        lastT = performance.now();
+        rafId = requestAnimationFrame(tick);
+      };
+
+      if (img.complete && bgImg.complete) {
+        begin();
+        return;
+      }
+
+      let pending = 0;
+      const tryStart = () => {
+        if (--pending <= 0) begin();
+      };
+      if (!img.complete)  { pending++; img.onload  = tryStart; }
+      if (!bgImg.complete){ pending++; bgImg.onload = tryStart; }
+      if (pending === 0) begin();
+    }
+
+    function resetGameState() {
+      gameState = 'idle';
+      introStartMs = 0;
+      swirlPetals = [];
+      blossoms.length = 0;
+      shards.length = 0;
+      katanaRevealed = false;
+      pointer.x = pointer.y = pointer.prevX = -9999;
+      pointer.inside = false;
+      cursorOrient = 'left';
+    }
+
+    async function startExperience(options = {}) {
+      if (started) return;
+
+      if (options.requestFullscreen) {
+        try { await enterFullscreen(); } catch (e) {}
+      }
+
+      started = true;
+      resetGameState();
+      if (startOverlay) startOverlay.style.display = 'none';
+      canvas.style.cursor = 'none';
+
+      try { bgSong.currentTime = 0; await bgSong.play(); } catch (e) {}
+      try { katanaDraw.currentTime = 0; katanaDraw.pause(); } catch (e) {}
+
+      gameState = 'intro';
+      introStartMs = performance.now();
+      initSwirl();
+
+      scheduleTick();
+    }
+
+    function stopExperience() {
+      if (!started) return;
+      started = false;
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      resetGameState();
+      canvas.style.cursor = 'default';
+      try { bgSong.pause(); bgSong.currentTime = 0; } catch (e) {}
+      try { slashAudio.pause(); slashAudio.currentTime = 0; } catch (e) {}
+      try { katanaDraw.pause(); katanaDraw.currentTime = 0; } catch (e) {}
+    }
+
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        startExperience({ requestFullscreen: true });
+      });
+    } else {
+      window.requestAnimationFrame(() => startExperience());
+    }
+
+    window.startExperience = (options) => startExperience(options);
+    window.stopExperience = stopExperience;
+    window.storyGameApi = { start: startExperience, stop: stopExperience };
+
+  })();
+  

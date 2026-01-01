@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title
+    class="translate"
+    data-fr="Lignes majestueuses"
+    data-en="Majestic lines"
+    data-ja="荘厳なライン">
+    Lignes majestueuses (ESPACE = activer)
+  </title>
+
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+
+  <style>
+    #langToggle{
+      position:fixed; top:14px; right:44px; z-index:11;
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:0.35rem 0.85rem; border-radius:999px;
+      border:2px solid #04c8bb; background:#0b0f12; color:#04c8bb;
+      font-weight:700; letter-spacing:0.02em; cursor:pointer; user-select:none;
+      transition: box-shadow .2s ease, transform .05s ease;
+    }
+    #langToggle:hover{ box-shadow:0 0 0 3px rgba(4,200,187,.2); }
+    #langToggle:active{ transform:translateY(1px); }
+
+    #infoButton{
+      position:fixed; top:10px; left:10px; z-index:99999;
+      display:inline-flex; align-items:center; justify-content:center;
+      width:40px; height:40px; border-radius:10px; border:2px solid #009688;
+      background:#fff; color:#009688; font-weight:700; cursor:pointer; user-select:none;
+    }
+    body.dark #infoButton{ background:#111; color:#00b3a4; border-color:#00b3a4; }
+
+    #startOptions{
+      display:flex; gap:12px; align-items:center; justify-content:center; margin:14px 0;
+      flex-wrap:wrap;
+    }
+
+    #segSwitch{
+      display:inline-flex; align-items:center;
+      border:2px solid #009688; border-radius:999px; overflow:hidden;
+      box-shadow:0 2px 6px rgba(0,0,0,.12);
+    }
+    #segSwitch .seg-btn{
+      padding:8px 14px; border:0; background:#fff; color:#009688;
+      font-weight:700; cursor:pointer; user-select:none;
+    }
+    #segSwitch .seg-btn[aria-selected="true"]{ background:#009688; color:#fff; }
+
+    #promptOverlay #segSwitch{ border-color:#fff; }
+    #promptOverlay #segSwitch .seg-btn{ background:rgba(255,255,255,.1); color:#fff; }
+    #promptOverlay #segSwitch .seg-btn[aria-selected="true"]{ background:#fff; color:#009688; }
+  </style>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+
+<body>
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN / JA</button>
+  <button id="infoButton" title="Plus d'infos" class="translate" data-fr="ⓘ" data-en="ⓘ" data-ja="ⓘ">ⓘ</button>
+
+  <div id="promptOverlay">
+    <p class="translate translate-html"
+       data-fr="<b>Une seule animation</b> : quelques grandes lignes “majestueuses” (style pinceau) se déploient et flottent partout à l’écran.<br><b>Mode 1</b> : maintenir ESPACE = elles grandissent et se déplacent. Relâcher = arrêt complet.<br><b>Mode 2</b> : appuyer ESPACE = 10 secondes, puis arrêt. Appuyer de nouveau pour relancer."
+       data-en="<b>Single animation</b>: a few large, majestic brush-like lines unfold and drift across the whole screen.<br><b>Mode 1</b>: hold SPACE = they grow and move. Release = full stop.<br><b>Mode 2</b>: press SPACE = 10 seconds, then stop. Press again to restart."
+       data-ja="<b>1つのアニメーション</b>：大きく荘厳な“筆”のラインが画面全体に広がり漂います。<br><b>モード1</b>：スペースを押し続けると成長して動く。離すと停止。<br><b>モード2</b>：スペースで10秒動いて停止。もう一度押すと再開。">
+      Maintenir ou appuyer sur ESPACE pour déclencher l’animation.
+    </p>
+
+    <div id="startOptions">
+      <div id="segSwitch" role="tablist" aria-label="Control mode">
+        <button type="button" role="tab" id="segHold" aria-selected="true" class="seg-btn">
+          <span class="translate" data-fr="Mode 1 — maintenir" data-en="Mode 1 — hold" data-ja="モード1 — 押し続け">Mode 1 — maintenir</span>
+        </button>
+        <button type="button" role="tab" id="segTimed" aria-selected="false" class="seg-btn">
+          <span class="translate" data-fr="Mode 2 — 10 secondes" data-en="Mode 2 — 10 seconds" data-ja="モード2 — 10秒">Mode 2 — 10 secondes</span>
+        </button>
+      </div>
+    </div>
+
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+  </div>
+
+  <div id="infoModal" style="display:none;">
+    <p class="translate translate-html"
+       data-fr="Effet unique, riche et stable: grandes lignes façon pinceau qui se déploient lentement, sans flash agressif."
+       data-en="Single rich, stable effect: large brush-like lines unfolding slowly, without harsh flashing."
+       data-ja="単一で豊かな安定刺激：大きな筆のラインがゆっくり展開（強い点滅なし）。">
+      Infos.
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
+  </div>
+
+  <script>
+    /* ===== Translation system ===== */
+    const LS_LANG_KEY = 'siteLanguage';
+    const SUPPORTED_LANGS = ['en', 'ja', 'fr'];
+    const langToggle = document.getElementById('langToggle');
+
+    function documentLangFallback(){
+      const htmlLang = (document.documentElement.lang || '').toLowerCase();
+      return SUPPORTED_LANGS.includes(htmlLang) ? htmlLang : 'en';
+    }
+    function getText(el, lang){
+      for(const code of [lang, ...SUPPORTED_LANGS.filter(c => c !== lang)]){
+        const val = el.getAttribute(`data-${code}`);
+        if(val != null) return val;
+      }
+      return null;
+    }
+    function applyTranslations(lang){
+      const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
+      document.querySelectorAll('.translate').forEach(el => {
+        const value = getText(el, safeLang);
+        if(value == null) return;
+        if(['P','BUTTON','DIV','H1','H2','H3','SPAN'].includes(el.tagName)) el.innerHTML = value;
+        else el.textContent = value;
+      });
+
+      document.documentElement.lang = safeLang;
+
+      const titleEl = document.querySelector('title');
+      if(titleEl){
+        const nextTitle = getText(titleEl, safeLang);
+        if(nextTitle){ titleEl.textContent = nextTitle; document.title = nextTitle; }
+      }
+
+      if(langToggle){
+        const idx = SUPPORTED_LANGS.indexOf(safeLang);
+        langToggle.textContent = SUPPORTED_LANGS[(idx + 1) % SUPPORTED_LANGS.length].toUpperCase();
+      }
+    }
+    function setLang(lang){
+      const safeLang = SUPPORTED_LANGS.includes(lang) ? lang : 'en';
+      try{ localStorage.setItem(LS_LANG_KEY, safeLang); }catch(e){}
+      applyTranslations(safeLang);
+    }
+    function getInitialLang(){
+      let initial = documentLangFallback();
+      try{
+        const stored = localStorage.getItem(LS_LANG_KEY);
+        if(SUPPORTED_LANGS.includes(stored)) initial = stored;
+      }catch(e){}
+      return initial;
+    }
+    langToggle?.addEventListener('click', () => {
+      const currentRaw =
+        (typeof localStorage !== 'undefined' && localStorage.getItem(LS_LANG_KEY)) ||
+        document.documentElement.lang || 'en';
+      const current = currentRaw.toLowerCase();
+      const idx = SUPPORTED_LANGS.indexOf(current);
+      setLang(SUPPORTED_LANGS[(idx + 1) % SUPPORTED_LANGS.length]);
+    });
+    setLang(getInitialLang());
+
+    /* ===== Mode selection (pre-start) ===== */
+    let segChoice = 'hold'; // 'hold' | 'timed'
+    const segHold = document.getElementById('segHold');
+    const segTimed = document.getElementById('segTimed');
+    function selectSeg(which){
+      segChoice = which;
+      segHold.setAttribute('aria-selected', which === 'hold' ? 'true' : 'false');
+      segTimed.setAttribute('aria-selected', which === 'timed' ? 'true' : 'false');
+    }
+    segHold.addEventListener('click', ()=>selectSeg('hold'));
+    segTimed.addEventListener('click', ()=>selectSeg('timed'));
+
+    /* ===== Start / info UI ===== */
+    let started = false;
+    document.getElementById("startButton").addEventListener("click", function(){
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      const pill = document.getElementById('langToggle'); if(pill) pill.style.display = 'none';
+      const info = document.getElementById('infoButton'); if(info) info.style.display = 'none';
+      goFullscreen();
+    });
+    document.getElementById("infoButton").addEventListener("click", ()=>{ document.getElementById("infoModal").style.display="block"; });
+    document.getElementById("closeModal").addEventListener("click", ()=>{ document.getElementById("infoModal").style.display="none"; });
+    function goFullscreen(){
+      if(!document.fullscreenElement){
+        document.documentElement.requestFullscreen().catch(()=>{});
+      }
+    }
+  </script>
+
+  <script>
+    /* =========================================================
+       SINGLE ANIMATION ONLY: Majestic Brush Lines
+       - A small number of “streamers” (big, elegant, painterly)
+       - They GROW continuously (longer + thicker) while active
+       - No separate background animation (just controlled fading)
+       - BLEND-only + capped alpha => never whites out
+       ========================================================= */
+
+    // Run control (2 modes)
+    let isHolding = false;
+    let runActive = false;
+    let runStartMs = 0;
+    const RAMP_MS = 1600;
+    const TIMED_RUN_MS = 10000;
+
+    let spd = 0.0;
+    let spdTarget = 0.0;
+
+    // Majestic lines
+    let streamers = [];
+    const STREAMER_COUNT = 7;    // few, big, “majestic”
+    let hueBase = 200;
+
+    // Flow field
+    const FS = 0.00145;
+    const FT = 0.00016;
+    const EPS = 0.0010;
+
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      colorMode(HSB, 360, 100, 100, 100);
+      background(0);
+
+      streamers = [];
+      for(let i=0;i<STREAMER_COUNT;i++){
+        streamers.push(new Streamer(i));
+      }
+    }
+
+    function draw(){
+      if(!started){
+        background(0);
+        return;
+      }
+
+      // --- speed logic ---
+      if(segChoice === 'hold'){
+        runActive = isHolding;
+        if(!runActive){ spd = 0; spdTarget = 0; }
+        else {
+          const e = millis() - runStartMs;
+          const t = constrain(e / RAMP_MS, 0, 1);
+          spdTarget = smootherstep(t);
+          spd = lerp(spd, spdTarget, 0.14);
+        }
+      } else {
+        if(runActive){
+          const e = millis() - runStartMs;
+          if(e >= TIMED_RUN_MS){ runActive = false; spd = 0; spdTarget = 0; }
+          else {
+            const t = constrain(e / min(RAMP_MS, 1200), 0, 1);
+            spdTarget = smootherstep(t);
+            spd = lerp(spd, spdTarget, 0.14);
+          }
+        } else { spd = 0; spdTarget = 0; }
+      }
+
+      // This is NOT a second animation; it’s only persistence control.
+      // (Fades previous brush strokes so it stays vibrant, never white.)
+      const fadeA = lerp(12, 22, spd); // low = long trails, higher = safer
+      noStroke();
+      fill(0, 0, 0, fadeA);
+      rect(0, 0, width, height);
+
+      if(spd > 0.02){
+        hueBase = (hueBase + 0.20 + 0.90*spd) % 360;
+      }
+
+      // Update + draw the single animation system
+      for(const s of streamers){
+        if(spd > 0.0001) s.update(spd);
+        s.draw(spd);
+      }
+    }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+      colorMode(HSB, 360, 100, 100, 100);
+      background(0);
+      streamers = [];
+      for(let i=0;i<STREAMER_COUNT;i++) streamers.push(new Streamer(i));
+    }
+
+    function keyPressed(){
+      if(!started) return;
+      if(keyCode === 32){
+        if(segChoice === 'hold'){
+          if(!isHolding){ isHolding = true; runStartMs = millis(); }
+        } else {
+          runActive = true;
+          runStartMs = millis();
+        }
+      }
+    }
+    function keyReleased(){
+      if(!started) return;
+      if(keyCode === 32 && segChoice === 'hold'){
+        isHolding = false;
+      }
+    }
+
+    // --- flow field ---
+    function curl(x, y, t){
+      const e = EPS;
+      const nx1 = noise((x+e)*FS, y*FS, t);
+      const nx2 = noise((x-e)*FS, y*FS, t);
+      const ny1 = noise(x*FS, (y+e)*FS, t);
+      const ny2 = noise(x*FS, (y-e)*FS, t);
+      const dndx = (nx1 - nx2) / (2*e);
+      const dndy = (ny1 - ny2) / (2*e);
+      const v = createVector(dndy, -dndx);
+      v.normalize();
+      return v;
+    }
+
+    class Streamer{
+      constructor(i){
+        this.i = i;
+        this.reset(true);
+      }
+
+      reset(initial){
+        this.pos = createVector(random(width), random(height));
+        this.head = this.pos.copy();
+
+        // Elegant palette offsets (majestic, not neon-flash)
+        this.hOff = (i*360/STREAMER_COUNT) + random(-18, 18);
+        this.s = random(70, 92);
+        this.b = random(70, 90);
+
+        // Growth state
+        this.g = initial ? random(0.25, 0.55) : 0.0;     // 0..1
+        this.gVel = random(0.0025, 0.0060);              // growth rate
+
+        // Thick brush look
+        this.wMin = random(1.8, 3.4);
+        this.wMax = random(18, 34);
+
+        // Long majestic body
+        this.tailMin = floor(random(18, 30));
+        this.tailMax = floor(random(160, 260));
+        this.tail = [];
+        for(let k=0;k<this.tailMin;k++) this.tail.push(this.pos.copy());
+
+        // Movement
+        this.speedMul = random(0.9, 1.35);
+        this.wig = random(0.15, 0.55);
+
+        // Lifetime (so they occasionally re-seed somewhere else)
+        this.life = floor(random(900, 1600));
+        this.age = floor(random(0, initial ? 500 : 0));
+      }
+
+      update(spd){
+        this.age++;
+
+        // Grow and grow while active
+        this.g = constrain(this.g + this.gVel * (0.45 + 1.25*spd), 0, 1);
+
+        const t = millis()*FT + (this.hOff*0.01);
+
+        // Field direction + gentle wiggle
+        const v = curl(this.head.x, this.head.y, t);
+        const n = noise(this.head.x*0.004, this.head.y*0.004, t*2.1) - 0.5;
+        v.rotate(n * this.wig);
+
+        // Step scales with spd (majestic, not frantic)
+        const step = (0.7 + 4.8*spd) * this.speedMul;
+        this.head.add(v.mult(step));
+
+        // Wrap
+        if(this.head.x < -40) this.head.x = width + 40;
+        if(this.head.x > width + 40) this.head.x = -40;
+        if(this.head.y < -40) this.head.y = height + 40;
+        if(this.head.y > height + 40) this.head.y = -40;
+
+        // Tail length grows with g
+        const targetLen = floor(lerp(this.tailMin, this.tailMax, easeOutCubic(this.g)));
+        this.tail.unshift(this.head.copy());
+        while(this.tail.length > targetLen) this.tail.pop();
+
+        // When fully grown, slowly drift hue & occasionally re-seed
+        if(this.age > this.life){
+          // reset but keep the “majestic few”
+          this.reset(false);
+        }
+      }
+
+      draw(spd){
+        if(this.tail.length < 6) return;
+
+        const gg = easeOutCubic(this.g);
+        const w = lerp(this.wMin, this.wMax, gg) * (0.95 + 0.35*spd);
+
+        // Capped alpha prevents white build-up
+        const aBase = 46 * (0.45 + 0.55*(1-gg)); // starts stronger, then stabilizes
+        const hh = (hueBase + this.hOff + 360) % 360;
+
+        // Painterly multi-stroke brush (still BLEND-only)
+        // 1) outer mist
+        strokeWeight(w * 1.55);
+        stroke((hh + 12) % 360, this.s*0.75, this.b*0.65, aBase*0.35);
+        drawRibbonCurve(this.tail);
+
+        // 2) body
+        strokeWeight(w * 1.05);
+        stroke(hh, this.s, this.b, aBase*0.65);
+        drawRibbonCurve(this.tail);
+
+        // 3) inner sheen (subtle, not white)
+        strokeWeight(max(1.2, w * 0.42));
+        stroke((hh + 26) % 360, min(96, this.s + 6), min(92, this.b + 4), aBase*0.28);
+        drawRibbonCurve(this.tail);
+      }
+    }
+
+    function drawRibbonCurve(pts){
+      noFill();
+      beginShape();
+      for(let i=pts.length-1;i>=0;i--){
+        const p = pts[i];
+        curveVertex(p.x, p.y);
+      }
+      endShape();
+    }
+
+    function smootherstep(t){
+      return t*t*t*(t*(t*6 - 15) + 10);
+    }
+    function easeOutCubic(t){
+      return 1 - pow(1 - t, 3);
+    }
+  </script>
+</body>
+</html>

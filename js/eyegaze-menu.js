@@ -7,6 +7,22 @@ window.eyegazeSettings = {
     if (overlay) overlay.style.display = 'none';
   }
 };
+
+window.setEyegazeDwellTime = function setEyegazeDwellTime(val) {
+  const dwellValue = parseInt(val, 10);
+  const fallback = window.eyegazeSettings?.dwellTime || 1500;
+  const resolved = Number.isFinite(dwellValue) ? dwellValue : fallback;
+
+  if (window.eyegazeSettings) {
+    eyegazeSettings.dwellTime = resolved;
+  }
+
+  try {
+    localStorage.setItem('eyegazeDwellTime', resolved);
+  } catch (e) {}
+
+  return resolved;
+};
 function initEyegazeMenu() {
   const dwellSlider = document.getElementById('dwellTimeSlider');
   const dwellVal = document.getElementById('dwellTimeVal');
@@ -19,10 +35,8 @@ function initEyegazeMenu() {
     dwellSlider.value = initial;
     dwellVal.textContent = initial;
     dwellSlider.addEventListener('input', e => {
-      const val = parseInt(e.target.value);
-      eyegazeSettings.dwellTime = val;
+      const val = setEyegazeDwellTime(e.target.value);
       dwellVal.textContent = val;
-      localStorage.setItem('eyegazeDwellTime', val);
     });
   }
 

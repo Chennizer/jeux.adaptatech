@@ -561,10 +561,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Fixation Time Slider Setup (for hover delay)
   if (fixationTimeInput && fixationTimeValue) {
+    const storedDwell = Number(window?.eyegazeSettings?.dwellTime);
+    const initial = Number.isFinite(storedDwell)
+      ? storedDwell
+      : parseInt(fixationTimeInput.value, 10) || 2000;
+
+    fixationDelay = initial;
+    fixationTimeInput.value = initial;
+    fixationTimeValue.textContent = initial;
+    document.documentElement.style.setProperty('--hover-duration', `${initial}ms`);
+
+    const persistDwell = (val) => {
+      if (typeof setEyegazeDwellTime === 'function') {
+        setEyegazeDwellTime(val);
+      } else if (window?.eyegazeSettings) {
+        eyegazeSettings.dwellTime = val;
+        try { localStorage.setItem('eyegazeDwellTime', val); } catch (e) {}
+      }
+    };
+
     fixationTimeInput.addEventListener('input', () => {
-      fixationDelay = parseInt(fixationTimeInput.value, 10);
-      fixationTimeValue.textContent = fixationDelay;
-      document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
+      const dwellVal = parseInt(fixationTimeInput.value, 10) || 2000;
+      fixationDelay = dwellVal;
+      fixationTimeValue.textContent = dwellVal;
+      document.documentElement.style.setProperty('--hover-duration', `${dwellVal}ms`);
+      persistDwell(dwellVal);
     });
   }
 

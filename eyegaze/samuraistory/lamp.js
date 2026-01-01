@@ -1,0 +1,1160 @@
+  (() => {
+    /* =======================
+       TUNABLES
+    ======================= */
+    const BG_SRC      = "../../images/samurai/lampbg.png";
+
+    // Two lamp variants
+    const CLOSED1_SRC = "../../images/samurai/closedlamp1.png";
+    const LIT1_SRC    = "../../images/samurai/litlamp1.png";
+    const CLOSED2_SRC = "../../images/samurai/closedlamp2.png";
+    const LIT2_SRC    = "../../images/samurai/litlamp2.png";
+
+    const LANTERN_COUNT   = 5;
+    const LAMP_H_MIN      = 180;
+    const LAMP_H_MAX      = 300;
+    const HOVER_RADIUS    = 60;
+
+    const ASCEND_SPEED_MIN = 60;
+    const ASCEND_SPEED_MAX = 100;
+    const DRIFT_X_MIN      = 20;
+    const DRIFT_X_MAX      = 30;
+    const SWAY_FREQ_MIN    = 0.6;
+    const SWAY_FREQ_MAX    = 1.2;
+    const SWAY_AMP_MIN     = 12;
+    const SWAY_AMP_MAX     = 28;
+
+    // Scattering along bottom — raised baseline (rope stop)
+    const SIDE_PAD_H   = 24;
+    const BOTTOM_PAD_V = 140;  // rope-limited rest height
+    const SEP_EXTRA    = 40;
+
+    // Stars
+    const STAR_DENSITY_PER_MPX = 55;
+    const STAR_MIN_SIZE = 0.8, STAR_MAX_SIZE = 2.0;
+    const STAR_MIN_AMP  = 0.25, STAR_MAX_AMP = 0.55;
+    const STAR_MIN_FREQ = 0.30, STAR_MAX_FREQ = 0.95; // Hz
+    const STAR_BASE_MIN = 0.06, STAR_BASE_MAX = 0.14;
+    const STAR_HALO_CORE = 0.35;
+    const STAR_HALO_RING = 0.10;
+
+    // Fireflies (soft, colored)
+    const FIREFLY_COUNT = 22;
+    const FIREFLY_Y_MIN_FRAC = 0.68, FIREFLY_Y_MAX_FRAC = 0.92;
+    const FIREFLY_SPEED = 12;
+    const FIREFLY_PULSE_MIN = 0.6, FIREFLY_PULSE_MAX = 1.2;
+    const FIREFLY_SIZE_MIN = 1.8, FIREFLY_SIZE_MAX = 3.2;
+    const FIREFLY_COLORS = [
+      { core: '255,230,140', halo: '255,230,140' },
+      { core: '185,255,185', halo: '185,255,185' },
+      { core: '255,185,185', halo: '255,185,185' },
+      { core: '185,220,255', halo: '185,220,255' },
+    ];
+
+    // Idle motion
+    const IDLE_BOB_AMP_CLOSED = 2.2;
+    const IDLE_BOB_AMP_LIT    = 3.6;
+    const IDLE_BOB_FREQ_MIN   = 0.2;
+    const IDLE_BOB_FREQ_MAX   = 0.35;
+    const IDLE_ROT_AMP        = 0.015;
+
+    // Constant lamp glow
+    const GLOW_BASE_ALPHA = 0.22;
+    const GLOW_RADIUS_MULT = 1.25;
+
+    const HOVER_COOLDOWN_MS = 250;
+
+    // Distant background lanterns
+    const BG_LANTERN_COUNT = 10;
+    const BG_LANTERN_SIZE_MIN = 14, BG_LANTERN_SIZE_MAX = 26; // px
+    const BG_LANTERN_SPEED_MIN = 10, BG_LANTERN_SPEED_MAX = 22; // px/s
+    const BG_LANTERN_HALO_ALPHA = 0.10;
+    const BG_LANTERN_CORE_ALPHA = 0.20;
+
+    // Shooting star
+    const SHOOTING_STAR_MIN_INTERVAL = 18; // seconds
+    const SHOOTING_STAR_MAX_INTERVAL = 45;
+    const SHOOTING_STAR_SPEED_MIN = 600, SHOOTING_STAR_SPEED_MAX = 900; // px/s
+    const SHOOTING_STAR_LEN_MIN = 120, SHOOTING_STAR_LEN_MAX = 200; // px
+    const SHOOTING_STAR_LIFE = 1.2; // seconds
+
+    // === ROPE (tethers) ===
+    const ROPE_COLOR_RGB = '210,180,140';
+    const ROPE_ALPHA     = 0.85;
+    const ROPE_WIDTH     = 4.0;    // thicker rope
+    const ROPE_SAG_MAX   = 120;
+    const ROPE_SAG_RATIO = 0.36;
+    const ROPE_SNAP_LIFE = 0.6;
+    const ROPE_ATTACH_FROM_BOTTOM_FRAC = 0.10;
+    const ROPE_ANCHOR_BOTTOM_OFFSET    = 0;
+
+    // Katana must hit rope
+    const ROPE_HIT_RADIUS = 12; // px distance from rope to register a cut
+
+    // Dwell + audio
+    const LAMP_DWELL_MS = 1000;  // hover to light (Chi)
+    const LIFT_DURATION = 2.0;   // seconds to rise to rope-limited position
+
+    const MODE_DWELL_MS = 500;
+
+    const KATANA_CURSOR_SRC = "../../images/samurai/katana.png";
+    const KATANA_CURSOR_MAX_PX = 124;
+    const KATANA_CURSOR_HOTSPOT = { x: 12, y: 28 };
+    const KATANA_MOVE_THRESHOLD = 2;
+
+    const POINTER_EDGE_GRACE = 22;
+
+    // ▼ UPDATED: use the exact same Chi image as the tile
+    const CHI_POINTER_SRC = "../../images/samurai/transparentchi.png";
+    const CHI_POINTER_BASE = 96;
+    const CHI_POINTER_MAX = 118;
+    const CHI_POINTER_BREATH = 0.05;
+    const CHI_POINTER_BREATH_FREQ = 0.8;
+
+    /* =======================
+       SETUP
+    ======================= */
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const initialRect = canvas.getBoundingClientRect();
+    let W = canvas.width  = initialRect.width  || window.innerWidth;
+    let H = canvas.height = initialRect.height || window.innerHeight;
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const displayW = rect.width  || W;
+      const displayH = rect.height || H;
+      W = canvas.width  = displayW;
+      H = canvas.height = displayH;
+      rebuildStars();
+      rebuildFireflies();
+      rebuildBgLanterns();
+      // keep rope anchors at bottom & inside margins and recompute rest/ground positions
+      for (const l of lanterns) {
+        if (!l.anchor) continue;
+        l.anchor.y = H - ROPE_ANCHOR_BOTTOM_OFFSET;
+        l.anchor.x = Math.max(SIDE_PAD_H, Math.min(W - SIDE_PAD_H, l.anchor.x));
+        l.restY  = H - BOTTOM_PAD_V - l.h * 0.5;
+        l.groundY = H - l.h * 0.5 + 2;
+        if (l.state === 'closed') l.y = l.groundY; // keep closed lamps at ground after resize
+      }
+    }
+    window.addEventListener('resize', resize);
+
+    const bgImg  = new Image(); bgImg.src  = BG_SRC;
+
+    const imgClosed1 = new Image(); imgClosed1.src = CLOSED1_SRC;
+    const imgLit1    = new Image(); imgLit1.src    = LIT1_SRC;
+    const imgClosed2 = new Image(); imgClosed2.src = CLOSED2_SRC;
+    const imgLit2    = new Image(); imgLit2.src    = LIT2_SRC;
+
+    const lanternImageSets = [
+      { closed: imgClosed1, lit: imgLit1 },
+      { closed: imgClosed2, lit: imgLit2 }
+    ];
+
+    function imageHasDimensions(img) {
+      return !!(img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+    }
+
+    function lanternTypeReady(type) {
+      const entry = lanternImageSets[type - 1];
+      if (!entry) return false;
+      return imageHasDimensions(entry.closed) || imageHasDimensions(entry.lit);
+    }
+
+    function lanternAspect(type) {
+      const entry = lanternImageSets[type - 1];
+      if (!entry) return 1;
+      const source = imageHasDimensions(entry.closed) ? entry.closed : imageHasDimensions(entry.lit) ? entry.lit : null;
+      if (!source) return 1;
+      return source.naturalWidth / source.naturalHeight;
+    }
+
+    let lanternAssetsReady = false;
+
+    function updateLanternAssetReadiness() {
+      lanternAssetsReady = lanternImageSets.every((_, idx) => lanternTypeReady(idx + 1));
+      if (lanternAssetsReady) {
+        ensureCount();
+      }
+    }
+
+    lanternImageSets.forEach((set) => {
+      [set.closed, set.lit].forEach((img) => {
+        if (!img) return;
+        if (!imageHasDimensions(img)) {
+          img.addEventListener('load', updateLanternAssetReadiness, { once: false });
+        }
+      });
+    });
+    updateLanternAssetReadiness();
+
+    function getClosedImg(type){ return type===1 ? imgClosed1 : imgClosed2; }
+    function getLitImg(type){    return type===1 ? imgLit1    : imgLit2; }
+
+    const modeSelector = document.getElementById('modeSelector');
+    const modeTileNodes = Array.from(modeSelector.querySelectorAll('.mode-tile'));
+    const modeTiles = modeTileNodes.map(el => ({
+      el,
+      mode: el.dataset.mode,
+      progressEl: el.querySelector('.progress'),
+      dwellStart: 0
+    }));
+    let hoveredTile = null;
+    let currentMode = 'chi';
+
+    function refreshModeTiles() {
+      for (const tile of modeTiles) {
+        const active = tile.mode === currentMode;
+        tile.el.classList.toggle('active', active);
+        tile.el.setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
+    }
+
+    const pointer = { x: -9999, y: -9999, inside: false, prevX: -9999 };
+    let cursorOrient = 'left';
+
+    function applyCurrentCursor() { canvas.style.cursor = 'none'; }
+
+    function updatePointerFromEvent(e) {
+      const rect = canvas.getBoundingClientRect();
+      const displayW = rect.width || 1;
+      const displayH = rect.height || 1;
+      const scaleX = displayW ? W / displayW : 1;
+      const scaleY = displayH ? H / displayH : 1;
+      const relX = e.clientX - rect.left;
+      const relY = e.clientY - rect.top;
+
+      const clampedX = Math.max(0, Math.min(displayW, relX));
+      const clampedY = Math.max(0, Math.min(displayH, relY));
+      pointer.x = clampedX * scaleX;
+      pointer.y = clampedY * scaleY;
+
+      const insideNow =
+        relX >= -POINTER_EDGE_GRACE && relX <= displayW + POINTER_EDGE_GRACE &&
+        relY >= -POINTER_EDGE_GRACE && relY <= displayH + POINTER_EDGE_GRACE;
+
+      if (currentMode === 'katana' && pointer.prevX !== -9999 && insideNow) {
+        const dx = pointer.x - pointer.prevX;
+        if (Math.abs(dx) > KATANA_MOVE_THRESHOLD) {
+          const wantOrient = dx > 0 ? 'right' : 'left';
+          if (wantOrient !== cursorOrient) {
+            cursorOrient = wantOrient;
+            applyCurrentCursor();
+          }
+        }
+      }
+
+      pointer.prevX = insideNow ? pointer.x : -9999;
+      pointer.inside = insideNow;
+    }
+    window.addEventListener('pointermove', updatePointerFromEvent, { passive: true });
+
+    function setTileProgress(tile, progress) {
+      if (!tile.progressEl) return;
+      const clamped = Math.max(0, Math.min(1, progress));
+      const pct = (clamped * 100).toFixed(1) + '%';
+      if (clamped <= 0) {
+        tile.progressEl.style.width = '0%';
+        tile.progressEl.style.height = '0%';
+        tile.progressEl.style.opacity = '';
+        return;
+      }
+      tile.progressEl.style.width = pct;
+      tile.progressEl.style.height = pct;
+    }
+
+    function clearTileProgress(tile) {
+      tile.dwellStart = 0;
+      tile.el.classList.remove('hovering');
+      if (tile.progressEl) {
+        tile.progressEl.style.width = '0%';
+        tile.progressEl.style.height = '0%';
+        tile.progressEl.style.opacity = '';
+      }
+    }
+
+    /* ========= Mode switch + slice SFX ========= */
+    const KATANA_DRAW_SRC  = "../../sounds/katana.mp3";
+    const CHI_SELECT_SRC   = "../../sounds/samurai/energyball.mp3";
+    const KATANA_SLICE_SRC = "../../sounds/blade.mp3"; // <-- NEW: rope cut slice
+
+    const sfxKatanaDraw  = new Audio(KATANA_DRAW_SRC);  sfxKatanaDraw.volume  = 0.9; sfxKatanaDraw.preload  = "auto";
+    const sfxChiSelect   = new Audio(CHI_SELECT_SRC);   sfxChiSelect.volume   = 0.7; sfxChiSelect.preload   = "auto";
+    const sfxKatanaSlice = new Audio(KATANA_SLICE_SRC); sfxKatanaSlice.volume = 0.9; sfxKatanaSlice.preload = "auto";
+
+    function playSfx(a){ try{ const n=a.cloneNode(true); n.volume=a.volume; n.play().catch(()=>{});}catch(_){} }
+    /* ========================================== */
+
+    function setMode(mode) {
+      if (mode === currentMode) { applyCurrentCursor(); return; }
+      currentMode = mode;
+
+      // Play the requested sounds on mode change
+      if (mode === 'katana') playSfx(sfxKatanaDraw);
+      else if (mode === 'chi') playSfx(sfxChiSelect);
+
+      refreshModeTiles();
+      applyCurrentCursor();
+    }
+
+    function updateModeHover() {
+      if (!hoveredTile) return;
+      const tile = hoveredTile;
+      if (!tile.dwellStart) tile.dwellStart = performance.now();
+      const elapsed = performance.now() - tile.dwellStart;
+      const progress = Math.min(1, elapsed / MODE_DWELL_MS);
+      setTileProgress(tile, progress);
+      if (progress >= 1) {
+        clearTileProgress(tile);
+        hoveredTile = null;
+        setMode(tile.mode);
+      }
+    }
+
+    for (const tile of modeTiles) {
+      tile.el.addEventListener('pointerenter', () => {
+        if (hoveredTile && hoveredTile !== tile) clearTileProgress(hoveredTile);
+        hoveredTile = tile;
+        tile.dwellStart = performance.now();
+        tile.el.classList.add('hovering');
+        setTileProgress(tile, 0.02);
+      });
+      tile.el.addEventListener('pointerleave', () => {
+        if (hoveredTile === tile) hoveredTile = null;
+        clearTileProgress(tile);
+      });
+    }
+
+    const katanaCursor = { left: null, right: null };
+    let katanaCursorReady = false;
+    const katanaCursorImg = new Image();
+    katanaCursorImg.src = KATANA_CURSOR_SRC;
+    katanaCursorImg.onload = () => {
+      const iw = katanaCursorImg.width;
+      const ih = katanaCursorImg.height;
+      if (!iw || !ih) return;
+      const scale = Math.min(1, KATANA_CURSOR_MAX_PX / Math.max(iw, ih));
+      const dw = Math.round(iw * scale);
+      const dh = Math.round(ih * scale);
+
+      const makeCanvas = flipX => {
+        const c = document.createElement('canvas');
+        c.width = dw; c.height = dh;
+        const cctx = c.getContext('2d');
+        cctx.imageSmoothingEnabled = true;
+        if (flipX) { cctx.translate(dw, 0); cctx.scale(-1, 1); }
+        cctx.drawImage(katanaCursorImg, 0, 0, dw, dh);
+        return c;
+      };
+
+      const hx = Math.max(0, Math.min(dw - 1, Math.round(KATANA_CURSOR_HOTSPOT.x * scale)));
+      const hy = Math.max(0, Math.min(dh - 1, Math.round(KATANA_CURSOR_HOTSPOT.y * scale)));
+
+      katanaCursor.left = { canvas: makeCanvas(false), hx, hy };
+      katanaCursor.right = { canvas: makeCanvas(true), hx: (dw - 1) - hx, hy };
+      katanaCursorReady = true;
+      if (currentMode === 'katana') applyCurrentCursor();
+    };
+
+    const chiPointerImg = new Image();
+    chiPointerImg.src = CHI_POINTER_SRC;
+
+    refreshModeTiles();
+    applyCurrentCursor();
+
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const clamp01 = v => Math.max(0, Math.min(1, v));
+    const nowMs = () => performance.now();
+    const nowSec = () => performance.now()/1000;
+
+    /* =======================
+       AUDIO (lamp lit)
+    ======================= */
+    const lampLitSounds = [1,2,3].map(i => {
+      const a = new Audio(`../../sounds/samurai/lamplit${i}.mp3`);
+      a.preload = 'auto';
+      a.volume = 0.8;
+      return a;
+    });
+    function playRandomLampLit() {
+      const base = lampLitSounds[Math.floor(Math.random() * lampLitSounds.length)];
+      if (!base) return;
+      const a = base.cloneNode(true);
+      a.volume = base.volume;
+      a.play().catch(() => {});
+    }
+
+    /* =======================
+       LANTERNS (foreground)
+    ======================= */
+    const lanterns = [];
+
+    function chooseScatteredX(w) {
+      const minX = SIDE_PAD_H + w * 0.5;
+      const maxX = W - SIDE_PAD_H - w * 0.5;
+      const tries = 24;
+      for (let t = 0; t < tries; t++) {
+        const x = rand(minX, maxX);
+        let ok = true;
+        for (const l of lanterns) {
+          const minSep = (w + l.w) * 0.5 + SEP_EXTRA;
+          if (Math.abs(x - l.x) < minSep) { ok = false; break; }
+        }
+        if (ok) return x;
+      }
+      return rand(minX, maxX);
+    }
+
+    function spawnLanternBottom() {
+      if (!lanternAssetsReady) return false;
+      const type = Math.random() < 0.5 ? 1 : 2;
+      const dispH = rand(LAMP_H_MIN, LAMP_H_MAX);
+      const aspect = lanternAspect(type);
+      const dispW = dispH * aspect;
+
+      const x = chooseScatteredX(dispW);
+
+      // Rest (rope-limited) position and ground position
+      const restY   = H - BOTTOM_PAD_V - dispH * 0.5; // where the rope stops it
+      const groundY = H - dispH * 0.5 + 2;           // at the floor
+
+      const born = nowMs();
+
+      lanterns.push({
+        type, x, y: groundY, w: dispW, h: dispH,
+        state: "closed",
+        lastHover: 0,
+        ascendVy: rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX),
+        driftBase: Math.random() < 0.5 ? -1 : 1,
+        driftSpeed: rand(DRIFT_X_MIN, DRIFT_X_MAX),
+        swayFreq: rand(SWAY_FREQ_MIN, SWAY_FREQ_MAX),
+        swayAmp: rand(SWAY_AMP_MIN, SWAY_AMP_MAX),
+        bobFreq: rand(IDLE_BOB_FREQ_MIN, IDLE_BOB_FREQ_MAX),
+        bobPhase: Math.random() * Math.PI * 2,
+        born,
+        dwellStartChi: 0,
+        anchor: { x: x + rand(-30,30), y: H - ROPE_ANCHOR_BOTTOM_OFFSET },
+        snap: null,
+        _ropeHovered: false,
+
+        // lift animation data
+        restY, groundY, liftT0: 0, liftDur: LIFT_DURATION
+      });
+      return true;
+    }
+
+    function ensureCount() {
+      if (!lanternAssetsReady) return;
+      while (lanterns.length < LANTERN_COUNT) {
+        if (!spawnLanternBottom()) break;
+      }
+    }
+    function resetOne(i) { lanterns.splice(i, 1); ensureCount(); }
+
+    function isHovering(l) {
+      const dx = pointer.x - l.x;
+      const dy = pointer.y - l.y;
+      return (dx*dx + dy*dy) <= (HOVER_RADIUS * HOVER_RADIUS);
+    }
+
+    /* ---------- Rope math helpers ---------- */
+    function quadBezierPoint(p0, p1, p2, t) {
+      const it = 1 - t;
+      return { x: it*it*p0.x + 2*it*t*p1.x + t*t*p2.x, y: it*it*p0.y + 2*it*t*p1.y + t*t*p2.y };
+    }
+    function pointSegDist(px, py, ax, ay, bx, by) {
+      const vx = bx - ax, vy = by - ay;
+      const wx = px - ax, wy = py - ay;
+      const c1 = vx*wx + vy*wy;
+      if (c1 <= 0) return Math.hypot(px - ax, py - ay);
+      const c2 = vx*vx + vy*vy;
+      if (c2 <= c1) return Math.hypot(px - bx, py - by);
+      const t = c1 / c2;
+      const ix = ax + t*vx, iy = ay + t*vy;
+      return Math.hypot(px - ix, py - iy);
+    }
+    function ropePoints(l, t) {
+      const p0 = { x: l.anchor.x, y: l.anchor.y };
+      const p2 = { x: l.x, y: l.y + l.h * (0.5 - ROPE_ATTACH_FROM_BOTTOM_FRAC) };
+      const len = Math.hypot(p2.x - p0.x, p2.y - p0.y);
+      const sag = Math.min(ROPE_SAG_MAX, len * ROPE_SAG_RATIO);
+      const sway = Math.sin((t + l.bobPhase) * 2 * Math.PI * l.bobFreq) * 4;
+      const p1 = { x: (p0.x + p2.x)/2 + sway * 0.6, y: (p0.y + p2.y)/2 + sag + sway * 0.2 };
+      return { p0, p1, p2 };
+    }
+    function ropeHitTest(l, tSec) {
+      const { p0, p1, p2 } = ropePoints(l, tSec);
+      const minX = Math.min(p0.x, p1.x, p2.x) - ROPE_HIT_RADIUS;
+      const maxX = Math.max(p0.x, p1.x, p2.x) + ROPE_HIT_RADIUS;
+      const minY = Math.min(p0.y, p1.y, p2.y) - ROPE_HIT_RADIUS;
+      const maxY = Math.max(p0.y, p1.y, p2.y) + ROPE_HIT_RADIUS;
+      if (pointer.x < minX || pointer.x > maxX || pointer.y < minY || pointer.y > maxY) return false;
+      const STEPS = 24;
+      let prev = quadBezierPoint(p0, p1, p2, 0);
+      for (let i = 1; i <= STEPS; i++) {
+        const tt = i / STEPS;
+        const cur = quadBezierPoint(p0, p1, p2, tt);
+        const d = pointSegDist(pointer.x, pointer.y, prev.x, prev.y, cur.x, cur.y);
+        if (d <= ROPE_HIT_RADIUS) return true;
+        prev = cur;
+      }
+      return false;
+    }
+    // Closest point on rope to pointer (sampled)
+    function ropeClosestPoint(l, tSec) {
+      const { p0, p1, p2 } = ropePoints(l, tSec);
+      const STEPS = 48;
+      let best = { d: Infinity, pt: {x: p0.x, y: p0.y} };
+      let prev = quadBezierPoint(p0, p1, p2, 0);
+      for (let i = 1; i <= STEPS; i++) {
+        const tt = i / STEPS;
+        const cur = quadBezierPoint(p0, p1, p2, tt);
+        const d = pointSegDist(pointer.x, pointer.y, prev.x, prev.y, cur.x, cur.y);
+        if (d < best.d) {
+          best = d < pointSegDist(pointer.x, pointer.y, cur.x, cur.y, prev.x, prev.y)
+            ? { d, pt: prev } : { d, pt: cur };
+        }
+        prev = cur;
+      }
+      return best.pt;
+    }
+
+    function easeOutCubic(u) { const t = 1 - Math.max(0, Math.min(1, u)); return 1 - t*t*t; }
+
+    function handleHoverActions(l) {
+      const t = nowMs();
+      if (currentMode === 'chi') {
+        if (l.state !== 'closed' && l.state !== 'lifting') { l.dwellStartChi = 0; return; }
+        if (!pointer.inside || !isHovering(l)) { l.dwellStartChi = 0; return; }
+
+        if (!l.dwellStartChi) l.dwellStartChi = t;
+        const elapsed = t - l.dwellStartChi;
+
+        // When dwell completes: start lifting animation (if not already lifting)
+        if (elapsed >= LAMP_DWELL_MS && (t - l.lastHover) >= HOVER_COOLDOWN_MS) {
+          l.lastHover = t;
+          l.dwellStartChi = 0;
+          if (l.state !== 'lifting' && l.y > l.restY + 1) {
+            l.state = 'lifting';
+            l.liftT0 = nowSec();
+            playRandomLampLit();
+          }
+        }
+      } else if (currentMode === 'katana') {
+        l.dwellStartChi = 0; // no dwell in katana; reset any progress fill
+        if (l.state !== 'lit') return;                 // can cut only after it has finished lifting
+        if (t - l.lastHover < HOVER_COOLDOWN_MS) return;
+
+        const tSec = performance.now()/1000;
+        const overRope = ropeHitTest(l, tSec);
+        l._ropeHovered = !!overRope;
+        if (!overRope) return;
+
+        // === Freeze rope geometry at the cut moment ===
+        const frozen = ropePoints(l, tSec);               // snapshot of curve
+        const breakPt = ropeClosestPoint(l, tSec);        // point on snapshot nearest pointer
+
+        l.lastHover = t;
+        l.state = 'ascend';
+        l.ascendVy = rand(ASCEND_SPEED_MIN, ASCEND_SPEED_MAX);
+        l.snap = {
+          t0: nowSec(),
+          life: ROPE_SNAP_LIFE,
+          breakPt,
+          frozen   // {p0,p1,p2} frozen at cut time
+        };
+
+        // ▼ NEW: play slice SFX right when the rope is cut
+        playSfx(sfxKatanaSlice);
+      }
+    }
+
+    /* =======================
+       AMBIENT: STARS & FIREFLIES
+    ======================= */
+    let stars = [];
+    function rebuildStars() {
+      const areaMPx = (W * H) / 1_000_000;
+      const count = Math.max(40, Math.round(STAR_DENSITY_PER_MPX * areaMPx));
+      stars = Array.from({length: count}, () => ({
+        x: Math.random() * W,
+        y: Math.random() * H * 0.9,
+        r: rand(STAR_MIN_SIZE, STAR_MAX_SIZE),
+        base: rand(STAR_BASE_MIN, STAR_BASE_MAX),
+        amp:  rand(STAR_MIN_AMP, STAR_MAX_AMP),
+        freq: rand(STAR_MIN_FREQ, STAR_MAX_FREQ),
+        phase: Math.random() * Math.PI * 2
+      }));
+    }
+
+    let fireflies = [];
+    function rebuildFireflies() {
+      fireflies = Array.from({length: FIREFLY_COUNT}, () => {
+        const color = FIREFLY_COLORS[Math.floor(Math.random() * FIREFLY_COLORS.length)];
+        return {
+          x: Math.random() * W,
+          y: rand(H * FIREFLY_Y_MIN_FRAC, H * FIREFLY_Y_MAX_FRAC),
+          dir: Math.random() * Math.PI * 2,
+          speed: FIREFLY_SPEED * rand(0.8, 1.25),
+          pulseF: rand(FIREFLY_PULSE_MIN, FIREFLY_PULSE_MAX),
+          phase: Math.random() * Math.PI * 2,
+          size: rand(FIREFLY_SIZE_MIN, FIREFLY_SIZE_MAX),
+          color
+        };
+      });
+    }
+
+    function updateAmbient(dt) {
+      for (const f of fireflies) {
+        f.dir += (Math.random() - 0.5) * 0.15 * dt;
+        f.x += Math.cos(f.dir) * f.speed * dt;
+        f.y += Math.sin(f.dir) * f.speed * dt * 0.5;
+
+        if (f.x < -20) f.x = W + 20;
+        if (f.x > W + 20) f.x = -20;
+        if (f.y < H * FIREFLY_Y_MIN_FRAC) f.y = H * FIREFLY_Y_MIN_FRAC + 4;
+        if (f.y > H * FIREFLY_Y_MAX_FRAC) f.y = H * FIREFLY_Y_MAX_FRAC - 4;
+      }
+    }
+
+    function drawGlow(x, y, r, alpha, rgb="255,210,120") {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(${rgb},${alpha})`);
+      g.addColorStop(1, `rgba(${rgb},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawChiPointer() {
+      if (currentMode !== 'chi' || !pointer.inside) return;
+      const ready = chiPointerImg && chiPointerImg.complete && chiPointerImg.naturalWidth > 0;
+      const t = performance.now() / 1000;
+      const breathe = 1 + CHI_POINTER_BREATH * Math.sin(t * 2 * Math.PI * CHI_POINTER_BREATH_FREQ);
+      const size = Math.min(CHI_POINTER_MAX, CHI_POINTER_BASE * breathe);
+      const x = pointer.x, y = pointer.y;
+
+      const glowR = size * 0.75;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+      g.addColorStop(0, 'rgba(180,255,255,0.35)');
+      g.addColorStop(1, 'rgba(140,200,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, glowR, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.imageSmoothingQuality = 'high';
+      if (ready) ctx.drawImage(chiPointerImg, x - size/2, y - size/2, size, size);
+      else { ctx.fillStyle = '#cfefff'; ctx.beginPath(); ctx.arc(x, y, Math.max(6, size * 0.12), 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+
+    function drawKatanaPointer() {
+      if (currentMode !== 'katana' || !pointer.inside) return;
+      const data = cursorOrient === 'right' ? katanaCursor.right : katanaCursor.left;
+      const ready = katanaCursorReady && data && data.canvas;
+      const hx = data ? data.hx : 0, hy = data ? data.hy : 0;
+      const drawX = pointer.x - hx, drawY = pointer.y - hy;
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      if (ready) ctx.drawImage(data.canvas, drawX, drawY, data.canvas.width, data.canvas.height);
+      else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pointer.x - 18, pointer.y - 18); ctx.lineTo(pointer.x + 22, pointer.y + 22);
+        ctx.moveTo(pointer.x + 22, pointer.y - 18); ctx.lineTo(pointer.x - 18, pointer.y + 22);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function renderStars(t) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const s of stars) {
+        const p = 0.5 + 0.5 * Math.sin(s.phase + t * 2 * Math.PI * s.freq);
+        const a = Math.min(1, s.base + s.amp * p);
+        const r = s.r * (0.8 + 0.6 * p);
+
+        const R = r * 3.2;
+        const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, R);
+        g.addColorStop(0.0, `rgba(255,240,200,${a * STAR_HALO_CORE})`);
+        g.addColorStop(1.0, `rgba(255,240,200,${a * STAR_HALO_RING})`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(s.x, s.y, R, 0, Math.PI * 2); ctx.fill();
+
+        ctx.globalAlpha = Math.max(0.18, a);
+        ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgb(255,240,210)'; ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    /* =======================
+       BACKGROUND LANTERNS
+    ======================= */
+    let bgLanterns = [];
+    function rebuildBgLanterns() { bgLanterns = []; for (let i = 0; i < BG_LANTERN_COUNT; i++) spawnBgLantern(true); }
+    function spawnBgLantern(initial=false) {
+      const type = Math.random() < 0.5 ? 1 : 2;
+      const size = rand(BG_LANTERN_SIZE_MIN, BG_LANTERN_SIZE_MAX);
+      const x = Math.random() * W;
+      const y = initial ? rand(H * 0.15, H - 60) : H - 40 - size;
+      const vy = rand(BG_LANTERN_SPEED_MIN, BG_LANTERN_SPEED_MAX);
+      const swayFreq = rand(0.1, 0.25);
+      const swayAmp = rand(4, 9);
+      const phase = Math.random() * Math.PI * 2;
+      bgLanterns.push({ type, x, y, size, vy, swayFreq, swayAmp, phase });
+    }
+    function updateBgLanterns(dt) {
+      const t = performance.now() / 1000;
+      for (let i = bgLanterns.length - 1; i >= 0; i--) {
+        const b = bgLanterns[i];
+        b.y -= b.vy * dt;
+        b.x += Math.sin(t * 2 * Math.PI * b.swayFreq + b.phase) * b.swayAmp * dt;
+        if (b.y + b.size < -20) { bgLanterns.splice(i, 1); spawnBgLantern(false); }
+      }
+    }
+    function renderBgLanterns() {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const b of bgLanterns) {
+        drawGlow(b.x, b.y, b.size * 2.6, BG_LANTERN_HALO_ALPHA);
+        ctx.globalAlpha = BG_LANTERN_CORE_ALPHA;
+        const img = getLitImg(b.type);
+        ctx.drawImage(img, b.x - b.size/2, b.y - b.size/2, b.size, b.size);
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    /* =======================
+       SHOOTING STAR
+    ======================= */
+    let activeShootingStar = null;
+    let nextStarTime = 0;
+    function scheduleShootingStar() {
+      nextStarTime = performance.now() / 1000 + rand(SHOOTING_STAR_MIN_INTERVAL, SHOOTING_STAR_MAX_INTERVAL);
+    }
+    function maybeSpawnShootingStar() {
+      const t = performance.now() / 1000;
+      if (activeShootingStar || t < nextStarTime) return;
+      const y = rand(H * 0.05, H * 0.35);
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const x = dir > 0 ? -60 : W + 60;
+      activeShootingStar = {
+        x, y,
+        vx: dir * rand(SHOOTING_STAR_SPEED_MIN, SHOOTING_STAR_SPEED_MAX),
+        len: rand(SHOOTING_STAR_LEN_MIN, SHOOTING_STAR_LEN_MAX),
+        age: 0, life: SHOOTING_STAR_LIFE, dir
+      };
+    }
+    function updateShootingStar(dt) {
+      if (!activeShootingStar) return;
+      const s = activeShootingStar;
+      s.x += s.vx * dt;
+      s.age += dt;
+      if (s.age > s.life || s.x < -200 || s.x > W + 200) {
+        activeShootingStar = null;
+        scheduleShootingStar();
+      }
+    }
+    function renderShootingStar() {
+      if (!activeShootingStar) return;
+      const s = activeShootingStar;
+      const a = Math.max(0, 1 - s.age / s.life);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.65 * a;
+      ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, Math.PI * 2); ctx.fillStyle = 'rgb(255,240,210)'; ctx.fill();
+      const x2 = s.x - s.dir * s.len;
+      const y2 = s.y + 0.25 * s.len;
+      const grad = ctx.createLinearGradient(x2, y2, s.x, s.y);
+      grad.addColorStop(0, 'rgba(255,240,210,0)');
+      grad.addColorStop(1, 'rgba(255,240,210,0.6)');
+      ctx.strokeStyle = grad; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(s.x, s.y); ctx.stroke();
+      ctx.restore();
+    }
+
+    /* =======================
+       ROPES
+    ======================= */
+    function drawIntactRope(l, t) {
+      const { p0, p1, p2 } = ropePoints(l, t);
+      ctx.save();
+      ctx.lineWidth = ROPE_WIDTH; ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(${ROPE_COLOR_RGB},${ROPE_ALPHA})`;
+      ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y); ctx.stroke();
+
+      if (l._ropeHovered && currentMode === 'katana') {
+        ctx.strokeStyle = 'rgba(255,230,160,0.9)';
+        ctx.lineWidth = ROPE_WIDTH + 1.5;
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawSnappingRope(l, t) {
+      if (!l.snap) return;
+      const age = t - l.snap.t0;
+      const p = Math.min(1, age / l.snap.life); // 0→1
+      const frozen = l.snap.frozen || ropePoints(l, t); // fallback, but frozen is expected
+      const { p0, p1, p2 } = frozen;
+      const B = l.snap.breakPt || { x: (p0.x + p2.x)/2, y: (p0.y + p2.y)/2 };
+
+      // endpoints retreat towards their anchors along the FROZEN curve direction
+      const topEnd = { x: p2.x + (B.x - p2.x) * (1 - p), y: p2.y + (B.y - p2.y) * (1 - p) };
+      const botEnd = { x: p0.x + (B.x - p0.x) * (1 - p), y: p0.y + (B.y - p0.y) * (1 - p) };
+
+      // slight recoil offsets
+      const recoil = (1 - p) * 6;
+      const topOff = { x: 0, y: -recoil };
+      const botOff = { x: 0, y: recoil * 0.6 };
+
+      ctx.save();
+      ctx.lineWidth = ROPE_WIDTH; ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(${ROPE_COLOR_RGB},${ROPE_ALPHA * (1 - p)})`;
+
+      // top piece (near lantern)
+      ctx.beginPath();
+      ctx.moveTo(p2.x, p2.y);
+      ctx.lineTo(topEnd.x + topOff.x, topEnd.y + topOff.y);
+      ctx.stroke();
+
+      // bottom piece (near anchor)
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(botEnd.x + botOff.x, botEnd.y + botOff.y);
+      ctx.stroke();
+      ctx.restore();
+
+      if (p >= 1) l.snap = null; // done
+    }
+
+function drawRopes(t) {
+  for (const l of lanterns) {
+    // Lantern is flying away. Show snap animation while it lives; otherwise, no rope.
+    if (l.state === 'ascend') {
+      if (l.snap) drawSnappingRope(l, t);
+      continue; // <-- prevent drawing an intact rope after snap ends
+    }
+
+    // Rope should be visible only while the lantern is still tethered
+    // (closed at ground, lifting to rest, or sitting lit at rest).
+    if (l.state === 'closed' || l.state === 'lifting' || l.state === 'lit') {
+      drawIntactRope(l, t);
+    }
+  }
+}
+
+    /* =======================
+       INTERNAL FILL (progress inside lantern)
+    ======================= */
+    function renderLampFillInside(l) {
+      if (l.state !== 'closed' || !l.dwellStartChi) return;
+      const elapsed = performance.now() - l.dwellStartChi;
+      const p = clamp01(elapsed / LAMP_DWELL_MS);
+
+      if (!l._fillC) l._fillC = document.createElement('canvas');
+      const oc = l._fillC;
+      const w = Math.max(2, Math.round(l.w));
+      const h = Math.max(2, Math.round(l.h));
+      if (oc.width !== w || oc.height !== h) { oc.width = w; oc.height = h; }
+      const octx = oc.getContext('2d');
+      octx.clearRect(0, 0, w, h);
+
+      const fillH = Math.max(1, Math.floor(h * p));
+      const y0 = h - fillH;
+      const grad = octx.createLinearGradient(0, h, 0, y0);
+      grad.addColorStop(0.00, 'rgba(255,220,140,0.95)');
+      grad.addColorStop(0.60, 'rgba(255,205,120,0.65)');
+      grad.addColorStop(1.00, 'rgba(255,180,100,0.35)');
+
+      octx.globalCompositeOperation = 'source-over';
+      octx.fillStyle = grad;
+      octx.fillRect(0, y0, w, fillH);
+
+      octx.globalCompositeOperation = 'destination-in';
+      const closedImg = getClosedImg(l.type);
+      octx.drawImage(closedImg, 0, 0, w, h);
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(oc, -l.w/2, -l.h/2, l.w, l.h);
+      ctx.restore();
+    }
+
+    /* =======================
+       LOOP
+    ======================= */
+    let lastT = performance.now();
+    let started = false;
+    let rafId = 0;
+
+    function drawBackgroundImage() {
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        const iw = bgImg.width, ih = bgImg.height;
+        const scale = Math.max(W / iw, H / ih); // cover
+        const dw = iw * scale, dh = ih * scale;
+        const dx = (W - dw) * 0.5;
+        const dy = (H - dh) * 0.5;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(bgImg, dx, dy, dw, dh);
+      } else {
+        ctx.fillStyle = "#001028";
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    function update(dt) {
+      updateModeHover();
+
+      // ambient
+      updateAmbient(dt);
+      updateBgLanterns(dt);
+      maybeSpawnShootingStar();
+      updateShootingStar(dt);
+
+      const tSec = performance.now()/1000;
+
+      // foreground lanterns
+      for (let i = lanterns.length - 1; i >= 0; i--) {
+        const l = lanterns[i];
+
+        // Track rope hover for visual feedback in katana mode (only when lit)
+        l._ropeHovered = (currentMode === 'katana' && l.state === 'lit' && pointer.inside) ? ropeHitTest(l, tSec) : false;
+
+        if (pointer.inside && (isHovering(l) || l._ropeHovered)) {
+          handleHoverActions(l);
+        } else {
+          if (l.state === 'closed') l.dwellStartChi = 0;
+        }
+
+        // Clamp X inside play area at all times
+        const minX = SIDE_PAD_H + l.w * 0.5;
+        const maxX = W - SIDE_PAD_H - l.w * 0.5;
+
+        if (l.state === "ascend") {
+          // free-ascend into the sky after the cut
+          const t = (performance.now() - l.born) / 1000;
+          const sway = Math.sin(2 * Math.PI * l.swayFreq * t) * l.swayAmp;
+          l.y -= l.ascendVy * dt;
+          l.x += l.driftBase * l.driftSpeed * dt + sway * dt * 0.6;
+          l.x = Math.max(minX, Math.min(maxX, l.x));
+          if (l.y + l.h * 0.5 < -30) { resetOne(i); continue; }
+        } else if (l.state === 'lifting') {
+          // animate from groundY -> restY over LIFT_DURATION
+          const p = easeOutCubic((nowSec() - l.liftT0) / l.liftDur);
+          const prevY = l.y;
+          l.y = l.groundY + (l.restY - l.groundY) * Math.min(1, p);
+          const sway = Math.sin((nowSec() - l.liftT0) * 2 * Math.PI * l.swayFreq) * 0.25;
+          l.x += sway;
+          l.x = Math.max(minX, Math.min(maxX, l.x));
+          if (l.y <= l.restY + 0.5 || (l.y === prevY && p >= 1)) {
+            l.y = l.restY;
+            l.state = 'lit';
+          }
+        } else if (l.state === 'lit') {
+          const dy = l.restY - l.y;
+          if (Math.abs(dy) > 0.5) l.y += Math.sign(dy) * Math.min(120 * dt, Math.abs(dy));
+          l.x = Math.max(minX, Math.min(maxX, l.x));
+        } else { // 'closed' at ground
+          l.y = l.groundY;
+          l.x = Math.max(minX, Math.min(maxX, l.x));
+        }
+      }
+    }
+
+    function render() {
+      const t = performance.now() / 1000;
+
+      drawBackgroundImage();
+      renderStars(t);
+      renderShootingStar();
+      renderBgLanterns();
+
+      // Ropes behind lamps
+      drawRopes(t);
+
+      // Constant glow for lit/ascending lamps
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const l of lanterns) {
+        if (l.state === "lit" || l.state === "ascend" || l.state === "lifting") {
+          drawGlow(l.x, l.y, l.h * GLOW_RADIUS_MULT, GLOW_BASE_ALPHA);
+        }
+      }
+      ctx.restore();
+
+      // Foreground lamps
+      for (const l of lanterns) {
+        const bobAmp = (l.state === "lit" || l.state === "ascend" || l.state === "lifting")
+          ? IDLE_BOB_AMP_LIT : IDLE_BOB_AMP_CLOSED;
+        const yOff = Math.sin(l.bobPhase + t * 2 * Math.PI * l.bobFreq) * bobAmp;
+        const rot  = Math.sin(l.bobPhase * 0.7 + t * 2 * Math.PI * l.bobFreq * 0.8) * IDLE_ROT_AMP;
+
+        const img = (l.state === "closed") ? getClosedImg(l.type) : getLitImg(l.type);
+
+        ctx.save();
+        ctx.translate(l.x, l.y + yOff);
+        ctx.rotate(rot);
+
+        // draw lantern image first
+        ctx.drawImage(img, -l.w/2, -l.h/2, l.w, l.h);
+
+        // if closed and dwelling, overlay the internal fill
+        if (l.state === 'closed' && l.dwellStartChi) {
+          renderLampFillInside(l);
+        }
+
+        ctx.restore();
+      }
+
+      // Fireflies on top
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const f of fireflies) {
+        const a = 0.12 + 0.18 * (0.5 + 0.5 * Math.sin(f.phase + t * 2 * Math.PI * f.pulseF));
+        const haloR = f.size * 4.5;
+        const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, haloR);
+        g.addColorStop(0, `rgba(${f.color.halo},${a})`);
+        g.addColorStop(1, `rgba(${f.color.halo},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(f.x, f.y, haloR, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgb(${f.color.core})`; ctx.fill();
+      }
+      ctx.restore();
+
+      drawChiPointer();
+      drawKatanaPointer();
+    }
+
+    function tick(tMs) {
+      if (!started) {
+        rafId = 0;
+        return;
+      }
+      const dt = Math.min(0.033, (tMs - lastT) / 1000);
+      lastT = tMs;
+
+      ensureCount();
+      update(dt);
+      render();
+
+      rafId = requestAnimationFrame(tick);
+    }
+
+    /* ===== FULLSCREEN START ===== */
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
+
+    async function enterFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+    }
+
+    function scheduleTick() {
+      if (!started || rafId) return;
+      const begin = () => {
+        if (!started) return;
+        lastT = performance.now();
+        rafId = requestAnimationFrame(tick);
+      };
+
+      const imgs = [bgImg, imgClosed1, imgLit1, imgClosed2, imgLit2, chiPointerImg, katanaCursorImg];
+      if (imgs.every(im => im.complete)) {
+        begin();
+        return;
+      }
+
+      let pending = 0;
+      const tryStart = () => {
+        if (--pending <= 0) begin();
+      };
+      imgs.forEach(im => { if (!im.complete) { pending++; im.onload = tryStart; } });
+      if (pending === 0) begin();
+    }
+
+    function resetGameState() {
+      lanterns.length = 0;
+      hoveredTile = null;
+      modeTiles.forEach(clearTileProgress);
+      currentMode = 'chi';
+      refreshModeTiles();
+      cursorOrient = 'left';
+      applyCurrentCursor();
+      pointer.x = pointer.y = -9999;
+      pointer.prevX = -9999;
+      pointer.inside = false;
+      stars = [];
+      fireflies = [];
+      bgLanterns = [];
+      activeShootingStar = null;
+      nextStarTime = 0;
+    }
+
+    function rebuildWorld() {
+      ensureCount();
+      rebuildStars();
+      rebuildFireflies();
+      rebuildBgLanterns();
+      scheduleShootingStar();
+    }
+
+    function quietAudio() {
+      [sfxKatanaDraw, sfxChiSelect, sfxKatanaSlice, ...lampLitSounds].forEach(a => {
+        try { a.pause(); a.currentTime = 0; } catch (e) {}
+      });
+    }
+
+    async function startExperience(options = {}) {
+      if (started) return;
+      if (options.requestFullscreen) {
+        try { await enterFullscreen(); } catch (e) {}
+      }
+
+      resetGameState();
+      quietAudio();
+      started = true;
+      if (startOverlay) startOverlay.style.display = 'none';
+      canvas.style.cursor = 'none';
+
+      resize();
+      rebuildWorld();
+      scheduleTick();
+    }
+
+    function stopExperience() {
+      if (!started) return;
+      started = false;
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      quietAudio();
+      resetGameState();
+      canvas.style.cursor = 'default';
+    }
+
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        startExperience({ requestFullscreen: true });
+      });
+    } else {
+      window.requestAnimationFrame(() => startExperience());
+    }
+
+    window.startExperience = (options) => startExperience(options);
+    window.stopExperience = stopExperience;
+    window.storyGameApi = { start: startExperience, stop: stopExperience };
+  })();
+  
