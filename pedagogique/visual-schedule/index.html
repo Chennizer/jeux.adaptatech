@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual Schedule Builder</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --muted: #94a3b8;
+      --accent: #22c55e;
+      --accent-strong: #16a34a;
+      --border: #1f2937;
+      --card: #0b1220;
+      --shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 10% 20%, rgba(34,197,94,0.1), transparent 22%),
+                  radial-gradient(circle at 90% 10%, rgba(37,99,235,0.08), transparent 20%),
+                  var(--bg);
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 24px 28px 12px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+    }
+
+    p.subtitle {
+      margin: 0;
+      color: var(--muted);
+      max-width: 780px;
+      line-height: 1.5;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 18px;
+      padding: 0 24px 32px;
+    }
+
+    .panel {
+      background: linear-gradient(160deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 20px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .control {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #e2e8f0;
+    }
+
+    .control label { color: var(--muted); }
+
+    input[type=range] {
+      width: 180px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
+    button {
+      background: var(--accent);
+      color: #052e16;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 160ms ease, background 160ms ease;
+      box-shadow: 0 6px 18px rgba(34,197,94,0.35);
+    }
+
+    button.secondary {
+      background: transparent;
+      color: #e2e8f0;
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+
+    button:active { transform: translateY(1px); }
+    button:hover { background: var(--accent-strong); }
+    button.secondary:hover { background: rgba(255,255,255,0.04); }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .step-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+      transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+      cursor: pointer;
+      position: relative;
+      min-height: 180px;
+    }
+
+    .step-card.selected {
+      border-color: rgba(255,255,255,0.18);
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.07);
+    }
+
+    .step-card .step-number {
+      font-weight: 700;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .step-card img {
+      width: 100%;
+      height: 120px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: #111827;
+      border: 1px dashed var(--border);
+      padding: 8px;
+      transition: filter 160ms ease, transform 160ms ease, border-color 160ms ease;
+    }
+
+    .step-card .placeholder {
+      width: 100%;
+      height: 120px;
+      border-radius: 10px;
+      border: 1px dashed var(--border);
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .step-card .caption { color: var(--muted); font-size: 14px; }
+
+    .step-card .clear-step {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #cbd5e1;
+      padding: 6px 8px;
+      font-size: 12px;
+      display: none;
+    }
+
+    .step-card:hover .clear-step { display: inline-block; }
+    .step-card .clear-step:hover { background: rgba(255,255,255,0.08); }
+
+    .step-card.active-step {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(34,197,94,0.25), var(--shadow);
+    }
+
+    .step-card.active-step img { border-color: rgba(34,197,94,0.4); }
+
+    .step-card.completed-step {
+      border-color: #475569;
+    }
+
+    .step-card.completed-step img { filter: grayscale(0.9); opacity: 0.65; }
+
+    .active-step img {
+      animation: breathe 1600ms ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+      100% { transform: scale(1); }
+    }
+
+    .source-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 12px 0 16px;
+    }
+
+    .source-tab {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0b1220;
+      color: #e2e8f0;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .source-tab.active {
+      background: rgba(34,197,94,0.12);
+      border-color: rgba(34,197,94,0.3);
+      color: #bbf7d0;
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+      max-height: 460px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .thumb {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      background: var(--panel);
+      display: grid;
+      gap: 6px;
+      cursor: pointer;
+      transition: border-color 140ms ease, transform 140ms ease;
+    }
+
+    .thumb:hover {
+      border-color: rgba(255,255,255,0.2);
+      transform: translateY(-2px);
+    }
+
+    .thumb img {
+      width: 100%;
+      height: 90px;
+      object-fit: contain;
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 6px;
+    }
+
+    .thumb .label {
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .upload-box {
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .status {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      font-size: 13px;
+    }
+
+    .active-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #befae3;
+      font-weight: 600;
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .legend .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+      border: 1px solid #fff2;
+    }
+
+    .dot.active { background: var(--accent); }
+    .dot.completed { background: #475569; }
+    .dot.pending { background: #1f2937; }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .pill.ghost {
+      background: transparent;
+      border-style: dashed;
+    }
+
+    @media (max-width: 1024px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Visual Schedule Builder</h1>
+    <p class="subtitle">Assemble a step-by-step visual routine by mixing your own images with our pictogram library. Choose how many steps you need, place the pictures in order, then guide the learner with Active Mode to mark progress.</p>
+  </header>
+
+  <div class="layout">
+    <section class="panel">
+      <div class="controls">
+        <div class="control">
+          <label for="step-count">Steps</label>
+          <input type="range" id="step-count" min="2" max="10" value="4">
+          <span class="pill"><span id="step-count-value">4</span> steps</span>
+        </div>
+        <div class="control">
+          <button id="active-mode-btn">Enter Active Mode</button>
+          <span class="legend">
+            <span><span class="dot pending"></span>Pending</span>
+            <span><span class="dot active"></span>Active</span>
+            <span><span class="dot completed"></span>Completed</span>
+          </span>
+        </div>
+        <div class="control">
+          <button class="secondary" id="clear-all">Clear schedule</button>
+        </div>
+      </div>
+
+      <div class="steps-grid" id="steps-grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Pick images</h2>
+      <p class="muted">Choose from our preset library or upload your own images. Click a step card first, then pick an image to place it.</p>
+      <div class="source-tabs">
+        <div class="source-tab active" data-tab="library">Preset library</div>
+        <div class="source-tab" data-tab="uploads">My uploads</div>
+      </div>
+
+      <div id="library" class="tab-panel">
+        <div class="control" style="margin-bottom: 12px;">
+          <label for="search">Search</label>
+          <input id="search" type="text" placeholder="apple, bear, toothbrush..." style="flex:1; padding:10px 12px; border-radius: 10px; border:1px solid var(--border); background:#0b1220; color:#e2e8f0;">
+          <span class="pill ghost" id="library-count">0 images</span>
+        </div>
+        <div class="gallery" id="library-gallery"></div>
+      </div>
+
+      <div id="uploads" class="tab-panel" style="display:none;">
+        <div class="upload-box">
+          <p><strong>Add images from your device</strong></p>
+          <p class="muted">Drop multiple files or pick a folder. We keep everything in this page only.</p>
+          <div style="margin: 10px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+            <input type="file" id="file-input" accept="image/*" multiple>
+            <input type="file" id="folder-input" accept="image/*" webkitdirectory>
+            <span class="pill ghost" id="upload-count">No files yet</span>
+          </div>
+        </div>
+        <div class="gallery" id="upload-gallery" style="margin-top:12px;"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const stepCount = document.getElementById('step-count');
+    const stepCountValue = document.getElementById('step-count-value');
+    const stepsGrid = document.getElementById('steps-grid');
+    const activeModeBtn = document.getElementById('active-mode-btn');
+    const clearAllBtn = document.getElementById('clear-all');
+    const searchInput = document.getElementById('search');
+    const libraryGallery = document.getElementById('library-gallery');
+    const libraryCount = document.getElementById('library-count');
+    const uploadGallery = document.getElementById('upload-gallery');
+    const uploadCount = document.getElementById('upload-count');
+    const fileInput = document.getElementById('file-input');
+    const folderInput = document.getElementById('folder-input');
+
+    let activeMode = false;
+    let selectedStepIndex = 0;
+    let schedule = [];
+    let libraryItems = [];
+    let uploadItems = [];
+
+    function createStepCard(index) {
+      const card = document.createElement('div');
+      card.className = 'step-card';
+      card.dataset.index = index;
+
+      const number = document.createElement('div');
+      number.className = 'step-number';
+      number.innerHTML = `<span>Step ${index + 1}</span>`;
+      card.appendChild(number);
+
+      const placeholder = document.createElement('div');
+      placeholder.className = 'placeholder';
+      placeholder.textContent = 'Click a picture to assign';
+      card.appendChild(placeholder);
+
+      const caption = document.createElement('div');
+      caption.className = 'caption muted';
+      caption.textContent = 'Not set yet';
+      card.appendChild(caption);
+
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'clear-step secondary';
+      clearBtn.textContent = 'Clear';
+      clearBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        setStepContent(index, null);
+      });
+      card.appendChild(clearBtn);
+
+      card.addEventListener('click', () => {
+        if (activeMode) {
+          handleActiveClick(card);
+        } else {
+          selectStep(index);
+        }
+      });
+
+      return card;
+    }
+
+    function buildSteps(count) {
+      stepsGrid.innerHTML = '';
+      schedule = Array.from({ length: count }, () => ({ src: null, label: '' }));
+      for (let i = 0; i < count; i++) {
+        const card = createStepCard(i);
+        stepsGrid.appendChild(card);
+      }
+      selectStep(0);
+    }
+
+    function selectStep(index) {
+      selectedStepIndex = index;
+      document.querySelectorAll('.step-card').forEach(card => {
+        card.classList.toggle('selected', Number(card.dataset.index) === index);
+      });
+    }
+
+    function setStepContent(index, item) {
+      const card = stepsGrid.querySelector(`.step-card[data-index="${index}"]`);
+      if (!card) return;
+      schedule[index] = item ? { src: item.src, label: item.label } : { src: null, label: '' };
+      card.classList.remove('active-step', 'completed-step');
+
+      const placeholder = card.querySelector('.placeholder');
+      const existingImg = card.querySelector('img');
+      const caption = card.querySelector('.caption');
+
+      if (item) {
+        const img = existingImg || document.createElement('img');
+        img.src = item.src;
+        img.alt = item.label;
+        if (!existingImg) {
+          if (placeholder) {
+            placeholder.replaceWith(img);
+          } else {
+            card.insertBefore(img, caption);
+          }
+        }
+        caption.textContent = item.label;
+        caption.classList.remove('muted');
+      } else {
+        const newPlaceholder = placeholder || document.createElement('div');
+        newPlaceholder.className = 'placeholder';
+        newPlaceholder.textContent = 'Click a picture to assign';
+        if (!placeholder) {
+          if (existingImg) existingImg.replaceWith(newPlaceholder);
+          else card.insertBefore(newPlaceholder, caption);
+        }
+        if (existingImg) existingImg.remove();
+        caption.textContent = 'Not set yet';
+        caption.classList.add('muted');
+      }
+    }
+
+    function handleActiveClick(card) {
+      const isActive = card.classList.contains('active-step');
+      document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active-step'));
+      if (isActive) {
+        card.classList.add('completed-step');
+      } else {
+        card.classList.remove('completed-step');
+        card.classList.add('active-step');
+      }
+    }
+
+    function toggleActiveMode() {
+      activeMode = !activeMode;
+      activeModeBtn.textContent = activeMode ? 'Active Mode: On' : 'Enter Active Mode';
+      activeModeBtn.classList.toggle('secondary', !activeMode);
+      document.body.classList.toggle('active-mode', activeMode);
+      if (!activeMode) {
+        document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active-step'));
+      }
+    }
+
+    async function loadLibrary() {
+      try {
+        const res = await fetch('../../images/pictos/index.json');
+        const data = await res.json();
+        const base = data.base || '../../images/pictos/';
+        libraryItems = [];
+        Object.values(data.categories || {}).forEach(cat => {
+          (cat.items || []).forEach(item => {
+            libraryItems.push({
+              src: base + item.file,
+              label: (item.label?.en?.word || item.label?.fr?.word || item.file).replace(/_/g, ' ')
+            });
+          });
+        });
+        renderLibrary(libraryItems);
+      } catch (err) {
+        libraryGallery.innerHTML = '<p class="muted">Could not load library.</p>';
+        console.error(err);
+      }
+    }
+
+    function renderLibrary(items) {
+      libraryGallery.innerHTML = '';
+      items.forEach(item => {
+        const thumb = document.createElement('div');
+        thumb.className = 'thumb';
+        thumb.innerHTML = `<img src="${item.src}" alt="${item.label}"><div class="label">${item.label}</div>`;
+        thumb.addEventListener('click', () => assignToStep(item));
+        libraryGallery.appendChild(thumb);
+      });
+      libraryCount.textContent = `${items.length} images`;
+    }
+
+    function assignToStep(item) {
+      setStepContent(selectedStepIndex, item);
+      const nextIndex = Math.min(selectedStepIndex + 1, schedule.length - 1);
+      selectStep(nextIndex);
+    }
+
+    function filterLibrary() {
+      const term = searchInput.value.trim().toLowerCase();
+      if (!term) {
+        renderLibrary(libraryItems);
+        return;
+      }
+      const filtered = libraryItems.filter(item => item.label.toLowerCase().includes(term));
+      renderLibrary(filtered);
+    }
+
+    function addUploads(files) {
+      const newItems = Array.from(files).filter(f => f.type.startsWith('image/')).map(file => ({
+        src: URL.createObjectURL(file),
+        label: file.name.replace(/\.[^.]+$/, '')
+      }));
+      uploadItems = uploadItems.concat(newItems);
+      uploadCount.textContent = `${uploadItems.length} image${uploadItems.length === 1 ? '' : 's'}`;
+      renderUploads();
+    }
+
+    function renderUploads() {
+      uploadGallery.innerHTML = '';
+      if (!uploadItems.length) {
+        uploadGallery.innerHTML = '<p class="muted">No uploads yet.</p>';
+        return;
+      }
+      uploadItems.forEach(item => {
+        const thumb = document.createElement('div');
+        thumb.className = 'thumb';
+        thumb.innerHTML = `<img src="${item.src}" alt="${item.label}"><div class="label">${item.label}</div>`;
+        thumb.addEventListener('click', () => assignToStep(item));
+        uploadGallery.appendChild(thumb);
+      });
+    }
+
+    document.querySelectorAll('.source-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.source-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const name = tab.dataset.tab;
+        document.getElementById('library').style.display = name === 'library' ? 'block' : 'none';
+        document.getElementById('uploads').style.display = name === 'uploads' ? 'block' : 'none';
+      });
+    });
+
+    stepCount.addEventListener('input', () => {
+      stepCountValue.textContent = stepCount.value;
+      buildSteps(Number(stepCount.value));
+    });
+
+    activeModeBtn.addEventListener('click', toggleActiveMode);
+    clearAllBtn.addEventListener('click', () => buildSteps(Number(stepCount.value)));
+    searchInput.addEventListener('input', filterLibrary);
+    fileInput.addEventListener('change', (e) => addUploads(e.target.files));
+    folderInput.addEventListener('change', (e) => addUploads(e.target.files));
+
+    buildSteps(Number(stepCount.value));
+    loadLibrary();
+  </script>
+</body>
+</html>
