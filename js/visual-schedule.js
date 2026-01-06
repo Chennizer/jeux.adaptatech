@@ -10,6 +10,7 @@
   const toggleActiveBtn = document.getElementById('toggle-active-mode');
   const resetProgressBtn = document.getElementById('reset-progress');
   const orientationToggle = document.getElementById('orientation-toggle');
+  const textToggle = document.getElementById('text-toggle');
   const overlay = document.getElementById('active-overlay');
   const overlaySteps = document.getElementById('overlay-steps');
   const exitActiveBtn = document.getElementById('exit-active');
@@ -66,6 +67,18 @@
       dragPayload = null;
     });
     container.appendChild(thumb);
+  }
+
+  function enterFullscreen() {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }
+
+  function exitFullscreen() {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
   }
 
   function loadPresetLibrary() {
@@ -318,6 +331,7 @@
       overlay.classList.add('hidden');
       overlay.setAttribute('aria-hidden', 'true');
       overlaySteps.style.removeProperty('--overlay-card-size');
+      exitFullscreen();
       return;
     }
 
@@ -326,9 +340,11 @@
     renderActiveSteps();
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
+    enterFullscreen();
   }
 
   function adjustOverlaySizing(orientationClass) {
+    const showText = textToggle?.checked;
     if (!isActiveMode) return;
     cancelAnimationFrame(resizeRaf);
     const gapValue = `${Math.max(window.innerHeight * gapBase, 24)}px`;
@@ -340,8 +356,9 @@
       if (!count) return;
 
       const gap = Number.parseFloat(gapValue);
-      const availableWidth = rect.width - gap * Math.max(0, count - 1);
-      const availableHeight = rect.height - gap * Math.max(0, count - 1);
+      const textSpace = showText ? Math.max((orientationClass === 'horizontal' ? window.innerHeight : window.innerWidth) * 0.08, 60) : 0;
+      const availableWidth = Math.max(120, rect.width - gap * Math.max(0, count - 1) - (orientationClass === 'vertical' ? textSpace : 0));
+      const availableHeight = Math.max(120, rect.height - gap * Math.max(0, count - 1) - (orientationClass === 'horizontal' ? textSpace : 0));
       const horizontalSize = Math.min(availableHeight * 0.9, availableWidth / count);
       const verticalSize = Math.min(availableWidth * 0.9, availableHeight / count);
       const cardSize = Math.max(120, Math.min(900, orientationClass === 'horizontal' ? horizontalSize : verticalSize));
@@ -364,6 +381,7 @@
   function renderActiveSteps() {
     overlaySteps.innerHTML = '';
     const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
+    const showText = textToggle?.checked;
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
 
@@ -372,15 +390,32 @@
       const card = document.createElement('div');
       card.className = 'overlay-card';
       card.dataset.index = index;
+      const imageWrapper = document.createElement('div');
+      imageWrapper.className = 'overlay-image';
       const img = document.createElement('img');
       img.src = step.assignment.src;
       img.alt = step.assignment.name;
-      card.appendChild(img);
+      imageWrapper.appendChild(img);
+      card.appendChild(imageWrapper);
+
+      if (showText) {
+        const caption = document.createElement('div');
+        caption.className = 'overlay-caption';
+        caption.textContent = getImageLabel(step.assignment.name);
+        card.appendChild(caption);
+      }
       card.addEventListener('click', () => handleActiveStepClick(index));
       overlaySteps.appendChild(card);
       updateStepStateClasses(card, index);
     });
     adjustOverlaySizing(orientationClass);
+  }
+
+  function getImageLabel(name) {
+    if (typeof name !== 'string') return '';
+    const lastDot = name.lastIndexOf('.');
+    if (lastDot <= 0) return name;
+    return name.slice(0, lastDot);
   }
 
   function init() {
@@ -393,6 +428,11 @@
     toggleActiveBtn.addEventListener('click', toggleActiveMode);
     resetProgressBtn.addEventListener('click', resetProgress);
     orientationToggle.addEventListener('change', () => {
+      if (isActiveMode) {
+        renderActiveSteps();
+      }
+    });
+    textToggle.addEventListener('change', () => {
       if (isActiveMode) {
         renderActiveSteps();
       }
