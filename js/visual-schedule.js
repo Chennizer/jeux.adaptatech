@@ -4,6 +4,7 @@
   const presetGrid = document.getElementById('preset-grid');
   const userGrid = document.getElementById('user-grid');
   const userUpload = document.getElementById('user-upload');
+  const uploadBox = document.querySelector('.upload-box');
   const stepsContainer = document.getElementById('steps-container');
   const selectionStatus = document.getElementById('selection-status');
   const activeStatus = document.getElementById('active-status');
@@ -118,6 +119,18 @@
     const promises = files.map(addUserImage);
     await Promise.all(promises);
     renderUserImages();
+  }
+
+  async function handleUserDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    uploadBox.classList.remove('dragover');
+    const dropped = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'));
+    if (!dropped.length) return;
+    const promises = dropped.map(addUserImage);
+    await Promise.all(promises);
+    renderUserImages();
+    userUpload.value = '';
   }
 
   function renderUserImages() {
@@ -356,9 +369,15 @@
       if (!count) return;
 
       const gap = Number.parseFloat(gapValue);
-      const textSpace = showText ? Math.max((orientationClass === 'horizontal' ? window.innerHeight : window.innerWidth) * 0.08, 60) : 0;
-      const availableWidth = Math.max(120, rect.width - gap * Math.max(0, count - 1) - (orientationClass === 'vertical' ? textSpace : 0));
-      const availableHeight = Math.max(120, rect.height - gap * Math.max(0, count - 1) - (orientationClass === 'horizontal' ? textSpace : 0));
+      const captionAllowance = showText
+        ? Math.max(
+          orientationClass === 'horizontal' ? Math.min(window.innerHeight * 0.15, 220) : Math.min(rect.width * 0.18, 260),
+          70
+        )
+        : 0;
+
+      const availableWidth = Math.max(120, rect.width - gap * Math.max(0, count - 1) - (orientationClass === 'vertical' ? captionAllowance : 0));
+      const availableHeight = Math.max(120, rect.height - gap * Math.max(0, count - 1) - (orientationClass === 'horizontal' ? captionAllowance : 0));
       const horizontalSize = Math.min(availableHeight * 0.9, availableWidth / count);
       const verticalSize = Math.min(availableWidth * 0.9, availableHeight / count);
       const cardSize = Math.max(120, Math.min(900, orientationClass === 'horizontal' ? horizontalSize : verticalSize));
@@ -387,6 +406,10 @@
 
     steps.forEach((step, index) => {
       if (!step.assignment) return;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'overlay-item';
+      wrapper.classList.add(orientationClass === 'horizontal' ? 'item-horizontal' : 'item-vertical');
+
       const card = document.createElement('div');
       card.className = 'overlay-card';
       card.dataset.index = index;
@@ -398,14 +421,16 @@
       imageWrapper.appendChild(img);
       card.appendChild(imageWrapper);
 
+      wrapper.appendChild(card);
+
       if (showText) {
         const caption = document.createElement('div');
         caption.className = 'overlay-caption';
         caption.textContent = getImageLabel(step.assignment.name);
-        card.appendChild(caption);
+        wrapper.appendChild(caption);
       }
       card.addEventListener('click', () => handleActiveStepClick(index));
-      overlaySteps.appendChild(card);
+      overlaySteps.appendChild(wrapper);
       updateStepStateClasses(card, index);
     });
     adjustOverlaySizing(orientationClass);
@@ -425,6 +450,14 @@
     applyStepsBtn.addEventListener('click', () => buildSteps(stepCountInput.value));
     stepCountInput.addEventListener('change', () => buildSteps(stepCountInput.value));
     userUpload.addEventListener('change', handleUserUpload);
+    if (uploadBox) {
+      uploadBox.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        uploadBox.classList.add('dragover');
+      });
+      uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('dragover'));
+      uploadBox.addEventListener('drop', handleUserDrop);
+    }
     toggleActiveBtn.addEventListener('click', toggleActiveMode);
     resetProgressBtn.addEventListener('click', resetProgress);
     orientationToggle.addEventListener('change', () => {
