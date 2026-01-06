@@ -7,8 +7,6 @@
 
   <link rel="stylesheet" href="../../css/games.css" />
   <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
-
   <style>
     :root {
       --night-1: #050915;
@@ -93,6 +91,16 @@
       filter: blur(0px);
       z-index: 0;
       pointer-events: none;
+    }
+
+    #burstCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+      mix-blend-mode: screen;
     }
 
     #hint {
@@ -285,6 +293,7 @@
 
   <div id="scene" class="scene" aria-live="polite">
     <div class="layer-glow"></div>
+    <canvas id="burstCanvas"></canvas>
     <div id="gazePointer"></div>
     <div id="hint" class="translate" data-fr="Fixe n'importe où : un nombre sera prononcé et la même quantité d'éclats apparaîtra." data-en="Look anywhere: a number will be spoken and the same count of bursts will appear." data-ja="どこを見ても、その数だけ光のイベントが現れます。">Fixe n'importe où : un nombre sera prononcé et la même quantité d'éclats apparaîtra.</div>
   </div>
@@ -315,7 +324,10 @@
     let lastMove = performance.now();
     let lastTrigger = 0;
     let playing = false;
-    let bloomEngine = null;
+    const burstCanvas = document.getElementById('burstCanvas');
+    const ctx = burstCanvas.getContext('2d');
+    let bursts = [];
+    let rafId = null;
 
     const numberWords = {
       fr: ['un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'],
@@ -347,123 +359,83 @@
 
     function pickPalette() {
       const palettes = [
-        ['#5eead4', '#a5f3fc', '#60a5fa', '#22d3ee'],
-        ['#f472b6', '#c4b5fd', '#60a5fa', '#f9a8d4'],
-        ['#fcd34d', '#fda4af', '#38bdf8', '#bef264']
+        ['#a5f3fc', '#38bdf8', '#22d3ee', '#0ea5e9'],
+        ['#f9a8d4', '#f472b6', '#e879f9', '#c084fc'],
+        ['#fcd34d', '#fbbf24', '#fb923c', '#f97316']
       ];
       return palettes[Math.floor(Math.random() * palettes.length)];
     }
 
-    class GlowBurst {
-      constructor(p, x, y, count, palette) {
-        this.p = p;
-        this.particles = [];
-        this.rings = [];
-        this.createParticles(x, y, count, palette);
-      }
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      burstCanvas.width = window.innerWidth * dpr;
+      burstCanvas.height = window.innerHeight * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
 
-      createParticles(x, y, count, palette) {
-        for (let i = 0; i < count; i++) {
-          const hue = palette[i % palette.length];
-          const angle = randomBetween(0, Math.PI * 2);
-          const speed = randomBetween(1.6, 4.4);
-          const size = randomBetween(12, 34);
-          const travel = randomBetween(90, 180);
-          this.particles.push({
-            x, y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            life: 0,
-            maxLife: randomBetween(50, 95),
-            size,
-            travel,
-            color: hue,
-            sparkle: Math.random() > 0.5
-          });
-          if (i % 2 === 0) {
-            this.rings.push({ x, y, r: 0, maxR: randomBetween(60, 140), color: hue, life: 0, maxLife: 80 });
-          }
-        }
-      }
+    function animateBursts() {
+      ctx.clearRect(0, 0, burstCanvas.width, burstCanvas.height);
+      const now = performance.now();
 
-      update() {
-        this.particles.forEach(pt => {
-          pt.x += pt.vx;
-          pt.y += pt.vy;
-          pt.life++;
+      bursts = bursts.filter(burst => {
+        const age = now - burst.startedAt;
+        const alive = age < burst.duration;
+        if (!alive) return false;
+
+        burst.particles.forEach(p => {
+          const lifeRatio = Math.min(1, (now - p.start) / p.life);
+          const ease = lifeRatio * (2 - lifeRatio);
+          const px = p.x + p.vx * ease;
+          const py = p.y + p.vy * ease;
+          const size = p.size * (1 + ease * 0.35);
+          const alpha = (1 - lifeRatio) * 0.8;
+
+          const grad = ctx.createRadialGradient(px, py, 0, px, py, size);
+          grad.addColorStop(0, `${p.color}cc`);
+          grad.addColorStop(0.55, `${p.color}66`);
+          grad.addColorStop(1, `${p.color}00`);
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.ellipse(px, py, size, size * 0.92, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = `${p.color}${Math.floor(alpha * 255).toString(16).padStart(2, '0')}`;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.arc(px, py, size * 0.5, 0, Math.PI * 2);
+          ctx.stroke();
         });
-        this.rings.forEach(r => { r.r += 2.2; r.life += 1.8; });
-        this.particles = this.particles.filter(pt => pt.life < pt.maxLife);
-        this.rings = this.rings.filter(r => r.life < r.maxLife);
-      }
 
-      draw() {
-        const p = this.p;
-        p.push();
-        p.blendMode(p.ADD);
-        this.particles.forEach(pt => {
-          const alpha = p.map(pt.life, 0, pt.maxLife, 255, 0);
-          const size = pt.size + p.map(pt.life, 0, pt.maxLife, 0, 22);
-          p.noStroke();
-          p.drawingContext.shadowBlur = 18;
-          p.drawingContext.shadowColor = pt.color;
-          const grad = p.drawingContext.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, size);
-          grad.addColorStop(0, `${pt.color}ff`);
-          grad.addColorStop(0.4, `${pt.color}aa`);
-          grad.addColorStop(1, `${pt.color}00`);
-          p.drawingContext.fillStyle = grad;
-          p.ellipse(pt.x, pt.y, size, size);
-          if (pt.sparkle && pt.life % 4 === 0) {
-            p.stroke(pt.color);
-            p.strokeWeight(1.2);
-            p.line(pt.x - 10, pt.y, pt.x + 10, pt.y);
-            p.line(pt.x, pt.y - 10, pt.x, pt.y + 10);
-          }
-        });
-        this.rings.forEach(r => {
-          const alpha = p.map(r.life, 0, r.maxLife, 180, 0);
-          p.noFill();
-          p.stroke(r.color + Math.floor(alpha).toString(16).padStart(2, '0'));
-          p.strokeWeight(2.5);
-          p.ellipse(r.x, r.y, r.r * 2);
-        });
-        p.pop();
-      }
+        return true;
+      });
 
-      isAlive() {
-        return this.particles.length > 0 || this.rings.length > 0;
+      if (bursts.length > 0) {
+        rafId = requestAnimationFrame(animateBursts);
+      } else {
+        rafId = null;
+        ctx.clearRect(0, 0, burstCanvas.width, burstCanvas.height);
       }
     }
 
-    function initBloomEngine() {
-      bloomEngine = new p5(p => {
-        let bursts = [];
+    function addBurst(x, y, count, palette) {
+      const particles = [];
+      for (let i = 0; i < count; i++) {
+        const angle = randomBetween(0, Math.PI * 2);
+        const speed = randomBetween(18, 58);
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: randomBetween(16, 42),
+          life: randomBetween(720, 1400),
+          start: performance.now(),
+          color: palette[i % palette.length]
+        });
+      }
 
-        p.setup = () => {
-          const canvas = p.createCanvas(p.windowWidth, p.windowHeight);
-          canvas.parent(scene);
-          canvas.id('number-event-canvas');
-          canvas.style('position', 'fixed');
-          canvas.style('inset', '0');
-          canvas.style('z-index', '1');
-          canvas.style('pointer-events', 'none');
-          p.clear();
-        };
-
-        p.windowResized = () => {
-          p.resizeCanvas(p.windowWidth, p.windowHeight);
-        };
-
-        p.draw = () => {
-          p.clear();
-          bursts = bursts.filter(b => b.isAlive());
-          bursts.forEach(b => { b.update(); b.draw(); });
-        };
-
-        p.addBurst = (x, y, count, palette) => {
-          bursts.push(new GlowBurst(p, x, y, count, palette));
-        };
-      });
+      bursts.push({ particles, startedAt: performance.now(), duration: 1600 });
+      if (!rafId) animateBursts();
     }
 
     function triggerSequence(x, y) {
@@ -493,7 +465,7 @@
       }
 
       const palette = pickPalette();
-      bloomEngine?.addBurst(x, y, count, palette);
+      addBurst(x, y, count, palette);
       lastTrigger = performance.now();
     }
 
@@ -548,7 +520,7 @@
     showPointer.addEventListener('change', togglePointerVisibility);
 
     initEyegazeMenu();
-    initBloomEngine();
+    resizeCanvas();
     updateLabels();
     syncDwellWithMenu();
     togglePointerVisibility();
@@ -558,6 +530,7 @@
       gazePos.x = clamp(gazePos.x, 0, window.innerWidth);
       gazePos.y = clamp(gazePos.y, 0, window.innerHeight);
       gazePointer.style.transform = `translate(${gazePos.x}px, ${gazePos.y}px)`;
+      resizeCanvas();
     });
   </script>
 </body>
