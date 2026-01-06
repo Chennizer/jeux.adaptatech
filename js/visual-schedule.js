@@ -13,6 +13,7 @@
   const overlay = document.getElementById('active-overlay');
   const overlaySteps = document.getElementById('overlay-steps');
   const exitActiveBtn = document.getElementById('exit-active');
+  const gapBase = 0.05; // 5vh
 
   const maxSteps = 10;
   const minSteps = 2;
@@ -24,6 +25,7 @@
   let completedSteps = new Set();
   let userImages = [];
   let dragPayload = null;
+  let resizeRaf = null;
 
   function clampStepCount(value) {
     const parsed = Number.parseInt(value, 10);
@@ -315,6 +317,7 @@
       toggleActiveBtn.textContent = 'Enter Active Mode';
       overlay.classList.add('hidden');
       overlay.setAttribute('aria-hidden', 'true');
+      overlaySteps.style.removeProperty('--overlay-card-size');
       return;
     }
 
@@ -323,6 +326,27 @@
     renderActiveSteps();
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
+  }
+
+  function adjustOverlaySizing(orientationClass) {
+    if (!isActiveMode) return;
+    cancelAnimationFrame(resizeRaf);
+    const gapValue = `${Math.max(window.innerHeight * gapBase, 24)}px`;
+    overlaySteps.style.gap = gapValue;
+    resizeRaf = requestAnimationFrame(() => {
+      const rect = overlaySteps.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const count = overlaySteps.children.length;
+      if (!count) return;
+
+      const gap = Number.parseFloat(gapValue);
+      const availableWidth = rect.width - gap * Math.max(0, count - 1);
+      const availableHeight = rect.height - gap * Math.max(0, count - 1);
+      const horizontalSize = Math.min(availableHeight * 0.9, availableWidth / count);
+      const verticalSize = Math.min(availableWidth * 0.9, availableHeight / count);
+      const cardSize = Math.max(120, Math.min(900, orientationClass === 'horizontal' ? horizontalSize : verticalSize));
+      overlaySteps.style.setProperty('--overlay-card-size', `${cardSize}px`);
+    });
   }
 
   function resetProgress() {
@@ -356,6 +380,7 @@
       overlaySteps.appendChild(card);
       updateStepStateClasses(card, index);
     });
+    adjustOverlaySizing(orientationClass);
   }
 
   function init() {
@@ -373,6 +398,12 @@
       }
     });
     exitActiveBtn.addEventListener('click', toggleActiveMode);
+    window.addEventListener('resize', () => {
+      if (isActiveMode) {
+        const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
+        adjustOverlaySizing(orientationClass);
+      }
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
