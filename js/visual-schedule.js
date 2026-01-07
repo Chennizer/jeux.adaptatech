@@ -5,35 +5,23 @@
 
   const optionsModal = document.getElementById('game-options');
   const pickerModal = document.getElementById('tile-picker-modal');
-  const builderScreen = document.getElementById('builder-screen');
-
   const stepSlider = document.getElementById('step-count');
   const stepValue = document.getElementById('step-value');
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
-  const liveOrientationToggle = document.getElementById('live-orientation-toggle');
-  const liveTextToggle = document.getElementById('live-text-toggle');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
   const backToOptionsBtn = document.getElementById('back-to-options');
   const launchBuilderBtn = document.getElementById('launch-builder');
   const clearSelectionBtn = document.getElementById('clear-selection');
-  const editSelectionBtn = document.getElementById('edit-selection');
 
   const presetGrid = document.getElementById('preset-grid');
   const userGrid = document.getElementById('user-grid');
   const userUpload = document.getElementById('user-upload');
   const selectionRow = document.getElementById('selection-row');
 
-  const stepsContainer = document.getElementById('steps-container');
-  const selectionStatus = document.getElementById('selection-status');
-  const activeStatus = document.getElementById('active-status');
-  const toggleActiveBtn = document.getElementById('toggle-active-mode');
-  const resetProgressBtn = document.getElementById('reset-progress');
-
   const overlay = document.getElementById('active-overlay');
   const overlaySteps = document.getElementById('overlay-steps');
-  const exitActiveBtn = document.getElementById('exit-active');
 
   let steps = [];
   let selectedImage = null;
@@ -51,11 +39,6 @@
     return Math.min(maxSteps, Math.max(minSteps, parsed));
   }
 
-  function syncLiveToggles() {
-    liveOrientationToggle.checked = orientationToggle.checked;
-    liveTextToggle.checked = textToggle.checked;
-  }
-
   function setSelection(image, thumbEl) {
     selectedImage = image;
     if (selectedThumb) {
@@ -65,7 +48,6 @@
     if (selectedThumb) {
       selectedThumb.classList.add('selected');
     }
-    selectionStatus.textContent = image ? image.name : '';
   }
 
   function renderThumb(container, image) {
@@ -148,7 +130,6 @@
       activeStepIndex = null;
     }
     renderSelectionRow();
-    renderStepsContainer();
     updateLaunchState();
   }
 
@@ -175,10 +156,7 @@
       }
 
       slot.addEventListener('click', () => {
-        if (!selectedImage) {
-          selectionStatus.textContent = 'Select or drag an image first';
-          return;
-        }
+        if (!selectedImage) return;
         assignImageToStep(index, selectedImage, null);
       });
 
@@ -208,70 +186,6 @@
     });
   }
 
-  function renderStepsContainer() {
-    stepsContainer.innerHTML = '';
-    steps.forEach((step, index) => {
-      const card = document.createElement('div');
-      card.className = 'step-card';
-      card.dataset.index = index;
-      card.draggable = !!step.assignment;
-
-      const header = document.createElement('div');
-      header.className = 'step-header';
-      const label = document.createElement('span');
-      label.className = 'step-label';
-      label.textContent = `Step ${index + 1}`;
-      const clearBtn = document.createElement('button');
-      clearBtn.type = 'button';
-      clearBtn.className = 'button ghost';
-      clearBtn.textContent = 'Clear';
-      clearBtn.addEventListener('click', (event) => {
-        event.stopPropagation();
-        clearStep(index);
-      });
-      header.appendChild(label);
-      header.appendChild(clearBtn);
-
-      const imageWrapper = document.createElement('div');
-      imageWrapper.className = 'step-image';
-      imageWrapper.textContent = '';
-
-      if (step.assignment) {
-        applyAssignment(card, step.assignment);
-        card.draggable = true;
-      }
-
-      card.appendChild(header);
-      card.appendChild(imageWrapper);
-
-      card.addEventListener('click', () => handleStepClick(index));
-      card.addEventListener('dragstart', () => {
-        if (steps[index]?.assignment) {
-          dragPayload = { image: steps[index].assignment, from: 'card', index };
-        }
-      });
-      card.addEventListener('dragend', () => {
-        dragPayload = null;
-        card.classList.remove('drag-target');
-      });
-      card.addEventListener('dragover', (event) => {
-        event.preventDefault();
-        card.classList.add('drag-target');
-      });
-      card.addEventListener('dragleave', () => card.classList.remove('drag-target'));
-      card.addEventListener('drop', (event) => {
-        event.preventDefault();
-        card.classList.remove('drag-target');
-        const payloadImage = dragPayload?.image || selectedImage;
-        if (!payloadImage) return;
-        assignImageToStep(index, payloadImage, dragPayload?.index ?? null);
-      });
-
-      updateStepStateClasses(card, index);
-      stepsContainer.appendChild(card);
-    });
-  }
-
   function assignImageToStep(index, image, fromIndex) {
     if (!image) return;
     const assignment = { ...image };
@@ -284,40 +198,10 @@
       activeStepIndex = null;
     }
     renderSelectionRow();
-    renderStepsContainer();
     if (isActiveMode) {
       renderActiveSteps();
     }
     updateLaunchState();
-  }
-
-  function applyAssignment(card, assignment) {
-    card.classList.add('assigned');
-    const wrapper = card.querySelector('.step-image');
-    if (wrapper) {
-      wrapper.innerHTML = '';
-      const img = document.createElement('img');
-      img.src = assignment.src;
-      img.alt = assignment.name;
-      wrapper.appendChild(img);
-    }
-    const meta = card.querySelector('.meta');
-    if (meta) {
-      meta.remove();
-    }
-  }
-
-  function handleStepClick(index) {
-    if (isActiveMode) {
-      handleActiveStepClick(index);
-      return;
-    }
-
-    if (!selectedImage) {
-      selectionStatus.textContent = 'Select or drag an image first';
-      return;
-    }
-    assignImageToStep(index, selectedImage, null);
   }
 
   function handleActiveStepClick(index) {
@@ -340,34 +224,17 @@
     const previous = activeStepIndex;
     activeStepIndex = index;
     completedSteps.delete(index);
-    updateStepStateClasses(stepsContainer.querySelector(`[data-index="${index}"]`), index);
+    updateStepStateClasses(null, index);
     if (previous !== null && previous !== index) {
-      updateStepStateClasses(stepsContainer.querySelector(`[data-index="${previous}"]`), previous);
+      updateStepStateClasses(null, previous);
     }
-    activeStatus.textContent = `Active Mode: step ${index + 1} is live. Click it again to complete.`;
     renderActiveSteps();
   }
 
   function markCompleted(index) {
     completedSteps.add(index);
-    updateStepStateClasses(stepsContainer.querySelector(`[data-index="${index}"]`), index);
     activeStepIndex = null;
-    activeStatus.textContent = `Step ${index + 1} marked complete.`;
     renderActiveSteps();
-  }
-
-  function clearStep(index) {
-    steps[index] = { assignment: null };
-    completedSteps.delete(index);
-    if (activeStepIndex === index) {
-      activeStepIndex = null;
-    }
-    renderSelectionRow();
-    renderStepsContainer();
-    if (isActiveMode) {
-      renderActiveSteps();
-    }
-    updateLaunchState();
   }
 
   function clearAllSelections() {
@@ -377,15 +244,10 @@
     activeStepIndex = null;
     setSelection(null, null);
     renderSelectionRow();
-    renderStepsContainer();
     updateLaunchState();
   }
 
   function updateStepStateClasses(card, index) {
-    if (card) {
-      card.classList.toggle('active-step', activeStepIndex === index);
-      card.classList.toggle('completed-step', completedSteps.has(index));
-    }
     const overlayCard = overlaySteps.querySelector(`[data-index="${index}"]`);
     if (overlayCard) {
       overlayCard.classList.toggle('active-step', activeStepIndex === index);
@@ -393,31 +255,25 @@
     }
   }
 
-  function toggleActiveMode() {
-    isActiveMode = !isActiveMode;
-    if (!isActiveMode) {
-      activeStatus.textContent = 'Active Mode is off. Assign images before starting.';
-      toggleActiveBtn.textContent = 'Enter Active Mode';
-      overlay.classList.add('hidden');
-      overlay.setAttribute('aria-hidden', 'true');
-      overlaySteps.style.removeProperty('--overlay-card-size');
-      document.body.classList.remove('no-scroll');
-      exitFullscreen();
-      return;
-    }
-
-    if (!steps.some((step) => step.assignment)) {
-      isActiveMode = false;
-      return;
-    }
-
-    toggleActiveBtn.textContent = 'Exit Active Mode';
-    activeStatus.textContent = 'Active Mode: click any assigned step to make it live.';
+  function enterActiveMode() {
+    if (!steps.some((step) => step.assignment)) return;
+    isActiveMode = true;
     renderActiveSteps();
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('no-scroll');
     enterFullscreen();
+  }
+
+  function exitActiveMode() {
+    if (!isActiveMode) return;
+    isActiveMode = false;
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+    overlaySteps.style.removeProperty('--overlay-card-size');
+    document.body.classList.remove('no-scroll');
+    exitFullscreen();
+    showPicker();
   }
 
   function adjustOverlaySizing(orientationClass) {
@@ -445,22 +301,10 @@
     });
   }
 
-  function resetProgress() {
-    completedSteps.clear();
-    activeStepIndex = null;
-    stepsContainer.querySelectorAll('.step-card').forEach((card) => {
-      card.classList.remove('active-step', 'completed-step');
-    });
-    overlaySteps.querySelectorAll('.overlay-card').forEach((card) => {
-      card.classList.remove('active-step', 'completed-step');
-    });
-    activeStatus.textContent = isActiveMode ? 'Active Mode: progress reset.' : 'Active Mode is off. Progress reset.';
-  }
-
   function renderActiveSteps() {
     overlaySteps.innerHTML = '';
-    const orientationClass = liveOrientationToggle?.checked ? 'vertical' : 'horizontal';
-    const showText = liveTextToggle?.checked;
+    const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
+    const showText = textToggle?.checked;
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
 
@@ -522,77 +366,51 @@
   }
 
   function showPicker() {
-    if (isActiveMode) toggleActiveMode();
     optionsModal.classList.add('hidden');
-    builderScreen.classList.add('hidden');
     pickerModal.classList.remove('hidden');
   }
 
   function showOptions() {
-    if (isActiveMode) toggleActiveMode();
     pickerModal.classList.add('hidden');
-    builderScreen.classList.add('hidden');
     optionsModal.classList.remove('hidden');
-  }
-
-  function showBuilder() {
-    pickerModal.classList.add('hidden');
-    optionsModal.classList.add('hidden');
-    builderScreen.classList.remove('hidden');
   }
 
   function init() {
     loadPresetLibrary();
     setStepCount(stepSlider.value);
-    syncLiveToggles();
 
     stepSlider.addEventListener('input', (event) => setStepCount(event.target.value));
     orientationToggle.addEventListener('change', () => {
-      syncLiveToggles();
       if (isActiveMode) renderActiveSteps();
     });
     textToggle.addEventListener('change', () => {
-      syncLiveToggles();
-      if (isActiveMode) renderActiveSteps();
-    });
-    liveOrientationToggle.addEventListener('change', () => {
-      orientationToggle.checked = liveOrientationToggle.checked;
-      if (isActiveMode) renderActiveSteps();
-    });
-    liveTextToggle.addEventListener('change', () => {
-      textToggle.checked = liveTextToggle.checked;
       if (isActiveMode) renderActiveSteps();
     });
 
     userUpload.addEventListener('change', handleUserUpload);
     openPickerBtn.addEventListener('click', () => {
-      syncLiveToggles();
       showPicker();
     });
     backToOptionsBtn.addEventListener('click', showOptions);
     clearSelectionBtn.addEventListener('click', clearAllSelections);
-    editSelectionBtn.addEventListener('click', () => {
-      showPicker();
-    });
 
     launchBuilderBtn.addEventListener('click', () => {
       if (launchBuilderBtn.disabled) return;
-      showBuilder();
-      isActiveMode = false;
-      activeStatus.textContent = 'Assign steps and start Active Mode.';
-      toggleActiveBtn.textContent = 'Enter Active Mode';
-      document.body.classList.remove('no-scroll');
-      exitFullscreen();
+      pickerModal.classList.add('hidden');
+      optionsModal.classList.add('hidden');
+      enterActiveMode();
     });
-
-    toggleActiveBtn.addEventListener('click', toggleActiveMode);
-    resetProgressBtn.addEventListener('click', resetProgress);
-    exitActiveBtn.addEventListener('click', toggleActiveMode);
 
     window.addEventListener('resize', () => {
       if (isActiveMode) {
-        const orientationClass = liveOrientationToggle?.checked ? 'vertical' : 'horizontal';
+        const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
         adjustOverlaySizing(orientationClass);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && isActiveMode) {
+        exitActiveMode();
       }
     });
   }
