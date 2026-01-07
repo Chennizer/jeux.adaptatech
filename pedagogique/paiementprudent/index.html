@@ -38,6 +38,19 @@ body.advanced-wallet{
   --coinSize: calc(var(--uiScale) * clamp(32px, 4.4vmin, 75px));
 }
 body.advanced-wallet .counter{font-size: calc(var(--coinFont) * 0.8);}
+body.advanced-wallet #priceTag{font-size: clamp(1.7rem, 1.4rem + 1.8vw, 3.2rem);}
+body.advanced-wallet #priceButtons{flex-wrap:nowrap;gap:clamp(0.5rem, 1.6vw, 0.9rem);}
+body.advanced-wallet #priceButtons button{
+  min-width: clamp(110px, 20vw, 180px);
+  width: clamp(110px, 22vw, 190px);
+  font-size: clamp(1rem, 0.9rem + 0.7vmin, 1.4rem);
+  padding: 0.35rem 0.8rem;
+}
+body.advanced-wallet #studentSetPriceBtn{
+  min-width: clamp(110px, 20vw, 180px);
+  width: clamp(110px, 22vw, 190px);
+  font-size: clamp(1rem, 0.9rem + 0.7vmin, 1.4rem);
+}
 
 html,body{
   height:100%;margin:0;
@@ -361,7 +374,7 @@ body.advanced-wallet .counter.bad{
 #payBtn:disabled,#payBtn.dim{background:#d79a85;cursor:not-allowed;}
 
 #studentSetPriceBtn{
-  margin:.5rem auto 0;
+  margin:0;
   min-height: calc(var(--tileSize) * 0.95);
   min-width: clamp(140px, 28vw, 220px);
   width: clamp(140px, 32vw, 240px);
@@ -643,9 +656,9 @@ body.advanced-wallet .counter.bad{
         <div id="priceStatus" aria-live="polite" role="status"></div>
         <div id="priceButtons">
           <button id="verifyBtn">VÉRIFIER</button>
+          <button id="studentSetPriceBtn">Combien ça coûte?</button>
           <button id="payBtn">PAYER</button>
         </div>
-        <button id="studentSetPriceBtn">Combien ça coûte?</button>
       </div>
     </div>
   </div>
@@ -1548,6 +1561,25 @@ function animateCoins(idxArr,cb){
 const dragSources = document.querySelectorAll('.dragSource');
 const walletDropAreaEl = $('walletDropArea');
 let ghostCoin=null, offsetX=0, offsetY=0;
+let dragStartX=0, dragStartY=0, dragMoved=false;
+let ignoreClickUntil=0;
+
+function addCoinValue(val){
+  let maxCoins = advancedMode ? 100 : 10;
+  if(!advancedMode && coins + val > maxCoins){
+    setAdvancedMode(true);
+    maxCoins = 100;
+  }
+  if(coins + val <= maxCoins){
+    coins += val;
+    saveRender();
+    if(val === 1){
+      playSound(sndAdd1);
+    }
+    return;
+  }
+  alertBox('Porte-monnaie plein !');
+}
 
 function onDragStart(e){
   const src = e.currentTarget;
@@ -1563,6 +1595,9 @@ function onDragStart(e){
   const rect = src.getBoundingClientRect();
   offsetX = evt.clientX - rect.left;
   offsetY = evt.clientY - rect.top;
+  dragStartX = evt.clientX;
+  dragStartY = evt.clientY;
+  dragMoved = false;
   ghostCoin.style.left = rect.left+'px';
   ghostCoin.style.top  = rect.top+'px';
   walletDropAreaEl.classList.add('droptarget');
@@ -1580,6 +1615,11 @@ function onDragMove(e){
   const evt = e.touches ? e.touches[0] : e;
   ghostCoin.style.left = evt.clientX - offsetX + 'px';
   ghostCoin.style.top  = evt.clientY - offsetY + 'px';
+  if(!dragMoved){
+    const dx = Math.abs(evt.clientX - dragStartX);
+    const dy = Math.abs(evt.clientY - dragStartY);
+    if(dx > 6 || dy > 6) dragMoved = true;
+  }
 }
 function onDragEnd(e){
   if(!ghostCoin) return;
@@ -1588,21 +1628,13 @@ function onDragEnd(e){
   const rect = walletDropAreaEl.getBoundingClientRect();
   if(evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom){
     const val = parseInt(ghostCoin.dataset.value,10);
-    let maxCoins = advancedMode ? 100 : 10;
-    if(!advancedMode && coins + val > maxCoins){
-      setAdvancedMode(true);
-      maxCoins = 100;
-    }
-    if(coins + val <= maxCoins){
-      coins += val;
-      saveRender();
-      if(val===1){
-        playSound(sndAdd1);
-      }
-    } else alertBox('Porte-monnaie plein !');
+    addCoinValue(val);
   }
   document.body.removeChild(ghostCoin);
   ghostCoin = null;
+  if(dragMoved){
+    ignoreClickUntil = Date.now() + 400;
+  }
   if(e.type==='touchend'){
     document.removeEventListener('touchmove',onDragMove);
     document.removeEventListener('touchend',onDragEnd);
@@ -1611,9 +1643,16 @@ function onDragEnd(e){
     document.removeEventListener('mouseup',onDragEnd);
   }
 }
+function onDragSourceClick(e){
+  if(Date.now() < ignoreClickUntil) return;
+  const val = parseInt(e.currentTarget.dataset.value,10);
+  if(Number.isNaN(val)) return;
+  addCoinValue(val);
+}
 dragSources.forEach(el=>{
   el.addEventListener('mousedown',onDragStart);
   el.addEventListener('touchstart',onDragStart,{passive:false});
+  el.addEventListener('click',onDragSourceClick);
 });
 
 // PRICE MODAL (ADMIN)
