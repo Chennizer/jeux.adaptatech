@@ -83,10 +83,10 @@
     let fixationDelay = Number.isFinite(storedDwell)
       ? storedDwell
       : parseInt(fixationTimeInput?.value, 10) || 2000;
-    let tileSize = parseInt(tileSizeInput?.value, 10) || 40;
+    let tileSize = parseInt(tileSizeInput?.value, 10) || 42;
     document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
     document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-    const initialGap = 7 * (40 / tileSize);
+    const initialGap = 4.5 * (42 / tileSize);
     document.documentElement.style.setProperty('--tile-gap', initialGap + 'vh');
 
     const tileChoiceMap = new WeakMap();
@@ -670,7 +670,7 @@
         tileSize = parseInt(tileSizeInput.value, 10);
         tileSizeValue.textContent = tileSize;
         document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-        const newGap = 7 * (40 / tileSize);
+        const newGap = 4.5 * (42 / tileSize);
         document.documentElement.style.setProperty('--tile-gap', newGap + 'vh');
       });
     }
