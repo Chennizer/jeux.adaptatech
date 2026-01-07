@@ -10,6 +10,7 @@
   const stepValue = document.getElementById('step-value');
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
+  const numberToggle = document.getElementById('number-toggle');
   const backgroundSelect = document.getElementById('background-select');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
@@ -316,12 +317,18 @@
     });
   }
 
+  function isBlackBackground() {
+    return backgroundSelect?.value === '#000000';
+  }
+
   function renderActiveSteps() {
     overlaySteps.innerHTML = '';
     const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
     const showText = textToggle?.checked;
+    const showNumbers = numberToggle?.checked;
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
+    overlaySteps.classList.toggle('single', steps.filter((step) => step.assignment).length <= 1);
 
     steps.forEach((step, index) => {
       if (!step.assignment) return;
@@ -339,6 +346,14 @@
       imageWrapper.appendChild(img);
       frame.appendChild(imageWrapper);
       card.appendChild(frame);
+
+      if (showNumbers) {
+        const numberTag = document.createElement('div');
+        numberTag.className = 'overlay-number';
+        numberTag.textContent = String(index + 1);
+        numberTag.style.color = isBlackBackground() ? '#ffffff' : '#000000';
+        card.appendChild(numberTag);
+      }
 
       if (showText) {
         const caption = document.createElement('div');
@@ -410,8 +425,12 @@
     textToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
     });
+    numberToggle.addEventListener('change', () => {
+      if (isActiveMode) renderActiveSteps();
+    });
     backgroundSelect.addEventListener('change', () => {
       updateOverlayBackground();
+      if (isActiveMode) renderActiveSteps();
     });
 
     userUpload.addEventListener('change', handleUserUpload);
