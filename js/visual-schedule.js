@@ -19,6 +19,7 @@
   const presetGrid = document.getElementById('preset-grid');
   const userGrid = document.getElementById('user-grid');
   const userUpload = document.getElementById('user-upload');
+  const userUploadSingle = document.getElementById('user-upload-single');
   const selectionRow = document.getElementById('selection-row');
 
   const overlay = document.getElementById('active-overlay');
@@ -111,6 +112,14 @@
     const promises = files.map(addUserImage);
     await Promise.all(promises);
     renderUserImages();
+  }
+
+  async function handleUserUploadSingle(event) {
+    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
+    if (!files.length) return;
+    await addUserImage(files[0]);
+    renderUserImages();
+    event.target.value = '';
   }
 
   function renderUserImages() {
@@ -393,6 +402,7 @@
     });
 
     userUpload.addEventListener('change', handleUserUpload);
+    userUploadSingle.addEventListener('change', handleUserUploadSingle);
     openPickerBtn.addEventListener('click', () => {
       showPicker();
     });
