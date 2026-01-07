@@ -2,6 +2,7 @@
   const minSteps = 2;
   const maxSteps = 10;
   const gapBase = 0.05; // 5vh
+  const storageKey = 'visualScheduleState';
 
   const optionsModal = document.getElementById('game-options');
   const pickerModal = document.getElementById('tile-picker-modal');
@@ -37,11 +38,60 @@
   let activeStepIndex = null;
   let completedSteps = new Set();
   let resizeRaf = null;
+  let isRestoringState = false;
 
   function clampStepCount(value) {
     const parsed = Number.parseInt(value, 10);
     if (Number.isNaN(parsed)) return minSteps;
     return Math.min(maxSteps, Math.max(minSteps, parsed));
+  }
+
+  function loadState() {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function saveState() {
+    if (isRestoringState) return;
+    const payload = {
+      stepCount: steps.length,
+      steps: steps.map((step) => step.assignment ? {
+        name: step.assignment.name,
+        src: step.assignment.src,
+        origin: step.assignment.origin
+      } : null),
+      userImages
+    };
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+  }
+
+  function applyState(state) {
+    if (!state) return;
+    isRestoringState = true;
+    if (Array.isArray(state.userImages)) {
+      userImages = state.userImages.filter((image) => image && image.src);
+      renderUserImages();
+    }
+    const storedStepCount = clampStepCount(state.stepCount);
+    if (storedStepCount) {
+      stepSlider.value = storedStepCount;
+      setStepCount(storedStepCount);
+    }
+    if (Array.isArray(state.steps)) {
+      steps = steps.map((step, index) => {
+        const assignment = state.steps[index];
+        if (!assignment || !assignment.src) return { assignment: null };
+        return { assignment: { ...assignment } };
+      });
+      renderSelectionRow();
+      updateLaunchState();
+    }
+    isRestoringState = false;
   }
 
   function setSelection(image, thumbEl) {
@@ -115,6 +165,7 @@
     const promises = files.map(addUserImage);
     await Promise.all(promises);
     renderUserImages();
+    saveState();
   }
 
   async function handleUserUploadSingle(event) {
@@ -123,6 +174,7 @@
     await Promise.all(files.map(addUserImage));
     renderUserImages();
     event.target.value = '';
+    saveState();
   }
 
   function renderUserImages() {
@@ -144,6 +196,7 @@
     }
     renderSelectionRow();
     updateLaunchState();
+    saveState();
   }
 
   function renderSelectionRow() {
@@ -215,6 +268,7 @@
       renderActiveSteps();
     }
     updateLaunchState();
+    saveState();
   }
 
   function handleActiveStepClick(index) {
@@ -259,6 +313,7 @@
     setSelection(null, null);
     renderSelectionRow();
     updateLaunchState();
+    saveState();
   }
 
   function updateStepStateClasses(card, index) {
@@ -422,6 +477,7 @@
   function init() {
     loadPresetLibrary();
     setStepCount(stepSlider.value);
+    applyState(loadState());
     stepSlider.addEventListener('input', (event) => setStepCount(event.target.value));
     orientationToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
