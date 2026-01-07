@@ -12,6 +12,7 @@
   const textToggle = document.getElementById('text-toggle');
   const numberToggle = document.getElementById('number-toggle');
   const backgroundSelect = document.getElementById('background-select');
+  const completedBehaviorSelect = document.getElementById('completed-behavior');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
   const backToOptionsBtn = document.getElementById('back-to-options');
@@ -326,9 +327,11 @@
     const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
     const showText = textToggle?.checked;
     const showNumbers = numberToggle?.checked;
+    const completedBehavior = completedBehaviorSelect?.value || 'gray';
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
     overlaySteps.classList.toggle('single', steps.filter((step) => step.assignment).length <= 1);
+    overlaySteps.dataset.completedBehavior = completedBehavior;
 
     steps.forEach((step, index) => {
       if (!step.assignment) return;
@@ -427,6 +430,9 @@
       if (isActiveMode) renderActiveSteps();
     });
     numberToggle.addEventListener('change', () => {
+      if (isActiveMode) renderActiveSteps();
+    });
+    completedBehaviorSelect.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
     });
     backgroundSelect.addEventListener('change', () => {
