@@ -10,6 +10,7 @@
   const stepValue = document.getElementById('step-value');
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
+  const numberToggle = document.getElementById('number-toggle');
   const backgroundSelect = document.getElementById('background-select');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
@@ -313,6 +314,8 @@
       const sizeFromCross = availableCross * 0.9;
       const cardSize = Math.max(120, Math.min(900, Math.min(sizeFromMain, sizeFromCross)));
       overlaySteps.style.setProperty('--overlay-card-size', `${cardSize}px`);
+      const lineLength = count > 1 ? Math.max(0, count * cardSize + gap * (count - 1)) : 0;
+      overlaySteps.style.setProperty('--overlay-line-length', `${lineLength}px`);
     });
   }
 
@@ -320,6 +323,7 @@
     overlaySteps.innerHTML = '';
     const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
     const showText = textToggle?.checked;
+    const showNumbers = numberToggle?.checked;
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
 
@@ -333,6 +337,12 @@
       frame.className = 'overlay-frame';
       const imageWrapper = document.createElement('div');
       imageWrapper.className = 'overlay-image';
+      if (showNumbers) {
+        const numberBadge = document.createElement('span');
+        numberBadge.className = 'overlay-number';
+        numberBadge.textContent = `${index + 1}`;
+        imageWrapper.appendChild(numberBadge);
+      }
       const img = document.createElement('img');
       img.src = step.assignment.src;
       img.alt = step.assignment.name;
@@ -397,7 +407,10 @@
 
   function updateOverlayBackground() {
     if (!backgroundSelect) return;
-    overlay.style.backgroundColor = backgroundSelect.value;
+    const color = backgroundSelect.value;
+    overlay.style.backgroundColor = color;
+    const isBlack = color.toLowerCase() === '#000000';
+    overlay.style.setProperty('--overlay-number-color', isBlack ? '#ffffff' : '#000000');
   }
 
   function init() {
@@ -408,6 +421,9 @@
       if (isActiveMode) renderActiveSteps();
     });
     textToggle.addEventListener('change', () => {
+      if (isActiveMode) renderActiveSteps();
+    });
+    numberToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
     });
     backgroundSelect.addEventListener('change', () => {
