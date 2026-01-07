@@ -38,6 +38,27 @@ body.advanced-wallet{
   --coinSize: calc(var(--uiScale) * clamp(32px, 4.4vmin, 75px));
 }
 body.advanced-wallet .counter{font-size: calc(var(--coinFont) * 0.8);}
+body.advanced-wallet #priceZone{
+  gap: clamp(0.4rem, 1vmin, 0.7rem);
+}
+body.advanced-wallet #priceTag{
+  font-size: clamp(1.6rem, 1.4rem + 1.6vw, 2.6rem);
+}
+body.advanced-wallet #priceButtons{
+  flex-wrap:nowrap;
+}
+body.advanced-wallet #priceButtons button{
+  min-width: clamp(120px, 18vw, 180px);
+  width: auto;
+  padding: 0.35rem 0.8rem;
+  font-size: clamp(1rem, 0.9rem + 0.7vmin, 1.4rem);
+}
+body.advanced-wallet #studentSetPriceBtn{
+  min-width: clamp(120px, 18vw, 180px);
+  width: auto;
+  padding: 0.35rem 0.8rem;
+  font-size: clamp(1rem, 0.9rem + 0.7vmin, 1.4rem);
+}
 
 html,body{
   height:100%;margin:0;
@@ -936,6 +957,8 @@ function toggleSelect(e){
 // RENDER
 const payNeeded=()=>Math.ceil(price);
 const getCommitted=()=> payDirect ? coins : selected.size;
+const studentSetPriceBtnParent = studentSetPriceBtn.parentElement;
+const studentSetPriceBtnNextSibling = studentSetPriceBtn.nextElementSibling;
 
 function updateSelectionStatus(){
   if(currentStatusSource && currentStatusSource!=='selection') return;
@@ -1212,6 +1235,7 @@ function applyAdvancedMode(){
   selected.clear();
   if(advancedMode) buildWalletAdvanced();
   else buildWalletSimple();
+  updateActionRow();
   render();
   requestAnimationFrame(autoScaleToViewport);
 }
@@ -1519,6 +1543,20 @@ studentSetPriceBtn.addEventListener('click',()=>{
   else open();
 });
 
+function updateActionRow(){
+  if(advancedMode){
+    if(studentSetPriceBtn.parentElement !== $('priceButtons')){
+      $('priceButtons').appendChild(studentSetPriceBtn);
+    }
+  } else if(studentSetPriceBtnParent){
+    if(studentSetPriceBtnNextSibling){
+      studentSetPriceBtnParent.insertBefore(studentSetPriceBtn, studentSetPriceBtnNextSibling);
+    } else {
+      studentSetPriceBtnParent.appendChild(studentSetPriceBtn);
+    }
+  }
+}
+
 // START/SETUP
 $('startBtn').onclick = ()=>{
   hide($('startOverlay'));
@@ -1548,10 +1586,32 @@ function animateCoins(idxArr,cb){
 const dragSources = document.querySelectorAll('.dragSource');
 const walletDropAreaEl = $('walletDropArea');
 let ghostCoin=null, offsetX=0, offsetY=0;
+let dragMoved=false, dragStartX=0, dragStartY=0;
+
+function addCoin(val){
+  let maxCoins = advancedMode ? 100 : 10;
+  if(!advancedMode && coins + val > maxCoins){
+    setAdvancedMode(true);
+    maxCoins = 100;
+  }
+  if(coins + val <= maxCoins){
+    coins += val;
+    saveRender();
+    if(val===1){
+      playSound(sndAdd1);
+    }
+  } else {
+    alertBox('Porte-monnaie plein !');
+  }
+}
 
 function onDragStart(e){
   const src = e.currentTarget;
   if(ghostCoin) return;
+  dragMoved = false;
+  const evt = e.touches ? e.touches[0] : e;
+  dragStartX = evt.clientX;
+  dragStartY = evt.clientY;
   ghostCoin = src.cloneNode(true);
   ghostCoin.classList.add('dragging');
   ghostCoin.style.position='fixed';
@@ -1559,7 +1619,6 @@ function onDragStart(e){
   ghostCoin.style.zIndex='9999';
   ghostCoin.dataset.value = src.dataset.value;
   document.body.appendChild(ghostCoin);
-  const evt = e.touches ? e.touches[0] : e;
   const rect = src.getBoundingClientRect();
   offsetX = evt.clientX - rect.left;
   offsetY = evt.clientY - rect.top;
@@ -1578,6 +1637,13 @@ function onDragStart(e){
 function onDragMove(e){
   if(!ghostCoin) return;
   const evt = e.touches ? e.touches[0] : e;
+  if(!dragMoved){
+    const deltaX = evt.clientX - dragStartX;
+    const deltaY = evt.clientY - dragStartY;
+    if(Math.hypot(deltaX, deltaY) > 6){
+      dragMoved = true;
+    }
+  }
   ghostCoin.style.left = evt.clientX - offsetX + 'px';
   ghostCoin.style.top  = evt.clientY - offsetY + 'px';
 }
@@ -1586,20 +1652,9 @@ function onDragEnd(e){
   const evt = e.type==='touchend' ? e.changedTouches[0] : e;
   walletDropAreaEl.classList.remove('droptarget');
   const rect = walletDropAreaEl.getBoundingClientRect();
-  if(evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom){
-    const val = parseInt(ghostCoin.dataset.value,10);
-    let maxCoins = advancedMode ? 100 : 10;
-    if(!advancedMode && coins + val > maxCoins){
-      setAdvancedMode(true);
-      maxCoins = 100;
-    }
-    if(coins + val <= maxCoins){
-      coins += val;
-      saveRender();
-      if(val===1){
-        playSound(sndAdd1);
-      }
-    } else alertBox('Porte-monnaie plein !');
+  const val = parseInt(ghostCoin.dataset.value,10);
+  if(!dragMoved || (evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom)){
+    addCoin(val);
   }
   document.body.removeChild(ghostCoin);
   ghostCoin = null;
