@@ -382,12 +382,14 @@
     if (isActiveMode) exitActiveMode();
     optionsModal.classList.add('hidden');
     pickerModal.classList.remove('hidden');
+    enterFullscreen();
   }
 
   function showOptions() {
     if (isActiveMode) exitActiveMode();
     pickerModal.classList.add('hidden');
     optionsModal.classList.remove('hidden');
+    exitFullscreen();
   }
 
   function init() {
