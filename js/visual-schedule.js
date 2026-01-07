@@ -413,6 +413,7 @@
   function updateOverlayBackground() {
     if (!backgroundSelect) return;
     overlay.style.backgroundColor = backgroundSelect.value;
+    overlay.style.setProperty('--overlay-bg', backgroundSelect.value);
   }
 
   function init() {
