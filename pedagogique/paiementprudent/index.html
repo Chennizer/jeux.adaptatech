@@ -329,6 +329,13 @@ body.advanced-wallet .counter.bad{
   padding:0 clamp(16px,5vw,80px);
   width:min(100%,820px);
 }
+#actionButtons{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:clamp(0.8rem, 2.4vw, 1rem);
+  width:100%;
+}
 #priceTag{
   font-size: clamp(2.2rem, 1.8rem + 2.6vw, 4.4rem);
   font-weight:800;cursor:pointer;text-align:center;
@@ -361,7 +368,7 @@ body.advanced-wallet .counter.bad{
 #payBtn:disabled,#payBtn.dim{background:#d79a85;cursor:not-allowed;}
 
 #studentSetPriceBtn{
-  margin:.5rem auto 0;
+  margin:0;
   min-height: calc(var(--tileSize) * 0.95);
   min-width: clamp(140px, 28vw, 220px);
   width: clamp(140px, 32vw, 240px);
@@ -374,6 +381,34 @@ body.advanced-wallet .counter.bad{
 }
 #studentSetPriceBtn:active{transform:scale(.97);}
 #studentSetPriceBtn.active{background:#244774;color:#fff;}
+
+body.advanced-wallet #priceZone{
+  gap: clamp(0.4rem, 1vmin, 0.7rem);
+}
+body.advanced-wallet #priceTag{
+  font-size: clamp(1.7rem, 1.3rem + 1.6vw, 3.1rem);
+}
+body.advanced-wallet #priceStatus{
+  min-height:1.8rem;
+  font-size:clamp(0.95rem, 0.85rem + 0.5vw, 1.2rem);
+}
+body.advanced-wallet #actionButtons{
+  flex-direction:row;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:clamp(0.4rem, 1.2vw, 0.8rem);
+}
+body.advanced-wallet #priceButtons{
+  flex-wrap:nowrap;
+  width:auto;
+  gap:clamp(0.4rem, 1.2vw, 0.8rem);
+}
+body.advanced-wallet #priceButtons button,
+body.advanced-wallet #studentSetPriceBtn{
+  min-width: clamp(110px, 18vw, 160px);
+  width: clamp(110px, 18vw, 170px);
+  font-size: clamp(1rem, 0.85rem + 0.8vmin, 1.3rem);
+}
 
 /* Modales génériques */
 .modalBox{
@@ -641,11 +676,13 @@ body.advanced-wallet .counter.bad{
       <div id="priceZone">
         <div id="priceTag" tabindex="0" role="button" aria-label="Prix actuel"></div>
         <div id="priceStatus" aria-live="polite" role="status"></div>
-        <div id="priceButtons">
-          <button id="verifyBtn">VÉRIFIER</button>
-          <button id="payBtn">PAYER</button>
+        <div id="actionButtons">
+          <div id="priceButtons">
+            <button id="verifyBtn">VÉRIFIER</button>
+            <button id="payBtn">PAYER</button>
+          </div>
+          <button id="studentSetPriceBtn">Combien ça coûte?</button>
         </div>
-        <button id="studentSetPriceBtn">Combien ça coûte?</button>
       </div>
     </div>
   </div>
@@ -816,6 +853,24 @@ function playSound(a){
     a.currentTime = 0;
     a.play();
   }catch{}
+}
+
+function addCoins(val){
+  let maxCoins = advancedMode ? 100 : 10;
+  if(!advancedMode && coins + val > maxCoins){
+    setAdvancedMode(true);
+    maxCoins = 100;
+  }
+  if(coins + val <= maxCoins){
+    coins += val;
+    saveRender();
+    if(val===1){
+      playSound(sndAdd1);
+    }
+    return true;
+  }
+  alertBox('Porte-monnaie plein !');
+  return false;
 }
 
 // HELPERS
@@ -1548,6 +1603,8 @@ function animateCoins(idxArr,cb){
 const dragSources = document.querySelectorAll('.dragSource');
 const walletDropAreaEl = $('walletDropArea');
 let ghostCoin=null, offsetX=0, offsetY=0;
+let dragMoved=false;
+let dragStartPos=null;
 
 function onDragStart(e){
   const src = e.currentTarget;
@@ -1563,6 +1620,8 @@ function onDragStart(e){
   const rect = src.getBoundingClientRect();
   offsetX = evt.clientX - rect.left;
   offsetY = evt.clientY - rect.top;
+  dragStartPos = {x: evt.clientX, y: evt.clientY};
+  dragMoved = false;
   ghostCoin.style.left = rect.left+'px';
   ghostCoin.style.top  = rect.top+'px';
   walletDropAreaEl.classList.add('droptarget');
@@ -1580,29 +1639,34 @@ function onDragMove(e){
   const evt = e.touches ? e.touches[0] : e;
   ghostCoin.style.left = evt.clientX - offsetX + 'px';
   ghostCoin.style.top  = evt.clientY - offsetY + 'px';
+  if(dragStartPos){
+    const dx = evt.clientX - dragStartPos.x;
+    const dy = evt.clientY - dragStartPos.y;
+    if(Math.hypot(dx, dy) > 6){
+      dragMoved = true;
+    }
+  }
 }
 function onDragEnd(e){
   if(!ghostCoin) return;
   const evt = e.type==='touchend' ? e.changedTouches[0] : e;
   walletDropAreaEl.classList.remove('droptarget');
   const rect = walletDropAreaEl.getBoundingClientRect();
-  if(evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom){
-    const val = parseInt(ghostCoin.dataset.value,10);
-    let maxCoins = advancedMode ? 100 : 10;
-    if(!advancedMode && coins + val > maxCoins){
-      setAdvancedMode(true);
-      maxCoins = 100;
-    }
-    if(coins + val <= maxCoins){
-      coins += val;
-      saveRender();
-      if(val===1){
-        playSound(sndAdd1);
-      }
-    } else alertBox('Porte-monnaie plein !');
+  const val = parseInt(ghostCoin.dataset.value,10);
+  const dropped = (
+    evt.clientX>rect.left &&
+    evt.clientX<rect.right &&
+    evt.clientY>rect.top &&
+    evt.clientY<rect.bottom
+  );
+  if(dropped){
+    addCoins(val);
+  } else if(!dragMoved){
+    addCoins(val);
   }
   document.body.removeChild(ghostCoin);
   ghostCoin = null;
+  dragStartPos = null;
   if(e.type==='touchend'){
     document.removeEventListener('touchmove',onDragMove);
     document.removeEventListener('touchend',onDragEnd);
