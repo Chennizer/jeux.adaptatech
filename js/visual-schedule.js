@@ -10,6 +10,7 @@
   const stepValue = document.getElementById('step-value');
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
+  const backgroundSelect = document.getElementById('background-select');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
   const backToOptionsBtn = document.getElementById('back-to-options');
@@ -117,7 +118,7 @@
   async function handleUserUploadSingle(event) {
     const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
     if (!files.length) return;
-    await addUserImage(files[0]);
+    await Promise.all(files.map(addUserImage));
     renderUserImages();
     event.target.value = '';
   }
@@ -273,6 +274,7 @@
   function enterActiveMode() {
     if (!steps.some((step) => step.assignment)) return;
     isActiveMode = true;
+    updateOverlayBackground();
     renderActiveSteps();
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
@@ -382,6 +384,7 @@
     if (isActiveMode) exitActiveMode();
     optionsModal.classList.add('hidden');
     pickerModal.classList.remove('hidden');
+    updateOverlayBackground();
     enterFullscreen();
   }
 
@@ -390,6 +393,11 @@
     pickerModal.classList.add('hidden');
     optionsModal.classList.remove('hidden');
     exitFullscreen();
+  }
+
+  function updateOverlayBackground() {
+    if (!backgroundSelect) return;
+    overlay.style.backgroundColor = backgroundSelect.value;
   }
 
   function init() {
@@ -401,6 +409,9 @@
     });
     textToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
+    });
+    backgroundSelect.addEventListener('change', () => {
+      updateOverlayBackground();
     });
 
     userUpload.addEventListener('change', handleUserUpload);
