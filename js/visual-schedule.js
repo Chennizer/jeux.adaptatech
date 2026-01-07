@@ -3,8 +3,8 @@
   const maxSteps = 10;
   const gapBase = 0.05; // 5vh
 
-  const optionsModal = document.getElementById('options-modal');
-  const pickerModal = document.getElementById('image-picker-modal');
+  const optionsModal = document.getElementById('game-options');
+  const pickerModal = document.getElementById('tile-picker-modal');
   const builderScreen = document.getElementById('builder-screen');
 
   const stepSlider = document.getElementById('step-count');
@@ -65,7 +65,7 @@
     if (selectedThumb) {
       selectedThumb.classList.add('selected');
     }
-    selectionStatus.textContent = image ? `Selected: ${image.name}` : 'Pick an image to assign';
+    selectionStatus.textContent = image ? `Selected: ${image.name}` : '';
   }
 
   function renderThumb(container, image) {
@@ -172,10 +172,6 @@
         img.src = step.assignment.src;
         img.alt = step.assignment.name;
         slot.appendChild(img);
-      } else {
-        const prompt = document.createElement('span');
-        prompt.textContent = 'Drop or click';
-        slot.appendChild(prompt);
       }
 
       slot.addEventListener('click', () => {
@@ -238,11 +234,7 @@
 
       const imageWrapper = document.createElement('div');
       imageWrapper.className = 'step-image';
-      imageWrapper.textContent = 'Drop or click to assign';
-
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.textContent = 'Drag from the picker or selection row';
+      imageWrapper.textContent = '';
 
       if (step.assignment) {
         applyAssignment(card, step.assignment);
@@ -251,7 +243,6 @@
 
       card.appendChild(header);
       card.appendChild(imageWrapper);
-      card.appendChild(meta);
 
       card.addEventListener('click', () => handleStepClick(index));
       card.addEventListener('dragstart', () => {
@@ -309,10 +300,6 @@
       img.src = assignment.src;
       img.alt = assignment.name;
       wrapper.appendChild(img);
-    }
-    const meta = card.querySelector('.meta');
-    if (meta) {
-      meta.textContent = `From: ${assignment.origin}`;
     }
   }
 
