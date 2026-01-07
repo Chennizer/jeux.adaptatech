@@ -1,23 +1,33 @@
 (function() {
+  const minSteps = 2;
+  const maxSteps = 10;
+  const gapBase = 0.05; // 5vh
+
+  const optionsModal = document.getElementById('options-modal');
+  const pickerModal = document.getElementById('picker-modal');
+  const overlay = document.getElementById('active-overlay');
+
   const stepCountInput = document.getElementById('step-count');
-  const applyStepsBtn = document.getElementById('apply-steps');
+  const stepCountValue = document.getElementById('step-count-value');
+  const textToggle = document.getElementById('text-toggle');
+  const orientationToggle = document.getElementById('orientation-toggle');
+  const fullscreenToggle = document.getElementById('fullscreen-toggle');
+
+  const openPickerBtn = document.getElementById('open-picker');
+  const backToOptionsBtn = document.getElementById('back-to-options');
+  const launchBtn = document.getElementById('launch-schedule');
+  const restartPickerBtn = document.getElementById('restart-picker');
+  const exitActiveBtn = document.getElementById('exit-active');
+
   const presetGrid = document.getElementById('preset-grid');
   const userGrid = document.getElementById('user-grid');
   const userUpload = document.getElementById('user-upload');
   const stepsContainer = document.getElementById('steps-container');
   const selectionStatus = document.getElementById('selection-status');
-  const activeStatus = document.getElementById('active-status');
-  const toggleActiveBtn = document.getElementById('toggle-active-mode');
-  const resetProgressBtn = document.getElementById('reset-progress');
-  const orientationToggle = document.getElementById('orientation-toggle');
-  const textToggle = document.getElementById('text-toggle');
-  const overlay = document.getElementById('active-overlay');
   const overlaySteps = document.getElementById('overlay-steps');
-  const exitActiveBtn = document.getElementById('exit-active');
-  const gapBase = 0.05; // 5vh
+  const resetProgressBtn = document.getElementById('reset-progress');
+  const clearStepsBtn = document.getElementById('clear-steps');
 
-  const maxSteps = 10;
-  const minSteps = 2;
   let steps = [];
   let selectedImage = null;
   let selectedThumb = null;
@@ -36,28 +46,27 @@
 
   function setSelection(image, thumbEl) {
     selectedImage = image;
-    if (selectedThumb) {
-      selectedThumb.classList.remove('selected');
-    }
+    if (selectedThumb) selectedThumb.classList.remove('selected');
     selectedThumb = thumbEl;
-    if (selectedThumb) {
-      selectedThumb.classList.add('selected');
-    }
-    selectionStatus.textContent = image ? `Selected: ${image.name}` : 'Pick an image to assign';
+    if (selectedThumb) selectedThumb.classList.add('selected');
+    selectionStatus.textContent = image ? `Sélectionné : ${image.name}` : 'Glissez une image sur chaque étape ou cliquez pour assigner';
   }
 
   function renderThumb(container, image) {
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
     thumb.draggable = true;
+
     const img = document.createElement('img');
     img.src = image.src;
     img.alt = image.name;
     const label = document.createElement('span');
     label.className = 'thumb-label';
     label.textContent = image.name;
+
     thumb.appendChild(img);
     thumb.appendChild(label);
+
     thumb.addEventListener('click', () => setSelection(image, thumb));
     thumb.addEventListener('dragstart', () => {
       dragPayload = image;
@@ -66,19 +75,8 @@
     thumb.addEventListener('dragend', () => {
       dragPayload = null;
     });
+
     container.appendChild(thumb);
-  }
-
-  function enterFullscreen() {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-  }
-
-  function exitFullscreen() {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
-    }
   }
 
   function loadPresetLibrary() {
@@ -90,7 +88,7 @@
       const image = {
         name: item.name || item.theme || `Image ${index + 1}`,
         src,
-        origin: 'Preset'
+        origin: 'Preset',
       };
       renderThumb(presetGrid, image);
     });
@@ -100,11 +98,7 @@
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => {
-        const image = {
-          name: file.name,
-          src: reader.result,
-          origin: 'User'
-        };
+        const image = { name: file.name, src: reader.result, origin: 'User' };
         userImages.push(image);
         resolve(image);
       };
@@ -130,10 +124,11 @@
     if (validated !== Number.parseInt(stepCountInput.value, 10)) {
       stepCountInput.value = validated;
     }
+    stepCountValue.textContent = validated;
+
     const nextSteps = Array.from({ length: validated }, (_, idx) => steps[idx] || { assignment: null });
     steps = nextSteps;
 
-    // sanitize state
     completedSteps = new Set([...completedSteps].filter((idx) => idx < validated));
     if (activeStepIndex !== null && activeStepIndex >= validated) {
       activeStepIndex = null;
@@ -144,6 +139,7 @@
       const card = createStepCard(idx, step.assignment);
       stepsContainer.appendChild(card);
     });
+    updateLaunchState();
   }
 
   function createStepCard(index, assignment) {
@@ -156,11 +152,11 @@
     header.className = 'step-header';
     const label = document.createElement('span');
     label.className = 'step-label';
-    label.textContent = `Step ${index + 1}`;
+    label.textContent = `Étape ${index + 1}`;
     const clearBtn = document.createElement('button');
     clearBtn.type = 'button';
-    clearBtn.className = 'secondary';
-    clearBtn.textContent = 'Clear';
+    clearBtn.className = 'button secondary';
+    clearBtn.textContent = 'Retirer';
     clearBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       clearStep(index);
@@ -170,11 +166,11 @@
 
     const imageWrapper = document.createElement('div');
     imageWrapper.className = 'step-image';
-    imageWrapper.textContent = 'Drop or click to assign';
+    imageWrapper.textContent = 'Déposez ou cliquez pour assigner';
 
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'Drag from a source or tap to use the selection';
+    meta.textContent = 'Glisser depuis une source ou utiliser la sélection active';
 
     card.appendChild(header);
     card.appendChild(imageWrapper);
@@ -227,6 +223,7 @@
     if (isActiveMode) {
       renderActiveSteps();
     }
+    updateLaunchState();
   }
 
   function applyAssignment(card, assignment) {
@@ -238,28 +235,20 @@
     img.alt = assignment.name;
     wrapper.appendChild(img);
     const meta = card.querySelector('.meta');
-    meta.textContent = `From: ${assignment.origin}`;
+    meta.textContent = `Source : ${assignment.origin}`;
   }
 
   function handleStepClick(index) {
-    if (isActiveMode) {
-      handleActiveStepClick(index);
-      return;
-    }
-
     if (!selectedImage) {
-      selectionStatus.textContent = 'Select or drag an image first';
+      selectionStatus.textContent = 'Sélectionnez ou glissez une image d’abord';
       return;
     }
-
     assignImageToStep(index, selectedImage);
   }
 
   function handleActiveStepClick(index) {
     const card = stepsContainer.querySelector(`[data-index="${index}"]`);
-    if (!card || !steps[index].assignment) {
-      return;
-    }
+    if (!card || !steps[index].assignment) return;
 
     if (completedSteps.has(index)) {
       completedSteps.delete(index);
@@ -282,14 +271,12 @@
     if (previous !== null && previous !== index) {
       updateStepStateClasses(stepsContainer.querySelector(`[data-index="${previous}"]`), previous);
     }
-    activeStatus.textContent = `Active Mode: step ${index + 1} is live. Click it again to complete.`;
   }
 
   function markCompleted(index) {
     completedSteps.add(index);
     updateStepStateClasses(stepsContainer.querySelector(`[data-index="${index}"]`), index);
     activeStepIndex = null;
-    activeStatus.textContent = `Step ${index + 1} marked complete.`;
   }
 
   function clearStep(index) {
@@ -302,13 +289,22 @@
     if (!card) return;
     card.classList.remove('assigned', 'active-step', 'completed-step');
     const wrapper = card.querySelector('.step-image');
-    wrapper.innerHTML = 'Drop or click to assign';
+    wrapper.innerHTML = 'Déposez ou cliquez pour assigner';
     const meta = card.querySelector('.meta');
-    meta.textContent = 'Drag from a source or tap to use the selection';
+    meta.textContent = 'Glisser depuis une source ou utiliser la sélection active';
     card.draggable = false;
     if (isActiveMode) {
       renderActiveSteps();
     }
+    updateLaunchState();
+  }
+
+  function clearAllSteps() {
+    steps.forEach((_, index) => clearStep(index));
+    setSelection(null, null);
+    completedSteps.clear();
+    activeStepIndex = null;
+    updateLaunchState();
   }
 
   function updateStepStateClasses(card, index) {
@@ -323,26 +319,70 @@
     }
   }
 
-  function toggleActiveMode() {
-    isActiveMode = !isActiveMode;
-    if (!isActiveMode) {
-      activeStatus.textContent = 'Active Mode is off. Assign images before starting.';
-      toggleActiveBtn.textContent = 'Enter Active Mode';
-      overlay.classList.add('hidden');
-      overlay.setAttribute('aria-hidden', 'true');
-      overlaySteps.style.removeProperty('--overlay-card-size');
-      document.body.classList.remove('no-scroll');
-      exitFullscreen();
+  function updateLaunchState() {
+    const ready = steps.length >= minSteps && steps.every((step) => !!step.assignment);
+    launchBtn.disabled = !ready;
+    return ready;
+  }
+
+  function enterFullscreen() {
+    if (!fullscreenToggle.checked) return;
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }
+
+  function exitFullscreen() {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  function showOptions() {
+    optionsModal.classList.add('visible');
+    optionsModal.classList.remove('hidden');
+    pickerModal.classList.add('hidden');
+    pickerModal.classList.remove('visible');
+    overlay.classList.add('hidden');
+    document.body.classList.remove('no-scroll');
+    isActiveMode = false;
+    exitFullscreen();
+  }
+
+  function showPicker() {
+    pickerModal.classList.add('visible');
+    pickerModal.classList.remove('hidden');
+    optionsModal.classList.add('hidden');
+    optionsModal.classList.remove('visible');
+  }
+
+  function openActiveMode() {
+    if (!updateLaunchState()) {
+      selectionStatus.textContent = 'Ajoutez une image à chaque étape avant de lancer.';
       return;
     }
-
-    toggleActiveBtn.textContent = 'Exit Active Mode';
-    activeStatus.textContent = 'Active Mode: click any assigned step to make it live.';
+    isActiveMode = true;
+    pickerModal.classList.add('hidden');
+    pickerModal.classList.remove('visible');
+    optionsModal.classList.add('hidden');
+    optionsModal.classList.remove('visible');
     renderActiveSteps();
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('no-scroll');
     enterFullscreen();
+  }
+
+  function closeActiveMode(returnToPicker = true) {
+    isActiveMode = false;
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+    overlaySteps.style.removeProperty('--overlay-card-size');
+    document.body.classList.remove('no-scroll');
+    exitFullscreen();
+    if (returnToPicker) {
+      showPicker();
+    }
   }
 
   function adjustOverlaySizing(orientationClass) {
@@ -379,7 +419,6 @@
     overlaySteps.querySelectorAll('.overlay-card').forEach((card) => {
       card.classList.remove('active-step', 'completed-step');
     });
-    activeStatus.textContent = isActiveMode ? 'Active Mode: progress reset.' : 'Active Mode is off. Progress reset.';
   }
 
   function renderActiveSteps() {
@@ -426,32 +465,39 @@
     return name.slice(0, lastDot);
   }
 
-  function init() {
-    loadPresetLibrary();
-    buildSteps(stepCountInput.value);
-
-    applyStepsBtn.addEventListener('click', () => buildSteps(stepCountInput.value));
-    stepCountInput.addEventListener('change', () => buildSteps(stepCountInput.value));
+  function bindEvents() {
+    stepCountInput.addEventListener('input', (event) => buildSteps(event.target.value));
     userUpload.addEventListener('change', handleUserUpload);
-    toggleActiveBtn.addEventListener('click', toggleActiveMode);
+    openPickerBtn.addEventListener('click', () => {
+      buildSteps(stepCountInput.value);
+      showPicker();
+    });
+    backToOptionsBtn.addEventListener('click', showOptions);
+    launchBtn.addEventListener('click', openActiveMode);
+    restartPickerBtn.addEventListener('click', () => closeActiveMode(true));
+    exitActiveBtn.addEventListener('click', () => closeActiveMode(true));
     resetProgressBtn.addEventListener('click', resetProgress);
+    clearStepsBtn.addEventListener('click', clearAllSteps);
+
     orientationToggle.addEventListener('change', () => {
-      if (isActiveMode) {
-        renderActiveSteps();
-      }
+      if (isActiveMode) renderActiveSteps();
     });
     textToggle.addEventListener('change', () => {
-      if (isActiveMode) {
-        renderActiveSteps();
-      }
+      if (isActiveMode) renderActiveSteps();
     });
-    exitActiveBtn.addEventListener('click', toggleActiveMode);
+
     window.addEventListener('resize', () => {
       if (isActiveMode) {
         const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
         adjustOverlaySizing(orientationClass);
       }
     });
+  }
+
+  function init() {
+    loadPresetLibrary();
+    buildSteps(stepCountInput.value);
+    bindEvents();
   }
 
   document.addEventListener('DOMContentLoaded', init);
