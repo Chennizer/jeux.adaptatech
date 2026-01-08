@@ -608,14 +608,11 @@
       }
     });
 
-    const langToggle = document.getElementById('langToggle');
-    if (langToggle) {
-      langToggle.addEventListener('click', () => {
-        renderSelectionRow();
-        updateLaunchState();
-        if (isActiveMode) renderActiveSteps();
-      });
-    }
+    document.addEventListener('siteLanguageChanged', () => {
+      renderSelectionRow();
+      updateLaunchState();
+      if (isActiveMode) renderActiveSteps();
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
