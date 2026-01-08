@@ -13,7 +13,12 @@ function nextLanguage(lang) {
 }
 
 function getElementContent(el, lang) {
-  const languageOrder = [lang, ...SUPPORTED_LANGUAGES.filter(code => code !== lang)];
+  const fallbackOrder = {
+    en: ['en', 'fr'],
+    fr: ['fr', 'en'],
+    ja: ['ja', 'en']
+  };
+  const languageOrder = fallbackOrder[lang] || ['en'];
   for (const code of languageOrder) {
     const text = el.getAttribute('data-' + code);
     if (text != null) {
