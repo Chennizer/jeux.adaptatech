@@ -20,6 +20,7 @@
   const numberToggle = document.getElementById('number-toggle');
   const backgroundSelect = document.getElementById('background-select');
   const completedStyleSelect = document.getElementById('completed-style');
+  const ttsToggle = document.getElementById('tts-toggle');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
   const backToOptionsBtn = document.getElementById('back-to-options');
@@ -60,6 +61,21 @@
   function getTranslatedText(key) {
     const lang = getCurrentLanguage();
     return languageText[lang]?.[key] || languageText.en[key] || '';
+  }
+
+  function speakLabel(label) {
+    if (!label || !('speechSynthesis' in window)) return;
+    const lang = getCurrentLanguage();
+    const utterance = new SpeechSynthesisUtterance(label);
+    if (lang === 'fr') {
+      utterance.lang = 'fr-CA';
+    } else if (lang === 'ja') {
+      utterance.lang = 'ja-JP';
+    } else {
+      utterance.lang = 'en-US';
+    }
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
   }
 
   function setSelection(image, thumbEl) {
@@ -264,6 +280,14 @@
       updateStepStateClasses(null, previous);
     }
     renderActiveSteps();
+    if (
+      isActiveMode &&
+      ttsToggle?.checked &&
+      previous !== index &&
+      steps[index]?.assignment
+    ) {
+      speakLabel(getImageLabel(steps[index].assignment.name));
+    }
   }
 
   function markCompleted(index) {
@@ -458,7 +482,8 @@
         showText: !!textToggle?.checked,
         showNumbers: !!numberToggle?.checked,
         background: backgroundSelect?.value || '#000000',
-        completedStyle: completedStyleSelect?.value || 'greyed'
+        completedStyle: completedStyleSelect?.value || 'greyed',
+        tts: !!ttsToggle?.checked
       },
       userImages: userImages.map((image) => ({ ...image }))
     };
@@ -486,6 +511,7 @@
       orientationToggle.checked = !!state.settings.orientation;
       textToggle.checked = !!state.settings.showText;
       numberToggle.checked = !!state.settings.showNumbers;
+      ttsToggle.checked = !!state.settings.tts;
       if (state.settings.background) {
         backgroundSelect.value = state.settings.background;
       }
@@ -537,6 +563,9 @@
     });
     numberToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
+      saveState();
+    });
+    ttsToggle.addEventListener('change', () => {
       saveState();
     });
     backgroundSelect.addEventListener('change', () => {
