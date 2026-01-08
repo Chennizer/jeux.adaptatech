@@ -10,7 +10,9 @@
   const stepValue = document.getElementById('step-value');
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
+  const numberToggle = document.getElementById('number-toggle');
   const backgroundSelect = document.getElementById('background-select');
+  const completedBehaviorSelect = document.getElementById('completed-behavior');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
   const backToOptionsBtn = document.getElementById('back-to-options');
@@ -25,6 +27,8 @@
 
   const overlay = document.getElementById('active-overlay');
   const overlaySteps = document.getElementById('overlay-steps');
+
+  const storageKey = 'visualScheduleState';
 
   let steps = [];
   let selectedImage = null;
@@ -101,6 +105,7 @@
           origin: 'User'
         };
         userImages.push(image);
+        saveState();
         resolve(image);
       };
       reader.readAsDataURL(file);
@@ -142,6 +147,7 @@
     }
     renderSelectionRow();
     updateLaunchState();
+    saveState();
   }
 
   function renderSelectionRow() {
@@ -213,6 +219,7 @@
       renderActiveSteps();
     }
     updateLaunchState();
+    saveState();
   }
 
   function handleActiveStepClick(index) {
@@ -257,6 +264,7 @@
     setSelection(null, null);
     renderSelectionRow();
     updateLaunchState();
+    saveState();
   }
 
   function updateStepStateClasses(card, index) {
@@ -316,12 +324,20 @@
     });
   }
 
+  function isBlackBackground() {
+    return backgroundSelect?.value === '#000000';
+  }
+
   function renderActiveSteps() {
     overlaySteps.innerHTML = '';
     const orientationClass = orientationToggle?.checked ? 'vertical' : 'horizontal';
     const showText = textToggle?.checked;
+    const showNumbers = numberToggle?.checked;
+    const completedBehavior = completedBehaviorSelect?.value || 'gray';
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
+    overlaySteps.classList.toggle('single', steps.filter((step) => step.assignment).length <= 1);
+    overlaySteps.dataset.completedBehavior = completedBehavior;
 
     steps.forEach((step, index) => {
       if (!step.assignment) return;
@@ -339,6 +355,14 @@
       imageWrapper.appendChild(img);
       frame.appendChild(imageWrapper);
       card.appendChild(frame);
+
+      if (showNumbers) {
+        const numberTag = document.createElement('div');
+        numberTag.className = 'overlay-number';
+        numberTag.textContent = String(index + 1);
+        numberTag.style.color = isBlackBackground() ? '#ffffff' : '#000000';
+        card.appendChild(numberTag);
+      }
 
       if (showText) {
         const caption = document.createElement('div');
@@ -398,11 +422,60 @@
   function updateOverlayBackground() {
     if (!backgroundSelect) return;
     overlay.style.backgroundColor = backgroundSelect.value;
+    overlay.style.setProperty('--overlay-bg', backgroundSelect.value);
+  }
+
+  function saveState() {
+    if (!window.localStorage) return;
+    const payload = {
+      stepCount: steps.length,
+      steps: steps.map((step) => {
+        if (!step.assignment) return null;
+        const { name, src, origin } = step.assignment;
+        return { name, src, origin };
+      }),
+      userImages
+    };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch (error) {
+      console.warn('Unable to save visual schedule state', error);
+    }
+  }
+
+  function loadState() {
+    if (!window.localStorage) return false;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return false;
+      const payload = JSON.parse(raw);
+      const count = clampStepCount(payload.stepCount || stepSlider.value);
+      stepSlider.value = count;
+      stepValue.textContent = String(count);
+      const savedSteps = Array.isArray(payload.steps) ? payload.steps : [];
+      steps = Array.from({ length: count }, (_, idx) => {
+        const assignment = savedSteps[idx];
+        return assignment ? { assignment } : { assignment: null };
+      });
+      userImages = Array.isArray(payload.userImages) ? payload.userImages : [];
+      completedSteps.clear();
+      activeStepIndex = null;
+      setSelection(null, null);
+      renderUserImages();
+      renderSelectionRow();
+      updateLaunchState();
+      return true;
+    } catch (error) {
+      console.warn('Unable to load visual schedule state', error);
+      return false;
+    }
   }
 
   function init() {
     loadPresetLibrary();
-    setStepCount(stepSlider.value);
+    if (!loadState()) {
+      setStepCount(stepSlider.value);
+    }
     stepSlider.addEventListener('input', (event) => setStepCount(event.target.value));
     orientationToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
@@ -410,8 +483,15 @@
     textToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
     });
+    numberToggle.addEventListener('change', () => {
+      if (isActiveMode) renderActiveSteps();
+    });
+    completedBehaviorSelect.addEventListener('change', () => {
+      if (isActiveMode) renderActiveSteps();
+    });
     backgroundSelect.addEventListener('change', () => {
       updateOverlayBackground();
+      if (isActiveMode) renderActiveSteps();
     });
 
     userUpload.addEventListener('change', handleUserUpload);
