@@ -54,7 +54,9 @@
   }
 
   function getCurrentLanguage() {
-    const stored = localStorage.getItem('siteLanguage') || document.documentElement.lang || 'en';
+    const docLang = document.documentElement.lang;
+    if (supportedLanguages.includes(docLang)) return docLang;
+    const stored = localStorage.getItem('siteLanguage');
     return supportedLanguages.includes(stored) ? stored : 'en';
   }
 
