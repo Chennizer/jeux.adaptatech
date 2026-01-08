@@ -2,6 +2,13 @@
   const minSteps = 2;
   const maxSteps = 10;
   const gapBase = 0.05; // 5vh
+  const storageKey = 'visualScheduleState';
+  const supportedLanguages = ['en', 'fr', 'ja'];
+  const languageText = {
+    en: { step: 'Step', launch: 'Launch', launchCount: 'Launch ({filled}/{total})' },
+    fr: { step: 'Étape', launch: 'Lancer', launchCount: 'Lancer ({filled}/{total})' },
+    ja: { step: 'ステップ', launch: '開始', launchCount: '開始 ({filled}/{total})' }
+  };
 
   const optionsModal = document.getElementById('game-options');
   const pickerModal = document.getElementById('tile-picker-modal');
@@ -13,6 +20,7 @@
   const numberToggle = document.getElementById('number-toggle');
   const backgroundSelect = document.getElementById('background-select');
   const completedStyleSelect = document.getElementById('completed-style');
+  const ttsToggle = document.getElementById('tts-toggle');
 
   const openPickerBtn = document.getElementById('choose-tiles-button');
   const backToOptionsBtn = document.getElementById('back-to-options');
@@ -37,11 +45,37 @@
   let activeStepIndex = null;
   let completedSteps = new Set();
   let resizeRaf = null;
+  let isRestoring = false;
 
   function clampStepCount(value) {
     const parsed = Number.parseInt(value, 10);
     if (Number.isNaN(parsed)) return minSteps;
     return Math.min(maxSteps, Math.max(minSteps, parsed));
+  }
+
+  function getCurrentLanguage() {
+    const stored = localStorage.getItem('siteLanguage') || document.documentElement.lang || 'en';
+    return supportedLanguages.includes(stored) ? stored : 'en';
+  }
+
+  function getTranslatedText(key) {
+    const lang = getCurrentLanguage();
+    return languageText[lang]?.[key] || languageText.en[key] || '';
+  }
+
+  function speakLabel(label) {
+    if (!label || !('speechSynthesis' in window)) return;
+    const lang = getCurrentLanguage();
+    const utterance = new SpeechSynthesisUtterance(label);
+    if (lang === 'fr') {
+      utterance.lang = 'fr-CA';
+    } else if (lang === 'ja') {
+      utterance.lang = 'ja-JP';
+    } else {
+      utterance.lang = 'en-US';
+    }
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
   }
 
   function setSelection(image, thumbEl) {
@@ -115,6 +149,7 @@
     const promises = files.map(addUserImage);
     await Promise.all(promises);
     renderUserImages();
+    saveState();
   }
 
   async function handleUserUploadSingle(event) {
@@ -123,6 +158,7 @@
     await Promise.all(files.map(addUserImage));
     renderUserImages();
     event.target.value = '';
+    saveState();
   }
 
   function renderUserImages() {
@@ -144,6 +180,7 @@
     }
     renderSelectionRow();
     updateLaunchState();
+    saveState();
   }
 
   function renderSelectionRow() {
@@ -156,7 +193,7 @@
 
       const label = document.createElement('span');
       label.className = 'slot-label';
-      label.textContent = `Step ${index + 1}`;
+      label.textContent = `${getTranslatedText('step')} ${index + 1}`;
       slot.appendChild(label);
 
       if (step.assignment) {
@@ -215,6 +252,7 @@
       renderActiveSteps();
     }
     updateLaunchState();
+    saveState();
   }
 
   function handleActiveStepClick(index) {
@@ -242,6 +280,14 @@
       updateStepStateClasses(null, previous);
     }
     renderActiveSteps();
+    if (
+      isActiveMode &&
+      ttsToggle?.checked &&
+      previous !== index &&
+      steps[index]?.assignment
+    ) {
+      speakLabel(getImageLabel(steps[index].assignment.name));
+    }
   }
 
   function markCompleted(index) {
@@ -259,6 +305,7 @@
     setSelection(null, null);
     renderSelectionRow();
     updateLaunchState();
+    saveState();
   }
 
   function updateStepStateClasses(card, index) {
@@ -384,8 +431,12 @@
     const filled = steps.filter((step) => step.assignment).length;
     const total = steps.length;
     const ready = filled === total && total >= minSteps;
+    const launchText = getTranslatedText('launch');
+    const launchCountTemplate = getTranslatedText('launchCount');
     launchBuilderBtn.disabled = !ready;
-    launchBuilderBtn.textContent = ready ? 'Launch' : `Launch (${filled}/${total})`;
+    launchBuilderBtn.textContent = ready
+      ? launchText
+      : launchCountTemplate.replace('{filled}', String(filled)).replace('{total}', String(total));
   }
 
   function enterFullscreen() {
@@ -421,25 +472,110 @@
     overlay.style.setProperty('--overlay-bg', backgroundSelect.value);
   }
 
+  function saveState() {
+    if (isRestoring) return;
+    const state = {
+      stepCount: steps.length,
+      steps: steps.map((step) => (step.assignment ? { ...step.assignment } : null)),
+      settings: {
+        orientation: !!orientationToggle?.checked,
+        showText: !!textToggle?.checked,
+        showNumbers: !!numberToggle?.checked,
+        background: backgroundSelect?.value || '#000000',
+        completedStyle: completedStyleSelect?.value || 'greyed',
+        tts: !!ttsToggle?.checked
+      },
+      userImages: userImages.map((image) => ({ ...image }))
+    };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    } catch (error) {
+      console.warn('Unable to save visual schedule state', error);
+    }
+  }
+
+  function loadState() {
+    let state;
+    try {
+      state = JSON.parse(localStorage.getItem(storageKey));
+    } catch (error) {
+      return false;
+    }
+    if (!state) return false;
+
+    isRestoring = true;
+    if (typeof state.stepCount === 'number') {
+      stepSlider.value = clampStepCount(state.stepCount);
+    }
+    if (state.settings) {
+      orientationToggle.checked = !!state.settings.orientation;
+      textToggle.checked = !!state.settings.showText;
+      numberToggle.checked = !!state.settings.showNumbers;
+      ttsToggle.checked = !!state.settings.tts;
+      if (state.settings.background) {
+        backgroundSelect.value = state.settings.background;
+      }
+      if (state.settings.completedStyle) {
+        completedStyleSelect.value = state.settings.completedStyle;
+      }
+    }
+
+    if (Array.isArray(state.userImages)) {
+      userImages = state.userImages.map((image) => ({
+        name: image.name || 'Image',
+        src: image.src,
+        origin: image.origin || 'User'
+      }));
+      renderUserImages();
+    }
+
+    setStepCount(stepSlider.value);
+
+    if (Array.isArray(state.steps)) {
+      steps = steps.map((step, index) => {
+        const assignment = state.steps[index];
+        return {
+          assignment: assignment ? { ...assignment } : null
+        };
+      });
+    }
+
+    renderSelectionRow();
+    updateLaunchState();
+    updateOverlayBackground();
+    isRestoring = false;
+    return true;
+  }
+
   function init() {
     loadPresetLibrary();
-    setStepCount(stepSlider.value);
+    if (!loadState()) {
+      setStepCount(stepSlider.value);
+    }
     stepSlider.addEventListener('input', (event) => setStepCount(event.target.value));
     orientationToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
+      saveState();
     });
     textToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
+      saveState();
     });
     numberToggle.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
+      saveState();
+    });
+    ttsToggle.addEventListener('change', () => {
+      saveState();
     });
     backgroundSelect.addEventListener('change', () => {
       updateOverlayBackground();
       if (isActiveMode) renderActiveSteps();
+      saveState();
     });
     completedStyleSelect.addEventListener('change', () => {
       if (isActiveMode) renderActiveSteps();
+      saveState();
     });
 
     userUpload.addEventListener('change', handleUserUpload);
@@ -471,6 +607,15 @@
         showOptions();
       }
     });
+
+    const langToggle = document.getElementById('langToggle');
+    if (langToggle) {
+      langToggle.addEventListener('click', () => {
+        renderSelectionRow();
+        updateLaunchState();
+        if (isActiveMode) renderActiveSteps();
+      });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
