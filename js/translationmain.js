@@ -1,5 +1,5 @@
 
-const SUPPORTED_LANGUAGES = ['en', 'ja', 'fr'];
+const SUPPORTED_LANGUAGES = ['en', 'fr', 'ja'];
 const LANGUAGE_LABELS = { en: 'EN', fr: 'FR', ja: '日本語' };
 
 function getStoredLanguage() {
@@ -40,6 +40,8 @@ function updateLanguage() {
     toggleBtn.textContent = label;
     toggleBtn.classList.toggle('lang-ja-label', label === LANGUAGE_LABELS.ja);
   });
+
+  document.dispatchEvent(new CustomEvent('siteLanguageChanged', { detail: { language: lang } }));
 }
 
 // Cycle language between English, French, and Japanese.
