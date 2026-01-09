@@ -123,23 +123,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const loadingContainer = document.getElementById('control-panel-loading-bar-container');
       const loadingBar = loadingContainer ? loadingContainer.querySelector('#control-panel-loading-bar') : null;
       const buttonContainer = document.getElementById('button-container');
-      let loadingLabel = document.getElementById('control-panel-loading-label');
       let loadingStatus = document.getElementById('control-panel-loading-status');
       const loadingMessages = {
         en: {
-          label: 'Loading bar',
           progress: (current, totalCount) => `Loading videos… ${current}/${totalCount}`,
           retrying: (attempt, max) => `Loading stalled, retrying… (${attempt}/${max})`,
           long: 'Loading is taking longer than expected, starting anyway…'
         },
         fr: {
-          label: 'Barre de chargement',
           progress: (current, totalCount) => `Chargement des vidéos… ${current}/${totalCount}`,
           retrying: (attempt, max) => `Chargement bloqué, nouvelle tentative… (${attempt}/${max})`,
           long: 'Le chargement prend plus de temps, lancement quand même…'
         },
         ja: {
-          label: '読み込みバー',
           progress: (current, totalCount) => `動画を読み込み中… ${current}/${totalCount}`,
           retrying: (attempt, max) => `読み込み停滞、再試行中… (${attempt}/${max})`,
           long: '読み込みに時間がかかっています。先に開始します…'
@@ -155,15 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const lang = stored || document.documentElement.lang || 'en';
         return loadingMessages[lang] ? lang : 'en';
       };
-
-      if (!loadingLabel && buttonContainer) {
-        loadingLabel = document.createElement('div');
-        loadingLabel.id = 'control-panel-loading-label';
-        loadingLabel.setAttribute('data-en', loadingMessages.en.label);
-        loadingLabel.setAttribute('data-fr', loadingMessages.fr.label);
-        loadingLabel.setAttribute('data-ja', loadingMessages.ja.label);
-        buttonContainer.insertBefore(loadingLabel, loadingContainer);
-      }
 
       if (!loadingStatus && buttonContainer) {
         loadingStatus = document.createElement('div');
@@ -308,11 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     preloadMedia(selectedMedia, () => {
       startButton.style.display = 'block';
       document.getElementById('control-panel-loading-bar-container').style.display = 'none';
-      const loadingLabel = document.getElementById('control-panel-loading-label');
       const loadingStatus = document.getElementById('control-panel-loading-status');
-      if (loadingLabel) {
-        loadingLabel.style.display = 'none';
-      }
       if (loadingStatus) {
         loadingStatus.style.display = 'none';
       }
