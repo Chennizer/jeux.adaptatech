@@ -119,26 +119,137 @@ document.addEventListener('DOMContentLoaded', () => {
     function preloadMedia(list, onComplete) {
       let loaded = 0;
       const total = list.length;
-      const loadingBar = document.getElementById('control-panel-loading-bar-container').querySelector('#control-panel-loading-bar');
-      list.forEach(src => {
+      let completed = false;
+      const loadingContainer = document.getElementById('control-panel-loading-bar-container');
+      const loadingBar = loadingContainer ? loadingContainer.querySelector('#control-panel-loading-bar') : null;
+      const buttonContainer = document.getElementById('button-container');
+      let loadingLabel = document.getElementById('control-panel-loading-label');
+      let loadingStatus = document.getElementById('control-panel-loading-status');
+      const preloadTimeoutMs = 12000;
+      const retryDelayMs = 1200;
+      const maxRetries = 2;
+      const overallTimeoutMs = 60000;
+      let segments = [];
+
+      if (!loadingLabel && buttonContainer) {
+        loadingLabel = document.createElement('div');
+        loadingLabel.id = 'control-panel-loading-label';
+        loadingLabel.setAttribute('data-fr', 'Barre de chargement');
+        loadingLabel.setAttribute('data-en', 'Loading bar');
+        loadingLabel.setAttribute('data-ja', '読み込みバー');
+        loadingLabel.textContent = 'Loading bar';
+        buttonContainer.insertBefore(loadingLabel, loadingContainer);
+      }
+
+      if (!loadingStatus && buttonContainer) {
+        loadingStatus = document.createElement('div');
+        loadingStatus.id = 'control-panel-loading-status';
+        buttonContainer.insertBefore(loadingStatus, loadingContainer);
+      }
+
+      if (total === 0) {
+        onComplete();
+        return;
+      }
+
+      if (loadingBar) {
+        loadingBar.classList.add('segmented');
+        loadingBar.style.width = '100%';
+        loadingBar.innerHTML = '';
+        segments = Array.from({ length: total }, () => {
+          const segment = document.createElement('div');
+          segment.className = 'loading-segment';
+          loadingBar.appendChild(segment);
+          return segment;
+        });
+      }
+
+      if (typeof updateLanguage === 'function') {
+        updateLanguage();
+      }
+
+      const completeOnce = () => {
+        if (completed) return;
+        completed = true;
+        onComplete();
+      };
+
+      const updateProgress = () => {
+        if (loadingBar && !segments.length) {
+          const percent = (loaded / total) * 100;
+          loadingBar.style.width = `${percent}%`;
+        }
+        if (loadingStatus) {
+          loadingStatus.textContent = `Loading videos… ${loaded}/${total}`;
+        }
+        if (segments.length) {
+          segments.forEach((segment, index) => {
+            segment.classList.toggle('filled', index < loaded);
+          });
+        }
+      };
+
+      const markLoaded = () => {
+        loaded += 1;
+        updateProgress();
+        if (loaded === total) {
+          completeOnce();
+        }
+      };
+
+      const loadMedia = (src, attempt) => {
         const mediaEl = document.createElement('video');
+        let timeoutId = null;
+        let settled = false;
+
+        const cleanup = () => {
+          if (timeoutId) clearTimeout(timeoutId);
+          mediaEl.removeEventListener('canplaythrough', handleSuccess);
+          mediaEl.removeEventListener('error', handleFailure);
+          mediaEl.remove();
+        };
+
+        const handleSuccess = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          markLoaded();
+        };
+
+        const handleFailure = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          if (attempt < maxRetries) {
+            if (loadingStatus) {
+              loadingStatus.textContent = `Loading stalled, retrying… (${attempt + 1}/${maxRetries})`;
+            }
+            setTimeout(() => loadMedia(src, attempt + 1), retryDelayMs);
+            return;
+          }
+          markLoaded();
+        };
+
         mediaEl.src = src;
         mediaEl.preload = 'auto';
         mediaEl.style.display = 'none';
         document.body.appendChild(mediaEl);
-        mediaEl.addEventListener('canplaythrough', () => {
-          loaded++;
-          const percent = (loaded / total) * 100;
-          loadingBar.style.width = `${percent}%`;
-          if (loaded === total) onComplete();
-        });
-        mediaEl.addEventListener('error', () => {
-          loaded++;
-          const percent = (loaded / total) * 100;
-          loadingBar.style.width = `${percent}%`;
-          if (loaded === total) onComplete();
-        });
-      });
+        mediaEl.addEventListener('canplaythrough', handleSuccess, { once: true });
+        mediaEl.addEventListener('error', handleFailure, { once: true });
+        timeoutId = setTimeout(handleFailure, preloadTimeoutMs);
+      };
+
+      updateProgress();
+      list.forEach(src => loadMedia(src, 0));
+
+      setTimeout(() => {
+        if (loaded < total && !completed) {
+          if (loadingStatus) {
+            loadingStatus.textContent = 'Loading is taking longer than expected, starting anyway…';
+          }
+          completeOnce();
+        }
+      }, overallTimeoutMs);
     }
   
     function playIntroJingle() {
@@ -175,6 +286,14 @@ document.addEventListener('DOMContentLoaded', () => {
     preloadMedia(selectedMedia, () => {
       startButton.style.display = 'block';
       document.getElementById('control-panel-loading-bar-container').style.display = 'none';
+      const loadingLabel = document.getElementById('control-panel-loading-label');
+      if (loadingLabel) {
+        loadingLabel.style.display = 'none';
+      }
+      const loadingStatus = document.getElementById('control-panel-loading-status');
+      if (loadingStatus) {
+        loadingStatus.style.display = 'none';
+      }
       playIntroJingle();
     });
   
