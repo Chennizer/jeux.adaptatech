@@ -123,11 +123,47 @@ document.addEventListener('DOMContentLoaded', () => {
       const loadingContainer = document.getElementById('control-panel-loading-bar-container');
       const loadingBar = loadingContainer ? loadingContainer.querySelector('#control-panel-loading-bar') : null;
       const buttonContainer = document.getElementById('button-container');
+      let loadingLabel = document.getElementById('control-panel-loading-label');
       let loadingStatus = document.getElementById('control-panel-loading-status');
+      const loadingMessages = {
+        en: {
+          label: 'Loading bar',
+          progress: (current, totalCount) => `Loading videos… ${current}/${totalCount}`,
+          retrying: (attempt, max) => `Loading stalled, retrying… (${attempt}/${max})`,
+          long: 'Loading is taking longer than expected, starting anyway…'
+        },
+        fr: {
+          label: 'Barre de chargement',
+          progress: (current, totalCount) => `Chargement des vidéos… ${current}/${totalCount}`,
+          retrying: (attempt, max) => `Chargement bloqué, nouvelle tentative… (${attempt}/${max})`,
+          long: 'Le chargement prend plus de temps, lancement quand même…'
+        },
+        ja: {
+          label: '読み込みバー',
+          progress: (current, totalCount) => `動画を読み込み中… ${current}/${totalCount}`,
+          retrying: (attempt, max) => `読み込み停滞、再試行中… (${attempt}/${max})`,
+          long: '読み込みに時間がかかっています。先に開始します…'
+        }
+      };
       const preloadTimeoutMs = 12000;
       const retryDelayMs = 1200;
       const maxRetries = 2;
       const overallTimeoutMs = 60000;
+
+      const getLanguage = () => {
+        const stored = localStorage.getItem('siteLanguage');
+        const lang = stored || document.documentElement.lang || 'en';
+        return loadingMessages[lang] ? lang : 'en';
+      };
+
+      if (!loadingLabel && buttonContainer) {
+        loadingLabel = document.createElement('div');
+        loadingLabel.id = 'control-panel-loading-label';
+        loadingLabel.setAttribute('data-en', loadingMessages.en.label);
+        loadingLabel.setAttribute('data-fr', loadingMessages.fr.label);
+        loadingLabel.setAttribute('data-ja', loadingMessages.ja.label);
+        buttonContainer.insertBefore(loadingLabel, loadingContainer);
+      }
 
       if (!loadingStatus && buttonContainer) {
         loadingStatus = document.createElement('div');
@@ -146,13 +182,30 @@ document.addEventListener('DOMContentLoaded', () => {
         onComplete();
       };
 
+      const segments = [];
+      if (loadingBar) {
+        loadingBar.innerHTML = '';
+        for (let i = 0; i < total; i += 1) {
+          const segment = document.createElement('div');
+          segment.classList.add('loading-bar-segment');
+          loadingBar.appendChild(segment);
+          segments.push(segment);
+        }
+      }
+
+      if (typeof updateLanguage === 'function') {
+        updateLanguage();
+      }
+
       const updateProgress = () => {
-        if (loadingBar) {
-          const percent = (loaded / total) * 100;
-          loadingBar.style.width = `${percent}%`;
+        if (segments.length) {
+          segments.forEach((segment, index) => {
+            segment.classList.toggle('filled', index < loaded);
+          });
         }
         if (loadingStatus) {
-          loadingStatus.textContent = `Loading videos… ${loaded}/${total}`;
+          const lang = getLanguage();
+          loadingStatus.textContent = loadingMessages[lang].progress(loaded, total);
         }
       };
 
@@ -189,7 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
           cleanup();
           if (attempt < maxRetries) {
             if (loadingStatus) {
-              loadingStatus.textContent = `Loading stalled, retrying… (${attempt + 1}/${maxRetries})`;
+              const lang = getLanguage();
+              loadingStatus.textContent = loadingMessages[lang].retrying(attempt + 1, maxRetries);
             }
             setTimeout(() => loadMedia(src, attempt + 1), retryDelayMs);
             return;
@@ -212,7 +266,8 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         if (loaded < total && !completed) {
           if (loadingStatus) {
-            loadingStatus.textContent = 'Loading is taking longer than expected, starting anyway…';
+            const lang = getLanguage();
+            loadingStatus.textContent = loadingMessages[lang].long;
           }
           completeOnce();
         }
@@ -253,7 +308,11 @@ document.addEventListener('DOMContentLoaded', () => {
     preloadMedia(selectedMedia, () => {
       startButton.style.display = 'block';
       document.getElementById('control-panel-loading-bar-container').style.display = 'none';
+      const loadingLabel = document.getElementById('control-panel-loading-label');
       const loadingStatus = document.getElementById('control-panel-loading-status');
+      if (loadingLabel) {
+        loadingLabel.style.display = 'none';
+      }
       if (loadingStatus) {
         loadingStatus.style.display = 'none';
       }
