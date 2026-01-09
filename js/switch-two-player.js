@@ -124,19 +124,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const loadingBar = loadingContainer ? loadingContainer.querySelector('#control-panel-loading-bar') : null;
       const buttonContainer = document.getElementById('button-container');
       let loadingStatus = document.getElementById('control-panel-loading-status');
+      let loadingFill = loadingBar ? loadingBar.querySelector('.loading-bar-fill') : null;
       const loadingMessages = {
         en: {
-          progress: (current, totalCount) => `Loading videos… ${current}/${totalCount}`,
           retrying: (attempt, max) => `Loading stalled, retrying… (${attempt}/${max})`,
           long: 'Loading is taking longer than expected, starting anyway…'
         },
         fr: {
-          progress: (current, totalCount) => `Chargement des vidéos… ${current}/${totalCount}`,
           retrying: (attempt, max) => `Chargement bloqué, nouvelle tentative… (${attempt}/${max})`,
           long: 'Le chargement prend plus de temps, lancement quand même…'
         },
         ja: {
-          progress: (current, totalCount) => `動画を読み込み中… ${current}/${totalCount}`,
           retrying: (attempt, max) => `読み込み停滞、再試行中… (${attempt}/${max})`,
           long: '読み込みに時間がかかっています。先に開始します…'
         }
@@ -158,6 +156,12 @@ document.addEventListener('DOMContentLoaded', () => {
         buttonContainer.insertBefore(loadingStatus, loadingContainer);
       }
 
+      if (loadingBar && !loadingFill) {
+        loadingFill = document.createElement('div');
+        loadingFill.classList.add('loading-bar-fill');
+        loadingBar.appendChild(loadingFill);
+      }
+
       if (total === 0) {
         onComplete();
         return;
@@ -169,31 +173,27 @@ document.addEventListener('DOMContentLoaded', () => {
         onComplete();
       };
 
-      const segments = [];
-      if (loadingBar) {
-        loadingBar.innerHTML = '';
-        for (let i = 0; i < total; i += 1) {
-          const segment = document.createElement('div');
-          segment.classList.add('loading-bar-segment');
-          loadingBar.appendChild(segment);
-          segments.push(segment);
-        }
-      }
-
       if (typeof updateLanguage === 'function') {
         updateLanguage();
       }
 
+      const updateStatus = (message) => {
+        if (!loadingStatus) return;
+        if (message) {
+          loadingStatus.style.display = 'block';
+          loadingStatus.textContent = message;
+        } else {
+          loadingStatus.style.display = 'none';
+          loadingStatus.textContent = '';
+        }
+      };
+
       const updateProgress = () => {
-        if (segments.length) {
-          segments.forEach((segment, index) => {
-            segment.classList.toggle('filled', index < loaded);
-          });
+        if (loadingFill) {
+          const percent = Math.min((loaded / total) * 100, 100);
+          loadingFill.style.width = `${percent}%`;
         }
-        if (loadingStatus) {
-          const lang = getLanguage();
-          loadingStatus.textContent = loadingMessages[lang].progress(loaded, total);
-        }
+        updateStatus('');
       };
 
       const markLoaded = () => {
@@ -228,10 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
           settled = true;
           cleanup();
           if (attempt < maxRetries) {
-            if (loadingStatus) {
-              const lang = getLanguage();
-              loadingStatus.textContent = loadingMessages[lang].retrying(attempt + 1, maxRetries);
-            }
+            const lang = getLanguage();
+            updateStatus(loadingMessages[lang].retrying(attempt + 1, maxRetries));
             setTimeout(() => loadMedia(src, attempt + 1), retryDelayMs);
             return;
           }
@@ -252,10 +250,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       setTimeout(() => {
         if (loaded < total && !completed) {
-          if (loadingStatus) {
-            const lang = getLanguage();
-            loadingStatus.textContent = loadingMessages[lang].long;
-          }
+          const lang = getLanguage();
+          updateStatus(loadingMessages[lang].long);
           completeOnce();
         }
       }, overallTimeoutMs);
