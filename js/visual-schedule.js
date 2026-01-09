@@ -46,6 +46,7 @@
   let completedSteps = new Set();
   let resizeRaf = null;
   let isRestoring = false;
+  let langToggle = null;
 
   function clampStepCount(value) {
     const parsed = Number.parseInt(value, 10);
@@ -328,6 +329,9 @@
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('no-scroll');
+    if (langToggle) {
+      langToggle.style.display = 'none';
+    }
     enterFullscreen();
   }
 
@@ -337,6 +341,9 @@
     overlay.setAttribute('aria-hidden', 'true');
     overlaySteps.style.removeProperty('--overlay-card-size');
     document.body.classList.remove('no-scroll');
+    if (langToggle) {
+      langToggle.style.display = 'inline-flex';
+    }
     exitFullscreen();
   }
 
@@ -608,12 +615,14 @@
       }
     });
 
-    const langToggle = document.getElementById('langToggle');
+    langToggle = document.getElementById('langToggle');
     if (langToggle) {
       langToggle.addEventListener('click', () => {
-        renderSelectionRow();
-        updateLaunchState();
-        if (isActiveMode) renderActiveSteps();
+        requestAnimationFrame(() => {
+          renderSelectionRow();
+          updateLaunchState();
+          if (isActiveMode) renderActiveSteps();
+        });
       });
     }
   }
