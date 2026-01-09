@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingLabel.setAttribute('data-en', loadingMessages.en.label);
         loadingLabel.setAttribute('data-fr', loadingMessages.fr.label);
         loadingLabel.setAttribute('data-ja', loadingMessages.ja.label);
-        buttonContainer.insertBefore(loadingLabel, loadingContainer);
+        buttonContainer.insertBefore(loadingLabel, loadingContainer ? loadingContainer.nextSibling : null);
       }
 
       if (loadingBar && !loadingFill) {
