@@ -618,9 +618,11 @@
     langToggle = document.getElementById('langToggle');
     if (langToggle) {
       langToggle.addEventListener('click', () => {
-        renderSelectionRow();
-        updateLaunchState();
-        if (isActiveMode) renderActiveSteps();
+        requestAnimationFrame(() => {
+          renderSelectionRow();
+          updateLaunchState();
+          if (isActiveMode) renderActiveSteps();
+        });
       });
     }
   }
