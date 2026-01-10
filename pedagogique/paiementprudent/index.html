@@ -192,6 +192,7 @@ body.advanced-wallet #walletDropArea{
   margin-top:clamp(12px, 4vh, 28px);
   padding:clamp(10px, 1.6vw, 18px) clamp(12px, 2.6vw, 20px) clamp(10px, 1.6vw, 14px);
   max-height:60vh;
+  margin-bottom:clamp(8px, 1.2vh, 14px);
 }
 body.advanced-wallet .rows{
   gap:clamp(0.5rem, 1vmin, 0.9rem);
@@ -334,6 +335,16 @@ body.advanced-wallet .counter.bad{
   font-weight:800;cursor:pointer;text-align:center;
   transition:transform .15s;
 }
+body.advanced-wallet #priceZone{
+  margin-top:clamp(0.2rem, 0.7vh, 0.6rem);
+  gap:clamp(0.4rem, 0.9vmin, 0.7rem);
+}
+body.advanced-wallet #priceTag{
+  font-size:clamp(1.1rem, 0.95rem + 1.4vw, 2.2rem);
+}
+body.advanced-wallet #priceStatus{
+  min-height:1.4rem;
+}
 #priceTag .price-amount{display:inline-flex;gap:.4rem;align-items:flex-end;}
 #priceTag .price-dollar,#priceTag .price-cent{transition:color .2s;}
 #priceTag .completed{color:var(--green);}
@@ -346,6 +357,7 @@ body.advanced-wallet .counter.bad{
 
 /* Boutons d'action */
 #priceButtons{display:flex;justify-content:center;flex-wrap:wrap;width:100%;gap:clamp(0.8rem, 2.4vw, 1rem);}
+body.advanced-wallet #priceButtons{gap:clamp(0.6rem, 1.8vw, 0.8rem);}
 #priceButtons button{
   min-height: calc(var(--tileSize) * 0.95);
   min-width: clamp(140px, 28vw, 220px);
@@ -361,7 +373,7 @@ body.advanced-wallet .counter.bad{
 #payBtn:disabled,#payBtn.dim{background:#d79a85;cursor:not-allowed;}
 
 #studentSetPriceBtn{
-  margin:.5rem auto 0;
+  margin:0;
   min-height: calc(var(--tileSize) * 0.95);
   min-width: clamp(140px, 28vw, 220px);
   width: clamp(140px, 32vw, 240px);
@@ -372,8 +384,17 @@ body.advanced-wallet .counter.bad{
   cursor:pointer;transition:transform .1s,background .1s,color .1s;
   text-align:center;
 }
+#priceButtons #studentSetPriceBtn{
+  background:#fff;
+  color:#244774;
+  border-color:#244774;
+}
 #studentSetPriceBtn:active{transform:scale(.97);}
 #studentSetPriceBtn.active{background:#244774;color:#fff;}
+body:not(.advanced-wallet) #studentSetPriceBtn{
+  flex-basis:100%;
+  margin-top:.5rem;
+}
 
 /* Modales génériques */
 .modalBox{
@@ -639,15 +660,15 @@ body.advanced-wallet .counter.bad{
         <div id="advancedLegend" aria-hidden="true"></div>
       </div>
       <div id="priceZone">
-        <div id="priceTag" tabindex="0" role="button" aria-label="Prix actuel"></div>
-        <div id="priceStatus" aria-live="polite" role="status"></div>
-        <div id="priceButtons">
-          <button id="verifyBtn">VÉRIFIER</button>
-          <button id="payBtn">PAYER</button>
-        </div>
+      <div id="priceTag" tabindex="0" role="button" aria-label="Prix actuel"></div>
+      <div id="priceStatus" aria-live="polite" role="status"></div>
+      <div id="priceButtons">
+        <button id="verifyBtn">VÉRIFIER</button>
+        <button id="payBtn">PAYER</button>
         <button id="studentSetPriceBtn">Combien ça coûte?</button>
       </div>
     </div>
+  </div>
   </div>
 
   <!-- ---------- GENERIC MODALS ---------- -->
@@ -1545,9 +1566,27 @@ function animateCoins(idxArr,cb){
 }
 
 // DRAG & DROP
+function addCoinToWallet(val){
+  let maxCoins = advancedMode ? 100 : 10;
+  if(!advancedMode && coins + val > maxCoins){
+    setAdvancedMode(true);
+    maxCoins = 100;
+  }
+  if(coins + val <= maxCoins){
+    coins += val;
+    saveRender();
+    if(val===1){
+      playSound(sndAdd1);
+    }
+  } else {
+    alertBox('Porte-monnaie plein !');
+  }
+}
 const dragSources = document.querySelectorAll('.dragSource');
 const walletDropAreaEl = $('walletDropArea');
 let ghostCoin=null, offsetX=0, offsetY=0;
+let dragStartX=0, dragStartY=0;
+const dragTapThreshold = 8;
 
 function onDragStart(e){
   const src = e.currentTarget;
@@ -1563,6 +1602,8 @@ function onDragStart(e){
   const rect = src.getBoundingClientRect();
   offsetX = evt.clientX - rect.left;
   offsetY = evt.clientY - rect.top;
+  dragStartX = evt.clientX;
+  dragStartY = evt.clientY;
   ghostCoin.style.left = rect.left+'px';
   ghostCoin.style.top  = rect.top+'px';
   walletDropAreaEl.classList.add('droptarget');
@@ -1585,21 +1626,15 @@ function onDragEnd(e){
   if(!ghostCoin) return;
   const evt = e.type==='touchend' ? e.changedTouches[0] : e;
   walletDropAreaEl.classList.remove('droptarget');
-  const rect = walletDropAreaEl.getBoundingClientRect();
-  if(evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom){
-    const val = parseInt(ghostCoin.dataset.value,10);
-    let maxCoins = advancedMode ? 100 : 10;
-    if(!advancedMode && coins + val > maxCoins){
-      setAdvancedMode(true);
-      maxCoins = 100;
+  const val = parseInt(ghostCoin.dataset.value,10);
+  const moved = Math.hypot(evt.clientX - dragStartX, evt.clientY - dragStartY);
+  if(moved < dragTapThreshold){
+    addCoinToWallet(val);
+  } else {
+    const rect = walletDropAreaEl.getBoundingClientRect();
+    if(evt.clientX>rect.left && evt.clientX<rect.right && evt.clientY>rect.top && evt.clientY<rect.bottom){
+      addCoinToWallet(val);
     }
-    if(coins + val <= maxCoins){
-      coins += val;
-      saveRender();
-      if(val===1){
-        playSound(sndAdd1);
-      }
-    } else alertBox('Porte-monnaie plein !');
   }
   document.body.removeChild(ghostCoin);
   ghostCoin = null;
