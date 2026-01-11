@@ -1,28 +1,3 @@
-/* switch-two-player-custom.js — unified version with folder picker + thumbnails + YouTube playlist import
-   Ordering fixes:
-   - Sequential by default (DOM order). Set shuffleEnabled=true if you want random.
-   - Resets internal playback order whenever the selected set or its order changes.
-   - Local videos: **per-set order persistence** (no cross-contamination between different folders/sets).
-
-   Embedding/VEVO handling:
-   - During playlist import: we validate with videos?part=status,snippet and import ONLY embeddable, public/unlisted items (also fetch title + best thumbnail).
-   - When adding a single YouTube URL: we validate first; if blocked, we DO NOT add a card.
-   - When restoring saved URLs from localStorage: batch-validate and only re-add playable ones (storage is cleaned).
-   - At playback, if a video still errors, we auto-skip.
-
-   Fixes in this version:
-   - Fixed syntax error in visual options ("high-contrast" branch).
-   - Made YT onError delegate to a global-safe handler (no scope issues).
-   - Guarded loading bar null refs.
-
-   New in this version:
-   - YouTube thumbnails:
-     • Playlist import: use API to fetch title + best thumbnail.
-     • Single URLs / restored URLs: use lightweight no-API fallback (ytimg) with multi-resolution fallback chain.
-   - Local removals persist across refresh:
-     • When you remove a local card (×), we remember its stable key in LOCAL_HIDDEN_KEY and filter it out when repopulating from a saved folder.
-     • "Clear everything" now also deletes the saved folder handle and clears hidden/exclusions.
-*/
 
 let youtubePlayer = null;
 let youtubeStateChangeHandler = null;
