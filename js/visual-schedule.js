@@ -18,6 +18,7 @@
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
   const numberToggle = document.getElementById('number-toggle');
+  const orderToggle = document.getElementById('order-toggle');
   const backgroundSelect = document.getElementById('background-select');
   const completedStyleSelect = document.getElementById('completed-style');
   const ttsToggle = document.getElementById('tts-toggle');
@@ -449,6 +450,14 @@
 
   function handleActiveStepClick(index) {
     if (!steps[index]?.assignment) return;
+    if (orderToggle?.checked) {
+      const nextIndex = steps.findIndex(
+        (step, stepIndex) => step.assignment && !completedSteps.has(stepIndex)
+      );
+      if (nextIndex !== -1 && index !== nextIndex) {
+        return;
+      }
+    }
 
     if (completedSteps.has(index)) {
       completedSteps.delete(index);
@@ -579,6 +588,7 @@
     overlaySteps.classList.toggle('style-greyed', completedStyle === 'greyed');
     overlaySteps.classList.toggle('style-turn', completedStyle === 'turn');
     overlaySteps.classList.toggle('style-scribble', completedStyle === 'scribble');
+    overlaySteps.classList.toggle('has-active-step', activeStepIndex !== null);
 
     steps.forEach((step, index) => {
       if (!step.assignment) return;
@@ -672,6 +682,7 @@
         orientation: !!orientationToggle?.checked,
         showText: !!textToggle?.checked,
         showNumbers: !!numberToggle?.checked,
+        enforceOrder: orderToggle ? !!orderToggle.checked : true,
         background: backgroundSelect?.value || '#000000',
         completedStyle: completedStyleSelect?.value || 'greyed',
         tts: !!ttsToggle?.checked
@@ -702,6 +713,9 @@
       orientationToggle.checked = !!state.settings.orientation;
       textToggle.checked = !!state.settings.showText;
       numberToggle.checked = !!state.settings.showNumbers;
+      if (orderToggle) {
+        orderToggle.checked = state.settings.enforceOrder !== false;
+      }
       ttsToggle.checked = !!state.settings.tts;
       if (state.settings.background) {
         backgroundSelect.value = state.settings.background;
@@ -756,6 +770,11 @@
       if (isActiveMode) renderActiveSteps();
       saveState();
     });
+    if (orderToggle) {
+      orderToggle.addEventListener('change', () => {
+        saveState();
+      });
+    }
     ttsToggle.addEventListener('change', () => {
       saveState();
     });
