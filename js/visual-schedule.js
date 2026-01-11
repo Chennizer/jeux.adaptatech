@@ -330,6 +330,7 @@
           origin: 'User'
         };
         userImages.push(image);
+        saveState();
         resolve(image);
       };
       reader.readAsDataURL(file);
