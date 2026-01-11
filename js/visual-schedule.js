@@ -51,6 +51,7 @@
   let pictosManifest = null;
   let pictosCategories = [];
   let currentPresetCategory = '';
+  let presetObserver = null;
 
   function clampStepCount(value) {
     const parsed = Number.parseInt(value, 10);
@@ -140,13 +141,24 @@
     return getImageLabel(image.name || '');
   }
 
-  function renderThumb(container, image) {
+  function renderThumb(container, image, options = {}) {
+    const { lazyLoad = false, observer = null } = options;
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
     thumb.draggable = true;
     const img = document.createElement('img');
-    img.src = image.src;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    if (lazyLoad && observer) {
+      img.dataset.src = image.src;
+    } else {
+      img.src = image.src;
+    }
     img.alt = getImageDisplayName(image);
+    img.style.opacity = '0';
+    img.addEventListener('load', () => {
+      img.style.opacity = '1';
+    });
     const label = document.createElement('span');
     label.className = 'thumb-label';
     label.textContent = getImageDisplayName(image);
@@ -161,6 +173,24 @@
       dragPayload = null;
     });
     container.appendChild(thumb);
+  }
+
+  function createPresetObserver() {
+    if (!('IntersectionObserver' in window)) return null;
+    return new IntersectionObserver(
+      (entries, observer) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const target = entry.target;
+          if (target.dataset?.src) {
+            target.src = target.dataset.src;
+            target.removeAttribute('data-src');
+          }
+          observer.unobserve(target);
+        });
+      },
+      { root: presetGrid, rootMargin: '200px 0px', threshold: 0.01 }
+    );
   }
 
   function populatePresetCategories() {
@@ -199,6 +229,10 @@
 
   function renderPresetItems() {
     presetGrid.innerHTML = '';
+    if (presetObserver) {
+      presetObserver.disconnect();
+    }
+    presetObserver = createPresetObserver();
     const items = getPresetItems();
     items.forEach((item, index) => {
       if (!item?.file) return;
@@ -210,8 +244,14 @@
         src,
         origin: 'Preset'
       };
-      renderThumb(presetGrid, image);
+      renderThumb(presetGrid, image, { lazyLoad: true, observer: presetObserver });
     });
+    if (!presetObserver) {
+      presetGrid.querySelectorAll('img[data-src]').forEach((img) => {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+      });
+    }
   }
 
   async function loadPresetLibrary() {
