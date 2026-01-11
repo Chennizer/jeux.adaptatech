@@ -50,7 +50,8 @@
   let langToggle = null;
   let pictosManifest = null;
   let pictosCategories = [];
-  let currentPresetCategory = '';
+  const defaultPresetCategoryKey = 'mobilierClasse';
+  let currentPresetCategory = defaultPresetCategoryKey;
   let presetObserver = null;
 
   function clampStepCount(value) {
@@ -173,6 +174,9 @@
       dragPayload = null;
     });
     container.appendChild(thumb);
+    if (lazyLoad && observer) {
+      observer.observe(img);
+    }
   }
 
   function createPresetObserver() {
@@ -211,6 +215,16 @@
       if (category.labels?.ja) option.setAttribute('data-ja', category.labels.ja);
       presetCategorySelect.add(option);
     });
+    if (
+      !currentPresetCategory ||
+      !pictosCategories.some((category) => category.key === currentPresetCategory)
+    ) {
+      currentPresetCategory = pictosCategories.some(
+        (category) => category.key === defaultPresetCategoryKey
+      )
+        ? defaultPresetCategoryKey
+        : '';
+    }
     presetCategorySelect.value = currentPresetCategory || '';
   }
 
@@ -285,6 +299,16 @@
               };
             })
             .filter((category) => category.items.length > 0);
+        }
+        if (
+          !currentPresetCategory ||
+          !pictosCategories.some((category) => category.key === currentPresetCategory)
+        ) {
+          currentPresetCategory = pictosCategories.some(
+            (category) => category.key === defaultPresetCategoryKey
+          )
+            ? defaultPresetCategoryKey
+            : '';
         }
       }
       populatePresetCategories();
