@@ -18,6 +18,8 @@
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
   const numberToggle = document.getElementById('number-toggle');
+  const captionSizeSlider = document.getElementById('caption-size');
+  const captionSizeValue = document.getElementById('caption-size-value');
   const orderToggle = document.getElementById('order-toggle');
   const backgroundSelect = document.getElementById('background-select');
   const completedStyleSelect = document.getElementById('completed-style');
@@ -583,6 +585,10 @@
     const showText = textToggle?.checked;
     const showNumbers = numberToggle?.checked;
     const completedStyle = completedStyleSelect?.value || 'greyed';
+    if (captionSizeSlider) {
+      const scale = Number.parseFloat(captionSizeSlider.value) || 1;
+      overlaySteps.style.setProperty('--overlay-caption-size', `${1.1 * scale}rem`);
+    }
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
     overlaySteps.classList.toggle('single', steps.filter((step) => step.assignment).length <= 1);
@@ -684,6 +690,7 @@
         showText: !!textToggle?.checked,
         showNumbers: !!numberToggle?.checked,
         enforceOrder: orderToggle ? !!orderToggle.checked : true,
+        captionScale: captionSizeSlider ? Number.parseFloat(captionSizeSlider.value) || 1 : 1,
         background: backgroundSelect?.value || '#000000',
         completedStyle: completedStyleSelect?.value || 'greyed',
         tts: !!ttsToggle?.checked
@@ -716,6 +723,13 @@
       numberToggle.checked = !!state.settings.showNumbers;
       if (orderToggle) {
         orderToggle.checked = state.settings.enforceOrder !== false;
+      }
+      if (captionSizeSlider) {
+        const scale = Number.parseFloat(state.settings.captionScale) || 1;
+        captionSizeSlider.value = String(scale);
+        if (captionSizeValue) {
+          captionSizeValue.textContent = `${scale.toFixed(1)}×`;
+        }
       }
       ttsToggle.checked = !!state.settings.tts;
       if (state.settings.background) {
@@ -771,6 +785,20 @@
       if (isActiveMode) renderActiveSteps();
       saveState();
     });
+    if (captionSizeSlider) {
+      captionSizeSlider.addEventListener('input', () => {
+        const scale = Number.parseFloat(captionSizeSlider.value) || 1;
+        if (captionSizeValue) {
+          captionSizeValue.textContent = `${scale.toFixed(1)}×`;
+        }
+        if (isActiveMode) renderActiveSteps();
+        saveState();
+      });
+      if (captionSizeValue) {
+        const scale = Number.parseFloat(captionSizeSlider.value) || 1;
+        captionSizeValue.textContent = `${scale.toFixed(1)}×`;
+      }
+    }
     if (orderToggle) {
       orderToggle.addEventListener('change', () => {
         saveState();
