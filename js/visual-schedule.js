@@ -18,6 +18,9 @@
   const orientationToggle = document.getElementById('orientation-toggle');
   const textToggle = document.getElementById('text-toggle');
   const numberToggle = document.getElementById('number-toggle');
+  const captionSizeSlider = document.getElementById('caption-size');
+  const captionSizeValue = document.getElementById('caption-size-value');
+  const orderToggle = document.getElementById('order-toggle');
   const backgroundSelect = document.getElementById('background-select');
   const completedStyleSelect = document.getElementById('completed-style');
   const ttsToggle = document.getElementById('tts-toggle');
@@ -28,6 +31,7 @@
   const clearSelectionBtn = document.getElementById('clear-selection');
 
   const presetGrid = document.getElementById('preset-grid');
+  const presetCategorySelect = document.getElementById('preset-category');
   const userGrid = document.getElementById('user-grid');
   const userUpload = document.getElementById('user-upload');
   const userUploadSingle = document.getElementById('user-upload-single');
@@ -47,6 +51,11 @@
   let resizeRaf = null;
   let isRestoring = false;
   let langToggle = null;
+  let pictosManifest = null;
+  let pictosCategories = [];
+  const defaultPresetCategoryKey = 'mobilierClasse';
+  let currentPresetCategory = defaultPresetCategoryKey;
+  let presetObserver = null;
 
   function clampStepCount(value) {
     const parsed = Number.parseInt(value, 10);
@@ -90,16 +99,73 @@
     }
   }
 
-  function renderThumb(container, image) {
+  function getCategoryLabel(label, key) {
+    const lang = getCurrentLanguage();
+    const fallback = typeof label === 'string' ? label : null;
+    if (!label || typeof label !== 'object') {
+      return fallback || (key ? key.replaceAll('_', ' ') : '');
+    }
+    return label[lang] || label.en || label.fr || fallback || (key ? key.replaceAll('_', ' ') : '');
+  }
+
+  function normalizeItemLabels(label) {
+    if (!label) return {};
+    if (typeof label === 'string') {
+      return { fr: label, en: label, ja: label };
+    }
+    if (typeof label === 'object') {
+      const result = {};
+      ['fr', 'en', 'ja'].forEach((lang) => {
+        const entry = label[lang];
+        if (!entry) return;
+        if (typeof entry === 'string') {
+          result[lang] = entry;
+        } else if (typeof entry === 'object' && entry.word) {
+          result[lang] = entry.word;
+        }
+      });
+      return result;
+    }
+    return {};
+  }
+
+  function getImageLabel(name) {
+    if (typeof name !== 'string') return '';
+    const lastDot = name.lastIndexOf('.');
+    if (lastDot <= 0) return name;
+    return name.slice(0, lastDot);
+  }
+
+  function getImageDisplayName(image) {
+    if (!image) return '';
+    if (typeof image === 'string') return getImageLabel(image);
+    const lang = getCurrentLanguage();
+    const label = image.labels?.[lang] || image.labels?.en || image.labels?.fr || image.labels?.ja;
+    if (label) return label;
+    return getImageLabel(image.name || '');
+  }
+
+  function renderThumb(container, image, options = {}) {
+    const { lazyLoad = false, observer = null } = options;
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
     thumb.draggable = true;
     const img = document.createElement('img');
-    img.src = image.src;
-    img.alt = image.name;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    if (lazyLoad && observer) {
+      img.dataset.src = image.src;
+    } else {
+      img.src = image.src;
+    }
+    img.alt = getImageDisplayName(image);
+    img.style.opacity = '0';
+    img.addEventListener('load', () => {
+      img.style.opacity = '1';
+    });
     const label = document.createElement('span');
     label.className = 'thumb-label';
-    label.textContent = image.name;
+    label.textContent = getImageDisplayName(image);
     thumb.appendChild(img);
     thumb.appendChild(label);
     thumb.addEventListener('click', () => setSelection(image, thumb));
@@ -111,21 +177,149 @@
       dragPayload = null;
     });
     container.appendChild(thumb);
+    if (lazyLoad && observer) {
+      observer.observe(img);
+    }
   }
 
-  function loadPresetLibrary() {
-    const data = Array.isArray(window.imageLibraryArray) ? window.imageLibraryArray : [];
+  function createPresetObserver() {
+    if (!('IntersectionObserver' in window)) return null;
+    return new IntersectionObserver(
+      (entries, observer) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const target = entry.target;
+          if (target.dataset?.src) {
+            target.src = target.dataset.src;
+            target.removeAttribute('data-src');
+          }
+          observer.unobserve(target);
+        });
+      },
+      { root: presetGrid, rootMargin: '200px 0px', threshold: 0.01 }
+    );
+  }
+
+  function populatePresetCategories() {
+    if (!presetCategorySelect) return;
+    presetCategorySelect.innerHTML = '';
+    const lang = getCurrentLanguage();
+    const allLabel = lang === 'fr' ? 'Toutes' : lang === 'ja' ? 'すべて' : 'All';
+    const allOption = new Option(allLabel, '', false, false);
+    allOption.setAttribute('data-fr', 'Toutes');
+    allOption.setAttribute('data-en', 'All');
+    allOption.setAttribute('data-ja', 'すべて');
+    presetCategorySelect.add(allOption);
+    pictosCategories.forEach((category) => {
+      const label = getCategoryLabel(category.labels || category.label, category.key);
+      const option = new Option(label, category.key, false, false);
+      if (category.labels?.fr) option.setAttribute('data-fr', category.labels.fr);
+      if (category.labels?.en) option.setAttribute('data-en', category.labels.en);
+      if (category.labels?.ja) option.setAttribute('data-ja', category.labels.ja);
+      presetCategorySelect.add(option);
+    });
+    if (
+      !currentPresetCategory ||
+      !pictosCategories.some((category) => category.key === currentPresetCategory)
+    ) {
+      currentPresetCategory = pictosCategories.some(
+        (category) => category.key === defaultPresetCategoryKey
+      )
+        ? defaultPresetCategoryKey
+        : '';
+    }
+    presetCategorySelect.value = currentPresetCategory || '';
+  }
+
+  function getPresetItems() {
+    if (!pictosManifest) return [];
+    if (!currentPresetCategory) {
+      const allItems = [];
+      pictosCategories.forEach((category) => {
+        category.items.forEach((item) => allItems.push(item));
+      });
+      return allItems;
+    }
+    const category = pictosCategories.find((entry) => entry.key === currentPresetCategory);
+    return category ? category.items : [];
+  }
+
+  function renderPresetItems() {
     presetGrid.innerHTML = '';
-    data.forEach((item, index) => {
-      if (!item || !item.src) return;
-      const src = new URL(item.src, window.location.href).href;
+    if (presetObserver) {
+      presetObserver.disconnect();
+    }
+    presetObserver = createPresetObserver();
+    const items = getPresetItems();
+    items.forEach((item, index) => {
+      if (!item?.file) return;
+      const src = `${pictosManifest.base}${item.file}`;
+      const labels = normalizeItemLabels(item.name || item.label);
       const image = {
-        name: item.name || item.theme || `Image ${index + 1}`,
+        name: labels.en || labels.fr || item.file || `Image ${index + 1}`,
+        labels,
         src,
         origin: 'Preset'
       };
-      renderThumb(presetGrid, image);
+      renderThumb(presetGrid, image, { lazyLoad: true, observer: presetObserver });
     });
+    if (!presetObserver) {
+      presetGrid.querySelectorAll('img[data-src]').forEach((img) => {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+      });
+    }
+  }
+
+  async function loadPresetLibrary() {
+    if (!presetGrid) return;
+    try {
+      if (!pictosManifest) {
+        const response = await fetch('../../images/pictos/index.json', { cache: 'force-cache' });
+        if (!response.ok) {
+          throw new Error(`Unable to load pictos (${response.status})`);
+        }
+        const data = await response.json();
+        const rawBase = typeof data.base === 'string' ? data.base : '../../images/pictos/';
+        let base = new URL(rawBase, response.url).href;
+        if (!base.endsWith('/')) {
+          base += '/';
+        }
+        pictosManifest = { base };
+        if (data.categories && typeof data.categories === 'object') {
+          pictosCategories = Object.entries(data.categories)
+            .map(([key, value]) => {
+              const items = Array.isArray(value)
+                ? value
+                : Array.isArray(value?.items)
+                  ? value.items
+                  : [];
+              return {
+                key,
+                label: value?.label,
+                labels: value?.label,
+                items
+              };
+            })
+            .filter((category) => category.items.length > 0);
+        }
+        if (
+          !currentPresetCategory ||
+          !pictosCategories.some((category) => category.key === currentPresetCategory)
+        ) {
+          currentPresetCategory = pictosCategories.some(
+            (category) => category.key === defaultPresetCategoryKey
+          )
+            ? defaultPresetCategoryKey
+            : '';
+        }
+      }
+      populatePresetCategories();
+      renderPresetItems();
+    } catch (error) {
+      console.warn('Unable to load pictogram presets', error);
+      presetGrid.innerHTML = '';
+    }
   }
 
   function addUserImage(file) {
@@ -138,6 +332,7 @@
           origin: 'User'
         };
         userImages.push(image);
+        saveState();
         resolve(image);
       };
       reader.readAsDataURL(file);
@@ -202,7 +397,7 @@
         const img = document.createElement('img');
         img.className = 'slot-image';
         img.src = step.assignment.src;
-        img.alt = step.assignment.name;
+        img.alt = getImageDisplayName(step.assignment);
         slot.appendChild(img);
       }
 
@@ -258,6 +453,14 @@
 
   function handleActiveStepClick(index) {
     if (!steps[index]?.assignment) return;
+    if (orderToggle?.checked) {
+      const nextIndex = steps.findIndex(
+        (step, stepIndex) => step.assignment && !completedSteps.has(stepIndex)
+      );
+      if (nextIndex !== -1 && index !== nextIndex) {
+        return;
+      }
+    }
 
     if (completedSteps.has(index)) {
       completedSteps.delete(index);
@@ -287,7 +490,7 @@
       previous !== index &&
       steps[index]?.assignment
     ) {
-      speakLabel(getImageLabel(steps[index].assignment.name));
+      speakLabel(getImageDisplayName(steps[index].assignment));
     }
   }
 
@@ -382,12 +585,17 @@
     const showText = textToggle?.checked;
     const showNumbers = numberToggle?.checked;
     const completedStyle = completedStyleSelect?.value || 'greyed';
+    if (captionSizeSlider) {
+      const scale = Number.parseFloat(captionSizeSlider.value) || 1;
+      overlaySteps.style.setProperty('--overlay-caption-size', `${1.1 * scale}rem`);
+    }
     overlaySteps.classList.remove('vertical', 'horizontal');
     overlaySteps.classList.add(orientationClass);
     overlaySteps.classList.toggle('single', steps.filter((step) => step.assignment).length <= 1);
     overlaySteps.classList.toggle('style-greyed', completedStyle === 'greyed');
     overlaySteps.classList.toggle('style-turn', completedStyle === 'turn');
     overlaySteps.classList.toggle('style-scribble', completedStyle === 'scribble');
+    overlaySteps.classList.toggle('has-active-step', activeStepIndex !== null);
 
     steps.forEach((step, index) => {
       if (!step.assignment) return;
@@ -401,7 +609,7 @@
       imageWrapper.className = 'overlay-image';
       const img = document.createElement('img');
       img.src = step.assignment.src;
-      img.alt = step.assignment.name;
+      img.alt = getImageDisplayName(step.assignment);
       imageWrapper.appendChild(img);
       frame.appendChild(imageWrapper);
       card.appendChild(frame);
@@ -417,7 +625,7 @@
       if (showText) {
         const caption = document.createElement('div');
         caption.className = 'overlay-caption';
-        caption.textContent = getImageLabel(step.assignment.name);
+        caption.textContent = getImageDisplayName(step.assignment);
         card.appendChild(caption);
       }
       card.addEventListener('click', () => handleActiveStepClick(index));
@@ -425,13 +633,6 @@
       updateStepStateClasses(card, index);
     });
     adjustOverlaySizing(orientationClass);
-  }
-
-  function getImageLabel(name) {
-    if (typeof name !== 'string') return '';
-    const lastDot = name.lastIndexOf('.');
-    if (lastDot <= 0) return name;
-    return name.slice(0, lastDot);
   }
 
   function updateLaunchState() {
@@ -488,6 +689,8 @@
         orientation: !!orientationToggle?.checked,
         showText: !!textToggle?.checked,
         showNumbers: !!numberToggle?.checked,
+        enforceOrder: orderToggle ? !!orderToggle.checked : true,
+        captionScale: captionSizeSlider ? Number.parseFloat(captionSizeSlider.value) || 1 : 1,
         background: backgroundSelect?.value || '#000000',
         completedStyle: completedStyleSelect?.value || 'greyed',
         tts: !!ttsToggle?.checked
@@ -518,6 +721,16 @@
       orientationToggle.checked = !!state.settings.orientation;
       textToggle.checked = !!state.settings.showText;
       numberToggle.checked = !!state.settings.showNumbers;
+      if (orderToggle) {
+        orderToggle.checked = state.settings.enforceOrder !== false;
+      }
+      if (captionSizeSlider) {
+        const scale = Number.parseFloat(state.settings.captionScale) || 1;
+        captionSizeSlider.value = String(scale);
+        if (captionSizeValue) {
+          captionSizeValue.textContent = `${scale.toFixed(1)}×`;
+        }
+      }
       ttsToggle.checked = !!state.settings.tts;
       if (state.settings.background) {
         backgroundSelect.value = state.settings.background;
@@ -572,6 +785,25 @@
       if (isActiveMode) renderActiveSteps();
       saveState();
     });
+    if (captionSizeSlider) {
+      captionSizeSlider.addEventListener('input', () => {
+        const scale = Number.parseFloat(captionSizeSlider.value) || 1;
+        if (captionSizeValue) {
+          captionSizeValue.textContent = `${scale.toFixed(1)}×`;
+        }
+        if (isActiveMode) renderActiveSteps();
+        saveState();
+      });
+      if (captionSizeValue) {
+        const scale = Number.parseFloat(captionSizeSlider.value) || 1;
+        captionSizeValue.textContent = `${scale.toFixed(1)}×`;
+      }
+    }
+    if (orderToggle) {
+      orderToggle.addEventListener('change', () => {
+        saveState();
+      });
+    }
     ttsToggle.addEventListener('change', () => {
       saveState();
     });
@@ -584,6 +816,12 @@
       if (isActiveMode) renderActiveSteps();
       saveState();
     });
+    if (presetCategorySelect) {
+      presetCategorySelect.addEventListener('change', () => {
+        currentPresetCategory = presetCategorySelect.value;
+        renderPresetItems();
+      });
+    }
 
     userUpload.addEventListener('change', handleUserUpload);
     userUploadSingle.addEventListener('change', handleUserUploadSingle);
@@ -619,6 +857,8 @@
     if (langToggle) {
       langToggle.addEventListener('click', () => {
         requestAnimationFrame(() => {
+          populatePresetCategories();
+          renderPresetItems();
           renderSelectionRow();
           updateLaunchState();
           if (isActiveMode) renderActiveSteps();
