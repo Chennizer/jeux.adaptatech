@@ -251,7 +251,7 @@
     items.forEach((item, index) => {
       if (!item?.file) return;
       const src = `${pictosManifest.base}${item.file}`;
-      const labels = normalizeItemLabels(item.label);
+      const labels = normalizeItemLabels(item.name || item.label);
       const image = {
         name: labels.en || labels.fr || item.file || `Image ${index + 1}`,
         labels,
