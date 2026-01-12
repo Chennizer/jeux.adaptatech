@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="translate" data-fr="Graffiti (commande oculaire)" data-en="Graffiti (eyegaze)" data-ja="グラフィティ（視線入力）">Graffiti (commande oculaire)</title>
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap');
+
+    :root {
+      --sidebar-w: clamp(88px, 18vw, 180px);
+      --sidebar-pad: clamp(10px, 2vw, 18px);
+      --swatch-size: clamp(56px, 7vw, 86px);
+      --swatch-gap: clamp(8px, 1.4vw, 16px);
+      --swatch-border: 5px;
+      --swatch-outline: 6px;
+      --dwell-color: rgba(255, 64, 64, 0.45);
+      --cursor-size: clamp(16px, 3vw, 26px);
+      --brush: 24px;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #050505; color: #fff; font-family: 'Roboto', system-ui, sans-serif; overflow: hidden; }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      background: radial-gradient(circle at 40% 20%, rgba(0, 184, 255, 0.18), transparent 40%), #010101;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(16px, 4vw, 48px);
+    }
+
+    #overlay .panel {
+      max-width: 720px;
+      width: min(90vw, 760px);
+      background: rgba(0, 0, 0, 0.82);
+      border: 2px solid #0af;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+      border-radius: 20px;
+      padding: clamp(18px, 4vw, 32px);
+      text-align: center;
+    }
+
+    #overlay h1 {
+      font-family: 'Permanent Marker', cursive;
+      letter-spacing: 2px;
+      font-size: clamp(34px, 6vw, 70px);
+      margin: 0 0 12px;
+      color: #0af;
+      text-shadow: 0 0 20px rgba(0,170,255,0.6);
+    }
+
+    #overlay p { margin: 10px 0; line-height: 1.6; font-size: clamp(16px, 2.4vw, 20px); color: #dce7ff; }
+
+    #musicModes { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin: 14px 0 6px; }
+    #musicModes button {
+      min-width: 160px;
+      padding: 12px 18px;
+      background: rgba(255,255,255,0.1);
+      border: 2px solid transparent;
+      color: #fff;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      transition: transform 0.1s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+    #musicModes button.active { background: #0af; color: #000; border-color: #0af; transform: scale(1.04); }
+
+    #startBtn {
+      margin-top: 18px;
+      padding: 14px 28px;
+      font-size: clamp(18px, 3vw, 22px);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      background: linear-gradient(120deg, #ff0080, #00e5ff);
+      border: none;
+      border-radius: 14px;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+    }
+    #startBtn:hover { filter: brightness(1.05); }
+
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-w);
+      padding: var(--sidebar-pad);
+      background: #fafafa;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      z-index: 10;
+      color: #000;
+      box-shadow: 0 10px 35px rgba(0,0,0,0.12);
+    }
+
+    #sidebar h2 { margin: 0; color: #222; font-size: clamp(16px, 3vw, 18px); text-align: center; letter-spacing: 0.05em; }
+
+    #palette {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(var(--swatch-size), 1fr));
+      gap: var(--swatch-gap);
+      justify-items: center;
+      align-content: start;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .swatch {
+      width: var(--swatch-size);
+      height: var(--swatch-size);
+      border-radius: 50%;
+      border: var(--swatch-border) solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18) inset, 0 4px 12px rgba(0,0,0,0.12);
+      position: relative;
+      transition: transform 0.12s ease;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    .swatch.active { transform: scale(1.06); }
+    .swatch.active::after {
+      content: '';
+      position: absolute;
+      inset: calc(var(--swatch-outline));
+      border-radius: 50%;
+      border: 3px solid #111;
+      pointer-events: none;
+    }
+
+    .dwell {
+      position: absolute;
+      inset: 0;
+      background: var(--dwell-color);
+      transform-origin: center;
+      transform: scale(0.08);
+      animation: dwellGrow 900ms linear forwards;
+      pointer-events: none;
+      border-radius: 50%;
+      opacity: 0.9;
+    }
+
+    @keyframes dwellGrow {
+      from { transform: scale(0.08); opacity: 0.9; }
+      to { transform: scale(1.02); opacity: 0.5; }
+    }
+
+    canvas#paint {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: #111;
+      cursor: none;
+    }
+
+    #cursorPreview {
+      position: fixed;
+      width: var(--cursor-size);
+      height: var(--cursor-size);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 20;
+      mix-blend-mode: screen;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.35);
+      opacity: 0.8;
+    }
+
+    #statusBar {
+      position: fixed;
+      right: 14px;
+      bottom: 12px;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 14px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    #musicLabel { font-weight: 700; letter-spacing: 0.05em; color: #8ae4ff; }
+
+    #settingsBtn {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 26;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.22);
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 26px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+
+    #settingsBtn:hover { border-color: #0af; }
+
+    #settingsModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 28;
+      padding: 20px;
+    }
+
+    #settingsModal .window {
+      background: #0b0c10;
+      border: 2px solid #0af;
+      border-radius: 16px;
+      width: min(420px, 90vw);
+      padding: 18px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+      color: #e8f4ff;
+    }
+
+    #settingsModal h3 { margin: 0 0 12px; font-size: 20px; letter-spacing: 0.08em; }
+
+    #settingsModal .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+
+    #settingsModal button, #settingsModal input[type="range"] {
+      cursor: pointer;
+    }
+
+    .closeSettings {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid #0af;
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    #brushSizeValue { font-weight: 700; color: #0af; }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div class="panel">
+      <h1>GRAFFITI FLOW</h1>
+      <p class="translate" data-fr="Choisis une ambiance musicale, puis balade ton regard pour asperger le mur." data-en="Pick your vibe, then move your eyes around to spray the wall." data-ja="音楽を選んで、視線を動かしながら壁にスプレーしよう。">
+        Choisis une ambiance musicale, puis balade ton regard pour asperger le mur.
+      </p>
+      <p class="translate" data-fr="Passe sur une couleur à gauche : elle se sélectionne automatiquement." data-en="Hover a color on the left to select it automatically." data-ja="左側の色に触れるだけで自動的に選択されます。">
+        Passe sur une couleur à gauche : elle se sélectionne automatiquement.
+      </p>
+      <div id="musicModes">
+        <button class="active" data-style="punk">PUNK ROCK</button>
+        <button data-style="hiphop">HIP HOP</button>
+      </div>
+      <button id="startBtn" class="translate" data-fr="Commencer" data-en="Start" data-ja="スタート">Commencer</button>
+    </div>
+  </div>
+
+  <div id="sidebar" aria-label="Palette de couleurs">
+    <h2 class="translate" data-fr="Couleurs" data-en="Colors" data-ja="カラー">Couleurs</h2>
+    <div id="palette"></div>
+  </div>
+
+  <canvas id="paint"></canvas>
+  <div id="cursorPreview"></div>
+  <button id="settingsBtn" aria-label="Paramètres">⚙️</button>
+  <div id="settingsModal" role="dialog" aria-modal="true" aria-label="Paramètres">
+    <div class="window">
+      <h3 class="translate" data-fr="Options" data-en="Options" data-ja="オプション">Options</h3>
+      <div class="translate" data-fr="Ambiance musicale" data-en="Music vibe" data-ja="音楽の雰囲気">Ambiance musicale</div>
+      <div class="row" id="musicChips" aria-label="Choisir la musique"></div>
+      <div class="translate" data-fr="Taille du spray" data-en="Spray size" data-ja="スプレーの大きさ">Taille du spray</div>
+      <div class="row" style="align-items: center;">
+        <input type="range" id="brushSize" min="12" max="60" value="24" aria-label="Taille du spray">
+        <span id="brushSizeValue">24px</span>
+      </div>
+      <button class="closeSettings" id="closeSettings">OK</button>
+    </div>
+  </div>
+  <div id="statusBar" aria-live="polite">
+    <span id="statusColor">#00FFEA</span>
+    <span id="musicLabel">PUNK ROCK</span>
+  </div>
+
+  <script>
+    const paint = document.getElementById('paint');
+    const ctx = paint.getContext('2d');
+    const palette = document.getElementById('palette');
+    const cursorPreview = document.getElementById('cursorPreview');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const musicButtons = document.querySelectorAll('#musicModes button');
+    const sidebar = document.getElementById('sidebar');
+    const statusColor = document.getElementById('statusColor');
+    const musicLabel = document.getElementById('musicLabel');
+    const musicChips = document.getElementById('musicChips');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettings = document.getElementById('closeSettings');
+    const brushSizeInput = document.getElementById('brushSize');
+    const brushSizeValue = document.getElementById('brushSizeValue');
+
+    const COLORS = [
+      '#ff1744', '#ff9100', '#ffd600', '#00e676', '#00e5ff', '#2979ff', '#651fff', '#f06292', '#ffffff', '#000000'
+    ];
+
+    const PLAYLISTS = {
+      punk: ['../../songs/grafiti/grafitipunkrock1.mp3'],
+      hiphop: ['../../songs/grafiti/grafitihiphop1.mp3']
+    };
+
+    let currentColor = COLORS[4];
+    let currentStyle = 'punk';
+    let paintingEnabled = false;
+    let musicEl = null;
+    let overSidebar = false;
+
+    function resize() {
+      paint.width = window.innerWidth;
+      paint.height = window.innerHeight;
+      drawBackdrop();
+    }
+
+    function drawBackdrop() {
+      const { width, height } = paint;
+      ctx.fillStyle = '#222';
+      ctx.fillRect(0, 0, width, height);
+
+      const brickH = 110;
+      const brickW = 220;
+      const mortar = 8;
+      const rows = Math.ceil(height / brickH) + 1;
+      const cols = Math.ceil(width / brickW) + 1;
+
+      for (let r = 0; r < rows; r++) {
+        const offset = (r % 2) * (brickW / 2);
+        for (let c = -1; c < cols; c++) {
+          const x = c * brickW + offset;
+          const y = r * brickH;
+          const hue = 6 + Math.random() * 4;
+          const sat = 38 + Math.random() * 6;
+          const light = 32 + Math.random() * 6;
+          ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
+          ctx.fillRect(x + mortar, y + mortar, brickW - mortar * 2, brickH - mortar * 2);
+        }
+      }
+    }
+
+    function spray(x, y) {
+      const density = 26;
+      const radius = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--brush')) || 24;
+      for (let i = 0; i < density; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = Math.random() * radius;
+        const px = x + Math.cos(angle) * r;
+        const py = y + Math.sin(angle) * r;
+        ctx.fillStyle = currentColor + 'b0';
+        ctx.beginPath();
+        ctx.arc(px, py, Math.random() * 3 + 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function setColor(col) {
+      currentColor = col;
+      cursorPreview.style.background = col;
+      statusColor.textContent = col.toUpperCase();
+    }
+
+    function updateCursor(e) {
+      cursorPreview.style.left = `${e.clientX}px`;
+      cursorPreview.style.top = `${e.clientY}px`;
+      const settingsOpen = settingsModal.style.display === 'flex';
+      if (paintingEnabled && !overSidebar && !settingsOpen) {
+        spray(e.clientX, e.clientY);
+      }
+    }
+
+    function startMusic(style) {
+      if (!PLAYLISTS[style]) return;
+      if (musicEl) { musicEl.pause(); }
+      const track = PLAYLISTS[style][0];
+      musicEl = new Audio(track);
+      musicEl.loop = true;
+      musicEl.volume = 0.6;
+      musicEl.play().catch(() => {});
+      musicLabel.textContent = style === 'punk' ? 'PUNK ROCK' : 'HIP HOP';
+    }
+
+    function makeSwatch(color) {
+      const sw = document.createElement('div');
+      sw.className = 'swatch';
+      sw.style.background = color;
+
+      const handleSelect = () => {
+        document.querySelectorAll('.swatch').forEach(el => el.classList.remove('active'));
+        sw.classList.add('active');
+        setColor(color);
+      };
+
+      sw.addEventListener('pointerenter', () => {
+        startDwell(sw, handleSelect);
+      });
+      sw.addEventListener('pointerleave', () => {
+        clearDwell(sw);
+      });
+      sw.addEventListener('pointerdown', handleSelect);
+      return sw;
+    }
+
+    function startDwell(el, onComplete, duration = 900) {
+      clearDwell(el);
+      const overlay = document.createElement('div');
+      overlay.className = 'dwell';
+      el.appendChild(overlay);
+      const timer = setTimeout(() => {
+        overlay.remove();
+        onComplete();
+      }, duration);
+      el.dataset.dwellTimer = timer;
+    }
+
+    function clearDwell(el) {
+      if (el.dataset.dwellTimer) {
+        clearTimeout(el.dataset.dwellTimer);
+        delete el.dataset.dwellTimer;
+      }
+      const dw = el.querySelector('.dwell');
+      if (dw) dw.remove();
+    }
+
+    function buildPalette() {
+      COLORS.forEach(c => palette.appendChild(makeSwatch(c)));
+      const swatches = Array.from(palette.querySelectorAll('.swatch'));
+      const initial = swatches.find(sw => sw.style.background.toLowerCase() === currentColor.toLowerCase());
+      (initial || swatches[0]).classList.add('active');
+    }
+
+    function buildMusicChips() {
+      musicChips.innerHTML = '';
+      PLAYLISTS_KEYS.forEach(style => {
+        const btn = document.createElement('button');
+        btn.textContent = style === 'punk' ? 'PUNK ROCK' : 'HIP HOP';
+        btn.className = style === currentStyle ? 'active' : '';
+        btn.style.margin = '4px 0';
+        btn.style.padding = '10px 12px';
+        btn.style.borderRadius = '12px';
+        btn.style.border = '1px solid #0af';
+        btn.style.background = style === currentStyle ? '#0af' : 'rgba(255,255,255,0.08)';
+        btn.style.color = '#fff';
+        btn.addEventListener('pointerenter', () => startDwell(btn, () => switchMusic(style)));
+        btn.addEventListener('pointerleave', () => clearDwell(btn));
+        btn.addEventListener('click', () => switchMusic(style));
+        musicChips.appendChild(btn);
+      });
+    }
+
+    const PLAYLISTS_KEYS = Object.keys(PLAYLISTS);
+
+    function switchMusic(style) {
+      currentStyle = style;
+      document.querySelectorAll('#musicModes button').forEach(btn => btn.classList.toggle('active', btn.dataset.style === style));
+      Array.from(musicChips.children).forEach(btn => {
+        const match = (btn.textContent.includes('PUNK') && style === 'punk') || (btn.textContent.includes('HIP') && style === 'hiphop');
+        btn.style.background = match ? '#0af' : 'rgba(255,255,255,0.08)';
+        btn.style.color = '#fff';
+      });
+      if (paintingEnabled) startMusic(style);
+      buildMusicChips();
+    }
+
+    musicButtons.forEach(btn => {
+      btn.addEventListener('click', () => switchMusic(btn.dataset.style));
+      btn.addEventListener('pointerenter', () => startDwell(btn, () => switchMusic(btn.dataset.style), 1000));
+      btn.addEventListener('pointerleave', () => clearDwell(btn));
+    });
+
+    sidebar.addEventListener('pointerenter', () => overSidebar = true);
+    sidebar.addEventListener('pointerleave', () => { overSidebar = false; clearAllDwells(); });
+
+    function clearAllDwells() {
+      document.querySelectorAll('.dwell').forEach(dw => dw.remove());
+      document.querySelectorAll('[data-dwell-timer]').forEach(el => clearDwell(el));
+    }
+
+    window.addEventListener('pointermove', updateCursor);
+
+    function requestFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) return el.requestFullscreen();
+      if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+      if (el.msRequestFullscreen) return el.msRequestFullscreen();
+      return Promise.resolve();
+    }
+
+    const beginGame = () => {
+      overlay.style.display = 'none';
+      paintingEnabled = true;
+      startMusic(currentStyle);
+      requestFullscreen().catch(() => {});
+    };
+
+    startBtn.addEventListener('click', beginGame);
+    startBtn.addEventListener('pointerenter', () => startDwell(startBtn, beginGame, 1200));
+    startBtn.addEventListener('pointerleave', () => clearDwell(startBtn));
+
+    const openSettings = () => {
+      settingsModal.style.display = 'flex';
+    };
+
+    const closeSettingsModal = () => {
+      settingsModal.style.display = 'none';
+      clearAllDwells();
+    };
+
+    settingsBtn.addEventListener('click', openSettings);
+    settingsBtn.addEventListener('pointerenter', () => startDwell(settingsBtn, openSettings, 1200));
+    settingsBtn.addEventListener('pointerleave', () => clearDwell(settingsBtn));
+
+    closeSettings.addEventListener('click', closeSettingsModal);
+    closeSettings.addEventListener('pointerenter', () => startDwell(closeSettings, closeSettingsModal, 900));
+    closeSettings.addEventListener('pointerleave', () => clearDwell(closeSettings));
+
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) closeSettingsModal();
+    });
+
+    brushSizeInput.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      document.documentElement.style.setProperty('--brush', `${val}px`);
+      brushSizeValue.textContent = `${val}px`;
+    });
+
+    window.addEventListener('resize', resize);
+
+    resize();
+    buildPalette();
+    buildMusicChips();
+    setColor(currentColor);
+  </script>
+</body>
+</html>
