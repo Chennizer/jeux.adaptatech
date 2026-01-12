@@ -12,16 +12,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const scanDelayContainer = document.getElementById('scan-delay-container');
   const scanDelayInput = document.getElementById('scan-delay');
   const enableCycleSoundCheckbox = document.getElementById('enable-cycle-sound');
-  const tilePickerModal = document.getElementById('tile-picker-modal');
+  const choicePickerScreen = document.getElementById('choice-picker-screen');
   const tilePickerGrid = document.getElementById('tile-picker-grid');
-  const tilePickerPanel = tilePickerModal ? tilePickerModal.querySelector('#control-panel-options') : null;
+  const tilePickerPanel = choicePickerScreen ? choicePickerScreen.querySelector('#control-panel-options') : null;
   const tileCountDisplay = document.getElementById('tile-count-display');
   const startGameButton = document.getElementById('start-game-button');
   const tileContainer = document.getElementById('tile-container');
-  const choiceTypeColorsButton = document.getElementById('choice-type-colors');
-  const choiceTypeWordsButton = document.getElementById('choice-type-words');
-  const choiceTypeNumbersButton = document.getElementById('choice-type-numbers');
-  const choiceTypePhotosButton = document.getElementById('choice-type-photos');
+  const choiceTypeSelect = document.getElementById('choiceTypeSelect');
   const wordsOptions = document.getElementById('wordsOptions');
   const numbersOptions = document.getElementById('numbersOptions');
   const photosOptions = document.getElementById('photosOptions');
@@ -52,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let inputEnabled = false;
   let mode = 'choice';
-  let choiceType = 'colors';
+  let choiceType = choiceTypeSelect ? choiceTypeSelect.value : 'colors';
   let desiredTileCount = 0;
   let selectedTileIndices = [];
   let currentSelectedIndex = 0;
@@ -84,15 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ].forEach(button => button.classList.toggle('selected', button === activeButton));
   }
 
-  function updateChoiceTypeSelection(activeButton) {
-    [
-      choiceTypeColorsButton,
-      choiceTypeWordsButton,
-      choiceTypeNumbersButton,
-      choiceTypePhotosButton
-    ].forEach(button => button.classList.toggle('selected', button === activeButton));
-  }
-
   function updateChoiceTypeVisibility() {
     colorsOptions.style.display = choiceType === 'colors' ? 'block' : 'none';
     wordsOptions.style.display = choiceType === 'words' ? 'block' : 'none';
@@ -106,9 +94,11 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStartButtonState();
   }
 
-  function setChoiceType(newType, activeButton) {
+  function setChoiceType(newType) {
     choiceType = newType;
-    updateChoiceTypeSelection(activeButton);
+    if (choiceTypeSelect) {
+      choiceTypeSelect.value = newType;
+    }
     updateChoiceTypeVisibility();
     resetSelections();
   }
@@ -167,20 +157,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.remove('this-or-that-mode');
   });
 
-  choiceTypeColorsButton.addEventListener('click', () => {
-    setChoiceType('colors', choiceTypeColorsButton);
-  });
-
-  choiceTypeWordsButton.addEventListener('click', () => {
-    setChoiceType('words', choiceTypeWordsButton);
-  });
-
-  choiceTypeNumbersButton.addEventListener('click', () => {
-    setChoiceType('numbers', choiceTypeNumbersButton);
-  });
-
-  choiceTypePhotosButton.addEventListener('click', () => {
-    setChoiceType('photos', choiceTypePhotosButton);
+  choiceTypeSelect.addEventListener('change', () => {
+    setChoiceType(choiceTypeSelect.value);
   });
 
   function getWordsChoices() {
@@ -472,13 +450,14 @@ document.addEventListener('DOMContentLoaded', () => {
       ? 2
       : (parseInt(tileCountInput.value, 10) || 0);
     tileCountDisplay.textContent = desiredTileCount;
-    tilePickerModal.style.display = 'flex';
+    gameOptionsModal.style.display = 'none';
+    choicePickerScreen.style.display = 'flex';
     populateTilePickerGrid();
   });
 
   startGameButton.addEventListener('click', () => {
     inputEnabled = true;
-    tilePickerModal.style.display = 'none';
+    choicePickerScreen.style.display = 'none';
     gameOptionsModal.style.display = 'none';
     renderGameTiles();
   });
