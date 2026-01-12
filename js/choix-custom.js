@@ -18,6 +18,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const tileCountDisplay = document.getElementById('tile-count-display');
   const startGameButton = document.getElementById('start-game-button');
   const tileContainer = document.getElementById('tile-container');
+  const choiceTypeColorsButton = document.getElementById('choice-type-colors');
+  const choiceTypeWordsButton = document.getElementById('choice-type-words');
+  const choiceTypeNumbersButton = document.getElementById('choice-type-numbers');
+  const choiceTypePhotosButton = document.getElementById('choice-type-photos');
+  const wordsOptions = document.getElementById('wordsOptions');
+  const numbersOptions = document.getElementById('numbersOptions');
+  const photosOptions = document.getElementById('photosOptions');
+  const colorsOptions = document.getElementById('colorsOptions');
+  const wordsContainer = document.getElementById('wordsContainer');
+  const addWordButton = document.getElementById('addWordButton');
+  const numberSlider = document.getElementById('numberSlider');
+  const numberValue = document.getElementById('numberValue');
+  const photoInput = document.getElementById('photoInput');
   const cycleSfx = new Audio("../../sounds/woosh.mp3");
   cycleSfx.preload = 'auto';
   cycleSfx.load();
@@ -39,11 +52,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let inputEnabled = false;
   let mode = 'choice';
+  let choiceType = 'colors';
   let desiredTileCount = 0;
   let selectedTileIndices = [];
   let currentSelectedIndex = 0;
   let autoScanInterval = null;
   let flashcardTimer = null;
+  let photoChoices = [];
 
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
@@ -67,6 +82,35 @@ document.addEventListener('DOMContentLoaded', () => {
       modeFlashcardButton,
       modeFlashcardManualButton
     ].forEach(button => button.classList.toggle('selected', button === activeButton));
+  }
+
+  function updateChoiceTypeSelection(activeButton) {
+    [
+      choiceTypeColorsButton,
+      choiceTypeWordsButton,
+      choiceTypeNumbersButton,
+      choiceTypePhotosButton
+    ].forEach(button => button.classList.toggle('selected', button === activeButton));
+  }
+
+  function updateChoiceTypeVisibility() {
+    colorsOptions.style.display = choiceType === 'colors' ? 'block' : 'none';
+    wordsOptions.style.display = choiceType === 'words' ? 'block' : 'none';
+    numbersOptions.style.display = choiceType === 'numbers' ? 'block' : 'none';
+    photosOptions.style.display = choiceType === 'photos' ? 'block' : 'none';
+  }
+
+  function resetSelections() {
+    selectedTileIndices = [];
+    currentSelectedIndex = 0;
+    updateStartButtonState();
+  }
+
+  function setChoiceType(newType, activeButton) {
+    choiceType = newType;
+    updateChoiceTypeSelection(activeButton);
+    updateChoiceTypeVisibility();
+    resetSelections();
   }
 
   modeChoiceButton.addEventListener('click', () => {
@@ -123,37 +167,98 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.remove('this-or-that-mode');
   });
 
+  choiceTypeColorsButton.addEventListener('click', () => {
+    setChoiceType('colors', choiceTypeColorsButton);
+  });
+
+  choiceTypeWordsButton.addEventListener('click', () => {
+    setChoiceType('words', choiceTypeWordsButton);
+  });
+
+  choiceTypeNumbersButton.addEventListener('click', () => {
+    setChoiceType('numbers', choiceTypeNumbersButton);
+  });
+
+  choiceTypePhotosButton.addEventListener('click', () => {
+    setChoiceType('photos', choiceTypePhotosButton);
+  });
+
+  function getWordsChoices() {
+    const inputs = [...wordsContainer.querySelectorAll('.word-input')];
+    return inputs
+      .map(input => input.value.trim())
+      .filter(Boolean)
+      .slice(0, 6)
+      .map(word => ({ label: word, type: 'text' }));
+  }
+
+  function getNumbersChoices() {
+    const count = parseInt(numberSlider.value, 10) || 1;
+    return Array.from({ length: count }, (_, idx) => ({
+      label: String(idx + 1),
+      type: 'text'
+    }));
+  }
+
+  function getCurrentChoices() {
+    if (choiceType === 'colors') return colorChoices.map(choice => ({ ...choice, type: 'color' }));
+    if (choiceType === 'words') return getWordsChoices();
+    if (choiceType === 'numbers') return getNumbersChoices();
+    if (choiceType === 'photos') return photoChoices;
+    return [];
+  }
+
   function updateStartButtonState() {
     startGameButton.disabled = selectedTileIndices.length !== desiredTileCount;
   }
 
-  function createColorTile(choice, idx, isSelected, onSelect) {
+  function createChoiceTile(choice, idx, isSelected, onSelect) {
     const tile = document.createElement('div');
     tile.classList.add('tile');
     tile.dataset.index = idx;
-    tile.style.background = choice.color;
-    tile.style.backgroundImage = 'none';
+
+    if (choice.type === 'photo') {
+      tile.style.backgroundImage = `url(${choice.image})`;
+      tile.style.backgroundColor = '#000';
+    } else if (choice.type === 'color') {
+      tile.style.background = choice.color;
+      tile.style.backgroundImage = 'none';
+    } else {
+      tile.style.background = '#1a1a1a';
+      tile.style.backgroundImage = 'none';
+    }
+
     if (isSelected) tile.classList.add('selected');
+
     const cap = document.createElement('div');
-    cap.classList.add('caption', 'translate');
-    if (choice.name.fr) cap.dataset.fr = choice.name.fr;
-    if (choice.name.en) cap.dataset.en = choice.name.en;
-    if (choice.name.ja) cap.dataset.ja = choice.name.ja;
-    cap.textContent = choice.name.en || choice.name.fr || '';
+    cap.classList.add('caption');
+
+    if (choice.type === 'color' && choice.name) {
+      cap.classList.add('translate');
+      if (choice.name.fr) cap.dataset.fr = choice.name.fr;
+      if (choice.name.en) cap.dataset.en = choice.name.en;
+      if (choice.name.ja) cap.dataset.ja = choice.name.ja;
+      cap.textContent = choice.name.en || choice.name.fr || '';
+    } else {
+      cap.classList.add('no-translate');
+      cap.textContent = choice.label || '';
+    }
+
     tile.appendChild(cap);
     tile.addEventListener('click', onSelect);
     return tile;
   }
 
   function populateTilePickerGrid() {
-    selectedTileIndices = selectedTileIndices.filter(i => i < colorChoices.length);
+    const choices = getCurrentChoices();
+    selectedTileIndices = selectedTileIndices.filter(i => i < choices.length);
     updateStartButtonState();
     tilePickerGrid.innerHTML = '';
     const grid = document.createElement('div');
 
-    colorChoices.forEach((choice, idx) => {
+    choices.forEach((choice, idx) => {
       const isSel = selectedTileIndices.includes(idx);
-      const tile = createColorTile(choice, idx, isSel, () => {
+      const tile = createChoiceTile(choice, idx, isSel, () => {
         if (isSel) {
           selectedTileIndices = selectedTileIndices.filter(i => i !== idx);
         } else if (selectedTileIndices.length < desiredTileCount) {
@@ -167,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const tileSize = 100;
     const gap = 10;
-    const cols = Math.ceil(Math.sqrt(colorChoices.length));
+    const cols = Math.ceil(Math.sqrt(Math.max(choices.length, 1)));
     const width = cols * tileSize + (cols - 1) * gap;
     Object.assign(grid.style, {
       display: 'grid',
@@ -214,10 +319,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderFlashcard() {
+    const choices = getCurrentChoices();
     tileContainer.innerHTML = '';
     const idx = selectedTileIndices[currentSelectedIndex];
-    const choice = colorChoices[idx];
-    const tile = createColorTile(choice, idx, false, () => {});
+    const choice = choices[idx];
+    if (!choice) return;
+    const tile = createChoiceTile(choice, idx, false, () => {});
     tileContainer.appendChild(tile);
     tileContainer.style.display = 'flex';
     if (typeof updateLanguage === 'function') {
@@ -256,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearScanInterval();
     clearFlashcardTimer();
     tileContainer.innerHTML = '';
+    const choices = getCurrentChoices();
 
     if (mode === 'flashcard' || mode === 'flashcard-manual') {
       renderFlashcard();
@@ -265,9 +373,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const tiles = selectedTileIndices.map(i => colorChoices[i]);
+    const tiles = selectedTileIndices.map(i => choices[i]).filter(Boolean);
     tiles.forEach((choice, idx) => {
-      const tile = createColorTile(choice, idx, false, () => {
+      const tile = createChoiceTile(choice, idx, false, () => {
         currentSelectedIndex = idx;
         updateSelection();
       });
@@ -296,6 +404,68 @@ document.addEventListener('DOMContentLoaded', () => {
       updateLanguage();
     }
   }
+
+  function wireWordInputs() {
+    wordsContainer.addEventListener('input', () => {
+      if (choiceType === 'words') {
+        resetSelections();
+      }
+    });
+  }
+
+  function addWordInput() {
+    const inputs = wordsContainer.querySelectorAll('.word-input');
+    if (inputs.length >= 6) return;
+    const nextIndex = inputs.length + 1;
+    const input = document.createElement('input');
+    input.classList.add('word-input');
+    input.type = 'text';
+    input.placeholder = `Word ${nextIndex}`;
+    wordsContainer.appendChild(input);
+  }
+
+  function setupNumberSlider() {
+    numberSlider.addEventListener('input', () => {
+      numberValue.textContent = numberSlider.value;
+      if (choiceType === 'numbers') {
+        resetSelections();
+      }
+    });
+  }
+
+  function setupPhotoInput() {
+    photoInput.addEventListener('change', () => {
+      const files = Array.from(photoInput.files || []).slice(0, 6);
+      if (!files.length) {
+        photoChoices = [];
+        if (choiceType === 'photos') {
+          resetSelections();
+        }
+        return;
+      }
+
+      Promise.all(
+        files.map(file => new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = () => resolve({
+            label: file.name,
+            image: reader.result,
+            type: 'photo'
+          });
+          reader.readAsDataURL(file);
+        }))
+      ).then(results => {
+        photoChoices = results;
+        if (choiceType === 'photos') {
+          resetSelections();
+        }
+      });
+    });
+  }
+
+  addWordButton.addEventListener('click', () => {
+    addWordInput();
+  });
 
   chooseTilesButton.addEventListener('click', () => {
     desiredTileCount = (mode === 'thisOrThat')
@@ -344,4 +514,9 @@ document.addEventListener('DOMContentLoaded', () => {
       updateSelection();
     }
   });
+
+  updateChoiceTypeVisibility();
+  wireWordInputs();
+  setupNumberSlider();
+  setupPhotoInput();
 });
