@@ -15,6 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const visualOptionsSelect = document.getElementById('special-options-select');
     const videoContainer = document.getElementById('video-container');
 
+    const homeButtonTarget = document.body.dataset.homeTarget || '../index.html';
+    if (homeButtonTarget) {
+      const userLang = localStorage.getItem('siteLanguage') || 'en';
+      const homeButtonLabel = userLang === 'fr' ? 'Retour au menu précédent' : 'Back to previous menu';
+      const homeButton = document.createElement('a');
+      homeButton.href = homeButtonTarget;
+      homeButton.className = 'floating-button home-button';
+      homeButton.textContent = '🏠';
+      homeButton.setAttribute('aria-label', homeButtonLabel);
+      homeButton.title = homeButtonLabel;
+      document.body.appendChild(homeButton);
+    }
+
     // Default to interval mode with a 30-second interval
     playModeSelect.value = 'interval';
     intervalLabel.style.display = 'inline-block';
