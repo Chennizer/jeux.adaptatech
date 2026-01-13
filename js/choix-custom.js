@@ -28,8 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const colorsOptions = document.getElementById('colorsOptions');
   const wordsContainer = document.getElementById('wordsContainer');
   const addWordButton = document.getElementById('addWordButton');
-  const numberSlider = document.getElementById('numberSlider');
-  const numberValue = document.getElementById('numberValue');
+  const numberGrid = document.getElementById('numberGrid');
   const photoInput = document.getElementById('photoInput');
   const cycleSfx = new Audio("../../sounds/woosh.mp3");
   cycleSfx.preload = 'auto';
@@ -60,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let flashcardTimer = null;
   let photoChoices = [];
   let colorDisplayTimer = null;
+  let selectedNumbers = new Set();
 
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
@@ -85,6 +85,19 @@ document.addEventListener('DOMContentLoaded', () => {
     ].forEach(button => button.classList.toggle('selected', button === activeButton));
   }
 
+  function setBodyModeClasses(activeMode) {
+    document.body.classList.toggle('choice-mode', activeMode === 'choice');
+    if (activeMode === 'thisOrThat') {
+      document.body.classList.add('this-or-that-mode');
+      document.body.classList.remove('flashcard-mode');
+    } else if (activeMode === 'flashcard' || activeMode === 'flashcard-manual') {
+      document.body.classList.add('flashcard-mode');
+      document.body.classList.remove('this-or-that-mode');
+    } else {
+      document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
+    }
+  }
+
   function updateChoiceTypeVisibility() {
     colorsOptions.style.display = choiceType === 'colors' ? 'block' : 'none';
     wordsOptions.style.display = choiceType === 'words' ? 'block' : 'none';
@@ -105,6 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateChoiceTypeVisibility();
     resetSelections();
+    if (choiceType === 'numbers') {
+      renderNumberGrid();
+      populateTilePickerGrid();
+    }
   }
 
   modeChoiceButton.addEventListener('click', () => {
@@ -114,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
     showScanOptions(false);
-    document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
+    setBodyModeClasses(mode);
   });
 
   modeScanButton.addEventListener('click', () => {
@@ -124,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
     showScanOptions(true);
-    document.body.classList.remove('this-or-that-mode', 'flashcard-mode');
+    setBodyModeClasses(mode);
   });
 
   modeThisOrThatButton.addEventListener('click', () => {
@@ -135,8 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tileCountInput.disabled = true;
     tileSliderContainer.style.visibility = 'hidden';
     showScanOptions(false);
-    document.body.classList.add('this-or-that-mode');
-    document.body.classList.remove('flashcard-mode');
+    setBodyModeClasses(mode);
   });
 
   modeFlashcardButton.addEventListener('click', () => {
@@ -146,8 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
     showScanOptions(true);
-    document.body.classList.add('flashcard-mode');
-    document.body.classList.remove('this-or-that-mode');
+    setBodyModeClasses(mode);
   });
 
   modeFlashcardManualButton.addEventListener('click', () => {
@@ -157,8 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tileCountContainer.style.display = 'flex';
     tileSliderContainer.style.visibility = 'visible';
     showScanOptions(false);
-    document.body.classList.add('flashcard-mode');
-    document.body.classList.remove('this-or-that-mode');
+    setBodyModeClasses(mode);
   });
 
   choiceTypeSelect.addEventListener('change', () => {
@@ -175,11 +189,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function getNumbersChoices() {
-    const count = parseInt(numberSlider.value, 10) || 1;
-    return Array.from({ length: count }, (_, idx) => ({
-      label: String(idx + 1),
-      type: 'text'
-    }));
+    return Array.from(selectedNumbers)
+      .sort((a, b) => a - b)
+      .map(value => ({
+        label: String(value),
+        type: 'number'
+      }));
   }
 
   function getCurrentChoices() {
@@ -207,6 +222,9 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.style.backgroundImage = 'none';
     } else {
       tile.classList.add('text-choice');
+      if (choice.type === 'number') {
+        tile.classList.add('number-choice');
+      }
       tile.style.background = '#1a1a1a';
       tile.style.backgroundImage = 'none';
     }
@@ -437,13 +455,31 @@ document.addEventListener('DOMContentLoaded', () => {
     wordsContainer.appendChild(input);
   }
 
-  function setupNumberSlider() {
-    numberSlider.addEventListener('input', () => {
-      numberValue.textContent = numberSlider.value;
-      if (choiceType === 'numbers') {
-        resetSelections();
+  function renderNumberGrid() {
+    if (!numberGrid) return;
+    numberGrid.innerHTML = '';
+    for (let i = 1; i <= 10; i += 1) {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.classList.add('number-tile');
+      tile.textContent = String(i);
+      if (selectedNumbers.has(i)) {
+        tile.classList.add('selected');
       }
-    });
+      tile.addEventListener('click', () => {
+        if (selectedNumbers.has(i)) {
+          selectedNumbers.delete(i);
+        } else {
+          selectedNumbers.add(i);
+        }
+        renderNumberGrid();
+        if (choiceType === 'numbers') {
+          resetSelections();
+          populateTilePickerGrid();
+        }
+      });
+      numberGrid.appendChild(tile);
+    }
   }
 
   function setupPhotoInput() {
@@ -537,8 +573,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  if (selectedNumbers.size === 0) {
+    selectedNumbers = new Set(Array.from({ length: 10 }, (_, idx) => idx + 1));
+  }
+  renderNumberGrid();
   updateChoiceTypeVisibility();
+  setBodyModeClasses(mode);
   wireWordInputs();
-  setupNumberSlider();
   setupPhotoInput();
 });
