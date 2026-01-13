@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const tileCountDisplay = document.getElementById('tile-count-display');
   const startGameButton = document.getElementById('start-game-button');
   const tileContainer = document.getElementById('tile-container');
+  const colorDisplay = document.getElementById('color-display');
+  const colorDisplayName = document.getElementById('color-display-name');
+  const langToggle = document.getElementById('langToggle');
   const choiceTypeSelect = document.getElementById('choiceTypeSelect');
   const wordsOptions = document.getElementById('wordsOptions');
   const numbersOptions = document.getElementById('numbersOptions');
@@ -56,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let autoScanInterval = null;
   let flashcardTimer = null;
   let photoChoices = [];
+  let colorDisplayTimer = null;
 
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
@@ -202,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.style.background = choice.color;
       tile.style.backgroundImage = 'none';
     } else {
+      tile.classList.add('text-choice');
       tile.style.background = '#1a1a1a';
       tile.style.backgroundImage = 'none';
     }
@@ -225,6 +230,33 @@ document.addEventListener('DOMContentLoaded', () => {
     tile.appendChild(cap);
     tile.addEventListener('click', onSelect);
     return tile;
+  }
+
+  function hideColorDisplay() {
+    if (!colorDisplay) return;
+    colorDisplay.style.display = 'none';
+    colorDisplay.setAttribute('aria-hidden', 'true');
+    if (colorDisplayTimer) {
+      clearTimeout(colorDisplayTimer);
+      colorDisplayTimer = null;
+    }
+  }
+
+  function showColorDisplay(choice) {
+    if (!colorDisplay || !colorDisplayName || !choice) return;
+    colorDisplay.style.backgroundColor = choice.color || '#000';
+    colorDisplayName.classList.add('translate');
+    colorDisplayName.dataset.fr = choice.name?.fr || '';
+    colorDisplayName.dataset.en = choice.name?.en || '';
+    colorDisplayName.dataset.ja = choice.name?.ja || '';
+    colorDisplayName.textContent = choice.name?.en || choice.name?.fr || '';
+    colorDisplay.style.display = 'flex';
+    colorDisplay.setAttribute('aria-hidden', 'false');
+    if (typeof updateLanguage === 'function') {
+      updateLanguage();
+    }
+    if (colorDisplayTimer) clearTimeout(colorDisplayTimer);
+    colorDisplayTimer = setTimeout(hideColorDisplay, 10000);
   }
 
   function populateTilePickerGrid() {
@@ -356,6 +388,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const tile = createChoiceTile(choice, idx, false, () => {
         currentSelectedIndex = idx;
         updateSelection();
+        if (choice.type === 'color') {
+          showColorDisplay(choice);
+        }
       });
       if (mode === 'thisOrThat') {
         tile.classList.add(idx === 0 ? 'selected-left' : 'selected-right');
@@ -459,6 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inputEnabled = true;
     choicePickerScreen.style.display = 'none';
     gameOptionsModal.style.display = 'none';
+    if (langToggle) langToggle.style.display = 'none';
     renderGameTiles();
   });
 
@@ -477,6 +513,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const total = tiles.length;
     if (mode === 'choice' && e.key === 'Enter') {
       cycleToNextTile();
+    } else if (e.key === ' ') {
+      const choices = getCurrentChoices();
+      const choice = choices[selectedTileIndices[currentSelectedIndex]];
+      if (choice && choice.type === 'color') {
+        e.preventDefault();
+        showColorDisplay(choice);
+      }
     } else if (e.key === 'ArrowRight') {
       currentSelectedIndex = (currentSelectedIndex + 1) % total;
       updateSelection();
