@@ -104,6 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
     wordsOptions.style.display = choiceType === 'words' ? 'block' : 'none';
     numbersOptions.style.display = choiceType === 'numbers' ? 'block' : 'none';
     photosOptions.style.display = choiceType === 'photos' ? 'block' : 'none';
+    if (tilePickerGrid) {
+      tilePickerGrid.style.display = choiceType === 'numbers' ? 'none' : 'block';
+    }
   }
 
   function resetSelections() {
@@ -120,8 +123,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateChoiceTypeVisibility();
     resetSelections();
     if (choiceType === 'numbers') {
+      selectedNumbers.clear();
       renderNumberGrid();
-      populateTilePickerGrid();
+      updateStartButtonState();
     }
   }
 
@@ -207,7 +211,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateStartButtonState() {
-    startGameButton.disabled = selectedTileIndices.length !== desiredTileCount;
+    const count = choiceType === 'numbers' ? selectedNumbers.size : selectedTileIndices.length;
+    startGameButton.disabled = count !== desiredTileCount;
   }
 
   function createChoiceTile(choice, idx, isSelected, onSelect) {
@@ -281,6 +286,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function populateTilePickerGrid() {
+    if (choiceType === 'numbers') {
+      return;
+    }
     const choices = getCurrentChoices();
     selectedTileIndices = selectedTileIndices.filter(i => i < choices.length);
     updateStartButtonState();
@@ -472,14 +480,12 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.addEventListener('click', () => {
         if (selectedNumbers.has(i)) {
           selectedNumbers.delete(i);
-        } else {
+        } else if (selectedNumbers.size < desiredTileCount) {
           selectedNumbers.add(i);
         }
+        selectedTileIndices = Array.from({ length: selectedNumbers.size }, (_, idx) => idx);
         renderNumberGrid();
-        if (choiceType === 'numbers') {
-          resetSelections();
-          populateTilePickerGrid();
-        }
+        updateStartButtonState();
       });
       numberGrid.appendChild(tile);
     }
@@ -526,7 +532,14 @@ document.addEventListener('DOMContentLoaded', () => {
     tileCountDisplay.textContent = desiredTileCount;
     gameOptionsModal.style.display = 'none';
     choicePickerScreen.style.display = 'flex';
-    populateTilePickerGrid();
+    if (choiceType === 'numbers') {
+      selectedNumbers.clear();
+      selectedTileIndices = [];
+      renderNumberGrid();
+      updateStartButtonState();
+    } else {
+      populateTilePickerGrid();
+    }
   });
 
   startGameButton.addEventListener('click', () => {
