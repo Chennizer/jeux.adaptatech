@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const tileCountDisplay = document.getElementById('tile-count-display');
   const volumeInput = document.getElementById('music-volume');
   const volumeValue = document.getElementById('music-volume-value');
+  const stopAllToggle = document.getElementById('enable-stop-all');
   const backgroundSelect = document.getElementById('background-color');
   const fixationTimeInput = document.getElementById('fixation-time');
   const fixationTimeValue = document.getElementById('fixation-time-value');
@@ -38,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentVolume = parseInt(volumeInput.value, 10) || 60;
   let selectedIds = [];
   let audioMap = new Map();
+  let tileMap = new Map();
   let inGame = false;
 
   function updateVolumeDisplay() {
@@ -155,9 +157,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function stopAllSounds() {
+    audioMap.forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    tileMap.forEach(tile => {
+      tile.classList.remove('playing');
+    });
+  }
+
   function buildGameTiles() {
     tileContainer.innerHTML = '';
     tileContainer.classList.add('music-grid');
+    audioMap = new Map();
+    tileMap = new Map();
 
     const selected = instruments.filter(instrument => selectedIds.includes(instrument.id));
     const columns = Math.min(3, Math.max(1, selected.length));
@@ -167,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const tile = document.createElement('div');
       tile.className = 'tile';
       tile.style.backgroundImage = `url(${instrument.image})`;
+      tile.dataset.instrumentId = instrument.id;
 
       const caption = document.createElement('span');
       caption.className = 'caption';
@@ -196,7 +211,34 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       tileContainer.appendChild(tile);
+      tileMap.set(instrument.id, tile);
     });
+
+    if (stopAllToggle?.checked) {
+      const stopTile = document.createElement('div');
+      stopTile.className = 'tile stop-all-tile';
+      stopTile.setAttribute('role', 'button');
+      stopTile.setAttribute('aria-label', 'Stop all');
+      stopTile.textContent = '✕';
+
+      let hoverTimeout = null;
+      stopTile.addEventListener('pointerenter', () => {
+        if (gazePointer) gazePointer.classList.add('gp-dwell');
+        hoverTimeout = window.setTimeout(() => {
+          stopAllSounds();
+          if (gazePointer) gazePointer.classList.remove('gp-dwell');
+        }, fixationDelay);
+      });
+
+      stopTile.addEventListener('pointerleave', () => {
+        if (hoverTimeout) {
+          window.clearTimeout(hoverTimeout);
+        }
+        if (gazePointer) gazePointer.classList.remove('gp-dwell');
+      });
+
+      tileContainer.appendChild(stopTile);
+    }
   }
 
   chooseTilesButton.addEventListener('click', () => {
