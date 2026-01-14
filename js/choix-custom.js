@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const tileContainer = document.getElementById('tile-container');
   const colorDisplay = document.getElementById('color-display');
   const colorDisplayName = document.getElementById('color-display-name');
+  const textDisplay = document.getElementById('text-display');
+  const textDisplayName = document.getElementById('text-display-name');
   const langToggle = document.getElementById('langToggle');
   const choiceTypeSelect = document.getElementById('choiceTypeSelect');
   const wordsOptions = document.getElementById('wordsOptions');
@@ -61,6 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let colorDisplayTimer = null;
   let selectedNumbers = new Set();
   let colorOverlayActive = false;
+  let textOverlayActive = false;
+  let textDisplayTimer = null;
 
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
@@ -261,6 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
     colorDisplay.style.display = 'none';
     colorDisplay.setAttribute('aria-hidden', 'true');
     colorOverlayActive = false;
+    tileContainer.style.display = 'flex';
     if (colorDisplayTimer) {
       clearTimeout(colorDisplayTimer);
       colorDisplayTimer = null;
@@ -278,11 +283,35 @@ document.addEventListener('DOMContentLoaded', () => {
     colorDisplay.style.display = 'flex';
     colorDisplay.setAttribute('aria-hidden', 'false');
     colorOverlayActive = true;
+    tileContainer.style.display = 'none';
     if (typeof updateLanguage === 'function') {
       updateLanguage();
     }
     if (colorDisplayTimer) clearTimeout(colorDisplayTimer);
     colorDisplayTimer = setTimeout(hideColorDisplay, 10000);
+  }
+
+  function hideTextDisplay() {
+    if (!textDisplay) return;
+    textDisplay.style.display = 'none';
+    textDisplay.setAttribute('aria-hidden', 'true');
+    textOverlayActive = false;
+    tileContainer.style.display = 'flex';
+    if (textDisplayTimer) {
+      clearTimeout(textDisplayTimer);
+      textDisplayTimer = null;
+    }
+  }
+
+  function showTextDisplay(choice) {
+    if (!textDisplay || !textDisplayName || !choice) return;
+    textDisplayName.textContent = choice.label || '';
+    textDisplay.style.display = 'flex';
+    textDisplay.setAttribute('aria-hidden', 'false');
+    textOverlayActive = true;
+    tileContainer.style.display = 'none';
+    if (textDisplayTimer) clearTimeout(textDisplayTimer);
+    textDisplayTimer = setTimeout(hideTextDisplay, 10000);
   }
 
   function populateTilePickerGrid() {
@@ -419,6 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSelection();
         if (choice.type === 'color') {
           showColorDisplay(choice);
+        } else if (choice.type === 'text' || choice.type === 'number') {
+          showTextDisplay(choice);
         }
       });
       if (mode === 'thisOrThat') {
@@ -551,8 +582,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.addEventListener('keydown', e => {
-    if (!inputEnabled || colorOverlayActive) {
-      if (colorOverlayActive) {
+    if (!inputEnabled || colorOverlayActive || textOverlayActive) {
+      if (colorOverlayActive || textOverlayActive) {
         e.preventDefault();
       }
       return;
@@ -576,6 +607,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (choice && choice.type === 'color') {
         e.preventDefault();
         showColorDisplay(choice);
+      } else if (choice && (choice.type === 'text' || choice.type === 'number')) {
+        e.preventDefault();
+        showTextDisplay(choice);
       }
     } else if (e.key === 'ArrowRight') {
       currentSelectedIndex = (currentSelectedIndex + 1) % total;
