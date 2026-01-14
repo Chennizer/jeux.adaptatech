@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let photoChoices = [];
   let colorDisplayTimer = null;
   let selectedNumbers = new Set();
+  let colorOverlayActive = false;
 
   tileCountInput.addEventListener('input', () => {
     document.getElementById('tile-count-value').textContent = tileCountInput.value;
@@ -254,6 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!colorDisplay) return;
     colorDisplay.style.display = 'none';
     colorDisplay.setAttribute('aria-hidden', 'true');
+    colorOverlayActive = false;
     if (colorDisplayTimer) {
       clearTimeout(colorDisplayTimer);
       colorDisplayTimer = null;
@@ -270,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
     colorDisplayName.textContent = choice.name?.en || choice.name?.fr || '';
     colorDisplay.style.display = 'flex';
     colorDisplay.setAttribute('aria-hidden', 'false');
+    colorOverlayActive = true;
     if (typeof updateLanguage === 'function') {
       updateLanguage();
     }
@@ -535,7 +538,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.addEventListener('keydown', e => {
-    if (!inputEnabled) return;
+    if (!inputEnabled || colorOverlayActive) {
+      if (colorOverlayActive) {
+        e.preventDefault();
+      }
+      return;
+    }
     const tiles = document.querySelectorAll('#tile-container .tile');
     if (mode === 'flashcard-manual' && e.key === 'Enter') {
       e.preventDefault();
@@ -573,9 +581,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  if (selectedNumbers.size === 0) {
-    selectedNumbers = new Set(Array.from({ length: 10 }, (_, idx) => idx + 1));
-  }
   renderNumberGrid();
   updateChoiceTypeVisibility();
   setBodyModeClasses(mode);
