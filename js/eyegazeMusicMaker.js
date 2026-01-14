@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const gameOptionsModal = document.getElementById('game-options');
   const tilePickerModal = document.getElementById('tile-picker-modal');
   const tilePickerGrid = document.getElementById('tile-picker-grid');
+  const presetPickerGrid = document.getElementById('preset-picker-grid');
   const tileContainer = document.getElementById('tile-container');
   const chooseTilesButton = document.getElementById('choose-tiles-button');
   const startGameButton = document.getElementById('start-game-button');
@@ -32,6 +33,26 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'flute', label: 'Flute', image: '../../images/pictos/assistiveswitches.png', sound: '../../sounds/beatles.mp3' },
     { id: 'bass', label: 'Bass', image: '../../images/pictos/angry.png', sound: '../../sounds/beatles.mp3' },
     { id: 'pad', label: 'Pad', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3' }
+  ];
+  const presets = [
+    {
+      id: 'percussion',
+      label: 'Percussions',
+      image: '../../images/pictos/assistiveswitches.png',
+      instrumentIds: ['drum', 'marimba', 'bell'],
+    },
+    {
+      id: 'rock',
+      label: 'Rock band',
+      image: '../../images/pictos/assistivebike.png',
+      instrumentIds: ['drum', 'guitar', 'bass'],
+    },
+    {
+      id: 'ambient',
+      label: 'Ambient',
+      image: '../../images/pictos/OSD.png',
+      instrumentIds: ['pad', 'synth', 'flute'],
+    },
   ];
 
   let desiredTileCount = parseInt(tileCountInput.value, 10) || 3;
@@ -123,6 +144,39 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       tilePickerGrid.appendChild(tile);
+    });
+  }
+
+  function applyPreset(preset) {
+    if (!preset) return;
+    desiredTileCount = preset.instrumentIds.length;
+    tileCountInput.value = desiredTileCount;
+    selectedIds = [...preset.instrumentIds];
+    updateTileCountDisplay();
+    renderPicker();
+    updateStartState();
+  }
+
+  function renderPresets() {
+    if (!presetPickerGrid) return;
+    presetPickerGrid.innerHTML = '';
+    presets.forEach(preset => {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'preset-tile';
+      tile.style.backgroundImage = `url(${preset.image})`;
+      tile.setAttribute('aria-label', preset.label);
+
+      const caption = document.createElement('span');
+      caption.className = 'preset-caption';
+      caption.textContent = preset.label;
+      tile.appendChild(caption);
+
+      tile.addEventListener('click', () => {
+        applyPreset(preset);
+      });
+
+      presetPickerGrid.appendChild(tile);
     });
   }
 
@@ -299,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateFixationDisplay();
   updatePointerStyle();
   updateBackground();
+  renderPresets();
   renderPicker();
   updateStartState();
 });
