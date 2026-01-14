@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const tileCountDisplay = document.getElementById('tile-count-display');
   const volumeInput = document.getElementById('music-volume');
   const volumeValue = document.getElementById('music-volume-value');
+  const backgroundSelect = document.getElementById('background-color');
   const fixationTimeInput = document.getElementById('fixation-time');
   const fixationTimeValue = document.getElementById('fixation-time-value');
   const showGazePointer = document.getElementById('showGazePointer');
@@ -74,6 +75,11 @@ document.addEventListener('DOMContentLoaded', () => {
     audioMap.forEach(audio => {
       audio.volume = currentVolume / 100;
     });
+  }
+
+  function updateBackground() {
+    if (!backgroundSelect) return;
+    document.body.style.backgroundColor = backgroundSelect.value;
   }
 
   function trimSelections() {
@@ -218,6 +224,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAudioVolume();
   });
 
+  backgroundSelect?.addEventListener('change', updateBackground);
+
   fixationTimeInput.addEventListener('input', () => {
     fixationDelay = parseInt(fixationTimeInput.value, 10) || 2000;
     updateFixationDisplay();
@@ -237,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateTileCountDisplay();
   updateFixationDisplay();
   updatePointerStyle();
+  updateBackground();
   renderPicker();
   updateStartState();
 });
