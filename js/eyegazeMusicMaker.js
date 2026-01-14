@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const gazeOpacity = document.getElementById('gazeOpacity');
   const gazeOpacityVal = document.getElementById('gazeOpacityVal');
   const gazePointer = document.getElementById('gazePointer');
+  const languageToggle = document.getElementById('language-toggle');
 
   const instruments = [
     { id: 'drum', label: 'Drum', image: '../../images/pictos/balloon.png', sound: '../../sounds/beatles.mp3' },
@@ -37,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentVolume = parseInt(volumeInput.value, 10) || 60;
   let selectedIds = [];
   let audioMap = new Map();
+  let inGame = false;
 
   function updateVolumeDisplay() {
     volumeValue.textContent = currentVolume;
@@ -67,8 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
     gazeSizeVal.textContent = size;
     gazeOpacityVal.textContent = opacity;
     gazePointer.style.setProperty('--gp-size', `${size}px`);
-    gazePointer.style.opacity = showGazePointer.checked ? opacity / 100 : 0;
-    document.body.classList.toggle('hide-native-cursor', showGazePointer.checked);
+    const pointerVisible = inGame && showGazePointer.checked;
+    gazePointer.style.opacity = pointerVisible ? opacity / 100 : 0;
+    document.body.classList.toggle('hide-native-cursor', pointerVisible);
+    if (!pointerVisible) {
+      gazePointer.classList.remove('gp-dwell');
+    }
   }
 
   function updateAudioVolume() {
@@ -207,7 +213,12 @@ document.addEventListener('DOMContentLoaded', () => {
     tilePickerModal.style.display = 'none';
     tileContainer.style.display = 'grid';
     requestFullscreen();
+    inGame = true;
+    if (languageToggle) {
+      languageToggle.style.display = 'none';
+    }
     buildGameTiles();
+    updatePointerStyle();
   });
 
   tileCountInput.addEventListener('input', () => {
