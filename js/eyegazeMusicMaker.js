@@ -239,6 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function buildGameTiles() {
     tileContainer.innerHTML = '';
     tileContainer.classList.add('music-grid');
+    tileContainer.style.setProperty('--pulse-phase', `${Math.floor(performance.now() % 1400)}ms`);
     audioMap = new Map();
     tileMap = new Map();
     musicLine = document.createElement('div');
