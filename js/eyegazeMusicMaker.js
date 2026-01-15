@@ -24,15 +24,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const languageToggle = document.getElementById('language-toggle');
 
   const instruments = [
-    { id: 'drum', label: 'Drum', image: '../../images/pictos/balloon.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'bell', label: 'Bell', image: '../../images/pictos/apple.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'piano', label: 'Piano', image: '../../images/pictos/avocado.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'guitar', label: 'Guitar', image: '../../images/pictos/banana.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'marimba', label: 'Marimba', image: '../../images/pictos/almond.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'synth', label: 'Synth', image: '../../images/pictos/assistivebike.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'flute', label: 'Flute', image: '../../images/pictos/assistiveswitches.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'bass', label: 'Bass', image: '../../images/pictos/angry.png', sound: '../../sounds/beatles.mp3' },
-    { id: 'pad', label: 'Pad', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3' }
+    { id: 'drum', label: 'Drum', image: '../../images/pictos/balloon.png', sound: '../../sounds/beatles.mp3', color: '#ef4444' },
+    { id: 'bell', label: 'Bell', image: '../../images/pictos/apple.png', sound: '../../sounds/beatles.mp3', color: '#f59e0b' },
+    { id: 'piano', label: 'Piano', image: '../../images/pictos/avocado.png', sound: '../../sounds/beatles.mp3', color: '#10b981' },
+    { id: 'guitar', label: 'Guitar', image: '../../images/pictos/banana.png', sound: '../../sounds/beatles.mp3', color: '#3b82f6' },
+    { id: 'marimba', label: 'Marimba', image: '../../images/pictos/almond.png', sound: '../../sounds/beatles.mp3', color: '#8b5cf6' },
+    { id: 'synth', label: 'Synth', image: '../../images/pictos/assistivebike.png', sound: '../../sounds/beatles.mp3', color: '#ec4899' },
+    { id: 'flute', label: 'Flute', image: '../../images/pictos/assistiveswitches.png', sound: '../../sounds/beatles.mp3', color: '#22c55e' },
+    { id: 'bass', label: 'Bass', image: '../../images/pictos/angry.png', sound: '../../sounds/beatles.mp3', color: '#0ea5e9' },
+    { id: 'pad', label: 'Pad', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3', color: '#eab308' }
   ];
   const presets = [
     {
@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let audioMap = new Map();
   let tileMap = new Map();
   let inGame = false;
+  let musicLine = null;
 
   function updateVolumeDisplay() {
     volumeValue.textContent = currentVolume;
@@ -204,11 +205,20 @@ document.addEventListener('DOMContentLoaded', () => {
       audio.currentTime = 0;
       audio.play();
       tile.classList.add('playing');
+      setMusicLineActive(instrument.id, true);
     } else {
       audio.pause();
       audio.currentTime = 0;
       tile.classList.remove('playing');
+      setMusicLineActive(instrument.id, false);
     }
+  }
+
+  function setMusicLineActive(instrumentId, isActive) {
+    if (!musicLine) return;
+    const segment = musicLine.querySelector(`[data-instrument-line='${instrumentId}']`);
+    if (!segment) return;
+    segment.classList.toggle('active', isActive);
   }
 
   function stopAllSounds() {
@@ -219,6 +229,11 @@ document.addEventListener('DOMContentLoaded', () => {
     tileMap.forEach(tile => {
       tile.classList.remove('playing');
     });
+    if (musicLine) {
+      musicLine.querySelectorAll('.music-line-segment.active').forEach(segment => {
+        segment.classList.remove('active');
+      });
+    }
   }
 
   function buildGameTiles() {
@@ -226,10 +241,14 @@ document.addEventListener('DOMContentLoaded', () => {
     tileContainer.classList.add('music-grid');
     audioMap = new Map();
     tileMap = new Map();
+    musicLine = document.createElement('div');
+    musicLine.className = 'music-line';
 
     const selected = instruments.filter(instrument => selectedIds.includes(instrument.id));
     const columns = Math.min(3, Math.max(1, selected.length));
     tileContainer.style.setProperty('--music-columns', columns);
+
+    const lineSegments = [];
 
     selected.forEach(instrument => {
       const tile = document.createElement('div');
@@ -266,7 +285,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
       tileContainer.appendChild(tile);
       tileMap.set(instrument.id, tile);
+
+      const segment = document.createElement('div');
+      segment.className = 'music-line-segment';
+      segment.dataset.instrumentLine = instrument.id;
+      segment.style.setProperty('--line-color', instrument.color);
+      lineSegments.push(segment);
     });
+
+    lineSegments.forEach(segment => musicLine.appendChild(segment));
+    tileContainer.appendChild(musicLine);
 
     if (stopAllToggle?.checked) {
       const stopTile = document.createElement('div');
