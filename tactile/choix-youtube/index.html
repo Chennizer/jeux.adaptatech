@@ -25,6 +25,20 @@
     #tile-container.this-or-that-mode {
       gap: 30vh !important;
     }
+    #youtube-player {
+      position: absolute;
+      inset: 0;
+    }
+    .tile.youtube-playing {
+      position: relative;
+      background-image: none !important;
+    }
+    #tile-container.inputs-frozen .tile {
+      pointer-events: none;
+    }
+    #tile-container.inputs-frozen .tile.youtube-playing {
+      pointer-events: auto;
+    }
   </style>
 </head>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
@@ -134,7 +148,7 @@
         Votre navigateur ne supporte pas la vidéo.
       </span>
     </video>
-    <div id="youtube-player" style="display:none;width:100%;height:100%;pointer-events:none;"></div>
+    <div id="youtube-player" style="display:none;width:100%;height:100%;"></div>
   </div>
 
   <script>window.populateTilePickerGrid = function(){};</script>
@@ -144,7 +158,8 @@
         apiReady: false,
         player: null,
         pendingLoad: null,
-        readyCallbacks: []
+        readyCallbacks: [],
+        unmuteOnPlay: false
       };
 
       function flushReadyCallbacks() {
@@ -186,6 +201,7 @@
       const videoPlayer      = document.getElementById('video-player');
       const videoSource      = document.getElementById('video-source');
       const youtubeDiv       = document.getElementById('youtube-player');
+      const youtubeHome      = youtubeDiv.parentElement;
 
       const tileCountInput   = document.getElementById('tile-count');
       const tileCountValue   = document.getElementById('tile-count-value');
@@ -207,6 +223,8 @@
       let videoResumePositions = {};
       let currentVideoUrl = null;
       let loadingDiv = null;
+      let activeTile = null;
+      let inputsFrozen = false;
 
       let inactivityTimer = null;
       function clearInactivityTimer() {
@@ -372,10 +390,46 @@
           caption.textContent = choice.name;
           tile.appendChild(caption);
           tile.addEventListener('click', () => {
-            playVideo(choice.video);
+            playVideo(choice.video, tile);
           });
           tileContainer.appendChild(tile);
         });
+      }
+
+      function attachYoutubeToTile(tile) {
+        if (activeTile && activeTile !== tile) {
+          restoreTile(activeTile);
+        }
+        activeTile = tile;
+        if (!tile.dataset.backgroundImage) {
+          tile.dataset.backgroundImage = tile.style.backgroundImage;
+        }
+        tile.classList.add('youtube-playing');
+        const caption = tile.querySelector('.caption');
+        if (caption) {
+          caption.style.display = 'none';
+        }
+        tile.appendChild(youtubeDiv);
+        youtubeDiv.style.display = 'block';
+      }
+
+      function restoreTile(tile) {
+        if (!tile) return;
+        tile.classList.remove('youtube-playing');
+        if (tile.dataset.backgroundImage) {
+          tile.style.backgroundImage = tile.dataset.backgroundImage;
+        }
+        const caption = tile.querySelector('.caption');
+        if (caption) {
+          caption.style.display = '';
+        }
+        if (youtubeDiv.parentElement === tile) {
+          youtubeHome.appendChild(youtubeDiv);
+          youtubeDiv.style.display = 'none';
+        }
+        if (activeTile === tile) {
+          activeTile = null;
+        }
       }
 
       function createOrLoadYoutube(videoId, startSeconds) {
@@ -392,12 +446,15 @@
         }
         youtubeState.pendingLoad = null;
         if (youtubeState.player) {
+          if (typeof youtubeState.player.mute === 'function') {
+            youtubeState.player.mute();
+          }
           youtubeState.player.loadVideoById({ videoId, startSeconds });
           youtubeState.player.playVideo();
         } else {
           youtubeState.player = new YT.Player('youtube-player', {
             videoId,
-            playerVars: { autoplay: 1, controls: 0 },
+            playerVars: { autoplay: 1, controls: 0, playsinline: 1, mute: 1 },
             events: {
               onReady: event => {
                 if (startSeconds) {
@@ -406,6 +463,15 @@
                 event.target.playVideo();
               },
               onStateChange: event => {
+                if (event.data === YT.PlayerState.PLAYING && youtubeState.unmuteOnPlay) {
+                  if (typeof event.target.unMute === 'function') {
+                    event.target.unMute();
+                  }
+                  youtubeState.unmuteOnPlay = false;
+                }
+                if (event.data === YT.PlayerState.PLAYING) {
+                  inputsFrozen = true;
+                }
                 if (event.data === YT.PlayerState.ENDED) {
                   if (currentVideoUrl) {
                     delete videoResumePositions[currentVideoUrl];
@@ -422,28 +488,39 @@
         }
       }
 
-      function playVideo(videoUrl) {
+      function playVideo(videoUrl, tile) {
         videoPlaying = true;
+        inputsFrozen = true;
+        tileContainer.classList.add('inputs-frozen');
         currentVideoUrl = videoUrl;
-        tileContainer.style.display = 'none';
         tilePickerModal.style.display = 'none';
         gameOptionsModal.style.display = 'none';
-        videoContainer.style.display = 'flex';
         resetInactivityTimer();
 
         if (isYouTubeUrl(videoUrl)) {
           videoPlayer.pause();
           videoPlayer.currentTime = 0;
           videoPlayer.style.display = 'none';
-          youtubeDiv.style.display = 'block';
+          videoContainer.style.display = 'none';
+          tileContainer.style.display = 'flex';
+          attachYoutubeToTile(tile);
+          if (tile.requestFullscreen) {
+            tile.requestFullscreen().catch(() => {});
+          } else if (tile.webkitRequestFullscreen) {
+            tile.webkitRequestFullscreen();
+          }
           const videoId = getYouTubeId(videoUrl);
           const resumeTime = (enableResumeVideoCheckbox.checked && videoResumePositions[videoUrl]) ? videoResumePositions[videoUrl] : 0;
           if (videoId) {
+            youtubeState.unmuteOnPlay = true;
             createOrLoadYoutube(videoId, resumeTime);
           }
         } else {
+          restoreTile(activeTile);
           youtubeDiv.style.display = 'none';
           videoPlayer.style.display = 'block';
+          tileContainer.style.display = 'none';
+          videoContainer.style.display = 'flex';
           videoSource.src = videoUrl;
           videoPlayer.removeAttribute('controls');
           videoPlayer.load();
@@ -455,10 +532,12 @@
           };
         }
 
-        if (videoContainer.requestFullscreen) {
-          videoContainer.requestFullscreen().catch(() => {});
-        } else if (videoContainer.webkitRequestFullscreen) {
-          videoContainer.webkitRequestFullscreen();
+        if (!isYouTubeUrl(videoUrl)) {
+          if (videoContainer.requestFullscreen) {
+            videoContainer.requestFullscreen().catch(() => {});
+          } else if (videoContainer.webkitRequestFullscreen) {
+            videoContainer.webkitRequestFullscreen();
+          }
         }
 
         if (enableTimeLimitCheckbox.checked) {
@@ -496,6 +575,10 @@
         resetToTileScreen();
       });
 
+      videoPlayer.addEventListener('playing', () => {
+        inputsFrozen = true;
+      });
+
       function resetToTileScreen() {
         if (videoTimeLimitTimeout) {
           clearTimeout(videoTimeLimitTimeout);
@@ -505,11 +588,14 @@
           if (youtubeState.player) {
             youtubeState.player.stopVideo();
           }
+          restoreTile(activeTile);
         } else {
           videoPlayer.pause();
           videoPlayer.currentTime = 0;
         }
         videoPlaying = false;
+        inputsFrozen = false;
+        tileContainer.classList.remove('inputs-frozen');
         currentVideoUrl = null;
         videoContainer.style.display = 'none';
         tileContainer.style.display = 'flex';
