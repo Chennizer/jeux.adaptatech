@@ -63,6 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let tileMap = new Map();
   let inGame = false;
   let musicLine = null;
+  let equalizerBars = [];
+  let equalizerTimer = null;
+  let activeInstrumentIds = new Set();
 
   function updateVolumeDisplay() {
     volumeValue.textContent = currentVolume;
@@ -205,20 +208,25 @@ document.addEventListener('DOMContentLoaded', () => {
       audio.currentTime = 0;
       audio.play();
       tile.classList.add('playing');
-      setMusicLineActive(instrument.id, true);
+      activeInstrumentIds.add(instrument.id);
+      updateEqualizerState();
     } else {
       audio.pause();
       audio.currentTime = 0;
       tile.classList.remove('playing');
-      setMusicLineActive(instrument.id, false);
+      activeInstrumentIds.delete(instrument.id);
+      updateEqualizerState();
     }
   }
 
-  function setMusicLineActive(instrumentId, isActive) {
-    if (!musicLine) return;
-    const wave = musicLine.querySelector(`[data-instrument-line='${instrumentId}']`);
-    if (!wave) return;
-    wave.classList.toggle('active', isActive);
+  function updateEqualizerState() {
+    updateEqualizerColors();
+    if (activeInstrumentIds.size > 0) {
+      startEqualizer();
+    } else {
+      stopEqualizer();
+      setEqualizerBars(0.15);
+    }
   }
 
   function stopAllSounds() {
@@ -229,10 +237,43 @@ document.addEventListener('DOMContentLoaded', () => {
     tileMap.forEach(tile => {
       tile.classList.remove('playing');
     });
-    if (musicLine) {
-      musicLine.querySelectorAll('.music-line-wave.active').forEach(wave => {
-        wave.classList.remove('active');
-      });
+    activeInstrumentIds.clear();
+    updateEqualizerState();
+  }
+
+  function updateEqualizerColors() {
+    const total = Math.max(1, tileMap.size);
+    const ratio = Math.min(1, activeInstrumentIds.size / total);
+    const hue = 120 - 120 * ratio;
+    const color = `hsl(${hue} 85% 50%)`;
+    equalizerBars.forEach(bar => {
+      bar.style.backgroundColor = color;
+      bar.style.boxShadow = `0 0 10px hsl(${hue} 85% 55% / 0.65)`;
+    });
+  }
+
+  function setEqualizerBars(level = 0.2) {
+    const clamped = Math.max(0, Math.min(1, level));
+    equalizerBars.forEach(bar => {
+      const height = (20 + clamped * 80) * (0.7 + Math.random() * 0.6);
+      bar.style.height = `${Math.min(height, 100)}%`;
+    });
+  }
+
+  function startEqualizer() {
+    if (equalizerTimer) return;
+    equalizerTimer = window.setInterval(() => {
+      const total = Math.max(1, tileMap.size);
+      const ratio = Math.min(1, activeInstrumentIds.size / total);
+      const baseLevel = 0.15 + ratio * 0.75;
+      setEqualizerBars(baseLevel);
+    }, 140);
+  }
+
+  function stopEqualizer() {
+    if (equalizerTimer) {
+      window.clearInterval(equalizerTimer);
+      equalizerTimer = null;
     }
   }
 
@@ -242,16 +283,21 @@ document.addEventListener('DOMContentLoaded', () => {
     tileContainer.style.setProperty('--pulse-phase', `${Math.floor(performance.now() % 1400)}ms`);
     audioMap = new Map();
     tileMap = new Map();
+    activeInstrumentIds = new Set();
+    stopEqualizer();
+    equalizerBars = [];
     musicLine = document.createElement('div');
     musicLine.className = 'music-line';
     const musicLineTrack = document.createElement('div');
-    musicLineTrack.className = 'music-line-track';
+    musicLineTrack.className = 'music-line-track music-eq';
+    const musicLineBars = document.createElement('div');
+    musicLineBars.className = 'music-line-bars';
 
     const selected = instruments.filter(instrument => selectedIds.includes(instrument.id));
     const columns = Math.min(3, Math.max(1, selected.length));
     tileContainer.style.setProperty('--music-columns', columns);
 
-    const lineWaves = [];
+    const lineBarCount = 32;
 
     selected.forEach(instrument => {
       const tile = document.createElement('div');
@@ -288,17 +334,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       tileContainer.appendChild(tile);
       tileMap.set(instrument.id, tile);
-
-      const wave = document.createElement('div');
-      wave.className = 'music-line-wave';
-      wave.dataset.instrumentLine = instrument.id;
-      wave.style.setProperty('--line-color', instrument.color);
-      lineWaves.push(wave);
     });
 
-    lineWaves.forEach(wave => musicLineTrack.appendChild(wave));
+    for (let i = 0; i < lineBarCount; i += 1) {
+      const bar = document.createElement('div');
+      bar.className = 'music-line-bar';
+      musicLineBars.appendChild(bar);
+      equalizerBars.push(bar);
+    }
+
+    musicLineTrack.appendChild(musicLineBars);
     musicLine.appendChild(musicLineTrack);
     tileContainer.appendChild(musicLine);
+    updateEqualizerState();
 
     if (stopAllToggle?.checked) {
       const stopTile = document.createElement('div');
