@@ -220,7 +220,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateEqualizerState() {
-    updateEqualizerColors();
     if (activeInstrumentIds.size > 0) {
       startEqualizer();
     } else {
@@ -241,22 +240,16 @@ document.addEventListener('DOMContentLoaded', () => {
     updateEqualizerState();
   }
 
-  function updateEqualizerColors() {
-    const total = Math.max(1, tileMap.size);
-    const ratio = Math.min(1, activeInstrumentIds.size / total);
-    const hue = 120 - 120 * ratio;
-    const color = `hsl(${hue} 85% 50%)`;
-    equalizerBars.forEach(bar => {
-      bar.style.backgroundColor = color;
-      bar.style.boxShadow = `0 0 10px hsl(${hue} 85% 55% / 0.65)`;
-    });
-  }
-
   function setEqualizerBars(level = 0.2) {
     const clamped = Math.max(0, Math.min(1, level));
     equalizerBars.forEach(bar => {
       const height = (20 + clamped * 80) * (0.7 + Math.random() * 0.6);
       bar.style.height = `${Math.min(height, 100)}%`;
+      const normalized = Math.min(height / 100, 1);
+      const hue = 120 - 120 * normalized;
+      const lightness = 40 + 20 * (1 - normalized);
+      bar.style.backgroundColor = `hsl(${hue} 85% ${lightness}%)`;
+      bar.style.boxShadow = `0 0 10px hsl(${hue} 85% 55% / 0.65)`;
     });
   }
 
