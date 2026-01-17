@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title class="translate" data-fr="Créateur musical" data-en="Music Maker" data-ja="ミュージックメーカー">Créateur musical</title>
+
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <style>
+    body {
+      display: block;
+      background: #000;
+    }
+
+    body.menu-open {
+      background: #000;
+      color: #fff;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: #fff;
+      color: #009688;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .hide-native-cursor,
+    .hide-native-cursor * {
+      cursor: none !important;
+    }
+
+    .game-container {
+      width: 100vw;
+      height: 100vh;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+      gap: 20px;
+    }
+
+    #instrument-grid {
+      width: min(1200px, 92vw);
+      height: min(80vh, 800px);
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      align-items: center;
+    }
+
+    .instrument-card {
+      position: relative;
+      background: rgba(255, 255, 255, 0.12);
+      border: 2px solid transparent;
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #fff;
+      min-height: 220px;
+      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .instrument-card.active {
+      border-color: #14b8a6;
+      box-shadow: 0 0 18px rgba(20, 184, 166, 0.6);
+      transform: translateY(-4px);
+    }
+
+    .instrument-card img {
+      max-width: 140px;
+      max-height: 140px;
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      border-radius: 12px;
+      background: #fff;
+      padding: 8px;
+    }
+
+    .instrument-label {
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .dwell-fill {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      height: 6px;
+      width: 0;
+      background: #ff3b3b;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+      opacity: 0;
+    }
+
+    .instrument-card.dwell-active .dwell-fill {
+      opacity: 1;
+      animation: dwellProgress var(--dwell-time, 1000ms) linear forwards;
+    }
+
+    @keyframes dwellProgress {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      will-change: transform, opacity;
+    }
+
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff0000;
+    }
+
+    #gazePointer.gp-dwell::before {
+      animation: gpPulse 700ms ease-in-out infinite alternate;
+    }
+
+    @keyframes gpPulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.06); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #gazePointer.gp-dwell::before { animation: none; }
+    }
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body class="menu-open">
+  <button id="langToggle" title="Changer de langue / Change language">FR / EN</button>
+
+  <div id="game-options" class="modal" style="display: flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title" class="translate" data-fr="Créateur musical pour contrôle oculaire" data-en="Eye-gaze Music Maker" data-ja="視線入力ミュージックメーカー">
+          Créateur musical pour contrôle oculaire
+        </h2>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label for="volume-slider" class="teal-label">
+              <span class="translate" data-fr="Volume:" data-en="Volume:" data-ja="音量：">Volume:</span>
+              <span id="volume-value">70</span>
+            </label>
+            <input type="range" id="volume-slider" class="styled-slider" min="0" max="100" value="70">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="instrument-count" class="teal-label">
+              <span class="translate" data-fr="Nombre d'instruments:" data-en="Number of instruments:" data-ja="楽器の数：">Nombre d'instruments:</span>
+              <span id="instrument-count-value">3</span>
+            </label>
+            <input type="range" id="instrument-count" class="styled-slider" min="1" max="6" value="3">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwell-time" class="teal-label">
+              <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:" data-ja="注視時間：">Temps de fixation:</span>
+              <span id="dwell-time-value">1500</span> ms
+            </label>
+            <input type="range" id="dwell-time" class="styled-slider" min="500" max="5000" step="100" value="1500">
+          </div>
+          <div class="option-item gp-compact">
+            <label class="teal-label">
+              <input type="checkbox" id="showGazePointer" checked>
+              <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)" data-ja="視線ポインターを表示（マウスを非表示）">
+                Afficher le pointeur (cache la souris)
+              </span>
+            </label>
+
+            <details id="gpDetails">
+              <summary class="gp-summary">
+                <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options" data-ja="ポインターの詳細設定">
+                  Options avancées du pointeur
+                </span>
+              </summary>
+
+              <div class="gp-advanced">
+                <div class="gp-row">
+                  <label for="gazeSize" class="teal-label gp-label">
+                    <span class="translate" data-fr="Taille" data-en="Size" data-ja="サイズ">Taille</span>:
+                    <span id="gazeSizeVal">36</span> px
+                  </label>
+                  <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36">
+                </div>
+
+                <div class="gp-row">
+                  <label for="gazeOpacity" class="teal-label gp-label">
+                    <span class="translate" data-fr="Opacité" data-en="Opacity" data-ja="不透明度">Opacité</span>:
+                    <span id="gazeOpacityVal">100</span>%
+                  </label>
+                  <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <button id="choose-instruments-button" class="button translate" data-fr="Choix des instruments" data-en="Instrument selection" data-ja="楽器の選択">
+        Choix des instruments
+      </button>
+    </div>
+  </div>
+
+  <div id="tile-picker-modal" class="modal" style="display: none;">
+    <div id="control-panel-options">
+      <div id="control-panel-title-wrapper">
+        <h2 id="control-panel-title" class="translate" data-fr="Choisir les instruments" data-en="Choose instruments" data-ja="楽器を選ぶ">
+          Choisir les instruments
+        </h2>
+      </div>
+      <div id="control-panel-instructions" style="margin-top:10px;">
+        <span class="translate" data-fr="Choisir" data-en="Choose" data-ja="選ぶ">Choisir</span>
+        <span id="instrument-count-display" class="no-lang"></span>
+        <span class="translate" data-fr="instruments." data-en="instruments." data-ja="楽器。"> instruments.</span>
+      </div>
+      <div id="tile-picker-grid"></div>
+      <button id="start-game-button" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始" disabled>
+        Commencer
+      </button>
+    </div>
+  </div>
+
+  <div id="game-container" class="game-container">
+    <div id="instrument-grid"></div>
+  </div>
+
+  <div id="gazePointer"></div>
+
+  <script src="../../js/translationmain.js"></script>
+  <script>
+    const instruments = [
+      {
+        id: 'instrument-1',
+        labels: { fr: 'Tambour', en: 'Drum', ja: 'ドラム' },
+        image: '../../images/pictos/balloon.png',
+        sound: '../../sounds/africaflute.mp3'
+      },
+      {
+        id: 'instrument-2',
+        labels: { fr: 'Guitare', en: 'Guitar', ja: 'ギター' },
+        image: '../../images/pictos/avocado.png',
+        sound: '../../sounds/africaflute.mp3'
+      },
+      {
+        id: 'instrument-3',
+        labels: { fr: 'Clavier', en: 'Keys', ja: 'キーボード' },
+        image: '../../images/pictos/banana.png',
+        sound: '../../sounds/africaflute.mp3'
+      },
+      {
+        id: 'instrument-4',
+        labels: { fr: 'Basse', en: 'Bass', ja: 'ベース' },
+        image: '../../images/pictos/almond.png',
+        sound: '../../sounds/africaflute.mp3'
+      },
+      {
+        id: 'instrument-5',
+        labels: { fr: 'Flûte', en: 'Flute', ja: 'フルート' },
+        image: '../../images/pictos/apple.png',
+        sound: '../../sounds/africaflute.mp3'
+      },
+      {
+        id: 'instrument-6',
+        labels: { fr: 'Maracas', en: 'Maracas', ja: 'マラカス' },
+        image: '../../images/pictos/assistiveswitches.png',
+        sound: '../../sounds/africaflute.mp3'
+      }
+    ];
+
+    const selectionState = {
+      maxInstruments: 3,
+      selectedIds: new Set(),
+      volume: 0.7,
+      dwellTime: 1500,
+      showPointer: true,
+      gazeSize: 36,
+      gazeOpacity: 100
+    };
+
+    const elements = {
+      volumeSlider: document.getElementById('volume-slider'),
+      volumeValue: document.getElementById('volume-value'),
+      instrumentCount: document.getElementById('instrument-count'),
+      instrumentCountValue: document.getElementById('instrument-count-value'),
+      dwellTime: document.getElementById('dwell-time'),
+      dwellTimeValue: document.getElementById('dwell-time-value'),
+      showPointer: document.getElementById('showGazePointer'),
+      gazeSize: document.getElementById('gazeSize'),
+      gazeOpacity: document.getElementById('gazeOpacity'),
+      gazeSizeVal: document.getElementById('gazeSizeVal'),
+      gazeOpacityVal: document.getElementById('gazeOpacityVal'),
+      chooseInstrumentsButton: document.getElementById('choose-instruments-button'),
+      startGameButton: document.getElementById('start-game-button'),
+      gameOptions: document.getElementById('game-options'),
+      tilePicker: document.getElementById('tile-picker-modal'),
+      tilePickerGrid: document.getElementById('tile-picker-grid'),
+      instrumentCountDisplay: document.getElementById('instrument-count-display'),
+      gameContainer: document.getElementById('game-container'),
+      instrumentGrid: document.getElementById('instrument-grid'),
+      gazePointer: document.getElementById('gazePointer'),
+      langToggle: document.getElementById('langToggle')
+    };
+
+    const audioPlayers = new Map();
+
+    const getLanguage = () => localStorage.getItem('siteLanguage') || 'en';
+
+    const getLabel = (instrument) => {
+      const lang = getLanguage();
+      return instrument.labels[lang] || instrument.labels.en;
+    };
+
+    const updateInstrumentCountDisplay = () => {
+      elements.instrumentCountDisplay.textContent = selectionState.maxInstruments;
+    };
+
+    const updateStartButtonState = () => {
+      elements.startGameButton.disabled = selectionState.selectedIds.size !== selectionState.maxInstruments;
+    };
+
+    const renderInstrumentPicker = () => {
+      elements.tilePickerGrid.innerHTML = '';
+      instruments.forEach((instrument) => {
+        const tile = document.createElement('div');
+        tile.classList.add('tile');
+        tile.dataset.instrumentId = instrument.id;
+        tile.style.backgroundImage = `url(${instrument.image})`;
+
+        const caption = document.createElement('span');
+        caption.classList.add('caption');
+        caption.textContent = getLabel(instrument);
+        tile.appendChild(caption);
+
+        if (selectionState.selectedIds.has(instrument.id)) {
+          tile.classList.add('selected');
+        }
+
+        tile.addEventListener('click', () => {
+          const isSelected = selectionState.selectedIds.has(instrument.id);
+          if (isSelected) {
+            selectionState.selectedIds.delete(instrument.id);
+            tile.classList.remove('selected');
+          } else if (selectionState.selectedIds.size < selectionState.maxInstruments) {
+            selectionState.selectedIds.add(instrument.id);
+            tile.classList.add('selected');
+          }
+          updateStartButtonState();
+        });
+
+        elements.tilePickerGrid.appendChild(tile);
+      });
+    };
+
+    const updateVolume = (value) => {
+      selectionState.volume = value / 100;
+      audioPlayers.forEach((audio) => {
+        audio.volume = selectionState.volume;
+      });
+    };
+
+    const setupPointer = () => {
+      if (!selectionState.showPointer) {
+        elements.gazePointer.style.opacity = 0;
+        document.body.classList.remove('hide-native-cursor');
+        return;
+      }
+      document.body.classList.add('hide-native-cursor');
+      elements.gazePointer.style.opacity = selectionState.gazeOpacity / 100;
+      elements.gazePointer.style.setProperty('--gp-size', `${selectionState.gazeSize}px`);
+    };
+
+    const updatePointerSize = (value) => {
+      selectionState.gazeSize = Number(value);
+      elements.gazeSizeVal.textContent = value;
+      elements.gazePointer.style.setProperty('--gp-size', `${value}px`);
+    };
+
+    const updatePointerOpacity = (value) => {
+      selectionState.gazeOpacity = Number(value);
+      elements.gazeOpacityVal.textContent = value;
+      elements.gazePointer.style.opacity = selectionState.showPointer ? (value / 100) : 0;
+    };
+
+    const attachPointerTracking = () => {
+      document.addEventListener('mousemove', (event) => {
+        if (!selectionState.showPointer) {
+          return;
+        }
+        elements.gazePointer.style.left = `${event.clientX}px`;
+        elements.gazePointer.style.top = `${event.clientY}px`;
+      });
+    };
+
+    const resetAudio = () => {
+      audioPlayers.forEach((audio) => {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+      audioPlayers.clear();
+    };
+
+    const toggleSound = (instrumentId, card) => {
+      let audio = audioPlayers.get(instrumentId);
+      if (!audio) {
+        const instrument = instruments.find((item) => item.id === instrumentId);
+        audio = new Audio(instrument.sound);
+        audio.loop = true;
+        audio.volume = selectionState.volume;
+        audioPlayers.set(instrumentId, audio);
+      }
+
+      if (audio.paused) {
+        audio.play();
+        card.classList.add('active');
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+        card.classList.remove('active');
+      }
+    };
+
+    const attachDwellHandlers = (card, instrumentId) => {
+      let dwellTimer = null;
+      const dwellFill = card.querySelector('.dwell-fill');
+      card.style.setProperty('--dwell-time', `${selectionState.dwellTime}ms`);
+
+      const clearDwell = () => {
+        if (dwellTimer) {
+          clearTimeout(dwellTimer);
+        }
+        dwellTimer = null;
+        dwellFill.style.animation = 'none';
+        dwellFill.style.opacity = 0;
+      };
+
+      card.addEventListener('pointerenter', () => {
+        if (dwellTimer) {
+          return;
+        }
+        dwellFill.style.animation = 'none';
+        void dwellFill.offsetWidth;
+        dwellFill.style.opacity = 1;
+        dwellFill.style.animation = `dwellProgress ${selectionState.dwellTime}ms linear forwards`;
+        dwellTimer = setTimeout(() => {
+          toggleSound(instrumentId, card);
+          dwellTimer = null;
+          dwellFill.style.animation = 'none';
+          dwellFill.style.opacity = 0;
+        }, selectionState.dwellTime);
+      });
+
+      card.addEventListener('pointerleave', clearDwell);
+      card.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        clearDwell();
+        toggleSound(instrumentId, card);
+      });
+    };
+
+    const renderGameGrid = () => {
+      elements.instrumentGrid.innerHTML = '';
+      resetAudio();
+      selectionState.selectedIds.forEach((instrumentId) => {
+        const instrument = instruments.find((item) => item.id === instrumentId);
+        const card = document.createElement('div');
+        card.classList.add('instrument-card');
+
+        const image = document.createElement('img');
+        image.src = instrument.image;
+        image.alt = getLabel(instrument);
+
+        const label = document.createElement('div');
+        label.classList.add('instrument-label');
+        label.textContent = getLabel(instrument);
+
+        const dwellFill = document.createElement('div');
+        dwellFill.classList.add('dwell-fill');
+
+        card.appendChild(image);
+        card.appendChild(label);
+        card.appendChild(dwellFill);
+
+        attachDwellHandlers(card, instrumentId);
+        elements.instrumentGrid.appendChild(card);
+      });
+    };
+
+    const startGame = () => {
+      if (selectionState.selectedIds.size !== selectionState.maxInstruments) {
+        return;
+      }
+      elements.tilePicker.style.display = 'none';
+      elements.gameOptions.style.display = 'none';
+      elements.gameContainer.style.display = 'flex';
+      document.body.classList.remove('menu-open');
+
+      renderGameGrid();
+
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    };
+
+    elements.volumeSlider.addEventListener('input', (event) => {
+      elements.volumeValue.textContent = event.target.value;
+      updateVolume(Number(event.target.value));
+    });
+
+    elements.instrumentCount.addEventListener('input', (event) => {
+      selectionState.maxInstruments = Number(event.target.value);
+      elements.instrumentCountValue.textContent = event.target.value;
+    });
+
+    elements.dwellTime.addEventListener('input', (event) => {
+      selectionState.dwellTime = Number(event.target.value);
+      elements.dwellTimeValue.textContent = event.target.value;
+    });
+
+    elements.showPointer.addEventListener('change', (event) => {
+      selectionState.showPointer = event.target.checked;
+      setupPointer();
+    });
+
+    elements.gazeSize.addEventListener('input', (event) => {
+      updatePointerSize(event.target.value);
+    });
+
+    elements.gazeOpacity.addEventListener('input', (event) => {
+      updatePointerOpacity(event.target.value);
+    });
+
+    elements.chooseInstrumentsButton.addEventListener('click', () => {
+      selectionState.maxInstruments = Number(elements.instrumentCount.value);
+      selectionState.selectedIds.clear();
+      updateInstrumentCountDisplay();
+      renderInstrumentPicker();
+      updateStartButtonState();
+      elements.gameOptions.style.display = 'none';
+      elements.tilePicker.style.display = 'flex';
+    });
+
+    elements.startGameButton.addEventListener('click', startGame);
+
+    elements.langToggle.addEventListener('click', () => {
+      if (typeof toggleLanguage === 'function') {
+        toggleLanguage();
+      }
+      renderInstrumentPicker();
+      renderGameGrid();
+    });
+
+    updateInstrumentCountDisplay();
+    updateVolume(Number(elements.volumeSlider.value));
+    updatePointerSize(elements.gazeSize.value);
+    updatePointerOpacity(elements.gazeOpacity.value);
+    setupPointer();
+    attachPointerTracking();
+  </script>
+</body>
+</html>
