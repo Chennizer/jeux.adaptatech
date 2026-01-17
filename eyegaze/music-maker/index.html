@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-fr="Créateur musical (contrôle oculaire)" data-en="Music maker (eye gaze)" data-ja="音楽メーカー（視線入力）">Créateur musical (contrôle oculaire)</title>
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #000;
+      color: #fff;
+    }
+
+    #options-title-bar h2,
+    #control-panel-title,
+    #control-panel-instructions,
+    #options-inline-container label,
+    #control-panel-options {
+      color: #000;
+    }
+
+    #control-panel-instructions {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    #instrument-grid {
+      display: grid;
+      gap: 24px;
+      padding: 40px;
+      width: 100%;
+      height: 100vh;
+      box-sizing: border-box;
+      place-items: center;
+      background: radial-gradient(circle, rgba(0,150,136,0.15) 0%, rgba(0,0,0,1) 70%);
+    }
+
+    .instrument-item {
+      width: 100%;
+      max-width: 260px;
+      aspect-ratio: 1 / 1;
+      background: rgba(255, 255, 255, 0.08);
+      border: 3px solid rgba(0, 150, 136, 0.6);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .instrument-item img {
+      max-width: 60%;
+      max-height: 60%;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+    }
+
+    .instrument-item span {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff;
+      text-align: center;
+    }
+
+    .instrument-item.playing {
+      border-color: #00ffc3;
+      box-shadow: 0 0 20px rgba(0, 255, 195, 0.6);
+      transform: scale(1.03);
+    }
+
+    #dwell-indicator {
+      position: fixed;
+      width: 30px;
+      height: 30px;
+      border: 4px solid #00ffc3;
+      border-radius: 50%;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+    }
+
+    .value-pill {
+      display: inline-block;
+      min-width: 40px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .instrument-help {
+      font-size: 16px;
+      line-height: 1.4;
+      color: #333;
+      text-align: left;
+    }
+
+    @media (max-width: 900px) {
+      #options-inline-container {
+        grid-template-columns: 1fr;
+      }
+
+      #options-inline-container > div,
+      #options-inline-container > div:first-child {
+        align-items: center;
+        border-right: none;
+      }
+
+      #instrument-grid {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-B45TJG4GBJ');
+</script>
+<body>
+  <div id="game-options" class="modal" style="display: flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 data-fr="Créateur musical pour contrôle oculaire" data-en="Music maker for eye gaze" data-ja="視線入力向け音楽メーカー">Créateur musical pour contrôle oculaire</h2>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div id="advanced-options-section" class="options-column">
+          <div class="instrument-help">
+            <p data-fr="Choisissez le volume général et le nombre d'instruments à afficher." data-en="Choose the overall volume and how many instruments to show." data-ja="全体の音量と表示する楽器数を選択します。">
+              Choisissez le volume général et le nombre d'instruments à afficher.
+            </p>
+            <p data-fr="Ensuite, sélectionnez vos instruments et démarrez en plein écran." data-en="Then pick your instruments and start in full screen." data-ja="次に楽器を選び、全画面で開始します。">
+              Ensuite, sélectionnez vos instruments et démarrez en plein écran.
+            </p>
+          </div>
+        </div>
+
+        <div id="game-options-controls" class="options-column">
+          <div class="option-item">
+            <label for="volume-range" class="teal-label">
+              <span data-fr="Volume" data-en="Volume" data-ja="音量">Volume</span>:
+              <span id="volume-value" class="value-pill">70</span>
+            </label>
+            <input type="range" id="volume-range" min="0" max="100" value="70" class="styled-slider">
+          </div>
+          <div class="option-item">
+            <label for="instrument-count" class="teal-label">
+              <span data-fr="Nombre d'instruments" data-en="Number of instruments" data-ja="楽器の数">Nombre d'instruments</span>:
+              <span id="instrument-count-value" class="value-pill">3</span>
+            </label>
+            <input type="range" id="instrument-count" min="1" max="6" value="3" class="styled-slider">
+          </div>
+        </div>
+
+        <div id="sliders-column" class="options-column">
+          <div class="option-item">
+            <p class="instrument-help" data-fr="Chaque instrument joue une boucle sonore quand il est activé par fixation." data-en="Each instrument plays a looping sound when activated by dwell." data-ja="各楽器は視線の固定でループ音を再生します。">
+              Chaque instrument joue une boucle sonore quand il est activé par fixation.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <button id="choose-instruments-button" class="button" data-fr="Choix des instruments" data-en="Choose instruments" data-ja="楽器を選ぶ">Choix des instruments</button>
+    </div>
+  </div>
+
+  <div id="tile-picker-modal" class="modal" style="display: none;">
+    <div id="control-panel-options">
+      <div id="control-panel-title-wrapper">
+        <h2 id="control-panel-title" data-fr="Choisir les instruments" data-en="Choose instruments" data-ja="楽器を選択">Choisir les instruments</h2>
+      </div>
+      <div id="control-panel-instructions">
+        <span data-fr="Choisir" data-en="Choose" data-ja="選ぶ">Choisir</span>
+        <span id="instrument-count-display" class="value-pill">3</span>
+        <span data-fr="instruments." data-en="instruments." data-ja="個の楽器。">instruments.</span>
+      </div>
+      <div id="tile-picker-grid"></div>
+      <button id="start-game-button" class="button" data-fr="Commencer" data-en="Start" data-ja="開始" disabled>Commencer</button>
+    </div>
+  </div>
+
+  <div id="music-maker-game" style="display: none;">
+    <div id="instrument-grid"></div>
+  </div>
+
+  <div id="dwell-indicator"></div>
+
+  <script>
+    const instruments = [
+      {
+        id: 'guitar',
+        name: 'Guitare',
+        image: '../../images/pictos/guitar.png',
+        sound: '../../sounds/africaflute.mp3'
+      },
+      {
+        id: 'synth',
+        name: 'Synthé',
+        image: '../../images/pictos/music.png',
+        sound: '../../sounds/beatles.mp3'
+      },
+      {
+        id: 'drums',
+        name: 'Batterie',
+        image: '../../images/pictos/balloon.png',
+        sound: '../../sounds/belleetbete.mp3'
+      },
+      {
+        id: 'bass',
+        name: 'Basse',
+        image: '../../images/pictos/apple.png',
+        sound: '../../sounds/blade.mp3'
+      },
+      {
+        id: 'piano',
+        name: 'Piano',
+        image: '../../images/pictos/banana.png',
+        sound: '../../sounds/ca.mp3'
+      },
+      {
+        id: 'percussion',
+        name: 'Percussions',
+        image: '../../images/pictos/avocado.png',
+        sound: '../../sounds/arthur.mp3'
+      }
+    ];
+
+    const volumeRange = document.getElementById('volume-range');
+    const volumeValue = document.getElementById('volume-value');
+    const instrumentCountRange = document.getElementById('instrument-count');
+    const instrumentCountValue = document.getElementById('instrument-count-value');
+    const instrumentCountDisplay = document.getElementById('instrument-count-display');
+    const chooseInstrumentsButton = document.getElementById('choose-instruments-button');
+    const gameOptionsModal = document.getElementById('game-options');
+    const pickerModal = document.getElementById('tile-picker-modal');
+    const pickerGrid = document.getElementById('tile-picker-grid');
+    const startGameButton = document.getElementById('start-game-button');
+    const gameContainer = document.getElementById('music-maker-game');
+    const instrumentGrid = document.getElementById('instrument-grid');
+    const dwellIndicator = document.getElementById('dwell-indicator');
+
+    const dwellTimeMs = 1500;
+    let dwellTimeout = null;
+    let selectedInstrumentIds = [];
+    let instrumentAudio = {};
+    let currentVolume = Number(volumeRange.value) / 100;
+
+    volumeRange.addEventListener('input', () => {
+      volumeValue.textContent = volumeRange.value;
+      currentVolume = Number(volumeRange.value) / 100;
+      Object.values(instrumentAudio).forEach(audio => {
+        audio.volume = currentVolume;
+      });
+    });
+
+    instrumentCountRange.addEventListener('input', () => {
+      instrumentCountValue.textContent = instrumentCountRange.value;
+      instrumentCountDisplay.textContent = instrumentCountRange.value;
+      updateStartButton();
+      if (selectedInstrumentIds.length > Number(instrumentCountRange.value)) {
+        selectedInstrumentIds = selectedInstrumentIds.slice(0, Number(instrumentCountRange.value));
+        renderPicker();
+      }
+    });
+
+    chooseInstrumentsButton.addEventListener('click', () => {
+      gameOptionsModal.style.display = 'none';
+      pickerModal.style.display = 'flex';
+      renderPicker();
+    });
+
+    function renderPicker() {
+      pickerGrid.innerHTML = '';
+      instruments.forEach(instrument => {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        tile.style.backgroundImage = `url(${instrument.image})`;
+        tile.dataset.id = instrument.id;
+        if (selectedInstrumentIds.includes(instrument.id)) {
+          tile.classList.add('selected');
+        }
+        const caption = document.createElement('span');
+        caption.className = 'caption';
+        caption.textContent = instrument.name;
+        tile.appendChild(caption);
+        tile.addEventListener('click', () => toggleInstrumentSelection(instrument.id));
+        pickerGrid.appendChild(tile);
+      });
+      updateStartButton();
+    }
+
+    function toggleInstrumentSelection(id) {
+      const maxCount = Number(instrumentCountRange.value);
+      const existingIndex = selectedInstrumentIds.indexOf(id);
+      if (existingIndex !== -1) {
+        selectedInstrumentIds.splice(existingIndex, 1);
+      } else if (selectedInstrumentIds.length < maxCount) {
+        selectedInstrumentIds.push(id);
+      }
+      renderPicker();
+    }
+
+    function updateStartButton() {
+      const maxCount = Number(instrumentCountRange.value);
+      startGameButton.disabled = selectedInstrumentIds.length !== maxCount;
+    }
+
+    startGameButton.addEventListener('click', () => {
+      pickerModal.style.display = 'none';
+      gameContainer.style.display = 'block';
+      document.documentElement.requestFullscreen?.();
+      buildInstrumentGrid();
+    });
+
+    function buildInstrumentGrid() {
+      instrumentGrid.innerHTML = '';
+      instrumentAudio = {};
+      const selectedInstruments = instruments.filter(instrument => selectedInstrumentIds.includes(instrument.id));
+      const columnCount = selectedInstruments.length <= 3 ? selectedInstruments.length : 3;
+      instrumentGrid.style.gridTemplateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
+
+      selectedInstruments.forEach(instrument => {
+        const card = document.createElement('div');
+        card.className = 'instrument-item';
+        card.dataset.id = instrument.id;
+
+        const image = document.createElement('img');
+        image.src = instrument.image;
+        image.alt = instrument.name;
+
+        const label = document.createElement('span');
+        label.textContent = instrument.name;
+
+        card.appendChild(image);
+        card.appendChild(label);
+        instrumentGrid.appendChild(card);
+
+        const audio = new Audio(instrument.sound);
+        audio.loop = true;
+        audio.volume = currentVolume;
+        instrumentAudio[instrument.id] = audio;
+
+        card.addEventListener('mouseenter', event => startDwell(card, event));
+        card.addEventListener('mousemove', moveDwellIndicator);
+        card.addEventListener('mouseleave', stopDwell);
+      });
+    }
+
+    function startDwell(target, event) {
+      stopDwell();
+      dwellIndicator.style.opacity = '1';
+      dwellIndicator.style.transition = 'none';
+      dwellIndicator.style.width = '30px';
+      dwellIndicator.style.height = '30px';
+      moveDwellIndicator(event);
+
+      requestAnimationFrame(() => {
+        dwellIndicator.style.transition = `width ${dwellTimeMs}ms ease, height ${dwellTimeMs}ms ease`;
+        dwellIndicator.style.width = '120px';
+        dwellIndicator.style.height = '120px';
+      });
+
+      dwellTimeout = setTimeout(() => {
+        toggleInstrumentSound(target);
+        stopDwell();
+      }, dwellTimeMs);
+    }
+
+    function stopDwell() {
+      clearTimeout(dwellTimeout);
+      dwellIndicator.style.opacity = '0';
+    }
+
+    function moveDwellIndicator(event) {
+      dwellIndicator.style.left = `${event.clientX}px`;
+      dwellIndicator.style.top = `${event.clientY}px`;
+    }
+
+    function toggleInstrumentSound(card) {
+      const id = card.dataset.id;
+      const audio = instrumentAudio[id];
+      if (!audio) {
+        return;
+      }
+      if (audio.paused) {
+        audio.play();
+        card.classList.add('playing');
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+        card.classList.remove('playing');
+      }
+    }
+  </script>
+</body>
+</html>
