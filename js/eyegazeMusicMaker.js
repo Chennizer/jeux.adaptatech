@@ -216,9 +216,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setMusicLineActive(instrumentId, isActive) {
     if (!musicLine) return;
-    const segment = musicLine.querySelector(`[data-instrument-line='${instrumentId}']`);
-    if (!segment) return;
-    segment.classList.toggle('active', isActive);
+    const wave = musicLine.querySelector(`[data-instrument-line='${instrumentId}']`);
+    if (!wave) return;
+    wave.classList.toggle('active', isActive);
   }
 
   function stopAllSounds() {
@@ -230,8 +230,8 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.classList.remove('playing');
     });
     if (musicLine) {
-      musicLine.querySelectorAll('.music-line-segment.active').forEach(segment => {
-        segment.classList.remove('active');
+      musicLine.querySelectorAll('.music-line-wave.active').forEach(wave => {
+        wave.classList.remove('active');
       });
     }
   }
@@ -244,12 +244,14 @@ document.addEventListener('DOMContentLoaded', () => {
     tileMap = new Map();
     musicLine = document.createElement('div');
     musicLine.className = 'music-line';
+    const musicLineTrack = document.createElement('div');
+    musicLineTrack.className = 'music-line-track';
 
     const selected = instruments.filter(instrument => selectedIds.includes(instrument.id));
     const columns = Math.min(3, Math.max(1, selected.length));
     tileContainer.style.setProperty('--music-columns', columns);
 
-    const lineSegments = [];
+    const lineWaves = [];
 
     selected.forEach(instrument => {
       const tile = document.createElement('div');
@@ -287,14 +289,15 @@ document.addEventListener('DOMContentLoaded', () => {
       tileContainer.appendChild(tile);
       tileMap.set(instrument.id, tile);
 
-      const segment = document.createElement('div');
-      segment.className = 'music-line-segment';
-      segment.dataset.instrumentLine = instrument.id;
-      segment.style.setProperty('--line-color', instrument.color);
-      lineSegments.push(segment);
+      const wave = document.createElement('div');
+      wave.className = 'music-line-wave';
+      wave.dataset.instrumentLine = instrument.id;
+      wave.style.setProperty('--line-color', instrument.color);
+      lineWaves.push(wave);
     });
 
-    lineSegments.forEach(segment => musicLine.appendChild(segment));
+    lineWaves.forEach(wave => musicLineTrack.appendChild(wave));
+    musicLine.appendChild(musicLineTrack);
     tileContainer.appendChild(musicLine);
 
     if (stopAllToggle?.checked) {
