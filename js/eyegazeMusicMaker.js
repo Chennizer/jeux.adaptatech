@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const presetPickerGrid = document.getElementById('preset-picker-grid');
   const tileContainer = document.getElementById('tile-container');
   const chooseTilesButton = document.getElementById('choose-tiles-button');
+  const choosePresetsButton = document.getElementById('choose-presets-button');
   const startGameButton = document.getElementById('start-game-button');
   const tileCountInput = document.getElementById('tile-count');
   const tileCountValueSpan = document.getElementById('tile-count-value');
@@ -24,15 +25,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const languageToggle = document.getElementById('language-toggle');
 
   const instruments = [
-    { id: 'drum', label: 'Drum', image: '../../images/pictos/balloon.png', sound: '../../sounds/beatles.mp3', color: '#ef4444' },
-    { id: 'bell', label: 'Bell', image: '../../images/pictos/apple.png', sound: '../../sounds/beatles.mp3', color: '#f59e0b' },
-    { id: 'piano', label: 'Piano', image: '../../images/pictos/avocado.png', sound: '../../sounds/beatles.mp3', color: '#10b981' },
-    { id: 'guitar', label: 'Guitar', image: '../../images/pictos/banana.png', sound: '../../sounds/beatles.mp3', color: '#3b82f6' },
-    { id: 'marimba', label: 'Marimba', image: '../../images/pictos/almond.png', sound: '../../sounds/beatles.mp3', color: '#8b5cf6' },
-    { id: 'synth', label: 'Synth', image: '../../images/pictos/assistivebike.png', sound: '../../sounds/beatles.mp3', color: '#ec4899' },
-    { id: 'flute', label: 'Flute', image: '../../images/pictos/assistiveswitches.png', sound: '../../sounds/beatles.mp3', color: '#22c55e' },
-    { id: 'bass', label: 'Bass', image: '../../images/pictos/angry.png', sound: '../../sounds/beatles.mp3', color: '#0ea5e9' },
-    { id: 'pad', label: 'Pad', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3', color: '#eab308' }
+    { id: 'drum', label: 'Drum', image: '../../images/pictos/balloon.png', sound: '../../sounds/beatles.mp3', color: '#ef4444', trackMode: 'loop' },
+    { id: 'bell', label: 'Bell', image: '../../images/pictos/apple.png', sound: '../../sounds/beatles.mp3', color: '#f59e0b', trackMode: 'loop' },
+    { id: 'piano', label: 'Piano', image: '../../images/pictos/avocado.png', sound: '../../sounds/beatles.mp3', color: '#10b981', trackMode: 'loop' },
+    { id: 'guitar', label: 'Guitar', image: '../../images/pictos/banana.png', sound: '../../sounds/beatles.mp3', color: '#3b82f6', trackMode: 'loop' },
+    { id: 'marimba', label: 'Marimba', image: '../../images/pictos/almond.png', sound: '../../sounds/beatles.mp3', color: '#8b5cf6', trackMode: 'loop' },
+    { id: 'synth', label: 'Synth', image: '../../images/pictos/assistivebike.png', sound: '../../sounds/beatles.mp3', color: '#ec4899', trackMode: 'loop' },
+    { id: 'flute', label: 'Flute', image: '../../images/pictos/assistiveswitches.png', sound: '../../sounds/beatles.mp3', color: '#22c55e', trackMode: 'loop' },
+    { id: 'bass', label: 'Bass', image: '../../images/pictos/angry.png', sound: '../../sounds/beatles.mp3', color: '#0ea5e9', trackMode: 'loop' },
+    { id: 'pad', label: 'Pad', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3', color: '#eab308', trackMode: 'loop' },
+    { id: 'rock-bass', label: 'Bass', image: '../../images/pictos/banana.png', sound: '../../sounds/beatles.mp3', color: '#22c55e', trackMode: 'synced' },
+    { id: 'rock-guitar', label: 'Guitar', image: '../../images/pictos/assistivebike.png', sound: '../../sounds/blade.mp3', color: '#f97316', trackMode: 'synced' },
+    { id: 'rock-vocals', label: 'Vocals', image: '../../images/pictos/OSD.png', sound: '../../sounds/arthur.mp3', color: '#e11d48', trackMode: 'synced' },
+    { id: 'rock-drums', label: 'Drums', image: '../../images/pictos/balloon.png', sound: '../../sounds/belleetbete.mp3', color: '#facc15', trackMode: 'synced' }
   ];
   const presets = [
     {
@@ -40,20 +45,31 @@ document.addEventListener('DOMContentLoaded', () => {
       label: 'Percussions',
       image: '../../images/pictos/assistiveswitches.png',
       instrumentIds: ['drum', 'marimba', 'bell'],
+      mode: 'custom',
     },
     {
       id: 'rock',
       label: 'Rock band',
       image: '../../images/pictos/assistivebike.png',
       instrumentIds: ['drum', 'guitar', 'bass'],
+      mode: 'custom',
     },
     {
       id: 'ambient',
       label: 'Ambient',
       image: '../../images/pictos/OSD.png',
       instrumentIds: ['pad', 'synth', 'flute'],
+      mode: 'custom',
+    },
+    {
+      id: 'punk-rock',
+      label: 'Punk rock',
+      image: '../../images/pictos/angry.png',
+      instrumentIds: ['rock-bass', 'rock-guitar', 'rock-vocals', 'rock-drums'],
+      mode: 'prerecorded',
     },
   ];
+  const instrumentMap = new Map(instruments.map(instrument => [instrument.id, instrument]));
 
   let desiredTileCount = parseInt(tileCountInput.value, 10) || 3;
   let fixationDelay = parseInt(fixationTimeInput.value, 10) || 2000;
@@ -66,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let equalizerBars = [];
   let equalizerTimer = null;
   let activeInstrumentIds = new Set();
+  let currentMode = 'custom';
 
   function updateVolumeDisplay() {
     volumeValue.textContent = currentVolume;
@@ -105,8 +122,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateAudioVolume() {
-    audioMap.forEach(audio => {
-      audio.volume = currentVolume / 100;
+    audioMap.forEach((audio, id) => {
+      const instrument = instrumentMap.get(id);
+      if (instrument?.trackMode === 'synced') {
+        audio.volume = activeInstrumentIds.has(id) ? currentVolume / 100 : 0;
+      } else {
+        audio.volume = currentVolume / 100;
+      }
     });
   }
 
@@ -153,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyPreset(preset) {
     if (!preset) return;
+    currentMode = preset.mode || currentMode;
     desiredTileCount = preset.instrumentIds.length;
     tileCountInput.value = desiredTileCount;
     selectedIds = [...preset.instrumentIds];
@@ -164,7 +187,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderPresets() {
     if (!presetPickerGrid) return;
     presetPickerGrid.innerHTML = '';
-    presets.forEach(preset => {
+    const visiblePresets = presets.filter(preset => preset.mode === currentMode);
+    visiblePresets.forEach(preset => {
       const tile = document.createElement('button');
       tile.type = 'button';
       tile.className = 'preset-tile';
@@ -204,19 +228,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const audio = audioMap.get(instrument.id);
     if (!audio) return;
 
+    if (instrument.trackMode === 'synced') {
+      const isActive = !activeInstrumentIds.has(instrument.id);
+      if (audio.paused) {
+        audio.play();
+      }
+      audio.volume = isActive ? currentVolume / 100 : 0;
+      tile.classList.toggle('playing', isActive);
+      if (isActive) {
+        activeInstrumentIds.add(instrument.id);
+      } else {
+        activeInstrumentIds.delete(instrument.id);
+      }
+      updateEqualizerState();
+      return;
+    }
+
     if (audio.paused) {
       audio.currentTime = 0;
       audio.play();
       tile.classList.add('playing');
       activeInstrumentIds.add(instrument.id);
-      updateEqualizerState();
     } else {
       audio.pause();
       audio.currentTime = 0;
       tile.classList.remove('playing');
       activeInstrumentIds.delete(instrument.id);
-      updateEqualizerState();
     }
+    updateEqualizerState();
   }
 
   function updateEqualizerState() {
@@ -229,9 +268,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function stopAllSounds() {
-    audioMap.forEach(audio => {
-      audio.pause();
-      audio.currentTime = 0;
+    audioMap.forEach((audio, id) => {
+      const instrument = instrumentMap.get(id);
+      if (instrument?.trackMode === 'synced') {
+        audio.volume = 0;
+        if (audio.paused) {
+          audio.play();
+        }
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+      }
     });
     tileMap.forEach(tile => {
       tile.classList.remove('playing');
@@ -279,6 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     activeInstrumentIds = new Set();
     stopEqualizer();
     equalizerBars = [];
+    currentMode = currentMode || 'custom';
     musicLine = document.createElement('div');
     musicLine.className = 'music-line';
     const musicLineTrack = document.createElement('div');
@@ -305,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const audio = new Audio(instrument.sound);
       audio.loop = true;
-      audio.volume = currentVolume / 100;
+      audio.volume = instrument.trackMode === 'synced' ? 0 : currentVolume / 100;
       audioMap.set(instrument.id, audio);
 
       let hoverTimeout = null;
@@ -340,6 +388,14 @@ document.addEventListener('DOMContentLoaded', () => {
     musicLine.appendChild(musicLineTrack);
     tileContainer.appendChild(musicLine);
     updateEqualizerState();
+    if (currentMode === 'prerecorded') {
+      selected.forEach(instrument => {
+        const audio = audioMap.get(instrument.id);
+        if (audio) {
+          audio.play();
+        }
+      });
+    }
 
     if (stopAllToggle?.checked) {
       const stopTile = document.createElement('div');
@@ -369,10 +425,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   chooseTilesButton.addEventListener('click', () => {
+    currentMode = 'custom';
+    tileCountInput.disabled = false;
+    tilePickerGrid.style.display = '';
     desiredTileCount = parseInt(tileCountInput.value, 10) || 3;
     trimSelections();
     updateTileCountDisplay();
+    renderPresets();
     renderPicker();
+    updateStartState();
+    gameOptionsModal.style.display = 'none';
+    tilePickerModal.style.display = 'flex';
+  });
+
+  choosePresetsButton?.addEventListener('click', () => {
+    currentMode = 'prerecorded';
+    tileCountInput.disabled = true;
+    tilePickerGrid.style.display = 'none';
+    renderPresets();
+    selectedIds = [];
     updateStartState();
     gameOptionsModal.style.display = 'none';
     tilePickerModal.style.display = 'flex';
@@ -402,6 +473,14 @@ document.addEventListener('DOMContentLoaded', () => {
     currentVolume = parseInt(volumeInput.value, 10) || 0;
     updateVolumeDisplay();
     updateAudioVolume();
+    if (currentMode === 'prerecorded') {
+      activeInstrumentIds.forEach(id => {
+        const audio = audioMap.get(id);
+        if (audio) {
+          audio.volume = currentVolume / 100;
+        }
+      });
+    }
   });
 
   backgroundSelect?.addEventListener('change', updateBackground);
