@@ -34,10 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'flute', label: 'Flute', image: '../../images/pictos/assistiveswitches.png', sound: '../../sounds/beatles.mp3', color: '#22c55e', trackMode: 'loop' },
     { id: 'bass', label: 'Bass', image: '../../images/pictos/angry.png', sound: '../../sounds/beatles.mp3', color: '#0ea5e9', trackMode: 'loop' },
     { id: 'pad', label: 'Pad', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3', color: '#eab308', trackMode: 'loop' },
-    { id: 'rock-bass', label: 'Bass', image: '../../images/pictos/banana.png', sound: '../../sounds/beatles.mp3', color: '#22c55e', trackMode: 'synced' },
-    { id: 'rock-guitar', label: 'Guitar', image: '../../images/pictos/assistivebike.png', sound: '../../sounds/blade.mp3', color: '#f97316', trackMode: 'synced' },
-    { id: 'rock-vocals', label: 'Vocals', image: '../../images/pictos/OSD.png', sound: '../../sounds/arthur.mp3', color: '#e11d48', trackMode: 'synced' },
-    { id: 'rock-drums', label: 'Drums', image: '../../images/pictos/balloon.png', sound: '../../sounds/belleetbete.mp3', color: '#facc15', trackMode: 'synced' }
+    { id: 'rock-bass', label: 'Bass', image: '../../images/musicmaker/bass.png', sound: '../../songs/musicmaker/therapy/bass.mp3', color: '#22c55e', trackMode: 'synced' },
+    { id: 'rock-guitar', label: 'Guitar', image: '../../images/musicmaker/electricguitar.png', sound: '../../songs/musicmaker/therapy/guitar.mp3', color: '#f97316', trackMode: 'synced' },
+    { id: 'rock-vocals', label: 'Vocals', image: '../../images/musicmaker/microphone.png', sound: '../../songs/musicmaker/therapy/vocals.mp3', color: '#e11d48', trackMode: 'synced' },
+    { id: 'rock-drums', label: 'Drums', image: '../../images/musicmaker/drum.png', sound: '../../songs/musicmaker/therapy/drums.mp3', color: '#facc15', trackMode: 'synced' }
   ];
   const presets = [
     {
