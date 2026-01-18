@@ -25,6 +25,10 @@
     #tile-container.this-or-that-mode {
       gap: 30vh !important;
     }
+    #tile-container.inputs-frozen .tile,
+    .tile.youtube-playing {
+      pointer-events: none;
+    }
   </style>
 </head>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
@@ -207,6 +211,7 @@
       let videoResumePositions = {};
       let currentVideoUrl = null;
       let loadingDiv = null;
+      let activeTile = null;
 
       let inactivityTimer = null;
       function clearInactivityTimer() {
@@ -372,7 +377,7 @@
           caption.textContent = choice.name;
           tile.appendChild(caption);
           tile.addEventListener('click', () => {
-            playVideo(choice.video);
+            playVideo(choice.video, tile);
           });
           tileContainer.appendChild(tile);
         });
@@ -422,16 +427,25 @@
         }
       }
 
-      function playVideo(videoUrl) {
+      function playVideo(videoUrl, tile) {
         videoPlaying = true;
         currentVideoUrl = videoUrl;
+        if (activeTile) {
+          activeTile.classList.remove('youtube-playing');
+        }
+        activeTile = tile || null;
+        if (activeTile) {
+          activeTile.classList.add('youtube-playing');
+        }
+        tileContainer.classList.add('inputs-frozen');
         tileContainer.style.display = 'none';
         tilePickerModal.style.display = 'none';
         gameOptionsModal.style.display = 'none';
         videoContainer.style.display = 'flex';
         resetInactivityTimer();
 
-        if (isYouTubeUrl(videoUrl)) {
+        const isYoutubeVideo = isYouTubeUrl(videoUrl);
+        if (isYoutubeVideo) {
           videoPlayer.pause();
           videoPlayer.currentTime = 0;
           videoPlayer.style.display = 'none';
@@ -459,6 +473,9 @@
           videoContainer.requestFullscreen().catch(() => {});
         } else if (videoContainer.webkitRequestFullscreen) {
           videoContainer.webkitRequestFullscreen();
+        }
+        if (isYoutubeVideo && youtubeState.player && typeof youtubeState.player.playVideo === 'function') {
+          youtubeState.player.playVideo();
         }
 
         if (enableTimeLimitCheckbox.checked) {
@@ -511,6 +528,11 @@
         }
         videoPlaying = false;
         currentVideoUrl = null;
+        if (activeTile) {
+          activeTile.classList.remove('youtube-playing');
+          activeTile = null;
+        }
+        tileContainer.classList.remove('inputs-frozen');
         videoContainer.style.display = 'none';
         tileContainer.style.display = 'flex';
         if (document.fullscreenElement) {
