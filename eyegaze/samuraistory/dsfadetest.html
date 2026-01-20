@@ -71,8 +71,9 @@
         /* Video element - initially hidden */
         #current-video {
             position: absolute;
-            top: 0;
-            left: 0;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             width: 100%;
             height: 100%;
             object-fit: contain;
@@ -648,6 +649,32 @@
         let videoExists = false;
         let animationEnded = false;
         let videoTransitionTimeout = null;
+        let pendingVideoSync = null;
+
+        function syncVideoToImage() {
+            if (!currentImage.complete) {
+                return;
+            }
+
+            const rect = currentImage.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) {
+                return;
+            }
+
+            currentVideo.style.width = `${rect.width}px`;
+            currentVideo.style.height = `${rect.height}px`;
+        }
+
+        function scheduleVideoSync() {
+            if (pendingVideoSync) {
+                cancelAnimationFrame(pendingVideoSync);
+            }
+
+            pendingVideoSync = requestAnimationFrame(() => {
+                syncVideoToImage();
+                pendingVideoSync = null;
+            });
+        }
 
         // Initialize thumbnails
         function initThumbnails() {
@@ -693,6 +720,7 @@
             // Update image source
             currentImage.src = basePath + imageName;
             imageInfo.textContent = imageName;
+            scheduleVideoSync();
             
             // Check if corresponding video exists
             checkForVideo(imageName);
@@ -828,6 +856,7 @@
             currentImage.style.animation = 'none';
             void currentImage.offsetWidth; // Trigger reflow
             currentImage.style.animation = 'colorFadeIn 4s ease-in-out forwards';
+            scheduleVideoSync();
             
             // If in fullscreen and video exists, set up video again
             if (isFullscreen && videoExists) {
@@ -1083,6 +1112,7 @@
             const wasFullscreen = isFullscreen;
             isFullscreen = !!document.fullscreenElement;
             fullscreenBtn.textContent = isFullscreen ? 'Exit Fullscreen' : 'Fullscreen';
+            scheduleVideoSync();
             
             // If we just exited fullscreen, reset video
             if (wasFullscreen && !isFullscreen) {
@@ -1121,6 +1151,9 @@
             imageInfo.textContent = 'Error loading image: ' + images[currentImageIndex];
             console.error('Failed to load image:', basePath + images[currentImageIndex]);
         });
+
+        currentImage.addEventListener('load', scheduleVideoSync);
+        window.addEventListener('resize', scheduleVideoSync);
 
         // Show image info on hover
         currentImage.addEventListener('mouseenter', () => {
