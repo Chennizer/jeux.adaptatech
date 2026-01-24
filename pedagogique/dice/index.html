@@ -71,6 +71,7 @@
       <div id="photosOptions" style="display:none;">
         <p class="translate" data-fr="Source des fichiers"
            data-en="Upload Source">Upload Source</p>
+        <div id="photoPreviewGrid" aria-live="polite"></div>
         <div id="photoModeSegmentedControl">
           <button id="photo-files-button" class="mode-btn translate selected"
                   data-fr="Fichiers" data-en="Files">Files</button>
@@ -158,6 +159,7 @@
     let availableColors=[], selectedColors=[];
     let itemsData=[], poolData=[]; // données courantes / originales
     let imgs=[], imgsAll=[], poolImgs=[];
+    let photoSelections = [];
     let lastChoice=null;
     let cur=0, startIdx=0, targetIdx=0;
 
@@ -419,6 +421,7 @@
           photoFolderButton = document.getElementById('photo-folder-button'),
           fileInput      = document.getElementById('fileInput'),
           folderInput    = document.getElementById('folderInput'),
+          photoPreviewGrid = document.getElementById('photoPreviewGrid'),
           wordsContainer = document.getElementById('wordsContainer'),
           addWordButton  = document.getElementById('addWordButton'),
           numberSlider   = document.getElementById('numberSlider'),
@@ -487,6 +490,7 @@
       photoFolderButton.classList.remove('selected');
       fileSelectWrap.style.display = 'block';
       folderSelectWrap.style.display = 'none';
+      folderInput.value = '';
     };
 
     photoFolderButton.onclick = () => {
@@ -494,14 +498,84 @@
       photoFilesButton.classList.remove('selected');
       fileSelectWrap.style.display = 'none';
       folderSelectWrap.style.display = 'block';
+      fileInput.value = '';
     };
+
+    function clearPhotoSelections() {
+      photoSelections.forEach(item => URL.revokeObjectURL(item.url));
+      photoSelections = [];
+      renderPhotoPreviews();
+    }
+
+    function renderPhotoPreviews() {
+      photoPreviewGrid.innerHTML = '';
+      if (!photoSelections.length) {
+        const empty = document.createElement('div');
+        empty.className = 'photo-preview-empty';
+        empty.textContent = 'Aperçu des images';
+        photoPreviewGrid.appendChild(empty);
+        return;
+      }
+
+      photoSelections.forEach((item, idx) => {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = `photo-preview-tile${item.selected ? ' selected' : ''}`;
+        tile.setAttribute('aria-pressed', item.selected.toString());
+        tile.title = item.file.name || `Image ${idx + 1}`;
+
+        const img = document.createElement('img');
+        img.src = item.url;
+        img.alt = item.file.name || `Image ${idx + 1}`;
+        tile.appendChild(img);
+
+        tile.onclick = () => {
+          const selectedCount = photoSelections.filter(s => s.selected).length;
+          if (!item.selected && selectedCount >= 6) {
+            alert('Max 6 images');
+            return;
+          }
+          item.selected = !item.selected;
+          renderPhotoPreviews();
+        };
+
+        photoPreviewGrid.appendChild(tile);
+      });
+    }
+
+    function setPhotoSelections(files) {
+      clearPhotoSelections();
+      const items = [...files].filter(file => file.type.startsWith('image/'));
+      photoSelections = items.map((file, idx) => ({
+        file,
+        url: URL.createObjectURL(file),
+        selected: idx < 6
+      }));
+      renderPhotoPreviews();
+    }
+
+    fileInput.addEventListener('change', e => {
+      setPhotoSelections(e.target.files);
+    });
+
+    folderInput.addEventListener('change', e => {
+      setPhotoSelections(e.target.files);
+    });
 
     /* ---------- Lancement ---------- */
     startButton.onclick = () => {
       if (!mode) diceBtn.onclick();  // Sécurité : mode par défaut
 
       document.getElementById('game-options').style.display = 'none';
-      started = true; zoomed = false;
+      zoomed = false;
+
+      const finalizeStart = () => {
+        started = true;
+        poolData = itemsData.slice();
+        poolImgs = imgsAll.slice();
+        cur = 0;
+        goFullscreen();
+      };
 
       if (mode === 'colors') {
         if (!selectedColors.length) {
@@ -510,41 +584,39 @@
         itemsData = selectedColors.slice();
         imgs      = itemsData.map(makeColorCircle);
         imgsAll   = imgs.slice();
+        finalizeStart();
 
       } else if (mode === 'photos') {
-        const files = fileInput.files.length ? fileInput.files : folderInput.files;
-        if (!files.length) { alert('Select images'); started = false; return; }
+        const selectedFiles = photoSelections.filter(s => s.selected);
+        if (!selectedFiles.length) { alert('Select images'); started = false; return; }
         itemsData = []; imgs = [];
 
-        const tasks = [];
-        for (let i = 0; i < Math.min(files.length, 6); i++) {
-          tasks.push(new Promise(res => {
-            const fr = new FileReader();
-            fr.onload = () => {
-              const im = loadImage(fr.result, () => res());
-              itemsData.push(im); imgs.push(im);
-            };
-            fr.readAsDataURL(files[i]);
-          }));
-        }
-        Promise.all(tasks).then(() => imgsAll = imgs.slice());
+        const tasks = selectedFiles.map(item => new Promise((res, rej) => {
+          const im = loadImage(item.url, () => res(im), () => rej());
+        }));
+        Promise.all(tasks).then(loaded => {
+          itemsData = loaded.slice();
+          imgs = loaded.slice();
+          imgsAll = imgs.slice();
+          finalizeStart();
+        }).catch(() => {
+          alert('Image load failed');
+        });
+        return;
 
       } else if (mode === 'words') {
         const d = [...wordsContainer.querySelectorAll('input.word-input')]
                     .map(i => i.value.trim()).filter(Boolean);
         if (!d.length) { alert('Enter words'); started = false; return; }
         itemsData = d.slice(); imgs = imgsAll = [];
+        finalizeStart();
 
       } else if (mode === 'numbers') {
         const n = parseInt(numberSlider.value);
         itemsData = shuffleArray([...Array(n).keys()].map(i => i + 1));
         imgs = imgsAll = [];
+        finalizeStart();
       }
-
-      poolData = itemsData.slice();
-      poolImgs = imgsAll.slice();
-      cur = 0;
-      goFullscreen();
     };
 
     /* --------- Plein écran automatique --------- */
