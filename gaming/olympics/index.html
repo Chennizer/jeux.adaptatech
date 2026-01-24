@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ski Trail Painter — Side View (Single Skier)</title>
+  <style>
+    :root{
+      --panel:#111a33cc;
+      --panel-border:#2a3a6a;
+      --text:#f2f5ff;
+      --muted:#b7c1e6;
+      --accent:#2f6fff;
+      --danger:#ff6b6b;
+    }
+
+    *{ box-sizing:border-box; }
+    html, body { height:100%; margin:0; }
+    body{
+      background:#ffffff;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow:hidden;
+      user-select:none;
+      -webkit-user-select:none;
+      touch-action: manipulation;
+    }
+
+    #app{ position:relative; width:100%; height:100%; }
+    canvas{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      display:block;
+    }
+
+    #panel{
+      position:absolute;
+      left:18px;
+      top:18px;
+      width:min(480px, calc(100% - 36px));
+      background:var(--panel);
+      border:1px solid var(--panel-border);
+      border-radius:16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.22);
+      padding:14px 14px 12px 14px;
+      backdrop-filter: blur(10px);
+      color:var(--text);
+    }
+
+    #panel h1{
+      font-size:16px;
+      margin:0 0 8px 0;
+      letter-spacing:0.2px;
+      font-weight:800;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+
+    .badge{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:700;
+      border:1px solid rgba(255,255,255,0.12);
+      padding:4px 8px;
+      border-radius:999px;
+    }
+
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 150px;
+      gap:10px;
+      align-items:center;
+      margin:8px 0;
+    }
+
+    label{
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.25;
+    }
+
+    input[type="range"]{ width:100%; }
+    input[type="number"], select{
+      width:100%;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.14);
+      background:rgba(0,0,0,0.22);
+      color:var(--text);
+      outline:none;
+      font-size:13px;
+    }
+
+    .btnrow{
+      display:flex;
+      gap:10px;
+      margin-top:10px;
+      flex-wrap:wrap;
+    }
+
+    button{
+      border:none;
+      border-radius:12px;
+      padding:10px 12px;
+      font-weight:800;
+      font-size:14px;
+      cursor:pointer;
+      color:#081022;
+      background: linear-gradient(180deg, #9ec0ff 0%, #6fa2ff 100%);
+      box-shadow: 0 10px 22px rgba(122,167,255,0.22);
+    }
+    button.secondary{
+      color:var(--text);
+      background: rgba(255,255,255,0.10);
+      border:1px solid rgba(255,255,255,0.12);
+      box-shadow:none;
+    }
+    button.danger{
+      color:#1d0707;
+      background: linear-gradient(180deg, #ff9b9b 0%, #ff6b6b 100%);
+      box-shadow: 0 10px 22px rgba(255,107,107,0.18);
+    }
+
+    .tips{
+      margin-top:10px;
+      font-size:12.5px;
+      color:var(--muted);
+      line-height:1.35;
+    }
+
+    .tips kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size:12px;
+      color:var(--text);
+      background: rgba(0,0,0,0.28);
+      border:1px solid rgba(255,255,255,0.14);
+      padding:2px 6px;
+      border-radius:8px;
+      display:inline-block;
+      margin:0 2px;
+    }
+
+    #activateZone{
+      position:absolute;
+      right:18px;
+      bottom:18px;
+      width:min(420px, calc(100% - 36px));
+      height:150px;
+      border-radius:18px;
+      border:1px solid rgba(0,0,0,0.10);
+      background: rgba(255,255,255,0.88);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.12);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      padding:14px;
+      backdrop-filter: blur(10px);
+      overflow:hidden;
+      color:#0b1020;
+    }
+
+    #activateZone .title{
+      font-weight:900;
+      letter-spacing:0.2px;
+      font-size:18px;
+      margin-bottom:6px;
+    }
+    #activateZone .subtitle{
+      font-size:13px;
+      color:rgba(0,0,0,0.58);
+      line-height:1.35;
+    }
+
+    #dwellRing{
+      position:absolute;
+      width:110px;
+      height:110px;
+      border-radius:999px;
+      border:4px solid rgba(0,0,0,0.12);
+      display:none;
+      pointer-events:none;
+      transform: translate(-50%, -50%);
+    }
+    #dwellFill{
+      position:absolute;
+      inset:-4px;
+      border-radius:999px;
+      background: conic-gradient(rgba(47,111,255,0.18) 0deg, rgba(47,111,255,0.18) 360deg);
+    }
+    #dwellCenter{
+      position:absolute;
+      inset:10px;
+      border-radius:999px;
+      background: rgba(255,255,255,0.78);
+      border:1px solid rgba(0,0,0,0.10);
+    }
+    #dwellText{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:900;
+      color:#0b1020;
+      font-size:14px;
+    }
+
+    #status{
+      position:absolute;
+      left:18px;
+      bottom:18px;
+      font-size:12.5px;
+      color:rgba(0,0,0,0.65);
+      background: rgba(255,255,255,0.88);
+      border:1px solid rgba(0,0,0,0.10);
+      padding:8px 10px;
+      border-radius:12px;
+      max-width: min(760px, calc(100% - 36px));
+      box-shadow: 0 10px 24px rgba(0,0,0,0.10);
+      backdrop-filter: blur(10px);
+    }
+
+    @media (max-width: 820px){
+      #panel{ left:12px; top:12px; width: calc(100% - 24px); }
+      #activateZone{ left:12px; right:12px; bottom:12px; width: calc(100% - 24px); height: 140px; }
+      #status{ display:none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+
+    <div id="panel" aria-label="Control panel">
+      <h1>
+        Ski Trail Painter — Side View
+        <span class="badge" id="modeBadge">Ready</span>
+      </h1>
+
+      <div class="row">
+        <label for="dwellMs">Eye-gaze dwell time (ms)</label>
+        <input id="dwellMs" type="number" min="0" max="5000" step="50" value="800" />
+      </div>
+
+      <div class="row">
+        <label for="speed">Skier speed</label>
+        <input id="speed" type="range" min="0.3" max="2.5" step="0.05" value="1.2" />
+      </div>
+
+      <div class="row">
+        <label for="wiggle">Wiggle / carving</label>
+        <input id="wiggle" type="range" min="0" max="2.0" step="0.05" value="0.9" />
+      </div>
+
+      <div class="row">
+        <label for="slopeAngle">Slope angle</label>
+        <input id="slopeAngle" type="range" min="12" max="35" step="1" value="22" />
+      </div>
+
+      <div class="row">
+        <label for="trailWidth">Trail thickness</label>
+        <input id="trailWidth" type="range" min="3" max="30" step="1" value="14" />
+      </div>
+
+      <div class="row">
+        <label for="trailFade">Trail fade (seconds)</label>
+        <input id="trailFade" type="range" min="2" max="30" step="1" value="10" />
+      </div>
+
+      <div class="row">
+        <label for="colorMode">Color mode</label>
+        <select id="colorMode">
+          <option value="rainbow" selected>Rainbow (auto)</option>
+          <option value="cool">Cool (blue/teal/purple)</option>
+          <option value="warm">Warm (pink/orange/yellow)</option>
+          <option value="single">Single color</option>
+          <option value="randomRun">Random per run</option>
+        </select>
+      </div>
+
+      <div class="row" id="singleColorRow" style="display:none;">
+        <label for="singleColor">Single color (hex)</label>
+        <input id="singleColor" type="text" value="#2f6fff" />
+      </div>
+
+      <div class="btnrow">
+        <button id="startBtn" type="button">Start / Activate</button>
+        <button id="pauseBtn" class="secondary" type="button">Pause</button>
+        <button id="clearBtn" class="danger" type="button">Clear Trails</button>
+        <button id="fullscreenBtn" class="secondary" type="button">Fullscreen</button>
+      </div>
+
+      <div class="tips">
+        One skier at a time. Activate (dwell/click) or press <kbd>Space</kbd>/<kbd>Enter</kbd> to start a new downhill run.
+        <br />
+        Dwell <kbd>0</kbd> disables dwell activation.
+      </div>
+    </div>
+
+    <div id="activateZone" role="button" tabindex="0" aria-label="Activate (dwell or click)">
+      <div>
+        <div class="title">Activate</div>
+        <div class="subtitle">Look here (dwell), click/tap, or press Space/Enter.</div>
+      </div>
+
+      <div id="dwellRing" aria-hidden="true">
+        <div id="dwellFill"></div>
+        <div id="dwellCenter"></div>
+        <div id="dwellText">0%</div>
+      </div>
+    </div>
+
+    <div id="status" aria-live="polite"></div>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("c");
+      const ctx = canvas.getContext("2d", { alpha: false });
+
+      const activateZone = document.getElementById("activateZone");
+      const statusEl = document.getElementById("status");
+      const modeBadge = document.getElementById("modeBadge");
+
+      const dwellMsEl = document.getElementById("dwellMs");
+      const speedEl = document.getElementById("speed");
+      const wiggleEl = document.getElementById("wiggle");
+      const slopeAngleEl = document.getElementById("slopeAngle");
+      const trailWidthEl = document.getElementById("trailWidth");
+      const trailFadeEl = document.getElementById("trailFade");
+      const colorModeEl = document.getElementById("colorMode");
+      const singleColorRow = document.getElementById("singleColorRow");
+      const singleColorEl = document.getElementById("singleColor");
+
+      const startBtn = document.getElementById("startBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const fullscreenBtn = document.getElementById("fullscreenBtn");
+
+      const dwellRing = document.getElementById("dwellRing");
+      const dwellFill = document.getElementById("dwellFill");
+      const dwellText = document.getElementById("dwellText");
+
+      let W = 0, H = 0, DPR = 1;
+      let running = true;
+      let lastT = performance.now();
+
+      let stroke = null; // {points:[{x,y,t}], color, width, birthT, lifeS}
+      let skier = null;  // {s, phase, color, speed}
+
+      let hoverActive = false;
+      let dwellStartT = 0;
+
+      const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+      const rand = (a, b) => a + Math.random() * (b - a);
+
+      function resize() {
+        DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        W = Math.floor(window.innerWidth);
+        H = Math.floor(window.innerHeight);
+        canvas.width = Math.floor(W * DPR);
+        canvas.height = Math.floor(H * DPR);
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      }
+      window.addEventListener("resize", resize, { passive: true });
+      resize();
+
+      function degToRad(d) { return (d * Math.PI) / 180; }
+
+      // --------- Background texture (grain + streaks + specks) ---------
+      const grainCanvas = document.createElement("canvas");
+      const grainCtx = grainCanvas.getContext("2d");
+
+      function buildGrain() {
+        const gw = 240, gh = 240;
+        grainCanvas.width = gw;
+        grainCanvas.height = gh;
+        const img = grainCtx.createImageData(gw, gh);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const n = (Math.random() * 255) | 0;
+          d[i] = n; d[i + 1] = n; d[i + 2] = n; d[i + 3] = 255;
+        }
+        grainCtx.putImageData(img, 0, 0);
+      }
+      buildGrain();
+
+      const streaks = Array.from({ length: 26 }, () => ({
+        x: rand(-W * 0.2, W * 1.2),
+        y: rand(-H * 0.2, H * 1.2),
+        len: rand(180, 520),
+        w: rand(2, 8),
+        a: rand(0.03, 0.09),
+        drift: rand(6, 24)
+      }));
+
+      const specks = Array.from({ length: 120 }, () => ({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: rand(0.6, 1.8),
+        s: rand(0.08, 0.45),
+        a: rand(0.035, 0.11)
+      }));
+
+      function updateTexture(dt) {
+        for (const p of specks) {
+          p.y += (22 * p.s) * dt;
+          p.x += (8 * p.s) * dt * Math.sin((p.y / 120) + p.s);
+          if (p.y > H + 10) {
+            p.y = -10;
+            p.x = Math.random() * W;
+            p.r = rand(0.6, 1.8);
+            p.s = rand(0.08, 0.45);
+            p.a = rand(0.035, 0.11);
+          }
+        }
+        for (const s of streaks) {
+          s.x += s.drift * dt * 0.35;
+          s.y += s.drift * dt * 0.18;
+          if (s.x > W * 1.35) s.x = -W * 0.35;
+          if (s.y > H * 1.35) s.y = -H * 0.35;
+        }
+      }
+
+      function drawBackground() {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, W, H);
+
+        const ang = degToRad(Number(slopeAngleEl.value));
+        ctx.save();
+        ctx.translate(W * 0.5, H * 0.5);
+        ctx.rotate(ang);
+        const bandGrad = ctx.createLinearGradient(0, -H * 0.25, 0, H * 0.25);
+        bandGrad.addColorStop(0, "rgba(0,0,0,0.00)");
+        bandGrad.addColorStop(0.5, "rgba(0,0,0,0.03)");
+        bandGrad.addColorStop(1, "rgba(0,0,0,0.00)");
+        ctx.fillStyle = bandGrad;
+        ctx.fillRect(-W, -H * 0.30, W * 2, H * 0.60);
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalCompositeOperation = "multiply";
+        ctx.strokeStyle = "rgba(0,0,0,0.06)";
+        ctx.lineCap = "round";
+        const streakAngle = ang + degToRad(6);
+        for (const s of streaks) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(streakAngle);
+          ctx.globalAlpha = s.a;
+          ctx.lineWidth = s.w;
+          ctx.beginPath();
+          ctx.moveTo(-s.len * 0.55, 0);
+          ctx.lineTo(s.len * 0.55, 0);
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalAlpha = 0.045;
+        ctx.globalCompositeOperation = "overlay";
+        const pat = ctx.createPattern(grainCanvas, "repeat");
+        ctx.fillStyle = pat;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+
+        for (const p of specks) {
+          ctx.fillStyle = `rgba(0,0,0,${p.a})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const v = ctx.createRadialGradient(W * 0.55, H * 0.4, 80, W * 0.5, H * 0.5, Math.max(W, H) * 0.9);
+        v.addColorStop(0, "rgba(0,0,0,0.00)");
+        v.addColorStop(1, "rgba(0,0,0,0.09)");
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // --------- Color utilities ----------
+      function parseHexColor(str, fallback = "#2f6fff") {
+        const s = (str || "").trim();
+        const ok = /^#([0-9a-fA-F]{6})$/.test(s);
+        return ok ? s : fallback;
+      }
+
+      function colorFromMode(t01) {
+        const mode = colorModeEl.value;
+        if (mode === "single") return parseHexColor(singleColorEl.value);
+
+        if (mode === "cool") {
+          const palette = ["#2f6fff", "#2bb6ff", "#2ad4a7", "#7a5cff"];
+          return palette[Math.floor(t01 * palette.length) % palette.length];
+        }
+        if (mode === "warm") {
+          const palette = ["#ff4fa3", "#ff8a4a", "#ffd24a", "#ff4f6d"];
+          return palette[Math.floor(t01 * palette.length) % palette.length];
+        }
+        const hue = (t01 * 360) % 360;
+        return `hsl(${hue}, 90%, 52%)`;
+      }
+
+      function randomRunColor() {
+        const hue = Math.floor(Math.random() * 360);
+        return `hsl(${hue}, 90%, 52%)`;
+      }
+
+      function withAlpha(color, a) {
+        if (color.startsWith("hsl(")) return color.replace("hsl(", "hsla(").replace(")", `, ${a})`);
+        const hex = color.replace("#", "");
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return `rgba(${r},${g},${b},${a})`;
+      }
+
+      function announce(msg) {
+        if (statusEl) statusEl.textContent = msg;
+      }
+
+      function syncSingleColorUI() {
+        singleColorRow.style.display = (colorModeEl.value === "single") ? "grid" : "none";
+      }
+      colorModeEl.addEventListener("change", syncSingleColorUI);
+      syncSingleColorUI();
+
+      // --------- Path ----------
+      function pathPoint(s) {
+        const ang = degToRad(Number(slopeAngleEl.value));
+        const startX = -90;
+        const startY = H * 0.28;
+        const travel = W + 260;
+        const x = startX + travel * s;
+        const y = startY + travel * Math.tan(ang) * s;
+        return { x, y, ang };
+      }
+
+      function startRun() {
+        if (!running) return;
+
+        const now = performance.now();
+        const width = Number(trailWidthEl.value);
+        const lifeS = Number(trailFadeEl.value);
+
+        let color;
+        if (colorModeEl.value === "randomRun") color = randomRunColor();
+        else color = colorFromMode((now * 0.00008) % 1);
+
+        const p0 = pathPoint(0);
+
+        stroke = {
+          points: [{ x: p0.x, y: p0.y, t: now }],
+          color,
+          width,
+          birthT: now,
+          lifeS
+        };
+
+        skier = {
+          s: 0,
+          phase: Math.random() * Math.PI * 2,
+          color,
+          speed: Number(speedEl.value)
+        };
+
+        modeBadge.textContent = "Active";
+        announce("Run started.");
+      }
+
+      function clearAll() {
+        stroke = null;
+        skier = null;
+        modeBadge.textContent = "Ready";
+        announce("Cleared trails.");
+      }
+
+      function drawStroke(now) {
+        if (!stroke || stroke.points.length < 2) return;
+
+        const ageS = (now - stroke.birthT) / 1000;
+        const fadeStart = Math.max(0, stroke.lifeS * 0.25);
+        let alpha = 1;
+
+        if (ageS > fadeStart) {
+          const t = clamp((ageS - fadeStart) / Math.max(0.001, (stroke.lifeS - fadeStart)), 0, 1);
+          alpha = 1 - t;
+        }
+        if (ageS >= stroke.lifeS) {
+          stroke = null;
+          return;
+        }
+
+        const pts = stroke.points;
+        const w = stroke.width;
+
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+
+        ctx.strokeStyle = "rgba(0,0,0,0.10)";
+        ctx.lineWidth = w * 2.1;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+
+        ctx.strokeStyle = withAlpha(stroke.color, 0.18 * alpha);
+        ctx.lineWidth = w * 1.85;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+
+        ctx.strokeStyle = withAlpha(stroke.color, 0.86 * alpha);
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+
+        ctx.strokeStyle = withAlpha("#ffffff", 0.35 * alpha);
+        ctx.lineWidth = Math.max(1.5, w * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
+
+      // --------- Skier (requested fixes) ----------
+      // - Skis are dark (always dark, not tied to trail color)
+      // - Head more on top of body (less forward offset, more vertical alignment)
+      function drawSkier(x, y, slopeAngle, color, motionTilt, tNow, carveAmt01) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(slopeAngle);
+        ctx.rotate(motionTilt);
+
+        const baseScale = 1.05;
+        ctx.scale(baseScale, baseScale);
+
+        const outline = "rgba(0,0,0,0.23)";
+
+        function strokeFillPath(fill, stroke, lw, pathFn) {
+          ctx.save();
+          pathFn();
+          if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+          if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+          ctx.restore();
+        }
+
+        // Shadow
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.beginPath();
+        ctx.ellipse(10, 24, 24, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Skis (dark)
+        const skiLen = 66;
+        const skiSep = 7;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+
+        ctx.strokeStyle = "rgba(0,0,0,0.78)";
+        ctx.lineWidth = 4.4;
+
+        ctx.beginPath();
+        ctx.moveTo(-skiLen * 0.56, 20 - skiSep);
+        ctx.quadraticCurveTo(skiLen * 0.18, 16 - skiSep, skiLen * 0.56, 20 - skiSep);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-skiLen * 0.56, 20 + skiSep);
+        ctx.quadraticCurveTo(skiLen * 0.18, 16 + skiSep, skiLen * 0.56, 20 + skiSep);
+        ctx.stroke();
+
+        // Tiny shin highlight to separate boots from skis (still dark, subtle)
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(-2, 18 - skiSep);
+        ctx.lineTo(12, 20 - skiSep);
+        ctx.moveTo(8, 18 + skiSep);
+        ctx.lineTo(22, 20 + skiSep);
+        ctx.stroke();
+
+        // Knees
+        const step = Math.sin(tNow * 0.012) * 1.1;
+        const knee = 8 + step;
+
+        // Legs
+        strokeFillPath("rgba(0,0,0,0.55)", outline, 2.1, () => {
+          ctx.beginPath();
+          ctx.moveTo(2, 6);
+          ctx.quadraticCurveTo(-8, 12, -8, knee);
+          ctx.quadraticCurveTo(-8, 26, 4, 26);
+          ctx.quadraticCurveTo(10, 22, 8, 14);
+          ctx.quadraticCurveTo(7, 10, 2, 6);
+
+          ctx.moveTo(10, 6);
+          ctx.quadraticCurveTo(1, 12, 2, knee + 2);
+          ctx.quadraticCurveTo(3, 28, 15, 27);
+          ctx.quadraticCurveTo(20, 24, 18, 14);
+          ctx.quadraticCurveTo(16, 10, 10, 6);
+          ctx.closePath();
+        });
+
+        // Boots
+        strokeFillPath("rgba(255,255,255,0.85)", outline, 2.0, () => {
+          ctx.beginPath();
+          ctx.roundRect(-6, 14, 16, 12, 4);
+          ctx.roundRect(6, 14, 16, 12, 4);
+        });
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        ctx.fillRect(-3, 16, 10, 3);
+        ctx.fillRect(9, 16, 10, 3);
+
+        // Jacket (taller + thinner)
+        const jacketGrad = ctx.createLinearGradient(-4, -20, 22, 18);
+        jacketGrad.addColorStop(0, withAlpha(color, 0.98));
+        jacketGrad.addColorStop(1, withAlpha(color, 0.72));
+
+        strokeFillPath(jacketGrad, outline, 2.2, () => {
+          ctx.beginPath();
+          ctx.ellipse(12, -6, 10.5, 23, -0.52, 0, Math.PI * 2);
+          ctx.moveTo(6, 6);
+          ctx.quadraticCurveTo(14, 10, 18, 18);
+          ctx.quadraticCurveTo(9, 18, 3, 12);
+          ctx.closePath();
+        });
+
+        // Jacket highlight stripe
+        ctx.strokeStyle = "rgba(255,255,255,0.30)";
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(9, -16);
+        ctx.quadraticCurveTo(14, -6, 15, 6);
+        ctx.stroke();
+
+        // Arm + glove
+        strokeFillPath("rgba(0,0,0,0.25)", outline, 2.0, () => {
+          ctx.beginPath();
+          ctx.moveTo(9, -4);
+          ctx.quadraticCurveTo(1, 1, -10, 10);
+          ctx.quadraticCurveTo(-12, 12, -10, 14);
+          ctx.quadraticCurveTo(-6, 14, -4, 12);
+          ctx.quadraticCurveTo(3, 7, 12, 4);
+          ctx.closePath();
+        });
+        strokeFillPath("rgba(0,0,0,0.55)", outline, 2.0, () => {
+          ctx.beginPath();
+          ctx.roundRect(-13, 10, 8, 7, 3);
+        });
+
+        // Scarf
+        ctx.strokeStyle = withAlpha(color, 0.50);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(18, -24);
+        ctx.quadraticCurveTo(9, -17, -2, -18 - carveAmt01 * 6);
+        ctx.stroke();
+
+        // Head aligned "on top" of body axis:
+        // Torso center ~ x=12. Move head close to that, and raise it slightly.
+        const headX = 14.5;  // much closer to torso center
+        const headY = -32.0; // higher (more on top)
+
+        // Helmet
+        strokeFillPath("rgba(0,0,0,0.65)", outline, 2.2, () => {
+          ctx.beginPath();
+          ctx.ellipse(headX, headY, 10.2, 8.3, 0.08, 0, Math.PI * 2);
+        });
+
+        // Face
+        strokeFillPath("rgba(255,255,255,0.92)", outline, 2.0, () => {
+          ctx.beginPath();
+          ctx.ellipse(headX + 1.6, headY + 2.2, 6.6, 5.6, 0.08, 0, Math.PI * 2);
+        });
+
+        // Goggles
+        strokeFillPath("rgba(47,111,255,0.28)", "rgba(0,0,0,0.30)", 1.6, () => {
+          ctx.beginPath();
+          ctx.roundRect(headX - 3.8, headY + 0.5, 13.0, 7.0, 3.2);
+        });
+
+        // Strap
+        ctx.strokeStyle = "rgba(0,0,0,0.35)";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(headX + 0.8, headY + 7.4);
+        ctx.quadraticCurveTo(headX - 3.4, headY + 12.0, headX - 5.4, headY + 15.5);
+        ctx.stroke();
+
+        // Pole
+        ctx.strokeStyle = "rgba(0,0,0,0.34)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(3, 3);
+        ctx.lineTo(-22, 34);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(0,0,0,0.25)";
+        ctx.beginPath();
+        ctx.arc(-22, 34, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      function updateSkier(now, dt) {
+        if (!skier || !stroke) return;
+
+        const baseSpeed = 0.17 * skier.speed;
+        skier.phase += dt * (1.35 + skier.speed * 0.75);
+
+        const wiggle = Number(wiggleEl.value);
+        const wig = Math.sin(skier.phase) * 0.030 * wiggle;
+
+        skier.s += baseSpeed * dt;
+
+        if (skier.s > 1.05) {
+          skier = null;
+          modeBadge.textContent = "Ready";
+          announce("Run complete. Activate to start again.");
+          return;
+        }
+
+        const { x, y, ang } = pathPoint(skier.s);
+
+        const nx = -Math.sin(ang);
+        const ny =  Math.cos(ang);
+        const offsetPx = (W * 0.10) * wig;
+
+        const xx = x + nx * offsetPx;
+        const yy = y + ny * offsetPx;
+
+        stroke.points.push({ x: xx, y: yy, t: now });
+
+        const motionTilt = clamp(wig * 1.5, -0.22, 0.22);
+        const carveAmt01 = clamp(Math.abs(wig) / (0.030 * Math.max(0.001, wiggle)), 0, 1);
+
+        drawSkier(xx, yy, ang, skier.color, motionTilt, now, carveAmt01);
+      }
+
+      // --------- Dwell ring ----------
+      function updateDwell(now) {
+        const dwellMs = clamp(Number(dwellMsEl.value || 0), 0, 5000);
+        if (!hoverActive || dwellMs <= 0) {
+          dwellRing.style.display = "none";
+          return;
+        }
+
+        const elapsed = now - dwellStartT;
+        const p = clamp(elapsed / dwellMs, 0, 1);
+
+        const r = activateZone.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        dwellRing.style.left = cx + "px";
+        dwellRing.style.top = cy + "px";
+        dwellRing.style.display = "block";
+
+        const deg = Math.floor(p * 360);
+        dwellFill.style.background =
+          `conic-gradient(rgba(47,111,255,0.45) 0deg, rgba(47,111,255,0.45) ${deg}deg, rgba(47,111,255,0.10) ${deg}deg, rgba(47,111,255,0.10) 360deg)`;
+        dwellText.textContent = `${Math.round(p * 100)}%`;
+
+        if (p >= 1) {
+          startRun();
+          dwellStartT = now;
+        }
+      }
+
+      // --------- Main loop ----------
+      function tick(t) {
+        const now = t;
+        const dt = clamp((now - lastT) / 1000, 0, 0.033);
+        lastT = now;
+
+        if (running) updateTexture(dt);
+
+        drawBackground();
+        drawStroke(now);
+
+        if (running) updateSkier(now, dt);
+        else {
+          if (skier && stroke && stroke.points.length) {
+            const pt = stroke.points[stroke.points.length - 1];
+            const ang = degToRad(Number(slopeAngleEl.value));
+            drawSkier(pt.x, pt.y, ang, skier.color, 0, now, 0);
+          }
+        }
+
+        updateDwell(now);
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+
+      // --------- Interactions ----------
+      function activate() {
+        if (!running) return;
+        startRun();
+      }
+
+      activateZone.addEventListener("mouseenter", () => {
+        hoverActive = true;
+        dwellStartT = performance.now();
+      });
+      activateZone.addEventListener("mouseleave", () => {
+        hoverActive = false;
+        dwellRing.style.display = "none";
+      });
+
+      activateZone.addEventListener("touchstart", () => {
+        hoverActive = true;
+        dwellStartT = performance.now();
+      }, { passive: true });
+
+      activateZone.addEventListener("touchend", () => {
+        hoverActive = false;
+        dwellRing.style.display = "none";
+      }, { passive: true });
+
+      activateZone.addEventListener("click", () => activate());
+
+      window.addEventListener("keydown", (e) => {
+        const k = e.key;
+        if (k === " " || k === "Enter") {
+          e.preventDefault();
+          activate();
+        } else if (k.toLowerCase() === "p") {
+          togglePause();
+        } else if (k.toLowerCase() === "c") {
+          clearAll();
+        }
+      }, { passive: false });
+
+      startBtn.addEventListener("click", () => activate());
+
+      function togglePause() {
+        running = !running;
+        pauseBtn.textContent = running ? "Pause" : "Resume";
+        modeBadge.textContent = running ? (skier ? "Active" : "Ready") : "Paused";
+        announce(running ? "Resumed." : "Paused. (Press P to resume)");
+      }
+      pauseBtn.addEventListener("click", togglePause);
+
+      clearBtn.addEventListener("click", clearAll);
+
+      fullscreenBtn.addEventListener("click", async () => {
+        try {
+          if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+          else await document.exitFullscreen();
+        } catch { /* ignore */ }
+      });
+
+      window.addEventListener("resize", () => {
+        for (const p of specks) {
+          p.x = Math.random() * window.innerWidth;
+          p.y = Math.random() * window.innerHeight;
+        }
+        for (const s of streaks) {
+          s.x = rand(-window.innerWidth * 0.2, window.innerWidth * 1.2);
+          s.y = rand(-window.innerHeight * 0.2, window.innerHeight * 1.2);
+        }
+      }, { passive: true });
+
+      // roundRect polyfill
+      if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+          r = Math.min(r, w/2, h/2);
+          this.beginPath();
+          this.moveTo(x + r, y);
+          this.arcTo(x + w, y, x + w, y + h, r);
+          this.arcTo(x + w, y + h, x, y + h, r);
+          this.arcTo(x, y + h, x, y, r);
+          this.arcTo(x, y, x + w, y, r);
+          this.closePath();
+          return this;
+        };
+      }
+
+      announce("Ready. Skis are dark. Head is more directly on top of the body. Activate to start a downhill run.");
+    })();
+  </script>
+</body>
+</html>

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../css/randomizer.css" />
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
 </head>
+
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -15,6 +16,7 @@
   gtag('js', new Date());
   gtag('config', 'G-B45TJG4GBJ');
 </script>
+
 <body>
   <div id="game-options" class="modal" style="display: flex;">
     <div id="control-panel-options">
@@ -43,7 +45,7 @@
       <!-- Dice -->
       <div id="diceOptions" style="display:none;">
         <p class="translate"
-           data-fr="Sélectionnez le nombre de faces (2–6) :"
+           data-fr="Sélectionnez le nombre de faces (2–6) :"
            data-en="Select number of faces (2–6):">
           Select number of faces (2–6):
         </p>
@@ -111,7 +113,7 @@
       <!-- Words -->
       <div id="wordsOptions" style="display:none;">
         <p class="translate"
-           data-fr="Entrez jusqu'à 6 mots (ou phrases courtes) :"
+           data-fr="Entrez jusqu'à 6 mots (ou phrases courtes) :"
            data-en="Enter up to 6 words (or short phrases):">
           Enter up to 6 words (or short phrases):
         </p>
@@ -127,7 +129,7 @@
       <!-- Numbers -->
       <div id="numbersOptions" style="display:none;">
         <p class="translate"
-           data-fr="Sélectionnez le nombre d'éléments (1–10) :"
+           data-fr="Sélectionnez le nombre d'éléments (1–10) :"
            data-en="Select number of items (1–10):">
           Select number of items (1–10):
         </p>
@@ -153,11 +155,11 @@
     let rolling=false, rollStart=0, bouncing=false, bounceStart=0, currentScale=1;
     let spinning=false, spinStart=0, spinDuration=STEP_DURATION;
     let zoomed=false;
-    let started=false, mode;       // <- mode sera défini plus bas
+    let started=false, mode;       // mode set by buttons
     let diceVal=1, diceSize;
     let availableColors=[], selectedColors=[];
-    let itemsData=[], poolData=[]; // données courantes / originales
-    let imgs=[], imgsAll=[], poolImgs=[];
+    let itemsData=[], poolData=[]; // current/original items
+    let imgs=[], imgsAll=[], poolImgs=[]; // current/original images
     let lastChoice=null;
     let cur=0, startIdx=0, targetIdx=0;
 
@@ -168,7 +170,7 @@
       availableColors = ['red','green','blue','yellow','pink','purple',
                          'orange','brown','white','gray','teal','gold'];
       textAlign(CENTER, CENTER);
-      renderColorGrids();          // remplit la grille dès le départ
+      renderColorGrids();
     };
 
     window.windowResized = () => {
@@ -203,7 +205,7 @@
       if (rolling) {
         if (now - rollStart < ROLL_DURATION) {
           if (now - lastChange > ROLL_INT) {
-            const mf = parseInt(diceSlider.value) || 6;
+            const mf = parseInt(diceSlider.value, 10) || 6;
             diceVal = floor(random(1, mf + 1));
             lastChange = now;
           }
@@ -245,13 +247,19 @@
     function triggerSpin() {
       if (spinning || rolling || zoomed) return;
 
-      // réinitialise le pool
+      // Guard against empty pools (prevents "spin but nothing shows")
+      if (!poolData.length) return;
+      if ((mode === 'colors' || mode === 'photos') && !poolImgs.length) return;
+
+      // reset from pool
       itemsData = poolData.slice();
       imgsAll   = poolImgs.slice();
       imgs      = imgsAll.slice();
       cur = 0;
 
-      new Audio(`../../sounds/roulette/${soundFiles[floor(random(soundFiles.length))]}`).play();
+      try {
+        new Audio(`../../sounds/roulette/${soundFiles[floor(random(soundFiles.length))]}`).play();
+      } catch (_) {}
 
       const steps = floor(random(5, 12));
       spinDuration = steps * STEP_DURATION;
@@ -276,13 +284,21 @@
 
     function removeSideItems() {
       const total = itemsData.length;
+      if (!total) return;
+
       const idx = ((round(cur) % total) + total) % total;
+
+      // IMPORTANT: lastChoice should match what your zoom renderer expects
+      // - colors/words/numbers: a value (string/number)
+      // - photos: a p5.Image
       lastChoice = itemsData[idx];
 
       if (mode === 'colors' || mode === 'photos') {
-        imgs = [imgs[idx]];
+        if (imgs[idx]) {
+          imgs = [imgs[idx]];
+          imgsAll = imgs.slice();
+        }
         itemsData = [itemsData[idx]];
-        imgsAll = imgs.slice();
       }
       cur = 0;
     }
@@ -306,9 +322,11 @@
       }
 
       if (!imgs.length) return;
+
       for (let i = 0; i < imgs.length; i++) {
         let rel = ((i - cur + imgs.length / 2) % imgs.length) - imgs.length / 2;
         if (abs(rel) > 1.2) continue;
+
         const x = cx + rel * 0.4 * width;
         const w = lerp(centerW, sideW, min(abs(rel), 1));
 
@@ -316,6 +334,7 @@
           imageMode(CENTER);
           image(imgs[i], x, cy, w, w);
         } else {
+          // photos: keep aspect ratio
           const h = w * (imgs[i].height / imgs[i].width);
           imageMode(CENTER);
           image(imgs[i], x, cy, w, h);
@@ -373,23 +392,29 @@
 
       if (e.key === ' ') {                         // Space
         mode === 'dice' ? triggerRollClassic() : triggerSpin();
-      } else if (e.key === 'Enter') {              // Enter -> zoom plein écran
+
+      } else if (e.key === 'Enter') {              // Enter -> zoom full screen
         if (rolling || spinning || mode === 'dice') return;
+        if (!lastChoice) return;
 
         if (!zoomed) {
           zoomed = true;
           window.draw = () => {
             background(0);
+
             if (mode === 'colors') {
               background(lastChoice);
+
             } else if (mode === 'words') {
               fill(255); textSize(width * 0.2);
               text(lastChoice, width / 2, height / 2);
+
             } else if (mode === 'photos') {
-              const img = lastChoice;
+              const img = lastChoice; // p5.Image
               const s = min(width / img.width, height / img.height);
               imageMode(CENTER);
               image(img, width / 2, height / 2, img.width * s, img.height * s);
+
             } else if (mode === 'numbers') {
               fill(255); textSize(width * 0.3);
               text(lastChoice.toString(), width / 2, height / 2);
@@ -427,7 +452,7 @@
           diceValue      = document.getElementById('diceValue'),
           startButton    = document.getElementById('startButton');
 
-    /* Valeurs dynamiques (sliders) */
+    /* Slider live values */
     diceSlider.oninput   = () => diceValue.textContent = diceSlider.value;
     numberSlider.oninput = () => numberValue.textContent = numberSlider.value;
 
@@ -471,7 +496,7 @@
         .forEach(d => d.style.display = 'none');
     };
 
-    /* Ajout de champs mot supplémentaires */
+    /* Add extra word fields */
     addWordButton.onclick = () => {
       const f = wordsContainer.querySelectorAll('input.word-input');
       if (f.length >= 8) return alert('Max 8 words');
@@ -481,7 +506,7 @@
       wordsContainer.appendChild(n);
     };
 
-    /* Sélecteur photo : fichiers / dossier */
+    /* Photo selector: files / folder */
     photoFilesButton.onclick = () => {
       photoFilesButton.classList.add('selected');
       photoFolderButton.classList.remove('selected');
@@ -496,64 +521,88 @@
       folderSelectWrap.style.display = 'block';
     };
 
-    /* ---------- Lancement ---------- */
-    startButton.onclick = () => {
-      if (!mode) diceBtn.onclick();  // Sécurité : mode par défaut
+    /* ---------- Start (FIXED: async + await images) ---------- */
+    startButton.onclick = async () => {
+      if (!mode) diceBtn.onclick();  // safety
 
-      document.getElementById('game-options').style.display = 'none';
-      started = true; zoomed = false;
+      started = false;
+      zoomed = false;
+      lastChoice = null;
 
       if (mode === 'colors') {
-        if (!selectedColors.length) {
-          alert('Pick colors'); started = false; return;
-        }
+        if (!selectedColors.length) { alert('Pick colors'); return; }
         itemsData = selectedColors.slice();
         imgs      = itemsData.map(makeColorCircle);
         imgsAll   = imgs.slice();
 
       } else if (mode === 'photos') {
-        const files = fileInput.files.length ? fileInput.files : folderInput.files;
-        if (!files.length) { alert('Select images'); started = false; return; }
-        itemsData = []; imgs = [];
+        const files = (fileInput.files && fileInput.files.length) ? fileInput.files : folderInput.files;
+        if (!files || !files.length) { alert('Select images'); return; }
 
-        const tasks = [];
-        for (let i = 0; i < Math.min(files.length, 6); i++) {
-          tasks.push(new Promise(res => {
-            const fr = new FileReader();
-            fr.onload = () => {
-              const im = loadImage(fr.result, () => res());
-              itemsData.push(im); imgs.push(im);
-            };
-            fr.readAsDataURL(files[i]);
-          }));
+        itemsData = [];
+        imgs = [];
+        imgsAll = [];
+
+        const loadFileAsP5Image = (file) => new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onerror = () => reject(new Error('FileReader failed'));
+          fr.onload = () => {
+            loadImage(
+              fr.result,
+              (im) => resolve(im),
+              () => reject(new Error('p5 loadImage failed'))
+            );
+          };
+          fr.readAsDataURL(file);
+        });
+
+        const count = Math.min(files.length, 6);
+        const fileList = Array.from(files).slice(0, count);
+
+        try {
+          const loadedImages = await Promise.all(fileList.map(loadFileAsP5Image));
+          imgs = loadedImages.slice();
+          itemsData = loadedImages.slice(); // used for lastChoice
+          imgsAll = imgs.slice();
+        } catch (err) {
+          console.error(err);
+          alert('Error loading images');
+          return;
         }
-        Promise.all(tasks).then(() => imgsAll = imgs.slice());
 
       } else if (mode === 'words') {
         const d = [...wordsContainer.querySelectorAll('input.word-input')]
-                    .map(i => i.value.trim()).filter(Boolean);
-        if (!d.length) { alert('Enter words'); started = false; return; }
-        itemsData = d.slice(); imgs = imgsAll = [];
+          .map(i => i.value.trim()).filter(Boolean);
+        if (!d.length) { alert('Enter words'); return; }
+        itemsData = d.slice();
+        imgs = [];
+        imgsAll = [];
 
       } else if (mode === 'numbers') {
-        const n = parseInt(numberSlider.value);
+        const n = parseInt(numberSlider.value, 10);
         itemsData = shuffleArray([...Array(n).keys()].map(i => i + 1));
-        imgs = imgsAll = [];
+        imgs = [];
+        imgsAll = [];
       }
 
+      // Pools (FIXED: set after photos are actually loaded)
       poolData = itemsData.slice();
       poolImgs = imgsAll.slice();
       cur = 0;
+
+      document.getElementById('game-options').style.display = 'none';
+      started = true;
+
       goFullscreen();
     };
 
-    /* --------- Plein écran automatique --------- */
+    /* --------- Auto fullscreen --------- */
     function goFullscreen() {
       document.documentElement.requestFullscreen?.().catch(() => {});
     }
 
-    /* ---------- INIT : Dice par défaut ---------- */
-    diceBtn.onclick();              // Active le mode Dé dès le chargement
+    /* ---------- INIT: Dice default ---------- */
+    diceBtn.onclick();
   });
   </script>
 
