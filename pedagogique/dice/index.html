@@ -71,6 +71,18 @@
       <div id="photosOptions" style="display:none;">
         <p class="translate" data-fr="Source des fichiers"
            data-en="Upload Source">Upload Source</p>
+        <div id="photoPreviewSection">
+          <div id="photoPreviewGrid" aria-live="polite"></div>
+          <p id="photoPreviewHelp" class="translate"
+             data-fr="Cliquez sur une image pour la sélectionner ou la retirer."
+             data-en="Click an image to select or deselect it."
+             data-empty-fr="Cliquez sur une image pour la sélectionner ou la retirer."
+             data-empty-en="Click an image to select or deselect it."
+             data-selected-count-fr="{count}/{max} sélectionné(s)"
+             data-selected-count-en="{count}/{max} selected">
+            Click an image to select or deselect it.
+          </p>
+        </div>
         <div id="photoModeSegmentedControl">
           <button id="photo-files-button" class="mode-btn translate selected"
                   data-fr="Fichiers" data-en="Files">Files</button>
@@ -160,6 +172,8 @@
     let imgs=[], imgsAll=[], poolImgs=[];
     let lastChoice=null;
     let cur=0, startIdx=0, targetIdx=0;
+    const MAX_PHOTOS = 6;
+    let photoSelections = [];
 
     /* ---------- p5.js ---------- */
     window.setup = () => {
@@ -419,6 +433,8 @@
           photoFolderButton = document.getElementById('photo-folder-button'),
           fileInput      = document.getElementById('fileInput'),
           folderInput    = document.getElementById('folderInput'),
+          photoPreviewGrid = document.getElementById('photoPreviewGrid'),
+          photoPreviewHelp = document.getElementById('photoPreviewHelp'),
           wordsContainer = document.getElementById('wordsContainer'),
           addWordButton  = document.getElementById('addWordButton'),
           numberSlider   = document.getElementById('numberSlider'),
@@ -496,6 +512,90 @@
       folderSelectWrap.style.display = 'block';
     };
 
+    function getPreferredLang() {
+      const supported = ['en', 'ja', 'fr'];
+      const userLang = (localStorage.getItem('siteLanguage') || 'en');
+      return supported.includes(userLang) ? userLang : 'en';
+    }
+
+    function getLocalizedDataset(el, key) {
+      const lang = getPreferredLang();
+      const langSuffix = `${lang.charAt(0).toUpperCase()}${lang.slice(1)}`;
+      const datasetKey = `${key}${langSuffix}`;
+      const fallbackKey = `${key}En`;
+      return el.dataset[datasetKey] || el.dataset[fallbackKey] || '';
+    }
+
+    function clearPhotoSelections() {
+      photoSelections.forEach(item => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+      photoSelections = [];
+      photoPreviewGrid.innerHTML = '';
+    }
+
+    function updatePhotoHelp() {
+      const selectedCount = photoSelections.filter(item => item.selected).length;
+      if (!selectedCount) {
+        photoPreviewHelp.textContent = getLocalizedDataset(photoPreviewHelp, 'empty');
+        return;
+      }
+      const template = getLocalizedDataset(photoPreviewHelp, 'selectedCount');
+      photoPreviewHelp.textContent = template
+        .replace('{count}', selectedCount)
+        .replace('{max}', MAX_PHOTOS);
+    }
+
+    function renderPhotoPreview() {
+      photoPreviewGrid.innerHTML = '';
+      photoSelections.forEach((item, idx) => {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'photo-preview-tile';
+        tile.setAttribute('aria-pressed', item.selected ? 'true' : 'false');
+        if (item.selected) tile.classList.add('selected');
+
+        const img = document.createElement('img');
+        img.src = item.url;
+        img.alt = item.file.name || `photo-${idx + 1}`;
+        tile.appendChild(img);
+
+        tile.addEventListener('click', () => {
+          item.selected = !item.selected;
+          tile.classList.toggle('selected', item.selected);
+          tile.setAttribute('aria-pressed', item.selected ? 'true' : 'false');
+          updatePhotoHelp();
+        });
+
+        photoPreviewGrid.appendChild(tile);
+      });
+      updatePhotoHelp();
+    }
+
+    function handlePhotoFiles(fileList) {
+      clearPhotoSelections();
+      const files = Array.from(fileList || []).filter(file =>
+        file.type && file.type.startsWith('image/')
+      );
+      const limited = files.slice(0, MAX_PHOTOS);
+      photoSelections = limited.map(file => ({
+        file,
+        url: URL.createObjectURL(file),
+        selected: true
+      }));
+      renderPhotoPreview();
+    }
+
+    fileInput.addEventListener('change', () => {
+      folderInput.value = '';
+      handlePhotoFiles(fileInput.files);
+    });
+
+    folderInput.addEventListener('change', () => {
+      fileInput.value = '';
+      handlePhotoFiles(folderInput.files);
+    });
+
     /* ---------- Lancement ---------- */
     startButton.onclick = () => {
       if (!mode) diceBtn.onclick();  // Sécurité : mode par défaut
@@ -512,22 +612,22 @@
         imgsAll   = imgs.slice();
 
       } else if (mode === 'photos') {
-        const files = fileInput.files.length ? fileInput.files : folderInput.files;
-        if (!files.length) { alert('Select images'); started = false; return; }
+        const selectedItems = photoSelections.filter(item => item.selected);
+        if (!selectedItems.length) { alert('Select images'); started = false; return; }
         itemsData = []; imgs = [];
 
-        const tasks = [];
-        for (let i = 0; i < Math.min(files.length, 6); i++) {
-          tasks.push(new Promise(res => {
-            const fr = new FileReader();
-            fr.onload = () => {
-              const im = loadImage(fr.result, () => res());
-              itemsData.push(im); imgs.push(im);
-            };
-            fr.readAsDataURL(files[i]);
-          }));
-        }
-        Promise.all(tasks).then(() => imgsAll = imgs.slice());
+        const tasks = selectedItems.map(item =>
+          new Promise(res => {
+            const im = loadImage(item.url, () => {
+              itemsData.push(im);
+              imgs.push(im);
+              res();
+            }, () => res());
+          })
+        );
+        Promise.all(tasks).then(() => {
+          imgsAll = imgs.slice();
+        });
 
       } else if (mode === 'words') {
         const d = [...wordsContainer.querySelectorAll('input.word-input')]
