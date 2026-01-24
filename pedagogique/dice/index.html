@@ -71,6 +71,10 @@
       <div id="photosOptions" style="display:none;">
         <p class="translate" data-fr="Source des fichiers"
            data-en="Upload Source">Upload Source</p>
+        <div id="photoPreviewGrid" aria-live="polite"></div>
+        <p id="photoSelectionCount" class="translate"
+           data-fr="0/6 sélectionnées"
+           data-en="0/6 selected">0/6 selected</p>
         <div id="photoModeSegmentedControl">
           <button id="photo-files-button" class="mode-btn translate selected"
                   data-fr="Fichiers" data-en="Files">Files</button>
@@ -158,8 +162,12 @@
     let availableColors=[], selectedColors=[];
     let itemsData=[], poolData=[]; // données courantes / originales
     let imgs=[], imgsAll=[], poolImgs=[];
+    let photoCandidates = [];
+    let selectedPhotoIds = new Set();
+    const MAX_PHOTOS = 6;
     let lastChoice=null;
     let cur=0, startIdx=0, targetIdx=0;
+    const supportedLangs = ['en', 'fr', 'ja'];
 
     /* ---------- p5.js ---------- */
     window.setup = () => {
@@ -419,6 +427,8 @@
           photoFolderButton = document.getElementById('photo-folder-button'),
           fileInput      = document.getElementById('fileInput'),
           folderInput    = document.getElementById('folderInput'),
+          photoPreviewGrid = document.getElementById('photoPreviewGrid'),
+          photoSelectionCount = document.getElementById('photoSelectionCount'),
           wordsContainer = document.getElementById('wordsContainer'),
           addWordButton  = document.getElementById('addWordButton'),
           numberSlider   = document.getElementById('numberSlider'),
@@ -496,6 +506,116 @@
       folderSelectWrap.style.display = 'block';
     };
 
+    function getCurrentLanguage() {
+      const stored = localStorage.getItem('siteLanguage') || 'en';
+      return supportedLangs.includes(stored) ? stored : 'en';
+    }
+
+    function formatSelectionCount(count) {
+      const lang = getCurrentLanguage();
+      if (lang === 'fr') return `${count}/${MAX_PHOTOS} sélectionnées`;
+      if (lang === 'ja') return `${count}/${MAX_PHOTOS} 選択済み`;
+      return `${count}/${MAX_PHOTOS} selected`;
+    }
+
+    function emptyPreviewText() {
+      const lang = getCurrentLanguage();
+      if (lang === 'fr') return 'Aucun aperçu pour le moment';
+      if (lang === 'ja') return 'プレビューはまだありません';
+      return 'No previews yet';
+    }
+
+    function updatePhotoSelectionCount() {
+      photoSelectionCount.textContent = formatSelectionCount(selectedPhotoIds.size);
+    }
+
+    function renderPhotoPreviews() {
+      photoPreviewGrid.innerHTML = '';
+
+      if (!photoCandidates.length) {
+        const empty = document.createElement('div');
+        empty.className = 'photo-preview-empty translate';
+        empty.setAttribute('data-fr', 'Aucun aperçu pour le moment');
+        empty.setAttribute('data-en', 'No previews yet');
+        empty.setAttribute('data-ja', 'プレビューはまだありません');
+        empty.textContent = emptyPreviewText();
+        photoPreviewGrid.appendChild(empty);
+        updatePhotoSelectionCount();
+        return;
+      }
+
+      photoCandidates.forEach(candidate => {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'photo-tile';
+        const isSelected = selectedPhotoIds.has(candidate.id);
+        if (isSelected) tile.classList.add('selected');
+        tile.setAttribute('aria-pressed', isSelected.toString());
+        tile.title = candidate.file.name;
+
+        const img = document.createElement('img');
+        img.src = candidate.dataUrl;
+        img.alt = candidate.file.name;
+        tile.appendChild(img);
+
+        tile.onclick = () => {
+          if (selectedPhotoIds.has(candidate.id)) {
+            selectedPhotoIds.delete(candidate.id);
+          } else if (selectedPhotoIds.size < MAX_PHOTOS) {
+            selectedPhotoIds.add(candidate.id);
+          } else {
+            alert('Max 6 images');
+          }
+          renderPhotoPreviews();
+        };
+
+        photoPreviewGrid.appendChild(tile);
+      });
+
+      updatePhotoSelectionCount();
+    }
+
+    function loadPhotoFiles(fileList) {
+      const files = [...fileList].filter(file => file.type.startsWith('image/'));
+      photoCandidates = [];
+      selectedPhotoIds = new Set();
+
+      if (!files.length) {
+        renderPhotoPreviews();
+        return;
+      }
+
+      const tasks = files.map((file, index) => new Promise(resolve => {
+        const fr = new FileReader();
+        fr.onload = () => {
+          photoCandidates.push({
+            id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+            file,
+            dataUrl: fr.result
+          });
+          resolve();
+        };
+        fr.readAsDataURL(file);
+      }));
+
+      Promise.all(tasks).then(() => {
+        photoCandidates = photoCandidates.slice(0, 50);
+        photoCandidates.slice(0, MAX_PHOTOS)
+          .forEach(candidate => selectedPhotoIds.add(candidate.id));
+        renderPhotoPreviews();
+      });
+    }
+
+    fileInput.onchange = () => {
+      folderInput.value = '';
+      loadPhotoFiles(fileInput.files);
+    };
+
+    folderInput.onchange = () => {
+      fileInput.value = '';
+      loadPhotoFiles(folderInput.files);
+    };
+
     /* ---------- Lancement ---------- */
     startButton.onclick = () => {
       if (!mode) diceBtn.onclick();  // Sécurité : mode par défaut
@@ -512,22 +632,26 @@
         imgsAll   = imgs.slice();
 
       } else if (mode === 'photos') {
-        const files = fileInput.files.length ? fileInput.files : folderInput.files;
-        if (!files.length) { alert('Select images'); started = false; return; }
-        itemsData = []; imgs = [];
-
-        const tasks = [];
-        for (let i = 0; i < Math.min(files.length, 6); i++) {
-          tasks.push(new Promise(res => {
-            const fr = new FileReader();
-            fr.onload = () => {
-              const im = loadImage(fr.result, () => res());
-              itemsData.push(im); imgs.push(im);
-            };
-            fr.readAsDataURL(files[i]);
-          }));
+        const selectedCandidates = photoCandidates
+          .filter(candidate => selectedPhotoIds.has(candidate.id));
+        if (!selectedCandidates.length) {
+          alert('Select images');
+          started = false;
+          return;
         }
-        Promise.all(tasks).then(() => imgsAll = imgs.slice());
+
+        itemsData = [];
+        imgs = [];
+
+        const tasks = selectedCandidates.map(candidate => new Promise(res => {
+          const im = loadImage(candidate.dataUrl, () => res());
+          itemsData.push(im);
+          imgs.push(im);
+        }));
+
+        Promise.all(tasks).then(() => {
+          imgsAll = imgs.slice();
+        });
 
       } else if (mode === 'words') {
         const d = [...wordsContainer.querySelectorAll('input.word-input')]
@@ -554,6 +678,7 @@
 
     /* ---------- INIT : Dice par défaut ---------- */
     diceBtn.onclick();              // Active le mode Dé dès le chargement
+    renderPhotoPreviews();
   });
   </script>
 
