@@ -71,6 +71,10 @@
       <div id="photosOptions" style="display:none;">
         <p class="translate" data-fr="Source des fichiers"
            data-en="Upload Source">Upload Source</p>
+        <div id="photoPreviewGrid" aria-live="polite"></div>
+        <div id="photoSelectionCount" class="translate"
+             data-fr="0 sélectionnée(s) sur 6"
+             data-en="0 selected out of 6">0 selected out of 6</div>
         <div id="photoModeSegmentedControl">
           <button id="photo-files-button" class="mode-btn translate selected"
                   data-fr="Fichiers" data-en="Files">Files</button>
@@ -160,6 +164,9 @@
     let imgs=[], imgsAll=[], poolImgs=[];
     let lastChoice=null;
     let cur=0, startIdx=0, targetIdx=0;
+    const MAX_PHOTO_SELECTION = 6;
+    let photoFiles = [];
+    let selectedPhotoIds = new Set();
 
     /* ---------- p5.js ---------- */
     window.setup = () => {
@@ -419,6 +426,8 @@
           photoFolderButton = document.getElementById('photo-folder-button'),
           fileInput      = document.getElementById('fileInput'),
           folderInput    = document.getElementById('folderInput'),
+          photoPreviewGrid = document.getElementById('photoPreviewGrid'),
+          photoSelectionCount = document.getElementById('photoSelectionCount'),
           wordsContainer = document.getElementById('wordsContainer'),
           addWordButton  = document.getElementById('addWordButton'),
           numberSlider   = document.getElementById('numberSlider'),
@@ -496,6 +505,76 @@
       folderSelectWrap.style.display = 'block';
     };
 
+    function updatePhotoSelectionCount() {
+      const count = selectedPhotoIds.size;
+      photoSelectionCount.textContent = `${count} selected out of ${MAX_PHOTO_SELECTION}`;
+      photoSelectionCount.dataset.fr = `${count} sélectionnée(s) sur ${MAX_PHOTO_SELECTION}`;
+      photoSelectionCount.dataset.en = `${count} selected out of ${MAX_PHOTO_SELECTION}`;
+    }
+
+    function clearPhotoPreviews() {
+      photoFiles.forEach(({ url }) => URL.revokeObjectURL(url));
+      photoFiles = [];
+      selectedPhotoIds = new Set();
+      photoPreviewGrid.innerHTML = '';
+      updatePhotoSelectionCount();
+    }
+
+    function renderPhotoPreviews(files) {
+      clearPhotoPreviews();
+      const imageFiles = [...files].filter(file => file.type.startsWith('image/'));
+      photoFiles = imageFiles.map((file, index) => {
+        const url = URL.createObjectURL(file);
+        return { id: `${file.name}-${index}-${file.size}`, file, url };
+      });
+
+      photoFiles.forEach((item, index) => {
+        if (index < MAX_PHOTO_SELECTION) {
+          selectedPhotoIds.add(item.id);
+        }
+      });
+
+      photoFiles.forEach(item => {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'photo-preview-tile';
+        tile.dataset.photoId = item.id;
+        tile.title = item.file.name;
+
+        const img = document.createElement('img');
+        img.src = item.url;
+        img.alt = item.file.name;
+        tile.appendChild(img);
+
+        tile.addEventListener('click', () => {
+          if (selectedPhotoIds.has(item.id)) {
+            selectedPhotoIds.delete(item.id);
+            tile.classList.remove('selected');
+          } else if (selectedPhotoIds.size < MAX_PHOTO_SELECTION) {
+            selectedPhotoIds.add(item.id);
+            tile.classList.add('selected');
+          }
+          updatePhotoSelectionCount();
+        });
+
+        if (selectedPhotoIds.has(item.id)) {
+          tile.classList.add('selected');
+        }
+
+        photoPreviewGrid.appendChild(tile);
+      });
+
+      updatePhotoSelectionCount();
+    }
+
+    fileInput.addEventListener('change', () => {
+      renderPhotoPreviews(fileInput.files);
+    });
+
+    folderInput.addEventListener('change', () => {
+      renderPhotoPreviews(folderInput.files);
+    });
+
     /* ---------- Lancement ---------- */
     startButton.onclick = () => {
       if (!mode) diceBtn.onclick();  // Sécurité : mode par défaut
@@ -512,19 +591,19 @@
         imgsAll   = imgs.slice();
 
       } else if (mode === 'photos') {
-        const files = fileInput.files.length ? fileInput.files : folderInput.files;
-        if (!files.length) { alert('Select images'); started = false; return; }
+        const selectedFiles = photoFiles.filter(item => selectedPhotoIds.has(item.id));
+        if (!selectedFiles.length) { alert('Select images'); started = false; return; }
         itemsData = []; imgs = [];
 
         const tasks = [];
-        for (let i = 0; i < Math.min(files.length, 6); i++) {
+        for (let i = 0; i < Math.min(selectedFiles.length, MAX_PHOTO_SELECTION); i++) {
           tasks.push(new Promise(res => {
             const fr = new FileReader();
             fr.onload = () => {
               const im = loadImage(fr.result, () => res());
               itemsData.push(im); imgs.push(im);
             };
-            fr.readAsDataURL(files[i]);
+            fr.readAsDataURL(selectedFiles[i].file);
           }));
         }
         Promise.all(tasks).then(() => imgsAll = imgs.slice());
