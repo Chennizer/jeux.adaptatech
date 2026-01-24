@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title class="translate" data-fr="Randomiseur" data-en="Randomizer">Randomizeur</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="../../css/global.css" />
   <link rel="stylesheet" href="../../css/choix.css" />
   <link rel="stylesheet" href="../../css/randomizer.css" />
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
@@ -16,6 +17,7 @@
   gtag('config', 'G-B45TJG4GBJ');
 </script>
 <body>
+  <button id="langToggle" class="floating-button lang-toggle" title="Changer la langue / Switch language">EN</button>
   <div id="game-options" class="modal" style="display: flex;">
     <div id="control-panel-options">
       <div id="options-title-bar">
@@ -71,6 +73,10 @@
       <div id="photosOptions" style="display:none;">
         <p class="translate" data-fr="Source des fichiers"
            data-en="Upload Source">Upload Source</p>
+        <div id="photoPreviewGrid" aria-live="polite"></div>
+        <p id="photoSelectionCount" class="translate"
+           data-fr="0/6 sélectionnées"
+           data-en="0/6 selected">0/6 selected</p>
         <div id="photoModeSegmentedControl">
           <button id="photo-files-button" class="mode-btn translate selected"
                   data-fr="Fichiers" data-en="Files">Files</button>
@@ -158,8 +164,12 @@
     let availableColors=[], selectedColors=[];
     let itemsData=[], poolData=[]; // données courantes / originales
     let imgs=[], imgsAll=[], poolImgs=[];
+    let photoCandidates = [];
+    let selectedPhotoIds = new Set();
+    const MAX_PHOTOS = 6;
     let lastChoice=null;
     let cur=0, startIdx=0, targetIdx=0;
+    const supportedLangs = ['en', 'fr', 'ja'];
 
     /* ---------- p5.js ---------- */
     window.setup = () => {
@@ -256,7 +266,7 @@
       const steps = floor(random(5, 12));
       spinDuration = steps * STEP_DURATION;
       startIdx = cur;
-      targetIdx = cur - steps;
+      targetIdx = cur + steps;
       spinning = true;
       spinStart = millis();
     }
@@ -274,9 +284,19 @@
       }
     }
 
+    function wrapIndex(value, total) {
+      return ((value % total) + total) % total;
+    }
+
+    function wrappedPosition(total) {
+      if (!total) return 0;
+      return wrapIndex(cur, total);
+    }
+
     function removeSideItems() {
       const total = itemsData.length;
-      const idx = ((round(cur) % total) + total) % total;
+      if (!total) return;
+      const idx = wrapIndex(round(cur), total);
       lastChoice = itemsData[idx];
 
       if (mode === 'colors' || mode === 'photos') {
@@ -293,8 +313,9 @@
 
       if (mode === 'words' || mode === 'numbers') {
         const total = itemsData.length;
+        const displayCur = wrappedPosition(total);
         for (let i = 0; i < total; i++) {
-          let rel = ((i - cur + total / 2) % total) - total / 2;
+          let rel = ((i - displayCur + total / 2) % total) - total / 2;
           if (abs(rel) > 1.2) continue;
           const x = cx + rel * 0.4 * width;
           const w = lerp(centerW, sideW, min(abs(rel), 1));
@@ -306,8 +327,10 @@
       }
 
       if (!imgs.length) return;
+      const totalImgs = imgs.length;
+      const displayCur = wrappedPosition(totalImgs);
       for (let i = 0; i < imgs.length; i++) {
-        let rel = ((i - cur + imgs.length / 2) % imgs.length) - imgs.length / 2;
+        let rel = ((i - displayCur + totalImgs / 2) % totalImgs) - totalImgs / 2;
         if (abs(rel) > 1.2) continue;
         const x = cx + rel * 0.4 * width;
         const w = lerp(centerW, sideW, min(abs(rel), 1));
@@ -419,6 +442,8 @@
           photoFolderButton = document.getElementById('photo-folder-button'),
           fileInput      = document.getElementById('fileInput'),
           folderInput    = document.getElementById('folderInput'),
+          photoPreviewGrid = document.getElementById('photoPreviewGrid'),
+          photoSelectionCount = document.getElementById('photoSelectionCount'),
           wordsContainer = document.getElementById('wordsContainer'),
           addWordButton  = document.getElementById('addWordButton'),
           numberSlider   = document.getElementById('numberSlider'),
@@ -496,55 +521,177 @@
       folderSelectWrap.style.display = 'block';
     };
 
+    function getCurrentLanguage() {
+      const stored = localStorage.getItem('siteLanguage') || 'en';
+      return supportedLangs.includes(stored) ? stored : 'en';
+    }
+
+    function formatSelectionCount(count) {
+      const lang = getCurrentLanguage();
+      if (lang === 'fr') return `${count}/${MAX_PHOTOS} sélectionnées`;
+      if (lang === 'ja') return `${count}/${MAX_PHOTOS} 選択済み`;
+      return `${count}/${MAX_PHOTOS} selected`;
+    }
+
+    function emptyPreviewText() {
+      const lang = getCurrentLanguage();
+      if (lang === 'fr') return 'Aucun aperçu pour le moment';
+      if (lang === 'ja') return 'プレビューはまだありません';
+      return 'No previews yet';
+    }
+
+    function updatePhotoSelectionCount() {
+      photoSelectionCount.textContent = formatSelectionCount(selectedPhotoIds.size);
+    }
+
+    function renderPhotoPreviews() {
+      photoPreviewGrid.innerHTML = '';
+
+      if (!photoCandidates.length) {
+        const empty = document.createElement('div');
+        empty.className = 'photo-preview-empty translate';
+        empty.setAttribute('data-fr', 'Aucun aperçu pour le moment');
+        empty.setAttribute('data-en', 'No previews yet');
+        empty.setAttribute('data-ja', 'プレビューはまだありません');
+        empty.textContent = emptyPreviewText();
+        photoPreviewGrid.appendChild(empty);
+        updatePhotoSelectionCount();
+        return;
+      }
+
+      photoCandidates.forEach(candidate => {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'photo-tile';
+        const isSelected = selectedPhotoIds.has(candidate.id);
+        if (isSelected) tile.classList.add('selected');
+        tile.setAttribute('aria-pressed', isSelected.toString());
+        tile.title = candidate.file.name;
+
+        const img = document.createElement('img');
+        img.src = candidate.dataUrl;
+        img.alt = candidate.file.name;
+        tile.appendChild(img);
+
+        tile.onclick = () => {
+          if (selectedPhotoIds.has(candidate.id)) {
+            selectedPhotoIds.delete(candidate.id);
+          } else if (selectedPhotoIds.size < MAX_PHOTOS) {
+            selectedPhotoIds.add(candidate.id);
+          } else {
+            alert('Max 6 images');
+          }
+          renderPhotoPreviews();
+        };
+
+        photoPreviewGrid.appendChild(tile);
+      });
+
+      updatePhotoSelectionCount();
+    }
+
+    function loadPhotoFiles(fileList) {
+      const files = [...fileList].filter(file => file.type.startsWith('image/'));
+      photoCandidates = [];
+      selectedPhotoIds = new Set();
+
+      if (!files.length) {
+        renderPhotoPreviews();
+        return;
+      }
+
+      const tasks = files.map((file, index) => new Promise(resolve => {
+        const fr = new FileReader();
+        fr.onload = () => {
+          photoCandidates.push({
+            id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+            file,
+            dataUrl: fr.result
+          });
+          resolve();
+        };
+        fr.readAsDataURL(file);
+      }));
+
+      Promise.all(tasks).then(() => {
+        photoCandidates = photoCandidates.slice(0, 50);
+        photoCandidates.slice(0, MAX_PHOTOS)
+          .forEach(candidate => selectedPhotoIds.add(candidate.id));
+        renderPhotoPreviews();
+      });
+    }
+
+    fileInput.onchange = () => {
+      folderInput.value = '';
+      loadPhotoFiles(fileInput.files);
+    };
+
+    folderInput.onchange = () => {
+      fileInput.value = '';
+      loadPhotoFiles(folderInput.files);
+    };
+
     /* ---------- Lancement ---------- */
     startButton.onclick = () => {
       if (!mode) diceBtn.onclick();  // Sécurité : mode par défaut
 
-      document.getElementById('game-options').style.display = 'none';
-      started = true; zoomed = false;
+      zoomed = false;
+
+      const launchGame = () => {
+        document.getElementById('game-options').style.display = 'none';
+        started = true;
+        poolData = itemsData.slice();
+        poolImgs = imgsAll.slice();
+        cur = 0;
+        goFullscreen();
+      };
 
       if (mode === 'colors') {
         if (!selectedColors.length) {
-          alert('Pick colors'); started = false; return;
+          alert('Pick colors'); return;
         }
         itemsData = selectedColors.slice();
         imgs      = itemsData.map(makeColorCircle);
         imgsAll   = imgs.slice();
+        launchGame();
 
       } else if (mode === 'photos') {
-        const files = fileInput.files.length ? fileInput.files : folderInput.files;
-        if (!files.length) { alert('Select images'); started = false; return; }
-        itemsData = []; imgs = [];
-
-        const tasks = [];
-        for (let i = 0; i < Math.min(files.length, 6); i++) {
-          tasks.push(new Promise(res => {
-            const fr = new FileReader();
-            fr.onload = () => {
-              const im = loadImage(fr.result, () => res());
-              itemsData.push(im); imgs.push(im);
-            };
-            fr.readAsDataURL(files[i]);
-          }));
+        const selectedCandidates = photoCandidates
+          .filter(candidate => selectedPhotoIds.has(candidate.id));
+        if (!selectedCandidates.length) {
+          alert('Select images');
+          return;
         }
-        Promise.all(tasks).then(() => imgsAll = imgs.slice());
+
+        startButton.disabled = true;
+        itemsData = [];
+        imgs = [];
+
+        const tasks = selectedCandidates.map(candidate => new Promise(res => {
+          const im = loadImage(candidate.dataUrl, () => res());
+          itemsData.push(im);
+          imgs.push(im);
+        }));
+
+        Promise.all(tasks).then(() => {
+          imgsAll = imgs.slice();
+          startButton.disabled = false;
+          launchGame();
+        });
 
       } else if (mode === 'words') {
         const d = [...wordsContainer.querySelectorAll('input.word-input')]
                     .map(i => i.value.trim()).filter(Boolean);
-        if (!d.length) { alert('Enter words'); started = false; return; }
+        if (!d.length) { alert('Enter words'); return; }
         itemsData = d.slice(); imgs = imgsAll = [];
+        launchGame();
 
       } else if (mode === 'numbers') {
         const n = parseInt(numberSlider.value);
         itemsData = shuffleArray([...Array(n).keys()].map(i => i + 1));
         imgs = imgsAll = [];
+        launchGame();
       }
-
-      poolData = itemsData.slice();
-      poolImgs = imgsAll.slice();
-      cur = 0;
-      goFullscreen();
     };
 
     /* --------- Plein écran automatique --------- */
@@ -554,9 +701,13 @@
 
     /* ---------- INIT : Dice par défaut ---------- */
     diceBtn.onclick();              // Active le mode Dé dès le chargement
+    renderPhotoPreviews();
   });
   </script>
 
-  <script src="../../js/translationonly.js"></script>
+  <script src="../../js/translationmain.js"></script>
+  <script>
+    document.getElementById('langToggle')?.addEventListener('click', toggleLanguage);
+  </script>
 </body>
 </html>
