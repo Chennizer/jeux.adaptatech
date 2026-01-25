@@ -152,6 +152,66 @@
       box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
       outline: none;
     }
+
+    :fullscreen .story-page,
+    :-webkit-full-screen .story-page,
+    :-moz-full-screen .story-page,
+    :-ms-fullscreen .story-page {
+      padding: 0;
+    }
+
+    :fullscreen .story-media,
+    :-webkit-full-screen .story-media,
+    :-moz-full-screen .story-media,
+    :-ms-fullscreen .story-media {
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw;
+      max-height: 100vh;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .fullscreen-button {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      padding: 12px 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: rgba(15, 23, 42, 0.85);
+      color: #f8fafc;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      z-index: 20;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .fullscreen-button:hover,
+    .fullscreen-button:focus-visible {
+      transform: translateY(-2px);
+      background: rgba(30, 41, 59, 0.95);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+      outline: none;
+    }
+
+    .transition-overlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle, rgba(148, 163, 184, 0.15), rgba(15, 23, 42, 0.95));
+      opacity: 0;
+      pointer-events: none;
+      z-index: 15;
+      transition: opacity 0.6s ease;
+    }
+
+    .transition-overlay.active {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
@@ -170,7 +230,7 @@
       </div>
     </section>
 
-    <section class="page game-page" data-type="game" data-game="cherry">
+    <section class="page game-page" data-type="game" data-game="cherry" data-transition="true">
       <div class="game-frame" data-game-host></div>
     </section>
 
@@ -181,7 +241,7 @@
       </div>
     </section>
 
-    <section class="page game-page" data-type="game" data-game="meditation">
+    <section class="page game-page" data-type="game" data-game="meditation" data-transition="true">
       <div class="game-frame" data-game-host></div>
     </section>
 
@@ -192,7 +252,7 @@
       </div>
     </section>
 
-    <section class="page game-page" data-type="game" data-game="lamp">
+    <section class="page game-page" data-type="game" data-game="lamp" data-transition="true">
       <div class="game-frame" data-game-host></div>
     </section>
 
@@ -205,11 +265,15 @@
   </div>
 
   <button id="nextButton" class="next-button" type="button">Next</button>
+  <button id="fullscreenButton" class="fullscreen-button" type="button">Fullscreen</button>
+  <div id="transitionOverlay" class="transition-overlay" aria-hidden="true"></div>
 
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const pages = Array.from(document.querySelectorAll('.page'));
       const nextButton = document.getElementById('nextButton');
+      const fullscreenButton = document.getElementById('fullscreenButton');
+      const transitionOverlay = document.getElementById('transitionOverlay');
       const imageBasePath = '../../images/samuraikata/';
       const videoBasePath = '../../animations/samurai/';
       const fadeDurationMs = 4000;
@@ -217,6 +281,7 @@
 
       const storyTimers = new WeakMap();
       const gameSessions = new Map();
+      let transitionTimeoutId = null;
 
       const clearStoryTimers = (page) => {
         const timers = storyTimers.get(page);
@@ -228,6 +293,26 @@
           clearTimeout(timers.checkTimeout);
         }
         storyTimers.delete(page);
+      };
+
+      const clearTransitionOverlay = () => {
+        if (transitionTimeoutId) {
+          clearTimeout(transitionTimeoutId);
+          transitionTimeoutId = null;
+        }
+        if (transitionOverlay) {
+          transitionOverlay.classList.remove('active');
+        }
+      };
+
+      const triggerTransitionOverlay = () => {
+        if (!transitionOverlay) return;
+        clearTransitionOverlay();
+        transitionOverlay.classList.add('active');
+        transitionTimeoutId = window.setTimeout(() => {
+          transitionOverlay.classList.remove('active');
+          transitionTimeoutId = null;
+        }, 900);
       };
 
       const resetStoryMedia = (page) => {
@@ -242,6 +327,31 @@
         image.style.animation = 'none';
         void image.offsetHeight;
         image.style.animation = 'colorFadeIn 4s ease-in-out forwards';
+      };
+
+      const requestAppFullscreen = async () => {
+        if (document.fullscreenElement) return;
+        const root = document.documentElement;
+        const method = root.requestFullscreen || root.webkitRequestFullscreen || root.msRequestFullscreen;
+        if (method) {
+          try {
+            await method.call(root);
+          } catch (error) {
+            /* ignore failures */
+          }
+        }
+      };
+
+      const exitFullscreen = async () => {
+        if (!document.fullscreenElement) return;
+        const method = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if (method) {
+          try {
+            await method.call(document);
+          } catch (error) {
+            /* ignore failures */
+          }
+        }
       };
 
       const checkVideoExists = (path, callback) => {
@@ -300,7 +410,7 @@
           video.src = videoPath;
           video.load();
           timers.videoTimeout = setTimeout(() => {
-            if (pages[currentIndex] !== page) return;
+            if (pages[currentIndex] !== page || !document.fullscreenElement) return;
             media.classList.add('video-playing');
             const playPromise = video.play();
             if (playPromise && typeof playPromise.catch === 'function') {
@@ -462,6 +572,7 @@
       const showPage = (index) => {
         if (index < 0 || index >= pages.length) return;
         if (index === currentIndex) return;
+        clearTransitionOverlay();
 
         const previousPage = pages[currentIndex];
         if (previousPage) {
@@ -472,6 +583,9 @@
           }
           if (previousPage.dataset.type === 'game') {
             stopGame(previousPage);
+            if (previousPage.dataset.transition === 'true') {
+              triggerTransitionOverlay();
+            }
           }
         }
 
@@ -499,9 +613,36 @@
         });
       }
 
+      if (fullscreenButton) {
+        fullscreenButton.addEventListener('click', () => {
+          if (document.fullscreenElement) {
+            exitFullscreen();
+          } else {
+            requestAppFullscreen();
+          }
+        });
+      }
+
+      document.addEventListener('fullscreenchange', () => {
+        if (fullscreenButton) {
+          fullscreenButton.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+        }
+        const page = pages[currentIndex];
+        if (page && page.dataset.type === 'story') {
+          setupStoryPage(page);
+        }
+      });
+
       document.addEventListener('keydown', (event) => {
         if (event.key === 'ArrowRight' || event.key === ' ') {
           nextPage();
+        }
+        if (event.key.toLowerCase() === 'f') {
+          if (document.fullscreenElement) {
+            exitFullscreen();
+          } else {
+            requestAppFullscreen();
+          }
         }
       });
 
