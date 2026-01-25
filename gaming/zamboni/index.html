@@ -55,8 +55,11 @@
 
     const state = {
       finished:false,
+      isAnimating:false,
+      animationStart:0,
       smoothing:0,
       targetSmoothing:0,
+      currentSweepRow:1,
       celebrationTime:0,
     };
 
@@ -73,6 +76,13 @@
       row:1,
       dir:1,
       lineStride:1,
+    };
+
+    const sweep = {
+      startCol:1,
+      endCol:26,
+      durationMs:4500,
+      progress:0,
     };
 
     const arena = {
@@ -104,6 +114,8 @@
       zamboni.col = 1;
       zamboni.row = 1;
       zamboni.dir = 1;
+      state.currentSweepRow = zamboni.row;
+      sweep.progress = 0;
       cleanLine(zamboni.row);
     }
 
@@ -129,18 +141,33 @@
     }
 
     function handlePress(){
-      if(state.finished) return;
+      if(state.finished || state.isAnimating) return;
+      startSweep();
+    }
+
+    function startSweep(){
+      state.isAnimating = true;
+      state.animationStart = performance.now();
+      state.currentSweepRow = zamboni.row;
+      sweep.startCol = zamboni.dir === 1 ? 1 : grid.cols - 2;
+      sweep.endCol = zamboni.dir === 1 ? grid.cols - 2 : 1;
+      sweep.progress = 0;
+    }
+
+    function completeSweep(){
+      cleanLine(state.currentSweepRow);
+      zamboni.row += zamboni.lineStride;
+      if(zamboni.row >= grid.rows){
+        zamboni.row = 0;
+      }
+      zamboni.dir *= -1;
       advanceZamboni();
       arena.glow = Math.min(1, arena.glow + 0.18);
     }
 
     function advanceZamboni(){
-      cleanLine(zamboni.row);
-      zamboni.row += zamboni.lineStride;
-      if(zamboni.row >= grid.rows){
-        zamboni.row = 0;
-      }
-      zamboni.col = zamboni.dir === 1 ? 1 : grid.cols - 2;
+      state.isAnimating = false;
+      sweep.progress = 0;
     }
 
     function triggerCelebration(){
@@ -150,8 +177,11 @@
 
     function restart(){
       state.finished = false;
+      state.isAnimating = false;
+      state.animationStart = 0;
       state.smoothing = 0;
       state.targetSmoothing = 0;
+      state.currentSweepRow = 1;
       arena.glow = 0;
       buildGrid();
     }
@@ -305,6 +335,19 @@
       ctx.restore();
     }
 
+    function updateSweep(){
+      if(!state.isAnimating) return;
+      const now = performance.now();
+      const elapsed = now - state.animationStart;
+      sweep.progress = Math.min(1, elapsed / sweep.durationMs);
+      const col = sweep.startCol + (sweep.endCol - sweep.startCol) * sweep.progress;
+      zamboni.col = col;
+      zamboni.row = state.currentSweepRow;
+      if(sweep.progress >= 1){
+        completeSweep();
+      }
+    }
+
     function drawShine(inner){
       state.smoothing += (state.targetSmoothing - state.smoothing) * 0.06;
       const alpha = 0.18 + state.smoothing * 0.32 + arena.glow * 0.18;
@@ -449,6 +492,8 @@
       const vh = window.innerHeight;
       ctx.clearRect(0,0,vw,vh);
 
+      updateSweep();
+
       const rinkW = Math.min(vw*0.9, 1200);
       const rinkH = Math.min(vh*0.68, 680);
       const rinkX = (vw - rinkW)/2;
@@ -466,7 +511,6 @@
     }
 
     resize();
-    syncProgress();
     draw();
   </script>
 </body>
