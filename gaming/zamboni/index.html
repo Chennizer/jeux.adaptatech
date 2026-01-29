@@ -61,6 +61,7 @@
       targetSmoothing:0,
       currentSweepRow:1,
       celebrationTime:0,
+      lastCleanCol:0,
     };
 
     const grid = {
@@ -123,7 +124,6 @@
       state.currentSweepRow = zamboni.row;
       sweep.progress = 0;
       buildSparkles();
-      cleanLine(zamboni.row);
     }
 
     function idx(c,r){ return r*grid.cols + c; }
@@ -156,13 +156,14 @@
       state.isAnimating = true;
       state.animationStart = performance.now();
       state.currentSweepRow = zamboni.row;
-      sweep.startCol = zamboni.dir === 1 ? 1 : grid.cols - 2;
-      sweep.endCol = zamboni.dir === 1 ? grid.cols - 2 : 1;
+      sweep.startCol = zamboni.dir === 1 ? 0 : grid.cols - 1;
+      sweep.endCol = zamboni.dir === 1 ? grid.cols - 1 : 0;
       sweep.progress = 0;
+      state.lastCleanCol = sweep.startCol;
     }
 
     function completeSweep(){
-      cleanLine(state.currentSweepRow);
+      cleanThrough(sweep.endCol);
       zamboni.row += zamboni.lineStride;
       if(zamboni.row >= grid.rows){
         zamboni.row = 0;
@@ -189,6 +190,7 @@
       state.smoothing = 0;
       state.targetSmoothing = 0;
       state.currentSweepRow = 1;
+      state.lastCleanCol = 0;
       arena.glow = 0;
       buildSparkles();
       buildGrid();
@@ -324,7 +326,7 @@
       ctx.fill();
 
       ctx.save();
-      ctx.translate(w*0.1, h*0.1);
+      ctx.translate(w*0.12, h*0.12);
       ctx.fillStyle = '#ff6f61';
       ctx.beginPath();
       ctx.arc(0, 0, h*0.18, 0, Math.PI*2);
@@ -335,6 +337,12 @@
       ctx.fill();
       ctx.restore();
 
+      ctx.save();
+      ctx.fillStyle = '#ffe082';
+      roundRect(ctx, w*0.05, h*0.22, w*0.9, h*0.12, 8);
+      ctx.fill();
+      ctx.restore();
+
       ctx.fillStyle = '#455a64';
       roundRect(ctx, w*0.18, -h*0.05, w*0.42, h*0.38, 8);
       ctx.fill();
@@ -342,6 +350,13 @@
       ctx.fillStyle = '#90caf9';
       roundRect(ctx, w*0.24, 0, w*0.3, h*0.22, 6);
       ctx.fill();
+
+      ctx.save();
+      ctx.fillStyle = '#ffecb3';
+      ctx.beginPath();
+      ctx.arc(w*0.95, h*0.28, h*0.12, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
 
       ctx.fillStyle = '#263238';
       ctx.beginPath();
@@ -372,8 +387,25 @@
       const col = sweep.startCol + (sweep.endCol - sweep.startCol) * sweep.progress;
       zamboni.col = col;
       zamboni.row = state.currentSweepRow;
+      cleanThrough(col);
       if(sweep.progress >= 1){
         completeSweep();
+      }
+    }
+
+    function cleanThrough(targetCol){
+      if(state.finished) return;
+      const row = state.currentSweepRow;
+      const start = state.lastCleanCol;
+      const end = targetCol;
+      const step = end >= start ? 1 : -1;
+      for(let c = start; step > 0 ? c <= end : c >= end; c += step){
+        cleanCell(c,row);
+      }
+      state.lastCleanCol = targetCol;
+      state.targetSmoothing = grid.cleaned / grid.total;
+      if(grid.cleaned >= grid.total){
+        triggerCelebration();
       }
     }
 
