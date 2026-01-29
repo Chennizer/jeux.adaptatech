@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title
+    data-fr="Olympiques d'hiver — Zamboni (Jeu switch)"
+    data-en="Winter Olympics — Zamboni (Switch Game)"
+    data-ja="冬季オリンピック — ザンボーニ（スイッチゲーム）"
+  >Olympiques d'hiver — Zamboni (Jeu switch)</title>
+
+  <link rel="stylesheet" href="../../css/otherswitch.css" />
+  <style>
+    :root{
+      --bg-top:#061a2b;
+      --bg-bottom:#0b2f4d;
+      --ice:#dff4ff;
+      --ice-dull:#cfe7f5;
+      --clean:#f4fdff;
+      --line:#e53935;
+      --line-blue:#1e88e5;
+      --accent:#ffd54f;
+      --accent-2:#ffb300;
+      --text:#ffffff;
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0;height:100%;overflow:hidden;background:#04111f;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;}
+
+    body{
+      background:linear-gradient(180deg,var(--bg-top),var(--bg-bottom));
+    }
+
+    canvas{
+      position:fixed;
+      inset:0;
+      width:100vw;
+      height:100vh;
+      display:block;
+      z-index:1;
+    }
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body>
+  <canvas id="rink"></canvas>
+  <script>
+    const canvas = document.getElementById('rink');
+    const ctx = canvas.getContext('2d');
+
+    const state = {
+      finished:false,
+      isAnimating:false,
+      animationStart:0,
+      smoothing:0,
+      targetSmoothing:0,
+      currentSweepRow:1,
+      celebrationTime:0,
+    };
+
+    const grid = {
+      cols:28,
+      rows:16,
+      cells:[],
+      cleaned:0,
+      total:0,
+    };
+
+    const zamboni = {
+      col:1,
+      row:1,
+      dir:1,
+      lineStride:1,
+    };
+
+    const sweep = {
+      startCol:1,
+      endCol:26,
+      durationMs:4500,
+      progress:0,
+    };
+
+    const arena = {
+      flags:[
+        '#ef5350','#42a5f5','#66bb6a','#ffee58','#ab47bc','#ffa726','#26c6da','#ec407a'
+      ],
+      flagPhase:0,
+      glow:0,
+    };
+
+    const sparkle = {
+      flakes:[],
+      stars:[],
+      lastTime:0,
+    };
+
+    function resize(){
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = '100vw';
+      canvas.style.height = '100vh';
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      buildGrid();
+      draw();
+    }
+
+    window.addEventListener('resize', resize);
+
+    function buildGrid(){
+      const {cols,rows} = grid;
+      grid.cells = new Array(cols*rows).fill(0);
+      grid.cleaned = 0;
+      grid.total = cols*rows;
+      zamboni.col = 1;
+      zamboni.row = 1;
+      zamboni.dir = 1;
+      state.currentSweepRow = zamboni.row;
+      sweep.progress = 0;
+      buildSparkles();
+      state.targetSmoothing = 0;
+    }
+
+    function idx(c,r){ return r*grid.cols + c; }
+
+    function cleanCell(c,r){
+      if(c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) return;
+      const i = idx(c,r);
+      if(grid.cells[i] < 1){
+        grid.cells[i] = 1;
+        grid.cleaned += 1;
+      }
+    }
+
+    function updateProgress(){
+      state.targetSmoothing = grid.cleaned / grid.total;
+      if(!state.finished && grid.cleaned >= grid.total){
+        triggerCelebration();
+      }
+    }
+
+    function cleanLine(row){
+      for(let c = 0; c < grid.cols; c++){
+        cleanCell(c,row);
+      }
+      updateProgress();
+    }
+
+    function cleanSegment(row, fromCol, toCol){
+      const start = Math.round(Math.min(fromCol, toCol));
+      const end = Math.round(Math.max(fromCol, toCol));
+      for(let c = start; c <= end; c++){
+        cleanCell(c,row);
+      }
+      updateProgress();
+    }
+
+    function handlePress(){
+      if(state.finished || state.isAnimating) return;
+      startSweep();
+    }
+
+    function startSweep(){
+      state.isAnimating = true;
+      state.animationStart = performance.now();
+      state.currentSweepRow = zamboni.row;
+      sweep.startCol = zamboni.dir === 1 ? 1 : grid.cols - 2;
+      sweep.endCol = zamboni.dir === 1 ? grid.cols - 2 : 1;
+      sweep.progress = 0;
+    }
+
+    function completeSweep(){
+      cleanLine(state.currentSweepRow);
+      zamboni.row += zamboni.lineStride;
+      if(zamboni.row >= grid.rows){
+        zamboni.row = 0;
+      }
+      zamboni.dir *= -1;
+      advanceZamboni();
+      arena.glow = Math.min(1, arena.glow + 0.18);
+    }
+
+    function advanceZamboni(){
+      state.isAnimating = false;
+      sweep.progress = 0;
+    }
+
+    function triggerCelebration(){
+      state.finished = true;
+      state.celebrationTime = performance.now();
+    }
+
+    function restart(){
+      state.finished = false;
+      state.isAnimating = false;
+      state.animationStart = 0;
+      state.smoothing = 0;
+      state.targetSmoothing = 0;
+      state.currentSweepRow = 1;
+      arena.glow = 0;
+      buildSparkles();
+      buildGrid();
+    }
+
+    function onKey(e){
+      if(e.code === 'Space'){
+        e.preventDefault();
+        handlePress();
+      }
+      if(e.code === 'Enter'){
+        e.preventDefault();
+        restart();
+      }
+    }
+    window.addEventListener('keydown', onKey, {passive:false});
+
+    window.addEventListener('pointerdown', handlePress);
+
+    function drawArenaFrame(bounds){
+      const {x,y,w,h} = bounds;
+      const board = Math.min(w,h) * 0.06;
+      ctx.save();
+      ctx.translate(x,y);
+
+      const outerRadius = 26;
+      roundRect(ctx,0,0,w,h,outerRadius);
+      ctx.fillStyle = '#f7fbff';
+      ctx.fill();
+
+      roundRect(ctx,board,board,w-board*2,h-board*2,20);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      ctx.lineWidth = board*0.35;
+      ctx.strokeStyle = '#c62828';
+      roundRect(ctx,board*0.5,board*0.5,w-board,h-board,24);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawRink(bounds){
+      const {x,y,w,h} = bounds;
+      const pad = Math.min(w,h) * 0.06;
+      const inner = {x:x+pad,y:y+pad,w:w-pad*2,h:h-pad*2};
+
+      const cellW = inner.w / grid.cols;
+      const cellH = inner.h / grid.rows;
+
+      // Ice base
+      const iceGrad = ctx.createLinearGradient(inner.x, inner.y, inner.x, inner.y + inner.h);
+      iceGrad.addColorStop(0, '#eefbff');
+      iceGrad.addColorStop(1, '#d7f1ff');
+      ctx.fillStyle = iceGrad;
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      ctx.fill();
+
+      // Uncleaned overlay
+      ctx.save();
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      ctx.clip();
+      for(let r=0;r<grid.rows;r++){
+        for(let c=0;c<grid.cols;c++){
+          const clean = grid.cells[idx(c,r)];
+          if(clean >= 1) continue;
+          const cx = inner.x + c*cellW;
+          const cy = inner.y + r*cellH;
+          ctx.fillStyle = (c+r)%2===0 ? 'rgba(195,224,240,0.42)' : 'rgba(186,217,236,0.38)';
+          ctx.fillRect(cx,cy,cellW+0.6,cellH+0.6);
+        }
+      }
+      ctx.restore();
+
+      // Hockey lines
+      const centerX = inner.x + inner.w/2;
+      const centerY = inner.y + inner.h/2;
+      ctx.save();
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      ctx.clip();
+
+      ctx.lineWidth = Math.max(2, inner.w * 0.004);
+      ctx.strokeStyle = 'rgba(229,57,53,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(centerX, inner.y);
+      ctx.lineTo(centerX, inner.y + inner.h);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(30,136,229,0.85)';
+      const blueOffset = inner.w * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(centerX - blueOffset, inner.y);
+      ctx.lineTo(centerX - blueOffset, inner.y + inner.h);
+      ctx.moveTo(centerX + blueOffset, inner.y);
+      ctx.lineTo(centerX + blueOffset, inner.y + inner.h);
+      ctx.stroke();
+
+      // Faceoff circle
+      ctx.strokeStyle = 'rgba(229,57,53,0.85)';
+      ctx.lineWidth = Math.max(2, inner.w * 0.005);
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, inner.w * 0.09, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+
+      drawZamboni(inner, cellW, cellH);
+      drawShine(inner);
+    }
+
+    function drawZamboni(inner, cellW, cellH){
+      const zx = inner.x + zamboni.col*cellW;
+      const zy = inner.y + zamboni.row*cellH;
+      const w = cellW * 2.4;
+      const h = cellH * 1.5;
+
+      ctx.save();
+      ctx.translate(zx, zy);
+
+      // shadow
+      ctx.fillStyle = 'rgba(0,0,0,.18)';
+      ctx.beginPath();
+      ctx.ellipse(w*0.5, h*0.95, w*0.55, h*0.35, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      // body
+      const dir = zamboni.dir;
+      ctx.scale(dir,1);
+      const offsetX = dir === 1 ? 0 : -w;
+      ctx.translate(offsetX,0);
+
+      const bodyGrad = ctx.createLinearGradient(0, 0, w, 0);
+      bodyGrad.addColorStop(0, '#ffcf4a');
+      bodyGrad.addColorStop(1, '#ffb300');
+      ctx.fillStyle = bodyGrad;
+      roundRect(ctx, 0, h*0.05, w, h*0.7, 12);
+      ctx.fill();
+
+      ctx.fillStyle = '#ff7043';
+      roundRect(ctx, w*0.05, h*0.18, w*0.2, h*0.18, 6);
+      ctx.fill();
+
+      ctx.fillStyle = '#37474f';
+      roundRect(ctx, w*0.2, -h*0.08, w*0.5, h*0.42, 10);
+      ctx.fill();
+
+      ctx.fillStyle = '#90caf9';
+      roundRect(ctx, w*0.26, -h*0.02, w*0.32, h*0.24, 6);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffd54f';
+      ctx.beginPath();
+      ctx.arc(w*0.1, h*0.22, h*0.12, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = '#263238';
+      ctx.beginPath();
+      ctx.arc(w*0.22, h*0.78, h*0.22, 0, Math.PI*2);
+      ctx.arc(w*0.78, h*0.78, h*0.22, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = '#eceff1';
+      roundRect(ctx, w*0.02, h*0.52, w*0.96, h*0.14, 6);
+      ctx.fill();
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = Math.max(2, h*0.08);
+      ctx.beginPath();
+      ctx.moveTo(w*0.08, h*0.8);
+      ctx.quadraticCurveTo(w*0.5, h*1.02, w*0.92, h*0.8);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.arc(w*0.92, h*0.34, h*0.08, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.restore();
+    }
+
+    function updateSweep(){
+      if(!state.isAnimating) return;
+      const now = performance.now();
+      const elapsed = now - state.animationStart;
+      sweep.progress = Math.min(1, elapsed / sweep.durationMs);
+      const col = sweep.startCol + (sweep.endCol - sweep.startCol) * sweep.progress;
+      zamboni.col = col;
+      zamboni.row = state.currentSweepRow;
+      cleanSegment(state.currentSweepRow, sweep.startCol, col);
+      if(sweep.progress >= 1){
+        completeSweep();
+      }
+    }
+
+    function buildSparkles(){
+      const flakeCount = 60;
+      const starCount = 12;
+      sparkle.flakes = Array.from({length: flakeCount}, () => ({
+        x: Math.random(),
+        y: Math.random(),
+        speed: 0.08 + Math.random()*0.18,
+        size: 1 + Math.random()*2,
+        drift: (Math.random() - 0.5) * 0.2,
+      }));
+      sparkle.stars = Array.from({length: starCount}, () => ({
+        x: Math.random(),
+        y: Math.random(),
+        r: 5 + Math.random()*8,
+        phase: Math.random()*Math.PI*2,
+        twinkle: 0.6 + Math.random()*0.4,
+      }));
+    }
+
+    function updateSparkles(dt){
+      sparkle.flakes.forEach(flake => {
+        flake.y += flake.speed * dt * 0.0006;
+        flake.x += flake.drift * dt * 0.0002;
+        if(flake.y > 1.1) flake.y = -0.1;
+        if(flake.x > 1.1) flake.x = -0.1;
+        if(flake.x < -0.1) flake.x = 1.1;
+      });
+      sparkle.stars.forEach(star => {
+        star.phase += dt * 0.0015;
+      });
+    }
+
+    function drawSparkles(bounds, now){
+      const {x,y,w,h} = bounds;
+      const time = now || performance.now();
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      sparkle.stars.forEach(star => {
+        const sx = x + star.x * w;
+        const sy = y + star.y * h;
+        const twinkle = (Math.sin(star.phase + time*0.0015) * 0.4 + 0.6) * star.twinkle;
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 * twinkle})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(sx - star.r, sy);
+        ctx.lineTo(sx + star.r, sy);
+        ctx.moveTo(sx, sy - star.r);
+        ctx.lineTo(sx, sy + star.r);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    function drawSnow(bounds){
+      const {x,y,w,h} = bounds;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      sparkle.flakes.forEach(flake => {
+        ctx.beginPath();
+        ctx.arc(x + flake.x * w, y + flake.y * h, flake.size, 0, Math.PI*2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    function drawShine(inner){
+      state.smoothing += (state.targetSmoothing - state.smoothing) * 0.06;
+      const alpha = 0.18 + state.smoothing * 0.32 + arena.glow * 0.18;
+      arena.glow *= 0.94;
+
+      ctx.save();
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      ctx.clip();
+
+      const grad = ctx.createLinearGradient(inner.x, inner.y, inner.x + inner.w, inner.y + inner.h);
+      grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      grad.addColorStop(0.5, `rgba(255,255,255,${alpha*0.35})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
+
+      // celebration sweep
+      if(state.finished){
+        const t = (performance.now() - state.celebrationTime) / 1000;
+        const sweepX = inner.x + ((t * 180) % (inner.w + 200)) - 100;
+        const sweep = ctx.createLinearGradient(sweepX, inner.y, sweepX + 160, inner.y);
+        sweep.addColorStop(0, 'rgba(255,255,255,0)');
+        sweep.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+        sweep.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sweep;
+        ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
+      }
+
+      ctx.restore();
+    }
+
+    function drawCrowd(bounds){
+      const {x,y,w} = bounds;
+      const crowdY = y - 40;
+      const rows = 3;
+      const dotsPerRow = Math.max(18, Math.floor(w / 40));
+      ctx.save();
+      for(let r=0;r<rows;r++){
+        const yy = crowdY - r*18;
+        for(let i=0;i<dotsPerRow;i++){
+          const xx = x + (i + (r%2)*0.5) * (w / dotsPerRow);
+          const hue = 180 + ((i*17 + r*23) % 120);
+          ctx.fillStyle = `hsla(${hue},80%,70%,${0.18 + r*0.05})`;
+          ctx.beginPath();
+          ctx.arc(xx, yy, 4 - r*0.6, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawFlags(bounds){
+      const {x,y,w} = bounds;
+      const flagTop = y - 120;
+      const flagCount = 8;
+      const gap = w / (flagCount + 1);
+      arena.flagPhase += 0.02;
+      ctx.save();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      for(let i=0;i<flagCount;i++){
+        const fx = x + gap*(i+1);
+        const sway = Math.sin(arena.flagPhase + i*0.7) * 6;
+        ctx.beginPath();
+        ctx.moveTo(fx, flagTop);
+        ctx.lineTo(fx, flagTop + 60);
+        ctx.stroke();
+
+        ctx.fillStyle = arena.flags[i % arena.flags.length];
+        ctx.beginPath();
+        ctx.moveTo(fx, flagTop + 6);
+        ctx.quadraticCurveTo(fx + 28 + sway, flagTop + 18, fx, flagTop + 34);
+        ctx.lineTo(fx, flagTop + 6);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawSpotlights(bounds){
+      const {x,y,w,h} = bounds;
+      const t = performance.now() * 0.001;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      for(let i=0;i<3;i++){
+        const phase = t * (0.6 + i*0.2);
+        const sx = x + (i+1) * (w/4);
+        const sweep = Math.sin(phase) * (w*0.2);
+        const grad = ctx.createLinearGradient(sx + sweep, y - 180, sx - sweep, y + h*0.3);
+        grad.addColorStop(0, 'rgba(255,255,255,0.22)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(sx - 40, y - 180);
+        ctx.lineTo(sx + 40, y - 180);
+        ctx.lineTo(sx + 200 + sweep, y + h*0.35);
+        ctx.lineTo(sx - 200 + sweep, y + h*0.35);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPodium(bounds){
+      if(!state.finished) return;
+      const {x,y,w,h} = bounds;
+      const baseY = y + h + 26;
+      const blockW = Math.min(120, w*0.16);
+      const gap = blockW * 0.25;
+      const centerX = x + w/2;
+
+      ctx.save();
+      ctx.translate(centerX, baseY);
+      const pulse = 1 + Math.sin(performance.now()*0.006)*0.04;
+      ctx.scale(pulse,pulse);
+
+      const colors = ['#c0c0c0','#ffd54f','#cd7f32'];
+      const heights = [54,74,44];
+      const order = [-1,0,1];
+      order.forEach((pos,idx) => {
+        const bx = pos*(blockW+gap) - blockW/2;
+        const bh = heights[idx];
+        ctx.fillStyle = colors[idx];
+        roundRect(ctx,bx,-bh,blockW,bh,8);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    function roundRect(ctx,x,y,w,h,r){
+      const rr = Math.min(r, w/2, h/2);
+      ctx.beginPath();
+      ctx.moveTo(x+rr,y);
+      ctx.arcTo(x+w,y,x+w,y+h,rr);
+      ctx.arcTo(x+w,y+h,x,y+h,rr);
+      ctx.arcTo(x,y+h,x,y,rr);
+      ctx.arcTo(x,y,x+w,y,rr);
+      ctx.closePath();
+    }
+
+    function draw(){
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      ctx.clearRect(0,0,vw,vh);
+
+      const now = performance.now();
+      const dt = sparkle.lastTime ? (now - sparkle.lastTime) : 16;
+      sparkle.lastTime = now;
+      updateSparkles(dt);
+      updateSweep();
+
+      const rinkW = Math.min(vw*0.9, 1200);
+      const rinkH = Math.min(vh*0.68, 680);
+      const rinkX = (vw - rinkW)/2;
+      const rinkY = Math.max(120, (vh - rinkH)/2 - 20);
+      const bounds = {x:rinkX,y:rinkY,w:rinkW,h:rinkH};
+
+      drawSpotlights(bounds);
+      drawSparkles(bounds, now);
+      drawFlags(bounds);
+      drawCrowd(bounds);
+      drawArenaFrame(bounds);
+      drawSnow(bounds);
+      drawRink(bounds);
+      drawPodium(bounds);
+
+      requestAnimationFrame(draw);
+    }
+
+    resize();
+    draw();
+  </script>
+</body>
+</html>
