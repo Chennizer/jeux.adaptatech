@@ -32,12 +32,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoSource = document.getElementById('video-source');
   const youtubeDiv = document.getElementById('youtube-player');
   const ytImportControls = document.getElementById('yt-import-controls');
+  const languageToggle = document.getElementById('langToggle');
   let youtubePlayer = null;
   let youtubeStateChangeHandler = null;
   let currentVideoUrl = null;
   const cycleSfx = new Audio("../../sounds/woosh.mp3");
   cycleSfx.preload = 'auto';
   cycleSfx.load();
+
+  function updateLanguageToggleVisibility() {
+    if (!languageToggle) return;
+    const menuVisible = gameOptionsModal && gameOptionsModal.style.display !== 'none';
+    languageToggle.style.display = menuVisible ? '' : 'none';
+  }
 
   // Hide the preview-equals-scan option until relevant
   previewEqualsScanContainer.style.display = 'none';
@@ -808,6 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStartButtonState();
     gameOptionsModal.style.display = 'none';
     tilePickerModal.style.display = 'flex';
+    updateLanguageToggleVisibility();
     currentCategory = 'all';
     if (categorySelect) categorySelect.value = 'all';
     populateTilePickerGrid();
@@ -853,6 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           tilePickerModal.style.display = 'none';
           tileContainer.style.display = 'flex';
+          updateLanguageToggleVisibility();
           startInactivityTimer();
           setTimeout(() => { inputEnabled = true; }, 2000);
         });
@@ -869,4 +878,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Disable keyboard input until game starts
   inputEnabled = false;
+  updateLanguageToggleVisibility();
 });
