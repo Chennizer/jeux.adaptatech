@@ -27,7 +27,7 @@
     html,body{margin:0;height:100%;overflow:hidden;background:#04111f;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;}
 
     body{
-      background:linear-gradient(180deg,var(--bg-top),var(--bg-bottom));
+      background:#000;
     }
 
     canvas{
@@ -59,7 +59,7 @@
       animationStart:0,
       smoothing:0,
       targetSmoothing:0,
-      currentSweepRow:1,
+      currentSweepRow:0,
       celebrationTime:0,
     };
 
@@ -73,7 +73,7 @@
 
     const zamboni = {
       col:1,
-      row:1,
+      row:0,
       dir:1,
       lineStride:1,
     };
@@ -86,16 +86,13 @@
     };
 
     const arena = {
-      flags:[
-        '#ef5350','#42a5f5','#66bb6a','#ffee58','#ab47bc','#ffa726','#26c6da','#ec407a'
-      ],
-      flagPhase:0,
       glow:0,
     };
 
     const sparkle = {
       flakes:[],
       stars:[],
+      orbs:[],
       lastTime:0,
     };
 
@@ -118,7 +115,7 @@
       grid.cleaned = 0;
       grid.total = cols*rows;
       zamboni.col = 1;
-      zamboni.row = 1;
+      zamboni.row = 0;
       zamboni.dir = 1;
       state.currentSweepRow = zamboni.row;
       sweep.progress = 0;
@@ -201,7 +198,7 @@
       state.animationStart = 0;
       state.smoothing = 0;
       state.targetSmoothing = 0;
-      state.currentSweepRow = 1;
+      state.currentSweepRow = 0;
       arena.glow = 0;
       buildSparkles();
       buildGrid();
@@ -221,32 +218,9 @@
 
     window.addEventListener('pointerdown', handlePress);
 
-    function drawArenaFrame(bounds){
-      const {x,y,w,h} = bounds;
-      const board = Math.min(w,h) * 0.06;
-      ctx.save();
-      ctx.translate(x,y);
-
-      const outerRadius = 26;
-      roundRect(ctx,0,0,w,h,outerRadius);
-      ctx.fillStyle = '#f7fbff';
-      ctx.fill();
-
-      roundRect(ctx,board,board,w-board*2,h-board*2,20);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-
-      ctx.lineWidth = board*0.35;
-      ctx.strokeStyle = '#c62828';
-      roundRect(ctx,board*0.5,board*0.5,w-board,h-board,24);
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
     function drawRink(bounds){
       const {x,y,w,h} = bounds;
-      const pad = Math.min(w,h) * 0.06;
+      const pad = Math.min(w,h) * 0.04;
       const inner = {x:x+pad,y:y+pad,w:w-pad*2,h:h-pad*2};
 
       const cellW = inner.w / grid.cols;
@@ -400,8 +374,9 @@
     }
 
     function buildSparkles(){
-      const flakeCount = 60;
-      const starCount = 12;
+      const flakeCount = 50;
+      const starCount = 10;
+      const orbCount = 16;
       sparkle.flakes = Array.from({length: flakeCount}, () => ({
         x: Math.random(),
         y: Math.random(),
@@ -416,6 +391,15 @@
         phase: Math.random()*Math.PI*2,
         twinkle: 0.6 + Math.random()*0.4,
       }));
+      sparkle.orbs = Array.from({length: orbCount}, () => ({
+        x: Math.random(),
+        y: Math.random(),
+        size: 12 + Math.random()*22,
+        hue: 180 + Math.random()*140,
+        driftX: (Math.random() - 0.5) * 0.08,
+        driftY: (Math.random() - 0.5) * 0.06,
+        pulse: Math.random()*Math.PI*2,
+      }));
     }
 
     function updateSparkles(dt){
@@ -429,6 +413,15 @@
       sparkle.stars.forEach(star => {
         star.phase += dt * 0.0015;
       });
+      sparkle.orbs.forEach(orb => {
+        orb.x += orb.driftX * dt * 0.00015;
+        orb.y += orb.driftY * dt * 0.00015;
+        orb.pulse += dt * 0.001;
+        if(orb.x > 1.2) orb.x = -0.2;
+        if(orb.x < -0.2) orb.x = 1.2;
+        if(orb.y > 1.2) orb.y = -0.2;
+        if(orb.y < -0.2) orb.y = 1.2;
+      });
     }
 
     function drawSparkles(bounds, now){
@@ -436,6 +429,18 @@
       const time = now || performance.now();
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
+      sparkle.orbs.forEach(orb => {
+        const ox = x + orb.x * w;
+        const oy = y + orb.y * h;
+        const pulse = 0.6 + Math.sin(orb.pulse) * 0.25;
+        const grad = ctx.createRadialGradient(ox, oy, 0, ox, oy, orb.size * pulse);
+        grad.addColorStop(0, `hsla(${orb.hue},80%,65%,0.5)`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(ox, oy, orb.size * pulse, 0, Math.PI*2);
+        ctx.fill();
+      });
       sparkle.stars.forEach(star => {
         const sx = x + star.x * w;
         const sy = y + star.y * h;
@@ -495,103 +500,6 @@
       ctx.restore();
     }
 
-    function drawCrowd(bounds){
-      const {x,y,w} = bounds;
-      const crowdY = y - 40;
-      const rows = 3;
-      const dotsPerRow = Math.max(18, Math.floor(w / 40));
-      ctx.save();
-      for(let r=0;r<rows;r++){
-        const yy = crowdY - r*18;
-        for(let i=0;i<dotsPerRow;i++){
-          const xx = x + (i + (r%2)*0.5) * (w / dotsPerRow);
-          const hue = 180 + ((i*17 + r*23) % 120);
-          ctx.fillStyle = `hsla(${hue},80%,70%,${0.18 + r*0.05})`;
-          ctx.beginPath();
-          ctx.arc(xx, yy, 4 - r*0.6, 0, Math.PI*2);
-          ctx.fill();
-        }
-      }
-      ctx.restore();
-    }
-
-    function drawFlags(bounds){
-      const {x,y,w} = bounds;
-      const flagTop = y - 120;
-      const flagCount = 8;
-      const gap = w / (flagCount + 1);
-      arena.flagPhase += 0.02;
-      ctx.save();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-      for(let i=0;i<flagCount;i++){
-        const fx = x + gap*(i+1);
-        const sway = Math.sin(arena.flagPhase + i*0.7) * 6;
-        ctx.beginPath();
-        ctx.moveTo(fx, flagTop);
-        ctx.lineTo(fx, flagTop + 60);
-        ctx.stroke();
-
-        ctx.fillStyle = arena.flags[i % arena.flags.length];
-        ctx.beginPath();
-        ctx.moveTo(fx, flagTop + 6);
-        ctx.quadraticCurveTo(fx + 28 + sway, flagTop + 18, fx, flagTop + 34);
-        ctx.lineTo(fx, flagTop + 6);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    function drawSpotlights(bounds){
-      const {x,y,w,h} = bounds;
-      const t = performance.now() * 0.001;
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      for(let i=0;i<3;i++){
-        const phase = t * (0.6 + i*0.2);
-        const sx = x + (i+1) * (w/4);
-        const sweep = Math.sin(phase) * (w*0.2);
-        const grad = ctx.createLinearGradient(sx + sweep, y - 180, sx - sweep, y + h*0.3);
-        grad.addColorStop(0, 'rgba(255,255,255,0.22)');
-        grad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(sx - 40, y - 180);
-        ctx.lineTo(sx + 40, y - 180);
-        ctx.lineTo(sx + 200 + sweep, y + h*0.35);
-        ctx.lineTo(sx - 200 + sweep, y + h*0.35);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    function drawPodium(bounds){
-      if(!state.finished) return;
-      const {x,y,w,h} = bounds;
-      const baseY = y + h + 26;
-      const blockW = Math.min(120, w*0.16);
-      const gap = blockW * 0.25;
-      const centerX = x + w/2;
-
-      ctx.save();
-      ctx.translate(centerX, baseY);
-      const pulse = 1 + Math.sin(performance.now()*0.006)*0.04;
-      ctx.scale(pulse,pulse);
-
-      const colors = ['#c0c0c0','#ffd54f','#cd7f32'];
-      const heights = [54,74,44];
-      const order = [-1,0,1];
-      order.forEach((pos,idx) => {
-        const bx = pos*(blockW+gap) - blockW/2;
-        const bh = heights[idx];
-        ctx.fillStyle = colors[idx];
-        roundRect(ctx,bx,-bh,blockW,bh,8);
-        ctx.fill();
-      });
-      ctx.restore();
-    }
-
     function roundRect(ctx,x,y,w,h,r){
       const rr = Math.min(r, w/2, h/2);
       ctx.beginPath();
@@ -614,20 +522,15 @@
       updateSparkles(dt);
       updateSweep();
 
-      const rinkW = Math.min(vw*0.9, 1200);
-      const rinkH = Math.min(vh*0.68, 680);
+      const rinkW = Math.min(vw*0.92, 1200);
+      const rinkH = Math.min(vh*0.78, 720);
       const rinkX = (vw - rinkW)/2;
-      const rinkY = Math.max(120, (vh - rinkH)/2 - 20);
+      const rinkY = (vh - rinkH)/2;
       const bounds = {x:rinkX,y:rinkY,w:rinkW,h:rinkH};
 
-      drawSpotlights(bounds);
       drawSparkles(bounds, now);
-      drawFlags(bounds);
-      drawCrowd(bounds);
-      drawArenaFrame(bounds);
       drawSnow(bounds);
       drawRink(bounds);
-      drawPodium(bounds);
 
       requestAnimationFrame(draw);
     }
