@@ -42,7 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateLanguageToggleVisibility() {
     if (!languageToggle) return;
-    const menuVisible = gameOptionsModal && gameOptionsModal.style.display !== 'none';
+    const menuVisible = (gameOptionsModal && gameOptionsModal.style.display !== 'none') ||
+      (tilePickerModal && tilePickerModal.style.display !== 'none');
     languageToggle.style.display = menuVisible ? '' : 'none';
   }
 
