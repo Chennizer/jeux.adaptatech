@@ -67,6 +67,10 @@
     zamboniMoveSound.loop = true;
     zamboniMoveSound.volume = 0.4;
 
+    // TODO: Replace with final finish whistle sound.
+    const finishWhistleSound = new Audio('../../sounds/asia-sound.wav');
+    finishWhistleSound.volume = 0.6;
+
     let audioUnlocked = false;
 
     const state = {
@@ -78,6 +82,7 @@
       currentSweepRow:0,
       lastCleanCol:0,
       celebrationTime:0,
+      whistlePlayed:false,
     };
 
     const grid = {
@@ -219,6 +224,12 @@
     function triggerCelebration(){
       state.finished = true;
       state.celebrationTime = performance.now();
+      if(!state.whistlePlayed){
+        state.whistlePlayed = true;
+        finishWhistleSound.currentTime = 0;
+        finishWhistleSound.play().catch(() => {});
+      }
+      zamboniMoveSound.pause();
     }
 
     function restart(){
@@ -228,6 +239,7 @@
       state.smoothing = 0;
       state.targetSmoothing = 0;
       state.currentSweepRow = 0;
+      state.whistlePlayed = false;
       arena.glow = 0;
       buildSparkles();
       buildGrid();
@@ -322,7 +334,9 @@
       ctx.stroke();
       ctx.restore();
 
-      drawZamboni(inner, cellW, cellH);
+      if(!state.finished){
+        drawZamboni(inner, cellW, cellH);
+      }
       drawShine(inner);
     }
 
@@ -496,20 +510,36 @@
       const {x,y,w,h} = bounds;
       const t = (now - state.celebrationTime) / 1000;
       const centerX = x + w * 0.5;
-      const centerY = y + h * 0.15;
-      const radius = Math.min(w, h) * (0.08 + 0.03 * Math.sin(t * 3));
-      const colors = ['#ffd54f', '#ff8a65', '#4fc3f7', '#81c784', '#ba68c8'];
+      const centerY = y + h * 0.18;
+      const pulse = 1 + Math.sin(t * 4) * 0.06;
+      const rinkGlow = Math.min(1, t / 1.2);
+
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      colors.forEach((color, idx) => {
-        const angle = t * 2 + idx * (Math.PI * 2 / colors.length);
-        const px = centerX + Math.cos(angle) * radius * 3;
-        const py = centerY + Math.sin(angle) * radius * 2;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(px, py, radius * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-      });
+      ctx.fillStyle = `rgba(255,80,80,${0.25 * rinkGlow})`;
+      ctx.fillRect(x, y, w, h);
+
+      // Goal light bars
+      const barW = w * 0.12;
+      const barH = h * 0.2;
+      ctx.fillStyle = `rgba(255,70,70,${0.6 * rinkGlow})`;
+      roundRect(ctx, x + w * 0.08, y + h * 0.2, barW, barH, 12);
+      ctx.fill();
+      roundRect(ctx, x + w * 0.8, y + h * 0.2, barW, barH, 12);
+      ctx.fill();
+
+      // Puck burst
+      const puckRadius = Math.min(w, h) * 0.04 * pulse;
+      ctx.fillStyle = 'rgba(20,20,20,0.9)';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, puckRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(255,255,255,${0.8 * rinkGlow})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, puckRadius * 2.6, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
 
