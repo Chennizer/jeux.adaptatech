@@ -405,6 +405,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
   const clearAllButton = document.getElementById('clear-all-button');
+  const categoryToggle = document.getElementById('category-toggle');
+  const categorySelect = document.getElementById('category-select');
+  const categoryNameInput = document.getElementById('category-name-input');
+  const addCategoryButton = document.getElementById('add-category-button');
+  const renameCategoryButton = document.getElementById('rename-category-button');
+  const deleteCategoryButton = document.getElementById('delete-category-button');
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
@@ -498,6 +504,119 @@ document.addEventListener('DOMContentLoaded', async () => {
   let lastSelectionSignature = '';
   let shuffleEnabled = false; // optional toggle if you add it to miscOptions
   const YT_STORAGE_KEY = 'customYoutubeUrls';
+  const YT_CATEGORIES_KEY = 'customYoutubeCategories';
+
+  let categoriesEnabled = false;
+  let categoriesState = { activeId: null, categories: [] };
+
+  function loadCategoriesState() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(YT_CATEGORIES_KEY) || 'null');
+      if (stored && Array.isArray(stored.categories)) {
+        categoriesEnabled = !!stored.enabled;
+        categoriesState = {
+          activeId: stored.activeId || (stored.categories[0] && stored.categories[0].id) || null,
+          categories: stored.categories
+        };
+        return;
+      }
+    } catch {}
+    categoriesEnabled = false;
+    categoriesState = { activeId: null, categories: [] };
+  }
+
+  function persistCategoriesState() {
+    try {
+      localStorage.setItem(
+        YT_CATEGORIES_KEY,
+        JSON.stringify({
+          enabled: categoriesEnabled,
+          activeId: categoriesState.activeId,
+          categories: categoriesState.categories
+        })
+      );
+    } catch {}
+  }
+
+  function createCategory(name) {
+    const id = `cat-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    return { id, name: name || 'Nouvelle catégorie', urls: [] };
+  }
+
+  function getActiveCategory() {
+    return categoriesState.categories.find(cat => cat.id === categoriesState.activeId) || null;
+  }
+
+  function ensureCategoryDefaults() {
+    if (!categoriesState.categories.length) {
+      const cat = createCategory('Mes vidéos');
+      categoriesState.categories = [cat];
+      categoriesState.activeId = cat.id;
+    } else if (!categoriesState.activeId) {
+      categoriesState.activeId = categoriesState.categories[0].id;
+    }
+  }
+
+  function setCategoryControlsVisibility(enabled) {
+    if (!categorySelect || !categoryNameInput || !addCategoryButton || !renameCategoryButton || !deleteCategoryButton) return;
+    const display = enabled ? '' : 'none';
+    categorySelect.style.display = display;
+    categoryNameInput.style.display = display;
+    addCategoryButton.style.display = display;
+    renameCategoryButton.style.display = display;
+    deleteCategoryButton.style.display = display;
+  }
+
+  function renderCategorySelect() {
+    if (!categorySelect) return;
+    categorySelect.innerHTML = '';
+    categoriesState.categories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.id;
+      opt.textContent = cat.name;
+      if (cat.id === categoriesState.activeId) opt.selected = true;
+      categorySelect.appendChild(opt);
+    });
+  }
+
+  async function renderCategoryUrls(urls) {
+    if (!urlVideoList) return;
+    urlVideoList.innerHTML = '';
+    for (const url of urls) {
+      await addYoutubeUrlCard(url);
+    }
+    renumberCards();
+  }
+
+  async function ensureCategoryFromLegacy() {
+    if (categoriesState.categories.length) return;
+    const saved = localStorage.getItem(YT_STORAGE_KEY);
+    if (!saved) return;
+    try {
+      const urls = JSON.parse(saved);
+      if (Array.isArray(urls) && urls.length) {
+        const cat = createCategory('Mes vidéos');
+        cat.urls = urls.slice();
+        categoriesState.categories = [cat];
+        categoriesState.activeId = cat.id;
+      }
+    } catch {}
+  }
+
+  async function syncActiveCategoryFromDom() {
+    if (!categoriesEnabled || !urlVideoList) return;
+    const active = getActiveCategory();
+    if (!active) return;
+    active.urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
+  }
+
+  async function refreshCategoryView() {
+    if (!categoriesEnabled) return;
+    ensureCategoryDefaults();
+    renderCategorySelect();
+    const active = getActiveCategory();
+    await renderCategoryUrls(active ? active.urls : []);
+  }
 
   // ---------- Local order persistence (PER-SET) ----------
   const LOCAL_ORDERS_KEY = 'customLocalVideoOrders'; // map: signature -> [ordered keys]
@@ -588,9 +707,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Clear persisted data
     try { localStorage.removeItem(YT_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(YT_CATEGORIES_KEY); } catch {}
     try { localStorage.removeItem(LOCAL_ORDERS_KEY); } catch {}
     clearHidden();              // NEW: forget hidden exclusions
     await deleteRepoHandle();   // NEW: forget saved folder handle
+
+    if (categoriesEnabled) {
+      categoriesState = { activeId: null, categories: [] };
+      ensureCategoryDefaults();
+      persistCategoriesState();
+      renderCategorySelect();
+      await renderCategoryUrls([]);
+    }
 
     // Reset selection / numbering / UI
     selectedMedia = [];
@@ -828,12 +956,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   function saveYoutubeUrls() {
     if (!urlVideoList) return;
     const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
+    if (categoriesEnabled) {
+      const active = getActiveCategory();
+      if (active) {
+        active.urls = urls;
+        persistCategoriesState();
+      }
+      return;
+    }
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
   }
 
   // ---------- UPDATED: loadStoredYoutubeUrls uses addYoutubeUrlCard (thumbnails + title) ----------
   async function loadStoredYoutubeUrls() {
     if (!urlVideoList) return;
+    if (categoriesEnabled) {
+      ensureCategoryDefaults();
+      const active = getActiveCategory();
+      await renderCategoryUrls(active ? active.urls : []);
+      return;
+    }
     const saved = localStorage.getItem(YT_STORAGE_KEY);
     if (!saved) return;
 
@@ -935,6 +1077,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  loadCategoriesState();
+  if (categoryToggle) {
+    categoryToggle.checked = categoriesEnabled;
+    setCategoryControlsVisibility(categoriesEnabled);
+    if (categoriesEnabled) {
+      ensureCategoryDefaults();
+      renderCategorySelect();
+    }
+  }
+
   // Load saved URLs (with validation)
   await loadStoredYoutubeUrls();
 
@@ -945,6 +1097,78 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Apply saved local order on startup (after cards exist)
   loadLocalOrderForCurrentSet();
+
+  if (categoryToggle) {
+    categoryToggle.addEventListener('change', async () => {
+      categoriesEnabled = categoryToggle.checked;
+      if (categoriesEnabled) {
+        await ensureCategoryFromLegacy();
+        ensureCategoryDefaults();
+        renderCategorySelect();
+        await refreshCategoryView();
+      }
+      setCategoryControlsVisibility(categoriesEnabled);
+      persistCategoriesState();
+      if (!categoriesEnabled) {
+        await loadStoredYoutubeUrls();
+      }
+    });
+  }
+
+  if (categorySelect) {
+    categorySelect.addEventListener('change', async () => {
+      if (!categoriesEnabled) return;
+      await syncActiveCategoryFromDom();
+      categoriesState.activeId = categorySelect.value;
+      persistCategoriesState();
+      await refreshCategoryView();
+    });
+  }
+
+  if (addCategoryButton && categoryNameInput) {
+    addCategoryButton.addEventListener('click', async () => {
+      if (!categoriesEnabled) return;
+      const name = categoryNameInput.value.trim();
+      if (!name) return;
+      await syncActiveCategoryFromDom();
+      const cat = createCategory(name);
+      categoriesState.categories.push(cat);
+      categoriesState.activeId = cat.id;
+      categoryNameInput.value = '';
+      persistCategoriesState();
+      await refreshCategoryView();
+    });
+  }
+
+  if (renameCategoryButton) {
+    renameCategoryButton.addEventListener('click', () => {
+      if (!categoriesEnabled) return;
+      const active = getActiveCategory();
+      if (!active) return;
+      const nextName = prompt('Nom de la catégorie :', active.name);
+      if (!nextName) return;
+      active.name = nextName.trim() || active.name;
+      persistCategoriesState();
+      renderCategorySelect();
+    });
+  }
+
+  if (deleteCategoryButton) {
+    deleteCategoryButton.addEventListener('click', async () => {
+      if (!categoriesEnabled) return;
+      if (categoriesState.categories.length <= 1) {
+        alert('Au moins une catégorie est requise.');
+        return;
+      }
+      const active = getActiveCategory();
+      if (!active) return;
+      if (!confirm(`Supprimer la catégorie "${active.name}" ?`)) return;
+      categoriesState.categories = categoriesState.categories.filter(cat => cat.id !== active.id);
+      categoriesState.activeId = categoriesState.categories[0].id;
+      persistCategoriesState();
+      await refreshCategoryView();
+    });
+  }
 
   // initial selection
   selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
@@ -999,13 +1223,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // UI events
-  selectVideosButton.addEventListener('click', () => {
+  selectVideosButton.addEventListener('click', async () => {
     videoSelectionModal.style.display = 'block';
+    if (categoriesEnabled) {
+      await refreshCategoryView();
+    }
   });
   closeModal.addEventListener('click', () => {
+    if (categoriesEnabled) saveYoutubeUrls();
     videoSelectionModal.style.display = 'none';
   });
   okButton.addEventListener('click', () => {
+    if (categoriesEnabled) saveYoutubeUrls();
     updateSelectedMedia();
     videoSelectionModal.style.display = 'none';
   });
@@ -1050,6 +1279,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       addVideoUrlInput.value = '';
       renumberCards();
       updateSelectedMedia();
+      if (categoriesEnabled) {
+        await syncActiveCategoryFromDom();
+        persistCategoriesState();
+      }
       if (urlVideoList) saveYoutubeUrls();
     });
   }
@@ -1086,6 +1319,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           refused = blocked.size;
           renumberCards();
           updateSelectedMedia();
+          if (categoriesEnabled) {
+            await syncActiveCategoryFromDom();
+            persistCategoriesState();
+          }
           if (urlVideoList) saveYoutubeUrls();
           ytPlaylistStatus.textContent = `Import terminé: ${added} ajouté(s)${refused ? `, ${refused} ignoré(s)` : ''}.`;
         }
