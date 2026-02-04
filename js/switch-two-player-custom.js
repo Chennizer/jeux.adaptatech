@@ -408,6 +408,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const categoriesToggle = document.getElementById('categories-toggle');
   const categorySelect = document.getElementById('category-select');
   const addCategoryButton = document.getElementById('add-category-button');
+  const addCategoryModal = document.getElementById('add-category-modal');
+  const closeAddCategoryModal = document.getElementById('close-add-category-modal');
+  const addCategoryNameInput = document.getElementById('add-category-name-input');
+  const addCategorySaveButton = document.getElementById('add-category-save');
+  const addCategoryCancelButton = document.getElementById('add-category-cancel');
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
@@ -682,6 +687,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (addCategoryButton) {
     addCategoryButton.addEventListener('click', () => addNewCategory());
+  }
+  if (closeAddCategoryModal) {
+    closeAddCategoryModal.addEventListener('click', () => closeAddCategoryModalDialog());
+  }
+  if (addCategoryCancelButton) {
+    addCategoryCancelButton.addEventListener('click', () => closeAddCategoryModalDialog());
+  }
+  if (addCategorySaveButton) {
+    addCategorySaveButton.addEventListener('click', () => saveCategoryFromModal());
+  }
+  if (addCategoryNameInput) {
+    addCategoryNameInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        saveCategoryFromModal();
+      }
+    });
+  }
+  if (addCategoryModal) {
+    addCategoryModal.addEventListener('click', (event) => {
+      if (event.target === addCategoryModal) closeAddCategoryModalDialog();
+    });
   }
 
   function loadLocalOrderForCurrentSet() {
@@ -1230,16 +1257,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function addNewCategory() {
+  function openAddCategoryModal() {
+    if (!addCategoryModal || !addCategoryNameInput) return;
+    addCategoryModal.style.display = 'block';
+    addCategoryNameInput.value = '';
+    addCategoryNameInput.focus();
+  }
+
+  function closeAddCategoryModalDialog() {
+    if (!addCategoryModal) return;
+    addCategoryModal.style.display = 'none';
+  }
+
+  function saveCategoryFromModal() {
+    if (!addCategoryNameInput) return;
+    const name = addCategoryNameInput.value.trim();
+    if (!name) return;
     const state = getCategoryState();
     if (!state) return;
-    const name = prompt('Nom de la catégorie ?');
-    if (!name) return;
     const id = `cat-${Date.now()}`;
-    state.categories.push({ id, name: name.trim(), urls: [] });
+    state.categories.push({ id, name, urls: [] });
     setCategoryState(state);
     renderCategorySelect(state);
     updateCategoryButtonsForList();
+    closeAddCategoryModalDialog();
+  }
+
+  function addNewCategory() {
+    openAddCategoryModal();
   }
 
   function initCategoryControls() {
