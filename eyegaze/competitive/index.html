@@ -21,6 +21,7 @@
       color: #fff;
       height: 100vh;
       overflow: hidden;
+      cursor: none;
     }
 
     .hud {
@@ -74,6 +75,7 @@
     .arena {
       position: absolute;
       inset: 0;
+      cursor: none;
     }
 
     #target {
@@ -142,6 +144,35 @@
       border-color: rgba(255, 255, 255, 0.6);
     }
 
+    .start-screen {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 10;
+    }
+
+    .start-card {
+      text-align: center;
+      padding: 32px 36px;
+      border-radius: 24px;
+      background: rgba(16, 16, 16, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      max-width: 360px;
+    }
+
+    .start-card h1 {
+      margin: 0 0 12px;
+      font-size: 28px;
+    }
+
+    .start-card p {
+      margin: 0 0 20px;
+      opacity: 0.8;
+      font-size: 15px;
+    }
+
     @keyframes dwellPulse {
       0% {
         transform: scale(1);
@@ -186,6 +217,14 @@
 
   <div class="helper">Move the gaze cursor to the target and hold to score.</div>
 
+  <div class="start-screen" id="startScreen">
+    <div class="start-card">
+      <h1>Eyegaze Duel</h1>
+      <p>Press start to enter fullscreen and begin the duel.</p>
+      <button id="startButton" type="button">Start</button>
+    </div>
+  </div>
+
   <script>
     const ABLY_KEY = 'cdtKhA.qjdiYA:nbUbeaXqiQWHgQF1F9Nn0glvP62CRod3LcbAQDWJaIE';
     const CHANNEL_NAME = 'eyegaze-duel';
@@ -200,6 +239,8 @@
     const scoreOpponentEl = document.getElementById('scoreOpponent');
     const dwellDisplay = document.getElementById('dwellDisplay');
     const resetButton = document.getElementById('resetButton');
+    const startScreen = document.getElementById('startScreen');
+    const startButton = document.getElementById('startButton');
 
     dwellDisplay.textContent = `${(DWELL_TIME / 1000).toFixed(1)}s`;
 
@@ -210,6 +251,7 @@
     const channel = ably.channels.get(CHANNEL_NAME);
 
     const state = {
+      started: false,
       pointer: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
       opponent: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
       target: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
@@ -258,6 +300,7 @@
     }
 
     function handleDwell() {
+      if (!state.started) return;
       const dx = state.pointer.x - state.target.x;
       const dy = state.pointer.y - state.target.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -292,6 +335,7 @@
     }
 
     function onMove(event) {
+      if (!state.started) return;
       const rect = arena.getBoundingClientRect();
       state.pointer.x = Math.min(rect.width, Math.max(0, event.clientX - rect.left));
       state.pointer.y = Math.min(rect.height, Math.max(0, event.clientY - rect.top));
@@ -328,6 +372,18 @@
       state.scoreOpponent = 0;
       updateScores();
       channel.publish('reset', { id: clientId });
+    });
+
+    startButton.addEventListener('click', async () => {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (error) {
+        // Fullscreen can fail if not allowed by the browser; continue anyway.
+      }
+      state.started = true;
+      startScreen.style.display = 'none';
     });
 
     ably.connection.on('connected', () => {
