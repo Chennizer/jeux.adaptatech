@@ -848,6 +848,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     ensureOrderButtons(card);
+    applyCategoryButtons(card);
 
     if (isCustomPage && !card.querySelector('.remove-btn')) {
       const rm = document.createElement('span');
@@ -899,6 +900,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     setCategoryState(state);
   }
 
+  function applyCategoryButtons(card) {
+    if (!card) return;
+    const existing = card.querySelector('.category-chip-group');
+    if (existing) existing.remove();
+    const state = getCategoryState();
+    if (!isCategoriesEnabled(state)) return;
+    if (!state || !Array.isArray(state.categories)) return;
+    const group = document.createElement('div');
+    group.className = 'category-chip-group';
+    const activeId = state.activeId;
+    state.categories.forEach(cat => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'category-chip';
+      chip.textContent = cat.name;
+      if (cat.id === activeId) {
+        chip.classList.add('active');
+        chip.disabled = true;
+      } else {
+        chip.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const nextState = getCategoryState();
+          if (!nextState) return;
+          const target = nextState.categories.find(c => c.id === cat.id);
+          if (!target) return;
+          const src = card.dataset.src;
+          if (!src) return;
+          if (!Array.isArray(target.urls)) target.urls = [];
+          if (!target.urls.includes(src)) {
+            target.urls.push(src);
+            setCategoryState(nextState);
+          }
+        });
+      }
+      group.appendChild(chip);
+    });
+    card.appendChild(group);
+  }
+
+  function updateCategoryButtonsForList() {
+    if (!urlVideoList) return;
+    Array.from(urlVideoList.querySelectorAll('.video-card')).forEach(card => {
+      applyCategoryButtons(card);
+    });
+  }
+
   function saveYoutubeUrls() {
     if (!urlVideoList) return;
     if (isCategoriesEnabled()) {
@@ -917,6 +964,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (videoSelectionModal) {
       videoSelectionModal.classList.toggle(CATEGORY_ENABLED_CLASS, visible);
     }
+    updateCategoryButtonsForList();
   }
 
   function renderCategorySelect(state) {
@@ -1070,6 +1118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderCategorySelect(state);
     urlVideoList.innerHTML = '';
     await loadUrlsIntoList(target.urls || []);
+    updateCategoryButtonsForList();
     saveYoutubeUrls();
   }
 
@@ -1083,6 +1132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (categoriesToggle) categoriesToggle.checked = true;
       renderCategorySelect(nextState);
       await loadCategoryById(nextState.activeId || nextState.categories[0].id);
+      updateCategoryButtonsForList();
       return;
     }
     const urlsFromDom = getCurrentUrlListFromDom();
@@ -1096,6 +1146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (categoriesToggle) categoriesToggle.checked = true;
     renderCategorySelect(state);
     await loadCategoryById(state.activeId);
+    updateCategoryButtonsForList();
   }
 
   async function disableCategoriesToFlatList() {
@@ -1110,6 +1161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (urlVideoList) {
       urlVideoList.innerHTML = '';
       await loadUrlsIntoList(flatUrls);
+      updateCategoryButtonsForList();
       saveYoutubeUrls();
     }
   }
@@ -1125,6 +1177,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setCategoryState(state);
     renderCategorySelect(state);
     loadCategoryById(id);
+    updateCategoryButtonsForList();
   }
 
   function initCategoryControls() {
@@ -1135,6 +1188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (enabled && state) {
       renderCategorySelect(state);
     }
+    updateCategoryButtonsForList();
   }
 
   // Load saved URLs (with validation)
