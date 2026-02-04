@@ -31,11 +31,6 @@ let remotePosition = { x: 0.5, y: 0.5 };
 let lastInsideAt = null;
 let lastSendAt = 0;
 
-const savedKey = localStorage.getItem('hotspotCaptureKey');
-if (savedKey) {
-  elements.ablyKey.value = savedKey;
-}
-
 const savedHost = localStorage.getItem('hotspotCaptureHost');
 isHost = savedHost === 'true';
 updateHostButton();
@@ -153,7 +148,6 @@ function connect() {
     return;
   }
 
-  localStorage.setItem('hotspotCaptureKey', key);
   clientId = localStorage.getItem('hotspotCaptureClientId');
   if (!clientId) {
     clientId = `player-${Math.random().toString(36).slice(2, 8)}`;
