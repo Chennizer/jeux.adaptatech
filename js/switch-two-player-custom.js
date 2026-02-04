@@ -405,6 +405,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
   const clearAllButton = document.getElementById('clear-all-button');
+  const categoriesToggle = document.getElementById('categories-toggle');
+  const categorySelect = document.getElementById('category-select');
+  const addCategoryButton = document.getElementById('add-category-button');
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
@@ -498,6 +501,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   let lastSelectionSignature = '';
   let shuffleEnabled = false; // optional toggle if you add it to miscOptions
   const YT_STORAGE_KEY = 'customYoutubeUrls';
+  const YT_CATEGORY_STORAGE_KEY = 'customYoutubeCategories';
+
+  const DEFAULT_CATEGORY_NAME = 'Général';
+  const CATEGORY_ENABLED_CLASS = 'categories-enabled';
 
   // ---------- Local order persistence (PER-SET) ----------
   const LOCAL_ORDERS_KEY = 'customLocalVideoOrders'; // map: signature -> [ordered keys]
@@ -528,6 +535,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   function clearHidden() {
     try { localStorage.removeItem(LOCAL_HIDDEN_KEY); } catch {}
+  }
+
+  function getCategoryState() {
+    try {
+      return JSON.parse(localStorage.getItem(YT_CATEGORY_STORAGE_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  }
+  function setCategoryState(state) {
+    try { localStorage.setItem(YT_CATEGORY_STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }
+  function isCategoriesEnabled(state = getCategoryState()) {
+    return !!(state && state.enabled);
+  }
+  function ensureCategoryStateFromUrls(urls) {
+    const id = `cat-${Date.now()}`;
+    return {
+      enabled: true,
+      activeId: id,
+      categories: [{ id, name: DEFAULT_CATEGORY_NAME, urls: urls || [] }]
+    };
+  }
+  function flattenCategoryUrls(state) {
+    if (!state || !Array.isArray(state.categories)) return [];
+    return state.categories.flatMap(cat => Array.isArray(cat.urls) ? cat.urls : []);
   }
 
   // stable key for local files (works across reloads for folder picker / file input)
@@ -588,6 +621,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Clear persisted data
     try { localStorage.removeItem(YT_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(YT_CATEGORY_STORAGE_KEY); } catch {}
     try { localStorage.removeItem(LOCAL_ORDERS_KEY); } catch {}
     clearHidden();              // NEW: forget hidden exclusions
     await deleteRepoHandle();   // NEW: forget saved folder handle
@@ -603,11 +637,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (startButton) startButton.style.display = 'none';
     if (ytPlaylistStatus) ytPlaylistStatus.textContent = '';
+    if (categoriesToggle) categoriesToggle.checked = false;
+    setCategoryControlsVisible(false);
 
     document.dispatchEvent(new CustomEvent('video-list-cleared'));
   }
 
   if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
+
+  if (categoriesToggle) {
+    categoriesToggle.addEventListener('change', async () => {
+      if (categoriesToggle.checked) {
+        await enableCategoriesFromCurrentList();
+      } else {
+        await disableCategoriesToFlatList();
+      }
+      updateSelectedMedia();
+    });
+  }
+
+  if (categorySelect) {
+    categorySelect.addEventListener('change', async () => {
+      await loadCategoryById(categorySelect.value);
+      updateSelectedMedia();
+    });
+  }
+
+  if (addCategoryButton) {
+    addCategoryButton.addEventListener('click', () => addNewCategory());
+  }
 
   function loadLocalOrderForCurrentSet() {
     if (!localVideoList) return;
@@ -822,69 +880,183 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       card.appendChild(rm);
     }
+    refreshCategoryButtons();
   }
 
   // ===== SAVE/RESTORE URL LISTS (YouTube / external URLs) =====
+  function getActiveCategory(state) {
+    if (!state || !Array.isArray(state.categories)) return null;
+    return state.categories.find(cat => cat.id === state.activeId) || state.categories[0] || null;
+  }
+
+  function syncCategoriesFromDom() {
+    if (!urlVideoList) return;
+    const state = getCategoryState();
+    if (!isCategoriesEnabled(state)) return;
+    const active = getActiveCategory(state);
+    if (!active) return;
+    active.urls = Array.from(urlVideoList.querySelectorAll('.video-card'))
+      .map(card => card.dataset.src);
+    setCategoryState(state);
+  }
+
   function saveYoutubeUrls() {
     if (!urlVideoList) return;
+    if (isCategoriesEnabled()) {
+      syncCategoriesFromDom();
+      return;
+    }
     const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
   }
 
+  function setCategoryControlsVisible(visible) {
+    if (!categorySelect || !addCategoryButton) return;
+    const display = visible ? 'inline-flex' : 'none';
+    categorySelect.style.display = visible ? 'inline-block' : 'none';
+    addCategoryButton.style.display = display;
+    if (videoSelectionModal) {
+      videoSelectionModal.classList.toggle(CATEGORY_ENABLED_CLASS, visible);
+    }
+    if (!visible) {
+      refreshCategoryButtons();
+    }
+  }
+
+  function renderCategorySelect(state) {
+    if (!categorySelect) return;
+    categorySelect.innerHTML = '';
+    if (!state || !Array.isArray(state.categories) || !state.categories.length) return;
+    state.categories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.id;
+      opt.textContent = cat.name;
+      if (cat.id === state.activeId) opt.selected = true;
+      categorySelect.appendChild(opt);
+    });
+    refreshCategoryButtons();
+  }
+
+  function refreshCategoryButtons() {
+    if (!urlVideoList) return;
+    urlVideoList.querySelectorAll('.category-actions').forEach(node => node.remove());
+    const state = getCategoryState();
+    if (!isCategoriesEnabled(state) || !state || !Array.isArray(state.categories)) return;
+    if (state.categories.length < 2) return;
+    const activeId = state.activeId;
+    const cards = Array.from(urlVideoList.querySelectorAll('.video-card'));
+    cards.forEach(card => {
+      const actions = document.createElement('div');
+      actions.className = 'category-actions';
+      state.categories.forEach(cat => {
+        if (cat.id === activeId) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = cat.name;
+        btn.title = `Déplacer vers ${cat.name}`;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          moveCardToCategory(card, cat.id);
+        });
+        actions.appendChild(btn);
+      });
+      if (actions.children.length) {
+        card.appendChild(actions);
+      }
+    });
+  }
+
+  function moveCardToCategory(card, targetId) {
+    syncCategoriesFromDom();
+    const state = getCategoryState();
+    if (!state || !Array.isArray(state.categories)) return;
+    const active = getActiveCategory(state);
+    const target = state.categories.find(cat => cat.id === targetId);
+    if (!active || !target) return;
+    const url = card.dataset.src;
+    if (!url) return;
+    active.urls = Array.isArray(active.urls) ? active.urls.filter(u => u !== url) : [];
+    if (!Array.isArray(target.urls)) target.urls = [];
+    if (!target.urls.includes(url)) target.urls.push(url);
+    setCategoryState(state);
+    card.remove();
+    renumberCards();
+    updateSelectedMedia();
+    refreshCategoryButtons();
+  }
+
   // ---------- UPDATED: loadStoredYoutubeUrls uses addYoutubeUrlCard (thumbnails + title) ----------
+  async function loadUrlsIntoList(urls) {
+    if (!urlVideoList) return [];
+    const apiKey = window.YT_API_KEY;
+
+    // Batch-collect ids in order and validate once
+    const ytEntries = urls.map(u => ({ url: u, id: isYouTubeUrl(u) ? getYouTubeId(u) : null }));
+
+    let okSet = null;
+    const idList = ytEntries.map(e => e.id).filter(Boolean);
+    if (apiKey && idList.length) {
+      try {
+        const { ok } = await validateEmbeddableIds(apiKey, idList);
+        okSet = new Set(ok);
+      } catch {
+        okSet = null; // fail-open
+      }
+    }
+
+    const keptUrls = [];
+    for (const { url, id } of ytEntries) {
+      const isYT = !!id;
+      if (!isYT) {
+        // Non-YouTube URL: simple card + title async
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.dataset.src = url;
+        card.appendChild(createIndexBadge());
+        const cap = document.createElement('div');
+        cap.className = 'video-name video-filename';
+        cap.textContent = extractFileNameFromUrl(url);
+        cap.title = cap.textContent;
+        urlVideoList.appendChild(card);
+        initCard(card);
+        fetchVideoTitle(url).then(title => { cap.textContent = title; cap.title = title; });
+        keptUrls.push(url);
+        continue;
+      }
+
+      const playable = !apiKey || !id || okSet === null || okSet.has(id);
+      if (playable) {
+        await addYoutubeUrlCard(url); // will fetch title (noembed) + thumbnail (ytimg fallback)
+        keptUrls.push(url);
+      }
+    }
+
+    renumberCards();
+    refreshCategoryButtons();
+    return keptUrls;
+  }
+
   async function loadStoredYoutubeUrls() {
     if (!urlVideoList) return;
+    const state = getCategoryState();
+    if (isCategoriesEnabled(state)) {
+      const active = getActiveCategory(state);
+      const urls = active && Array.isArray(active.urls) ? active.urls : [];
+      const keptUrls = await loadUrlsIntoList(urls);
+      if (active) {
+        active.urls = keptUrls;
+        setCategoryState(state);
+      }
+      return;
+    }
+
     const saved = localStorage.getItem(YT_STORAGE_KEY);
     if (!saved) return;
 
     try {
       const urls = JSON.parse(saved);
-      const apiKey = window.YT_API_KEY;
-
-      // Batch-collect ids in order and validate once
-      const ytEntries = urls.map(u => ({ url: u, id: isYouTubeUrl(u) ? getYouTubeId(u) : null }));
-
-      let okSet = null;
-      const idList = ytEntries.map(e => e.id).filter(Boolean);
-      if (apiKey && idList.length) {
-        try {
-          const { ok } = await validateEmbeddableIds(apiKey, idList);
-          okSet = new Set(ok);
-        } catch {
-          okSet = null; // fail-open
-        }
-      }
-
-      const keptUrls = [];
-      for (const { url, id } of ytEntries) {
-        const isYT = !!id;
-        if (!isYT) {
-          // Non-YouTube URL: simple card + title async
-          const card = document.createElement('div');
-          card.className = 'video-card';
-          card.dataset.src = url;
-          card.appendChild(createIndexBadge());
-          const cap = document.createElement('div');
-          cap.className = 'video-name video-filename';
-          cap.textContent = extractFileNameFromUrl(url);
-          cap.title = cap.textContent;
-          urlVideoList.appendChild(card);
-          initCard(card);
-          fetchVideoTitle(url).then(title => { cap.textContent = title; cap.title = title; });
-          keptUrls.push(url);
-          continue;
-        }
-
-        const playable = !apiKey || !id || okSet === null || okSet.has(id);
-        if (playable) {
-          await addYoutubeUrlCard(url); // will fetch title (noembed) + thumbnail (ytimg fallback)
-          keptUrls.push(url);
-        }
-      }
-
-      // Clean storage to only playable/kept items (order preserved)
+      const keptUrls = await loadUrlsIntoList(urls);
       localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(keptUrls));
-      renumberCards();
     } catch (e) {
       console.error('Failed to parse saved YouTube URLs', e);
     }
@@ -935,7 +1107,93 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  function getCurrentUrlListFromDom() {
+    if (!urlVideoList) return [];
+    return Array.from(urlVideoList.querySelectorAll('.video-card')).map(card => card.dataset.src);
+  }
+
+  async function loadCategoryById(categoryId) {
+    if (!urlVideoList) return;
+    const state = getCategoryState();
+    if (!state || !Array.isArray(state.categories)) return;
+    syncCategoriesFromDom();
+    const target = state.categories.find(cat => cat.id === categoryId) || state.categories[0];
+    if (!target) return;
+    state.activeId = target.id;
+    setCategoryState(state);
+    renderCategorySelect(state);
+    urlVideoList.innerHTML = '';
+    await loadUrlsIntoList(target.urls || []);
+    saveYoutubeUrls();
+  }
+
+  async function enableCategoriesFromCurrentList() {
+    const existingState = getCategoryState();
+    if (isCategoriesEnabled(existingState)) return;
+    if (existingState && Array.isArray(existingState.categories) && existingState.categories.length) {
+      const nextState = { ...existingState, enabled: true };
+      setCategoryState(nextState);
+      setCategoryControlsVisible(true);
+      if (categoriesToggle) categoriesToggle.checked = true;
+      renderCategorySelect(nextState);
+      await loadCategoryById(nextState.activeId || nextState.categories[0].id);
+      return;
+    }
+    const urlsFromDom = getCurrentUrlListFromDom();
+    const urlsFromStorage = (() => {
+      try { return JSON.parse(localStorage.getItem(YT_STORAGE_KEY) || '[]'); } catch { return []; }
+    })();
+    const urls = urlsFromDom.length ? urlsFromDom : urlsFromStorage;
+    const state = ensureCategoryStateFromUrls(urls);
+    setCategoryState(state);
+    setCategoryControlsVisible(true);
+    if (categoriesToggle) categoriesToggle.checked = true;
+    renderCategorySelect(state);
+    await loadCategoryById(state.activeId);
+  }
+
+  async function disableCategoriesToFlatList() {
+    const state = getCategoryState();
+    if (!state) return;
+    syncCategoriesFromDom();
+    const flatUrls = flattenCategoryUrls(state);
+    localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(flatUrls));
+    setCategoryState({ ...state, enabled: false });
+    setCategoryControlsVisible(false);
+    if (categoriesToggle) categoriesToggle.checked = false;
+    if (urlVideoList) {
+      urlVideoList.innerHTML = '';
+      await loadUrlsIntoList(flatUrls);
+      saveYoutubeUrls();
+    }
+  }
+
+  function addNewCategory() {
+    const state = getCategoryState();
+    if (!state) return;
+    const name = prompt('Nom de la catégorie ?');
+    if (!name) return;
+    const id = `cat-${Date.now()}`;
+    state.categories.push({ id, name: name.trim(), urls: [] });
+    state.activeId = id;
+    setCategoryState(state);
+    renderCategorySelect(state);
+    loadCategoryById(id);
+    refreshCategoryButtons();
+  }
+
+  function initCategoryControls() {
+    const state = getCategoryState();
+    const enabled = isCategoriesEnabled(state);
+    if (categoriesToggle) categoriesToggle.checked = enabled;
+    setCategoryControlsVisible(enabled);
+    if (enabled && state) {
+      renderCategorySelect(state);
+    }
+  }
+
   // Load saved URLs (with validation)
+  initCategoryControls();
   await loadStoredYoutubeUrls();
 
   // Initialize any pre-existing cards (if present in DOM at load)
