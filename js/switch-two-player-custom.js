@@ -1237,10 +1237,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!name) return;
     const id = `cat-${Date.now()}`;
     state.categories.push({ id, name: name.trim(), urls: [] });
-    state.activeId = id;
     setCategoryState(state);
     renderCategorySelect(state);
-    loadCategoryById(id);
     updateCategoryButtonsForList();
   }
 
