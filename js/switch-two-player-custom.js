@@ -503,7 +503,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const YT_STORAGE_KEY = 'customYoutubeUrls';
   const YT_CATEGORY_STORAGE_KEY = 'customYoutubeCategories';
 
-  const DEFAULT_CATEGORY_NAME = 'Général';
+  const DEFAULT_CATEGORY_NAME = 'All videos';
   const CATEGORY_ENABLED_CLASS = 'categories-enabled';
 
   // ---------- Local order persistence (PER-SET) ----------
@@ -539,7 +539,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function getCategoryState() {
     try {
-      return JSON.parse(localStorage.getItem(YT_CATEGORY_STORAGE_KEY) || 'null');
+      const state = JSON.parse(localStorage.getItem(YT_CATEGORY_STORAGE_KEY) || 'null');
+      return normalizeCategoryState(state);
     } catch {
       return null;
     }
@@ -555,12 +556,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     return {
       enabled: true,
       activeId: id,
+      allId: id,
       categories: [{ id, name: DEFAULT_CATEGORY_NAME, urls: urls || [] }]
     };
   }
   function flattenCategoryUrls(state) {
     if (!state || !Array.isArray(state.categories)) return [];
+    if (state.allId) {
+      const allCat = state.categories.find(cat => cat.id === state.allId);
+      if (allCat && Array.isArray(allCat.urls)) return allCat.urls;
+    }
     return state.categories.flatMap(cat => Array.isArray(cat.urls) ? cat.urls : []);
+  }
+
+  function normalizeCategoryState(state) {
+    if (!state || !Array.isArray(state.categories)) return state;
+    const lowerDefault = DEFAULT_CATEGORY_NAME.toLowerCase();
+    let allCat = null;
+    if (state.allId) {
+      allCat = state.categories.find(cat => cat.id === state.allId) || null;
+    }
+    if (!allCat) {
+      allCat = state.categories.find(cat => {
+        const name = (cat.name || '').toLowerCase();
+        return name === lowerDefault || name === 'général' || name === 'general';
+      }) || null;
+    }
+    if (!allCat) {
+      const id = `cat-${Date.now()}`;
+      allCat = { id, name: DEFAULT_CATEGORY_NAME, urls: [] };
+      state.categories.unshift(allCat);
+    }
+    allCat.name = DEFAULT_CATEGORY_NAME;
+    state.allId = allCat.id;
+    if (!state.activeId) state.activeId = allCat.id;
+    setCategoryState(state);
+    return state;
   }
 
   // stable key for local files (works across reloads for folder picker / file input)
@@ -897,6 +928,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!active) return;
     active.urls = Array.from(urlVideoList.querySelectorAll('.video-card'))
       .map(card => card.dataset.src);
+    if (state.allId && state.allId !== active.id) {
+      const allCategory = state.categories.find(cat => cat.id === state.allId);
+      if (allCategory) {
+        const union = new Set();
+        state.categories.forEach(cat => {
+          if (cat.id === state.allId) return;
+          (cat.urls || []).forEach(url => union.add(url));
+        });
+        allCategory.urls = Array.from(union);
+      }
+    }
     setCategoryState(state);
   }
 
@@ -915,25 +957,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       chip.type = 'button';
       chip.className = 'category-chip';
       chip.textContent = cat.name;
-      if (cat.id === activeId) {
+      const src = card.dataset.src;
+      const isMember = Array.isArray(cat.urls) && src && cat.urls.includes(src);
+      if (isMember) {
         chip.classList.add('active');
-        chip.disabled = true;
-      } else {
-        chip.addEventListener('click', (event) => {
-          event.stopPropagation();
-          const nextState = getCategoryState();
-          if (!nextState) return;
-          const target = nextState.categories.find(c => c.id === cat.id);
-          if (!target) return;
-          const src = card.dataset.src;
-          if (!src) return;
-          if (!Array.isArray(target.urls)) target.urls = [];
-          if (!target.urls.includes(src)) {
-            target.urls.push(src);
-            setCategoryState(nextState);
-          }
-        });
       }
+      chip.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (cat.id === activeId) return;
+        const nextState = getCategoryState();
+        if (!nextState) return;
+        const target = nextState.categories.find(c => c.id === cat.id);
+        if (!target) return;
+        const nextSrc = card.dataset.src;
+        if (!nextSrc) return;
+        if (!Array.isArray(target.urls)) target.urls = [];
+        if (!target.urls.includes(nextSrc)) {
+          target.urls.push(nextSrc);
+          setCategoryState(nextState);
+          updateCategoryButtonsForList();
+        }
+      });
       group.appendChild(chip);
     });
     card.appendChild(group);
@@ -978,6 +1022,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (cat.id === state.activeId) opt.selected = true;
       categorySelect.appendChild(opt);
     });
+    updateCategoryButtonsForList();
   }
 
   // ---------- UPDATED: loadStoredYoutubeUrls uses addYoutubeUrlCard (thumbnails + title) ----------
