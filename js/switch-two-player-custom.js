@@ -928,36 +928,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     group.className = 'category-chip-group';
     const activeId = state.activeId;
     const src = card.dataset.src;
-    state.categories.forEach(cat => {
+    const allVideos = getAllVideosCategory(state);
+    const categories = state.categories.filter(cat => cat !== allVideos);
+    const ordered = [...categories];
+    if (allVideos) {
+      ordered.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    }
+    ordered.forEach((cat, idx) => {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'category-chip';
+      chip.className = `category-chip color-${(idx % 6) + 1}`;
       chip.textContent = cat.name;
       const isMember = !!(src && Array.isArray(cat.urls) && cat.urls.includes(src));
-      if (isMember) {
-        chip.classList.add('active');
-        chip.disabled = true;
-      }
+      chip.classList.toggle('active', isMember);
       if (cat.id === activeId) {
         chip.setAttribute('aria-current', 'true');
       }
-      if (!isMember) {
-        chip.addEventListener('click', (event) => {
-          event.stopPropagation();
-          const nextState = getCategoryState();
-          if (!nextState) return;
-          const target = nextState.categories.find(c => c.id === cat.id);
-          if (!target) return;
-          const src = card.dataset.src;
-          if (!src) return;
-          if (!Array.isArray(target.urls)) target.urls = [];
-          if (!target.urls.includes(src)) {
-            target.urls.push(src);
-            setCategoryState(nextState);
-            applyCategoryButtons(card);
-          }
-        });
-      }
+      chip.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const nextState = getCategoryState();
+        if (!nextState) return;
+        const target = nextState.categories.find(c => c.id === cat.id);
+        if (!target) return;
+        const src = card.dataset.src;
+        if (!src) return;
+        if (!Array.isArray(target.urls)) target.urls = [];
+        const index = target.urls.indexOf(src);
+        if (index >= 0) {
+          target.urls.splice(index, 1);
+        } else {
+          target.urls.push(src);
+        }
+        const allCategory = getAllVideosCategory(nextState);
+        if (allCategory && Array.isArray(allCategory.urls)) {
+          allCategory.urls = Array.from(new Set(flattenCategoryUrls(nextState)));
+        }
+        setCategoryState(nextState);
+        applyCategoryButtons(card);
+      });
       group.appendChild(chip);
     });
     card.appendChild(group);
