@@ -405,6 +405,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
   const clearAllButton = document.getElementById('clear-all-button');
+  const categoryControls = document.getElementById('category-controls');
+  const categoryTabs = document.getElementById('category-tabs');
+  const addCategoryButton = document.getElementById('add-category-button');
+  const enableCategoriesToggle = document.getElementById('enable-categories-toggle');
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
@@ -451,6 +455,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const miscOptionsOkButton = document.getElementById('misc-options-ok-button');
   const miscOptionsButton = document.getElementById('misc-options-button');
   const player2PromptContainer = document.getElementById('player2-prompt-container');
+  const urlSectionTitle = document.querySelector('#url-videos-section .video-section-title');
+  const defaultUrlSectionTitle = urlSectionTitle ? urlSectionTitle.textContent : '';
 
   // ---- runtime state (unique) ----
   let preventInput = false;
@@ -485,6 +491,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const miscOptionsState = {};
   let selectedMedia = [];
+  let selectedUrlSet = new Set();
   let controlsEnabled = false;
   let playedMedia = [];
   let currentMediaIndex = 0;
@@ -498,9 +505,58 @@ document.addEventListener('DOMContentLoaded', async () => {
   let lastSelectionSignature = '';
   let shuffleEnabled = false; // optional toggle if you add it to miscOptions
   const YT_STORAGE_KEY = 'customYoutubeUrls';
+  const YT_CATEGORY_STORAGE_KEY = 'customYoutubeCategories';
+
+  const defaultCategoryName = 'Vidéos';
+  let categoryState = {
+    enabled: false,
+    categories: [],
+    activeId: null
+  };
 
   // ---------- Local order persistence (PER-SET) ----------
   const LOCAL_ORDERS_KEY = 'customLocalVideoOrders'; // map: signature -> [ordered keys]
+
+  function buildDefaultCategoryState(urls = []) {
+    const id = `cat-${Date.now()}`;
+    return {
+      enabled: false,
+      categories: [{ id, name: defaultCategoryName, urls: [...urls] }],
+      activeId: id
+    };
+  }
+
+  function loadCategoryState() {
+    try {
+      const raw = localStorage.getItem(YT_CATEGORY_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.categories)) {
+          return parsed;
+        }
+      }
+    } catch {}
+    const urls = (() => {
+      try { return JSON.parse(localStorage.getItem(YT_STORAGE_KEY) || '[]'); }
+      catch { return []; }
+    })();
+    return buildDefaultCategoryState(urls);
+  }
+
+  function saveCategoryState() {
+    try { localStorage.setItem(YT_CATEGORY_STORAGE_KEY, JSON.stringify(categoryState)); } catch {}
+  }
+
+  function getActiveCategory() {
+    if (!categoryState.categories.length) {
+      categoryState = buildDefaultCategoryState();
+    }
+    return categoryState.categories.find(c => c.id === categoryState.activeId) || categoryState.categories[0];
+  }
+
+  function allCategoryUrls() {
+    return categoryState.categories.flatMap(c => c.urls);
+  }
 
   function getLocalOrderMap() {
     try { return JSON.parse(localStorage.getItem(LOCAL_ORDERS_KEY) || '{}'); }
@@ -588,6 +644,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Clear persisted data
     try { localStorage.removeItem(YT_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(YT_CATEGORY_STORAGE_KEY); } catch {}
     try { localStorage.removeItem(LOCAL_ORDERS_KEY); } catch {}
     clearHidden();              // NEW: forget hidden exclusions
     await deleteRepoHandle();   // NEW: forget saved folder handle
@@ -597,6 +654,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     playedMedia = [];
     currentMediaIndex = 0;
     lastSelectionSignature = '';
+    selectedUrlSet = new Set();
+    categoryState = buildDefaultCategoryState();
+    if (enableCategoriesToggle) {
+      categoryState.enabled = enableCategoriesToggle.checked;
+    }
+    saveCategoryState();
+    renderCategoryTabs();
+    updateUrlSectionTitle();
 
     updateSelectedMedia();
     renumberCards();
@@ -784,6 +849,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   function initCard(card) {
     card.classList.add('selected');
     card.classList.remove('deselected');
+    card.draggable = true;
+    card.addEventListener('dragstart', () => {
+      draggedCard = card;
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      draggedCard = null;
+      saveYoutubeUrls();
+      renumberCards();
+    });
 
     if (!card.querySelector('.video-index')) {
       card.insertBefore(createIndexBadge(), card.firstChild);
@@ -815,6 +891,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         card.remove();
+        if (categoryState.enabled && parent === urlVideoList) {
+          const active = getActiveCategory();
+          active.urls = active.urls.filter(u => u !== card.dataset.src);
+          selectedUrlSet.delete(card.dataset.src);
+          saveCategoryState();
+        }
         updateSelectedMedia();
         renumberCards();
         if (parent === urlVideoList) saveYoutubeUrls();
@@ -827,18 +909,171 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ===== SAVE/RESTORE URL LISTS (YouTube / external URLs) =====
   function saveYoutubeUrls() {
     if (!urlVideoList) return;
+    if (categoryState.enabled) {
+      const activeCategory = getActiveCategory();
+      activeCategory.urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
+      saveCategoryState();
+      try { localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(allCategoryUrls())); } catch {}
+      return;
+    }
     const urls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
+  }
+
+  function updateUrlSectionTitle() {
+    if (!urlSectionTitle) return;
+    if (categoryState.enabled) {
+      const activeCategory = getActiveCategory();
+      urlSectionTitle.textContent = activeCategory?.name || defaultCategoryName;
+    } else {
+      urlSectionTitle.textContent = defaultUrlSectionTitle;
+    }
+  }
+
+  function renderCategoryTabs() {
+    if (!categoryTabs) return;
+    categoryTabs.innerHTML = '';
+    categoryState.categories.forEach((category) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'category-tab';
+      if (category.id === categoryState.activeId) btn.classList.add('active');
+      btn.textContent = category.name;
+      btn.addEventListener('click', () => {
+        categoryState.activeId = category.id;
+        saveCategoryState();
+        updateUrlSectionTitle();
+        refreshActiveCategoryList();
+        renderCategoryTabs();
+      });
+      btn.addEventListener('dblclick', () => {
+        const nextName = prompt('Renommer la catégorie', category.name);
+        if (!nextName) return;
+        category.name = nextName.trim() || category.name;
+        saveCategoryState();
+        renderCategoryTabs();
+        updateUrlSectionTitle();
+      });
+      btn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (categoryState.categories.length <= 1) return;
+        if (!confirm(`Supprimer la catégorie "${category.name}" ?`)) return;
+        const idx = categoryState.categories.findIndex(c => c.id === category.id);
+        if (idx === -1) return;
+        const removed = categoryState.categories.splice(idx, 1)[0];
+        const fallback = categoryState.categories[0];
+        if (categoryState.activeId === removed.id) {
+          categoryState.activeId = fallback.id;
+          refreshActiveCategoryList();
+        }
+        saveCategoryState();
+        renderCategoryTabs();
+        updateUrlSectionTitle();
+        if (removed.urls.length) {
+          fallback.urls.push(...removed.urls);
+          saveCategoryState();
+          try { localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(allCategoryUrls())); } catch {}
+        }
+      });
+      btn.addEventListener('dragover', (e) => {
+        if (!draggedCard) return;
+        e.preventDefault();
+      });
+      btn.addEventListener('drop', (e) => {
+        if (!draggedCard) return;
+        e.preventDefault();
+        const url = draggedCard.dataset.src;
+        const fromCategory = getActiveCategory();
+        const toCategory = categoryState.categories.find(c => c.id === category.id);
+        if (!toCategory || !url || toCategory.id === fromCategory.id) return;
+        fromCategory.urls = fromCategory.urls.filter(u => u !== url);
+        toCategory.urls.push(url);
+        draggedCard.remove();
+        saveCategoryState();
+        try { localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(allCategoryUrls())); } catch {}
+        renderCategoryTabs();
+        updateSelectedMedia();
+        renumberCards();
+      });
+      categoryTabs.appendChild(btn);
+    });
+  }
+
+  function refreshActiveCategoryList() {
+    if (!urlVideoList) return;
+    urlVideoList.innerHTML = '';
+    const activeCategory = getActiveCategory();
+    updateUrlSectionTitle();
+    if (!activeCategory) return;
+    (async () => {
+      for (const url of activeCategory.urls) {
+        await addYoutubeUrlCard(url);
+      }
+      renumberCards();
+      updateSelectedMedia();
+    })();
+  }
+
+  function enableCategories(enabled) {
+    categoryState.enabled = enabled;
+    if (categoryControls) {
+      categoryControls.style.display = enabled ? 'block' : 'none';
+    }
+    if (enabled) {
+      const currentUrls = Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src);
+      selectedUrlSet = new Set(currentUrls);
+      if (!categoryState.categories.length) {
+        categoryState = buildDefaultCategoryState(currentUrls);
+        categoryState.enabled = true;
+      } else {
+        const active = getActiveCategory();
+        active.urls = currentUrls;
+      }
+      saveCategoryState();
+      renderCategoryTabs();
+      refreshActiveCategoryList();
+    } else {
+      saveCategoryState();
+      renderCategoryTabs();
+      updateUrlSectionTitle();
+      selectedUrlSet = new Set(Array.from(urlVideoList.querySelectorAll('.video-card')).map(c => c.dataset.src));
+      saveYoutubeUrls();
+    }
+  }
+
+  let draggedCard = null;
+  function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.video-card:not(.dragging)')];
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset, element: child };
+      }
+      return closest;
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
   }
 
   // ---------- UPDATED: loadStoredYoutubeUrls uses addYoutubeUrlCard (thumbnails + title) ----------
   async function loadStoredYoutubeUrls() {
     if (!urlVideoList) return;
+    categoryState = loadCategoryState();
+    if (enableCategoriesToggle) {
+      enableCategoriesToggle.checked = !!categoryState.enabled;
+    }
+    if (categoryControls) {
+      categoryControls.style.display = categoryState.enabled ? 'block' : 'none';
+    }
+    if (categoryState.enabled) {
+      renderCategoryTabs();
+      updateUrlSectionTitle();
+    }
+
     const saved = localStorage.getItem(YT_STORAGE_KEY);
-    if (!saved) return;
+    if (!saved && !categoryState.enabled) return;
 
     try {
-      const urls = JSON.parse(saved);
+      const urls = categoryState.enabled ? getActiveCategory().urls : JSON.parse(saved);
       const apiKey = window.YT_API_KEY;
 
       // Batch-collect ids in order and validate once
@@ -883,7 +1118,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       // Clean storage to only playable/kept items (order preserved)
-      localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(keptUrls));
+      if (categoryState.enabled) {
+        getActiveCategory().urls = keptUrls;
+        saveCategoryState();
+      }
+      localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(categoryState.enabled ? allCategoryUrls() : keptUrls));
+      selectedUrlSet = new Set(categoryState.enabled ? allCategoryUrls() : keptUrls);
       renumberCards();
     } catch (e) {
       console.error('Failed to parse saved YouTube URLs', e);
@@ -912,6 +1152,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     card.append(badge, img, cap);
     (urlVideoList || videoSelectionDiv).appendChild(card);
     initCard(card);
+    if (categoryState.enabled && !selectedUrlSet.has(url)) {
+      card.classList.remove('selected');
+      card.classList.add('deselected');
+    }
 
     // Title via noembed (non-blocking) if not provided
     if (!opts.title) {
@@ -947,7 +1191,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadLocalOrderForCurrentSet();
 
   // initial selection
-  selectedMedia = Array.from(document.querySelectorAll('.video-card')).map(card => card.dataset.src);
+  if (!categoryState.enabled) {
+    selectedUrlSet = new Set(Array.from(document.querySelectorAll('.video-card'))
+      .filter(card => card.parentElement === urlVideoList)
+      .map(card => card.dataset.src));
+  }
+  updateSelectedMedia();
   if (videoCardsArray.length === 0 && (addVideoInput || addVideoUrlInput)) {
     videoSelectionModal.style.display = 'block';
   }
@@ -1009,6 +1258,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateSelectedMedia();
     videoSelectionModal.style.display = 'none';
   });
+  if (enableCategoriesToggle) {
+    enableCategoriesToggle.addEventListener('change', () => {
+      enableCategories(enableCategoriesToggle.checked);
+    });
+  }
+  if (addCategoryButton) {
+    addCategoryButton.addEventListener('click', () => {
+      const name = prompt('Nom de la catégorie');
+      if (!name) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const id = `cat-${Date.now()}`;
+      categoryState.categories.push({ id, name: trimmed, urls: [] });
+      categoryState.activeId = id;
+      saveCategoryState();
+      renderCategoryTabs();
+      refreshActiveCategoryList();
+    });
+  }
 
   // Local file uploads with thumbnails
   if (addVideoFileButton && addVideoInput && localVideoList) {
@@ -1047,6 +1315,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       await addYoutubeUrlCard(url);
+      if (categoryState.enabled) {
+        selectedUrlSet.add(url);
+      }
       addVideoUrlInput.value = '';
       renumberCards();
       updateSelectedMedia();
@@ -1081,6 +1352,9 @@ document.addEventListener('DOMContentLoaded', async () => {
               thumbUrl: thumbs.get(id) || null,
               title: titles.get(id) || null
             });
+            if (categoryState.enabled) {
+              selectedUrlSet.add(urlItem);
+            }
             added++;
           }
           refused = blocked.size;
@@ -1108,7 +1382,32 @@ document.addEventListener('DOMContentLoaded', async () => {
       const willSelect = !card.classList.contains('selected');
       card.classList.toggle('selected', willSelect);
       card.classList.toggle('deselected', !willSelect);
+      if (categoryState.enabled && card.parentElement === urlVideoList) {
+        if (willSelect) {
+          selectedUrlSet.add(card.dataset.src);
+        } else {
+          selectedUrlSet.delete(card.dataset.src);
+        }
+      }
 
+      updateSelectedMedia();
+    });
+  }
+
+  if (urlVideoList) {
+    urlVideoList.addEventListener('dragover', (e) => {
+      if (!draggedCard) return;
+      e.preventDefault();
+      const afterElement = getDragAfterElement(urlVideoList, e.clientY);
+      if (afterElement == null) {
+        urlVideoList.appendChild(draggedCard);
+      } else {
+        urlVideoList.insertBefore(draggedCard, afterElement);
+      }
+    });
+    urlVideoList.addEventListener('drop', () => {
+      saveYoutubeUrls();
+      renumberCards();
       updateSelectedMedia();
     });
   }
@@ -1116,9 +1415,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   // updateSelectedMedia: reset ordering when list/order changes
   function updateSelectedMedia() {
     videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
-    selectedMedia = videoCardsArray
-      .filter(c => c.classList.contains('selected'))
+    const localSelections = videoCardsArray
+      .filter(c => c.classList.contains('selected') && c.parentElement === localVideoList)
       .map(c => c.dataset.src);
+    if (categoryState.enabled) {
+      const orderedUrls = categoryState.categories.flatMap(c => c.urls);
+      const urlSelections = orderedUrls.filter(url => selectedUrlSet.has(url));
+      selectedMedia = [...localSelections, ...urlSelections];
+    } else {
+      const urlSelections = videoCardsArray
+        .filter(c => c.classList.contains('selected') && c.parentElement === urlVideoList)
+        .map(c => c.dataset.src);
+      selectedMedia = [...localSelections, ...urlSelections];
+    }
 
     videoCardsArray.forEach(card => {
       const isSelected = card.classList.contains('selected');
