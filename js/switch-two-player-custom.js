@@ -552,14 +552,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         legacy.name = DEFAULT_CATEGORY_NAME;
       }
       if (!hasAllVideos && !legacy && state.categories.length) {
-        const allUrls = flattenCategoryUrls(state, { excludeAllVideos: true });
-        state.categories.unshift({ id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: allUrls });
+        state.categories.unshift({ id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: [] });
         state.activeId = state.activeId || 'all-videos';
-      }
-      const allCategory = state.categories.find(cat => cat.name === DEFAULT_CATEGORY_NAME);
-      if (allCategory) {
-        const allUrls = flattenCategoryUrls(state, { excludeAllVideos: true });
-        allCategory.urls = Array.from(new Set(allUrls));
       }
       return state;
     } catch {
@@ -580,15 +574,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       categories: [{ id, name: DEFAULT_CATEGORY_NAME, urls: urls || [] }]
     };
   }
-  function flattenCategoryUrls(state, opts = {}) {
-    if (!state || !Array.isArray(state.categories)) return [];
-    const { excludeAllVideos = false } = opts;
-    const allVideos = excludeAllVideos ? getAllVideosCategory(state) : null;
-    return state.categories
-      .filter(cat => !excludeAllVideos || cat !== allVideos)
-      .flatMap(cat => Array.isArray(cat.urls) ? cat.urls : []);
-  }
-
   function uniquePreserveOrder(list) {
     const seen = new Set();
     const result = [];
@@ -1002,10 +987,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
           target.urls.push(src);
         }
-        const allCategory = getAllVideosCategory(nextState);
-        if (allCategory && Array.isArray(allCategory.urls)) {
-          allCategory.urls = Array.from(new Set(flattenCategoryUrls(nextState, { excludeAllVideos: true })));
-        }
         setCategoryState(nextState);
         applyCategoryButtons(card);
       });
@@ -1040,11 +1021,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!Array.isArray(allVideos.urls)) allVideos.urls = [];
     if (!allVideos.urls.includes(url)) {
       allVideos.urls.push(url);
-    }
-    const active = getActiveCategory(nextState);
-    if (active && active !== allVideos) {
-      if (!Array.isArray(active.urls)) active.urls = [];
-      if (!active.urls.includes(url)) active.urls.push(url);
     }
     setCategoryState(nextState);
   }
@@ -1262,9 +1238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     syncCategoriesFromDom();
     const allCategory = getAllVideosCategory(state);
     const flatUrls = uniquePreserveOrder(
-      Array.isArray(allCategory?.urls)
-        ? allCategory.urls
-        : flattenCategoryUrls(state, { excludeAllVideos: true })
+      Array.isArray(allCategory?.urls) ? allCategory.urls : []
     );
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(flatUrls));
     setCategoryState({ ...state, enabled: false });
