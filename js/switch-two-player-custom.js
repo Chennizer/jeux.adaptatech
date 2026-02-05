@@ -1211,21 +1211,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function enableCategoriesFromCurrentList() {
     const existingState = getCategoryState();
     if (isCategoriesEnabled(existingState)) return;
-    if (existingState && Array.isArray(existingState.categories) && existingState.categories.length) {
-      const nextState = { ...existingState, enabled: true };
-      setCategoryState(nextState);
-      setCategoryControlsVisible(true);
-      if (categoriesToggle) categoriesToggle.checked = true;
-      renderCategorySelect(nextState);
-      await loadCategoryById(nextState.activeId || nextState.categories[0].id);
-      updateCategoryButtonsForList();
-      return;
-    }
     const urlsFromDom = getCurrentUrlListFromDom();
     const urlsFromStorage = (() => {
       try { return JSON.parse(localStorage.getItem(YT_STORAGE_KEY) || '[]'); } catch { return []; }
     })();
     const urls = urlsFromDom.length ? urlsFromDom : urlsFromStorage;
+    if (existingState && Array.isArray(existingState.categories) && existingState.categories.length) {
+      const nextState = { ...existingState, enabled: true };
+      let allVideos = getAllVideosCategory(nextState);
+      if (!allVideos) {
+        allVideos = { id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: [] };
+        nextState.categories.unshift(allVideos);
+      }
+      allVideos.urls = Array.isArray(urls) ? urls : [];
+      nextState.activeId = nextState.activeId || allVideos.id;
+      setCategoryState(nextState);
+      setCategoryControlsVisible(true);
+      if (categoriesToggle) categoriesToggle.checked = true;
+      renderCategorySelect(nextState);
+      await loadCategoryById(nextState.activeId);
+      updateCategoryButtonsForList();
+      return;
+    }
     const state = ensureCategoryStateFromUrls(urls);
     setCategoryState(state);
     setCategoryControlsVisible(true);
