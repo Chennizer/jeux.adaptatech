@@ -553,13 +553,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       if (!hasAllVideos && !legacy && state.categories.length) {
         const allUrls = flattenCategoryUrls(state);
-        state.categories.unshift({ id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: allUrls });
+        state.categories.unshift({ id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: uniqueUrls(allUrls) });
         state.activeId = state.activeId || 'all-videos';
       }
       const allCategory = state.categories.find(cat => cat.name === DEFAULT_CATEGORY_NAME);
       if (allCategory) {
         const allUrls = flattenCategoryUrls(state);
-        allCategory.urls = Array.from(new Set(allUrls));
+        allCategory.urls = uniqueUrls(allUrls);
       }
       return state;
     } catch {
@@ -583,6 +583,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   function flattenCategoryUrls(state) {
     if (!state || !Array.isArray(state.categories)) return [];
     return state.categories.flatMap(cat => Array.isArray(cat.urls) ? cat.urls : []);
+  }
+  function uniqueUrls(list) {
+    return Array.from(new Set((list || []).filter(Boolean)));
   }
 
   // stable key for local files (works across reloads for folder picker / file input)
@@ -987,8 +990,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           target.urls.push(src);
         }
         const allCategory = getAllVideosCategory(nextState);
-        if (allCategory && Array.isArray(allCategory.urls)) {
-          allCategory.urls = Array.from(new Set(flattenCategoryUrls(nextState)));
+        if (allCategory) {
+          allCategory.urls = uniqueUrls(flattenCategoryUrls(nextState));
         }
         setCategoryState(nextState);
         applyCategoryButtons(card);
@@ -1204,6 +1207,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     syncCategoriesFromDom();
     const target = state.categories.find(cat => cat.id === categoryId) || state.categories[0];
     if (!target) return;
+    if (target === getAllVideosCategory(state)) {
+      target.urls = uniqueUrls(flattenCategoryUrls(state));
+    }
     state.activeId = target.id;
     setCategoryState(state);
     renderCategorySelect(state);
