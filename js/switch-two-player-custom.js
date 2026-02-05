@@ -406,13 +406,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
   const clearAllButton = document.getElementById('clear-all-button');
   const categoriesToggle = document.getElementById('categories-toggle');
-  const categorySelect = document.getElementById('category-select');
-  const addCategoryButton = document.getElementById('add-category-button');
-  const addCategoryModal = document.getElementById('add-category-modal');
-  const closeAddCategoryModal = document.getElementById('close-add-category-modal');
-  const addCategoryNameInput = document.getElementById('add-category-name-input');
-  const addCategorySaveButton = document.getElementById('add-category-save');
-  const addCategoryCancelButton = document.getElementById('add-category-cancel');
+  const categorySelect = document.getElementById('category-select') || document.getElementById('categorySelect');
+  const addCategoryButton = document.getElementById('add-category-button') || document.getElementById('addCategoryButton');
+  const addCategoryModal = document.getElementById('add-category-modal') || document.getElementById('addCategoryModal');
+  const closeAddCategoryModal = document.getElementById('close-add-category-modal') || document.getElementById('closeAddCategoryModal');
+  const addCategoryNameInput = document.getElementById('add-category-name-input') || document.getElementById('addCategoryNameInput');
+  const addCategorySaveButton = document.getElementById('add-category-save') || document.getElementById('addCategorySave');
+  const addCategoryCancelButton = document.getElementById('add-category-cancel') || document.getElementById('addCategoryCancel');
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
@@ -1036,10 +1036,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function setCategoryControlsVisible(visible) {
-    if (!categorySelect || !addCategoryButton) return;
     const display = visible ? 'inline-flex' : 'none';
-    categorySelect.style.display = visible ? 'inline-block' : 'none';
-    addCategoryButton.style.display = display;
+    if (categorySelect) {
+      categorySelect.style.display = visible ? 'inline-block' : 'none';
+    }
+    if (addCategoryButton) {
+      addCategoryButton.style.display = display;
+    }
     if (videoSelectionModal) {
       videoSelectionModal.classList.toggle(CATEGORY_ENABLED_CLASS, visible);
     }
