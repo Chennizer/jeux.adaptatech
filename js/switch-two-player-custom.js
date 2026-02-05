@@ -546,14 +546,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const state = JSON.parse(localStorage.getItem(YT_CATEGORY_STORAGE_KEY) || 'null');
       if (!state || !Array.isArray(state.categories)) return state;
+
+      const collectUrls = () => uniquePreserveOrder(
+        state.categories.flatMap((cat) => Array.isArray(cat?.urls) ? cat.urls : [])
+      );
+
       const hasAllVideos = state.categories.find(cat => cat.name === DEFAULT_CATEGORY_NAME);
       const legacy = state.categories.find(cat => cat.name === 'Général');
       if (!hasAllVideos && legacy) {
         legacy.name = DEFAULT_CATEGORY_NAME;
+        if (!legacy.id) legacy.id = 'all-videos';
       }
       if (!hasAllVideos && !legacy && state.categories.length) {
-        state.categories.unshift({ id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: [] });
+        state.categories.unshift({ id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: collectUrls() });
         state.activeId = state.activeId || 'all-videos';
+      }
+
+      state.categories = state.categories
+        .filter(cat => cat && typeof cat === 'object')
+        .map((cat, index) => ({
+          id: cat.id || `${cat.name || 'category'}-${index}`,
+          name: cat.name || `Category ${index + 1}`,
+          urls: uniquePreserveOrder(Array.isArray(cat.urls) ? cat.urls : [])
+        }));
+
+      if (!state.activeId || !state.categories.some(cat => cat.id === state.activeId)) {
+        state.activeId = state.categories[0]?.id || null;
       }
       return state;
     } catch {
