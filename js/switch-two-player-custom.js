@@ -405,6 +405,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
   const clearAllButton = document.getElementById('clear-all-button');
+  const categoryControls = document.querySelector('.category-controls');
   const categoriesToggle = document.getElementById('categories-toggle');
   const categorySelect = document.getElementById('category-select') || document.getElementById('categorySelect');
   const addCategoryButton = document.getElementById('add-category-button') || document.getElementById('addCategoryButton');
@@ -669,6 +670,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
 
   if (categoriesToggle) {
+    if (categoryControls) {
+      categoryControls.addEventListener('click', (event) => {
+        const clickedInteractive = event.target.closest('button, select, option, input');
+        if (clickedInteractive && clickedInteractive !== categoriesToggle) return;
+        categoriesToggle.checked = !categoriesToggle.checked;
+        categoriesToggle.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
     categoriesToggle.addEventListener('change', async () => {
       if (categoriesToggle.checked) {
         await enableCategoriesFromCurrentList();
