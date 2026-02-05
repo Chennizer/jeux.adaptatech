@@ -406,13 +406,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
   const clearAllButton = document.getElementById('clear-all-button');
   const categoriesToggle = document.getElementById('categories-toggle');
-  const categorySelect = document.getElementById('category-select');
-  const addCategoryButton = document.getElementById('add-category-button');
-  const addCategoryModal = document.getElementById('add-category-modal');
-  const closeAddCategoryModal = document.getElementById('close-add-category-modal');
-  const addCategoryNameInput = document.getElementById('add-category-name-input');
-  const addCategorySaveButton = document.getElementById('add-category-save');
-  const addCategoryCancelButton = document.getElementById('add-category-cancel');
+  const categorySelect = document.getElementById('category-select') || document.getElementById('categorySelect');
+  const addCategoryButton = document.getElementById('add-category-button') || document.getElementById('addCategoryButton');
+  const addCategoryModal = document.getElementById('add-category-modal') || document.getElementById('addCategoryModal');
+  const closeAddCategoryModal = document.getElementById('close-add-category-modal') || document.getElementById('closeAddCategoryModal');
+  const addCategoryNameInput = document.getElementById('add-category-name-input') || document.getElementById('addCategoryNameInput');
+  const addCategorySaveButton = document.getElementById('add-category-save') || document.getElementById('addCategorySave');
+  const addCategoryCancelButton = document.getElementById('add-category-cancel') || document.getElementById('addCategoryCancel');
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
@@ -1036,10 +1036,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function setCategoryControlsVisible(visible) {
-    if (!categorySelect || !addCategoryButton) return;
     const display = visible ? 'inline-flex' : 'none';
-    categorySelect.style.display = visible ? 'inline-block' : 'none';
-    addCategoryButton.style.display = display;
+    if (categorySelect) {
+      categorySelect.style.display = visible ? 'inline-block' : 'none';
+    }
+    if (addCategoryButton) {
+      addCategoryButton.style.display = display;
+    }
     if (videoSelectionModal) {
       videoSelectionModal.classList.toggle(CATEGORY_ENABLED_CLASS, visible);
     }
@@ -1208,21 +1211,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function enableCategoriesFromCurrentList() {
     const existingState = getCategoryState();
     if (isCategoriesEnabled(existingState)) return;
-    if (existingState && Array.isArray(existingState.categories) && existingState.categories.length) {
-      const nextState = { ...existingState, enabled: true };
-      setCategoryState(nextState);
-      setCategoryControlsVisible(true);
-      if (categoriesToggle) categoriesToggle.checked = true;
-      renderCategorySelect(nextState);
-      await loadCategoryById(nextState.activeId || nextState.categories[0].id);
-      updateCategoryButtonsForList();
-      return;
-    }
     const urlsFromDom = getCurrentUrlListFromDom();
     const urlsFromStorage = (() => {
       try { return JSON.parse(localStorage.getItem(YT_STORAGE_KEY) || '[]'); } catch { return []; }
     })();
     const urls = urlsFromDom.length ? urlsFromDom : urlsFromStorage;
+    if (existingState && Array.isArray(existingState.categories) && existingState.categories.length) {
+      const nextState = { ...existingState, enabled: true };
+      let allVideos = getAllVideosCategory(nextState);
+      if (!allVideos) {
+        allVideos = { id: 'all-videos', name: DEFAULT_CATEGORY_NAME, urls: [] };
+        nextState.categories.unshift(allVideos);
+      }
+      allVideos.urls = Array.isArray(urls) ? urls : [];
+      nextState.activeId = nextState.activeId || allVideos.id;
+      setCategoryState(nextState);
+      setCategoryControlsVisible(true);
+      if (categoriesToggle) categoriesToggle.checked = true;
+      renderCategorySelect(nextState);
+      await loadCategoryById(nextState.activeId);
+      updateCategoryButtonsForList();
+      return;
+    }
     const state = ensureCategoryStateFromUrls(urls);
     setCategoryState(state);
     setCategoryControlsVisible(true);
