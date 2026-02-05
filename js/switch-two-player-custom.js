@@ -669,14 +669,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
 
   if (categoriesToggle) {
-    categoriesToggle.addEventListener('change', async () => {
-      if (categoriesToggle.checked) {
+    let lastToggleValue = categoriesToggle.checked;
+    const onCategoriesToggle = async () => {
+      const nextValue = !!categoriesToggle.checked;
+      if (nextValue === lastToggleValue) return;
+      lastToggleValue = nextValue;
+      if (nextValue) {
         await enableCategoriesFromCurrentList();
       } else {
         await disableCategoriesToFlatList();
       }
       updateSelectedMedia();
-    });
+    };
+    categoriesToggle.addEventListener('change', onCategoriesToggle);
+    // Some browsers/webviews can miss `change` for checkbox controls in modals.
+    categoriesToggle.addEventListener('input', onCategoriesToggle);
   }
 
   if (categorySelect) {
@@ -1210,7 +1217,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function enableCategoriesFromCurrentList() {
     const existingState = getCategoryState();
-    if (isCategoriesEnabled(existingState)) return;
+    if (isCategoriesEnabled(existingState)) {
+      setCategoryControlsVisible(true);
+      if (categoriesToggle) categoriesToggle.checked = true;
+      if (existingState) {
+        renderCategorySelect(existingState);
+        await loadCategoryById(existingState.activeId);
+      }
+      updateCategoryButtonsForList();
+      return;
+    }
     const urlsFromDom = getCurrentUrlListFromDom();
     const urlsFromStorage = (() => {
       try { return JSON.parse(localStorage.getItem(YT_STORAGE_KEY) || '[]'); } catch { return []; }
