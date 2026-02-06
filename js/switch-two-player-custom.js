@@ -687,11 +687,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
 
   if (categoriesToggle) {
-    let lastToggleValue = categoriesToggle.checked;
+    let toggleSyncScheduled = false;
     const onCategoriesToggle = async () => {
       const nextValue = !!categoriesToggle.checked;
-      if (nextValue === lastToggleValue) return;
-      lastToggleValue = nextValue;
+      const enabled = isCategoriesEnabled();
+      if (nextValue === enabled) {
+        setCategoryControlsVisible(nextValue);
+        return;
+      }
       if (nextValue) {
         await enableCategoriesFromCurrentList();
       } else {
@@ -699,9 +702,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       updateSelectedMedia();
     };
-    categoriesToggle.addEventListener('change', onCategoriesToggle);
+    const scheduleCategoriesToggle = () => {
+      if (toggleSyncScheduled) return;
+      toggleSyncScheduled = true;
+      setTimeout(async () => {
+        toggleSyncScheduled = false;
+        await onCategoriesToggle();
+      }, 0);
+    };
+    categoriesToggle.addEventListener('change', scheduleCategoriesToggle);
     // Some browsers/webviews can miss `change` for checkbox controls in modals.
-    categoriesToggle.addEventListener('input', onCategoriesToggle);
+    categoriesToggle.addEventListener('input', scheduleCategoriesToggle);
+    // Some webviews update `.checked` after `input`; click+timeout catches that case.
+    categoriesToggle.addEventListener('click', scheduleCategoriesToggle);
   }
 
   if (categorySelect) {
