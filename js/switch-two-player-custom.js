@@ -678,44 +678,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (startButton) startButton.style.display = 'none';
     if (ytPlaylistStatus) ytPlaylistStatus.textContent = '';
-    if (categoriesToggle) categoriesToggle.checked = false;
-    setCategoryControlsVisible(false);
+    const clearedState = ensureCategoryStateFromUrls([]);
+    setCategoryState(clearedState);
+    if (categoriesToggle) {
+      categoriesToggle.checked = true;
+      categoriesToggle.disabled = true;
+    }
+    setCategoryControlsVisible(true);
+    renderCategorySelect(clearedState);
 
     document.dispatchEvent(new CustomEvent('video-list-cleared'));
   }
 
   if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
-
-  if (categoriesToggle) {
-    let toggleSyncScheduled = false;
-    const onCategoriesToggle = async () => {
-      const nextValue = !!categoriesToggle.checked;
-      const enabled = isCategoriesEnabled();
-      if (nextValue === enabled) {
-        setCategoryControlsVisible(nextValue);
-        return;
-      }
-      if (nextValue) {
-        await enableCategoriesFromCurrentList();
-      } else {
-        await disableCategoriesToFlatList();
-      }
-      updateSelectedMedia();
-    };
-    const scheduleCategoriesToggle = () => {
-      if (toggleSyncScheduled) return;
-      toggleSyncScheduled = true;
-      setTimeout(async () => {
-        toggleSyncScheduled = false;
-        await onCategoriesToggle();
-      }, 0);
-    };
-    categoriesToggle.addEventListener('change', scheduleCategoriesToggle);
-    // Some browsers/webviews can miss `change` for checkbox controls in modals.
-    categoriesToggle.addEventListener('input', scheduleCategoriesToggle);
-    // Some webviews update `.checked` after `input`; click+timeout catches that case.
-    categoriesToggle.addEventListener('click', scheduleCategoriesToggle);
-  }
 
   if (categorySelect) {
     categorySelect.addEventListener('change', async () => {
@@ -1340,11 +1315,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function initCategoryControls() {
-    const state = getCategoryState();
-    const enabled = isCategoriesEnabled(state);
-    if (categoriesToggle) categoriesToggle.checked = enabled;
-    setCategoryControlsVisible(enabled);
-    if (enabled && state) {
+    let state = getCategoryState();
+    if (!state || !Array.isArray(state.categories) || !state.categories.length) {
+      const urls = (() => {
+        try { return JSON.parse(localStorage.getItem(YT_STORAGE_KEY) || '[]'); } catch { return []; }
+      })();
+      state = ensureCategoryStateFromUrls(urls);
+    } else if (!state.enabled) {
+      state = { ...state, enabled: true };
+    }
+    setCategoryState(state);
+    if (categoriesToggle) {
+      categoriesToggle.checked = true;
+      categoriesToggle.disabled = true;
+    }
+    setCategoryControlsVisible(true);
+    if (state) {
       renderCategorySelect(state);
     }
     updateCategoryButtonsForList();
@@ -1417,6 +1403,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // UI events
   selectVideosButton.addEventListener('click', () => {
     videoSelectionModal.style.display = 'block';
+    setTimeout(() => setCategoryControlsVisible(true), 0);
   });
   closeModal.addEventListener('click', () => {
     videoSelectionModal.style.display = 'none';
