@@ -687,62 +687,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
 
   const categoryControls = document.querySelector('#video-selection-modal .category-controls');
+  const categoryToggleLabel = document.querySelector('#video-selection-modal .category-toggle');
 
-  let scheduleCategoriesToggle = null;
-
-  if (categoriesToggle) {
-    let toggleSyncScheduled = false;
-    const onCategoriesToggle = async () => {
-      const nextValue = !!categoriesToggle.checked;
-      setCategoryControlsVisible(nextValue);
-      const enabled = isCategoriesEnabled();
-      if (nextValue === enabled) {
-        setCategoryControlsVisible(nextValue);
-        return;
-      }
-      try {
-        if (nextValue) {
-          await enableCategoriesFromCurrentList();
-        } else {
-          await disableCategoriesToFlatList();
-        }
-      } catch (error) {
-        console.error('Failed to toggle categories', error);
-        setCategoryControlsVisible(nextValue);
-      }
-      updateSelectedMedia();
-    };
-    scheduleCategoriesToggle = () => {
-      if (toggleSyncScheduled) return;
-      toggleSyncScheduled = true;
-      requestAnimationFrame(() => {
-        setTimeout(async () => {
-          toggleSyncScheduled = false;
-          await onCategoriesToggle();
-        }, 0);
-      });
-    };
-    categoriesToggle.addEventListener('change', scheduleCategoriesToggle);
-    // Some browsers/webviews can miss `change` for checkbox controls in modals.
-    categoriesToggle.addEventListener('input', scheduleCategoriesToggle);
-    // Some webviews update `.checked` after `input`; click+timeout catches that case.
-    categoriesToggle.addEventListener('click', scheduleCategoriesToggle);
-    categoriesToggle.addEventListener('touchend', scheduleCategoriesToggle, { passive: true });
-  }
-
-  if (categoryControls && categoriesToggle && scheduleCategoriesToggle) {
-    categoryControls.addEventListener('click', (event) => {
-      if (
-        event.target === categoriesToggle ||
-        event.target.closest('select') ||
-        event.target.closest('button')
-      ) {
-        return;
-      }
-      event.preventDefault();
-      categoriesToggle.checked = !categoriesToggle.checked;
-      scheduleCategoriesToggle();
-    });
+  if (categoryToggleLabel) {
+    categoryToggleLabel.style.display = 'none';
   }
 
   if (categorySelect) {
@@ -1370,9 +1318,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   function initCategoryControls() {
     const state = getCategoryState();
     const enabled = isCategoriesEnabled(state);
-    if (categoriesToggle) categoriesToggle.checked = enabled;
-    setCategoryControlsVisible(enabled);
-    if (enabled && state) {
+    if (categoriesToggle) categoriesToggle.checked = true;
+    setCategoryControlsVisible(true);
+    if (!enabled) {
+      enableCategoriesFromCurrentList();
+    } else if (state) {
       renderCategorySelect(state);
     }
     updateCategoryButtonsForList();
@@ -1445,9 +1395,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // UI events
   selectVideosButton.addEventListener('click', () => {
     videoSelectionModal.style.display = 'block';
-    if (categoriesToggle) {
-      setTimeout(() => setCategoryControlsVisible(!!categoriesToggle.checked), 0);
-    }
+    setTimeout(() => setCategoryControlsVisible(true), 0);
   });
   closeModal.addEventListener('click', () => {
     videoSelectionModal.style.display = 'none';
