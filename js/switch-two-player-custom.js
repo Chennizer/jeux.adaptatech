@@ -686,35 +686,63 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (clearAllButton) clearAllButton.addEventListener('click', () => handleClearAll());
 
+  const categoryControls = document.querySelector('#video-selection-modal .category-controls');
+
+  let scheduleCategoriesToggle = null;
+
   if (categoriesToggle) {
+    categoriesToggle.checked = true;
+    categoriesToggle.disabled = true;
     let toggleSyncScheduled = false;
     const onCategoriesToggle = async () => {
       const nextValue = !!categoriesToggle.checked;
+      setCategoryControlsVisible(nextValue);
       const enabled = isCategoriesEnabled();
       if (nextValue === enabled) {
         setCategoryControlsVisible(nextValue);
         return;
       }
-      if (nextValue) {
-        await enableCategoriesFromCurrentList();
-      } else {
-        await disableCategoriesToFlatList();
+      try {
+        if (nextValue) {
+          await enableCategoriesFromCurrentList();
+        } else {
+          await disableCategoriesToFlatList();
+        }
+      } catch (error) {
+        console.error('Failed to toggle categories', error);
+        setCategoryControlsVisible(nextValue);
       }
       updateSelectedMedia();
     };
-    const scheduleCategoriesToggle = () => {
+    scheduleCategoriesToggle = () => {
       if (toggleSyncScheduled) return;
       toggleSyncScheduled = true;
-      setTimeout(async () => {
-        toggleSyncScheduled = false;
-        await onCategoriesToggle();
-      }, 0);
+      requestAnimationFrame(() => {
+        setTimeout(async () => {
+          toggleSyncScheduled = false;
+          await onCategoriesToggle();
+        }, 0);
+      });
     };
     categoriesToggle.addEventListener('change', scheduleCategoriesToggle);
     // Some browsers/webviews can miss `change` for checkbox controls in modals.
     categoriesToggle.addEventListener('input', scheduleCategoriesToggle);
     // Some webviews update `.checked` after `input`; click+timeout catches that case.
     categoriesToggle.addEventListener('click', scheduleCategoriesToggle);
+    categoriesToggle.addEventListener('touchend', scheduleCategoriesToggle, { passive: true });
+  }
+
+  if (categoryControls && categoriesToggle && scheduleCategoriesToggle) {
+    categoryControls.addEventListener('click', (event) => {
+      if (
+        event.target === categoriesToggle ||
+        event.target.closest('select') ||
+        event.target.closest('button')
+      ) {
+        return;
+      }
+      event.preventDefault();
+    });
   }
 
   if (categorySelect) {
@@ -1341,10 +1369,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function initCategoryControls() {
     const state = getCategoryState();
-    const enabled = isCategoriesEnabled(state);
-    if (categoriesToggle) categoriesToggle.checked = enabled;
-    setCategoryControlsVisible(enabled);
-    if (enabled && state) {
+    const enabled = true;
+    if (categoriesToggle) {
+      categoriesToggle.checked = true;
+      categoriesToggle.disabled = true;
+    }
+    setCategoryControlsVisible(true);
+    if (state) {
       renderCategorySelect(state);
     }
     updateCategoryButtonsForList();
@@ -1352,6 +1383,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load saved URLs (with validation)
   initCategoryControls();
+  await enableCategoriesFromCurrentList();
   await loadStoredYoutubeUrls();
 
   // Initialize any pre-existing cards (if present in DOM at load)
@@ -1417,6 +1449,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // UI events
   selectVideosButton.addEventListener('click', () => {
     videoSelectionModal.style.display = 'block';
+    if (categoriesToggle) {
+      setTimeout(() => setCategoryControlsVisible(!!categoriesToggle.checked), 0);
+    }
   });
   closeModal.addEventListener('click', () => {
     videoSelectionModal.style.display = 'none';
