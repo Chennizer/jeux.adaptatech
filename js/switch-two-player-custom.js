@@ -690,15 +690,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     let toggleSyncScheduled = false;
     const onCategoriesToggle = async () => {
       const nextValue = !!categoriesToggle.checked;
+      setCategoryControlsVisible(nextValue);
       const enabled = isCategoriesEnabled();
       if (nextValue === enabled) {
         setCategoryControlsVisible(nextValue);
         return;
       }
-      if (nextValue) {
-        await enableCategoriesFromCurrentList();
-      } else {
-        await disableCategoriesToFlatList();
+      try {
+        if (nextValue) {
+          await enableCategoriesFromCurrentList();
+        } else {
+          await disableCategoriesToFlatList();
+        }
+      } catch (error) {
+        console.error('Failed to toggle categories', error);
+        setCategoryControlsVisible(nextValue);
       }
       updateSelectedMedia();
     };
@@ -1417,6 +1423,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // UI events
   selectVideosButton.addEventListener('click', () => {
     videoSelectionModal.style.display = 'block';
+    if (categoriesToggle) {
+      setTimeout(() => setCategoryControlsVisible(!!categoriesToggle.checked), 0);
+    }
   });
   closeModal.addEventListener('click', () => {
     videoSelectionModal.style.display = 'none';
