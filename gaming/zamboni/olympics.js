@@ -303,7 +303,7 @@ function updateFireworks(){
 }
 
 function updateLaunches(){
-  openingStage.launches = openingStage.launches.filter(l => l.life < l.ttl && l.y > l.targetY - 6);
+  const remaining = [];
   openingStage.launches.forEach(l => {
     l.life += 1;
     l.x += l.vx;
@@ -313,7 +313,11 @@ function updateLaunches(){
       l.fired = true;
       spawnBurst(l.burst);
     }
+    if(l.life < l.ttl && (l.y > l.targetY - 6 || !l.fired)){
+      remaining.push(l);
+    }
   });
+  openingStage.launches = remaining;
 }
 
 function spawnBurst(burst){
@@ -460,11 +464,8 @@ function drawOpeningStage(now){
   if(openingStage.complete){
     const pulse = 0.5 + Math.sin((now - openingStage.completeTime) * 0.002) * 0.2;
     ctx.save();
-    ctx.strokeStyle = `rgba(255,255,255,${0.4 + pulse})`;
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(vw/2, vh/2, Math.min(vw, vh) * 0.22 * (1 + pulse * 0.15), 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.fillStyle = `rgba(255,255,255,${0.08 + pulse * 0.1})`;
+    ctx.fillRect(0, 0, vw, vh);
     ctx.restore();
   }
 }
