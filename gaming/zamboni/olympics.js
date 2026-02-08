@@ -41,6 +41,12 @@ zamboniMoveSound.volume = 0.4;
 const victorySound = new Audio('../../sounds/asia-sound.wav');
 victorySound.volume = 0.6;
 
+const fireworkSound = new Audio('../../sounds/africaflute.mp3');
+fireworkSound.volume = 0.45;
+
+const snowCannonSound = new Audio('../../sounds/ca.mp3');
+snowCannonSound.volume = 0.5;
+
 let audioUnlocked = false;
 
 function unlockAudio(){
@@ -222,6 +228,9 @@ function handleSnowPress(){
     snowStage.growthEnd = now + 3000;
     snowStage.growthFrom = snowStage.growth;
     snowStage.growthTarget = Math.min(snowStage.growthTarget + window.innerHeight * 0.06, window.innerHeight * 0.22);
+    try { snowCannonSound.pause(); } catch(e){}
+    snowCannonSound.currentTime = 0;
+    snowCannonSound.play().catch(() => {});
   }
   if(snowStage.presses >= 5 && !snowStage.complete){
     snowStage.complete = true;
@@ -358,6 +367,9 @@ function spawnBurst(burst){
     ttl: 18,
     hue: (hue + 40) % 360,
   });
+  try { fireworkSound.pause(); } catch(e){}
+  fireworkSound.currentTime = 0;
+  fireworkSound.play().catch(() => {});
   for(let i=0;i<count;i++){
     const angle = type === 'ring' ? (i / count) * Math.PI * 2 : Math.random() * Math.PI * 2;
     const spread = type === 'chrysanthemum' ? (0.8 + Math.random() * 0.5) : (0.6 + Math.random() * 0.8);
