@@ -25,11 +25,7 @@
     }
     *{box-sizing:border-box;}
     html,body{margin:0;height:100%;overflow:hidden;background:#04111f;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;}
-
-    body{
-      background:#000;
-    }
-
+    body{background:#000;}
     canvas{
       position:fixed;
       inset:0;
@@ -39,6 +35,7 @@
       z-index:1;
     }
   </style>
+
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -49,25 +46,32 @@
 </head>
 <body>
   <canvas id="rink"></canvas>
+
   <script>
     const canvas = document.getElementById('rink');
     const ctx = canvas.getContext('2d');
 
-    // TODO: Replace with the final Zamboni PNG asset.
-    const zamboniImg = new Image();
-    zamboniImg.src = '../../images/activitychoice.png';
+    // ----- BASELINE FOR SCALING (your “correct” layout) -----
+    const BASE_W = 1920;
+    const BASE_H = 1080;
 
-    // TODO: Replace with final background music.
+    function getUiScale(){
+      // uniform scale factor relative to 1920x1080
+      return Math.max(0.55, Math.min(1.6, Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H)));
+    }
+
+    const zamboniImg = new Image();
+    zamboniImg.src = '../../images/zamboni.png';
+
     const backgroundMusic = new Audio('../../sounds/beatles.mp3');
     backgroundMusic.loop = true;
     backgroundMusic.volume = 0.25;
 
-    // TODO: Replace with final Zamboni movement sound.
+    // one-shot sound (space only)
     const zamboniMoveSound = new Audio('../../sounds/africa-sound.wav');
-    zamboniMoveSound.loop = true;
+    zamboniMoveSound.loop = false;
     zamboniMoveSound.volume = 0.4;
 
-    // TODO: Replace with final victory sound.
     const victorySound = new Audio('../../sounds/asia-sound.wav');
     victorySound.volume = 0.6;
 
@@ -97,7 +101,7 @@
     const zamboni = {
       col:1,
       row:0,
-      dir:1,
+      dir:1,         // 1 = left->right, -1 = right->left
       lineStride:1,
     };
 
@@ -108,9 +112,7 @@
       progress:0,
     };
 
-    const arena = {
-      glow:0,
-    };
+    const arena = { glow:0 };
 
     const sparkle = {
       flakes:[],
@@ -129,7 +131,6 @@
       buildGrid();
       draw();
     }
-
     window.addEventListener('resize', resize);
 
     function buildGrid(){
@@ -137,12 +138,15 @@
       grid.cells = new Array(cols*rows).fill(0);
       grid.cleaned = 0;
       grid.total = cols*rows;
+
       zamboni.col = 1;
       zamboni.row = 0;
       zamboni.dir = 1;
+
       state.currentSweepRow = zamboni.row;
       sweep.progress = 0;
-      buildSparkles();
+
+      buildSparkles(); // uses current ui scale
       state.targetSmoothing = 0;
     }
 
@@ -165,25 +169,15 @@
     }
 
     function cleanLine(row){
-      for(let c = 0; c < grid.cols; c++){
-        cleanCell(c,row);
-      }
+      for(let c = 0; c < grid.cols; c++) cleanCell(c,row);
       updateProgress();
     }
 
     function cleanSegment(row, fromCol, toCol){
       const start = Math.round(Math.min(fromCol, toCol));
       const end = Math.round(Math.max(fromCol, toCol));
-      for(let c = start; c <= end; c++){
-        cleanCell(c,row);
-      }
+      for(let c = start; c <= end; c++) cleanCell(c,row);
       updateProgress();
-    }
-
-    function handlePress(){
-      if(state.finished || state.isAnimating) return;
-      unlockAudio();
-      startSweep();
     }
 
     function unlockAudio(){
@@ -192,46 +186,56 @@
       backgroundMusic.play().catch(() => {});
     }
 
-    function startSweep(){
+    function handlePress(fromSpace=false){
+      if(state.finished || state.isAnimating) return;
+      unlockAudio();
+      startSweep(fromSpace);
+    }
+
+    function startSweep(fromSpace=false){
       state.isAnimating = true;
       state.animationStart = performance.now();
       state.currentSweepRow = zamboni.row;
+
       sweep.startCol = zamboni.dir === 1 ? 1 : grid.cols - 2;
-      sweep.endCol = zamboni.dir === 1 ? grid.cols - 2 : 1;
+      sweep.endCol   = zamboni.dir === 1 ? grid.cols - 2 : 1;
       sweep.progress = 0;
+
       state.lastCleanCol = sweep.startCol;
-      zamboniMoveSound.currentTime = 0;
-      zamboniMoveSound.play().catch(() => {});
+
+      // sound plays once ONLY when space is pressed
+      if(fromSpace){
+        try { zamboniMoveSound.pause(); } catch(e){}
+        zamboniMoveSound.currentTime = 0;
+        zamboniMoveSound.play().catch(() => {});
+      }
     }
 
     function completeSweep(){
       cleanLine(state.currentSweepRow);
-      zamboni.row += zamboni.lineStride;
-      if(zamboni.row >= grid.rows){
-        zamboni.row = 0;
-      }
-      zamboni.dir *= -1;
-      advanceZamboni();
-      arena.glow = Math.min(1, arena.glow + 0.18);
-    }
 
-    function advanceZamboni(){
+      zamboni.row += zamboni.lineStride;
+      if(zamboni.row >= grid.rows) zamboni.row = 0;
+
+      zamboni.dir *= -1;
+
       state.isAnimating = false;
       sweep.progress = 0;
       state.lastCleanCol = zamboni.col;
-      zamboniMoveSound.pause();
+
+      arena.glow = Math.min(1, arena.glow + 0.18);
     }
 
     function triggerCelebration(){
       state.finished = true;
       state.celebrationTime = performance.now();
       state.victoryLapDone = false;
+
       if(!state.victoryPlayed){
         state.victoryPlayed = true;
         victorySound.currentTime = 0;
         victorySound.play().catch(() => {});
       }
-      zamboniMoveSound.pause();
     }
 
     function restart(){
@@ -244,16 +248,18 @@
       state.victoryPlayed = false;
       state.victoryLapDone = false;
       arena.glow = 0;
+
       buildSparkles();
       buildGrid();
-      zamboniMoveSound.pause();
+
+      try { zamboniMoveSound.pause(); } catch(e){}
       zamboniMoveSound.currentTime = 0;
     }
 
     function onKey(e){
       if(e.code === 'Space'){
         e.preventDefault();
-        handlePress();
+        handlePress(true); // space => sound
       }
       if(e.code === 'Enter'){
         e.preventDefault();
@@ -262,22 +268,28 @@
     }
     window.addEventListener('keydown', onKey, {passive:false});
 
-    window.addEventListener('pointerdown', handlePress);
+    // pointer starts sweep but does NOT play one-shot sound
+    window.addEventListener('pointerdown', () => handlePress(false));
 
-    function drawRink(bounds){
+    function drawRink(bounds, s){
       const {x,y,w,h} = bounds;
-      const pad = Math.min(w,h) * 0.04;
+      const pad = Math.min(w,h) * 0.04; // proportional already
       const inner = {x:x+pad,y:y+pad,w:w-pad*2,h:h-pad*2};
 
       const cellW = inner.w / grid.cols;
       const cellH = inner.h / grid.rows;
 
+      // scaled radii (baseline tuned at 1920x1080)
+      const rOuter = 24 * s;
+      const rMid   = 20 * s;
+      const rInner = 18 * s;
+
       // Rink border
       ctx.save();
-      roundRect(ctx, x, y, w, h, 24);
+      roundRect(ctx, x, y, w, h, rOuter);
       ctx.fillStyle = '#0e2236';
       ctx.fill();
-      roundRect(ctx, x + 6, y + 6, w - 12, h - 12, 20);
+      roundRect(ctx, x + 6*s, y + 6*s, w - 12*s, h - 12*s, rMid);
       ctx.fillStyle = '#f8fbff';
       ctx.fill();
       ctx.restore();
@@ -287,12 +299,12 @@
       iceGrad.addColorStop(0, '#eefbff');
       iceGrad.addColorStop(1, '#d7f1ff');
       ctx.fillStyle = iceGrad;
-      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, rInner);
       ctx.fill();
 
       // Uncleaned overlay
       ctx.save();
-      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, rInner);
       ctx.clip();
       for(let r=0;r<grid.rows;r++){
         for(let c=0;c<grid.cols;c++){
@@ -301,7 +313,7 @@
           const cx = inner.x + c*cellW;
           const cy = inner.y + r*cellH;
           ctx.fillStyle = (c+r)%2===0 ? 'rgba(195,224,240,0.42)' : 'rgba(186,217,236,0.38)';
-          ctx.fillRect(cx,cy,cellW+0.6,cellH+0.6);
+          ctx.fillRect(cx,cy,cellW+0.6*s,cellH+0.6*s);
         }
       }
       ctx.restore();
@@ -309,11 +321,12 @@
       // Hockey lines
       const centerX = inner.x + inner.w/2;
       const centerY = inner.y + inner.h/2;
+
       ctx.save();
-      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, rInner);
       ctx.clip();
 
-      ctx.lineWidth = Math.max(2, inner.w * 0.004);
+      ctx.lineWidth = Math.max(2*s, inner.w * 0.004);
       ctx.strokeStyle = 'rgba(229,57,53,0.9)';
       ctx.beginPath();
       ctx.moveTo(centerX, inner.y);
@@ -329,37 +342,51 @@
       ctx.lineTo(centerX + blueOffset, inner.y + inner.h);
       ctx.stroke();
 
-      // Faceoff circle
       ctx.strokeStyle = 'rgba(229,57,53,0.85)';
-      ctx.lineWidth = Math.max(2, inner.w * 0.005);
+      ctx.lineWidth = Math.max(2*s, inner.w * 0.005);
       ctx.beginPath();
       ctx.arc(centerX, centerY, inner.w * 0.09, 0, Math.PI*2);
       ctx.stroke();
+
       ctx.restore();
 
-      drawZamboni(inner, cellW, cellH);
-      drawShine(inner);
+      drawZamboni(inner, cellW, cellH, s);
+      drawShine(inner, s);
     }
 
-    function drawZamboni(inner, cellW, cellH){
-      const zx = inner.x + zamboni.col*cellW;
-      const zy = inner.y + zamboni.row*cellH;
-      const w = cellW * 3.2;
-      const h = cellH * 2.1;
+    // When moving LEFT->RIGHT (dir===1): flip to face RIGHT.
+    // When moving RIGHT->LEFT (dir===-1): keep as-is (faces LEFT).
+    function drawZamboni(inner, cellW, cellH, s){
+      const leftNudge = cellW * 3.2; // proportional to rink/grid (already scales)
+      const yLift = cellH * 0.5;     // ✅ move up by ~half of one row height
+
+      const zx = inner.x + zamboni.col * cellW - leftNudge;
+      const zy = inner.y + zamboni.row * cellH - yLift;
+
+      // size driven by cell size; stays proportional automatically
+      const maxW = cellW * 3.2 * 4;
+      const maxH = cellH * 2.1 * 4;
 
       ctx.save();
       ctx.translate(zx, zy);
 
-      const dir = zamboni.dir;
-      ctx.scale(dir,1);
-      const offsetX = dir === 1 ? 0 : -w;
-      ctx.translate(offsetX,0);
+      const flipX = (zamboni.dir === 1) ? -1 : 1;
+      ctx.scale(flipX, 1);
 
-      if(zamboniImg.complete){
-        ctx.drawImage(zamboniImg, 0, -h*0.1, w, h*1.1);
+      if(zamboniImg.complete && zamboniImg.naturalWidth > 0){
+        const iw = zamboniImg.naturalWidth;
+        const ih = zamboniImg.naturalHeight;
+
+        const scale = Math.min(maxW / iw, maxH / ih);
+        const drawW = iw * scale;
+        const drawH = ih * scale;
+
+        const dx = (flipX === -1) ? -drawW : 0;
+        ctx.drawImage(zamboniImg, dx, 0, drawW, drawH);
       }else{
         ctx.fillStyle = '#ffc107';
-        roundRect(ctx, 0, h*0.1, w, h*0.6, 12);
+        const dx = (flipX === -1) ? -maxW : 0;
+        roundRect(ctx, dx, 0, maxW, maxH * 0.7, 12*s);
         ctx.fill();
       }
 
@@ -368,41 +395,49 @@
 
     function updateSweep(){
       if(!state.isAnimating) return;
+
       const now = performance.now();
       const elapsed = now - state.animationStart;
+
       sweep.progress = Math.min(1, elapsed / sweep.durationMs);
+
       const col = sweep.startCol + (sweep.endCol - sweep.startCol) * sweep.progress;
       zamboni.col = col;
       zamboni.row = state.currentSweepRow;
+
       cleanSegment(state.currentSweepRow, state.lastCleanCol, col);
       state.lastCleanCol = col;
-      if(sweep.progress >= 1){
-        completeSweep();
-      }
+
+      if(sweep.progress >= 1) completeSweep();
     }
 
     function buildSparkles(){
+      const s = getUiScale();
+
       const flakeCount = 50;
       const starCount = 10;
       const orbCount = 16;
+
       sparkle.flakes = Array.from({length: flakeCount}, () => ({
         x: Math.random(),
         y: Math.random(),
         speed: 0.08 + Math.random()*0.18,
-        size: 1 + Math.random()*2,
+        size: (1 + Math.random()*2) * s,
         drift: (Math.random() - 0.5) * 0.2,
       }));
+
       sparkle.stars = Array.from({length: starCount}, () => ({
         x: Math.random(),
         y: Math.random(),
-        r: 5 + Math.random()*8,
+        r: (5 + Math.random()*8) * s,
         phase: Math.random()*Math.PI*2,
         twinkle: 0.6 + Math.random()*0.4,
       }));
+
       sparkle.orbs = Array.from({length: orbCount}, () => ({
         x: Math.random(),
         y: Math.random(),
-        size: 12 + Math.random()*22,
+        size: (12 + Math.random()*22) * s,
         hue: 180 + Math.random()*140,
         driftX: (Math.random() - 0.5) * 0.08,
         driftY: (Math.random() - 0.5) * 0.06,
@@ -418,9 +453,9 @@
         if(flake.x > 1.1) flake.x = -0.1;
         if(flake.x < -0.1) flake.x = 1.1;
       });
-      sparkle.stars.forEach(star => {
-        star.phase += dt * 0.0015;
-      });
+
+      sparkle.stars.forEach(star => { star.phase += dt * 0.0015; });
+
       sparkle.orbs.forEach(orb => {
         orb.x += orb.driftX * dt * 0.00015;
         orb.y += orb.driftY * dt * 0.00015;
@@ -432,11 +467,13 @@
       });
     }
 
-    function drawSparkles(bounds, now){
+    function drawSparkles(bounds, now, s){
       const {x,y,w,h} = bounds;
       const time = now || performance.now();
+
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
+
       sparkle.orbs.forEach(orb => {
         const ox = x + orb.x * w;
         const oy = y + orb.y * h;
@@ -449,12 +486,13 @@
         ctx.arc(ox, oy, orb.size * pulse, 0, Math.PI*2);
         ctx.fill();
       });
+
       sparkle.stars.forEach(star => {
         const sx = x + star.x * w;
         const sy = y + star.y * h;
         const twinkle = (Math.sin(star.phase + time*0.0015) * 0.4 + 0.6) * star.twinkle;
         ctx.strokeStyle = `rgba(255,255,255,${0.35 * twinkle})`;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.2 * s;
         ctx.beginPath();
         ctx.moveTo(sx - star.r, sy);
         ctx.lineTo(sx + star.r, sy);
@@ -462,6 +500,7 @@
         ctx.lineTo(sx, sy + star.r);
         ctx.stroke();
       });
+
       ctx.restore();
     }
 
@@ -477,27 +516,31 @@
       ctx.restore();
     }
 
-    function drawStands(bounds, now){
+    function drawStands(bounds, now, s){
       const {x,y,w,h} = bounds;
       const ringCount = 5;
+
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
+
       for(let i=0;i<ringCount;i++){
-        const inset = (i + 1) * 12;
+        const inset = (i + 1) * 12 * s;
         const alpha = 0.18 + i * 0.08;
         const pulse = 1 + Math.sin((now * 0.001) + i) * 0.02;
         ctx.strokeStyle = `rgba(120,200,255,${alpha})`;
-        ctx.lineWidth = 6 - i;
+        ctx.lineWidth = (6 - i) * s;
+
         roundRect(
           ctx,
           x - inset * pulse,
           y - inset * pulse,
           w + inset * 2 * pulse,
           h + inset * 2 * pulse,
-          26 + i * 4
+          (26 + i * 4) * s
         );
         ctx.stroke();
       }
+
       ctx.restore();
     }
 
@@ -507,31 +550,25 @@
       const speed = 0.08;
       const perimeter = 2 * (w + h);
       const lapTime = 1 / speed;
+
       if(t >= lapTime){
         state.victoryLapDone = true;
         return;
       }
+
       let d = (t * speed * perimeter) % perimeter;
       let px = x;
       let py = y;
       let dir = 1;
 
       if(d <= w){
-        px = x + d;
-        py = y;
-        dir = 1;
+        px = x + d; py = y; dir = 1;
       }else if(d <= w + h){
-        px = x + w;
-        py = y + (d - w);
-        dir = -1;
+        px = x + w; py = y + (d - w); dir = -1;
       }else if(d <= 2 * w + h){
-        px = x + w - (d - (w + h));
-        py = y + h;
-        dir = -1;
+        px = x + w - (d - (w + h)); py = y + h; dir = -1;
       }else{
-        px = x;
-        py = y + h - (d - (2 * w + h));
-        dir = 1;
+        px = x; py = y + h - (d - (2 * w + h)); dir = 1;
       }
 
       zamboni.col = (px - x) / (w / grid.cols);
@@ -539,30 +576,34 @@
       zamboni.dir = dir;
     }
 
-    function drawVictoryConfetti(now){
+    function drawVictoryConfetti(now, s){
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const count = 80;
+      const size = 6 * s;
+
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
+
       for(let i=0;i<count;i++){
         const seed = i * 37.2;
         const t = (now * 0.001 + seed) * 0.6;
         const x = (seed * 13 + t * 120) % vw;
         const y = (seed * 29 + t * 180) % vh;
         ctx.fillStyle = `hsla(${(i*27)%360},80%,60%,0.85)`;
-        ctx.fillRect(x, y, 6, 6);
+        ctx.fillRect(x, y, size, size);
       }
+
       ctx.restore();
     }
 
-    function drawShine(inner){
+    function drawShine(inner, s){
       state.smoothing += (state.targetSmoothing - state.smoothing) * 0.06;
       const alpha = 0.18 + state.smoothing * 0.32 + arena.glow * 0.18;
       arena.glow *= 0.94;
 
       ctx.save();
-      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
+      roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18 * s);
       ctx.clip();
 
       const grad = ctx.createLinearGradient(inner.x, inner.y, inner.x + inner.w, inner.y + inner.h);
@@ -572,11 +613,10 @@
       ctx.fillStyle = grad;
       ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
 
-      // celebration sweep
       if(state.finished){
         const t = (performance.now() - state.celebrationTime) / 1000;
-        const sweepX = inner.x + ((t * 180) % (inner.w + 200)) - 100;
-        const sweep = ctx.createLinearGradient(sweepX, inner.y, sweepX + 160, inner.y);
+        const sweepX = inner.x + ((t * (180*s)) % (inner.w + (200*s))) - (100*s);
+        const sweep = ctx.createLinearGradient(sweepX, inner.y, sweepX + (160*s), inner.y);
         sweep.addColorStop(0, 'rgba(255,255,255,0)');
         sweep.addColorStop(0.5, 'rgba(255,255,255,0.5)');
         sweep.addColorStop(1, 'rgba(255,255,255,0)');
@@ -603,27 +643,37 @@
       const vh = window.innerHeight;
       ctx.clearRect(0,0,vw,vh);
 
+      const s = getUiScale();
+
       const now = performance.now();
       const dt = sparkle.lastTime ? (now - sparkle.lastTime) : 16;
       sparkle.lastTime = now;
+
       updateSparkles(dt);
       updateSweep();
 
-      const rinkW = Math.min(vw*0.92, 1200);
-      const rinkH = Math.min(vh*0.78, 720);
+      // Baseline rink at 1920x1080 is 1200x720
+      const baseRinkW = 1200;
+      const baseRinkH = 720;
+
+      const targetW = baseRinkW * s;
+      const targetH = baseRinkH * s;
+
+      const rinkW = Math.min(vw * 0.92, targetW);
+      const rinkH = Math.min(vh * 0.78, targetH);
+
       const rinkX = (vw - rinkW)/2;
       const rinkY = (vh - rinkH)/2;
       const bounds = {x:rinkX,y:rinkY,w:rinkW,h:rinkH};
 
-      drawStands(bounds, now);
-      drawSparkles(bounds, now);
+      drawStands(bounds, now, s);
+      drawSparkles(bounds, now, s);
       drawSnow(bounds);
-      drawRink(bounds);
-      if(state.finished){
-        if(!state.victoryLapDone){
-          drawVictoryLap(bounds, now);
-          drawVictoryConfetti(now);
-        }
+      drawRink(bounds, s);
+
+      if(state.finished && !state.victoryLapDone){
+        drawVictoryLap(bounds, now);
+        drawVictoryConfetti(now, s);
       }
 
       requestAnimationFrame(draw);
