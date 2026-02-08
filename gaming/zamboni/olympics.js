@@ -695,7 +695,7 @@ function getMountainProfile(){
 function getCannonBounds(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const size = Math.min(vw, vh) * 0.18;
+  const size = Math.min(vw, vh) * 0.54;
   const x = vw * 0.07;
   const y = vh * 0.72;
   return {x, y, w: size, h: size * 0.6};
