@@ -216,8 +216,8 @@ function handleSnowPress(){
     spawnSnowBurst();
     const now = performance.now();
     snowStage.streamEndTime = now + 900;
-    snowStage.growthStart = now;
-    snowStage.growthEnd = now + 900;
+    snowStage.growthStart = now + 500;
+    snowStage.growthEnd = now + 3000;
     snowStage.growthTarget = Math.min(snowStage.growthTarget + window.innerHeight * 0.06, window.innerHeight * 0.22);
   }
   if(snowStage.presses >= 5 && !snowStage.complete){
