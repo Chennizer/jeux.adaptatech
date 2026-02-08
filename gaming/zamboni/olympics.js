@@ -21,6 +21,8 @@ const stageHints = [
   'Appuyez pour faire avancer la zamboni et nettoyer la glace.'
 ];
 
+const INPUT_COOLDOWN_MS = 3000;
+
 function getUiScale(){
   return Math.max(0.55, Math.min(1.6, Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H)));
 }
@@ -48,6 +50,7 @@ const openingStage = {
   ringPresses: 0,
   ringTimes: [],
   fireworks: [],
+  launches: [],
   stars: [],
   complete: false,
   completeTime: 0,
@@ -106,6 +109,7 @@ zamboniImg.src = '../../images/zamboni.png';
 const stageState = {
   index: -1,
   transition: false,
+  lastInputTime: 0,
 };
 
 function resize(){
@@ -133,6 +137,7 @@ function setStage(index){
     openingStage.ringPresses = 0;
     openingStage.ringTimes = [];
     openingStage.fireworks = [];
+    openingStage.launches = [];
     openingStage.stars = [];
     openingStage.complete = false;
     openingStage.completeTime = 0;
@@ -160,13 +165,23 @@ function advanceStage(){
   }
 }
 
+function canHandleInput(){
+  return performance.now() - stageState.lastInputTime >= INPUT_COOLDOWN_MS;
+}
+
+function markInputHandled(){
+  stageState.lastInputTime = performance.now();
+}
+
 function handleOpeningPress(){
   if(openingStage.complete) return;
   unlockAudio();
+  if(!canHandleInput()) return;
   if(openingStage.ringPresses < 5){
     openingStage.ringPresses += 1;
     openingStage.ringTimes.push(performance.now());
     spawnFirework();
+    markInputHandled();
   }
   if(openingStage.ringPresses >= 5 && !openingStage.complete){
     openingStage.complete = true;
@@ -179,10 +194,12 @@ function handleOpeningPress(){
 function handleSnowPress(){
   if(snowStage.complete) return;
   unlockAudio();
+  if(!canHandleInput()) return;
   if(snowStage.presses < 5){
     snowStage.presses += 1;
     spawnSnowBurst();
     snowStage.streamEndTime = performance.now() + 900;
+    markInputHandled();
   }
   if(snowStage.presses >= 5 && !snowStage.complete){
     snowStage.complete = true;
@@ -194,7 +211,9 @@ function handleSnowPress(){
 function handleZamboniPress(fromSpace=false){
   if(zamboniStage.finished || zamboniStage.isAnimating) return;
   unlockAudio();
+  if(!canHandleInput()) return;
   startSweep(fromSpace);
+  markInputHandled();
 }
 
 function onKey(e){
@@ -232,12 +251,29 @@ function spawnFirework(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const x = vw * (0.2 + Math.random() * 0.6);
-  const y = vh * (0.18 + Math.random() * 0.35);
+  const y = vh * (0.16 + Math.random() * 0.35);
   const hue = Math.random() * 360;
   const type = ['peony', 'ring', 'chrysanthemum', 'willow'][Math.floor(Math.random() * 4)];
+  const launchHue = (hue + Math.random() * 30) % 360;
+  openingStage.launches.push({
+    x,
+    y: vh + 20,
+    targetY: y,
+    vx: (Math.random() - 0.5) * 0.6,
+    vy: -12.5 - Math.random() * 3.8,
+    hue: launchHue,
+    sat: 90 + Math.random() * 10,
+    life: 0,
+    sparkLife: [],
+    burstHue: hue,
+    burstType: type,
+    exploded: false,
+  });
+}
+
+function spawnFireworkBurst(x, y, hue, type){
   const count = type === 'ring' ? 160 : 240;
   const baseSpeed = type === 'willow' ? 3.2 : 4.6;
-
   for(let i=0;i<count;i++){
     const angle = type === 'ring' ? (i / count) * Math.PI * 2 : Math.random() * Math.PI * 2;
     const spread = type === 'chrysanthemum' ? (0.8 + Math.random() * 0.5) : (0.6 + Math.random() * 0.8);
@@ -251,7 +287,7 @@ function spawnFirework(){
       life: 0,
       ttl: type === 'willow' ? 200 + Math.random() * 40 : 150 + Math.random() * 50,
       hue: (hue + hueShift + 360) % 360,
-      sat: type === 'willow' ? 60 + Math.random() * 25 : 75 + Math.random() * 20,
+      sat: type === 'willow' ? 70 + Math.random() * 20 : 85 + Math.random() * 15,
       size: type === 'ring' ? 4.4 : 3.4 + Math.random() * 2.6,
       glow: type === 'willow' ? 1 : Math.random() > 0.7 ? 1 : 0,
       twinkle: 0.4 + Math.random() * 0.5,
@@ -275,6 +311,45 @@ function updateFireworks(){
     p.vy *= p.drag;
     p.vy += p.gravity;
   });
+}
+
+function updateLaunches(){
+  const vh = window.innerHeight;
+  openingStage.launches = openingStage.launches.filter(launch => !launch.exploded);
+  openingStage.launches.forEach(launch => {
+    launch.life += 1;
+    launch.x += launch.vx;
+    launch.y += launch.vy;
+    launch.vy *= 0.992;
+    launch.vy += 0.12;
+    launch.sparkLife.push(16);
+    if(launch.sparkLife.length > 20) launch.sparkLife.shift();
+    if(launch.y <= launch.targetY && !launch.exploded){
+      launch.exploded = true;
+      spawnFireworkBurst(launch.x, launch.targetY, launch.burstHue, launch.burstType);
+    }
+    if(launch.y > vh + 40){
+      launch.exploded = true;
+    }
+  });
+}
+
+function drawLaunches(){
+  ctx.save();
+  openingStage.launches.forEach(launch => {
+    if(launch.exploded) return;
+    ctx.fillStyle = `hsla(${launch.hue},${launch.sat}%,70%,0.9)`;
+    ctx.fillRect(launch.x - 2.5, launch.y - 10, 5, 12);
+    for(let i=0;i<launch.sparkLife.length;i++){
+      const t = launch.sparkLife[i] -= 1;
+      const alpha = Math.max(t * 0.06, 0);
+      ctx.fillStyle = `hsla(${launch.hue},${launch.sat}%,70%,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(launch.x + (Math.random() - 0.5) * 3, launch.y + i * 3, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  ctx.restore();
 }
 
 function buildStars(){
@@ -338,9 +413,11 @@ function drawOpeningStage(now){
   drawStars(now);
   drawProjectorLights(now);
 
+  updateLaunches();
   updateFireworks();
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
+  drawLaunches();
   openingStage.fireworks.forEach(p => {
     const alpha = 1 - p.life / p.ttl;
     const flicker = 0.7 + p.twinkle * Math.sin((p.x + p.y + now) * 0.01);
@@ -412,7 +489,7 @@ function spawnSnowBurst(){
 }
 
 function spawnSnowParticle(startX, startY, intensity){
-  const angle = (-Math.PI / 3.8) + Math.random() * (Math.PI / 2.6);
+  const angle = (-Math.PI / 5.2) + Math.random() * (Math.PI / 6.5);
   const speed = (3.6 + Math.random() * 5.2) * intensity;
   snowStage.particles.push({
     x: startX,
@@ -475,8 +552,8 @@ function drawSnowMountain(){
   const vh = window.innerHeight;
   const progress = snowStage.presses / 5;
   const peakHeight = vh * (0.2 + progress * 0.35);
-  const baseY = vh * 0.85;
-  const baseWidth = vw * 0.9;
+  const baseY = vh * 0.96;
+  const baseWidth = vw * 1.05;
   const centerX = vw * 0.55;
 
   ctx.save();
