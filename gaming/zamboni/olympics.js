@@ -4,21 +4,26 @@ const ctx = canvas.getContext('2d');
 const overlay = document.getElementById('promptOverlay');
 const startButton = document.getElementById('startButton');
 const stageHud = document.getElementById('stageHud');
-const stageHint = document.getElementById('stageHint');
 
 const BASE_W = 1920;
 const BASE_H = 1080;
 
 const stageLabels = [
-  'Cérémonie d\'ouverture',
-  'Canon à neige',
-  'Zamboni olympique'
-];
-
-const stageHints = [
-  'Appuyez sur ESPACE pour lancer les feux d\'artifice et créer un anneau.',
-  'Appuyez 5 fois sur le canon à neige pour former la montagne.',
-  'Appuyez pour faire avancer la zamboni et nettoyer la glace.'
+  {
+    fr: 'Cérémonie d\'ouverture',
+    en: 'Opening Ceremony',
+    ja: '開会式'
+  },
+  {
+    fr: 'Canon à neige',
+    en: 'Snow Cannon',
+    ja: 'スノーキャノン'
+  },
+  {
+    fr: 'Zamboni olympique',
+    en: 'Olympic Zamboni',
+    ja: 'オリンピック ザンボーニ'
+  }
 ];
 
 function getUiScale(){
@@ -130,10 +135,12 @@ window.addEventListener('resize', resize);
 function setStage(index){
   stageState.index = index;
   stageState.transition = false;
-  stageHud.textContent = stageLabels[index];
-  stageHint.textContent = stageHints[index];
+  const labels = stageLabels[index];
+  stageHud.dataset.fr = labels.fr;
+  stageHud.dataset.en = labels.en;
+  stageHud.dataset.ja = labels.ja;
+  stageHud.textContent = labels.fr;
   stageHud.style.display = 'block';
-  stageHint.style.display = 'block';
 
   if(index === 0){
     openingStage.ringPresses = 0;
@@ -421,9 +428,9 @@ function drawProjectorLights(now){
     grad.addColorStop(1, 'rgba(80,160,255,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.moveTo(baseX - vw * 0.08, vh);
-    ctx.lineTo(topX, vh * 0.22);
-    ctx.lineTo(baseX + vw * 0.08, vh);
+    ctx.moveTo(baseX - vw * 0.02, vh);
+    ctx.lineTo(topX - vw * 0.12, vh * 0.22);
+    ctx.lineTo(topX + vw * 0.12, vh * 0.22);
     ctx.closePath();
     ctx.fill();
   }
