@@ -544,8 +544,8 @@ function drawOlympicRings(now){
 
 function spawnSnowBurst(){
   const cannon = getCannonBounds();
-  const startX = cannon.x + cannon.w * 0.7;
-  const startY = cannon.y + cannon.h * 0.2;
+  const startX = cannon.x + cannon.w * 0.73;
+  const startY = cannon.y + cannon.h * 0.15;
   for(let i=0;i<120;i++){
     spawnSnowParticle(startX, startY, 1);
   }
@@ -567,8 +567,8 @@ function spawnSnowParticle(startX, startY, intensity){
 
 function updateSnowParticles(now){
   const cannon = getCannonBounds();
-  const startX = cannon.x + cannon.w * 0.7;
-  const startY = cannon.y + cannon.h * 0.2;
+  const startX = cannon.x + cannon.w * 0.73;
+  const startY = cannon.y + cannon.h * 0.15;
   if(now < snowStage.streamEndTime){
     for(let i=0;i<16;i++){
       spawnSnowParticle(startX, startY, 1.1);
