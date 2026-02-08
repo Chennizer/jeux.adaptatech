@@ -309,7 +309,7 @@ function updateLaunches(){
     l.x += l.vx;
     l.y += l.vy;
     l.vy += 0.12;
-    if(!l.fired && l.y <= l.targetY){
+    if(!l.fired && (l.y <= l.targetY || l.vy >= -0.4)){
       l.fired = true;
       spawnBurst(l.burst);
     }
@@ -326,13 +326,20 @@ function spawnBurst(burst){
     x,
     y,
     life: 0,
-    ttl: 22,
+    ttl: 28,
     hue,
+  });
+  openingStage.flashes.push({
+    x,
+    y,
+    life: 0,
+    ttl: 18,
+    hue: (hue + 40) % 360,
   });
   for(let i=0;i<count;i++){
     const angle = type === 'ring' ? (i / count) * Math.PI * 2 : Math.random() * Math.PI * 2;
     const spread = type === 'chrysanthemum' ? (0.8 + Math.random() * 0.5) : (0.6 + Math.random() * 0.8);
-    const speed = baseSpeed * spread;
+    const speed = baseSpeed * spread * 1.15;
     const hueShift = (Math.random() - 0.5) * 60;
     openingStage.fireworks.push({
       x,
@@ -340,10 +347,10 @@ function spawnBurst(burst){
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       life: 0,
-      ttl: type === 'willow' ? 210 + Math.random() * 60 : 160 + Math.random() * 60,
+      ttl: type === 'willow' ? 220 + Math.random() * 70 : 180 + Math.random() * 70,
       hue: (hue + hueShift + 360) % 360,
       sat: type === 'willow' ? 70 + Math.random() * 20 : 80 + Math.random() * 20,
-      size: type === 'ring' ? 5.6 : 4.4 + Math.random() * 3.4,
+      size: type === 'ring' ? 6.2 : 5 + Math.random() * 3.8,
       glow: type === 'willow' ? 1 : Math.random() > 0.7 ? 1 : 0,
       twinkle: 0.4 + Math.random() * 0.5,
       drag: type === 'willow' ? 0.994 : 0.992,
