@@ -258,7 +258,7 @@ function spawnFirework(){
   const y = vh * (0.18 + Math.random() * 0.35);
   const hue = Math.random() * 360;
   const type = ['peony', 'ring', 'chrysanthemum', 'willow'][Math.floor(Math.random() * 4)];
-  const count = type === 'ring' ? 220 : 340;
+  const count = type === 'ring' ? 240 : 360;
   const baseSpeed = type === 'willow' ? 3.6 : 5.4;
 
   openingStage.launches.push({
@@ -270,36 +270,16 @@ function spawnFirework(){
     hue,
     life: 0,
     ttl: 90,
+    fired: false,
   });
-  openingStage.flashes.push({
+  openingStage.launches[openingStage.launches.length - 1].burst = {
     x,
     y,
-    life: 0,
-    ttl: 22,
     hue,
-  });
-
-  for(let i=0;i<count;i++){
-    const angle = type === 'ring' ? (i / count) * Math.PI * 2 : Math.random() * Math.PI * 2;
-    const spread = type === 'chrysanthemum' ? (0.8 + Math.random() * 0.5) : (0.6 + Math.random() * 0.8);
-    const speed = baseSpeed * spread;
-    const hueShift = (Math.random() - 0.5) * 40;
-    openingStage.fireworks.push({
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: 0,
-      ttl: type === 'willow' ? 200 + Math.random() * 40 : 150 + Math.random() * 50,
-      hue: (hue + hueShift + 360) % 360,
-      sat: type === 'willow' ? 70 + Math.random() * 20 : 80 + Math.random() * 15,
-      size: type === 'ring' ? 5.2 : 4 + Math.random() * 3.2,
-      glow: type === 'willow' ? 1 : Math.random() > 0.7 ? 1 : 0,
-      twinkle: 0.4 + Math.random() * 0.5,
-      drag: type === 'willow' ? 0.994 : 0.992,
-      gravity: type === 'willow' ? 0.06 : 0.085,
-    });
-  }
+    type,
+    count,
+    baseSpeed,
+  };
 }
 
 function spawnFinalFireworks(){
@@ -323,15 +303,50 @@ function updateFireworks(){
 }
 
 function updateLaunches(){
-  openingStage.launches = openingStage.launches.filter(l => l.life < l.ttl && l.y > l.targetY);
+  openingStage.launches = openingStage.launches.filter(l => l.life < l.ttl && l.y > l.targetY - 6);
   openingStage.launches.forEach(l => {
     l.life += 1;
     l.x += l.vx;
     l.y += l.vy;
     l.vy += 0.12;
+    if(!l.fired && l.y <= l.targetY){
+      l.fired = true;
+      spawnBurst(l.burst);
+    }
   });
 }
 
+function spawnBurst(burst){
+  const {x, y, hue, type, count, baseSpeed} = burst;
+  openingStage.flashes.push({
+    x,
+    y,
+    life: 0,
+    ttl: 22,
+    hue,
+  });
+  for(let i=0;i<count;i++){
+    const angle = type === 'ring' ? (i / count) * Math.PI * 2 : Math.random() * Math.PI * 2;
+    const spread = type === 'chrysanthemum' ? (0.8 + Math.random() * 0.5) : (0.6 + Math.random() * 0.8);
+    const speed = baseSpeed * spread;
+    const hueShift = (Math.random() - 0.5) * 60;
+    openingStage.fireworks.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0,
+      ttl: type === 'willow' ? 210 + Math.random() * 60 : 160 + Math.random() * 60,
+      hue: (hue + hueShift + 360) % 360,
+      sat: type === 'willow' ? 70 + Math.random() * 20 : 80 + Math.random() * 20,
+      size: type === 'ring' ? 5.6 : 4.4 + Math.random() * 3.4,
+      glow: type === 'willow' ? 1 : Math.random() > 0.7 ? 1 : 0,
+      twinkle: 0.4 + Math.random() * 0.5,
+      drag: type === 'willow' ? 0.994 : 0.992,
+      gravity: type === 'willow' ? 0.06 : 0.085,
+    });
+  }
+}
 function drawLaunches(){
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
@@ -458,7 +473,7 @@ function drawOlympicRings(now){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const ringSize = Math.min(vw, vh) * 0.18;
-  const gap = ringSize * 0.35;
+  const gap = ringSize * 0.5;
   const centerX = vw / 2;
   const centerY = vh / 2.05;
 
@@ -548,7 +563,7 @@ function drawSnowStage(){
 
   drawSnowMountain();
   drawSettledSnow();
-  drawCannon();
+  drawSnowBlower();
 
   const now = performance.now();
   updateSnowParticles(now);
@@ -640,23 +655,24 @@ function getCannonBounds(){
   return {x, y, w: size, h: size * 0.6};
 }
 
-function drawCannon(){
+const snowBlowerImg = new Image();
+snowBlowerImg.src = '../../images/snowplow.png';
+
+function drawSnowBlower(){
   const cannon = getCannonBounds();
   ctx.save();
-  ctx.fillStyle = '#455a64';
-  ctx.fillRect(cannon.x, cannon.y + cannon.h * 0.25, cannon.w * 0.5, cannon.h * 0.35);
-
-  ctx.fillStyle = '#263238';
-  ctx.fillRect(cannon.x + cannon.w * 0.45, cannon.y, cannon.w * 0.45, cannon.h * 0.3);
-
-  ctx.beginPath();
-  ctx.fillStyle = '#37474f';
-  ctx.arc(cannon.x + cannon.w * 0.25, cannon.y + cannon.h * 0.6, cannon.h * 0.25, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = '#90caf9';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(cannon.x + cannon.w * 0.45, cannon.y, cannon.w * 0.45, cannon.h * 0.3);
+  const imgW = cannon.w * 0.9;
+  const imgH = cannon.h * 1.1;
+  const x = cannon.x;
+  const y = cannon.y - cannon.h * 0.2;
+  if(snowBlowerImg.complete && snowBlowerImg.naturalWidth > 0){
+    ctx.drawImage(snowBlowerImg, x, y, imgW, imgH);
+  }else{
+    ctx.fillStyle = '#455a64';
+    ctx.fillRect(x, y + imgH * 0.3, imgW * 0.6, imgH * 0.4);
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(x + imgW * 0.5, y, imgW * 0.4, imgH * 0.3);
+  }
   ctx.restore();
 }
 
