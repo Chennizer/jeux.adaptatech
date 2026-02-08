@@ -69,6 +69,7 @@ const snowStage = {
   complete: false,
   completeTime: 0,
   lastPressTime: 0,
+  growth: 0,
 };
 
 const zamboniStage = {
@@ -162,6 +163,7 @@ function setStage(index){
     snowStage.complete = false;
     snowStage.completeTime = 0;
     snowStage.lastPressTime = 0;
+    snowStage.growth = 0;
   }
 
   if(index === 2){
@@ -316,7 +318,7 @@ function updateLaunches(){
     l.x += l.vx;
     l.y += l.vy;
     l.vy += 0.12;
-    if(!l.fired && (l.y <= l.targetY || l.vy >= -0.4)){
+    if(!l.fired && (l.y <= l.targetY || l.vy >= -0.4 || l.life >= l.ttl - 1)){
       l.fired = true;
       spawnBurst(l.burst);
     }
@@ -534,7 +536,7 @@ function spawnSnowParticle(startX, startY, intensity){
     vy: Math.sin(angle) * speed,
     life: 0,
     ttl: 150 + Math.random() * 90,
-    size: 2.2 + Math.random() * 3.6,
+    size: (2.2 + Math.random() * 3.6) * 5,
   });
 }
 
@@ -559,9 +561,10 @@ function updateSnowParticles(now){
       snowStage.settled.push({
         x: p.x,
         y: surface,
-        size: p.size * 0.8,
+        size: p.size * 0.22,
         life: 0,
       });
+      snowStage.growth = Math.min(snowStage.growth + window.innerHeight * 0.004, window.innerHeight * 0.16);
       p.life = p.ttl;
     }
   });
@@ -611,7 +614,7 @@ function drawSnowMountain(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const progress = snowStage.presses / 5;
-  const peakHeight = vh * (0.2 + progress * 0.35);
+  const peakHeight = vh * (0.2 + progress * 0.35) + snowStage.growth;
   const baseY = vh;
   const baseWidth = vw * 0.9;
   const centerX = vw * 0.55;
@@ -639,7 +642,7 @@ function getMountainProfile(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const progress = snowStage.presses / 5;
-  const peakHeight = vh * (0.2 + progress * 0.35);
+  const peakHeight = vh * (0.2 + progress * 0.35) + snowStage.growth;
   const baseY = vh;
   const baseWidth = vw * 0.9;
   const centerX = vw * 0.55;
