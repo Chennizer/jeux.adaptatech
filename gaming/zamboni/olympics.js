@@ -30,21 +30,21 @@ function getUiScale(){
   return Math.max(0.55, Math.min(1.6, Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H)));
 }
 
-const backgroundMusic = new Audio('../../sounds/beatles.mp3');
+const backgroundMusic = new Audio('../../songs/winterolympicssong.mp3');
 backgroundMusic.loop = true;
 backgroundMusic.volume = 0.25;
 
-const zamboniMoveSound = new Audio('../../sounds/africa-sound.wav');
+const zamboniMoveSound = new Audio('../../sounds/zamboni.mp3');
 zamboniMoveSound.loop = false;
 zamboniMoveSound.volume = 0.4;
 
 const victorySound = new Audio('../../sounds/asia-sound.wav');
 victorySound.volume = 0.6;
 
-const fireworkSound = new Audio('../../sounds/africaflute.mp3');
+const fireworkSound = new Audio('../../sounds/firework.mp3');
 fireworkSound.volume = 0.45;
 
-const snowCannonSound = new Audio('../../sounds/ca.mp3');
+const snowCannonSound = new Audio('../../sounds/snowcannon.mp3');
 snowCannonSound.volume = 0.5;
 
 let audioUnlocked = false;
@@ -702,7 +702,7 @@ function getCannonBounds(){
 }
 
 const snowBlowerImg = new Image();
-snowBlowerImg.src = '../../images/snowplow.png';
+snowBlowerImg.src = '../../images/snowcannon.png';
 
 function drawSnowBlower(){
   const cannon = getCannonBounds();
