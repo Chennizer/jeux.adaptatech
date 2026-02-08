@@ -70,6 +70,9 @@ const snowStage = {
   completeTime: 0,
   lastPressTime: 0,
   growth: 0,
+  growthTarget: 0,
+  growthStart: 0,
+  growthEnd: 0,
 };
 
 const zamboniStage = {
@@ -164,6 +167,9 @@ function setStage(index){
     snowStage.completeTime = 0;
     snowStage.lastPressTime = 0;
     snowStage.growth = 0;
+    snowStage.growthTarget = 0;
+    snowStage.growthStart = 0;
+    snowStage.growthEnd = 0;
   }
 
   if(index === 2){
@@ -176,7 +182,7 @@ function advanceStage(){
   stageState.transition = true;
   const nextIndex = stageState.index + 1;
   if(nextIndex < stageLabels.length){
-    setTimeout(() => setStage(nextIndex), 1800);
+    setTimeout(() => setStage(nextIndex), 5000);
   }
 }
 
@@ -208,7 +214,11 @@ function handleSnowPress(){
   if(snowStage.presses < 5){
     snowStage.presses += 1;
     spawnSnowBurst();
-    snowStage.streamEndTime = performance.now() + 900;
+    const now = performance.now();
+    snowStage.streamEndTime = now + 900;
+    snowStage.growthStart = now;
+    snowStage.growthEnd = now + 900;
+    snowStage.growthTarget = Math.min(snowStage.growthTarget + window.innerHeight * 0.06, window.innerHeight * 0.22);
   }
   if(snowStage.presses >= 5 && !snowStage.complete){
     snowStage.complete = true;
@@ -490,7 +500,7 @@ function drawOlympicRings(now){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const ringSize = Math.min(vw, vh) * 0.18;
-  const gap = ringSize * 0.5;
+  const gap = ringSize * 0.9;
   const centerX = vw / 2;
   const centerY = vh / 2.05;
 
@@ -564,7 +574,6 @@ function updateSnowParticles(now){
         size: p.size * 0.22,
         life: 0,
       });
-      snowStage.growth = Math.min(snowStage.growth + window.innerHeight * 0.004, window.innerHeight * 0.16);
       p.life = p.ttl;
     }
   });
@@ -585,6 +594,10 @@ function drawSnowStage(){
 
   const now = performance.now();
   updateSnowParticles(now);
+  if(snowStage.growthEnd > snowStage.growthStart){
+    const progress = Math.min(1, Math.max(0, (now - snowStage.growthStart) / (snowStage.growthEnd - snowStage.growthStart)));
+    snowStage.growth = snowStage.growth + (snowStage.growthTarget - snowStage.growth) * progress;
+  }
   ctx.save();
   snowStage.particles.forEach(p => {
     const alpha = 1 - p.life / p.ttl;
