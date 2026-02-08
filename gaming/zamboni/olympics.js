@@ -70,6 +70,7 @@ const snowStage = {
   completeTime: 0,
   lastPressTime: 0,
   growth: 0,
+  growthFrom: 0,
   growthTarget: 0,
   growthStart: 0,
   growthEnd: 0,
@@ -167,6 +168,7 @@ function setStage(index){
     snowStage.completeTime = 0;
     snowStage.lastPressTime = 0;
     snowStage.growth = 0;
+    snowStage.growthFrom = 0;
     snowStage.growthTarget = 0;
     snowStage.growthStart = 0;
     snowStage.growthEnd = 0;
@@ -218,6 +220,7 @@ function handleSnowPress(){
     snowStage.streamEndTime = now + 900;
     snowStage.growthStart = now + 500;
     snowStage.growthEnd = now + 3000;
+    snowStage.growthFrom = snowStage.growth;
     snowStage.growthTarget = Math.min(snowStage.growthTarget + window.innerHeight * 0.06, window.innerHeight * 0.22);
   }
   if(snowStage.presses >= 5 && !snowStage.complete){
@@ -596,7 +599,7 @@ function drawSnowStage(){
   updateSnowParticles(now);
   if(snowStage.growthEnd > snowStage.growthStart){
     const progress = Math.min(1, Math.max(0, (now - snowStage.growthStart) / (snowStage.growthEnd - snowStage.growthStart)));
-    snowStage.growth = snowStage.growth + (snowStage.growthTarget - snowStage.growth) * progress;
+    snowStage.growth = snowStage.growthFrom + (snowStage.growthTarget - snowStage.growthFrom) * progress;
   }
   ctx.save();
   snowStage.particles.forEach(p => {
