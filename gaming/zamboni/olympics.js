@@ -56,6 +56,8 @@ const openingStage = {
 const snowStage = {
   presses: 0,
   particles: [],
+  streamActive: false,
+  streamEndsAt: 0,
   complete: false,
   completeTime: 0,
 };
@@ -141,6 +143,8 @@ function setStage(index){
   if(index === 1){
     snowStage.presses = 0;
     snowStage.particles = [];
+    snowStage.streamActive = false;
+    snowStage.streamEndsAt = 0;
     snowStage.complete = false;
     snowStage.completeTime = 0;
   }
@@ -373,7 +377,7 @@ function drawOlympicRings(now){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const ringSize = Math.min(vw, vh) * 0.14;
-  const gap = ringSize * 0.2;
+  const gap = ringSize * 0.35;
   const centerX = vw / 2;
   const centerY = vh / 2.1;
 
@@ -404,7 +408,9 @@ function spawnSnowBurst(){
   const cannon = getCannonBounds();
   const startX = cannon.x + cannon.w * 0.7;
   const startY = cannon.y + cannon.h * 0.2;
-  for(let i=0;i<170;i++){
+  snowStage.streamActive = true;
+  snowStage.streamEndsAt = performance.now() + 900;
+  for(let i=0;i<120;i++){
     const angle = (-Math.PI / 3.4) + Math.random() * (Math.PI / 2.2);
     const speed = 2.8 + Math.random() * 4.2;
     snowStage.particles.push({
@@ -420,13 +426,44 @@ function spawnSnowBurst(){
 }
 
 function updateSnowParticles(){
+  if(snowStage.streamActive){
+    const now = performance.now();
+    if(now > snowStage.streamEndsAt){
+      snowStage.streamActive = false;
+    }else{
+      spawnSnowStream(now);
+    }
+  }
   snowStage.particles = snowStage.particles.filter(p => p.life < p.ttl);
   snowStage.particles.forEach(p => {
     p.life += 1;
     p.x += p.vx;
     p.y += p.vy;
-    p.vy += 0.02;
+    p.vy += 0.03;
+    p.vx *= 0.995;
+    p.vy *= 0.995;
   });
+}
+
+function spawnSnowStream(now){
+  const cannon = getCannonBounds();
+  const startX = cannon.x + cannon.w * 0.75;
+  const startY = cannon.y + cannon.h * 0.18;
+  const streamCount = 18;
+  for(let i=0;i<streamCount;i++){
+    const angle = (-Math.PI / 3.6) + (Math.random() - 0.5) * 0.35;
+    const speed = 4.6 + Math.random() * 2.6;
+    snowStage.particles.push({
+      x: startX + Math.random() * 6,
+      y: startY + Math.random() * 6,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0,
+      ttl: 120 + Math.random() * 80,
+      size: 2.8 + Math.random() * 3.6,
+      trail: now + Math.random() * 200,
+    });
+  }
 }
 
 function drawSnowStage(){
@@ -443,13 +480,21 @@ function drawSnowStage(){
 
   updateSnowParticles();
   ctx.save();
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
   snowStage.particles.forEach(p => {
     const alpha = 1 - p.life / p.ttl;
+    const streak = Math.max(6, p.size * 3.2);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Math.atan2(p.vy, p.vx));
+    const grad = ctx.createRadialGradient(0, 0, 0, streak * 0.2, 0, streak);
+    grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
     ctx.globalAlpha = alpha;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, streak, p.size, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   });
   ctx.restore();
 }
