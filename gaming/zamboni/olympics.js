@@ -49,6 +49,7 @@ const openingStage = {
   ringTimes: [],
   fireworks: [],
   launches: [],
+  flashes: [],
   stars: [],
   complete: false,
   completeTime: 0,
@@ -58,6 +59,7 @@ const openingStage = {
 const snowStage = {
   presses: 0,
   particles: [],
+  settled: [],
   streamEndTime: 0,
   complete: false,
   completeTime: 0,
@@ -138,6 +140,7 @@ function setStage(index){
     openingStage.ringTimes = [];
     openingStage.fireworks = [];
     openingStage.launches = [];
+    openingStage.flashes = [];
     openingStage.stars = [];
     openingStage.complete = false;
     openingStage.completeTime = 0;
@@ -148,6 +151,7 @@ function setStage(index){
   if(index === 1){
     snowStage.presses = 0;
     snowStage.particles = [];
+    snowStage.settled = [];
     snowStage.complete = false;
     snowStage.completeTime = 0;
     snowStage.lastPressTime = 0;
@@ -241,6 +245,9 @@ window.addEventListener('pointerdown', (event) => {
 
 startButton.addEventListener('click', () => {
   overlay.style.display = 'none';
+  if(document.documentElement.requestFullscreen){
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
   setStage(0);
 });
 
@@ -251,8 +258,8 @@ function spawnFirework(){
   const y = vh * (0.18 + Math.random() * 0.35);
   const hue = Math.random() * 360;
   const type = ['peony', 'ring', 'chrysanthemum', 'willow'][Math.floor(Math.random() * 4)];
-  const count = type === 'ring' ? 160 : 240;
-  const baseSpeed = type === 'willow' ? 3.2 : 4.6;
+  const count = type === 'ring' ? 220 : 340;
+  const baseSpeed = type === 'willow' ? 3.6 : 5.4;
 
   openingStage.launches.push({
     x,
@@ -263,6 +270,13 @@ function spawnFirework(){
     hue,
     life: 0,
     ttl: 90,
+  });
+  openingStage.flashes.push({
+    x,
+    y,
+    life: 0,
+    ttl: 22,
+    hue,
   });
 
   for(let i=0;i<count;i++){
@@ -278,8 +292,8 @@ function spawnFirework(){
       life: 0,
       ttl: type === 'willow' ? 200 + Math.random() * 40 : 150 + Math.random() * 50,
       hue: (hue + hueShift + 360) % 360,
-      sat: type === 'willow' ? 60 + Math.random() * 25 : 75 + Math.random() * 20,
-      size: type === 'ring' ? 4.4 : 3.4 + Math.random() * 2.6,
+      sat: type === 'willow' ? 70 + Math.random() * 20 : 80 + Math.random() * 15,
+      size: type === 'ring' ? 5.2 : 4 + Math.random() * 3.2,
       glow: type === 'willow' ? 1 : Math.random() > 0.7 ? 1 : 0,
       twinkle: 0.4 + Math.random() * 0.5,
       drag: type === 'willow' ? 0.994 : 0.992,
@@ -294,6 +308,7 @@ function spawnFinalFireworks(){
 
 function updateFireworks(){
   openingStage.fireworks = openingStage.fireworks.filter(p => p.life < p.ttl);
+  openingStage.flashes = openingStage.flashes.filter(f => f.life < f.ttl);
   openingStage.fireworks.forEach(p => {
     p.life += 1;
     p.x += p.vx;
@@ -301,6 +316,9 @@ function updateFireworks(){
     p.vx *= p.drag;
     p.vy *= p.drag;
     p.vy += p.gravity;
+  });
+  openingStage.flashes.forEach(f => {
+    f.life += 1;
   });
 }
 
@@ -399,6 +417,13 @@ function drawOpeningStage(now){
   drawLaunches();
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
+  openingStage.flashes.forEach(f => {
+    const alpha = 1 - f.life / f.ttl;
+    ctx.fillStyle = `hsla(${f.hue},90%,70%,${alpha * 0.6})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, 48 * alpha, 0, Math.PI * 2);
+    ctx.fill();
+  });
   openingStage.fireworks.forEach(p => {
     const alpha = 1 - p.life / p.ttl;
     const flicker = 0.7 + p.twinkle * Math.sin((p.x + p.y + now) * 0.01);
@@ -432,10 +457,10 @@ function drawOpeningStage(now){
 function drawOlympicRings(now){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const ringSize = Math.min(vw, vh) * 0.14;
+  const ringSize = Math.min(vw, vh) * 0.18;
   const gap = ringSize * 0.35;
   const centerX = vw / 2;
-  const centerY = vh / 2.15;
+  const centerY = vh / 2.05;
 
   const rings = [
     {x: centerX - ringSize - gap, y: centerY - ringSize * 0.25, color: '#1e88e5'},
@@ -470,7 +495,7 @@ function spawnSnowBurst(){
 }
 
 function spawnSnowParticle(startX, startY, intensity){
-  const angle = (-Math.PI / 5) + Math.random() * (Math.PI / 8);
+  const angle = (-Math.PI / 6.2) + Math.random() * (Math.PI / 10);
   const speed = (3.6 + Math.random() * 5.2) * intensity;
   snowStage.particles.push({
     x: startX,
@@ -488,16 +513,27 @@ function updateSnowParticles(now){
   const startX = cannon.x + cannon.w * 0.7;
   const startY = cannon.y + cannon.h * 0.2;
   if(now < snowStage.streamEndTime){
-    for(let i=0;i<14;i++){
+    for(let i=0;i<16;i++){
       spawnSnowParticle(startX, startY, 1.1);
     }
   }
+  const {surfaceY} = getMountainProfile();
   snowStage.particles = snowStage.particles.filter(p => p.life < p.ttl);
   snowStage.particles.forEach(p => {
     p.life += 1;
     p.x += p.vx;
     p.y += p.vy;
     p.vy += 0.03;
+    const surface = surfaceY(p.x);
+    if(p.y >= surface){
+      snowStage.settled.push({
+        x: p.x,
+        y: surface,
+        size: p.size * 0.8,
+        life: 0,
+      });
+      p.life = p.ttl;
+    }
   });
 }
 
@@ -511,6 +547,7 @@ function drawSnowStage(){
   ctx.fillRect(0,0,vw,vh);
 
   drawSnowMountain();
+  drawSettledSnow();
   drawCannon();
 
   const now = performance.now();
@@ -524,6 +561,18 @@ function drawSnowStage(){
     ctx.moveTo(p.x, p.y);
     ctx.lineTo(p.x - p.vx * 2.6, p.y - p.vy * 2.6);
     ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function drawSettledSnow(){
+  if(!snowStage.settled.length) return;
+  ctx.save();
+  snowStage.settled.forEach(s => {
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y - s.size * 0.2, s.size, 0, Math.PI * 2);
+    ctx.fill();
   });
   ctx.restore();
 }
@@ -554,6 +603,32 @@ function drawSnowMountain(){
   ctx.closePath();
   ctx.fill();
   ctx.restore();
+}
+
+function getMountainProfile(){
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const progress = snowStage.presses / 5;
+  const peakHeight = vh * (0.2 + progress * 0.35);
+  const baseY = vh;
+  const baseWidth = vw * 0.9;
+  const centerX = vw * 0.55;
+  const leftX = centerX - baseWidth * 0.45;
+  const rightX = centerX + baseWidth * 0.45;
+  const peakX = centerX;
+  const peakY = baseY - peakHeight;
+
+  function surfaceY(x){
+    if(x <= leftX || x >= rightX) return baseY;
+    if(x <= peakX){
+      const t = (x - leftX) / (peakX - leftX);
+      return baseY - t * peakHeight;
+    }
+    const t = (x - peakX) / (rightX - peakX);
+    return peakY + t * peakHeight;
+  }
+
+  return {surfaceY};
 }
 
 function getCannonBounds(){
