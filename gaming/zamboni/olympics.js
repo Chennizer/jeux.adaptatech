@@ -38,9 +38,6 @@ const zamboniMoveSound = new Audio('../../sounds/zamboni.mp3');
 zamboniMoveSound.loop = false;
 zamboniMoveSound.volume = 0.4;
 
-const victorySound = new Audio('../../sounds/asia-sound.wav');
-victorySound.volume = 0.6;
-
 const fireworkSound = new Audio('../../sounds/firework.mp3');
 fireworkSound.volume = 0.45;
 
@@ -92,8 +89,8 @@ const zamboniStage = {
   currentSweepRow:0,
   lastCleanCol:0,
   celebrationTime:0,
-  victoryPlayed:false,
   victoryLapDone:false,
+  victoryLapEndTime:0,
   arenaGlow:0,
   grid: {
     cols:28,
@@ -152,6 +149,9 @@ function setStage(index){
   stageHud.dataset.ja = labels.ja;
   stageHud.textContent = labels.fr;
   stageHud.style.display = 'block';
+  if(typeof window.updateLanguage === 'function'){
+    window.updateLanguage();
+  }
 
   if(index === 0){
     openingStage.ringPresses = 0;
@@ -745,8 +745,8 @@ function resetZamboni(){
   zamboniStage.currentSweepRow = 0;
   zamboniStage.lastCleanCol = 0;
   zamboniStage.celebrationTime = 0;
-  zamboniStage.victoryPlayed = false;
   zamboniStage.victoryLapDone = false;
+  zamboniStage.victoryLapEndTime = 0;
   zamboniStage.arenaGlow = 0;
 
   sweep.progress = 0;
@@ -829,12 +829,7 @@ function triggerCelebration(){
   zamboniStage.finished = true;
   zamboniStage.celebrationTime = performance.now();
   zamboniStage.victoryLapDone = false;
-
-  if(!zamboniStage.victoryPlayed){
-    zamboniStage.victoryPlayed = true;
-    victorySound.currentTime = 0;
-    victorySound.play().catch(() => {});
-  }
+  zamboniStage.victoryLapEndTime = 0;
 }
 
 function updateSweep(){
@@ -1002,6 +997,7 @@ function drawVictoryLap(bounds, now){
 
   if(t >= lapTime){
     zamboniStage.victoryLapDone = true;
+    zamboniStage.victoryLapEndTime = now;
     return;
   }
 
@@ -1235,6 +1231,12 @@ function drawZamboniStage(now){
   if(zamboniStage.finished && !zamboniStage.victoryLapDone){
     drawVictoryLap(bounds, now);
     drawVictoryConfetti(now, s);
+  }
+  if(zamboniStage.finished && zamboniStage.victoryLapDone && zamboniStage.victoryLapEndTime){
+    if(now - zamboniStage.victoryLapEndTime >= 5000 && !stageState.transition){
+      stageState.transition = true;
+      setStage(0);
+    }
   }
 }
 
