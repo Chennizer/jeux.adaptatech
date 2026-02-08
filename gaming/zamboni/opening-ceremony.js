@@ -10,17 +10,17 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 function createFirework(origin, palette) {
   const particles = [];
-  const count = 90 + Math.floor(Math.random() * 40);
+  const count = 180 + Math.floor(Math.random() * 80);
   for (let i = 0; i < count; i += 1) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 1.8 + Math.random() * 4.2;
+    const speed = 2.6 + Math.random() * 6.4;
     particles.push({
       x: origin.x,
       y: origin.y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       life: 1,
-      size: 2 + Math.random() * 3,
+      size: 2.5 + Math.random() * 4.5,
       color: palette[Math.floor(Math.random() * palette.length)]
     });
   }
@@ -54,8 +54,8 @@ export function createOpeningCeremony(p) {
   };
 
   const ringPositions = () => {
-    const spacing = p.width * 0.12;
-    const ringRadius = Math.min(p.width, p.height) * 0.08;
+    const spacing = p.width * 0.14;
+    const ringRadius = Math.min(p.width, p.height) * 0.11;
     const centerX = p.width * 0.5;
     const topY = p.height * 0.38;
     return [
@@ -89,6 +89,7 @@ export function createOpeningCeremony(p) {
       y: p.height * (0.12 + Math.random() * 0.35)
     };
     fireworks.push(createFirework(origin, palette));
+    fireworks.push(createFirework(origin, palette));
   };
 
   const onPress = () => {
@@ -121,7 +122,7 @@ export function createOpeningCeremony(p) {
 
   const drawRings = () => {
     const positions = ringPositions();
-    const radius = Math.min(p.width, p.height) * 0.08;
+    const radius = Math.min(p.width, p.height) * 0.11;
     p.strokeWeight(radius * 0.16);
     positions.forEach((pos, i) => {
       if (ringProgress[i] <= 0) return;
@@ -206,18 +207,12 @@ export function createOpeningCeremony(p) {
 
   const draw = () => {
     p.background(6, 10, 30);
-    for (let i = 0; i < 40; i += 1) {
-      const t = i / 39;
-      p.noStroke();
-      p.fill(8 + t * 18, 15 + t * 30, 40 + t * 55, 80);
-      p.rect(0, p.height * 0.2 + t * p.height * 0.7, p.width, p.height * 0.02 + 1);
-    }
     drawStars();
     drawStadium();
     ringProgress = ringProgress.map((value, index) => {
       const target = ringTargets[index];
       if (value >= target) return value;
-      return lerp(value, target, 0.08);
+      return lerp(value, target, 0.03);
     });
     drawRings();
     drawSparkles();

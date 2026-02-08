@@ -19,6 +19,7 @@ export function createSnowCannon(p) {
   let driftingSnow = [];
   let complete = false;
   let completionStart = null;
+  let streamUntil = 0;
 
   const reset = () => {
     pressCount = 0;
@@ -33,6 +34,7 @@ export function createSnowCannon(p) {
     }));
     complete = false;
     completionStart = null;
+    streamUntil = 0;
   };
 
   const onPress = () => {
@@ -41,9 +43,10 @@ export function createSnowCannon(p) {
       pressCount += 1;
       mountainTarget = pressCount / 5;
       const origin = { x: p.width * 0.14, y: p.height * 0.78 };
-      for (let i = 0; i < 60; i += 1) {
+      for (let i = 0; i < 220; i += 1) {
         snowBursts.push(createParticle(origin));
       }
+      streamUntil = performance.now() + 1200;
       if (pressCount === 5) {
         completionStart = performance.now();
       }
@@ -51,26 +54,13 @@ export function createSnowCannon(p) {
   };
 
   const drawSky = () => {
-    for (let i = 0; i < 60; i += 1) {
-      const t = i / 59;
+    p.background(18, 32, 58);
+    const glow = p.height * 0.6;
+    for (let i = 0; i < 6; i += 1) {
+      const alpha = 120 - i * 18;
       p.noStroke();
-      p.fill(20 + t * 30, 40 + t * 60, 80 + t * 80, 255);
-      p.rect(0, t * p.height, p.width, p.height / 60 + 1);
-    }
-  };
-
-  const drawAurora = () => {
-    p.noFill();
-    for (let i = 0; i < 3; i += 1) {
-      const offset = i * 60;
-      p.stroke(120, 220, 255, 70 - i * 10);
-      p.strokeWeight(40 - i * 8);
-      p.beginShape();
-      for (let x = 0; x <= p.width; x += 40) {
-        const y = p.height * 0.2 + Math.sin((x + offset) * 0.01 + p.frameCount * 0.01) * 20 + i * 20;
-        p.vertex(x, y);
-      }
-      p.endShape();
+      p.fill(80, 140, 210, alpha);
+      p.ellipse(p.width * 0.7, p.height * 0.2, glow * (1 + i * 0.15), glow * (0.6 + i * 0.1));
     }
   };
 
@@ -93,28 +83,28 @@ export function createSnowCannon(p) {
     const maxHeight = p.height * 0.45;
     mountainHeight = lerp(mountainHeight, mountainTarget, 0.03);
     const currentHeight = maxHeight * mountainHeight;
+    const centerX = p.width * 0.6;
+    const baseWidth = p.width * 0.95;
     p.noStroke();
     p.fill(230, 238, 255);
-    p.beginShape();
-    p.vertex(0, baseY);
-    for (let x = 0; x <= p.width; x += 30) {
-      const noise = p.noise(x * 0.004, p.frameCount * 0.002);
-      const peak = baseY - currentHeight - noise * 40;
-      p.vertex(x, peak);
-    }
-    p.vertex(p.width, baseY);
-    p.endShape(p.CLOSE);
+    p.triangle(
+      centerX - baseWidth * 0.5,
+      baseY,
+      centerX + baseWidth * 0.5,
+      baseY,
+      centerX,
+      baseY - currentHeight
+    );
 
-    p.fill(255, 255, 255, 120);
-    p.beginShape();
-    p.vertex(0, baseY);
-    for (let x = 0; x <= p.width; x += 30) {
-      const noise = p.noise(x * 0.006 + 100, p.frameCount * 0.002 + 5);
-      const peak = baseY - currentHeight * 0.6 - noise * 30;
-      p.vertex(x, peak);
-    }
-    p.vertex(p.width, baseY);
-    p.endShape(p.CLOSE);
+    p.fill(255, 255, 255, 160);
+    p.triangle(
+      centerX - baseWidth * 0.2,
+      baseY,
+      centerX + baseWidth * 0.35,
+      baseY,
+      centerX + baseWidth * 0.08,
+      baseY - currentHeight * 0.7
+    );
   };
 
   const drawCannon = () => {
@@ -134,6 +124,12 @@ export function createSnowCannon(p) {
   };
 
   const drawBurst = () => {
+    if (streamUntil && performance.now() < streamUntil) {
+      const origin = { x: p.width * 0.14, y: p.height * 0.78 };
+      for (let i = 0; i < 18; i += 1) {
+        snowBursts.push(createParticle(origin));
+      }
+    }
     snowBursts.forEach(particle => {
       particle.x += particle.vx;
       particle.y += particle.vy;
@@ -168,7 +164,6 @@ export function createSnowCannon(p) {
 
   const draw = () => {
     drawSky();
-    drawAurora();
     drawSnow();
     drawMountain();
     drawCannon();
