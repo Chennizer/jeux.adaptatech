@@ -48,6 +48,7 @@ const openingStage = {
   ringPresses: 0,
   ringTimes: [],
   fireworks: [],
+  stars: [],
   complete: false,
   completeTime: 0,
 };
@@ -113,6 +114,9 @@ function resize(){
   canvas.style.width = '100vw';
   canvas.style.height = '100vh';
   ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(stageState.index === 0){
+    buildStars();
+  }
 }
 window.addEventListener('resize', resize);
 
@@ -128,8 +132,10 @@ function setStage(index){
     openingStage.ringPresses = 0;
     openingStage.ringTimes = [];
     openingStage.fireworks = [];
+    openingStage.stars = [];
     openingStage.complete = false;
     openingStage.completeTime = 0;
+    buildStars();
   }
 
   if(index === 1){
@@ -224,20 +230,31 @@ function spawnFirework(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const x = vw * (0.2 + Math.random() * 0.6);
-  const y = vh * (0.15 + Math.random() * 0.35);
-  const colors = ['#ff5252','#ffd740','#40c4ff','#69f0ae','#ff80ab'];
-  const color = colors[openingStage.ringPresses % colors.length];
-  const count = 110;
+  const y = vh * (0.18 + Math.random() * 0.35);
+  const hue = Math.random() * 360;
+  const type = ['peony', 'ring', 'chrysanthemum', 'willow'][Math.floor(Math.random() * 4)];
+  const count = type === 'ring' ? 160 : 240;
+  const baseSpeed = type === 'willow' ? 3.2 : 4.6;
+
   for(let i=0;i<count;i++){
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 1.6 + Math.random() * 3.4;
+    const angle = type === 'ring' ? (i / count) * Math.PI * 2 : Math.random() * Math.PI * 2;
+    const spread = type === 'chrysanthemum' ? (0.8 + Math.random() * 0.5) : (0.6 + Math.random() * 0.8);
+    const speed = baseSpeed * spread;
+    const hueShift = (Math.random() - 0.5) * 40;
     openingStage.fireworks.push({
-      x, y,
+      x,
+      y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       life: 0,
-      ttl: 120 + Math.random() * 40,
-      color
+      ttl: type === 'willow' ? 200 + Math.random() * 40 : 150 + Math.random() * 50,
+      hue: (hue + hueShift + 360) % 360,
+      sat: type === 'willow' ? 60 + Math.random() * 25 : 75 + Math.random() * 20,
+      size: type === 'ring' ? 4.4 : 3.4 + Math.random() * 2.6,
+      glow: type === 'willow' ? 1 : Math.random() > 0.7 ? 1 : 0,
+      twinkle: 0.4 + Math.random() * 0.5,
+      drag: type === 'willow' ? 0.994 : 0.992,
+      gravity: type === 'willow' ? 0.06 : 0.085,
     });
   }
 }
@@ -252,27 +269,88 @@ function updateFireworks(){
     p.life += 1;
     p.x += p.vx;
     p.y += p.vy;
-    p.vy += 0.02;
+    p.vx *= p.drag;
+    p.vy *= p.drag;
+    p.vy += p.gravity;
   });
+}
+
+function buildStars(){
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const count = Math.floor((vw * vh) / 22000);
+  openingStage.stars = Array.from({length: count}, () => ({
+    x: Math.random() * vw,
+    y: Math.random() * vh * 0.7,
+    size: 0.8 + Math.random() * 1.8,
+    twinkle: Math.random() * Math.PI * 2,
+    speed: 0.5 + Math.random() * 1.2,
+  }));
+}
+
+function drawStars(now){
+  if(!openingStage.stars.length){
+    buildStars();
+  }
+  ctx.save();
+  openingStage.stars.forEach(star => {
+    const alpha = 0.45 + Math.sin(now * 0.0015 * star.speed + star.twinkle) * 0.35;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawProjectorLights(now){
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const beamCount = 4;
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for(let i=0;i<beamCount;i++){
+    const baseX = (vw / (beamCount + 1)) * (i + 1);
+    const sway = Math.sin(now * 0.0008 + i) * vw * 0.04;
+    const topX = baseX + sway;
+    const grad = ctx.createLinearGradient(baseX, vh, topX, vh * 0.25);
+    grad.addColorStop(0, 'rgba(80,160,255,0.0)');
+    grad.addColorStop(0.4, 'rgba(80,160,255,0.18)');
+    grad.addColorStop(1, 'rgba(80,160,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(baseX - vw * 0.08, vh);
+    ctx.lineTo(topX, vh * 0.22);
+    ctx.lineTo(baseX + vw * 0.08, vh);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawOpeningStage(now){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const grad = ctx.createLinearGradient(0,0,0,vh);
-  grad.addColorStop(0, '#051427');
-  grad.addColorStop(1, '#0c2b4a');
-  ctx.fillStyle = grad;
+  ctx.fillStyle = '#04060d';
   ctx.fillRect(0,0,vw,vh);
+  drawStars(now);
+  drawProjectorLights(now);
 
   updateFireworks();
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
   openingStage.fireworks.forEach(p => {
     const alpha = 1 - p.life / p.ttl;
-    ctx.fillStyle = hexToRgba(p.color, alpha);
+    const flicker = 0.7 + p.twinkle * Math.sin((p.x + p.y + now) * 0.01);
+    if(p.glow){
+      ctx.fillStyle = `hsla(${p.hue},${p.sat}%,65%,${alpha * 0.35})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = `hsla(${p.hue},${p.sat}%,70%,${alpha * flicker})`;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
     ctx.fill();
   });
   ctx.restore();
@@ -294,10 +372,10 @@ function drawOpeningStage(now){
 function drawOlympicRings(now){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const ringSize = Math.min(vw, vh) * 0.12;
-  const gap = ringSize * 0.1;
+  const ringSize = Math.min(vw, vh) * 0.14;
+  const gap = ringSize * 0.2;
   const centerX = vw / 2;
-  const centerY = vh / 2;
+  const centerY = vh / 2.1;
 
   const rings = [
     {x: centerX - ringSize - gap, y: centerY - ringSize * 0.25, color: '#1e88e5'},
@@ -326,17 +404,17 @@ function spawnSnowBurst(){
   const cannon = getCannonBounds();
   const startX = cannon.x + cannon.w * 0.7;
   const startY = cannon.y + cannon.h * 0.2;
-  for(let i=0;i<70;i++){
-    const angle = (-Math.PI / 4) + Math.random() * (Math.PI / 3);
-    const speed = 1 + Math.random() * 2.4;
+  for(let i=0;i<170;i++){
+    const angle = (-Math.PI / 3.4) + Math.random() * (Math.PI / 2.2);
+    const speed = 2.8 + Math.random() * 4.2;
     snowStage.particles.push({
       x: startX,
       y: startY,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       life: 0,
-      ttl: 100 + Math.random() * 60,
-      size: 1.8 + Math.random() * 2.8,
+      ttl: 130 + Math.random() * 80,
+      size: 2.6 + Math.random() * 4.2,
     });
   }
 }
@@ -355,8 +433,8 @@ function drawSnowStage(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const grad = ctx.createLinearGradient(0,0,0,vh);
-  grad.addColorStop(0, '#9fd3ff');
-  grad.addColorStop(1, '#e8f5ff');
+  grad.addColorStop(0, '#60b6ff');
+  grad.addColorStop(1, '#d8f0ff');
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,vw,vh);
 
