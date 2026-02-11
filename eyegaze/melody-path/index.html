@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="translate" data-fr="Chemin mélodique" data-en="Melody Path" data-ja="メロディーの道">Chemin mélodique</title>
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-1: #0b0f1c;
+      --bg-2: #151c2f;
+      --accent: #57d9ff;
+      --accent-soft: rgba(87, 217, 255, 0.18);
+      --node: #f4f7ff;
+      --node-active: #ffe680;
+      --node-glow: rgba(255, 230, 128, 0.5);
+      --path-glow: rgba(87, 217, 255, 0.6);
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(circle at top, var(--bg-2), var(--bg-1));
+      color: #f5f7ff;
+      min-height: 100vh;
+    }
+
+    body.menu-open {
+      background: #0a0d17;
+    }
+
+    .game-shell {
+      display: none;
+      min-height: 100vh;
+      padding: 48px 6vw 32px;
+      box-sizing: border-box;
+    }
+
+    body.playing .game-shell {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    .hero {
+      max-width: 640px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 3vw, 2.8rem);
+      margin-bottom: 8px;
+    }
+
+    .hero p {
+      margin: 0;
+      opacity: 0.8;
+      font-size: 1.1rem;
+      line-height: 1.5;
+    }
+
+    .path-stage {
+      position: relative;
+      flex: 1;
+      min-height: 380px;
+      border-radius: 28px;
+      background: linear-gradient(135deg, rgba(87, 217, 255, 0.08), rgba(21, 28, 47, 0.2));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 60px rgba(7, 13, 26, 0.5);
+      overflow: hidden;
+    }
+
+    .path-stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 20% 20%, rgba(87, 217, 255, 0.12), transparent 60%),
+        radial-gradient(circle at 80% 70%, rgba(255, 230, 128, 0.1), transparent 55%);
+      pointer-events: none;
+    }
+
+    svg.path-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .path-line {
+      fill: none;
+      stroke: rgba(87, 217, 255, 0.4);
+      stroke-width: 6;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 10px var(--path-glow));
+    }
+
+    .path-progress {
+      fill: none;
+      stroke: #ffe680;
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 1400;
+      stroke-dashoffset: 1400;
+      filter: drop-shadow(0 0 14px var(--node-glow));
+      transition: stroke-dashoffset 0.6s ease;
+    }
+
+    .path-node {
+      position: absolute;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #ffffff, #d9e3ff);
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      display: grid;
+      place-items: center;
+      color: #0d1424;
+      font-weight: 700;
+      font-size: 1.2rem;
+      letter-spacing: 0.02em;
+      box-shadow: 0 10px 30px rgba(5, 12, 24, 0.4);
+      transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+      cursor: pointer;
+    }
+
+    .path-node.active {
+      background: radial-gradient(circle at 30% 30%, #fff5c4, #f7d56b);
+      box-shadow: 0 0 0 6px rgba(255, 230, 128, 0.2), 0 14px 35px rgba(255, 230, 128, 0.45);
+      transform: scale(1.05);
+    }
+
+    .path-node.completed {
+      background: radial-gradient(circle at 30% 30%, #e6f4ff, #9fdcff);
+      opacity: 0.85;
+    }
+
+    .path-node .dwell-ring {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      opacity: 0;
+      transform: scale(0.6);
+    }
+
+    .path-node.charging .dwell-ring {
+      animation: dwellRing var(--dwell-duration, 1500ms) linear forwards;
+    }
+
+    @keyframes dwellRing {
+      0% {
+        transform: scale(0.6);
+        opacity: 0.2;
+        border-color: rgba(87, 217, 255, 0.3);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+        border-color: rgba(255, 230, 128, 0.9);
+      }
+    }
+
+    .hint-pill {
+      align-self: flex-start;
+      padding: 10px 18px;
+      border-radius: 999px;
+      background: rgba(87, 217, 255, 0.18);
+      border: 1px solid rgba(87, 217, 255, 0.35);
+      font-size: 0.95rem;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(10px);
+    }
+
+    .note-label {
+      font-size: 0.95rem;
+      font-weight: 600;
+      opacity: 0.65;
+    }
+
+    @media (max-width: 800px) {
+      .path-node {
+        width: 72px;
+        height: 72px;
+        font-size: 1rem;
+      }
+
+      .game-shell {
+        padding: 32px 5vw 24px;
+      }
+    }
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body class="menu-open">
+  <div id="menu-placeholder"></div>
+
+  <main class="game-shell">
+    <div class="hero">
+      <h1 class="translate" data-fr="Chemin mélodique" data-en="Melody Path" data-ja="メロディーの道">Chemin mélodique</h1>
+      <p class="translate" data-fr="Suivez la trajectoire lumineuse. Fixez chaque étoile pour jouer une note et créer une mélodie simple." data-en="Follow the glowing path. Dwell on each star to play a note and build a simple melody." data-ja="光る道をたどり、星を見つめて音を鳴らしましょう。">Suivez la trajectoire lumineuse. Fixez chaque étoile pour jouer une note et créer une mélodie simple.</p>
+    </div>
+
+    <div class="hint-pill translate" data-fr="Commencez par la première étoile dorée." data-en="Start with the first golden star." data-ja="最初の金色の星から始めましょう。">Commencez par la première étoile dorée.</div>
+
+    <section class="path-stage" aria-label="Melody path">
+      <svg class="path-svg" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
+        <path class="path-line" d="M 80 420 C 180 320, 280 340, 360 260 C 440 180, 540 220, 620 150 C 700 80, 820 100, 920 180" />
+        <path id="pathProgress" class="path-progress" d="M 80 420 C 180 320, 280 340, 360 260 C 440 180, 540 220, 620 150 C 700 80, 820 100, 920 180" />
+      </svg>
+
+      <div class="path-node" data-note="C4" style="left: 6%; top: 70%;">
+        <div class="dwell-ring"></div>
+        <span>1</span>
+      </div>
+      <div class="path-node" data-note="D4" style="left: 23%; top: 56%;">
+        <div class="dwell-ring"></div>
+        <span>2</span>
+      </div>
+      <div class="path-node" data-note="E4" style="left: 36%; top: 46%;">
+        <div class="dwell-ring"></div>
+        <span>3</span>
+      </div>
+      <div class="path-node" data-note="G4" style="left: 51%; top: 34%;">
+        <div class="dwell-ring"></div>
+        <span>4</span>
+      </div>
+      <div class="path-node" data-note="A4" style="left: 66%; top: 26%;">
+        <div class="dwell-ring"></div>
+        <span>5</span>
+      </div>
+      <div class="path-node" data-note="G4" style="left: 82%; top: 34%;">
+        <div class="dwell-ring"></div>
+        <span>6</span>
+      </div>
+      <div class="path-node" data-note="E4" style="left: 92%; top: 50%;">
+        <div class="dwell-ring"></div>
+        <span>7</span>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/eyegazeMenuLoader.js"></script>
+  <script>
+    const nodes = Array.from(document.querySelectorAll('.path-node'));
+    const progressPath = document.getElementById('pathProgress');
+    let activeIndex = 0;
+    let hoverTimeout;
+    let synth;
+
+    function setActiveNode(index) {
+      nodes.forEach((node, nodeIndex) => {
+        node.classList.toggle('active', nodeIndex === index);
+      });
+      const progress = index / (nodes.length - 1);
+      progressPath.style.strokeDashoffset = `${1400 - 1400 * progress}`;
+    }
+
+    function clearHover(node) {
+      clearTimeout(hoverTimeout);
+      node.classList.remove('charging');
+    }
+
+    function playNote(note) {
+      if (!synth || eyegazeSettings.sfxMuted) return;
+      const volume = Math.max(-60, -60 + (eyegazeSettings.sfxVolume / 100) * 60);
+      synth.volume.value = volume;
+      synth.triggerAttackRelease(note, '8n');
+    }
+
+    function completeNode(node) {
+      node.classList.add('completed');
+      node.classList.remove('charging');
+      playNote(node.dataset.note);
+      activeIndex += 1;
+      if (activeIndex >= nodes.length) {
+        activeIndex = 0;
+        nodes.forEach(target => target.classList.remove('completed'));
+      }
+      setActiveNode(activeIndex);
+    }
+
+    function startHover(node) {
+      if (nodes[activeIndex] !== node) return;
+      clearTimeout(hoverTimeout);
+      node.style.setProperty('--dwell-duration', `${eyegazeSettings.dwellTime}ms`);
+      node.classList.add('charging');
+      hoverTimeout = setTimeout(() => completeNode(node), eyegazeSettings.dwellTime);
+    }
+
+    function stopHover(node) {
+      clearHover(node);
+    }
+
+    function bindNodeEvents() {
+      nodes.forEach(node => {
+        node.addEventListener('pointerenter', () => startHover(node));
+        node.addEventListener('pointerleave', () => stopHover(node));
+      });
+    }
+
+    function startGame() {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+      }
+
+      Tone.start();
+      synth = new Tone.Synth({
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.02, decay: 0.2, sustain: 0.2, release: 0.8 }
+      }).toDestination();
+
+      document.body.classList.remove('menu-open');
+      document.body.classList.add('playing');
+      eyegazeSettings.hideOverlay();
+      setActiveNode(activeIndex);
+    }
+
+    loadEyegazeMenu({
+      titleTranslations: {
+        fr: 'Chemin mélodique',
+        en: 'Melody Path',
+        ja: 'メロディーの道'
+      }
+    }).then(() => {
+      initEyegazeMenu();
+      document.getElementById('startButton').addEventListener('click', startGame);
+      bindNodeEvents();
+      applyEyegazeTranslations(eyegazeMenuLang);
+    });
+  </script>
+</body>
+</html>
