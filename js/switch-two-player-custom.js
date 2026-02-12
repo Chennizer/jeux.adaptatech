@@ -161,6 +161,7 @@ async function makeThumbnailFromVideo(srcOrFile) {
 /* File System Access + IndexedDB persistence for the selected folder */
 const FS_DB_NAME = 'custom-video-handles';
 const FS_STORE = 'handles';
+const FILE_HANDLES_KEY = 'video-files';
 const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
 function idbOpenFS() {
   return new Promise((res, rej) => {
@@ -195,6 +196,44 @@ async function loadRepoHandle() {
       g.onerror = () => res(null);
     });
   } catch { return null; }
+}
+
+async function saveFileHandles(handles) {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).put(handles, FILE_HANDLES_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch {}
+}
+
+async function loadFileHandles() {
+  try {
+    const db = await idbOpenFS();
+    return new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readonly');
+      const g = tx.objectStore(FS_STORE).get(FILE_HANDLES_KEY);
+      g.onsuccess = () => res(g.result || []);
+      g.onerror = () => res([]);
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function clearFileHandles() {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).delete(FILE_HANDLES_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => res();
+    });
+  } catch {}
 }
 async function* iterVideos(dirHandle) {
   for await (const entry of dirHandle.values()) {
@@ -507,6 +546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let shuffleEnabled = false; // optional toggle if you add it to miscOptions
   const YT_STORAGE_KEY = 'customYoutubeUrls';
   const YT_CATEGORY_STORAGE_KEY = 'customYoutubeCategories';
+  const supportsYoutubeCategories = !!(urlVideoList && categorySelect);
 
   const DEFAULT_CATEGORY_NAME = 'All videos';
   const CATEGORY_ENABLED_CLASS = 'categories-enabled';
@@ -543,6 +583,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function getCategoryState() {
+    if (!supportsYoutubeCategories) return null;
     try {
       const state = JSON.parse(localStorage.getItem(YT_CATEGORY_STORAGE_KEY) || 'null');
       if (!state || !Array.isArray(state.categories)) return state;
@@ -579,9 +620,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
   function setCategoryState(state) {
+    if (!supportsYoutubeCategories) return;
     try { localStorage.setItem(YT_CATEGORY_STORAGE_KEY, JSON.stringify(state)); } catch {}
   }
   function isCategoriesEnabled(state = getCategoryState()) {
+    if (!supportsYoutubeCategories) return false;
     return !!(state && state.enabled);
   }
   function ensureCategoryStateFromUrls(urls) {
@@ -666,6 +709,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { localStorage.removeItem(LOCAL_ORDERS_KEY); } catch {}
     clearHidden();              // NEW: forget hidden exclusions
     await deleteRepoHandle();   // NEW: forget saved folder handle
+    await clearFileHandles();
 
     // Reset selection / numbering / UI
     selectedMedia = [];
@@ -960,6 +1004,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function applyCategoryButtons(card) {
+    if (!supportsYoutubeCategories) return;
     if (!card) return;
     const existing = card.querySelector('.category-chip-group');
     if (existing) existing.remove();
@@ -1050,6 +1095,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function setCategoryControlsVisible(visible) {
+    if (!supportsYoutubeCategories) return;
     const display = visible ? 'inline-flex' : 'none';
     if (categorySelect) {
       categorySelect.style.display = visible ? 'inline-block' : 'none';
@@ -1064,6 +1110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderCategorySelect(state) {
+    if (!supportsYoutubeCategories) return;
     if (!categorySelect) return;
     categorySelect.innerHTML = '';
     if (!state || !Array.isArray(state.categories) || !state.categories.length) return;
@@ -1207,6 +1254,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function loadCategoryById(categoryId) {
+    if (!supportsYoutubeCategories) return;
     if (!urlVideoList) return;
     const state = getCategoryState();
     if (!state || !Array.isArray(state.categories)) return;
@@ -1293,11 +1341,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function closeAddCategoryModalDialog() {
+    if (!supportsYoutubeCategories) return;
     if (!addCategoryModal) return;
     addCategoryModal.style.display = 'none';
   }
 
   function saveCategoryFromModal() {
+    if (!supportsYoutubeCategories) return;
     if (!addCategoryNameInput) return;
     const name = addCategoryNameInput.value.trim();
     if (!name) return;
@@ -1312,6 +1362,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function addNewCategory() {
+    if (!supportsYoutubeCategories) return;
     openAddCategoryModal();
   }
 
@@ -1407,9 +1458,45 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Local file uploads with thumbnails
   if (addVideoFileButton && addVideoInput && localVideoList) {
-    addVideoFileButton.addEventListener('click', () => addVideoInput.click());
+    addVideoFileButton.addEventListener('click', async () => {
+      if (window.showOpenFilePicker) {
+        try {
+          const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [{ description: 'Videos', accept: { 'video/*': ['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.m4v'] } }]
+          });
+
+          await deleteRepoHandle();
+          await clearFileHandles();
+          await saveFileHandles(handles);
+
+          localVideoList.innerHTML = '';
+          for (const h of handles) {
+            try {
+              const file = await h.getFile();
+              const src = URL.createObjectURL(file);
+              const key = makeLocalKey(file.name, file.size, file.lastModified);
+              const card = await buildVideoCardElement({ src, name: file.name, key });
+              localVideoList.appendChild(card);
+              initCard(card);
+            } catch {}
+          }
+
+          updateSelectedMedia();
+          renumberCards();
+          saveLocalOrderForCurrentSet();
+          return;
+        } catch {}
+      }
+      addVideoInput.click();
+    });
+
     addVideoInput.addEventListener('change', async () => {
+      await deleteRepoHandle();
+      await clearFileHandles();
+
       const files = Array.from(addVideoInput.files);
+      localVideoList.innerHTML = '';
       for (const file of files) {
         const src = URL.createObjectURL(file); // transient across reloads; key keeps order stable within session
         const key = makeLocalKey(file.name, file.size, file.lastModified);
@@ -2273,6 +2360,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const handle = await window.showDirectoryPicker();
       repoHandle = handle;
       await saveRepoHandle(handle);
+      await clearFileHandles();
       await populateFromRepo(repoHandle);
     } catch {}
   }
@@ -2288,7 +2376,29 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (perm === 'granted') {
             repoHandle = saved;
             await populateFromRepo(repoHandle);
+            return;
           }
+        }
+
+        const savedFiles = await loadFileHandles();
+        if (localVideoList && Array.isArray(savedFiles) && savedFiles.length) {
+          localVideoList.innerHTML = '';
+          for (const handle of savedFiles) {
+            let perm = await handle.queryPermission?.({ mode: 'read' });
+            if (perm !== 'granted') {
+              perm = await handle.requestPermission?.({ mode: 'read' });
+            }
+            if (perm !== 'granted') continue;
+            const file = await handle.getFile();
+            const src = URL.createObjectURL(file);
+            const key = makeLocalKey(file.name, file.size, file.lastModified);
+            const card = await buildVideoCardElement({ src, name: file.name, key });
+            localVideoList.appendChild(card);
+            initCard(card);
+          }
+          updateSelectedMedia();
+          renumberCards();
+          saveLocalOrderForCurrentSet();
         }
       } catch {}
     })();
