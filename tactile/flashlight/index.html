@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-fr="Lampe torche tactile" data-en="Touch flashlight" data-ja="タッチ懐中電灯">Lampe torche tactile</title>
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+  <style>
+    :root {
+      --ui-bg: rgba(10, 10, 14, 0.82);
+      --ui-border: rgba(255, 255, 255, 0.18);
+      --ui-text: #fff;
+      --found: #8af58a;
+      --radius: 130px;
+      --overlay-darkness: 0.99;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      touch-action: none;
+      font-family: Arial, sans-serif;
+      color: var(--ui-text);
+    }
+
+    .scene {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: cover;
+      isolation: isolate;
+      filter: brightness(0.35);
+      transition: filter 650ms ease;
+      cursor: none;
+    }
+
+    .scene.scene-complete { filter: brightness(1); }
+
+    .picto {
+      position: absolute;
+      height: auto;
+      object-fit: contain;
+      pointer-events: none;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    .picto.found { opacity: 1; }
+    .picto.pop-reveal { animation: popReveal 420ms ease-out; }
+    .picto.fading-out {
+      opacity: 0 !important;
+      transition: opacity 5s linear;
+    }
+
+    @keyframes popReveal {
+      0% { transform: scale(0.55) rotate(-6deg); filter: drop-shadow(0 0 0 rgba(138, 245, 138, 0)); }
+      55% { transform: scale(1.22) rotate(3deg); filter: drop-shadow(0 0 20px rgba(138, 245, 138, 0.85)); }
+      100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55)); }
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle var(--radius) at var(--x, 50%) var(--y, 50%), rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.22) 30%, rgba(0, 0, 0, 0.82) 52%, rgba(0, 0, 0, calc(var(--overlay-darkness) - 0.01)) 72%, rgba(0, 0, 0, var(--overlay-darkness)) 100%);
+      transition: opacity 650ms ease;
+    }
+
+    .flashlight-cursor {
+      position: absolute;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 220, 0.95);
+      box-shadow:
+        0 0 0 4px rgba(255, 255, 180, 0.26),
+        0 0 26px rgba(255, 255, 170, 0.72),
+        inset 0 0 18px rgba(255, 255, 220, 0.5);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 120ms ease;
+      mix-blend-mode: screen;
+    }
+
+    .flashlight-cursor.visible {
+      opacity: 1;
+    }
+
+    .scene.scene-complete .overlay { opacity: 0; }
+
+    .ui {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: flex-end;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .panel {
+      background: var(--ui-bg);
+      border: 1px solid var(--ui-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      line-height: 1.35;
+      backdrop-filter: blur(2px);
+    }
+
+    .counter { font-weight: bold; white-space: nowrap; }
+    .counter.done { color: var(--found); }
+
+    .controls {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      display: flex;
+      gap: 8px;
+      z-index: 3;
+    }
+
+    button {
+      border: 1px solid var(--ui-border);
+      border-radius: 999px;
+      background: var(--ui-bg);
+      color: var(--ui-text);
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    .celebration {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 4;
+    }
+
+    .celebration.show { animation: bigCelebrate 1.3s ease-out; }
+
+    @keyframes bigCelebrate {
+      0% { opacity: 0; transform: scale(0.95); }
+      20%, 45% { opacity: 1; }
+      100% { opacity: 0; transform: scale(1.06); }
+    }
+
+    .celebration::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(255, 215, 0, 0.58), transparent 34%),
+        radial-gradient(circle at 78% 28%, rgba(138, 245, 138, 0.56), transparent 35%),
+        radial-gradient(circle at 50% 74%, rgba(0, 200, 255, 0.48), transparent 40%);
+    }
+
+    #control-panel-options { text-align: center; }
+    #options-inline-container > .options-column { align-items: center; gap: 18px; }
+    .menu-note { margin: 10px 0 0; color: #fff; }
+    .value-readout { font-size: 1rem; font-weight: 600; margin-top: 6px; color: #009688; }
+    .styled-select {
+      width: 85%;
+      max-width: 280px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: rgba(255,255,255,0.95);
+      padding: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #045f58;
+    }
+
+    @media (max-width: 900px) {
+      #options-inline-container { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-B45TJG4GBJ');
+</script>
+<body>
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" data-fr="Lampe torche tactile" data-en="Touch flashlight" data-ja="タッチ懐中電灯">Lampe torche tactile</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <p class="menu-note" data-fr="Règle les options puis commence la partie." data-en="Adjust options then start the game." data-ja="オプションを調整して開始してください。">Règle les options puis commence la partie.</p>
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label for="themeSelect" class="teal-label label-block" data-fr="Thème" data-en="Theme" data-ja="テーマ">Thème</label>
+            <select id="themeSelect" class="styled-select">
+              <option value="african_animals" selected>African animals</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="sizeSlider" class="teal-label label-block" data-fr="Taille des images" data-en="Image size" data-ja="画像サイズ">Taille des images</label>
+            <div class="value-readout"><span id="sizeDisplay">100</span>%</div>
+            <input type="range" id="sizeSlider" class="styled-slider" min="60" max="170" step="5" value="100">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="countSlider" class="teal-label label-block" data-fr="Nombre d'images" data-en="Number of images" data-ja="画像の数">Nombre d'images</label>
+            <div class="value-readout"><span id="countDisplay">8</span></div>
+            <input type="range" id="countSlider" class="styled-slider" min="1" max="8" step="1" value="8">
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+    </div>
+  </div>
+
+  <main id="scene" class="scene" aria-label="flashlight discovery scene" style="display:none;">
+    <div class="ui">
+      <div class="panel counter" id="counter">0 / 0</div>
+    </div>
+    <div class="overlay"></div>
+    <div class="flashlight-cursor" id="flashlightCursor"></div>
+    <div class="celebration" id="celebration"></div>
+    <div class="controls">
+      <button id="resetBtn" data-fr="Nouvelle partie" data-en="New round" data-ja="新しいラウンド">Nouvelle partie</button>
+      <button id="menuBtn" data-fr="Menu" data-en="Menu" data-ja="メニュー">Menu</button>
+      <button id="backBtn" data-fr="Retour" data-en="Back" data-ja="戻る">Retour</button>
+    </div>
+  </main>
+
+  <script src="../../js/translationmain.js"></script>
+  <script>
+    const scene = document.getElementById('scene');
+    const gameOptions = document.getElementById('game-options');
+    const counterEl = document.getElementById('counter');
+    const resetBtn = document.getElementById('resetBtn');
+    const menuBtn = document.getElementById('menuBtn');
+    const backBtn = document.getElementById('backBtn');
+    const celebrationEl = document.getElementById('celebration');
+    const flashlightCursor = document.getElementById('flashlightCursor');
+    const startButton = document.getElementById('startButton');
+
+    const themeSelect = document.getElementById('themeSelect');
+    const sizeSlider = document.getElementById('sizeSlider');
+    const sizeDisplay = document.getElementById('sizeDisplay');
+    const countSlider = document.getElementById('countSlider');
+    const countDisplay = document.getElementById('countDisplay');
+
+    const sceneConfig = {
+      theme: 'african_animals',
+      keyword: 'african',
+      category: 'animaux',
+      pictoCount: 8,
+      sizePercent: 100
+    };
+
+    async function enterFullscreen() {
+      const target = document.documentElement;
+      if (document.fullscreenElement) return;
+      try {
+        if (target.requestFullscreen) {
+          await target.requestFullscreen();
+        } else if (target.webkitRequestFullscreen) {
+          target.webkitRequestFullscreen();
+        }
+      } catch (error) {
+        console.warn('Fullscreen request failed:', error);
+      }
+    }
+
+    let hiddenItems = [];
+    let celebrationTimeout = null;
+    let roundResetTimeout = null;
+    let isRoundComplete = false;
+    let lastBackground = null;
+
+    function syncOptionDisplays() {
+      sizeDisplay.textContent = sizeSlider.value;
+      countDisplay.textContent = countSlider.value;
+      sceneConfig.sizePercent = Number(sizeSlider.value);
+      sceneConfig.pictoCount = Number(countSlider.value);
+      sceneConfig.theme = themeSelect.value;
+    }
+
+    function setLightPosition(clientX, clientY) {
+      if (isRoundComplete) return;
+      const rect = scene.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 100;
+      const y = ((clientY - rect.top) / rect.height) * 100;
+      scene.style.setProperty('--x', `${Math.max(0, Math.min(100, x))}%`);
+      scene.style.setProperty('--y', `${Math.max(0, Math.min(100, y))}%`);
+      if (flashlightCursor) {
+        flashlightCursor.style.left = `${clientX - rect.left}px`;
+        flashlightCursor.style.top = `${clientY - rect.top}px`;
+        flashlightCursor.classList.add('visible');
+      }
+      revealHitItems(clientX, clientY);
+    }
+
+    const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+    const rand = (min, max) => Math.random() * (max - min) + min;
+
+    async function loadSceneData() {
+      const pictosRes = await fetch('../../images/pictos/index.json');
+      const pictosData = await pictosRes.json();
+      return { pictosData };
+    }
+
+    function resolveThemeConfig() {
+      return {
+        african_animals: {
+          keyword: 'african',
+          category: 'animaux'
+        }
+      }[sceneConfig.theme] || { keyword: 'african', category: 'animaux' };
+    }
+
+    function findBackgroundName(keyword) {
+      const allBackgrounds = [
+        'africanbackground1.webp',
+        'africanbackground2.webp',
+        'africanbackground3.webp',
+        'moana-background.jpg',
+        'rocket/rocketbackground.png'
+      ];
+      const preferred = allBackgrounds.filter((file) => file.toLowerCase().includes(keyword));
+      const pool = preferred.length ? preferred : allBackgrounds;
+      const withoutLast = pool.filter((file) => file !== lastBackground);
+      const finalPool = withoutLast.length ? withoutLast : pool;
+      const pick = finalPool[Math.floor(Math.random() * finalPool.length)];
+      lastBackground = pick;
+      return pick;
+    }
+
+    function computePictoSizePx() {
+      const ratio = sceneConfig.sizePercent / 100;
+      const basis = Math.min(window.innerWidth, window.innerHeight);
+      return Math.max(44, Math.min(180, Math.round(basis * 0.115 * ratio)));
+    }
+
+    function drawItems(items, basePath) {
+      document.querySelectorAll('.picto').forEach((el) => el.remove());
+      hiddenItems = [];
+      const sizePx = computePictoSizePx();
+
+      for (const item of items) {
+        const img = document.createElement('img');
+        img.className = 'picto';
+        img.src = `${basePath}${item.file}`;
+        img.alt = item.name?.fr || item.file;
+        img.style.width = `${sizePx}px`;
+        img.style.left = `${rand(8, 84)}%`;
+        img.style.top = `${rand(15, 83)}%`;
+        scene.appendChild(img);
+        hiddenItems.push({ el: img, found: false });
+      }
+      updateCounter();
+    }
+
+    function revealHitItems(clientX, clientY) {
+      const radiusPx = 145;
+      let foundSomething = false;
+
+      hiddenItems.forEach((entry) => {
+        if (entry.found) return;
+        const r = entry.el.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const dist = Math.hypot(cx - clientX, cy - clientY);
+
+        if (dist <= radiusPx * 0.86) {
+          entry.found = true;
+          entry.el.classList.add('found');
+          entry.el.classList.remove('pop-reveal');
+          void entry.el.offsetWidth;
+          entry.el.classList.add('pop-reveal');
+          entry.el.style.outline = '4px solid rgba(138, 245, 138, 0.95)';
+          entry.el.style.borderRadius = '10px';
+          foundSomething = true;
+        }
+      });
+
+      if (foundSomething) updateCounter();
+
+      const found = hiddenItems.filter((item) => item.found).length;
+      if (found === hiddenItems.length && hiddenItems.length > 0 && !isRoundComplete) {
+        counterEl.classList.add('done');
+        completeRound();
+      }
+    }
+
+    function triggerBigCelebration() {
+      celebrationEl.classList.remove('show');
+      void celebrationEl.offsetWidth;
+      celebrationEl.classList.add('show');
+      if (celebrationTimeout) clearTimeout(celebrationTimeout);
+      celebrationTimeout = setTimeout(() => celebrationEl.classList.remove('show'), 1300);
+    }
+
+    function completeRound() {
+      isRoundComplete = true;
+      scene.classList.add('scene-complete');
+      triggerBigCelebration();
+      hiddenItems.forEach((item) => item.el.classList.add('fading-out'));
+      if (roundResetTimeout) clearTimeout(roundResetTimeout);
+      roundResetTimeout = setTimeout(() => initRound(), 5000);
+    }
+
+    function updateCounter() {
+      const found = hiddenItems.filter((item) => item.found).length;
+      counterEl.textContent = `${found} / ${hiddenItems.length}`;
+      counterEl.classList.toggle('done', found === hiddenItems.length && hiddenItems.length > 0);
+    }
+
+    async function initRound() {
+      if (roundResetTimeout) {
+        clearTimeout(roundResetTimeout);
+        roundResetTimeout = null;
+      }
+      isRoundComplete = false;
+      scene.classList.remove('scene-complete');
+
+      syncOptionDisplays();
+      const selectedTheme = resolveThemeConfig();
+      sceneConfig.keyword = selectedTheme.keyword;
+      sceneConfig.category = selectedTheme.category;
+
+      const { pictosData } = await loadSceneData();
+      const background = findBackgroundName(sceneConfig.keyword);
+      scene.style.backgroundImage = background ? `url(../../images/${background})` : 'none';
+
+      const allCategoryItems = pictosData?.categories?.[sceneConfig.category]?.items || [];
+      const validItems = allCategoryItems.filter((item) => item?.file && !/hcow\.png/i.test(item.file));
+      const chosenItems = shuffle(validItems).slice(0, sceneConfig.pictoCount);
+      drawItems(chosenItems, pictosData.base || '../../images/pictos/');
+
+      celebrationEl.classList.remove('show');
+      scene.style.setProperty('--x', '50%');
+      scene.style.setProperty('--y', '50%');
+    }
+
+    scene.addEventListener('pointermove', (event) => setLightPosition(event.clientX, event.clientY));
+    scene.addEventListener('pointerdown', (event) => setLightPosition(event.clientX, event.clientY));
+    scene.addEventListener('pointerleave', () => {
+      flashlightCursor?.classList.remove('visible');
+    });
+
+    scene.addEventListener('touchmove', (event) => {
+      if (!event.touches[0]) return;
+      setLightPosition(event.touches[0].clientX, event.touches[0].clientY);
+    }, { passive: true });
+
+    scene.addEventListener('touchend', () => {
+      flashlightCursor?.classList.remove('visible');
+    });
+
+    sizeSlider.addEventListener('input', syncOptionDisplays);
+    countSlider.addEventListener('input', syncOptionDisplays);
+    themeSelect.addEventListener('change', syncOptionDisplays);
+
+    startButton.addEventListener('click', async () => {
+      await enterFullscreen();
+      gameOptions.style.display = 'none';
+      scene.style.display = 'block';
+      await initRound();
+    });
+
+    menuBtn.addEventListener('click', () => {
+      gameOptions.style.display = 'block';
+      scene.style.display = 'none';
+      flashlightCursor?.classList.remove('visible');
+    });
+
+    resetBtn.addEventListener('click', () => initRound());
+    backBtn.addEventListener('click', () => { window.location.href = '../index.html'; });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      syncOptionDisplays();
+      if (typeof applyTranslations === 'function') {
+        applyTranslations(localStorage.getItem('language') || 'fr');
+      }
+    });
+  </script>
+</body>
+</html>
