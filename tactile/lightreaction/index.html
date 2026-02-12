@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Touch the Light</title>
+  <style>
+    :root{
+      --bg: #000;
+      --ui: rgba(255,255,255,0.85);
+      --ui2: rgba(255,255,255,0.6);
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      cursor: default;
+    }
+
+    /* Start overlay */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at center, rgba(20,20,20,0.35) 0%, rgba(0,0,0,0.92) 70%);
+      z-index: 20;
+    }
+
+    .panel {
+      width: min(560px, calc(100vw - 32px));
+      border-radius: 18px;
+      padding: 18px 18px 16px;
+      background: rgba(15,15,15,0.72);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 18px 80px rgba(0,0,0,0.6);
+      color: var(--ui);
+    }
+
+    .panel h1{
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .panel p{
+      margin: 0 0 14px;
+      color: var(--ui2);
+      line-height: 1.35;
+      font-size: 14px;
+    }
+
+    .row{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .btn{
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.10);
+      color: var(--ui);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 650;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .btn:hover{ background: rgba(255,255,255,0.14); }
+    .btn:active{ transform: translateY(1px); }
+
+    .hint{
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+    }
+
+    /* ---------------------------
+       ALIVE / BREATHING SHINY SPOT
+       --------------------------- */
+    .spot {
+      position: absolute;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      outline: none;
+      border: none;
+
+      background:
+        radial-gradient(circle at 30% 30%,
+          rgba(255,255,255,0.95) 0%,
+          rgba(255,255,255,0.30) 18%,
+          rgba(255,255,255,0.0) 36%),
+        radial-gradient(circle at 50% 50%,
+          var(--spotColor) 0%,
+          var(--spotColor) 66%,
+          rgba(0,0,0,0.0) 78%);
+
+      box-shadow:
+        0 0 18px var(--spotGlow),
+        0 0 55px var(--spotGlow),
+        0 0 120px rgba(255,255,255,0.06);
+
+      animation:
+        breathe 2.8s ease-in-out infinite,
+        drift 3.6s ease-in-out infinite;
+      will-change: transform, filter;
+    }
+
+    .spot::after {
+      content: "";
+      position: absolute;
+      inset: -22%;
+      border-radius: 50%;
+      background: radial-gradient(circle,
+        rgba(255,255,255,0.00) 30%,
+        var(--spotGlow) 55%,
+        rgba(0,0,0,0.00) 74%);
+      opacity: 0.65;
+      filter: blur(10px);
+      transform: scale(0.92);
+      animation: aura 2.8s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes breathe {
+      0%, 100% { filter: brightness(1.05) saturate(1.18); }
+      50%      { filter: brightness(1.28) saturate(1.45); }
+    }
+    @keyframes aura {
+      0%, 100% { opacity: 0.55; transform: scale(0.90); filter: blur(11px); }
+      50%      { opacity: 0.90; transform: scale(1.06); filter: blur(14px); }
+    }
+    @keyframes drift {
+      0%, 100% { transform: translate(-50%, -50%) scale(1.00); }
+      33%      { transform: translate(calc(-50% + 2px), calc(-50% - 1px)) scale(1.01); }
+      66%      { transform: translate(calc(-50% - 2px), calc(-50% + 1px)) scale(0.99); }
+    }
+
+    /* Optional vignette */
+    #vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at center,
+        rgba(0,0,0,0) 45%,
+        rgba(0,0,0,0.38) 100%
+      );
+      z-index: 1;
+    }
+
+    /* ---------------------------
+       SLOW SCREEN FLASH (2s)
+       --------------------------- */
+    #screenFlash {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      background: var(--flashColor);
+      z-index: 8;
+    }
+
+    #screenFlash.flash2s {
+      animation: flash2s 2s ease-out forwards;
+    }
+
+    @keyframes flash2s {
+      0%   { opacity: 0; }
+      10%  { opacity: 0.55; }
+      60%  { opacity: 0.40; }
+      100% { opacity: 0; }
+    }
+
+    /* ---------------------------
+       SLOW RIPPLE (4s)
+       Spreads to cover the whole screen
+       --------------------------- */
+    .ripple {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(0.02);
+      pointer-events: none;
+      z-index: 9;
+
+      /* ring-ish look */
+      background: radial-gradient(circle,
+        rgba(0,0,0,0) 55%,
+        rgba(255,255,255,0.65) 58%,
+        var(--rippleColor) 62%,
+        rgba(0,0,0,0) 70%
+      );
+
+      mix-blend-mode: screen;
+      opacity: 0.9;
+      animation: rippleOut 4s ease-out forwards;
+      filter: blur(0.15px);
+    }
+
+    @keyframes rippleOut {
+      0%   { opacity: 0.0; transform: translate(-50%, -50%) scale(0.05); }
+      8%   { opacity: 0.85; }
+      55%  { opacity: 0.55; }
+      100% { opacity: 0.0; transform: translate(-50%, -50%) scale(var(--rippleScale)); }
+    }
+  </style>
+</head>
+<body>
+  <div id="stage" aria-label="Touch the light game"></div>
+
+  <!-- slow flash + ripple layers -->
+  <div id="screenFlash"></div>
+
+  <div id="vignette"></div>
+
+  <div id="overlay">
+    <div class="panel" role="dialog" aria-modal="true" aria-label="Start game">
+
+      <div class="row">
+        <button id="startBtn" class="btn">Start </button>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const screenFlash = document.getElementById('screenFlash');
+
+    const SETTINGS = {
+      minSize: 140,
+      maxSize: 270,
+      spawnDelayMs: 260,
+      edgePadding: 32,
+      flashDurationMs: 2000,
+      rippleDurationMs: 4000
+    };
+
+    const SPARKLE_COLORS = [
+      { color: "rgba(255, 0, 200, 1)",  glow: "rgba(255, 0, 200, 0.55)" }, // Magenta
+      { color: "rgba(255, 60, 180, 1)", glow: "rgba(255, 60, 180, 0.55)" }, // Hot Pink
+      { color: "rgba(0, 255, 220, 1)",  glow: "rgba(0, 255, 220, 0.55)" }, // Electric Teal
+      { color: "rgba(0, 210, 255, 1)",  glow: "rgba(0, 210, 255, 0.55)" }, // Neon Cyan
+      { color: "rgba(170, 0, 255, 1)",  glow: "rgba(170, 0, 255, 0.55)" }, // Laser Purple
+      { color: "rgba(160, 255, 0, 1)",  glow: "rgba(160, 255, 0, 0.55)" }, // Bright Lime
+      { color: "rgba(255, 220, 0, 1)",  glow: "rgba(255, 220, 0, 0.55)" }, // Golden Yellow
+      { color: "rgba(255, 140, 0, 1)",  glow: "rgba(255, 140, 0, 0.55)" }, // Neon Orange
+      { color: "rgba(0, 120, 255, 1)",  glow: "rgba(0, 120, 255, 0.55)" }, // Electric Blue
+      { color: "rgba(255, 40, 60, 1)",  glow: "rgba(255, 40, 60, 0.55)" }  // Ruby Red
+    ];
+
+    let spotEl = null;
+    let isPlaying = false;
+
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function pickRandomColor() {
+      return SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)];
+    }
+
+    function getStageRect() {
+      return stage.getBoundingClientRect();
+    }
+
+    function removeSpot() {
+      if (spotEl && spotEl.parentNode) {
+        spotEl.removeEventListener('pointerdown', onSpotHit);
+        spotEl.parentNode.removeChild(spotEl);
+      }
+      spotEl = null;
+    }
+
+    function spawnSpot() {
+      removeSpot();
+
+      const rect = getStageRect();
+      const size = rand(SETTINGS.minSize, SETTINGS.maxSize);
+
+      const pad = SETTINGS.edgePadding + size * 0.35;
+      const x = rand(pad, rect.width - pad);
+      const y = rand(pad, rect.height - pad);
+
+      const c = pickRandomColor();
+
+      const el = document.createElement('div');
+      el.className = 'spot';
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.style.setProperty('--spotColor', c.color);
+      el.style.setProperty('--spotGlow', c.glow);
+
+      // organic timing so it feels alive
+      const breatheDur = rand(2.4, 3.4).toFixed(2);
+      const driftDur = rand(3.0, 4.2).toFixed(2);
+      const delay = (-rand(0, 1.6)).toFixed(2);
+      el.style.animationDuration = `${breatheDur}s, ${driftDur}s`;
+      el.style.animationDelay = `${delay}s, ${delay}s`;
+
+      el.dataset.flashColor = c.color;   // full-screen flash uses solid color
+      el.dataset.rippleColor = c.glow;   // ripple uses glow color
+
+      el.addEventListener('pointerdown', onSpotHit, { passive: false });
+      stage.appendChild(el);
+      spotEl = el;
+    }
+
+    // Flash whole screen with the circle color for ~2 seconds
+    function triggerScreenFlash(color) {
+      screenFlash.style.setProperty('--flashColor', color);
+
+      screenFlash.classList.remove('flash2s');
+      void screenFlash.offsetWidth; // restart animation
+      screenFlash.classList.add('flash2s');
+    }
+
+    // Ripple spreads across the screen over 4 seconds
+    function triggerRipple(x, y, color) {
+      const rect = getStageRect();
+
+      // Maximum distance from (x,y) to any corner -> convert to scale
+      const corners = [
+        {x: 0, y: 0},
+        {x: rect.width, y: 0},
+        {x: 0, y: rect.height},
+        {x: rect.width, y: rect.height}
+      ];
+
+      let maxDist = 0;
+      for (const c of corners) {
+        const dx = c.x - x;
+        const dy = c.y - y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d > maxDist) maxDist = d;
+      }
+
+      // Ripple element starts at 10px diameter; scale needed to reach maxDist radius
+      // radius needed ≈ maxDist; initial radius ≈ 5px => scale ≈ maxDist / 5
+      const rippleScale = Math.max(20, (maxDist / 5)).toFixed(2);
+
+      const ripple = document.createElement('div');
+      ripple.className = 'ripple';
+      ripple.style.left = `${x}px`;
+      ripple.style.top = `${y}px`;
+      ripple.style.setProperty('--rippleColor', color);
+      ripple.style.setProperty('--rippleScale', rippleScale);
+
+      stage.appendChild(ripple);
+      ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
+    }
+
+    function onSpotHit(e) {
+      e.preventDefault();
+      if (!spotEl) return;
+
+      const x = parseFloat(spotEl.style.left);
+      const y = parseFloat(spotEl.style.top);
+
+      const flashColor = spotEl.dataset.flashColor || 'rgba(255,255,255,0.25)';
+      const rippleColor = spotEl.dataset.rippleColor || 'rgba(255,255,255,0.55)';
+
+      // Slow effects
+      triggerScreenFlash(flashColor);
+      triggerRipple(x, y, rippleColor);
+
+      // Continue gameplay (respawn quickly; effects keep running on top)
+      removeSpot();
+      setTimeout(spawnSpot, SETTINGS.spawnDelayMs);
+    }
+
+    async function requestFullscreen() {
+      const el = document.documentElement;
+      try {
+        if (document.fullscreenElement) return;
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+        else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+      } catch (_) {}
+    }
+
+    function startGame() {
+      overlay.style.display = 'none';
+      isPlaying = true;
+      spawnSpot();
+    }
+
+    startBtn.addEventListener('click', async () => {
+      await requestFullscreen();
+      startGame();
+    });
+
+    window.addEventListener('resize', () => {
+      if (!isPlaying) return;
+      spawnSpot();
+    });
+
+    overlay.addEventListener('click', async (e) => {
+      if (e.target === overlay) {
+        await requestFullscreen();
+        startGame();
+      }
+    });
+  </script>
+</body>
+</html>
