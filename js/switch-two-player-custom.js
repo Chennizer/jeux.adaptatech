@@ -1836,6 +1836,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function handleMediaEnd() {
+    if (youtubePlayer && typeof youtubePlayer.stopVideo === 'function') {
+      try {
+        youtubePlayer.stopVideo();
+        if (typeof youtubePlayer.clearVideo === 'function') youtubePlayer.clearVideo();
+      } catch {}
+    }
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mediaPlayer) mediaPlayer.style.display = 'none';
     if (mode === 'pressBetween') {
