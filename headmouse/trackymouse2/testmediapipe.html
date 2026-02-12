@@ -6,34 +6,29 @@
   <style>
     html,body{margin:0;height:100%;background:#1a1a1a;overflow:hidden}
     #video{
-      position:absolute;top:16px;left:16px;width:220px;height:165px;
+      position:absolute;top:16px;left:16px;
       object-fit:cover;border:2px solid #fff;border-radius:14px;
       box-shadow:0 0 18px #000a;z-index:2;
     }
-    #overlay{position:fixed;inset:0;pointer-events:none}
+    #overlay{
+      position:absolute;top:16px;left:16px;pointer-events:none;z-index:3;
+    }
   </style>
 </head>
 <body>
   <video id="video" autoplay muted playsinline></video>
   <canvas id="overlay"></canvas>
 
-  <script type="module">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection/dist/face-landmarks-detection.min.js"></script>
+  <script>
     (async () => {
-      /* ---------------------------------------------------------------
-         1.  Dynamically import TFJS (bundle) and the face-landmarks model
-             – no hard-coded “dist/…js” paths, so 404s disappear.
-      ----------------------------------------------------------------*/
-      const tf  = await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/+esm');
-      const fld = await import('https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@3.0.1/+esm');
-
       /* ---------------------------------------------------------------
          2.  DOM setup
       ----------------------------------------------------------------*/
       const video  = document.getElementById('video');
       const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('overlay'));
       const ctx    = canvas.getContext('2d');
-      const resize = () => { canvas.width = innerWidth; canvas.height = innerHeight; };
-      addEventListener('resize', resize); resize();
 
       /* ---------------------------------------------------------------
          3.  Webcam
@@ -41,43 +36,84 @@
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
       await new Promise(r => video.onloadedmetadata = r);
+      const {videoWidth:vw, videoHeight:vh} = video;
+      video.width = canvas.width = vw;
+      video.height = canvas.height = vh;
+      video.style.width = canvas.style.width = vw + 'px';
+      video.style.height = canvas.style.height = vh + 'px';
+
+      let smoothX = vw/2, smoothY = vh/2;
+      const SMOOTH = 0.2;
 
       /* ---------------------------------------------------------------
          4.  TFJS backend + model
       ----------------------------------------------------------------*/
-      await tf.setBackend('webgl'); await tf.ready();
+      await tf.setBackend('webgl');
+      await tf.ready();
 
-      const model = await fld.load(
-        fld.SupportedPackages.mediapipe_facemesh,
-        { maxFaces: 1, shouldLoadIrisModel: true }
+      const model = await faceLandmarksDetection.createDetector(
+        faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
+        { runtime: 'tfjs', maxFaces: 1, refineLandmarks: true }
       );
 
       /* ---------------------------------------------------------------
          5.  Helpers
       ----------------------------------------------------------------*/
-      const L=[468,469,470,471], R=[473,474,475,476];         // iris indices
-      const mid = (a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+      const LEFT = { iris:[468,469,470,471], corners:[33,133], lids:[159,145] };
+      const RIGHT = { iris:[473,474,475,476], corners:[263,362], lids:[386,374] };
+
+      function eyeGaze(eye, mesh){
+        const iris = eye.iris.map(i => mesh[i]);
+        const center = iris.reduce((s,p)=>({x:s.x+p.x,y:s.y+p.y}),{x:0,y:0});
+        center.x /= iris.length; center.y /= iris.length;
+
+        const [c1,c2] = eye.corners.map(i=>mesh[i]);
+        const [top,bottom] = eye.lids.map(i=>mesh[i]);
+        const hMin = Math.min(c1.x, c2.x), hMax = Math.max(c1.x, c2.x);
+        const vMin = Math.min(top.y, bottom.y), vMax = Math.max(top.y, bottom.y);
+        return {
+          x:(center.x-hMin)/(hMax-hMin),
+          y:(center.y-vMin)/(vMax-vMin)
+        };
+      }
 
       /* ---------------------------------------------------------------
          6.  Render loop
       ----------------------------------------------------------------*/
       async function draw(){
-        const faces = await model.estimateFaces({ input: video, flipHorizontal: true });
+        const faces = await model.estimateFaces(video, { flipHorizontal: true });
         ctx.clearRect(0,0,canvas.width,canvas.height);
 
         if (faces.length){
-          const mesh = faces[0].scaledMesh;
-          const l = L.map(i=>mesh[i]), r = R.map(i=>mesh[i]);
+          const mesh = faces[0].keypoints;
+          for (const {x,y} of mesh) {
+            ctx.beginPath();
+            ctx.arc(x,y,1.5,0,Math.PI*2);
+            ctx.fillStyle = '#0ff';
+            ctx.fill();
+          }
 
-          const lC = l.reduce((s,p)=>[s[0]+p[0],s[1]+p[1]],[0,0]).map(v=>v/l.length);
-          const rC = r.reduce((s,p)=>[s[0]+p[0],s[1]+p[1]],[0,0]).map(v=>v/r.length);
-          const gaze = mid(lC, rC);
+          const l = eyeGaze(LEFT, mesh);
+          const r = eyeGaze(RIGHT, mesh);
+          const normX = (l.x + r.x)/2;
+          const normY = (l.y + r.y)/2;
+          const screenX = normX * vw;
+          const screenY = normY * vh;
+          smoothX += SMOOTH * (screenX - smoothX);
+          smoothY += SMOOTH * (screenY - smoothY);
 
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(gaze[0], gaze[1], 24, 0, Math.PI*2);
-          ctx.fillStyle = 'rgba(255,215,0,.65)';
-          ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-          ctx.fill(); ctx.stroke();
+          ctx.moveTo(smoothX-20, smoothY);
+          ctx.lineTo(smoothX+20, smoothY);
+          ctx.moveTo(smoothX, smoothY-20);
+          ctx.lineTo(smoothX, smoothY+20);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(smoothX, smoothY, 4, 0, Math.PI*2);
+          ctx.fillStyle = '#ffd700';
+          ctx.fill();
         }
         requestAnimationFrame(draw);
       }
