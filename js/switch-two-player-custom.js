@@ -2409,13 +2409,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (pickFolderButton && 'showDirectoryPicker' in window) {
     pickFolderButton.addEventListener('click', chooseFolder);
-    (async () => {
-      try {
-        if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
+  }
+
+  (async () => {
+    try {
+      if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
+
+      // Restore individually-picked video files (when file handles are supported)
+      if ('showOpenFilePicker' in window) {
         const savedFiles = await loadFileHandles();
         if (savedFiles.length) {
           await populateFromFileHandles(savedFiles);
         }
+      }
+
+      // Restore previously-selected folder (if supported and permission is granted)
+      if ('showDirectoryPicker' in window) {
         const saved = await loadRepoHandle();
         if (saved) {
           const perm = await saved.requestPermission?.({mode:'read'});
@@ -2424,9 +2433,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             await populateFromRepo(repoHandle);
           }
         }
-      } catch {}
-    })();
-  }
+      }
+    } catch {}
+  })();
 
   // Misc dialog open/close
   miscOptionsButton.addEventListener('click', () => {
