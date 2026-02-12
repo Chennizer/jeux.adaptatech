@@ -1836,8 +1836,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function handleMediaEnd() {
+    if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo();
     if (youtubeDiv) youtubeDiv.style.display = 'none';
     if (mediaPlayer) mediaPlayer.style.display = 'none';
+    if (videoContainer) videoContainer.style.display = 'none';
     if (mode === 'pressBetween') {
       if (playedMedia.length < selectedMedia.length) {
         currentMediaIndex = getNextMediaIndex();
