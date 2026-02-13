@@ -162,7 +162,6 @@ async function makeThumbnailFromVideo(srcOrFile) {
 const FS_DB_NAME = 'custom-video-handles';
 const FS_STORE = 'handles';
 const FILE_HANDLES_KEY = 'video-files';
-const FILE_BLOBS_KEY = 'video-blobs';
 const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
 function idbOpenFS() {
   return new Promise((res, rej) => {
@@ -246,51 +245,7 @@ async function deleteFileHandles() {
   } catch {}
 }
 
-async function saveBlobFiles(files) {
-  try {
-    const existing = await loadBlobFiles();
-    const byKey = new Map(existing.map((item) => [item.key, item]));
-    for (const file of files || []) {
-      if (!file || !VIDEO_RX.test(file.name)) continue;
-      const key = makeLocalKey(file.name, file.size, file.lastModified);
-      byKey.set(key, { key, name: file.name, blob: file });
-    }
-    const db = await idbOpenFS();
-    await new Promise((res, rej) => {
-      const tx = db.transaction(FS_STORE, 'readwrite');
-      tx.objectStore(FS_STORE).put(Array.from(byKey.values()), FILE_BLOBS_KEY);
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-  } catch {}
-}
-async function loadBlobFiles() {
-  try {
-    const db = await idbOpenFS();
-    return await new Promise((res) => {
-      const tx = db.transaction(FS_STORE, 'readonly');
-      const g = tx.objectStore(FS_STORE).get(FILE_BLOBS_KEY);
-      g.onsuccess = () => {
-        const files = Array.isArray(g.result) ? g.result : [];
-        res(files.filter((f) => f && f.blob && VIDEO_RX.test(f.name || '')));
-      };
-      g.onerror = () => res([]);
-    });
-  } catch {
-    return [];
-  }
-}
-async function deleteBlobFiles() {
-  try {
-    const db = await idbOpenFS();
-    await new Promise((res, rej) => {
-      const tx = db.transaction(FS_STORE, 'readwrite');
-      tx.objectStore(FS_STORE).delete(FILE_BLOBS_KEY);
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-  } catch {}
-}
+
 async function* iterVideos(dirHandle) {
   for await (const entry of dirHandle.values()) {
     if (entry.kind !== 'file') continue;
@@ -499,6 +454,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistInput = document.getElementById('yt-playlist-url-input');
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
+  const localImportStatus = document.getElementById('local-import-status');
   const clearAllButton = document.getElementById('clear-all-button');
   const categoriesToggle = document.getElementById('categories-toggle');
   const categorySelect = document.getElementById('category-select') || document.getElementById('categorySelect');
@@ -514,6 +470,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
     pickFolderButton.style.display = 'none';
+  }
+
+  if (isLocalCustomPage && localImportStatus && !('showOpenFilePicker' in window)) {
+    localImportStatus.textContent = 'Ce navigateur ne peut pas mémoriser automatiquement les vidéos ajoutées individuellement.';
   }
 
   // Players / visuals
@@ -766,7 +726,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearHidden();              // NEW: forget hidden exclusions
     await deleteRepoHandle();   // NEW: forget saved folder handle
     await deleteFileHandles();
-    await deleteBlobFiles();
 
     // Reset selection / numbering / UI
     selectedMedia = [];
@@ -1528,19 +1487,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           const mergedHandles = [...existingHandles, ...handles];
           await saveFileHandles(mergedHandles);
 
-          // Also store blob fallback so these picks survive browsers/contexts
-          // where file handles are unavailable or permissions are later lost.
-          const pickedFiles = [];
-          for (const handle of handles) {
-            try {
-              const file = await handle.getFile();
-              if (file && VIDEO_RX.test(file.name)) pickedFiles.push(file);
-            } catch {}
-          }
-          if (pickedFiles.length) {
-            await saveBlobFiles(pickedFiles);
-          }
-
           await populateFromFileHandles(mergedHandles, repoHandle);
           return;
         } catch {}
@@ -1557,7 +1503,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         initCard(card);
       }
       addVideoInput.value = '';
-      await saveBlobFiles(files);
       updateSelectedMedia();
       renumberCards();
       saveLocalOrderForCurrentSet(); // persist order after adding
@@ -2361,14 +2306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return items;
   }
 
-  async function collectItemsFromBlobStorage() {
-    const stored = await loadBlobFiles();
-    return stored.map((item) => ({
-      file: item.blob,
-      key: item.key || makeLocalKey(item.name, item.blob?.size, item.blob?.lastModified),
-      name: item.name || item.blob?.name || 'video'
-    }));
-  }
+
 
   async function collectItemsFromRepo(handle) {
     const items = [];
@@ -2436,16 +2374,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function populateFromFileHandles(handles, folderHandle = null) {
     const fromHandles = await collectItemsFromFileHandles(handles);
-    const fromBlobs = await collectItemsFromBlobStorage();
     const fromRepo = await collectItemsFromRepo(folderHandle);
-    await renderCombinedLocalItems([...fromHandles, ...fromBlobs, ...fromRepo]);
+    await renderCombinedLocalItems([...fromHandles, ...fromRepo]);
   }
 
   async function populateFromRepo(handle, handles = []) {
     const fromRepo = await collectItemsFromRepo(handle);
     const fromHandles = await collectItemsFromFileHandles(handles);
-    const fromBlobs = await collectItemsFromBlobStorage();
-    await renderCombinedLocalItems([...fromHandles, ...fromBlobs, ...fromRepo]);
+    await renderCombinedLocalItems([...fromHandles, ...fromRepo]);
   }
 
   async function chooseFolder() {
@@ -2481,11 +2417,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (savedFiles.length || repoHandle) {
         await populateFromFileHandles(savedFiles, repoHandle);
-      } else {
-        const fromBlobs = await collectItemsFromBlobStorage();
-        if (fromBlobs.length) {
-          await renderCombinedLocalItems(fromBlobs);
-        }
       }
     } catch {}
   })();
