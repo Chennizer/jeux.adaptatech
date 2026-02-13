@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>Pulse de glacier — Jeu switch</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <link rel="stylesheet" href="../../css/otherswitch.css"/>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#041016;color:#fff;font-family:"Inter",system-ui,sans-serif;}
+    canvas{display:block;position:fixed;inset:0;z-index:0;}
+    #langToggle{position:fixed;top:14px;right:14px;z-index:10001;padding:.45rem 1rem;border-radius:999px;border:2px solid #7fe7ff;background:rgba(3,16,22,.8);color:#7fe7ff;font-weight:700;cursor:pointer;letter-spacing:.02em;}
+    #promptOverlay{position:fixed;inset:0;z-index:10000;background:rgba(0,4,12,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1.5rem;gap:1.25rem;}
+    #promptOverlay p{max-width:min(720px,85vw);font-size:1.2rem;line-height:1.6;}
+    #startButton{padding:1rem 2.4rem;border-radius:14px;border:none;background:#7fe7ff;color:#012f3d;font-size:1.25rem;font-weight:700;cursor:pointer;}
+    #startButton:hover{filter:brightness(1.1);} 
+  </style>
+</head>
+<body>
+  <button id="langToggle" title="Changer de langue / Switch language">FR / EN</button>
+  <div id="promptOverlay">
+    <p class="translate" data-fr="Appuyez sur Espace pour envoyer une onde lumineuse dans le lac gelé." data-en="Press Space to send a light wave across the frozen lake.">Appuyez sur Espace pour envoyer une onde lumineuse dans le lac gelé.</p>
+    <p class="translate" data-fr="Trois pressions rapides déclenchent une éruption cristalline." data-en="Three quick presses awaken a crystalline eruption.">Trois pressions rapides déclenchent une éruption cristalline.</p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+  <script>
+    let currentLang = (document.documentElement.lang || 'fr').toLowerCase() === 'en' ? 'en' : 'fr';
+    function applyTranslations(){
+      document.querySelectorAll('.translate').forEach(el=>{
+        const fr = el.getAttribute('data-fr');
+        const en = el.getAttribute('data-en');
+        const txt = currentLang === 'fr' ? fr : en;
+        if(txt != null){
+          if(['P','BUTTON','H1','H2','H3','DIV'].includes(el.tagName)) el.innerHTML = txt; else el.textContent = txt;
+        }
+      });
+      document.documentElement.lang = currentLang;
+      document.title = currentLang === 'fr' ? 'Pulse de glacier — Jeu switch' : 'Glacier Pulse — Switch game';
+    }
+    document.getElementById('langToggle').addEventListener('pointerup', ()=>{
+      currentLang = currentLang === 'fr' ? 'en' : 'fr';
+      applyTranslations();
+    });
+    applyTranslations();
+
+    let started = false;
+    let ripples = [];
+    let shards = [];
+    let glow = 0;
+    let pressTimes = [];
+    let lakeCenter;
+    let auroraBands = [];
+
+    function startExperience(){
+      if(started) return;
+      started = true;
+      document.getElementById('promptOverlay')?.remove();
+      document.getElementById('langToggle').style.display = 'none';
+      if (typeof fullscreen === 'function') { fullscreen(true); } else { document.documentElement.requestFullscreen?.(); }
+    }
+
+    document.getElementById('startButton').addEventListener('pointerup', (ev)=>{
+      ev.preventDefault();
+      startExperience();
+    });
+
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      lakeCenter = createVector(width/2, height*0.65);
+      angleMode(RADIANS);
+      createAurora();
+    }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+      lakeCenter = createVector(width/2, height*0.65);
+      createAurora();
+    }
+
+    function draw(){
+      drawSky();
+      drawAurora();
+      drawMountains();
+      drawLake();
+
+      ripples = ripples.filter(r => millis() - r.birth < r.life);
+      for(const r of ripples){
+        const age = millis() - r.birth;
+        const t = age / r.life;
+        const radius = r.startRadius + r.growth * easeOutCubic(t);
+        const alpha = 255 * (1 - t);
+        noFill();
+        stroke(r.color.levels[0], r.color.levels[1], r.color.levels[2], alpha);
+        strokeWeight(r.weight * (1 - t * 0.7));
+        ellipse(lakeCenter.x, lakeCenter.y, radius*2, radius*0.8);
+      }
+
+      shards = shards.filter(s => millis() - s.birth < s.life);
+      for(const s of shards){
+        const age = millis() - s.birth;
+        const t = age / s.life;
+        const pos = p5.Vector.add(s.pos, p5.Vector.mult(s.vel, easeOutQuad(t)));
+        const alpha = 255 * (1 - t);
+        push();
+        translate(pos.x, pos.y);
+        rotate(s.rot + s.spin * t);
+        fill(s.color.levels[0], s.color.levels[1], s.color.levels[2], alpha*0.7);
+        stroke(s.color.levels[0], s.color.levels[1], s.color.levels[2], alpha);
+        strokeWeight(1.5);
+        beginShape();
+        for(const pt of s.points){
+          vertex(pt.x, pt.y);
+        }
+        endShape(CLOSE);
+        pop();
+      }
+
+      if(glow > 0){
+        const g = glow;
+        glow = max(0, glow - 0.012);
+        noStroke();
+        fill(120,200,255, 80*g);
+        ellipse(lakeCenter.x, lakeCenter.y, width*0.9, height*0.45);
+      }
+    }
+
+    function drawSky(){
+      const topCol = color(6,22,38);
+      const midCol = color(12,40,66);
+      const botCol = color(7,20,30);
+      noFill();
+      for(let y=0;y<height;y++){
+        const t = y/height;
+        const blend = t < 0.55 ? lerpColor(topCol, midCol, constrain(t/0.55,0,1)) : lerpColor(midCol, botCol, constrain((t-0.55)/0.45,0,1));
+      const col = blend;
+        stroke(col);
+        line(0,y,width,y);
+      }
+    }
+
+    function drawAurora(){
+      noFill();
+      strokeWeight(2.5);
+      for(const band of auroraBands){
+        beginShape();
+        stroke(band.color.levels[0], band.color.levels[1], band.color.levels[2], 120);
+        for(const pt of band.points){
+          const offsetY = sin((millis()*band.speed)+pt.phase)*band.amplitude;
+          vertex(pt.x, pt.y + offsetY);
+        }
+        endShape();
+      }
+    }
+
+    function drawMountains(){
+      noStroke();
+      const peaks = [
+        {base:height*0.72, col:color(12,38,56)},
+        {base:height*0.78, col:color(8,28,44)}
+      ];
+      for(const layer of peaks){
+        fill(layer.col);
+        beginShape();
+        vertex(0,height);
+        for(let i=-1;i<=6;i++){
+          const x = map(i,-1,6,-width*0.1,width*1.1);
+          const y = layer.base - noise(i*0.3)*height*0.18;
+          vertex(x,y);
+        }
+        vertex(width,height);
+        endShape(CLOSE);
+      }
+    }
+
+    function drawLake(){
+      noStroke();
+      const gradTop = color(10,30,44, 220);
+      const gradBottom = color(6,14,24, 240);
+      for(let y=0;y<height*0.4;y++){
+        const t = y/(height*0.4);
+        const col = lerpColor(gradTop, gradBottom, t);
+        fill(red(col), green(col), blue(col), alpha(col));
+        const stretch = map(y,0,height*0.4, width*0.95,width*0.6);
+        ellipse(lakeCenter.x, lakeCenter.y + y*0.45, stretch, 40);
+      }
+      fill(12,44,60,90);
+      ellipse(lakeCenter.x, lakeCenter.y, width*0.82, height*0.32);
+    }
+
+    function triggerPulse(){
+      const now = millis();
+      pressTimes.push(now);
+      pressTimes = pressTimes.filter(t => now - t < 2600);
+
+      const palette = [color('#74f0ff'), color('#7fffd4'), color('#c1fbff'), color('#4be2ff')];
+      const ripple = {
+        birth: now,
+        life: 4200,
+        startRadius: random(40,90),
+        growth: random(width*0.6,width*0.85),
+        weight: random(3,6),
+        color: random(palette)
+      };
+      ripples.push(ripple);
+      glow = min(1, glow + 0.22);
+
+      if(pressTimes.length >= 3 && (now - pressTimes[pressTimes.length-3]) < 1600){
+        triggerEruption();
+        pressTimes = [];
+      }
+    }
+
+    function triggerEruption(){
+      const burstCount = 36;
+      const palette = [color('#9ffcff'), color('#d8f9ff'), color('#7de4ff'), color('#b0fff4')];
+      for(let i=0;i<burstCount;i++){
+        const ang = random(TWO_PI);
+        const speed = random(1.2,4.2);
+        const life = random(2600,4200);
+        const size = random(16,32);
+        const pts = [];
+        const spikes = floor(random(4,7));
+        for(let j=0;j<spikes;j++){
+          const t = j/spikes;
+          const r = size * (0.6 + random(-0.15,0.25));
+          pts.push({x: cos(TWO_PI*t)*r, y: sin(TWO_PI*t)*r*0.6});
+        }
+        shards.push({
+          birth: millis(),
+          life,
+          pos: lakeCenter.copy(),
+          vel: createVector(cos(ang)*speed*60, sin(ang)*speed*30 - random(10,40)),
+          rot: random(TWO_PI),
+          spin: random(-PI,PI),
+          points: pts,
+          color: random(palette)
+        });
+      }
+      glow = 1.2;
+    }
+
+    function keyPressed(){
+      if(!started){
+        if(key === ' ' || keyCode === 32){
+          startExperience();
+        }
+        return;
+      }
+      if(key === ' ' || keyCode === 32){
+        triggerPulse();
+      } else if(keyCode === ENTER){
+        ripples = [];
+        shards = [];
+        glow = 0;
+      }
+    }
+
+    function touchStarted(){
+      if(!started){
+        startExperience();
+        return false;
+      }
+      triggerPulse();
+      return false;
+    }
+
+    function createAurora(){
+      auroraBands = [];
+      const colors = ['#66d2ff','#88f7ff','#cce6ff'];
+      for(let i=0;i<3;i++){
+        const pts = [];
+        const segments = 18;
+        const baseY = height*0.28 + i*18;
+        for(let j=0;j<=segments;j++){
+          const x = map(j,0,segments,-width*0.1,width*1.1);
+          pts.push({x, y: baseY + noise(i*100+j*0.15)*14, phase: random(TWO_PI)});
+        }
+        auroraBands.push({
+          points: pts,
+          color: color(colors[i]),
+          amplitude: random(18,34),
+          speed: random(0.0006,0.0012)
+        });
+      }
+    }
+
+    function easeOutQuad(x){
+      return 1 - (1 - x)*(1 - x);
+    }
+
+    function easeOutCubic(x){
+      return 1 - pow(1 - x, 3);
+    }
+  </script>
+</body>
+</html>
