@@ -161,6 +161,7 @@ async function makeThumbnailFromVideo(srcOrFile) {
 /* File System Access + IndexedDB persistence for the selected folder */
 const FS_DB_NAME = 'custom-video-handles';
 const FS_STORE = 'handles';
+const FILE_HANDLES_KEY = 'video-files';
 const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
 function idbOpenFS() {
   return new Promise((res, rej) => {
@@ -196,6 +197,55 @@ async function loadRepoHandle() {
     });
   } catch { return null; }
 }
+async function saveFileHandles(handles) {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).put(handles, FILE_HANDLES_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch {}
+}
+async function loadFileHandles() {
+  try {
+    const db = await idbOpenFS();
+    return await new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readonly');
+      const g = tx.objectStore(FS_STORE).get(FILE_HANDLES_KEY);
+      g.onsuccess = async () => {
+        const handles = Array.isArray(g.result) ? g.result : [];
+        if (!handles.length) return res([]);
+        const permitted = [];
+        for (const h of handles) {
+          try {
+            if ((await h.queryPermission?.({ mode: 'read' })) === 'granted') {
+              permitted.push(h);
+            }
+          } catch {}
+        }
+        res(permitted);
+      };
+      g.onerror = () => res([]);
+    });
+  } catch {
+    return [];
+  }
+}
+async function deleteFileHandles() {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).delete(FILE_HANDLES_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch {}
+}
+
+
 async function* iterVideos(dirHandle) {
   for await (const entry of dirHandle.values()) {
     if (entry.kind !== 'file') continue;
@@ -404,6 +454,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistInput = document.getElementById('yt-playlist-url-input');
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
+  const localImportStatus = document.getElementById('local-import-status');
   const clearAllButton = document.getElementById('clear-all-button');
   const categoriesToggle = document.getElementById('categories-toggle');
   const categorySelect = document.getElementById('category-select') || document.getElementById('categorySelect');
@@ -413,10 +464,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const addCategoryNameInput = document.getElementById('add-category-name-input') || document.getElementById('addCategoryNameInput');
   const addCategorySaveButton = document.getElementById('add-category-save') || document.getElementById('addCategorySave');
   const addCategoryCancelButton = document.getElementById('add-category-cancel') || document.getElementById('addCategoryCancel');
+  const isYoutubeCustomPage = !!(urlVideoList && addVideoUrlInput);
+  const isLocalCustomPage = !!(localVideoList && addVideoInput);
   // Folder picker
   const pickFolderButton = document.getElementById('pick-video-folder-button');
   if (pickFolderButton && !('showDirectoryPicker' in window)) {
     pickFolderButton.style.display = 'none';
+  }
+
+  if (isLocalCustomPage && localImportStatus && !('showOpenFilePicker' in window)) {
+    localImportStatus.textContent = 'Ce navigateur ne peut pas mémoriser automatiquement les vidéos ajoutées individuellement.';
   }
 
   // Players / visuals
@@ -661,11 +718,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (localVideoList) localVideoList.innerHTML = '';
 
     // Clear persisted data
-    try { localStorage.removeItem(YT_STORAGE_KEY); } catch {}
-    try { localStorage.removeItem(YT_CATEGORY_STORAGE_KEY); } catch {}
+    if (isYoutubeCustomPage) {
+      try { localStorage.removeItem(YT_STORAGE_KEY); } catch {}
+      try { localStorage.removeItem(YT_CATEGORY_STORAGE_KEY); } catch {}
+    }
     try { localStorage.removeItem(LOCAL_ORDERS_KEY); } catch {}
     clearHidden();              // NEW: forget hidden exclusions
     await deleteRepoHandle();   // NEW: forget saved folder handle
+    await deleteFileHandles();
 
     // Reset selection / numbering / UI
     selectedMedia = [];
@@ -961,6 +1021,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function applyCategoryButtons(card) {
     if (!card) return;
+    if (!isYoutubeCustomPage) return;
+    if (urlVideoList && card.parentElement !== urlVideoList) return;
     const existing = card.querySelector('.category-chip-group');
     if (existing) existing.remove();
     const state = getCategoryState();
@@ -1050,6 +1112,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function setCategoryControlsVisible(visible) {
+    if (!isYoutubeCustomPage) return;
     const display = visible ? 'inline-flex' : 'none';
     if (categorySelect) {
       categorySelect.style.display = visible ? 'inline-block' : 'none';
@@ -1316,6 +1379,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function initCategoryControls() {
+    if (!isYoutubeCustomPage) return;
     const state = getCategoryState();
     const enabled = isCategoriesEnabled(state);
     if (categoriesToggle) categoriesToggle.checked = true;
@@ -1329,8 +1393,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Load saved URLs (with validation)
-  initCategoryControls();
-  await loadStoredYoutubeUrls();
+  if (isYoutubeCustomPage) {
+    initCategoryControls();
+    await loadStoredYoutubeUrls();
+  }
 
   // Initialize any pre-existing cards (if present in DOM at load)
   let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
@@ -1395,7 +1461,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // UI events
   selectVideosButton.addEventListener('click', () => {
     videoSelectionModal.style.display = 'block';
-    setTimeout(() => setCategoryControlsVisible(true), 0);
+    if (isYoutubeCustomPage) {
+      setTimeout(() => setCategoryControlsVisible(true), 0);
+    }
   });
   closeModal.addEventListener('click', () => {
     videoSelectionModal.style.display = 'none';
@@ -1407,7 +1475,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Local file uploads with thumbnails
   if (addVideoFileButton && addVideoInput && localVideoList) {
-    addVideoFileButton.addEventListener('click', () => addVideoInput.click());
+    addVideoFileButton.addEventListener('click', async () => {
+      if ('showOpenFilePicker' in window) {
+        try {
+          const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [{ description: 'Videos', accept: { 'video/*': ['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.m4v'] } }]
+          });
+          if (!handles?.length) return;
+          const existingHandles = await loadFileHandles();
+          const mergedHandles = [...existingHandles, ...handles];
+          await saveFileHandles(mergedHandles);
+
+          await populateFromFileHandles(mergedHandles, repoHandle);
+          return;
+        } catch {}
+      }
+      addVideoInput.click();
+    });
     addVideoInput.addEventListener('change', async () => {
       const files = Array.from(addVideoInput.files);
       for (const file of files) {
@@ -2207,19 +2292,45 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* Folder picker integration */
   let repoHandle = null;
 
-  // NEW: fully deterministic population using saved order pre-sort + hidden filter
-  async function populateFromRepo(handle) {
-    // 1) collect entries and file metadata
+
+  async function collectItemsFromFileHandles(handles) {
     const items = [];
+    for (const handle of handles || []) {
+      try {
+        const file = await handle.getFile();
+        if (!VIDEO_RX.test(file.name)) continue;
+        const key = makeLocalKey(file.name, file.size, file.lastModified);
+        items.push({ file, key, name: file.name });
+      } catch {}
+    }
+    return items;
+  }
+
+
+
+  async function collectItemsFromRepo(handle) {
+    const items = [];
+    if (!handle) return items;
     for await (const entry of iterVideos(handle)) {
       const file = await entry.getFile();
       const key = makeLocalKey(entry.name, file.size, file.lastModified);
-      items.push({ entry, file, key, name: entry.name });
+      items.push({ file, key, name: entry.name });
     }
+    return items;
+  }
 
-    // NEW: drop items the user has hidden previously
+  async function renderCombinedLocalItems(items) {
+    if (!isLocalCustomPage) return;
+
+    const byKey = new Map();
+    for (const item of items || []) {
+      if (!item?.file || !item?.key || byKey.has(item.key)) continue;
+      byKey.set(item.key, item);
+    }
+    const mergedItems = Array.from(byKey.values());
+
     const hidden = getHiddenSet();
-    const visibleItems = items.filter(it => !hidden.has(it.key));
+    const visibleItems = mergedItems.filter(it => !hidden.has(it.key));
 
     if (!visibleItems.length) {
       (localVideoList || videoSelectionDiv).innerHTML = '';
@@ -2228,16 +2339,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    // 2) compute set signature BEFORE rendering (on visible set)
     const sig = visibleItems.map(i => i.key).sort().join('||');
     const map = getLocalOrderMap();
     const saved = Array.isArray(map[sig]) ? map[sig] : null;
-
-    // 3) build a rank map from saved order (if any)
     const rank = new Map();
     if (saved) saved.forEach((k, i) => rank.set(k, i));
 
-    // 4) sort items: saved order first, then newcomers alphabetically by name
     visibleItems.sort((a, b) => {
       const ra = rank.has(a.key), rb = rank.has(b.key);
       if (ra && rb) return rank.get(a.key) - rank.get(b.key);
@@ -2246,7 +2353,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
 
-    // 5) render cards in final order (no flicker reordering after)
     const container = localVideoList || videoSelectionDiv;
     const frag = document.createDocumentFragment();
     for (const it of visibleItems) {
@@ -2255,17 +2361,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       initCard(card);
       frag.appendChild(card);
     }
+
     container.innerHTML = '';
     container.appendChild(frag);
-
-    // 6) finalize selection + numbering
     updateSelectedMedia();
     renumberCards();
 
-    // 7) persist current order (so newcomers get appended consistently next time)
     const keysInDom = Array.from(container.querySelectorAll('.video-card')).map(c => c.dataset.key || c.dataset.src);
     map[sig] = keysInDom;
     setLocalOrderMap(map);
+  }
+
+  async function populateFromFileHandles(handles, folderHandle = null) {
+    const fromHandles = await collectItemsFromFileHandles(handles);
+    const fromRepo = await collectItemsFromRepo(folderHandle);
+    await renderCombinedLocalItems([...fromHandles, ...fromRepo]);
+  }
+
+  async function populateFromRepo(handle, handles = []) {
+    const fromRepo = await collectItemsFromRepo(handle);
+    const fromHandles = await collectItemsFromFileHandles(handles);
+    await renderCombinedLocalItems([...fromHandles, ...fromRepo]);
   }
 
   async function chooseFolder() {
@@ -2273,26 +2389,37 @@ document.addEventListener('DOMContentLoaded', async () => {
       const handle = await window.showDirectoryPicker();
       repoHandle = handle;
       await saveRepoHandle(handle);
-      await populateFromRepo(repoHandle);
+      const savedHandles = await loadFileHandles();
+      await populateFromRepo(repoHandle, savedHandles);
     } catch {}
   }
 
   if (pickFolderButton && 'showDirectoryPicker' in window) {
     pickFolderButton.addEventListener('click', chooseFolder);
-    (async () => {
-      try {
-        if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
+  }
+
+  (async () => {
+    try {
+      if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
+
+      const savedFiles = ('showOpenFilePicker' in window) ? await loadFileHandles() : [];
+
+      // Restore previously-selected folder (if supported and permission is granted)
+      if ('showDirectoryPicker' in window) {
         const saved = await loadRepoHandle();
         if (saved) {
           const perm = await saved.requestPermission?.({mode:'read'});
           if (perm === 'granted') {
             repoHandle = saved;
-            await populateFromRepo(repoHandle);
           }
         }
-      } catch {}
-    })();
-  }
+      }
+
+      if (savedFiles.length || repoHandle) {
+        await populateFromFileHandles(savedFiles, repoHandle);
+      }
+    } catch {}
+  })();
 
   // Misc dialog open/close
   miscOptionsButton.addEventListener('click', () => {
