@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-fr="Chef d'orchestre des aurores" data-en="Aurora Conductor">Chef d'orchestre des aurores</title>
+
+  <link rel="stylesheet" href="../../css/otherswitch.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+
+  <style>
+    html, body { margin: 0; padding: 0; background: #040712; }
+    canvas { display: block; }
+
+    #promptOverlay {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; gap: 1.2rem;
+      align-items: center; justify-content: center;
+      background: radial-gradient(circle at top, rgba(22,38,76,0.95), rgba(3,7,18,0.95));
+      text-align: center; padding: 2rem; color: #f8fbff;
+    }
+    #promptOverlay p { font-size: clamp(1rem, 2.4vmin, 1.25rem); line-height: 1.5; max-width: min(760px, 90vw); }
+    #startButton { font-size: 1.1rem; padding: 0.75rem 1.8rem; border-radius: 999px; border: none; background: linear-gradient(120deg,#1bcdd1,#6d82ff); color:#fff; cursor:pointer; box-shadow:0 12px 24px rgba(20,40,110,0.4); }
+    #startButton:hover { filter: brightness(1.12); }
+
+    .corner-btn {
+      position: fixed;
+      top: 16px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.78);
+      color: #fff;
+      font-size: 1.3rem;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+      z-index: 2001;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .corner-btn:hover { background: rgba(0, 0, 0, 0.92); transform: translateY(-1px); }
+    #infoButton { left: 16px; }
+    #settings-icon { right: 16px; display: none; }
+
+    #infoModal {
+      position: fixed; inset: 0; display: none; place-items: center;
+      background: rgba(2,7,18,0.6); z-index: 2002;
+    }
+    #infoModal .card {
+      background: #fff;
+      color: #0c1628;
+      padding: 1.5rem;
+      border-radius: 12px;
+      width: min(420px, 92vw);
+      box-shadow: 0 16px 38px rgba(0, 0, 0, 0.35);
+      text-align: center;
+      line-height: 1.6;
+      font-size: 1rem;
+    }
+    #closeModal {
+      margin-top: 1rem;
+      padding: 0.55rem 1.2rem;
+      border-radius: 999px;
+      border: none;
+      background: #0c1628;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    #fullscreen-btn {
+      position: fixed;
+      top: 16px;
+      right: 72px;
+      padding: 0.55rem 1rem;
+      font-size: 0.85rem;
+      border-radius: 999px;
+      border: none;
+      background: rgba(0,0,0,0.78);
+      color: #fff;
+      display: none;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+      z-index: 2001;
+      transition: background 0.2s ease;
+    }
+    #fullscreen-btn:hover { background: rgba(0,0,0,0.92); }
+
+    #menu {
+      display: none;
+      position: fixed;
+      top: 72px;
+      right: 16px;
+      background: rgba(255,255,255,0.95);
+      color: #0c1628;
+      padding: 1rem 1.1rem;
+      border-radius: 12px;
+      width: 260px;
+      box-shadow: 0 18px 36px rgba(0,0,0,0.3);
+      z-index: 2000;
+    }
+    #menu.show { display: block; }
+    #menu h3 { margin: 0.6rem 0 0.35rem; font-size: 1rem; }
+    #menu h3:first-of-type { margin-top: 0; }
+    #menu label { display: block; margin-bottom: 0.65rem; font-size: 0.9rem; }
+    #menu label.inline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    #menu input[type="range"] { width: 100%; }
+    #menu span.value { display: inline-block; min-width: 2ch; text-align: right; font-weight: 600; }
+  </style>
+</head>
+
+<body>
+  <button id="infoButton" class="corner-btn translate" data-fr="ⓘ" data-en="ⓘ" title="Plus d'informations">ⓘ</button>
+
+  <div id="promptOverlay">
+    <p class="translate"
+       data-fr="Appuyez sur ESPACE pour diriger le ciel. Chaque pression fait onduler une nouvelle aurore, accompagnée d'une montée musicale."
+       data-en="Press SPACE to conduct the sky. Each press releases a fresh aurora ripple with a musical swell.">
+      Appuyez sur ESPACE pour diriger le ciel. Chaque pression fait onduler une nouvelle aurore, accompagnée d'une montée musicale.
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+
+  <div id="infoModal">
+    <div class="card">
+      <p class="translate"
+         data-fr="Compétence&nbsp;: appuyer (cause → effet).<br>SENICT niveau&nbsp;1.<br>Switch Progression Roadmap niveaux&nbsp;8 à&nbsp;10."
+         data-en="Skill: press (cause → effect).<br>SENICT level&nbsp;1.<br>Switch Progression Roadmap levels&nbsp;8–10.">
+        Compétence&nbsp;: appuyer (cause → effet).<br>SENICT niveau&nbsp;1.<br>Switch Progression Roadmap niveaux&nbsp;8 à&nbsp;10.
+      </p>
+      <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+    </div>
+  </div>
+
+  <div id="settings-icon" class="corner-btn translate" data-fr="⚙️" data-en="⚙️" title="Réglages">⚙️</div>
+  <button id="fullscreen-btn" class="translate" data-fr="Plein écran" data-en="Fullscreen">Plein écran</button>
+
+  <div id="menu">
+    <h3 data-fr="Musique" data-en="Music">Musique</h3>
+    <label class="inline">
+      <span class="translate" data-fr="Couper la musique" data-en="Mute music">Couper la musique</span>
+      <input type="checkbox" id="muteMusicToggle" />
+    </label>
+    <label>
+      <span class="translate" data-fr="Volume de la musique" data-en="Music volume">Volume de la musique</span>
+      <span id="musicVolumeValue" class="value">50</span>
+      <input type="range" id="musicVolumeSlider" min="0" max="100" value="50" />
+    </label>
+
+    <h3 data-fr="Effets sonores" data-en="Sound effects">Effets sonores</h3>
+    <label class="inline">
+      <span class="translate" data-fr="Couper les effets" data-en="Mute effects">Couper les effets</span>
+      <input type="checkbox" id="muteSFXToggle" />
+    </label>
+    <label>
+      <span class="translate" data-fr="Volume des effets" data-en="Effects volume">Volume des effets</span>
+      <span id="sfxVolumeValue" class="value">70</span>
+      <input type="range" id="sfxVolumeSlider" min="0" max="100" value="70" />
+    </label>
+
+    <h3 data-fr="Interaction" data-en="Interaction">Interaction</h3>
+    <label class="inline">
+      <span class="translate"
+            data-fr="Autoriser le toucher / clic"
+            data-en="Allow tap / click">
+        Autoriser le toucher / clic
+      </span>
+      <input type="checkbox" id="allowPointerToggle" checked />
+    </label>
+  </div>
+
+  <script src="../../js/translationonly.js"></script>
+
+  <script>
+    const menu = document.getElementById('menu');
+    const settingsIcon = document.getElementById('settings-icon');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+    const muteMusicToggle = document.getElementById('muteMusicToggle');
+    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+    const musicVolumeValue = document.getElementById('musicVolumeValue');
+    const muteSFXToggle = document.getElementById('muteSFXToggle');
+    const sfxVolumeSlider = document.getElementById('sfxVolumeSlider');
+    const sfxVolumeValue = document.getElementById('sfxVolumeValue');
+    const allowPointerToggle = document.getElementById('allowPointerToggle');
+
+    let musicVolume = 0.5;
+    let sfxVolume = 0.7;
+    let musicMuted = false;
+    let sfxMuted = false;
+    let pointerEnabled = true;
+
+    const playlistPaths = [
+      '../../songs/space/space1.mp3',
+      '../../songs/space/spacebest2.mp3',
+      '../../songs/space/spacevortex3.mp3'
+    ];
+    const musicPlaylist = [];
+    let currentTrackIndex = -1;
+    let currentTrack = null;
+
+    muteMusicToggle.addEventListener('change', () => {
+      musicMuted = muteMusicToggle.checked;
+      if (musicMuted) {
+        stopCurrentTrack();
+      } else {
+        ensureMusicPlaying(true);
+      }
+    });
+    musicVolumeSlider.addEventListener('input', () => {
+      musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
+      musicVolumeValue.textContent = musicVolumeSlider.value;
+      updateMusicVolume(0.1);
+    });
+    muteSFXToggle.addEventListener('change', () => {
+      sfxMuted = muteSFXToggle.checked;
+    });
+    sfxVolumeSlider.addEventListener('input', () => {
+      sfxVolume = parseInt(sfxVolumeSlider.value, 10) / 100;
+      sfxVolumeValue.textContent = sfxVolumeSlider.value;
+    });
+    allowPointerToggle.addEventListener('change', () => {
+      pointerEnabled = allowPointerToggle.checked;
+    });
+
+    settingsIcon.addEventListener('click', () => {
+      menu.classList.toggle('show');
+    });
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.();
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
+    document.addEventListener('click', (event) => {
+      if (!menu.classList.contains('show')) return;
+      if (menu.contains(event.target) || settingsIcon.contains(event.target)) return;
+      menu.classList.remove('show');
+    });
+
+    document.getElementById('infoButton').addEventListener('click', () => {
+      document.getElementById('infoModal').style.display = 'grid';
+    });
+    document.getElementById('closeModal').addEventListener('click', () => {
+      document.getElementById('infoModal').style.display = 'none';
+    });
+
+    const startButton = document.getElementById('startButton');
+    startButton.addEventListener('click', async () => {
+      musicMuted = muteMusicToggle.checked;
+      sfxMuted = muteSFXToggle.checked;
+      pointerEnabled = allowPointerToggle.checked;
+      musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
+      sfxVolume = parseInt(sfxVolumeSlider.value, 10) / 100;
+
+      try {
+        if (typeof getAudioContext === 'function') {
+          await userStartAudio();
+        }
+      } catch (err) {
+        console.warn('Audio context could not start:', err);
+      }
+
+      if (document.documentElement) {
+        if (document.documentElement.requestFullscreen) {
+          try {
+            await document.documentElement.requestFullscreen();
+          } catch (err) {
+            console.warn('Fullscreen request failed:', err);
+          }
+        } else if (document.documentElement.webkitRequestFullscreen) {
+          try {
+            document.documentElement.webkitRequestFullscreen();
+          } catch (err) {
+            console.warn('Fullscreen request failed:', err);
+          }
+        }
+      }
+
+      started = true;
+      document.getElementById('promptOverlay').style.display = 'none';
+      settingsIcon.style.display = 'flex';
+      fullscreenBtn.style.display = 'inline-flex';
+      menu.classList.remove('show');
+
+      ensureMusicPlaying(true);
+    });
+
+    const shimmerSounds = [];
+    const swellSounds = [];
+    let started = false;
+    const REFRESH_DELAY = 2000;
+    let lastAuroraTime = -REFRESH_DELAY;
+    let pendingAuroraTimeout = null;
+    let pendingAuroraReset = false;
+
+    function preload() {
+      soundFormats('mp3', 'wav');
+      musicPlaylist.length = 0;
+      for (const path of playlistPaths) {
+        musicPlaylist.push(loadSound(path));
+      }
+      shimmerSounds.push(
+        loadSound('../../sounds/space/twinklingstar1.mp3'),
+        loadSound('../../sounds/space/twinklingstar2.mp3'),
+        loadSound('../../sounds/space/twinklingstar3.mp3'),
+        loadSound('../../sounds/space/twinklingstar4.mp3')
+      );
+      swellSounds.push(
+        loadSound('../../sounds/harp.mp3'),
+        loadSound('../../sounds/spacequestlaunch2.mp3'),
+        loadSound('../../sounds/spacequestwoosh.mp3')
+      );
+    }
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(HSB, 360, 100, 100, 1);
+      noStroke();
+      initStars();
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      initStars(true);
+    }
+
+    function draw() {
+      if (!started) return;
+      drawSky();
+      updateGlows();
+      drawStars();
+      updateRibbons();
+      updateSparks();
+    }
+
+    function keyPressed() {
+      if (!started) return;
+      if (key === ' ') {
+        requestAurora();
+        return false;
+      }
+      if (key === 'Enter') {
+        requestAurora(true);
+        return false;
+      }
+    }
+
+    function mousePressed(event) {
+      if (!started || !pointerEnabled) return;
+      const target = event?.target || null;
+      if (target && (menu.contains(target) || settingsIcon.contains(target) || fullscreenBtn.contains(target))) {
+        return;
+      }
+      menu.classList.remove('show');
+      requestAurora();
+    }
+
+    function touchStarted(event) {
+      if (!started || !pointerEnabled) return false;
+      const target = event?.target || null;
+      if (target && (menu.contains(target) || settingsIcon.contains(target) || fullscreenBtn.contains(target))) {
+        return false;
+      }
+      menu.classList.remove('show');
+      requestAurora();
+      return false;
+    }
+
+    function stopCurrentTrack() {
+      if (currentTrack && currentTrack.isPlaying()) {
+        currentTrack.stop();
+      }
+      currentTrack = null;
+      currentTrackIndex = -1;
+    }
+
+    function updateMusicVolume(transition = 0.2) {
+      if (!currentTrack || !currentTrack.isLoaded()) return;
+      currentTrack.setVolume(musicMuted ? 0 : musicVolume, transition);
+    }
+
+    function playNextTrack(forceRandomStart = false) {
+      if (!musicPlaylist.length || musicMuted) {
+        stopCurrentTrack();
+        return;
+      }
+
+      if (currentTrack && currentTrack.isPlaying()) {
+        currentTrack.stop();
+      }
+
+      if (forceRandomStart || currentTrackIndex < 0) {
+        currentTrackIndex = Math.floor(random(musicPlaylist.length));
+      } else {
+        currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+      }
+
+      currentTrack = musicPlaylist[currentTrackIndex];
+      if (!currentTrack) return;
+
+      currentTrack.setLoop(false);
+      currentTrack.setVolume(musicVolume, 0);
+      currentTrack.onended(() => {
+        setTimeout(() => playNextTrack(false), 400);
+      });
+      currentTrack.play();
+    }
+
+    function ensureMusicPlaying(forceRandomStart = false) {
+      if (musicMuted) return;
+      if (!musicPlaylist.length) return;
+      if (!currentTrack || !currentTrack.isPlaying()) {
+        playNextTrack(forceRandomStart);
+        return;
+      }
+      updateMusicVolume(0.3);
+    }
+
+    function clearScene() {
+      ribbons = [];
+      sparks = [];
+      glows = [];
+    }
+
+    let ribbons = [];
+    let sparks = [];
+    let glows = [];
+    let stars = [];
+    let skyHue = 200;
+    let targetSkyHue = 200;
+    let skyPulse = 0;
+
+    function initStars(reset = false) {
+      if (!reset) stars = [];
+      const count = Math.floor((windowWidth * windowHeight) / 9000);
+      stars = Array.from({ length: count }, () => ({
+        x: random(width),
+        y: random(height),
+        size: random(1.2, 2.6),
+        base: random(40, 75),
+        range: random(18, 35),
+        speed: random(0.5, 1.4),
+        phase: random(TWO_PI)
+      }));
+    }
+
+    function drawSky() {
+      skyPulse += 0.0018 * (deltaTime || 16.6);
+      const horizonShift = (Math.sin(skyPulse * 0.25) + 1) * 0.5;
+      skyHue = lerp(skyHue, targetSkyHue, 0.01);
+      const topHue = (skyHue + 320) % 360;
+      const bottomHue = (skyHue + 40) % 360;
+      const ctx = drawingContext;
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, hsla(topHue, 72, 28 + 6 * horizonShift, 1));
+      gradient.addColorStop(0.45, hsla(skyHue, 68, 18 + 10 * horizonShift, 1));
+      gradient.addColorStop(0.9, hsla((skyHue + 26) % 360, 60, 12, 1));
+      gradient.addColorStop(1, hsla(bottomHue, 64, 8, 1));
+      ctx.save();
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+
+      const haloY = height * 0.48 + Math.sin(skyPulse * 0.12) * height * 0.03;
+      const haloGradient = ctx.createRadialGradient(width / 2, haloY, height * 0.05, width / 2, haloY, height * 0.55);
+      haloGradient.addColorStop(0, hsla((skyHue + 40) % 360, 60, 55, 0.42));
+      haloGradient.addColorStop(0.45, hsla((skyHue + 70) % 360, 55, 40, 0.18));
+      haloGradient.addColorStop(1, hsla((skyHue + 110) % 360, 50, 22, 0));
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = haloGradient;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+
+    function drawStars() {
+      fill(0, 0, 100, 0.8);
+      noStroke();
+      for (const star of stars) {
+        const twinkle = star.base + star.range * (0.5 + 0.5 * Math.sin(frameCount * 0.01 * star.speed + star.phase));
+        fill(skyHue, 10, twinkle, 0.8);
+        circle(star.x, star.y, star.size);
+      }
+    }
+
+    class Ribbon {
+      constructor(hues, centerY = height * 0.5) {
+        this.hues = hues;
+        this.baseHue = hues[0];
+        this.secondaryHue = hues[1 % hues.length];
+        this.highlightHue = hues[2 % hues.length];
+        this.glintHue = hues[3 % hues.length];
+        const boundsTop = height * 0.34;
+        const boundsBottom = height * 0.6;
+        this.targetBaseY = constrain(centerY + random(-height * 0.05, height * 0.05), boundsTop, boundsBottom);
+        this.entryStartY = constrain(
+          this.targetBaseY + random(-height * 0.06, height * 0.06),
+          boundsTop + height * 0.02,
+          boundsBottom - height * 0.02
+        );
+        this.exitTargetY = constrain(
+          this.targetBaseY + random(-height * 0.16, height * 0.16),
+          boundsTop - height * 0.04,
+          boundsBottom + height * 0.04
+        );
+        this.baseY = this.entryStartY;
+        this.amplitude = random(height * 0.22, height * 0.34);
+        this.noiseScale = random(0.0008, 0.0016);
+        this.waveSpeed = random(0.00018, 0.00042) * (random() > 0.5 ? 1 : -1);
+        this.phase = random(1000);
+        this.tilt = random(-0.28, 0.28);
+        this.alpha = 0;
+        this.targetAlpha = random(0.58, 0.88);
+        this.life = 1;
+        this.fadeInRate = random(0.00045, 0.001);
+        this.fadeOutRate = random(0.00028, 0.00054);
+        this.entryDuration = random(2200, 3200);
+        this.holdDuration = random(3600, 5200);
+        this.exitDuration = random(2600, 3600);
+        this.createdAt = millis();
+        this.driftPhase = random(TWO_PI);
+        this.driftSpeed = random(0.00008, 0.00014);
+        this.glow = random(0.55, 1.1);
+        this.gradientStops = this.buildGradientStops();
+      }
+
+      update() {
+        const elapsed = millis() - this.createdAt;
+        const dt = (deltaTime || 16.6);
+        this.phase += this.waveSpeed * dt;
+
+        if (elapsed < this.entryDuration) {
+          const progress = easeOutCubic(constrain(elapsed / this.entryDuration, 0, 1));
+          this.baseY = lerp(this.entryStartY, this.targetBaseY, progress);
+          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * dt * 0.8);
+        } else if (elapsed < this.entryDuration + this.holdDuration) {
+          const holdElapsed = elapsed - this.entryDuration;
+          const drift = Math.sin(holdElapsed * this.driftSpeed + this.driftPhase) * this.amplitude * 0.05;
+          this.baseY = this.targetBaseY + drift;
+          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * dt);
+        } else {
+          const exitElapsed = elapsed - this.entryDuration - this.holdDuration;
+          const exitProgress = easeInCubic(constrain(exitElapsed / this.exitDuration, 0, 1));
+          this.baseY = lerp(this.targetBaseY, this.exitTargetY, exitProgress);
+          this.alpha = max(0, this.alpha - this.fadeOutRate * dt * (1.1 + exitProgress));
+        }
+
+        this.life = this.alpha / max(this.targetAlpha, 0.0001);
+      }
+
+      draw(ctx) {
+        const points = [];
+        const step = max(12, width / 48);
+        for (let x = 0; x <= width; x += step) {
+          points.push({ x, y: this.sampleY(x) });
+        }
+        if (points[points.length - 1].x < width) {
+          points.push({ x: width, y: this.sampleY(width) });
+        }
+        const thickness = this.amplitude * 0.52 + height * 0.018;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y - thickness);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y - thickness);
+        }
+        for (let i = points.length - 1; i >= 0; i--) {
+          ctx.lineTo(points[i].x, points[i].y + thickness);
+        }
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(
+          0,
+          this.baseY - this.amplitude * 1.2,
+          0,
+          this.baseY + this.amplitude * 1.2
+        );
+        const stops = this.gradientStops;
+        const stopCount = stops.length - 1;
+        stops.forEach((hue, index) => {
+          const position = stopCount <= 0 ? 0 : index / stopCount;
+          const saturation = 86 - index * 6;
+          const brightness = 72 - index * 8;
+          const alpha = this.alpha * (0.95 - index * 0.12);
+          grad.addColorStop(position, hsla((hue + 360) % 360, saturation, brightness, Math.max(alpha, 0.05)));
+        });
+
+        ctx.globalCompositeOperation = 'screen';
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      sampleY(x) {
+        const nx = this.phase + x * this.noiseScale;
+        const nz = frameCount * 0.0016;
+        const noiseVal = noise(nx, nz) * 2 - 1;
+        const wave = Math.sin((x / width) * TAU * 0.52 + nz * 1.6 + this.tilt);
+        const mix = lerp(wave, noiseVal, 0.55);
+        return this.baseY + mix * this.amplitude;
+      }
+
+      isDead() {
+        return this.alpha <= 0.01;
+      }
+
+      buildGradientStops() {
+        const extended = this.hues.map(h => (h + random([-48, -28, 28, 48, 72, 88])) % 360);
+        const combined = shuffle([...this.hues, ...extended]);
+        return combined.slice(0, 5);
+      }
+    }
+
+    class Spark {
+      constructor(huePool, centerY = height * 0.5) {
+        this.x = random(width);
+        this.y = constrain(centerY + random(-height * 0.08, height * 0.08), height * 0.3, height * 0.7);
+        this.vx = random(-0.06, 0.06);
+        this.vy = random(-0.05, 0.1);
+        this.size = random(2.2, 5.8);
+        this.life = random(1.6, 2.9);
+        this.huePool = huePool;
+        this.hue = this.pickHue();
+        this.alpha = 1;
+        this.flickerRate = random(0.06, 0.14);
+        this.flickerPhase = random(TWO_PI);
+      }
+
+      update(dt) {
+        const speedScale = dt * 60;
+        this.x += this.vx * speedScale;
+        this.y += this.vy * speedScale;
+        this.vy += 0.0009 * speedScale;
+        this.life -= 0.26 * dt;
+        this.alpha = constrain(this.life, 0, 1);
+        if (random() < 0.012) {
+          this.hue = this.pickHue();
+        }
+      }
+
+      draw() {
+        const ctx = drawingContext;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.globalCompositeOperation = 'screen';
+
+        const baseFlicker = 0.6 + 0.4 * Math.sin(frameCount * this.flickerRate + this.flickerPhase);
+        const intensity = Math.min(1, this.alpha * baseFlicker);
+        const radius = this.size * (1.15 + 0.15 * baseFlicker);
+
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.4);
+        glow.addColorStop(0, hsla(this.hue, 82, 96, intensity));
+        glow.addColorStop(0.35, hsla(this.hue, 70, 76, intensity * 0.65));
+        glow.addColorStop(1, hsla(this.hue, 52, 32, 0));
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.4, 0, TAU);
+        ctx.fill();
+
+        const rayColor = hsla(this.hue, 84, 88, intensity * 0.7);
+        const rayLength = radius * 2.6;
+        ctx.strokeStyle = rayColor;
+        ctx.lineWidth = Math.max(0.6, radius * 0.18);
+        ctx.beginPath();
+        ctx.moveTo(-rayLength, 0);
+        ctx.lineTo(rayLength, 0);
+        ctx.moveTo(0, -rayLength);
+        ctx.lineTo(0, rayLength);
+        ctx.stroke();
+
+        ctx.rotate(Math.PI / 4);
+        ctx.lineWidth = Math.max(0.5, radius * 0.14);
+        ctx.beginPath();
+        ctx.moveTo(-rayLength * 0.75, 0);
+        ctx.lineTo(rayLength * 0.75, 0);
+        ctx.moveTo(0, -rayLength * 0.75);
+        ctx.lineTo(0, rayLength * 0.75);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      isDead() {
+        return this.alpha <= 0.02 || this.y > height + 60;
+      }
+
+      pickHue() {
+        if (!Array.isArray(this.huePool) || !this.huePool.length) {
+          return random(360);
+        }
+        return (random(this.huePool) + random(-24, 24) + 360) % 360;
+      }
+    }
+
+    function updateRibbons() {
+      const ctx = drawingContext;
+      for (const ribbon of ribbons) {
+        ribbon.update();
+        ribbon.draw(ctx);
+      }
+      ribbons = ribbons.filter(r => !r.isDead());
+    }
+
+    function updateSparks() {
+      const dt = (deltaTime || 16.6) / 1000;
+      for (const spark of sparks) {
+        spark.update(dt);
+        spark.draw();
+      }
+      sparks = sparks.filter(s => !s.isDead());
+    }
+
+    class Glow {
+      constructor(hues, centerY = height * 0.5) {
+        this.hues = hues;
+        this.centerX = width / 2 + random(-width * 0.12, width * 0.12);
+        this.centerY = constrain(centerY + random(-height * 0.035, height * 0.035), height * 0.36, height * 0.62);
+        this.radius = random(height * 0.36, height * 0.54);
+        this.alpha = 0;
+        this.targetAlpha = random(0.26, 0.38);
+        this.fadeInRate = random(0.00045, 0.00085);
+        this.fadeOutRate = random(0.00018, 0.00032);
+        this.holdTime = random(5200, 7800);
+        this.createdAt = millis();
+      }
+
+      update() {
+        const elapsed = millis() - this.createdAt;
+        if (elapsed < this.holdTime) {
+          this.alpha = min(this.targetAlpha, this.alpha + this.fadeInRate * (deltaTime || 16.6));
+        } else {
+          this.alpha = max(0, this.alpha - this.fadeOutRate * (deltaTime || 16.6));
+        }
+      }
+
+      draw(ctx) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const gradient = ctx.createRadialGradient(
+          this.centerX,
+          this.centerY,
+          this.radius * 0.1,
+          this.centerX,
+          this.centerY,
+          this.radius
+        );
+        gradient.addColorStop(0, hsla(this.hues[0], 72, 78, this.alpha));
+        gradient.addColorStop(0.38, hsla(this.hues[1 % this.hues.length], 64, 60, this.alpha * 0.58));
+        gradient.addColorStop(0.72, hsla(this.hues[2 % this.hues.length], 58, 42, this.alpha * 0.28));
+        gradient.addColorStop(1, hsla(this.hues[3 % this.hues.length] || this.hues[0], 48, 24, 0));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+
+      isDead() {
+        return this.alpha <= 0.01;
+      }
+    }
+
+    function updateGlows() {
+      const ctx = drawingContext;
+      for (const glow of glows) {
+        glow.update();
+        glow.draw(ctx);
+      }
+      glows = glows.filter(g => !g.isDead());
+    }
+
+    function createAuroraPalette() {
+      const baseChoices = [128, 140, 152, 164, 176, 188, 202, 216, 232, 248, 264, 282, 298, 312, 328];
+      const coreHue = random(baseChoices);
+      const offsets = shuffle([22, 34, 46, 58, 74, 96, 122, 148, 182, 214, -32, -48, -66, -92, -118, -146]);
+      const huePool = [coreHue];
+      for (let i = 0; i < offsets.length; i++) {
+        huePool.push((coreHue + offsets[i] + 360) % 360);
+      }
+      const uniqueHuePool = [...new Set(huePool.map(h => ((h % 360) + 360) % 360))];
+      const skyHueShift = random([-18, -8, 0, 12, 24]);
+      return {
+        skyHue: (coreHue + skyHueShift + 360) % 360,
+        huePool: uniqueHuePool
+      };
+    }
+
+    function requestAurora(resetScene = false) {
+      const now = millis();
+      const elapsed = now - lastAuroraTime;
+      if (elapsed < REFRESH_DELAY) {
+        pendingAuroraReset = pendingAuroraReset || resetScene;
+        if (pendingAuroraTimeout) {
+          clearTimeout(pendingAuroraTimeout);
+        }
+        pendingAuroraTimeout = setTimeout(() => {
+          pendingAuroraTimeout = null;
+          const shouldReset = pendingAuroraReset;
+          pendingAuroraReset = false;
+          requestAurora(shouldReset);
+        }, REFRESH_DELAY - elapsed);
+        return;
+      }
+      if (pendingAuroraTimeout) {
+        clearTimeout(pendingAuroraTimeout);
+        pendingAuroraTimeout = null;
+        pendingAuroraReset = false;
+      }
+      if (resetScene) {
+        clearScene();
+      }
+      lastAuroraTime = now;
+
+      const palette = createAuroraPalette();
+      targetSkyHue = palette.skyHue;
+      const centerY = height * 0.48 + random(-height * 0.04, height * 0.04);
+      const ribbonHues = shuffle([...palette.huePool]).slice(0, 5);
+      ribbons.push(new Ribbon(ribbonHues, centerY));
+      const burstPalette = shuffle([...palette.huePool]).slice(0, 7);
+      const burstCount = Math.floor(random(110, 170));
+      for (let i = 0; i < burstCount; i++) {
+        sparks.push(new Spark(burstPalette, centerY));
+      }
+      glows.push(new Glow(shuffle([...palette.huePool]).slice(0, 4), centerY));
+      if (random() < 0.4) {
+        glows.push(new Glow(shuffle([...palette.huePool]).slice(0, 4), centerY + random(-height * 0.02, height * 0.02)));
+      }
+
+      if (!sfxMuted) {
+        const shimmer = pickLoaded(shimmerSounds);
+        if (shimmer) {
+          shimmer.setVolume(sfxVolume * 0.7);
+          shimmer.play();
+        }
+        if (random() < 0.5) {
+          const swell = pickLoaded(swellSounds);
+          if (swell) {
+            swell.setVolume(sfxVolume * 0.9);
+            swell.play();
+          }
+        }
+      }
+    }
+
+    function pickLoaded(list) {
+      if (!Array.isArray(list) || !list.length) return null;
+      const pool = list.filter(s => s && s.isLoaded());
+      if (!pool.length) return null;
+      return random(pool);
+    }
+
+    function easeOutCubic(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function easeInCubic(t) {
+      return t * t * t;
+    }
+
+    function hsla(h, s, l, a) {
+      return `hsla(${((h % 360) + 360) % 360}, ${s}%, ${l}%, ${a})`;
+    }
+  </script>
+</body>
+</html>
