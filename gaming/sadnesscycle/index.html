@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Cycle météo nostalgique</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="../../css/otherswitch.css" />
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Inter", "Segoe UI", sans-serif;
+      background: #070b13;
+      color: #ffffff;
+    }
+
+    canvas {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      gap: 1.25rem;
+      background: radial-gradient(circle at top, rgba(12, 17, 31, 0.82), rgba(7, 11, 19, 0.92));
+      transition: opacity 0.6s ease;
+    }
+
+    #overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #overlay button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.85rem 2.25rem;
+      background: #3b6ee0;
+      color: #fff;
+      font-size: 1.1rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: transform 0.2s ease, filter 0.2s ease;
+    }
+
+    #overlay button:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.1);
+    }
+
+    #overlay h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      margin: 0;
+      font-weight: 600;
+    }
+
+    #overlay p {
+      margin: 0;
+      max-width: 45ch;
+      line-height: 1.4;
+      opacity: 0.85;
+    }
+
+    #scene-label {
+      position: fixed;
+      inset-inline: 0;
+      bottom: 28px;
+      z-index: 20;
+      text-align: center;
+      font-size: clamp(1rem, 2.4vw, 1.35rem);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+      pointer-events: none;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+</head>
+<body>
+  <div id="overlay">
+    <h1>Cycle nostalgique</h1>
+    <p>
+      Appuie sur la barre d’espace pour parcourir trois ambiances sensorielles :
+      pluie nocturne, neige silencieuse et pétales qui dérivent. Chaque pression
+      révèle la scène suivante.
+    </p>
+    <button id="startButton">Commencer</button>
+    <small>Conseil : laisse chaque ambiance se dévoiler quelques instants.</small>
+  </div>
+
+  <div id="scene-label"></div>
+
+  <script>
+    const scenes = [];
+    let activeSceneIndex = 0;
+    let started = false;
+
+    class RainDrop {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = random(width);
+        this.y = random(-height, 0);
+        this.len = random(12, 28);
+        this.speed = random(6, 14);
+        this.thickness = random(1, 2.3);
+        this.alpha = random(120, 200);
+      }
+      update() {
+        this.y += this.speed;
+        if (this.y > height + 30) {
+          this.reset();
+          this.y = random(-120, -10);
+        }
+      }
+      draw() {
+        stroke(120, 160, 255, this.alpha);
+        strokeWeight(this.thickness);
+        line(this.x, this.y, this.x, this.y + this.len);
+      }
+    }
+
+    class SnowFlake {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = random(width);
+        this.y = random(-height, 0);
+        this.size = random(2, 5);
+        this.speed = random(0.6, 1.6);
+        this.offset = random(TWO_PI);
+        this.drift = random(10, 35);
+        this.alpha = random(120, 210);
+      }
+      update() {
+        this.y += this.speed;
+        this.x += sin(this.offset + frameCount * 0.01) * 0.6;
+        if (this.y > height + 10) {
+          this.reset();
+          this.y = random(-80, -5);
+        }
+      }
+      draw() {
+        noStroke();
+        fill(235, 240, 255, this.alpha);
+        circle(this.x, this.y, this.size);
+      }
+    }
+
+    class Petal {
+      constructor() {
+        this.reset(true);
+      }
+      reset(initial = false) {
+        this.x = random(width);
+        this.y = initial ? random(height) : random(-height * 0.5, -20);
+        this.speedY = random(0.8, 2.2);
+        this.speedX = random(-0.7, 0.7);
+        this.rotation = random(TWO_PI);
+        this.rotationSpeed = random(-0.015, 0.015);
+        this.scale = random(0.6, 1.4);
+        this.alpha = random(80, 160);
+      }
+      update() {
+        this.x += this.speedX + sin(frameCount * 0.01 + this.rotation) * 0.15;
+        this.y += this.speedY;
+        this.rotation += this.rotationSpeed;
+        if (this.y > height + 30) {
+          this.reset();
+        }
+      }
+      draw() {
+        push();
+        translate(this.x, this.y);
+        rotate(this.rotation);
+        scale(this.scale);
+        noStroke();
+        const inner = color(255, 190, 210, this.alpha);
+        const outer = color(210, 120, 170, max(this.alpha - 50, 30));
+        for (let i = 0; i < 10; i++) {
+          const t = i / 10;
+          const c = lerpColor(inner, outer, t);
+          fill(c);
+          const r = map(i, 0, 9, 0, 18);
+          ellipse(0, 0, r * 1.5, r * 1.2);
+        }
+        fill(inner);
+        beginShape();
+        vertex(0, -18);
+        bezierVertex(12, -12, 14, 10, 0, 18);
+        bezierVertex(-14, 10, -12, -12, 0, -18);
+        endShape(CLOSE);
+        pop();
+      }
+    }
+
+    function createRainScene() {
+      const drops = Array.from({ length: 500 }, () => new RainDrop());
+      return {
+        nameFR: 'Pluie nocturne',
+        nameEN: 'Night rain',
+        init() {},
+        draw() {
+          background(10, 16, 30);
+          noStroke();
+          for (let i = 0; i < height; i += 2) {
+            const alpha = map(i, 0, height, 0, 40);
+            fill(20, 32, 56, alpha);
+            rect(0, i, width, 2);
+          }
+          drops.forEach((d) => {
+            d.update();
+            d.draw();
+          });
+          if (frameCount % 160 === 0) {
+            push();
+            blendMode(ADD);
+            fill(180, 200, 255, 40);
+            rect(0, 0, width, height);
+            pop();
+          }
+        }
+      };
+    }
+
+    function createSnowScene() {
+      const flakes = Array.from({ length: 260 }, () => new SnowFlake());
+      let hazeAlpha = 0;
+      return {
+        nameFR: 'Neige silencieuse',
+        nameEN: 'Silent snow',
+        init() {
+          hazeAlpha = 0;
+        },
+        draw() {
+          background(15, 20, 32);
+          const gradient = drawingContext.createLinearGradient(0, 0, 0, height);
+          gradient.addColorStop(0, 'rgba(40, 60, 90, 0.8)');
+          gradient.addColorStop(1, 'rgba(8, 12, 20, 0.95)');
+          drawingContext.fillStyle = gradient;
+          drawingContext.fillRect(0, 0, width, height);
+
+          flakes.forEach((flake) => {
+            flake.update();
+            flake.draw();
+          });
+
+          hazeAlpha = lerp(hazeAlpha, 110, 0.01);
+          noStroke();
+          fill(220, 230, 255, hazeAlpha);
+          rect(0, 0, width, height);
+        }
+      };
+    }
+
+    function createPetalScene() {
+      const petals = Array.from({ length: 120 }, () => new Petal());
+      return {
+        nameFR: 'Pétales mémoire',
+        nameEN: 'Memory petals',
+        init() {},
+        draw() {
+          background(25, 12, 20);
+          const radial = drawingContext.createRadialGradient(
+            width * 0.5,
+            height * 0.35,
+            0,
+            width * 0.5,
+            height * 0.35,
+            Math.max(width, height)
+          );
+          radial.addColorStop(0, 'rgba(70, 30, 60, 0.95)');
+          radial.addColorStop(1, 'rgba(20, 8, 18, 0.98)');
+          drawingContext.fillStyle = radial;
+          drawingContext.fillRect(0, 0, width, height);
+
+          petals.forEach((petal) => {
+            petal.update();
+            petal.draw();
+          });
+
+          push();
+          blendMode(ADD);
+          noStroke();
+          fill(255, 160, 200, 20 + 15 * sin(frameCount * 0.02));
+          ellipse(width * 0.5, height * 0.3, width * 0.6, height * 0.25);
+          pop();
+        }
+      };
+    }
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      scenes.push(createRainScene());
+      scenes.push(createSnowScene());
+      scenes.push(createPetalScene());
+      updateSceneLabel();
+      noLoop();
+    }
+
+    function draw() {
+      if (!started) return;
+      clear();
+      const scene = scenes[activeSceneIndex];
+      scene.draw();
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function activateScene(index) {
+      activeSceneIndex = (index + scenes.length) % scenes.length;
+      scenes[activeSceneIndex].init?.();
+      updateSceneLabel();
+    }
+
+    function updateSceneLabel() {
+      const label = document.getElementById('scene-label');
+      const scene = scenes[activeSceneIndex];
+      label.textContent = scene ? scene.nameFR + ' · ' + scene.nameEN : '';
+    }
+
+    function startExperience() {
+      if (started) return;
+      started = true;
+      document.getElementById('overlay').classList.add('hidden');
+      activateScene(0);
+      loop();
+    }
+
+    function keyPressed() {
+      if (key === ' ') {
+        if (!started) {
+          startExperience();
+          return false;
+        }
+        activateScene(activeSceneIndex + 1);
+        return false;
+      }
+    }
+
+    document.getElementById('startButton').addEventListener('click', startExperience);
+  </script>
+</body>
+</html>
