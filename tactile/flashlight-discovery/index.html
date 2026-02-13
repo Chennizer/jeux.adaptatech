@@ -21,7 +21,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      background: rgba(0, 0, 0, 0.86);
+      background: rgba(0, 0, 0, 0.9);
       padding: 16px;
     }
 
@@ -78,6 +78,7 @@
     #objectsLayer {
       position: absolute;
       inset: 0;
+      z-index: 1;
     }
 
     .hidden-object {
@@ -86,21 +87,23 @@
       height: var(--size, 100px);
       object-fit: contain;
       pointer-events: none;
-      filter: brightness(0.2) saturate(0.8);
-      opacity: 0.82;
+      opacity: 0;
+      filter: brightness(1.02) saturate(1.02);
+      transition: opacity 70ms linear;
     }
 
     #overlay {
       position: absolute;
       inset: 0;
+      z-index: 2;
       pointer-events: none;
       background:
         radial-gradient(
           circle var(--flashlight-size, 180px) at var(--flashlight-x, 50%) var(--flashlight-y, 50%),
-          rgba(255, 255, 255, 0.22) 0%,
-          rgba(255, 255, 255, 0.13) 30%,
-          rgba(0, 0, 0, 0.18) 55%,
-          rgba(0, 0, 0, 0.88) 100%
+          rgba(255, 255, 255, 0.06) 0%,
+          rgba(0, 0, 0, 0.12) 24%,
+          rgba(0, 0, 0, 0.92) 55%,
+          rgba(0, 0, 0, 0.985) 100%
         );
     }
 
@@ -116,6 +119,7 @@
       pointer-events: none;
       opacity: 0.7;
       box-shadow: 0 0 22px rgba(255, 255, 255, 0.45);
+      z-index: 3;
     }
 
     #hint {
@@ -128,6 +132,7 @@
       padding: 8px 14px;
       border-radius: 10px;
       font-size: 0.95rem;
+      z-index: 4;
     }
   </style>
 </head>
@@ -209,8 +214,12 @@
     const imageSizeInput = document.getElementById('imageSize');
     const imageSizeValue = document.getElementById('imageSizeValue');
 
+    let flashlightX = window.innerWidth / 2;
+    let flashlightY = window.innerHeight / 2;
+
     flashlightSizeInput.addEventListener('input', () => {
       flashlightSizeValue.textContent = flashlightSizeInput.value;
+      updateObjectVisibility();
     });
 
     imageSizeInput.addEventListener('input', () => {
@@ -264,13 +273,36 @@
         img.onerror = () => img.remove();
         objectsLayer.appendChild(img);
       });
+
+      updateObjectVisibility();
+    }
+
+    function updateObjectVisibility() {
+      const lightRadius = Number(flashlightSizeInput.value);
+      const touchRadius = Math.max(28, lightRadius * 0.5);
+      const images = objectsLayer.querySelectorAll('.hidden-object');
+
+      images.forEach((img) => {
+        const centerX = img.offsetLeft + img.offsetWidth / 2;
+        const centerY = img.offsetTop + img.offsetHeight / 2;
+        const dx = centerX - flashlightX;
+        const dy = centerY - flashlightY;
+        const distance = Math.hypot(dx, dy);
+
+        img.style.opacity = distance <= touchRadius ? '1' : '0';
+      });
     }
 
     function updateFlashlightPosition(clientX, clientY) {
+      flashlightX = clientX;
+      flashlightY = clientY;
+
       const x = `${Math.round((clientX / window.innerWidth) * 100)}%`;
       const y = `${Math.round((clientY / window.innerHeight) * 100)}%`;
       scene.style.setProperty('--flashlight-x', x);
       scene.style.setProperty('--flashlight-y', y);
+
+      updateObjectVisibility();
     }
 
     scene.addEventListener('pointermove', (event) => {
@@ -279,6 +311,10 @@
 
     scene.addEventListener('pointerdown', (event) => {
       updateFlashlightPosition(event.clientX, event.clientY);
+    });
+
+    window.addEventListener('resize', () => {
+      updateFlashlightPosition(window.innerWidth / 2, window.innerHeight / 2);
     });
 
     startButton.addEventListener('click', async () => {
