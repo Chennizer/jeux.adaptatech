@@ -123,6 +123,32 @@
       font-size: 0.95rem;
       z-index: 5;
     }
+
+    #rewardOverlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      z-index: 6;
+      background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2), rgba(0, 0, 0, 0.7));
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(1.8rem, 4vw, 3.4rem);
+      font-weight: 800;
+      color: #fff;
+      text-align: center;
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+      animation: rewardPulse 700ms ease-in-out infinite alternate;
+      padding: 24px;
+    }
+
+    #rewardOverlay.show {
+      display: flex;
+    }
+
+    @keyframes rewardPulse {
+      from { transform: scale(0.98); }
+      to { transform: scale(1.02); }
+    }
   </style>
 </head>
 <body>
@@ -149,6 +175,13 @@
             <label for="themeSelect" class="teal-label label-block">Thème</label>
             <select id="themeSelect" class="styled-select">
               <option value="africa">Afrique</option>
+            </select>
+          </div>
+          <div class="option-item">
+            <label for="modeSelect" class="teal-label label-block">Mode</label>
+            <select id="modeSelect" class="styled-select">
+              <option value="free">Free play</option>
+              <option value="find">Find</option>
             </select>
           </div>
         </div>
@@ -182,11 +215,16 @@
     <div id="overlay"></div>
     <div id="pointer"></div>
     <div id="hint">Touchez ou déplacez la souris pour chercher les animaux cachés.</div>
+    <div id="rewardOverlay">🎉 Bravo ! Tous trouvés ! 🎉</div>
   </main>
 
   <script>
     const SCENE_BY_THEME = {
-      africa: '../../images/africanbackground1.webp'
+      africa: [
+        '../../images/africanbackground1.webp',
+        '../../images/africanbackground2.webp',
+        '../../images/africanbackground3.webp'
+      ]
     };
 
     const FALLBACK_ANIMALS = [
@@ -196,9 +234,12 @@
     const optionsModal = document.getElementById('game-options');
     const scene = document.getElementById('scene');
     const objectsLayer = document.getElementById('objectsLayer');
+    const rewardOverlay = document.getElementById('rewardOverlay');
     const startButton = document.getElementById('startButton');
     const flashlightSizeInput = document.getElementById('flashlightSize');
     const flashlightSizeValue = document.getElementById('flashlightSizeValue');
+    const themeSelect = document.getElementById('themeSelect');
+    const modeSelect = document.getElementById('modeSelect');
     const imageCountSelect = document.getElementById('imageCount');
     const imageSizeInput = document.getElementById('imageSize');
     const imageSizeValue = document.getElementById('imageSizeValue');
@@ -208,6 +249,10 @@
     let targetFlashlightX = flashlightX;
     let targetFlashlightY = flashlightY;
     let animationFrameId = null;
+    let animalsPool = null;
+    let foundKeys = new Set();
+    let sceneIndexByTheme = { africa: -1 };
+    let roundTransitioning = false;
 
     flashlightSizeInput.addEventListener('input', () => {
       flashlightSizeValue.textContent = flashlightSizeInput.value;
@@ -227,19 +272,32 @@
       return clone;
     }
 
+    function getNextSceneForTheme(theme) {
+      const list = SCENE_BY_THEME[theme] || [];
+      if (list.length === 0) return null;
+      const currentIndex = sceneIndexByTheme[theme] ?? -1;
+      const nextIndex = (currentIndex + 1) % list.length;
+      sceneIndexByTheme[theme] = nextIndex;
+      return list[nextIndex];
+    }
+
     async function loadAnimalPngs() {
+      if (animalsPool) return animalsPool;
+
       try {
         const response = await fetch('../../images/pictos/index.json');
         if (!response.ok) throw new Error('index.json unavailable');
         const data = await response.json();
         const animaux = data?.categories?.animaux?.items ?? [];
-        return animaux
+        animalsPool = animaux
           .map(item => item.file)
           .filter(name => typeof name === 'string' && name.toLowerCase().endsWith('.png'));
       } catch (error) {
         console.warn('Fallback animals list used:', error);
-        return FALLBACK_ANIMALS;
+        animalsPool = FALLBACK_ANIMALS;
       }
+
+      return animalsPool;
     }
 
     function placeObjects(files, sizePx) {
@@ -252,6 +310,7 @@
         img.className = 'hidden-object';
         img.src = `../../images/pictos/${file}`;
         img.alt = file.replace('.png', '');
+        img.dataset.key = `${file}-${idx}`;
         img.style.setProperty('--size', `${sizePx}px`);
 
         const margin = 30;
@@ -269,9 +328,24 @@
       updateObjectVisibility();
     }
 
+    function finishFindRoundIfComplete(total) {
+      if (roundTransitioning || modeSelect.value !== 'find') return;
+      if (total > 0 && foundKeys.size >= total) {
+        roundTransitioning = true;
+        rewardOverlay.classList.add('show');
+
+        setTimeout(async () => {
+          rewardOverlay.classList.remove('show');
+          await startRound(true);
+          roundTransitioning = false;
+        }, 1500);
+      }
+    }
+
     function updateObjectVisibility() {
       const lightRadius = Number(flashlightSizeInput.value);
       const revealRadius = Math.max(30, lightRadius * 0.7);
+      const mode = modeSelect.value;
       const images = objectsLayer.querySelectorAll('.hidden-object');
 
       images.forEach((img) => {
@@ -285,9 +359,18 @@
         const dx = flashlightX - nearestX;
         const dy = flashlightY - nearestY;
         const distance = Math.hypot(dx, dy);
+        const isRevealed = distance <= revealRadius;
+        const key = img.dataset.key;
 
-        img.style.opacity = distance <= revealRadius ? '1' : '0';
+        if (mode === 'find') {
+          if (isRevealed && key) foundKeys.add(key);
+          img.style.opacity = foundKeys.has(key) ? '1' : '0';
+        } else {
+          img.style.opacity = isRevealed ? '1' : '0';
+        }
       });
+
+      finishFindRoundIfComplete(images.length);
     }
 
     function renderFlashlightPosition() {
@@ -338,21 +421,35 @@
       }
     }
 
-    startButton.addEventListener('click', async () => {
-      await enterFullscreenOnStart();
-
-      const theme = document.getElementById('themeSelect').value;
+    async function startRound(useNextScene = false) {
+      const theme = themeSelect.value;
       const imageCount = Number(imageCountSelect.value);
       const imageSize = Number(imageSizeInput.value);
       const flashlightSize = Number(flashlightSizeInput.value);
+      const mode = modeSelect.value;
+
+      if (!useNextScene || mode !== 'find') {
+        sceneIndexByTheme[theme] = -1;
+      }
+
+      const nextScene = getNextSceneForTheme(theme);
+      if (nextScene) {
+        scene.style.backgroundImage = `url('${nextScene}')`;
+      }
+
+      scene.style.setProperty('--flashlight-size', `${flashlightSize}px`);
 
       const allAnimals = await loadAnimalPngs();
       const selected = shuffle(allAnimals).slice(0, imageCount);
 
-      scene.style.backgroundImage = `url('${SCENE_BY_THEME[theme]}')`;
-      scene.style.setProperty('--flashlight-size', `${flashlightSize}px`);
-
+      foundKeys = new Set();
+      rewardOverlay.classList.remove('show');
       placeObjects(selected, imageSize);
+    }
+
+    startButton.addEventListener('click', async () => {
+      await enterFullscreenOnStart();
+
       optionsModal.style.display = 'none';
       scene.style.display = 'block';
 
@@ -360,6 +457,8 @@
       flashlightY = window.innerHeight / 2;
       targetFlashlightX = flashlightX;
       targetFlashlightY = flashlightY;
+
+      await startRound(false);
 
       if (animationFrameId === null) {
         animationFrameId = requestAnimationFrame(renderFlashlightPosition);
