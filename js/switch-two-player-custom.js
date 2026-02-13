@@ -162,6 +162,7 @@ async function makeThumbnailFromVideo(srcOrFile) {
 const FS_DB_NAME = 'custom-video-handles';
 const FS_STORE = 'handles';
 const FILE_HANDLES_KEY = 'video-files';
+const FILE_BLOBS_KEY = 'video-blobs';
 const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
 function idbOpenFS() {
   return new Promise((res, rej) => {
@@ -239,6 +240,52 @@ async function deleteFileHandles() {
     await new Promise((res, rej) => {
       const tx = db.transaction(FS_STORE, 'readwrite');
       tx.objectStore(FS_STORE).delete(FILE_HANDLES_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch {}
+}
+
+async function saveBlobFiles(files) {
+  try {
+    const existing = await loadBlobFiles();
+    const byKey = new Map(existing.map((item) => [item.key, item]));
+    for (const file of files || []) {
+      if (!file || !VIDEO_RX.test(file.name)) continue;
+      const key = makeLocalKey(file.name, file.size, file.lastModified);
+      byKey.set(key, { key, name: file.name, blob: file });
+    }
+    const db = await idbOpenFS();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).put(Array.from(byKey.values()), FILE_BLOBS_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch {}
+}
+async function loadBlobFiles() {
+  try {
+    const db = await idbOpenFS();
+    return await new Promise((res) => {
+      const tx = db.transaction(FS_STORE, 'readonly');
+      const g = tx.objectStore(FS_STORE).get(FILE_BLOBS_KEY);
+      g.onsuccess = () => {
+        const files = Array.isArray(g.result) ? g.result : [];
+        res(files.filter((f) => f && f.blob && VIDEO_RX.test(f.name || '')));
+      };
+      g.onerror = () => res([]);
+    });
+  } catch {
+    return [];
+  }
+}
+async function deleteBlobFiles() {
+  try {
+    const db = await idbOpenFS();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, 'readwrite');
+      tx.objectStore(FS_STORE).delete(FILE_BLOBS_KEY);
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
     });
@@ -719,6 +766,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearHidden();              // NEW: forget hidden exclusions
     await deleteRepoHandle();   // NEW: forget saved folder handle
     await deleteFileHandles();
+    await deleteBlobFiles();
 
     // Reset selection / numbering / UI
     selectedMedia = [];
@@ -1476,8 +1524,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             types: [{ description: 'Videos', accept: { 'video/*': ['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.m4v'] } }]
           });
           if (!handles?.length) return;
-          await saveFileHandles(handles);
-          await populateFromFileHandles(handles);
+          const existingHandles = await loadFileHandles();
+          const mergedHandles = [...existingHandles, ...handles];
+          await saveFileHandles(mergedHandles);
+          await populateFromFileHandles(mergedHandles, repoHandle);
           return;
         } catch {}
       }
@@ -1493,7 +1543,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         initCard(card);
       }
       addVideoInput.value = '';
-      await deleteFileHandles();
+      await saveBlobFiles(files);
       updateSelectedMedia();
       renumberCards();
       saveLocalOrderForCurrentSet(); // persist order after adding
@@ -2283,8 +2333,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* Folder picker integration */
   let repoHandle = null;
 
-  async function populateFromFileHandles(handles) {
-    if (!isLocalCustomPage) return;
+
+  async function collectItemsFromFileHandles(handles) {
     const items = [];
     for (const handle of handles || []) {
       try {
@@ -2294,62 +2344,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         items.push({ file, key, name: file.name });
       } catch {}
     }
-
-    if (!items.length) {
-      (localVideoList || videoSelectionDiv).innerHTML = '';
-      updateSelectedMedia();
-      renumberCards();
-      return;
-    }
-
-    const sig = items.map(i => i.key).sort().join('||');
-    const map = getLocalOrderMap();
-    const saved = Array.isArray(map[sig]) ? map[sig] : null;
-    const rank = new Map();
-    if (saved) saved.forEach((k, i) => rank.set(k, i));
-
-    items.sort((a, b) => {
-      const ra = rank.has(a.key), rb = rank.has(b.key);
-      if (ra && rb) return rank.get(a.key) - rank.get(b.key);
-      if (ra && !rb) return -1;
-      if (!ra && rb) return 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-    });
-
-    const hidden = getHiddenSet();
-    const container = localVideoList || videoSelectionDiv;
-    const frag = document.createDocumentFragment();
-    for (const it of items) {
-      if (hidden.has(it.key)) continue;
-      const src = URL.createObjectURL(it.file);
-      const card = await buildVideoCardElement({ src, name: it.name, key: it.key });
-      initCard(card);
-      frag.appendChild(card);
-    }
-
-    container.innerHTML = '';
-    container.appendChild(frag);
-    updateSelectedMedia();
-    renumberCards();
-
-    const keysInDom = Array.from(container.querySelectorAll('.video-card')).map(c => c.dataset.key || c.dataset.src);
-    map[sig] = keysInDom;
-    setLocalOrderMap(map);
+    return items;
   }
 
-  // NEW: fully deterministic population using saved order pre-sort + hidden filter
-  async function populateFromRepo(handle) {
-    // 1) collect entries and file metadata
+  async function collectItemsFromBlobStorage() {
+    const stored = await loadBlobFiles();
+    return stored.map((item) => ({
+      file: item.blob,
+      key: item.key || makeLocalKey(item.name, item.blob?.size, item.blob?.lastModified),
+      name: item.name || item.blob?.name || 'video'
+    }));
+  }
+
+  async function collectItemsFromRepo(handle) {
     const items = [];
+    if (!handle) return items;
     for await (const entry of iterVideos(handle)) {
       const file = await entry.getFile();
       const key = makeLocalKey(entry.name, file.size, file.lastModified);
-      items.push({ entry, file, key, name: entry.name });
+      items.push({ file, key, name: entry.name });
     }
+    return items;
+  }
 
-    // NEW: drop items the user has hidden previously
+  async function renderCombinedLocalItems(items) {
+    if (!isLocalCustomPage) return;
+
+    const byKey = new Map();
+    for (const item of items || []) {
+      if (!item?.file || !item?.key || byKey.has(item.key)) continue;
+      byKey.set(item.key, item);
+    }
+    const mergedItems = Array.from(byKey.values());
+
     const hidden = getHiddenSet();
-    const visibleItems = items.filter(it => !hidden.has(it.key));
+    const visibleItems = mergedItems.filter(it => !hidden.has(it.key));
 
     if (!visibleItems.length) {
       (localVideoList || videoSelectionDiv).innerHTML = '';
@@ -2358,16 +2387,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    // 2) compute set signature BEFORE rendering (on visible set)
     const sig = visibleItems.map(i => i.key).sort().join('||');
     const map = getLocalOrderMap();
     const saved = Array.isArray(map[sig]) ? map[sig] : null;
-
-    // 3) build a rank map from saved order (if any)
     const rank = new Map();
     if (saved) saved.forEach((k, i) => rank.set(k, i));
 
-    // 4) sort items: saved order first, then newcomers alphabetically by name
     visibleItems.sort((a, b) => {
       const ra = rank.has(a.key), rb = rank.has(b.key);
       if (ra && rb) return rank.get(a.key) - rank.get(b.key);
@@ -2376,7 +2401,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
 
-    // 5) render cards in final order (no flicker reordering after)
     const container = localVideoList || videoSelectionDiv;
     const frag = document.createDocumentFragment();
     for (const it of visibleItems) {
@@ -2385,17 +2409,29 @@ document.addEventListener('DOMContentLoaded', async () => {
       initCard(card);
       frag.appendChild(card);
     }
+
     container.innerHTML = '';
     container.appendChild(frag);
-
-    // 6) finalize selection + numbering
     updateSelectedMedia();
     renumberCards();
 
-    // 7) persist current order (so newcomers get appended consistently next time)
     const keysInDom = Array.from(container.querySelectorAll('.video-card')).map(c => c.dataset.key || c.dataset.src);
     map[sig] = keysInDom;
     setLocalOrderMap(map);
+  }
+
+  async function populateFromFileHandles(handles, folderHandle = null) {
+    const fromHandles = await collectItemsFromFileHandles(handles);
+    const fromBlobs = await collectItemsFromBlobStorage();
+    const fromRepo = await collectItemsFromRepo(folderHandle);
+    await renderCombinedLocalItems([...fromHandles, ...fromBlobs, ...fromRepo]);
+  }
+
+  async function populateFromRepo(handle, handles = []) {
+    const fromRepo = await collectItemsFromRepo(handle);
+    const fromHandles = await collectItemsFromFileHandles(handles);
+    const fromBlobs = await collectItemsFromBlobStorage();
+    await renderCombinedLocalItems([...fromHandles, ...fromBlobs, ...fromRepo]);
   }
 
   async function chooseFolder() {
@@ -2403,7 +2439,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const handle = await window.showDirectoryPicker();
       repoHandle = handle;
       await saveRepoHandle(handle);
-      await populateFromRepo(repoHandle);
+      const savedHandles = await loadFileHandles();
+      await populateFromRepo(repoHandle, savedHandles);
     } catch {}
   }
 
@@ -2415,13 +2452,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
 
-      // Restore individually-picked video files (when file handles are supported)
-      if ('showOpenFilePicker' in window) {
-        const savedFiles = await loadFileHandles();
-        if (savedFiles.length) {
-          await populateFromFileHandles(savedFiles);
-        }
-      }
+      const savedFiles = ('showOpenFilePicker' in window) ? await loadFileHandles() : [];
 
       // Restore previously-selected folder (if supported and permission is granted)
       if ('showDirectoryPicker' in window) {
@@ -2430,8 +2461,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           const perm = await saved.requestPermission?.({mode:'read'});
           if (perm === 'granted') {
             repoHandle = saved;
-            await populateFromRepo(repoHandle);
           }
+        }
+      }
+
+      if (savedFiles.length || repoHandle) {
+        await populateFromFileHandles(savedFiles, repoHandle);
+      } else {
+        const fromBlobs = await collectItemsFromBlobStorage();
+        if (fromBlobs.length) {
+          await renderCombinedLocalItems(fromBlobs);
         }
       }
     } catch {}
