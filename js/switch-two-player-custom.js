@@ -1527,6 +1527,20 @@ document.addEventListener('DOMContentLoaded', async () => {
           const existingHandles = await loadFileHandles();
           const mergedHandles = [...existingHandles, ...handles];
           await saveFileHandles(mergedHandles);
+
+          // Also store blob fallback so these picks survive browsers/contexts
+          // where file handles are unavailable or permissions are later lost.
+          const pickedFiles = [];
+          for (const handle of handles) {
+            try {
+              const file = await handle.getFile();
+              if (file && VIDEO_RX.test(file.name)) pickedFiles.push(file);
+            } catch {}
+          }
+          if (pickedFiles.length) {
+            await saveBlobFiles(pickedFiles);
+          }
+
           await populateFromFileHandles(mergedHandles, repoHandle);
           return;
         } catch {}
