@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exploration lampe torche (tactile)</title>
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    #game-options {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.9);
+      padding: 16px;
+    }
+
+    #control-panel-options {
+      width: min(980px, 95vw);
+      background: #fff;
+      color: #222;
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+    }
+
+    #options-title-bar h2 {
+      margin: 0;
+      text-align: center;
+      color: #009688;
+      font-size: 1.6rem;
+    }
+
+    .menu-note {
+      margin: 10px 0 0;
+      text-align: center;
+      font-size: 0.98rem;
+      line-height: 1.35;
+    }
+
+    .value-readout {
+      color: #009688;
+      font-weight: 700;
+      margin: 4px 0;
+    }
+
+    .styled-slider { width: 90%; }
+    .options-column { gap: 10px; }
+    .options-column:first-child { align-items: flex-start !important; }
+
+    #startButton {
+      display: block;
+      margin: 8px auto 0;
+      min-width: 220px;
+    }
+
+    #scene {
+      position: fixed;
+      inset: 0;
+      display: none;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: cover;
+      touch-action: none;
+      cursor: none;
+    }
+
+    #objectsLayer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+    }
+
+    .hidden-object {
+      position: absolute;
+      width: var(--size, 100px);
+      height: var(--size, 100px);
+      object-fit: contain;
+      pointer-events: none;
+      opacity: 0;
+      filter: brightness(1.02) saturate(1.02);
+      transition: opacity 70ms linear;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 3.8s ease-in-out;
+      background:
+        radial-gradient(
+          circle var(--flashlight-size, 180px) at var(--flashlight-x, 50%) var(--flashlight-y, 50%),
+          rgba(255, 255, 255, 0.06) 0%,
+          rgba(0, 0, 0, 0.12) 24%,
+          rgba(0, 0, 0, 0.92) 55%,
+          rgba(0, 0, 0, 0.985) 100%
+        );
+    }
+
+    #scene.completed #overlay {
+      opacity: 0;
+    }
+
+    #pointer {
+      display: none;
+    }
+
+    #hint {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.58);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      z-index: 5;
+    }
+
+    #rewardCanvas {
+      position: absolute;
+      inset: 0;
+      display: none;
+      z-index: 6;
+      pointer-events: none;
+    }
+
+    #rewardCanvas.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-options">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2>Exploration lampe torche (prototype)</h2>
+      </div>
+      <p class="menu-note">Concept en une étape : déplacez votre doigt/souris pour révéler des PNG d'animaux cachés dans la scène.</p>
+
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label for="flashlightSize" class="teal-label label-block">Taille de la lampe</label>
+            <div class="value-readout"><span id="flashlightSizeValue">180</span> px</div>
+            <input id="flashlightSize" class="styled-slider" type="range" min="80" max="320" value="180" />
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="themeSelect" class="teal-label label-block">Thème</label>
+            <select id="themeSelect" class="styled-select">
+              <option value="africa">Afrique</option>
+              <option value="kitchen">Kitchen</option>
+              <option value="vegetables">Vegetables</option>
+              <option value="fruits">Fruits</option>
+              <option value="construction">Construction</option>
+            </select>
+          </div>
+          <div class="option-item">
+            <label for="modeSelect" class="teal-label label-block">Mode</label>
+            <select id="modeSelect" class="styled-select">
+              <option value="free">Free play</option>
+              <option value="find">Find</option>
+            </select>
+          </div>
+          <div class="option-item">
+            <label class="teal-label" for="ttsToggle">
+              <input id="ttsToggle" type="checkbox" />
+              <span>Lire le nom (TTS)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="imageCount" class="teal-label label-block">Nombre d'images</label>
+            <select id="imageCount" class="styled-select">
+              <option>4</option>
+              <option selected>6</option>
+              <option>8</option>
+              <option>10</option>
+            </select>
+          </div>
+          <div class="option-item">
+            <label for="imageSize" class="teal-label label-block">Taille des images</label>
+            <div class="value-readout"><span id="imageSizeValue">100</span> px</div>
+            <input id="imageSize" class="styled-slider" type="range" min="60" max="180" value="100" />
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <button id="startButton" class="button">Commencer</button>
+    </div>
+  </div>
+
+  <main id="scene" aria-label="Scène d'exploration tactile">
+    <div id="objectsLayer"></div>
+    <div id="overlay"></div>
+    <div id="pointer"></div>
+    <div id="hint">Touchez ou déplacez la souris pour chercher les animaux cachés.</div>
+    <canvas id="rewardCanvas" aria-hidden="true"></canvas>
+  </main>
+
+  <script>
+    const THEME_CONFIG = {
+      africa: {
+        category: 'animaux',
+        backgrounds: [
+          '../../images/africanbackground1.webp',
+          '../../images/africanbackground2.webp',
+          '../../images/africanbackground3.webp'
+        ]
+      },
+      kitchen: {
+        category: 'vaisselleCuisine',
+        backgrounds: [
+          '../../images/background/kitchen1.webp',
+          '../../images/background/kitchen2.webp',
+          '../../images/africanbackground1.webp'
+        ]
+      },
+      vegetables: {
+        category: 'legumes',
+        backgrounds: [
+          '../../images/background/vegetables1.webp',
+          '../../images/background/vegetables2.webp',
+          '../../images/africanbackground2.webp'
+        ]
+      },
+      fruits: {
+        category: 'fruits',
+        backgrounds: [
+          '../../images/background/fruits1.webp',
+          '../../images/background/fruits2.webp',
+          '../../images/africanbackground3.webp'
+        ]
+      },
+      construction: {
+        category: 'vehiculesConstruction',
+        backgrounds: [
+          '../../images/background/construction1.webp',
+          '../../images/background/construction2.webp',
+          '../../images/rocket/rocketbackground.png'
+        ]
+      }
+    };
+
+    const FALLBACK_ANIMALS = [
+      'elephant.png', 'lion.png', 'zebra.png', 'giraffe.png', 'monkey.png', 'hippo.png', 'snake.png', 'bird.png'
+    ];
+
+    const optionsModal = document.getElementById('game-options');
+    const scene = document.getElementById('scene');
+    const objectsLayer = document.getElementById('objectsLayer');
+    const rewardCanvas = document.getElementById('rewardCanvas');
+    const startButton = document.getElementById('startButton');
+    const flashlightSizeInput = document.getElementById('flashlightSize');
+    const flashlightSizeValue = document.getElementById('flashlightSizeValue');
+    const themeSelect = document.getElementById('themeSelect');
+    const modeSelect = document.getElementById('modeSelect');
+    const imageCountSelect = document.getElementById('imageCount');
+    const imageSizeInput = document.getElementById('imageSize');
+    const imageSizeValue = document.getElementById('imageSizeValue');
+    const ttsToggle = document.getElementById('ttsToggle');
+
+    let flashlightX = window.innerWidth / 2;
+    let flashlightY = window.innerHeight / 2;
+    let targetFlashlightX = flashlightX;
+    let targetFlashlightY = flashlightY;
+    let animationFrameId = null;
+    let animalsPoolByCategory = {};
+    let foundKeys = new Set();
+    let sceneIndexByTheme = {};
+    Object.keys(THEME_CONFIG).forEach((theme) => { sceneIndexByTheme[theme] = -1; });
+    let roundTransitioning = false;
+    let rewardRafId = null;
+    let rewardFireworks = [];
+    let rewardSparkles = [];
+    let rewardLastSpawn = 0;
+    let backgroundAvailability = {};
+
+
+    flashlightSizeInput.addEventListener('input', () => {
+      flashlightSizeValue.textContent = flashlightSizeInput.value;
+      updateObjectVisibility();
+    });
+
+    imageSizeInput.addEventListener('input', () => {
+      imageSizeValue.textContent = imageSizeInput.value;
+    });
+
+    function shuffle(arr) {
+      const clone = [...arr];
+      for (let i = clone.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [clone[i], clone[j]] = [clone[j], clone[i]];
+      }
+      return clone;
+    }
+
+    function canLoadBackground(url) {
+      if (url in backgroundAvailability) {
+        return Promise.resolve(backgroundAvailability[url]);
+      }
+
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          backgroundAvailability[url] = true;
+          resolve(true);
+        };
+        img.onerror = () => {
+          backgroundAvailability[url] = false;
+          resolve(false);
+        };
+        img.src = url;
+      });
+    }
+
+    async function getNextSceneForTheme(theme) {
+      const list = THEME_CONFIG[theme]?.backgrounds || [];
+      if (list.length === 0) return null;
+
+      const currentIndex = sceneIndexByTheme[theme] ?? -1;
+      for (let offset = 1; offset <= list.length; offset++) {
+        const nextIndex = (currentIndex + offset) % list.length;
+        const candidate = list[nextIndex];
+        if (await canLoadBackground(candidate)) {
+          sceneIndexByTheme[theme] = nextIndex;
+          return candidate;
+        }
+      }
+
+      return null;
+    }
+
+    async function loadPictosByCategory(categoryKey) {
+      if (animalsPoolByCategory[categoryKey]) return animalsPoolByCategory[categoryKey];
+
+      try {
+        const response = await fetch('../../images/pictos/index.json');
+        if (!response.ok) throw new Error('index.json unavailable');
+        const data = await response.json();
+        const items = data?.categories?.[categoryKey]?.items ?? [];
+        const files = items
+          .map(item => item.file)
+          .filter(name => typeof name === 'string' && name.toLowerCase().endsWith('.png'));
+
+        animalsPoolByCategory[categoryKey] = files.length > 0 ? files : FALLBACK_ANIMALS;
+      } catch (error) {
+        console.warn('Fallback animals list used:', error);
+        animalsPoolByCategory[categoryKey] = FALLBACK_ANIMALS;
+      }
+
+      return animalsPoolByCategory[categoryKey];
+    }
+
+    function placeObjects(files, sizePx) {
+      objectsLayer.innerHTML = '';
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      files.forEach((file, idx) => {
+        const img = document.createElement('img');
+        img.className = 'hidden-object';
+        img.src = `../../images/pictos/${file}`;
+        img.alt = file.replace('.png', '');
+        img.dataset.key = `${file}-${idx}`;
+        img.dataset.label = formatLabelFromFile(file);
+        img.dataset.wasVisible = '0';
+        img.style.setProperty('--size', `${sizePx}px`);
+
+        const margin = 30;
+        const x = margin + Math.random() * Math.max(1, (w - sizePx - margin * 2));
+        const y = margin + Math.random() * Math.max(1, (h - sizePx - margin * 2));
+
+        img.style.left = `${x}px`;
+        img.style.top = `${y}px`;
+        img.style.transform = `rotate(${(Math.random() * 18) - 9}deg)`;
+        img.style.zIndex = `${idx + 1}`;
+        img.onerror = () => img.remove();
+        objectsLayer.appendChild(img);
+      });
+
+      updateObjectVisibility();
+    }
+
+    function formatLabelFromFile(file) {
+      return file
+        .replace(/\.[^.]+$/, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .trim();
+    }
+
+    function speakAnimalName(name) {
+      if (!ttsToggle?.checked) return;
+      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return;
+      const text = (name || '').trim();
+      if (!text) return;
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function resizeRewardCanvas() {
+      rewardCanvas.width = window.innerWidth;
+      rewardCanvas.height = window.innerHeight;
+    }
+
+    function createFirework() {
+      const x = Math.random() * rewardCanvas.width;
+      const y = rewardCanvas.height * (0.15 + Math.random() * 0.55);
+      const hue = Math.floor(Math.random() * 360);
+      const count = 26 + Math.floor(Math.random() * 16);
+
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.2;
+        const speed = 1.5 + Math.random() * 4.2;
+        rewardSparkles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          fade: 0.012 + Math.random() * 0.02,
+          radius: 1.5 + Math.random() * 2.8,
+          hue
+        });
+      }
+
+      rewardFireworks.push({
+        x,
+        y,
+        radius: 12,
+        life: 1,
+        hue
+      });
+    }
+
+    function renderRewardFireworks(timestamp) {
+      const ctx = rewardCanvas.getContext('2d');
+      if (!ctx) return;
+
+      if (!rewardLastSpawn || timestamp - rewardLastSpawn > 260) {
+        createFirework();
+        rewardLastSpawn = timestamp;
+      }
+
+      ctx.clearRect(0, 0, rewardCanvas.width, rewardCanvas.height);
+      ctx.fillStyle = 'rgba(255,255,255,0.045)';
+      ctx.fillRect(0, 0, rewardCanvas.width, rewardCanvas.height);
+
+      rewardFireworks = rewardFireworks.filter((ring) => {
+        ring.radius += 1.8;
+        ring.life -= 0.03;
+        if (ring.life <= 0) return false;
+
+        ctx.beginPath();
+        ctx.arc(ring.x, ring.y, ring.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `hsla(${ring.hue}, 100%, 72%, ${ring.life * 0.45})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        return true;
+      });
+
+      rewardSparkles = rewardSparkles.filter((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.03;
+        p.vx *= 0.994;
+        p.vy *= 0.994;
+        p.life -= p.fade;
+        if (p.life <= 0) return false;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${p.hue}, 100%, 68%, ${p.life})`;
+        ctx.fill();
+        return true;
+      });
+
+      rewardRafId = requestAnimationFrame(renderRewardFireworks);
+    }
+
+    function startRewardFireworks() {
+      resizeRewardCanvas();
+      rewardCanvas.classList.add('show');
+      rewardSparkles = [];
+      rewardFireworks = [];
+      rewardLastSpawn = 0;
+
+      if (rewardRafId === null) {
+        rewardRafId = requestAnimationFrame(renderRewardFireworks);
+      }
+    }
+
+    function stopRewardFireworks() {
+      rewardCanvas.classList.remove('show');
+      if (rewardRafId !== null) {
+        cancelAnimationFrame(rewardRafId);
+        rewardRafId = null;
+      }
+      rewardSparkles = [];
+      rewardFireworks = [];
+      const ctx = rewardCanvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, rewardCanvas.width, rewardCanvas.height);
+    }
+
+    function finishFindRoundIfComplete(total) {
+      if (roundTransitioning || modeSelect.value !== 'find') return;
+      if (total > 0 && foundKeys.size >= total) {
+        roundTransitioning = true;
+        startRewardFireworks();
+
+        scene.classList.add('completed');
+
+        setTimeout(async () => {
+          stopRewardFireworks();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+          scene.classList.remove('completed');
+          await startRound(true);
+          roundTransitioning = false;
+        }, 6200);
+      }
+    }
+
+    function updateObjectVisibility() {
+      const lightRadius = Number(flashlightSizeInput.value);
+      const revealRadius = Math.max(30, lightRadius * 0.7);
+      const mode = modeSelect.value;
+      const images = objectsLayer.querySelectorAll('.hidden-object');
+
+      images.forEach((img) => {
+        const left = img.offsetLeft;
+        const right = left + img.offsetWidth;
+        const top = img.offsetTop;
+        const bottom = top + img.offsetHeight;
+
+        const nearestX = Math.max(left, Math.min(flashlightX, right));
+        const nearestY = Math.max(top, Math.min(flashlightY, bottom));
+        const dx = flashlightX - nearestX;
+        const dy = flashlightY - nearestY;
+        const distance = Math.hypot(dx, dy);
+        const isRevealed = distance <= revealRadius;
+        const key = img.dataset.key;
+
+        if (mode === 'find') {
+          const beforeFound = foundKeys.has(key);
+          if (isRevealed && key) foundKeys.add(key);
+          const nowFound = foundKeys.has(key);
+          img.style.opacity = nowFound ? '1' : '0';
+
+          if (!beforeFound && nowFound) {
+            speakAnimalName(img.dataset.label || img.alt);
+          }
+        } else {
+          img.style.opacity = isRevealed ? '1' : '0';
+
+          const wasVisible = img.dataset.wasVisible === '1';
+          if (isRevealed && !wasVisible) {
+            speakAnimalName(img.dataset.label || img.alt);
+          }
+          img.dataset.wasVisible = isRevealed ? '1' : '0';
+        }
+      });
+
+      finishFindRoundIfComplete(images.length);
+    }
+
+    function renderFlashlightPosition() {
+      const smoothing = 0.22;
+      flashlightX += (targetFlashlightX - flashlightX) * smoothing;
+      flashlightY += (targetFlashlightY - flashlightY) * smoothing;
+
+      if (Math.abs(targetFlashlightX - flashlightX) < 0.25) flashlightX = targetFlashlightX;
+      if (Math.abs(targetFlashlightY - flashlightY) < 0.25) flashlightY = targetFlashlightY;
+
+      const x = `${((flashlightX / window.innerWidth) * 100).toFixed(2)}%`;
+      const y = `${((flashlightY / window.innerHeight) * 100).toFixed(2)}%`;
+      scene.style.setProperty('--flashlight-x', x);
+      scene.style.setProperty('--flashlight-y', y);
+
+      updateObjectVisibility();
+
+      animationFrameId = requestAnimationFrame(renderFlashlightPosition);
+    }
+
+    function updateFlashlightPosition(clientX, clientY) {
+      targetFlashlightX = clientX;
+      targetFlashlightY = clientY;
+    }
+
+    scene.addEventListener('pointermove', (event) => {
+      updateFlashlightPosition(event.clientX, event.clientY);
+    });
+
+    scene.addEventListener('pointerdown', (event) => {
+      updateFlashlightPosition(event.clientX, event.clientY);
+    });
+
+    window.addEventListener('resize', () => {
+      flashlightX = window.innerWidth / 2;
+      flashlightY = window.innerHeight / 2;
+      targetFlashlightX = flashlightX;
+      targetFlashlightY = flashlightY;
+      resizeRewardCanvas();
+    });
+
+    async function enterFullscreenOnStart() {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (error) {
+          console.warn('Fullscreen request was denied or failed:', error);
+        }
+      }
+    }
+
+    async function startRound(useNextScene = false) {
+      const theme = themeSelect.value;
+      const imageCount = Number(imageCountSelect.value);
+      const imageSize = Number(imageSizeInput.value);
+      const flashlightSize = Number(flashlightSizeInput.value);
+      const mode = modeSelect.value;
+      const categoryKey = THEME_CONFIG[theme]?.category || 'animaux';
+
+      if (!useNextScene || mode !== 'find') {
+        sceneIndexByTheme[theme] = -1;
+      }
+
+      const nextScene = await getNextSceneForTheme(theme);
+      if (nextScene) {
+        scene.style.backgroundImage = `url('${nextScene}')`;
+      }
+
+      scene.style.setProperty('--flashlight-size', `${flashlightSize}px`);
+
+      const allAnimals = await loadPictosByCategory(categoryKey);
+      const selected = shuffle(allAnimals).slice(0, imageCount);
+
+      foundKeys = new Set();
+      stopRewardFireworks();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      scene.classList.remove('completed');
+      placeObjects(selected, imageSize);
+    }
+
+    startButton.addEventListener('click', async () => {
+      await enterFullscreenOnStart();
+
+      optionsModal.style.display = 'none';
+      scene.style.display = 'block';
+
+      flashlightX = window.innerWidth / 2;
+      flashlightY = window.innerHeight / 2;
+      targetFlashlightX = flashlightX;
+      targetFlashlightY = flashlightY;
+
+      await startRound(false);
+
+      if (animationFrameId === null) {
+        animationFrameId = requestAnimationFrame(renderFlashlightPosition);
+      }
+    });
+  </script>
+</body>
+</html>
