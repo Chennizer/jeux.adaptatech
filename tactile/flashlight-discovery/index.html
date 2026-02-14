@@ -130,53 +130,16 @@
       z-index: 5;
     }
 
-    #rewardOverlay {
+    #rewardCanvas {
       position: absolute;
       inset: 0;
       display: none;
       z-index: 6;
       pointer-events: none;
-      background:
-        radial-gradient(circle at center, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0) 35%),
-        conic-gradient(from 0deg, rgba(255, 224, 102, 0.24), rgba(123, 211, 255, 0.24), rgba(191, 123, 255, 0.24), rgba(255, 224, 102, 0.24));
-      mix-blend-mode: screen;
-      animation: rewardSpin 6s linear infinite, rewardBreath 2.2s ease-in-out infinite alternate;
     }
 
-    #rewardOverlay::before,
-    #rewardOverlay::after {
-      content: "";
-      position: absolute;
-      inset: 10%;
-      border-radius: 50%;
-      border: 2px solid rgba(255, 255, 255, 0.38);
-      filter: blur(0.4px);
-      animation: ringFloat 2.8s ease-in-out infinite alternate;
-    }
-
-    #rewardOverlay::after {
-      inset: 22%;
-      animation-duration: 3.7s;
-      border-color: rgba(255, 255, 255, 0.26);
-    }
-
-    #rewardOverlay.show {
+    #rewardCanvas.show {
       display: block;
-    }
-
-    @keyframes rewardSpin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    @keyframes rewardBreath {
-      from { opacity: 0.35; }
-      to { opacity: 0.78; }
-    }
-
-    @keyframes ringFloat {
-      from { transform: scale(0.92); }
-      to { transform: scale(1.06); }
     }
   </style>
 </head>
@@ -244,7 +207,7 @@
     <div id="overlay"></div>
     <div id="pointer"></div>
     <div id="hint">Touchez ou déplacez la souris pour chercher les animaux cachés.</div>
-    <div id="rewardOverlay" aria-hidden="true"></div>
+    <canvas id="rewardCanvas" aria-hidden="true"></canvas>
   </main>
 
   <script>
@@ -263,7 +226,7 @@
     const optionsModal = document.getElementById('game-options');
     const scene = document.getElementById('scene');
     const objectsLayer = document.getElementById('objectsLayer');
-    const rewardOverlay = document.getElementById('rewardOverlay');
+    const rewardCanvas = document.getElementById('rewardCanvas');
     const startButton = document.getElementById('startButton');
     const flashlightSizeInput = document.getElementById('flashlightSize');
     const flashlightSizeValue = document.getElementById('flashlightSizeValue');
@@ -282,6 +245,11 @@
     let foundKeys = new Set();
     let sceneIndexByTheme = { africa: -1 };
     let roundTransitioning = false;
+    let rewardRafId = null;
+    let rewardFireworks = [];
+    let rewardSparkles = [];
+    let rewardLastSpawn = 0;
+
 
     flashlightSizeInput.addEventListener('input', () => {
       flashlightSizeValue.textContent = flashlightSizeInput.value;
@@ -357,16 +325,120 @@
       updateObjectVisibility();
     }
 
+    function resizeRewardCanvas() {
+      rewardCanvas.width = window.innerWidth;
+      rewardCanvas.height = window.innerHeight;
+    }
+
+    function createFirework() {
+      const x = Math.random() * rewardCanvas.width;
+      const y = rewardCanvas.height * (0.15 + Math.random() * 0.55);
+      const hue = Math.floor(Math.random() * 360);
+      const count = 26 + Math.floor(Math.random() * 16);
+
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.2;
+        const speed = 1.5 + Math.random() * 4.2;
+        rewardSparkles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          fade: 0.012 + Math.random() * 0.02,
+          radius: 1.5 + Math.random() * 2.8,
+          hue
+        });
+      }
+
+      rewardFireworks.push({
+        x,
+        y,
+        radius: 12,
+        life: 1,
+        hue
+      });
+    }
+
+    function renderRewardFireworks(timestamp) {
+      const ctx = rewardCanvas.getContext('2d');
+      if (!ctx) return;
+
+      if (!rewardLastSpawn || timestamp - rewardLastSpawn > 260) {
+        createFirework();
+        rewardLastSpawn = timestamp;
+      }
+
+      ctx.clearRect(0, 0, rewardCanvas.width, rewardCanvas.height);
+      ctx.fillStyle = 'rgba(255,255,255,0.045)';
+      ctx.fillRect(0, 0, rewardCanvas.width, rewardCanvas.height);
+
+      rewardFireworks = rewardFireworks.filter((ring) => {
+        ring.radius += 1.8;
+        ring.life -= 0.03;
+        if (ring.life <= 0) return false;
+
+        ctx.beginPath();
+        ctx.arc(ring.x, ring.y, ring.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `hsla(${ring.hue}, 100%, 72%, ${ring.life * 0.45})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        return true;
+      });
+
+      rewardSparkles = rewardSparkles.filter((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.03;
+        p.vx *= 0.994;
+        p.vy *= 0.994;
+        p.life -= p.fade;
+        if (p.life <= 0) return false;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${p.hue}, 100%, 68%, ${p.life})`;
+        ctx.fill();
+        return true;
+      });
+
+      rewardRafId = requestAnimationFrame(renderRewardFireworks);
+    }
+
+    function startRewardFireworks() {
+      resizeRewardCanvas();
+      rewardCanvas.classList.add('show');
+      rewardSparkles = [];
+      rewardFireworks = [];
+      rewardLastSpawn = 0;
+
+      if (rewardRafId === null) {
+        rewardRafId = requestAnimationFrame(renderRewardFireworks);
+      }
+    }
+
+    function stopRewardFireworks() {
+      rewardCanvas.classList.remove('show');
+      if (rewardRafId !== null) {
+        cancelAnimationFrame(rewardRafId);
+        rewardRafId = null;
+      }
+      rewardSparkles = [];
+      rewardFireworks = [];
+      const ctx = rewardCanvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, rewardCanvas.width, rewardCanvas.height);
+    }
+
     function finishFindRoundIfComplete(total) {
       if (roundTransitioning || modeSelect.value !== 'find') return;
       if (total > 0 && foundKeys.size >= total) {
         roundTransitioning = true;
-        rewardOverlay.classList.add('show');
+        startRewardFireworks();
 
         scene.classList.add('completed');
 
         setTimeout(async () => {
-          rewardOverlay.classList.remove('show');
+          stopRewardFireworks();
           scene.classList.remove('completed');
           await startRound(true);
           roundTransitioning = false;
@@ -441,6 +513,7 @@
       flashlightY = window.innerHeight / 2;
       targetFlashlightX = flashlightX;
       targetFlashlightY = flashlightY;
+      resizeRewardCanvas();
     });
 
     async function enterFullscreenOnStart() {
@@ -475,7 +548,7 @@
       const selected = shuffle(allAnimals).slice(0, imageCount);
 
       foundKeys = new Set();
-      rewardOverlay.classList.remove('show');
+      stopRewardFireworks();
       scene.classList.remove('completed');
       placeObjects(selected, imageSize);
     }
