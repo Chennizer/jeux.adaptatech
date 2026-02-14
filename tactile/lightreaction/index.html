@@ -4,8 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Touch the Light</title>
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
   <style>
-    :root{
+    :root {
       --bg: #000;
       --ui: rgba(255,255,255,0.85);
       --ui2: rgba(255,255,255,0.6);
@@ -22,6 +23,7 @@
       user-select: none;
       -webkit-user-select: none;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      display: block;
     }
 
     #stage {
@@ -31,66 +33,55 @@
       cursor: default;
     }
 
-    /* Start overlay */
-    #overlay {
-      position: fixed;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      background: radial-gradient(circle at center, rgba(20,20,20,0.35) 0%, rgba(0,0,0,0.92) 70%);
-      z-index: 20;
-    }
-
-    .panel {
-      width: min(560px, calc(100vw - 32px));
-      border-radius: 18px;
-      padding: 18px 18px 16px;
-      background: rgba(15,15,15,0.72);
-      border: 1px solid rgba(255,255,255,0.14);
-      box-shadow: 0 18px 80px rgba(0,0,0,0.6);
-      color: var(--ui);
-    }
-
-    .panel h1{
-      margin: 0 0 8px;
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.2px;
-    }
-
-    .panel p{
-      margin: 0 0 14px;
-      color: var(--ui2);
-      line-height: 1.35;
-      font-size: 14px;
-    }
-
-    .row{
+    #game-options.modal {
       display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
     }
 
-    .btn{
-      appearance: none;
-      border: 1px solid rgba(255,255,255,0.18);
-      background: rgba(255,255,255,0.10);
-      color: var(--ui);
-      border-radius: 12px;
-      padding: 10px 14px;
-      font-weight: 650;
+    #control-panel-options {
+      padding: 14px 20px 20px;
+      z-index: 12;
+    }
+
+    #options-inline-container {
+      margin-top: 12px;
+    }
+
+    #mode-divider {
+      margin: 10px 0;
+    }
+
+    .option-item {
+      text-align: left;
+    }
+
+    #options-inline-container > .options-column:nth-child(2) .option-item {
+      text-align: center;
+    }
+
+    #options-inline-container > .options-column:nth-child(3) {
+      align-items: flex-start;
+    }
+
+    #options-inline-container > .options-column:nth-child(3) .option-item {
+      text-align: left;
+    }
+
+    .helper-text {
+      margin: 0;
+      color: #333;
       font-size: 14px;
-      cursor: pointer;
+      font-weight: 600;
     }
 
-    .btn:hover{ background: rgba(255,255,255,0.14); }
-    .btn:active{ transform: translateY(1px); }
+    .value-text {
+      font-weight: 700;
+      color: #00796B;
+    }
 
-    .hint{
-      font-size: 12px;
-      color: rgba(255,255,255,0.55);
+    .styled-slider {
+      width: min(260px, 90%);
     }
 
     /* ---------------------------
@@ -125,6 +116,14 @@
       will-change: transform, filter;
     }
 
+    .spot.hold-armed {
+      box-shadow:
+        0 0 22px var(--spotGlow),
+        0 0 66px var(--spotGlow),
+        0 0 130px rgba(255,255,255,0.18);
+      filter: brightness(1.2);
+    }
+
     .spot::after {
       content: "";
       position: absolute;
@@ -155,7 +154,6 @@
       66%      { transform: translate(calc(-50% - 2px), calc(-50% + 1px)) scale(0.99); }
     }
 
-    /* Optional vignette */
     #vignette {
       position: fixed;
       inset: 0;
@@ -167,9 +165,6 @@
       z-index: 1;
     }
 
-    /* ---------------------------
-       SLOW SCREEN FLASH (2s)
-       --------------------------- */
     #screenFlash {
       position: fixed;
       inset: 0;
@@ -190,10 +185,6 @@
       100% { opacity: 0; }
     }
 
-    /* ---------------------------
-       SLOW RIPPLE (4s)
-       Spreads to cover the whole screen
-       --------------------------- */
     .ripple {
       position: fixed;
       left: 0;
@@ -229,27 +220,80 @@
 <body>
   <div id="stage" aria-label="Touch the light game"></div>
 
-  <!-- slow flash + ripple layers -->
   <div id="screenFlash"></div>
-
   <div id="vignette"></div>
 
-  <div id="overlay">
-    <div class="panel" role="dialog" aria-modal="true" aria-label="Start game">
-      <h1>Touch the Light</h1>
-      <p>Touch or click the glowing circle. On hit: screen flashes (2s), ripple spreads (4s), and a random twinkle plays.</p>
-      <div class="row">
-        <button id="startBtn" class="btn">Start (Fullscreen)</button>
-        <span class="hint">Fullscreen requires a user click.</span>
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title">Touch the Light</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label" for="holdToActivate">
+              <input type="checkbox" id="holdToActivate">
+              Hold to activate
+            </label>
+          </div>
+          <div class="option-item">
+            <label for="holdDuration" class="teal-label label-block">Hold duration: <span id="holdDurationVal">1000</span> ms</label>
+            <input type="range" id="holdDuration" class="styled-slider" min="500" max="2000" step="50" value="1000">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="colorMode" class="teal-label label-block">Spot color palette</label>
+            <select id="colorMode" class="styled-select">
+              <option value="default" selected>Current mix (default)</option>
+              <option value="magenta">Magenta</option>
+              <option value="teal">Teal</option>
+              <option value="blue">Blue</option>
+              <option value="green">Green</option>
+              <option value="pink">Pink</option>
+              <option value="red">Red</option>
+              <option value="yellow">Yellow</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label" for="sfxEnabled">
+              <input type="checkbox" id="sfxEnabled" checked>
+              Sound effects
+            </label>
+          </div>
+          <div class="option-item">
+            <label for="sfxVolume" class="teal-label label-block">Sound volume: <span id="sfxVolumeVal">70</span>%</label>
+            <input type="range" id="sfxVolume" class="styled-slider" min="0" max="100" value="70">
+          </div>
+        </div>
       </div>
+
+      <div id="mode-divider"></div>
+      <p class="helper-text">Touch/click the glowing circle. Fullscreen starts after pressing Start.</p>
+      <button id="startButton" class="button">Start</button>
     </div>
   </div>
 
   <script>
     const stage = document.getElementById('stage');
-    const overlay = document.getElementById('overlay');
-    const startBtn = document.getElementById('startBtn');
+    const optionsOverlay = document.getElementById('game-options');
+    const startButton = document.getElementById('startButton');
     const screenFlash = document.getElementById('screenFlash');
+
+    const holdToActivate = document.getElementById('holdToActivate');
+    const holdDuration = document.getElementById('holdDuration');
+    const holdDurationVal = document.getElementById('holdDurationVal');
+    const colorMode = document.getElementById('colorMode');
+    const sfxEnabled = document.getElementById('sfxEnabled');
+    const sfxVolume = document.getElementById('sfxVolume');
+    const sfxVolumeVal = document.getElementById('sfxVolumeVal');
 
     const SETTINGS = {
       minSize: 140,
@@ -259,54 +303,80 @@
     };
 
     const SPARKLE_COLORS = [
-      { color: "rgba(255, 0, 200, 1)",  glow: "rgba(255, 0, 200, 0.55)" }, // Magenta
-      { color: "rgba(255, 60, 180, 1)", glow: "rgba(255, 60, 180, 0.55)" }, // Hot Pink
-      { color: "rgba(0, 255, 220, 1)",  glow: "rgba(0, 255, 220, 0.55)" }, // Electric Teal
-      { color: "rgba(0, 210, 255, 1)",  glow: "rgba(0, 210, 255, 0.55)" }, // Neon Cyan
-      { color: "rgba(170, 0, 255, 1)",  glow: "rgba(170, 0, 255, 0.55)" }, // Laser Purple
-      { color: "rgba(160, 255, 0, 1)",  glow: "rgba(160, 255, 0, 0.55)" }, // Bright Lime
-      { color: "rgba(255, 220, 0, 1)",  glow: "rgba(255, 220, 0, 0.55)" }, // Golden Yellow
-      { color: "rgba(255, 140, 0, 1)",  glow: "rgba(255, 140, 0, 0.55)" }, // Neon Orange
-      { color: "rgba(0, 120, 255, 1)",  glow: "rgba(0, 120, 255, 0.55)" }, // Electric Blue
-      { color: "rgba(255, 40, 60, 1)",  glow: "rgba(255, 40, 60, 0.55)" }  // Ruby Red
+      { color: 'rgba(255, 0, 200, 1)',  glow: 'rgba(255, 0, 200, 0.55)' },
+      { color: 'rgba(255, 60, 180, 1)', glow: 'rgba(255, 60, 180, 0.55)' },
+      { color: 'rgba(0, 255, 220, 1)',  glow: 'rgba(0, 255, 220, 0.55)' },
+      { color: 'rgba(0, 210, 255, 1)',  glow: 'rgba(0, 210, 255, 0.55)' },
+      { color: 'rgba(170, 0, 255, 1)',  glow: 'rgba(170, 0, 255, 0.55)' },
+      { color: 'rgba(160, 255, 0, 1)',  glow: 'rgba(160, 255, 0, 0.55)' },
+      { color: 'rgba(255, 220, 0, 1)',  glow: 'rgba(255, 220, 0, 0.55)' },
+      { color: 'rgba(255, 140, 0, 1)',  glow: 'rgba(255, 140, 0, 0.55)' },
+      { color: 'rgba(0, 120, 255, 1)',  glow: 'rgba(0, 120, 255, 0.55)' },
+      { color: 'rgba(255, 40, 60, 1)',  glow: 'rgba(255, 40, 60, 0.55)' }
     ];
 
-    // NEW: 4 random sound choices (same path, 1..4)
+    const MONO_PALETTES = {
+      magenta: [{ color: 'rgba(255, 0, 200, 1)', glow: 'rgba(255, 0, 200, 0.55)' }],
+      teal: [{ color: 'rgba(0, 255, 220, 1)', glow: 'rgba(0, 255, 220, 0.55)' }],
+      blue: [{ color: 'rgba(0, 120, 255, 1)', glow: 'rgba(0, 120, 255, 0.55)' }],
+      green: [{ color: 'rgba(160, 255, 0, 1)', glow: 'rgba(160, 255, 0, 0.55)' }],
+      pink: [{ color: 'rgba(255, 60, 180, 1)', glow: 'rgba(255, 60, 180, 0.55)' }],
+      red: [{ color: 'rgba(255, 40, 60, 1)', glow: 'rgba(255, 40, 60, 0.55)' }],
+      yellow: [{ color: 'rgba(255, 220, 0, 1)', glow: 'rgba(255, 220, 0, 0.55)' }]
+    };
+
     const POP_SOUNDS = [
-      "../../sounds/space/twinklingstar1.mp3",
-      "../../sounds/space/twinklingstar2.mp3",
-      "../../sounds/space/twinklingstar3.mp3",
-      "../../sounds/space/twinklingstar4.mp3"
+      '../../sounds/space/twinklingstar1.mp3',
+      '../../sounds/space/twinklingstar2.mp3',
+      '../../sounds/space/twinklingstar3.mp3',
+      '../../sounds/space/twinklingstar4.mp3'
     ];
 
-    // We'll reuse one Audio element for low latency and to avoid piling up audio objects.
-    // If you want overlapping sounds, tell me and I'll switch to a small pool of Audio elements.
     const popAudio = new Audio();
-    popAudio.preload = "auto";
+    popAudio.preload = 'auto';
+
+    const gameState = {
+      holdEnabled: false,
+      holdDurationMs: 1000,
+      colorMode: 'default',
+      sfxEnabled: true,
+      sfxVolume: 70
+    };
 
     let spotEl = null;
     let isPlaying = false;
+    let holdTimeoutId = null;
+    let holdingPointerId = null;
 
     function rand(min, max) {
       return Math.random() * (max - min) + min;
-    }
-
-    function pickRandomColor() {
-      return SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)];
     }
 
     function pickRandomSound() {
       return POP_SOUNDS[Math.floor(Math.random() * POP_SOUNDS.length)];
     }
 
+    function getPalette() {
+      if (gameState.colorMode === 'default') return SPARKLE_COLORS;
+      return MONO_PALETTES[gameState.colorMode] || SPARKLE_COLORS;
+    }
+
+    function pickColor() {
+      const palette = getPalette();
+      return palette[Math.floor(Math.random() * palette.length)];
+    }
+
     async function playPopSound() {
+      if (!gameState.sfxEnabled) return;
+
       try {
         const src = pickRandomSound();
-        if (popAudio.src !== src) popAudio.src = src;
+        if (!popAudio.src.includes(src)) popAudio.src = src;
+        popAudio.volume = gameState.sfxVolume / 100;
         popAudio.currentTime = 0;
         await popAudio.play();
       } catch (err) {
-        // Autoplay restrictions or missing file: ignore silently.
+        // Ignore autoplay/file errors.
       }
     }
 
@@ -314,9 +384,22 @@
       return stage.getBoundingClientRect();
     }
 
+    function clearHoldState() {
+      if (holdTimeoutId) {
+        clearTimeout(holdTimeoutId);
+        holdTimeoutId = null;
+      }
+      holdingPointerId = null;
+      if (spotEl) spotEl.classList.remove('hold-armed');
+    }
+
     function removeSpot() {
+      clearHoldState();
       if (spotEl && spotEl.parentNode) {
-        spotEl.removeEventListener('pointerdown', onSpotHit);
+        spotEl.removeEventListener('pointerdown', onSpotPointerDown);
+        spotEl.removeEventListener('pointerup', onSpotPointerEnd);
+        spotEl.removeEventListener('pointercancel', onSpotPointerEnd);
+        spotEl.removeEventListener('pointerleave', onSpotPointerEnd);
         spotEl.parentNode.removeChild(spotEl);
       }
       spotEl = null;
@@ -331,8 +414,7 @@
       const pad = SETTINGS.edgePadding + size * 0.35;
       const x = rand(pad, rect.width - pad);
       const y = rand(pad, rect.height - pad);
-
-      const c = pickRandomColor();
+      const c = pickColor();
 
       const el = document.createElement('div');
       el.className = 'spot';
@@ -343,52 +425,47 @@
       el.style.setProperty('--spotColor', c.color);
       el.style.setProperty('--spotGlow', c.glow);
 
-      // organic timing so it feels alive
       const breatheDur = rand(2.4, 3.4).toFixed(2);
       const driftDur = rand(3.0, 4.2).toFixed(2);
       const delay = (-rand(0, 1.6)).toFixed(2);
       el.style.animationDuration = `${breatheDur}s, ${driftDur}s`;
       el.style.animationDelay = `${delay}s, ${delay}s`;
 
-      el.dataset.flashColor = c.color;   // full-screen flash uses solid color
-      el.dataset.rippleColor = c.glow;   // ripple uses glow color
+      el.dataset.flashColor = c.color;
+      el.dataset.rippleColor = c.glow;
 
-      el.addEventListener('pointerdown', onSpotHit, { passive: false });
+      el.addEventListener('pointerdown', onSpotPointerDown, { passive: false });
+      el.addEventListener('pointerup', onSpotPointerEnd, { passive: false });
+      el.addEventListener('pointercancel', onSpotPointerEnd, { passive: false });
+      el.addEventListener('pointerleave', onSpotPointerEnd, { passive: false });
       stage.appendChild(el);
       spotEl = el;
     }
 
-    // Flash whole screen with the circle color for ~2 seconds
     function triggerScreenFlash(color) {
       screenFlash.style.setProperty('--flashColor', color);
-
       screenFlash.classList.remove('flash2s');
-      void screenFlash.offsetWidth; // restart animation
+      void screenFlash.offsetWidth;
       screenFlash.classList.add('flash2s');
     }
 
-    // Ripple spreads across the screen over 4 seconds
     function triggerRipple(x, y, color) {
       const rect = getStageRect();
-
-      // Maximum distance from (x,y) to any corner -> convert to scale
       const corners = [
-        {x: 0, y: 0},
-        {x: rect.width, y: 0},
-        {x: 0, y: rect.height},
-        {x: rect.width, y: rect.height}
+        { x: 0, y: 0 },
+        { x: rect.width, y: 0 },
+        { x: 0, y: rect.height },
+        { x: rect.width, y: rect.height }
       ];
 
       let maxDist = 0;
-      for (const c of corners) {
-        const dx = c.x - x;
-        const dy = c.y - y;
-        const d = Math.sqrt(dx*dx + dy*dy);
+      for (const corner of corners) {
+        const dx = corner.x - x;
+        const dy = corner.y - y;
+        const d = Math.sqrt(dx * dx + dy * dy);
         if (d > maxDist) maxDist = d;
       }
 
-      // Ripple element starts at 10px diameter; scale needed to reach maxDist radius
-      // radius needed ≈ maxDist; initial radius ≈ 5px => scale ≈ maxDist / 5
       const rippleScale = Math.max(20, (maxDist / 5)).toFixed(2);
 
       const ripple = document.createElement('div');
@@ -402,26 +479,46 @@
       ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
     }
 
-    function onSpotHit(e) {
-      e.preventDefault();
+    function triggerSpotHit() {
       if (!spotEl) return;
 
       const x = parseFloat(spotEl.style.left);
       const y = parseFloat(spotEl.style.top);
-
       const flashColor = spotEl.dataset.flashColor || 'rgba(255,255,255,0.25)';
       const rippleColor = spotEl.dataset.rippleColor || 'rgba(255,255,255,0.55)';
 
-      // NEW: play a random "twinkling star" sound (1..4)
       playPopSound();
-
-      // Slow effects
       triggerScreenFlash(flashColor);
       triggerRipple(x, y, rippleColor);
 
-      // Continue gameplay (respawn quickly; effects keep running on top)
       removeSpot();
       setTimeout(spawnSpot, SETTINGS.spawnDelayMs);
+    }
+
+    function onSpotPointerDown(event) {
+      event.preventDefault();
+      if (!spotEl) return;
+
+      if (!gameState.holdEnabled) {
+        triggerSpotHit();
+        return;
+      }
+
+      if (holdingPointerId !== null) return;
+      holdingPointerId = event.pointerId;
+      spotEl.classList.add('hold-armed');
+
+      holdTimeoutId = setTimeout(() => {
+        holdTimeoutId = null;
+        triggerSpotHit();
+      }, gameState.holdDurationMs);
+    }
+
+    function onSpotPointerEnd(event) {
+      if (!gameState.holdEnabled) return;
+      if (holdingPointerId === null) return;
+      if (event.pointerId !== holdingPointerId) return;
+      clearHoldState();
     }
 
     async function requestFullscreen() {
@@ -435,18 +532,52 @@
     }
 
     function startGame() {
-      overlay.style.display = 'none';
+      optionsOverlay.style.display = 'none';
       isPlaying = true;
 
-      // Prime audio on first gesture if possible (helps some browsers)
-      // (No sound played here; just loads the first file.)
       popAudio.src = POP_SOUNDS[0];
+      popAudio.volume = gameState.sfxVolume / 100;
       popAudio.load();
 
       spawnSpot();
     }
 
-    startBtn.addEventListener('click', async () => {
+    function bindMenu() {
+      holdDurationVal.textContent = holdDuration.value;
+      sfxVolumeVal.textContent = sfxVolume.value;
+
+      holdToActivate.addEventListener('change', () => {
+        gameState.holdEnabled = holdToActivate.checked;
+      });
+
+      holdDuration.addEventListener('input', () => {
+        gameState.holdDurationMs = parseInt(holdDuration.value, 10);
+        holdDurationVal.textContent = gameState.holdDurationMs;
+      });
+
+      colorMode.addEventListener('change', () => {
+        gameState.colorMode = colorMode.value;
+        if (isPlaying) spawnSpot();
+      });
+
+      sfxEnabled.addEventListener('change', () => {
+        gameState.sfxEnabled = sfxEnabled.checked;
+      });
+
+      sfxVolume.addEventListener('input', () => {
+        gameState.sfxVolume = parseInt(sfxVolume.value, 10);
+        sfxVolumeVal.textContent = gameState.sfxVolume;
+        popAudio.volume = gameState.sfxVolume / 100;
+      });
+
+      gameState.holdEnabled = holdToActivate.checked;
+      gameState.holdDurationMs = parseInt(holdDuration.value, 10);
+      gameState.colorMode = colorMode.value;
+      gameState.sfxEnabled = sfxEnabled.checked;
+      gameState.sfxVolume = parseInt(sfxVolume.value, 10);
+    }
+
+    startButton.addEventListener('click', async () => {
       await requestFullscreen();
       startGame();
     });
@@ -456,12 +587,7 @@
       spawnSpot();
     });
 
-    overlay.addEventListener('click', async (e) => {
-      if (e.target === overlay) {
-        await requestFullscreen();
-        startGame();
-      }
-    });
+    bindMenu();
   </script>
 </body>
 </html>
