@@ -205,7 +205,6 @@
       pointer-events: none;
       z-index: 9;
 
-      /* ring-ish look */
       background: radial-gradient(circle,
         rgba(0,0,0,0) 55%,
         rgba(255,255,255,0.65) 58%,
@@ -237,10 +236,11 @@
 
   <div id="overlay">
     <div class="panel" role="dialog" aria-modal="true" aria-label="Start game">
-
+      <h1>Touch the Light</h1>
+      <p>Touch or click the glowing circle. On hit: screen flashes (2s), ripple spreads (4s), and a random twinkle plays.</p>
       <div class="row">
-        <button id="startBtn" class="btn">Start </button>
-
+        <button id="startBtn" class="btn">Start (Fullscreen)</button>
+        <span class="hint">Fullscreen requires a user click.</span>
       </div>
     </div>
   </div>
@@ -255,9 +255,7 @@
       minSize: 140,
       maxSize: 270,
       spawnDelayMs: 260,
-      edgePadding: 32,
-      flashDurationMs: 2000,
-      rippleDurationMs: 4000
+      edgePadding: 32
     };
 
     const SPARKLE_COLORS = [
@@ -273,6 +271,19 @@
       { color: "rgba(255, 40, 60, 1)",  glow: "rgba(255, 40, 60, 0.55)" }  // Ruby Red
     ];
 
+    // NEW: 4 random sound choices (same path, 1..4)
+    const POP_SOUNDS = [
+      "../../sounds/space/twinklingstar1.mp3",
+      "../../sounds/space/twinklingstar2.mp3",
+      "../../sounds/space/twinklingstar3.mp3",
+      "../../sounds/space/twinklingstar4.mp3"
+    ];
+
+    // We'll reuse one Audio element for low latency and to avoid piling up audio objects.
+    // If you want overlapping sounds, tell me and I'll switch to a small pool of Audio elements.
+    const popAudio = new Audio();
+    popAudio.preload = "auto";
+
     let spotEl = null;
     let isPlaying = false;
 
@@ -282,6 +293,21 @@
 
     function pickRandomColor() {
       return SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)];
+    }
+
+    function pickRandomSound() {
+      return POP_SOUNDS[Math.floor(Math.random() * POP_SOUNDS.length)];
+    }
+
+    async function playPopSound() {
+      try {
+        const src = pickRandomSound();
+        if (popAudio.src !== src) popAudio.src = src;
+        popAudio.currentTime = 0;
+        await popAudio.play();
+      } catch (err) {
+        // Autoplay restrictions or missing file: ignore silently.
+      }
     }
 
     function getStageRect() {
@@ -386,6 +412,9 @@
       const flashColor = spotEl.dataset.flashColor || 'rgba(255,255,255,0.25)';
       const rippleColor = spotEl.dataset.rippleColor || 'rgba(255,255,255,0.55)';
 
+      // NEW: play a random "twinkling star" sound (1..4)
+      playPopSound();
+
       // Slow effects
       triggerScreenFlash(flashColor);
       triggerRipple(x, y, rippleColor);
@@ -408,6 +437,12 @@
     function startGame() {
       overlay.style.display = 'none';
       isPlaying = true;
+
+      // Prime audio on first gesture if possible (helps some browsers)
+      // (No sound played here; just loads the first file.)
+      popAudio.src = POP_SOUNDS[0];
+      popAudio.load();
+
       spawnSpot();
     }
 
