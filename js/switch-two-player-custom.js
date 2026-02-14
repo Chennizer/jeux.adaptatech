@@ -967,7 +967,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     ensureOrderButtons(card);
-    applyCategoryButtons(card);
+    if (isYoutubeCustomPage && urlVideoList && card.parentElement === urlVideoList) {
+      applyCategoryButtons(card);
+    } else {
+      const staleCategoryChips = card.querySelector('.category-chip-group');
+      if (staleCategoryChips) staleCategoryChips.remove();
+    }
 
     if (isCustomPage && !card.querySelector('.remove-btn')) {
       const rm = document.createElement('span');
@@ -1021,10 +1026,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function applyCategoryButtons(card) {
     if (!card) return;
-    if (!isYoutubeCustomPage) return;
-    if (urlVideoList && card.parentElement !== urlVideoList) return;
     const existing = card.querySelector('.category-chip-group');
     if (existing) existing.remove();
+    if (!isYoutubeCustomPage) return;
+    if (urlVideoList && card.parentElement !== urlVideoList) return;
     const state = getCategoryState();
     if (!isCategoriesEnabled(state)) return;
     if (!state || !Array.isArray(state.categories)) return;
