@@ -176,6 +176,12 @@
               <option value="find">Find</option>
             </select>
           </div>
+          <div class="option-item">
+            <label class="teal-label" for="ttsToggle">
+              <input id="ttsToggle" type="checkbox" />
+              <span>Lire le nom (TTS)</span>
+            </label>
+          </div>
         </div>
 
         <div class="options-column">
@@ -235,6 +241,7 @@
     const imageCountSelect = document.getElementById('imageCount');
     const imageSizeInput = document.getElementById('imageSize');
     const imageSizeValue = document.getElementById('imageSizeValue');
+    const ttsToggle = document.getElementById('ttsToggle');
 
     let flashlightX = window.innerWidth / 2;
     let flashlightY = window.innerHeight / 2;
@@ -308,6 +315,8 @@
         img.src = `../../images/pictos/${file}`;
         img.alt = file.replace('.png', '');
         img.dataset.key = `${file}-${idx}`;
+        img.dataset.label = formatLabelFromFile(file);
+        img.dataset.wasVisible = '0';
         img.style.setProperty('--size', `${sizePx}px`);
 
         const margin = 30;
@@ -323,6 +332,28 @@
       });
 
       updateObjectVisibility();
+    }
+
+    function formatLabelFromFile(file) {
+      return file
+        .replace(/\.[^.]+$/, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .trim();
+    }
+
+    function speakAnimalName(name) {
+      if (!ttsToggle?.checked) return;
+      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return;
+      const text = (name || '').trim();
+      if (!text) return;
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
     }
 
     function resizeRewardCanvas() {
@@ -439,6 +470,7 @@
 
         setTimeout(async () => {
           stopRewardFireworks();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
           scene.classList.remove('completed');
           await startRound(true);
           roundTransitioning = false;
@@ -467,10 +499,22 @@
         const key = img.dataset.key;
 
         if (mode === 'find') {
+          const beforeFound = foundKeys.has(key);
           if (isRevealed && key) foundKeys.add(key);
-          img.style.opacity = foundKeys.has(key) ? '1' : '0';
+          const nowFound = foundKeys.has(key);
+          img.style.opacity = nowFound ? '1' : '0';
+
+          if (!beforeFound && nowFound) {
+            speakAnimalName(img.dataset.label || img.alt);
+          }
         } else {
           img.style.opacity = isRevealed ? '1' : '0';
+
+          const wasVisible = img.dataset.wasVisible === '1';
+          if (isRevealed && !wasVisible) {
+            speakAnimalName(img.dataset.label || img.alt);
+          }
+          img.dataset.wasVisible = isRevealed ? '1' : '0';
         }
       });
 
@@ -549,6 +593,7 @@
 
       foundKeys = new Set();
       stopRewardFireworks();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       scene.classList.remove('completed');
       placeObjects(selected, imageSize);
     }
