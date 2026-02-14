@@ -167,6 +167,10 @@
             <label for="themeSelect" class="teal-label label-block">Thème</label>
             <select id="themeSelect" class="styled-select">
               <option value="africa">Afrique</option>
+              <option value="kitchen">Kitchen</option>
+              <option value="vegetables">Vegetables</option>
+              <option value="fruits">Fruits</option>
+              <option value="construction">Construction</option>
             </select>
           </div>
           <div class="option-item">
@@ -217,12 +221,47 @@
   </main>
 
   <script>
-    const SCENE_BY_THEME = {
-      africa: [
-        '../../images/africanbackground1.webp',
-        '../../images/africanbackground2.webp',
-        '../../images/africanbackground3.webp'
-      ]
+    const THEME_CONFIG = {
+      africa: {
+        category: 'animaux',
+        backgrounds: [
+          '../../images/africanbackground1.webp',
+          '../../images/africanbackground2.webp',
+          '../../images/africanbackground3.webp'
+        ]
+      },
+      kitchen: {
+        category: 'vaisselleCuisine',
+        backgrounds: [
+          '../../images/background/kitchen1.webp',
+          '../../images/background/kitchen2.webp',
+          '../../images/africanbackground1.webp'
+        ]
+      },
+      vegetables: {
+        category: 'legumes',
+        backgrounds: [
+          '../../images/background/vegetables1.webp',
+          '../../images/background/vegetables2.webp',
+          '../../images/africanbackground2.webp'
+        ]
+      },
+      fruits: {
+        category: 'fruits',
+        backgrounds: [
+          '../../images/background/fruits1.webp',
+          '../../images/background/fruits2.webp',
+          '../../images/africanbackground3.webp'
+        ]
+      },
+      construction: {
+        category: 'vehiculesConstruction',
+        backgrounds: [
+          '../../images/background/construction1.webp',
+          '../../images/background/construction2.webp',
+          '../../images/rocket/rocketbackground.png'
+        ]
+      }
     };
 
     const FALLBACK_ANIMALS = [
@@ -248,14 +287,16 @@
     let targetFlashlightX = flashlightX;
     let targetFlashlightY = flashlightY;
     let animationFrameId = null;
-    let animalsPool = null;
+    let animalsPoolByCategory = {};
     let foundKeys = new Set();
-    let sceneIndexByTheme = { africa: -1 };
+    let sceneIndexByTheme = {};
+    Object.keys(THEME_CONFIG).forEach((theme) => { sceneIndexByTheme[theme] = -1; });
     let roundTransitioning = false;
     let rewardRafId = null;
     let rewardFireworks = [];
     let rewardSparkles = [];
     let rewardLastSpawn = 0;
+    let backgroundAvailability = {};
 
 
     flashlightSizeInput.addEventListener('input', () => {
@@ -276,32 +317,61 @@
       return clone;
     }
 
-    function getNextSceneForTheme(theme) {
-      const list = SCENE_BY_THEME[theme] || [];
-      if (list.length === 0) return null;
-      const currentIndex = sceneIndexByTheme[theme] ?? -1;
-      const nextIndex = (currentIndex + 1) % list.length;
-      sceneIndexByTheme[theme] = nextIndex;
-      return list[nextIndex];
+    function canLoadBackground(url) {
+      if (url in backgroundAvailability) {
+        return Promise.resolve(backgroundAvailability[url]);
+      }
+
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          backgroundAvailability[url] = true;
+          resolve(true);
+        };
+        img.onerror = () => {
+          backgroundAvailability[url] = false;
+          resolve(false);
+        };
+        img.src = url;
+      });
     }
 
-    async function loadAnimalPngs() {
-      if (animalsPool) return animalsPool;
+    async function getNextSceneForTheme(theme) {
+      const list = THEME_CONFIG[theme]?.backgrounds || [];
+      if (list.length === 0) return null;
+
+      const currentIndex = sceneIndexByTheme[theme] ?? -1;
+      for (let offset = 1; offset <= list.length; offset++) {
+        const nextIndex = (currentIndex + offset) % list.length;
+        const candidate = list[nextIndex];
+        if (await canLoadBackground(candidate)) {
+          sceneIndexByTheme[theme] = nextIndex;
+          return candidate;
+        }
+      }
+
+      return null;
+    }
+
+    async function loadPictosByCategory(categoryKey) {
+      if (animalsPoolByCategory[categoryKey]) return animalsPoolByCategory[categoryKey];
 
       try {
         const response = await fetch('../../images/pictos/index.json');
         if (!response.ok) throw new Error('index.json unavailable');
         const data = await response.json();
-        const animaux = data?.categories?.animaux?.items ?? [];
-        animalsPool = animaux
+        const items = data?.categories?.[categoryKey]?.items ?? [];
+        const files = items
           .map(item => item.file)
           .filter(name => typeof name === 'string' && name.toLowerCase().endsWith('.png'));
+
+        animalsPoolByCategory[categoryKey] = files.length > 0 ? files : FALLBACK_ANIMALS;
       } catch (error) {
         console.warn('Fallback animals list used:', error);
-        animalsPool = FALLBACK_ANIMALS;
+        animalsPoolByCategory[categoryKey] = FALLBACK_ANIMALS;
       }
 
-      return animalsPool;
+      return animalsPoolByCategory[categoryKey];
     }
 
     function placeObjects(files, sizePx) {
@@ -576,19 +646,20 @@
       const imageSize = Number(imageSizeInput.value);
       const flashlightSize = Number(flashlightSizeInput.value);
       const mode = modeSelect.value;
+      const categoryKey = THEME_CONFIG[theme]?.category || 'animaux';
 
       if (!useNextScene || mode !== 'find') {
         sceneIndexByTheme[theme] = -1;
       }
 
-      const nextScene = getNextSceneForTheme(theme);
+      const nextScene = await getNextSceneForTheme(theme);
       if (nextScene) {
         scene.style.backgroundImage = `url('${nextScene}')`;
       }
 
       scene.style.setProperty('--flashlight-size', `${flashlightSize}px`);
 
-      const allAnimals = await loadAnimalPngs();
+      const allAnimals = await loadPictosByCategory(categoryKey);
       const selected = shuffle(allAnimals).slice(0, imageCount);
 
       foundKeys = new Set();
