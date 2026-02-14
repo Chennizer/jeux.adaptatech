@@ -272,6 +272,16 @@
             <label for="sfxVolume" class="teal-label label-block">Sound volume: <span id="sfxVolumeVal">70</span>%</label>
             <input type="range" id="sfxVolume" class="styled-slider" min="0" max="100" value="70">
           </div>
+          <div class="option-item">
+            <label class="teal-label" for="musicEnabled">
+              <input type="checkbox" id="musicEnabled">
+              Music
+            </label>
+          </div>
+          <div class="option-item">
+            <label for="musicVolume" class="teal-label label-block">Music volume: <span id="musicVolumeVal">45</span>%</label>
+            <input type="range" id="musicVolume" class="styled-slider" min="0" max="100" value="45">
+          </div>
         </div>
       </div>
 
@@ -294,6 +304,9 @@
     const sfxEnabled = document.getElementById('sfxEnabled');
     const sfxVolume = document.getElementById('sfxVolume');
     const sfxVolumeVal = document.getElementById('sfxVolumeVal');
+    const musicEnabled = document.getElementById('musicEnabled');
+    const musicVolume = document.getElementById('musicVolume');
+    const musicVolumeVal = document.getElementById('musicVolumeVal');
 
     const SETTINGS = {
       minSize: 140,
@@ -332,15 +345,25 @@
       '../../sounds/space/twinklingstar4.mp3'
     ];
 
+    const MUSIC_PLAYLIST = [
+      '../../songs/space/spacegood1.mp3',
+      '../../songs/space/spacegood2.mp3',
+      '../../songs/space/spacegood3.mp3'
+    ];
+
     const popAudio = new Audio();
     popAudio.preload = 'auto';
+    const musicAudio = new Audio();
+    musicAudio.preload = 'auto';
 
     const gameState = {
       holdEnabled: false,
       holdDurationMs: 1000,
       colorMode: 'default',
       sfxEnabled: true,
-      sfxVolume: 70
+      sfxVolume: 70,
+      musicEnabled: false,
+      musicVolume: 45
     };
 
     let spotEl = null;
@@ -354,6 +377,10 @@
 
     function pickRandomSound() {
       return POP_SOUNDS[Math.floor(Math.random() * POP_SOUNDS.length)];
+    }
+
+    function pickRandomMusicTrack() {
+      return MUSIC_PLAYLIST[Math.floor(Math.random() * MUSIC_PLAYLIST.length)];
     }
 
     function getPalette() {
@@ -377,6 +404,34 @@
         await popAudio.play();
       } catch (err) {
         // Ignore autoplay/file errors.
+      }
+    }
+
+    async function playRandomMusicTrack() {
+      if (!gameState.musicEnabled) return;
+
+      try {
+        const src = pickRandomMusicTrack();
+        musicAudio.src = src;
+        musicAudio.volume = gameState.musicVolume / 100;
+        musicAudio.currentTime = 0;
+        await musicAudio.play();
+      } catch (err) {
+        // Ignore autoplay/file errors.
+      }
+    }
+
+    function syncMusicPlayback() {
+      musicAudio.volume = gameState.musicVolume / 100;
+
+      if (!gameState.musicEnabled) {
+        musicAudio.pause();
+        musicAudio.currentTime = 0;
+        return;
+      }
+
+      if (isPlaying && (musicAudio.paused || !musicAudio.src)) {
+        playRandomMusicTrack();
       }
     }
 
@@ -538,6 +593,7 @@
       popAudio.src = POP_SOUNDS[0];
       popAudio.volume = gameState.sfxVolume / 100;
       popAudio.load();
+      syncMusicPlayback();
 
       spawnSpot();
     }
@@ -545,6 +601,12 @@
     function bindMenu() {
       holdDurationVal.textContent = holdDuration.value;
       sfxVolumeVal.textContent = sfxVolume.value;
+      musicVolumeVal.textContent = musicVolume.value;
+
+      musicAudio.addEventListener('ended', () => {
+        if (!gameState.musicEnabled || !isPlaying) return;
+        playRandomMusicTrack();
+      });
 
       holdToActivate.addEventListener('change', () => {
         gameState.holdEnabled = holdToActivate.checked;
@@ -570,11 +632,25 @@
         popAudio.volume = gameState.sfxVolume / 100;
       });
 
+      musicEnabled.addEventListener('change', () => {
+        gameState.musicEnabled = musicEnabled.checked;
+        syncMusicPlayback();
+      });
+
+      musicVolume.addEventListener('input', () => {
+        gameState.musicVolume = parseInt(musicVolume.value, 10);
+        musicVolumeVal.textContent = gameState.musicVolume;
+        musicAudio.volume = gameState.musicVolume / 100;
+      });
+
       gameState.holdEnabled = holdToActivate.checked;
       gameState.holdDurationMs = parseInt(holdDuration.value, 10);
       gameState.colorMode = colorMode.value;
       gameState.sfxEnabled = sfxEnabled.checked;
       gameState.sfxVolume = parseInt(sfxVolume.value, 10);
+      gameState.musicEnabled = musicEnabled.checked;
+      gameState.musicVolume = parseInt(musicVolume.value, 10);
+      musicAudio.volume = gameState.musicVolume / 100;
     }
 
     startButton.addEventListener('click', async () => {
