@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eyegaze Duel</title>
+  <script src="https://cdn.ably.io/lib/ably.min-1.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .hud {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 5;
+    }
+
+    .card {
+      background: rgba(16, 16, 16, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 12px 16px;
+      min-width: 200px;
+      backdrop-filter: blur(6px);
+    }
+
+    .score-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 18px;
+      margin-top: 8px;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--dot-color, #4cc3ff);
+    }
+
+    .status {
+      font-size: 14px;
+      opacity: 0.8;
+      margin-top: 6px;
+    }
+
+    .arena {
+      position: absolute;
+      inset: 0;
+    }
+
+    #target {
+      position: absolute;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fff, var(--target-color, #ff5a5f));
+      box-shadow: 0 0 30px rgba(255, 90, 95, 0.6);
+      display: grid;
+      place-items: center;
+    }
+
+    #target .dwell-ring {
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      background: conic-gradient(
+        var(--dwell-color, #ffe66d) var(--progress, 0%),
+        rgba(0, 0, 0, 0) 0%
+      );
+      transition: background 0.05s linear;
+    }
+
+    .pointer {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 4;
+      background: var(--pointer-color, #4cc3ff);
+    }
+
+    .helper {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(16, 16, 16, 0.8);
+      padding: 10px 18px;
+      border-radius: 20px;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    button {
+      background: #1c1c1c;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      border-color: rgba(255, 255, 255, 0.6);
+    }
+
+    .dwell-complete {
+      animation: dwell-pop 0.35s ease-out;
+    }
+
+    @keyframes dwell-pop {
+      0% {
+        transform: scale(1);
+        box-shadow: 0 0 30px rgba(255, 255, 255, 0.35);
+      }
+      55% {
+        transform: scale(1.12);
+        box-shadow: 0 0 60px rgba(255, 230, 109, 0.85);
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 30px rgba(255, 255, 255, 0.35);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <div class="card">
+      <div class="score-row">
+        <span class="legend"><span class="dot" style="--dot-color: #ff4d4d;"></span>You</span>
+        <strong id="scoreYou">0</strong>
+      </div>
+      <div class="score-row">
+        <span class="legend"><span class="dot" style="--dot-color: #4dff6a;"></span>Opponent</span>
+        <strong id="scoreOpponent">0</strong>
+      </div>
+    </div>
+    <div class="card">
+      <div class="status">Dwell time: <span id="dwellDisplay">1.2s</span></div>
+      <div class="status" id="connectionStatus">Connecting to Ably…</div>
+      <button id="resetButton" type="button">Reset scores</button>
+    </div>
+  </div>
+
+  <div class="arena" id="arena">
+    <div id="target" aria-label="Target">
+      <div class="dwell-ring" id="dwellRing"></div>
+    </div>
+    <div class="pointer" id="pointerYou" style="--pointer-color: #ff4d4d;"></div>
+    <div class="pointer" id="pointerOpponent" style="--pointer-color: #4dff6a;"></div>
+  </div>
+
+  <div class="helper">Move the gaze cursor to the target and hold to score.</div>
+
+  <script>
+    const ABLY_KEY = 'cdtKhA.qjdiYA:nbUbeaXqiQWHgQF1F9Nn0glvP62CRod3LcbAQDWJaIE';
+    const CHANNEL_NAME = 'eyegaze-duel';
+    const DWELL_TIME = 1200;
+
+    const arena = document.getElementById('arena');
+    const target = document.getElementById('target');
+    const dwellRing = document.getElementById('dwellRing');
+    const pointerYou = document.getElementById('pointerYou');
+    const pointerOpponent = document.getElementById('pointerOpponent');
+    const scoreYouEl = document.getElementById('scoreYou');
+    const scoreOpponentEl = document.getElementById('scoreOpponent');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const dwellDisplay = document.getElementById('dwellDisplay');
+    const resetButton = document.getElementById('resetButton');
+
+    dwellDisplay.textContent = `${(DWELL_TIME / 1000).toFixed(1)}s`;
+
+    const clientId = localStorage.getItem('eyegaze-duel-id') || `player-${Math.random().toString(16).slice(2, 8)}`;
+    localStorage.setItem('eyegaze-duel-id', clientId);
+
+    const ably = new Ably.Realtime({ key: ABLY_KEY, clientId });
+    const channel = ably.channels.get(CHANNEL_NAME);
+
+    const state = {
+      pointer: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+      opponent: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+      target: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+      targetColor: '#ff5a5f',
+      dwellStart: null,
+      scoreYou: 0,
+      scoreOpponent: 0,
+    };
+
+    target.addEventListener('animationend', () => {
+      target.classList.remove('dwell-complete');
+    });
+
+    function randomTarget() {
+      const padding = 120;
+      const x = Math.random() * (window.innerWidth - padding * 2) + padding;
+      const y = Math.random() * (window.innerHeight - padding * 2) + padding;
+      const colors = ['#ff5a5f', '#3ddc97', '#8f7bff', '#ffb347', '#4cc3ff'];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      return { x, y, color };
+    }
+
+    function positionTarget(x, y, color) {
+      state.target.x = x;
+      state.target.y = y;
+      state.targetColor = color;
+      target.style.transform = `translate(${x - 70}px, ${y - 70}px)`;
+      target.style.setProperty('--target-color', color);
+      target.style.setProperty('--dwell-color', color);
+    }
+
+    function updatePointer(el, point) {
+      el.style.left = `${point.x}px`;
+      el.style.top = `${point.y}px`;
+    }
+
+    function updateScores() {
+      scoreYouEl.textContent = state.scoreYou;
+      scoreOpponentEl.textContent = state.scoreOpponent;
+    }
+
+    function updateDwell(progress) {
+      const percentage = Math.min(100, Math.max(0, progress * 100));
+      dwellRing.style.setProperty('--progress', `${percentage}%`);
+    }
+
+    function resetDwell() {
+      state.dwellStart = null;
+      updateDwell(0);
+    }
+
+    function handleDwell() {
+      const dx = state.pointer.x - state.target.x;
+      const dy = state.pointer.y - state.target.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const inside = distance < 70;
+
+      if (!inside) {
+        resetDwell();
+        return;
+      }
+
+      if (!state.dwellStart) {
+        state.dwellStart = performance.now();
+      }
+
+      const elapsed = performance.now() - state.dwellStart;
+      updateDwell(elapsed / DWELL_TIME);
+
+      if (elapsed >= DWELL_TIME) {
+        const nextTarget = randomTarget();
+        state.scoreYou += 1;
+        updateScores();
+        resetDwell();
+        target.classList.remove('dwell-complete');
+        void target.offsetWidth;
+        target.classList.add('dwell-complete');
+        channel.publish('score', {
+          id: clientId,
+          score: state.scoreYou,
+          target: nextTarget,
+        });
+      }
+    }
+
+    function onMove(event) {
+      const rect = arena.getBoundingClientRect();
+      state.pointer.x = Math.min(rect.width, Math.max(0, event.clientX - rect.left));
+      state.pointer.y = Math.min(rect.height, Math.max(0, event.clientY - rect.top));
+    }
+
+    let publishQueued = false;
+    function publishPointer() {
+      if (publishQueued) return;
+      publishQueued = true;
+      requestAnimationFrame(() => {
+        publishQueued = false;
+        channel.publish('pointer', {
+          id: clientId,
+          x: state.pointer.x,
+          y: state.pointer.y,
+        });
+      });
+    }
+
+    arena.addEventListener('mousemove', (event) => {
+      onMove(event);
+      publishPointer();
+    });
+
+    arena.addEventListener('touchmove', (event) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      onMove({ clientX: touch.clientX, clientY: touch.clientY });
+      publishPointer();
+    }, { passive: true });
+
+    resetButton.addEventListener('click', () => {
+      state.scoreYou = 0;
+      state.scoreOpponent = 0;
+      updateScores();
+      channel.publish('reset', { id: clientId });
+    });
+
+    ably.connection.on('connected', () => {
+      connectionStatus.textContent = `Connected as ${clientId}`;
+      const initialTarget = randomTarget();
+      positionTarget(initialTarget.x, initialTarget.y, initialTarget.color);
+      channel.publish('target', initialTarget);
+    });
+
+    ably.connection.on('failed', () => {
+      connectionStatus.textContent = 'Connection failed. Check the key or network.';
+    });
+
+    channel.subscribe('pointer', (message) => {
+      if (message.data.id === clientId) return;
+      state.opponent.x = message.data.x;
+      state.opponent.y = message.data.y;
+    });
+
+    channel.subscribe('score', (message) => {
+      if (message.data.id !== clientId) {
+        state.scoreOpponent = message.data.score || 0;
+        updateScores();
+      }
+      if (message.data.target) {
+        positionTarget(message.data.target.x, message.data.target.y, message.data.target.color);
+      }
+    });
+
+    channel.subscribe('target', (message) => {
+      if (!message?.data) return;
+      positionTarget(message.data.x, message.data.y, message.data.color);
+    });
+
+    channel.subscribe('reset', () => {
+      state.scoreYou = 0;
+      state.scoreOpponent = 0;
+      updateScores();
+    });
+
+    function tick() {
+      updatePointer(pointerYou, state.pointer);
+      updatePointer(pointerOpponent, state.opponent);
+      handleDwell();
+      requestAnimationFrame(tick);
+    }
+
+    window.addEventListener('resize', () => {
+      const nextTarget = randomTarget();
+      positionTarget(nextTarget.x, nextTarget.y, nextTarget.color);
+      channel.publish('target', nextTarget);
+    });
+
+    positionTarget(state.target.x, state.target.y, state.targetColor);
+    updateScores();
+    tick();
+  </script>
+</body>
+</html>
