@@ -3,30 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Eyegaze Duel</title>
+  <title>Space Gaze Duel</title>
   <script src="https://cdn.ably.io/lib/ably.min-1.js"></script>
   <style>
     :root {
       color-scheme: dark;
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+
+      --ui-bg: rgba(16, 16, 16, 0.78);
+      --ui-border: rgba(255, 255, 255, 0.12);
+
+      --you: #ff3b3b;
+      --opp: #3ddc97;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
-    body {
+    html, body {
       margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: #000;
       color: #fff;
-      height: 100vh;
-      overflow: hidden;
     }
 
-    body.started {
-      cursor: none;
-    }
+    body.started { cursor: none; }
 
+    /* ---------- HUD ---------- */
     .hud {
       position: absolute;
       top: 20px;
@@ -36,16 +40,19 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      z-index: 5;
+      z-index: 10;
+      pointer-events: none;
     }
 
     .card {
-      background: rgba(16, 16, 16, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      pointer-events: auto;
+      background: var(--ui-bg);
+      border: 1px solid var(--ui-border);
       border-radius: 16px;
       padding: 12px 16px;
       min-width: 200px;
-      backdrop-filter: blur(6px);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.35);
     }
 
     .score-row {
@@ -56,43 +63,140 @@
       margin-top: 8px;
     }
 
-    .legend {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .legend { display: flex; align-items: center; gap: 8px; }
 
     .dot {
       width: 12px;
       height: 12px;
       border-radius: 50%;
       background: var(--dot-color, #4cc3ff);
+      box-shadow: 0 0 14px color-mix(in srgb, var(--dot-color, #4cc3ff) 70%, transparent);
     }
 
     .status {
       font-size: 14px;
-      opacity: 0.8;
+      opacity: 0.85;
       margin-top: 6px;
     }
 
+    button {
+      background: rgba(24, 24, 24, 0.9);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 999px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { border-color: rgba(255, 255, 255, 0.55); }
+
+    /* ---------- ARENA + SPACE BACKGROUND ---------- */
     .arena {
       position: absolute;
       inset: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 60%, #070812 0%, #02030a 48%, #000 100%);
     }
 
-    body.started .arena {
-      cursor: none;
+    body.started .arena { cursor: none; }
+
+    /* Dark vignette */
+    .arena::before{
+      content:"";
+      position:absolute;
+      inset:-30%;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.72) 58%, rgba(0,0,0,0.94) 100%);
+      pointer-events:none;
+      z-index: 0;
     }
 
+    /* Keep CSS star layers extremely subtle (main stars from canvas) */
+    .stars, .stars2, .stars3 {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.10;
+      background-repeat: repeat;
+      background-size: 520px 520px;
+      mix-blend-mode: screen;
+      filter: blur(0.25px);
+    }
+
+    .stars {
+      background-image:
+        radial-gradient(1px 1px at 18px 42px, rgba(255,255,255,0.85), transparent 60%),
+        radial-gradient(1px 1px at 120px 210px, rgba(255,255,255,0.8), transparent 60%),
+        radial-gradient(1px 1px at 260px 88px, rgba(255,255,255,0.75), transparent 60%),
+        radial-gradient(1px 1px at 410px 310px, rgba(255,255,255,0.8), transparent 60%);
+      animation: drift1 60s linear infinite;
+      opacity: 0.08;
+    }
+
+    .stars2 {
+      background-size: 680px 680px;
+      background-image:
+        radial-gradient(1.6px 1.6px at 80px 120px, rgba(255,255,255,0.9), transparent 60%),
+        radial-gradient(1.6px 1.6px at 420px 250px, rgba(255,255,255,0.85), transparent 60%);
+      animation: drift2 90s linear infinite;
+      opacity: 0.07;
+    }
+
+    .stars3 {
+      background-size: 900px 900px;
+      background-image:
+        radial-gradient(2.4px 2.4px at 120px 170px, rgba(255,255,255,0.95), transparent 65%);
+      animation: drift3 120s linear infinite;
+      opacity: 0.05;
+    }
+
+    @keyframes drift1 { from { transform: translate3d(0,0,0); } to { transform: translate3d(-120px, 70px, 0); } }
+    @keyframes drift2 { from { transform: translate3d(0,0,0); } to { transform: translate3d(90px, -110px, 0); } }
+    @keyframes drift3 { from { transform: translate3d(0,0,0); } to { transform: translate3d(-70px, -60px, 0); } }
+
+    /* ---------- Planet target ---------- */
     #target {
       position: absolute;
       width: 140px;
       height: 140px;
       border-radius: 50%;
-      background: radial-gradient(circle at 30% 30%, #fff, var(--target-color, #ff5a5f));
-      box-shadow: 0 0 30px rgba(255, 90, 95, 0.6);
       display: grid;
       place-items: center;
+      z-index: 6;
+      transform: translate(0,0);
+      background:
+        radial-gradient(circle at 30% 28%, rgba(255,255,255,0.95), rgba(255,255,255,0.0) 32%),
+        radial-gradient(circle at 35% 35%, rgba(255,255,255,0.18), transparent 55%),
+        radial-gradient(circle at 45% 55%, color-mix(in srgb, var(--planet-color, #7a6bff) 85%, #000) 0%, color-mix(in srgb, var(--planet-color, #7a6bff) 52%, #000) 55%, rgba(0,0,0,0.92) 100%);
+      box-shadow:
+        0 0 40px color-mix(in srgb, var(--planet-color, #7a6bff) 50%, transparent),
+        inset -18px -22px 40px rgba(0,0,0,0.5);
+    }
+
+    #target::before{
+      content:"";
+      position:absolute;
+      inset:-10px;
+      border-radius:50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.0) 58%, color-mix(in srgb, var(--planet-color, #7a6bff) 55%, transparent) 76%, rgba(255,255,255,0.0) 100%);
+      opacity: 0.8;
+      pointer-events:none;
+    }
+
+    #target.ringed::after{
+      content:"";
+      position:absolute;
+      width: 210px;
+      height: 80px;
+      border-radius: 50%;
+      transform: rotate(-18deg);
+      background:
+        radial-gradient(closest-side, rgba(255,255,255,0.0) 48%, rgba(255,255,255,0.18) 56%, rgba(255,255,255,0.0) 70%),
+        radial-gradient(closest-side, rgba(255,255,255,0.0) 45%, color-mix(in srgb, var(--planet-color, #7a6bff) 42%, transparent) 62%, rgba(255,255,255,0.0) 78%);
+      opacity: 0.55;
+      pointer-events:none;
+      z-index: -1;
     }
 
     #target .dwell-ring {
@@ -101,89 +205,72 @@
       border-radius: 50%;
       background: radial-gradient(
         circle,
-        var(--ring-color, #ff3b3b) 0%,
-        var(--ring-color, #ff3b3b) var(--progress, 0%),
+        var(--ring-color, var(--you)) 0%,
+        var(--ring-color, var(--you)) var(--progress, 0%),
         rgba(255, 255, 255, 0) calc(var(--progress, 0%) + 1px)
       );
       transition: background 0.05s linear;
-      filter: drop-shadow(0 0 18px color-mix(in srgb, var(--ring-color, #ff3b3b) 80%, transparent));
+      filter: drop-shadow(0 0 18px color-mix(in srgb, var(--ring-color, var(--you)) 80%, transparent));
+      z-index: 7;
     }
 
-    #target .dwell-ring.complete {
-      animation: dwellPulse 0.45s ease-out;
+    #target .dwell-ring.complete { animation: dwellPulse 0.45s ease-out; }
+
+    @keyframes dwellPulse {
+      0% { transform: scale(1); opacity: 0.9; }
+      60% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1.35); opacity: 0; }
     }
 
-    .burst {
+    /* ---------- Screen flash ---------- */
+    #screenFlash{
       position: absolute;
-      width: 200px;
-      height: 200px;
-      left: 0;
-      top: 0;
-      transform: translate(-50%, -50%);
-      border-radius: 50%;
-      opacity: 0;
+      inset: 0;
+      z-index: 9;
       pointer-events: none;
+      opacity: 0;
       mix-blend-mode: screen;
     }
 
-    .burst::before,
-    .burst::after {
-      content: "";
-      position: absolute;
-      inset: 12px;
-      border-radius: 50%;
-      opacity: 0;
+    #screenFlash.active{ animation: flash 0.55s ease-out; }
+
+    @keyframes flash{
+      0% { opacity: 0; }
+      20% { opacity: 0.72; }
+      100% { opacity: 0; }
     }
 
-    .burst.active {
-      animation: burstPulse 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
-    }
-
-    .burst.active::before {
-      animation: burstFlash 0.5s ease-out;
-    }
-
-    .burst.active::after {
-      animation: burstRays 0.7s ease-out;
-    }
-
+    /* ---------- Pointers ---------- */
     .pointer {
       position: absolute;
       width: 42px;
       height: 42px;
       border-radius: 50%;
-      border: 3px solid rgba(255, 255, 255, 0.9);
       transform: translate(-50%, -50%);
       pointer-events: none;
-      z-index: 4;
+      z-index: 7;
+
+      border: 3px solid rgba(255, 255, 255, 0.9);
       background: var(--pointer-color, #4cc3ff);
-      box-shadow: 0 0 18px color-mix(in srgb, var(--pointer-color, #4cc3ff) 80%, transparent);
+      box-shadow:
+        0 0 18px color-mix(in srgb, var(--pointer-color, #4cc3ff) 85%, transparent),
+        0 0 42px color-mix(in srgb, var(--pointer-color, #4cc3ff) 30%, transparent);
     }
 
+    /* ---------- Helper + Start ---------- */
     .helper {
       position: absolute;
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(16, 16, 16, 0.8);
+      background: var(--ui-bg);
+      border: 1px solid var(--ui-border);
       padding: 10px 18px;
       border-radius: 20px;
       font-size: 14px;
-      opacity: 0.9;
-    }
-
-    button {
-      background: #1c1c1c;
-      color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 999px;
-      padding: 10px 16px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-
-    button:hover {
-      border-color: rgba(255, 255, 255, 0.6);
+      opacity: 0.92;
+      z-index: 10;
+      backdrop-filter: blur(8px);
     }
 
     .start-screen {
@@ -191,8 +278,8 @@
       inset: 0;
       display: grid;
       place-items: center;
-      background: #000;
-      z-index: 10;
+      background: radial-gradient(circle at 50% 60%, #070812 0%, #02030a 48%, #000 100%);
+      z-index: 20;
       cursor: default;
     }
 
@@ -200,135 +287,34 @@
       text-align: center;
       padding: 32px 36px;
       border-radius: 24px;
-      background: rgba(16, 16, 16, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      max-width: 360px;
+      background: rgba(12, 14, 24, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      max-width: 380px;
+      box-shadow: 0 18px 48px rgba(0,0,0,0.55);
     }
 
-    .start-card h1 {
-      margin: 0 0 12px;
-      font-size: 28px;
-    }
+    .start-card h1 { margin: 0 0 12px; font-size: 28px; }
+    .start-card p { margin: 0 0 20px; opacity: 0.85; font-size: 15px; }
 
-    .start-card p {
-      margin: 0 0 20px;
-      opacity: 0.8;
-      font-size: 15px;
-    }
-
-    @keyframes dwellPulse {
-      0% {
-        transform: scale(1);
-        opacity: 0.9;
-      }
-      60% {
-        transform: scale(1.15);
-        opacity: 1;
-      }
-      100% {
-        transform: scale(1.35);
-        opacity: 0;
-      }
-    }
-
-    @keyframes burstPulse {
-      0% {
-        transform: translate(-50%, -50%) scale(0.45);
-        opacity: 0;
-        box-shadow:
-          0 0 0 0 rgba(255, 80, 80, 0.9),
-          0 0 30px 12px rgba(255, 80, 80, 0.7);
-      }
-      35% {
-        transform: translate(-50%, -50%) scale(1);
-        opacity: 1;
-        box-shadow:
-          0 0 0 14px rgba(255, 80, 80, 0.45),
-          0 0 50px 24px rgba(255, 80, 80, 0.7);
-      }
-      100% {
-        transform: translate(-50%, -50%) scale(1.6);
-        opacity: 0;
-        box-shadow:
-          0 0 0 36px rgba(255, 80, 80, 0),
-          0 0 70px 38px rgba(255, 80, 80, 0);
-      }
-    }
-
-    @keyframes burstFlash {
-      0% {
-        transform: scale(0.4);
-        opacity: 0;
-        box-shadow:
-          inset 0 0 25px rgba(255, 255, 255, 0.9),
-          0 0 35px rgba(255, 80, 80, 0.7);
-      }
-      40% {
-        transform: scale(1);
-        opacity: 1;
-        box-shadow:
-          inset 0 0 40px rgba(255, 255, 255, 0.9),
-          0 0 50px rgba(255, 120, 120, 0.9);
-      }
-      100% {
-        transform: scale(1.2);
-        opacity: 0;
-        box-shadow:
-          inset 0 0 10px rgba(255, 255, 255, 0),
-          0 0 60px rgba(255, 120, 120, 0);
-      }
-    }
-
-    @keyframes burstRays {
-      0% {
-        transform: scale(0.6) rotate(0deg);
-        opacity: 0;
-        background: conic-gradient(
-          from 0deg,
-          rgba(255, 120, 120, 0.9) 0deg,
-          rgba(255, 120, 120, 0.1) 20deg,
-          rgba(255, 120, 120, 0.9) 40deg,
-          rgba(255, 120, 120, 0.1) 60deg,
-          rgba(255, 120, 120, 0.9) 80deg,
-          rgba(255, 120, 120, 0.1) 100deg,
-          rgba(255, 120, 120, 0.9) 120deg,
-          rgba(255, 120, 120, 0.1) 140deg,
-          rgba(255, 120, 120, 0.9) 160deg,
-          rgba(255, 120, 120, 0.1) 180deg,
-          rgba(255, 120, 120, 0.9) 200deg,
-          rgba(255, 120, 120, 0.1) 220deg,
-          rgba(255, 120, 120, 0.9) 240deg,
-          rgba(255, 120, 120, 0.1) 260deg,
-          rgba(255, 120, 120, 0.9) 280deg,
-          rgba(255, 120, 120, 0.1) 300deg,
-          rgba(255, 120, 120, 0.9) 320deg,
-          rgba(255, 120, 120, 0.1) 340deg,
-          rgba(255, 120, 120, 0.9) 360deg
-        );
-        filter: blur(0px);
-      }
-      40% {
-        transform: scale(1) rotate(18deg);
-        opacity: 0.9;
-        filter: blur(0.5px);
-      }
-      100% {
-        transform: scale(1.35) rotate(35deg);
-        opacity: 0;
-        filter: blur(1px);
-      }
+    /* canvas sits behind gameplay elements */
+    #starsCanvas {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
     }
   </style>
 </head>
+
 <body>
   <div class="hud">
     <div class="card">
       <div class="score-row">
-        <span class="legend"><span class="dot" style="--dot-color: #ff3b3b;"></span>You</span>
+        <span class="legend"><span class="dot" style="--dot-color: var(--you);"></span>You</span>
         <strong id="scoreYou">0</strong>
       </div>
       <div class="score-row">
-        <span class="legend"><span class="dot" style="--dot-color: #3ddc97;"></span>Opponent</span>
+        <span class="legend"><span class="dot" style="--dot-color: var(--opp);"></span>Opponent</span>
         <strong id="scoreOpponent">0</strong>
       </div>
     </div>
@@ -339,20 +325,27 @@
   </div>
 
   <div class="arena" id="arena">
-    <div id="target" aria-label="Target">
+    <div class="stars"></div>
+    <div class="stars2"></div>
+    <div class="stars3"></div>
+    <canvas id="starsCanvas"></canvas>
+
+    <div id="screenFlash"></div>
+
+    <div id="target" aria-label="Planet target">
       <div class="dwell-ring" id="dwellRing"></div>
     </div>
-    <div class="burst" id="burstEffect"></div>
-    <div class="pointer" id="pointerYou" style="--pointer-color: #ff3b3b;"></div>
-    <div class="pointer" id="pointerOpponent" style="--pointer-color: #3ddc97;"></div>
+
+    <div class="pointer" id="pointerYou" style="--pointer-color: var(--you);"></div>
+    <div class="pointer" id="pointerOpponent" style="--pointer-color: var(--opp);"></div>
   </div>
 
-  <div class="helper">Move the gaze cursor to the target and hold to score.</div>
+  <div class="helper">Hold your gaze on the planet to score.</div>
 
   <div class="start-screen" id="startScreen">
     <div class="start-card">
-      <h1>Eyegaze Duel</h1>
-      <p>Press start to enter fullscreen and begin the duel.</p>
+      <h1>Space Gaze Duel</h1>
+      <p>Press start to enter fullscreen and begin.</p>
       <button id="startButton" type="button">Start</button>
     </div>
   </div>
@@ -361,14 +354,17 @@
     const ABLY_KEY = 'cdtKhA.qjdiYA:nbUbeaXqiQWHgQF1F9Nn0glvP62CRod3LcbAQDWJaIE';
     const CHANNEL_NAME = 'eyegaze-duel';
     const DWELL_TIME = 1200;
-    const TARGET_RADIUS = 70;
+
+    const TARGET_RADIUS = 70;     // hit test radius (px)
+    const POINTER_SEND_HZ = 25;   // fixed rate pointer publishing
 
     const arena = document.getElementById('arena');
     const target = document.getElementById('target');
     const dwellRing = document.getElementById('dwellRing');
     const pointerYou = document.getElementById('pointerYou');
     const pointerOpponent = document.getElementById('pointerOpponent');
-    const burstEffect = document.getElementById('burstEffect');
+    const screenFlash = document.getElementById('screenFlash');
+
     const scoreYouEl = document.getElementById('scoreYou');
     const scoreOpponentEl = document.getElementById('scoreOpponent');
     const dwellDisplay = document.getElementById('dwellDisplay');
@@ -376,9 +372,14 @@
     const startScreen = document.getElementById('startScreen');
     const startButton = document.getElementById('startButton');
 
+    const starsCanvas = document.getElementById('starsCanvas');
+    const ctx = starsCanvas.getContext('2d');
+
     dwellDisplay.textContent = `${(DWELL_TIME / 1000).toFixed(1)}s`;
 
-    const clientId = localStorage.getItem('eyegaze-duel-id') || `player-${Math.random().toString(16).slice(2, 8)}`;
+    const clientId =
+      localStorage.getItem('eyegaze-duel-id') ||
+      `player-${Math.random().toString(16).slice(2, 8)}`;
     localStorage.setItem('eyegaze-duel-id', clientId);
 
     const ably = new Ably.Realtime({ key: ABLY_KEY, clientId });
@@ -386,13 +387,18 @@
 
     const state = {
       started: false,
-      pointer: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
-      opponent: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
-      target: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
-      targetColor: '#ff5a5f',
+      pointer:   { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+      opponent:  { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+      target:    { x: window.innerWidth / 2, y: window.innerHeight / 2 },
       dwellStart: null,
       scoreYou: 0,
       scoreOpponent: 0,
+
+      pointerN:  { x: 0.5, y: 0.5 },
+      opponentN: { x: 0.5, y: 0.5 },
+      targetN:   { x: 0.5, y: 0.5 },
+
+      planetColor: '#7a6bff',
     };
 
     function getArenaBounds() {
@@ -400,27 +406,58 @@
       return {
         width: rect.width || window.innerWidth,
         height: rect.height || window.innerHeight,
+        left: rect.left || 0,
+        top: rect.top || 0,
       };
     }
 
-    function randomTarget() {
+    function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+    function applyNormalizedPositions() {
       const { width, height } = getArenaBounds();
-      const padding = Math.max(TARGET_RADIUS + 30, Math.min(width, height) * 0.12);
-      const safeWidth = Math.max(width - padding * 2, TARGET_RADIUS * 2);
-      const safeHeight = Math.max(height - padding * 2, TARGET_RADIUS * 2);
-      const x = Math.random() * safeWidth + padding;
-      const y = Math.random() * safeHeight + padding;
-      const colors = ['#ff5a5f', '#3ddc97', '#8f7bff', '#ffb347', '#4cc3ff'];
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      return { x, y, color };
+      state.pointer.x = state.pointerN.x * width;
+      state.pointer.y = state.pointerN.y * height;
+      state.opponent.x = state.opponentN.x * width;
+      state.opponent.y = state.opponentN.y * height;
+      state.target.x = state.targetN.x * width;
+      state.target.y = state.targetN.y * height;
     }
 
-    function positionTarget(x, y, color) {
-      state.target.x = x;
-      state.target.y = y;
-      state.targetColor = color;
-      target.style.transform = `translate(${x - TARGET_RADIUS}px, ${y - TARGET_RADIUS}px)`;
-      target.style.setProperty('--target-color', color);
+    const PLANET_COLORS = ['#7a6bff', '#4cc3ff', '#ff6bd6', '#ffb347', '#3ddc97', '#ff5a5f'];
+
+    function randomTargetNormalized() {
+      const { width, height } = getArenaBounds();
+      const paddingPx = Math.max(TARGET_RADIUS + 30, Math.min(width, height) * 0.12);
+      const safeWidth = Math.max(width - paddingPx * 2, TARGET_RADIUS * 2);
+      const safeHeight = Math.max(height - paddingPx * 2, TARGET_RADIUS * 2);
+
+      const xPx = Math.random() * safeWidth + paddingPx;
+      const yPx = Math.random() * safeHeight + paddingPx;
+
+      const nx = width ? xPx / width : 0.5;
+      const ny = height ? yPx / height : 0.5;
+
+      const color = PLANET_COLORS[Math.floor(Math.random() * PLANET_COLORS.length)];
+      return { nx: clamp01(nx), ny: clamp01(ny), color };
+    }
+
+    function setPlanetLook(color) {
+      state.planetColor = color || state.planetColor;
+      target.style.setProperty('--planet-color', state.planetColor);
+
+      const ringChance = (state.planetColor === '#ffb347' || state.planetColor === '#4cc3ff' || state.planetColor === '#7a6bff') ? 0.55 : 0.20;
+      if (Math.random() < ringChance) target.classList.add('ringed');
+      else target.classList.remove('ringed');
+    }
+
+    function positionTargetNormalized(nx, ny, color) {
+      state.targetN.x = clamp01(nx);
+      state.targetN.y = clamp01(ny);
+
+      applyNormalizedPositions();
+
+      target.style.transform = `translate(${state.target.x - TARGET_RADIUS}px, ${state.target.y - TARGET_RADIUS}px)`;
+      setPlanetLook(color);
     }
 
     function updatePointer(el, point) {
@@ -434,8 +471,8 @@
     }
 
     function updateDwell(progress) {
-      const percentage = Math.min(100, Math.max(0, progress * 100));
-      dwellRing.style.setProperty('--progress', `${percentage}%`);
+      const pct = Math.min(100, Math.max(0, progress * 100));
+      dwellRing.style.setProperty('--progress', `${pct}%`);
     }
 
     function resetDwell() {
@@ -444,16 +481,123 @@
       updateDwell(0);
     }
 
-    function playBurstAt(x, y) {
-      burstEffect.style.left = `${x}px`;
-      burstEffect.style.top = `${y}px`;
-      burstEffect.classList.remove('active');
-      void burstEffect.offsetWidth;
-      burstEffect.classList.add('active');
+    /* ---------- BIG, LONGER, MORE IMPRESSIVE "crack + chunks" pop ---------- */
+    const pops = [];
+
+    function hexToRgb(hex) {
+      const h = (hex || '').replace('#', '').trim();
+      if (h.length !== 6) return { r: 200, g: 240, b: 255 };
+      return {
+        r: parseInt(h.slice(0,2), 16),
+        g: parseInt(h.slice(2,4), 16),
+        b: parseInt(h.slice(4,6), 16),
+      };
+    }
+
+    function makeCracks(n) {
+      const cracks = [];
+      for (let i = 0; i < n; i++) {
+        const baseA = Math.random() * Math.PI * 2;
+        const len = 34 + Math.random() * 44;           // longer cracks
+        const steps = 6 + Math.floor(Math.random() * 4);
+        const segs = [];
+        let px = 0, py = 0;
+        let a = baseA;
+
+        for (let s = 0; s < steps; s++) {
+          a += (Math.random() * 0.8 - 0.4);
+          const stepLen = len / steps * (0.85 + Math.random() * 0.4);
+          const nx = px + Math.cos(a) * stepLen;
+          const ny = py + Math.sin(a) * stepLen;
+          segs.push({ x1: px, y1: py, x2: nx, y2: ny });
+          px = nx; py = ny;
+        }
+
+        cracks.push({
+          rot: baseA,
+          offR: 18 + Math.random() * 34,
+          segs
+        });
+      }
+      return cracks;
+    }
+
+    function makeFragmentsBig(n) {
+      const fr = [];
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 130 + Math.random() * 210;          // slower initial speed (drifts longer)
+        const size = 22 + Math.random() * 28;          // WAY bigger
+        const isTri = Math.random() < 0.40;
+        fr.push({
+          kind: 'big',
+          x: 0, y: 0,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          ang: Math.random() * Math.PI * 2,
+          vang: (Math.random() * 3.6 - 1.8),           // slower rotation
+          size,
+          tri: isTri,
+          life: 0,
+          ttl: 3.6 + Math.random() * 0.6,              // 3–4s drift
+          drag: 0.986 + Math.random() * 0.008,         // gentle drag
+        });
+      }
+      return fr;
+    }
+
+    function makeFragmentsDust(n) {
+      const fr = [];
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 220 + Math.random() * 380;          // faster dust
+        const size = 3 + Math.random() * 7;
+        fr.push({
+          kind: 'dust',
+          x: 0, y: 0,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          ang: Math.random() * Math.PI * 2,
+          vang: (Math.random() * 10 - 5),
+          size,
+          tri: Math.random() < 0.35,
+          life: 0,
+          ttl: 1.4 + Math.random() * 0.6,              // shorter dust
+          drag: 0.955 + Math.random() * 0.02,
+        });
+      }
+      return fr;
+    }
+
+    function spawnPlanetPop(x, y, color) {
+      pops.push({
+        x, y,
+        t: 0,
+        ttl: 4.0,                      // overall envelope
+        color,
+        cracks: makeCracks(10),
+        ring: { r: 30, life: 0, ttl: 1.8 }, // expanding debris ring
+        frags: [...makeFragmentsBig(10), ...makeFragmentsDust(26)]
+      });
+
+      // bigger, longer flash (still not blinding)
+      screenFlash.style.background =
+        `radial-gradient(circle at 50% 50%,
+          rgba(255,255,255,0) 0%,
+          rgba(255,255,255,0) 40%,
+          color-mix(in srgb, ${color} 48%, transparent) 100%)`;
+      screenFlash.classList.remove('active');
+      void screenFlash.offsetWidth;
+      screenFlash.classList.add('active');
+    }
+
+    function playPopAt(x, y) {
+      spawnPlanetPop(x, y, state.planetColor);
     }
 
     function handleDwell() {
       if (!state.started) return;
+
       const dx = state.pointer.x - state.target.x;
       const dy = state.pointer.y - state.target.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -464,24 +608,26 @@
         return;
       }
 
-      if (!state.dwellStart) {
-        state.dwellStart = performance.now();
-      }
+      if (!state.dwellStart) state.dwellStart = performance.now();
 
       const elapsed = performance.now() - state.dwellStart;
       updateDwell(elapsed / DWELL_TIME);
 
       if (elapsed >= DWELL_TIME) {
-        const nextTarget = randomTarget();
-        const burstX = state.target.x;
-        const burstY = state.target.y;
+        const nextTarget = randomTargetNormalized();
+        const popX = state.target.x;
+        const popY = state.target.y;
+
         state.scoreYou += 1;
         updateScores();
+
         dwellRing.classList.remove('complete');
         void dwellRing.offsetWidth;
         dwellRing.classList.add('complete');
+
         resetDwell();
-        playBurstAt(burstX, burstY);
+        playPopAt(popX, popY);
+
         channel.publish('score', {
           id: clientId,
           score: state.scoreYou,
@@ -490,38 +636,48 @@
       }
     }
 
-    function onMove(event) {
+    function setPointerFromClientXY(clientX, clientY) {
       if (!state.started) return;
-      const rect = arena.getBoundingClientRect();
-      state.pointer.x = Math.min(rect.width, Math.max(0, event.clientX - rect.left));
-      state.pointer.y = Math.min(rect.height, Math.max(0, event.clientY - rect.top));
-    }
+      const { width, height, left, top } = getArenaBounds();
+      const x = Math.min(width, Math.max(0, clientX - left));
+      const y = Math.min(height, Math.max(0, clientY - top));
+      state.pointer.x = x;
+      state.pointer.y = y;
 
-    let publishQueued = false;
-    function publishPointer() {
-      if (publishQueued) return;
-      publishQueued = true;
-      requestAnimationFrame(() => {
-        publishQueued = false;
-        channel.publish('pointer', {
-          id: clientId,
-          x: state.pointer.x,
-          y: state.pointer.y,
-        });
-      });
+      state.pointerN.x = width ? clamp01(x / width) : 0.5;
+      state.pointerN.y = height ? clamp01(y / height) : 0.5;
     }
 
     arena.addEventListener('mousemove', (event) => {
-      onMove(event);
-      publishPointer();
+      setPointerFromClientXY(event.clientX, event.clientY);
     });
 
     arena.addEventListener('touchmove', (event) => {
       const touch = event.touches[0];
       if (!touch) return;
-      onMove({ clientX: touch.clientX, clientY: touch.clientY });
-      publishPointer();
+      setPointerFromClientXY(touch.clientX, touch.clientY);
     }, { passive: true });
+
+    let pointerPublishTimer = null;
+    function startPointerPublishing() {
+      if (pointerPublishTimer) return;
+      const intervalMs = Math.max(20, Math.round(1000 / POINTER_SEND_HZ));
+      pointerPublishTimer = setInterval(() => {
+        if (!state.started) return;
+        channel.publish('pointer', {
+          id: clientId,
+          nx: state.pointerN.x,
+          ny: state.pointerN.y,
+        });
+      }, intervalMs);
+    }
+
+    function stopPointerPublishing() {
+      if (pointerPublishTimer) {
+        clearInterval(pointerPublishTimer);
+        pointerPublishTimer = null;
+      }
+    }
 
     resetButton.addEventListener('click', () => {
       state.scoreYou = 0;
@@ -535,43 +691,45 @@
         if (document.documentElement.requestFullscreen) {
           await document.documentElement.requestFullscreen();
         }
-      } catch (error) {
-        // Fullscreen can fail if not allowed by the browser; continue anyway.
-      }
+      } catch (error) {}
       state.started = true;
       document.body.classList.add('started');
       startScreen.style.display = 'none';
+      startPointerPublishing();
     });
 
     ably.connection.on('connected', () => {
-      const initialTarget = randomTarget();
-      positionTarget(initialTarget.x, initialTarget.y, initialTarget.color);
+      const initialTarget = randomTargetNormalized();
+      positionTargetNormalized(initialTarget.nx, initialTarget.ny, initialTarget.color);
       channel.publish('target', initialTarget);
     });
 
-    ably.connection.on('failed', () => {
-      // Connection status is intentionally not shown in the UI.
-    });
-
     channel.subscribe('pointer', (message) => {
+      if (!message?.data) return;
       if (message.data.id === clientId) return;
-      state.opponent.x = message.data.x;
-      state.opponent.y = message.data.y;
+
+      state.opponentN.x = clamp01(message.data.nx ?? 0.5);
+      state.opponentN.y = clamp01(message.data.ny ?? 0.5);
+      applyNormalizedPositions();
     });
 
     channel.subscribe('score', (message) => {
+      if (!message?.data) return;
+
       if (message.data.id !== clientId) {
         state.scoreOpponent = message.data.score || 0;
         updateScores();
       }
+
       if (message.data.target) {
-        positionTarget(message.data.target.x, message.data.target.y, message.data.target.color);
+        const t = message.data.target;
+        positionTargetNormalized(t.nx ?? 0.5, t.ny ?? 0.5, t.color || state.planetColor);
       }
     });
 
     channel.subscribe('target', (message) => {
       if (!message?.data) return;
-      positionTarget(message.data.x, message.data.y, message.data.color);
+      positionTargetNormalized(message.data.nx ?? 0.5, message.data.ny ?? 0.5, message.data.color || state.planetColor);
     });
 
     channel.subscribe('reset', () => {
@@ -587,15 +745,325 @@
       requestAnimationFrame(tick);
     }
 
+    /* ---------- Canvas: star density band + pops ---------- */
+    let stars = [];
+    let lastT = performance.now();
+
+    const BAND = {
+      angleDeg: -18,
+      thickness: 0.22,
+      strength: 0.85,
+    };
+
+    function bandDistance(nx, ny) {
+      const a = BAND.angleDeg * Math.PI / 180;
+      const x = nx - 0.5;
+      const y = ny - 0.5;
+      const xr = x * Math.cos(a) - y * Math.sin(a);
+      const yr = x * Math.sin(a) + y * Math.cos(a);
+      return Math.abs(yr);
+    }
+
+    function makeStar(nx, ny, fromBand) {
+      const r = Math.random();
+      const rad = fromBand
+        ? (r < 0.90 ? (Math.random() * 1.0 + 0.22) : (Math.random() * 1.7 + 0.55))
+        : (r < 0.86 ? (Math.random() * 1.1 + 0.25) : (Math.random() * 1.9 + 0.6));
+
+      const a = fromBand
+        ? (r < 0.90 ? (Math.random() * 0.22 + 0.16) : (Math.random() * 0.25 + 0.28))
+        : (r < 0.86 ? (Math.random() * 0.24 + 0.16) : (Math.random() * 0.26 + 0.30));
+
+      const hue = Math.random() < 0.08 ? (Math.random() < 0.5 ? 210 : 330) : 0;
+
+      return { nx, ny, x: 0, y: 0, rad, a, hue };
+    }
+
+    function resizeStars() {
+      const { width, height } = getArenaBounds();
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      starsCanvas.width = Math.floor(width * dpr);
+      starsCanvas.height = Math.floor(height * dpr);
+      starsCanvas.style.width = `${width}px`;
+      starsCanvas.style.height = `${height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const baseCount = Math.floor((width * height) / 22000);
+      const extraCount = Math.floor((width * height) / 13000);
+
+      stars = [];
+
+      for (let i = 0; i < baseCount; i++) {
+        stars.push(makeStar(Math.random(), Math.random(), false));
+      }
+
+      for (let i = 0; i < extraCount; i++) {
+        let nx, ny, w;
+        for (let k = 0; k < 8; k++) {
+          nx = Math.random();
+          ny = Math.random();
+          const d = bandDistance(nx, ny);
+          const halfT = (BAND.thickness * 0.5);
+          const dn = Math.min(1, d / halfT);
+          const core = 1 - dn;
+          w = core * core * core;
+          const accept = (w * BAND.strength) + (1 - BAND.strength) * 0.08;
+          if (Math.random() < accept) break;
+        }
+        stars.push(makeStar(nx, ny, true));
+      }
+
+      for (const s of stars) {
+        s.x = s.nx * width;
+        s.y = s.ny * height;
+      }
+    }
+
+    function easeOutCubic(x) { return 1 - Math.pow(1 - x, 3); }
+    function easeOutExpo(x) { return x === 1 ? 1 : 1 - Math.pow(2, -10 * x); }
+
+    function drawPops(dt) {
+      if (!pops.length) return;
+
+      for (let i = pops.length - 1; i >= 0; i--) {
+        const pop = pops[i];
+        pop.t += dt;
+
+        const t = pop.t;
+        const ttl = pop.ttl;
+        if (t >= ttl) {
+          pops.splice(i, 1);
+          continue;
+        }
+
+        const rgb = hexToRgb(pop.color);
+        const nt = Math.min(1, t / ttl);
+
+        // Fade that stays strong early, then slowly fades (more "impressive" linger)
+        const fade = Math.pow(1 - nt, 0.75);
+
+        // ---- Expanding debris ring ----
+        pop.ring.life += dt;
+        const rt = Math.min(1, pop.ring.life / pop.ring.ttl);
+        const ringR = 28 + easeOutCubic(rt) * 240;
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        ctx.lineWidth = 5.0 - rt * 3.6;
+        ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.22 * (1 - rt) * fade})`;
+        ctx.beginPath();
+        ctx.arc(pop.x, pop.y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // soft outer glow
+        const rg = ctx.createRadialGradient(pop.x, pop.y, ringR * 0.6, pop.x, pop.y, ringR * 1.2);
+        rg.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${0.10 * (1 - rt) * fade})`);
+        rg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.arc(pop.x, pop.y, ringR * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // ---- Cracks: longer visibility, thicker, brighter ----
+        const crackIn = Math.min(1, t / 0.24);
+        const crackHold = Math.max(0, 1 - Math.max(0, (t - 1.2) / 1.2)); // hold ~1.2s then fade
+        if (crackIn > 0) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          const whiteA = 0.9 * crackHold * fade;
+          ctx.strokeStyle = `rgba(255,255,255,${whiteA})`;
+          ctx.lineWidth = 3.2;
+
+          for (const c of pop.cracks) {
+            const offx = Math.cos(c.rot) * c.offR;
+            const offy = Math.sin(c.rot) * c.offR;
+            for (const seg of c.segs) {
+              const x1 = pop.x + offx + seg.x1 * crackIn;
+              const y1 = pop.y + offy + seg.y1 * crackIn;
+              const x2 = pop.x + offx + seg.x2 * crackIn;
+              const y2 = pop.y + offy + seg.y2 * crackIn;
+              ctx.beginPath();
+              ctx.moveTo(x1, y1);
+              ctx.lineTo(x2, y2);
+              ctx.stroke();
+            }
+          }
+
+          // tinted glow pass
+          ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.22 * crackHold * fade})`;
+          ctx.lineWidth = 7.6;
+          for (const c of pop.cracks) {
+            const offx = Math.cos(c.rot) * c.offR;
+            const offy = Math.sin(c.rot) * c.offR;
+            for (const seg of c.segs) {
+              const x1 = pop.x + offx + seg.x1 * crackIn;
+              const y1 = pop.y + offy + seg.y1 * crackIn;
+              const x2 = pop.x + offx + seg.x2 * crackIn;
+              const y2 = pop.y + offy + seg.y2 * crackIn;
+              ctx.beginPath();
+              ctx.moveTo(x1, y1);
+              ctx.lineTo(x2, y2);
+              ctx.stroke();
+            }
+          }
+
+          ctx.restore();
+        }
+
+        // ---- Fragments: bigger, trails, drift longer ----
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+
+        for (const f of pop.frags) {
+          f.life += dt;
+          if (f.life > f.ttl) continue;
+
+          const ft = Math.min(1, f.life / f.ttl);
+
+          // smoother fade; big fragments linger
+          const ffade = (f.kind === 'big')
+            ? Math.pow(1 - ft, 0.55) * fade
+            : Math.pow(1 - ft, 0.95) * fade;
+
+          // motion
+          const dragPow = Math.pow(f.drag, dt * 60);
+          f.vx *= dragPow;
+          f.vy *= dragPow;
+          f.x += f.vx * dt;
+          f.y += f.vy * dt;
+          f.ang += f.vang * dt;
+
+          const cx = pop.x + f.x;
+          const cy = pop.y + f.y;
+
+          // trail / streak (more impressive)
+          const speed = Math.hypot(f.vx, f.vy);
+          const trailLen = (f.kind === 'big' ? 0.09 : 0.05) * speed; // pixels
+          if (trailLen > 6) {
+            const tx = cx - (f.vx / (speed || 1)) * trailLen;
+            const ty = cy - (f.vy / (speed || 1)) * trailLen;
+            ctx.lineWidth = (f.kind === 'big' ? 4.5 : 2.3);
+            ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.10 * ffade})`;
+            ctx.beginPath();
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(cx, cy);
+            ctx.stroke();
+          }
+
+          // a little "kick" scale early
+          const kick = 1 + 0.16 * Math.sin(Math.min(1, ft) * Math.PI);
+          const sz = f.size * kick;
+
+          // fill + subtle highlight stroke
+          const fillA = (f.kind === 'big' ? 0.78 : 0.55) * ffade;
+          const strokeA = (f.kind === 'big' ? 0.22 : 0.14) * ffade;
+
+          ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${fillA})`;
+          ctx.strokeStyle = `rgba(255,255,255,${strokeA})`;
+          ctx.lineWidth = (f.kind === 'big' ? 1.8 : 1.1);
+
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(f.ang);
+
+          if (f.tri) {
+            ctx.beginPath();
+            ctx.moveTo(-sz * 0.70,  sz * 0.62);
+            ctx.lineTo( sz * 0.78, 0);
+            ctx.lineTo(-sz * 0.24, -sz * 0.82);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.roundRect(-sz * 0.62, -sz * 0.62, sz * 1.24, sz * 1.24, 4.5);
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          // brighter inner sheen on big chunks
+          if (f.kind === 'big') {
+            const g2 = ctx.createRadialGradient(-sz * 0.25, -sz * 0.25, 0, 0, 0, sz * 1.2);
+            g2.addColorStop(0, `rgba(255,255,255,${0.18 * ffade})`);
+            g2.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g2;
+            ctx.beginPath();
+            ctx.arc(0, 0, sz * 1.2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // halo
+          const haloR = (f.kind === 'big') ? (44 + sz * 1.15) : (22 + sz * 1.0);
+          const g = ctx.createRadialGradient(0, 0, 0, 0, 0, haloR);
+          g.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${(f.kind === 'big' ? 0.20 : 0.12) * ffade})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        ctx.restore();
+      }
+    }
+
+    function drawBackground(now) {
+      const { width, height } = getArenaBounds();
+      const dt = Math.min(0.05, (now - lastT) / 1000);
+      lastT = now;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Stars
+      for (const s of stars) {
+        const d = bandDistance(s.nx, s.ny);
+        const halfT = (BAND.thickness * 0.5);
+        const dn = Math.min(1, d / halfT);
+        const core = 1 - dn;
+        const boost = 1 + (core * core) * 0.25;
+
+        const alpha = Math.min(0.95, s.a * boost);
+
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.rad, 0, Math.PI * 2);
+        if (s.hue) ctx.fillStyle = `hsla(${s.hue}, 85%, 85%, ${alpha})`;
+        else ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.fill();
+      }
+
+      // Pops above stars
+      drawPops(dt);
+
+      requestAnimationFrame(drawBackground);
+    }
+
     window.addEventListener('resize', () => {
-      const nextTarget = randomTarget();
-      positionTarget(nextTarget.x, nextTarget.y, nextTarget.color);
+      applyNormalizedPositions();
+      target.style.transform = `translate(${state.target.x - TARGET_RADIUS}px, ${state.target.y - TARGET_RADIUS}px)`;
+
+      const nextTarget = randomTargetNormalized();
+      positionTargetNormalized(nextTarget.nx, nextTarget.ny, nextTarget.color);
       channel.publish('target', nextTarget);
+
+      resizeStars();
     });
 
-    positionTarget(state.target.x, state.target.y, state.targetColor);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopPointerPublishing();
+      else if (state.started) startPointerPublishing();
+    });
+
+    // init
+    positionTargetNormalized(0.5, 0.5, state.planetColor);
     updateScores();
     tick();
+    resizeStars();
+    requestAnimationFrame((t) => { lastT = t; drawBackground(t); });
   </script>
 </body>
 </html>
