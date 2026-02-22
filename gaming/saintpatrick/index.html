@@ -81,6 +81,7 @@
     const CFG = {
       cloverImgPath: "../../images/arthur.jpg",
       chestImgPath: "../../images/zamboni.png",
+      leprechaunImgPath: "../../images/cartoonrhino.png",
       cloverCount: 14,
       spawnRatePerSec: 2.0,
       maxClovers: 26,
@@ -160,12 +161,13 @@
     }
 
     // ===== STATE =====
-    let cloverImg=null, chestImg=null;
+    let cloverImg=null, chestImg=null, leprechaunImg=null;
     let started=false;
     let phaseIndex=0;
     let phaseScore=0;
     let rainbowProgress=0;
     let chestScale=2;
+    let leprechaunJump=0;
     let phaseTransitionPending=false;
     let phaseTimer=null;
 
@@ -281,6 +283,7 @@
     function preload(){
       cloverImg = loadImage(CFG.cloverImgPath);
       chestImg = loadImage(CFG.chestImgPath);
+      leprechaunImg = loadImage(CFG.leprechaunImgPath);
     }
 
     function setup(){
@@ -529,6 +532,7 @@
       phaseScore = 0;
       rainbowProgress = 0;
       chestScale = 2;
+      leprechaunJump = 0;
       tokens = [];
       particles = [];
       ripples = [];
@@ -557,58 +561,91 @@
       }
       if (phase.key === 'coin'){
         chestScale = 2;
+        leprechaunJump = 0;
         return;
       }
       for (let i=0;i<CFG.cloverCount;i++) tokens.push(makeToken(phase.key, random(-height, 0)));
     }
 
+    function getCoinLayout(){
+      const chestW = min(width, height) * 0.23 * chestScale;
+      const chestH = chestW * 0.72;
+      const chestX = width * 0.42;
+      const chestY = height * 0.80;
+      return {
+        chestX,
+        chestY,
+        chestW,
+        chestH,
+        lepX: chestX + chestW * 0.95,
+        lepY: chestY + chestH * 0.04,
+        rainbowX: width * 0.28,
+        rainbowY: height * 0.52,
+        rainbowR: min(width, height) * 0.22
+      };
+    }
+
     function spawnCoinDrop(){
-      const chestY = height * 0.87;
-      const chestX = width * 0.5;
-      const startX = random(width * 0.1, width * 0.9);
+      const L = getCoinLayout();
+      const startX = random(width * 0.08, width * 0.72);
       const coinSize = min(width, height) * 0.216;
       coinDrops.push({
         x: startX,
         y: -coinSize,
-        targetX: chestX + random(-26, 26),
+        targetX: L.chestX + random(-26, 26),
         size: coinSize,
-        vy: max(4.5, (chestY + 30) / (CFG.coinDropSeconds * 60)),
+        vy: max(3.2, (L.chestY + 40) / (CFG.coinDropSeconds * 60)),
         done: false
       });
     }
 
     function drawChest(){
-      const cx = width * 0.5;
-      const cy = height * 0.87;
-      const baseW = min(width, height) * 0.23 * chestScale;
-      const baseH = baseW * 0.72;
+      const L = getCoinLayout();
       push();
       if (chestImg){
         imageMode(CENTER);
-        image(chestImg, cx, cy, baseW, baseH);
+        image(chestImg, L.chestX, L.chestY, L.chestW, L.chestH);
       }else{
         noStroke();
         fill(30, 65, 45, 1);
         rectMode(CENTER);
-        rect(cx, cy, baseW, baseH, 18);
+        rect(L.chestX, L.chestY, L.chestW, L.chestH, 18);
+      }
+      pop();
+    }
+
+    function drawLeprechaun(dt){
+      const L = getCoinLayout();
+      if (leprechaunJump > 0) leprechaunJump = max(0, leprechaunJump - dt * 0.06);
+      const jumpY = Math.sin(leprechaunJump * Math.PI) * min(width, height) * 0.08;
+      const w = min(width, height) * 0.22;
+      const h = w * 0.95;
+      push();
+      imageMode(CENTER);
+      if (leprechaunImg) image(leprechaunImg, L.lepX, L.lepY - jumpY, w, h);
+      else {
+        noStroke();
+        fill(120, 40, 90, 0.95);
+        rectMode(CENTER);
+        rect(L.lepX, L.lepY - jumpY, w*0.75, h*0.8, 20);
       }
       pop();
     }
 
     function updateCoinDrops(dt){
-      const chestY = height * 0.87;
-      const chestX = width * 0.5;
+      const L = getCoinLayout();
       for (const coin of coinDrops){
         if (coin.done) continue;
         coin.x = lerp(coin.x, coin.targetX, 0.035 * dt);
         coin.y += coin.vy * dt;
-        if (coin.y >= chestY - coin.size*0.55){
+        if (coin.y >= L.chestY - coin.size*0.55){
           coin.done = true;
           phaseScore += 1;
           chestScale = 2 + phaseScore * 0.08;
+          leprechaunJump = 1;
           flashHue = 46;
           flashT = 0;
-          for (let i=0;i<18;i++) particles.push(new Particle(chestX, chestY - 10, 48 + random(-4, 5)));
+          for (let i=0;i<18;i++) particles.push(new Particle(L.chestX, L.chestY - 10, 48 + random(-4, 5)));
           if (phaseScore >= getPhase().target && !phaseTransitionPending){
             phaseTransitionPending = true;
             coinDrops = [];
@@ -746,6 +783,22 @@
       noStroke();
       fill(112, 60, 42, 1);
       rect(0, height*0.82, width, height*0.18);
+
+      // mini rainbow arc on left side, curving down
+      const L = getCoinLayout();
+      const cols = [
+        [292, 62, 98], [238, 64, 100], [198, 70, 96], [112, 65, 92], [52, 80, 100], [28, 82, 100], [0, 85, 98]
+      ];
+      const band = max(8, min(width, height) * 0.024);
+      for (let i=0;i<cols.length;i++){
+        const [h,s,b] = cols[i];
+        stroke(h,s,b,0.95);
+        strokeWeight(band);
+        noFill();
+        const rr = L.rainbowR - i*band*0.9;
+        arc(L.rainbowX, L.rainbowY, rr*2, rr*2, PI, PI + HALF_PI);
+      }
+      noStroke();
     }
 
     function handleAction(){
@@ -794,6 +847,7 @@
         drawRainbowRain(dt);
       }else if (getPhase().key === 'coin'){
         drawChest();
+        drawLeprechaun(dt);
         updateCoinDrops(dt);
         drawCoinDrops();
       }else{
