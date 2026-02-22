@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Pop the Falling Clovers (Switch)</title>
+  <title>Saint Patrick Adventure (Switch)</title>
   <style>
     html, body{
       margin:0; padding:0; width:100%; height:100%;
@@ -52,16 +52,17 @@
 <body>
   <div id="overlay" role="dialog" aria-modal="true">
     <div id="panel">
-      <h1>Pop the Falling Clovers</h1>
+      <h1>Saint Patrick Adventure</h1>
       <p>
-        Press <b>Space</b> (switch) to pop clovers. You can also tap/click a clover.
+        Press <b>Space</b> (switch) to pop items. You can also tap/click.
+        Play 3 phases in sequence: clovers, rainbow drops, then gold coins.
         This screen appears once to enable sound and fullscreen.
       </p>
       <div class="btnrow">
         <button id="startBtn" type="button">Start</button>
         <button id="fsBtn" type="button">Fullscreen</button>
       </div>
-      <div class="hint">Tip: Space also starts the game.</div>
+      <div class="hint">Tip: Space starts and plays. Each phase advances automatically after enough pops.</div>
     </div>
   </div>
 
@@ -69,30 +70,27 @@
 
   <script>
     /******************************************************************
-     * Updates requested:
-     * - Hills less rugged: smoother curves (lower noise freq, larger step,
-     *   extra smoothing pass over ridge points)
-     * - Brighter, clearer palette: more vivid blues/greens
+     * Saint Patrick multi-phase game:
+     * 1) Pop clovers
+     * 2) Pop rainbow drops
+     * 3) Pop gold coins
      ******************************************************************/
 
     // ===== CONFIG =====
     const CFG = {
       cloverImgPath: "../../images/arthur.jpg",
-      cloverCount: 14,
-      spawnRatePerSec: 2.0,
-      maxClovers: 26,
-      minScale: 0.22,
-      maxScale: 0.52,
-      fallSpeedMin: 1.0,
-      fallSpeedMax: 2.8,
-      driftMax: 0.55,
-      spinMax: 0.018,
       hitRadiusBoost: 1.25,
       flashSeconds: 0.35,
       rippleSeconds: 1.15,
       particlesPerPop: 46,
       reduceMotion: false
     };
+
+    const PHASES = [
+      { id:'clover', title:'Clover Rain', hue:118, spawnRate:2.0, maxItems:26, startCount:14, goal:16 },
+      { id:'rainbow', title:'Rainbow Drops', hue:285, spawnRate:2.3, maxItems:24, startCount:12, goal:16 },
+      { id:'gold', title:'Gold Coins', hue:46, spawnRate:2.6, maxItems:25, startCount:13, goal:18 }
+    ];
 
     // ===== AUDIO (simple procedural pop) =====
     let audioCtx=null, masterGain=null, audioEnabled=false;
@@ -150,20 +148,20 @@
     let cloverImg=null;
     let started=false;
 
-    let clovers=[], particles=[], ripples=[];
+    let items=[], particles=[], ripples=[];
     let flashHue=120, flashT=10;
     let pointerX=0, pointerY=0;
 
+    let stageIndex=0, stagePops=0, stageBannerT=0;
     let lastMs=0, spawnAcc=0;
 
     // background graphics (static scene)
     let bgGfx=null;
     let bgSeed=Math.random()*10000;
 
-    // ===== ENTITIES =====
-    class FallingClover{
-      constructor(x,y,s,vy,vx,rot,rv){ this.x=x; this.y=y; this.s=s; this.vy=vy; this.vx=vx; this.rot=rot; this.rv=rv; this.wob=Math.random()*1000; }
-      radius(){ return min(width,height)*0.12*this.s; }
+    class FallingItem{
+      constructor(type,x,y,s,vy,vx,rot,rv){ this.type=type; this.x=x; this.y=y; this.s=s; this.vy=vy; this.vx=vx; this.rot=rot; this.rv=rv; this.wob=Math.random()*1000; this.colorIndex=Math.floor(random(6)); }
+      radius(){ return min(width,height)*(this.type==='gold' ? 0.10 : 0.12)*this.s; }
       update(dt){
         const sp = CFG.reduceMotion ? 0.6 : 1.0;
         const t = millis()*0.001;
@@ -176,73 +174,65 @@
         if (this.y - r > height + 60){
           this.y = -r - 60;
           this.x = random(r, width-r);
-          this.vy = random(CFG.fallSpeedMin, CFG.fallSpeedMax);
-          this.vx = random(-CFG.driftMax, CFG.driftMax);
-          this.rv = random(-CFG.spinMax, CFG.spinMax);
+          this.vy = random(1.0, this.type==='gold' ? 3.2 : 2.8);
+          this.vx = random(-0.55, 0.55);
+          this.rv = random(-0.018, 0.018);
         }
         if (this.x < -r) this.x = width + r;
         if (this.x > width + r) this.x = -r;
       }
       contains(px,py){ return dist(px,py,this.x,this.y) <= this.radius()*CFG.hitRadiusBoost; }
       draw(){
-        if (!cloverImg) return;
         push();
         translate(this.x,this.y);
         rotate(this.rot);
-
-        // subtle glow
-        noStroke();
         const rr=this.radius();
-        fill(120, 55, 85, 0.10);
-        ellipse(0,0, rr*2.6, rr*2.1);
-
-        imageMode(CENTER);
-        const sz = rr*2.0;
-        image(cloverImg, 0,0, sz,sz);
+        noStroke();
+        if (this.type==='clover' && cloverImg){
+          fill(120, 55, 85, 0.10);
+          ellipse(0,0, rr*2.6, rr*2.1);
+          imageMode(CENTER);
+          image(cloverImg, 0,0, rr*2.0,rr*2.0);
+        } else if (this.type==='rainbow'){
+          const stripes = [0, 34, 60, 120, 210, 280];
+          fill(0, 0, 100, 0.16);
+          ellipse(0,0, rr*2.9, rr*2.9);
+          for (let i=0;i<stripes.length;i++){
+            fill(stripes[(i + this.colorIndex)%stripes.length], 85, 95, 0.95);
+            arc(0,0, rr*2.0, rr*2.0, -HALF_PI + i*(TWO_PI/6), -HALF_PI + (i+1)*(TWO_PI/6), PIE);
+          }
+          fill(0,0,100,0.9);
+          ellipse(-rr*0.2,-rr*0.25, rr*0.5, rr*0.35);
+        } else {
+          fill(44, 86, 100, 0.20);
+          ellipse(0,0, rr*2.8, rr*2.8);
+          fill(45, 82, 98, 1);
+          ellipse(0,0, rr*2.0, rr*2.0);
+          fill(38, 58, 82, 1);
+          ellipse(0,0, rr*1.55, rr*1.55);
+          stroke(50, 20, 100, 0.7);
+          strokeWeight(max(1, rr*0.08));
+          line(0, -rr*0.6, 0, rr*0.6);
+          noStroke();
+          fill(48, 18, 100, 0.85);
+          textAlign(CENTER, CENTER);
+          textSize(rr*0.95);
+          text('€', 0, rr*0.06);
+        }
         pop();
       }
     }
 
     class Particle{
-      constructor(x,y,hue){
-        this.x=x; this.y=y;
-        const a=Math.random()*TWO_PI;
-        const sp=2.5+Math.random()*9;
-        this.vx=Math.cos(a)*sp;
-        this.vy=Math.sin(a)*sp;
-        this.life=1;
-        this.hue=hue;
-        this.size=2.5+Math.random()*7;
-      }
-      update(dt){
-        const sp = CFG.reduceMotion ? 0.7 : 1.0;
-        this.x += this.vx*dt*0.95*sp;
-        this.y += this.vy*dt*0.95*sp;
-        this.vx *= 0.98; this.vy *= 0.98;
-        this.vy += 0.03*dt;
-        this.life -= 0.02*dt;
-      }
-      draw(){
-        if (this.life<=0) return;
-        noStroke();
-        fill(this.hue, 60, 98, constrain(this.life,0,1)*0.9);
-        ellipse(this.x,this.y,this.size,this.size);
-      }
+      constructor(x,y,hue){ this.x=x; this.y=y; const a=Math.random()*TWO_PI; const sp=2.5+Math.random()*9; this.vx=Math.cos(a)*sp; this.vy=Math.sin(a)*sp; this.life=1; this.hue=hue; this.size=2.5+Math.random()*7; }
+      update(dt){ const sp = CFG.reduceMotion ? 0.7 : 1.0; this.x += this.vx*dt*0.95*sp; this.y += this.vy*dt*0.95*sp; this.vx *= 0.98; this.vy *= 0.98; this.vy += 0.03*dt; this.life -= 0.02*dt; }
+      draw(){ if (this.life<=0) return; noStroke(); fill(this.hue, 60, 98, constrain(this.life,0,1)*0.9); ellipse(this.x,this.y,this.size,this.size); }
     }
 
     class Ripple{
       constructor(x,y,hue){ this.x=x; this.y=y; this.hue=hue; this.t=0; }
       update(dt){ this.t += dt/60; }
-      draw(){
-        const p=constrain(this.t/CFG.rippleSeconds,0,1);
-        if (p>=1) return;
-        const rr=lerp(0, max(width,height)*0.85, p);
-        const a=(1-p)*0.55;
-        noFill();
-        stroke(this.hue, 45, 100, a);
-        strokeWeight(6*(1-p)+1);
-        ellipse(this.x,this.y, rr*2, rr*2);
-      }
+      draw(){ const p=constrain(this.t/CFG.rippleSeconds,0,1); if (p>=1) return; const rr=lerp(0, max(width,height)*0.85, p); const a=(1-p)*0.55; noFill(); stroke(this.hue, 45, 100, a); strokeWeight(6*(1-p)+1); ellipse(this.x,this.y, rr*2, rr*2); }
       done(){ return this.t>=CFG.rippleSeconds; }
     }
 
@@ -254,8 +244,8 @@
       colorMode(HSB, 360, 100, 100, 1);
       cursor();
 
-      buildCleanSceneBackground();   // smoother + brighter
-      resetClovers();
+      buildCleanSceneBackground();
+      resetStageObjects();
 
       pointerX = width*0.5;
       pointerY = height*0.6;
@@ -265,10 +255,10 @@
     function windowResized(){
       resizeCanvas(window.innerWidth, window.innerHeight);
       buildCleanSceneBackground();
-      resetClovers();
+      resetStageObjects();
     }
 
-    // ===== BACKGROUND =====
+// ===== BACKGROUND =====
     function smoothArray(arr, passes=2){
       // simple neighbor averaging smoothing
       const out = arr.slice();
@@ -444,58 +434,99 @@
     }
 
     // ===== GAME LOGIC =====
-    function resetClovers(){
-      clovers=[];
-      for (let i=0;i<CFG.cloverCount;i++){
-        clovers.push(makeClover(random(-height, 0)));
-      }
-      particles=[]; ripples=[];
-      flashT=10; spawnAcc=0;
-    }
+    function currentPhase(){ return PHASES[stageIndex % PHASES.length]; }
 
-    function makeClover(yOverride=null){
-      const s = random(CFG.minScale, CFG.maxScale);
-      const vy = random(CFG.fallSpeedMin, CFG.fallSpeedMax);
-      const vx = random(-CFG.driftMax, CFG.driftMax);
+    function makeItem(type, yOverride=null){
+      const s = random(0.22, type==='gold' ? 0.50 : 0.56);
+      const vy = random(1.0, type==='gold' ? 3.2 : 2.8);
+      const vx = random(-0.55, 0.55);
       const rot = random(TWO_PI);
-      const rv  = random(-CFG.spinMax, CFG.spinMax);
-      const r = min(width,height)*0.12*s;
+      const rv  = random(-0.018, 0.018);
+      const r = min(width,height)*(type==='gold' ? 0.10 : 0.12)*s;
       const x = random(r, width-r);
       const y = (yOverride!==null) ? yOverride : random(-height, -60);
-      return new FallingClover(x,y,s,vy,vx,rot,rv);
+      return new FallingItem(type,x,y,s,vy,vx,rot,rv);
     }
 
-    function pickBestClover(){
-      if (!clovers.length) return null;
-      for (const c of clovers) if (c.contains(pointerX, pointerY)) return c;
+    function resetStageObjects(){
+      const phase = currentPhase();
+      items=[];
+      for (let i=0;i<phase.startCount;i++) items.push(makeItem(phase.id, random(-height, 0)));
+      particles=[];
+      ripples=[];
+      flashT=10;
+      spawnAcc=0;
+    }
 
-      let best=clovers[0];
+    function pickBestItem(){
+      if (!items.length) return null;
+      for (const c of items) if (c.contains(pointerX, pointerY)) return c;
+
+      let best=items[0];
       let bestD=dist(pointerX,pointerY,best.x,best.y);
-      for (const c of clovers){
+      for (const c of items){
         const d=dist(pointerX,pointerY,c.x,c.y);
         if (d<bestD){ bestD=d; best=c; }
       }
-      if (bestD > min(width,height)*0.45) return random(clovers);
+      if (bestD > min(width,height)*0.45) return random(items);
       return best;
     }
 
-    function popClover(c){
-      if (!c) return;
-      const idx=clovers.indexOf(c);
-      if (idx>=0) clovers.splice(idx,1);
+    function advancePhase(){
+      stageIndex = (stageIndex + 1) % PHASES.length;
+      stagePops = 0;
+      stageBannerT = 2.4;
+      resetStageObjects();
+    }
 
-      flashHue = 115;
+    function popItem(c){
+      if (!c) return;
+      const idx=items.indexOf(c);
+      if (idx>=0) items.splice(idx,1);
+
+      const phase = currentPhase();
+      flashHue = phase.hue;
       flashT = 0;
 
-      ripples.push(new Ripple(c.x, c.y, 120));
+      ripples.push(new Ripple(c.x, c.y, phase.hue));
       const n = CFG.reduceMotion ? Math.floor(CFG.particlesPerPop*0.65) : CFG.particlesPerPop;
-      for (let i=0;i<n;i++) particles.push(new Particle(c.x,c.y, 112 + random(-10,10)));
+      for (let i=0;i<n;i++) particles.push(new Particle(c.x,c.y, phase.hue + random(-12,12)));
 
-      const intensity = constrain(map(c.s, CFG.minScale, CFG.maxScale, 0.9, 1.2), 0.8, 1.25);
+      const intensity = constrain(map(c.s, 0.22, 0.56, 0.9, 1.2), 0.8, 1.25);
       playPopSound(intensity);
 
-      if (clovers.length < CFG.maxClovers){
-        setTimeout(()=>clovers.push(makeClover(random(-240,-60))), 120);
+      stagePops += 1;
+      if (stagePops >= phase.goal){
+        advancePhase();
+        return;
+      }
+      if (items.length < phase.maxItems){
+        setTimeout(()=>items.push(makeItem(phase.id, random(-240,-60))), 120);
+      }
+    }
+
+    function drawHud(dt){
+      const phase = currentPhase();
+      const remain = Math.max(0, phase.goal - stagePops);
+      noStroke();
+      fill(0,0,0,0.28);
+      rect(14, 12, min(430, width-28), 58, 14);
+      fill(0,0,100,0.94);
+      textAlign(LEFT, TOP);
+      textSize(18);
+      text(`${phase.title} • Phase ${stageIndex+1}/3`, 26, 22);
+      textSize(14);
+      text(`Pops to next phase: ${remain}`, 26, 45);
+
+      if (stageBannerT > 0){
+        stageBannerT = Math.max(0, stageBannerT - dt/60);
+        const a = constrain(stageBannerT/2.4, 0, 1);
+        fill(phase.hue, 42, 100, 0.20*a);
+        rect(0, 0, width, height);
+        fill(0,0,100,a);
+        textAlign(CENTER, CENTER);
+        textSize(min(width*0.06, 48));
+        text(phase.title, width*0.5, height*0.26);
       }
     }
 
@@ -508,17 +539,16 @@
 
       image(bgGfx, 0, 0);
 
-      spawnAcc += (dt/60) * CFG.spawnRatePerSec;
+      const phase = currentPhase();
+      spawnAcc += (dt/60) * phase.spawnRate;
       if (spawnAcc >= 1){
         const k = floor(spawnAcc);
         spawnAcc -= k;
-        for (let i=0;i<k;i++){
-          if (clovers.length < CFG.maxClovers) clovers.push(makeClover());
-        }
+        for (let i=0;i<k;i++) if (items.length < phase.maxItems) items.push(makeItem(phase.id));
       }
 
-      for (const c of clovers) c.update(dt);
-      for (const c of clovers) c.draw();
+      for (const c of items) c.update(dt);
+      for (const c of items) c.draw();
 
       for (const r of ripples) r.update(dt);
       for (const r of ripples) r.draw();
@@ -529,8 +559,8 @@
       particles = particles.filter(p => p.life > 0);
 
       drawFlash(dt);
+      drawHud(dt);
 
-      // pointer hint ring
       noFill();
       stroke(120, 40, 100, started ? 0.10 : 0.06);
       strokeWeight(2);
@@ -555,30 +585,17 @@
       }
       if (key===' '){
         if (!audioEnabled) ensureAudio();
-        popClover(pickBestClover());
+        popItem(pickBestItem());
         return false;
       }
     }
     function mouseMoved(){ pointerX=mouseX; pointerY=mouseY; }
     function mouseDragged(){ pointerX=mouseX; pointerY=mouseY; }
-    function mousePressed(){
-      pointerX=mouseX; pointerY=mouseY;
-      if (!audioEnabled) ensureAudio();
-      popClover(pickBestClover());
-      return false;
-    }
-    function touchStarted(){
-      if (touches && touches[0]){ pointerX=touches[0].x; pointerY=touches[0].y; }
-      if (!audioEnabled) ensureAudio();
-      popClover(pickBestClover());
-      return false;
-    }
-    function touchMoved(){
-      if (touches && touches[0]){ pointerX=touches[0].x; pointerY=touches[0].y; }
-      return false;
-    }
+    function mousePressed(){ pointerX=mouseX; pointerY=mouseY; if (!audioEnabled) ensureAudio(); popItem(pickBestItem()); return false; }
+    function touchStarted(){ if (touches && touches[0]){ pointerX=touches[0].x; pointerY=touches[0].y; } if (!audioEnabled) ensureAudio(); popItem(pickBestItem()); return false; }
+    function touchMoved(){ if (touches && touches[0]){ pointerX=touches[0].x; pointerY=touches[0].y; } return false; }
 
-    // ===== OVERLAY =====
+// ===== OVERLAY =====
     const overlay=document.getElementById('overlay');
     const startBtn=document.getElementById('startBtn');
     const fsBtn=document.getElementById('fsBtn');
@@ -587,6 +604,10 @@
       ensureAudio();
       overlay.style.display='none';
       started=true;
+      stageIndex=0;
+      stagePops=0;
+      stageBannerT=2.2;
+      resetStageObjects();
       pointerX=width*0.5; pointerY=height*0.6;
     }
     async function requestFullscreen(){
