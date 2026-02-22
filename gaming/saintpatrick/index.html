@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Pop the Falling Clovers (Switch)</title>
+  <title>Saint Patrick Mini Games (Switch)</title>
   <style>
     html, body{
       margin:0; padding:0; width:100%; height:100%;
@@ -50,11 +50,13 @@
 </head>
 
 <body>
+  <div id="hud" style="position:fixed;left:12px;top:12px;z-index:8;color:#f4ffe7;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:8px 12px;font-size:14px;backdrop-filter:blur(2px)"></div>
   <div id="overlay" role="dialog" aria-modal="true">
     <div id="panel">
-      <h1>Pop the Falling Clovers</h1>
+      <h1>Saint Patrick Mini Games</h1>
       <p>
-        Press <b>Space</b> (switch) to pop clovers. You can also tap/click a clover.
+        Press <b>Space</b> (switch) to interact. You can also tap/click.
+        Play three Saint Patrick mini-games in sequence: clovers, rainbow, then gold coins.
         This screen appears once to enable sound and fullscreen.
       </p>
       <div class="btnrow">
@@ -79,8 +81,10 @@
     const CFG = {
       cloverImgPath: "../../images/arthur.jpg",
       cloverCount: 14,
+      coinCount: 12,
       spawnRatePerSec: 2.0,
       maxClovers: 26,
+      maxCoins: 22,
       minScale: 0.22,
       maxScale: 0.52,
       fallSpeedMin: 1.0,
@@ -91,8 +95,19 @@
       flashSeconds: 0.35,
       rippleSeconds: 1.15,
       particlesPerPop: 46,
+      rainbowTarget: 7,
+      cloverTarget: 16,
+      coinTarget: 14,
+      rainDrops: 85,
+      chestImgPath: "../../images/cvipng/cvibucket.png",
       reduceMotion: false
     };
+
+    const PHASES = [
+      { key: 'clover', title: 'Clover Shower', target: CFG.cloverTarget },
+      { key: 'rainbow', title: 'Rainbow Builder', target: CFG.rainbowTarget },
+      { key: 'coin', title: 'Gold Coin Rush', target: CFG.coinTarget }
+    ];
 
     // ===== AUDIO (simple procedural pop) =====
     let audioCtx=null, masterGain=null, audioEnabled=false;
@@ -148,9 +163,16 @@
 
     // ===== STATE =====
     let cloverImg=null;
+    let chestImg=null;
     let started=false;
+    let phaseIndex=0;
+    let phaseScore=0;
+    let rainbowProgress=0;
+    let rainDrops=[];
+    let coinDrops=[];
+    let chestScale=1;
 
-    let clovers=[], particles=[], ripples=[];
+    let tokens=[], particles=[], ripples=[];
     let flashHue=120, flashT=10;
     let pointerX=0, pointerY=0;
 
@@ -161,8 +183,8 @@
     let bgSeed=Math.random()*10000;
 
     // ===== ENTITIES =====
-    class FallingClover{
-      constructor(x,y,s,vy,vx,rot,rv){ this.x=x; this.y=y; this.s=s; this.vy=vy; this.vx=vx; this.rot=rot; this.rv=rv; this.wob=Math.random()*1000; }
+    class FallingToken{
+      constructor(x,y,s,vy,vx,rot,rv,type){ this.x=x; this.y=y; this.s=s; this.vy=vy; this.vx=vx; this.rot=rot; this.rv=rv; this.type=type; this.wob=Math.random()*1000; }
       radius(){ return min(width,height)*0.12*this.s; }
       update(dt){
         const sp = CFG.reduceMotion ? 0.6 : 1.0;
@@ -185,7 +207,6 @@
       }
       contains(px,py){ return dist(px,py,this.x,this.y) <= this.radius()*CFG.hitRadiusBoost; }
       draw(){
-        if (!cloverImg) return;
         push();
         translate(this.x,this.y);
         rotate(this.rot);
@@ -193,12 +214,23 @@
         // subtle glow
         noStroke();
         const rr=this.radius();
-        fill(120, 55, 85, 0.10);
+        fill(this.type === 'coin' ? 45 : 120, 55, 85, 0.10);
         ellipse(0,0, rr*2.6, rr*2.1);
-
-        imageMode(CENTER);
         const sz = rr*2.0;
-        image(cloverImg, 0,0, sz,sz);
+        if (this.type === 'coin'){
+          noStroke();
+          fill(47, 75, 100, 0.98);
+          ellipse(0, 0, sz, sz);
+          fill(42, 55, 88, 0.65);
+          ellipse(0, 0, sz*0.65, sz*0.65);
+          stroke(38, 70, 78, 0.8);
+          strokeWeight(max(2, sz*0.05));
+          noFill();
+          ellipse(0, 0, sz*0.88, sz*0.88);
+        }else if (cloverImg){
+          imageMode(CENTER);
+          image(cloverImg, 0,0, sz,sz);
+        }
         pop();
       }
     }
@@ -246,8 +278,35 @@
       done(){ return this.t>=CFG.rippleSeconds; }
     }
 
+    class CoinDrop{
+      constructor(x){
+        this.x = x;
+        this.y = -30;
+        this.vy = random(5.5, 7.2);
+        this.done = false;
+      }
+      update(dt, targetY){
+        if (this.done) return;
+        this.y += this.vy * dt;
+        if (this.y >= targetY){
+          this.done = true;
+        }
+      }
+      draw(){
+        if (this.done) return;
+        noStroke();
+        fill(48, 78, 100, 0.98);
+        ellipse(this.x, this.y, 26, 26);
+        fill(42, 58, 86, 0.7);
+        ellipse(this.x, this.y, 16, 16);
+      }
+    }
+
     // ===== p5 preload/setup =====
-    function preload(){ cloverImg = loadImage(CFG.cloverImgPath); }
+    function preload(){
+      cloverImg = loadImage(CFG.cloverImgPath);
+      chestImg = loadImage(CFG.chestImgPath);
+    }
 
     function setup(){
       createCanvas(window.innerWidth, window.innerHeight);
@@ -255,7 +314,9 @@
       cursor();
 
       buildCleanSceneBackground();   // smoother + brighter
-      resetClovers();
+      resetTokens();
+      initRainDrops();
+      updateHud();
 
       pointerX = width*0.5;
       pointerY = height*0.6;
@@ -265,7 +326,22 @@
     function windowResized(){
       resizeCanvas(window.innerWidth, window.innerHeight);
       buildCleanSceneBackground();
-      resetClovers();
+      resetTokens();
+      initRainDrops();
+      updateHud();
+    }
+
+
+    function initRainDrops(){
+      rainDrops = [];
+      for (let i=0; i<CFG.rainDrops; i++) {
+        rainDrops.push({
+          x: random(width),
+          y: random(-height, height),
+          len: random(10, 20),
+          vy: random(5, 9)
+        });
+      }
     }
 
     // ===== BACKGROUND =====
@@ -286,174 +362,108 @@
       bgGfx.colorMode(HSB, 360, 100, 100, 1);
       bgGfx.noStroke();
 
-      // --- SKY: brighter clear blue -> warm light near horizon
       for (let y=0;y<h;y++){
         const t = y/h;
-        const hue = lerp(205, 175, pow(t, 1.05));  // clear blue -> teal-ish
-        const sat = lerp(65, 35, t);
-        const bri = lerp(45, 92, pow(t, 1.25));    // brighter overall
+        const hue = lerp(205, 170, t);
+        const sat = lerp(75, 45, t);
+        const bri = lerp(92, 100, pow(1-t, 0.5));
         bgGfx.stroke(hue, sat, bri, 1);
         bgGfx.line(0, y, w, y);
       }
       bgGfx.noStroke();
 
-      // --- SUN: clean disk + small halo
-      const sunX = w*0.78, sunY = h*0.18;
-      bgGfx.fill(50, 22, 100, 1);
-      bgGfx.ellipse(sunX, sunY, w*0.055, w*0.055);
-      for (let i=0;i<28;i++){
-        const r = i/28;
-        const a = 0.16*(1-r);
-        bgGfx.fill(50, 25, 100, a);
-        bgGfx.ellipse(sunX, sunY, r*w*0.36, r*w*0.36);
+      const sunX = w*0.82, sunY = h*0.16;
+      for (let i=22;i>=1;i--){
+        const r = i/22;
+        bgGfx.fill(50, 30, 100, 0.04 + 0.06*(1-r));
+        bgGfx.ellipse(sunX, sunY, r*w*0.42, r*w*0.42);
       }
+      bgGfx.fill(52, 24, 100, 1);
+      bgGfx.ellipse(sunX, sunY, w*0.09, w*0.09);
 
-      // --- CLOUDS: cleaner, slightly warmer whites
-      function drawCloud(cx, cy, s){
+      function drawCartoonCloud(cx, cy, s){
         bgGfx.push();
         bgGfx.translate(cx, cy);
         bgGfx.scale(s);
-
-        bgGfx.noStroke();
-        bgGfx.fill(0, 0, 100, 0.95);
-        bgGfx.ellipse(0, 0, 230, 86);
-        bgGfx.ellipse(-78, -18, 130, 98);
-        bgGfx.ellipse(  6, -40, 150, 118);
-        bgGfx.ellipse( 92, -14, 132, 100);
-
-        // gentle underside shade (still quite opaque)
-        bgGfx.fill(45, 8, 96, 0.55);
-        bgGfx.ellipse(0, 12, 220, 66);
-
+        bgGfx.fill(0, 0, 100, 0.98);
+        bgGfx.ellipse(-70, -6, 120, 75);
+        bgGfx.ellipse(-8, -24, 135, 90);
+        bgGfx.ellipse(70, -2, 130, 80);
+        bgGfx.ellipse(0, 10, 220, 65);
+        bgGfx.fill(205, 6, 96, 0.45);
+        bgGfx.ellipse(0, 18, 190, 36);
         bgGfx.pop();
       }
+      drawCartoonCloud(w*0.2, h*0.18, 0.9);
+      drawCartoonCloud(w*0.48, h*0.14, 0.75);
+      drawCartoonCloud(w*0.67, h*0.24, 0.95);
 
-      const clouds = [
-        {x:w*0.20, y:h*0.18, s:0.78},
-        {x:w*0.44, y:h*0.12, s:0.62},
-        {x:w*0.60, y:h*0.22, s:0.84},
-        {x:w*0.84, y:h*0.14, s:0.70}
-      ];
-      for (const c of clouds) drawCloud(c.x, c.y, c.s);
-
-      // --- HILLS: smoother, rounder silhouettes (lower freq + smoothing)
-      function drawHillLayer(opts){
-        const { baseY, amp, freq, hue, sat, bri, step, texDensity, texBriJitter, smoothPasses } = opts;
-
-        const xs = [];
-        const ys = [];
-        for (let x=0; x<=w; x+=step){
-          xs.push(x);
-          // Use noise at lower frequency for round hills
-          const n = noise(bgSeed + x*freq, baseY*0.01);
-          const yy = baseY - (n-0.5)*2*amp;
-          ys.push(yy);
-        }
-
-        const ysSmooth = smoothArray(ys, smoothPasses);
-
-        // fill hill
-        bgGfx.noStroke();
+      function drawHill(baseY, amp, hue, sat, bri){
         bgGfx.fill(hue, sat, bri, 1);
         bgGfx.beginShape();
         bgGfx.vertex(0, h);
-        for (let i=0;i<xs.length;i++) bgGfx.vertex(xs[i], ysSmooth[i]);
+        for (let x=0; x<=w; x+=12){
+          const yy = baseY - sin((x/w) * PI) * amp - noise(bgSeed + x*0.002, baseY*0.01) * amp*0.4;
+          bgGfx.vertex(x, yy);
+        }
         bgGfx.vertex(w, h);
         bgGfx.endShape(CLOSE);
-
-        // ridge highlight (slightly brighter)
-        bgGfx.stroke(hue, max(0, sat-25), min(100, bri+16), 0.35);
-        bgGfx.strokeWeight(2);
-        bgGfx.noFill();
-        bgGfx.beginShape();
-        for (let i=0;i<xs.length;i++) bgGfx.vertex(xs[i], ysSmooth[i] + 1.5);
-        bgGfx.endShape();
-        bgGfx.noStroke();
-
-        // texture: subtle dots + swaths, but keep it clean and opaque-ish
-        const texCount = Math.floor(w*h*texDensity);
-        for (let i=0;i<texCount;i++){
-          const x = random(w);
-          const idx = Math.floor((x / w) * (ysSmooth.length-1));
-          const ridgeY = ysSmooth[idx];
-          const y = random(ridgeY + 6, h);
-          const t = (y - ridgeY) / (h - ridgeY + 0.0001);
-          const dotSize = random(1.0, 2.2) * (0.55 + 0.75*t);
-          const localBri = bri - (5 + random()*texBriJitter) * t;
-          bgGfx.fill(hue + random(-2,2), sat + random(-5,4), localBri, 0.24);
-          bgGfx.ellipse(x, y, dotSize, dotSize);
-        }
-
-        const swaths = 9;
-        for (let i=0;i<swaths;i++){
-          const x = random(w);
-          const idx = Math.floor((x / w) * (ysSmooth.length-1));
-          const ridgeY = ysSmooth[idx];
-          const y = random(ridgeY + 22, h);
-          const ww = random(w*0.14, w*0.30);
-          const hh = random(h*0.03, h*0.085);
-          bgGfx.fill(hue, sat, bri - random(3,7), 0.10);
-          bgGfx.ellipse(x, y, ww, hh);
-        }
       }
 
-      // far hills (brighter green-blue, less saturated)
-      drawHillLayer({
-        baseY: h*0.55, amp: h*0.055, freq: 0.0016, // lower freq
-        hue: 135, sat: 28, bri: 58,
-        step: 14, texDensity: 0.000010, texBriJitter: 10,
-        smoothPasses: 4
-      });
+      drawHill(h*0.62, h*0.1, 145, 42, 68);
+      drawHill(h*0.74, h*0.11, 126, 56, 62);
+      drawHill(h*0.86, h*0.14, 112, 70, 52);
 
-      // mid hills (clearer green)
-      drawHillLayer({
-        baseY: h*0.67, amp: h*0.095, freq: 0.0022,
-        hue: 122, sat: 48, bri: 52,
-        step: 12, texDensity: 0.000016, texBriJitter: 12,
-        smoothPasses: 4
-      });
-
-      // near meadow (vivid green)
-      drawHillLayer({
-        baseY: h*0.83, amp: h*0.155, freq: 0.0028,
-        hue: 112, sat: 72, bri: 48,
-        step: 10, texDensity: 0.000020, texBriJitter: 14,
-        smoothPasses: 5
-      });
-
-      // foreground grass strokes (a bit brighter)
-      bgGfx.stroke(112, 55, 58, 0.16);
-      bgGfx.strokeWeight(1);
-      const blades = Math.floor(w*h*0.00022);
-      for (let i=0;i<blades;i++){
+      for (let i=0; i<120; i++){
         const x = random(w);
         const y = random(h*0.72, h);
-        const t = (y - h*0.72)/(h*0.28);
-        const len = (8 + random()*22) * (0.5 + t);
-        bgGfx.line(x, y, x + random(-2,2), y - len);
+        bgGfx.stroke(113 + random(-4,4), 65, 55 + random(-6, 8), 0.2);
+        bgGfx.line(x, y, x + random(-3,3), y-random(10, 24));
       }
       bgGfx.noStroke();
 
-      // subtle vignette (lighter)
-      for (let i=0;i<9;i++){
-        const r=i/9;
-        bgGfx.fill(0,0,0, 0.04*r);
-        const m = i*22;
+      for (let i=0;i<7;i++){
+        const r=i/7;
+        bgGfx.fill(0,0,0, 0.028*r);
+        const m = i*24;
         bgGfx.rect(m, m, w-m*2, h-m*2, 60);
       }
     }
 
     // ===== GAME LOGIC =====
-    function resetClovers(){
-      clovers=[];
-      for (let i=0;i<CFG.cloverCount;i++){
-        clovers.push(makeClover(random(-height, 0)));
-      }
-      particles=[]; ripples=[];
-      flashT=10; spawnAcc=0;
+    const hud = document.getElementById('hud');
+
+    function getPhase(){ return PHASES[phaseIndex]; }
+
+    function updateHud(){
+      const phase = getPhase();
+      const total = phase.target;
+      const done = phase.key === 'rainbow' ? rainbowProgress : phaseScore;
+      hud.textContent = `${phase.title} · ${done}/${total}`;
     }
 
-    function makeClover(yOverride=null){
+    function nextPhase(){
+      phaseIndex = (phaseIndex + 1) % PHASES.length;
+      phaseScore = 0;
+      rainbowProgress = 0;
+      chestScale = 1;
+      coinDrops = [];
+      resetTokens();
+      updateHud();
+    }
+
+    function resetTokens(){
+      tokens=[];
+      particles=[];
+      ripples=[];
+      flashT=10;
+      spawnAcc=0;
+      const phase = getPhase();
+      if (phase.key !== 'clover') return;
+      for (let i=0;i<CFG.cloverCount;i++) tokens.push(makeToken(phase.key, random(-height, 0)));
+    }
+
+    function makeToken(type, yOverride=null){
       const s = random(CFG.minScale, CFG.maxScale);
       const vy = random(CFG.fallSpeedMin, CFG.fallSpeedMax);
       const vx = random(-CFG.driftMax, CFG.driftMax);
@@ -462,41 +472,153 @@
       const r = min(width,height)*0.12*s;
       const x = random(r, width-r);
       const y = (yOverride!==null) ? yOverride : random(-height, -60);
-      return new FallingClover(x,y,s,vy,vx,rot,rv);
+      return new FallingToken(x,y,s,vy,vx,rot,rv,type);
     }
 
-    function pickBestClover(){
-      if (!clovers.length) return null;
-      for (const c of clovers) if (c.contains(pointerX, pointerY)) return c;
+    function pickBestToken(){
+      if (!tokens.length) return null;
+      for (const c of tokens) if (c.contains(pointerX, pointerY)) return c;
 
-      let best=clovers[0];
+      let best=tokens[0];
       let bestD=dist(pointerX,pointerY,best.x,best.y);
-      for (const c of clovers){
+      for (const c of tokens){
         const d=dist(pointerX,pointerY,c.x,c.y);
         if (d<bestD){ bestD=d; best=c; }
       }
-      if (bestD > min(width,height)*0.45) return random(clovers);
+      if (bestD > min(width,height)*0.45) return random(tokens);
       return best;
     }
 
-    function popClover(c){
+    function popToken(c){
       if (!c) return;
-      const idx=clovers.indexOf(c);
-      if (idx>=0) clovers.splice(idx,1);
+      const idx=tokens.indexOf(c);
+      if (idx>=0) tokens.splice(idx,1);
 
-      flashHue = 115;
+      const coinMode = getPhase().key === 'coin';
+      flashHue = coinMode ? 48 : 115;
       flashT = 0;
 
-      ripples.push(new Ripple(c.x, c.y, 120));
+      ripples.push(new Ripple(c.x, c.y, coinMode ? 45 : 120));
       const n = CFG.reduceMotion ? Math.floor(CFG.particlesPerPop*0.65) : CFG.particlesPerPop;
-      for (let i=0;i<n;i++) particles.push(new Particle(c.x,c.y, 112 + random(-10,10)));
+      for (let i=0;i<n;i++) particles.push(new Particle(c.x,c.y, coinMode ? 45 + random(-6,8) : 112 + random(-10,10)));
 
       const intensity = constrain(map(c.s, CFG.minScale, CFG.maxScale, 0.9, 1.2), 0.8, 1.25);
       playPopSound(intensity);
 
-      if (clovers.length < CFG.maxClovers){
-        setTimeout(()=>clovers.push(makeClover(random(-240,-60))), 120);
+      if (getPhase().key === 'clover' && tokens.length < CFG.maxClovers){
+        setTimeout(()=>tokens.push(makeToken('clover', random(-240,-60))), 120);
       }
+
+      phaseScore += 1;
+      if (phaseScore >= getPhase().target) nextPhase();
+      else updateHud();
+    }
+
+    function drawRainbowChallenge(){
+      const arcColors = [
+        [0, 85, 98],
+        [28, 82, 100],
+        [52, 80, 100],
+        [112, 65, 92],
+        [198, 70, 96],
+        [238, 64, 100],
+        [292, 62, 98]
+      ];
+      const cx = width * 0.5;
+      const cy = height * 0.88;
+      const baseR = min(width, height) * 0.18;
+      const thick = min(width, height) * 0.035;
+      const start = PI;
+      const end = TWO_PI;
+      for (let i = 0; i < arcColors.length; i++){
+        const active = i < rainbowProgress;
+        const [h,s,b] = arcColors[i];
+        stroke(h, s, b, active ? 0.95 : 0.18);
+        strokeWeight(thick);
+        noFill();
+        arc(cx, cy, (baseR + i*thick*0.9)*2, (baseR + i*thick*0.9)*2, start, end);
+      }
+    }
+
+    function getChestBox(){
+      const baseW = min(width * 0.24, 260);
+      const chestW = baseW * chestScale;
+      const chestH = chestW * 0.8;
+      const chestX = width * 0.5;
+      const chestY = height - chestH * 0.42;
+      return { chestX, chestY, chestW, chestH, mouthY: chestY - chestH*0.18 };
+    }
+
+    function drawCoinChest(){
+      const b = getChestBox();
+      if (chestImg){
+        imageMode(CENTER);
+        image(chestImg, b.chestX, b.chestY, b.chestW, b.chestH);
+      } else {
+        fill(34, 45, 45, 0.95);
+        rectMode(CENTER);
+        rect(b.chestX, b.chestY, b.chestW, b.chestH, 18);
+      }
+    }
+
+    function drawRainbowRain(dt){
+      stroke(197, 32, 100, 0.34);
+      strokeWeight(2);
+      for (const drop of rainDrops){
+        drop.y += drop.vy * dt;
+        if (drop.y > height + 20){
+          drop.y = random(-100, -10);
+          drop.x = random(width);
+        }
+        line(drop.x, drop.y, drop.x - 4, drop.y + drop.len);
+      }
+      noStroke();
+    }
+
+    function updateCoinDrops(dt){
+      const b = getChestBox();
+      for (const coin of coinDrops) coin.update(dt, b.mouthY);
+      const landed = coinDrops.filter(c => c.done).length;
+      if (landed > 0){
+        coinDrops = coinDrops.filter(c => !c.done);
+        for (let i=0;i<landed;i++){
+          phaseScore += 1;
+          chestScale = min(1.8, chestScale + 0.03);
+          ripples.push(new Ripple(b.chestX, b.mouthY, 45));
+          for (let j=0;j<20;j++) particles.push(new Particle(b.chestX, b.mouthY, 46 + random(-8,8)));
+        }
+        if (phaseScore >= getPhase().target) setTimeout(nextPhase, 450);
+        updateHud();
+      }
+      for (const coin of coinDrops) coin.draw();
+    }
+
+    function handleAction(){
+      const phase = getPhase();
+      if (phase.key === 'rainbow'){
+        if (rainbowProgress < CFG.rainbowTarget){
+          rainbowProgress += 1;
+          flashHue = random(0, 360);
+          flashT = 0;
+          playPopSound(1);
+          for (let i=0;i<28;i++) particles.push(new Particle(width*0.5, height*0.55, random(0, 360)));
+          if (rainbowProgress >= phase.target) setTimeout(nextPhase, 350);
+          updateHud();
+        }
+        return;
+      }
+      if (phase.key === 'coin'){
+        if (phaseScore < phase.target){
+          const b = getChestBox();
+          const x = constrain(random(b.chestX - b.chestW*0.35, b.chestX + b.chestW*0.35), 24, width-24);
+          coinDrops.push(new CoinDrop(x));
+          flashHue = 48;
+          flashT = 0;
+          playPopSound(1.08);
+        }
+        return;
+      }
+      popToken(pickBestToken());
     }
 
     // ===== DRAW LOOP =====
@@ -508,17 +630,26 @@
 
       image(bgGfx, 0, 0);
 
-      spawnAcc += (dt/60) * CFG.spawnRatePerSec;
-      if (spawnAcc >= 1){
-        const k = floor(spawnAcc);
-        spawnAcc -= k;
-        for (let i=0;i<k;i++){
-          if (clovers.length < CFG.maxClovers) clovers.push(makeClover());
+      const phaseKey = getPhase().key;
+      if (phaseKey === 'rainbow'){
+        drawRainbowChallenge();
+        drawRainbowRain(dt);
+      }else if (phaseKey === 'coin'){
+        drawCoinChest();
+        updateCoinDrops(dt);
+      }else{
+        spawnAcc += (dt/60) * CFG.spawnRatePerSec;
+        if (spawnAcc >= 1){
+          const k = floor(spawnAcc);
+          spawnAcc -= k;
+          for (let i=0;i<k;i++){
+            if (tokens.length < CFG.maxClovers) tokens.push(makeToken('clover'));
+          }
         }
-      }
 
-      for (const c of clovers) c.update(dt);
-      for (const c of clovers) c.draw();
+        for (const c of tokens) c.update(dt);
+        for (const c of tokens) c.draw();
+      }
 
       for (const r of ripples) r.update(dt);
       for (const r of ripples) r.draw();
@@ -555,7 +686,7 @@
       }
       if (key===' '){
         if (!audioEnabled) ensureAudio();
-        popClover(pickBestClover());
+        handleAction();
         return false;
       }
     }
@@ -564,13 +695,13 @@
     function mousePressed(){
       pointerX=mouseX; pointerY=mouseY;
       if (!audioEnabled) ensureAudio();
-      popClover(pickBestClover());
+      handleAction();
       return false;
     }
     function touchStarted(){
       if (touches && touches[0]){ pointerX=touches[0].x; pointerY=touches[0].y; }
       if (!audioEnabled) ensureAudio();
-      popClover(pickBestClover());
+      handleAction();
       return false;
     }
     function touchMoved(){
@@ -588,6 +719,7 @@
       overlay.style.display='none';
       started=true;
       pointerX=width*0.5; pointerY=height*0.6;
+      updateHud();
     }
     async function requestFullscreen(){
       const el=document.documentElement;
