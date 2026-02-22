@@ -3,616 +3,317 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Pop the Falling Clovers (Switch)</title>
+  <title>Saint Patrick Mini Games (Switch)</title>
   <style>
-    html, body{
-      margin:0; padding:0; width:100%; height:100%;
-      overflow:hidden; background:#07140b;
-      touch-action:none; user-select:none; -webkit-user-select:none;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-    canvas{ display:block; }
-
-    #overlay{
-      position:fixed; inset:0;
-      background:rgba(0,0,0,0.70);
-      display:grid; place-items:center;
-      z-index:10; padding:22px; text-align:center;
-    }
-    #panel{
-      width:min(640px, 92vw);
-      background:rgba(255,255,255,0.08);
-      border:1px solid rgba(255,255,255,0.18);
-      border-radius:18px;
-      padding:16px 16px 14px;
-      box-shadow:0 14px 50px rgba(0,0,0,0.5);
-      color:rgba(255,255,255,0.92);
-      backdrop-filter: blur(4px);
-    }
-    #panel h1{ margin:0 0 10px; font-size:20px; font-weight:750; letter-spacing:0.2px; }
-    #panel p{ margin:0 0 14px; font-size:14px; line-height:1.35; color:rgba(255,255,255,0.78); }
-    .btnrow{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-    button{
-      appearance:none;
-      border:1px solid rgba(255,255,255,0.22);
-      background:rgba(255,255,255,0.12);
-      color:rgba(255,255,255,0.92);
-      padding:10px 14px;
-      border-radius:14px;
-      font-size:14px;
-      cursor:pointer;
-      transition:transform 80ms ease, background 120ms ease;
-    }
-    button:hover{ background:rgba(255,255,255,0.16); }
-    button:active{ transform:translateY(1px) scale(0.99); }
-    .hint{ margin-top:10px; font-size:12px; color:rgba(255,255,255,0.62); }
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#07140b; touch-action:none; user-select:none; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
+    canvas { display:block; }
+    #overlay { position:fixed; inset:0; background:rgba(0,0,0,.72); display:grid; place-items:center; z-index:10; padding:22px; text-align:center; }
+    #panel { width:min(690px,92vw); background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.2); border-radius:18px; padding:16px 16px 14px; box-shadow:0 14px 50px rgba(0,0,0,.55); color:rgba(255,255,255,.94); backdrop-filter: blur(4px); }
+    #panel h1 { margin:0 0 8px; font-size:20px; font-weight:760; }
+    #panel p { margin:0 0 12px; font-size:14px; line-height:1.4; color:rgba(255,255,255,.8); }
+    .btnrow { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    button { border:1px solid rgba(255,255,255,.24); background:rgba(255,255,255,.12); color:rgba(255,255,255,.92); padding:10px 14px; border-radius:14px; font-size:14px; cursor:pointer; }
+    .hint { margin-top:10px; font-size:12px; color:rgba(255,255,255,.62); }
   </style>
 </head>
-
 <body>
   <div id="overlay" role="dialog" aria-modal="true">
     <div id="panel">
-      <h1>Pop the Falling Clovers</h1>
+      <h1>Saint Patrick Mini Games</h1>
       <p>
-        Press <b>Space</b> (switch) to pop clovers. You can also tap/click a clover.
-        This screen appears once to enable sound and fullscreen.
+        A themed sequence of 3 mini games:<br>
+        <b>1)</b> Pop clovers, <b>2)</b> Build the rainbow, <b>3)</b> Collect gold coins.<br>
+        Press <b>Space</b> (switch) to interact in each stage.
       </p>
       <div class="btnrow">
         <button id="startBtn" type="button">Start</button>
         <button id="fsBtn" type="button">Fullscreen</button>
       </div>
-      <div class="hint">Tip: Space also starts the game.</div>
+      <div class="hint">Space can also start from this screen.</div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/p5.min.js"></script>
-
   <script>
-    /******************************************************************
-     * Updates requested:
-     * - Hills less rugged: smoother curves (lower noise freq, larger step,
-     *   extra smoothing pass over ridge points)
-     * - Brighter, clearer palette: more vivid blues/greens
-     ******************************************************************/
-
-    // ===== CONFIG =====
     const CFG = {
       cloverImgPath: "../../images/arthur.jpg",
       cloverCount: 14,
-      spawnRatePerSec: 2.0,
+      spawnRatePerSec: 2,
       maxClovers: 26,
       minScale: 0.22,
       maxScale: 0.52,
-      fallSpeedMin: 1.0,
+      fallSpeedMin: 1,
       fallSpeedMax: 2.8,
       driftMax: 0.55,
       spinMax: 0.018,
       hitRadiusBoost: 1.25,
-      flashSeconds: 0.35,
-      rippleSeconds: 1.15,
-      particlesPerPop: 46,
-      reduceMotion: false
+      particlesPerBurst: 40,
+      coinsTarget: 15,
+      cloversTarget: 18
     };
 
-    // ===== AUDIO (simple procedural pop) =====
+    const STAGES = [
+      { key: 'clover', label: 'Stage 1/3 · Clovers' },
+      { key: 'rainbow', label: 'Stage 2/3 · Rainbow' },
+      { key: 'coins', label: 'Stage 3/3 · Gold coins' }
+    ];
+
     let audioCtx=null, masterGain=null, audioEnabled=false;
     function ensureAudio(){
       if (audioEnabled) return true;
-      try{
+      try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.24;
+        masterGain.gain.value = 0.22;
         masterGain.connect(audioCtx.destination);
         audioEnabled = true;
         return true;
-      }catch(e){ audioEnabled=false; return false; }
+      } catch { return false; }
     }
-    function playPopSound(intensity=1){
+    function playBlip(freq=620, len=.12, gain=.13){
       if (!audioEnabled || !audioCtx) return;
       const t0 = audioCtx.currentTime;
-      const dur = 0.10 + 0.05*intensity;
-
-      const osc1 = audioCtx.createOscillator(); osc1.type="sine";
-      const osc2 = audioCtx.createOscillator(); osc2.type="triangle";
+      const osc = audioCtx.createOscillator();
       const g = audioCtx.createGain();
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(0.17*intensity, t0+0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
-
-      const base = 560 + Math.random()*320;
-      osc1.frequency.setValueAtTime(base, t0);
-      osc1.frequency.exponentialRampToValueAtTime(base*0.55, t0+dur);
-      osc2.frequency.setValueAtTime(base*0.78, t0);
-      osc2.frequency.exponentialRampToValueAtTime(base*0.45, t0+dur);
-
-      osc1.connect(g); osc2.connect(g); g.connect(masterGain);
-
-      const noiseDur=0.03;
-      const bufferSize = Math.max(1, Math.floor(audioCtx.sampleRate*noiseDur));
-      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
-      const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
-
-      const ng = audioCtx.createGain();
-      ng.gain.setValueAtTime(0.001, t0);
-      ng.gain.exponentialRampToValueAtTime(0.07*intensity, t0+0.002);
-      ng.gain.exponentialRampToValueAtTime(0.0001, t0+noiseDur);
-      noise.connect(ng); ng.connect(masterGain);
-
-      osc1.start(t0); osc2.start(t0); noise.start(t0);
-      osc1.stop(t0+dur+0.02);
-      osc2.stop(t0+dur+0.02);
-      noise.stop(t0+noiseDur+0.01);
+      osc.type='triangle';
+      osc.frequency.setValueAtTime(freq, t0);
+      osc.frequency.exponentialRampToValueAtTime(freq*.65, t0+len);
+      g.gain.setValueAtTime(.0001, t0);
+      g.gain.exponentialRampToValueAtTime(gain, t0+.01);
+      g.gain.exponentialRampToValueAtTime(.0001, t0+len);
+      osc.connect(g); g.connect(masterGain); osc.start(t0); osc.stop(t0+len+.02);
     }
 
-    // ===== STATE =====
-    let cloverImg=null;
     let started=false;
+    let currentStage=0;
+    let stageMessage='';
+    let stageMessageTimer=0;
 
+    let cloverImg=null;
     let clovers=[], particles=[], ripples=[];
-    let flashHue=120, flashT=10;
-    let pointerX=0, pointerY=0;
+    let coins=[];
+    let rainbowProgress=0;
+    const rainbowColors = ['#ff4d4d','#ff8f1f','#ffd447','#4bc95a','#32b8ff','#4f6bff','#b145ff'];
+    let cloverPopped=0, coinsCollected=0;
 
+    let pointerX=0, pointerY=0;
     let lastMs=0, spawnAcc=0;
 
-    // background graphics (static scene)
-    let bgGfx=null;
-    let bgSeed=Math.random()*10000;
-
-    // ===== ENTITIES =====
-    class FallingClover{
-      constructor(x,y,s,vy,vx,rot,rv){ this.x=x; this.y=y; this.s=s; this.vy=vy; this.vx=vx; this.rot=rot; this.rv=rv; this.wob=Math.random()*1000; }
+    class FallingClover {
+      constructor(x,y,s,vy,vx,rot,rv){ Object.assign(this,{x,y,s,vy,vx,rot,rv,wob:Math.random()*1000}); }
       radius(){ return min(width,height)*0.12*this.s; }
       update(dt){
-        const sp = CFG.reduceMotion ? 0.6 : 1.0;
-        const t = millis()*0.001;
-        const wob = Math.sin(t*1.2 + this.wob) * 0.35 * sp;
+        const wob = Math.sin(millis()*0.0012 + this.wob) * 0.35;
         this.x += (this.vx + wob) * dt;
-        this.y += this.vy * dt * sp;
-        this.rot += this.rv * dt * sp;
-
+        this.y += this.vy * dt;
+        this.rot += this.rv * dt;
         const r=this.radius();
-        if (this.y - r > height + 60){
-          this.y = -r - 60;
-          this.x = random(r, width-r);
-          this.vy = random(CFG.fallSpeedMin, CFG.fallSpeedMax);
-          this.vx = random(-CFG.driftMax, CFG.driftMax);
-          this.rv = random(-CFG.spinMax, CFG.spinMax);
-        }
-        if (this.x < -r) this.x = width + r;
-        if (this.x > width + r) this.x = -r;
+        if (this.y-r > height+60){ this.y=-r-60; this.x=random(r,width-r); }
+        if (this.x < -r) this.x = width+r;
+        if (this.x > width+r) this.x = -r;
       }
       contains(px,py){ return dist(px,py,this.x,this.y) <= this.radius()*CFG.hitRadiusBoost; }
       draw(){
         if (!cloverImg) return;
-        push();
-        translate(this.x,this.y);
-        rotate(this.rot);
-
-        // subtle glow
-        noStroke();
+        push(); translate(this.x,this.y); rotate(this.rot); imageMode(CENTER);
         const rr=this.radius();
-        fill(120, 55, 85, 0.10);
-        ellipse(0,0, rr*2.6, rr*2.1);
-
-        imageMode(CENTER);
-        const sz = rr*2.0;
-        image(cloverImg, 0,0, sz,sz);
-        pop();
+        noStroke(); fill(120, 55, 85, .12); ellipse(0,0, rr*2.6, rr*2.1);
+        image(cloverImg, 0,0, rr*2, rr*2); pop();
       }
     }
 
-    class Particle{
-      constructor(x,y,hue){
-        this.x=x; this.y=y;
-        const a=Math.random()*TWO_PI;
-        const sp=2.5+Math.random()*9;
-        this.vx=Math.cos(a)*sp;
-        this.vy=Math.sin(a)*sp;
-        this.life=1;
-        this.hue=hue;
-        this.size=2.5+Math.random()*7;
+    class Particle {
+      constructor(x,y,h,s){
+        const a=Math.random()*TWO_PI, sp=2.5+Math.random()*8;
+        Object.assign(this,{x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,h,size:s||2.5+Math.random()*6});
       }
-      update(dt){
-        const sp = CFG.reduceMotion ? 0.7 : 1.0;
-        this.x += this.vx*dt*0.95*sp;
-        this.y += this.vy*dt*0.95*sp;
-        this.vx *= 0.98; this.vy *= 0.98;
-        this.vy += 0.03*dt;
-        this.life -= 0.02*dt;
-      }
-      draw(){
-        if (this.life<=0) return;
-        noStroke();
-        fill(this.hue, 60, 98, constrain(this.life,0,1)*0.9);
-        ellipse(this.x,this.y,this.size,this.size);
-      }
+      update(dt){ this.x+=this.vx*dt*.95; this.y+=this.vy*dt*.95; this.vx*=.98; this.vy=this.vy*.98+.03*dt; this.life-=.022*dt; }
+      draw(){ if(this.life<=0)return; noStroke(); fill(this.h,70,100,constrain(this.life,0,1)*.9); ellipse(this.x,this.y,this.size,this.size); }
     }
 
-    class Ripple{
-      constructor(x,y,hue){ this.x=x; this.y=y; this.hue=hue; this.t=0; }
-      update(dt){ this.t += dt/60; }
-      draw(){
-        const p=constrain(this.t/CFG.rippleSeconds,0,1);
-        if (p>=1) return;
-        const rr=lerp(0, max(width,height)*0.85, p);
-        const a=(1-p)*0.55;
-        noFill();
-        stroke(this.hue, 45, 100, a);
-        strokeWeight(6*(1-p)+1);
-        ellipse(this.x,this.y, rr*2, rr*2);
-      }
-      done(){ return this.t>=CFG.rippleSeconds; }
+    class Ripple { constructor(x,y,h){ Object.assign(this,{x,y,h,t:0}); } update(dt){ this.t+=dt/60; } done(){ return this.t>=1.1; }
+      draw(){ const p=constrain(this.t/1.1,0,1); if(p>=1)return; noFill(); stroke(this.h,55,100,(1-p)*.5); strokeWeight(5*(1-p)+1); const rr=lerp(0,max(width,height)*.5,p); ellipse(this.x,this.y,rr*2,rr*2); }
     }
 
-    // ===== p5 preload/setup =====
     function preload(){ cloverImg = loadImage(CFG.cloverImgPath); }
-
     function setup(){
       createCanvas(window.innerWidth, window.innerHeight);
       colorMode(HSB, 360, 100, 100, 1);
-      cursor();
-
-      buildCleanSceneBackground();   // smoother + brighter
-      resetClovers();
-
-      pointerX = width*0.5;
-      pointerY = height*0.6;
+      pointerX=width*.5; pointerY=height*.6;
+      resetStage(0);
       lastMs = millis();
     }
+    function windowResized(){ resizeCanvas(window.innerWidth, window.innerHeight); resetStage(currentStage); }
 
-    function windowResized(){
-      resizeCanvas(window.innerWidth, window.innerHeight);
-      buildCleanSceneBackground();
-      resetClovers();
-    }
-
-    // ===== BACKGROUND =====
-    function smoothArray(arr, passes=2){
-      // simple neighbor averaging smoothing
-      const out = arr.slice();
-      for (let p=0;p<passes;p++){
-        for (let i=1;i<out.length-1;i++){
-          out[i] = (out[i-1] + out[i] + out[i+1]) / 3;
-        }
-      }
-      return out;
-    }
-
-    function buildCleanSceneBackground(){
-      const w=width, h=height;
-      bgGfx = createGraphics(w, h);
-      bgGfx.colorMode(HSB, 360, 100, 100, 1);
-      bgGfx.noStroke();
-
-      // --- SKY: brighter clear blue -> warm light near horizon
-      for (let y=0;y<h;y++){
-        const t = y/h;
-        const hue = lerp(205, 175, pow(t, 1.05));  // clear blue -> teal-ish
-        const sat = lerp(65, 35, t);
-        const bri = lerp(45, 92, pow(t, 1.25));    // brighter overall
-        bgGfx.stroke(hue, sat, bri, 1);
-        bgGfx.line(0, y, w, y);
-      }
-      bgGfx.noStroke();
-
-      // --- SUN: clean disk + small halo
-      const sunX = w*0.78, sunY = h*0.18;
-      bgGfx.fill(50, 22, 100, 1);
-      bgGfx.ellipse(sunX, sunY, w*0.055, w*0.055);
-      for (let i=0;i<28;i++){
-        const r = i/28;
-        const a = 0.16*(1-r);
-        bgGfx.fill(50, 25, 100, a);
-        bgGfx.ellipse(sunX, sunY, r*w*0.36, r*w*0.36);
-      }
-
-      // --- CLOUDS: cleaner, slightly warmer whites
-      function drawCloud(cx, cy, s){
-        bgGfx.push();
-        bgGfx.translate(cx, cy);
-        bgGfx.scale(s);
-
-        bgGfx.noStroke();
-        bgGfx.fill(0, 0, 100, 0.95);
-        bgGfx.ellipse(0, 0, 230, 86);
-        bgGfx.ellipse(-78, -18, 130, 98);
-        bgGfx.ellipse(  6, -40, 150, 118);
-        bgGfx.ellipse( 92, -14, 132, 100);
-
-        // gentle underside shade (still quite opaque)
-        bgGfx.fill(45, 8, 96, 0.55);
-        bgGfx.ellipse(0, 12, 220, 66);
-
-        bgGfx.pop();
-      }
-
-      const clouds = [
-        {x:w*0.20, y:h*0.18, s:0.78},
-        {x:w*0.44, y:h*0.12, s:0.62},
-        {x:w*0.60, y:h*0.22, s:0.84},
-        {x:w*0.84, y:h*0.14, s:0.70}
-      ];
-      for (const c of clouds) drawCloud(c.x, c.y, c.s);
-
-      // --- HILLS: smoother, rounder silhouettes (lower freq + smoothing)
-      function drawHillLayer(opts){
-        const { baseY, amp, freq, hue, sat, bri, step, texDensity, texBriJitter, smoothPasses } = opts;
-
-        const xs = [];
-        const ys = [];
-        for (let x=0; x<=w; x+=step){
-          xs.push(x);
-          // Use noise at lower frequency for round hills
-          const n = noise(bgSeed + x*freq, baseY*0.01);
-          const yy = baseY - (n-0.5)*2*amp;
-          ys.push(yy);
-        }
-
-        const ysSmooth = smoothArray(ys, smoothPasses);
-
-        // fill hill
-        bgGfx.noStroke();
-        bgGfx.fill(hue, sat, bri, 1);
-        bgGfx.beginShape();
-        bgGfx.vertex(0, h);
-        for (let i=0;i<xs.length;i++) bgGfx.vertex(xs[i], ysSmooth[i]);
-        bgGfx.vertex(w, h);
-        bgGfx.endShape(CLOSE);
-
-        // ridge highlight (slightly brighter)
-        bgGfx.stroke(hue, max(0, sat-25), min(100, bri+16), 0.35);
-        bgGfx.strokeWeight(2);
-        bgGfx.noFill();
-        bgGfx.beginShape();
-        for (let i=0;i<xs.length;i++) bgGfx.vertex(xs[i], ysSmooth[i] + 1.5);
-        bgGfx.endShape();
-        bgGfx.noStroke();
-
-        // texture: subtle dots + swaths, but keep it clean and opaque-ish
-        const texCount = Math.floor(w*h*texDensity);
-        for (let i=0;i<texCount;i++){
-          const x = random(w);
-          const idx = Math.floor((x / w) * (ysSmooth.length-1));
-          const ridgeY = ysSmooth[idx];
-          const y = random(ridgeY + 6, h);
-          const t = (y - ridgeY) / (h - ridgeY + 0.0001);
-          const dotSize = random(1.0, 2.2) * (0.55 + 0.75*t);
-          const localBri = bri - (5 + random()*texBriJitter) * t;
-          bgGfx.fill(hue + random(-2,2), sat + random(-5,4), localBri, 0.24);
-          bgGfx.ellipse(x, y, dotSize, dotSize);
-        }
-
-        const swaths = 9;
-        for (let i=0;i<swaths;i++){
-          const x = random(w);
-          const idx = Math.floor((x / w) * (ysSmooth.length-1));
-          const ridgeY = ysSmooth[idx];
-          const y = random(ridgeY + 22, h);
-          const ww = random(w*0.14, w*0.30);
-          const hh = random(h*0.03, h*0.085);
-          bgGfx.fill(hue, sat, bri - random(3,7), 0.10);
-          bgGfx.ellipse(x, y, ww, hh);
-        }
-      }
-
-      // far hills (brighter green-blue, less saturated)
-      drawHillLayer({
-        baseY: h*0.55, amp: h*0.055, freq: 0.0016, // lower freq
-        hue: 135, sat: 28, bri: 58,
-        step: 14, texDensity: 0.000010, texBriJitter: 10,
-        smoothPasses: 4
-      });
-
-      // mid hills (clearer green)
-      drawHillLayer({
-        baseY: h*0.67, amp: h*0.095, freq: 0.0022,
-        hue: 122, sat: 48, bri: 52,
-        step: 12, texDensity: 0.000016, texBriJitter: 12,
-        smoothPasses: 4
-      });
-
-      // near meadow (vivid green)
-      drawHillLayer({
-        baseY: h*0.83, amp: h*0.155, freq: 0.0028,
-        hue: 112, sat: 72, bri: 48,
-        step: 10, texDensity: 0.000020, texBriJitter: 14,
-        smoothPasses: 5
-      });
-
-      // foreground grass strokes (a bit brighter)
-      bgGfx.stroke(112, 55, 58, 0.16);
-      bgGfx.strokeWeight(1);
-      const blades = Math.floor(w*h*0.00022);
-      for (let i=0;i<blades;i++){
-        const x = random(w);
-        const y = random(h*0.72, h);
-        const t = (y - h*0.72)/(h*0.28);
-        const len = (8 + random()*22) * (0.5 + t);
-        bgGfx.line(x, y, x + random(-2,2), y - len);
-      }
-      bgGfx.noStroke();
-
-      // subtle vignette (lighter)
-      for (let i=0;i<9;i++){
-        const r=i/9;
-        bgGfx.fill(0,0,0, 0.04*r);
-        const m = i*22;
-        bgGfx.rect(m, m, w-m*2, h-m*2, 60);
+    function resetStage(index){
+      currentStage=index;
+      particles=[]; ripples=[]; stageMessage=''; stageMessageTimer=0;
+      if (STAGES[currentStage].key === 'clover') {
+        clovers=[]; cloverPopped=0; spawnAcc=0;
+        for (let i=0;i<CFG.cloverCount;i++) clovers.push(makeClover(random(-height,0)));
+      } else if (STAGES[currentStage].key === 'rainbow') {
+        rainbowProgress=0;
+      } else {
+        coinsCollected=0;
+        spawnCoins(7);
       }
     }
 
-    // ===== GAME LOGIC =====
-    function resetClovers(){
-      clovers=[];
-      for (let i=0;i<CFG.cloverCount;i++){
-        clovers.push(makeClover(random(-height, 0)));
-      }
-      particles=[]; ripples=[];
-      flashT=10; spawnAcc=0;
+    function nextStage(){
+      const next = (currentStage + 1) % STAGES.length;
+      setStageMessage(next === 0 ? 'Nice! Starting a new Saint Patrick cycle.' : 'Great! Next mini game...');
+      setTimeout(() => resetStage(next), 700);
     }
+
+    function setStageMessage(msg){ stageMessage = msg; stageMessageTimer = 150; }
 
     function makeClover(yOverride=null){
-      const s = random(CFG.minScale, CFG.maxScale);
-      const vy = random(CFG.fallSpeedMin, CFG.fallSpeedMax);
-      const vx = random(-CFG.driftMax, CFG.driftMax);
-      const rot = random(TWO_PI);
-      const rv  = random(-CFG.spinMax, CFG.spinMax);
-      const r = min(width,height)*0.12*s;
-      const x = random(r, width-r);
-      const y = (yOverride!==null) ? yOverride : random(-height, -60);
-      return new FallingClover(x,y,s,vy,vx,rot,rv);
+      const s=random(CFG.minScale, CFG.maxScale), r=min(width,height)*0.12*s;
+      return new FallingClover(random(r,width-r), yOverride ?? random(-height,-60), s, random(CFG.fallSpeedMin,CFG.fallSpeedMax), random(-CFG.driftMax,CFG.driftMax), random(TWO_PI), random(-CFG.spinMax,CFG.spinMax));
     }
-
     function pickBestClover(){
       if (!clovers.length) return null;
-      for (const c of clovers) if (c.contains(pointerX, pointerY)) return c;
-
-      let best=clovers[0];
-      let bestD=dist(pointerX,pointerY,best.x,best.y);
-      for (const c of clovers){
-        const d=dist(pointerX,pointerY,c.x,c.y);
-        if (d<bestD){ bestD=d; best=c; }
-      }
-      if (bestD > min(width,height)*0.45) return random(clovers);
-      return best;
+      for (const c of clovers) if (c.contains(pointerX,pointerY)) return c;
+      return clovers.reduce((best,c)=>dist(pointerX,pointerY,c.x,c.y)<dist(pointerX,pointerY,best.x,best.y)?c:best, clovers[0]);
     }
 
     function popClover(c){
       if (!c) return;
-      const idx=clovers.indexOf(c);
-      if (idx>=0) clovers.splice(idx,1);
+      clovers = clovers.filter(x => x !== c);
+      cloverPopped += 1;
+      ripples.push(new Ripple(c.x,c.y,120));
+      for(let i=0;i<CFG.particlesPerBurst;i++) particles.push(new Particle(c.x,c.y,112+random(-10,10)));
+      playBlip(620 + random(-80,120), .12, .15);
+      if (clovers.length < CFG.maxClovers) setTimeout(()=>clovers.push(makeClover(random(-220,-60))), 100);
+      if (cloverPopped >= CFG.cloversTarget) { setStageMessage('Clover stage complete!'); nextStage(); }
+    }
 
-      flashHue = 115;
-      flashT = 0;
+    function drawRainbowStage(){
+      for (let y=0; y<height; y++) {
+        stroke(203, 70, map(y,0,height,88,55), 1); line(0,y,width,y);
+      }
+      noStroke(); fill(110, 52, 46); ellipse(width*.5, height*.92, width*1.3, height*.55);
+      fill(40, 35, 95); ellipse(width*.82, height*.84, width*.13, width*.13);
 
-      ripples.push(new Ripple(c.x, c.y, 120));
-      const n = CFG.reduceMotion ? Math.floor(CFG.particlesPerPop*0.65) : CFG.particlesPerPop;
-      for (let i=0;i<n;i++) particles.push(new Particle(c.x,c.y, 112 + random(-10,10)));
-
-      const intensity = constrain(map(c.s, CFG.minScale, CFG.maxScale, 0.9, 1.2), 0.8, 1.25);
-      playPopSound(intensity);
-
-      if (clovers.length < CFG.maxClovers){
-        setTimeout(()=>clovers.push(makeClover(random(-240,-60))), 120);
+      const cx=width*.5, cy=height*.9;
+      const arcR=min(width,height)*.9;
+      strokeWeight(max(10, width*.012)); noFill();
+      for (let i=0;i<rainbowProgress;i++) {
+        stroke(rainbowColors[i]);
+        arc(cx, cy, arcR - i*26, arcR - i*26, PI, TWO_PI);
       }
     }
 
-    // ===== DRAW LOOP =====
-    function draw(){
-      const now=millis();
-      let dt = (now-lastMs)/(1000/60);
-      lastMs=now;
-      dt = constrain(dt, 0.5, 2.5);
-
-      image(bgGfx, 0, 0);
-
-      spawnAcc += (dt/60) * CFG.spawnRatePerSec;
-      if (spawnAcc >= 1){
-        const k = floor(spawnAcc);
-        spawnAcc -= k;
-        for (let i=0;i<k;i++){
-          if (clovers.length < CFG.maxClovers) clovers.push(makeClover());
-        }
-      }
-
-      for (const c of clovers) c.update(dt);
-      for (const c of clovers) c.draw();
-
-      for (const r of ripples) r.update(dt);
-      for (const r of ripples) r.draw();
-      ripples = ripples.filter(r => !r.done());
-
-      for (const p of particles) p.update(dt);
-      for (const p of particles) p.draw();
-      particles = particles.filter(p => p.life > 0);
-
-      drawFlash(dt);
-
-      // pointer hint ring
-      noFill();
-      stroke(120, 40, 100, started ? 0.10 : 0.06);
-      strokeWeight(2);
-      ellipse(pointerX, pointerY, 30, 30);
+    function spawnCoins(n){
+      coins=[];
+      for(let i=0;i<n;i++) coins.push({x:random(width*.16,width*.84),y:random(height*.28,height*.78),r:random(22,34)});
+    }
+    function pickBestCoin(){
+      if (!coins.length) return null;
+      return coins.reduce((best,c)=>dist(pointerX,pointerY,c.x,c.y)<dist(pointerX,pointerY,best.x,best.y)?c:best, coins[0]);
+    }
+    function collectCoin(coin){
+      if (!coin) return;
+      coins = coins.filter(c => c !== coin);
+      coinsCollected += 1;
+      for(let i=0;i<34;i++) particles.push(new Particle(coin.x,coin.y,45+random(-5,8),2+random()*4));
+      playBlip(900 + random(-60,80), .08, .14);
+      if (!coins.length) spawnCoins(7);
+      if (coinsCollected >= CFG.coinsTarget) { setStageMessage('Gold collected!'); nextStage(); }
     }
 
-    function drawFlash(dt){
-      const p = constrain(flashT/CFG.flashSeconds, 0, 1);
-      if (p>=1) return;
-      const a = (1-p)*0.24;
+    function drawCoinsStage(){
+      for (let y=0; y<height; y++){ stroke(42, 45, map(y,0,height,36,10), 1); line(0,y,width,y); }
       noStroke();
-      fill(flashHue, 55, 95, a);
-      rect(0,0,width,height);
-      flashT += dt/60;
+      fill(44, 70, 26); rect(0,height*.78,width,height*.22);
+      fill(41, 88, 86); ellipse(width*.5,height*.92,width*.7,height*.28);
+      for (const c of coins){
+        fill(47, 88, 96); ellipse(c.x,c.y,c.r*2,c.r*2);
+        fill(42, 70, 78); ellipse(c.x,c.y,c.r*1.25,c.r*1.25);
+      }
     }
 
-    // ===== INPUT =====
+    function drawCloverStage(dt){
+      for (let y=0; y<height; y++) { stroke(200, 45, map(y,0,height,72,45), 1); line(0,y,width,y); }
+      noStroke(); fill(122, 55, 42); ellipse(width*.5,height*.9,width*1.25,height*.45);
+      spawnAcc += (dt/60) * CFG.spawnRatePerSec;
+      if (spawnAcc >= 1) {
+        const k = floor(spawnAcc); spawnAcc -= k;
+        for(let i=0;i<k;i++) if (clovers.length<CFG.maxClovers) clovers.push(makeClover());
+      }
+      for (const c of clovers) { c.update(dt); c.draw(); }
+    }
+
+    function draw(){
+      const now=millis(); let dt=constrain((now-lastMs)/(1000/60), .5, 2.5); lastMs=now;
+      background(0);
+
+      const key = STAGES[currentStage].key;
+      if (key === 'clover') drawCloverStage(dt);
+      else if (key === 'rainbow') drawRainbowStage();
+      else drawCoinsStage();
+
+      for (const r of ripples){ r.update(dt); r.draw(); }
+      ripples = ripples.filter(r=>!r.done());
+      for (const p of particles){ p.update(dt); p.draw(); }
+      particles = particles.filter(p=>p.life>0);
+
+      drawHud();
+    }
+
+    function drawHud(){
+      noStroke(); fill(0,0,0,.34); rect(14,14,min(430,width-28),84,14);
+      fill(0,0,100,.95); textSize(20); textAlign(LEFT,TOP);
+      text(STAGES[currentStage].label, 26, 24);
+      textSize(16);
+      if (STAGES[currentStage].key==='clover') text(`Popped: ${cloverPopped} / ${CFG.cloversTarget}`, 26, 54);
+      if (STAGES[currentStage].key==='rainbow') text(`Segments: ${rainbowProgress} / 7`, 26, 54);
+      if (STAGES[currentStage].key==='coins') text(`Coins: ${coinsCollected} / ${CFG.coinsTarget}`, 26, 54);
+      if (stageMessageTimer > 0) {
+        stageMessageTimer--;
+        fill(0,0,100,.92); textAlign(CENTER,TOP); textSize(18); text(stageMessage, width*.5, 108);
+      }
+    }
+
+    function interact(){
+      if (!audioEnabled) ensureAudio();
+      const key = STAGES[currentStage].key;
+      if (key==='clover') popClover(pickBestClover());
+      else if (key==='rainbow') {
+        if (rainbowProgress < 7) {
+          rainbowProgress += 1;
+          const rx = width*.5 + random(-140,140), ry = height*.47 + random(-70,70);
+          for (let i=0;i<26;i++) particles.push(new Particle(rx,ry,random(0,360),2+random()*4));
+          playBlip(540 + rainbowProgress*60, .11, .12);
+          if (rainbowProgress >= 7) { setStageMessage('Rainbow complete!'); nextStage(); }
+        }
+      } else {
+        collectCoin(pickBestCoin());
+      }
+    }
+
     function keyPressed(){
-      if (!started && (key===' ' || keyCode===ENTER)){
-        startGame();
-        return false;
-      }
-      if (key===' '){
-        if (!audioEnabled) ensureAudio();
-        popClover(pickBestClover());
-        return false;
-      }
+      if (!started && (key===' ' || keyCode===ENTER)) { startGame(); return false; }
+      if (key===' ') { interact(); return false; }
     }
     function mouseMoved(){ pointerX=mouseX; pointerY=mouseY; }
     function mouseDragged(){ pointerX=mouseX; pointerY=mouseY; }
-    function mousePressed(){
-      pointerX=mouseX; pointerY=mouseY;
-      if (!audioEnabled) ensureAudio();
-      popClover(pickBestClover());
-      return false;
-    }
-    function touchStarted(){
-      if (touches && touches[0]){ pointerX=touches[0].x; pointerY=touches[0].y; }
-      if (!audioEnabled) ensureAudio();
-      popClover(pickBestClover());
-      return false;
-    }
-    function touchMoved(){
-      if (touches && touches[0]){ pointerX=touches[0].x; pointerY=touches[0].y; }
-      return false;
-    }
+    function mousePressed(){ pointerX=mouseX; pointerY=mouseY; interact(); return false; }
+    function touchStarted(){ if (touches?.[0]) { pointerX=touches[0].x; pointerY=touches[0].y; } interact(); return false; }
+    function touchMoved(){ if (touches?.[0]) { pointerX=touches[0].x; pointerY=touches[0].y; } return false; }
 
-    // ===== OVERLAY =====
     const overlay=document.getElementById('overlay');
     const startBtn=document.getElementById('startBtn');
     const fsBtn=document.getElementById('fsBtn');
-
-    function startGame(){
-      ensureAudio();
-      overlay.style.display='none';
-      started=true;
-      pointerX=width*0.5; pointerY=height*0.6;
-    }
-    async function requestFullscreen(){
-      const el=document.documentElement;
-      try{
-        if (!document.fullscreenElement && el.requestFullscreen) await el.requestFullscreen();
-      }catch(_){}
-    }
+    function startGame(){ ensureAudio(); overlay.style.display='none'; started=true; }
+    async function requestFullscreen(){ try{ if(!document.fullscreenElement) await document.documentElement.requestFullscreen?.(); }catch{} }
     startBtn.addEventListener('click', ()=>{ startGame(); requestFullscreen(); });
     fsBtn.addEventListener('click', ()=>{ ensureAudio(); requestFullscreen(); });
-    overlay.addEventListener('pointerdown', (e)=>{
-      if (e.target.tagName.toLowerCase()==='button') return;
-      startGame(); requestFullscreen();
-    }, {passive:true});
+    overlay.addEventListener('pointerdown',(e)=>{ if(e.target.tagName.toLowerCase()==='button') return; startGame(); requestFullscreen(); },{passive:true});
 
-    // expose p5 hooks
-    window.preload=preload;
-    window.setup=setup;
-    window.draw=draw;
-    window.windowResized=windowResized;
-    window.keyPressed=keyPressed;
-    window.mouseMoved=mouseMoved;
-    window.mouseDragged=mouseDragged;
-    window.mousePressed=mousePressed;
-    window.touchStarted=touchStarted;
-    window.touchMoved=touchMoved;
+    window.preload=preload; window.setup=setup; window.draw=draw; window.windowResized=windowResized;
+    window.keyPressed=keyPressed; window.mouseMoved=mouseMoved; window.mouseDragged=mouseDragged; window.mousePressed=mousePressed;
+    window.touchStarted=touchStarted; window.touchMoved=touchMoved;
   </script>
 </body>
 </html>
