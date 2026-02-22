@@ -166,6 +166,8 @@
     let phaseScore=0;
     let rainbowProgress=0;
     let chestScale=1;
+    let phaseTransitioning=false;
+    let pendingTimers=[];
 
     let tokens=[], particles=[], ripples=[];
     let coinDrops=[];
@@ -496,6 +498,20 @@
 
     function getPhase(){ return PHASES[phaseIndex]; }
 
+    function clearPendingTimers(){
+      for (const id of pendingTimers) clearTimeout(id);
+      pendingTimers = [];
+    }
+
+    function schedule(fn, ms){
+      const id = setTimeout(() => {
+        pendingTimers = pendingTimers.filter(t => t !== id);
+        fn();
+      }, ms);
+      pendingTimers.push(id);
+      return id;
+    }
+
     function updateHud(){
       const phase = getPhase();
       const total = phase.target;
@@ -504,6 +520,8 @@
     }
 
     function nextPhase(){
+      if (phaseTransitioning) return;
+      phaseTransitioning = true;
       const wasCoinPhase = getPhase().key === 'coin';
       if (wasCoinPhase){
         startNewCycle();
@@ -514,9 +532,11 @@
       rainbowProgress = 0;
       resetTokens();
       updateHud();
+      phaseTransitioning = false;
     }
 
     function startNewCycle(){
+      clearPendingTimers();
       phaseIndex = 0;
       phaseScore = 0;
       rainbowProgress = 0;
@@ -532,10 +552,12 @@
       pointerY = height * 0.6;
       resetTokens();
       updateHud();
+      phaseTransitioning = false;
     }
 
     function resetTokens(){
       tokens=[];
+      clearPendingTimers();
       particles=[];
       ripples=[];
       coinDrops=[];
@@ -598,7 +620,7 @@
           flashHue = 46;
           flashT = 0;
           for (let i=0;i<18;i++) particles.push(new Particle(chestX, chestY - 10, 48 + random(-4, 5)));
-          if (phaseScore >= getPhase().target) setTimeout(nextPhase, 450);
+          if (!phaseTransitioning && phaseScore >= getPhase().target) schedule(nextPhase, 450);
           updateHud();
         }
       }
@@ -683,7 +705,7 @@
       playPopSound(intensity);
 
       if (tokens.length < CFG.maxClovers){
-        setTimeout(()=>tokens.push(makeToken(getPhase().key, random(-240,-60))), 120);
+        schedule(()=>tokens.push(makeToken(getPhase().key, random(-240,-60))), 120);
       }
 
       phaseScore += 1;
@@ -734,18 +756,20 @@
     function handleAction(){
       const phase = getPhase();
       if (phase.key === 'rainbow'){
+        if (phaseTransitioning) return;
         if (rainbowProgress < CFG.rainbowTarget){
           rainbowProgress += 1;
           flashHue = random(0, 360);
           flashT = 0;
           playPopSound(1);
           for (let i=0;i<28;i++) particles.push(new Particle(width*0.5, height*0.55, random(0, 360)));
-          if (rainbowProgress >= phase.target) setTimeout(nextPhase, 350);
+          if (!phaseTransitioning && rainbowProgress >= phase.target) schedule(nextPhase, 350);
           updateHud();
         }
         return;
       }
       if (phase.key === 'coin'){
+        if (phaseTransitioning) return;
         spawnCoinDrop();
         playPopSound(0.9);
         return;
