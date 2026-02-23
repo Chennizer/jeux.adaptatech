@@ -108,6 +108,20 @@
       { key: 'coin', title: 'Gold Coin Rush', target: CFG.coinTarget }
     ];
 
+    const SFX_PATHS = {
+      clover: '../../sounds/cartoon/cartoonappear1.mp3',
+      rainbow: '../../sounds/cartoon/cartoonappear2.mp3',
+      coin: '../../sounds/cartoon/cartoonappear3.mp3',
+      leprechaun: '../../sounds/cartoon/cartoonappear4.mp3'
+    };
+
+    const MUSIC_PLAYLIST = [
+      '../../songs/gelee2.mp3',
+      '../../songs/bird2.mp3',
+      '../../songs/artgallery1.mp3',
+      '../../songs/confetti.mp3'
+    ];
+
     // ===== AUDIO (simple procedural pop) =====
     let audioCtx=null, masterGain=null, audioEnabled=false;
     function ensureAudio(){
@@ -160,6 +174,37 @@
       noise.stop(t0+noiseDur+0.01);
     }
 
+    function setupPlaceholderAudio(){
+      for (const [name, path] of Object.entries(SFX_PATHS)){
+        const audio = new Audio(path);
+        audio.preload = 'auto';
+        audio.volume = 0.45;
+        sfxPlayers[name] = audio;
+      }
+      if (!musicPlayer){
+        musicPlayer = new Audio(MUSIC_PLAYLIST[musicIndex]);
+        musicPlayer.preload = 'auto';
+        musicPlayer.volume = 0.30;
+        musicPlayer.addEventListener('ended', ()=>{
+          musicIndex = (musicIndex + 1) % MUSIC_PLAYLIST.length;
+          musicPlayer.src = MUSIC_PLAYLIST[musicIndex];
+          musicPlayer.play().catch(()=>{});
+        });
+      }
+    }
+
+    function playSfx(name){
+      const sfx = sfxPlayers[name];
+      if (!sfx) return;
+      sfx.currentTime = 0;
+      sfx.play().catch(()=>{});
+    }
+
+    function startPlaylistLoop(){
+      if (!musicPlayer) return;
+      musicPlayer.play().catch(()=>{});
+    }
+
     // ===== STATE =====
     let cloverImg=null, chestImg=null, leprechaunImg=null;
     let started=false;
@@ -170,6 +215,13 @@
     let leprechaunJump=0;
     let phaseTransitionPending=false;
     let phaseTimer=null;
+    let sceneFade=0;
+    let sceneFadeDir=0;
+    let onFadeMiddle=null;
+
+    let sfxPlayers={};
+    let musicPlayer=null;
+    let musicIndex=0;
 
     let tokens=[], particles=[], ripples=[];
     let coinDrops=[];
@@ -509,18 +561,24 @@
     }
 
     function nextPhase(){
-      phaseTransitionPending = false;
-      if (phaseTimer){ clearTimeout(phaseTimer); phaseTimer = null; }
-      const wasCoinPhase = getPhase().key === 'coin';
-      if (wasCoinPhase){
-        startNewCycle();
-        return;
-      }
-      phaseIndex = (phaseIndex + 1) % PHASES.length;
-      phaseScore = 0;
-      rainbowProgress = 0;
-      resetTokens();
-      updateHud();
+      if (sceneFadeDir !== 0) return;
+      sceneFadeDir = 1;
+      sceneFade = 0;
+      onFadeMiddle = () => {
+        phaseTransitionPending = false;
+        if (phaseTimer){ clearTimeout(phaseTimer); phaseTimer = null; }
+        const wasCoinPhase = getPhase().key === 'coin';
+        if (wasCoinPhase){
+          startNewCycle();
+        } else {
+          phaseIndex = (phaseIndex + 1) % PHASES.length;
+          phaseScore = 0;
+          rainbowProgress = 0;
+          resetTokens();
+          updateHud();
+        }
+        sceneFadeDir = -1;
+      };
     }
 
     function startNewCycle(){
@@ -646,6 +704,7 @@
           phaseScore += 1;
           chestScale = 2 + phaseScore * 0.08;
           leprechaunJump = 1;
+          playSfx('leprechaun');
           flashHue = 46;
           flashT = 0;
           for (let i=0;i<18;i++) particles.push(new Particle(L.chestX, L.chestY - 10, 48 + random(-4, 5)));
@@ -736,6 +795,7 @@
 
       const intensity = constrain(map(c.s, CFG.minScale, CFG.maxScale, 0.9, 1.2), 0.8, 1.25);
       playPopSound(intensity);
+      playSfx('clover');
 
       if (tokens.length < CFG.maxClovers){
         setTimeout(()=>tokens.push(makeToken(getPhase().key, random(-240,-60))), 120);
@@ -802,6 +862,7 @@
           flashHue = random(0, 360);
           flashT = 0;
           playPopSound(1);
+          playSfx('rainbow');
           for (let i=0;i<28;i++) particles.push(new Particle(width*0.5, height*0.55, random(0, 360)));
           if (rainbowProgress >= phase.target && !phaseTransitionPending){
             phaseTransitionPending = true;
@@ -814,6 +875,7 @@
       if (phase.key === 'coin'){
         spawnCoinDrop();
         playPopSound(0.9);
+        playSfx('coin');
         return;
       }
       popToken(pickBestToken());
@@ -861,6 +923,7 @@
       particles = particles.filter(p => p.life > 0);
 
       drawFlash(dt);
+      drawSceneFade(dt);
 
       // pointer hint ring
       noFill();
@@ -877,6 +940,26 @@
       fill(flashHue, 55, 95, a);
       rect(0,0,width,height);
       flashT += dt/60;
+    }
+
+    function drawSceneFade(dt){
+      if (sceneFadeDir === 1){
+        sceneFade = min(1, sceneFade + dt * 0.045);
+        if (sceneFade >= 1 && onFadeMiddle){
+          const fn = onFadeMiddle;
+          onFadeMiddle = null;
+          fn();
+        }
+      }else if (sceneFadeDir === -1){
+        sceneFade = max(0, sceneFade - dt * 0.045);
+        if (sceneFade <= 0) sceneFadeDir = 0;
+      }
+
+      if (sceneFade > 0){
+        noStroke();
+        fill(0, 0, 0, sceneFade * 0.72);
+        rect(0, 0, width, height);
+      }
     }
 
     // ===== INPUT =====
@@ -917,6 +1000,8 @@
 
     function startGame(){
       ensureAudio();
+      setupPlaceholderAudio();
+      startPlaylistLoop();
       overlay.style.display='none';
       started=true;
       pointerX=width*0.5; pointerY=height*0.6;
