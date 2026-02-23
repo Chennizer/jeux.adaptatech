@@ -32,6 +32,8 @@
     #panel h1{ margin:0 0 10px; font-size:20px; font-weight:750; letter-spacing:0.2px; }
     #panel p{ margin:0 0 14px; font-size:14px; line-height:1.35; color:rgba(255,255,255,0.78); }
     .btnrow{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    .modes{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:12px; }
+    .modeBtn.active{ background:linear-gradient(135deg, rgba(123,214,111,0.85), rgba(93,184,84,0.85)); color:#103b10; font-weight:700; }
     button{
       appearance:none;
       border:1px solid rgba(255,255,255,0.22);
@@ -59,6 +61,10 @@
         Play three Saint Patrick mini-games in sequence: clovers, rainbow, then gold coins.
         This screen appears once to enable sound and fullscreen.
       </p>
+      <div class="modes">
+        <button class="modeBtn active" data-mode="manual" type="button">Standard mode</button>
+        <button class="modeBtn" data-mode="single" type="button">One-press mode</button>
+      </div>
       <div class="btnrow">
         <button id="startBtn" type="button">Start</button>
         <button id="fsBtn" type="button">Fullscreen</button>
@@ -205,6 +211,12 @@
       musicPlayer.play().catch(()=>{});
     }
 
+    function clearAutoTimers(){
+      for (const id of autoTimers) clearTimeout(id);
+      autoTimers = [];
+      autoPhaseTriggered = false;
+    }
+
     // ===== STATE =====
     let cloverImg=null, chestImg=null, leprechaunImg=null;
     let started=false;
@@ -223,6 +235,9 @@
     let sfxPlayers={};
     let musicPlayer=null;
     let musicIndex=0;
+    let playMode='manual';
+    let autoPhaseTriggered=false;
+    let autoTimers=[];
 
     let tokens=[], particles=[], ripples=[];
     let coinDrops=[];
@@ -567,6 +582,7 @@
       sceneFadeDir = 1;
       sceneFade = 0;
       onFadeMiddle = () => {
+        clearAutoTimers();
         phaseTransitionPending = false;
         if (phaseTimer){ clearTimeout(phaseTimer); phaseTimer = null; }
         const wasCoinPhase = getPhase().key === 'coin';
@@ -584,6 +600,7 @@
     }
 
     function startNewCycle(){
+      clearAutoTimers();
       phaseTransitionPending = false;
       if (phaseTimer){ clearTimeout(phaseTimer); phaseTimer = null; }
       resizeCanvas(window.innerWidth, window.innerHeight);
@@ -607,6 +624,7 @@
     }
 
     function resetTokens(){
+      autoPhaseTriggered = false;
       phaseTransitionPending = false;
       tokens=[];
       particles=[];
@@ -704,7 +722,7 @@
         if (coin.y >= L.chestY - coin.size*0.55){
           coin.done = true;
           phaseScore += 1;
-          chestScale = 2 + phaseScore * 0.08;
+          chestScale = 2 + phaseScore * 0.16;
           leprechaunJump = 1;
           playSfx('leprechaun');
           flashHue = 46;
@@ -858,6 +876,54 @@
     function handleAction(){
       if (phaseTransitionPending) return;
       const phase = getPhase();
+
+      if (playMode === 'single'){
+        if (autoPhaseTriggered) return;
+        autoPhaseTriggered = true;
+
+        if (phase.key === 'clover'){
+          tokens = [];
+          phaseScore = phase.target;
+          updateHud();
+          playSfx('clover');
+          nextPhase();
+          return;
+        }
+
+        if (phase.key === 'rainbow'){
+          const tick = () => {
+            if (getPhase().key !== 'rainbow') return;
+            if (rainbowProgress < phase.target){
+              rainbowProgress += 1;
+              playSfx('rainbow');
+              flashHue = random(0, 360);
+              flashT = 0;
+              updateHud();
+              if (rainbowProgress < phase.target){
+                autoTimers.push(setTimeout(tick, 500));
+              } else {
+                phaseTransitionPending = true;
+                phaseTimer = setTimeout(nextPhase, 350);
+              }
+            }
+          };
+          tick();
+          return;
+        }
+
+        if (phase.key === 'coin'){
+          const total = phase.target - phaseScore;
+          for (let i=0;i<total;i++){
+            autoTimers.push(setTimeout(()=>{
+              if (getPhase().key !== 'coin') return;
+              spawnCoinDrop();
+              playSfx('coin');
+            }, i*300));
+          }
+          return;
+        }
+      }
+
       if (phase.key === 'rainbow'){
         if (rainbowProgress < CFG.rainbowTarget){
           rainbowProgress += 1;
@@ -1002,6 +1068,14 @@
     const overlay=document.getElementById('overlay');
     const startBtn=document.getElementById('startBtn');
     const fsBtn=document.getElementById('fsBtn');
+    const modeBtns=[...document.querySelectorAll('.modeBtn')];
+
+    modeBtns.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        playMode = btn.dataset.mode || 'manual';
+        modeBtns.forEach(b=>b.classList.toggle('active', b===btn));
+      });
+    });
 
     function startGame(){
       ensureAudio();
