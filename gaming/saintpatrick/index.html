@@ -71,11 +71,74 @@
       letter-spacing: 0.02em;
       cursor: pointer;
     }
+
+    #settings-icon {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #9ae08b;
+      background: rgba(14, 64, 24, 0.9);
+      color: #eaffea;
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 14;
+      transition: transform .25s ease;
+    }
+    #settings-icon:hover { transform: rotate(90deg); }
+
+    #menu {
+      position: fixed;
+      top: 60px;
+      right: -320px;
+      width: 280px;
+      max-width: calc(100vw - 20px);
+      background: rgba(10, 45, 18, 0.93);
+      border: 1px solid rgba(154, 224, 139, .4);
+      border-radius: 14px;
+      padding: 16px;
+      color: #eaffea;
+      z-index: 13;
+      opacity: 0;
+      transition: right .25s ease, opacity .25s ease;
+    }
+    #menu.show { right: 10px; opacity: 1; }
+    #menu h2 { margin: 0 0 10px; font-size: 18px; color:#bafaa8; }
+    #menu label { display:block; margin: 12px 0; font-size:13px; }
+    #menu input[type="range"] { width:100%; margin-top:6px; }
   </style>
 </head>
 
 <body>
   <button id="langToggle" title="Changer de langue / Change language">EN</button>
+  <button id="settings-icon" aria-label="Settings">⚙️</button>
+  <div id="menu">
+    <h2 class="translate" data-fr="Options" data-en="Options" data-ja="オプション">Options</h2>
+
+    <label>
+      <span class="translate" data-fr="Délai entre appuis" data-en="Time between presses" data-ja="押下間隔">Délai entre appuis</span>
+      <span id="tapDelayVal">500</span>
+      <input type="range" id="tapDelaySlider" min="100" max="5000" value="500" step="50">
+    </label>
+
+    <label>
+      <span class="translate" data-fr="Volume musique" data-en="Music volume" data-ja="音楽の音量">Volume musique</span>
+      <span id="musicVolVal">30</span>
+      <input type="range" id="musicVol" min="0" max="100" value="30">
+    </label>
+
+    <label>
+      <span class="translate" data-fr="Volume effets" data-en="Sound volume" data-ja="効果音の音量">Volume effets</span>
+      <span id="sfxVolVal">45</span>
+      <input type="range" id="sfxVol" min="0" max="100" value="45">
+    </label>
+  </div>
+
   <div id="overlay" role="dialog" aria-modal="true">
     <div id="panel">
       <h1 class="translate"
@@ -190,7 +253,7 @@
       try{
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.24;
+        masterGain.gain.value = 0.24 * volSFX;
         masterGain.connect(audioCtx.destination);
         audioEnabled = true;
         return true;
@@ -206,7 +269,7 @@
       const osc2 = audioCtx.createOscillator(); osc2.type="triangle";
       const g = audioCtx.createGain();
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(0.17*intensity, t0+0.01);
+      g.gain.exponentialRampToValueAtTime(0.17*intensity*Math.max(0.05, volSFX), t0+0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
 
       const base = 560 + Math.random()*320;
@@ -226,7 +289,7 @@
 
       const ng = audioCtx.createGain();
       ng.gain.setValueAtTime(0.001, t0);
-      ng.gain.exponentialRampToValueAtTime(0.07*intensity, t0+0.002);
+      ng.gain.exponentialRampToValueAtTime(0.07*intensity*Math.max(0.05, volSFX), t0+0.002);
       ng.gain.exponentialRampToValueAtTime(0.0001, t0+noiseDur);
       noise.connect(ng); ng.connect(masterGain);
 
@@ -240,18 +303,18 @@
       for (const [name, path] of Object.entries(SFX_PATHS)){
         const audio = new Audio(path);
         audio.preload = 'auto';
-        audio.volume = 0.45;
+        audio.volume = volSFX;
         sfxPlayers[name] = audio;
       }
       if (!transitionSfx){
         transitionSfx = new Audio(CFG.transitionSfxPath);
         transitionSfx.preload = 'auto';
-        transitionSfx.volume = 0.55;
+        transitionSfx.volume = volSFX;
       }
       if (!musicPlayer){
         musicPlayer = new Audio(MUSIC_PLAYLIST[musicIndex]);
         musicPlayer.preload = 'auto';
-        musicPlayer.volume = 0.30;
+        musicPlayer.volume = volMusic;
         musicPlayer.addEventListener('ended', ()=>{
           musicIndex = (musicIndex + 1) % MUSIC_PLAYLIST.length;
           musicPlayer.src = MUSIC_PLAYLIST[musicIndex];
@@ -303,6 +366,9 @@
     let transitionSfx=null;
     let musicPlayer=null;
     let musicIndex=0;
+    let volMusic=0.30;
+    let volSFX=0.45;
+    let tapDelay=500;
     let playMode='manual';
     let modePressCount=0;
     let autoTimers=[];
@@ -1300,7 +1366,7 @@
       }
       if (key===' '){
         const now = millis();
-        if (now - lastSpacePressTime < 500) return; // Debounce check
+        if (now - lastSpacePressTime < tapDelay) return;
         lastSpacePressTime = now;
 
         if (!audioEnabled) ensureAudio();
@@ -1328,6 +1394,14 @@
     const startBtn=document.getElementById('startBtn');
     const modeBtns=[...document.querySelectorAll('.modeBtn')];
     const langToggle=document.getElementById('langToggle');
+    const settingsIcon=document.getElementById('settings-icon');
+    const menu=document.getElementById('menu');
+    const tapDelaySlider=document.getElementById('tapDelaySlider');
+    const tapDelayVal=document.getElementById('tapDelayVal');
+    const musicVol=document.getElementById('musicVol');
+    const musicVolVal=document.getElementById('musicVolVal');
+    const sfxVol=document.getElementById('sfxVol');
+    const sfxVolVal=document.getElementById('sfxVolVal');
 
     langToggle?.addEventListener('click', ()=>{ 
       const idx = SUPPORTED_LANGS.indexOf(currentLang);
@@ -1343,6 +1417,31 @@
         modeBtns.forEach(b=>b.classList.toggle('active', b===btn));
       });
     });
+    tapDelaySlider?.addEventListener('input', (e)=>{
+      tapDelay = parseInt(e.target.value, 10);
+      tapDelayVal.textContent = String(tapDelay);
+    });
+
+    musicVol?.addEventListener('input', (e)=>{
+      volMusic = parseInt(e.target.value, 10) / 100;
+      musicVolVal.textContent = e.target.value;
+      if (musicPlayer) musicPlayer.volume = volMusic;
+    });
+
+    sfxVol?.addEventListener('input', (e)=>{
+      volSFX = parseInt(e.target.value, 10) / 100;
+      sfxVolVal.textContent = e.target.value;
+      if (masterGain) masterGain.gain.value = 0.24 * volSFX;
+      Object.values(sfxPlayers).forEach((s)=>{ s.volume = volSFX; });
+      if (transitionSfx) transitionSfx.volume = volSFX;
+    });
+
+    settingsIcon?.addEventListener('click', ()=> menu?.classList.toggle('show'));
+    document.addEventListener('click', (e)=>{
+      if (!menu || !settingsIcon) return;
+      if (!menu.contains(e.target) && !settingsIcon.contains(e.target)) menu.classList.remove('show');
+    });
+
 
     function startGame(){
       ensureAudio();
@@ -1354,6 +1453,7 @@
       updateHud();
 
       if (langToggle) langToggle.remove();
+      if (settingsIcon) settingsIcon.style.display = 'inline-flex';
     }
 
     async function requestFullscreen(){
