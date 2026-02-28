@@ -57,7 +57,7 @@
     #langToggle {
       position: fixed;
       top: 14px;
-      right: 14px;
+      right: 64px;
       z-index: 12;
       display: inline-flex;
       align-items: center;
@@ -71,11 +71,90 @@
       letter-spacing: 0.02em;
       cursor: pointer;
     }
+
+    #settings-icon {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid rgba(154, 235, 147, 0.45);
+      background: rgba(14, 64, 24, 0.92);
+      color: #eaffea;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      visibility: hidden;
+      cursor: pointer;
+      z-index: 12;
+    }
+
+    #menu {
+      position: fixed;
+      top: 64px;
+      right: -340px;
+      width: min(320px, calc(100vw - 32px));
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      background: rgba(14, 52, 20, 0.95);
+      border: 1px solid rgba(154, 235, 147, 0.38);
+      border-radius: 14px;
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.38);
+      color: #eaffea;
+      padding: 16px;
+      z-index: 12;
+      transition: right 220ms ease;
+    }
+
+    #menu.show { right: 14px; }
+    #menu h2, #menu h3 { margin: 0 0 10px; }
+    #menu h2 { font-size: 20px; }
+    #menu h3 { font-size: 16px; }
+    #menu label { display: block; margin: 12px 0; font-size: 14px; }
+    #menu label span { display: inline-block; margin-bottom: 6px; }
+    #menu input[type="range"] { width: 100%; accent-color: #9ae08b; }
   </style>
 </head>
 
 <body>
   <button id="langToggle" title="Changer de langue / Change language">EN</button>
+  <div id="settings-icon"
+       title="Settings"
+       class="translate"
+       data-fr="⚙️" data-en="⚙️" data-ja="⚙️">⚙️</div>
+
+  <div id="menu">
+    <h2 class="translate" data-fr="Options" data-en="Options" data-ja="オプション">Options</h2>
+
+    <h3 class="translate" data-fr="Musique &amp; son" data-en="Music &amp; Sound" data-ja="音楽と効果音">
+      Musique &amp; son
+    </h3>
+
+    <label>
+      <span class="translate" data-fr="Volume musique" data-en="Music volume" data-ja="音楽の音量">Volume musique</span>
+      <span id="musicVolVal">30</span>
+      <input type="range" id="musicVol" min="0" max="100" value="30">
+    </label>
+
+    <label>
+      <span class="translate" data-fr="Volume effets" data-en="SFX volume" data-ja="効果音の音量">Volume effets</span>
+      <span id="sfxVolVal">45</span>
+      <input type="range" id="sfxVol" min="0" max="100" value="45">
+    </label>
+
+    <h3 class="translate" data-fr="Délai entre appuis" data-en="Press delay" data-ja="押下間隔">
+      Délai entre appuis (ms)
+    </h3>
+
+    <label>
+      <span class="translate" data-fr="Délai" data-en="Delay" data-ja="間隔">Délai</span>
+      <span id="tapDelayVal">500</span>
+      <input type="range" id="tapDelaySlider" min="150" max="3000" value="500">
+    </label>
+  </div>
+
   <div id="overlay" role="dialog" aria-modal="true">
     <div id="panel">
       <h1 class="translate"
@@ -190,7 +269,7 @@
       try{
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.24;
+        masterGain.gain.value = sfxVolume * 0.55;
         masterGain.connect(audioCtx.destination);
         audioEnabled = true;
         return true;
@@ -240,18 +319,18 @@
       for (const [name, path] of Object.entries(SFX_PATHS)){
         const audio = new Audio(path);
         audio.preload = 'auto';
-        audio.volume = 0.45;
+        audio.volume = sfxVolume;
         sfxPlayers[name] = audio;
       }
       if (!transitionSfx){
         transitionSfx = new Audio(CFG.transitionSfxPath);
         transitionSfx.preload = 'auto';
-        transitionSfx.volume = 0.55;
+        transitionSfx.volume = sfxVolume;
       }
       if (!musicPlayer){
         musicPlayer = new Audio(MUSIC_PLAYLIST[musicIndex]);
         musicPlayer.preload = 'auto';
-        musicPlayer.volume = 0.30;
+        musicPlayer.volume = musicVolume;
         musicPlayer.addEventListener('ended', ()=>{
           musicIndex = (musicIndex + 1) % MUSIC_PLAYLIST.length;
           musicPlayer.src = MUSIC_PLAYLIST[musicIndex];
@@ -263,18 +342,21 @@
     function playSfx(name){
       const sfx = sfxPlayers[name];
       if (!sfx) return;
+      sfx.volume = sfxVolume;
       sfx.currentTime = 0;
       sfx.play().catch(()=>{});
     }
 
     function playTransitionSfx(){
       if (!transitionSfx) return;
+      transitionSfx.volume = sfxVolume;
       transitionSfx.currentTime = 0;
       transitionSfx.play().catch(()=>{});
     }
 
     function startPlaylistLoop(){
       if (!musicPlayer) return;
+      musicPlayer.volume = musicVolume;
       musicPlayer.play().catch(()=>{});
     }
 
@@ -307,6 +389,9 @@
     let modePressCount=0;
     let autoTimers=[];
     let phaseInputUnlockAt=0;
+    let pressDelayMs=500;
+    let sfxVolume=0.45;
+    let musicVolume=0.30;
 
     let tokens=[], particles=[], ripples=[], streaks=[];
     let coinDrops=[];
@@ -774,7 +859,7 @@
 
     function resetTokens(){
       modePressCount = 0;
-      phaseInputUnlockAt = millis() + 350;
+      phaseInputUnlockAt = millis() + pressDelayMs;
       phaseTransitionPending = false;
       tokens=[];
       particles=[];
@@ -1065,6 +1150,7 @@
     function handleAction(){
       if (phaseTransitionPending || transitionPhase !== 'idle') return;
       if (millis() < phaseInputUnlockAt) return;
+      phaseInputUnlockAt = millis() + pressDelayMs;
       const phase = getPhase();
 
       function completePhaseSoon(){
@@ -1300,7 +1386,7 @@
       }
       if (key===' '){
         const now = millis();
-        if (now - lastSpacePressTime < 500) return; // Debounce check
+        if (now - lastSpacePressTime < pressDelayMs) return; // Debounce check
         lastSpacePressTime = now;
 
         if (!audioEnabled) ensureAudio();
@@ -1328,6 +1414,42 @@
     const startBtn=document.getElementById('startBtn');
     const modeBtns=[...document.querySelectorAll('.modeBtn')];
     const langToggle=document.getElementById('langToggle');
+    const settingsIcon=document.getElementById('settings-icon');
+    const menu=document.getElementById('menu');
+    const tapDelaySlider=document.getElementById('tapDelaySlider');
+    const tapDelayVal=document.getElementById('tapDelayVal');
+    const musicVolSlider=document.getElementById('musicVol');
+    const musicVolVal=document.getElementById('musicVolVal');
+    const sfxVolSlider=document.getElementById('sfxVol');
+    const sfxVolVal=document.getElementById('sfxVolVal');
+
+    tapDelaySlider?.addEventListener('input', (e)=>{
+      pressDelayMs = parseInt(e.target.value, 10);
+      tapDelayVal.textContent = e.target.value;
+    });
+
+    musicVolSlider?.addEventListener('input', (e)=>{
+      musicVolume = parseInt(e.target.value, 10) / 100;
+      musicVolVal.textContent = e.target.value;
+      if (musicPlayer) musicPlayer.volume = musicVolume;
+    });
+
+    sfxVolSlider?.addEventListener('input', (e)=>{
+      sfxVolume = parseInt(e.target.value, 10) / 100;
+      sfxVolVal.textContent = e.target.value;
+      if (transitionSfx) transitionSfx.volume = sfxVolume;
+      Object.values(sfxPlayers).forEach(audio => { audio.volume = sfxVolume; });
+      if (masterGain) masterGain.gain.value = sfxVolume * 0.55;
+    });
+
+    settingsIcon?.addEventListener('click', ()=>{
+      menu?.classList.toggle('show');
+    });
+
+    document.addEventListener('click', (e)=>{
+      if (!menu || !settingsIcon) return;
+      if (!menu.contains(e.target) && !settingsIcon.contains(e.target)) menu.classList.remove('show');
+    });
 
     langToggle?.addEventListener('click', ()=>{ 
       const idx = SUPPORTED_LANGS.indexOf(currentLang);
@@ -1354,6 +1476,7 @@
       updateHud();
 
       if (langToggle) langToggle.remove();
+      if (settingsIcon) settingsIcon.style.visibility = 'visible';
     }
 
     async function requestFullscreen(){
