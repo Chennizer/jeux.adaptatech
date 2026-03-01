@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartographie CVI par zones</title>
+  <style>
+    :root {
+      --bg: #000;
+      --panel: #101a30;
+      --text: #f5f7ff;
+      --muted: #a6b4d6;
+      --accent: #8dd0ff;
+      --good: #34d399;
+      --maybe: #fbbf24;
+      --none: #f87171;
+      --grid-border: #2a3c63;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      min-height: 100vh;
+      height: 100vh;
+      padding: 1rem;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) 1fr;
+      gap: 1rem;
+      align-items: start;
+      height: calc(100vh - 2rem);
+    }
+
+    .panel {
+      background: linear-gradient(180deg, var(--panel) 0%, #0c1425 100%);
+      border: 1px solid var(--grid-border);
+      border-radius: 16px;
+      padding: 0.9rem;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .controls {
+      display: grid;
+      gap: 0.55rem;
+      align-content: start;
+    }
+
+    .controls label {
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-top: 0.2rem;
+    }
+
+    .controls select,
+    .controls input,
+    .controls button {
+      width: 100%;
+      font-size: 1rem;
+      border-radius: 10px;
+      border: 1px solid #314c7e;
+      background: #0a1224;
+      color: var(--text);
+      padding: 0.58rem;
+    }
+
+    button {
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.06s ease, opacity 0.2s;
+    }
+
+    button:active { transform: scale(0.98); }
+    button:hover { opacity: 0.92; }
+
+    .btn-primary { background: #60a5fa; color: #00122e; }
+
+    .test-zone {
+      position: relative;
+      min-height: calc(100vh - 165px);
+      border-radius: 18px;
+      border: 1px solid var(--grid-border);
+      background: #000;
+      overflow: hidden;
+    }
+
+    .grid {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    body:not(.running) .grid {
+      pointer-events: auto;
+    }
+
+    .cell {
+      border: 1px solid rgba(66, 94, 145, 0.72);
+      position: relative;
+      transition: background 0.15s ease;
+      cursor: pointer;
+    }
+
+    .cell-label {
+      position: absolute;
+      top: 0.3rem;
+      left: 0.3rem;
+      color: rgba(186, 205, 240, 0.9);
+      font-size: 0.76rem;
+      font-weight: 600;
+    }
+
+    .cell.active {
+      background: rgba(143, 191, 255, 0.14);
+    }
+
+    .cell.selected {
+      box-shadow: inset 0 0 0 2px #fbbf24;
+      background: rgba(251, 191, 36, 0.12);
+    }
+
+    .target {
+      width: 110px;
+      height: 110px;
+      border-radius: 14px;
+      border: 3px solid #fff;
+      box-shadow: 0 0 18px rgba(255, 255, 255, 0.86);
+      position: absolute;
+      transform: translate(-50%, -50%);
+      display: grid;
+      place-items: center;
+      padding: 8px;
+      pointer-events: none;
+    }
+
+    .target img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: auto;
+      filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.7));
+    }
+
+    .target.hidden { display: none; }
+
+    .response-buttons {
+      margin-top: 0.7rem;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(70px, 1fr));
+      gap: 0.5rem;
+    }
+
+    .response-buttons button {
+      font-size: 0.95rem;
+      min-height: 46px;
+      max-width: 150px;
+      justify-self: center;
+      border-radius: 10px;
+      border: none;
+      color: #101010;
+    }
+
+    .btn-none { background: var(--none); }
+    .btn-maybe { background: var(--maybe); }
+    .btn-clear { background: var(--good); }
+
+    .progress {
+      margin-top: 0.2rem;
+      font-weight: 700;
+      color: var(--accent);
+      min-height: 1.1rem;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.3;
+      margin-top: 0.15rem;
+    }
+
+    .summary {
+      margin-top: 0.6rem;
+      display: none;
+      gap: 0.5rem;
+    }
+
+    .heatmap {
+      display: grid;
+      gap: 0.4rem;
+      min-height: 170px;
+    }
+
+    .heat-cell {
+      border-radius: 12px;
+      border: 1px solid #1f2e50;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 0.4rem;
+      font-weight: 700;
+      font-size: 0.9rem;
+      min-height: 60px;
+    }
+
+    .recommendation {
+      margin-top: 0.45rem;
+      background: #0d2340;
+      border: 1px solid #385f99;
+      border-radius: 12px;
+      padding: 0.7rem;
+    }
+
+    body.running {
+      padding: 0;
+    }
+
+    body.running .layout {
+      grid-template-columns: 1fr;
+      height: 100vh;
+      gap: 0;
+    }
+
+    body.running .controls {
+      display: none;
+    }
+
+    body.running .session {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+    }
+
+    body.running .panel {
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      background: #000;
+    }
+
+    body.running .test-zone {
+      min-height: auto;
+      height: 100%;
+      border-radius: 0;
+      border: none;
+    }
+
+    body.running .response-buttons {
+      margin: 0;
+      padding: 0.6rem;
+      background: #060606;
+      border-top: 1px solid #1b2b48;
+    }
+
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <section class="panel controls">
+      <h1>CVI Field Mapper</h1>
+      <p class="hint">Choisir une zone en cliquant sur la grille, puis choisir une image CVI et une couleur.</p>
+
+      <label for="zoneLayout">Disposition des zones</label>
+      <select id="zoneLayout">
+        <option value="4">4 zones (2 x 2)</option>
+        <option value="6">6 zones (3 x 2)</option>
+        <option value="9" selected>9 zones (3 x 3)</option>
+      </select>
+
+      <label for="passes">Passages par zone</label>
+      <input id="passes" type="number" min="1" max="10" value="2" />
+
+      <label for="imagePicker">Menu image (défilant)</label>
+      <select id="imagePicker" size="8"></select>
+
+      <label for="colorPicker">Menu couleur (défilant)</label>
+      <select id="colorPicker" size="6"></select>
+
+      <button class="btn-primary" id="startBtn">Démarrer une session</button>
+
+      <div class="progress" id="progressText">Session non démarrée.</div>
+
+      <div class="summary" id="summaryPanel">
+        <h2>Résumé de session</h2>
+        <div id="summaryText"></div>
+        <div class="heatmap" id="heatmap"></div>
+        <div class="recommendation" id="recommendation"></div>
+      </div>
+    </section>
+
+    <section class="session">
+      <div class="panel test-zone" id="testZone">
+        <div class="grid" id="grid"></div>
+        <div class="target hidden" id="target" aria-hidden="true"><img id="targetImage" alt="cible" /></div>
+      </div>
+
+      <div class="response-buttons">
+        <button class="btn-none" data-response="0">Aucune</button>
+        <button class="btn-maybe" data-response="1">Possible</button>
+        <button class="btn-clear" data-response="2">Claire</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="../../js/cviPngArray.js"></script>
+  <script>
+    const zoneLayoutEl = document.getElementById("zoneLayout");
+    const passesEl = document.getElementById("passes");
+    const imagePickerEl = document.getElementById("imagePicker");
+    const colorPickerEl = document.getElementById("colorPicker");
+    const startBtn = document.getElementById("startBtn");
+    const progressText = document.getElementById("progressText");
+    const gridEl = document.getElementById("grid");
+    const targetEl = document.getElementById("target");
+    const targetImageEl = document.getElementById("targetImage");
+    const testZoneEl = document.getElementById("testZone");
+    const summaryPanel = document.getElementById("summaryPanel");
+    const summaryText = document.getElementById("summaryText");
+    const heatmapEl = document.getElementById("heatmap");
+    const recommendationEl = document.getElementById("recommendation");
+
+    const responseButtons = [...document.querySelectorAll("[data-response]")];
+
+    const COLOR_OPTIONS = [
+      { name: "Jaune", value: "#FFD400" },
+      { name: "Rouge", value: "#FF3B30" },
+      { name: "Vert", value: "#22C55E" },
+      { name: "Bleu", value: "#3B82F6" },
+      { name: "Magenta", value: "#D946EF" },
+      { name: "Cyan", value: "#06B6D4" },
+      { name: "Orange", value: "#FB923C" },
+      { name: "Blanc", value: "#FFFFFF" }
+    ];
+
+    const cviImages = (window.PNG_ARRAY || []).map((item) => ({
+      label: `${item.name} (${item.category})`,
+      value: item.file
+    }));
+
+    const state = {
+      config: { layout: 9, passes: 2 },
+      zones: [],
+      queue: [],
+      trialIndex: 0,
+      running: false,
+      currentZoneId: null,
+      selectedZoneId: 0,
+      responses: {},
+      zoneVisuals: {}
+    };
+
+    function getLayoutShape(layout) {
+      if (layout === 4) return { cols: 2, rows: 2 };
+      if (layout === 6) return { cols: 3, rows: 2 };
+      return { cols: 3, rows: 3 };
+    }
+
+    function createZones(layout) {
+      const { cols, rows } = getLayoutShape(layout);
+      const zones = [];
+      let idx = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          zones.push({ id: idx, row: r, col: c, name: `Zone ${idx + 1}` });
+          idx++;
+        }
+      }
+      return zones;
+    }
+
+    function getDefaultVisual() {
+      return {
+        image: cviImages[0]?.value || "",
+        color: COLOR_OPTIONS[0].value
+      };
+    }
+
+    function ensureZoneVisuals() {
+      const defaultVisual = getDefaultVisual();
+      state.zones.forEach((zone) => {
+        if (!state.zoneVisuals[zone.id]) {
+          state.zoneVisuals[zone.id] = { ...defaultVisual };
+        }
+      });
+    }
+
+    function populatePickers() {
+      imagePickerEl.innerHTML = "";
+      cviImages.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.value;
+        option.textContent = item.label;
+        imagePickerEl.appendChild(option);
+      });
+
+      colorPickerEl.innerHTML = "";
+      COLOR_OPTIONS.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.value;
+        option.textContent = `${item.name} (${item.value})`;
+        colorPickerEl.appendChild(option);
+      });
+    }
+
+    function renderGrid() {
+      gridEl.innerHTML = "";
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      gridEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      state.zones.forEach((zone) => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.zoneId = String(zone.id);
+
+        const label = document.createElement("span");
+        label.className = "cell-label";
+        label.textContent = zone.name;
+        cell.appendChild(label);
+
+        cell.addEventListener("click", () => {
+          if (state.running) return;
+          selectZone(zone.id);
+        });
+
+        gridEl.appendChild(cell);
+      });
+
+      refreshZoneMarkers();
+    }
+
+    function refreshZoneMarkers() {
+      document.querySelectorAll(".cell").forEach((cell) => {
+        const zoneId = Number(cell.dataset.zoneId);
+        cell.classList.toggle("active", zoneId === state.currentZoneId);
+        cell.classList.toggle("selected", zoneId === state.selectedZoneId && !state.running);
+      });
+    }
+
+    function selectZone(zoneId) {
+      state.selectedZoneId = zoneId;
+      const visual = state.zoneVisuals[zoneId] || getDefaultVisual();
+      imagePickerEl.value = visual.image;
+      colorPickerEl.value = visual.color;
+      refreshZoneMarkers();
+      progressText.textContent = `Configuration ${state.zones.find((z) => z.id === zoneId)?.name || ""}.`;
+    }
+
+    function applyCurrentPickersToZone() {
+      if (state.selectedZoneId === null) return;
+      state.zoneVisuals[state.selectedZoneId] = {
+        image: imagePickerEl.value,
+        color: colorPickerEl.value
+      };
+    }
+
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function buildQueue() {
+      const base = [];
+      for (let p = 0; p < state.config.passes; p++) base.push(...state.zones.map((z) => z.id));
+      state.queue = shuffle(base);
+      state.trialIndex = 0;
+    }
+
+    function setActiveZone(zoneId) {
+      state.currentZoneId = zoneId;
+      refreshZoneMarkers();
+
+      const zone = state.zones.find((z) => z.id === zoneId);
+      if (!zone) {
+        targetEl.classList.add("hidden");
+        return;
+      }
+
+      const visual = state.zoneVisuals[zoneId] || getDefaultVisual();
+      targetEl.style.background = visual.color;
+      targetImageEl.src = visual.image;
+
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      const zoneWidth = testZoneEl.clientWidth / cols;
+      const zoneHeight = testZoneEl.clientHeight / rows;
+      const centerX = zone.col * zoneWidth + zoneWidth / 2;
+      const centerY = zone.row * zoneHeight + zoneHeight / 2;
+
+      targetEl.style.left = `${centerX}px`;
+      targetEl.style.top = `${centerY}px`;
+      targetEl.classList.remove("hidden");
+    }
+
+    function updateProgress() {
+      if (!state.running) {
+        if (state.selectedZoneId === null) {
+          progressText.textContent = "Session non démarrée.";
+        }
+        return;
+      }
+      const total = state.queue.length;
+      const current = state.trialIndex + 1;
+      const zoneName = state.zones.find((z) => z.id === state.currentZoneId)?.name || "";
+      progressText.textContent = `Essai ${current}/${total} — ${zoneName}`;
+    }
+
+    function startSession() {
+      applyCurrentPickersToZone();
+      state.config.layout = Number(zoneLayoutEl.value);
+      state.config.passes = Math.max(1, Math.min(10, Number(passesEl.value) || 1));
+      passesEl.value = state.config.passes;
+
+      state.responses = Object.fromEntries(state.zones.map((z) => [z.id, []]));
+      summaryPanel.style.display = "none";
+      buildQueue();
+      enterSessionMode();
+      state.running = true;
+      goToTrial(0);
+    }
+
+    async function enterFullscreen() {
+      if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        // Continue without fullscreen if browser blocks the API.
+      }
+    }
+
+    async function exitFullscreen() {
+      if (!document.fullscreenElement || !document.exitFullscreen) return;
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // Ignore exit errors.
+      }
+    }
+
+    function enterSessionMode() {
+      document.body.classList.add("running");
+      enterFullscreen();
+    }
+
+    function exitSessionMode() {
+      document.body.classList.remove("running");
+      exitFullscreen();
+    }
+
+    function goToTrial(index) {
+      if (index >= state.queue.length) {
+        finishSession();
+        return;
+      }
+      state.trialIndex = index;
+      const zoneId = state.queue[index];
+      setActiveZone(zoneId);
+      updateProgress();
+    }
+
+    function recordResponse(value) {
+      if (!state.running || state.currentZoneId === null) return;
+      state.responses[state.currentZoneId].push(value);
+      goToTrial(state.trialIndex + 1);
+    }
+
+    function scoreZone(zoneId) {
+      const values = state.responses[zoneId] || [];
+      if (!values.length) return 0;
+      const raw = values.reduce((sum, item) => sum + item, 0);
+      return raw / (values.length * 2);
+    }
+
+    function getColorForScore(score) {
+      const hue = Math.round(score * 120);
+      return `hsl(${hue}, 75%, 40%)`;
+    }
+
+    function finishSession() {
+      state.running = false;
+      targetEl.classList.add("hidden");
+      setActiveZone(-1);
+      exitSessionMode();
+      updateProgress();
+      renderSummary();
+    }
+
+    function renderSummary() {
+      heatmapEl.innerHTML = "";
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      heatmapEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      heatmapEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      let bestScore = -1;
+      const bestZones = [];
+      const lines = [];
+
+      state.zones.forEach((zone) => {
+        const values = state.responses[zone.id] || [];
+        const score = scoreZone(zone.id);
+        const percent = Math.round(score * 100);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestZones.length = 0;
+          bestZones.push(zone.name);
+        } else if (score === bestScore) {
+          bestZones.push(zone.name);
+        }
+
+        const cell = document.createElement("div");
+        cell.className = "heat-cell";
+        cell.style.background = getColorForScore(score);
+        cell.innerHTML = `${zone.name}<br>${percent}%`;
+        heatmapEl.appendChild(cell);
+
+        const label = values.length ? `${zone.name}: ${values.length} essais, score ${percent}%` : `${zone.name}: aucun essai`;
+        lines.push(label);
+      });
+
+      summaryText.innerHTML = lines.map((line) => `<div>${line}</div>`).join("");
+      recommendationEl.innerHTML = `
+        <h3>Recommandation</h3>
+        <p><strong>Champ(s) préféré(s):</strong> ${bestZones.join(", ") || "indéterminé"}.</p>
+        <p>Utiliser prioritairement cette/ces zone(s) dans les autres outils.</p>
+      `;
+
+      summaryPanel.style.display = "grid";
+      if (state.selectedZoneId !== null) {
+        progressText.textContent = `Session terminée. ${state.zones.find((z) => z.id === state.selectedZoneId)?.name || ""} sélectionnée.`;
+      }
+    }
+
+    function initForLayout() {
+      state.config.layout = Number(zoneLayoutEl.value);
+      state.zones = createZones(state.config.layout);
+      ensureZoneVisuals();
+      if (!state.zones.some((z) => z.id === state.selectedZoneId)) {
+        state.selectedZoneId = state.zones[0]?.id ?? null;
+      }
+      renderGrid();
+      if (state.selectedZoneId !== null) selectZone(state.selectedZoneId);
+    }
+
+    startBtn.addEventListener("click", startSession);
+
+    responseButtons.forEach((btn) => {
+      btn.addEventListener("click", () => recordResponse(Number(btn.dataset.response)));
+    });
+
+    zoneLayoutEl.addEventListener("change", () => {
+      if (state.running) return;
+      initForLayout();
+    });
+
+    imagePickerEl.addEventListener("change", applyCurrentPickersToZone);
+    colorPickerEl.addEventListener("change", applyCurrentPickersToZone);
+
+    window.addEventListener("resize", () => {
+      if (state.currentZoneId !== null && state.currentZoneId >= 0) {
+        setActiveZone(state.currentZoneId);
+      }
+    });
+
+    populatePickers();
+    initForLayout();
+    updateProgress();
+  </script>
+</body>
+</html>
