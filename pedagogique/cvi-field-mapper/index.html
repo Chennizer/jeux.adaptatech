@@ -33,7 +33,7 @@
 
     .layout {
       display: grid;
-      grid-template-columns: minmax(280px, 390px) 1fr;
+      grid-template-columns: minmax(300px, 430px) 1fr;
       gap: 1rem;
       align-items: start;
       height: calc(100vh - 2.4rem);
@@ -56,7 +56,7 @@
     }
 
     .controls label {
-      margin-bottom: 0.4rem;
+      margin-bottom: 0.3rem;
       display: block;
       color: var(--muted);
       font-weight: 600;
@@ -64,7 +64,7 @@
 
     .controls select,
     .controls input {
-      margin-bottom: 0.8rem;
+      margin-bottom: 0.7rem;
       border-radius: 10px;
       border: 1px solid #314c7e;
       background: #0a1224;
@@ -72,10 +72,53 @@
       padding: 0.65rem;
     }
 
+    .picker-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+      margin-bottom: 0.6rem;
+    }
+
     .scroll-pick {
       height: 150px;
-      padding: 0.4rem;
-      margin-bottom: 0.8rem;
+      padding: 0.25rem;
+      margin-bottom: 0.1rem;
+    }
+
+    .toggle-line {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin: 0.35rem 0 0.55rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .toggle-line input { width: auto; transform: scale(1.1); }
+
+    .dual-pickers { display: none; }
+    .dual-pickers.enabled { display: block; }
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(16px, 1fr));
+      gap: 0.35rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .color-tile {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      cursor: pointer;
+      transition: transform 0.08s ease, border-color 0.2s;
+    }
+
+    .color-tile.active {
+      border: 2px solid #fff;
+      transform: scale(1.08);
+      box-shadow: 0 0 0 1px #8dd0ff;
     }
 
     button {
@@ -89,7 +132,6 @@
 
     button:active { transform: scale(0.98); }
     button:hover { opacity: 0.92; }
-
     .btn-primary { background: #60a5fa; color: #00122e; }
 
     .test-zone {
@@ -179,11 +221,7 @@
     .btn-maybe { background: var(--maybe); color: #3b2c00; }
     .btn-clear { background: var(--good); color: #00331f; }
 
-    .progress {
-      margin-top: 0.7rem;
-      font-weight: 700;
-      color: var(--accent);
-    }
+    .progress { margin-top: 0.7rem; font-weight: 700; color: var(--accent); }
 
     .report-modal {
       position: fixed;
@@ -196,9 +234,7 @@
       padding: 1rem;
     }
 
-    .report-modal.open {
-      display: flex;
-    }
+    .report-modal.open { display: flex; }
 
     .report-card {
       width: min(860px, 96vw);
@@ -261,6 +297,8 @@
     @media (max-width: 960px) {
       .layout { grid-template-columns: 1fr; }
       .test-zone { min-height: 58vh; }
+      .picker-row { grid-template-columns: 1fr; }
+      .color-grid { grid-template-columns: repeat(8, minmax(16px, 1fr)); }
     }
   </style>
 </head>
@@ -280,18 +318,32 @@
       <label for="passes">Passages par zone</label>
       <input id="passes" type="number" min="1" max="10" value="2" />
 
-      <label for="imagePicker">Image CVI (menu défilant)</label>
-      <select id="imagePicker" class="scroll-pick" size="6"></select>
+      <label>Image principale (catégorie + item)</label>
+      <div class="picker-row">
+        <select id="categoryPicker" class="scroll-pick" size="6"></select>
+        <select id="itemPicker" class="scroll-pick" size="6"></select>
+      </div>
 
-      <label for="colorPicker">Couleur cible (menu défilant)</label>
-      <select id="colorPicker" class="scroll-pick" size="6"></select>
+      <label class="toggle-line" for="dualModeToggle">
+        <input type="checkbox" id="dualModeToggle" />
+        Mode 2 images (gauche + droite)
+      </label>
+
+      <div id="dualPickers" class="dual-pickers">
+        <label>Image secondaire (catégorie + item)</label>
+        <div class="picker-row">
+          <select id="categoryPicker2" class="scroll-pick" size="6"></select>
+          <select id="itemPicker2" class="scroll-pick" size="6"></select>
+        </div>
+      </div>
+
+      <label>Couleur cible (grille)</label>
+      <div id="colorGrid" class="color-grid"></div>
 
       <button class="btn-primary" id="startBtn">Démarrer une session</button>
 
       <div class="progress" id="progressText">Session non démarrée.</div>
       <p class="meta">Utiliser les boutons à droite pour indiquer la qualité de réponse observée: <strong>aucune</strong>, <strong>possible</strong>, <strong>claire</strong>.</p>
-
-
     </section>
 
     <section class="session">
@@ -324,10 +376,17 @@
 
   <script src="../../js/cviPngArray.js"></script>
   <script>
+    const COLORS = ['#000','#fff','#E6194B','#3CB44B','#FFE119','#0082C8','#F58231','#911EB4','#46F0F0','#F032E6','#D2F53C','#FABEBE','#008080','#E6BEFF','#AA6E28','#800000','#FF6B6B','#FFD700','#6B8E23','#4B0082'];
+
     const zoneLayoutEl = document.getElementById("zoneLayout");
     const passesEl = document.getElementById("passes");
-    const imagePickerEl = document.getElementById("imagePicker");
-    const colorPickerEl = document.getElementById("colorPicker");
+    const categoryPickerEl = document.getElementById("categoryPicker");
+    const itemPickerEl = document.getElementById("itemPicker");
+    const dualModeToggleEl = document.getElementById("dualModeToggle");
+    const dualPickersEl = document.getElementById("dualPickers");
+    const categoryPicker2El = document.getElementById("categoryPicker2");
+    const itemPicker2El = document.getElementById("itemPicker2");
+    const colorGridEl = document.getElementById("colorGrid");
     const startBtn = document.getElementById("startBtn");
     const progressText = document.getElementById("progressText");
     const gridEl = document.getElementById("grid");
@@ -341,18 +400,8 @@
     const recommendationEl = document.getElementById("recommendation");
 
     const responseButtons = [...document.querySelectorAll("[data-response]")];
-
-    const colorOptions = [
-      { label: "Jaune", value: "#facc15" },
-      { label: "Rouge", value: "#ef4444" },
-      { label: "Vert", value: "#22c55e" },
-      { label: "Bleu", value: "#3b82f6" },
-      { label: "Rose", value: "#ec4899" },
-      { label: "Orange", value: "#f97316" },
-      { label: "Violet", value: "#a855f7" },
-      { label: "Turquoise", value: "#06b6d4" },
-      { label: "Blanc", value: "#ffffff" }
-    ];
+    const allItems = Array.isArray(window.PNG_ARRAY) ? window.PNG_ARRAY : [];
+    const categories = [...new Set(allItems.map((item) => item.category))];
 
     const state = {
       config: { layout: 9, passes: 2 },
@@ -362,8 +411,10 @@
       running: false,
       currentZoneId: null,
       responses: {},
-      targetImage: "",
-      targetColor: "#facc15"
+      dualMode: false,
+      targetColor: COLORS[2],
+      targetImageLeft: "",
+      targetImageRight: ""
     };
 
     function getLayoutShape(layout) {
@@ -423,16 +474,26 @@
       state.trialIndex = 0;
     }
 
-    function applyTargetVisual() {
-      renderTargetCanvas();
-    }
-
     function getTargetSize() {
       const { cols, rows } = getLayoutShape(state.config.layout);
       const zoneWidth = testZoneEl.clientWidth / cols;
       const zoneHeight = testZoneEl.clientHeight / rows;
       const size = Math.floor(Math.min(zoneWidth, zoneHeight) * 0.74);
       return Math.max(90, size);
+    }
+
+    function tintAndDraw(ctx, imagePath, tint, x, y, width, height) {
+      if (!imagePath) return;
+      const img = new Image();
+      img.onload = () => {
+        ctx.save();
+        ctx.drawImage(img, x, y, width, height);
+        ctx.globalCompositeOperation = "source-in";
+        ctx.fillStyle = tint;
+        ctx.fillRect(x, y, width, height);
+        ctx.restore();
+      };
+      img.src = imagePath;
     }
 
     function renderTargetCanvas() {
@@ -447,26 +508,19 @@
 
       const ctx = targetCanvasEl.getContext("2d");
       if (!ctx) return;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, pxSize, pxSize);
 
-      if (!state.targetImage) return;
-      const img = new Image();
-      img.onload = () => {
-        ctx.clearRect(0, 0, pxSize, pxSize);
-        const scale = Math.min(pxSize / img.width, pxSize / img.height);
-        const drawW = img.width * scale;
-        const drawH = img.height * scale;
-        const x = (pxSize - drawW) / 2;
-        const y = (pxSize - drawH) / 2;
+      if (!state.targetImageLeft) return;
 
-        ctx.drawImage(img, x, y, drawW, drawH);
-        ctx.globalCompositeOperation = "source-in";
-        ctx.fillStyle = state.targetColor;
-        ctx.fillRect(0, 0, pxSize, pxSize);
-        ctx.globalCompositeOperation = "source-over";
-      };
-      img.src = state.targetImage;
+      if (!state.dualMode || !state.targetImageRight) {
+        tintAndDraw(ctx, state.targetImageLeft, state.targetColor, 0, 0, pxSize, pxSize);
+        return;
+      }
+
+      const gap = Math.floor(pxSize * 0.04);
+      const itemW = Math.floor((pxSize - gap) / 2);
+      tintAndDraw(ctx, state.targetImageLeft, state.targetColor, 0, 0, itemW, pxSize);
+      tintAndDraw(ctx, state.targetImageRight, state.targetColor, itemW + gap, 0, itemW, pxSize);
     }
 
     function setActiveZone(zoneId) {
@@ -503,29 +557,22 @@
       progressText.textContent = `Essai ${current}/${total} — ${state.zones.find(z => z.id === state.currentZoneId)?.name || ""}`;
     }
 
-    function resolveSelectedImage() {
-      const selected = imagePickerEl.value;
-      return selected || (window.PNG_ARRAY?.[0]?.file ?? "../../images/cvipng/cvistar.png");
-    }
-
-    function resolveSelectedColor() {
-      return colorPickerEl.value || "#facc15";
-    }
-
     function startSession() {
       state.config.layout = Number(zoneLayoutEl.value);
       state.config.passes = Math.max(1, Math.min(10, Number(passesEl.value) || 1));
-      state.targetImage = resolveSelectedImage();
-      state.targetColor = resolveSelectedColor();
+      state.dualMode = dualModeToggleEl.checked;
+      state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
       passesEl.value = state.config.passes;
+
+      reportModalEl.classList.remove("open");
+      reportModalEl.setAttribute("aria-hidden", "true");
 
       state.zones = createZones(state.config.layout);
       state.responses = Object.fromEntries(state.zones.map((z) => [z.id, []]));
-      reportModalEl.classList.remove("open");
-      reportModalEl.setAttribute("aria-hidden", "true");
       renderGrid();
       buildQueue();
-      applyTargetVisual();
+      renderTargetCanvas();
       enterSessionMode();
       state.running = true;
       goToTrial(0);
@@ -636,38 +683,63 @@
       recommendationEl.innerHTML = `
         <h3>Recommandation</h3>
         <p><strong>Champ(s) préféré(s):</strong> ${bestZones.join(", ") || "indéterminé"}.</p>
-        <p>Image utilisée: <strong>${imagePickerEl.options[imagePickerEl.selectedIndex]?.text || "CVI"}</strong> · Couleur: <strong>${colorPickerEl.options[colorPickerEl.selectedIndex]?.text || state.targetColor}</strong>.</p>
+        <p>Mode: <strong>${state.dualMode ? "2 images (gauche + droite)" : "1 image"}</strong> · Couleur: <strong>${state.targetColor}</strong>.</p>
       `;
 
       reportModalEl.classList.add("open");
       reportModalEl.setAttribute("aria-hidden", "false");
     }
 
-    function populateImagePicker() {
-      const list = Array.isArray(window.PNG_ARRAY) ? window.PNG_ARRAY : [];
-      imagePickerEl.innerHTML = "";
-      list.forEach((item) => {
+    function populateCategoryPicker(selectEl) {
+      selectEl.innerHTML = "";
+      categories.forEach((category) => {
         const option = document.createElement("option");
-        option.value = item.file;
-        option.textContent = `${item.category} · ${item.name}`;
-        imagePickerEl.appendChild(option);
+        option.value = category;
+        option.textContent = category;
+        selectEl.appendChild(option);
       });
-      if (list.length) {
-        imagePickerEl.selectedIndex = 0;
-      }
+      if (categories.length) selectEl.selectedIndex = 0;
     }
 
-    function populateColorPicker() {
-      colorPickerEl.innerHTML = "";
-      colorOptions.forEach((item, index) => {
+    function populateItemPicker(categoryValue, itemSelectEl) {
+      const items = allItems.filter((item) => item.category === categoryValue);
+      itemSelectEl.innerHTML = "";
+      items.forEach((item) => {
         const option = document.createElement("option");
-        option.value = item.value;
-        option.textContent = `${item.label} (${item.value})`;
-        option.style.background = item.value;
-        option.style.color = item.value.toLowerCase() === "#ffffff" ? "#000" : "#fff";
-        colorPickerEl.appendChild(option);
-        if (index === 0) colorPickerEl.selectedIndex = 0;
+        option.value = item.file;
+        option.textContent = item.name;
+        itemSelectEl.appendChild(option);
       });
+      if (items.length) itemSelectEl.selectedIndex = 0;
+    }
+
+    function resolveSelectedItem(categorySelectEl, itemSelectEl) {
+      const category = categorySelectEl.value;
+      const items = allItems.filter((item) => item.category === category);
+      if (!items.length) return "../../images/cvipng/cvistar.png";
+      const selected = itemSelectEl.value;
+      return selected || items[0].file;
+    }
+
+    function renderColorGrid() {
+      colorGridEl.innerHTML = "";
+      COLORS.forEach((color) => {
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "color-tile";
+        tile.style.backgroundColor = color;
+        tile.title = color;
+        tile.dataset.color = color;
+        tile.addEventListener("click", () => {
+          state.targetColor = color;
+          [...colorGridEl.children].forEach((el) => el.classList.remove("active"));
+          tile.classList.add("active");
+          renderTargetCanvas();
+        });
+        colorGridEl.appendChild(tile);
+      });
+      const defaultTile = colorGridEl.querySelector(`[data-color="${state.targetColor}"]`) || colorGridEl.firstElementChild;
+      if (defaultTile) defaultTile.classList.add("active");
     }
 
     startBtn.addEventListener("click", startSession);
@@ -680,17 +752,36 @@
       state.config.layout = Number(zoneLayoutEl.value);
       state.zones = createZones(state.config.layout);
       renderGrid();
+      renderTargetCanvas();
       setActiveZone(-1);
     });
 
-    imagePickerEl.addEventListener("change", () => {
-      state.targetImage = resolveSelectedImage();
-      applyTargetVisual();
+    dualModeToggleEl.addEventListener("change", () => {
+      state.dualMode = dualModeToggleEl.checked;
+      dualPickersEl.classList.toggle("enabled", state.dualMode);
+      renderTargetCanvas();
     });
 
-    colorPickerEl.addEventListener("change", () => {
-      state.targetColor = resolveSelectedColor();
-      applyTargetVisual();
+    categoryPickerEl.addEventListener("change", () => {
+      populateItemPicker(categoryPickerEl.value, itemPickerEl);
+      state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      renderTargetCanvas();
+    });
+
+    itemPickerEl.addEventListener("change", () => {
+      state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      renderTargetCanvas();
+    });
+
+    categoryPicker2El.addEventListener("change", () => {
+      populateItemPicker(categoryPicker2El.value, itemPicker2El);
+      state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
+      renderTargetCanvas();
+    });
+
+    itemPicker2El.addEventListener("change", () => {
+      state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
+      renderTargetCanvas();
     });
 
     window.addEventListener("resize", () => {
@@ -712,13 +803,17 @@
       }
     });
 
-    populateImagePicker();
-    populateColorPicker();
-    state.targetImage = resolveSelectedImage();
-    state.targetColor = resolveSelectedColor();
+    populateCategoryPicker(categoryPickerEl);
+    populateCategoryPicker(categoryPicker2El);
+    populateItemPicker(categoryPickerEl.value, itemPickerEl);
+    populateItemPicker(categoryPicker2El.value, itemPicker2El);
+    renderColorGrid();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+    state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
     state.zones = createZones(Number(zoneLayoutEl.value));
     renderGrid();
-    applyTargetVisual();
+    renderTargetCanvas();
   </script>
 </body>
 </html>
