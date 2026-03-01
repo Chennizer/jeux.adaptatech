@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartographie CVI par zones</title>
+  <style>
+    :root {
+      --bg: #0a0f1c;
+      --panel: #101a30;
+      --panel-soft: #16213a;
+      --text: #f5f7ff;
+      --muted: #a6b4d6;
+      --accent: #8dd0ff;
+      --good: #34d399;
+      --maybe: #fbbf24;
+      --none: #f87171;
+      --grid-border: #2a3c63;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top, #152747 0%, var(--bg) 45%);
+      min-height: 100vh;
+      padding: 1.2rem;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, var(--panel) 0%, #0e172b 100%);
+      border: 1px solid var(--grid-border);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .controls label,
+    .controls select,
+    .controls input,
+    .controls button {
+      width: 100%;
+      font-size: 1rem;
+    }
+
+    .controls label {
+      margin-bottom: 0.4rem;
+      display: block;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .controls select,
+    .controls input {
+      margin-bottom: 0.8rem;
+      border-radius: 10px;
+      border: 1px solid #314c7e;
+      background: #0a1224;
+      color: var(--text);
+      padding: 0.65rem;
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.06s ease, opacity 0.2s;
+    }
+
+    button:active { transform: scale(0.98); }
+    button:hover { opacity: 0.92; }
+
+    .btn-primary { background: #60a5fa; color: #00122e; }
+    .btn-secondary { background: #2b436f; color: var(--text); }
+    .btn-danger { background: #ef4444; color: white; }
+
+    .stack { display: grid; gap: 0.55rem; }
+
+    .test-zone {
+      position: relative;
+      min-height: 72vh;
+      border-radius: 18px;
+      border: 1px solid var(--grid-border);
+      background: #050915;
+      overflow: hidden;
+    }
+
+    .grid {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .cell {
+      border: 1px solid rgba(66, 94, 145, 0.7);
+      position: relative;
+      transition: background 0.15s ease;
+    }
+
+    .cell-label {
+      position: absolute;
+      top: 0.35rem;
+      left: 0.35rem;
+      color: rgba(186, 205, 240, 0.9);
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .cell.active {
+      background: rgba(143, 191, 255, 0.1);
+    }
+
+    .target {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #ffffff 0 20%, #000000 22% 38%, #ffffff 40% 60%, #000000 62% 78%, #ffffff 80% 100%);
+      border: 4px solid #fff;
+      box-shadow: 0 0 28px #fff, 0 0 12px #8dd0ff;
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .target.hidden { display: none; }
+
+    .response-buttons {
+      margin-top: 0.9rem;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(80px, 1fr));
+      gap: 0.6rem;
+    }
+
+    .response-buttons button {
+      font-size: 1.1rem;
+      min-height: 64px;
+    }
+
+    .btn-none { background: var(--none); color: #350000; }
+    .btn-maybe { background: var(--maybe); color: #3b2c00; }
+    .btn-clear { background: var(--good); color: #00331f; }
+
+    .progress {
+      margin-top: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .summary {
+      margin-top: 1rem;
+      display: none;
+    }
+
+    .heatmap {
+      margin-top: 0.7rem;
+      display: grid;
+      gap: 0.45rem;
+      min-height: 170px;
+    }
+
+    .heat-cell {
+      border-radius: 12px;
+      border: 1px solid #1f2e50;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 0.4rem;
+      font-weight: 700;
+      font-size: 0.9rem;
+      min-height: 60px;
+    }
+
+    .recommendation {
+      margin-top: 0.8rem;
+      background: #0d2340;
+      border: 1px solid #385f99;
+      border-radius: 12px;
+      padding: 0.8rem;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: 0.7rem;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+      .test-zone { min-height: 58vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <section class="panel controls">
+      <h1>CVI Field Mapper</h1>
+      <p>Test systématique de la réponse visuelle par région d'écran.</p>
+
+      <label for="studentName">Nom de l'élève</label>
+      <input id="studentName" type="text" placeholder="Ex.: Alex G." />
+
+      <label for="zoneLayout">Disposition des zones</label>
+      <select id="zoneLayout">
+        <option value="4">4 zones (2 x 2)</option>
+        <option value="6">6 zones (3 x 2)</option>
+        <option value="9" selected>9 zones (3 x 3)</option>
+      </select>
+
+      <label for="passes">Passages par zone</label>
+      <input id="passes" type="number" min="1" max="10" value="2" />
+
+      <div class="stack">
+        <button class="btn-primary" id="startBtn">Démarrer une session</button>
+        <button class="btn-secondary" id="saveBtn">Enregistrer le profil local</button>
+        <button class="btn-secondary" id="loadBtn">Charger le profil</button>
+        <button class="btn-danger" id="resetBtn">Réinitialiser</button>
+      </div>
+
+      <div class="progress" id="progressText">Session non démarrée.</div>
+      <p class="meta">Utiliser les grands boutons à droite pour indiquer la qualité de réponse observée: <strong>aucune</strong>, <strong>possible</strong>, <strong>claire</strong>.</p>
+
+      <div class="summary" id="summaryPanel">
+        <h2>Résumé de session</h2>
+        <div id="summaryText"></div>
+        <div class="heatmap" id="heatmap"></div>
+        <div class="recommendation" id="recommendation"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="panel test-zone" id="testZone">
+        <div class="grid" id="grid"></div>
+        <div class="target hidden" id="target" aria-hidden="true"></div>
+      </div>
+
+      <div class="response-buttons">
+        <button class="btn-none" data-response="0">Aucune</button>
+        <button class="btn-maybe" data-response="1">Possible</button>
+        <button class="btn-clear" data-response="2">Claire</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "cviFieldMapperProfilesV1";
+
+    const zoneLayoutEl = document.getElementById("zoneLayout");
+    const passesEl = document.getElementById("passes");
+    const studentNameEl = document.getElementById("studentName");
+    const startBtn = document.getElementById("startBtn");
+    const saveBtn = document.getElementById("saveBtn");
+    const loadBtn = document.getElementById("loadBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const progressText = document.getElementById("progressText");
+    const gridEl = document.getElementById("grid");
+    const targetEl = document.getElementById("target");
+    const testZoneEl = document.getElementById("testZone");
+    const summaryPanel = document.getElementById("summaryPanel");
+    const summaryText = document.getElementById("summaryText");
+    const heatmapEl = document.getElementById("heatmap");
+    const recommendationEl = document.getElementById("recommendation");
+
+    const responseButtons = [...document.querySelectorAll("[data-response]")];
+
+    const state = {
+      config: { layout: 9, passes: 2, studentName: "" },
+      zones: [],
+      queue: [],
+      trialIndex: 0,
+      running: false,
+      currentZoneId: null,
+      responses: {}
+    };
+
+    function getLayoutShape(layout) {
+      if (layout === 4) return { cols: 2, rows: 2 };
+      if (layout === 6) return { cols: 3, rows: 2 };
+      return { cols: 3, rows: 3 };
+    }
+
+    function createZones(layout) {
+      const { cols, rows } = getLayoutShape(layout);
+      const zones = [];
+      let idx = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          zones.push({
+            id: idx,
+            row: r,
+            col: c,
+            name: `Zone ${idx + 1}`
+          });
+          idx++;
+        }
+      }
+      return zones;
+    }
+
+    function renderGrid() {
+      gridEl.innerHTML = "";
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      gridEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      state.zones.forEach((zone) => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.zoneId = String(zone.id);
+
+        const label = document.createElement("span");
+        label.className = "cell-label";
+        label.textContent = zone.name;
+        cell.appendChild(label);
+
+        gridEl.appendChild(cell);
+      });
+    }
+
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function buildQueue() {
+      const base = [];
+      for (let p = 0; p < state.config.passes; p++) {
+        base.push(...state.zones.map((z) => z.id));
+      }
+      state.queue = shuffle(base);
+      state.trialIndex = 0;
+    }
+
+    function setActiveZone(zoneId) {
+      state.currentZoneId = zoneId;
+      document.querySelectorAll(".cell").forEach((cell) => {
+        cell.classList.toggle("active", Number(cell.dataset.zoneId) === zoneId);
+      });
+
+      const zone = state.zones.find((z) => z.id === zoneId);
+      if (!zone) {
+        targetEl.classList.add("hidden");
+        return;
+      }
+
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      const zoneWidth = testZoneEl.clientWidth / cols;
+      const zoneHeight = testZoneEl.clientHeight / rows;
+      const centerX = zone.col * zoneWidth + zoneWidth / 2;
+      const centerY = zone.row * zoneHeight + zoneHeight / 2;
+
+      targetEl.style.left = `${centerX}px`;
+      targetEl.style.top = `${centerY}px`;
+      targetEl.classList.remove("hidden");
+    }
+
+    function updateProgress() {
+      if (!state.running) {
+        progressText.textContent = "Session non démarrée.";
+        return;
+      }
+      const total = state.queue.length;
+      const current = state.trialIndex + 1;
+      progressText.textContent = `Essai ${current}/${total} — ${state.zones.find(z => z.id === state.currentZoneId)?.name || ""}`;
+    }
+
+    function startSession() {
+      state.config.layout = Number(zoneLayoutEl.value);
+      state.config.passes = Math.max(1, Math.min(10, Number(passesEl.value) || 1));
+      state.config.studentName = studentNameEl.value.trim();
+      passesEl.value = state.config.passes;
+
+      state.zones = createZones(state.config.layout);
+      state.responses = Object.fromEntries(state.zones.map((z) => [z.id, []]));
+      summaryPanel.style.display = "none";
+      renderGrid();
+      buildQueue();
+      state.running = true;
+      goToTrial(0);
+    }
+
+    function goToTrial(index) {
+      if (index >= state.queue.length) {
+        finishSession();
+        return;
+      }
+      state.trialIndex = index;
+      const zoneId = state.queue[index];
+      setActiveZone(zoneId);
+      updateProgress();
+    }
+
+    function recordResponse(value) {
+      if (!state.running || state.currentZoneId === null) return;
+      state.responses[state.currentZoneId].push(value);
+      goToTrial(state.trialIndex + 1);
+    }
+
+    function scoreZone(zoneId) {
+      const values = state.responses[zoneId] || [];
+      if (!values.length) return 0;
+      const raw = values.reduce((sum, item) => sum + item, 0);
+      return raw / (values.length * 2);
+    }
+
+    function getColorForScore(score) {
+      const hue = Math.round(score * 120);
+      return `hsl(${hue}, 75%, 40%)`;
+    }
+
+    function finishSession() {
+      state.running = false;
+      targetEl.classList.add("hidden");
+      setActiveZone(-1);
+      updateProgress();
+      renderSummary();
+    }
+
+    function renderSummary() {
+      heatmapEl.innerHTML = "";
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      heatmapEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      heatmapEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      let bestScore = -1;
+      const bestZones = [];
+      const lines = [];
+
+      state.zones.forEach((zone) => {
+        const values = state.responses[zone.id] || [];
+        const score = scoreZone(zone.id);
+        const percent = Math.round(score * 100);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestZones.length = 0;
+          bestZones.push(zone.name);
+        } else if (score === bestScore) {
+          bestZones.push(zone.name);
+        }
+
+        const cell = document.createElement("div");
+        cell.className = "heat-cell";
+        cell.style.background = getColorForScore(score);
+        cell.innerHTML = `${zone.name}<br>${percent}%`;
+        heatmapEl.appendChild(cell);
+
+        const label = values.length
+          ? `${zone.name}: ${values.length} essais, score ${percent}%`
+          : `${zone.name}: aucun essai`;
+        lines.push(label);
+      });
+
+      summaryText.innerHTML = lines.map((line) => `<div>${line}</div>`).join("");
+      recommendationEl.innerHTML = `
+        <h3>Recommandation</h3>
+        <p><strong>Champ(s) préféré(s):</strong> ${bestZones.join(", ") || "indéterminé"}.</p>
+        <p>Utiliser prioritairement cette/ces zone(s) dans les autres outils (position des éléments clés, consignes visuelles, cibles interactives).</p>
+      `;
+
+      summaryPanel.style.display = "block";
+    }
+
+    function getProfiles() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveProfile() {
+      const name = studentNameEl.value.trim();
+      if (!name) {
+        alert("Indiquer un nom d'élève avant d'enregistrer.");
+        return;
+      }
+
+      const profiles = getProfiles();
+      profiles[name] = {
+        savedAt: new Date().toISOString(),
+        config: {
+          layout: Number(zoneLayoutEl.value),
+          passes: Number(passesEl.value)
+        },
+        responses: state.responses,
+        zones: createZones(Number(zoneLayoutEl.value))
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
+      alert(`Profil enregistré pour ${name}.`);
+    }
+
+    function loadProfile() {
+      const name = studentNameEl.value.trim();
+      if (!name) {
+        alert("Entrer le nom de l'élève à charger.");
+        return;
+      }
+
+      const profiles = getProfiles();
+      const profile = profiles[name];
+      if (!profile) {
+        alert("Aucun profil local trouvé pour cet élève.");
+        return;
+      }
+
+      zoneLayoutEl.value = String(profile.config.layout);
+      passesEl.value = String(profile.config.passes);
+      state.config.layout = profile.config.layout;
+      state.config.passes = profile.config.passes;
+      state.zones = profile.zones || createZones(profile.config.layout);
+      state.responses = profile.responses || {};
+      state.running = false;
+
+      renderGrid();
+      renderSummary();
+      progressText.textContent = `Profil chargé (${new Date(profile.savedAt).toLocaleString()}).`;
+      targetEl.classList.add("hidden");
+      setActiveZone(-1);
+    }
+
+    function resetAll() {
+      state.running = false;
+      state.queue = [];
+      state.trialIndex = 0;
+      state.currentZoneId = null;
+      state.responses = {};
+      state.zones = createZones(Number(zoneLayoutEl.value));
+      renderGrid();
+      targetEl.classList.add("hidden");
+      summaryPanel.style.display = "none";
+      updateProgress();
+      setActiveZone(-1);
+    }
+
+    startBtn.addEventListener("click", startSession);
+    saveBtn.addEventListener("click", saveProfile);
+    loadBtn.addEventListener("click", loadProfile);
+    resetBtn.addEventListener("click", resetAll);
+
+    responseButtons.forEach((btn) => {
+      btn.addEventListener("click", () => recordResponse(Number(btn.dataset.response)));
+    });
+
+    zoneLayoutEl.addEventListener("change", () => {
+      state.config.layout = Number(zoneLayoutEl.value);
+      state.zones = createZones(state.config.layout);
+      renderGrid();
+      setActiveZone(-1);
+    });
+
+    window.addEventListener("resize", () => {
+      if (state.currentZoneId !== null && state.currentZoneId >= 0) {
+        setActiveZone(state.currentZoneId);
+      }
+    });
+
+    state.zones = createZones(Number(zoneLayoutEl.value));
+    renderGrid();
+  </script>
+</body>
+</html>
