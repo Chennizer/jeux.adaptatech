@@ -225,6 +225,54 @@
     #startButton:hover {
       background-color: #0088cc;
     }
+    #protocolIndicator {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 1002;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font-size: 13px;
+      display: none;
+      max-width: 360px;
+    }
+    #protocolStatus {
+      color: #9ad9ff;
+      font-weight: 500;
+    }
+    .protocol-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .protocol-buttons button {
+      flex: 1;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      padding: 6px;
+      color: #fff;
+      background: #0077be;
+      font-size: 12px;
+    }
+    .protocol-buttons button:hover {
+      background: #008fcc;
+    }
+    .protocol-note {
+      min-height: 60px;
+      resize: vertical;
+      border-radius: 4px;
+      border: none;
+      margin-top: 5px;
+      padding: 6px;
+      font-family: inherit;
+    }
+    .protocol-locked {
+      opacity: 0.45;
+      pointer-events: none;
+    }
     /* End Overlay Styles */
   </style>
 </head>
@@ -245,6 +293,10 @@
   <button id="fullscreen-btn">Plein écran</button>
   <!-- Pause Button -->
   <button id="pause-btn">Pause</button>
+  <div id="protocolIndicator">
+    <div id="protocolStatus">Mode libre</div>
+    <div id="protocolTimer"></div>
+  </div>
   <div id="settings-icon">⚙️</div>
   <div id="menu">
     <h2>Paramètres</h2>
@@ -356,6 +408,54 @@
       Effet de sillage:
       <input type="checkbox" id="trailToggle">
     </label>
+
+    <h3>Mode protocole (optionnel)</h3>
+    <label>
+      Activer le protocole:
+      <input type="checkbox" id="protocolEnabledToggle">
+    </label>
+    <div id="protocolSettings">
+      <label>
+        Forme fixe:
+        <select id="protocolShapeSelector">
+          <option value="circle">Cercle</option>
+          <option value="square">Carré</option>
+          <option value="triangle">Triangle</option>
+          <option value="polygon">Polygone</option>
+          <option value="star">Étoile</option>
+          <option value="character">Caractère</option>
+          <option value="emoji">Emoji</option>
+          <option value="image">Image</option>
+        </select>
+      </label>
+      <label>
+        Taille constante (0-100): <span id="protocolSizeValue">50</span>
+        <input type="range" id="protocolSizeSlider" min="0" max="100" value="50">
+      </label>
+      <label>
+        Vitesse constante (0-50): <span id="protocolSpeedValue">5</span>
+        <input type="range" id="protocolSpeedSlider" min="0" max="50" value="5">
+      </label>
+      <label>
+        Couleur de départ:
+        <input type="color" id="protocolBaseColorPicker" value="#ff0000">
+      </label>
+      <label>
+        Durée par étape (secondes):
+        <input type="number" id="protocolStepDuration" min="1" max="600" value="20">
+      </label>
+      <label>
+        Observation pour l'étape courante:
+        <textarea id="protocolStepNote" class="protocol-note" placeholder="Ex: fixation visuelle brève, poursuite horizontale..." ></textarea>
+      </label>
+      <div class="protocol-buttons">
+        <button id="saveProtocolPresetBtn" type="button">Enregistrer preset JSON</button>
+        <label class="custom-file-upload" style="margin-top:0;flex:1;">
+          <input type="file" id="loadProtocolPresetInput" accept="application/json" style="display:none;">
+          Charger preset JSON
+        </label>
+      </div>
+    </div>
   </div>
   <div id="tsparticles"></div>
   <script src="https://cdn.jsdelivr.net/npm/tsparticles@2.11.1/tsparticles.bundle.min.js"></script>
@@ -381,11 +481,24 @@
       },
       background: { color: { value: "#000000" } },
     };
+
     let uploadedImageUrl = null;
     let inactivityTimer;
     const inactivityDuration = 10000;
     let particlesInstance;
-    let started = false; // New variable to track if the experience has started
+    let started = false;
+    let isPaused = false;
+    let protocolStepTimer = null;
+    let protocolCountdownInterval = null;
+
+    const protocolState = {
+      enabled: false,
+      currentStepIndex: 0,
+      steps: [],
+      notes: {},
+      stepDeadline: null,
+      completed: false,
+    };
 
     // Element references
     const shapeSelector = document.getElementById("shapeSelector");
@@ -408,26 +521,50 @@
     const imageUploader = document.getElementById("imageUploader");
     const menu = document.getElementById("menu");
     const settingsIcon = document.getElementById("settings-icon");
-    const fullscreenBtn = document.getElementById('fullscreen-btn');
-    const pauseBtn = document.getElementById('pause-btn');
+    const fullscreenBtn = document.getElementById("fullscreen-btn");
+    const pauseBtn = document.getElementById("pause-btn");
     const fileNameDisplay = document.getElementById("fileName");
-    const startButton = document.getElementById('startButton'); // Start button
-    const startOverlay = document.getElementById('startOverlay'); // Start overlay
+    const startButton = document.getElementById("startButton");
+    const startOverlay = document.getElementById("startOverlay");
+    const protocolIndicator = document.getElementById("protocolIndicator");
+    const protocolStatus = document.getElementById("protocolStatus");
+    const protocolTimer = document.getElementById("protocolTimer");
+    const protocolEnabledToggle = document.getElementById("protocolEnabledToggle");
+    const protocolSettings = document.getElementById("protocolSettings");
+    const protocolShapeSelector = document.getElementById("protocolShapeSelector");
+    const protocolSizeSlider = document.getElementById("protocolSizeSlider");
+    const protocolSizeValue = document.getElementById("protocolSizeValue");
+    const protocolSpeedSlider = document.getElementById("protocolSpeedSlider");
+    const protocolSpeedValue = document.getElementById("protocolSpeedValue");
+    const protocolBaseColorPicker = document.getElementById("protocolBaseColorPicker");
+    const protocolStepDuration = document.getElementById("protocolStepDuration");
+    const protocolStepNote = document.getElementById("protocolStepNote");
+    const saveProtocolPresetBtn = document.getElementById("saveProtocolPresetBtn");
+    const loadProtocolPresetInput = document.getElementById("loadProtocolPresetInput");
 
-    // Add event listener for the start button
-    startButton.addEventListener('click', startExperience);
+    const freePlayControlIds = [
+      "shapeSelector",
+      "characterInput",
+      "emojiSelector",
+      "sizeSlider",
+      "colorPicker",
+      "randomColorToggle",
+      "numberSlider",
+      "speedSlider",
+      "directionSelector",
+      "straightToggle",
+      "trailToggle",
+    ];
+
+    startButton.addEventListener("click", startExperience);
 
     function startExperience() {
-      // Remove the start overlay
       startOverlay.remove();
-
-      // Start the particles
       updateShapeOptions();
+      setProtocolEnabled(protocolEnabledToggle.checked);
       updateConfig();
       loadParticles();
-
       started = true;
-      console.log('Experience started:', started);
     }
 
     tsParticles.addShape("emoji", {
@@ -448,14 +585,230 @@
       emojiOption.style.display = shapeSelector.value === "emoji" ? "flex" : "none";
     }
 
-    function updateConfig() {
-      config.particles.number.value = parseInt(numberSlider.value, 10);
-      numberValue.textContent = numberSlider.value;
-      config.particles.color.value = randomColorToggle.checked
-        ? "random"
-        : colorPicker.value;
-      config.background.color.value = backgroundColorPicker.value;
-      const selectedShape = shapeSelector.value;
+    function updateProtocolLabels() {
+      protocolSizeValue.textContent = protocolSizeSlider.value;
+      protocolSpeedValue.textContent = protocolSpeedSlider.value;
+    }
+
+    function hexToHsl(hex) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      if (hex.length === 4) {
+        r = Number(`0x${hex[1]}${hex[1]}`) / 255;
+        g = Number(`0x${hex[2]}${hex[2]}`) / 255;
+        b = Number(`0x${hex[3]}${hex[3]}`) / 255;
+      } else {
+        r = Number(`0x${hex[1]}${hex[2]}`) / 255;
+        g = Number(`0x${hex[3]}${hex[4]}`) / 255;
+        b = Number(`0x${hex[5]}${hex[6]}`) / 255;
+      }
+
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      let h = 0;
+      let s = 0;
+
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r:
+            h = (g - b) / d + (g < b ? 6 : 0);
+            break;
+          case g:
+            h = (b - r) / d + 2;
+            break;
+          case b:
+            h = (r - g) / d + 4;
+            break;
+          default:
+            break;
+        }
+        h /= 6;
+      }
+      return { h: h * 360, s: s * 100, l: l * 100 };
+    }
+
+    function hslToHex(h, s, l) {
+      const saturation = s / 100;
+      const lightness = l / 100;
+      const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+      const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+      const m = lightness - c / 2;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+
+      if (h >= 0 && h < 60) {
+        r = c; g = x; b = 0;
+      } else if (h >= 60 && h < 120) {
+        r = x; g = c; b = 0;
+      } else if (h >= 120 && h < 180) {
+        r = 0; g = c; b = x;
+      } else if (h >= 180 && h < 240) {
+        r = 0; g = x; b = c;
+      } else if (h >= 240 && h < 300) {
+        r = x; g = 0; b = c;
+      } else {
+        r = c; g = 0; b = x;
+      }
+
+      const toHex = (value) => Math.round((value + m) * 255).toString(16).padStart(2, "0");
+      return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    }
+
+    function getColorFamilyName(hue) {
+      if (hue < 20 || hue >= 340) return "Rouge";
+      if (hue < 45) return "Orange";
+      if (hue < 70) return "Jaune";
+      if (hue < 170) return "Vert";
+      if (hue < 220) return "Cyan";
+      if (hue < 270) return "Bleu";
+      if (hue < 320) return "Violet";
+      return "Rose";
+    }
+
+    function generateProtocolSteps(baseColor) {
+      const { h, l } = hexToHsl(baseColor);
+      const colorFamily = getColorFamilyName(h);
+      const saturationSteps = [100, 80, 60, 40, 20, 0];
+      const steps = saturationSteps.map((saturation) => ({
+        color: hslToHex(h, saturation, l),
+        description: saturation === 0
+          ? `${colorFamily} 0% saturation (gris coloré)`
+          : `${colorFamily} ${saturation}% saturation`,
+      }));
+
+      steps.push({ color: "#ffffff", description: "Blanc" });
+      steps.push({ color: "#9f9f9f", description: "Gris" });
+
+      return steps;
+    }
+
+    function updateProtocolIndicator() {
+      if (!protocolState.enabled) {
+        protocolIndicator.style.display = "none";
+        return;
+      }
+
+      protocolIndicator.style.display = "block";
+      const total = protocolState.steps.length;
+      const currentIndex = protocolState.currentStepIndex;
+      const step = protocolState.steps[currentIndex];
+      const stepNumber = Math.min(currentIndex + 1, total);
+
+      if (protocolState.completed) {
+        protocolStatus.textContent = `Protocole terminé: étape ${total}/${total} (${step?.description || ""})`;
+        protocolTimer.textContent = "";
+        return;
+      }
+
+      protocolStatus.textContent = `Étape ${stepNumber}/${total}: ${step?.description || ""}`;
+
+      if (protocolState.stepDeadline) {
+        const remainingSeconds = Math.max(0, Math.ceil((protocolState.stepDeadline - Date.now()) / 1000));
+        protocolTimer.textContent = `Temps restant: ${remainingSeconds}s`;
+      } else {
+        protocolTimer.textContent = "";
+      }
+    }
+
+    function refreshProtocolNoteField() {
+      const currentIndex = protocolState.currentStepIndex;
+      protocolStepNote.value = protocolState.notes[currentIndex] || "";
+    }
+
+    function saveCurrentProtocolNote() {
+      if (!protocolState.enabled) {
+        return;
+      }
+      protocolState.notes[protocolState.currentStepIndex] = protocolStepNote.value.trim();
+    }
+
+    function stopProtocolTimers() {
+      if (protocolStepTimer) {
+        clearTimeout(protocolStepTimer);
+        protocolStepTimer = null;
+      }
+      if (protocolCountdownInterval) {
+        clearInterval(protocolCountdownInterval);
+        protocolCountdownInterval = null;
+      }
+      protocolState.stepDeadline = null;
+    }
+
+    function lockFreePlayControls(isLocked) {
+      freePlayControlIds.forEach((id) => {
+        const element = document.getElementById(id);
+        if (!element) {
+          return;
+        }
+        element.disabled = isLocked;
+        const wrapperLabel = element.closest("label");
+        if (wrapperLabel) {
+          wrapperLabel.classList.toggle("protocol-locked", isLocked);
+        }
+      });
+    }
+
+    function applyProtocolStep(stepIndex) {
+      if (!protocolState.steps.length) {
+        return;
+      }
+      protocolState.currentStepIndex = stepIndex;
+      refreshProtocolNoteField();
+      updateConfig();
+      loadParticles();
+      updateProtocolIndicator();
+    }
+
+    function scheduleNextProtocolStep() {
+      stopProtocolTimers();
+      const durationSeconds = Math.max(1, parseInt(protocolStepDuration.value, 10) || 20);
+      protocolState.stepDeadline = Date.now() + durationSeconds * 1000;
+      protocolCountdownInterval = setInterval(updateProtocolIndicator, 500);
+
+      protocolStepTimer = setTimeout(() => {
+        saveCurrentProtocolNote();
+        const nextStep = protocolState.currentStepIndex + 1;
+        if (nextStep < protocolState.steps.length) {
+          applyProtocolStep(nextStep);
+          scheduleNextProtocolStep();
+        } else {
+          protocolState.completed = true;
+          stopProtocolTimers();
+          updateProtocolIndicator();
+        }
+      }, durationSeconds * 1000);
+    }
+
+    function restartProtocolSequence() {
+      protocolState.steps = generateProtocolSteps(protocolBaseColorPicker.value);
+      protocolState.currentStepIndex = 0;
+      protocolState.completed = false;
+      applyProtocolStep(0);
+      scheduleNextProtocolStep();
+    }
+
+    function setProtocolEnabled(enabled) {
+      protocolState.enabled = enabled;
+      protocolSettings.classList.toggle("protocol-locked", !enabled);
+      lockFreePlayControls(enabled);
+
+      if (enabled) {
+        restartProtocolSequence();
+      } else {
+        stopProtocolTimers();
+        protocolState.completed = false;
+        protocolIndicator.style.display = "none";
+        updateConfig();
+        loadParticles();
+      }
+    }
+
+    function applyShapeConfig(selectedShape) {
       config.particles.shape.type = selectedShape;
       if (selectedShape === "image" && uploadedImageUrl) {
         config.particles.shape.options = { image: [{ src: uploadedImageUrl }] };
@@ -463,18 +816,62 @@
         config.particles.shape.options = { character: { value: characterInput.value || "A" } };
       } else if (selectedShape === "emoji") {
         config.particles.shape.options = { emoji: { value: emojiSelector.value } };
+      } else {
+        config.particles.shape.options = {};
       }
-      const sizeSliderValue = parseInt(sizeSlider.value, 10);
+    }
+
+    function sliderValueToParticleSize(sliderValue) {
       const minParticleSize = 5;
       const maxParticleSize = window.innerHeight / 2;
-      const exponent = sizeSliderValue / 100;
-      const sizeValueExponential = minParticleSize * Math.pow(maxParticleSize / minParticleSize, exponent);
-      config.particles.size.value = sizeValueExponential;
+      const exponent = sliderValue / 100;
+      return minParticleSize * Math.pow(maxParticleSize / minParticleSize, exponent);
+    }
+
+    function updateConfig() {
+      config.background.color.value = backgroundColorPicker.value;
+
+      if (protocolState.enabled) {
+        const safeShape = protocolShapeSelector.value === "image" && !uploadedImageUrl
+          ? "circle"
+          : protocolShapeSelector.value;
+
+        config.particles.number.value = 1;
+        numberValue.textContent = "1";
+        applyShapeConfig(safeShape);
+
+        const currentStep = protocolState.steps[protocolState.currentStepIndex] || { color: protocolBaseColorPicker.value };
+        config.particles.color.value = currentStep.color;
+
+        const protocolSize = parseInt(protocolSizeSlider.value, 10);
+        config.particles.size.value = sliderValueToParticleSize(protocolSize);
+        sizeValue.textContent = protocolSizeSlider.value;
+
+        const protocolSpeed = parseInt(protocolSpeedSlider.value, 10);
+        config.particles.move.speed = protocolSpeed;
+        speedValue.textContent = protocolSpeedSlider.value;
+
+        config.particles.move.direction = "none";
+        config.particles.move.straight = true;
+        config.particles.move.trail = { enable: false };
+        return;
+      }
+
+      config.particles.number.value = parseInt(numberSlider.value, 10);
+      numberValue.textContent = numberSlider.value;
+      config.particles.color.value = randomColorToggle.checked ? "random" : colorPicker.value;
+
+      applyShapeConfig(shapeSelector.value);
+
+      const sizeSliderValue = parseInt(sizeSlider.value, 10);
+      config.particles.size.value = sliderValueToParticleSize(sizeSliderValue);
       sizeValue.textContent = sizeSlider.value;
+
       config.particles.move.speed = parseInt(speedSlider.value, 10);
       speedValue.textContent = speedSlider.value;
       config.particles.move.direction = directionSelector.value === "none" ? undefined : directionSelector.value;
       config.particles.move.straight = straightToggle.checked;
+
       if (trailToggle.checked) {
         config.particles.move.trail = {
           enable: true,
@@ -494,6 +891,51 @@
       tsParticles.load("tsparticles", config).then((container) => {
         particlesInstance = container;
       });
+    }
+
+    function downloadProtocolPreset() {
+      const payload = {
+        fixedShape: protocolShapeSelector.value,
+        fixedSize: parseInt(protocolSizeSlider.value, 10),
+        fixedSpeed: parseInt(protocolSpeedSlider.value, 10),
+        baseColor: protocolBaseColorPicker.value,
+        stepDurationSeconds: Math.max(1, parseInt(protocolStepDuration.value, 10) || 20),
+        notesByStep: protocolState.notes,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateCode = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `stimulation-protocole-${dateCode}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function loadProtocolPreset(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (data.fixedShape) protocolShapeSelector.value = data.fixedShape;
+          if (typeof data.fixedSize === "number") protocolSizeSlider.value = String(data.fixedSize);
+          if (typeof data.fixedSpeed === "number") protocolSpeedSlider.value = String(data.fixedSpeed);
+          if (data.baseColor) protocolBaseColorPicker.value = data.baseColor;
+          if (typeof data.stepDurationSeconds === "number") {
+            protocolStepDuration.value = String(Math.max(1, data.stepDurationSeconds));
+          }
+          protocolState.notes = data.notesByStep && typeof data.notesByStep === "object" ? data.notesByStep : {};
+          updateProtocolLabels();
+
+          if (protocolState.enabled) {
+            restartProtocolSequence();
+          }
+        } catch (error) {
+          alert("Preset invalide: impossible de lire ce fichier JSON.");
+        }
+      };
+      reader.readAsText(file);
     }
 
     function startInactivityTimer() {
@@ -524,16 +966,14 @@
       }
     }
 
-    let isPaused = false;
-
     function togglePause() {
       if (particlesInstance) {
         if (!isPaused) {
           particlesInstance.pause();
-          pauseBtn.textContent = 'Reprendre';
+          pauseBtn.textContent = "Reprendre";
         } else {
           particlesInstance.play();
-          pauseBtn.textContent = 'Pause';
+          pauseBtn.textContent = "Pause";
         }
         isPaused = !isPaused;
       }
@@ -559,77 +999,27 @@
       }
     });
 
-    characterInput.addEventListener("input", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    emojiSelector.addEventListener("change", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    sizeSlider.addEventListener("input", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    speedSlider.addEventListener("input", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    colorPicker.addEventListener("input", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    randomColorToggle.addEventListener("change", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    backgroundColorPicker.addEventListener("input", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    numberSlider.addEventListener("input", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
+    [
+      characterInput,
+      emojiSelector,
+      sizeSlider,
+      speedSlider,
+      colorPicker,
+      randomColorToggle,
+      backgroundColorPicker,
+      numberSlider,
+      straightToggle,
+      trailToggle,
+    ].forEach((element) => {
+      element.addEventListener(element === randomColorToggle || element === straightToggle || element === trailToggle ? "change" : "input", () => {
+        if (started) {
+          updateConfig();
+          loadParticles();
+        }
+      });
     });
 
     directionSelector.addEventListener("change", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    straightToggle.addEventListener("change", () => {
-      if (started) {
-        updateConfig();
-        loadParticles();
-      }
-    });
-
-    trailToggle.addEventListener("change", () => {
       if (started) {
         updateConfig();
         loadParticles();
@@ -656,22 +1046,57 @@
       }
     });
 
-    fullscreenBtn.addEventListener('click', toggleFullscreen);
+    protocolEnabledToggle.addEventListener("change", () => {
+      saveCurrentProtocolNote();
+      setProtocolEnabled(protocolEnabledToggle.checked);
+    });
 
-    pauseBtn.addEventListener('click', togglePause);
+    [protocolShapeSelector, protocolBaseColorPicker, protocolStepDuration].forEach((element) => {
+      element.addEventListener("change", () => {
+        if (protocolState.enabled) {
+          restartProtocolSequence();
+        }
+      });
+    });
 
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'f' || event.key === 'F') {
+    [protocolSizeSlider, protocolSpeedSlider].forEach((element) => {
+      element.addEventListener("input", () => {
+        updateProtocolLabels();
+        if (protocolState.enabled) {
+          updateConfig();
+          loadParticles();
+        }
+      });
+    });
+
+    protocolStepNote.addEventListener("input", saveCurrentProtocolNote);
+
+    saveProtocolPresetBtn.addEventListener("click", () => {
+      saveCurrentProtocolNote();
+      downloadProtocolPreset();
+    });
+
+    loadProtocolPresetInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        loadProtocolPreset(file);
+      }
+    });
+
+    fullscreenBtn.addEventListener("click", toggleFullscreen);
+    pauseBtn.addEventListener("click", togglePause);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "f" || event.key === "F") {
         toggleFullscreen();
-      } else if (event.key === 'p' || event.key === 'P') {
+      } else if (event.key === "p" || event.key === "P") {
         togglePause();
       }
     });
 
-    // Removed initial calls to update and load particles
-    // updateShapeOptions();
-    // updateConfig();
-    // loadParticles();
+    updateShapeOptions();
+    updateProtocolLabels();
+    protocolSettings.classList.add("protocol-locked");
   </script>
 </body>
 </html>
