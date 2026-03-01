@@ -128,26 +128,22 @@
     .cell.active { background: rgba(143, 191, 255, 0.1); }
 
     .target {
-      width: 100px;
-      height: 100px;
-      border-radius: 20px;
-      border: 3px solid #fff;
+      width: 120px;
+      height: 120px;
       position: absolute;
       transform: translate(-50%, -50%);
       pointer-events: none;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 24px #fff;
-      padding: 10px;
     }
 
-    .target img {
+    #targetCanvas {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      display: block;
       image-rendering: auto;
-      filter: brightness(0) invert(1);
+      filter: drop-shadow(0 0 12px rgba(255,255,255,0.95));
     }
 
     .target.hidden { display: none; }
@@ -267,7 +263,7 @@
       <div class="panel test-zone" id="testZone">
         <div class="grid" id="grid"></div>
         <div class="target hidden" id="target" aria-hidden="true">
-          <img id="targetImage" alt="Cible CVI" />
+          <canvas id="targetCanvas" aria-label="Cible CVI"></canvas>
         </div>
       </div>
 
@@ -289,7 +285,7 @@
     const progressText = document.getElementById("progressText");
     const gridEl = document.getElementById("grid");
     const targetEl = document.getElementById("target");
-    const targetImageEl = document.getElementById("targetImage");
+    const targetCanvasEl = document.getElementById("targetCanvas");
     const testZoneEl = document.getElementById("testZone");
     const summaryPanel = document.getElementById("summaryPanel");
     const summaryText = document.getElementById("summaryText");
@@ -380,9 +376,49 @@
     }
 
     function applyTargetVisual() {
-      targetEl.style.backgroundColor = state.targetColor;
-      targetEl.style.boxShadow = `0 0 24px ${state.targetColor}`;
-      targetImageEl.src = state.targetImage;
+      renderTargetCanvas();
+    }
+
+    function getTargetSize() {
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      const zoneWidth = testZoneEl.clientWidth / cols;
+      const zoneHeight = testZoneEl.clientHeight / rows;
+      const size = Math.floor(Math.min(zoneWidth, zoneHeight) * 0.74);
+      return Math.max(90, size);
+    }
+
+    function renderTargetCanvas() {
+      const cssSize = getTargetSize();
+      targetEl.style.width = `${cssSize}px`;
+      targetEl.style.height = `${cssSize}px`;
+
+      const dpr = window.devicePixelRatio || 1;
+      const pxSize = Math.max(1, Math.floor(cssSize * dpr));
+      targetCanvasEl.width = pxSize;
+      targetCanvasEl.height = pxSize;
+
+      const ctx = targetCanvasEl.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, pxSize, pxSize);
+
+      if (!state.targetImage) return;
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, pxSize, pxSize);
+        const scale = Math.min(pxSize / img.width, pxSize / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        const x = (pxSize - drawW) / 2;
+        const y = (pxSize - drawH) / 2;
+
+        ctx.drawImage(img, x, y, drawW, drawH);
+        ctx.globalCompositeOperation = "source-in";
+        ctx.fillStyle = state.targetColor;
+        ctx.fillRect(0, 0, pxSize, pxSize);
+        ctx.globalCompositeOperation = "source-over";
+      };
+      img.src = state.targetImage;
     }
 
     function setActiveZone(zoneId) {
@@ -405,6 +441,7 @@
 
       targetEl.style.left = `${centerX}px`;
       targetEl.style.top = `${centerY}px`;
+      renderTargetCanvas();
       targetEl.classList.remove("hidden");
     }
 
@@ -607,6 +644,7 @@
     });
 
     window.addEventListener("resize", () => {
+      renderTargetCanvas();
       if (state.currentZoneId !== null && state.currentZoneId >= 0) {
         setActiveZone(state.currentZoneId);
       }
