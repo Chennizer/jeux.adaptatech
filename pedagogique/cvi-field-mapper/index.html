@@ -157,6 +157,11 @@
       transition: background 0.15s ease;
     }
 
+    .cell-empty {
+      border-color: rgba(66, 94, 145, 0.25);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
     .cell-label {
       position: absolute;
       top: 0.35rem;
@@ -310,9 +315,10 @@
       <label for="zoneLayout">Disposition des zones</label>
       <select id="zoneLayout">
         <option value="2">2 zones (2 x 1, côte à côte)</option>
-        <option value="4">4 zones (2 x 2)</option>
+        <option value="4" selected>4 zones (2 x 2)</option>
+        <option value="5">5 zones (4 coins + milieu)</option>
         <option value="6">6 zones (3 x 2)</option>
-        <option value="9" selected>9 zones (3 x 3)</option>
+        <option value="9">9 zones (3 x 3)</option>
       </select>
 
       <label for="passes">Passages par zone</label>
@@ -400,11 +406,23 @@
     function getLayoutShape(layout) {
       if (layout === 2) return { cols: 2, rows: 1 };
       if (layout === 4) return { cols: 2, rows: 2 };
+      if (layout === 5) return { cols: 3, rows: 3 };
       if (layout === 6) return { cols: 3, rows: 2 };
       return { cols: 3, rows: 3 };
     }
 
     function createZones(layout) {
+      if (layout === 5) {
+        const positions = [
+          { row: 0, col: 0 },
+          { row: 0, col: 2 },
+          { row: 1, col: 1 },
+          { row: 2, col: 0 },
+          { row: 2, col: 2 }
+        ];
+        return positions.map((pos, idx) => ({ id: idx, row: pos.row, col: pos.col, name: `Zone ${idx + 1}` }));
+      }
+
       const { cols, rows } = getLayoutShape(layout);
       const zones = [];
       let idx = 0;
@@ -422,6 +440,26 @@
       const { cols, rows } = getLayoutShape(state.config.layout);
       gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
       gridEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      if (state.config.layout === 5) {
+        const zoneByPos = new Map(state.zones.map((z) => [`${z.row}-${z.col}`, z]));
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const cell = document.createElement("div");
+            const zone = zoneByPos.get(`${r}-${c}`);
+            cell.className = zone ? "cell" : "cell cell-empty";
+            if (zone) {
+              cell.dataset.zoneId = String(zone.id);
+              const label = document.createElement("span");
+              label.className = "cell-label";
+              label.textContent = zone.name;
+              cell.appendChild(label);
+            }
+            gridEl.appendChild(cell);
+          }
+        }
+        return;
+      }
 
       state.zones.forEach((zone) => {
         const cell = document.createElement("div");
@@ -669,27 +707,61 @@
       const bestZones = [];
       const scoresByZone = {};
 
-      state.zones.forEach((zone) => {
-        const values = state.responses[zone.id] || [];
-        const score = scoreZone(zone.id);
-        const percent = Math.round(score * 100);
-        scoresByZone[zone.id] = score;
+      if (state.config.layout === 5) {
+        const zoneByPos = new Map(state.zones.map((z) => [`${z.row}-${z.col}`, z]));
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const zone = zoneByPos.get(`${r}-${c}`);
+            const cell = document.createElement("div");
+            cell.className = "heat-cell";
+            if (!zone) {
+              cell.style.background = "#121a2b";
+              cell.textContent = "";
+              heatmapEl.appendChild(cell);
+              continue;
+            }
 
-        if (score > bestScore) {
-          bestScore = score;
-          bestZones.length = 0;
-          bestZones.push(zone.name);
-        } else if (score === bestScore) {
-          bestZones.push(zone.name);
+            const values = state.responses[zone.id] || [];
+            const score = scoreZone(zone.id);
+            const percent = Math.round(score * 100);
+            scoresByZone[zone.id] = score;
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestZones.length = 0;
+              bestZones.push(zone.name);
+            } else if (score === bestScore) {
+              bestZones.push(zone.name);
+            }
+
+            cell.style.background = getColorForScore(score);
+            cell.innerHTML = `${zone.name}<br>${percent}%`;
+            heatmapEl.appendChild(cell);
+          }
         }
+      } else {
+        state.zones.forEach((zone) => {
+          const values = state.responses[zone.id] || [];
+          const score = scoreZone(zone.id);
+          const percent = Math.round(score * 100);
+          scoresByZone[zone.id] = score;
 
-        const cell = document.createElement("div");
-        cell.className = "heat-cell";
-        cell.style.background = getColorForScore(score);
-        cell.innerHTML = `${zone.name}<br>${percent}%`;
-        heatmapEl.appendChild(cell);
+          if (score > bestScore) {
+            bestScore = score;
+            bestZones.length = 0;
+            bestZones.push(zone.name);
+          } else if (score === bestScore) {
+            bestZones.push(zone.name);
+          }
 
-      });
+          const cell = document.createElement("div");
+          cell.className = "heat-cell";
+          cell.style.background = getColorForScore(score);
+          cell.innerHTML = `${zone.name}<br>${percent}%`;
+          heatmapEl.appendChild(cell);
+
+        });
+      }
 
       const interpretation = getInterpretiveAnalysis(scoresByZone);
       summaryText.innerHTML = `
