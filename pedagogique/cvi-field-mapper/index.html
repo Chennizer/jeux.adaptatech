@@ -132,6 +132,7 @@
     button:active { transform: scale(0.98); }
     button:hover { opacity: 0.92; }
     .btn-primary { background: #14b8a6; color: #032b27; }
+    .lang-btn { background:#e2e8f0; color:#0f172a; margin-bottom:0.7rem; }
 
     .test-zone {
       position: relative;
@@ -308,31 +309,32 @@
 <body>
   <div class="layout">
     <section class="panel controls">
-      <h1>CVI Field Mapper</h1>
-      <label for="zoneLayout">Disposition des zones</label>
+      <h1 data-fr="Cartographie de champ" data-en="Field Mapper">Field Mapper</h1>
+      <button id="langToggle" class="lang-btn" type="button" data-fr="EN" data-en="FR">EN</button>
+      <label for="zoneLayout" data-fr="Disposition des zones" data-en="Zone layout">Disposition des zones</label>
       <select id="zoneLayout">
-        <option value="2">2 zones (2 x 1, côte à côte)</option>
-        <option value="4" selected>4 zones (2 x 2)</option>
-        <option value="5">5 zones (4 coins + milieu)</option>
-        <option value="6">6 zones (3 x 2)</option>
-        <option value="9">9 zones (3 x 3)</option>
+        <option value="2" data-fr="2 zones (2 x 1, côte à côte)" data-en="2 zones (2 x 1, side by side)">2 zones (2 x 1, côte à côte)</option>
+        <option value="4" selected data-fr="4 zones (2 x 2)" data-en="4 zones (2 x 2)">4 zones (2 x 2)</option>
+        <option value="5" data-fr="5 zones (4 coins + milieu)" data-en="5 zones (4 corners + center)">5 zones (4 coins + milieu)</option>
+        <option value="6" data-fr="6 zones (3 x 2)" data-en="6 zones (3 x 2)">6 zones (3 x 2)</option>
+        <option value="9" data-fr="9 zones (3 x 3)" data-en="9 zones (3 x 3)">9 zones (3 x 3)</option>
       </select>
 
-      <label for="passes">Passages par zone</label>
+      <label for="passes" data-fr="Passages par zone" data-en="Passes per zone">Passages par zone</label>
       <input id="passes" type="number" min="1" max="10" value="2" />
 
-      <label>Image principale (catégorie + item)</label>
+      <label data-fr="Image principale (catégorie + item)" data-en="Main image (category + item)">Image principale (catégorie + item)</label>
       <div class="picker-row">
         <select id="categoryPicker" class="scroll-pick" size="6"></select>
         <select id="itemPicker" class="scroll-pick" size="6"></select>
       </div>
 
-      <label>Couleur cible (grille)</label>
+      <label data-fr="Couleur cible (grille)" data-en="Target color (grid)">Couleur cible (grille)</label>
       <div id="colorGrid" class="color-grid"></div>
 
-      <button class="btn-primary" id="startBtn">Démarrer une session</button>
+      <button class="btn-primary" id="startBtn" data-fr="Démarrer une session" data-en="Start session">Démarrer une session</button>
 
-      <div class="progress" id="progressText">Session non démarrée.</div>
+      <div class="progress" id="progressText"></div>
     </section>
 
     <section class="session">
@@ -357,7 +359,7 @@
     <section class="report-card" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
       <div class="report-header">
         <h2 id="reportTitle">Résumé de session</h2>
-        <button id="closeReportBtn" class="report-close" type="button">Fermer</button>
+        <button id="closeReportBtn" class="report-close" type="button" data-fr="Fermer" data-en="Close">Fermer</button>
       </div>
       <div id="summaryText"></div>
       <div class="heatmap" id="heatmap"></div>
@@ -374,6 +376,7 @@
     const itemPickerEl = document.getElementById("itemPicker");
     const colorGridEl = document.getElementById("colorGrid");
     const startBtn = document.getElementById("startBtn");
+    const langToggleEl = document.getElementById("langToggle");
     const progressText = document.getElementById("progressText");
     const gridEl = document.getElementById("grid");
     const targetEl = document.getElementById("target");
@@ -387,6 +390,8 @@
     const responseButtons = [...document.querySelectorAll("[data-response]")];
     const allItems = Array.isArray(window.PNG_ARRAY) ? window.PNG_ARRAY : [];
     const categories = [...new Set(allItems.map((item) => item.category))];
+
+    let currentLang = "fr";
 
     const state = {
       config: { layout: 9, passes: 2 },
@@ -547,7 +552,7 @@
 
     function updateProgress() {
       if (!state.running) {
-        progressText.textContent = "Session non démarrée.";
+        progressText.textContent = "";
         return;
       }
       const total = state.queue.length;
@@ -555,10 +560,27 @@
       progressText.textContent = `Essai ${current}/${total} — ${state.zones.find(z => z.id === state.currentZoneId)?.name || ""}`;
     }
 
+    function t(fr, en) {
+      return currentLang === "fr" ? fr : en;
+    }
+
+    function applyTranslations() {
+      document.querySelectorAll("[data-fr][data-en]").forEach((el) => {
+        el.textContent = currentLang === "fr" ? el.dataset.fr : el.dataset.en;
+      });
+      document.querySelectorAll("option[data-fr][data-en]").forEach((opt) => {
+        opt.textContent = currentLang === "fr" ? opt.dataset.fr : opt.dataset.en;
+      });
+      const btn = langToggleEl;
+      if (btn) btn.textContent = currentLang === "fr" ? "EN" : "FR";
+    }
+
     function startSession() {
       state.config.layout = Number(zoneLayoutEl.value);
       state.config.passes = Math.max(1, Math.min(10, Number(passesEl.value) || 1));
-      state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      applyTranslations();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
       passesEl.value = state.config.passes;
 
       reportModalEl.classList.remove("open");
@@ -672,16 +694,16 @@
       const edgeAvg = avg(edgeZones);
 
       const pickDominance = (a, b, aLabel, bLabel) => {
-        if (a === null || b === null) return "indéterminée";
+        if (a === null || b === null) return t("indéterminée","undetermined");
         const delta = a - b;
-        if (Math.abs(delta) < 0.08) return "équilibrée";
+        if (Math.abs(delta) < 0.08) return t("équilibrée","balanced");
         return delta > 0 ? aLabel : bLabel;
       };
 
       return {
-        vertical: pickDominance(topAvg, bottomAvg, "plutôt HAUT", "plutôt BAS"),
-        horizontal: pickDominance(leftAvg, rightAvg, "plutôt GAUCHE", "plutôt DROITE"),
-        center: pickDominance(middleAvg, edgeAvg, "plutôt MILIEU", "plutôt PÉRIPHÉRIE")
+        vertical: pickDominance(topAvg, bottomAvg, t("plutôt HAUT","mostly TOP"), t("plutôt BAS","mostly BOTTOM")),
+        horizontal: pickDominance(leftAvg, rightAvg, t("plutôt GAUCHE","mostly LEFT"), t("plutôt DROITE","mostly RIGHT")),
+        center: pickDominance(middleAvg, edgeAvg, t("plutôt MILIEU","mostly CENTER"), t("plutôt PÉRIPHÉRIE","mostly PERIPHERY"))
       };
     }
 
@@ -753,10 +775,10 @@
 
       const interpretation = getInterpretiveAnalysis(scoresByZone);
       summaryText.innerHTML = `
-        <div><strong>Lecture interprétative:</strong></div>
-        <div>Orientation verticale: <strong>${interpretation.vertical}</strong></div>
-        <div>Orientation horizontale: <strong>${interpretation.horizontal}</strong></div>
-        <div>Tendance centrale: <strong>${interpretation.center}</strong></div>
+        <div><strong>${t("Lecture interprétative:","Interpretive reading:")}</strong></div>
+        <div>${t("Orientation verticale","Vertical orientation")}: <strong>${interpretation.vertical}</strong></div>
+        <div>${t("Orientation horizontale","Horizontal orientation")}: <strong>${interpretation.horizontal}</strong></div>
+        <div>${t("Tendance centrale","Central tendency")}: <strong>${interpretation.center}</strong></div>
       `;
 
       reportModalEl.classList.add("open");
@@ -780,7 +802,7 @@
       items.forEach((item) => {
         const option = document.createElement("option");
         option.value = item.file;
-        option.textContent = item.name;
+        option.textContent = item.name.replace(/^cvi/i, "");
         itemSelectEl.appendChild(option);
       });
       if (items.length) itemSelectEl.selectedIndex = 0;
@@ -830,12 +852,16 @@
 
     categoryPickerEl.addEventListener("change", () => {
       populateItemPicker(categoryPickerEl.value, itemPickerEl);
-      state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      applyTranslations();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
       renderTargetCanvas();
     });
 
     itemPickerEl.addEventListener("change", () => {
-      state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      applyTranslations();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
       renderTargetCanvas();
     });
 
@@ -844,6 +870,12 @@
       if (state.currentZoneId !== null && state.currentZoneId >= 0) {
         setActiveZone(state.currentZoneId);
       }
+    });
+
+    langToggleEl.addEventListener("click", () => {
+      currentLang = currentLang === "fr" ? "en" : "fr";
+      applyTranslations();
+      if (!state.running) updateProgress();
     });
 
     closeReportBtn.addEventListener("click", () => {
@@ -861,6 +893,8 @@
     populateCategoryPicker(categoryPickerEl);
     populateItemPicker(categoryPickerEl.value, itemPickerEl);
     renderColorGrid();
+
+    applyTranslations();
 
     state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
     state.zones = createZones(Number(zoneLayoutEl.value));
