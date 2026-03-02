@@ -603,6 +603,51 @@
       renderSummary();
     }
 
+    function getInterpretiveAnalysis(scoresByZone) {
+      const { cols, rows } = getLayoutShape(state.config.layout);
+
+      const topZones = state.zones.filter((z) => z.row < rows / 2).map((z) => z.id);
+      const bottomZones = state.zones.filter((z) => z.row >= rows / 2).map((z) => z.id);
+      const leftZones = state.zones.filter((z) => z.col < cols / 2).map((z) => z.id);
+      const rightZones = state.zones.filter((z) => z.col >= cols / 2).map((z) => z.id);
+
+      const midRow = Math.floor(rows / 2);
+      const midCol = Math.floor(cols / 2);
+      const middleZones = state.zones
+        .filter((z) => z.row === midRow || z.col === midCol)
+        .map((z) => z.id);
+      const edgeZones = state.zones
+        .filter((z) => !(z.row === midRow || z.col === midCol))
+        .map((z) => z.id);
+
+      const avg = (ids) => {
+        if (!ids.length) return null;
+        const vals = ids.map((id) => scoresByZone[id]).filter((v) => Number.isFinite(v));
+        if (!vals.length) return null;
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+      };
+
+      const topAvg = avg(topZones);
+      const bottomAvg = avg(bottomZones);
+      const leftAvg = avg(leftZones);
+      const rightAvg = avg(rightZones);
+      const middleAvg = avg(middleZones);
+      const edgeAvg = avg(edgeZones);
+
+      const pickDominance = (a, b, aLabel, bLabel) => {
+        if (a === null || b === null) return "indéterminée";
+        const delta = a - b;
+        if (Math.abs(delta) < 0.08) return "équilibrée";
+        return delta > 0 ? aLabel : bLabel;
+      };
+
+      return {
+        vertical: pickDominance(topAvg, bottomAvg, "plutôt HAUT", "plutôt BAS"),
+        horizontal: pickDominance(leftAvg, rightAvg, "plutôt GAUCHE", "plutôt DROITE"),
+        center: pickDominance(middleAvg, edgeAvg, "plutôt MILIEU", "plutôt PÉRIPHÉRIE")
+      };
+    }
+
     function renderSummary() {
       heatmapEl.innerHTML = "";
       const { cols, rows } = getLayoutShape(state.config.layout);
@@ -611,12 +656,13 @@
 
       let bestScore = -1;
       const bestZones = [];
-      const lines = [];
+      const scoresByZone = {};
 
       state.zones.forEach((zone) => {
         const values = state.responses[zone.id] || [];
         const score = scoreZone(zone.id);
         const percent = Math.round(score * 100);
+        scoresByZone[zone.id] = score;
 
         if (score > bestScore) {
           bestScore = score;
@@ -632,17 +678,19 @@
         cell.innerHTML = `${zone.name}<br>${percent}%`;
         heatmapEl.appendChild(cell);
 
-        const label = values.length
-          ? `${zone.name}: ${values.length} essais, score ${percent}%`
-          : `${zone.name}: aucun essai`;
-        lines.push(label);
       });
 
-      summaryText.innerHTML = lines.map((line) => `<div>${line}</div>`).join("");
+      const interpretation = getInterpretiveAnalysis(scoresByZone);
+      summaryText.innerHTML = `
+        <div><strong>Lecture interprétative:</strong></div>
+        <div>Orientation verticale: <strong>${interpretation.vertical}</strong></div>
+        <div>Orientation horizontale: <strong>${interpretation.horizontal}</strong></div>
+        <div>Tendance centrale: <strong>${interpretation.center}</strong></div>
+      `;
+
       recommendationEl.innerHTML = `
         <h3>Recommandation</h3>
         <p><strong>Champ(s) préféré(s):</strong> ${bestZones.join(", ") || "indéterminé"}.</p>
-        <p>Couleur: <strong>${state.targetColor}</strong>.</p>
       `;
 
       reportModalEl.classList.add("open");
@@ -687,7 +735,6 @@
         tile.type = "button";
         tile.className = "color-tile";
         tile.style.backgroundColor = color;
-        tile.title = color;
         tile.dataset.color = color;
         tile.addEventListener("click", () => {
           state.targetColor = color;
