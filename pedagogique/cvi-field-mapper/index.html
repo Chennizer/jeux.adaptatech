@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartographie CVI par zones</title>
+  <style>
+    :root {
+      --bg: #000;
+      --panel: #ffffff;
+      --text: #0f172a;
+      --muted: #35516b;
+      --accent: #0f766e;
+      --good: #34d399;
+      --maybe: #fbbf24;
+      --none: #f87171;
+      --grid-border: #2a3c63;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      height: 100vh;
+      padding: 1.2rem;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 430px) 1fr;
+      gap: 1rem;
+      align-items: start;
+      height: calc(100vh - 2.4rem);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid #d9e4ef;
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    .controls {
+      text-align: center;
+      position: relative;
+      padding-top: 1.8rem;
+    }
+
+    .controls label,
+    .controls select,
+    .controls input,
+    .controls button {
+      width: min(100%, 340px);
+      font-size: 1rem;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .controls label {
+      margin-bottom: 0.3rem;
+      display: block;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .controls select,
+    .controls input {
+      margin-bottom: 0.7rem;
+      border-radius: 10px;
+      border: 1px solid #b5c9dc;
+      background: #f7fbff;
+      color: var(--text);
+      padding: 0.65rem;
+    }
+
+    .picker-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+      margin-bottom: 0.6rem;
+      width: min(100%, 340px);
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .scroll-pick {
+      height: 150px;
+      padding: 0.25rem;
+      margin-bottom: 0.1rem;
+    }
+
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(24px, 1fr));
+      gap: 0.35rem;
+      margin-bottom: 0.9rem;
+      max-width: 230px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .color-tile {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      cursor: pointer;
+      transition: transform 0.08s ease, border-color 0.2s;
+    }
+
+    .color-tile.active {
+      border: 2px solid #fff;
+      transform: scale(1.08);
+      box-shadow: 0 0 0 1px #8dd0ff;
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.06s ease, opacity 0.2s;
+    }
+
+    button:active { transform: scale(0.98); }
+    button:hover { opacity: 0.92; }
+    .btn-primary { background: #14b8a6; color: #032b27; }
+    .lang-btn {
+      position: absolute;
+      top: 0.7rem;
+      right: 0.7rem;
+      width: auto !important;
+      min-width: 64px;
+      padding: 0.28rem 0.5rem;
+      font-size: 0.78rem !important;
+      border-radius: 999px;
+      background:#e2e8f0;
+      color:#0f172a;
+      margin-bottom:0;
+      z-index: 2;
+    }
+
+    .test-zone {
+      position: relative;
+      min-height: calc(100vh - 175px);
+      border-radius: 18px;
+      border: 1px solid var(--grid-border);
+      background: #000;
+      overflow: hidden;
+    }
+
+    .grid {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .cell {
+      border: none;
+      position: relative;
+      transition: background 0.15s ease;
+    }
+
+    .cell-empty {
+      border: none;
+      background: transparent;
+    }
+
+    .cell.active { background: transparent; }
+
+    .target {
+      width: 120px;
+      height: 120px;
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: breathe 2s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.3); }
+      100% { transform: translate(-50%, -50%) scale(1); }
+    }
+
+    #targetCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: auto;
+    }
+
+    .target.hidden { display: none; }
+
+    .response-buttons {
+      margin-top: 0.9rem;
+      display: none;
+      grid-template-columns: repeat(5, minmax(58px, 1fr));
+      gap: 0.45rem;
+      justify-content: end;
+    }
+
+    .response-buttons button {
+      font-size: 0.9rem;
+      min-height: 56px;
+      min-width: 58px;
+      max-width: 76px;
+      justify-self: center;
+      padding: 0.45rem;
+      font-weight: 800;
+    }
+
+    body.running { padding: 0; }
+    body.running .layout { grid-template-columns: 1fr; height: 100vh; gap: 0; }
+    body.running .controls { display: none; }
+    body.running .session { display: grid; grid-template-rows: 1fr auto; height: 100vh; }
+    body.running .panel { border-radius: 0; border: none; box-shadow: none; padding: 0; background: #000; }
+    body.running .test-zone { min-height: auto; height: 100%; border-radius: 0; border: none; }
+    body.running .response-buttons {
+      display: grid;
+      position: fixed;
+      right: 0.7rem;
+      bottom: 0.7rem;
+      margin: 0;
+      padding: 0.45rem;
+      background: rgba(6, 6, 6, 0.92);
+      border: 1px solid #1b2b48;
+      border-radius: 10px;
+      z-index: 15;
+    }
+
+    .btn-none { background: #f87171; color: #350000; }
+    .btn-low { background: #fb923c; color: #3f1d00; }
+    .btn-maybe { background: #fbbf24; color: #3b2c00; }
+    .btn-high { background: #86efac; color: #052e16; }
+    .btn-clear { background: #34d399; color: #00331f; }
+
+    .progress { margin-top: 0.7rem; font-weight: 700; color: var(--accent); }
+
+    .report-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1rem;
+    }
+
+    .report-modal.open { display: flex; }
+
+    .report-card {
+      width: min(860px, 96vw);
+      max-height: 92vh;
+      overflow: auto;
+      background: linear-gradient(180deg, #121f38 0%, #0c1527 100%);
+      border: 1px solid var(--grid-border);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .report-close {
+      width: auto;
+      background: #2b436f;
+      color: #fff;
+      padding: 0.45rem 0.8rem;
+      font-size: 0.9rem;
+    }
+
+    .heatmap {
+      margin-top: 0.7rem;
+      display: grid;
+      gap: 0.45rem;
+      min-height: 170px;
+    }
+
+    .heat-cell {
+      border-radius: 12px;
+      border: 1px solid #1f2e50;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 0.4rem;
+      font-weight: 700;
+      font-size: 0.9rem;
+      min-height: 60px;
+    }
+
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+      .test-zone { min-height: 58vh; }
+      .picker-row { grid-template-columns: 1fr; }
+      .color-grid { grid-template-columns: repeat(5, minmax(24px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <section class="panel controls">
+      <h1 data-fr="Cartographie de champ" data-en="Field Mapper" data-ja="フィールドマッパー">Field Mapper</h1>
+      <button id="langToggle" class="lang-btn" type="button" title="Langue / Language / 言語">EN</button>
+      <label for="zoneLayout" data-fr="Disposition des zones" data-en="Zone layout" data-ja="ゾーン配置">Disposition des zones</label>
+      <select id="zoneLayout">
+        <option value="2" data-fr="2 zones (2 x 1, côte à côte)" data-en="2 zones (2 x 1, side by side)" data-ja="2ゾーン（2 x 1、左右）">2 zones (2 x 1, côte à côte)</option>
+        <option value="4" selected data-fr="4 zones (2 x 2)" data-en="4 zones (2 x 2)" data-ja="4ゾーン（2 x 2）">4 zones (2 x 2)</option>
+        <option value="5" data-fr="5 zones (4 coins + milieu)" data-en="5 zones (4 corners + center)" data-ja="5ゾーン（四隅＋中央）">5 zones (4 coins + milieu)</option>
+        <option value="6" data-fr="6 zones (3 x 2)" data-en="6 zones (3 x 2)" data-ja="6ゾーン（3 x 2）">6 zones (3 x 2)</option>
+        <option value="9" data-fr="9 zones (3 x 3)" data-en="9 zones (3 x 3)" data-ja="9ゾーン（3 x 3）">9 zones (3 x 3)</option>
+      </select>
+
+      <label for="passes" data-fr="Passages par zone" data-en="Passes per zone" data-ja="ゾーンごとの反復">Passages par zone</label>
+      <input id="passes" type="number" min="1" max="10" value="2" />
+
+      <label data-fr="Image principale (catégorie + item)" data-en="Main image (category + item)" data-ja="メイン画像（カテゴリ＋項目）">Image principale (catégorie + item)</label>
+      <div class="picker-row">
+        <select id="categoryPicker" class="scroll-pick" size="6"></select>
+        <select id="itemPicker" class="scroll-pick" size="6"></select>
+      </div>
+
+      <label data-fr="Couleur cible (grille)" data-en="Target color (grid)" data-ja="ターゲット色（グリッド）">Couleur cible (grille)</label>
+      <div id="colorGrid" class="color-grid"></div>
+
+      <button class="btn-primary" id="startBtn" data-fr="Démarrer une session" data-en="Start session" data-ja="セッション開始">Démarrer une session</button>
+
+      <div class="progress" id="progressText"></div>
+    </section>
+
+    <section class="session">
+      <div class="panel test-zone" id="testZone">
+        <div class="grid" id="grid"></div>
+        <div class="target hidden" id="target" aria-hidden="true">
+          <canvas id="targetCanvas" aria-label="Cible CVI"></canvas>
+        </div>
+      </div>
+
+      <div class="response-buttons">
+        <button class="btn-none" data-response="0">Aucune</button>
+        <button class="btn-low" data-response="1">Faible</button>
+        <button class="btn-maybe" data-response="2">Possible</button>
+        <button class="btn-high" data-response="3">Bonne</button>
+        <button class="btn-clear" data-response="4">Claire</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="report-modal" id="reportModal" aria-hidden="true">
+    <section class="report-card" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+      <div class="report-header">
+        <h2 id="reportTitle">Résumé de session</h2>
+        <button id="closeReportBtn" class="report-close" type="button" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
+      </div>
+      <div id="summaryText"></div>
+      <div class="heatmap" id="heatmap"></div>
+    </section>
+  </div>
+
+  <script src="../../js/cviPngArray.js"></script>
+  <script>
+    const COLORS = ['#000','#fff','#E6194B','#3CB44B','#FFE119','#0082C8','#F58231','#911EB4','#46F0F0','#F032E6','#D2F53C','#FABEBE','#008080','#E6BEFF','#AA6E28','#800000','#FF6B6B','#FFD700','#6B8E23','#4B0082'];
+
+    const zoneLayoutEl = document.getElementById("zoneLayout");
+    const passesEl = document.getElementById("passes");
+    const categoryPickerEl = document.getElementById("categoryPicker");
+    const itemPickerEl = document.getElementById("itemPicker");
+    const colorGridEl = document.getElementById("colorGrid");
+    const startBtn = document.getElementById("startBtn");
+    const langToggleEl = document.getElementById("langToggle");
+    const progressText = document.getElementById("progressText");
+    const gridEl = document.getElementById("grid");
+    const targetEl = document.getElementById("target");
+    const targetCanvasEl = document.getElementById("targetCanvas");
+    const testZoneEl = document.getElementById("testZone");
+    const reportModalEl = document.getElementById("reportModal");
+    const closeReportBtn = document.getElementById("closeReportBtn");
+    const summaryText = document.getElementById("summaryText");
+    const heatmapEl = document.getElementById("heatmap");
+
+    const responseButtons = [...document.querySelectorAll("[data-response]")];
+    const allItems = Array.isArray(window.PNG_ARRAY) ? window.PNG_ARRAY : [];
+    const categories = [...new Set(allItems.map((item) => item.category))];
+
+    const SUPPORTED_LANGUAGES = ["fr", "en", "ja"];
+    const NEXT_LABEL = { fr: "EN", en: "日本語", ja: "FR" };
+    let currentLang = localStorage.getItem("language") || "fr";
+    if (!SUPPORTED_LANGUAGES.includes(currentLang)) currentLang = "fr";
+
+    const state = {
+      config: { layout: 9, passes: 2 },
+      zones: [],
+      queue: [],
+      trialIndex: 0,
+      running: false,
+      currentZoneId: null,
+      responses: {},
+      targetColor: COLORS[2],
+      targetImageLeft: ""
+    };
+
+    function getLayoutShape(layout) {
+      if (layout === 2) return { cols: 2, rows: 1 };
+      if (layout === 4) return { cols: 2, rows: 2 };
+      if (layout === 5) return { cols: 3, rows: 3 };
+      if (layout === 6) return { cols: 3, rows: 2 };
+      return { cols: 3, rows: 3 };
+    }
+
+    function createZones(layout) {
+      if (layout === 5) {
+        const positions = [
+          { row: 0, col: 0 },
+          { row: 0, col: 2 },
+          { row: 1, col: 1 },
+          { row: 2, col: 0 },
+          { row: 2, col: 2 }
+        ];
+        return positions.map((pos, idx) => ({ id: idx, row: pos.row, col: pos.col, name: `Zone ${idx + 1}` }));
+      }
+
+      const { cols, rows } = getLayoutShape(layout);
+      const zones = [];
+      let idx = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          zones.push({ id: idx, row: r, col: c, name: `Zone ${idx + 1}` });
+          idx++;
+        }
+      }
+      return zones;
+    }
+
+    function renderGrid() {
+      gridEl.innerHTML = "";
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      gridEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      if (state.config.layout === 5) {
+        const zoneByPos = new Map(state.zones.map((z) => [`${z.row}-${z.col}`, z]));
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const cell = document.createElement("div");
+            const zone = zoneByPos.get(`${r}-${c}`);
+            cell.className = zone ? "cell" : "cell cell-empty";
+            if (zone) {
+              cell.dataset.zoneId = String(zone.id);
+            }
+            gridEl.appendChild(cell);
+          }
+        }
+        return;
+      }
+
+      state.zones.forEach((zone) => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.zoneId = String(zone.id);
+
+        gridEl.appendChild(cell);
+      });
+    }
+
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function buildQueue() {
+      const base = [];
+      for (let p = 0; p < state.config.passes; p++) {
+        base.push(...state.zones.map((z) => z.id));
+      }
+      state.queue = shuffle(base);
+      state.trialIndex = 0;
+    }
+
+    function getTargetSize() {
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      const zoneWidth = testZoneEl.clientWidth / cols;
+      const zoneHeight = testZoneEl.clientHeight / rows;
+      const size = Math.floor(Math.min(zoneWidth, zoneHeight) * 0.74);
+      return Math.max(90, size);
+    }
+
+    function tintAndDraw(ctx, imagePath, tint, x, y, width, height) {
+      if (!imagePath) return;
+      const img = new Image();
+      img.onload = () => {
+        ctx.save();
+        ctx.drawImage(img, x, y, width, height);
+        ctx.globalCompositeOperation = "source-in";
+        ctx.fillStyle = tint;
+        ctx.fillRect(x, y, width, height);
+        ctx.restore();
+      };
+      img.src = imagePath;
+    }
+
+    function renderTargetCanvas() {
+      const cssSize = getTargetSize();
+      targetEl.style.width = `${cssSize}px`;
+      targetEl.style.height = `${cssSize}px`;
+
+      const dpr = window.devicePixelRatio || 1;
+      const pxSize = Math.max(1, Math.floor(cssSize * dpr));
+      targetCanvasEl.width = pxSize;
+      targetCanvasEl.height = pxSize;
+
+      const ctx = targetCanvasEl.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, pxSize, pxSize);
+
+      if (!state.targetImageLeft) return;
+      tintAndDraw(ctx, state.targetImageLeft, state.targetColor, 0, 0, pxSize, pxSize);
+    }
+
+    function setActiveZone(zoneId) {
+      state.currentZoneId = zoneId;
+      document.querySelectorAll(".cell").forEach((cell) => {
+        cell.classList.toggle("active", Number(cell.dataset.zoneId) === zoneId);
+      });
+
+      const zone = state.zones.find((z) => z.id === zoneId);
+      if (!zone) {
+        targetEl.classList.add("hidden");
+        return;
+      }
+
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      const zoneWidth = testZoneEl.clientWidth / cols;
+      const zoneHeight = testZoneEl.clientHeight / rows;
+      const centerX = zone.col * zoneWidth + zoneWidth / 2;
+      const centerY = zone.row * zoneHeight + zoneHeight / 2;
+
+      targetEl.style.left = `${centerX}px`;
+      targetEl.style.top = `${centerY}px`;
+      renderTargetCanvas();
+      targetEl.classList.remove("hidden");
+    }
+
+    function updateProgress() {
+      if (!state.running) {
+        progressText.textContent = "";
+        return;
+      }
+      const total = state.queue.length;
+      const current = state.trialIndex + 1;
+      progressText.textContent = `Essai ${current}/${total} — ${state.zones.find(z => z.id === state.currentZoneId)?.name || ""}`;
+    }
+
+    function t(fr, en, ja = en) {
+      if (currentLang === "fr") return fr;
+      if (currentLang === "ja") return ja;
+      return en;
+    }
+
+    function applyTranslations() {
+      document.documentElement.lang = currentLang;
+      const pick = (el) => el.getAttribute(`data-${currentLang}`) || el.getAttribute("data-en") || el.getAttribute("data-fr") || "";
+
+      document.querySelectorAll("[data-fr], [data-en], [data-ja]").forEach((el) => {
+        const value = pick(el);
+        if (value) el.textContent = value;
+      });
+
+      const btn = langToggleEl;
+      if (btn) btn.textContent = NEXT_LABEL[currentLang] || "EN";
+    }
+
+    function startSession() {
+      state.config.layout = Number(zoneLayoutEl.value);
+      state.config.passes = Math.max(1, Math.min(10, Number(passesEl.value) || 1));
+      applyTranslations();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      passesEl.value = state.config.passes;
+
+      reportModalEl.classList.remove("open");
+      reportModalEl.setAttribute("aria-hidden", "true");
+
+      state.zones = createZones(state.config.layout);
+      state.responses = Object.fromEntries(state.zones.map((z) => [z.id, []]));
+      renderGrid();
+      buildQueue();
+      renderTargetCanvas();
+      enterSessionMode();
+      state.running = true;
+      goToTrial(0);
+    }
+
+    async function enterFullscreen() {
+      if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        // Continue without fullscreen if blocked by browser policy.
+      }
+    }
+
+    async function exitFullscreen() {
+      if (!document.fullscreenElement || !document.exitFullscreen) return;
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // Ignore fullscreen exit errors.
+      }
+    }
+
+    function enterSessionMode() {
+      document.body.classList.add("running");
+      enterFullscreen();
+    }
+
+    function exitSessionMode() {
+      document.body.classList.remove("running");
+      exitFullscreen();
+    }
+
+    function goToTrial(index) {
+      if (index >= state.queue.length) {
+        finishSession();
+        return;
+      }
+      state.trialIndex = index;
+      const zoneId = state.queue[index];
+      setActiveZone(zoneId);
+      updateProgress();
+    }
+
+    function recordResponse(value) {
+      if (!state.running || state.currentZoneId === null) return;
+      state.responses[state.currentZoneId].push(value);
+      goToTrial(state.trialIndex + 1);
+    }
+
+    function scoreZone(zoneId) {
+      const values = state.responses[zoneId] || [];
+      if (!values.length) return 0;
+      const raw = values.reduce((sum, item) => sum + item, 0);
+      return raw / (values.length * 4);
+    }
+
+    function getColorForScore(score) {
+      const hue = Math.round(score * 120);
+      return `hsl(${hue}, 75%, 40%)`;
+    }
+
+    function finishSession() {
+      state.running = false;
+      targetEl.classList.add("hidden");
+      setActiveZone(-1);
+      exitSessionMode();
+      updateProgress();
+      renderSummary();
+    }
+
+    function getInterpretiveAnalysis(scoresByZone) {
+      const { cols, rows } = getLayoutShape(state.config.layout);
+
+      const topZones = state.zones.filter((z) => z.row < rows / 2).map((z) => z.id);
+      const bottomZones = state.zones.filter((z) => z.row >= rows / 2).map((z) => z.id);
+      const leftZones = state.zones.filter((z) => z.col < cols / 2).map((z) => z.id);
+      const rightZones = state.zones.filter((z) => z.col >= cols / 2).map((z) => z.id);
+
+      const midRow = Math.floor(rows / 2);
+      const midCol = Math.floor(cols / 2);
+      const middleZones = state.zones
+        .filter((z) => z.row === midRow || z.col === midCol)
+        .map((z) => z.id);
+      const edgeZones = state.zones
+        .filter((z) => !(z.row === midRow || z.col === midCol))
+        .map((z) => z.id);
+
+      const avg = (ids) => {
+        if (!ids.length) return null;
+        const vals = ids.map((id) => scoresByZone[id]).filter((v) => Number.isFinite(v));
+        if (!vals.length) return null;
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+      };
+
+      const topAvg = avg(topZones);
+      const bottomAvg = avg(bottomZones);
+      const leftAvg = avg(leftZones);
+      const rightAvg = avg(rightZones);
+      const middleAvg = avg(middleZones);
+      const edgeAvg = avg(edgeZones);
+
+      const pickDominance = (a, b, aLabel, bLabel) => {
+        if (a === null || b === null) return t("indéterminée","undetermined","未判定");
+        const delta = a - b;
+        if (Math.abs(delta) < 0.08) return t("équilibrée","balanced","均衡");
+        return delta > 0 ? aLabel : bLabel;
+      };
+
+      return {
+        vertical: pickDominance(topAvg, bottomAvg, t("plutôt HAUT","mostly TOP","上優位"), t("plutôt BAS","mostly BOTTOM","下優位")),
+        horizontal: pickDominance(leftAvg, rightAvg, t("plutôt GAUCHE","mostly LEFT","左優位"), t("plutôt DROITE","mostly RIGHT","右優位")),
+        center: pickDominance(middleAvg, edgeAvg, t("plutôt MILIEU","mostly CENTER","中央優位"), t("plutôt PÉRIPHÉRIE","mostly PERIPHERY","周辺優位"))
+      };
+    }
+
+    function renderSummary() {
+      heatmapEl.innerHTML = "";
+      const { cols, rows } = getLayoutShape(state.config.layout);
+      heatmapEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      heatmapEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+      let bestScore = -1;
+      const bestZones = [];
+      const scoresByZone = {};
+
+      if (state.config.layout === 5) {
+        const zoneByPos = new Map(state.zones.map((z) => [`${z.row}-${z.col}`, z]));
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const zone = zoneByPos.get(`${r}-${c}`);
+            const cell = document.createElement("div");
+            cell.className = "heat-cell";
+            if (!zone) {
+              cell.style.background = "#121a2b";
+              cell.textContent = "";
+              heatmapEl.appendChild(cell);
+              continue;
+            }
+
+            const values = state.responses[zone.id] || [];
+            const score = scoreZone(zone.id);
+            const percent = Math.round(score * 100);
+            scoresByZone[zone.id] = score;
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestZones.length = 0;
+              bestZones.push(zone.name);
+            } else if (score === bestScore) {
+              bestZones.push(zone.name);
+            }
+
+            cell.style.background = getColorForScore(score);
+            cell.innerHTML = `${zone.name}<br>${percent}%`;
+            heatmapEl.appendChild(cell);
+          }
+        }
+      } else {
+        state.zones.forEach((zone) => {
+          const values = state.responses[zone.id] || [];
+          const score = scoreZone(zone.id);
+          const percent = Math.round(score * 100);
+          scoresByZone[zone.id] = score;
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestZones.length = 0;
+            bestZones.push(zone.name);
+          } else if (score === bestScore) {
+            bestZones.push(zone.name);
+          }
+
+          const cell = document.createElement("div");
+          cell.className = "heat-cell";
+          cell.style.background = getColorForScore(score);
+          cell.innerHTML = `${zone.name}<br>${percent}%`;
+          heatmapEl.appendChild(cell);
+
+        });
+      }
+
+      const interpretation = getInterpretiveAnalysis(scoresByZone);
+      summaryText.innerHTML = `
+        <div><strong>${t("Lecture interprétative:","Interpretive reading:","解釈サマリー:")}</strong></div>
+        <div>${t("Orientation verticale","Vertical orientation","上下方向")}: <strong>${interpretation.vertical}</strong></div>
+        <div>${t("Orientation horizontale","Horizontal orientation","左右方向")}: <strong>${interpretation.horizontal}</strong></div>
+        <div>${t("Tendance centrale","Central tendency","中央傾向")}: <strong>${interpretation.center}</strong></div>
+      `;
+
+      reportModalEl.classList.add("open");
+      reportModalEl.setAttribute("aria-hidden", "false");
+    }
+
+    function populateCategoryPicker(selectEl) {
+      selectEl.innerHTML = "";
+      categories.forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        selectEl.appendChild(option);
+      });
+      if (categories.length) selectEl.selectedIndex = 0;
+    }
+
+    function populateItemPicker(categoryValue, itemSelectEl) {
+      const items = allItems.filter((item) => item.category === categoryValue);
+      itemSelectEl.innerHTML = "";
+      items.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.file;
+        option.textContent = item.name.replace(/^cvi/i, "");
+        itemSelectEl.appendChild(option);
+      });
+      if (items.length) itemSelectEl.selectedIndex = 0;
+    }
+
+    function resolveSelectedItem(categorySelectEl, itemSelectEl) {
+      const category = categorySelectEl.value;
+      const items = allItems.filter((item) => item.category === category);
+      if (!items.length) return "../../images/cvipng/cvistar.png";
+      const selected = itemSelectEl.value;
+      return selected || items[0].file;
+    }
+
+    function renderColorGrid() {
+      colorGridEl.innerHTML = "";
+      COLORS.forEach((color) => {
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "color-tile";
+        tile.style.backgroundColor = color;
+        tile.dataset.color = color;
+        tile.addEventListener("click", () => {
+          state.targetColor = color;
+          [...colorGridEl.children].forEach((el) => el.classList.remove("active"));
+          tile.classList.add("active");
+          renderTargetCanvas();
+        });
+        colorGridEl.appendChild(tile);
+      });
+      const defaultTile = colorGridEl.querySelector(`[data-color="${state.targetColor}"]`) || colorGridEl.firstElementChild;
+      if (defaultTile) defaultTile.classList.add("active");
+    }
+
+    startBtn.addEventListener("click", startSession);
+
+    responseButtons.forEach((btn) => {
+      btn.addEventListener("click", () => recordResponse(Number(btn.dataset.response)));
+    });
+
+    zoneLayoutEl.addEventListener("change", () => {
+      state.config.layout = Number(zoneLayoutEl.value);
+      state.zones = createZones(state.config.layout);
+      renderGrid();
+      renderTargetCanvas();
+      setActiveZone(-1);
+    });
+
+    categoryPickerEl.addEventListener("change", () => {
+      populateItemPicker(categoryPickerEl.value, itemPickerEl);
+      applyTranslations();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      renderTargetCanvas();
+    });
+
+    itemPickerEl.addEventListener("change", () => {
+      applyTranslations();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      renderTargetCanvas();
+    });
+
+    window.addEventListener("resize", () => {
+      renderTargetCanvas();
+      if (state.currentZoneId !== null && state.currentZoneId >= 0) {
+        setActiveZone(state.currentZoneId);
+      }
+    });
+
+    langToggleEl.addEventListener("click", () => {
+      const idx = SUPPORTED_LANGUAGES.indexOf(currentLang);
+      currentLang = SUPPORTED_LANGUAGES[(idx + 1) % SUPPORTED_LANGUAGES.length];
+      localStorage.setItem("language", currentLang);
+      applyTranslations();
+      if (!state.running) updateProgress();
+    });
+
+    closeReportBtn.addEventListener("click", () => {
+      reportModalEl.classList.remove("open");
+      reportModalEl.setAttribute("aria-hidden", "true");
+    });
+
+    reportModalEl.addEventListener("click", (event) => {
+      if (event.target === reportModalEl) {
+        reportModalEl.classList.remove("open");
+        reportModalEl.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    populateCategoryPicker(categoryPickerEl);
+    populateItemPicker(categoryPickerEl.value, itemPickerEl);
+    renderColorGrid();
+
+    applyTranslations();
+
+    state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+    state.zones = createZones(Number(zoneLayoutEl.value));
+    renderGrid();
+    renderTargetCanvas();
+  </script>
+</body>
+</html>
