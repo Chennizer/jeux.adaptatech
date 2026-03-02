@@ -85,19 +85,6 @@
       margin-bottom: 0.1rem;
     }
 
-    .toggle-line {
-      display: flex;
-      align-items: center;
-      gap: 0.55rem;
-      margin: 0.35rem 0 0.55rem;
-      color: var(--muted);
-      font-weight: 600;
-    }
-
-    .toggle-line input { width: auto; transform: scale(1.1); }
-
-    .dual-pickers { display: none; }
-    .dual-pickers.enabled { display: block; }
 
     .color-grid {
       display: grid;
@@ -310,6 +297,7 @@
 
       <label for="zoneLayout">Disposition des zones</label>
       <select id="zoneLayout">
+        <option value="2">2 zones (2 x 1, côte à côte)</option>
         <option value="4">4 zones (2 x 2)</option>
         <option value="6">6 zones (3 x 2)</option>
         <option value="9" selected>9 zones (3 x 3)</option>
@@ -322,19 +310,6 @@
       <div class="picker-row">
         <select id="categoryPicker" class="scroll-pick" size="6"></select>
         <select id="itemPicker" class="scroll-pick" size="6"></select>
-      </div>
-
-      <label class="toggle-line" for="dualModeToggle">
-        <input type="checkbox" id="dualModeToggle" />
-        Mode 2 images (gauche + droite)
-      </label>
-
-      <div id="dualPickers" class="dual-pickers">
-        <label>Image secondaire (catégorie + item)</label>
-        <div class="picker-row">
-          <select id="categoryPicker2" class="scroll-pick" size="6"></select>
-          <select id="itemPicker2" class="scroll-pick" size="6"></select>
-        </div>
       </div>
 
       <label>Couleur cible (grille)</label>
@@ -382,10 +357,6 @@
     const passesEl = document.getElementById("passes");
     const categoryPickerEl = document.getElementById("categoryPicker");
     const itemPickerEl = document.getElementById("itemPicker");
-    const dualModeToggleEl = document.getElementById("dualModeToggle");
-    const dualPickersEl = document.getElementById("dualPickers");
-    const categoryPicker2El = document.getElementById("categoryPicker2");
-    const itemPicker2El = document.getElementById("itemPicker2");
     const colorGridEl = document.getElementById("colorGrid");
     const startBtn = document.getElementById("startBtn");
     const progressText = document.getElementById("progressText");
@@ -411,13 +382,12 @@
       running: false,
       currentZoneId: null,
       responses: {},
-      dualMode: false,
       targetColor: COLORS[2],
-      targetImageLeft: "",
-      targetImageRight: ""
+      targetImageLeft: ""
     };
 
     function getLayoutShape(layout) {
+      if (layout === 2) return { cols: 2, rows: 1 };
       if (layout === 4) return { cols: 2, rows: 2 };
       if (layout === 6) return { cols: 3, rows: 2 };
       return { cols: 3, rows: 3 };
@@ -511,16 +481,7 @@
       ctx.clearRect(0, 0, pxSize, pxSize);
 
       if (!state.targetImageLeft) return;
-
-      if (!state.dualMode || !state.targetImageRight) {
-        tintAndDraw(ctx, state.targetImageLeft, state.targetColor, 0, 0, pxSize, pxSize);
-        return;
-      }
-
-      const gap = Math.floor(pxSize * 0.04);
-      const itemW = Math.floor((pxSize - gap) / 2);
-      tintAndDraw(ctx, state.targetImageLeft, state.targetColor, 0, 0, itemW, pxSize);
-      tintAndDraw(ctx, state.targetImageRight, state.targetColor, itemW + gap, 0, itemW, pxSize);
+      tintAndDraw(ctx, state.targetImageLeft, state.targetColor, 0, 0, pxSize, pxSize);
     }
 
     function setActiveZone(zoneId) {
@@ -560,9 +521,7 @@
     function startSession() {
       state.config.layout = Number(zoneLayoutEl.value);
       state.config.passes = Math.max(1, Math.min(10, Number(passesEl.value) || 1));
-      state.dualMode = dualModeToggleEl.checked;
       state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
-      state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
       passesEl.value = state.config.passes;
 
       reportModalEl.classList.remove("open");
@@ -683,7 +642,7 @@
       recommendationEl.innerHTML = `
         <h3>Recommandation</h3>
         <p><strong>Champ(s) préféré(s):</strong> ${bestZones.join(", ") || "indéterminé"}.</p>
-        <p>Mode: <strong>${state.dualMode ? "2 images (gauche + droite)" : "1 image"}</strong> · Couleur: <strong>${state.targetColor}</strong>.</p>
+        <p>Couleur: <strong>${state.targetColor}</strong>.</p>
       `;
 
       reportModalEl.classList.add("open");
@@ -756,12 +715,6 @@
       setActiveZone(-1);
     });
 
-    dualModeToggleEl.addEventListener("change", () => {
-      state.dualMode = dualModeToggleEl.checked;
-      dualPickersEl.classList.toggle("enabled", state.dualMode);
-      renderTargetCanvas();
-    });
-
     categoryPickerEl.addEventListener("change", () => {
       populateItemPicker(categoryPickerEl.value, itemPickerEl);
       state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
@@ -770,17 +723,6 @@
 
     itemPickerEl.addEventListener("change", () => {
       state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
-      renderTargetCanvas();
-    });
-
-    categoryPicker2El.addEventListener("change", () => {
-      populateItemPicker(categoryPicker2El.value, itemPicker2El);
-      state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
-      renderTargetCanvas();
-    });
-
-    itemPicker2El.addEventListener("change", () => {
-      state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
       renderTargetCanvas();
     });
 
@@ -804,13 +746,10 @@
     });
 
     populateCategoryPicker(categoryPickerEl);
-    populateCategoryPicker(categoryPicker2El);
     populateItemPicker(categoryPickerEl.value, itemPickerEl);
-    populateItemPicker(categoryPicker2El.value, itemPicker2El);
     renderColorGrid();
 
     state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
-    state.targetImageRight = resolveSelectedItem(categoryPicker2El, itemPicker2El);
     state.zones = createZones(Number(zoneLayoutEl.value));
     renderGrid();
     renderTargetCanvas();
