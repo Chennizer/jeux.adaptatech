@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Territory Capture Duel (Eye Gaze • 2 devices • Ably sync)</title>
+
+  <!-- Ably Realtime CDN -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+
+  <style>
+    :root{
+      --bg0:#07140b;
+      --bg1:#0b2211;
+      --card: rgba(255,255,255,.06);
+      --stroke: rgba(255,255,255,.12);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.72);
+      --shadow: 0 18px 50px rgba(0,0,0,.45);
+
+      --a:#45d37a;   /* Player A (green) */
+      --b:#5aa7ff;   /* Player B (blue) */
+      --n:#ffffff14; /* Neutral */
+      --win:#ffd86a;
+      --danger:#ff6b6b;
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; margin:0; background: radial-gradient(1200px 700px at 30% 0%, #113b1c, var(--bg0)); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body{ display:flex; align-items:stretch; justify-content:center; padding:18px; }
+
+    .app{
+      width:min(1200px, 100%);
+      display:grid;
+      grid-template-columns: 380px 1fr;
+      gap:16px;
+    }
+
+    .panel, .boardWrap{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+
+    .panel{
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+
+    .brand{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border-radius:14px;
+      background: rgba(0,0,0,.18);
+      border:1px solid var(--stroke);
+    }
+    .logo{
+      width:44px; height:44px; border-radius:12px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), rgba(255,255,255,0) 50%),
+        linear-gradient(135deg, var(--a), var(--b));
+      box-shadow: 0 10px 25px rgba(0,0,0,.35);
+      flex:0 0 auto;
+    }
+    .brand h1{
+      font-size:16px; margin:0;
+      letter-spacing:.2px;
+      line-height:1.2;
+    }
+    .brand p{ margin:2px 0 0; font-size:12px; color:var(--muted); }
+
+    .card{
+      background: rgba(0,0,0,.18);
+      border:1px solid var(--stroke);
+      border-radius:14px;
+      padding:12px;
+    }
+
+    label{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+    input[type="text"], input[type="password"], select{
+      width:100%;
+      padding:11px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.25);
+      color: var(--text);
+      outline:none;
+      font-size:14px;
+    }
+
+    .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .row3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
+
+    .btnRow{ display:flex; gap:10px; flex-wrap:wrap; }
+    button{
+      border:0;
+      padding:12px 14px;
+      border-radius:14px;
+      background: rgba(255,255,255,.10);
+      color: var(--text);
+      cursor:pointer;
+      font-size:14px;
+      font-weight:650;
+      letter-spacing:.2px;
+      border:1px solid rgba(255,255,255,.14);
+      transition: transform .08s ease, background .12s ease, border-color .12s ease;
+    }
+    button:hover{ background: rgba(255,255,255,.13); }
+    button:active{ transform: translateY(1px) scale(.99); }
+    button.primary{
+      background: linear-gradient(135deg, rgba(69,211,122,.95), rgba(90,167,255,.85));
+      border-color: rgba(255,255,255,.18);
+      color:#07210f;
+    }
+    button.danger{
+      background: linear-gradient(135deg, rgba(255,107,107,.95), rgba(255,216,106,.75));
+      border-color: rgba(255,255,255,.18);
+      color:#2a0b0b;
+    }
+    button:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+      filter:saturate(.7);
+    }
+
+    .status{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      background: rgba(0,0,0,.18);
+      border:1px solid var(--stroke);
+      font-size:12px;
+      color:var(--muted);
+    }
+    .dot{
+      width:10px; height:10px; border-radius:999px;
+      background: rgba(255,255,255,.25);
+      box-shadow: 0 0 0 4px rgba(255,255,255,.06);
+      flex:0 0 auto;
+    }
+    .dot.ok{ background: var(--a); box-shadow: 0 0 0 4px rgba(69,211,122,.18); }
+    .dot.warn{ background: var(--win); box-shadow: 0 0 0 4px rgba(255,216,106,.16); }
+    .dot.bad{ background: var(--danger); box-shadow: 0 0 0 4px rgba(255,107,107,.16); }
+
+    .mini{
+      font-size:12px; color:var(--muted);
+      line-height:1.45;
+    }
+    .mini code{
+      background: rgba(0,0,0,.25);
+      border:1px solid rgba(255,255,255,.14);
+      padding:2px 6px;
+      border-radius:8px;
+      color: rgba(255,255,255,.85);
+    }
+
+    /* Board */
+    .boardWrap{
+      display:flex;
+      flex-direction:column;
+      padding:14px;
+      gap:12px;
+      min-height: 620px;
+    }
+
+    .topHUD{
+      display:grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap:12px;
+      align-items:center;
+    }
+
+    .playerHUD{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid var(--stroke);
+      background: rgba(0,0,0,.18);
+    }
+    .playerName{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      font-weight:750;
+      letter-spacing:.2px;
+    }
+    .pill{
+      font-size:12px;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: var(--muted);
+      white-space:nowrap;
+    }
+
+    .bar{
+      height:16px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      overflow:hidden;
+      position:relative;
+    }
+    .bar > .fill{
+      height:100%;
+      width:0%;
+      border-radius:999px;
+      transition: width .18s ease;
+    }
+    .barA .fill{ background: linear-gradient(90deg, rgba(69,211,122,.95), rgba(69,211,122,.45)); }
+    .barB .fill{ background: linear-gradient(90deg, rgba(90,167,255,.95), rgba(90,167,255,.45)); }
+
+    .centerHUD{
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+      padding:10px 14px;
+      border-radius:16px;
+      border:1px solid var(--stroke);
+      background: rgba(0,0,0,.18);
+      min-width: 220px;
+    }
+    .timer{
+      font-size:28px;
+      font-weight:900;
+      letter-spacing:.8px;
+    }
+    .roundState{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .grid{
+      flex:1 1 auto;
+      display:grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap:12px;
+      padding:8px;
+    }
+
+    .tile{
+      position:relative;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      min-height: 110px;
+      overflow:hidden;
+      box-shadow: 0 10px 22px rgba(0,0,0,.25);
+      user-select:none;
+      touch-action:none;
+      outline:none;
+    }
+
+    .tile .shine{
+      position:absolute; inset:-40% -30%;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.18), rgba(255,255,255,0) 55%);
+      transform: rotate(12deg);
+      pointer-events:none;
+    }
+
+    .tile.neutral{ background: rgba(255,255,255,.06); }
+    .tile.a{ background: linear-gradient(160deg, rgba(69,211,122,.30), rgba(0,0,0,.18)); border-color: rgba(69,211,122,.45); }
+    .tile.b{ background: linear-gradient(160deg, rgba(90,167,255,.30), rgba(0,0,0,.18)); border-color: rgba(90,167,255,.45); }
+
+    .tile .badge{
+      position:absolute; left:10px; top:10px;
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.22);
+      color: rgba(255,255,255,.82);
+      letter-spacing:.2px;
+    }
+
+    /* dwell ring */
+    .ring{
+      position:absolute;
+      right:10px; bottom:10px;
+      width:46px; height:46px;
+      border-radius:999px;
+      border:2px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.22);
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+      pointer-events:none;
+    }
+    .ring .fill{
+      width:100%; height:100%;
+      transform-origin:center;
+      transform: scaleY(0);
+      background: linear-gradient(180deg, rgba(255,255,255,.0), rgba(255,255,255,.28));
+      transition: transform .04s linear;
+    }
+    .ring .dot{
+      position:absolute;
+      width:10px; height:10px; border-radius:999px;
+      background: rgba(255,255,255,.45);
+      box-shadow: none;
+    }
+
+    .overlay{
+      position:fixed; inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(10px);
+      padding:18px;
+    }
+    .overlay.show{ display:flex; }
+    .modal{
+      width:min(560px, 100%);
+      border-radius:22px;
+      border:1px solid rgba(255,255,255,.18);
+      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+      box-shadow: 0 28px 70px rgba(0,0,0,.55);
+      padding:18px;
+    }
+    .modal h2{ margin:0 0 6px; font-size:22px; }
+    .modal p{ margin:0 0 14px; color:var(--muted); line-height:1.45; }
+    .modal .big{
+      font-size:32px;
+      font-weight:950;
+      letter-spacing:.6px;
+      margin:10px 0 14px;
+    }
+
+    @media (max-width: 980px){
+      .app{ grid-template-columns: 1fr; }
+      .grid{ grid-template-columns: repeat(4, 1fr); }
+      .tile{ min-height: 100px; }
+    }
+    @media (max-width: 560px){
+      body{ padding:10px; }
+      .grid{ grid-template-columns: repeat(3, 1fr); gap:10px; }
+      .tile{ min-height: 92px; }
+      .timer{ font-size:24px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <!-- LEFT: setup / controls -->
+    <aside class="panel">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>Territory Capture Duel</h1>
+          <p>Two devices • Eye-gaze dwell • Ably event sync</p>
+        </div>
+      </div>
+
+      <div class="status" id="netStatus">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="dot" id="netDot"></span>
+          <span id="netText">Not connected</span>
+        </div>
+        <span id="netRoom" class="pill">room: —</span>
+      </div>
+
+      <div class="card">
+        <label for="apiKey">Ably API key (or token)</label>
+        <input id="apiKey" type="password" placeholder="Paste Ably key here (kept locally in this browser)" />
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label for="room">Room code</label>
+            <input id="room" type="text" placeholder="e.g., pmlD-01" value="pmlD-01" />
+          </div>
+          <div>
+            <label for="player">Player</label>
+            <select id="player">
+              <option value="A">Player A (green)</option>
+              <option value="B">Player B (blue)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="btnRow" style="margin-top:10px;">
+          <button id="connectBtn" class="primary">Connect</button>
+          <button id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+
+        <div class="mini" style="margin-top:10px;">
+          Network messages are <em>events only</em> (tile captures + round start/end). No gaze data is sent.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div>
+            <label for="dwellMs">Dwell time (ms)</label>
+            <input id="dwellMs" type="text" inputmode="numeric" value="900" />
+          </div>
+          <div>
+            <label for="roundSec">Round length (sec)</label>
+            <input id="roundSec" type="text" inputmode="numeric" value="45" />
+          </div>
+        </div>
+
+        <div class="btnRow" style="margin-top:10px;">
+          <button id="startBtn" class="primary" disabled>Start round</button>
+          <button id="resetBtn" class="danger" disabled>Reset board</button>
+        </div>
+
+        <div class="mini" style="margin-top:10px;">
+          Tip: pick a “host” (often Player A) to press <code>Start round</code> / <code>Reset</code>.
+          Others will mirror automatically.
+        </div>
+      </div>
+
+      <div class="card mini">
+        <div><strong>Ably key placement</strong></div>
+        <div style="margin-top:6px;">
+          You can paste it above at runtime, or hardcode it in JS at <code>ABLY_KEY_HERE</code>.
+        </div>
+      </div>
+    </aside>
+
+    <!-- RIGHT: game -->
+    <main class="boardWrap">
+      <div class="topHUD">
+        <section class="playerHUD" aria-label="Player A status">
+          <div class="playerName">
+            <span>Player A</span>
+            <span class="pill" id="scoreA">0</span>
+          </div>
+          <div class="bar barA"><div class="fill" id="barA"></div></div>
+        </section>
+
+        <section class="centerHUD" aria-label="Round status">
+          <div class="timer" id="timer">—</div>
+          <div class="roundState" id="roundState">Not started</div>
+        </section>
+
+        <section class="playerHUD" aria-label="Player B status">
+          <div class="playerName">
+            <span>Player B</span>
+            <span class="pill" id="scoreB">0</span>
+          </div>
+          <div class="bar barB"><div class="fill" id="barB"></div></div>
+        </section>
+      </div>
+
+      <div class="grid" id="grid" aria-label="Territory tiles"></div>
+    </main>
+  </div>
+
+  <div class="overlay" id="overlay" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h2 id="modalTitle">Round over</h2>
+      <p id="modalSub">—</p>
+      <div class="big" id="modalBig">—</div>
+      <div class="btnRow">
+        <button id="closeModalBtn" class="primary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /*****************************************************************
+     * Territory Capture Duel
+     * - 6x4 tiles (24 tiles)
+     * - Each tile can be captured once (first capture wins)
+     * - Captures are synced via Ably
+     * - Round start/end is synced via Ably
+     *
+     * Eye-gaze dwell:
+     * - Hover a tile for dwellMs => capture
+     *****************************************************************/
+
+    // ==== CONFIG ===================================================
+    const GRID_COLS = 6;
+    const GRID_ROWS = 4;
+    const TILE_COUNT = GRID_COLS * GRID_ROWS;
+
+    // If you want to hardcode your key instead of pasting in UI:
+    const ABLY_KEY_HERE = ""; // <-- optional. Leave blank to use UI.
+    // ===============================================================
+
+    // ==== UI refs ==================================================
+    const el = (id) => document.getElementById(id);
+
+    const apiKeyEl = el("apiKey");
+    const roomEl = el("room");
+    const playerEl = el("player");
+    const connectBtn = el("connectBtn");
+    const disconnectBtn = el("disconnectBtn");
+    const startBtn = el("startBtn");
+    const resetBtn = el("resetBtn");
+    const dwellMsEl = el("dwellMs");
+    const roundSecEl = el("roundSec");
+
+    const netDot = el("netDot");
+    const netText = el("netText");
+    const netRoom = el("netRoom");
+
+    const gridEl = el("grid");
+    const scoreAEl = el("scoreA");
+    const scoreBEl = el("scoreB");
+    const barAEl = el("barA");
+    const barBEl = el("barB");
+    const timerEl = el("timer");
+    const roundStateEl = el("roundState");
+
+    const overlayEl = el("overlay");
+    const modalTitleEl = el("modalTitle");
+    const modalSubEl = el("modalSub");
+    const modalBigEl = el("modalBig");
+    const closeModalBtn = el("closeModalBtn");
+    // ===============================================================
+
+    // ==== GAME STATE ==============================================
+    // owner: "A" | "B" | null
+    let tiles = Array.from({length: TILE_COUNT}, () => ({ owner: null }));
+    let roundActive = false;
+    let roundEndsAt = 0;
+    let timerTick = null;
+
+    // Ably
+    let ably = null;
+    let channel = null;
+    let connected = false;
+
+    // Dwell
+    let dwellMs = 900;
+    // ===============================================================
+
+    // ==== UTIL =====================================================
+    function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+    function nowMs(){ return Date.now(); }
+
+    function safeInt(v, fallback){
+      const n = parseInt(String(v).trim(), 10);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function setNet(status, msg){
+      netText.textContent = msg;
+      netDot.classList.remove("ok","warn","bad");
+      if(status === "ok") netDot.classList.add("ok");
+      else if(status === "warn") netDot.classList.add("warn");
+      else if(status === "bad") netDot.classList.add("bad");
+    }
+
+    function showModal(title, sub, big){
+      modalTitleEl.textContent = title;
+      modalSubEl.textContent = sub;
+      modalBigEl.textContent = big;
+      overlayEl.classList.add("show");
+    }
+    function hideModal(){ overlayEl.classList.remove("show"); }
+
+    closeModalBtn.addEventListener("click", hideModal);
+    overlayEl.addEventListener("click", (e)=>{ if(e.target === overlayEl) hideModal(); });
+
+    function computeScores(){
+      let a=0,b=0;
+      for(const t of tiles){
+        if(t.owner === "A") a++;
+        else if(t.owner === "B") b++;
+      }
+      return {a,b,total:TILE_COUNT};
+    }
+
+    function renderHUD(){
+      const {a,b,total} = computeScores();
+      scoreAEl.textContent = a;
+      scoreBEl.textContent = b;
+
+      const aPct = total ? (a/total)*100 : 0;
+      const bPct = total ? (b/total)*100 : 0;
+      barAEl.style.width = `${aPct}%`;
+      barBEl.style.width = `${bPct}%`;
+    }
+
+    function renderTile(i){
+      const tile = gridEl.querySelector(`[data-i="${i}"]`);
+      if(!tile) return;
+
+      const owner = tiles[i].owner;
+      tile.classList.remove("neutral","a","b");
+      tile.classList.add(owner === "A" ? "a" : owner === "B" ? "b" : "neutral");
+
+      const badge = tile.querySelector(".badge");
+      badge.textContent = owner ? `Captured: ${owner}` : `Neutral`;
+    }
+
+    function renderAll(){
+      renderHUD();
+      for(let i=0;i<TILE_COUNT;i++) renderTile(i);
+    }
+
+    function setRoundUI(){
+      if(!roundActive){
+        timerEl.textContent = "—";
+        roundStateEl.textContent = "Not started";
+        return;
+      }
+      roundStateEl.textContent = "Round active";
+    }
+
+    function updateTimer(){
+      if(!roundActive) return;
+      const remaining = Math.max(0, roundEndsAt - nowMs());
+      const s = Math.ceil(remaining / 1000);
+      timerEl.textContent = `${s}s`;
+      if(remaining <= 0){
+        endRoundLocal(); // local end; will also broadcast if host clicked start (we still broadcast end once)
+      }
+    }
+
+    function startTimerLoop(){
+      stopTimerLoop();
+      timerTick = setInterval(updateTimer, 150);
+      updateTimer();
+    }
+
+    function stopTimerLoop(){
+      if(timerTick){
+        clearInterval(timerTick);
+        timerTick = null;
+      }
+    }
+
+    // ==== GRID BUILD ===============================================
+    function buildGrid(){
+      gridEl.innerHTML = "";
+      for(let i=0;i<TILE_COUNT;i++){
+        const tile = document.createElement("div");
+        tile.className = "tile neutral";
+        tile.tabIndex = 0;
+        tile.dataset.i = String(i);
+
+        const badge = document.createElement("div");
+        badge.className = "badge";
+        badge.textContent = "Neutral";
+
+        const shine = document.createElement("div");
+        shine.className = "shine";
+
+        const ring = document.createElement("div");
+        ring.className = "ring";
+        ring.innerHTML = `<div class="fill"></div><div class="dot"></div>`;
+
+        tile.appendChild(badge);
+        tile.appendChild(shine);
+        tile.appendChild(ring);
+
+        setupDwellHandlers(tile, i);
+
+        gridEl.appendChild(tile);
+      }
+    }
+
+    // ==== DWELL HANDLING ===========================================
+    function setupDwellHandlers(tileEl, tileIndex){
+      let dwellStart = 0;
+      let dwellRAF = null;
+      let dwellArmed = false;
+
+      const ringFill = tileEl.querySelector(".ring .fill");
+
+      const clearDwell = ()=>{
+        dwellStart = 0;
+        dwellArmed = false;
+        if(dwellRAF) cancelAnimationFrame(dwellRAF);
+        dwellRAF = null;
+        ringFill.style.transform = "scaleY(0)";
+      };
+
+      const tick = ()=>{
+        if(!dwellArmed) return;
+        const t = nowMs();
+        const dt = t - dwellStart;
+        const p = clamp(dt / dwellMs, 0, 1);
+        ringFill.style.transform = `scaleY(${p})`;
+        if(p >= 1){
+          clearDwell();
+          attemptCapture(tileIndex);
+          return;
+        }
+        dwellRAF = requestAnimationFrame(tick);
+      };
+
+      const arm = ()=>{
+        // Only allow capture during an active round, and if tile is neutral
+        if(!roundActive) return;
+        if(tiles[tileIndex].owner) return;
+
+        dwellMs = clamp(safeInt(dwellMsEl.value, 900), 150, 5000);
+        dwellStart = nowMs();
+        dwellArmed = true;
+        tick();
+      };
+
+      tileEl.addEventListener("pointerenter", arm);
+      tileEl.addEventListener("pointerleave", clearDwell);
+
+      // In case some eye-gaze software triggers focus rather than pointer:
+      tileEl.addEventListener("focus", arm);
+      tileEl.addEventListener("blur", clearDwell);
+
+      // Prevent touch scrolling/selection noise
+      tileEl.addEventListener("pointerdown", (e)=>{ e.preventDefault(); });
+    }
+
+    // ==== GAME LOGIC ===============================================
+    function localPlayer(){
+      return playerEl.value === "B" ? "B" : "A";
+    }
+
+    function attemptCapture(tileId){
+      if(!roundActive) return;
+      if(tiles[tileId].owner) return;
+
+      const p = localPlayer();
+      applyCapture(tileId, p);
+
+      // Publish event
+      publish("tileCapture", {
+        tileId,
+        player: p,
+        t: nowMs()
+      });
+    }
+
+    function applyCapture(tileId, player){
+      if(tiles[tileId].owner) return; // first-capture-wins
+      tiles[tileId].owner = player;
+      renderTile(tileId);
+      renderHUD();
+    }
+
+    function resetBoardLocal(){
+      tiles = Array.from({length: TILE_COUNT}, () => ({ owner: null }));
+      roundActive = false;
+      roundEndsAt = 0;
+      stopTimerLoop();
+      setRoundUI();
+      renderAll();
+    }
+
+    function startRoundLocal(startAtMs, durationSec){
+      const duration = clamp(durationSec, 5, 300) * 1000;
+      const startAt = startAtMs || (nowMs() + 800);
+
+      roundActive = true;
+      roundEndsAt = startAt + duration;
+
+      setRoundUI();
+
+      // show countdown until startAt, then timer counts down
+      const preTick = ()=>{
+        const t = nowMs();
+        if(t < startAt){
+          timerEl.textContent = `${Math.ceil((startAt - t)/1000)}…`;
+          roundStateEl.textContent = "Starting…";
+          requestAnimationFrame(preTick);
+          return;
+        }
+        roundStateEl.textContent = "Round active";
+        startTimerLoop();
+      };
+      requestAnimationFrame(preTick);
+    }
+
+    let roundEndedOnce = false;
+    function endRoundLocal(){
+      if(!roundActive) return;
+
+      // Avoid multiple end triggers from rapid timer ticks
+      if(roundEndedOnce) return;
+      roundEndedOnce = true;
+
+      roundActive = false;
+      stopTimerLoop();
+      setRoundUI();
+
+      const {a,b} = computeScores();
+      let outcome = "Tie!";
+      if(a > b) outcome = "Player A wins!";
+      else if(b > a) outcome = "Player B wins!";
+
+      showModal(
+        "Round over",
+        `Score — A: ${a} • B: ${b}`,
+        outcome
+      );
+
+      // Broadcast end once
+      publish("roundEnd", { a, b, t: nowMs() });
+
+      // allow next round after a short moment
+      setTimeout(()=>{ roundEndedOnce = false; }, 800);
+    }
+
+    // ==== ABLY =====================================================
+    function publish(name, data){
+      if(!channel) return;
+      channel.publish(name, data);
+    }
+
+    function handleMessage(name, data){
+      if(name === "tileCapture"){
+        if(!data || typeof data.tileId !== "number") return;
+        if(data.tileId < 0 || data.tileId >= TILE_COUNT) return;
+        if(!data.player) return;
+        applyCapture(data.tileId, data.player === "B" ? "B" : "A");
+      }
+
+      if(name === "reset"){
+        resetBoardLocal();
+        roundStateEl.textContent = "Board reset";
+      }
+
+      if(name === "roundStart"){
+        const startAt = typeof data?.startAt === "number" ? data.startAt : (nowMs() + 800);
+        const dur = typeof data?.durationSec === "number" ? data.durationSec : 45;
+        roundEndedOnce = false;
+        startRoundLocal(startAt, dur);
+      }
+
+      if(name === "roundEnd"){
+        // If the other device ends round, mirror it immediately
+        if(roundActive){
+          roundActive = false;
+          stopTimerLoop();
+          setRoundUI();
+        }
+        const a = typeof data?.a === "number" ? data.a : computeScores().a;
+        const b = typeof data?.b === "number" ? data.b : computeScores().b;
+        let outcome = "Tie!";
+        if(a > b) outcome = "Player A wins!";
+        else if(b > a) outcome = "Player B wins!";
+
+        showModal(
+          "Round over",
+          `Score — A: ${a} • B: ${b}`,
+          outcome
+        );
+      }
+
+      if(name === "hello"){
+        // Peer joined; if we’re already playing / have board state, send snapshot (simple sync)
+        // (This keeps late-joining device consistent without requiring Ably history.)
+        if(channel){
+          const snapshot = {
+            tiles: tiles.map(t => t.owner),
+            roundActive,
+            roundEndsAt,
+            t: nowMs()
+          };
+          publish("state", snapshot);
+        }
+      }
+
+      if(name === "state"){
+        // Apply snapshot (only if ours is empty or we are not in a more advanced state)
+        if(!data || !Array.isArray(data.tiles) || data.tiles.length !== TILE_COUNT) return;
+
+        // If we have any captures already, keep ours to avoid jarring flips.
+        const haveAny = tiles.some(t => t.owner);
+        if(!haveAny){
+          tiles = data.tiles.map(o => ({ owner: (o === "A" || o === "B") ? o : null }));
+          renderAll();
+        }
+
+        // Round sync
+        if(data.roundActive && typeof data.roundEndsAt === "number"){
+          const remaining = data.roundEndsAt - nowMs();
+          if(remaining > 0 && !roundActive){
+            // Start locally with same end time
+            roundActive = true;
+            roundEndsAt = data.roundEndsAt;
+            roundEndedOnce = false;
+            setRoundUI();
+            roundStateEl.textContent = "Round active";
+            startTimerLoop();
+          }
+        }
+      }
+    }
+
+    async function connect(){
+      const key = (ABLY_KEY_HERE || apiKeyEl.value || "").trim();
+      const room = (roomEl.value || "").trim();
+
+      if(!key){
+        setNet("bad", "Missing Ably key/token");
+        return;
+      }
+      if(!room){
+        setNet("bad", "Missing room code");
+        return;
+      }
+
+      try{
+        setNet("warn", "Connecting…");
+        netRoom.textContent = `room: ${room}`;
+
+        ably = new Ably.Realtime({ key });
+
+        ably.connection.on((stateChange) => {
+          if(stateChange.current === "connected"){
+            connected = true;
+            setNet("ok", "Connected");
+            connectBtn.disabled = true;
+            disconnectBtn.disabled = false;
+            startBtn.disabled = false;
+            resetBtn.disabled = false;
+
+            // join channel
+            channel = ably.channels.get(`territory:${room}`);
+            channel.subscribe((msg)=>{
+              handleMessage(msg.name, msg.data);
+            });
+
+            // announce presence
+            publish("hello", { player: localPlayer(), t: nowMs() });
+
+          } else if(stateChange.current === "failed"){
+            setNet("bad", "Connection failed");
+          } else if(stateChange.current === "disconnected"){
+            setNet("warn", "Disconnected");
+          }
+        });
+
+      }catch(err){
+        console.error(err);
+        setNet("bad", "Connect error");
+      }
+    }
+
+    function disconnect(){
+      try{
+        if(channel){
+          channel.unsubscribe();
+          channel = null;
+        }
+        if(ably){
+          ably.close();
+          ably = null;
+        }
+      }catch(e){ /* ignore */ }
+
+      connected = false;
+      setNet("bad", "Not connected");
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      startBtn.disabled = true;
+      resetBtn.disabled = true;
+      netRoom.textContent = "room: —";
+    }
+
+    // ==== UI EVENTS ================================================
+    connectBtn.addEventListener("click", connect);
+    disconnectBtn.addEventListener("click", disconnect);
+
+    startBtn.addEventListener("click", ()=>{
+      if(!connected) return;
+      const dur = clamp(safeInt(roundSecEl.value, 45), 5, 300);
+      const startAt = nowMs() + 900; // slight buffer for sync
+      roundEndedOnce = false;
+
+      // Broadcast start (others will start too)
+      publish("roundStart", { startAt, durationSec: dur, t: nowMs() });
+
+      // Start locally immediately using the same startAt
+      startRoundLocal(startAt, dur);
+    });
+
+    resetBtn.addEventListener("click", ()=>{
+      if(!connected) return;
+      publish("reset", { t: nowMs() });
+      resetBoardLocal();
+      roundStateEl.textContent = "Board reset";
+    });
+
+    // If user edits dwell time, clamp immediately
+    dwellMsEl.addEventListener("change", ()=>{
+      dwellMs = clamp(safeInt(dwellMsEl.value, 900), 150, 5000);
+      dwellMsEl.value = String(dwellMs);
+    });
+
+    roundSecEl.addEventListener("change", ()=>{
+      const v = clamp(safeInt(roundSecEl.value, 45), 5, 300);
+      roundSecEl.value = String(v);
+    });
+
+    // ==== INIT ======================================================
+    buildGrid();
+    resetBoardLocal();
+    setNet("bad", "Not connected");
+  </script>
+</body>
+</html>
