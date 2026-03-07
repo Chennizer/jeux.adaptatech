@@ -434,7 +434,8 @@
       currentZoneId: null,
       responses: {},
       targetColor: COLORS[2],
-      targetImageLeft: ""
+      targetImageLeft: "",
+      fillZoneMode: false
     };
 
     function getLayoutShape(layout) {
@@ -554,7 +555,7 @@
       if (!ctx) return;
       ctx.clearRect(0, 0, pxSize, pxSize);
 
-      if (!state.targetImageLeft) return;
+      if (!state.targetImageLeft || state.fillZoneMode) return;
       tintAndDraw(ctx, state.targetImageLeft, state.targetColor, 0, 0, pxSize, pxSize);
     }
 
@@ -566,7 +567,16 @@
 
       const zone = state.zones.find((z) => z.id === zoneId);
       if (!zone) {
+        document.querySelectorAll(".cell").forEach((cell) => { cell.style.background = ""; });
         targetEl.classList.add("hidden");
+        return;
+      }
+
+      const activeCell = document.querySelector(`.cell[data-zone-id="${zoneId}"]`);
+      document.querySelectorAll(".cell").forEach((cell) => { cell.style.background = ""; });
+      if (state.fillZoneMode) {
+        targetEl.classList.add("hidden");
+        if (activeCell) activeCell.style.background = state.targetColor;
         return;
       }
 
@@ -617,6 +627,7 @@
       applyTranslations();
 
     state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      state.fillZoneMode = state.targetImageLeft === "__fill_zone__";
       passesEl.value = state.config.passes;
 
       reportModalEl.classList.remove("open");
@@ -836,19 +847,24 @@
     function populateItemPicker(categoryValue, itemSelectEl) {
       const items = allItems.filter((item) => item.category === categoryValue);
       itemSelectEl.innerHTML = "";
+
+      const fillOption = document.createElement("option");
+      fillOption.value = "__fill_zone__";
+      fillOption.textContent = t("Remplir la zone (couleur)", "Fill zone (color)", "ゾーンを色で塗る");
+      itemSelectEl.appendChild(fillOption);
       items.forEach((item) => {
         const option = document.createElement("option");
         option.value = item.file;
         option.textContent = item.name.replace(/^cvi/i, "");
         itemSelectEl.appendChild(option);
       });
-      if (items.length) itemSelectEl.selectedIndex = 0;
+      itemSelectEl.selectedIndex = items.length ? 1 : 0;
     }
 
     function resolveSelectedItem(categorySelectEl, itemSelectEl) {
       const category = categorySelectEl.value;
       const items = allItems.filter((item) => item.category === category);
-      if (!items.length) return "../../images/cvipng/cvistar.png";
+      if (!items.length) return "__fill_zone__";
       const selected = itemSelectEl.value;
       return selected || items[0].file;
     }
@@ -866,6 +882,9 @@
           [...colorGridEl.children].forEach((el) => el.classList.remove("active"));
           tile.classList.add("active");
           renderTargetCanvas();
+          if (state.fillZoneMode && state.running && state.currentZoneId !== null) {
+            setActiveZone(state.currentZoneId);
+          }
         });
         colorGridEl.appendChild(tile);
       });
@@ -892,6 +911,7 @@
       applyTranslations();
 
     state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      state.fillZoneMode = state.targetImageLeft === "__fill_zone__";
       renderTargetCanvas();
     });
 
@@ -899,6 +919,7 @@
       applyTranslations();
 
     state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+      state.fillZoneMode = state.targetImageLeft === "__fill_zone__";
       renderTargetCanvas();
     });
 
@@ -929,6 +950,7 @@
     applyTranslations();
 
     state.targetImageLeft = resolveSelectedItem(categoryPickerEl, itemPickerEl);
+    state.fillZoneMode = state.targetImageLeft === "__fill_zone__";
     state.zones = createZones(Number(zoneLayoutEl.value));
     renderGrid();
     renderTargetCanvas();
