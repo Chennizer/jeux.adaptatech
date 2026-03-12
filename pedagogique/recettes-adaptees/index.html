@@ -353,13 +353,44 @@
 
     .materials-list {
       margin: 0;
-      padding-left: 1.2rem;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      gap: 0.35rem 1rem;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      gap: 0.75rem;
+      overflow-x: auto;
+      padding-bottom: 0.2rem;
+    }
+
+    .material-card {
+      min-width: 138px;
+      max-width: 138px;
+      border: 1px solid #d7dee7;
+      border-radius: 12px;
+      background: #f8fafc;
+      padding: 0.5rem;
+      text-align: center;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+
+    .material-card img {
+      width: 112px;
+      height: 112px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid #dde4ed;
+      padding: 6px;
+      display: block;
+      margin: 0 auto 0.35rem;
+    }
+
+    .material-card span {
+      display: block;
       color: #334155;
       font-weight: 700;
-      font-size: 1rem;
+      font-size: 0.92rem;
+      line-height: 1.2;
+      word-break: break-word;
     }
 
     #emptyState {
@@ -573,8 +604,8 @@
         </div>
         <div class="row">
           <div class="field">
-            <label for="materialInput">Ajouter un élément de matériel</label>
-            <input id="materialInput" type="text" placeholder="Ex. bol, cuillère, couteau" />
+            <label for="materialSelect">Matériel (catégorie vaisselle/cuisine)</label>
+            <select id="materialSelect"></select>
           </div>
           <button id="addMaterialBtn" class="btn alt" type="button">Ajouter</button>
         </div>
@@ -632,7 +663,8 @@
       category: 'all',
       dragIndex: null,
       materialsEnabled: false,
-      materials: []
+      materials: [],
+      materialPictos: []
     };
 
     const el = {
@@ -658,7 +690,7 @@
       modalCategory: document.getElementById('modalCategory'),
       foodOnlyBtn: document.getElementById('foodOnlyBtn'),
       materialsEnabled: document.getElementById('materialsEnabled'),
-      materialInput: document.getElementById('materialInput'),
+      materialSelect: document.getElementById('materialSelect'),
       addMaterialBtn: document.getElementById('addMaterialBtn'),
       materialsEditorList: document.getElementById('materialsEditorList'),
       materialsPanel: document.getElementById('materialsPanel'),
@@ -684,7 +716,18 @@
         state.simplified = !!parsed.simplified;
         state.steps = Array.isArray(parsed.steps) ? parsed.steps : [];
         state.materialsEnabled = !!parsed.materialsEnabled;
-        state.materials = Array.isArray(parsed.materials) ? parsed.materials.filter(Boolean) : [];
+        state.materials = Array.isArray(parsed.materials)
+          ? parsed.materials
+              .filter(Boolean)
+              .map((item) => {
+                if (typeof item === 'string') return { label: item, pictoSrc: '' };
+                if (item && typeof item === 'object') {
+                  return { label: String(item.label || '').trim(), pictoSrc: String(item.pictoSrc || '') };
+                }
+                return null;
+              })
+              .filter((item) => item && item.label)
+          : [];
       } catch (err) {
         console.warn('Impossible de charger la recette sauvegardée.', err);
       }
@@ -785,6 +828,30 @@
       renderRecipe();
     }
 
+    function renderMaterialSelect() {
+      el.materialSelect.innerHTML = '';
+      if (!state.materialPictos.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'Aucun pictogramme vaisselle/cuisine disponible';
+        el.materialSelect.appendChild(opt);
+        return;
+      }
+
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Choisir un matériel';
+      el.materialSelect.appendChild(placeholder);
+
+      state.materialPictos.forEach((item) => {
+        const opt = document.createElement('option');
+        opt.value = item.src;
+        opt.textContent = item.label;
+        opt.dataset.label = item.label;
+        el.materialSelect.appendChild(opt);
+      });
+    }
+
     function renderMaterials() {
       el.materialsEnabled.checked = state.materialsEnabled;
       el.materialsPanel.style.display = (state.materialsEnabled && state.materials.length) ? 'block' : 'none';
@@ -794,7 +861,12 @@
 
       state.materials.forEach((item, idx) => {
         const editorRow = document.createElement('li');
-        editorRow.innerHTML = `<div class="mini"><span>${item}</span></div>`;
+        editorRow.innerHTML = `
+          <div class="mini">
+            ${item.pictoSrc ? `<img src="${item.pictoSrc}" alt="${item.label}">` : ''}
+            <span>${item.label}</span>
+          </div>
+        `;
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'btn small alt';
@@ -808,7 +880,11 @@
         el.materialsEditorList.appendChild(editorRow);
 
         const previewRow = document.createElement('li');
-        previewRow.textContent = item;
+        previewRow.className = 'material-card';
+        previewRow.innerHTML = `
+          ${item.pictoSrc ? `<img src="${item.pictoSrc}" alt="${item.label}">` : ''}
+          <span>${item.label}</span>
+        `;
         el.materialsPreviewList.appendChild(previewRow);
       });
     }
@@ -954,8 +1030,10 @@
         }
       }
       state.pictos = pictos;
+      state.materialPictos = pictos.filter((p) => p.category === 'vaisselleCuisine');
       renderCategoryOptions();
       renderModalGrid();
+      renderMaterialSelect();
     }
 
     function bindEvents() {
@@ -1012,18 +1090,15 @@
       });
 
       el.addMaterialBtn.addEventListener('click', () => {
-        const value = el.materialInput.value.trim();
-        if (!value) return;
-        state.materials.push(value);
-        el.materialInput.value = '';
+        const selectedOption = el.materialSelect.options[el.materialSelect.selectedIndex];
+        const pictoSrc = el.materialSelect.value;
+        const label = selectedOption?.dataset?.label || selectedOption?.textContent || '';
+        if (!pictoSrc || !label || label === 'Choisir un matériel') return;
+
+        state.materials.push({ label, pictoSrc });
+        el.materialSelect.value = '';
         saveState();
         renderMaterials();
-      });
-
-      el.materialInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
-        el.addMaterialBtn.click();
       });
     }
 
