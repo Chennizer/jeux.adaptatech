@@ -290,8 +290,8 @@
       border-radius: 999px;
       display: grid;
       place-items: center;
-      font-size: 0.95rem;
-      font-weight: 700;
+      font-size: 1.3rem;
+      font-weight: 800;
       color: #0f766e;
       background: #e8f8f5;
       border: 1px solid #bfe7e1;
@@ -332,6 +332,34 @@
 
     .recipe-card .instruction strong {
       color: #0f766e;
+      font-size: 1.35em;
+      font-weight: 800;
+    }
+
+    .materials-panel {
+      margin-bottom: 0.9rem;
+      background: #fff;
+      border: 1px solid #dbe2ea;
+      border-radius: 12px;
+      box-shadow: 0 8px 22px rgba(2,8,20,0.07);
+      padding: 0.8rem 1rem;
+    }
+
+    .materials-panel h3 {
+      margin: 0 0 0.55rem;
+      color: #0f766e;
+      font-size: 1rem;
+    }
+
+    .materials-list {
+      margin: 0;
+      padding-left: 1.2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 0.35rem 1rem;
+      color: #334155;
+      font-weight: 700;
+      font-size: 1rem;
     }
 
     #emptyState {
@@ -352,9 +380,9 @@
     }
 
     body.simplified .recipe-card .step-badge {
-      width: 56px;
-      height: 56px;
-      font-size: 1.1rem;
+      width: 66px;
+      height: 66px;
+      font-size: 1.55rem;
     }
 
     body.simplified .recipe-card .picto {
@@ -536,6 +564,23 @@
         <button id="addStepBtn" class="btn" type="button">Ajouter l’étape</button>
       </section>
 
+
+      <section class="group">
+        <h2>Matériel (optionnel)</h2>
+        <div class="inline-toggle">
+          <label for="materialsEnabled">Afficher la liste de matériel</label>
+          <input id="materialsEnabled" type="checkbox" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="materialInput">Ajouter un élément de matériel</label>
+            <input id="materialInput" type="text" placeholder="Ex. bol, cuillère, couteau" />
+          </div>
+          <button id="addMaterialBtn" class="btn alt" type="button">Ajouter</button>
+        </div>
+        <ul id="materialsEditorList" class="steps-list"></ul>
+      </section>
+
       <section class="group">
         <h2>Étapes enregistrées</h2>
         <ul id="stepsList" class="steps-list"></ul>
@@ -547,6 +592,10 @@
         <h2 id="previewTitle">Recette visuelle</h2>
         <button id="clearRecipeBtn" class="btn alt" type="button">Vider la recette</button>
       </div>
+      <section id="materialsPanel" class="materials-panel" style="display:none;">
+        <h3>Matériel nécessaire</h3>
+        <ul id="materialsPreviewList" class="materials-list"></ul>
+      </section>
       <div id="recipeCards"></div>
       <p id="emptyState">Ajoutez une première étape pour créer la recette visuelle.</p>
     </main>
@@ -581,7 +630,9 @@
       foodOnly: true,
       search: '',
       category: 'all',
-      dragIndex: null
+      dragIndex: null,
+      materialsEnabled: false,
+      materials: []
     };
 
     const el = {
@@ -605,14 +656,22 @@
       modalGrid: document.getElementById('modalGrid'),
       modalSearch: document.getElementById('modalSearch'),
       modalCategory: document.getElementById('modalCategory'),
-      foodOnlyBtn: document.getElementById('foodOnlyBtn')
+      foodOnlyBtn: document.getElementById('foodOnlyBtn'),
+      materialsEnabled: document.getElementById('materialsEnabled'),
+      materialInput: document.getElementById('materialInput'),
+      addMaterialBtn: document.getElementById('addMaterialBtn'),
+      materialsEditorList: document.getElementById('materialsEditorList'),
+      materialsPanel: document.getElementById('materialsPanel'),
+      materialsPreviewList: document.getElementById('materialsPreviewList')
     };
 
     function saveState() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         title: state.title,
         simplified: state.simplified,
-        steps: state.steps
+        steps: state.steps,
+        materialsEnabled: state.materialsEnabled,
+        materials: state.materials
       }));
     }
 
@@ -624,6 +683,8 @@
         state.title = typeof parsed.title === 'string' ? parsed.title : '';
         state.simplified = !!parsed.simplified;
         state.steps = Array.isArray(parsed.steps) ? parsed.steps : [];
+        state.materialsEnabled = !!parsed.materialsEnabled;
+        state.materials = Array.isArray(parsed.materials) ? parsed.materials.filter(Boolean) : [];
       } catch (err) {
         console.warn('Impossible de charger la recette sauvegardée.', err);
       }
@@ -724,11 +785,40 @@
       renderRecipe();
     }
 
+    function renderMaterials() {
+      el.materialsEnabled.checked = state.materialsEnabled;
+      el.materialsPanel.style.display = (state.materialsEnabled && state.materials.length) ? 'block' : 'none';
+
+      el.materialsEditorList.innerHTML = '';
+      el.materialsPreviewList.innerHTML = '';
+
+      state.materials.forEach((item, idx) => {
+        const editorRow = document.createElement('li');
+        editorRow.innerHTML = `<div class="mini"><span>${item}</span></div>`;
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'btn small alt';
+        deleteBtn.textContent = 'Supprimer';
+        deleteBtn.addEventListener('click', () => {
+          state.materials.splice(idx, 1);
+          saveState();
+          renderMaterials();
+        });
+        editorRow.appendChild(deleteBtn);
+        el.materialsEditorList.appendChild(editorRow);
+
+        const previewRow = document.createElement('li');
+        previewRow.textContent = item;
+        el.materialsPreviewList.appendChild(previewRow);
+      });
+    }
+
     function renderRecipe() {
       el.previewTitle.textContent = state.title.trim() || 'Recette visuelle';
       document.body.classList.toggle('simplified', state.simplified);
       el.simplifiedMode.checked = state.simplified;
       el.recipeCards.innerHTML = '';
+      renderMaterials();
 
       if (!state.steps.length) {
         el.emptyState.style.display = 'block';
@@ -913,6 +1003,27 @@
         el.foodOnlyBtn.classList.toggle('alt', !state.foodOnly);
         el.foodOnlyBtn.textContent = state.foodOnly ? 'Filtre cuisine/aliments' : 'Tous les pictogrammes';
         renderModalGrid();
+      });
+
+      el.materialsEnabled.addEventListener('change', (e) => {
+        state.materialsEnabled = e.target.checked;
+        saveState();
+        renderMaterials();
+      });
+
+      el.addMaterialBtn.addEventListener('click', () => {
+        const value = el.materialInput.value.trim();
+        if (!value) return;
+        state.materials.push(value);
+        el.materialInput.value = '';
+        saveState();
+        renderMaterials();
+      });
+
+      el.materialInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        el.addMaterialBtn.click();
       });
     }
 
