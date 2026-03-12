@@ -263,6 +263,26 @@
       align-items: center;
     }
 
+
+    .recipe-card {
+      cursor: grab;
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+
+    .recipe-card:active {
+      cursor: grabbing;
+    }
+
+    .recipe-card.dragging {
+      opacity: 0.55;
+      transform: scale(0.99);
+    }
+
+    .recipe-card.drop-target {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(0,150,136,0.18), 0 7px 20px rgba(2,8,20,0.08);
+    }
+
     .recipe-card .step-badge {
       width: 42px;
       height: 42px;
@@ -550,7 +570,8 @@
       categories: [],
       foodOnly: true,
       search: '',
-      category: 'all'
+      category: 'all',
+      dragIndex: null
     };
 
     const el = {
@@ -683,6 +704,16 @@
       return `${step.action} <strong>${q}</strong> de ${step.ingredient}`;
     }
 
+    function reorderSteps(fromIndex, toIndex) {
+      if (fromIndex === toIndex) return;
+      if (fromIndex < 0 || toIndex < 0) return;
+      if (fromIndex >= state.steps.length || toIndex >= state.steps.length) return;
+      const [moved] = state.steps.splice(fromIndex, 1);
+      state.steps.splice(toIndex, 0, moved);
+      saveState();
+      renderRecipe();
+    }
+
     function renderRecipe() {
       el.previewTitle.textContent = state.title.trim() || 'Recette visuelle';
       document.body.classList.toggle('simplified', state.simplified);
@@ -701,6 +732,8 @@
       state.steps.forEach((step, idx) => {
         const card = document.createElement('article');
         card.className = 'recipe-card';
+        card.draggable = true;
+        card.dataset.index = String(idx);
         card.innerHTML = `
           <span class="step-badge">${idx + 1}</span>
           <img class="picto" src="${step.pictoSrc}" alt="${step.ingredient}">
@@ -709,6 +742,37 @@
             <p class="instruction">${richInstruction(step)}</p>
           </div>
         `;
+
+        card.addEventListener('dragstart', (event) => {
+          state.dragIndex = idx;
+          card.classList.add('dragging');
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', String(idx));
+        });
+
+        card.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          card.classList.add('drop-target');
+          event.dataTransfer.dropEffect = 'move';
+        });
+
+        card.addEventListener('dragleave', () => {
+          card.classList.remove('drop-target');
+        });
+
+        card.addEventListener('drop', (event) => {
+          event.preventDefault();
+          card.classList.remove('drop-target');
+          const from = state.dragIndex ?? Number(event.dataTransfer.getData('text/plain'));
+          reorderSteps(Number(from), idx);
+        });
+
+        card.addEventListener('dragend', () => {
+          state.dragIndex = null;
+          card.classList.remove('dragging');
+          document.querySelectorAll('.recipe-card.drop-target').forEach((el) => el.classList.remove('drop-target'));
+        });
+
         cardFrag.appendChild(card);
 
         const row = document.createElement('li');
