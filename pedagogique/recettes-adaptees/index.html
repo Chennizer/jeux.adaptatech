@@ -584,7 +584,13 @@
           <select id="actionSelect">
             <option value="ajouter">ajouter</option>
             <option value="mélanger">mélanger</option>
+            <option value="mixer">mixer</option>
+            <option value="mélanger_tout">mélanger tous les ingrédients</option>
             <option value="cuire">cuire</option>
+            <option value="prechauffer_four">préchauffer le four</option>
+            <option value="enfourner">enfourner</option>
+            <option value="cuire_four">cuire au four</option>
+            <option value="laisser_refroidir">laisser refroidir</option>
             <option value="servir">servir</option>
             <option value="couper">couper</option>
             <option value="verser">verser</option>
@@ -806,16 +812,48 @@
       return '';
     }
 
-    function plainInstruction(step) {
+
+    const ACTION_LABELS = {
+      mixer: 'mixer',
+      mélanger_tout: 'mélanger tous les ingrédients',
+      prechauffer_four: 'préchauffer le four',
+      enfourner: 'enfourner',
+      cuire_four: 'cuire au four',
+      laisser_refroidir: 'laisser refroidir'
+    };
+
+    const GENERIC_COOKING_ACTIONS = new Set([
+      'mélanger_tout',
+      'prechauffer_four',
+      'enfourner',
+      'cuire_four',
+      'laisser_refroidir'
+    ]);
+
+    function resolveActionLabel(action) {
+      return ACTION_LABELS[action] || action;
+    }
+
+    function buildInstruction(step, rich = false) {
+      const actionLabel = resolveActionLabel(step.action);
+      if (GENERIC_COOKING_ACTIONS.has(step.action)) return actionLabel;
+
       const q = formatQuantity(step.quantity, step.unit);
-      if (!q) return `${step.action} ${step.ingredient}`;
-      return `${step.action} ${q} de ${step.ingredient}`;
+      if (!q) {
+        return step.ingredient ? `${actionLabel} ${step.ingredient}` : actionLabel;
+      }
+
+      return rich
+        ? `${actionLabel} <strong>${q}</strong> de ${step.ingredient}`
+        : `${actionLabel} ${q} de ${step.ingredient}`;
+    }
+
+    function plainInstruction(step) {
+      return buildInstruction(step, false);
     }
 
     function richInstruction(step) {
-      const q = formatQuantity(step.quantity, step.unit);
-      if (!q) return `${step.action} ${step.ingredient}`;
-      return `${step.action} <strong>${q}</strong> de ${step.ingredient}`;
+      return buildInstruction(step, true);
     }
 
     function reorderSteps(fromIndex, toIndex) {
@@ -977,21 +1015,28 @@
     }
 
     function addStep() {
-      if (!state.selectedIngredient) {
+      const action = el.actionSelect.value;
+      const isGenericAction = GENERIC_COOKING_ACTIONS.has(action);
+
+      if (!state.selectedIngredient && !isGenericAction) {
         alert('Choisissez d’abord un pictogramme d’ingrédient.');
         return;
       }
-      const ingredient = el.ingredientLabel.value.trim() || state.selectedIngredient.label;
-      const quantity = el.quantityInput.value.trim();
-      const unit = el.unitSelect.value;
-      const action = el.actionSelect.value;
+
+      const ingredient = isGenericAction
+        ? ''
+        : (el.ingredientLabel.value.trim() || state.selectedIngredient.label);
+      const quantity = isGenericAction ? '' : el.quantityInput.value.trim();
+      const unit = isGenericAction ? '' : el.unitSelect.value;
 
       state.steps.push({
         ingredient,
         quantity,
         unit,
         action,
-        pictoSrc: state.selectedIngredient.src
+        pictoSrc: isGenericAction
+          ? '../../images/pictos/microwave.png'
+          : state.selectedIngredient.src
       });
 
       el.ingredientLabel.value = '';
