@@ -556,6 +556,8 @@
         </div>
         <div class="row">
           <button id="openPictoPicker" class="btn alt" type="button">Choisir un pictogramme</button>
+          <button id="uploadCustomImageBtn" class="btn alt" type="button">Ajouter une image</button>
+          <input id="customImageInput" type="file" accept="image/*" multiple style="display:none;" />
         </div>
 
         <div class="field">
@@ -670,7 +672,8 @@
       dragIndex: null,
       materialsEnabled: false,
       materials: [],
-      materialPictos: []
+      materialPictos: [],
+      customImages: []
     };
 
     const el = {
@@ -690,6 +693,8 @@
       stepsList: document.getElementById('stepsList'),
       pictoModal: document.getElementById('pictoModal'),
       openPictoPicker: document.getElementById('openPictoPicker'),
+      uploadCustomImageBtn: document.getElementById('uploadCustomImageBtn'),
+      customImageInput: document.getElementById('customImageInput'),
       closePictoPicker: document.getElementById('closePictoPicker'),
       modalGrid: document.getElementById('modalGrid'),
       modalSearch: document.getElementById('modalSearch'),
@@ -709,7 +714,8 @@
         simplified: state.simplified,
         steps: state.steps,
         materialsEnabled: state.materialsEnabled,
-        materials: state.materials
+        materials: state.materials,
+        customImages: state.customImages
       }));
     }
 
@@ -734,6 +740,19 @@
               })
               .filter((item) => item && item.label)
           : [];
+        state.customImages = Array.isArray(parsed.customImages)
+          ? parsed.customImages
+              .filter((item) => item && typeof item === 'object')
+              .map((item) => ({
+                id: String(item.id || `custom-${Date.now()}`),
+                label: String(item.label || 'Image perso').trim(),
+                src: String(item.src || '').trim(),
+                category: '__custom',
+                categoryLabel: 'Images perso',
+                file: String(item.file || '')
+              }))
+              .filter((item) => item.src)
+          : [];
       } catch (err) {
         console.warn('Impossible de charger la recette sauvegardée.', err);
       }
@@ -745,9 +764,10 @@
 
     function getFilteredPictos() {
       const search = state.search.trim().toLowerCase();
-      return state.pictos.filter(item => {
+      const source = [...state.customImages, ...state.pictos];
+      return source.filter(item => {
         if (state.category !== 'all' && item.category !== state.category) return false;
-        if (state.foodOnly) {
+        if (state.foodOnly && item.category !== '__custom') {
           const hay = `${item.category} ${item.categoryLabel}`.toLowerCase();
           if (!FOOD_KEYWORDS.some(k => hay.includes(k))) return false;
         }
@@ -755,6 +775,46 @@
         const haystack = `${item.label} ${item.file} ${item.categoryLabel}`.toLowerCase();
         return haystack.includes(search);
       });
+    }
+
+
+    function slugifyName(name) {
+      return String(name || '')
+        .toLowerCase()
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '') || 'image-perso';
+    }
+
+    async function readFileAsDataURL(file) {
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Lecture impossible du fichier'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function addCustomImages(files) {
+      if (!files?.length) return;
+      const toAdd = [];
+      for (const file of files) {
+        if (!file.type || !file.type.startsWith('image/')) continue;
+        const src = await readFileAsDataURL(file);
+        toAdd.push({
+          id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          label: slugifyName(file.name).replace(/-/g, ' '),
+          src,
+          category: '__custom',
+          categoryLabel: 'Images perso',
+          file: file.name
+        });
+      }
+      if (!toAdd.length) return;
+      state.customImages = [...toAdd, ...state.customImages];
+      saveState();
+      renderCategoryOptions();
+      renderModalGrid();
     }
 
     function renderModalGrid() {
@@ -794,7 +854,12 @@
       all.textContent = 'Toutes les catégories';
       el.modalCategory.appendChild(all);
 
-      for (const c of state.categories) {
+      const categories = [...state.categories];
+      if (state.customImages.length) {
+        categories.unshift({ id: '__custom', label: 'Images perso' });
+      }
+
+      for (const c of categories) {
         const opt = document.createElement('option');
         opt.value = c.id;
         opt.textContent = c.label;
@@ -1105,6 +1170,25 @@
       el.openPictoPicker.addEventListener('click', () => {
         el.pictoModal.classList.add('show');
         renderModalGrid();
+      });
+
+      el.uploadCustomImageBtn.addEventListener('click', () => {
+        el.customImageInput.click();
+      });
+
+      el.customImageInput.addEventListener('change', async (e) => {
+        try {
+          await addCustomImages(Array.from(e.target.files || []));
+          el.pictoModal.classList.add('show');
+          state.category = '__custom';
+          el.modalCategory.value = '__custom';
+          renderModalGrid();
+        } catch (err) {
+          console.error(err);
+          alert("Impossible d'importer cette image.");
+        } finally {
+          e.target.value = '';
+        }
       });
       el.closePictoPicker.addEventListener('click', closeModal);
       el.pictoModal.addEventListener('click', (e) => {
