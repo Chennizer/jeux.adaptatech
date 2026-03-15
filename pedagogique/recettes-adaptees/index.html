@@ -528,6 +528,69 @@
       }
       #content { min-height: 44vh; }
     }
+
+
+    #recipeCards.sequence-mode {
+      display: flex;
+      gap: 0.9rem;
+      align-items: stretch;
+      overflow: auto;
+      flex-wrap: nowrap;
+    }
+
+    #recipeCards.sequence-mode.horizontal {
+      flex-direction: row;
+    }
+
+    #recipeCards.sequence-mode.vertical {
+      flex-direction: column;
+    }
+
+    #recipeCards.sequence-mode .recipe-card {
+      min-width: 280px;
+      max-width: 360px;
+      flex: 0 0 auto;
+    }
+
+    #recipeCards.sequence-mode.vertical .recipe-card {
+      max-width: none;
+      width: 100%;
+    }
+
+    @media print {
+      #sidebar,
+      #openPictoPicker,
+      #uploadCustomImageBtn,
+      #addStepBtn,
+      #clearRecipeBtn,
+      #downloadPdfBtn {
+        display: none !important;
+      }
+
+      html, body {
+        background: #fff;
+      }
+
+      #content {
+        padding: 0;
+      }
+
+      .preview-header {
+        box-shadow: none;
+        border: none;
+        padding: 0 0 12px;
+      }
+
+      #recipeCards {
+        overflow: visible;
+      }
+
+      .recipe-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -545,6 +608,14 @@
         <div class="inline-toggle">
           <label for="simplifiedMode">Lecture simplifiée (cartes géantes)</label>
           <input id="simplifiedMode" type="checkbox" />
+        </div>
+        <div class="inline-toggle">
+          <label for="sequenceMode">Mode séquence</label>
+          <input id="sequenceMode" type="checkbox" />
+        </div>
+        <div class="inline-toggle">
+          <label for="sequenceVertical">Séquence verticale (sinon horizontale)</label>
+          <input id="sequenceVertical" type="checkbox" />
         </div>
       </section>
 
@@ -629,7 +700,10 @@
     <main id="content">
       <div class="preview-header">
         <h2 id="previewTitle">Recette visuelle</h2>
-        <button id="clearRecipeBtn" class="btn alt" type="button">Vider la recette</button>
+        <div class="row">
+          <button id="downloadPdfBtn" class="btn" type="button">Télécharger PDF</button>
+          <button id="clearRecipeBtn" class="btn alt" type="button">Vider la recette</button>
+        </div>
       </div>
       <section id="materialsPanel" class="materials-panel" style="display:none;">
         <h3>Matériel nécessaire</h3>
@@ -658,6 +732,7 @@
   <script>
     const STORAGE_KEY = 'pedagogique-recettes-adaptees-v1';
     const FOOD_KEYWORDS = ['aliment', 'fruit', 'legume', 'cuisine', 'vaisselle', 'food', 'kitchen', 'drink', 'boisson'];
+    const ALLOWED_RECIPE_CATEGORIES = new Set(['aliments', 'fruits', 'legumes', 'vaisselleCuisine']);
 
     const state = {
       title: '',
@@ -673,16 +748,21 @@
       materialsEnabled: false,
       materials: [],
       materialPictos: [],
-      customImages: []
+      customImages: [],
+      sequenceMode: false,
+      sequenceVertical: false
     };
 
     const el = {
       recipeTitle: document.getElementById('recipeTitle'),
       simplifiedMode: document.getElementById('simplifiedMode'),
+      sequenceMode: document.getElementById('sequenceMode'),
+      sequenceVertical: document.getElementById('sequenceVertical'),
       previewTitle: document.getElementById('previewTitle'),
       recipeCards: document.getElementById('recipeCards'),
       emptyState: document.getElementById('emptyState'),
       clearRecipeBtn: document.getElementById('clearRecipeBtn'),
+      downloadPdfBtn: document.getElementById('downloadPdfBtn'),
       ingredientLabel: document.getElementById('ingredientLabel'),
       quantityInput: document.getElementById('quantityInput'),
       unitSelect: document.getElementById('unitSelect'),
@@ -715,7 +795,9 @@
         steps: state.steps,
         materialsEnabled: state.materialsEnabled,
         materials: state.materials,
-        customImages: state.customImages
+        customImages: state.customImages,
+        sequenceMode: state.sequenceMode,
+        sequenceVertical: state.sequenceVertical
       }));
     }
 
@@ -753,6 +835,8 @@
               }))
               .filter((item) => item.src)
           : [];
+        state.sequenceMode = !!parsed.sequenceMode;
+        state.sequenceVertical = !!parsed.sequenceVertical;
       } catch (err) {
         console.warn('Impossible de charger la recette sauvegardée.', err);
       }
@@ -996,6 +1080,11 @@
       el.previewTitle.textContent = state.title.trim() || 'Recette visuelle';
       document.body.classList.toggle('simplified', state.simplified);
       el.simplifiedMode.checked = state.simplified;
+      el.sequenceMode.checked = state.sequenceMode;
+      el.sequenceVertical.checked = state.sequenceVertical;
+      el.recipeCards.classList.toggle('sequence-mode', state.sequenceMode);
+      el.recipeCards.classList.toggle('horizontal', state.sequenceMode && !state.sequenceVertical);
+      el.recipeCards.classList.toggle('vertical', state.sequenceMode && state.sequenceVertical);
       el.recipeCards.innerHTML = '';
       renderMaterials();
 
@@ -1121,13 +1210,14 @@
       const rawBase = typeof json.base === 'string' ? json.base : '../../images/pictos/';
       const base = new URL(rawBase, res.url).pathname;
       const categories = json.categories || {};
-      state.categories = Object.entries(categories).map(([id, c]) => ({
+      const filteredEntries = Object.entries(categories).filter(([id]) => ALLOWED_RECIPE_CATEGORIES.has(id));
+      state.categories = filteredEntries.map(([id, c]) => ({
         id,
         label: c.label?.fr || c.label?.en || id
       }));
 
       const pictos = [];
-      for (const [id, cat] of Object.entries(categories)) {
+      for (const [id, cat] of filteredEntries) {
         const catLabel = cat.label?.fr || cat.label?.en || id;
         for (const item of (cat.items || [])) {
           pictos.push({
@@ -1159,7 +1249,23 @@
         renderRecipe();
       });
 
+      el.sequenceMode.addEventListener('change', (e) => {
+        state.sequenceMode = e.target.checked;
+        saveState();
+        renderRecipe();
+      });
+
+      el.sequenceVertical.addEventListener('change', (e) => {
+        state.sequenceVertical = e.target.checked;
+        saveState();
+        renderRecipe();
+      });
+
       el.addStepBtn.addEventListener('click', addStep);
+      el.downloadPdfBtn.addEventListener('click', () => {
+        window.print();
+      });
+
       el.clearRecipeBtn.addEventListener('click', () => {
         if (!confirm('Effacer toute la recette ?')) return;
         state.steps = [];
