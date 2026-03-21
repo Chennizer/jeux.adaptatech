@@ -48,6 +48,11 @@ document.addEventListener('DOMContentLoaded', () => {
     'selected-difficulty-label'
   );
   const selectedSoundLabel = document.getElementById('selected-sound-label');
+  const loadingStatus = document.getElementById('control-panel-loading-status');
+  const loadingBar = document.getElementById('control-panel-loading-bar');
+  let loadingFill = loadingBar
+    ? loadingBar.querySelector('.loading-bar-fill')
+    : null;
   const videoContainer = document.getElementById('video-container');
   const resultsScreen = document.getElementById('results-screen');
   const continueButton = document.getElementById('continue-button');
@@ -132,6 +137,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentTimestampIndex = 0;
   let pausedAtTime = 0;
   let controlsEnabled = false;
+  let mediaReady = false;
+  let mediaLoadingSession = 0;
   let pauseSoundInterval = null;
   let fadeOutTimeout = null;
   let hideTimeout = null;
@@ -245,6 +252,103 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!selectEl) return '';
     const opt = selectEl.options[selectEl.selectedIndex];
     return opt ? opt.textContent.trim() : '';
+  }
+
+  function getLoadingText(state) {
+    const lang = document.documentElement.lang || 'en';
+    if (state === 'ready') {
+      if (lang === 'fr') return 'Vidéo chargée — jeu prêt !';
+      if (lang === 'ja') return '動画の読み込み完了 — ゲーム開始できます。';
+      return 'Video loaded — game ready!';
+    }
+    if (state === 'error') {
+      if (lang === 'fr') return 'Vidéo indisponible — vérifiez la connexion.';
+      if (lang === 'ja') return '動画を読み込めませんでした。接続を確認してください。';
+      return 'Video unavailable — please check the connection.';
+    }
+    if (lang === 'fr') return 'Chargement de la vidéo…';
+    if (lang === 'ja') return '動画を読み込み中…';
+    return 'Loading video…';
+  }
+
+  function ensureLoadingFill() {
+    if (!loadingBar) return null;
+    if (!loadingFill) {
+      loadingFill = document.createElement('div');
+      loadingFill.className = 'loading-bar-fill';
+      loadingBar.appendChild(loadingFill);
+    }
+    return loadingFill;
+  }
+
+  function setLoadingProgress(percent, state) {
+    const fill = ensureLoadingFill();
+    const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (fill) fill.style.width = `${safePercent}%`;
+    if (loadingBar) loadingBar.classList.toggle('is-ready', state === 'ready');
+    if (loadingStatus) loadingStatus.textContent = getLoadingText(state);
+    if (startButton) {
+      startButton.disabled = state !== 'ready';
+      startButton.style.opacity = state === 'ready' ? '1' : '0.7';
+      startButton.style.cursor = state === 'ready' ? 'pointer' : 'wait';
+    }
+    mediaReady = state === 'ready';
+  }
+
+  function preloadCurrentMedia() {
+    if (!mediaPlayer) return;
+
+    mediaLoadingSession += 1;
+    const sessionId = mediaLoadingSession;
+    setLoadingProgress(10, 'loading');
+
+    const markProgress = function () {
+      if (sessionId !== mediaLoadingSession || !mediaPlayer) return;
+      if (mediaPlayer.duration && mediaPlayer.buffered && mediaPlayer.buffered.length) {
+        const bufferedEnd = mediaPlayer.buffered.end(mediaPlayer.buffered.length - 1);
+        const ratio = mediaPlayer.duration > 0 ? bufferedEnd / mediaPlayer.duration : 0;
+        setLoadingProgress(Math.max(20, Math.round(Math.min(ratio, 1) * 100)), 'loading');
+      } else if (mediaPlayer.readyState >= 2) {
+        setLoadingProgress(65, 'loading');
+      }
+    };
+
+    const markReady = function () {
+      if (sessionId !== mediaLoadingSession) return;
+      setLoadingProgress(100, 'ready');
+      mediaPlayer.removeEventListener('progress', markProgress);
+      mediaPlayer.removeEventListener('loadeddata', markProgress);
+      mediaPlayer.removeEventListener('loadedmetadata', markProgress);
+      mediaPlayer.removeEventListener('canplay', markReady);
+      mediaPlayer.removeEventListener('canplaythrough', markReady);
+      mediaPlayer.removeEventListener('error', markError);
+    };
+
+    const markError = function () {
+      if (sessionId !== mediaLoadingSession) return;
+      setLoadingProgress(100, 'error');
+      mediaPlayer.removeEventListener('progress', markProgress);
+      mediaPlayer.removeEventListener('loadeddata', markProgress);
+      mediaPlayer.removeEventListener('loadedmetadata', markProgress);
+      mediaPlayer.removeEventListener('canplay', markReady);
+      mediaPlayer.removeEventListener('canplaythrough', markReady);
+      mediaPlayer.removeEventListener('error', markError);
+    };
+
+    mediaPlayer.addEventListener('progress', markProgress);
+    mediaPlayer.addEventListener('loadeddata', markProgress);
+    mediaPlayer.addEventListener('loadedmetadata', markProgress);
+    mediaPlayer.addEventListener('canplay', markReady);
+    mediaPlayer.addEventListener('canplaythrough', markReady);
+    mediaPlayer.addEventListener('error', markError);
+
+    try {
+      mediaPlayer.load();
+    } catch (e) {}
+
+    if (mediaPlayer.readyState >= 3) {
+      markReady();
+    }
   }
 
   function updateSummaryTexts() {
@@ -466,6 +570,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // -------------------------
   if (startButton) {
     startButton.addEventListener('click', () => {
+      if (!mediaReady) {
+        return;
+      }
       if (!selectedDifficulty) {
         alert('Please select a game mode to start.');
         return;
@@ -1001,7 +1108,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const newSrc = opt.getAttribute('data-video-source') || videoSource || '';
       if (mediaPlayer) {
         mediaPlayer.src = newSrc;
-        mediaPlayer.load();
       }
 
       timestampsEasy = toNums(opt.getAttribute('data-timestamps-easy'));
@@ -1033,6 +1139,7 @@ document.addEventListener('DOMContentLoaded', () => {
         videoContainer.style.display = 'none';
       }
       if (startButton) startButton.classList.remove('hidden');
+      preloadCurrentMedia();
     });
   } else {
     if (startButton) startButton.classList.remove('hidden');
@@ -1221,6 +1328,8 @@ document.addEventListener('DOMContentLoaded', () => {
   populateSpacePromptImages();
   loadMiscOptions();
   loadConfig();
+  setLoadingProgress(0, mediaPlayer ? 'loading' : 'ready');
+  preloadCurrentMedia();
   if (levelSelect && levelSelect.value) {
     levelSelect.dispatchEvent(new Event('change'));
   }
