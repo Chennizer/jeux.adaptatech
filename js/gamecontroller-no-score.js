@@ -81,6 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const pdfInfoModal = document.getElementById('pdf-info-modal');
   const closePdfInfoModal = document.getElementById('close-pdf-info-modal');
   const pdfInfoOkButton = document.getElementById('pdf-info-ok-button');
+  const loadingBar = document.getElementById('control-panel-loading-bar');
+  const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+  const loadingStatus = document.getElementById('control-panel-loading-status');
 
   let mediaPlayer = null;
   if (mediaType === 'video') {
@@ -135,6 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let pauseSoundInterval = null;
   let fadeOutTimeout = null;
   let hideTimeout = null;
+  let loadingFill = null;
+  let mediaReady = false;
 
   // ---- read config.js no matter how it was declared (const vs window.*) ----
   const getSpacePromptImages = () => {
@@ -152,6 +157,75 @@ document.addEventListener('DOMContentLoaded', () => {
     if (Array.isArray(window.miscOptions)) return window.miscOptions;
     return [];
   };
+
+
+  function ensureLoadingFill() {
+    if (!loadingBar) return null;
+    let fill = loadingBar.querySelector('.loading-bar-fill');
+    if (!fill) {
+      fill = document.createElement('div');
+      fill.className = 'loading-bar-fill';
+      loadingBar.appendChild(fill);
+    }
+    loadingFill = fill;
+    return fill;
+  }
+
+  function setLoadingProgress(progress, message) {
+    const fill = ensureLoadingFill();
+    const safeProgress = Math.max(0, Math.min(100, progress));
+    if (fill) fill.style.width = safeProgress + '%';
+    if (loadingStatus) loadingStatus.textContent = message || '';
+    if (startButton) {
+      startButton.disabled = safeProgress < 100;
+      startButton.classList.toggle('is-disabled', safeProgress < 100);
+    }
+  }
+
+  function preloadCurrentMedia() {
+    if (!mediaPlayer || !videoSource) {
+      mediaReady = true;
+      setLoadingProgress(100, 'Ready');
+      return Promise.resolve();
+    }
+
+    mediaReady = false;
+    setLoadingProgress(12, 'Loading video…');
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finalize = (progress, message) => {
+        if (settled) return;
+        settled = true;
+        mediaReady = true;
+        setLoadingProgress(progress, message);
+        mediaPlayer.removeEventListener('loadedmetadata', onLoadedMetadata);
+        mediaPlayer.removeEventListener('canplay', onCanPlay);
+        mediaPlayer.removeEventListener('canplaythrough', onCanPlayThrough);
+        mediaPlayer.removeEventListener('error', onError);
+        resolve();
+      };
+      const onLoadedMetadata = () => setLoadingProgress(45, 'Video metadata loaded');
+      const onCanPlay = () => setLoadingProgress(78, 'Game almost ready…');
+      const onCanPlayThrough = () => finalize(100, 'Game ready');
+      const onError = () => finalize(100, 'Game ready');
+
+      mediaPlayer.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+      mediaPlayer.addEventListener('canplay', onCanPlay, { once: true });
+      mediaPlayer.addEventListener('canplaythrough', onCanPlayThrough, { once: true });
+      mediaPlayer.addEventListener('error', onError, { once: true });
+
+      try {
+        mediaPlayer.preload = 'auto';
+        mediaPlayer.load();
+      } catch (e) {
+        finalize(100, 'Game ready');
+        return;
+      }
+
+      window.setTimeout(() => finalize(100, 'Game ready'), 8000);
+    });
+  }
 
   // Inject a text node inside the overlay for text prompts (if not present)
   let spacePromptText = document.getElementById('space-prompt-text');
@@ -476,6 +550,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (timestamps.length === 0) {
         alert('No timestamps defined for this level and game mode.');
+        return;
+      }
+      if (!mediaReady) {
+        alert('The video is still loading. Please wait a moment.');
         return;
       }
 
@@ -1001,8 +1079,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const newSrc = opt.getAttribute('data-video-source') || videoSource || '';
       if (mediaPlayer) {
         mediaPlayer.src = newSrc;
-        mediaPlayer.load();
       }
+      mediaReady = false;
+      setLoadingProgress(10, 'Loading video…');
+      preloadCurrentMedia();
 
       timestampsEasy = toNums(opt.getAttribute('data-timestamps-easy'));
       timestampsMedium = toNums(
@@ -1221,7 +1301,11 @@ document.addEventListener('DOMContentLoaded', () => {
   populateSpacePromptImages();
   loadMiscOptions();
   loadConfig();
+  ensureLoadingFill();
+  setLoadingProgress(6, 'Loading video…');
   if (levelSelect && levelSelect.value) {
     levelSelect.dispatchEvent(new Event('change'));
+  } else {
+    preloadCurrentMedia();
   }
 });
