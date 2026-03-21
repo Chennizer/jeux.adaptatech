@@ -81,11 +81,117 @@ document.addEventListener('DOMContentLoaded', () => {
   const pdfInfoModal = document.getElementById('pdf-info-modal');
   const closePdfInfoModal = document.getElementById('close-pdf-info-modal');
   const pdfInfoOkButton = document.getElementById('pdf-info-ok-button');
+  const loadingBar = document.getElementById('control-panel-loading-bar');
 
   let mediaPlayer = null;
   if (mediaType === 'video') {
     mediaPlayer = document.getElementById('video-player');
     if (mediaPlayer && videoSource) mediaPlayer.src = videoSource;
+  }
+
+  let mediaReady = mediaType !== 'video';
+  let preloadToken = 0;
+
+  function setLoadingProgress(progress) {
+    if (!loadingBar) return;
+    const safeProgress = Math.max(0, Math.min(progress, 100));
+    loadingBar.style.width = safeProgress + '%';
+    loadingBar.dataset.ready = safeProgress >= 100 ? 'true' : 'false';
+  }
+
+  function setMediaReadyState(ready) {
+    mediaReady = ready;
+    if (startButton) {
+      startButton.disabled = !ready;
+      startButton.setAttribute('aria-disabled', ready ? 'false' : 'true');
+      startButton.style.opacity = ready ? '1' : '0.6';
+      startButton.style.cursor = ready ? 'pointer' : 'wait';
+    }
+    if (loadingBar) {
+      loadingBar.style.boxShadow = ready
+        ? '0 0 16px rgba(0, 196, 167, 0.45)'
+        : '0 0 0 rgba(0, 0, 0, 0)';
+    }
+  }
+
+  function markMediaReady(progress) {
+    setLoadingProgress(progress || 100);
+    setMediaReadyState(true);
+  }
+
+  function preloadCurrentMedia() {
+    if (mediaType !== 'video' || !mediaPlayer) {
+      markMediaReady(100);
+      return;
+    }
+
+    const currentSrc = mediaPlayer.currentSrc || mediaPlayer.src || videoSource;
+    if (!currentSrc) {
+      markMediaReady(100);
+      return;
+    }
+
+    preloadToken += 1;
+    const token = preloadToken;
+    setMediaReadyState(false);
+    setLoadingProgress(10);
+
+    let done = false;
+    const finishReady = (progress) => {
+      if (done || token !== preloadToken) return;
+      done = true;
+      cleanup();
+      markMediaReady(progress || 100);
+    };
+
+    const updateFromBuffer = () => {
+      if (done || token !== preloadToken) return;
+      let progress = 12;
+      if (mediaPlayer.duration && Number.isFinite(mediaPlayer.duration) && mediaPlayer.buffered.length) {
+        const bufferedEnd = mediaPlayer.buffered.end(mediaPlayer.buffered.length - 1);
+        progress = Math.min(95, Math.max(progress, (bufferedEnd / mediaPlayer.duration) * 100));
+      } else {
+        progress = Math.max(progress, 35 + mediaPlayer.readyState * 12);
+      }
+      setLoadingProgress(progress);
+      if (mediaPlayer.readyState >= 3) {
+        finishReady(100);
+      }
+    };
+
+    const onLoadedMetadata = () => setLoadingProgress(35);
+    const onLoadedData = () => setLoadingProgress(60);
+    const onCanPlay = () => finishReady(100);
+    const onCanPlayThrough = () => finishReady(100);
+    const onError = () => finishReady(100);
+
+    const cleanup = () => {
+      mediaPlayer.removeEventListener('loadedmetadata', onLoadedMetadata);
+      mediaPlayer.removeEventListener('loadeddata', onLoadedData);
+      mediaPlayer.removeEventListener('progress', updateFromBuffer);
+      mediaPlayer.removeEventListener('canplay', onCanPlay);
+      mediaPlayer.removeEventListener('canplaythrough', onCanPlayThrough);
+      mediaPlayer.removeEventListener('error', onError);
+    };
+
+    cleanup();
+    mediaPlayer.addEventListener('loadedmetadata', onLoadedMetadata);
+    mediaPlayer.addEventListener('loadeddata', onLoadedData);
+    mediaPlayer.addEventListener('progress', updateFromBuffer);
+    mediaPlayer.addEventListener('canplay', onCanPlay, { once: true });
+    mediaPlayer.addEventListener('canplaythrough', onCanPlayThrough, { once: true });
+    mediaPlayer.addEventListener('error', onError, { once: true });
+
+    try {
+      mediaPlayer.load();
+    } catch (e) {}
+
+    window.setTimeout(() => {
+      if (token !== preloadToken || done) return;
+      if (mediaPlayer.readyState >= 2) {
+        finishReady(100);
+      }
+    }, 4000);
   }
 
   // ----- Recording modal -----
@@ -466,6 +572,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // -------------------------
   if (startButton) {
     startButton.addEventListener('click', () => {
+      if (!mediaReady) {
+        return;
+      }
       if (!selectedDifficulty) {
         alert('Please select a game mode to start.');
         return;
@@ -1027,6 +1136,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       currentTimestampIndex = 0;
       pausedAtTime = 0;
+      preloadCurrentMedia();
 
       if (videoContainer) {
         videoContainer.classList.add('hidden');
@@ -1221,7 +1331,10 @@ document.addEventListener('DOMContentLoaded', () => {
   populateSpacePromptImages();
   loadMiscOptions();
   loadConfig();
+  setMediaReadyState(false);
   if (levelSelect && levelSelect.value) {
     levelSelect.dispatchEvent(new Event('change'));
+  } else {
+    preloadCurrentMedia();
   }
 });
