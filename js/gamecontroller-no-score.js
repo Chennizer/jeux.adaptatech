@@ -44,9 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const soundOptionsSelect = document.getElementById('sound-options-select');
   const soundVolumeSlider = document.getElementById('sound-volume-slider');
   const levelSelect = document.getElementById('level-select');
-  const selectedDifficultyLabel = document.getElementById(
-    'selected-difficulty-label'
-  );
   const selectedSoundLabel = document.getElementById('selected-sound-label');
   const videoContainer = document.getElementById('video-container');
   const resultsScreen = document.getElementById('results-screen');
@@ -78,6 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const pdfSwitchTypeInput = document.getElementById('pdf-switch-type-input');
   const pdfSwitchPositionInput = document.getElementById('pdf-switch-position-input');
   const downloadPdfButton = document.getElementById('download-pdf-button');
+  const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+  const loadingBar = document.getElementById('control-panel-loading-bar');
   const pdfInfoModal = document.getElementById('pdf-info-modal');
   const closePdfInfoModal = document.getElementById('close-pdf-info-modal');
   const pdfInfoOkButton = document.getElementById('pdf-info-ok-button');
@@ -135,6 +134,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let pauseSoundInterval = null;
   let fadeOutTimeout = null;
   let hideTimeout = null;
+  let mediaReady = false;
+  let mediaLoadProgress = 0;
+  let mediaLoadingInitialized = false;
 
   // ---- read config.js no matter how it was declared (const vs window.*) ----
   const getSpacePromptImages = () => {
@@ -248,10 +250,69 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateSummaryTexts() {
-    if (selectedDifficultyLabel)
-      selectedDifficultyLabel.textContent = getSelectedOptionLabel(playModeSelect);
     if (selectedSoundLabel)
       selectedSoundLabel.textContent = getSelectedOptionLabel(soundOptionsSelect);
+  }
+
+  function setMediaReadyState(isReady, progress, statusText) {
+    mediaReady = !!isReady;
+    mediaLoadProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+
+    if (loadingBar) {
+      loadingBar.style.width = mediaLoadProgress + '%';
+    }
+
+    if (loadingBarContainer) {
+      loadingBarContainer.dataset.status = statusText || (mediaReady ? 'Game ready' : 'Loading game...');
+      loadingBarContainer.classList.toggle('is-ready', mediaReady);
+    }
+
+    if (startButton) {
+      startButton.disabled = !mediaReady;
+      startButton.setAttribute('aria-disabled', mediaReady ? 'false' : 'true');
+    }
+  }
+
+  function refreshMediaLoadingState() {
+    if (!mediaPlayer) return;
+
+    let progress = mediaLoadProgress;
+    const duration = mediaPlayer.duration;
+    const hasBuffered = mediaPlayer.buffered && mediaPlayer.buffered.length > 0;
+    if (hasBuffered && Number.isFinite(duration) && duration > 0) {
+      const bufferedEnd = mediaPlayer.buffered.end(mediaPlayer.buffered.length - 1);
+      progress = Math.max(progress, Math.min(100, (bufferedEnd / duration) * 100));
+    } else if (mediaPlayer.readyState >= 3) {
+      progress = Math.max(progress, 90);
+    } else if (mediaPlayer.readyState >= 1) {
+      progress = Math.max(progress, 25);
+    }
+
+    const ready = mediaPlayer.readyState >= 4 || progress >= 100;
+    setMediaReadyState(ready, ready ? 100 : progress, ready ? 'Game ready' : 'Loading game...');
+  }
+
+  function initializeMediaLoading() {
+    if (!mediaPlayer) return;
+
+    setMediaReadyState(false, 8, 'Loading game...');
+
+    if (!mediaLoadingInitialized) {
+      ['loadstart', 'loadedmetadata', 'loadeddata', 'progress', 'canplay', 'canplaythrough'].forEach(function (evt) {
+        mediaPlayer.addEventListener(evt, refreshMediaLoadingState);
+      });
+      mediaPlayer.addEventListener('error', function () {
+        setMediaReadyState(true, 100, 'Game ready');
+      });
+      mediaLoadingInitialized = true;
+    }
+
+    try {
+      mediaPlayer.preload = 'auto';
+      mediaPlayer.load();
+    } catch (e) {}
+
+    refreshMediaLoadingState();
   }
 
   function populateSoundOptions() {
@@ -466,6 +527,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // -------------------------
   if (startButton) {
     startButton.addEventListener('click', () => {
+      if (!mediaReady) {
+        alert('The game is still loading. Please wait a moment.');
+        return;
+      }
       if (!selectedDifficulty) {
         alert('Please select a game mode to start.');
         return;
@@ -1001,7 +1066,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const newSrc = opt.getAttribute('data-video-source') || videoSource || '';
       if (mediaPlayer) {
         mediaPlayer.src = newSrc;
+        setMediaReadyState(false, 8, 'Loading game...');
         mediaPlayer.load();
+        refreshMediaLoadingState();
       }
 
       timestampsEasy = toNums(opt.getAttribute('data-timestamps-easy'));
@@ -1218,6 +1285,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // -------------------------
   // Boot
   // -------------------------
+  initializeMediaLoading();
   populateSpacePromptImages();
   loadMiscOptions();
   loadConfig();
