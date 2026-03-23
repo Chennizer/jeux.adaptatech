@@ -99,6 +99,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const videoSource = document.body.getAttribute('data-video-source') || '';
   const actionEvents = parseActionEvents(document.body.getAttribute('data-action-events'));
+  const prePauseDuration = Math.max(0, Number(document.body.getAttribute('data-pre-pause-duration')) || 1);
+  const promptSoundSrc = document.body.getAttribute('data-prompt-sound') || '../../sounds/pageturn.mp3';
+  const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
+  const minSlowPlaybackRate = 0.2;
 
   let currentEventIndex = 0;
   let awaitingResume = false;
@@ -108,9 +112,62 @@ document.addEventListener('DOMContentLoaded', () => {
   let gameStarted = false;
   let currentStatusKey = 'loading';
 
+  const promptAudio = createUiAudio(promptSoundSrc);
+  const successAudio = createUiAudio(successSoundSrc);
+
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
     videoPlayer.load();
+  }
+
+  function createUiAudio(source) {
+    if (!source) {
+      return null;
+    }
+
+    const audio = new Audio(source);
+    audio.preload = 'auto';
+    return audio;
+  }
+
+  function playUiSound(audio) {
+    if (!audio) {
+      return;
+    }
+
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function primeUiAudio() {
+    [promptAudio, successAudio].forEach((audio) => {
+      if (!audio) {
+        return;
+      }
+
+      try {
+        audio.volume = 0;
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+          playPromise.then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = 1;
+          }).catch(() => {
+            audio.volume = 1;
+          });
+        } else {
+          audio.volume = 1;
+        }
+      } catch (error) {
+        audio.volume = 1;
+      }
+    });
   }
 
   function parseActionEvents(rawValue) {
@@ -200,6 +257,31 @@ document.addEventListener('DOMContentLoaded', () => {
     setMediaReadyState(ready, ready ? 100 : progress, ready ? 'ready' : 'loading');
   }
 
+  function resetPlaybackRate() {
+    if (videoPlayer) {
+      videoPlayer.playbackRate = 1;
+      videoPlayer.defaultPlaybackRate = 1;
+    }
+  }
+
+  function applyPrePauseSlowdown(currentTime, targetTime) {
+    if (!videoPlayer || prePauseDuration <= 0) {
+      resetPlaybackRate();
+      return;
+    }
+
+    const slowdownStart = targetTime - prePauseDuration;
+    if (currentTime < slowdownStart || currentTime >= targetTime) {
+      resetPlaybackRate();
+      return;
+    }
+
+    const elapsed = Math.max(0, currentTime - slowdownStart);
+    const progress = Math.min(1, elapsed / prePauseDuration);
+    const nextPlaybackRate = Math.max(minSlowPlaybackRate, 1 - ((1 - minSlowPlaybackRate) * progress));
+    videoPlayer.playbackRate = nextPlaybackRate;
+  }
+
   function updatePromptLanguage() {
     if (!actionPromptLabel || !actionPromptImage || !activeActionKey) {
       if (loadingBarContainer) {
@@ -226,12 +308,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeActionKey = eventConfig.action;
     awaitingResume = true;
+    resetPlaybackRate();
 
     actionPromptImage.src = getActionImage(eventConfig.action);
     updatePromptLanguage();
 
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
+    playUiSound(promptAudio);
   }
 
   function hideActionPrompt() {
@@ -268,6 +352,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     hideActionPrompt();
+    playUiSound(successAudio);
+    resetPlaybackRate();
     videoPlayer.play().catch(() => {});
   }
 
@@ -275,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameStarted = false;
     hideActionPrompt();
     updateResultsSummary();
+    resetPlaybackRate();
 
     if (videoContainer) {
       videoContainer.classList.add('hidden');
@@ -303,6 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameStarted = false;
 
     hideActionPrompt();
+    resetPlaybackRate();
 
     if (resultsScreen) {
       resultsScreen.classList.remove('show');
@@ -323,6 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resetGameState();
     gameStarted = true;
+    primeUiAudio();
 
     if (controlPanel) {
       controlPanel.style.display = 'none';
@@ -372,8 +461,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const nextEvent = actionEvents[currentEventIndex];
     if (!nextEvent) {
+      resetPlaybackRate();
       return;
     }
+
+    applyPrePauseSlowdown(videoPlayer.currentTime, nextEvent.time);
 
     if (videoPlayer.currentTime + 0.05 >= nextEvent.time) {
       videoPlayer.pause();
@@ -420,6 +512,16 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', handleActivate, true);
   videoPlayer?.addEventListener('timeupdate', handleTimeUpdate);
   videoPlayer?.addEventListener('ended', finishGame);
+  videoPlayer?.addEventListener('pause', () => {
+    if (!awaitingResume) {
+      resetPlaybackRate();
+    }
+  });
+  videoPlayer?.addEventListener('play', () => {
+    if (!awaitingResume) {
+      resetPlaybackRate();
+    }
+  });
   videoPlayer?.addEventListener('loadstart', refreshMediaLoadingState);
   videoPlayer?.addEventListener('loadedmetadata', refreshMediaLoadingState);
   videoPlayer?.addEventListener('loadeddata', refreshMediaLoadingState);
