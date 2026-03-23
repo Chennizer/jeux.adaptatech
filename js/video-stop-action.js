@@ -99,10 +99,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const videoSource = document.body.getAttribute('data-video-source') || '';
   const actionEvents = parseActionEvents(document.body.getAttribute('data-action-events'));
-  const prePauseDuration = Math.max(0, Number(document.body.getAttribute('data-pre-pause-duration')) || 1);
   const promptSoundSrc = document.body.getAttribute('data-prompt-sound') || '../../sounds/pageturn.mp3';
   const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
-  const minSlowPlaybackRate = 0.2;
+  const zoomTransitionMs = 180;
 
   let currentEventIndex = 0;
   let awaitingResume = false;
@@ -111,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let mediaProgress = 0;
   let gameStarted = false;
   let currentStatusKey = 'loading';
+  let isTransitioning = false;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -257,29 +257,35 @@ document.addEventListener('DOMContentLoaded', () => {
     setMediaReadyState(ready, ready ? 100 : progress, ready ? 'ready' : 'loading');
   }
 
-  function resetPlaybackRate() {
-    if (videoPlayer) {
-      videoPlayer.playbackRate = 1;
-      videoPlayer.defaultPlaybackRate = 1;
-    }
-  }
-
-  function applyPrePauseSlowdown(currentTime, targetTime) {
-    if (!videoPlayer || prePauseDuration <= 0) {
-      resetPlaybackRate();
-      return;
+  function playZoomTransition(zoomIn) {
+    if (!videoPlayer) {
+      return Promise.resolve();
     }
 
-    const slowdownStart = targetTime - prePauseDuration;
-    if (currentTime < slowdownStart || currentTime >= targetTime) {
-      resetPlaybackRate();
-      return;
-    }
+    return new Promise((resolve) => {
+      let settled = false;
 
-    const elapsed = Math.max(0, currentTime - slowdownStart);
-    const progress = Math.min(1, elapsed / prePauseDuration);
-    const nextPlaybackRate = Math.max(minSlowPlaybackRate, 1 - ((1 - minSlowPlaybackRate) * progress));
-    videoPlayer.playbackRate = nextPlaybackRate;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        videoPlayer.removeEventListener('transitionend', handleTransitionEnd);
+        clearTimeout(timeoutId);
+        resolve();
+      };
+
+      const handleTransitionEnd = (event) => {
+        if (event.target === videoPlayer && event.propertyName === 'transform') {
+          finish();
+        }
+      };
+
+      const timeoutId = window.setTimeout(finish, zoomTransitionMs + 60);
+      videoPlayer.addEventListener('transitionend', handleTransitionEnd);
+      videoPlayer.classList.toggle('is-paused-zoom', zoomIn);
+    });
   }
 
   function updatePromptLanguage() {
@@ -308,7 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeActionKey = eventConfig.action;
     awaitingResume = true;
-    resetPlaybackRate();
 
     actionPromptImage.src = getActionImage(eventConfig.action);
     updatePromptLanguage();
@@ -346,14 +351,16 @@ document.addEventListener('DOMContentLoaded', () => {
     resultsSummary.textContent = copy[lang] || copy.en;
   }
 
-  function resumeGame() {
-    if (!videoPlayer || !awaitingResume) {
+  async function resumeGame() {
+    if (!videoPlayer || !awaitingResume || isTransitioning) {
       return;
     }
 
     hideActionPrompt();
     playUiSound(successAudio);
-    resetPlaybackRate();
+    isTransitioning = true;
+    await playZoomTransition(false);
+    isTransitioning = false;
     videoPlayer.play().catch(() => {});
   }
 
@@ -361,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameStarted = false;
     hideActionPrompt();
     updateResultsSummary();
-    resetPlaybackRate();
+    videoPlayer?.classList.remove('is-paused-zoom');
 
     if (videoContainer) {
       videoContainer.classList.add('hidden');
@@ -390,7 +397,8 @@ document.addEventListener('DOMContentLoaded', () => {
     gameStarted = false;
 
     hideActionPrompt();
-    resetPlaybackRate();
+    isTransitioning = false;
+    videoPlayer?.classList.remove('is-paused-zoom');
 
     if (resultsScreen) {
       resultsScreen.classList.remove('show');
@@ -455,22 +463,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleTimeUpdate() {
-    if (!videoPlayer || !gameStarted || awaitingResume) {
+    if (!videoPlayer || !gameStarted || awaitingResume || isTransitioning) {
       return;
     }
 
     const nextEvent = actionEvents[currentEventIndex];
     if (!nextEvent) {
-      resetPlaybackRate();
       return;
     }
 
-    applyPrePauseSlowdown(videoPlayer.currentTime, nextEvent.time);
-
     if (videoPlayer.currentTime + 0.05 >= nextEvent.time) {
       videoPlayer.pause();
-      showActionPrompt(nextEvent);
       currentEventIndex += 1;
+      isTransitioning = true;
+      playZoomTransition(true).then(() => {
+        showActionPrompt(nextEvent);
+        isTransitioning = false;
+      });
     }
   }
 
@@ -489,6 +498,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (awaitingResume) {
       resumeGame();
+      return;
+    }
+
+    if (isTransitioning) {
       return;
     }
 
@@ -512,14 +525,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', handleActivate, true);
   videoPlayer?.addEventListener('timeupdate', handleTimeUpdate);
   videoPlayer?.addEventListener('ended', finishGame);
-  videoPlayer?.addEventListener('pause', () => {
-    if (!awaitingResume) {
-      resetPlaybackRate();
-    }
-  });
   videoPlayer?.addEventListener('play', () => {
-    if (!awaitingResume) {
-      resetPlaybackRate();
+    if (!awaitingResume && !isTransitioning) {
+      videoPlayer.classList.remove('is-paused-zoom');
     }
   });
   videoPlayer?.addEventListener('loadstart', refreshMediaLoadingState);
