@@ -65,6 +65,24 @@ document.addEventListener('DOMContentLoaded', () => {
     neutral: '../../images/gaminganimation/neutral.png'
   };
 
+  const STATUS_COPY = {
+    loading: {
+      fr: 'Chargement du jeu...',
+      en: 'Loading game...',
+      ja: 'ゲームを読み込み中...'
+    },
+    ready: {
+      fr: 'Jeu prêt',
+      en: 'Game ready',
+      ja: 'ゲームの準備完了'
+    },
+    unavailable: {
+      fr: 'Vidéo indisponible',
+      en: 'Video unavailable',
+      ja: '動画を読み込めません'
+    }
+  };
+
   const controlPanel = document.getElementById('control-panel');
   const startButton = document.getElementById('control-panel-start-button');
   const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
@@ -88,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let mediaReady = false;
   let mediaProgress = 0;
   let gameStarted = false;
+  let currentStatusKey = 'loading';
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
@@ -132,16 +151,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return ACTION_IMAGES[actionKey] || ACTION_IMAGES.neutral;
   }
 
-  function setMediaReadyState(isReady, progress, statusText) {
+  function getStatusLabel(statusKey) {
+    const lang = getCurrentLanguage();
+    const statusCopy = STATUS_COPY[statusKey] || STATUS_COPY.loading;
+    return statusCopy[lang] || statusCopy.en;
+  }
+
+  function setMediaReadyState(isReady, progress, statusKey) {
     mediaReady = Boolean(isReady);
     mediaProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+    currentStatusKey = statusKey || currentStatusKey || 'loading';
 
     if (loadingBar) {
       loadingBar.style.width = mediaProgress + '%';
     }
 
     if (loadingBarContainer) {
-      loadingBarContainer.dataset.status = statusText;
+      loadingBarContainer.dataset.status = getStatusLabel(currentStatusKey);
       loadingBarContainer.classList.toggle('is-ready', mediaReady);
     }
 
@@ -171,13 +197,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const ready = videoPlayer.readyState >= 4 || progress >= 100;
-    setMediaReadyState(ready, ready ? 100 : progress, ready ? 'Game ready' : 'Loading game...');
+    setMediaReadyState(ready, ready ? 100 : progress, ready ? 'ready' : 'loading');
   }
 
   function updatePromptLanguage() {
     if (!actionPromptLabel || !actionPromptImage || !activeActionKey) {
+      if (loadingBarContainer) {
+        loadingBarContainer.dataset.status = getStatusLabel(currentStatusKey);
+      }
       updateResultsSummary();
       return;
+    }
+
+    if (loadingBarContainer) {
+      loadingBarContainer.dataset.status = getStatusLabel(currentStatusKey);
     }
 
     const label = getActionLabel(activeActionKey);
@@ -393,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
   videoPlayer?.addEventListener('progress', refreshMediaLoadingState);
   videoPlayer?.addEventListener('canplay', refreshMediaLoadingState);
   videoPlayer?.addEventListener('canplaythrough', refreshMediaLoadingState);
-  videoPlayer?.addEventListener('error', () => setMediaReadyState(false, mediaProgress, 'Video unavailable'));
+  videoPlayer?.addEventListener('error', () => setMediaReadyState(false, mediaProgress, 'unavailable'));
 
   const languageObserver = new MutationObserver(updatePromptLanguage);
   languageObserver.observe(document.documentElement, {
@@ -401,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attributeFilter: ['lang']
   });
 
-  setMediaReadyState(false, 8, 'Loading game...');
+  setMediaReadyState(false, 8, 'loading');
   refreshMediaLoadingState();
   updateResultsSummary();
 });
