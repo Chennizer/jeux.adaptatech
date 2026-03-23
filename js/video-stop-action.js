@@ -1,14 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const ACTION_EVENTS = [
-    { time: 5.0, action: 'jump' },
-    { time: 10.0, action: 'dodge' },
-    { time: 15.0, action: 'crouch' },
-    { time: 20.2, action: 'jump' },
-    { time: 25.5, action: 'crouch' },
-    { time: 30.4, action: 'kick' },
-    { time: 36.3, action: 'jump' }
-  ];
-
   const ACTION_COPY = {
     jump: {
       fr: 'Saute',
@@ -29,6 +19,36 @@ document.addEventListener('DOMContentLoaded', () => {
       fr: 'Coup de pied',
       en: 'Kick',
       ja: 'キック'
+    },
+    punch: {
+      fr: 'Coup de poing',
+      en: 'Punch',
+      ja: 'パンチ'
+    },
+    block: {
+      fr: 'Bloque',
+      en: 'Block',
+      ja: 'ガード'
+    },
+    climb: {
+      fr: 'Grimpe',
+      en: 'Climb',
+      ja: 'のぼる'
+    },
+    run: {
+      fr: 'Cours',
+      en: 'Run',
+      ja: 'はしる'
+    },
+    land: {
+      fr: 'Atterris',
+      en: 'Land',
+      ja: 'ちゃくち'
+    },
+    neutral: {
+      fr: 'Position neutre',
+      en: 'Neutral pose',
+      ja: 'ニュートラル'
     }
   };
 
@@ -36,12 +56,19 @@ document.addEventListener('DOMContentLoaded', () => {
     jump: '../../images/gaminganimation/jump.png',
     dodge: '../../images/gaminganimation/dodge.png',
     crouch: '../../images/gaminganimation/crouch.png',
-    kick: '../../images/gaminganimation/kick.png'
+    kick: '../../images/gaminganimation/kick.png',
+    punch: '../../images/gaminganimation/punch.png',
+    block: '../../images/gaminganimation/block.png',
+    climb: '../../images/gaminganimation/climb.png',
+    run: '../../images/gaminganimation/run.png',
+    land: '../../images/gaminganimation/land.png',
+    neutral: '../../images/gaminganimation/neutral.png'
   };
 
-  const body = document.body;
   const controlPanel = document.getElementById('control-panel');
   const startButton = document.getElementById('control-panel-start-button');
+  const loadingBarContainer = document.getElementById('control-panel-loading-bar-container');
+  const loadingBar = document.getElementById('control-panel-loading-bar');
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
   const overlayScreen = document.getElementById('overlay-screen');
@@ -51,56 +78,111 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultsSummary = document.getElementById('results-summary');
   const continueButton = document.getElementById('continue-button');
   const languageToggle = document.getElementById('language-toggle');
-  const downloadVideoButton = document.getElementById('download-video-button');
+
+  const videoSource = document.body.getAttribute('data-video-source') || '';
+  const actionEvents = parseActionEvents(document.body.getAttribute('data-action-events'));
 
   let currentEventIndex = 0;
   let awaitingResume = false;
   let activeActionKey = null;
   let mediaReady = false;
+  let mediaProgress = 0;
   let gameStarted = false;
-  let pausedAtTime = 0;
 
-  const videoSource = body.getAttribute('data-video-source') || '';
-  if (downloadVideoButton && videoSource) {
-    downloadVideoButton.href = videoSource;
-  }
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
     videoPlayer.load();
   }
 
+  function parseActionEvents(rawValue) {
+    if (!rawValue) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((item) => ({
+          time: Number(item.time),
+          action: typeof item.action === 'string' ? item.action : ''
+        }))
+        .filter((item) => Number.isFinite(item.time) && item.action)
+        .sort((left, right) => left.time - right.time);
+    } catch (error) {
+      return [];
+    }
+  }
+
   function getCurrentLanguage() {
     const lang = document.documentElement.lang || localStorage.getItem('siteLanguage') || 'en';
-    if (lang === 'fr' || lang === 'ja' || lang === 'en') {
-      return lang;
-    }
-    return 'en';
+    return ['fr', 'en', 'ja'].includes(lang) ? lang : 'en';
   }
 
   function getActionLabel(actionKey) {
-    const copy = ACTION_COPY[actionKey] || ACTION_COPY.jump;
+    const actionCopy = ACTION_COPY[actionKey] || ACTION_COPY.neutral;
     const lang = getCurrentLanguage();
-    return copy[lang] || copy.en;
+    return actionCopy[lang] || actionCopy.en;
   }
 
-  function setStartReadyState(isReady) {
-    mediaReady = isReady;
-    if (!startButton) {
+  function getActionImage(actionKey) {
+    return ACTION_IMAGES[actionKey] || ACTION_IMAGES.neutral;
+  }
+
+  function setMediaReadyState(isReady, progress, statusText) {
+    mediaReady = Boolean(isReady);
+    mediaProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+
+    if (loadingBar) {
+      loadingBar.style.width = mediaProgress + '%';
+    }
+
+    if (loadingBarContainer) {
+      loadingBarContainer.dataset.status = statusText;
+      loadingBarContainer.classList.toggle('is-ready', mediaReady);
+    }
+
+    if (startButton) {
+      startButton.disabled = !mediaReady;
+      startButton.setAttribute('aria-disabled', mediaReady ? 'false' : 'true');
+      startButton.classList.toggle('is-disabled', !mediaReady);
+    }
+  }
+
+  function refreshMediaLoadingState() {
+    if (!videoPlayer) {
       return;
     }
 
-    startButton.disabled = !isReady;
-    startButton.setAttribute('aria-disabled', isReady ? 'false' : 'true');
-    startButton.classList.toggle('is-disabled', !isReady);
-  }
+    let progress = mediaProgress;
+    const duration = videoPlayer.duration;
+    const hasBuffered = videoPlayer.buffered && videoPlayer.buffered.length > 0;
 
-  function updateVisiblePromptLanguage() {
-    if (awaitingResume && activeActionKey && actionPromptLabel && actionPromptImage) {
-      const label = getActionLabel(activeActionKey);
-      actionPromptLabel.textContent = label;
-      actionPromptImage.alt = label;
+    if (hasBuffered && Number.isFinite(duration) && duration > 0) {
+      const bufferedEnd = videoPlayer.buffered.end(videoPlayer.buffered.length - 1);
+      progress = Math.max(progress, Math.min(100, (bufferedEnd / duration) * 100));
+    } else if (videoPlayer.readyState >= 3) {
+      progress = Math.max(progress, 85);
+    } else if (videoPlayer.readyState >= 1) {
+      progress = Math.max(progress, 20);
     }
 
+    const ready = videoPlayer.readyState >= 4 || progress >= 100;
+    setMediaReadyState(ready, ready ? 100 : progress, ready ? 'Game ready' : 'Loading game...');
+  }
+
+  function updatePromptLanguage() {
+    if (!actionPromptLabel || !actionPromptImage || !activeActionKey) {
+      updateResultsSummary();
+      return;
+    }
+
+    const label = getActionLabel(activeActionKey);
+    actionPromptLabel.textContent = label;
+    actionPromptImage.alt = label;
     updateResultsSummary();
   }
 
@@ -111,10 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeActionKey = eventConfig.action;
     awaitingResume = true;
-    pausedAtTime = eventConfig.time;
 
-    actionPromptImage.src = ACTION_IMAGES[eventConfig.action] || ACTION_IMAGES.jump;
-    updateVisiblePromptLanguage();
+    actionPromptImage.src = getActionImage(eventConfig.action);
+    updatePromptLanguage();
 
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
@@ -132,48 +213,40 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.add('hidden');
   }
 
-  function resumeGame() {
-    if (!awaitingResume || !videoPlayer) {
-      return;
-    }
-
-    hideActionPrompt();
-
-    if (pausedAtTime) {
-      videoPlayer.currentTime = pausedAtTime;
-    }
-
-    videoPlayer.play().catch(() => {});
-  }
-
   function updateResultsSummary() {
     if (!resultsSummary) {
       return;
     }
 
+    const count = actionEvents.length;
     const lang = getCurrentLanguage();
-    const completedCount = ACTION_EVENTS.length;
-    const summaries = {
-      fr: `Tu as complété ${completedCount} actions dynamiques.`,
-      en: `You completed ${completedCount} dynamic action prompts.`,
-      ja: `${completedCount}回のアクション指示を完了しました。`
+    const copy = {
+      fr: `Tu as complété ${count} actions dynamiques.`,
+      en: `You completed ${count} dynamic action prompts.`,
+      ja: `${count}回のアクション指示を完了しました。`
     };
 
-    resultsSummary.textContent = summaries[lang] || summaries.en;
+    resultsSummary.textContent = copy[lang] || copy.en;
+  }
+
+  function resumeGame() {
+    if (!videoPlayer || !awaitingResume) {
+      return;
+    }
+
+    hideActionPrompt();
+    videoPlayer.play().catch(() => {});
   }
 
   function finishGame() {
     gameStarted = false;
-    awaitingResume = false;
-    activeActionKey = null;
+    hideActionPrompt();
+    updateResultsSummary();
 
     if (videoContainer) {
       videoContainer.classList.add('hidden');
       videoContainer.style.display = 'none';
     }
-
-    hideActionPrompt();
-    updateResultsSummary();
 
     if (resultsScreen) {
       resultsScreen.classList.remove('hidden');
@@ -194,16 +267,15 @@ document.addEventListener('DOMContentLoaded', () => {
     currentEventIndex = 0;
     awaitingResume = false;
     activeActionKey = null;
-    pausedAtTime = 0;
     gameStarted = false;
+
+    hideActionPrompt();
 
     if (resultsScreen) {
       resultsScreen.classList.remove('show');
       resultsScreen.classList.add('hidden');
       resultsScreen.style.display = 'none';
     }
-
-    hideActionPrompt();
 
     if (videoPlayer) {
       videoPlayer.pause();
@@ -212,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startGame() {
-    if (!videoPlayer || !mediaReady) {
+    if (!videoPlayer || !mediaReady || actionEvents.length === 0) {
       return;
     }
 
@@ -261,11 +333,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleTimeUpdate() {
-    if (!videoPlayer || awaitingResume || !gameStarted) {
+    if (!videoPlayer || !gameStarted || awaitingResume) {
       return;
     }
 
-    const nextEvent = ACTION_EVENTS[currentEventIndex];
+    const nextEvent = actionEvents[currentEventIndex];
     if (!nextEvent) {
       return;
     }
@@ -315,17 +387,21 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', handleActivate, true);
   videoPlayer?.addEventListener('timeupdate', handleTimeUpdate);
   videoPlayer?.addEventListener('ended', finishGame);
-  videoPlayer?.addEventListener('canplay', () => setStartReadyState(true), { once: true });
-  videoPlayer?.addEventListener('canplaythrough', () => setStartReadyState(true), { once: true });
-  videoPlayer?.addEventListener('loadeddata', () => setStartReadyState(true), { once: true });
-  videoPlayer?.addEventListener('error', () => setStartReadyState(true), { once: true });
+  videoPlayer?.addEventListener('loadstart', refreshMediaLoadingState);
+  videoPlayer?.addEventListener('loadedmetadata', refreshMediaLoadingState);
+  videoPlayer?.addEventListener('loadeddata', refreshMediaLoadingState);
+  videoPlayer?.addEventListener('progress', refreshMediaLoadingState);
+  videoPlayer?.addEventListener('canplay', refreshMediaLoadingState);
+  videoPlayer?.addEventListener('canplaythrough', refreshMediaLoadingState);
+  videoPlayer?.addEventListener('error', () => setMediaReadyState(false, mediaProgress, 'Video unavailable'));
 
-  const languageObserver = new MutationObserver(updateVisiblePromptLanguage);
+  const languageObserver = new MutationObserver(updatePromptLanguage);
   languageObserver.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['lang']
   });
 
-  setStartReadyState(videoPlayer ? videoPlayer.readyState >= 2 : true);
-  updateVisiblePromptLanguage();
+  setMediaReadyState(false, 8, 'Loading game...');
+  refreshMediaLoadingState();
+  updateResultsSummary();
 });
