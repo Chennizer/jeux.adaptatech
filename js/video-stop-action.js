@@ -65,6 +65,24 @@ document.addEventListener('DOMContentLoaded', () => {
     neutral: '../../images/gaminganimation/neutral.png'
   };
 
+  const MODE_DESCRIPTION_COPY = {
+    normal: {
+      fr: 'Profite du jeu et prends ton temps.',
+      en: 'Enjoy the game and take your time.',
+      ja: 'ゲームを楽しみながら、ゆっくり進めてください。'
+    },
+    hard: {
+      fr: 'Mode difficile : texte explicatif à venir.',
+      en: 'Hard mode: description coming soon.',
+      ja: 'ハードモード：説明は近日追加予定です。'
+    },
+    competitive: {
+      fr: 'Mode compétitif : texte explicatif à venir.',
+      en: 'Competitive mode: description coming soon.',
+      ja: '対戦モード：説明は近日追加予定です。'
+    }
+  };
+
   const STATUS_COPY = {
     loading: {
       fr: 'Chargement du jeu...',
@@ -97,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const continueButton = document.getElementById('continue-button');
   const languageToggle = document.getElementById('language-toggle');
   const modeButtons = Array.from(document.querySelectorAll('.stop-action-mode-btn'));
+  const modeDescription = document.getElementById('stop-action-mode-description');
 
   const videoSource = document.body.getAttribute('data-video-source') || '';
   const actionEvents = parseActionEvents(document.body.getAttribute('data-action-events'));
@@ -153,6 +172,13 @@ document.addEventListener('DOMContentLoaded', () => {
       button.classList.toggle('selected', isSelected);
       button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
     });
+
+    if (modeDescription) {
+      const selected = document.body.dataset.selectedMode;
+      const lang = getCurrentLanguage();
+      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
+      modeDescription.textContent = copy[lang] || copy.en;
+    }
   }
 
   function primeUiAudio() {
