@@ -112,6 +112,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const actionPromptLabel = document.getElementById('action-prompt-label');
   const resultsScreen = document.getElementById('results-screen');
   const resultsSummary = document.getElementById('results-summary');
+  const resultsScore = document.getElementById('results-score');
+  const resultsAverageDelay = document.getElementById('results-average-delay');
+  const resultsFalsePositives = document.getElementById('results-false-positives');
   const continueButton = document.getElementById('continue-button');
   const languageToggle = document.getElementById('language-toggle');
   const modeButtons = Array.from(document.querySelectorAll('.stop-action-mode-btn'));
@@ -122,6 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const promptSoundSrc = document.body.getAttribute('data-prompt-sound') || '../../sounds/pageturn.mp3';
   const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
   const zoomTransitionMs = 180;
+  const SCORE_MAX = 10000;
+  const DELAY_WEIGHT = 9000;
+  const FALSE_POSITIVE_WEIGHT = 1000;
+  const DELAY_REFERENCE_MS = 3000;
 
   let currentEventIndex = 0;
   let awaitingResume = false;
@@ -131,6 +138,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let gameStarted = false;
   let currentStatusKey = 'loading';
   let isTransitioning = false;
+  let currentPromptShownAtMs = null;
+  let responseDelaysMs = [];
+  let falsePositiveCount = 0;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -357,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
+    currentPromptShownAtMs = Date.now();
     playUiSound(promptAudio);
   }
 
@@ -372,6 +383,22 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.add('hidden');
   }
 
+  function computeFinalScore(avgDelayMs, falsePositives, totalPrompts) {
+    const normalizedDelay = Math.min(Math.max(avgDelayMs / DELAY_REFERENCE_MS, 0), 1);
+    const delayScore = DELAY_WEIGHT * (1 - normalizedDelay);
+
+    const denominator = Math.max(totalPrompts, 1);
+    const falsePositiveRatio = Math.min(Math.max(falsePositives / denominator, 0), 1);
+    const falsePositiveScore = FALSE_POSITIVE_WEIGHT * (1 - falsePositiveRatio);
+
+    const total = delayScore + falsePositiveScore;
+    return Math.max(0, Math.min(SCORE_MAX, Math.round(total)));
+  }
+
+  function formatDelayMs(ms) {
+    return (ms / 1000).toFixed(2) + 's';
+  }
+
   function updateResultsSummary() {
     if (!resultsSummary) {
       return;
@@ -379,18 +406,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const count = actionEvents.length;
     const lang = getCurrentLanguage();
+    const avgDelayMs = responseDelaysMs.length
+      ? responseDelaysMs.reduce((total, value) => total + value, 0) / responseDelaysMs.length
+      : 0;
+    const finalScore = computeFinalScore(avgDelayMs, falsePositiveCount, count);
+
     const copy = {
-      fr: `Tu as complété ${count} actions dynamiques.`,
-      en: `You completed ${count} dynamic action prompts.`,
-      ja: `${count}回のアクション指示を完了しました。`
+      fr: {
+        summary: `Tu as complété ${count} actions dynamiques.`,
+        score: `Score: ${finalScore} / ${SCORE_MAX}`,
+        delay: `Délai moyen: ${formatDelayMs(avgDelayMs)}`,
+        falsePositives: `Faux positifs: ${falsePositiveCount}`
+      },
+      en: {
+        summary: `You completed ${count} dynamic action prompts.`,
+        score: `Score: ${finalScore} / ${SCORE_MAX}`,
+        delay: `Average delay: ${formatDelayMs(avgDelayMs)}`,
+        falsePositives: `False positives: ${falsePositiveCount}`
+      },
+      ja: {
+        summary: `${count}回のアクション指示を完了しました。`,
+        score: `スコア: ${finalScore} / ${SCORE_MAX}`,
+        delay: `平均遅延: ${formatDelayMs(avgDelayMs)}`,
+        falsePositives: `誤反応: ${falsePositiveCount}`
+      }
     };
 
-    resultsSummary.textContent = copy[lang] || copy.en;
+    const localized = copy[lang] || copy.en;
+    resultsSummary.textContent = localized.summary;
+    if (resultsScore) resultsScore.textContent = localized.score;
+    if (resultsAverageDelay) resultsAverageDelay.textContent = localized.delay;
+    if (resultsFalsePositives) resultsFalsePositives.textContent = localized.falsePositives;
   }
 
   async function resumeGame() {
     if (!videoPlayer || !awaitingResume || isTransitioning) {
       return;
+    }
+
+    if (currentPromptShownAtMs) {
+      responseDelaysMs.push(Date.now() - currentPromptShownAtMs);
+      currentPromptShownAtMs = null;
     }
 
     hideActionPrompt();
@@ -432,6 +488,9 @@ document.addEventListener('DOMContentLoaded', () => {
     awaitingResume = false;
     activeActionKey = null;
     gameStarted = false;
+    currentPromptShownAtMs = null;
+    responseDelaysMs = [];
+    falsePositiveCount = 0;
 
     hideActionPrompt();
     isTransitioning = false;
@@ -539,6 +598,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (isTransitioning) {
+      return;
+    }
+
+    if (gameStarted) {
+      falsePositiveCount += 1;
+      updateResultsSummary();
       return;
     }
 
