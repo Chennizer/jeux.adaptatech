@@ -123,7 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const actionEvents = parseActionEvents(document.body.getAttribute('data-action-events'));
   const promptSoundSrc = document.body.getAttribute('data-prompt-sound') || '../../sounds/pageturn.mp3';
   const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
-  const hardTimeLimitMs = Math.max(1000, Number(document.body.getAttribute('data-hard-time-limit')) * 1000 || 5000);
+  const hardTimeLimitMs = Math.max(2000, Number(document.body.getAttribute('data-hard-time-limit')) * 1000 || 10000);
+  const hardShrinkDurationMs = Math.max(1000, Number(document.body.getAttribute('data-hard-shrink-duration')) * 1000 || 5000);
   const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/error.mp3';
   const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
   const zoomTransitionMs = 180;
@@ -402,8 +403,16 @@ document.addEventListener('DOMContentLoaded', () => {
     clearHardModePromptTimer();
 
     if (isHardModeSelected()) {
-      actionPromptImage.classList.add('hard-mode-countdown');
-      actionPromptLabel.classList.add('hard-mode-countdown');
+      const shrinkStartDelayMs = Math.max(0, hardTimeLimitMs - hardShrinkDurationMs);
+      const shrinkTimer = setTimeout(() => {
+        if (!awaitingResume) {
+          return;
+        }
+
+        actionPromptImage.classList.add('hard-mode-countdown');
+        actionPromptLabel.classList.add('hard-mode-countdown');
+      }, shrinkStartDelayMs);
+
       hardModePromptTimer = setTimeout(() => {
         if (!awaitingResume) {
           return;
@@ -412,6 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
         awaitingResume = false;
         currentPromptShownAtMs = null;
         hardModeNeedsRestart = true;
+        clearTimeout(shrinkTimer);
         clearHardModePromptTimer();
         actionPromptImage.classList.add('hidden');
         actionPromptLabel.textContent = getTryAgainText();
@@ -466,24 +476,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const copy = {
       fr: {
-        score: `Score: ${finalScore} / ${SCORE_MAX}`,
+        scoreLabel: 'Score',
+        scoreValue: `${finalScore}`,
         delay: `Délai moyen: ${formatDelayMs(avgDelayMs)}`,
         falsePositives: `Faux positifs: ${falsePositiveCount}`
       },
       en: {
-        score: `Score: ${finalScore} / ${SCORE_MAX}`,
+        scoreLabel: 'Score',
+        scoreValue: `${finalScore}`,
         delay: `Average delay: ${formatDelayMs(avgDelayMs)}`,
         falsePositives: `False positives: ${falsePositiveCount}`
       },
       ja: {
-        score: `スコア: ${finalScore} / ${SCORE_MAX}`,
+        scoreLabel: 'スコア',
+        scoreValue: `${finalScore}`,
         delay: `平均遅延: ${formatDelayMs(avgDelayMs)}`,
         falsePositives: `誤反応: ${falsePositiveCount}`
       }
     };
 
     const localized = copy[lang] || copy.en;
-    if (resultsScore) resultsScore.textContent = localized.score;
+    if (resultsScore) {
+      resultsScore.innerHTML = `<span class="stop-action-score-label">${localized.scoreLabel}</span><span class="stop-action-score-value">${localized.scoreValue}</span>`;
+    }
     if (resultsAverageDelay) resultsAverageDelay.textContent = localized.delay;
     if (resultsFalsePositives) resultsFalsePositives.textContent = localized.falsePositives;
   }
