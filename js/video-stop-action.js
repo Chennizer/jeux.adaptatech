@@ -83,6 +83,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const TRY_AGAIN_COPY = {
+    fr: 'Réessaie',
+    en: 'Try again',
+    ja: 'もう一度挑戦'
+  };
+
   const STATUS_COPY = {
     loading: {
       fr: 'Chargement du jeu...',
@@ -111,7 +117,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const actionPromptImage = document.getElementById('action-prompt-image');
   const actionPromptLabel = document.getElementById('action-prompt-label');
   const resultsScreen = document.getElementById('results-screen');
-  const resultsSummary = document.getElementById('results-summary');
   const resultsScore = document.getElementById('results-score');
   const resultsAverageDelay = document.getElementById('results-average-delay');
   const resultsFalsePositives = document.getElementById('results-false-positives');
@@ -124,6 +129,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const actionEvents = parseActionEvents(document.body.getAttribute('data-action-events'));
   const promptSoundSrc = document.body.getAttribute('data-prompt-sound') || '../../sounds/pageturn.mp3';
   const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
+  const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/error.mp3';
+  const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
   const zoomTransitionMs = 180;
   const SCORE_MAX = 10000;
   const DELAY_WEIGHT = 9000;
@@ -141,9 +148,13 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentPromptShownAtMs = null;
   let responseDelaysMs = [];
   let falsePositiveCount = 0;
+  let hardModeCountdownTimer = null;
+  let hardModeFailed = false;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
+  const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
+  const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
@@ -192,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function primeUiAudio() {
-    [promptAudio, successAudio].forEach((audio) => {
+    [promptAudio, successAudio, hardTimeoutAudio, hardRestartAudio].forEach((audio) => {
       if (!audio) {
         return;
       }
@@ -243,6 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function getCurrentLanguage() {
     const lang = document.documentElement.lang || localStorage.getItem('siteLanguage') || 'en';
     return ['fr', 'en', 'ja'].includes(lang) ? lang : 'en';
+  }
+
+  function isHardMode() {
+    return document.body.dataset.selectedMode === 'hard';
   }
 
   function getActionLabel(actionKey) {
@@ -336,6 +351,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updatePromptLanguage() {
+    if (hardModeFailed && actionPromptLabel) {
+      const lang = getCurrentLanguage();
+      actionPromptLabel.textContent = TRY_AGAIN_COPY[lang] || TRY_AGAIN_COPY.en;
+    }
+
     if (!actionPromptLabel || !actionPromptImage || !activeActionKey) {
       if (loadingBarContainer) {
         loadingBarContainer.dataset.status = getStatusLabel(currentStatusKey);
@@ -354,6 +374,53 @@ document.addEventListener('DOMContentLoaded', () => {
     updateResultsSummary();
   }
 
+  function clearHardModeCountdown() {
+    if (hardModeCountdownTimer) {
+      clearTimeout(hardModeCountdownTimer);
+      hardModeCountdownTimer = null;
+    }
+
+    actionPromptImage?.classList.remove('hard-mode-countdown', 'hard-mode-retry');
+    actionPromptLabel?.classList.remove('hard-mode-countdown');
+  }
+
+  function triggerHardModeFailure() {
+    if (!isHardMode() || !awaitingResume || hardModeFailed) {
+      return;
+    }
+
+    hardModeFailed = true;
+    awaitingResume = false;
+    currentPromptShownAtMs = null;
+    playUiSound(hardTimeoutAudio);
+
+    if (actionPromptImage) {
+      actionPromptImage.classList.add('hard-mode-retry');
+    }
+
+    if (actionPromptLabel) {
+      const lang = getCurrentLanguage();
+      actionPromptLabel.textContent = TRY_AGAIN_COPY[lang] || TRY_AGAIN_COPY.en;
+      actionPromptLabel.classList.remove('hard-mode-countdown');
+    }
+  }
+
+  function startHardModeCountdown() {
+    if (!isHardMode()) {
+      return;
+    }
+
+    clearHardModeCountdown();
+
+    if (actionPromptImage) actionPromptImage.classList.add('hard-mode-countdown');
+    if (actionPromptLabel) actionPromptLabel.classList.add('hard-mode-countdown');
+
+    hardModeCountdownTimer = setTimeout(() => {
+      hardModeCountdownTimer = null;
+      triggerHardModeFailure();
+    }, 5000);
+  }
+
   function showActionPrompt(eventConfig) {
     if (!overlayScreen || !actionPromptImage || !actionPromptLabel) {
       return;
@@ -361,6 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeActionKey = eventConfig.action;
     awaitingResume = true;
+    hardModeFailed = false;
+    clearHardModeCountdown();
 
     actionPromptImage.src = getActionImage(eventConfig.action);
     updatePromptLanguage();
@@ -369,11 +438,13 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.add('show');
     currentPromptShownAtMs = Date.now();
     playUiSound(promptAudio);
+    startHardModeCountdown();
   }
 
   function hideActionPrompt() {
     awaitingResume = false;
     activeActionKey = null;
+    clearHardModeCountdown();
 
     if (!overlayScreen) {
       return;
@@ -400,10 +471,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateResultsSummary() {
-    if (!resultsSummary) {
-      return;
-    }
-
     const count = actionEvents.length;
     const lang = getCurrentLanguage();
     const avgDelayMs = responseDelaysMs.length
@@ -413,19 +480,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const copy = {
       fr: {
-        summary: `Tu as complété ${count} actions dynamiques.`,
         score: `Score: ${finalScore} / ${SCORE_MAX}`,
         delay: `Délai moyen: ${formatDelayMs(avgDelayMs)}`,
         falsePositives: `Faux positifs: ${falsePositiveCount}`
       },
       en: {
-        summary: `You completed ${count} dynamic action prompts.`,
         score: `Score: ${finalScore} / ${SCORE_MAX}`,
         delay: `Average delay: ${formatDelayMs(avgDelayMs)}`,
         falsePositives: `False positives: ${falsePositiveCount}`
       },
       ja: {
-        summary: `${count}回のアクション指示を完了しました。`,
         score: `スコア: ${finalScore} / ${SCORE_MAX}`,
         delay: `平均遅延: ${formatDelayMs(avgDelayMs)}`,
         falsePositives: `誤反応: ${falsePositiveCount}`
@@ -433,14 +497,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const localized = copy[lang] || copy.en;
-    resultsSummary.textContent = localized.summary;
     if (resultsScore) resultsScore.textContent = localized.score;
     if (resultsAverageDelay) resultsAverageDelay.textContent = localized.delay;
     if (resultsFalsePositives) resultsFalsePositives.textContent = localized.falsePositives;
   }
 
   async function resumeGame() {
-    if (!videoPlayer || !awaitingResume || isTransitioning) {
+    if (!videoPlayer || !awaitingResume || isTransitioning || hardModeFailed) {
       return;
     }
 
@@ -491,6 +554,8 @@ document.addEventListener('DOMContentLoaded', () => {
     currentPromptShownAtMs = null;
     responseDelaysMs = [];
     falsePositiveCount = 0;
+    hardModeFailed = false;
+    clearHardModeCountdown();
 
     hideActionPrompt();
     isTransitioning = false;
@@ -594,6 +659,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (awaitingResume) {
       resumeGame();
+      return;
+    }
+
+    if (hardModeFailed && gameStarted) {
+      playUiSound(hardRestartAudio);
+      resetGameState();
+      gameStarted = true;
+      if (videoContainer) {
+        videoContainer.classList.remove('hidden');
+        videoContainer.style.display = 'block';
+      }
+      videoPlayer.currentTime = 0;
+      videoPlayer.play().catch(() => {});
       return;
     }
 
