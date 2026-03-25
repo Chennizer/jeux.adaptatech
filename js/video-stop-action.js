@@ -127,6 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const hardShrinkDurationMs = Math.max(1000, Number(document.body.getAttribute('data-hard-shrink-duration')) * 1000 || 5000);
   const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/error.mp3';
   const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
+  const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
+  const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
+  const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
   const zoomTransitionMs = 180;
   const SCORE_MAX = 10000;
   const DELAY_WEIGHT = 9000;
@@ -150,11 +153,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let imageLoadReady = false;
   let hardModePromptTimer = null;
   let hardModeNeedsRestart = false;
+  let waitMusicStartTimer = null;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
   const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
+  const menuMusicAudio = createUiAudio(menuMusicSrc);
+  const waitMusicAudio = createUiAudio(waitMusicSrc);
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
@@ -183,6 +189,65 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       // no-op
     }
+  }
+
+  function playLoopAudio(audio, volume) {
+    if (!audio) {
+      return;
+    }
+
+    try {
+      audio.loop = true;
+      audio.volume = volume;
+      audio.play().catch(() => {});
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function stopLoopAudio(audio) {
+    if (!audio) {
+      return;
+    }
+
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function clearWaitMusicStartTimer() {
+    if (waitMusicStartTimer) {
+      clearTimeout(waitMusicStartTimer);
+      waitMusicStartTimer = null;
+    }
+  }
+
+  function startWaitMusicWithDelay() {
+    clearWaitMusicStartTimer();
+    waitMusicStartTimer = setTimeout(() => {
+      playLoopAudio(waitMusicAudio, 0.35);
+      waitMusicStartTimer = null;
+    }, waitMusicDelayMs);
+  }
+
+  function stopWaitMusic() {
+    clearWaitMusicStartTimer();
+    stopLoopAudio(waitMusicAudio);
+  }
+
+  function startMenuMusic() {
+    if (controlPanel && controlPanel.style.display === 'none') {
+      return;
+    }
+
+    playLoopAudio(menuMusicAudio, 0.3);
+  }
+
+  function stopMenuMusic() {
+    stopLoopAudio(menuMusicAudio);
   }
 
   function setSelectedMode(mode) {
@@ -227,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function primeUiAudio() {
-    [promptAudio, successAudio, hardTimeoutAudio, hardRestartAudio].forEach((audio) => {
+    [promptAudio, successAudio, hardTimeoutAudio, hardRestartAudio, menuMusicAudio, waitMusicAudio].forEach((audio) => {
       if (!audio) {
         return;
       }
@@ -455,6 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentPromptShownAtMs = Date.now();
     hardModeNeedsRestart = false;
     clearHardModePromptTimer();
+    stopWaitMusic();
 
     if (isHardModeSelected()) {
       const shrinkStartDelayMs = Math.max(0, hardTimeLimitMs - hardShrinkDurationMs);
@@ -479,6 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hardModeNeedsRestart = true;
         clearTimeout(shrinkTimer);
         clearHardModePromptTimer();
+        stopWaitMusic();
         actionPromptImage.classList.add('hidden');
         actionPromptLabel.textContent = getTryAgainText();
         actionPromptLabel.classList.remove('hard-mode-countdown');
@@ -487,12 +554,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     playUiSound(promptAudio);
+    startWaitMusicWithDelay();
   }
 
   function hideActionPrompt() {
     awaitingResume = false;
     activeActionKey = null;
     clearHardModePromptTimer();
+    stopWaitMusic();
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
@@ -603,6 +672,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (languageToggle) {
       languageToggle.style.display = 'inline-flex';
     }
+
+    startMenuMusic();
   }
 
   function resetGameState() {
@@ -639,6 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
     resetGameState();
     gameStarted = true;
     primeUiAudio();
+    stopMenuMusic();
 
     if (controlPanel) {
       controlPanel.style.display = 'none';
@@ -679,6 +751,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (languageToggle) {
       languageToggle.style.display = 'inline-flex';
     }
+
+    startMenuMusic();
   }
 
   function handleTimeUpdate() {
@@ -790,4 +864,14 @@ document.addEventListener('DOMContentLoaded', () => {
   preloadActionImages();
   refreshMediaLoadingState();
   updateResultsSummary();
+  startMenuMusic();
+
+  const unlockMenuMusic = () => {
+    startMenuMusic();
+    document.removeEventListener('pointerdown', unlockMenuMusic, true);
+    document.removeEventListener('keydown', unlockMenuMusic, true);
+  };
+
+  document.addEventListener('pointerdown', unlockMenuMusic, true);
+  document.addEventListener('keydown', unlockMenuMusic, true);
 });
