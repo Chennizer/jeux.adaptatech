@@ -144,6 +144,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentPromptShownAtMs = null;
   let responseDelaysMs = [];
   let falsePositiveCount = 0;
+  let videoLoadProgress = 0;
+  let videoLoadReady = false;
+  let imageLoadProgress = 0;
+  let imageLoadReady = false;
   let hardModePromptTimer = null;
   let hardModeNeedsRestart = false;
 
@@ -292,6 +296,49 @@ document.addEventListener('DOMContentLoaded', () => {
     return statusCopy[lang] || statusCopy.en;
   }
 
+  function getActionImageSourcesForPreload() {
+    const sources = actionEvents
+      .map((eventConfig) => getActionImage(eventConfig.action))
+      .filter(Boolean);
+
+    return Array.from(new Set(sources));
+  }
+
+  function updateCombinedLoadingState() {
+    const combinedProgress = Math.round((videoLoadProgress * 0.7) + (imageLoadProgress * 0.3));
+    const ready = videoLoadReady && imageLoadReady;
+    setMediaReadyState(ready, ready ? 100 : combinedProgress, ready ? 'ready' : 'loading');
+  }
+
+  function preloadActionImages() {
+    const imageSources = getActionImageSourcesForPreload();
+    const total = imageSources.length;
+
+    if (total === 0) {
+      imageLoadProgress = 100;
+      imageLoadReady = true;
+      updateCombinedLoadingState();
+      return;
+    }
+
+    let completed = 0;
+    const markComplete = () => {
+      completed += 1;
+      imageLoadProgress = Math.round((completed / total) * 100);
+      if (completed >= total) {
+        imageLoadReady = true;
+      }
+      updateCombinedLoadingState();
+    };
+
+    imageSources.forEach((src) => {
+      const img = new Image();
+      img.onload = markComplete;
+      img.onerror = markComplete;
+      img.src = src;
+    });
+  }
+
   function setMediaReadyState(isReady, progress, statusKey) {
     mediaReady = Boolean(isReady);
     mediaProgress = Math.max(0, Math.min(100, Number(progress) || 0));
@@ -331,8 +378,13 @@ document.addEventListener('DOMContentLoaded', () => {
       progress = Math.max(progress, 20);
     }
 
-    const ready = videoPlayer.readyState >= 4 || progress >= 100;
-    setMediaReadyState(ready, ready ? 100 : progress, ready ? 'ready' : 'loading');
+    videoLoadProgress = Math.max(0, Math.min(100, progress));
+    videoLoadReady = videoPlayer.readyState >= 4 || videoLoadProgress >= 100;
+    if (videoLoadReady) {
+      videoLoadProgress = 100;
+    }
+
+    updateCombinedLoadingState();
   }
 
   function playZoomTransition(zoomIn) {
@@ -715,7 +767,11 @@ document.addEventListener('DOMContentLoaded', () => {
   videoPlayer?.addEventListener('progress', refreshMediaLoadingState);
   videoPlayer?.addEventListener('canplay', refreshMediaLoadingState);
   videoPlayer?.addEventListener('canplaythrough', refreshMediaLoadingState);
-  videoPlayer?.addEventListener('error', () => setMediaReadyState(false, mediaProgress, 'unavailable'));
+  videoPlayer?.addEventListener('error', () => {
+    videoLoadReady = false;
+    updateCombinedLoadingState();
+    setMediaReadyState(false, Math.round((videoLoadProgress * 0.7) + (imageLoadProgress * 0.3)), 'unavailable');
+  });
 
   const languageObserver = new MutationObserver(updatePromptLanguage);
   languageObserver.observe(document.documentElement, {
@@ -725,6 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setSelectedMode(document.body.dataset.selectedMode || 'normal');
   setMediaReadyState(false, 8, 'loading');
+  preloadActionImages();
   refreshMediaLoadingState();
   updateResultsSummary();
 });
