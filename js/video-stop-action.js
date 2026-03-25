@@ -213,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     actionPromptImage?.classList.remove('hard-mode-countdown');
+    actionPromptImage?.classList.remove('prompt-pulse');
     actionPromptLabel?.classList.remove('hard-mode-countdown');
   }
 
@@ -446,6 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
     awaitingResume = true;
 
     actionPromptImage.src = getActionImage(eventConfig.action);
+    actionPromptImage.classList.add('prompt-pulse');
     updatePromptLanguage();
 
     overlayScreen.classList.remove('hidden');
@@ -461,6 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
+        actionPromptImage.classList.remove('prompt-pulse');
         actionPromptImage.classList.add('hard-mode-countdown');
         actionPromptLabel.classList.add('hard-mode-countdown');
       }, shrinkStartDelayMs);
@@ -492,6 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
+      actionPromptImage.classList.remove('prompt-pulse');
     }
 
     if (!overlayScreen) {
