@@ -447,6 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     actionPromptImage.src = getActionImage(eventConfig.action);
     actionPromptImage.classList.add('is-pulsing');
+    actionPromptLabel.classList.add('is-pulsing');
     updatePromptLanguage();
 
     overlayScreen.classList.remove('hidden');
@@ -463,6 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         actionPromptImage.classList.remove('is-pulsing');
+        actionPromptLabel.classList.remove('is-pulsing');
         actionPromptImage.classList.add('hard-mode-countdown');
         actionPromptLabel.classList.add('hard-mode-countdown');
       }, shrinkStartDelayMs);
@@ -495,6 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
       actionPromptImage.classList.remove('is-pulsing');
+      actionPromptLabel?.classList.remove('is-pulsing');
     }
 
     if (!overlayScreen) {
