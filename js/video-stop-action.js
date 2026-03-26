@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const successAudio = createUiAudio(successSoundSrc);
   const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
-  const menuMusicAudio = createUiAudio(menuMusicSrc);
+  const menuMusicAudio = createUiAudio(menuMusicSrc, { elementId: 'intro-jingle' });
   const waitMusicAudio = createUiAudio(waitMusicSrc);
 
   if (videoPlayer && videoSource) {
@@ -169,13 +169,37 @@ document.addEventListener('DOMContentLoaded', () => {
     videoPlayer.load();
   }
 
-  function createUiAudio(source) {
+  function createUiAudio(source, options) {
+    const config = options || {};
+    const elementId = typeof config.elementId === 'string' ? config.elementId : '';
+
+    if (elementId) {
+      const elementAudio = document.getElementById(elementId);
+      if (elementAudio && typeof elementAudio.play === 'function') {
+        if (source && elementAudio.getAttribute('src') !== source) {
+          elementAudio.setAttribute('src', source);
+        }
+        elementAudio.preload = 'auto';
+        try {
+          elementAudio.load();
+        } catch (error) {
+          // no-op
+        }
+        return elementAudio;
+      }
+    }
+
     if (!source) {
       return null;
     }
 
     const audio = new Audio(source);
     audio.preload = 'auto';
+    try {
+      audio.load();
+    } catch (error) {
+      // no-op
+    }
     return audio;
   }
 
@@ -288,6 +312,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             menuMusicAudio.muted = false;
             menuMusicAudio.volume = 0.3;
+            try {
+              if (menuMusicAudio.paused) {
+                menuMusicAudio.play().catch(() => {});
+              }
+            } catch (error) {
+              // no-op
+            }
           }, 1200);
           clearMenuMusicAutoplayTimer();
         }).catch(() => {
