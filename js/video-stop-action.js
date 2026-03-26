@@ -161,7 +161,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const successAudio = createUiAudio(successSoundSrc);
   const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
-  const menuMusicAudio = createUiAudio(menuMusicSrc);
+  const menuMusicElement = document.getElementById('intro-jingle');
+  if (menuMusicElement && menuMusicSrc && !menuMusicElement.getAttribute('src')) {
+    menuMusicElement.src = menuMusicSrc;
+  }
+  if (menuMusicElement && typeof menuMusicElement.load === 'function') {
+    menuMusicElement.preload = 'auto';
+    menuMusicElement.load();
+  }
+
+  const menuMusicAudio = menuMusicElement || createUiAudio(menuMusicSrc);
   const waitMusicAudio = createUiAudio(waitMusicSrc);
 
   if (videoPlayer && videoSource) {
@@ -176,6 +185,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const audio = new Audio(source);
     audio.preload = 'auto';
+    if (typeof audio.load === 'function') {
+      audio.load();
+    }
     return audio;
   }
 
