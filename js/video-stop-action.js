@@ -156,12 +156,13 @@ document.addEventListener('DOMContentLoaded', () => {
   let waitMusicStartTimer = null;
   let menuMusicAutoplayAttempts = 0;
   let menuMusicAutoplayTimer = null;
+  let menuMusicStarted = false;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
   const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
-  const menuMusicAudio = createUiAudio(menuMusicSrc);
+  const menuMusicAudio = createUiAudio(menuMusicSrc, { elementId: 'intro-jingle' });
   const waitMusicAudio = createUiAudio(waitMusicSrc);
 
   if (videoPlayer && videoSource) {
@@ -169,13 +170,37 @@ document.addEventListener('DOMContentLoaded', () => {
     videoPlayer.load();
   }
 
-  function createUiAudio(source) {
+  function createUiAudio(source, options) {
+    const config = options || {};
+    const elementId = typeof config.elementId === 'string' ? config.elementId : '';
+
+    if (elementId) {
+      const elementAudio = document.getElementById(elementId);
+      if (elementAudio && typeof elementAudio.play === 'function') {
+        if (source && elementAudio.getAttribute('src') !== source) {
+          elementAudio.setAttribute('src', source);
+        }
+        elementAudio.preload = 'auto';
+        try {
+          elementAudio.load();
+        } catch (error) {
+          // no-op
+        }
+        return elementAudio;
+      }
+    }
+
     if (!source) {
       return null;
     }
 
     const audio = new Audio(source);
     audio.preload = 'auto';
+    try {
+      audio.load();
+    } catch (error) {
+      // no-op
+    }
     return audio;
   }
 
@@ -201,7 +226,15 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       audio.loop = true;
       audio.volume = volume;
-      audio.play().catch(() => {});
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(() => {
+          if (audio === menuMusicAudio) {
+            menuMusicStarted = true;
+            clearMenuMusicAutoplayTimer();
+          }
+        }).catch(() => {});
+      }
     } catch (error) {
       // no-op
     }
@@ -262,7 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (!menuMusicAudio.paused) {
+    if (menuMusicStarted || !menuMusicAudio.paused) {
+      menuMusicStarted = true;
       clearMenuMusicAutoplayTimer();
       return;
     }
@@ -273,43 +307,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     menuMusicAutoplayAttempts += 1;
-
-    try {
-      menuMusicAudio.loop = true;
-      menuMusicAudio.muted = true;
-      menuMusicAudio.volume = 0;
-      const playPromise = menuMusicAudio.play();
-
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise.then(() => {
-          window.setTimeout(() => {
-            if (controlPanel && controlPanel.style.display === 'none') {
-              return;
-            }
-            menuMusicAudio.muted = false;
-            menuMusicAudio.volume = 0.3;
-          }, 1200);
-          clearMenuMusicAutoplayTimer();
-        }).catch(() => {
-          // no-op; keep retrying while timer is active
-        });
-      }
-    } catch (error) {
-      // no-op; keep retrying while timer is active
-    }
+    startMenuMusic();
   }
 
   function scheduleMenuMusicAutoplay() {
-    if (!menuMusicAudio || menuMusicAutoplayTimer) {
+    if (!menuMusicAudio || menuMusicAutoplayTimer || menuMusicStarted) {
       return;
     }
 
+    menuMusicAutoplayAttempts = 0;
     autoStartMenuMusicAfterLoad();
     menuMusicAutoplayTimer = window.setInterval(autoStartMenuMusicAfterLoad, 1200);
   }
 
   function stopMenuMusic() {
     stopLoopAudio(menuMusicAudio);
+    menuMusicStarted = false;
   }
 
   function setSelectedMode(mode) {
