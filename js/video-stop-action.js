@@ -154,7 +154,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let hardModePromptTimer = null;
   let hardModeNeedsRestart = false;
   let waitMusicStartTimer = null;
-  let menuMusicAutoPlayAttempted = false;
+  let menuMusicAutoplayAttempts = 0;
+  let menuMusicAutoplayTimer = null;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -247,12 +248,31 @@ document.addEventListener('DOMContentLoaded', () => {
     playLoopAudio(menuMusicAudio, 0.3);
   }
 
-  function autoStartMenuMusicAfterLoad() {
-    if (!menuMusicAudio || menuMusicAutoPlayAttempted) {
+  function clearMenuMusicAutoplayTimer() {
+    if (!menuMusicAutoplayTimer) {
       return;
     }
 
-    menuMusicAutoPlayAttempted = true;
+    clearInterval(menuMusicAutoplayTimer);
+    menuMusicAutoplayTimer = null;
+  }
+
+  function autoStartMenuMusicAfterLoad() {
+    if (!menuMusicAudio) {
+      return;
+    }
+
+    if (!menuMusicAudio.paused) {
+      clearMenuMusicAutoplayTimer();
+      return;
+    }
+
+    if (menuMusicAutoplayAttempts >= 30) {
+      clearMenuMusicAutoplayTimer();
+      return;
+    }
+
+    menuMusicAutoplayAttempts += 1;
 
     try {
       menuMusicAudio.loop = true;
@@ -262,20 +282,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (playPromise && typeof playPromise.then === 'function') {
         playPromise.then(() => {
-          menuMusicAudio.muted = false;
-          menuMusicAudio.volume = 0.3;
+          window.setTimeout(() => {
+            if (controlPanel && controlPanel.style.display === 'none') {
+              return;
+            }
+            menuMusicAudio.muted = false;
+            menuMusicAudio.volume = 0.3;
+          }, 1200);
+          clearMenuMusicAutoplayTimer();
         }).catch(() => {
-          menuMusicAudio.muted = false;
-          menuMusicAudio.volume = 0.3;
+          // no-op; keep retrying while timer is active
         });
-      } else {
-        menuMusicAudio.muted = false;
-        menuMusicAudio.volume = 0.3;
       }
     } catch (error) {
-      menuMusicAudio.muted = false;
-      menuMusicAudio.volume = 0.3;
+      // no-op; keep retrying while timer is active
     }
+  }
+
+  function scheduleMenuMusicAutoplay() {
+    if (!menuMusicAudio || menuMusicAutoplayTimer) {
+      return;
+    }
+
+    autoStartMenuMusicAfterLoad();
+    menuMusicAutoplayTimer = window.setInterval(autoStartMenuMusicAfterLoad, 1200);
   }
 
   function stopMenuMusic() {
@@ -457,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (mediaReady) {
-      autoStartMenuMusicAfterLoad();
+      scheduleMenuMusicAutoplay();
     }
   }
 
@@ -747,6 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameStarted = true;
     primeUiAudio();
     stopMenuMusic();
+    clearMenuMusicAutoplayTimer();
 
     if (controlPanel) {
       controlPanel.style.display = 'none';
@@ -901,6 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshMediaLoadingState();
   updateResultsSummary();
   startMenuMusic();
+  scheduleMenuMusicAutoplay();
 
   const unlockMenuMusic = () => {
     startMenuMusic();
