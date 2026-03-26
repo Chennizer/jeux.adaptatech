@@ -65,6 +65,24 @@ document.addEventListener('DOMContentLoaded', () => {
     neutral: '../../images/gaminganimation/neutral.png'
   };
 
+  const MODE_DESCRIPTION_COPY = {
+    normal: {
+      fr: 'Profite du jeu et prends ton temps.',
+      en: 'Enjoy the game and take your time.',
+      ja: 'ゲームを楽しみながら、ゆっくり進めてください。'
+    },
+    hard: {
+      fr: 'Mode difficile : texte explicatif à venir.',
+      en: 'Hard mode: description coming soon.',
+      ja: 'ハードモード：説明は近日追加予定です。'
+    },
+    competitive: {
+      fr: 'Mode compétitif : texte explicatif à venir.',
+      en: 'Competitive mode: description coming soon.',
+      ja: '対戦モード：説明は近日追加予定です。'
+    }
+  };
+
   const STATUS_COPY = {
     loading: {
       fr: 'Chargement du jeu...',
@@ -93,15 +111,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const actionPromptImage = document.getElementById('action-prompt-image');
   const actionPromptLabel = document.getElementById('action-prompt-label');
   const resultsScreen = document.getElementById('results-screen');
-  const resultsSummary = document.getElementById('results-summary');
+  const resultsScore = document.getElementById('results-score');
+  const resultsAverageDelay = document.getElementById('results-average-delay');
+  const resultsFalsePositives = document.getElementById('results-false-positives');
   const continueButton = document.getElementById('continue-button');
   const languageToggle = document.getElementById('language-toggle');
+  const modeButtons = Array.from(document.querySelectorAll('.stop-action-mode-btn'));
+  const modeDescription = document.getElementById('stop-action-mode-description');
 
   const videoSource = document.body.getAttribute('data-video-source') || '';
   const actionEvents = parseActionEvents(document.body.getAttribute('data-action-events'));
   const promptSoundSrc = document.body.getAttribute('data-prompt-sound') || '../../sounds/pageturn.mp3';
   const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
+  const hardTimeLimitMs = Math.max(2000, Number(document.body.getAttribute('data-hard-time-limit')) * 1000 || 10000);
+  const hardShrinkDurationMs = Math.max(1000, Number(document.body.getAttribute('data-hard-shrink-duration')) * 1000 || 5000);
+  const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/error.mp3';
+  const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
+  const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
+  const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
+  const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
   const zoomTransitionMs = 180;
+  const SCORE_MAX = 10000;
+  const DELAY_WEIGHT = 9000;
+  const FALSE_POSITIVE_WEIGHT = 1000;
+  const DELAY_REFERENCE_MS = 3000;
 
   let currentEventIndex = 0;
   let awaitingResume = false;
@@ -111,9 +144,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let gameStarted = false;
   let currentStatusKey = 'loading';
   let isTransitioning = false;
+  let currentPromptShownAtMs = null;
+  let responseDelaysMs = [];
+  let falsePositiveCount = 0;
+  let videoLoadProgress = 0;
+  let videoLoadReady = false;
+  let imageLoadProgress = 0;
+  let imageLoadReady = false;
+  let hardModePromptTimer = null;
+  let hardModeNeedsRestart = false;
+  let waitMusicStartTimer = null;
+  let menuMusicAutoplayAttempts = 0;
+  let menuMusicAutoplayTimer = null;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
+  const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
+  const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
+  const menuMusicAudio = createUiAudio(menuMusicSrc);
+  const waitMusicAudio = createUiAudio(waitMusicSrc);
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
@@ -144,8 +193,168 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function playLoopAudio(audio, volume) {
+    if (!audio) {
+      return;
+    }
+
+    try {
+      audio.loop = true;
+      audio.volume = volume;
+      audio.play().catch(() => {});
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function stopLoopAudio(audio) {
+    if (!audio) {
+      return;
+    }
+
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function clearWaitMusicStartTimer() {
+    if (waitMusicStartTimer) {
+      clearTimeout(waitMusicStartTimer);
+      waitMusicStartTimer = null;
+    }
+  }
+
+  function startWaitMusicWithDelay() {
+    clearWaitMusicStartTimer();
+    waitMusicStartTimer = setTimeout(() => {
+      playLoopAudio(waitMusicAudio, 0.35);
+      waitMusicStartTimer = null;
+    }, waitMusicDelayMs);
+  }
+
+  function stopWaitMusic() {
+    clearWaitMusicStartTimer();
+    stopLoopAudio(waitMusicAudio);
+  }
+
+  function startMenuMusic() {
+    if (controlPanel && controlPanel.style.display === 'none') {
+      return;
+    }
+
+    playLoopAudio(menuMusicAudio, 0.3);
+  }
+
+  function clearMenuMusicAutoplayTimer() {
+    if (!menuMusicAutoplayTimer) {
+      return;
+    }
+
+    clearInterval(menuMusicAutoplayTimer);
+    menuMusicAutoplayTimer = null;
+  }
+
+  function autoStartMenuMusicAfterLoad() {
+    if (!menuMusicAudio) {
+      return;
+    }
+
+    if (!menuMusicAudio.paused) {
+      clearMenuMusicAutoplayTimer();
+      return;
+    }
+
+    if (menuMusicAutoplayAttempts >= 30) {
+      clearMenuMusicAutoplayTimer();
+      return;
+    }
+
+    menuMusicAutoplayAttempts += 1;
+
+    try {
+      menuMusicAudio.loop = true;
+      menuMusicAudio.muted = true;
+      menuMusicAudio.volume = 0;
+      const playPromise = menuMusicAudio.play();
+
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(() => {
+          window.setTimeout(() => {
+            if (controlPanel && controlPanel.style.display === 'none') {
+              return;
+            }
+            menuMusicAudio.muted = false;
+            menuMusicAudio.volume = 0.3;
+          }, 1200);
+          clearMenuMusicAutoplayTimer();
+        }).catch(() => {
+          // no-op; keep retrying while timer is active
+        });
+      }
+    } catch (error) {
+      // no-op; keep retrying while timer is active
+    }
+  }
+
+  function scheduleMenuMusicAutoplay() {
+    if (!menuMusicAudio || menuMusicAutoplayTimer) {
+      return;
+    }
+
+    autoStartMenuMusicAfterLoad();
+    menuMusicAutoplayTimer = window.setInterval(autoStartMenuMusicAfterLoad, 1200);
+  }
+
+  function stopMenuMusic() {
+    stopLoopAudio(menuMusicAudio);
+  }
+
+  function setSelectedMode(mode) {
+    document.body.dataset.selectedMode = mode || 'normal';
+
+    modeButtons.forEach((button) => {
+      const isSelected = button.dataset.mode === document.body.dataset.selectedMode;
+      button.classList.toggle('selected', isSelected);
+      button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+    });
+
+    if (modeDescription) {
+      const selected = document.body.dataset.selectedMode;
+      const lang = getCurrentLanguage();
+      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
+      modeDescription.textContent = copy[lang] || copy.en;
+    }
+  }
+
+  function isHardModeSelected() {
+    return document.body.dataset.selectedMode === 'hard';
+  }
+
+  function clearHardModePromptTimer() {
+    if (hardModePromptTimer) {
+      clearTimeout(hardModePromptTimer);
+      hardModePromptTimer = null;
+    }
+
+    actionPromptImage?.classList.remove('hard-mode-countdown');
+    actionPromptLabel?.classList.remove('hard-mode-countdown');
+  }
+
+  function getTryAgainText() {
+    const lang = getCurrentLanguage();
+    const copy = {
+      fr: 'Réessaie (appuie sur Espace)',
+      en: 'Try again (press Space)',
+      ja: 'もう一度（スペースキーを押す）'
+    };
+    return copy[lang] || copy.en;
+  }
+
   function primeUiAudio() {
-    [promptAudio, successAudio].forEach((audio) => {
+    [promptAudio, successAudio, hardTimeoutAudio, hardRestartAudio, menuMusicAudio, waitMusicAudio].forEach((audio) => {
       if (!audio) {
         return;
       }
@@ -214,6 +423,49 @@ document.addEventListener('DOMContentLoaded', () => {
     return statusCopy[lang] || statusCopy.en;
   }
 
+  function getActionImageSourcesForPreload() {
+    const sources = actionEvents
+      .map((eventConfig) => getActionImage(eventConfig.action))
+      .filter(Boolean);
+
+    return Array.from(new Set(sources));
+  }
+
+  function updateCombinedLoadingState() {
+    const combinedProgress = Math.round((videoLoadProgress * 0.7) + (imageLoadProgress * 0.3));
+    const ready = videoLoadReady && imageLoadReady;
+    setMediaReadyState(ready, ready ? 100 : combinedProgress, ready ? 'ready' : 'loading');
+  }
+
+  function preloadActionImages() {
+    const imageSources = getActionImageSourcesForPreload();
+    const total = imageSources.length;
+
+    if (total === 0) {
+      imageLoadProgress = 100;
+      imageLoadReady = true;
+      updateCombinedLoadingState();
+      return;
+    }
+
+    let completed = 0;
+    const markComplete = () => {
+      completed += 1;
+      imageLoadProgress = Math.round((completed / total) * 100);
+      if (completed >= total) {
+        imageLoadReady = true;
+      }
+      updateCombinedLoadingState();
+    };
+
+    imageSources.forEach((src) => {
+      const img = new Image();
+      img.onload = markComplete;
+      img.onerror = markComplete;
+      img.src = src;
+    });
+  }
+
   function setMediaReadyState(isReady, progress, statusKey) {
     mediaReady = Boolean(isReady);
     mediaProgress = Math.max(0, Math.min(100, Number(progress) || 0));
@@ -232,6 +484,10 @@ document.addEventListener('DOMContentLoaded', () => {
       startButton.disabled = !mediaReady;
       startButton.setAttribute('aria-disabled', mediaReady ? 'false' : 'true');
       startButton.classList.toggle('is-disabled', !mediaReady);
+    }
+
+    if (mediaReady) {
+      scheduleMenuMusicAutoplay();
     }
   }
 
@@ -253,8 +509,13 @@ document.addEventListener('DOMContentLoaded', () => {
       progress = Math.max(progress, 20);
     }
 
-    const ready = videoPlayer.readyState >= 4 || progress >= 100;
-    setMediaReadyState(ready, ready ? 100 : progress, ready ? 'ready' : 'loading');
+    videoLoadProgress = Math.max(0, Math.min(100, progress));
+    videoLoadReady = videoPlayer.readyState >= 4 || videoLoadProgress >= 100;
+    if (videoLoadReady) {
+      videoLoadProgress = 100;
+    }
+
+    updateCombinedLoadingState();
   }
 
   function playZoomTransition(zoomIn) {
@@ -316,16 +577,63 @@ document.addEventListener('DOMContentLoaded', () => {
     awaitingResume = true;
 
     actionPromptImage.src = getActionImage(eventConfig.action);
+    actionPromptImage.classList.add('is-pulsing');
+    actionPromptLabel.classList.add('is-pulsing');
     updatePromptLanguage();
 
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
+    currentPromptShownAtMs = Date.now();
+    hardModeNeedsRestart = false;
+    clearHardModePromptTimer();
+    stopWaitMusic();
+
+    if (isHardModeSelected()) {
+      const shrinkStartDelayMs = Math.max(0, hardTimeLimitMs - hardShrinkDurationMs);
+      const shrinkTimer = setTimeout(() => {
+        if (!awaitingResume) {
+          return;
+        }
+
+        actionPromptImage.classList.remove('is-pulsing');
+        actionPromptLabel.classList.remove('is-pulsing');
+        actionPromptImage.classList.add('hard-mode-countdown');
+        actionPromptLabel.classList.add('hard-mode-countdown');
+      }, shrinkStartDelayMs);
+
+      hardModePromptTimer = setTimeout(() => {
+        if (!awaitingResume) {
+          return;
+        }
+
+        awaitingResume = false;
+        currentPromptShownAtMs = null;
+        hardModeNeedsRestart = true;
+        clearTimeout(shrinkTimer);
+        clearHardModePromptTimer();
+        stopWaitMusic();
+        actionPromptImage.classList.add('hidden');
+        actionPromptLabel.textContent = getTryAgainText();
+        actionPromptLabel.classList.remove('hard-mode-countdown');
+        playUiSound(hardTimeoutAudio);
+      }, hardTimeLimitMs);
+    }
+
     playUiSound(promptAudio);
+    startWaitMusicWithDelay();
   }
 
   function hideActionPrompt() {
     awaitingResume = false;
     activeActionKey = null;
+    clearHardModePromptTimer();
+    stopWaitMusic();
+
+    if (actionPromptImage) {
+      actionPromptImage.classList.remove('hidden');
+      actionPromptImage.classList.remove('is-pulsing');
+      actionPromptLabel?.classList.remove('is-pulsing');
+    }
 
     if (!overlayScreen) {
       return;
@@ -335,25 +643,67 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.add('hidden');
   }
 
-  function updateResultsSummary() {
-    if (!resultsSummary) {
-      return;
-    }
+  function computeFinalScore(avgDelayMs, falsePositives, totalPrompts) {
+    const normalizedDelay = Math.min(Math.max(avgDelayMs / DELAY_REFERENCE_MS, 0), 1);
+    const delayScore = DELAY_WEIGHT * (1 - normalizedDelay);
 
+    const denominator = Math.max(totalPrompts, 1);
+    const falsePositiveRatio = Math.min(Math.max(falsePositives / denominator, 0), 1);
+    const falsePositiveScore = FALSE_POSITIVE_WEIGHT * (1 - falsePositiveRatio);
+
+    const total = delayScore + falsePositiveScore;
+    return Math.max(0, Math.min(SCORE_MAX, Math.round(total)));
+  }
+
+  function formatDelayMs(ms) {
+    return (ms / 1000).toFixed(2) + 's';
+  }
+
+  function updateResultsSummary() {
     const count = actionEvents.length;
     const lang = getCurrentLanguage();
+    const avgDelayMs = responseDelaysMs.length
+      ? responseDelaysMs.reduce((total, value) => total + value, 0) / responseDelaysMs.length
+      : 0;
+    const finalScore = computeFinalScore(avgDelayMs, falsePositiveCount, count);
+
     const copy = {
-      fr: `Tu as complété ${count} actions dynamiques.`,
-      en: `You completed ${count} dynamic action prompts.`,
-      ja: `${count}回のアクション指示を完了しました。`
+      fr: {
+        scoreLabel: 'Score',
+        scoreValue: `${finalScore}`,
+        delay: `Délai moyen: ${formatDelayMs(avgDelayMs)}`,
+        falsePositives: `Faux positifs: ${falsePositiveCount}`
+      },
+      en: {
+        scoreLabel: 'Score',
+        scoreValue: `${finalScore}`,
+        delay: `Average delay: ${formatDelayMs(avgDelayMs)}`,
+        falsePositives: `False positives: ${falsePositiveCount}`
+      },
+      ja: {
+        scoreLabel: 'スコア',
+        scoreValue: `${finalScore}`,
+        delay: `平均遅延: ${formatDelayMs(avgDelayMs)}`,
+        falsePositives: `誤反応: ${falsePositiveCount}`
+      }
     };
 
-    resultsSummary.textContent = copy[lang] || copy.en;
+    const localized = copy[lang] || copy.en;
+    if (resultsScore) {
+      resultsScore.innerHTML = `<span class="stop-action-score-label">${localized.scoreLabel}</span><span class="stop-action-score-value">${localized.scoreValue}</span>`;
+    }
+    if (resultsAverageDelay) resultsAverageDelay.textContent = localized.delay;
+    if (resultsFalsePositives) resultsFalsePositives.textContent = localized.falsePositives;
   }
 
   async function resumeGame() {
     if (!videoPlayer || !awaitingResume || isTransitioning) {
       return;
+    }
+
+    if (currentPromptShownAtMs) {
+      responseDelaysMs.push(Date.now() - currentPromptShownAtMs);
+      currentPromptShownAtMs = null;
     }
 
     hideActionPrompt();
@@ -388,6 +738,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (languageToggle) {
       languageToggle.style.display = 'inline-flex';
     }
+
+    startMenuMusic();
   }
 
   function resetGameState() {
@@ -395,6 +747,10 @@ document.addEventListener('DOMContentLoaded', () => {
     awaitingResume = false;
     activeActionKey = null;
     gameStarted = false;
+    currentPromptShownAtMs = null;
+    responseDelaysMs = [];
+    falsePositiveCount = 0;
+    hardModeNeedsRestart = false;
 
     hideActionPrompt();
     isTransitioning = false;
@@ -420,6 +776,8 @@ document.addEventListener('DOMContentLoaded', () => {
     resetGameState();
     gameStarted = true;
     primeUiAudio();
+    stopMenuMusic();
+    clearMenuMusicAutoplayTimer();
 
     if (controlPanel) {
       controlPanel.style.display = 'none';
@@ -460,6 +818,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (languageToggle) {
       languageToggle.style.display = 'inline-flex';
     }
+
+    startMenuMusic();
   }
 
   function handleTimeUpdate() {
@@ -501,7 +861,21 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (hardModeNeedsRestart) {
+      if (acceptedKeyboard && event.code === 'Space') {
+        playUiSound(hardRestartAudio);
+        startGame();
+      }
+      return;
+    }
+
     if (isTransitioning) {
+      return;
+    }
+
+    if (gameStarted) {
+      falsePositiveCount += 1;
+      updateResultsSummary();
       return;
     }
 
@@ -509,6 +883,10 @@ document.addEventListener('DOMContentLoaded', () => {
       startGame();
     }
   }
+
+  modeButtons.forEach((button) => {
+    button.addEventListener('click', () => setSelectedMode(button.dataset.mode));
+  });
 
   if (startButton) {
     startButton.addEventListener('click', startGame);
@@ -536,7 +914,11 @@ document.addEventListener('DOMContentLoaded', () => {
   videoPlayer?.addEventListener('progress', refreshMediaLoadingState);
   videoPlayer?.addEventListener('canplay', refreshMediaLoadingState);
   videoPlayer?.addEventListener('canplaythrough', refreshMediaLoadingState);
-  videoPlayer?.addEventListener('error', () => setMediaReadyState(false, mediaProgress, 'unavailable'));
+  videoPlayer?.addEventListener('error', () => {
+    videoLoadReady = false;
+    updateCombinedLoadingState();
+    setMediaReadyState(false, Math.round((videoLoadProgress * 0.7) + (imageLoadProgress * 0.3)), 'unavailable');
+  });
 
   const languageObserver = new MutationObserver(updatePromptLanguage);
   languageObserver.observe(document.documentElement, {
@@ -544,7 +926,20 @@ document.addEventListener('DOMContentLoaded', () => {
     attributeFilter: ['lang']
   });
 
+  setSelectedMode(document.body.dataset.selectedMode || 'normal');
   setMediaReadyState(false, 8, 'loading');
+  preloadActionImages();
   refreshMediaLoadingState();
   updateResultsSummary();
+  startMenuMusic();
+  scheduleMenuMusicAutoplay();
+
+  const unlockMenuMusic = () => {
+    startMenuMusic();
+    document.removeEventListener('pointerdown', unlockMenuMusic, true);
+    document.removeEventListener('keydown', unlockMenuMusic, true);
+  };
+
+  document.addEventListener('pointerdown', unlockMenuMusic, true);
+  document.addEventListener('keydown', unlockMenuMusic, true);
 });
