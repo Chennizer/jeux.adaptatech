@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const hardShrinkDurationMs = Math.max(1000, Number(document.body.getAttribute('data-hard-shrink-duration')) * 1000 || 5000);
   const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/error.mp3';
   const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
+  const autoStartOnReady = document.body.getAttribute('data-auto-start-on-ready') === 'true';
   const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
@@ -154,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let hardModePromptTimer = null;
   let hardModeNeedsRestart = false;
   let waitMusicStartTimer = null;
+  let autoStartHasRun = false;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -422,6 +424,11 @@ document.addEventListener('DOMContentLoaded', () => {
       startButton.disabled = !mediaReady;
       startButton.setAttribute('aria-disabled', mediaReady ? 'false' : 'true');
       startButton.classList.toggle('is-disabled', !mediaReady);
+    }
+
+    if (autoStartOnReady && mediaReady && !gameStarted && !autoStartHasRun) {
+      autoStartHasRun = true;
+      startGame({ requestFullscreen: false, autoStart: true });
     }
   }
 
@@ -702,7 +709,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function startGame() {
+  function startGame(options = {}) {
+    const requestFullscreenOnStart = options.requestFullscreen !== false;
+    const isAutoStart = options.autoStart === true;
+
     if (!videoPlayer || !mediaReady || actionEvents.length === 0) {
       return;
     }
@@ -725,20 +735,29 @@ document.addEventListener('DOMContentLoaded', () => {
       videoContainer.style.display = 'block';
     }
 
-    const requestFullscreen = document.documentElement.requestFullscreen
-      || document.documentElement.webkitRequestFullscreen
-      || document.documentElement.msRequestFullscreen;
+    if (requestFullscreenOnStart) {
+      const requestFullscreen = document.documentElement.requestFullscreen
+        || document.documentElement.webkitRequestFullscreen
+        || document.documentElement.msRequestFullscreen;
 
-    if (requestFullscreen) {
-      try {
-        requestFullscreen.call(document.documentElement);
-      } catch (error) {
-        // no-op
+      if (requestFullscreen) {
+        try {
+          requestFullscreen.call(document.documentElement);
+        } catch (error) {
+          // no-op
+        }
       }
     }
 
     videoPlayer.currentTime = 0;
-    videoPlayer.play().catch(() => {});
+    const playAttempt = videoPlayer.play();
+
+    if (isAutoStart && playAttempt && typeof playAttempt.catch === 'function') {
+      playAttempt.catch(() => {
+        videoPlayer.muted = true;
+        videoPlayer.play().catch(() => {});
+      });
+    }
   }
 
   function restartToMenu() {
