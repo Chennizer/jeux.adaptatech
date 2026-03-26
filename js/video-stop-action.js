@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const successAudio = createUiAudio(successSoundSrc);
   const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
-  const menuMusicAudio = createUiAudio(menuMusicSrc);
+  const menuMusicAudio = getMenuMusicAudio(menuMusicSrc);
   const waitMusicAudio = createUiAudio(waitMusicSrc);
 
   if (videoPlayer && videoSource) {
@@ -176,7 +176,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const audio = new Audio(source);
     audio.preload = 'auto';
+    try {
+      audio.load();
+    } catch (error) {
+      // no-op
+    }
     return audio;
+  }
+
+  function getMenuMusicAudio(source) {
+    const inlineAudio = document.getElementById('intro-jingle');
+    if (inlineAudio && typeof inlineAudio.play === 'function') {
+      if (source && !inlineAudio.getAttribute('src')) {
+        inlineAudio.src = source;
+      }
+      inlineAudio.preload = 'auto';
+      try {
+        inlineAudio.load();
+      } catch (error) {
+        // no-op
+      }
+      return inlineAudio;
+    }
+
+    return createUiAudio(source);
   }
 
   function playUiSound(audio) {
