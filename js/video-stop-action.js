@@ -127,7 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const hardShrinkDurationMs = Math.max(1000, Number(document.body.getAttribute('data-hard-shrink-duration')) * 1000 || 5000);
   const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/error.mp3';
   const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
-  const autoStartOnReady = document.body.getAttribute('data-auto-start-on-ready') === 'true';
   const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
@@ -155,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let hardModePromptTimer = null;
   let hardModeNeedsRestart = false;
   let waitMusicStartTimer = null;
-  let autoStartHasRun = false;
+  let menuMusicAutoPlayAttempted = false;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -246,6 +245,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     playLoopAudio(menuMusicAudio, 0.3);
+  }
+
+  function autoStartMenuMusicAfterLoad() {
+    if (!menuMusicAudio || menuMusicAutoPlayAttempted) {
+      return;
+    }
+
+    menuMusicAutoPlayAttempted = true;
+
+    try {
+      menuMusicAudio.loop = true;
+      menuMusicAudio.muted = true;
+      menuMusicAudio.volume = 0;
+      const playPromise = menuMusicAudio.play();
+
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(() => {
+          menuMusicAudio.muted = false;
+          menuMusicAudio.volume = 0.3;
+        }).catch(() => {
+          menuMusicAudio.muted = false;
+          menuMusicAudio.volume = 0.3;
+        });
+      } else {
+        menuMusicAudio.muted = false;
+        menuMusicAudio.volume = 0.3;
+      }
+    } catch (error) {
+      menuMusicAudio.muted = false;
+      menuMusicAudio.volume = 0.3;
+    }
   }
 
   function stopMenuMusic() {
@@ -426,9 +456,8 @@ document.addEventListener('DOMContentLoaded', () => {
       startButton.classList.toggle('is-disabled', !mediaReady);
     }
 
-    if (autoStartOnReady && mediaReady && !gameStarted && !autoStartHasRun) {
-      autoStartHasRun = true;
-      startGame({ requestFullscreen: false, autoStart: true });
+    if (mediaReady) {
+      autoStartMenuMusicAfterLoad();
     }
   }
 
@@ -709,10 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function startGame(options = {}) {
-    const requestFullscreenOnStart = options.requestFullscreen !== false;
-    const isAutoStart = options.autoStart === true;
-
+  function startGame() {
     if (!videoPlayer || !mediaReady || actionEvents.length === 0) {
       return;
     }
@@ -735,29 +761,20 @@ document.addEventListener('DOMContentLoaded', () => {
       videoContainer.style.display = 'block';
     }
 
-    if (requestFullscreenOnStart) {
-      const requestFullscreen = document.documentElement.requestFullscreen
-        || document.documentElement.webkitRequestFullscreen
-        || document.documentElement.msRequestFullscreen;
+    const requestFullscreen = document.documentElement.requestFullscreen
+      || document.documentElement.webkitRequestFullscreen
+      || document.documentElement.msRequestFullscreen;
 
-      if (requestFullscreen) {
-        try {
-          requestFullscreen.call(document.documentElement);
-        } catch (error) {
-          // no-op
-        }
+    if (requestFullscreen) {
+      try {
+        requestFullscreen.call(document.documentElement);
+      } catch (error) {
+        // no-op
       }
     }
 
     videoPlayer.currentTime = 0;
-    const playAttempt = videoPlayer.play();
-
-    if (isAutoStart && playAttempt && typeof playAttempt.catch === 'function') {
-      playAttempt.catch(() => {
-        videoPlayer.muted = true;
-        videoPlayer.play().catch(() => {});
-      });
-    }
+    videoPlayer.play().catch(() => {});
   }
 
   function restartToMenu() {
