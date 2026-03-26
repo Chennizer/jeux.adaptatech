@@ -156,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let waitMusicStartTimer = null;
   let menuMusicAutoplayAttempts = 0;
   let menuMusicAutoplayTimer = null;
+  let menuMusicStarted = false;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -225,7 +226,15 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       audio.loop = true;
       audio.volume = volume;
-      audio.play().catch(() => {});
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(() => {
+          if (audio === menuMusicAudio) {
+            menuMusicStarted = true;
+            clearMenuMusicAutoplayTimer();
+          }
+        }).catch(() => {});
+      }
     } catch (error) {
       // no-op
     }
@@ -286,7 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (!menuMusicAudio.paused) {
+    if (menuMusicStarted || !menuMusicAudio.paused) {
+      menuMusicStarted = true;
       clearMenuMusicAutoplayTimer();
       return;
     }
@@ -297,50 +307,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     menuMusicAutoplayAttempts += 1;
-
-    try {
-      menuMusicAudio.loop = true;
-      menuMusicAudio.muted = true;
-      menuMusicAudio.volume = 0;
-      const playPromise = menuMusicAudio.play();
-
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise.then(() => {
-          window.setTimeout(() => {
-            if (controlPanel && controlPanel.style.display === 'none') {
-              return;
-            }
-            menuMusicAudio.muted = false;
-            menuMusicAudio.volume = 0.3;
-            try {
-              if (menuMusicAudio.paused) {
-                menuMusicAudio.play().catch(() => {});
-              }
-            } catch (error) {
-              // no-op
-            }
-          }, 1200);
-          clearMenuMusicAutoplayTimer();
-        }).catch(() => {
-          // no-op; keep retrying while timer is active
-        });
-      }
-    } catch (error) {
-      // no-op; keep retrying while timer is active
-    }
+    startMenuMusic();
   }
 
   function scheduleMenuMusicAutoplay() {
-    if (!menuMusicAudio || menuMusicAutoplayTimer) {
+    if (!menuMusicAudio || menuMusicAutoplayTimer || menuMusicStarted) {
       return;
     }
 
+    menuMusicAutoplayAttempts = 0;
     autoStartMenuMusicAfterLoad();
     menuMusicAutoplayTimer = window.setInterval(autoStartMenuMusicAfterLoad, 1200);
   }
 
   function stopMenuMusic() {
     stopLoopAudio(menuMusicAudio);
+    menuMusicStarted = false;
   }
 
   function setSelectedMode(mode) {
