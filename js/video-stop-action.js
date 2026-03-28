@@ -595,6 +595,11 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingBarContainer.dataset.status = getStatusLabel(currentStatusKey);
       }
       updateResultsSummary();
+
+      updateScorePanelCopy();
+      if (scoreFeatureEnabled && leaderboardPanel && !leaderboardPanel.classList.contains('hidden')) {
+        renderLeaderboard();
+      }
       return;
     }
 
@@ -607,6 +612,10 @@ document.addEventListener('DOMContentLoaded', () => {
     actionPromptImage.alt = label;
     updateResultsSummary();
     updateScorePanelCopy();
+
+    if (scoreFeatureEnabled && leaderboardPanel && !leaderboardPanel.classList.contains('hidden')) {
+      renderLeaderboard();
+    }
   }
 
   function getScorePanelCopy() {
@@ -623,7 +632,13 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
         emptyLeaderboard: 'Aucun score pour le moment.',
         loadingLeaderboard: 'Chargement du classement...',
-        leaderboardError: 'Impossible de charger le classement.'
+        leaderboardError: 'Impossible de charger le classement.',
+        anonymous: 'Anonyme',
+        modes: {
+          easy: 'Facile',
+          hard: 'Difficile',
+          competitive: 'Compétitif'
+        }
       },
       en: {
         registerQuestion: 'Save your score to the leaderboard.',
@@ -636,7 +651,13 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
         emptyLeaderboard: 'No scores yet.',
         loadingLeaderboard: 'Loading leaderboard...',
-        leaderboardError: 'Unable to load leaderboard.'
+        leaderboardError: 'Unable to load leaderboard.',
+        anonymous: 'Anonymous',
+        modes: {
+          easy: 'Easy',
+          hard: 'Hard',
+          competitive: 'Competitive'
+        }
       },
       ja: {
         registerQuestion: 'スコアをランキングに登録します。',
@@ -649,11 +670,38 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardTitle: (mode) => `トップ${scoreTopLimit}（${mode}）`,
         emptyLeaderboard: 'まだスコアがありません。',
         loadingLeaderboard: 'ランキングを読み込み中...',
-        leaderboardError: 'ランキングを読み込めません。'
+        leaderboardError: 'ランキングを読み込めません。',
+        anonymous: '匿名',
+        modes: {
+          easy: 'かんたん',
+          hard: 'ハード',
+          competitive: '対戦'
+        }
       }
     };
 
     return copy[lang] || copy.en;
+  }
+
+  function getModeLabelForLeaderboard(mode, copy) {
+    if (!copy || !copy.modes) {
+      return mode;
+    }
+
+    return copy.modes[mode] || mode;
+  }
+
+  function getLeaderboardMedal(index) {
+    if (index === 0) {
+      return '🥇 ';
+    }
+    if (index === 1) {
+      return '🥈 ';
+    }
+    if (index === 2) {
+      return '🥉 ';
+    }
+    return '';
   }
 
   function getFinalScoreValue() {
@@ -727,7 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const copy = getScorePanelCopy();
     const mode = getSelectedModeForScoreboard();
-    leaderboardTitle.textContent = copy.leaderboardTitle(mode);
+    leaderboardTitle.textContent = copy.leaderboardTitle(getModeLabelForLeaderboard(mode, copy));
     leaderboardPanel.classList.remove('hidden');
     leaderboardList.innerHTML = '';
 
@@ -747,11 +795,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      rows.slice(0, scoreTopLimit).forEach((row) => {
+      rows.slice(0, scoreTopLimit).forEach((row, index) => {
         const item = document.createElement('li');
-        const name = typeof row?.player_name === 'string' ? row.player_name : 'Anonymous';
+        const name = typeof row?.player_name === 'string' && row.player_name.trim()
+          ? row.player_name.trim()
+          : copy.anonymous;
         const value = Number.isFinite(Number(row?.score)) ? Number(row.score) : 0;
-        item.textContent = name + ' — ' + value;
+        item.textContent = getLeaderboardMedal(index) + name + ' — ' + value;
         leaderboardList.appendChild(item);
       });
     } catch (error) {
