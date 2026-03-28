@@ -66,25 +66,20 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const MODE_DESCRIPTION_COPY = {
-    easy: {
-      fr: 'Profite du jeu et prends ton temps.',
-      en: 'Enjoy the game and take your time.',
-      ja: 'ゲームを楽しみながら、ゆっくり進めてください。'
+    normal: {
+      fr: 'Mode normal : joue au rythme actuel, sans limite supplémentaire.',
+      en: 'Normal mode: play with the current pace and no extra penalties.',
+      ja: 'ノーマル：現在のテンポで、追加ペナルティなしで遊べます。'
     },
     hard: {
-      fr: 'Mode difficile : texte explicatif à venir.',
-      en: 'Hard mode: description coming soon.',
-      ja: 'ハードモード：説明は近日追加予定です。'
+      fr: 'Mode difficile : tu as 10 secondes pour valider chaque action et 5 erreurs de switch hors temps avant redémarrage.',
+      en: 'Hard mode: you have 10 seconds to confirm each prompt and 5 off-timing switch mistakes before restart.',
+      ja: 'ハード：各アクションは10秒以内、タイミング外のスイッチ操作は5回でリスタート。'
     },
     competitive: {
-      fr: 'Mode compétitif : texte explicatif à venir.',
-      en: 'Competitive mode: description coming soon.',
-      ja: '対戦モード：説明は近日追加予定です。'
-    },
-    normal: {
-      fr: 'Profite du jeu et prends ton temps.',
-      en: 'Enjoy the game and take your time.',
-      ja: 'ゲームを楽しみながら、ゆっくり進めてください。'
+      fr: 'Mode compétitif : 3 secondes pour valider (fondu après 1 seconde), et redémarrage immédiat au moindre switch hors temps.',
+      en: 'Competitive mode: 3 seconds to confirm (fades after 1 second), and instant restart on any off-timing switch press.',
+      ja: '対戦：入力は3秒以内（1秒後から2秒でフェード）、タイミング外スイッチは即リスタート。'
     }
   };
 
@@ -345,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setSelectedMode(mode) {
-    document.body.dataset.selectedMode = mode || 'easy';
+    document.body.dataset.selectedMode = mode || 'normal';
 
     modeButtons.forEach((button) => {
       const isSelected = button.dataset.mode === document.body.dataset.selectedMode;
@@ -356,21 +351,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modeDescription) {
       const selected = document.body.dataset.selectedMode;
       const lang = getCurrentLanguage();
-      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.easy;
+      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
       modeDescription.textContent = copy[lang] || copy.en;
     }
   }
 
   function getSelectedModeForScoreboard() {
-    const selectedMode = document.body.dataset.selectedMode || 'easy';
-    if (selectedMode === 'normal') {
-      return 'easy';
-    }
-    return selectedMode;
+    return document.body.dataset.selectedMode || 'normal';
   }
 
   function isHardModeSelected() {
     return document.body.dataset.selectedMode === 'hard';
+  }
+
+  function isCompetitiveModeSelected() {
+    return document.body.dataset.selectedMode === 'competitive';
   }
 
   function clearHardModePromptTimer() {
@@ -381,16 +376,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     actionPromptImage?.classList.remove('hard-mode-countdown');
     actionPromptLabel?.classList.remove('hard-mode-countdown');
+    if (actionPromptImage) {
+      actionPromptImage.style.animationDuration = '';
+    }
+    if (actionPromptLabel) {
+      actionPromptLabel.style.animationDuration = '';
+    }
   }
 
   function getTryAgainText() {
     const lang = getCurrentLanguage();
     const copy = {
-      fr: 'Réessaie (appuie sur Espace)',
-      en: 'Try again (press Space)',
-      ja: 'もう一度（スペースキーを押す）'
+      fr: 'Réessaie (appuie sur ta switch)',
+      en: 'Try again (press your switch)',
+      ja: 'もう一度（あなたのスイッチを押して）'
     };
     return copy[lang] || copy.en;
+  }
+
+  function triggerFailedPromptRestart() {
+    awaitingResume = false;
+    currentPromptShownAtMs = null;
+    hardModeNeedsRestart = true;
+    clearHardModePromptTimer();
+    stopWaitMusic();
+    videoPlayer?.pause();
+
+    if (actionPromptImage) {
+      actionPromptImage.classList.add('hidden');
+      actionPromptImage.style.animationDuration = '';
+    }
+    if (actionPromptLabel) {
+      actionPromptLabel.textContent = getTryAgainText();
+      actionPromptLabel.classList.remove('hard-mode-countdown');
+      actionPromptLabel.style.animationDuration = '';
+    }
+
+    overlayScreen?.classList.remove('hidden');
+    overlayScreen?.classList.add('show');
+    playUiSound(hardTimeoutAudio);
   }
 
   function primeUiAudio() {
@@ -635,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardError: 'Impossible de charger le classement.',
         anonymous: 'Anonyme',
         modes: {
-          easy: 'Facile',
+          normal: 'Normal',
           hard: 'Difficile',
           competitive: 'Compétitif'
         }
@@ -654,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardError: 'Unable to load leaderboard.',
         anonymous: 'Anonymous',
         modes: {
-          easy: 'Easy',
+          normal: 'Normal',
           hard: 'Hard',
           competitive: 'Competitive'
         }
@@ -673,7 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardError: 'ランキングを読み込めません。',
         anonymous: '匿名',
         modes: {
-          easy: 'かんたん',
+          normal: 'ノーマル',
           hard: 'ハード',
           competitive: '対戦'
         }
@@ -902,8 +926,10 @@ document.addEventListener('DOMContentLoaded', () => {
     clearHardModePromptTimer();
     stopWaitMusic();
 
-    if (isHardModeSelected()) {
-      const shrinkStartDelayMs = Math.max(0, hardTimeLimitMs - hardShrinkDurationMs);
+    if (isHardModeSelected() || isCompetitiveModeSelected()) {
+      const totalTimeMs = isCompetitiveModeSelected() ? 3000 : hardTimeLimitMs;
+      const shrinkDurationMs = isCompetitiveModeSelected() ? 2000 : hardShrinkDurationMs;
+      const shrinkStartDelayMs = Math.max(0, totalTimeMs - shrinkDurationMs);
       const shrinkTimer = setTimeout(() => {
         if (!awaitingResume) {
           return;
@@ -911,6 +937,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         actionPromptImage.classList.remove('is-pulsing');
         actionPromptLabel.classList.remove('is-pulsing');
+        if (actionPromptImage) {
+          actionPromptImage.style.animationDuration = (shrinkDurationMs / 1000) + 's';
+        }
+        if (actionPromptLabel) {
+          actionPromptLabel.style.animationDuration = (shrinkDurationMs / 1000) + 's';
+        }
         actionPromptImage.classList.add('hard-mode-countdown');
         actionPromptLabel.classList.add('hard-mode-countdown');
       }, shrinkStartDelayMs);
@@ -919,18 +951,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!awaitingResume) {
           return;
         }
-
-        awaitingResume = false;
-        currentPromptShownAtMs = null;
-        hardModeNeedsRestart = true;
         clearTimeout(shrinkTimer);
-        clearHardModePromptTimer();
-        stopWaitMusic();
-        actionPromptImage.classList.add('hidden');
-        actionPromptLabel.textContent = getTryAgainText();
-        actionPromptLabel.classList.remove('hard-mode-countdown');
-        playUiSound(hardTimeoutAudio);
-      }, hardTimeLimitMs);
+        triggerFailedPromptRestart();
+      }, totalTimeMs);
     }
 
     playUiSound(promptAudio);
@@ -1183,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (hardModeNeedsRestart) {
-      if (acceptedKeyboard && event.code === 'Space') {
+      if (acceptedKeyboard && (event.code === 'Space' || event.code === 'Enter')) {
         playUiSound(hardRestartAudio);
         startGame();
       }
@@ -1197,6 +1220,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gameStarted) {
       falsePositiveCount += 1;
       updateResultsSummary();
+
+      if (isCompetitiveModeSelected()) {
+        playUiSound(hardRestartAudio);
+        startGame();
+        return;
+      }
+
+      if (isHardModeSelected() && falsePositiveCount >= 5) {
+        triggerFailedPromptRestart();
+      }
       return;
     }
 
@@ -1255,7 +1288,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attributeFilter: ['lang']
   });
 
-  setSelectedMode(document.body.dataset.selectedMode || 'easy');
+  setSelectedMode(document.body.dataset.selectedMode || 'normal');
   setMediaReadyState(false, 8, 'loading');
   preloadActionImages();
   refreshMediaLoadingState();
