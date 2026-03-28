@@ -587,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
 
-      const timeoutId = window.setTimeout(finish, 2100);
+      const timeoutId = window.setTimeout(finish, 1100);
       videoContainer.addEventListener('animationend', handleAnimationEnd);
       videoContainer.classList.remove('is-freeze-encounter');
       void videoContainer.offsetWidth;
