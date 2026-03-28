@@ -569,30 +569,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     return new Promise((resolve) => {
-      let settled = false;
-
-      const finish = () => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        videoContainer.removeEventListener('animationend', handleAnimationEnd);
-        clearTimeout(timeoutId);
-        resolve();
-      };
-
-      const handleAnimationEnd = (event) => {
-        if (event.target === videoContainer && event.animationName === 'freezeEncounter') {
-          finish();
-        }
-      };
-
-      const timeoutId = window.setTimeout(finish, 600);
-      videoContainer.addEventListener('animationend', handleAnimationEnd);
       videoContainer.classList.remove('is-freeze-encounter');
       void videoContainer.offsetWidth;
       videoContainer.classList.add('is-freeze-encounter');
+      window.setTimeout(resolve, 520);
     });
   }
 
