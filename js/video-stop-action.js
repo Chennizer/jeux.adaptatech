@@ -122,9 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const continueButton = document.getElementById('continue-button');
   const scoreRegisterPanel = document.getElementById('score-register-panel');
   const scoreRegisterQuestion = document.getElementById('score-register-question');
-  const scoreRegisterActions = document.getElementById('score-register-actions');
-  const scoreRegisterYesButton = document.getElementById('score-register-yes');
-  const scoreRegisterNoButton = document.getElementById('score-register-no');
   const scoreRegisterForm = document.getElementById('score-register-form');
   const scorePlayerNameLabel = document.getElementById('score-player-name-label');
   const scorePlayerNameInput = document.getElementById('score-player-name');
@@ -617,9 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lang = getCurrentLanguage();
     const copy = {
       fr: {
-        registerQuestion: 'Voulez-vous enregistrer votre score?',
-        yes: 'Oui',
-        no: 'Non',
+        registerQuestion: 'Enregistre ton score dans le classement.',
         nameLabel: 'Votre nom',
         submit: 'Enregistrer',
         sending: 'Enregistrement du score...',
@@ -632,9 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardError: 'Impossible de charger le classement.'
       },
       en: {
-        registerQuestion: 'Do you want to register your score?',
-        yes: 'Yes',
-        no: 'No',
+        registerQuestion: 'Save your score to the leaderboard.',
         nameLabel: 'Your name',
         submit: 'Submit score',
         sending: 'Submitting score...',
@@ -647,9 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
         leaderboardError: 'Unable to load leaderboard.'
       },
       ja: {
-        registerQuestion: 'スコアを登録しますか？',
-        yes: 'はい',
-        no: 'いいえ',
+        registerQuestion: 'スコアをランキングに登録します。',
         nameLabel: '名前',
         submit: 'スコア登録',
         sending: 'スコアを送信中...',
@@ -684,7 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setScoreButtonsDisabled(disabled) {
-    [scoreRegisterYesButton, scoreRegisterNoButton, scoreSubmitButton].forEach((button) => {
+    [scoreSubmitButton].forEach((button) => {
       if (button) {
         button.disabled = Boolean(disabled);
       }
@@ -782,12 +773,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (scoreRegisterQuestion) {
       scoreRegisterQuestion.textContent = copy.registerQuestion;
     }
-    if (scoreRegisterYesButton) {
-      scoreRegisterYesButton.textContent = copy.yes;
-    }
-    if (scoreRegisterNoButton) {
-      scoreRegisterNoButton.textContent = copy.no;
-    }
     if (scorePlayerNameLabel) {
       scorePlayerNameLabel.textContent = copy.nameLabel;
     }
@@ -807,8 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     scoreSubmissionState = 'idle';
     scoreRegisterPanel.classList.remove('hidden');
-    scoreRegisterActions?.classList.remove('hidden');
-    scoreRegisterForm?.classList.add('hidden');
+    scoreRegisterForm?.classList.remove('hidden');
     leaderboardPanel?.classList.add('hidden');
     leaderboardList && (leaderboardList.innerHTML = '');
     if (scorePlayerNameInput) {
@@ -1016,6 +1000,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (scoreFeatureEnabled) {
       resetScorePanel();
       renderLeaderboard();
+      scorePlayerNameInput?.focus();
     }
 
     if (document.fullscreenElement) {
@@ -1183,19 +1168,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (continueButton) {
     continueButton.addEventListener('click', restartToMenu);
   }
-
-  scoreRegisterYesButton?.addEventListener('click', () => {
-    scoreRegisterActions?.classList.add('hidden');
-    scoreRegisterForm?.classList.remove('hidden');
-    scorePlayerNameInput?.focus();
-    setScoreStatusMessage('', false);
-  });
-
-  scoreRegisterNoButton?.addEventListener('click', () => {
-    scoreRegisterActions?.classList.add('hidden');
-    scoreRegisterForm?.classList.add('hidden');
-    setScoreStatusMessage('', false);
-  });
 
   scoreSubmitButton?.addEventListener('click', handleScoreSubmission);
   scorePlayerNameInput?.addEventListener('keydown', (event) => {
