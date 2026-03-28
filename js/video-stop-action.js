@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const MODE_DESCRIPTION_COPY = {
-    normal: {
+    easy: {
       fr: 'Profite du jeu et prends ton temps.',
       en: 'Enjoy the game and take your time.',
       ja: 'ゲームを楽しみながら、ゆっくり進めてください。'
@@ -80,6 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
       fr: 'Mode compétitif : texte explicatif à venir.',
       en: 'Competitive mode: description coming soon.',
       ja: '対戦モード：説明は近日追加予定です。'
+    },
+    normal: {
+      fr: 'Profite du jeu et prends ton temps.',
+      en: 'Enjoy the game and take your time.',
+      ja: 'ゲームを楽しみながら、ゆっくり進めてください。'
     }
   };
 
@@ -115,6 +120,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultsAverageDelay = document.getElementById('results-average-delay');
   const resultsFalsePositives = document.getElementById('results-false-positives');
   const continueButton = document.getElementById('continue-button');
+  const scoreRegisterPanel = document.getElementById('score-register-panel');
+  const scoreRegisterQuestion = document.getElementById('score-register-question');
+  const scoreRegisterActions = document.getElementById('score-register-actions');
+  const scoreRegisterYesButton = document.getElementById('score-register-yes');
+  const scoreRegisterNoButton = document.getElementById('score-register-no');
+  const scoreRegisterForm = document.getElementById('score-register-form');
+  const scorePlayerNameLabel = document.getElementById('score-player-name-label');
+  const scorePlayerNameInput = document.getElementById('score-player-name');
+  const scoreSubmitButton = document.getElementById('score-submit');
+  const scoreRegisterStatus = document.getElementById('score-register-status');
+  const leaderboardPanel = document.getElementById('leaderboard-panel');
+  const leaderboardTitle = document.getElementById('leaderboard-title');
+  const leaderboardList = document.getElementById('leaderboard-list');
   const languageToggle = document.getElementById('language-toggle');
   const modeButtons = Array.from(document.querySelectorAll('.stop-action-mode-btn'));
   const modeDescription = document.getElementById('stop-action-mode-description');
@@ -135,6 +153,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const DELAY_WEIGHT = 9000;
   const FALSE_POSITIVE_WEIGHT = 1000;
   const DELAY_REFERENCE_MS = 3000;
+  const scoreGame = document.body.getAttribute('data-score-game') || '';
+  const scoreApiBase = (document.body.getAttribute('data-score-api-base') || '').trim();
+  const scoreTopLimit = Math.max(1, Math.min(50, Number(document.body.getAttribute('data-score-top-limit')) || 5));
+  const scoreFeatureEnabled = Boolean(scoreGame && scoreApiBase);
 
   let currentEventIndex = 0;
   let awaitingResume = false;
@@ -157,6 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let menuMusicAutoplayAttempts = 0;
   let menuMusicAutoplayTimer = null;
   let menuMusicStarted = false;
+  let scoreSubmissionState = 'idle';
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -326,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setSelectedMode(mode) {
-    document.body.dataset.selectedMode = mode || 'normal';
+    document.body.dataset.selectedMode = mode || 'easy';
 
     modeButtons.forEach((button) => {
       const isSelected = button.dataset.mode === document.body.dataset.selectedMode;
@@ -337,9 +360,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modeDescription) {
       const selected = document.body.dataset.selectedMode;
       const lang = getCurrentLanguage();
-      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
+      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.easy;
       modeDescription.textContent = copy[lang] || copy.en;
     }
+  }
+
+  function getSelectedModeForScoreboard() {
+    const selectedMode = document.body.dataset.selectedMode || 'easy';
+    if (selectedMode === 'normal') {
+      return 'easy';
+    }
+    return selectedMode;
   }
 
   function isHardModeSelected() {
@@ -579,6 +610,244 @@ document.addEventListener('DOMContentLoaded', () => {
     actionPromptLabel.textContent = label;
     actionPromptImage.alt = label;
     updateResultsSummary();
+    updateScorePanelCopy();
+  }
+
+  function getScorePanelCopy() {
+    const lang = getCurrentLanguage();
+    const copy = {
+      fr: {
+        registerQuestion: 'Voulez-vous enregistrer votre score?',
+        yes: 'Oui',
+        no: 'Non',
+        nameLabel: 'Votre nom',
+        submit: 'Enregistrer',
+        sending: 'Enregistrement du score...',
+        submitSuccess: 'Score enregistré.',
+        submitError: 'Impossible d\'enregistrer le score pour le moment.',
+        emptyName: 'Veuillez entrer un nom.',
+        leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
+        emptyLeaderboard: 'Aucun score pour le moment.',
+        loadingLeaderboard: 'Chargement du classement...',
+        leaderboardError: 'Impossible de charger le classement.'
+      },
+      en: {
+        registerQuestion: 'Do you want to register your score?',
+        yes: 'Yes',
+        no: 'No',
+        nameLabel: 'Your name',
+        submit: 'Submit score',
+        sending: 'Submitting score...',
+        submitSuccess: 'Score submitted.',
+        submitError: 'Unable to submit score right now.',
+        emptyName: 'Please enter a name.',
+        leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
+        emptyLeaderboard: 'No scores yet.',
+        loadingLeaderboard: 'Loading leaderboard...',
+        leaderboardError: 'Unable to load leaderboard.'
+      },
+      ja: {
+        registerQuestion: 'スコアを登録しますか？',
+        yes: 'はい',
+        no: 'いいえ',
+        nameLabel: '名前',
+        submit: 'スコア登録',
+        sending: 'スコアを送信中...',
+        submitSuccess: 'スコアを登録しました。',
+        submitError: '現在スコアを登録できません。',
+        emptyName: '名前を入力してください。',
+        leaderboardTitle: (mode) => `トップ${scoreTopLimit}（${mode}）`,
+        emptyLeaderboard: 'まだスコアがありません。',
+        loadingLeaderboard: 'ランキングを読み込み中...',
+        leaderboardError: 'ランキングを読み込めません。'
+      }
+    };
+
+    return copy[lang] || copy.en;
+  }
+
+  function getFinalScoreValue() {
+    const count = actionEvents.length;
+    const avgDelayMs = responseDelaysMs.length
+      ? responseDelaysMs.reduce((total, value) => total + value, 0) / responseDelaysMs.length
+      : 0;
+    return computeFinalScore(avgDelayMs, falsePositiveCount, count);
+  }
+
+  function setScoreStatusMessage(message, isError) {
+    if (!scoreRegisterStatus) {
+      return;
+    }
+
+    scoreRegisterStatus.textContent = message || '';
+    scoreRegisterStatus.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function setScoreButtonsDisabled(disabled) {
+    [scoreRegisterYesButton, scoreRegisterNoButton, scoreSubmitButton].forEach((button) => {
+      if (button) {
+        button.disabled = Boolean(disabled);
+      }
+    });
+  }
+
+  async function submitScore(game, playerName, score, mode) {
+    const response = await fetch(scoreApiBase + '/score', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        game,
+        playerName,
+        score,
+        mode
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('submit_failed');
+    }
+
+    return response.json();
+  }
+
+  async function getLeaderboard(game, mode, limit) {
+    const params = new URLSearchParams({
+      game,
+      limit: String(limit)
+    });
+
+    if (mode) {
+      params.set('mode', mode);
+    }
+
+    const response = await fetch(scoreApiBase + '/leaderboard?' + params.toString());
+    if (!response.ok) {
+      throw new Error('leaderboard_failed');
+    }
+
+    return response.json();
+  }
+
+  async function renderLeaderboard() {
+    if (!scoreFeatureEnabled || !leaderboardPanel || !leaderboardList || !leaderboardTitle) {
+      return;
+    }
+
+    const copy = getScorePanelCopy();
+    const mode = getSelectedModeForScoreboard();
+    leaderboardTitle.textContent = copy.leaderboardTitle(mode);
+    leaderboardPanel.classList.remove('hidden');
+    leaderboardList.innerHTML = '';
+
+    const loadingItem = document.createElement('li');
+    loadingItem.textContent = copy.loadingLeaderboard;
+    leaderboardList.appendChild(loadingItem);
+
+    try {
+      const data = await getLeaderboard(scoreGame, mode, scoreTopLimit);
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+
+      leaderboardList.innerHTML = '';
+      if (rows.length === 0) {
+        const emptyItem = document.createElement('li');
+        emptyItem.textContent = copy.emptyLeaderboard;
+        leaderboardList.appendChild(emptyItem);
+        return;
+      }
+
+      rows.slice(0, scoreTopLimit).forEach((row) => {
+        const item = document.createElement('li');
+        const name = typeof row?.player_name === 'string' ? row.player_name : 'Anonymous';
+        const value = Number.isFinite(Number(row?.score)) ? Number(row.score) : 0;
+        item.textContent = name + ' — ' + value;
+        leaderboardList.appendChild(item);
+      });
+    } catch (error) {
+      leaderboardList.innerHTML = '';
+      const errorItem = document.createElement('li');
+      errorItem.textContent = copy.leaderboardError;
+      leaderboardList.appendChild(errorItem);
+    }
+  }
+
+  function updateScorePanelCopy() {
+    if (!scoreFeatureEnabled || !scoreRegisterPanel) {
+      return;
+    }
+
+    const copy = getScorePanelCopy();
+
+    if (scoreRegisterQuestion) {
+      scoreRegisterQuestion.textContent = copy.registerQuestion;
+    }
+    if (scoreRegisterYesButton) {
+      scoreRegisterYesButton.textContent = copy.yes;
+    }
+    if (scoreRegisterNoButton) {
+      scoreRegisterNoButton.textContent = copy.no;
+    }
+    if (scorePlayerNameLabel) {
+      scorePlayerNameLabel.textContent = copy.nameLabel;
+    }
+    if (scoreSubmitButton) {
+      scoreSubmitButton.textContent = copy.submit;
+    }
+
+    if (scoreSubmissionState === 'sending') {
+      setScoreStatusMessage(copy.sending, false);
+    }
+  }
+
+  function resetScorePanel() {
+    if (!scoreFeatureEnabled || !scoreRegisterPanel) {
+      return;
+    }
+
+    scoreSubmissionState = 'idle';
+    scoreRegisterPanel.classList.remove('hidden');
+    scoreRegisterActions?.classList.remove('hidden');
+    scoreRegisterForm?.classList.add('hidden');
+    leaderboardPanel?.classList.add('hidden');
+    leaderboardList && (leaderboardList.innerHTML = '');
+    if (scorePlayerNameInput) {
+      scorePlayerNameInput.value = '';
+    }
+    setScoreStatusMessage('', false);
+    setScoreButtonsDisabled(false);
+    updateScorePanelCopy();
+  }
+
+  async function handleScoreSubmission() {
+    if (!scoreFeatureEnabled || scoreSubmissionState === 'sending') {
+      return;
+    }
+
+    const copy = getScorePanelCopy();
+    const rawName = scorePlayerNameInput?.value || '';
+    const playerName = rawName.trim();
+    if (!playerName) {
+      setScoreStatusMessage(copy.emptyName, true);
+      scorePlayerNameInput?.focus();
+      return;
+    }
+
+    scoreSubmissionState = 'sending';
+    setScoreButtonsDisabled(true);
+    setScoreStatusMessage(copy.sending, false);
+
+    try {
+      await submitScore(scoreGame, playerName.slice(0, 20), getFinalScoreValue(), getSelectedModeForScoreboard());
+      scoreSubmissionState = 'submitted';
+      setScoreStatusMessage(copy.submitSuccess, false);
+      await renderLeaderboard();
+    } catch (error) {
+      scoreSubmissionState = 'idle';
+      setScoreStatusMessage(copy.submitError, true);
+    } finally {
+      setScoreButtonsDisabled(false);
+    }
   }
 
   function showActionPrompt(eventConfig) {
@@ -744,6 +1013,11 @@ document.addEventListener('DOMContentLoaded', () => {
       resultsScreen.style.display = 'flex';
     }
 
+    if (scoreFeatureEnabled) {
+      resetScorePanel();
+      renderLeaderboard();
+    }
+
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
@@ -764,6 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
     responseDelaysMs = [];
     falsePositiveCount = 0;
     hardModeNeedsRestart = false;
+    scoreSubmissionState = 'idle';
 
     hideActionPrompt();
     isTransitioning = false;
@@ -909,6 +1184,27 @@ document.addEventListener('DOMContentLoaded', () => {
     continueButton.addEventListener('click', restartToMenu);
   }
 
+  scoreRegisterYesButton?.addEventListener('click', () => {
+    scoreRegisterActions?.classList.add('hidden');
+    scoreRegisterForm?.classList.remove('hidden');
+    scorePlayerNameInput?.focus();
+    setScoreStatusMessage('', false);
+  });
+
+  scoreRegisterNoButton?.addEventListener('click', () => {
+    scoreRegisterActions?.classList.add('hidden');
+    scoreRegisterForm?.classList.add('hidden');
+    setScoreStatusMessage('', false);
+  });
+
+  scoreSubmitButton?.addEventListener('click', handleScoreSubmission);
+  scorePlayerNameInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleScoreSubmission();
+    }
+  });
+
   if (overlayScreen) {
     overlayScreen.addEventListener('pointerup', handleActivate);
   }
@@ -939,11 +1235,12 @@ document.addEventListener('DOMContentLoaded', () => {
     attributeFilter: ['lang']
   });
 
-  setSelectedMode(document.body.dataset.selectedMode || 'normal');
+  setSelectedMode(document.body.dataset.selectedMode || 'easy');
   setMediaReadyState(false, 8, 'loading');
   preloadActionImages();
   refreshMediaLoadingState();
   updateResultsSummary();
+  updateScorePanelCopy();
   startMenuMusic();
   scheduleMenuMusicAutoplay();
 
