@@ -122,7 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const continueButton = document.getElementById('continue-button');
   const scoreRegisterPanel = document.getElementById('score-register-panel');
   const scoreRegisterQuestion = document.getElementById('score-register-question');
-  const scoreRegisterForm = document.getElementById('score-register-form');
   const scorePlayerNameLabel = document.getElementById('score-player-name-label');
   const scorePlayerNameInput = document.getElementById('score-player-name');
   const scoreSubmitButton = document.getElementById('score-submit');
@@ -792,7 +791,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     scoreSubmissionState = 'idle';
     scoreRegisterPanel.classList.remove('hidden');
-    scoreRegisterForm?.classList.remove('hidden');
     leaderboardPanel?.classList.add('hidden');
     leaderboardList && (leaderboardList.innerHTML = '');
     if (scorePlayerNameInput) {
