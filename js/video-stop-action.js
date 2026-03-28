@@ -587,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
 
-      const timeoutId = window.setTimeout(finish, 1100);
+      const timeoutId = window.setTimeout(finish, 600);
       videoContainer.addEventListener('animationend', handleAnimationEnd);
       videoContainer.classList.remove('is-freeze-encounter');
       void videoContainer.offsetWidth;
@@ -669,7 +669,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }, hardTimeLimitMs);
     }
 
-    playUiSound(promptAudio);
     startWaitMusicWithDelay();
   }
 
@@ -890,6 +889,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentEventIndex += 1;
       isTransitioning = true;
       playZoomTransition(true).then(() => {
+        playUiSound(promptAudio);
         playFreezeEncounterAnimation().then(() => {
           showActionPrompt(nextEvent);
           isTransitioning = false;
