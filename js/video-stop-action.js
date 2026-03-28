@@ -562,6 +562,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function triggerFreezeEncounterAnimation() {
+    if (!videoContainer) {
+      return;
+    }
+
+    videoContainer.classList.remove('is-freeze-encounter');
+    void videoContainer.offsetWidth;
+    videoContainer.classList.add('is-freeze-encounter');
+  }
+
+  function clearFreezeEncounterAnimation() {
+    videoContainer?.classList.remove('is-freeze-encounter');
+  }
+
   function updatePromptLanguage() {
     if (!actionPromptLabel || !actionPromptImage || !activeActionKey) {
       if (loadingBarContainer) {
@@ -723,6 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
     playUiSound(successAudio);
     isTransitioning = true;
     await playZoomTransition(false);
+    clearFreezeEncounterAnimation();
     isTransitioning = false;
     videoPlayer.play().catch(() => {});
   }
@@ -732,6 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hideActionPrompt();
     updateResultsSummary();
     videoPlayer?.classList.remove('is-paused-zoom');
+    clearFreezeEncounterAnimation();
 
     if (videoContainer) {
       videoContainer.classList.add('hidden');
@@ -768,6 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hideActionPrompt();
     isTransitioning = false;
     videoPlayer?.classList.remove('is-paused-zoom');
+    clearFreezeEncounterAnimation();
 
     if (resultsScreen) {
       resultsScreen.classList.remove('show');
@@ -850,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentEventIndex += 1;
       isTransitioning = true;
       playZoomTransition(true).then(() => {
+        triggerFreezeEncounterAnimation();
         showActionPrompt(nextEvent);
         isTransitioning = false;
       });
@@ -919,6 +937,7 @@ document.addEventListener('DOMContentLoaded', () => {
   videoPlayer?.addEventListener('play', () => {
     if (!awaitingResume && !isTransitioning) {
       videoPlayer.classList.remove('is-paused-zoom');
+      clearFreezeEncounterAnimation();
     }
   });
   videoPlayer?.addEventListener('loadstart', refreshMediaLoadingState);
