@@ -562,14 +562,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function triggerFreezeEncounterAnimation() {
+  function playFreezeEncounterAnimation() {
     if (!videoContainer) {
-      return;
+      return Promise.resolve();
     }
 
-    videoContainer.classList.remove('is-freeze-encounter');
-    void videoContainer.offsetWidth;
-    videoContainer.classList.add('is-freeze-encounter');
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        videoContainer.removeEventListener('animationend', handleAnimationEnd);
+        clearTimeout(timeoutId);
+        resolve();
+      };
+
+      const handleAnimationEnd = (event) => {
+        if (event.target === videoContainer && event.animationName === 'freezeEncounter') {
+          finish();
+        }
+      };
+
+      const timeoutId = window.setTimeout(finish, 2100);
+      videoContainer.addEventListener('animationend', handleAnimationEnd);
+      videoContainer.classList.remove('is-freeze-encounter');
+      void videoContainer.offsetWidth;
+      videoContainer.classList.add('is-freeze-encounter');
+    });
   }
 
   function clearFreezeEncounterAnimation() {
@@ -867,9 +890,10 @@ document.addEventListener('DOMContentLoaded', () => {
       currentEventIndex += 1;
       isTransitioning = true;
       playZoomTransition(true).then(() => {
-        triggerFreezeEncounterAnimation();
-        showActionPrompt(nextEvent);
-        isTransitioning = false;
+        playFreezeEncounterAnimation().then(() => {
+          showActionPrompt(nextEvent);
+          isTransitioning = false;
+        });
       });
     }
   }
