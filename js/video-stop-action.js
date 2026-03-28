@@ -152,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let imageLoadProgress = 0;
   let imageLoadReady = false;
   let hardModePromptTimer = null;
+  let promptRevealTimer = null;
   let hardModeNeedsRestart = false;
   let waitMusicStartTimer = null;
   let menuMusicAutoplayAttempts = 0;
@@ -599,6 +600,13 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer?.classList.remove('is-freeze-encounter');
   }
 
+  function clearPromptRevealTimer() {
+    if (promptRevealTimer) {
+      clearTimeout(promptRevealTimer);
+      promptRevealTimer = null;
+    }
+  }
+
   function updatePromptLanguage() {
     if (!actionPromptLabel || !actionPromptImage || !activeActionKey) {
       if (loadingBarContainer) {
@@ -625,8 +633,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeActionKey = eventConfig.action;
     awaitingResume = true;
+    clearPromptRevealTimer();
 
     actionPromptImage.src = getActionImage(eventConfig.action);
+    actionPromptImage.classList.add('prompt-hidden');
+    actionPromptImage.classList.remove('is-fading-in');
     actionPromptImage.classList.add('is-pulsing');
     actionPromptLabel.classList.add('is-pulsing');
     updatePromptLanguage();
@@ -637,6 +648,13 @@ document.addEventListener('DOMContentLoaded', () => {
     hardModeNeedsRestart = false;
     clearHardModePromptTimer();
     stopWaitMusic();
+    promptRevealTimer = setTimeout(() => {
+      actionPromptImage.classList.remove('prompt-hidden');
+      actionPromptImage.classList.remove('is-fading-in');
+      void actionPromptImage.offsetWidth;
+      actionPromptImage.classList.add('is-fading-in');
+      promptRevealTimer = null;
+    }, 300);
 
     if (isHardModeSelected()) {
       const shrinkStartDelayMs = Math.max(0, hardTimeLimitMs - hardShrinkDurationMs);
@@ -676,10 +694,13 @@ document.addEventListener('DOMContentLoaded', () => {
     awaitingResume = false;
     activeActionKey = null;
     clearHardModePromptTimer();
+    clearPromptRevealTimer();
     stopWaitMusic();
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
+      actionPromptImage.classList.remove('prompt-hidden');
+      actionPromptImage.classList.remove('is-fading-in');
       actionPromptImage.classList.remove('is-pulsing');
       actionPromptLabel?.classList.remove('is-pulsing');
     }
