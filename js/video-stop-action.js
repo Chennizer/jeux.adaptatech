@@ -352,12 +352,18 @@ document.addEventListener('DOMContentLoaded', () => {
       button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
     });
 
-    if (modeDescription) {
-      const selected = document.body.dataset.selectedMode;
-      const lang = getCurrentLanguage();
-      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
-      modeDescription.textContent = copy[lang] || copy.en;
+    updateModeDescription();
+  }
+
+  function updateModeDescription() {
+    if (!modeDescription) {
+      return;
     }
+
+    const selected = document.body.dataset.selectedMode || 'normal';
+    const lang = getCurrentLanguage();
+    const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
+    modeDescription.textContent = copy[lang] || copy.en;
   }
 
   function getSelectedModeForScoreboard() {
@@ -623,6 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       updateResultsSummary();
 
+      updateModeDescription();
       updateScorePanelCopy();
       if (scoreFeatureEnabled && leaderboardPanel && !leaderboardPanel.classList.contains('hidden')) {
         renderLeaderboard();
@@ -638,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
     actionPromptLabel.textContent = label;
     actionPromptImage.alt = label;
     updateResultsSummary();
+    updateModeDescription();
     updateScorePanelCopy();
 
     if (scoreFeatureEnabled && leaderboardPanel && !leaderboardPanel.classList.contains('hidden')) {
@@ -1208,6 +1216,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (acceptedKeyboard) {
       event.preventDefault();
+      if (switchIsDown) {
+        return;
+      }
       switchIsDown = true;
     }
 
@@ -1268,6 +1279,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   modeButtons.forEach((button) => {
     button.addEventListener('click', () => setSelectedMode(button.dataset.mode));
+  });
+
+  languageToggle?.addEventListener('pointerup', () => {
+    window.setTimeout(updateModeDescription, 0);
   });
 
   if (startButton) {
