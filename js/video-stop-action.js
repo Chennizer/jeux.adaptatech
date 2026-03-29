@@ -1242,6 +1242,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleActivate(event) {
     const isKeyboard = event.type === 'keydown';
     const acceptedKeyboard = isKeyboard && (event.code === 'Space' || event.code === 'Enter');
+    const isSpaceKeyboard = isKeyboard && event.code === 'Space';
     const acceptedPointer = event.type === 'pointerup';
 
     if (!acceptedKeyboard && !acceptedPointer) {
@@ -1257,9 +1258,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (awaitingResume) {
-      if (acceptedKeyboard && promptRequiresFreshSwitchPress && !promptSawSwitchRelease) {
+      if (!isSpaceKeyboard) {
         return;
       }
+
+      if (promptRequiresFreshSwitchPress && !promptSawSwitchRelease) {
+        return;
+      }
+
       resumeGame();
       return;
     }
@@ -1301,7 +1307,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (event.code !== 'Space' && event.code !== 'Enter') {
+    if (event.code !== 'Space') {
       return;
     }
 
