@@ -168,6 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let hardModePromptTimer = null;
   let hardModeNeedsRestart = false;
   let waitMusicStartTimer = null;
+  let waitMusicFadeTimer = null;
   let menuMusicAutoplayAttempts = 0;
   let menuMusicAutoplayTimer = null;
   let menuMusicStarted = false;
@@ -278,8 +279,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function clearWaitMusicFadeTimer() {
+    if (waitMusicFadeTimer) {
+      clearInterval(waitMusicFadeTimer);
+      waitMusicFadeTimer = null;
+    }
+  }
+
+  function fadeOutWaitMusic(durationMs) {
+    if (!waitMusicAudio) {
+      return;
+    }
+
+    clearWaitMusicFadeTimer();
+
+    const totalDuration = Math.max(200, Number(durationMs) || 0);
+    const startingVolume = Number.isFinite(waitMusicAudio.volume) ? waitMusicAudio.volume : 0.35;
+    const startedAt = Date.now();
+
+    waitMusicFadeTimer = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(1, elapsed / totalDuration);
+      const nextVolume = Math.max(0, startingVolume * (1 - progress));
+      waitMusicAudio.volume = nextVolume;
+
+      if (progress >= 1) {
+        clearWaitMusicFadeTimer();
+        stopLoopAudio(waitMusicAudio);
+        waitMusicAudio.volume = 0.35;
+      }
+    }, 60);
+  }
+
   function startWaitMusicWithDelay() {
     clearWaitMusicStartTimer();
+    clearWaitMusicFadeTimer();
+    if (waitMusicAudio) {
+      waitMusicAudio.volume = 0.35;
+    }
     waitMusicStartTimer = setTimeout(() => {
       playLoopAudio(waitMusicAudio, 0.35);
       waitMusicStartTimer = null;
@@ -288,7 +325,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function stopWaitMusic() {
     clearWaitMusicStartTimer();
+    clearWaitMusicFadeTimer();
     stopLoopAudio(waitMusicAudio);
+    if (waitMusicAudio) {
+      waitMusicAudio.volume = 0.35;
+    }
   }
 
   function startMenuMusic() {
@@ -953,6 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         actionPromptImage.classList.add('hard-mode-countdown');
         actionPromptLabel.classList.add('hard-mode-countdown');
+        fadeOutWaitMusic(shrinkDurationMs);
       }, shrinkStartDelayMs);
 
       hardModePromptTimer = setTimeout(() => {
