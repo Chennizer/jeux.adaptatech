@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
   const hardTimeLimitMs = Math.max(2000, Number(document.body.getAttribute('data-hard-time-limit')) * 1000 || 10000);
   const hardShrinkDurationMs = Math.max(1000, Number(document.body.getAttribute('data-hard-shrink-duration')) * 1000 || 5000);
-  const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/error.mp3';
+  const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/arcade/arcadefail.mp3';
   const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
   const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
@@ -1411,6 +1411,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleActivate(event) {
     const isKeyboard = event.type === 'keydown';
     const acceptedKeyboard = isKeyboard && (event.code === 'Space' || event.code === 'Enter');
+    const isSpaceKeyboard = isKeyboard && event.code === 'Space';
     const acceptedPointer = event.type === 'pointerup';
 
     if (!acceptedKeyboard && !acceptedPointer) {
@@ -1430,9 +1431,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (awaitingResume) {
-      if (acceptedKeyboard && promptRequiresFreshSwitchPress && !promptSawSwitchRelease) {
+      if (!isSpaceKeyboard) {
         return;
       }
+
+      if (promptRequiresFreshSwitchPress && !promptSawSwitchRelease) {
+        return;
+      }
+
       resumeGame();
       return;
     }
@@ -1474,7 +1480,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (event.code !== 'Space' && event.code !== 'Enter') {
+    if (event.code !== 'Space') {
       return;
     }
 
