@@ -166,6 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let imageLoadProgress = 0;
   let imageLoadReady = false;
   let hardModePromptTimer = null;
+  let promptRevealTimer = null;
   let hardModeNeedsRestart = false;
   let waitMusicStartTimer = null;
   let waitMusicFadeTimer = null;
@@ -654,6 +655,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function playFreezeEncounterAnimation() {
+    if (!videoContainer) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      videoContainer.classList.remove('is-freeze-encounter');
+      void videoContainer.offsetWidth;
+      videoContainer.classList.add('is-freeze-encounter');
+      window.setTimeout(resolve, 520);
+    });
+  }
+
+  function clearFreezeEncounterAnimation() {
+    videoContainer?.classList.remove('is-freeze-encounter');
+  }
+
+  function clearPromptRevealTimer() {
+    if (promptRevealTimer) {
+      clearTimeout(promptRevealTimer);
+      promptRevealTimer = null;
+    }
+  }
+
   function updatePromptLanguage() {
     if (!actionPromptLabel || !actionPromptImage || !activeActionKey) {
       if (loadingBarContainer) {
@@ -957,8 +982,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeActionKey = eventConfig.action;
     awaitingResume = true;
+    clearPromptRevealTimer();
 
     actionPromptImage.src = getActionImage(eventConfig.action);
+    actionPromptImage.classList.add('prompt-hidden');
+    actionPromptImage.classList.remove('is-fading-in');
     actionPromptImage.classList.add('is-pulsing');
     actionPromptLabel.classList.add('is-pulsing');
     updatePromptLanguage();
@@ -971,6 +999,13 @@ document.addEventListener('DOMContentLoaded', () => {
     hardModeNeedsRestart = false;
     clearHardModePromptTimer();
     stopWaitMusic();
+    promptRevealTimer = setTimeout(() => {
+      actionPromptImage.classList.remove('prompt-hidden');
+      actionPromptImage.classList.remove('is-fading-in');
+      void actionPromptImage.offsetWidth;
+      actionPromptImage.classList.add('is-fading-in');
+      promptRevealTimer = null;
+    }, 300);
 
     if (isHardModeSelected() || isCompetitiveModeSelected()) {
       const totalTimeMs = isCompetitiveModeSelected() ? 3000 : hardTimeLimitMs;
@@ -1003,7 +1038,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }, totalTimeMs);
     }
 
-    playUiSound(promptAudio);
     startWaitMusicWithDelay();
   }
 
@@ -1013,10 +1047,13 @@ document.addEventListener('DOMContentLoaded', () => {
     promptRequiresFreshSwitchPress = false;
     promptSawSwitchRelease = true;
     clearHardModePromptTimer();
+    clearPromptRevealTimer();
     stopWaitMusic();
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
+      actionPromptImage.classList.remove('prompt-hidden');
+      actionPromptImage.classList.remove('is-fading-in');
       actionPromptImage.classList.remove('is-pulsing');
       actionPromptLabel?.classList.remove('is-pulsing');
     }
@@ -1096,6 +1133,7 @@ document.addEventListener('DOMContentLoaded', () => {
     playUiSound(successAudio);
     isTransitioning = true;
     await playZoomTransition(false);
+    clearFreezeEncounterAnimation();
     isTransitioning = false;
     videoPlayer.play().catch(() => {});
   }
@@ -1105,6 +1143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hideActionPrompt();
     updateResultsSummary();
     videoPlayer?.classList.remove('is-paused-zoom');
+    clearFreezeEncounterAnimation();
 
     if (videoContainer) {
       videoContainer.classList.add('hidden');
@@ -1151,6 +1190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hideActionPrompt();
     isTransitioning = false;
     videoPlayer?.classList.remove('is-paused-zoom');
+    clearFreezeEncounterAnimation();
 
     if (resultsScreen) {
       resultsScreen.classList.remove('show');
@@ -1233,8 +1273,11 @@ document.addEventListener('DOMContentLoaded', () => {
       currentEventIndex += 1;
       isTransitioning = true;
       playZoomTransition(true).then(() => {
-        showActionPrompt(nextEvent);
-        isTransitioning = false;
+        playUiSound(promptAudio);
+        playFreezeEncounterAnimation().then(() => {
+          showActionPrompt(nextEvent);
+          isTransitioning = false;
+        });
       });
     }
   }
@@ -1342,6 +1385,7 @@ document.addEventListener('DOMContentLoaded', () => {
   videoPlayer?.addEventListener('play', () => {
     if (!awaitingResume && !isTransitioning) {
       videoPlayer.classList.remove('is-paused-zoom');
+      clearFreezeEncounterAnimation();
     }
   });
   videoPlayer?.addEventListener('loadstart', refreshMediaLoadingState);
