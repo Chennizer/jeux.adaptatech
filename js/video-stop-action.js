@@ -77,8 +77,8 @@ document.addEventListener('DOMContentLoaded', () => {
       ja: 'スイッチを押すまでに10秒あります。タイミング外の押下が5回を超えると、最初からやり直しになります。'
     },
     competitive: {
-      fr: 'Mode extrême : tu as 3 secondes pour appuyer sur ta switch. Si tu appuies au mauvais moment, tu devras recommencer.',
-      en: 'Extreme mode: you have 3 seconds to press your switch. If you press at the wrong time, you will have to restart.',
+      fr: 'Mode maître : tu as 3 secondes pour appuyer sur ta switch. Si tu appuies au mauvais moment, tu devras recommencer.',
+      en: 'Master mode: you have 3 seconds to press your switch. If you press at the wrong time, you will have to restart.',
       ja: 'スイッチを押すまでに3秒あります。タイミング外に押すと、やり直しになります。'
     }
   };
@@ -705,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modes: {
           normal: 'Normal',
           hard: 'Difficile',
-          competitive: 'Extrême'
+          competitive: 'Maître'
         }
       },
       en: {
@@ -724,7 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modes: {
           normal: 'Normal',
           hard: 'Hard',
-          competitive: 'Extreme'
+          competitive: 'Master'
         }
       },
       ja: {
@@ -743,7 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modes: {
           normal: 'ノーマル',
           hard: 'ハード',
-          competitive: 'エクストリーム'
+          competitive: 'マスター'
         }
       }
     };
