@@ -67,19 +67,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const MODE_DESCRIPTION_COPY = {
     normal: {
-      fr: 'Profite du jeu et prends ton temps.',
-      en: 'Enjoy the game and take your time.',
-      ja: 'ゲームを楽しみながら、ゆっくり進めてください。'
+      fr: 'Appuie sur la switch au bon moment, pas besoin de se dépêcher.',
+      en: 'Press your switch at the right time, no need to rush.',
+      ja: '正しいタイミングでスイッチを押してください。急ぐ必要はありません。'
     },
     hard: {
-      fr: 'Mode difficile : texte explicatif à venir.',
-      en: 'Hard mode: description coming soon.',
-      ja: 'ハードモード：説明は近日追加予定です。'
+      fr: 'Tu as 10 secondes pour appuyer sur ta switch. Tu dois faire attention de ne pas appuyer plus de 5 fois au mauvais moment, sinon tu devras recommencer.',
+      en: 'You have 10 seconds to press your switch. Be careful not to press at the wrong time more than 5 times, or you will have to restart.',
+      ja: 'スイッチを押すまでに10秒あります。タイミング外の押下が5回を超えると、最初からやり直しになります。'
     },
     competitive: {
-      fr: 'Mode compétitif : texte explicatif à venir.',
-      en: 'Competitive mode: description coming soon.',
-      ja: '対戦モード：説明は近日追加予定です。'
+      fr: 'Mode maître : tu as 3 secondes pour appuyer sur ta switch. Si tu appuies au mauvais moment, tu devras recommencer.',
+      en: 'Master mode: you have 3 seconds to press your switch. If you press at the wrong time, you will have to restart.',
+      ja: 'スイッチを押すまでに3秒あります。タイミング外に押すと、やり直しになります。'
     }
   };
 
@@ -115,6 +115,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultsAverageDelay = document.getElementById('results-average-delay');
   const resultsFalsePositives = document.getElementById('results-false-positives');
   const continueButton = document.getElementById('continue-button');
+  const scoreRegisterPanel = document.getElementById('score-register-panel');
+  const scoreRegisterQuestion = document.getElementById('score-register-question');
+  const scorePlayerNameLabel = document.getElementById('score-player-name-label');
+  const scorePlayerNameInput = document.getElementById('score-player-name');
+  const scoreSubmitButton = document.getElementById('score-submit');
+  const scoreRegisterStatus = document.getElementById('score-register-status');
+  const leaderboardPanel = document.getElementById('leaderboard-panel');
+  const leaderboardTitle = document.getElementById('leaderboard-title');
+  const leaderboardList = document.getElementById('leaderboard-list');
   const languageToggle = document.getElementById('language-toggle');
   const modeButtons = Array.from(document.querySelectorAll('.stop-action-mode-btn'));
   const modeDescription = document.getElementById('stop-action-mode-description');
@@ -130,11 +139,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
+  const failPromptImageSrc = '../../images/gaminganimation/neutral.png';
   const zoomTransitionMs = 180;
   const SCORE_MAX = 10000;
   const DELAY_WEIGHT = 9000;
   const FALSE_POSITIVE_WEIGHT = 1000;
   const DELAY_REFERENCE_MS = 3000;
+  const scoreGame = document.body.getAttribute('data-score-game') || '';
+  const scoreApiBase = (document.body.getAttribute('data-score-api-base') || '').trim();
+  const scoreTopLimit = Math.max(1, Math.min(50, Number(document.body.getAttribute('data-score-top-limit')) || 5));
+  const scoreFeatureEnabled = Boolean(scoreGame && scoreApiBase);
 
   let currentEventIndex = 0;
   let awaitingResume = false;
@@ -154,9 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let hardModePromptTimer = null;
   let hardModeNeedsRestart = false;
   let waitMusicStartTimer = null;
+  let waitMusicFadeTimer = null;
   let menuMusicAutoplayAttempts = 0;
   let menuMusicAutoplayTimer = null;
   let menuMusicStarted = false;
+  let scoreSubmissionState = 'idle';
+  let switchIsDown = false;
+  let promptRequiresFreshSwitchPress = false;
+  let promptSawSwitchRelease = true;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -260,6 +279,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function clearWaitMusicFadeTimer() {
+    if (waitMusicFadeTimer) {
+      clearInterval(waitMusicFadeTimer);
+      waitMusicFadeTimer = null;
+    }
+  }
+
+  function fadeOutWaitMusic(durationMs) {
+    if (!waitMusicAudio) {
+      return;
+    }
+
+    if (waitMusicAudio.paused) {
+      return;
+    }
+
+    clearWaitMusicFadeTimer();
+
+    const startVolume = Number.isFinite(waitMusicAudio.volume) ? waitMusicAudio.volume : 0.35;
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      waitMusicAudio.volume = 0;
+      return;
+    }
+
+    const fadeStartAt = Date.now();
+    waitMusicFadeTimer = setInterval(() => {
+      const elapsed = Date.now() - fadeStartAt;
+      const progress = Math.min(1, elapsed / durationMs);
+      waitMusicAudio.volume = Math.max(0, startVolume * (1 - progress));
+
+      if (progress >= 1) {
+        clearWaitMusicFadeTimer();
+      }
+    }, 50);
+  }
+
   function startWaitMusicWithDelay() {
     clearWaitMusicStartTimer();
     waitMusicStartTimer = setTimeout(() => {
@@ -270,6 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function stopWaitMusic() {
     clearWaitMusicStartTimer();
+    clearWaitMusicFadeTimer();
     stopLoopAudio(waitMusicAudio);
   }
 
@@ -342,8 +398,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function getSelectedModeForScoreboard() {
+    return document.body.dataset.selectedMode || 'normal';
+  }
+
   function isHardModeSelected() {
     return document.body.dataset.selectedMode === 'hard';
+  }
+
+  function isCompetitiveModeSelected() {
+    return document.body.dataset.selectedMode === 'competitive';
   }
 
   function clearHardModePromptTimer() {
@@ -354,16 +418,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     actionPromptImage?.classList.remove('hard-mode-countdown');
     actionPromptLabel?.classList.remove('hard-mode-countdown');
+    if (actionPromptImage) {
+      actionPromptImage.style.animationDuration = '';
+    }
+    if (actionPromptLabel) {
+      actionPromptLabel.style.animationDuration = '';
+    }
   }
 
-  function getTryAgainText() {
-    const lang = getCurrentLanguage();
-    const copy = {
-      fr: 'Réessaie (appuie sur Espace)',
-      en: 'Try again (press Space)',
-      ja: 'もう一度（スペースキーを押す）'
-    };
-    return copy[lang] || copy.en;
+  function triggerFailedPromptRestart() {
+    awaitingResume = false;
+    currentPromptShownAtMs = null;
+    hardModeNeedsRestart = true;
+    clearHardModePromptTimer();
+    stopWaitMusic();
+    videoPlayer?.pause();
+
+    if (actionPromptImage) {
+      actionPromptImage.src = failPromptImageSrc;
+      actionPromptImage.classList.remove('hidden');
+      actionPromptImage.classList.remove('is-pulsing');
+      actionPromptImage.style.animationDuration = '';
+    }
+    if (actionPromptLabel) {
+      const playAgainCopy = {
+        fr: 'Rejouer ?',
+        en: 'Play again?',
+        ja: 'もう一度プレイ？'
+      };
+      const lang = getCurrentLanguage();
+      actionPromptLabel.textContent = playAgainCopy[lang] || playAgainCopy.en;
+      actionPromptLabel.classList.remove('is-pulsing');
+      actionPromptLabel.classList.remove('hard-mode-countdown');
+      actionPromptLabel.style.animationDuration = '';
+    }
+
+    overlayScreen?.classList.remove('hidden');
+    overlayScreen?.classList.add('show');
+    playUiSound(hardTimeoutAudio);
   }
 
   function primeUiAudio() {
@@ -567,7 +659,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (loadingBarContainer) {
         loadingBarContainer.dataset.status = getStatusLabel(currentStatusKey);
       }
+
+      setSelectedMode(document.body.dataset.selectedMode || 'normal');
       updateResultsSummary();
+
+      updateScorePanelCopy();
+      if (scoreFeatureEnabled && leaderboardPanel && !leaderboardPanel.classList.contains('hidden')) {
+        renderLeaderboard();
+      }
       return;
     }
 
@@ -578,7 +677,277 @@ document.addEventListener('DOMContentLoaded', () => {
     const label = getActionLabel(activeActionKey);
     actionPromptLabel.textContent = label;
     actionPromptImage.alt = label;
+    setSelectedMode(document.body.dataset.selectedMode || 'normal');
     updateResultsSummary();
+    updateScorePanelCopy();
+
+    if (scoreFeatureEnabled && leaderboardPanel && !leaderboardPanel.classList.contains('hidden')) {
+      renderLeaderboard();
+    }
+  }
+
+  function getScorePanelCopy() {
+    const lang = getCurrentLanguage();
+    const copy = {
+      fr: {
+        registerQuestion: 'Enregistre ton score dans le classement.',
+        nameLabel: 'Votre nom',
+        submit: 'Enregistrer',
+        sending: 'Enregistrement du score...',
+        submitSuccess: 'Score enregistré.',
+        submitError: 'Impossible d\'enregistrer le score pour le moment.',
+        emptyName: 'Veuillez entrer un nom.',
+        leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
+        emptyLeaderboard: 'Aucun score pour le moment.',
+        loadingLeaderboard: 'Chargement du classement...',
+        leaderboardError: 'Impossible de charger le classement.',
+        anonymous: 'Anonyme',
+        modes: {
+          normal: 'Normal',
+          hard: 'Difficile',
+          competitive: 'Maître'
+        }
+      },
+      en: {
+        registerQuestion: 'Save your score to the leaderboard.',
+        nameLabel: 'Your name',
+        submit: 'Submit score',
+        sending: 'Submitting score...',
+        submitSuccess: 'Score submitted.',
+        submitError: 'Unable to submit score right now.',
+        emptyName: 'Please enter a name.',
+        leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
+        emptyLeaderboard: 'No scores yet.',
+        loadingLeaderboard: 'Loading leaderboard...',
+        leaderboardError: 'Unable to load leaderboard.',
+        anonymous: 'Anonymous',
+        modes: {
+          normal: 'Normal',
+          hard: 'Hard',
+          competitive: 'Master'
+        }
+      },
+      ja: {
+        registerQuestion: 'スコアをランキングに登録します。',
+        nameLabel: '名前',
+        submit: 'スコア登録',
+        sending: 'スコアを送信中...',
+        submitSuccess: 'スコアを登録しました。',
+        submitError: '現在スコアを登録できません。',
+        emptyName: '名前を入力してください。',
+        leaderboardTitle: (mode) => `トップ${scoreTopLimit}（${mode}）`,
+        emptyLeaderboard: 'まだスコアがありません。',
+        loadingLeaderboard: 'ランキングを読み込み中...',
+        leaderboardError: 'ランキングを読み込めません。',
+        anonymous: '匿名',
+        modes: {
+          normal: 'ノーマル',
+          hard: 'ハード',
+          competitive: 'マスター'
+        }
+      }
+    };
+
+    return copy[lang] || copy.en;
+  }
+
+  function getModeLabelForLeaderboard(mode, copy) {
+    if (!copy || !copy.modes) {
+      return mode;
+    }
+
+    return copy.modes[mode] || mode;
+  }
+
+  function getLeaderboardMedal(index) {
+    if (index === 0) {
+      return '🥇 ';
+    }
+    if (index === 1) {
+      return '🥈 ';
+    }
+    if (index === 2) {
+      return '🥉 ';
+    }
+    return '';
+  }
+
+  function getFinalScoreValue() {
+    const count = actionEvents.length;
+    const avgDelayMs = responseDelaysMs.length
+      ? responseDelaysMs.reduce((total, value) => total + value, 0) / responseDelaysMs.length
+      : 0;
+    return computeFinalScore(avgDelayMs, falsePositiveCount, count);
+  }
+
+  function setScoreStatusMessage(message, isError) {
+    if (!scoreRegisterStatus) {
+      return;
+    }
+
+    scoreRegisterStatus.textContent = message || '';
+    scoreRegisterStatus.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function setScoreButtonsDisabled(disabled) {
+    [scoreSubmitButton].forEach((button) => {
+      if (button) {
+        button.disabled = Boolean(disabled);
+      }
+    });
+  }
+
+  async function submitScore(game, playerName, score, mode) {
+    const response = await fetch(scoreApiBase + '/score', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        game,
+        playerName,
+        score,
+        mode
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('submit_failed');
+    }
+
+    return response.json();
+  }
+
+  async function getLeaderboard(game, mode, limit) {
+    const params = new URLSearchParams({
+      game,
+      limit: String(limit)
+    });
+
+    if (mode) {
+      params.set('mode', mode);
+    }
+
+    const response = await fetch(scoreApiBase + '/leaderboard?' + params.toString());
+    if (!response.ok) {
+      throw new Error('leaderboard_failed');
+    }
+
+    return response.json();
+  }
+
+  async function renderLeaderboard() {
+    if (!scoreFeatureEnabled || !leaderboardPanel || !leaderboardList || !leaderboardTitle) {
+      return;
+    }
+
+    const copy = getScorePanelCopy();
+    const mode = getSelectedModeForScoreboard();
+    leaderboardTitle.textContent = copy.leaderboardTitle(getModeLabelForLeaderboard(mode, copy));
+    leaderboardPanel.classList.remove('hidden');
+    leaderboardList.innerHTML = '';
+
+    const loadingItem = document.createElement('li');
+    loadingItem.textContent = copy.loadingLeaderboard;
+    leaderboardList.appendChild(loadingItem);
+
+    try {
+      const data = await getLeaderboard(scoreGame, mode, scoreTopLimit);
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+
+      leaderboardList.innerHTML = '';
+      if (rows.length === 0) {
+        const emptyItem = document.createElement('li');
+        emptyItem.textContent = copy.emptyLeaderboard;
+        leaderboardList.appendChild(emptyItem);
+        return;
+      }
+
+      rows.slice(0, scoreTopLimit).forEach((row, index) => {
+        const item = document.createElement('li');
+        const name = typeof row?.player_name === 'string' && row.player_name.trim()
+          ? row.player_name.trim()
+          : copy.anonymous;
+        const value = Number.isFinite(Number(row?.score)) ? Number(row.score) : 0;
+        item.textContent = getLeaderboardMedal(index) + name + ' — ' + value;
+        leaderboardList.appendChild(item);
+      });
+    } catch (error) {
+      leaderboardList.innerHTML = '';
+      const errorItem = document.createElement('li');
+      errorItem.textContent = copy.leaderboardError;
+      leaderboardList.appendChild(errorItem);
+    }
+  }
+
+  function updateScorePanelCopy() {
+    if (!scoreFeatureEnabled || !scoreRegisterPanel) {
+      return;
+    }
+
+    const copy = getScorePanelCopy();
+
+    if (scoreRegisterQuestion) {
+      scoreRegisterQuestion.textContent = copy.registerQuestion;
+    }
+    if (scorePlayerNameLabel) {
+      scorePlayerNameLabel.textContent = copy.nameLabel;
+    }
+    if (scoreSubmitButton) {
+      scoreSubmitButton.textContent = copy.submit;
+    }
+
+    if (scoreSubmissionState === 'sending') {
+      setScoreStatusMessage(copy.sending, false);
+    }
+  }
+
+  function resetScorePanel() {
+    if (!scoreFeatureEnabled || !scoreRegisterPanel) {
+      return;
+    }
+
+    scoreSubmissionState = 'idle';
+    scoreRegisterPanel.classList.remove('hidden');
+    leaderboardPanel?.classList.add('hidden');
+    leaderboardList && (leaderboardList.innerHTML = '');
+    if (scorePlayerNameInput) {
+      scorePlayerNameInput.value = '';
+    }
+    setScoreStatusMessage('', false);
+    setScoreButtonsDisabled(false);
+    updateScorePanelCopy();
+  }
+
+  async function handleScoreSubmission() {
+    if (!scoreFeatureEnabled || scoreSubmissionState === 'sending') {
+      return;
+    }
+
+    const copy = getScorePanelCopy();
+    const rawName = scorePlayerNameInput?.value || '';
+    const playerName = rawName.trim();
+    if (!playerName) {
+      setScoreStatusMessage(copy.emptyName, true);
+      scorePlayerNameInput?.focus();
+      return;
+    }
+
+    scoreSubmissionState = 'sending';
+    setScoreButtonsDisabled(true);
+    setScoreStatusMessage(copy.sending, false);
+
+    try {
+      await submitScore(scoreGame, playerName.slice(0, 20), getFinalScoreValue(), getSelectedModeForScoreboard());
+      scoreSubmissionState = 'submitted';
+      setScoreStatusMessage(copy.submitSuccess, false);
+      await renderLeaderboard();
+    } catch (error) {
+      scoreSubmissionState = 'idle';
+      setScoreStatusMessage(copy.submitError, true);
+    } finally {
+      setScoreButtonsDisabled(false);
+    }
   }
 
   function showActionPrompt(eventConfig) {
@@ -597,12 +966,16 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
     currentPromptShownAtMs = Date.now();
+    promptRequiresFreshSwitchPress = switchIsDown;
+    promptSawSwitchRelease = !switchIsDown;
     hardModeNeedsRestart = false;
     clearHardModePromptTimer();
     stopWaitMusic();
 
-    if (isHardModeSelected()) {
-      const shrinkStartDelayMs = Math.max(0, hardTimeLimitMs - hardShrinkDurationMs);
+    if (isHardModeSelected() || isCompetitiveModeSelected()) {
+      const totalTimeMs = isCompetitiveModeSelected() ? 3000 : hardTimeLimitMs;
+      const shrinkDurationMs = isCompetitiveModeSelected() ? 2000 : hardShrinkDurationMs;
+      const shrinkStartDelayMs = Math.max(0, totalTimeMs - shrinkDurationMs);
       const shrinkTimer = setTimeout(() => {
         if (!awaitingResume) {
           return;
@@ -610,6 +983,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         actionPromptImage.classList.remove('is-pulsing');
         actionPromptLabel.classList.remove('is-pulsing');
+        if (actionPromptImage) {
+          actionPromptImage.style.animationDuration = (shrinkDurationMs / 1000) + 's';
+        }
+        if (actionPromptLabel) {
+          actionPromptLabel.style.animationDuration = (shrinkDurationMs / 1000) + 's';
+        }
+        fadeOutWaitMusic(shrinkDurationMs);
         actionPromptImage.classList.add('hard-mode-countdown');
         actionPromptLabel.classList.add('hard-mode-countdown');
       }, shrinkStartDelayMs);
@@ -618,18 +998,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!awaitingResume) {
           return;
         }
-
-        awaitingResume = false;
-        currentPromptShownAtMs = null;
-        hardModeNeedsRestart = true;
         clearTimeout(shrinkTimer);
-        clearHardModePromptTimer();
-        stopWaitMusic();
-        actionPromptImage.classList.add('hidden');
-        actionPromptLabel.textContent = getTryAgainText();
-        actionPromptLabel.classList.remove('hard-mode-countdown');
-        playUiSound(hardTimeoutAudio);
-      }, hardTimeLimitMs);
+        triggerFailedPromptRestart();
+      }, totalTimeMs);
     }
 
     playUiSound(promptAudio);
@@ -639,6 +1010,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function hideActionPrompt() {
     awaitingResume = false;
     activeActionKey = null;
+    promptRequiresFreshSwitchPress = false;
+    promptSawSwitchRelease = true;
     clearHardModePromptTimer();
     stopWaitMusic();
 
@@ -744,6 +1117,12 @@ document.addEventListener('DOMContentLoaded', () => {
       resultsScreen.style.display = 'flex';
     }
 
+    if (scoreFeatureEnabled) {
+      resetScorePanel();
+      renderLeaderboard();
+      scorePlayerNameInput?.focus();
+    }
+
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
@@ -764,6 +1143,10 @@ document.addEventListener('DOMContentLoaded', () => {
     responseDelaysMs = [];
     falsePositiveCount = 0;
     hardModeNeedsRestart = false;
+    scoreSubmissionState = 'idle';
+    switchIsDown = false;
+    promptRequiresFreshSwitchPress = false;
+    promptSawSwitchRelease = true;
 
     hideActionPrompt();
     isTransitioning = false;
@@ -866,16 +1249,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (acceptedKeyboard) {
+      if (switchIsDown) {
+        return;
+      }
       event.preventDefault();
+      switchIsDown = true;
     }
 
     if (awaitingResume) {
+      if (acceptedKeyboard && promptRequiresFreshSwitchPress && !promptSawSwitchRelease) {
+        return;
+      }
       resumeGame();
       return;
     }
 
     if (hardModeNeedsRestart) {
-      if (acceptedKeyboard && event.code === 'Space') {
+      if (acceptedKeyboard && (event.code === 'Space' || event.code === 'Enter')) {
         playUiSound(hardRestartAudio);
         startGame();
       }
@@ -889,11 +1279,35 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gameStarted) {
       falsePositiveCount += 1;
       updateResultsSummary();
+
+      if (isCompetitiveModeSelected()) {
+        triggerFailedPromptRestart();
+        return;
+      }
+
+      if (isHardModeSelected() && falsePositiveCount >= 5) {
+        triggerFailedPromptRestart();
+      }
       return;
     }
 
     if (!gameStarted && acceptedKeyboard && event.code === 'Enter' && mediaReady) {
       startGame();
+    }
+  }
+
+  function handleSwitchRelease(event) {
+    if (event.type !== 'keyup') {
+      return;
+    }
+
+    if (event.code !== 'Space' && event.code !== 'Enter') {
+      return;
+    }
+
+    switchIsDown = false;
+    if (awaitingResume) {
+      promptSawSwitchRelease = true;
     }
   }
 
@@ -909,11 +1323,20 @@ document.addEventListener('DOMContentLoaded', () => {
     continueButton.addEventListener('click', restartToMenu);
   }
 
+  scoreSubmitButton?.addEventListener('click', handleScoreSubmission);
+  scorePlayerNameInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleScoreSubmission();
+    }
+  });
+
   if (overlayScreen) {
     overlayScreen.addEventListener('pointerup', handleActivate);
   }
 
   document.addEventListener('keydown', handleActivate, true);
+  document.addEventListener('keyup', handleSwitchRelease, true);
   videoPlayer?.addEventListener('timeupdate', handleTimeUpdate);
   videoPlayer?.addEventListener('ended', finishGame);
   videoPlayer?.addEventListener('play', () => {
@@ -944,6 +1367,7 @@ document.addEventListener('DOMContentLoaded', () => {
   preloadActionImages();
   refreshMediaLoadingState();
   updateResultsSummary();
+  updateScorePanelCopy();
   startMenuMusic();
   scheduleMenuMusicAutoplay();
 
