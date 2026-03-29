@@ -67,9 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const MODE_DESCRIPTION_COPY = {
     normal: {
-      fr: 'Mode normal : même rythme que le jeu actuel.',
-      en: 'Normal mode: current game pace.',
-      ja: 'ノーマル：今まで通りのペース。'
+      fr: 'Mode normal : suis l’action affichée à chaque pause, puis appuie sur la switch pour continuer.',
+      en: 'Normal mode: follow each prompt when the video pauses, then press your switch to continue.',
+      ja: 'ノーマル：動画が止まったら表示された動きをして、スイッチを押して再開します。'
     },
     hard: {
       fr: 'Mode difficile : 10 secondes pour appuyer sur la switch, jusqu’à 5 appuis au mauvais moment.',
@@ -77,9 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
       ja: 'ハード：スイッチは10秒以内、タイミング外は5回まで。'
     },
     competitive: {
-      fr: 'Mode compétitif : 3 secondes pour appuyer (fondu après 1 seconde), 0 appui au mauvais moment.',
-      en: 'Competitive mode: 3 seconds to press (fade after 1 second), 0 wrong-time presses.',
-      ja: '対戦：入力は3秒（1秒後からフェード）、タイミング外は0回。'
+      fr: 'Mode compétitif : 3 secondes pour appuyer, 0 appui au mauvais moment.',
+      en: 'Competitive mode: 3 seconds to press, 0 wrong-time presses.',
+      ja: '対戦：入力は3秒、タイミング外は0回。'
     }
   };
 
@@ -400,7 +400,13 @@ document.addEventListener('DOMContentLoaded', () => {
       actionPromptImage.style.animationDuration = '';
     }
     if (actionPromptLabel) {
-      actionPromptLabel.textContent = '';
+      const playAgainCopy = {
+        fr: 'Rejouer ?',
+        en: 'Play again?',
+        ja: 'もう一度プレイ？'
+      };
+      const lang = getCurrentLanguage();
+      actionPromptLabel.textContent = playAgainCopy[lang] || playAgainCopy.en;
       actionPromptLabel.classList.remove('is-pulsing');
       actionPromptLabel.classList.remove('hard-mode-countdown');
       actionPromptLabel.style.animationDuration = '';
