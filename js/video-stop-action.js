@@ -441,11 +441,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function triggerFailedPromptRestart() {
-    awaitingResume = false;
+    awaitingResume = eyegazeModeEnabled;
     currentPromptShownAtMs = null;
     hardModeNeedsRestart = true;
     clearHardModePromptTimer();
     stopWaitMusic();
+    cancelEyegazeDwell();
+    pointerInPromptTile = false;
     videoPlayer?.pause();
 
     if (actionPromptImage) {
@@ -467,8 +469,13 @@ document.addEventListener('DOMContentLoaded', () => {
       actionPromptLabel.style.animationDuration = '';
     }
 
+    resetEyegazePromptLayout();
     overlayScreen?.classList.remove('hidden');
     overlayScreen?.classList.add('show');
+    overlayScreen?.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
+    if (eyegazeModeEnabled && typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
+      pointerInPromptTile = isPointInsidePromptTile(lastPointerX, lastPointerY);
+    }
     playUiSound(hardTimeoutAudio);
   }
 
@@ -1144,7 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startEyegazeDwell() {
-    if (!eyegazeModeEnabled || !awaitingResume || hardModeNeedsRestart) {
+    if (!eyegazeModeEnabled || !awaitingResume) {
       return;
     }
 
@@ -1169,6 +1176,11 @@ document.addEventListener('DOMContentLoaded', () => {
       eyegazeDwellTimer = null;
       if (!hasRecentPointerMotion() || eyegazeDwellMotionPx < eyegazeMinMotionPx) {
         cancelEyegazeDwell();
+        return;
+      }
+      if (hardModeNeedsRestart) {
+        playUiSound(hardRestartAudio);
+        startGame();
         return;
       }
       resumeGame();
@@ -1535,7 +1547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gazePointer.style.top = `${y}px`;
       }
 
-      if (pointerInPromptTile && awaitingResume && !eyegazeDwellTimer && !hardModeNeedsRestart) {
+      if (pointerInPromptTile && awaitingResume && !eyegazeDwellTimer) {
         startEyegazeDwell();
       }
     });
