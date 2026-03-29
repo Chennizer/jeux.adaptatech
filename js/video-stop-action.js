@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const overlayScreen = document.getElementById('overlay-screen');
   const actionPromptImage = document.getElementById('action-prompt-image');
   const actionPromptLabel = document.getElementById('action-prompt-label');
+  const actionPromptTile = document.getElementById('action-prompt-tile');
   const resultsScreen = document.getElementById('results-screen');
   const resultsScore = document.getElementById('results-score');
   const resultsAverageDelay = document.getElementById('results-average-delay');
@@ -149,6 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const scoreApiBase = (document.body.getAttribute('data-score-api-base') || '').trim();
   const scoreTopLimit = Math.max(1, Math.min(50, Number(document.body.getAttribute('data-score-top-limit')) || 5));
   const scoreFeatureEnabled = Boolean(scoreGame && scoreApiBase);
+  const activationMode = (document.body.getAttribute('data-activation-mode') || 'switch').toLowerCase();
+  const gazeDwellMs = Math.max(300, Number(document.body.getAttribute('data-gaze-dwell-ms')) || 1500);
 
   let currentEventIndex = 0;
   let awaitingResume = false;
@@ -176,6 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let switchIsDown = false;
   let promptRequiresFreshSwitchPress = false;
   let promptSawSwitchRelease = true;
+  let gazeDwellTimer = null;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -432,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hardModeNeedsRestart = true;
     clearHardModePromptTimer();
     stopWaitMusic();
+    clearGazeDwellTimer();
     videoPlayer?.pause();
 
     if (actionPromptImage) {
@@ -965,12 +970,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
+
+    if (activationMode === 'eyegaze') {
+      actionPromptTile?.style.setProperty('--dwell-ms', `${gazeDwellMs}ms`);
+      clearGazeDwellTimer();
+    }
     currentPromptShownAtMs = Date.now();
     promptRequiresFreshSwitchPress = switchIsDown;
     promptSawSwitchRelease = !switchIsDown;
     hardModeNeedsRestart = false;
     clearHardModePromptTimer();
     stopWaitMusic();
+    clearGazeDwellTimer();
 
     if (isHardModeSelected() || isCompetitiveModeSelected()) {
       const totalTimeMs = isCompetitiveModeSelected() ? 3000 : hardTimeLimitMs;
@@ -1014,6 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
     promptSawSwitchRelease = true;
     clearHardModePromptTimer();
     stopWaitMusic();
+    clearGazeDwellTimer();
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
@@ -1027,6 +1039,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     overlayScreen.classList.remove('show');
     overlayScreen.classList.add('hidden');
+  }
+
+
+
+  function clearGazeDwellTimer() {
+    if (gazeDwellTimer) {
+      clearTimeout(gazeDwellTimer);
+      gazeDwellTimer = null;
+    }
+    actionPromptTile?.classList.remove('dwell-active');
+  }
+
+  function startGazeDwellTimer() {
+    if (activationMode !== 'eyegaze' || !awaitingResume) {
+      return;
+    }
+
+    clearGazeDwellTimer();
+    actionPromptTile?.style.setProperty('--dwell-ms', `${gazeDwellMs}ms`);
+    actionPromptTile?.classList.add('dwell-active');
+    gazeDwellTimer = setTimeout(() => {
+      gazeDwellTimer = null;
+      actionPromptTile?.classList.remove('dwell-active');
+      if (awaitingResume) {
+        resumeGame();
+      }
+    }, gazeDwellMs);
   }
 
   function computeFinalScore(avgDelayMs, falsePositives, totalPrompts) {
@@ -1248,6 +1287,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (activationMode === 'eyegaze' && acceptedKeyboard) {
+      return;
+    }
+
     if (acceptedKeyboard) {
       if (switchIsDown) {
         return;
@@ -1333,6 +1376,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (overlayScreen) {
     overlayScreen.addEventListener('pointerup', handleActivate);
+  }
+
+  if (actionPromptTile) {
+    actionPromptTile.addEventListener('pointerenter', () => {
+      startGazeDwellTimer();
+    });
+    actionPromptTile.addEventListener('pointerleave', () => {
+      clearGazeDwellTimer();
+    });
+    actionPromptTile.addEventListener('focus', () => {
+      startGazeDwellTimer();
+    });
+    actionPromptTile.addEventListener('blur', () => {
+      clearGazeDwellTimer();
+    });
   }
 
   document.addEventListener('keydown', handleActivate, true);
