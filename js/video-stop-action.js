@@ -965,8 +965,13 @@ document.addEventListener('DOMContentLoaded', () => {
     awaitingResume = true;
 
     actionPromptImage.src = getActionImage(eventConfig.action);
-    actionPromptImage.classList.add('is-pulsing');
-    actionPromptLabel.classList.add('is-pulsing');
+    if (!eyegazeModeEnabled) {
+      actionPromptImage.classList.add('is-pulsing');
+      actionPromptLabel.classList.add('is-pulsing');
+    } else {
+      actionPromptImage.classList.remove('is-pulsing');
+      actionPromptLabel.classList.remove('is-pulsing');
+    }
     updatePromptLanguage();
 
     overlayScreen.classList.remove('hidden');
