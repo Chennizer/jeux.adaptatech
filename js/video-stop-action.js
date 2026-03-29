@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const overlayScreen = document.getElementById('overlay-screen');
   const actionPromptTile = document.getElementById('action-prompt-tile');
   const actionPromptDwellFill = document.getElementById('action-prompt-dwell-fill');
+  const gazePointer = document.getElementById('gazePointer');
   const actionPromptImage = document.getElementById('action-prompt-image');
   const actionPromptLabel = document.getElementById('action-prompt-label');
   const resultsScreen = document.getElementById('results-screen');
@@ -145,6 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const inputMode = (document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
   const eyegazeModeEnabled = inputMode === 'eyegaze';
   const eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+  const eyegazeMotionIdleLimitMs = 1000;
+  const eyegazeMinMotionPx = 1.5;
   const zoomTransitionMs = 180;
   const SCORE_MAX = 10000;
   const DELAY_WEIGHT = 9000;
@@ -182,6 +185,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let promptRequiresFreshSwitchPress = false;
   let promptSawSwitchRelease = true;
   let eyegazeDwellTimer = null;
+  let lastPointerMoveAt = 0;
+  let lastPointerX = null;
+  let lastPointerY = null;
+  let eyegazeDwellMotionPx = 0;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -1053,13 +1060,35 @@ document.addEventListener('DOMContentLoaded', () => {
     actionPromptDwellFill.offsetHeight;
   }
 
+  function hasRecentPointerMotion() {
+    return (Date.now() - lastPointerMoveAt) <= eyegazeMotionIdleLimitMs;
+  }
+
+  function updateEyegazePointerState() {
+    if (!eyegazeModeEnabled) {
+      return;
+    }
+
+    const showPointer = Boolean(gazePointer && gameStarted && (!controlPanel || controlPanel.style.display === 'none'));
+    document.body.classList.toggle('hide-native-cursor', showPointer);
+    if (gazePointer) {
+      gazePointer.style.opacity = showPointer ? '1' : '0';
+    }
+  }
+
   function startEyegazeDwell() {
     if (!eyegazeModeEnabled || !awaitingResume || hardModeNeedsRestart) {
       return;
     }
 
+    if (!hasRecentPointerMotion()) {
+      cancelEyegazeDwell();
+      return;
+    }
+
     cancelEyegazeDwell();
     resetEyegazeDwellFill();
+    eyegazeDwellMotionPx = 0;
 
     if (actionPromptDwellFill) {
       actionPromptDwellFill.style.transition = `width ${eyegazeDwellMs}ms linear, height ${eyegazeDwellMs}ms linear`;
@@ -1071,6 +1100,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     eyegazeDwellTimer = setTimeout(() => {
       eyegazeDwellTimer = null;
+      if (!hasRecentPointerMotion() || eyegazeDwellMotionPx < eyegazeMinMotionPx) {
+        cancelEyegazeDwell();
+        return;
+      }
       resumeGame();
     }, eyegazeDwellMs);
   }
@@ -1185,6 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
       languageToggle.style.display = 'inline-flex';
     }
 
+    updateEyegazePointerState();
     startMenuMusic();
   }
 
@@ -1254,6 +1288,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    updateEyegazePointerState();
     videoPlayer.currentTime = 0;
     videoPlayer.play().catch(() => {});
   }
@@ -1269,6 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
       languageToggle.style.display = 'inline-flex';
     }
 
+    updateEyegazePointerState();
     startMenuMusic();
   }
 
@@ -1397,6 +1433,32 @@ document.addEventListener('DOMContentLoaded', () => {
     actionPromptTile.addEventListener('pointerenter', startEyegazeDwell);
     actionPromptTile.addEventListener('pointerleave', cancelEyegazeDwell);
     actionPromptTile.addEventListener('pointercancel', cancelEyegazeDwell);
+  }
+
+  if (eyegazeModeEnabled) {
+    document.addEventListener('pointermove', (event) => {
+      const x = typeof event.clientX === 'number' ? event.clientX : 0;
+      const y = typeof event.clientY === 'number' ? event.clientY : 0;
+
+      if (typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
+        const dx = x - lastPointerX;
+        const dy = y - lastPointerY;
+        const stepDistance = Math.hypot(dx, dy);
+        if (eyegazeDwellTimer && stepDistance > 0) {
+          eyegazeDwellMotionPx += stepDistance;
+        }
+      }
+
+      lastPointerX = x;
+      lastPointerY = y;
+      lastPointerMoveAt = Date.now();
+
+      if (gazePointer) {
+        gazePointer.style.left = `${x}px`;
+        gazePointer.style.top = `${y}px`;
+      }
+    });
+    updateEyegazePointerState();
   }
 
   document.addEventListener('keydown', handleActivate, true);
