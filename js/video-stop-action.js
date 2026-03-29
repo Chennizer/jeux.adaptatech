@@ -965,6 +965,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
+    videoContainer?.classList.add('is-freeze-fx');
     currentPromptShownAtMs = Date.now();
     promptRequiresFreshSwitchPress = switchIsDown;
     promptSawSwitchRelease = !switchIsDown;
@@ -1022,11 +1023,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (!overlayScreen) {
+      videoContainer?.classList.remove('is-freeze-fx');
       return;
     }
 
     overlayScreen.classList.remove('show');
     overlayScreen.classList.add('hidden');
+    videoContainer?.classList.remove('is-freeze-fx');
   }
 
   function computeFinalScore(avgDelayMs, falsePositives, totalPrompts) {
@@ -1105,6 +1108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hideActionPrompt();
     updateResultsSummary();
     videoPlayer?.classList.remove('is-paused-zoom');
+    videoContainer?.classList.remove('is-freeze-fx');
 
     if (videoContainer) {
       videoContainer.classList.add('hidden');
@@ -1151,6 +1155,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hideActionPrompt();
     isTransitioning = false;
     videoPlayer?.classList.remove('is-paused-zoom');
+    videoContainer?.classList.remove('is-freeze-fx');
 
     if (resultsScreen) {
       resultsScreen.classList.remove('show');
