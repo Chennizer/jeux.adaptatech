@@ -172,6 +172,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let menuMusicAutoplayTimer = null;
   let menuMusicStarted = false;
   let scoreSubmissionState = 'idle';
+  let switchIsDown = false;
+  let promptRequiresFreshSwitchPress = false;
+  let promptSawSwitchRelease = true;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -922,6 +925,8 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
     currentPromptShownAtMs = Date.now();
+    promptRequiresFreshSwitchPress = switchIsDown;
+    promptSawSwitchRelease = !switchIsDown;
     hardModeNeedsRestart = false;
     clearHardModePromptTimer();
     stopWaitMusic();
@@ -963,6 +968,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function hideActionPrompt() {
     awaitingResume = false;
     activeActionKey = null;
+    promptRequiresFreshSwitchPress = false;
+    promptSawSwitchRelease = true;
     clearHardModePromptTimer();
     stopWaitMusic();
 
@@ -1095,6 +1102,9 @@ document.addEventListener('DOMContentLoaded', () => {
     falsePositiveCount = 0;
     hardModeNeedsRestart = false;
     scoreSubmissionState = 'idle';
+    switchIsDown = false;
+    promptRequiresFreshSwitchPress = false;
+    promptSawSwitchRelease = true;
 
     hideActionPrompt();
     isTransitioning = false;
@@ -1198,9 +1208,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (acceptedKeyboard) {
       event.preventDefault();
+      switchIsDown = true;
     }
 
     if (awaitingResume) {
+      if (acceptedKeyboard && promptRequiresFreshSwitchPress && !promptSawSwitchRelease) {
+        return;
+      }
       resumeGame();
       return;
     }
@@ -1237,6 +1251,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function handleSwitchRelease(event) {
+    if (event.type !== 'keyup') {
+      return;
+    }
+
+    if (event.code !== 'Space' && event.code !== 'Enter') {
+      return;
+    }
+
+    switchIsDown = false;
+    if (awaitingResume) {
+      promptSawSwitchRelease = true;
+    }
+  }
+
   modeButtons.forEach((button) => {
     button.addEventListener('click', () => setSelectedMode(button.dataset.mode));
   });
@@ -1262,6 +1291,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   document.addEventListener('keydown', handleActivate, true);
+  document.addEventListener('keyup', handleSwitchRelease, true);
   videoPlayer?.addEventListener('timeupdate', handleTimeUpdate);
   videoPlayer?.addEventListener('ended', finishGame);
   videoPlayer?.addEventListener('play', () => {
