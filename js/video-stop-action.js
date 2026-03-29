@@ -108,6 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
   const overlayScreen = document.getElementById('overlay-screen');
+  const actionPromptTile = document.getElementById('action-prompt-tile');
+  const actionPromptDwellFill = document.getElementById('action-prompt-dwell-fill');
+  const gazePointer = document.getElementById('gazePointer');
   const actionPromptImage = document.getElementById('action-prompt-image');
   const actionPromptLabel = document.getElementById('action-prompt-label');
   const resultsScreen = document.getElementById('results-screen');
@@ -140,6 +143,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
   const failPromptImageSrc = '../../images/gaminganimation/neutral.png';
+  const inputMode = (document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
+  const eyegazeModeEnabled = inputMode === 'eyegaze';
+  const eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+  const eyegazeMotionIdleLimitMs = 1000;
+  const eyegazeMinMotionPx = 1.5;
   const zoomTransitionMs = 180;
   const SCORE_MAX = 10000;
   const DELAY_WEIGHT = 9000;
@@ -176,6 +184,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let switchIsDown = false;
   let promptRequiresFreshSwitchPress = false;
   let promptSawSwitchRelease = true;
+  let eyegazeDwellTimer = null;
+  let pointerInPromptTile = false;
+  let lastPointerMoveAt = 0;
+  let lastPointerX = null;
+  let lastPointerY = null;
+  let eyegazeDwellMotionPx = 0;
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
@@ -959,12 +973,23 @@ document.addEventListener('DOMContentLoaded', () => {
     awaitingResume = true;
 
     actionPromptImage.src = getActionImage(eventConfig.action);
-    actionPromptImage.classList.add('is-pulsing');
-    actionPromptLabel.classList.add('is-pulsing');
+    if (!eyegazeModeEnabled) {
+      actionPromptImage.classList.add('is-pulsing');
+      actionPromptLabel.classList.add('is-pulsing');
+    } else {
+      actionPromptImage.classList.remove('is-pulsing');
+      actionPromptLabel.classList.remove('is-pulsing');
+    }
     updatePromptLanguage();
 
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
+    overlayScreen.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
+    applyEyegazePromptLayout();
+    if (eyegazeModeEnabled && typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
+      pointerInPromptTile = isPointInsidePromptTile(lastPointerX, lastPointerY);
+    }
+    resetEyegazeDwellFill();
     currentPromptShownAtMs = Date.now();
     promptRequiresFreshSwitchPress = switchIsDown;
     promptSawSwitchRelease = !switchIsDown;
@@ -973,34 +998,44 @@ document.addEventListener('DOMContentLoaded', () => {
     stopWaitMusic();
 
     if (isHardModeSelected() || isCompetitiveModeSelected()) {
-      const totalTimeMs = isCompetitiveModeSelected() ? 3000 : hardTimeLimitMs;
-      const shrinkDurationMs = isCompetitiveModeSelected() ? 2000 : hardShrinkDurationMs;
-      const shrinkStartDelayMs = Math.max(0, totalTimeMs - shrinkDurationMs);
-      const shrinkTimer = setTimeout(() => {
-        if (!awaitingResume) {
-          return;
-        }
+      if (eyegazeModeEnabled) {
+        const totalTimeMs = isCompetitiveModeSelected() ? 5000 : hardTimeLimitMs;
+        hardModePromptTimer = setTimeout(() => {
+          if (!awaitingResume) {
+            return;
+          }
+          triggerFailedPromptRestart();
+        }, totalTimeMs);
+      } else {
+        const totalTimeMs = isCompetitiveModeSelected() ? 3000 : hardTimeLimitMs;
+        const shrinkDurationMs = isCompetitiveModeSelected() ? 2000 : hardShrinkDurationMs;
+        const shrinkStartDelayMs = Math.max(0, totalTimeMs - shrinkDurationMs);
+        const shrinkTimer = setTimeout(() => {
+          if (!awaitingResume) {
+            return;
+          }
 
-        actionPromptImage.classList.remove('is-pulsing');
-        actionPromptLabel.classList.remove('is-pulsing');
-        if (actionPromptImage) {
-          actionPromptImage.style.animationDuration = (shrinkDurationMs / 1000) + 's';
-        }
-        if (actionPromptLabel) {
-          actionPromptLabel.style.animationDuration = (shrinkDurationMs / 1000) + 's';
-        }
-        fadeOutWaitMusic(shrinkDurationMs);
-        actionPromptImage.classList.add('hard-mode-countdown');
-        actionPromptLabel.classList.add('hard-mode-countdown');
-      }, shrinkStartDelayMs);
+          actionPromptImage.classList.remove('is-pulsing');
+          actionPromptLabel.classList.remove('is-pulsing');
+          if (actionPromptImage) {
+            actionPromptImage.style.animationDuration = (shrinkDurationMs / 1000) + 's';
+          }
+          if (actionPromptLabel) {
+            actionPromptLabel.style.animationDuration = (shrinkDurationMs / 1000) + 's';
+          }
+          fadeOutWaitMusic(shrinkDurationMs);
+          actionPromptImage.classList.add('hard-mode-countdown');
+          actionPromptLabel.classList.add('hard-mode-countdown');
+        }, shrinkStartDelayMs);
 
-      hardModePromptTimer = setTimeout(() => {
-        if (!awaitingResume) {
-          return;
-        }
-        clearTimeout(shrinkTimer);
-        triggerFailedPromptRestart();
-      }, totalTimeMs);
+        hardModePromptTimer = setTimeout(() => {
+          if (!awaitingResume) {
+            return;
+          }
+          clearTimeout(shrinkTimer);
+          triggerFailedPromptRestart();
+        }, totalTimeMs);
+      }
     }
 
     playUiSound(promptAudio);
@@ -1014,12 +1049,17 @@ document.addEventListener('DOMContentLoaded', () => {
     promptSawSwitchRelease = true;
     clearHardModePromptTimer();
     stopWaitMusic();
+    cancelEyegazeDwell();
+    pointerInPromptTile = false;
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
       actionPromptImage.classList.remove('is-pulsing');
       actionPromptLabel?.classList.remove('is-pulsing');
+      actionPromptImage.classList.remove('hard-mode-countdown');
+      actionPromptLabel?.classList.remove('hard-mode-countdown');
     }
+    resetEyegazePromptLayout();
 
     if (!overlayScreen) {
       return;
@@ -1027,6 +1067,120 @@ document.addEventListener('DOMContentLoaded', () => {
 
     overlayScreen.classList.remove('show');
     overlayScreen.classList.add('hidden');
+  }
+
+  function resetEyegazeDwellFill() {
+    if (!actionPromptDwellFill) {
+      return;
+    }
+    actionPromptDwellFill.style.transition = 'none';
+    actionPromptDwellFill.style.width = '0';
+    actionPromptDwellFill.style.height = '0';
+    actionPromptDwellFill.offsetHeight;
+  }
+
+  function hasRecentPointerMotion() {
+    return (Date.now() - lastPointerMoveAt) <= eyegazeMotionIdleLimitMs;
+  }
+
+  function updateEyegazePointerState() {
+    if (!eyegazeModeEnabled) {
+      return;
+    }
+
+    const showPointer = Boolean(gazePointer && gameStarted && (!controlPanel || controlPanel.style.display === 'none'));
+    document.body.classList.toggle('hide-native-cursor', showPointer);
+    if (gazePointer) {
+      gazePointer.style.opacity = showPointer ? '1' : '0';
+    }
+  }
+
+  function applyEyegazePromptLayout() {
+    if (!eyegazeModeEnabled || !actionPromptTile) {
+      return;
+    }
+
+    actionPromptTile.classList.remove('eyegaze-hard-layout', 'eyegaze-competitive-layout');
+    actionPromptTile.style.removeProperty('--eyegaze-tile-x');
+    actionPromptTile.style.removeProperty('--eyegaze-tile-y');
+
+    if (isHardModeSelected()) {
+      const col = Math.floor(Math.random() * 2);
+      const row = Math.floor(Math.random() * 2);
+      const x = `${(col + 0.5) * 50}%`;
+      const y = `${(row + 0.5) * 50}%`;
+      actionPromptTile.classList.add('eyegaze-hard-layout');
+      actionPromptTile.style.setProperty('--eyegaze-tile-x', x);
+      actionPromptTile.style.setProperty('--eyegaze-tile-y', y);
+      return;
+    }
+
+    if (isCompetitiveModeSelected()) {
+      const col = Math.floor(Math.random() * 3);
+      const row = Math.floor(Math.random() * 3);
+      const x = `${(col + 0.5) * (100 / 3)}%`;
+      const y = `${(row + 0.5) * (100 / 3)}%`;
+      actionPromptTile.classList.add('eyegaze-competitive-layout');
+      actionPromptTile.style.setProperty('--eyegaze-tile-x', x);
+      actionPromptTile.style.setProperty('--eyegaze-tile-y', y);
+    }
+  }
+
+  function resetEyegazePromptLayout() {
+    if (!actionPromptTile) {
+      return;
+    }
+    actionPromptTile.classList.remove('eyegaze-hard-layout', 'eyegaze-competitive-layout');
+    actionPromptTile.style.removeProperty('--eyegaze-tile-x');
+    actionPromptTile.style.removeProperty('--eyegaze-tile-y');
+  }
+
+  function isPointInsidePromptTile(x, y) {
+    if (!actionPromptTile || typeof x !== 'number' || typeof y !== 'number') {
+      return false;
+    }
+    const hitElement = document.elementFromPoint(x, y);
+    return Boolean(hitElement && actionPromptTile.contains(hitElement));
+  }
+
+  function startEyegazeDwell() {
+    if (!eyegazeModeEnabled || !awaitingResume || hardModeNeedsRestart) {
+      return;
+    }
+
+    if (!hasRecentPointerMotion()) {
+      cancelEyegazeDwell();
+      return;
+    }
+
+    cancelEyegazeDwell();
+    resetEyegazeDwellFill();
+    eyegazeDwellMotionPx = 0;
+
+    if (actionPromptDwellFill) {
+      actionPromptDwellFill.style.transition = `width ${eyegazeDwellMs}ms linear, height ${eyegazeDwellMs}ms linear`;
+      requestAnimationFrame(() => {
+        actionPromptDwellFill.style.width = '100%';
+        actionPromptDwellFill.style.height = '100%';
+      });
+    }
+
+    eyegazeDwellTimer = setTimeout(() => {
+      eyegazeDwellTimer = null;
+      if (!hasRecentPointerMotion() || eyegazeDwellMotionPx < eyegazeMinMotionPx) {
+        cancelEyegazeDwell();
+        return;
+      }
+      resumeGame();
+    }, eyegazeDwellMs);
+  }
+
+  function cancelEyegazeDwell() {
+    if (eyegazeDwellTimer) {
+      clearTimeout(eyegazeDwellTimer);
+      eyegazeDwellTimer = null;
+    }
+    resetEyegazeDwellFill();
   }
 
   function computeFinalScore(avgDelayMs, falsePositives, totalPrompts) {
@@ -1131,6 +1285,7 @@ document.addEventListener('DOMContentLoaded', () => {
       languageToggle.style.display = 'inline-flex';
     }
 
+    updateEyegazePointerState();
     startMenuMusic();
   }
 
@@ -1200,6 +1355,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    updateEyegazePointerState();
     videoPlayer.currentTime = 0;
     videoPlayer.play().catch(() => {});
   }
@@ -1215,6 +1371,7 @@ document.addEventListener('DOMContentLoaded', () => {
       languageToggle.style.display = 'inline-flex';
     }
 
+    updateEyegazePointerState();
     startMenuMusic();
   }
 
@@ -1245,6 +1402,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const acceptedPointer = event.type === 'pointerup';
 
     if (!acceptedKeyboard && !acceptedPointer) {
+      return;
+    }
+
+    if (eyegazeModeEnabled && awaitingResume && (acceptedKeyboard || acceptedPointer)) {
       return;
     }
 
@@ -1333,6 +1494,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (overlayScreen) {
     overlayScreen.addEventListener('pointerup', handleActivate);
+  }
+
+  if (actionPromptTile && eyegazeModeEnabled) {
+    actionPromptTile.addEventListener('pointerenter', () => {
+      pointerInPromptTile = true;
+      startEyegazeDwell();
+    });
+    actionPromptTile.addEventListener('pointerleave', () => {
+      pointerInPromptTile = false;
+      cancelEyegazeDwell();
+    });
+    actionPromptTile.addEventListener('pointercancel', () => {
+      pointerInPromptTile = false;
+      cancelEyegazeDwell();
+    });
+  }
+
+  if (eyegazeModeEnabled) {
+    document.addEventListener('pointermove', (event) => {
+      const x = typeof event.clientX === 'number' ? event.clientX : 0;
+      const y = typeof event.clientY === 'number' ? event.clientY : 0;
+      pointerInPromptTile = isPointInsidePromptTile(x, y);
+
+      if (typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
+        const dx = x - lastPointerX;
+        const dy = y - lastPointerY;
+        const stepDistance = Math.hypot(dx, dy);
+        if (eyegazeDwellTimer && stepDistance > 0) {
+          eyegazeDwellMotionPx += stepDistance;
+        }
+      }
+
+      lastPointerX = x;
+      lastPointerY = y;
+      lastPointerMoveAt = Date.now();
+
+      if (gazePointer) {
+        gazePointer.style.left = `${x}px`;
+        gazePointer.style.top = `${y}px`;
+      }
+
+      if (pointerInPromptTile && awaitingResume && !eyegazeDwellTimer && !hardModeNeedsRestart) {
+        startEyegazeDwell();
+      }
+    });
+    updateEyegazePointerState();
   }
 
   document.addEventListener('keydown', handleActivate, true);
