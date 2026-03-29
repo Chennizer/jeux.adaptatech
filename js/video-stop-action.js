@@ -185,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let promptRequiresFreshSwitchPress = false;
   let promptSawSwitchRelease = true;
   let eyegazeDwellTimer = null;
+  let pointerInPromptTile = false;
   let lastPointerMoveAt = 0;
   let lastPointerX = null;
   let lastPointerY = null;
@@ -1035,6 +1036,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearHardModePromptTimer();
     stopWaitMusic();
     cancelEyegazeDwell();
+    pointerInPromptTile = false;
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
@@ -1430,9 +1432,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (actionPromptTile && eyegazeModeEnabled) {
-    actionPromptTile.addEventListener('pointerenter', startEyegazeDwell);
-    actionPromptTile.addEventListener('pointerleave', cancelEyegazeDwell);
-    actionPromptTile.addEventListener('pointercancel', cancelEyegazeDwell);
+    actionPromptTile.addEventListener('pointerenter', () => {
+      pointerInPromptTile = true;
+      startEyegazeDwell();
+    });
+    actionPromptTile.addEventListener('pointerleave', () => {
+      pointerInPromptTile = false;
+      cancelEyegazeDwell();
+    });
+    actionPromptTile.addEventListener('pointercancel', () => {
+      pointerInPromptTile = false;
+      cancelEyegazeDwell();
+    });
   }
 
   if (eyegazeModeEnabled) {
@@ -1456,6 +1467,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (gazePointer) {
         gazePointer.style.left = `${x}px`;
         gazePointer.style.top = `${y}px`;
+      }
+
+      if (pointerInPromptTile && awaitingResume && !eyegazeDwellTimer && !hardModeNeedsRestart) {
+        startEyegazeDwell();
       }
     });
     updateEyegazePointerState();
