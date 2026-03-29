@@ -67,19 +67,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const MODE_DESCRIPTION_COPY = {
     normal: {
-      fr: 'Mode normal : suis l’action affichée à chaque pause, puis appuie sur la switch pour continuer.',
-      en: 'Normal mode: follow each prompt when the video pauses, then press your switch to continue.',
-      ja: 'ノーマル：動画が止まったら表示された動きをして、スイッチを押して再開します。'
+      fr: 'Appuie sur la switch au bon moment, pas besoin de se dépêcher.',
+      en: 'Press your switch at the right time, no need to rush.',
+      ja: '正しいタイミングでスイッチを押してください。急ぐ必要はありません。'
     },
     hard: {
-      fr: 'Mode difficile : 10 secondes pour appuyer sur la switch, jusqu’à 5 appuis au mauvais moment.',
-      en: 'Hard mode: 10 seconds to press your switch, up to 5 wrong-time presses.',
-      ja: 'ハード：スイッチは10秒以内、タイミング外は5回まで。'
+      fr: 'Tu as 10 secondes pour appuyer sur ta switch. Tu dois faire attention de ne pas appuyer plus de 5 fois au mauvais moment, sinon tu devras recommencer.',
+      en: 'You have 10 seconds to press your switch. Be careful not to press at the wrong time more than 5 times, or you will have to restart.',
+      ja: 'スイッチを押すまでに10秒あります。タイミング外の押下が5回を超えると、最初からやり直しになります。'
     },
     competitive: {
-      fr: 'Mode compétitif : 3 secondes pour appuyer, 0 appui au mauvais moment.',
-      en: 'Competitive mode: 3 seconds to press, 0 wrong-time presses.',
-      ja: '対戦：入力は3秒、タイミング外は0回。'
+      fr: 'Tu as 3 secondes pour appuyer sur ta switch. Si tu appuies au mauvais moment, tu devras recommencer.',
+      en: 'You have 3 seconds to press your switch. If you press at the wrong time, you will have to restart.',
+      ja: 'スイッチを押すまでに3秒あります。タイミング外に押すと、やり直しになります。'
     }
   };
 
