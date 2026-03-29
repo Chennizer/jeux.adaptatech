@@ -985,6 +985,9 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
     overlayScreen.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
+    if (eyegazeModeEnabled && typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
+      pointerInPromptTile = isPointInsidePromptTile(lastPointerX, lastPointerY);
+    }
     resetEyegazeDwellFill();
     currentPromptShownAtMs = Date.now();
     promptRequiresFreshSwitchPress = switchIsDown;
@@ -1076,6 +1079,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gazePointer) {
       gazePointer.style.opacity = showPointer ? '1' : '0';
     }
+  }
+
+  function isPointInsidePromptTile(x, y) {
+    if (!actionPromptTile || typeof x !== 'number' || typeof y !== 'number') {
+      return false;
+    }
+    const hitElement = document.elementFromPoint(x, y);
+    return Boolean(hitElement && actionPromptTile.contains(hitElement));
   }
 
   function startEyegazeDwell() {
@@ -1450,6 +1461,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('pointermove', (event) => {
       const x = typeof event.clientX === 'number' ? event.clientX : 0;
       const y = typeof event.clientY === 'number' ? event.clientY : 0;
+      pointerInPromptTile = isPointInsidePromptTile(x, y);
 
       if (typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
         const dx = x - lastPointerX;
