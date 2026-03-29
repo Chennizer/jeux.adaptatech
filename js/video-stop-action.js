@@ -985,6 +985,7 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.classList.remove('hidden');
     overlayScreen.classList.add('show');
     overlayScreen.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
+    applyEyegazePromptPlacement();
     if (eyegazeModeEnabled && typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
       pointerInPromptTile = isPointInsidePromptTile(lastPointerX, lastPointerY);
     }
@@ -997,7 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stopWaitMusic();
 
     if (isHardModeSelected() || isCompetitiveModeSelected()) {
-      const totalTimeMs = isCompetitiveModeSelected() ? 3000 : hardTimeLimitMs;
+      const totalTimeMs = isCompetitiveModeSelected() ? 5000 : hardTimeLimitMs;
       const shrinkDurationMs = isCompetitiveModeSelected() ? 2000 : hardShrinkDurationMs;
       const shrinkStartDelayMs = Math.max(0, totalTimeMs - shrinkDurationMs);
       const shrinkTimer = setTimeout(() => {
@@ -1040,6 +1041,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stopWaitMusic();
     cancelEyegazeDwell();
     pointerInPromptTile = false;
+    resetEyegazePromptPlacement();
 
     if (actionPromptImage) {
       actionPromptImage.classList.remove('hidden');
@@ -1053,6 +1055,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     overlayScreen.classList.remove('show');
     overlayScreen.classList.add('hidden');
+  }
+
+  function resetEyegazePromptPlacement() {
+    if (!overlayScreen || !actionPromptTile) {
+      return;
+    }
+    overlayScreen.classList.remove('eyegaze-hard-grid', 'eyegaze-competitive-grid');
+    actionPromptTile.style.removeProperty('grid-column');
+    actionPromptTile.style.removeProperty('grid-row');
+  }
+
+  function applyEyegazePromptPlacement() {
+    if (!eyegazeModeEnabled || !overlayScreen || !actionPromptTile) {
+      return;
+    }
+
+    resetEyegazePromptPlacement();
+
+    if (isCompetitiveModeSelected()) {
+      overlayScreen.classList.add('eyegaze-competitive-grid');
+      actionPromptTile.style.gridColumn = String(1 + Math.floor(Math.random() * 3));
+      actionPromptTile.style.gridRow = String(1 + Math.floor(Math.random() * 3));
+      return;
+    }
+
+    if (isHardModeSelected()) {
+      overlayScreen.classList.add('eyegaze-hard-grid');
+      actionPromptTile.style.gridColumn = String(1 + Math.floor(Math.random() * 2));
+      actionPromptTile.style.gridRow = String(1 + Math.floor(Math.random() * 2));
+    }
   }
 
   function resetEyegazeDwellFill() {
