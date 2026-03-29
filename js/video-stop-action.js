@@ -67,19 +67,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const MODE_DESCRIPTION_COPY = {
     normal: {
-      fr: 'Mode normal : joue au rythme actuel, sans limite supplémentaire.',
-      en: 'Normal mode: play with the current pace and no extra penalties.',
-      ja: 'ノーマル：現在のテンポで、追加ペナルティなしで遊べます。'
+      fr: 'Mode normal : même rythme que le jeu actuel.',
+      en: 'Normal mode: current game pace.',
+      ja: 'ノーマル：今まで通りのペース。'
     },
     hard: {
-      fr: 'Mode difficile : tu as 10 secondes pour valider chaque action et 5 erreurs de switch hors temps avant redémarrage.',
-      en: 'Hard mode: you have 10 seconds to confirm each prompt and 5 off-timing switch mistakes before restart.',
-      ja: 'ハード：各アクションは10秒以内、タイミング外のスイッチ操作は5回でリスタート。'
+      fr: 'Mode difficile : 10 secondes pour appuyer sur la switch, jusqu’à 5 appuis au mauvais moment.',
+      en: 'Hard mode: 10 seconds to press your switch, up to 5 wrong-time presses.',
+      ja: 'ハード：スイッチは10秒以内、タイミング外は5回まで。'
     },
     competitive: {
-      fr: 'Mode compétitif : 3 secondes pour valider (fondu après 1 seconde), et redémarrage immédiat au moindre switch hors temps.',
-      en: 'Competitive mode: 3 seconds to confirm (fades after 1 second), and instant restart on any off-timing switch press.',
-      ja: '対戦：入力は3秒以内（1秒後から2秒でフェード）、タイミング外スイッチは即リスタート。'
+      fr: 'Mode compétitif : 3 secondes pour appuyer (fondu après 1 seconde), 0 appui au mauvais moment.',
+      en: 'Competitive mode: 3 seconds to press (fade after 1 second), 0 wrong-time presses.',
+      ja: '対戦：入力は3秒（1秒後からフェード）、タイミング外は0回。'
     }
   };
 
@@ -139,6 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
+  const failPromptImageSrc = '../../images/gaminganimation/neutral.png';
   const zoomTransitionMs = 180;
   const SCORE_MAX = 10000;
   const DELAY_WEIGHT = 9000;
@@ -384,16 +385,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function getTryAgainText() {
-    const lang = getCurrentLanguage();
-    const copy = {
-      fr: 'Réessaie (appuie sur ta switch)',
-      en: 'Try again (press your switch)',
-      ja: 'もう一度（あなたのスイッチを押して）'
-    };
-    return copy[lang] || copy.en;
-  }
-
   function triggerFailedPromptRestart() {
     awaitingResume = false;
     currentPromptShownAtMs = null;
@@ -403,11 +394,14 @@ document.addEventListener('DOMContentLoaded', () => {
     videoPlayer?.pause();
 
     if (actionPromptImage) {
-      actionPromptImage.classList.add('hidden');
+      actionPromptImage.src = failPromptImageSrc;
+      actionPromptImage.classList.remove('hidden');
+      actionPromptImage.classList.remove('is-pulsing');
       actionPromptImage.style.animationDuration = '';
     }
     if (actionPromptLabel) {
-      actionPromptLabel.textContent = getTryAgainText();
+      actionPromptLabel.textContent = '';
+      actionPromptLabel.classList.remove('is-pulsing');
       actionPromptLabel.classList.remove('hard-mode-countdown');
       actionPromptLabel.style.animationDuration = '';
     }
@@ -1222,8 +1216,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateResultsSummary();
 
       if (isCompetitiveModeSelected()) {
-        playUiSound(hardRestartAudio);
-        startGame();
+        triggerFailedPromptRestart();
         return;
       }
 
