@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-fr="Graffiti (commande oculaire)" data-en="Graffiti (eye gaze)" data-ja="グラフィティ（視線操作）">Graffiti (commande oculaire)</title>
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+  <style>
+    :root {
+      --sidebar-width: clamp(96px, 24vw, 180px);
+      --swatch-size: clamp(58px, 9vw, 92px);
+      --swatch-gap: clamp(10px, 1.5vw, 18px);
+      --swatch-border: 5px;
+      --dwell-color: rgba(255, 64, 64, 0.45);
+      --cursor-outline: 2px;
+      --spray-size: 54;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, #1b1b1b, #050505 60%);
+      color: #fff;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    #wall {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      cursor: none;
+      background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 40%, rgba(255,255,255,0.06) 100%),
+                  radial-gradient(circle at 80% 30%, rgba(0,128,255,0.12), transparent 40%),
+                  #0c0c0c;
+      filter: drop-shadow(0 0 18px rgba(0,0,0,0.35));
+    }
+
+    #palette {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: var(--sidebar-width);
+      padding: clamp(12px, 2vw, 20px) clamp(10px, 2vw, 18px);
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-auto-rows: var(--swatch-size);
+      gap: var(--swatch-gap);
+      background: #fafafa;
+      box-shadow: 6px 0 18px rgba(0,0,0,0.35);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      z-index: 6;
+    }
+
+    .swatch {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: var(--swatch-border) solid #fff;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.2), 0 5px 14px rgba(0,0,0,0.16);
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+      transition: transform 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    .swatch::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      border: 3px solid rgba(0,0,0,0.45);
+      opacity: 0;
+      transition: opacity 0.14s ease;
+      pointer-events: none;
+    }
+
+    .swatch.active { transform: scale(1.04); box-shadow: inset 0 2px 7px rgba(0,0,0,0.32), 0 5px 16px rgba(0,0,0,0.24); }
+    .swatch.active::before { opacity: 1; }
+    .swatch.flash::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      box-shadow: 0 0 0 0 rgba(0,0,0,0.4);
+      animation: pulse 340ms ease-out;
+      pointer-events: none;
+    }
+
+    .dwell { position: absolute; inset: 0; border-radius: 50%; background: var(--dwell-color); transform: scale(0.05); transform-origin: center; pointer-events: none; }
+    .dwell.growing { animation: dwellGrow 720ms forwards; }
+    @keyframes dwellGrow { from { transform: scale(0.05); } to { transform: scale(1.05); } }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(0,0,0,0.32); }
+      60% { box-shadow: 0 0 0 14px rgba(0,0,0,0); }
+      100% { box-shadow: 0 0 0 18px rgba(0,0,0,0); }
+    }
+
+    #hud {
+      position: fixed;
+      right: clamp(14px, 2vw, 26px);
+      top: clamp(14px, 2vw, 26px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 6;
+    }
+
+    .chip {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.22);
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+    }
+    .chip.active { background: #00d0ff; color: #000; border-color: rgba(0,0,0,0.35); transform: translateY(-1px); }
+
+    #cursorPreview {
+      position: fixed;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 8;
+      transform: translate(-50%, -50%);
+      mix-blend-mode: screen;
+      border: var(--cursor-outline) solid rgba(255,255,255,0.45);
+      box-shadow: 0 0 12px rgba(255,255,255,0.4);
+      opacity: 0.8;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 30% 20%, rgba(0, 210, 255, 0.18), transparent 40%),
+                  radial-gradient(circle at 70% 50%, rgba(255, 48, 109, 0.18), transparent 42%),
+                  rgba(8, 8, 8, 0.92);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      z-index: 10;
+      padding: clamp(20px, 3vw, 40px);
+    }
+
+    #overlay .card {
+      max-width: 760px;
+      width: min(88vw, 760px);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 22px;
+      padding: clamp(20px, 3vw, 32px);
+      box-shadow: 0 10px 42px rgba(0,0,0,0.35);
+    }
+
+    h1 { margin: 0 0 10px; font-size: clamp(32px, 5vw, 56px); letter-spacing: 0.08em; }
+    p { margin: 8px 0 18px; color: #d8d8d8; line-height: 1.6; font-size: clamp(15px, 2.4vw, 18px); }
+
+    #startBtn {
+      margin-top: 10px;
+      padding: 14px 26px;
+      font-size: clamp(16px, 3vw, 20px);
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #00d0ff, #00ffa3);
+      color: #000;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      box-shadow: 0 12px 32px rgba(0, 255, 163, 0.26);
+    }
+
+    #musicSelect {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: #a0f0ff;
+      letter-spacing: 0.03em;
+    }
+
+    #sprayTrail {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 10% 10%, rgba(255,255,255,0.04), transparent 30%),
+                  radial-gradient(circle at 90% 90%, rgba(255,255,255,0.05), transparent 35%);
+      mix-blend-mode: overlay;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="wall"></canvas>
+  <div id="sprayTrail"></div>
+  <div id="palette" aria-label="Choix de couleurs"></div>
+  <div id="hud" aria-label="Ambiance musicale">
+    <button class="chip active" data-style="punk">PUNK ROCK</button>
+    <button class="chip" data-style="hiphop">HIP HOP</button>
+  </div>
+  <div id="cursorPreview"></div>
+
+  <div id="overlay">
+    <div class="card">
+      <h1>Wild Style (Eyegaze)</h1>
+      <p>Survole l'écran pour bomber le mur. Passe simplement sur une couleur à gauche pour changer de peinture. Choisis ton ambiance musicale, puis commence.</p>
+      <div id="musicSelect">
+        <button class="chip active" data-style="punk">Punk rock</button>
+        <button class="chip" data-style="hiphop">Hip hop</button>
+      </div>
+      <p class="hint">Tip: déplace le regard lentement pour un spray dense, plus vite pour un tracé texturé.</p>
+      <button id="startBtn">Commencer</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('wall');
+    const ctx = canvas.getContext('2d');
+    const paletteEl = document.getElementById('palette');
+    const cursor = document.getElementById('cursorPreview');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const musicButtons = document.querySelectorAll('#hud .chip');
+    const musicButtonsOverlay = document.querySelectorAll('#musicSelect .chip');
+
+    const colors = [
+      '#ff2d55', '#ff9f0a', '#ffd60a', '#5efc82', '#0fd3ff', '#4b7bff', '#a34bff', '#ff7edb', '#ffffff', '#111111'
+    ];
+
+    const playlists = {
+      punk: ['../../songs/grafiti/grafitipunkrock1.mp3'],
+      hiphop: ['../../songs/grafiti/grafitihiphop1.mp3']
+    };
+
+    let activeColor = colors[0];
+    let started = false;
+    let lastPoint = null;
+    let spraySize = 46;
+    let sprayDensity = 55;
+    let currentStyle = 'punk';
+    let currentAudio = null;
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function setCursorColor(color) {
+      cursor.style.background = color;
+    }
+
+    function createSwatches() {
+      colors.forEach((color, idx) => {
+        const swatch = document.createElement('button');
+        swatch.className = 'swatch' + (idx === 0 ? ' active' : '');
+        swatch.style.background = color;
+        swatch.setAttribute('aria-label', 'Choisir la couleur ' + (idx + 1));
+
+        const dwell = document.createElement('span');
+        dwell.className = 'dwell';
+        swatch.appendChild(dwell);
+
+        let dwellTimer = null;
+
+        swatch.addEventListener('pointerenter', () => {
+          dwell.classList.add('growing');
+          dwellTimer = setTimeout(() => {
+            setColor(color, swatch);
+            dwell.classList.remove('growing');
+          }, 750);
+        });
+
+        swatch.addEventListener('pointerleave', () => {
+          dwell.classList.remove('growing');
+          clearTimeout(dwellTimer);
+        });
+
+        paletteEl.appendChild(swatch);
+      });
+    }
+
+    function setColor(color, swatchEl) {
+      activeColor = color;
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      swatchEl.classList.add('active');
+      swatchEl.classList.add('flash');
+      setCursorColor(color);
+      setTimeout(() => swatchEl.classList.remove('flash'), 220);
+    }
+
+    function sprayAt(point) {
+      if (!started) return;
+      const { x, y } = point;
+      const steps = lastPoint ? Math.max(1, Math.floor(distance(lastPoint, point) / 4)) : 1;
+      const dx = lastPoint ? (point.x - lastPoint.x) / steps : 0;
+      const dy = lastPoint ? (point.y - lastPoint.y) / steps : 0;
+
+      for (let i = 0; i < steps; i++) {
+        const baseX = lastPoint ? lastPoint.x + dx * i : x;
+        const baseY = lastPoint ? lastPoint.y + dy * i : y;
+        scatterSpray(baseX, baseY);
+      }
+      lastPoint = point;
+    }
+
+    function scatterSpray(cx, cy) {
+      for (let i = 0; i < sprayDensity; i++) {
+        const radius = Math.random() * spraySize;
+        const angle = Math.random() * Math.PI * 2;
+        const px = cx + Math.cos(angle) * radius;
+        const py = cy + Math.sin(angle) * radius;
+        const alpha = 0.08 + Math.random() * 0.28;
+        ctx.fillStyle = hexToRgba(activeColor, alpha);
+        ctx.beginPath();
+        ctx.arc(px, py, Math.random() * 2.2 + 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // central glow
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, spraySize * 0.8);
+      grad.addColorStop(0, hexToRgba(activeColor, 0.18));
+      grad.addColorStop(1, hexToRgba(activeColor, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, spraySize * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function hexToRgba(hex, alpha) {
+      const sanitized = hex.replace('#', '');
+      const bigint = parseInt(sanitized, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function distance(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function moveCursor(e) {
+      const x = e.clientX;
+      const y = e.clientY;
+      cursor.style.transform = `translate(${x}px, ${y}px)`;
+      sprayAt({ x, y });
+    }
+
+    function startPainting() {
+      started = true;
+      lastPoint = null;
+      overlay.style.display = 'none';
+      canvas.addEventListener('pointermove', moveCursor);
+      playMusic();
+      setCursorColor(activeColor);
+    }
+
+    function setStyle(style) {
+      currentStyle = style;
+      document.querySelectorAll('.chip').forEach(btn => btn.classList.toggle('active', btn.dataset.style === style));
+      if (started) playMusic();
+    }
+
+    function playMusic() {
+      const track = playlists[currentStyle]?.[0];
+      if (!track) return;
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
+      const audio = new Audio(track);
+      audio.loop = true;
+      audio.volume = 0.55;
+      audio.play().catch(() => {});
+      currentAudio = audio;
+    }
+
+    function init() {
+      resizeCanvas();
+      createSwatches();
+      setCursorColor(activeColor);
+
+      window.addEventListener('resize', resizeCanvas);
+      startBtn.addEventListener('click', startPainting);
+      musicButtons.forEach(btn => btn.addEventListener('click', () => setStyle(btn.dataset.style)));
+      musicButtonsOverlay.forEach(btn => btn.addEventListener('click', () => setStyle(btn.dataset.style)));
+
+      document.addEventListener('pointermove', e => {
+        cursor.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
