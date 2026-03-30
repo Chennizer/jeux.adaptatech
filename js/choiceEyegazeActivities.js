@@ -67,8 +67,8 @@
     const tileContainer     = document.getElementById('tile-container');
 
     if (tileCountInput) {
-      const totalChoices = Array.isArray(window.activityChoices) ? window.activityChoices.length : 6;
-      const maxChoices = Math.min(6, totalChoices);
+      const totalChoices = Array.isArray(window.activityChoices) ? window.activityChoices.length : 9;
+      const maxChoices = Math.min(9, totalChoices);
       tileCountInput.max = String(maxChoices);
       if ((parseInt(tileCountInput.value, 10) || 1) > maxChoices) {
         tileCountInput.value = String(maxChoices);
@@ -83,10 +83,10 @@
     let fixationDelay = Number.isFinite(storedDwell)
       ? storedDwell
       : parseInt(fixationTimeInput?.value, 10) || 2000;
-    let tileSize = parseInt(tileSizeInput?.value, 10) || 40;
+    let tileSize = parseInt(tileSizeInput?.value, 10) || 42;
     document.documentElement.style.setProperty('--hover-duration', fixationDelay + 'ms');
     document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-    const initialGap = 10 * (40 / tileSize);
+    const initialGap = 4.5 * (42 / tileSize);
     document.documentElement.style.setProperty('--tile-gap', initialGap + 'vh');
 
     const tileChoiceMap = new WeakMap();
@@ -506,22 +506,45 @@
       tileContainer.innerHTML = '';
       const tilesToDisplay = selectedTileIndices.map(i => window.activityChoices[i]);
 
-      const makeRow = items => {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.justifyContent = 'center';
-        row.style.gap = 'var(--tile-gap)';
-        items.forEach(choice => row.appendChild(createTile(choice)));
-        return row;
+      const resetContainerLayout = () => {
+        tileContainer.style.display = 'flex';
+        tileContainer.style.flexDirection = 'column';
+        tileContainer.style.justifyContent = 'center';
+        tileContainer.style.alignItems = 'center';
+        tileContainer.style.gap = 'var(--tile-gap-clamped, var(--tile-gap))';
+        tileContainer.style.gridTemplateColumns = '';
+        tileContainer.style.width = '';
+        tileContainer.style.margin = '';
+        tileContainer.style.padding = '';
+        tileContainer.style.rowGap = '';
+        tileContainer.style.removeProperty('--tile-rows');
+        tileContainer.classList.remove('grid-layout');
       };
 
-      tileContainer.style.display = 'flex';
-      tileContainer.style.justifyContent = 'center';
-      tileContainer.style.alignItems = 'center';
+      const applyGridLayout = (columns, rows) => {
+        const clampedColumns = Math.max(2, Math.min(3, columns || 3));
+        const resolvedRows = Math.max(2, rows || Math.ceil((tilesToDisplay.length || 0) / clampedColumns));
+        tileContainer.classList.add('grid-layout');
+        tileContainer.style.display = 'grid';
+        tileContainer.style.gridTemplateColumns = `repeat(${clampedColumns}, minmax(0, 1fr))`;
+        tileContainer.style.gap = 'var(--tile-gap-clamped, var(--tile-gap))';
+        tileContainer.style.rowGap = 'var(--tile-gap-clamped, var(--tile-gap))';
+        tileContainer.style.justifyItems = 'center';
+        tileContainer.style.alignItems = 'center';
+        tileContainer.style.alignContent = 'center';
+        tileContainer.style.justifyContent = 'center';
+        tileContainer.style.width = 'min(1200px, 98vw)';
+        tileContainer.style.margin = '0 auto';
+        tileContainer.style.padding = 'calc(var(--tile-gap-clamped, 20px) * 0.75)';
+        tileContainer.style.setProperty('--tile-columns', clampedColumns);
+        tileContainer.style.setProperty('--tile-rows', resolvedRows);
+      };
+
+      resetContainerLayout();
 
       const isPair = tilesToDisplay.length === 2;
       tileContainer.classList.toggle('two-tiles', isPair);
-      tileContainer.style.flexDirection = isPair ? '' : 'column';
+      tileContainer.classList.toggle('grid-layout', !isPair && tilesToDisplay.length > 2);
 
       if (!tilesToDisplay.length) {
         requirePointerMotionBeforeHover();
@@ -531,13 +554,19 @@
       if (isPair) {
         tilesToDisplay.forEach(choice => tileContainer.appendChild(createTile(choice)));
       } else if (tilesToDisplay.length <= 2) {
-        tileContainer.appendChild(makeRow(tilesToDisplay));
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.justifyContent = 'center';
+        row.style.gap = 'var(--tile-gap-clamped, var(--tile-gap))';
+        tilesToDisplay.forEach(choice => row.appendChild(createTile(choice)));
+        tileContainer.appendChild(row);
       } else {
-        const row1Count = Math.ceil(tilesToDisplay.length / 2);
-        const firstRow = makeRow(tilesToDisplay.slice(0, row1Count));
-        const secondRow = makeRow(tilesToDisplay.slice(row1Count));
-        tileContainer.appendChild(firstRow);
-        tileContainer.appendChild(secondRow);
+        const columns = tilesToDisplay.length > 6
+          ? 3
+          : Math.min(3, Math.ceil(tilesToDisplay.length / 2));
+        const rows = Math.max(2, Math.ceil(tilesToDisplay.length / columns));
+        applyGridLayout(columns, rows);
+        tilesToDisplay.forEach(choice => tileContainer.appendChild(createTile(choice)));
       }
       requirePointerMotionBeforeHover();
       refreshPointerStyles();
@@ -641,7 +670,7 @@
         tileSize = parseInt(tileSizeInput.value, 10);
         tileSizeValue.textContent = tileSize;
         document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-        const newGap = 10 * (40 / tileSize);
+        const newGap = 4.5 * (42 / tileSize);
         document.documentElement.style.setProperty('--tile-gap', newGap + 'vh');
       });
     }
@@ -704,7 +733,7 @@
     }
 
     chooseTilesButton?.addEventListener('click', () => {
-      const maxChoices = Math.min(6, window.activityChoices.length);
+      const maxChoices = Math.min(9, window.activityChoices.length);
       desiredTileCount = Math.min(parseInt(tileCountInput.value, 10) || 1, maxChoices);
       if (tileCountInput.value !== String(desiredTileCount)) {
         tileCountInput.value = String(desiredTileCount);
