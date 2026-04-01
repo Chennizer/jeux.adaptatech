@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen?.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
 
     if (!eyegazeModeEnabled) {
-      clearEyegazeDwell();
+      cancelEyegazeDwell();
       pointerInPromptTile = false;
       if (gazePointer) {
         gazePointer.style.opacity = '0';
