@@ -137,14 +137,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const successSoundSrc = document.body.getAttribute('data-success-sound') || '../../sounds/success3.mp3';
   const hardTimeLimitMs = Math.max(2000, Number(document.body.getAttribute('data-hard-time-limit')) * 1000 || 10000);
   const hardShrinkDurationMs = Math.max(1000, Number(document.body.getAttribute('data-hard-shrink-duration')) * 1000 || 5000);
-  const hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/arcade/arcadefail.mp3';
+  let hardTimeoutSoundSrc = document.body.getAttribute('data-hard-timeout-sound') || '../../sounds/arcade/arcadefail.mp3';
   const hardRestartSoundSrc = document.body.getAttribute('data-hard-restart-sound') || '../../sounds/pagestart.mp3';
   const menuMusicSrc = document.body.getAttribute('data-menu-music') || '';
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
   const failPromptImageSrc = '../../images/gaminganimation/neutral.png';
   const inputMode = (document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
-  const eyegazeModeEnabled = inputMode === 'eyegaze';
+  let eyegazeModeEnabled = inputMode === 'eyegaze';
   const eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
   const eyegazeMotionIdleLimitMs = 1000;
   const eyegazeMinMotionPx = 1.5;
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const DELAY_WEIGHT = 9000;
   const FALSE_POSITIVE_WEIGHT = 1000;
   const DELAY_REFERENCE_MS = 3000;
-  const scoreGame = document.body.getAttribute('data-score-game') || '';
+  let scoreGame = document.body.getAttribute('data-score-game') || '';
   const scoreApiBase = (document.body.getAttribute('data-score-api-base') || '').trim();
   const scoreTopLimit = Math.max(1, Math.min(50, Number(document.body.getAttribute('data-score-top-limit')) || 5));
   const scoreFeatureEnabled = Boolean(scoreGame && scoreApiBase);
@@ -193,10 +193,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const promptAudio = createUiAudio(promptSoundSrc);
   const successAudio = createUiAudio(successSoundSrc);
-  const hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
+  let hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
   const menuMusicAudio = createUiAudio(menuMusicSrc, { elementId: 'intro-jingle' });
   const waitMusicAudio = createUiAudio(waitMusicSrc);
+
+  function setInputMode(mode, options) {
+    const config = options || {};
+    const syncBodyAttributes = config.syncBodyAttributes !== false;
+    const normalizedMode = mode === 'eyegaze' ? 'eyegaze' : 'switch';
+    eyegazeModeEnabled = normalizedMode === 'eyegaze';
+
+    if (syncBodyAttributes) {
+      document.body.setAttribute('data-input-mode', normalizedMode);
+      document.body.classList.toggle('video-stop-action-eyegaze', eyegazeModeEnabled);
+    }
+
+    if (eyegazeModeEnabled) {
+      scoreGame = 'mario-peach-challenge-eyegaze';
+      hardTimeoutSoundSrc = '../../sounds/error.mp3';
+      if (syncBodyAttributes) {
+        document.body.setAttribute('data-score-game', scoreGame);
+        document.body.setAttribute('data-hard-timeout-sound', hardTimeoutSoundSrc);
+      }
+    } else {
+      scoreGame = 'mario-peach-challenge';
+      hardTimeoutSoundSrc = '../../sounds/arcade/arcadefail.mp3';
+      if (syncBodyAttributes) {
+        document.body.setAttribute('data-score-game', scoreGame);
+        document.body.setAttribute('data-hard-timeout-sound', hardTimeoutSoundSrc);
+      }
+    }
+
+    if (hardTimeoutAudio) {
+      try {
+        hardTimeoutAudio.pause();
+        if (hardTimeoutAudio.getAttribute('src') !== hardTimeoutSoundSrc) {
+          hardTimeoutAudio.setAttribute('src', hardTimeoutSoundSrc);
+          hardTimeoutAudio.load();
+        }
+      } catch (error) {
+        // no-op
+      }
+    } else {
+      hardTimeoutAudio = createUiAudio(hardTimeoutSoundSrc);
+    }
+
+    updateEyegazePointerState();
+  }
+
+  setInputMode(inputMode, { syncBodyAttributes: false });
+  window.setStopActionInputMode = (mode) => {
+    if (gameStarted) {
+      return false;
+    }
+    setInputMode(mode);
+    return true;
+  };
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
@@ -1514,7 +1567,7 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.addEventListener('pointerup', handleActivate);
   }
 
-  if (actionPromptTile && eyegazeModeEnabled) {
+  if (actionPromptTile) {
     actionPromptTile.addEventListener('pointerenter', () => {
       pointerInPromptTile = true;
       startEyegazeDwell();
@@ -1529,12 +1582,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (eyegazeModeEnabled) {
-    document.addEventListener('pointermove', (event) => {
+  document.addEventListener('pointermove', (event) => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
+
       const x = typeof event.clientX === 'number' ? event.clientX : 0;
       const y = typeof event.clientY === 'number' ? event.clientY : 0;
       pointerInPromptTile = isPointInsidePromptTile(x, y);
-
       if (typeof lastPointerX === 'number' && typeof lastPointerY === 'number') {
         const dx = x - lastPointerX;
         const dy = y - lastPointerY;
@@ -1557,8 +1612,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startEyegazeDwell();
       }
     });
-    updateEyegazePointerState();
-  }
+  updateEyegazePointerState();
 
   document.addEventListener('keydown', handleActivate, true);
   document.addEventListener('keyup', handleSwitchRelease, true);
