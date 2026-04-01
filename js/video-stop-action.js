@@ -219,6 +219,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('arcade-input-mode-change', (event) => {
     const mode = event?.detail?.mode;
     syncInputModeFromBody(mode);
+    if (!gameStarted) {
+      startMenuMusicWithFallback();
+    }
   });
 
   if (videoPlayer && videoSource) {
