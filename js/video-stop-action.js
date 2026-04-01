@@ -143,9 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
   const failPromptImageSrc = '../../images/gaminganimation/neutral.png';
-  const inputMode = (document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
-  const eyegazeModeEnabled = inputMode === 'eyegaze';
-  const eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+  let inputMode = (document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
+  let eyegazeModeEnabled = inputMode === 'eyegaze';
+  let eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
   const eyegazeMotionIdleLimitMs = 1000;
   const eyegazeMinMotionPx = 1.5;
   const zoomTransitionMs = 180;
@@ -197,6 +197,42 @@ document.addEventListener('DOMContentLoaded', () => {
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
   const menuMusicAudio = createUiAudio(menuMusicSrc, { elementId: 'intro-jingle' });
   const waitMusicAudio = createUiAudio(waitMusicSrc);
+
+  function setInputMode(nextMode) {
+    const resolvedMode = nextMode === 'eyegaze' ? 'eyegaze' : 'switch';
+    inputMode = resolvedMode;
+    eyegazeModeEnabled = resolvedMode === 'eyegaze';
+    eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+    document.body.setAttribute('data-input-mode', resolvedMode);
+    document.body.classList.toggle('video-stop-action-eyegaze', eyegazeModeEnabled);
+    overlayScreen?.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
+
+    if (!eyegazeModeEnabled) {
+      pointerInPromptTile = false;
+      stopEyegazeDwellProgress();
+    }
+
+    if (actionPromptTile) {
+      updatePromptTileLayout();
+    }
+    updateEyegazePointerState();
+  }
+
+  window.setVideoStopActionInputMode = function(nextMode) {
+    if (gameStarted) {
+      return false;
+    }
+    setInputMode(nextMode);
+    return true;
+  };
+
+  document.addEventListener('video-stop-action:set-input-mode', (event) => {
+    if (gameStarted) {
+      return;
+    }
+    const requestedMode = event?.detail?.mode;
+    setInputMode(requestedMode);
+  });
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
