@@ -143,9 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
   const failPromptImageSrc = '../../images/gaminganimation/neutral.png';
-  const inputMode = (document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
-  const eyegazeModeEnabled = inputMode === 'eyegaze';
-  const eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+  let eyegazeModeEnabled = false;
+  let eyegazeDwellMs = 1500;
   const eyegazeMotionIdleLimitMs = 1000;
   const eyegazeMinMotionPx = 1.5;
   const zoomTransitionMs = 180;
@@ -197,6 +196,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
   const menuMusicAudio = createUiAudio(menuMusicSrc, { elementId: 'intro-jingle' });
   const waitMusicAudio = createUiAudio(waitMusicSrc);
+
+  function syncInputModeFromBody(modeOverride) {
+    const resolvedMode = (typeof modeOverride === 'string' ? modeOverride : document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
+    eyegazeModeEnabled = resolvedMode === 'eyegaze';
+    eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+
+    document.body.classList.toggle('video-stop-action-eyegaze', eyegazeModeEnabled);
+    overlayScreen?.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
+
+    if (!eyegazeModeEnabled) {
+      cancelEyegazeDwell();
+      pointerInPromptTile = false;
+      if (gazePointer) {
+        gazePointer.style.opacity = '0';
+      }
+    }
+  }
+
+  syncInputModeFromBody();
+
+  document.addEventListener('arcade-input-mode-change', (event) => {
+    const mode = event?.detail?.mode;
+    syncInputModeFromBody(mode);
+    if (!gameStarted) {
+      startMenuMusicWithFallback();
+    }
+  });
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
