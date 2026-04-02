@@ -212,6 +212,8 @@ document.addEventListener('DOMContentLoaded', () => {
         gazePointer.style.opacity = '0';
       }
     }
+
+    updateEyegazePointerState();
   }
 
   syncInputModeFromBody();
@@ -1540,23 +1542,34 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.addEventListener('pointerup', handleActivate);
   }
 
-  if (actionPromptTile && eyegazeModeEnabled) {
+  if (actionPromptTile) {
     actionPromptTile.addEventListener('pointerenter', () => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       pointerInPromptTile = true;
       startEyegazeDwell();
     });
     actionPromptTile.addEventListener('pointerleave', () => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       pointerInPromptTile = false;
       cancelEyegazeDwell();
     });
     actionPromptTile.addEventListener('pointercancel', () => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       pointerInPromptTile = false;
       cancelEyegazeDwell();
     });
   }
 
-  if (eyegazeModeEnabled) {
-    document.addEventListener('pointermove', (event) => {
+  document.addEventListener('pointermove', (event) => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       const x = typeof event.clientX === 'number' ? event.clientX : 0;
       const y = typeof event.clientY === 'number' ? event.clientY : 0;
       pointerInPromptTile = isPointInsidePromptTile(x, y);
@@ -1583,8 +1596,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startEyegazeDwell();
       }
     });
-    updateEyegazePointerState();
-  }
+  updateEyegazePointerState();
 
   document.addEventListener('keydown', handleActivate, true);
   document.addEventListener('keyup', handleSwitchRelease, true);
