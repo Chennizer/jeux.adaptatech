@@ -1120,12 +1120,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateEyegazePointerState() {
     if (!eyegazeModeEnabled) {
+      document.body.classList.remove('hide-native-cursor');
+      if (gazePointer) {
+        gazePointer.style.opacity = '0';
+        gazePointer.style.display = 'none';
+      }
       return;
     }
 
     const showPointer = Boolean(gazePointer && gameStarted && (!controlPanel || controlPanel.style.display === 'none'));
     document.body.classList.toggle('hide-native-cursor', showPointer);
     if (gazePointer) {
+      gazePointer.style.display = 'block';
       gazePointer.style.opacity = showPointer ? '1' : '0';
     }
   }
