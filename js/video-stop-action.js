@@ -83,6 +83,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const MODE_DESCRIPTION_COPY_EYEGAZE = {
+    normal: {
+      fr: "Grande tuile au centre de l’écran, prends ton temps.",
+      en: 'Large tile in the middle of the screen, take your time.',
+      ja: '画面中央の大きなタイルです。落ち着いて操作できます。'
+    },
+    hard: {
+      fr: "Tuile moyenne dans l’un des quatre coins : tu as 10 secondes pour l’activer.",
+      en: 'A medium tile in one of the four corners: you have 10 seconds to activate it.',
+      ja: '4つの角のどこかに中サイズのタイルが表示されます。10秒以内に起動してください。'
+    },
+    competitive: {
+      fr: "Petite tuile : tu as 3 secondes pour l’activer.",
+      en: 'A small tile: you have 3 seconds to activate it.',
+      ja: '小さなタイルです。3秒以内に起動してください。'
+    }
+  };
+
   const STATUS_COPY = {
     loading: {
       fr: 'Chargement du jeu...',
@@ -214,6 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateEyegazePointerState();
+    setSelectedMode(document.body.dataset.selectedMode || 'normal');
   }
 
   syncInputModeFromBody();
@@ -435,7 +454,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modeDescription) {
       const selected = document.body.dataset.selectedMode;
       const lang = getCurrentLanguage();
-      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
+      const copySet = eyegazeModeEnabled ? MODE_DESCRIPTION_COPY_EYEGAZE : MODE_DESCRIPTION_COPY;
+      const copy = copySet[selected] || copySet.normal;
       modeDescription.textContent = copy[lang] || copy.en;
     }
   }
