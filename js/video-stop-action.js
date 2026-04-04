@@ -83,6 +83,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const MODE_DESCRIPTION_COPY_EYEGAZE = {
+    normal: {
+      fr: "Grande tuile au centre de l’écran, prends ton temps.",
+      en: 'Large tile in the middle of the screen, take your time.',
+      ja: '画面中央の大きなタイルです。落ち着いて操作できます。'
+    },
+    hard: {
+      fr: "Tuile moyenne dans l’un des quatre coins : tu as 10 secondes pour l’activer.",
+      en: 'A medium tile in one of the four corners: you have 10 seconds to activate it.',
+      ja: '4つの角のどこかに中サイズのタイルが表示されます。10秒以内に起動してください。'
+    },
+    competitive: {
+      fr: "Petite tuile : tu as 3 secondes pour l’activer.",
+      en: 'A small tile: you have 3 seconds to activate it.',
+      ja: '小さなタイルです。3秒以内に起動してください。'
+    }
+  };
+
   const STATUS_COPY = {
     loading: {
       fr: 'Chargement du jeu...',
@@ -128,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const leaderboardTitle = document.getElementById('leaderboard-title');
   const leaderboardList = document.getElementById('leaderboard-list');
   const languageToggle = document.getElementById('language-toggle');
-  const modeButtons = Array.from(document.querySelectorAll('.stop-action-mode-btn'));
+  const modeButtons = Array.from(document.querySelectorAll('.stop-action-mode-btn[data-mode]'));
   const modeDescription = document.getElementById('stop-action-mode-description');
 
   const videoSource = document.body.getAttribute('data-video-source') || '';
@@ -143,9 +161,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const waitMusicSrc = document.body.getAttribute('data-wait-music') || '';
   const waitMusicDelayMs = Math.max(0, Number(document.body.getAttribute('data-wait-music-delay-ms')) || 500);
   const failPromptImageSrc = '../../images/gaminganimation/neutral.png';
-  const inputMode = (document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
-  const eyegazeModeEnabled = inputMode === 'eyegaze';
-  const eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+  let eyegazeModeEnabled = false;
+  let eyegazeDwellMs = 1500;
   const eyegazeMotionIdleLimitMs = 1000;
   const eyegazeMinMotionPx = 1.5;
   const zoomTransitionMs = 180;
@@ -197,6 +214,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const hardRestartAudio = createUiAudio(hardRestartSoundSrc);
   const menuMusicAudio = createUiAudio(menuMusicSrc, { elementId: 'intro-jingle' });
   const waitMusicAudio = createUiAudio(waitMusicSrc);
+
+  function syncInputModeFromBody(modeOverride) {
+    const resolvedMode = (typeof modeOverride === 'string' ? modeOverride : document.body.getAttribute('data-input-mode') || 'switch').toLowerCase();
+    eyegazeModeEnabled = resolvedMode === 'eyegaze';
+    eyegazeDwellMs = Math.max(400, Number(document.body.getAttribute('data-eyegaze-dwell-ms')) || 1500);
+
+    document.body.classList.toggle('video-stop-action-eyegaze', eyegazeModeEnabled);
+    overlayScreen?.classList.toggle('eyegaze-mode', eyegazeModeEnabled);
+
+    if (!eyegazeModeEnabled) {
+      cancelEyegazeDwell();
+      pointerInPromptTile = false;
+      if (gazePointer) {
+        gazePointer.style.opacity = '0';
+      }
+    }
+
+    updateEyegazePointerState();
+    setSelectedMode(document.body.dataset.selectedMode || 'normal');
+  }
+
+  syncInputModeFromBody();
+
+  document.addEventListener('arcade-input-mode-change', (event) => {
+    const mode = event?.detail?.mode;
+    syncInputModeFromBody(mode);
+    if (!gameStarted) {
+      startMenuMusicWithFallback();
+    }
+  });
 
   if (videoPlayer && videoSource) {
     videoPlayer.src = videoSource;
@@ -407,7 +454,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modeDescription) {
       const selected = document.body.dataset.selectedMode;
       const lang = getCurrentLanguage();
-      const copy = MODE_DESCRIPTION_COPY[selected] || MODE_DESCRIPTION_COPY.normal;
+      const copySet = eyegazeModeEnabled ? MODE_DESCRIPTION_COPY_EYEGAZE : MODE_DESCRIPTION_COPY;
+      const copy = copySet[selected] || copySet.normal;
       modeDescription.textContent = copy[lang] || copy.en;
     }
   }
@@ -1092,12 +1140,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateEyegazePointerState() {
     if (!eyegazeModeEnabled) {
+      document.body.classList.remove('hide-native-cursor');
+      if (gazePointer) {
+        gazePointer.style.opacity = '0';
+        gazePointer.style.display = 'none';
+      }
       return;
     }
 
     const showPointer = Boolean(gazePointer && gameStarted && (!controlPanel || controlPanel.style.display === 'none'));
     document.body.classList.toggle('hide-native-cursor', showPointer);
     if (gazePointer) {
+      gazePointer.style.display = 'block';
       gazePointer.style.opacity = showPointer ? '1' : '0';
     }
   }
@@ -1514,23 +1568,34 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayScreen.addEventListener('pointerup', handleActivate);
   }
 
-  if (actionPromptTile && eyegazeModeEnabled) {
+  if (actionPromptTile) {
     actionPromptTile.addEventListener('pointerenter', () => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       pointerInPromptTile = true;
       startEyegazeDwell();
     });
     actionPromptTile.addEventListener('pointerleave', () => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       pointerInPromptTile = false;
       cancelEyegazeDwell();
     });
     actionPromptTile.addEventListener('pointercancel', () => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       pointerInPromptTile = false;
       cancelEyegazeDwell();
     });
   }
 
-  if (eyegazeModeEnabled) {
-    document.addEventListener('pointermove', (event) => {
+  document.addEventListener('pointermove', (event) => {
+      if (!eyegazeModeEnabled) {
+        return;
+      }
       const x = typeof event.clientX === 'number' ? event.clientX : 0;
       const y = typeof event.clientY === 'number' ? event.clientY : 0;
       pointerInPromptTile = isPointInsidePromptTile(x, y);
@@ -1557,8 +1622,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startEyegazeDwell();
       }
     });
-    updateEyegazePointerState();
-  }
+  updateEyegazePointerState();
 
   document.addEventListener('keydown', handleActivate, true);
   document.addEventListener('keyup', handleSwitchRelease, true);
