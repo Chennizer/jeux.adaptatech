@@ -171,6 +171,7 @@
       </div>
     </div>
   </div>
+  <div id="gazePointer" aria-hidden="true"></div>
 
   <div id="game-over" class="hidden">
     <div class="results-panel stop-action-results-panel">
@@ -226,6 +227,11 @@
       let lastTs = 0;
       let motionTime = 0;
       let ammoEnergy = 1;
+      let gazeX = window.innerWidth * 0.5;
+      let gazeY = window.innerHeight * 0.5;
+      let hoveredEnemyId = null;
+      let hoverStartAt = 0;
+      const EYEGAZE_DWELL_MS = 1000;
 
       const stars = [];
       const bullets = [];
@@ -294,6 +300,24 @@
       function spawnEnemy() {
         const image = enemySprites[Math.floor(Math.random() * enemySprites.length)] || null;
         const size = 48;
+        if (inputMode === 'eyegaze') {
+          const tileSize = Math.min(window.innerWidth * 0.30, window.innerHeight * 0.30);
+          const lanes = [0.2, 0.5, 0.8];
+          const lane = lanes[Math.floor(Math.random() * lanes.length)];
+          enemies.push({
+            id: nextEnemyId++,
+            x: window.innerWidth * lane,
+            y: tileSize * 0.5 + 20,
+            size: tileSize,
+            speed: 0,
+            image,
+            type: 'normal',
+            hp: 1,
+            eyegazeTile: true
+          });
+          return;
+        }
+
         const isTank = (difficulty === 'hard' && Math.random() < 0.35)
           || (difficulty === 'competitive' && Math.random() < 0.5);
         const baseSpeed = 58;
@@ -321,6 +345,7 @@
 
       function shoot() {
         if (!running || player.cooldown > 0) return;
+        if (inputMode === 'eyegaze') return;
         if (usesAmmoMeter()) {
           const cost = getShotCost();
           if (ammoEnergy < cost) return;
@@ -371,7 +396,9 @@
         motionTime += dt;
         const centerX = canvas.width * 0.5;
         const horizontalRange = canvas.width / 12; // total sweep is 1/6th of the screen width
-        player.x = centerX + Math.sin(motionTime * 0.6) * horizontalRange;
+        player.x = inputMode === 'eyegaze'
+          ? centerX
+          : centerX + Math.sin(motionTime * 0.6) * horizontalRange;
 
         enemySpawnTimer += dt * 1000;
         if (enemySpawnTimer >= currentSpawnDelay) {
@@ -410,7 +437,7 @@
 
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
           const e = enemies[i];
-          e.y += e.speed * dt;
+          if (inputMode !== 'eyegaze') e.y += e.speed * dt;
 
           if (e.y - e.size * 0.5 > canvas.height) {
             enemies.splice(i, 1);
@@ -438,6 +465,10 @@
               break;
             }
           }
+        }
+
+        if (inputMode === 'eyegaze') {
+          updateEyegazeDwell();
         }
       }
 
@@ -520,6 +551,28 @@
 
       function drawEnemies() {
         for (const e of enemies) {
+          if (e.eyegazeTile) {
+            const x = e.x - e.size * 0.5;
+            const y = e.y - e.size * 0.5;
+            const hovered = hoveredEnemyId === e.id;
+            ctx.fillStyle = hovered ? 'rgba(40, 210, 255, 0.28)' : 'rgba(255,255,255,0.14)';
+            ctx.strokeStyle = hovered ? '#7af6ff' : 'rgba(255,255,255,0.55)';
+            ctx.lineWidth = hovered ? 5 : 3;
+            ctx.fillRect(x, y, e.size, e.size);
+            ctx.strokeRect(x, y, e.size, e.size);
+
+            if (hovered && hoverStartAt) {
+              const progress = Math.max(0, Math.min(1, (performance.now() - hoverStartAt) / EYEGAZE_DWELL_MS));
+              ctx.fillStyle = 'rgba(122, 246, 255, 0.85)';
+              ctx.fillRect(x, y + e.size - 10, e.size * progress, 8);
+            }
+
+            if (e.image && e.image.complete) {
+              ctx.drawImage(e.image, x + 6, y + 6, e.size - 12, e.size - 12);
+            }
+            continue;
+          }
+
           if (e.image && e.image.complete) {
             ctx.drawImage(e.image, e.x - e.size * 0.5, e.y - e.size * 0.5, e.size, e.size);
             if (e.type === 'tank') {
@@ -538,6 +591,62 @@
         }
       }
 
+      function updateEyegazeDwell() {
+        const hovered = findEyegazeTarget();
+        const now = performance.now();
+        if (!hovered) {
+          hoveredEnemyId = null;
+          hoverStartAt = 0;
+          return;
+        }
+
+        if (hoveredEnemyId !== hovered.id) {
+          hoveredEnemyId = hovered.id;
+          hoverStartAt = now;
+          return;
+        }
+
+        if (hoverStartAt && now - hoverStartAt >= EYEGAZE_DWELL_MS) {
+          launchEyegazeProjectile(hovered);
+          hoveredEnemyId = null;
+          hoverStartAt = 0;
+        }
+      }
+
+      function findEyegazeTarget() {
+        for (let i = enemies.length - 1; i >= 0; i -= 1) {
+          const e = enemies[i];
+          if (!e.eyegazeTile) continue;
+          const half = e.size * 0.5;
+          if (gazeX >= e.x - half && gazeX <= e.x + half && gazeY >= e.y - half && gazeY <= e.y + half) {
+            return e;
+          }
+        }
+        return null;
+      }
+
+      function launchEyegazeProjectile(target) {
+        if (!target) return;
+        const muzzleX = canvas.width * 0.5;
+        const muzzleY = player.y - 16;
+        const speed = 540;
+        const dx = target.x - muzzleX;
+        const dy = target.y - muzzleY;
+        const dist = Math.hypot(dx, dy) || 1;
+        bullets.push({
+          x: muzzleX,
+          y: muzzleY,
+          vx: (dx / dist) * speed,
+          vy: (dy / dist) * speed,
+          speed,
+          targetId: target.id,
+          homing: true,
+          turnRate: 3.2,
+          r: 6,
+          trail: []
+        });
+      }
+
       function updateHud() {
         scoreNode.textContent = `Score: ${score}`;
         livesNode.textContent = `Lives: ${lives}`;
@@ -552,7 +661,7 @@
       }
 
       function usesAmmoMeter() {
-        return difficulty === 'hard' || difficulty === 'competitive';
+        return (difficulty === 'hard' || difficulty === 'competitive') && inputMode !== 'eyegaze';
       }
 
       function getShotCost() {
@@ -604,6 +713,8 @@
         currentSpawnDelay = getSpawnDelayMs();
         motionTime = 0;
         ammoEnergy = 1;
+        hoveredEnemyId = null;
+        hoverStartAt = 0;
         player.x = canvas.width * 0.5;
         running = true;
         updateHudLanguage();
@@ -624,6 +735,7 @@
         running = false;
         cancelAnimationFrame(rafId);
         music.pause();
+        if (gazePointer) gazePointer.style.opacity = '0';
         gameOverScore.textContent = `Score final: ${score}`;
         gameOverScreen.style.display = 'flex';
       }
@@ -638,6 +750,7 @@
           button.classList.toggle('selected', selected);
           button.setAttribute('aria-pressed', selected ? 'true' : 'false');
         });
+        updateAmmoMeter();
       }
 
       function applyDifficulty(mode) {
@@ -675,6 +788,25 @@
           event.preventDefault();
           if (running) shoot();
         }
+      });
+
+      const gazePointer = document.getElementById('gazePointer');
+      function updateGazePointer(x, y) {
+        gazeX = x;
+        gazeY = y;
+        if (inputMode !== 'eyegaze' || !running) {
+          if (gazePointer) gazePointer.style.opacity = '0';
+          return;
+        }
+        if (gazePointer) {
+          gazePointer.style.display = 'block';
+          gazePointer.style.opacity = '1';
+          gazePointer.style.left = `${x}px`;
+          gazePointer.style.top = `${y}px`;
+        }
+      }
+      document.addEventListener('pointermove', (event) => {
+        updateGazePointer(event.clientX, event.clientY);
       });
 
       startButton.addEventListener('click', startGame);
