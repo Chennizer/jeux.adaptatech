@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title class="translate" data-fr="Arcade : Invasion fruitée" data-en="Arcade: Fruity Invaders" data-ja="アーケード：フルーツ侵略">Arcade: Fruity Invaders</title>
+  <link rel="stylesheet" href="../../css/control-panel.css">
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/gaming.css">
+  <link rel="stylesheet" href="../../css/layout.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Press Start 2P', cursive;
+    }
+
+    #language-toggle {
+      z-index: 25;
+    }
+
+    #game-shell {
+      position: fixed;
+      inset: 0;
+      display: none;
+      overflow: hidden;
+      background: radial-gradient(circle at top, #0f1730 0%, #05070f 60%, #020205 100%);
+    }
+
+    #game-shell::before,
+    #game-shell::after {
+      content: '';
+      position: absolute;
+      inset: -200%;
+      background-image:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.95), transparent),
+        radial-gradient(1.5px 1.5px at 65% 70%, rgba(255,255,255,.85), transparent),
+        radial-gradient(1px 1px at 45% 10%, rgba(255,255,255,.8), transparent),
+        radial-gradient(2px 2px at 80% 55%, rgba(255,255,255,.85), transparent),
+        radial-gradient(1px 1px at 12% 85%, rgba(255,255,255,.75), transparent);
+      background-size: 420px 420px;
+      animation: starsSlide 18s linear infinite;
+      opacity: .45;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #game-shell::after {
+      animation-duration: 30s;
+      opacity: .25;
+      transform: scale(1.4);
+    }
+
+    @keyframes starsSlide {
+      from { transform: translateY(0); }
+      to { transform: translateY(420px); }
+    }
+
+    #hud {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 12;
+      color: #fff;
+      font-size: clamp(0.65rem, 1.1vw, 0.95rem);
+      letter-spacing: 0.08em;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+      text-align: center;
+      line-height: 1.8;
+      display: none;
+      min-width: 50vw;
+    }
+
+    #hud strong {
+      color: #71f7ff;
+    }
+
+    #game-instructions {
+      margin-top: 8px;
+      font-size: 0.65em;
+      color: #ffe56d;
+    }
+
+    #restart-button {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 12;
+      display: none;
+      border: 2px solid #00d4ff;
+      background: rgba(9, 16, 29, 0.86);
+      color: #fff;
+      border-radius: 12px;
+      padding: 12px 22px;
+      font-family: inherit;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+
+    canvas {
+      position: fixed !important;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body
+  style="--menu-backdrop-image: url('../../images/arcade/mariomoviecover.png'); --menu-side-image: url('../../images/arcade/mariomoviecover.png');"
+>
+  <button id="language-toggle" title="Changer de langue / Change language">FR / EN</button>
+
+  <div id="control-panel">
+    <div id="control-panel-options" class="control-panel-options">
+      <div class="game-menu-layout stop-action-menu-layout">
+        <div class="game-menu-main">
+          <div id="options-title-bar">
+            <h1 id="options-arcade-title">Arcade</h1>
+            <h2 id="options-main-title" class="translate" data-fr="Invasion fruitée" data-en="Fruity Invaders" data-ja="フルーティーインベーダー">Fruity Invaders</h2>
+          </div>
+
+          <p id="control-panel-instructions" class="control-panel-instructions translate"
+             data-fr="Toutes les 10 secondes, un envahisseur apparaît. Appuie sur ESPACE pour tirer et protéger la galaxie !"
+             data-en="Every 10 seconds, an invader appears. Press SPACE to shoot and protect the galaxy!"
+             data-ja="10秒ごとにインベーダーが出現します。スペースキーで撃って銀河を守ろう！">
+          </p>
+
+          <div id="mode-divider"></div>
+
+          <div id="options-inline-container" class="stop-action-options-inline-container">
+            <div class="option-item stop-action-mode-card">
+              <div id="game-mode-segmented-control" role="tablist" aria-label="Mode selector">
+                <button type="button" class="stop-action-mode-btn selected translate" data-mode="normal" data-fr="Normal" data-en="Normal" data-ja="ノーマル" aria-pressed="true">Normal</button>
+                <button type="button" class="stop-action-mode-btn translate" data-mode="hard" data-fr="Difficile" data-en="Hard" data-ja="ハード" aria-pressed="false">Difficile</button>
+                <button type="button" class="stop-action-mode-btn translate" data-mode="competitive" data-fr="Maître" data-en="Master" data-ja="マスター" aria-pressed="false">Maître</button>
+              </div>
+              <p id="mode-description" class="stop-action-mode-description"></p>
+            </div>
+          </div>
+
+          <div id="mode-divider"></div>
+
+          <div id="button-container" class="button-container stop-action-button-container">
+            <button id="control-panel-start-button" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+          </div>
+        </div>
+
+        <aside class="game-menu-art" aria-hidden="true">
+          <div class="game-menu-art-card">
+            <div class="game-menu-art-image"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div id="game-shell"></div>
+
+  <div id="hud" aria-live="polite">
+    <div>
+      <span class="translate" data-fr="Score" data-en="Score" data-ja="スコア">Score</span>: <strong id="score-value">0</strong>
+      &nbsp;|&nbsp;
+      <span class="translate" data-fr="Ratés" data-en="Missed" data-ja="ミス">Missed</span>: <strong id="miss-value">0</strong>
+      &nbsp;|&nbsp;
+      <span class="translate" data-fr="Mode" data-en="Mode" data-ja="モード">Mode</span>: <strong id="mode-value">Normal</strong>
+    </div>
+    <div id="game-instructions" class="translate" data-fr="Touche ESPACE = tir" data-en="SPACE key = shoot" data-ja="スペースキー＝ショット">SPACE key = shoot</div>
+  </div>
+
+  <button id="restart-button" class="translate" data-fr="Recommencer" data-en="Restart" data-ja="もう一度">Recommencer</button>
+
+  <audio id="arcade-music" src="../../songs/space/spacequest1.mp3" preload="auto" loop></audio>
+
+  <script src="../../js/translationmain.js"></script>
+  <script>
+    document.getElementById('language-toggle')?.addEventListener('pointerup', toggleLanguage);
+
+    const FRUIT_PATHS = [
+      '../../images/pictos/apple.png',
+      '../../images/pictos/banana.png',
+      '../../images/pictos/grapes.png',
+      '../../images/pictos/pear.png',
+      '../../images/pictos/strawberry.png',
+      '../../images/pictos/watermelon.png',
+      '../../images/pictos/pineapple.png',
+      '../../images/pictos/mango.png',
+      '../../images/pictos/orange.png',
+      '../../images/pictos/kiwi.png'
+    ];
+
+    const MODE_CONFIG = {
+      normal: { bulletSpeed: 14, alienSpeed: 2.3 },
+      hard: { bulletSpeed: 12.5, alienSpeed: 2.9 },
+      competitive: { bulletSpeed: 11.5, alienSpeed: 3.5 }
+    };
+
+    let gameStarted = false;
+    let selectedMode = 'normal';
+    let score = 0;
+    let missed = 0;
+    let stars = [];
+    let aliens = [];
+    let bullets = [];
+    let cannonX = 0;
+    let spawnTimer = 0;
+    let gameOver = false;
+    let fruitImages = [];
+
+    function preload() {
+      fruitImages = FRUIT_PATHS.map((path) => loadImage(path));
+    }
+
+    function setup() {
+      const cnv = createCanvas(windowWidth, windowHeight);
+      cnv.parent(document.body);
+      noSmooth();
+      for (let i = 0; i < 180; i += 1) {
+        stars.push(makeStar());
+      }
+      cannonX = width / 2;
+      setupMenuInteractions();
+    }
+
+    function draw() {
+      if (!gameStarted) {
+        clear();
+        return;
+      }
+
+      clear();
+      drawStars();
+      drawCannon();
+
+      if (!gameOver) {
+        updateAliens();
+        updateBullets();
+        checkHits();
+        handleSpawns();
+      }
+
+      drawAliens();
+      drawBullets();
+      if (gameOver) {
+        drawGameOver();
+      }
+    }
+
+    function setupMenuInteractions() {
+      const modeButtons = Array.from(document.querySelectorAll('#game-mode-segmented-control .stop-action-mode-btn'));
+      const modeDescription = document.getElementById('mode-description');
+      const modeValue = document.getElementById('mode-value');
+      const music = document.getElementById('arcade-music');
+
+      const updateModeUi = () => {
+        modeButtons.forEach((btn) => {
+          const isActive = btn.dataset.mode === selectedMode;
+          btn.classList.toggle('selected', isActive);
+          btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+
+        const labels = {
+          normal: { fr: 'Standard', en: 'Standard' },
+          hard: { fr: 'Plus rapide', en: 'Faster' },
+          competitive: { fr: 'Très rapide', en: 'Very fast' }
+        };
+
+        const descriptions = {
+          normal: {
+            fr: 'Même rythme visuel, tir fluide.',
+            en: 'Same visual rhythm, smooth shooting.'
+          },
+          hard: {
+            fr: 'Les envahisseurs descendent plus vite.',
+            en: 'Invaders move down faster.'
+          },
+          competitive: {
+            fr: 'Défi maître : vitesse maximale.',
+            en: 'Master challenge: maximum speed.'
+          }
+        };
+
+        modeDescription.textContent = descriptions[selectedMode].en;
+        modeDescription.setAttribute('data-fr', descriptions[selectedMode].fr);
+        modeDescription.setAttribute('data-en', descriptions[selectedMode].en);
+        modeValue.textContent = labels[selectedMode].en;
+
+        if (document.documentElement.lang === 'fr') {
+          modeDescription.textContent = descriptions[selectedMode].fr;
+          modeValue.textContent = labels[selectedMode].fr;
+        }
+      };
+
+      modeButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          selectedMode = btn.dataset.mode;
+          updateModeUi();
+        });
+      });
+
+      document.getElementById('control-panel-start-button').addEventListener('click', async () => {
+        document.getElementById('control-panel').style.display = 'none';
+        document.getElementById('game-shell').style.display = 'block';
+        document.getElementById('hud').style.display = 'block';
+        document.getElementById('language-toggle').style.display = 'none';
+        gameStarted = true;
+        gameOver = false;
+        score = 0;
+        missed = 0;
+        aliens = [];
+        bullets = [];
+        spawnTimer = millis();
+        syncHud();
+        try {
+          music.volume = 0.5;
+          await music.play();
+        } catch (error) {
+          console.warn('Music autoplay blocked:', error);
+        }
+      });
+
+      document.getElementById('restart-button').addEventListener('click', () => {
+        gameOver = false;
+        score = 0;
+        missed = 0;
+        aliens = [];
+        bullets = [];
+        spawnTimer = millis();
+        document.getElementById('restart-button').style.display = 'none';
+        syncHud();
+      });
+
+      document.addEventListener('languageChanged', updateModeUi);
+      updateModeUi();
+      syncHud();
+    }
+
+    function makeStar() {
+      return {
+        x: random(width),
+        y: random(height),
+        speed: random(0.8, 3.2),
+        size: random(1, 2.6),
+        alpha: random(130, 255)
+      };
+    }
+
+    function drawStars() {
+      noStroke();
+      stars.forEach((star) => {
+        fill(255, star.alpha);
+        circle(star.x, star.y, star.size);
+        star.y += star.speed;
+        if (star.y > height) {
+          star.y = -5;
+          star.x = random(width);
+        }
+      });
+    }
+
+    function drawCannon() {
+      cannonX = constrain(mouseX || cannonX, 36, width - 36);
+      push();
+      noStroke();
+      fill(0, 212, 255);
+      rectMode(CENTER);
+      rect(cannonX, height - 55, 64, 16, 5);
+      fill(130, 247, 255);
+      rect(cannonX, height - 72, 18, 28, 4);
+      pop();
+    }
+
+    function shoot() {
+      if (!gameStarted || gameOver) {
+        return;
+      }
+      bullets.push({ x: cannonX, y: height - 84, speed: MODE_CONFIG[selectedMode].bulletSpeed });
+    }
+
+    function updateBullets() {
+      bullets = bullets.filter((bullet) => {
+        bullet.y -= bullet.speed;
+        return bullet.y > -25;
+      });
+    }
+
+    function drawBullets() {
+      noStroke();
+      fill(255, 247, 122);
+      bullets.forEach((bullet) => {
+        rect(bullet.x - 3, bullet.y - 12, 6, 16, 2);
+      });
+    }
+
+    function spawnAlien() {
+      const imageAsset = random(fruitImages);
+      aliens.push({
+        x: random(48, width - 48),
+        y: -40,
+        speed: MODE_CONFIG[selectedMode].alienSpeed,
+        size: random(54, 84),
+        img: imageAsset
+      });
+    }
+
+    function handleSpawns() {
+      if (millis() - spawnTimer >= 10000) {
+        spawnAlien();
+        spawnTimer = millis();
+      }
+    }
+
+    function updateAliens() {
+      aliens.forEach((alien) => {
+        alien.y += alien.speed;
+      });
+      const before = aliens.length;
+      aliens = aliens.filter((alien) => alien.y < height + alien.size);
+      const escaped = before - aliens.length;
+      if (escaped > 0) {
+        missed += escaped;
+        syncHud();
+        if (missed >= 5) {
+          triggerGameOver();
+        }
+      }
+    }
+
+    function drawAliens() {
+      imageMode(CENTER);
+      aliens.forEach((alien) => {
+        image(alien.img, alien.x, alien.y, alien.size, alien.size);
+      });
+    }
+
+    function checkHits() {
+      for (let i = aliens.length - 1; i >= 0; i -= 1) {
+        for (let j = bullets.length - 1; j >= 0; j -= 1) {
+          const alien = aliens[i];
+          const bullet = bullets[j];
+          const hit = dist(alien.x, alien.y, bullet.x, bullet.y) < alien.size * 0.36;
+          if (hit) {
+            aliens.splice(i, 1);
+            bullets.splice(j, 1);
+            score += 1;
+            syncHud();
+            break;
+          }
+        }
+      }
+    }
+
+    function triggerGameOver() {
+      gameOver = true;
+      document.getElementById('restart-button').style.display = 'block';
+    }
+
+    function drawGameOver() {
+      push();
+      fill(6, 14, 30, 210);
+      rectMode(CENTER);
+      rect(width / 2, height / 2, min(width * 0.84, 720), 220, 18);
+      fill(255);
+      textAlign(CENTER, CENTER);
+      textSize(min(width * 0.026, 24));
+      text('GAME OVER', width / 2, height / 2 - 28);
+      textSize(min(width * 0.014, 14));
+      text(`Score: ${score}  |  Missed: ${missed}`, width / 2, height / 2 + 16);
+      pop();
+    }
+
+    function syncHud() {
+      document.getElementById('score-value').textContent = String(score);
+      document.getElementById('miss-value').textContent = String(missed);
+    }
+
+    function keyPressed() {
+      if (keyCode === 32) {
+        shoot();
+        return false;
+      }
+      return true;
+    }
+
+    function touchStarted() {
+      if (!gameStarted || gameOver) {
+        return;
+      }
+      shoot();
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>
