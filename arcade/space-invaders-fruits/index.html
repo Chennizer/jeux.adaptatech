@@ -33,6 +33,29 @@
       line-height: 1.7;
       display: none;
     }
+    .ammo-meter {
+      margin-top: 10px;
+      width: min(260px, 52vw);
+      display: none;
+    }
+    .ammo-meter-label {
+      font-size: 11px;
+      margin-bottom: 6px;
+      opacity: 0.95;
+    }
+    .ammo-meter-track {
+      height: 12px;
+      border: 2px solid rgba(255,255,255,0.8);
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.15);
+    }
+    .ammo-meter-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #5ce1e6, #7df6a6);
+      transition: width 80ms linear;
+    }
 
     #game-over {
       position: fixed;
@@ -123,6 +146,12 @@
   <div id="hud" class="hud">
     <div id="hud-score">Score: 0</div>
     <div id="hud-lives">Lives: 3</div>
+    <div id="ammo-meter" class="ammo-meter" aria-live="polite">
+      <div id="ammo-meter-label" class="ammo-meter-label">Ammo charge</div>
+      <div class="ammo-meter-track">
+        <div id="ammo-meter-fill" class="ammo-meter-fill"></div>
+      </div>
+    </div>
   </div>
 
   <div id="game-over" class="hidden">
@@ -150,6 +179,9 @@
       const scoreNode = document.getElementById('hud-score');
       const livesNode = document.getElementById('hud-lives');
       const gameOverScore = document.getElementById('game-over-score');
+      const ammoMeter = document.getElementById('ammo-meter');
+      const ammoMeterLabel = document.getElementById('ammo-meter-label');
+      const ammoMeterFill = document.getElementById('ammo-meter-fill');
 
       const canvas = document.getElementById('game-canvas');
       const ctx = canvas.getContext('2d');
@@ -176,6 +208,7 @@
       let currentSpawnDelay = 10000;
       let lastTs = 0;
       let motionTime = 0;
+      let ammoEnergy = 1;
 
       const stars = [];
       const bullets = [];
@@ -268,6 +301,13 @@
 
       function shoot() {
         if (!running || player.cooldown > 0) return;
+        if (usesAmmoMeter()) {
+          const cost = getShotCost();
+          if (ammoEnergy < cost) return;
+          ammoEnergy = Math.max(0, ammoEnergy - cost);
+          updateAmmoMeter();
+        }
+
         const muzzleX = player.x;
         const muzzleY = player.y - 16;
         const speed = 540;
@@ -298,11 +338,15 @@
           r: 6,
           trail: []
         });
-        player.cooldown = 1.0;
+        player.cooldown = usesAmmoMeter() ? 0.12 : 1.0;
       }
 
       function updateGame(dt) {
         player.cooldown = Math.max(0, player.cooldown - dt);
+        if (usesAmmoMeter()) {
+          ammoEnergy = Math.min(1, ammoEnergy + getAmmoRegenPerSecond() * dt);
+          updateAmmoMeter();
+        }
 
         motionTime += dt;
         const centerX = canvas.width * 0.5;
@@ -483,8 +527,28 @@
         const lang = (typeof getStoredLanguage === 'function' ? getStoredLanguage() : (document.documentElement.lang || 'fr')) || 'fr';
         const scoreLabel = lang === 'fr' ? 'Score' : lang === 'ja' ? 'スコア' : 'Score';
         const livesLabel = lang === 'fr' ? 'Vies' : lang === 'ja' ? 'ライフ' : 'Lives';
+        const ammoLabel = lang === 'fr' ? 'Charge munitions' : lang === 'ja' ? '弾薬チャージ' : 'Ammo charge';
         scoreNode.textContent = `${scoreLabel}: ${score}`;
         livesNode.textContent = `${livesLabel}: ${lives}`;
+        ammoMeterLabel.textContent = ammoLabel;
+      }
+
+      function usesAmmoMeter() {
+        return difficulty === 'hard' || difficulty === 'competitive';
+      }
+
+      function getShotCost() {
+        return difficulty === 'competitive' ? 0.55 : 0.35;
+      }
+
+      function getAmmoRegenPerSecond() {
+        return difficulty === 'competitive' ? 0.22 : 0.3;
+      }
+
+      function updateAmmoMeter() {
+        if (!ammoMeter || !ammoMeterFill) return;
+        ammoMeter.style.display = usesAmmoMeter() ? 'block' : 'none';
+        ammoMeterFill.style.width = `${Math.round(ammoEnergy * 100)}%`;
       }
 
       function tick(ts) {
@@ -517,9 +581,11 @@
         enemySpawnTimer = 0;
         currentSpawnDelay = getSpawnDelayMs();
         motionTime = 0;
+        ammoEnergy = 1;
         player.x = canvas.width * 0.5;
         running = true;
         updateHudLanguage();
+        updateAmmoMeter();
 
         spawnEnemy();
         try { music.currentTime = 0; music.play(); } catch (_) {}
@@ -564,13 +630,13 @@
         const desc = document.getElementById('stop-action-mode-description');
         if (!desc) return;
         if (difficulty === 'hard') {
-          desc.dataset.fr = 'Ennemis 25% plus rapides, apparition toutes les 5 à 8 secondes, ennemis blindés (2 coups), 5 vies.';
-          desc.dataset.en = 'Enemies are 25% faster, spawn every 5 to 8 seconds, tank enemies need 2 hits, 5 lives.';
-          desc.dataset.ja = '敵は25%高速化、5〜8秒ごとに出現、2発必要なタンク敵、ライフ5。';
+          desc.dataset.fr = 'Ennemis 25% plus rapides, apparition toutes les 5 à 8 secondes, ennemis blindés (2 coups), 5 vies, barre de recharge munitions.';
+          desc.dataset.en = 'Enemies are 25% faster, spawn every 5 to 8 seconds, tank enemies need 2 hits, 5 lives, with an ammo recharge bar.';
+          desc.dataset.ja = '敵は25%高速化、5〜8秒ごとに出現、2発必要なタンク敵、ライフ5、弾薬リチャージバーあり。';
         } else if (difficulty === 'competitive') {
-          desc.dataset.fr = 'Mode Extrême : ennemis 50% plus rapides, apparition toutes les 3 à 4 secondes, ennemis blindés, 2 vies.';
-          desc.dataset.en = 'Extreme mode: enemies are 50% faster, spawn every 3 to 4 seconds, includes tank enemies, 2 lives.';
-          desc.dataset.ja = 'エクストリーム：敵は50%高速、3〜4秒ごとに出現、タンク敵あり、ライフ2。';
+          desc.dataset.fr = 'Mode Extrême : ennemis 50% plus rapides, apparition toutes les 3 à 4 secondes, ennemis blindés, 2 vies, tirs consomment davantage la barre.';
+          desc.dataset.en = 'Extreme mode: enemies are 50% faster, spawn every 3 to 4 seconds, includes tank enemies, 2 lives, and shots consume more ammo charge.';
+          desc.dataset.ja = 'エクストリーム：敵は50%高速、3〜4秒ごとに出現、タンク敵あり、ライフ2、射撃時の消費チャージが大きい。';
         } else {
           desc.dataset.fr = 'Cadence équilibrée pour commencer.';
           desc.dataset.en = 'Balanced pace to get started.';
@@ -579,6 +645,7 @@
 
         const lang = typeof getStoredLanguage === 'function' ? getStoredLanguage() : (document.documentElement.lang || 'fr');
         desc.textContent = lang === 'en' ? desc.dataset.en : lang === 'ja' ? desc.dataset.ja : desc.dataset.fr;
+        updateAmmoMeter();
       }
 
       document.addEventListener('keydown', (event) => {
@@ -619,6 +686,7 @@
       applyInputMode('switch');
       applyDifficulty('normal');
       updateHudLanguage();
+      updateAmmoMeter();
       drawStars();
       drawPlayer();
     })();
