@@ -94,7 +94,7 @@
               <div id="stop-action-mode-segmented-control" role="tablist" aria-label="Mode selector">
                 <button type="button" class="stop-action-mode-btn selected translate" data-mode="normal" data-fr="Normal" data-en="Normal" data-ja="ノーマル" aria-pressed="true">Normal</button>
                 <button type="button" class="stop-action-mode-btn translate" data-mode="hard" data-fr="Difficile" data-en="Hard" data-ja="ハード" aria-pressed="false">Difficile</button>
-                <button type="button" class="stop-action-mode-btn translate" data-mode="competitive" data-fr="Maître" data-en="Master" data-ja="マスター" aria-pressed="false">Maître</button>
+                <button type="button" class="stop-action-mode-btn translate" data-mode="competitive" data-fr="Extrême" data-en="Extreme" data-ja="エクストリーム" aria-pressed="false">Extrême</button>
               </div>
               <p id="stop-action-mode-description" class="stop-action-mode-description"></p>
             </div>
@@ -173,6 +173,7 @@
       let score = 0;
       let lives = 3;
       let enemySpawnTimer = 0;
+      let currentSpawnDelay = 10000;
       let lastTs = 0;
       let motionTime = 0;
 
@@ -181,7 +182,6 @@
       const enemies = [];
       let nextEnemyId = 1;
       const STAR_COUNT = 220;
-      const ENEMY_INTERVAL = 10000;
 
       const player = {
         x: 0,
@@ -244,14 +244,26 @@
       function spawnEnemy() {
         const image = enemySprites[Math.floor(Math.random() * enemySprites.length)] || null;
         const size = 48;
+        const isTank = (difficulty === 'hard' && Math.random() < 0.35)
+          || (difficulty === 'competitive' && Math.random() < 0.5);
+        const baseSpeed = 58;
+        const speedMultiplier = difficulty === 'competitive' ? 1.5 : difficulty === 'hard' ? 1.25 : 1;
         enemies.push({
           id: nextEnemyId++,
           x: 30 + Math.random() * Math.max(60, canvas.width - 60),
           y: 70,
           size,
-          speed: difficulty === 'competitive' ? 100 : difficulty === 'hard' ? 75 : 58,
-          image
+          speed: baseSpeed * speedMultiplier,
+          image,
+          type: isTank ? 'tank' : 'normal',
+          hp: isTank ? 2 : 1
         });
+      }
+
+      function getSpawnDelayMs() {
+        if (difficulty === 'hard') return 5000 + Math.random() * 3000;       // 5 to 8 sec
+        if (difficulty === 'competitive') return 3000 + Math.random() * 1000; // 3 to 4 sec
+        return 10000; // normal
       }
 
       function shoot() {
@@ -298,9 +310,10 @@
         player.x = centerX + Math.sin(motionTime * 0.6) * horizontalRange;
 
         enemySpawnTimer += dt * 1000;
-        if (enemySpawnTimer >= ENEMY_INTERVAL) {
+        if (enemySpawnTimer >= currentSpawnDelay) {
           enemySpawnTimer = 0;
           spawnEnemy();
+          currentSpawnDelay = getSpawnDelayMs();
         }
 
         for (let i = bullets.length - 1; i >= 0; i -= 1) {
@@ -352,9 +365,12 @@
             const dy = b.y - e.y;
             if ((dx * dx + dy * dy) <= ((e.size * 0.45) * (e.size * 0.45))) {
               bullets.splice(j, 1);
-              enemies.splice(i, 1);
-              score += 10;
-              updateHud();
+              e.hp -= 1;
+              if (e.hp <= 0) {
+                enemies.splice(i, 1);
+                score += e.type === 'tank' ? 20 : 10;
+                updateHud();
+              }
               break;
             }
           }
@@ -442,6 +458,13 @@
         for (const e of enemies) {
           if (e.image && e.image.complete) {
             ctx.drawImage(e.image, e.x - e.size * 0.5, e.y - e.size * 0.5, e.size, e.size);
+            if (e.type === 'tank') {
+              ctx.strokeStyle = 'rgba(255, 110, 110, 0.95)';
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.arc(e.x, e.y, e.size * 0.38, 0, Math.PI * 2);
+              ctx.stroke();
+            }
           } else {
             ctx.fillStyle = '#ff3b6b';
             ctx.beginPath();
@@ -488,10 +511,11 @@
         if (languageToggleButton) languageToggleButton.style.display = 'none';
 
         score = 0;
-        lives = difficulty === 'competitive' ? 2 : difficulty === 'hard' ? 3 : 4;
+        lives = difficulty === 'competitive' ? 2 : difficulty === 'hard' ? 5 : 4;
         bullets.length = 0;
         enemies.length = 0;
         enemySpawnTimer = 0;
+        currentSpawnDelay = getSpawnDelayMs();
         motionTime = 0;
         player.x = canvas.width * 0.5;
         running = true;
@@ -540,13 +564,13 @@
         const desc = document.getElementById('stop-action-mode-description');
         if (!desc) return;
         if (difficulty === 'hard') {
-          desc.dataset.fr = 'Les fruits descendent plus vite.';
-          desc.dataset.en = 'Fruits move down faster.';
-          desc.dataset.ja = 'フルーツの落下速度が上がります。';
+          desc.dataset.fr = 'Ennemis 25% plus rapides, apparition toutes les 5 à 8 secondes, ennemis blindés (2 coups), 5 vies.';
+          desc.dataset.en = 'Enemies are 25% faster, spawn every 5 to 8 seconds, tank enemies need 2 hits, 5 lives.';
+          desc.dataset.ja = '敵は25%高速化、5〜8秒ごとに出現、2発必要なタンク敵、ライフ5。';
         } else if (difficulty === 'competitive') {
-          desc.dataset.fr = 'Très rapide et moins de vies.';
-          desc.dataset.en = 'Very fast with fewer lives.';
-          desc.dataset.ja = '非常に速く、ライフが少なくなります。';
+          desc.dataset.fr = 'Mode Extrême : ennemis 50% plus rapides, apparition toutes les 3 à 4 secondes, ennemis blindés, 2 vies.';
+          desc.dataset.en = 'Extreme mode: enemies are 50% faster, spawn every 3 to 4 seconds, includes tank enemies, 2 lives.';
+          desc.dataset.ja = 'エクストリーム：敵は50%高速、3〜4秒ごとに出現、タンク敵あり、ライフ2。';
         } else {
           desc.dataset.fr = 'Cadence équilibrée pour commencer.';
           desc.dataset.en = 'Balanced pace to get started.';
