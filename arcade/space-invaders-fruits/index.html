@@ -142,10 +142,10 @@
   </div>
 
   <div id="hud-help" class="hud-help translate"
-       data-fr="Espace: tirer • Gauche/Droite: bouger"
-       data-en="Space: shoot • Left/Right: move"
-       data-ja="スペース: 発射 • 左右キー: 移動">
-    Espace: tirer • Gauche/Droite: bouger
+       data-fr="Espace: tirer (un seul bouton)"
+       data-en="Space: shoot (single-button play)"
+       data-ja="スペース: 発射（1ボタン操作）">
+    Espace: tirer (un seul bouton)
   </div>
 
   <div id="game-over" class="hidden">
@@ -195,9 +195,9 @@
       let rafId = null;
       let score = 0;
       let lives = 3;
-      let keys = new Set();
       let enemySpawnTimer = 0;
       let lastTs = 0;
+      let motionTime = 0;
 
       const stars = [];
       const bullets = [];
@@ -210,7 +210,6 @@
         y: 0,
         width: 72,
         height: 28,
-        speed: 420,
         cooldown: 0
       };
 
@@ -278,16 +277,22 @@
 
       function shoot() {
         if (!running || player.cooldown > 0) return;
-        bullets.push({ x: player.x, y: player.y - 16, speed: 620, r: 4 });
+        bullets.push({
+          x: player.x,
+          y: player.y - 16,
+          speed: 520,
+          r: 5
+        });
         player.cooldown = 0.22;
       }
 
       function updateGame(dt) {
         player.cooldown = Math.max(0, player.cooldown - dt);
 
-        if (keys.has('ArrowLeft')) player.x -= player.speed * dt;
-        if (keys.has('ArrowRight')) player.x += player.speed * dt;
-        player.x = Math.max(player.width * 0.5 + 8, Math.min(canvas.width - player.width * 0.5 - 8, player.x));
+        motionTime += dt;
+        const centerX = canvas.width * 0.5;
+        const horizontalRange = canvas.width / 12; // total sweep is 1/6th of the screen width
+        player.x = centerX + Math.sin(motionTime * 1.8) * horizontalRange;
 
         enemySpawnTimer += dt * 1000;
         if (enemySpawnTimer >= ENEMY_INTERVAL) {
@@ -297,8 +302,17 @@
 
         for (let i = bullets.length - 1; i >= 0; i -= 1) {
           const b = bullets[i];
-          b.y -= b.speed * dt;
-          if (b.y < -10) bullets.splice(i, 1);
+          const target = findNearestEnemy(b.x, b.y);
+          if (target) {
+            const dx = target.x - b.x;
+            const dy = target.y - b.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            b.x += (dx / dist) * b.speed * dt;
+            b.y += (dy / dist) * b.speed * dt;
+          } else {
+            b.y -= b.speed * dt;
+          }
+          if (b.y < -20 || b.y > canvas.height + 20 || b.x < -20 || b.x > canvas.width + 20) bullets.splice(i, 1);
         }
 
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
@@ -364,6 +378,22 @@
         }
       }
 
+      function findNearestEnemy(x, y) {
+        if (!enemies.length) return null;
+        let best = null;
+        let bestDistSq = Infinity;
+        for (const e of enemies) {
+          const dx = e.x - x;
+          const dy = e.y - y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestDistSq) {
+            bestDistSq = d2;
+            best = e;
+          }
+        }
+        return best;
+      }
+
       function drawEnemies() {
         for (const e of enemies) {
           if (e.image && e.image.complete) {
@@ -418,6 +448,7 @@
         bullets.length = 0;
         enemies.length = 0;
         enemySpawnTimer = 0;
+        motionTime = 0;
         player.x = canvas.width * 0.5;
         running = true;
         updateHudLanguage();
@@ -483,16 +514,6 @@
         if (event.key === ' ' || event.code === 'Space') {
           event.preventDefault();
           if (running) shoot();
-        }
-        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-          event.preventDefault();
-          keys.add(event.key);
-        }
-      });
-
-      document.addEventListener('keyup', (event) => {
-        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-          keys.delete(event.key);
         }
       });
 
