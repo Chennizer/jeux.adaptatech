@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Arcade : Envahisseurs de l'espace" data-en="Arcade: Space Invaders" data-ja="アーケード：スペースインベーダー">Arcade : Envahisseurs de l'espace</title>
+  <link rel="stylesheet" href="../../css/control-panel.css">
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/gaming.css">
+  <link rel="stylesheet" href="../../css/layout.css">
+  <link rel="stylesheet" href="../../css/video-stop-action.css">
+  <style>
+    :root {
+      --game-bg: radial-gradient(circle at center, #0e1a2b 0%, #03060c 62%, #000000 100%);
+      --hud-bg: rgba(5, 12, 24, 0.72);
+      --hud-border: rgba(95, 219, 255, 0.3);
+      --accent: #5fdbff;
+    }
+
+    #game-screen {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: var(--game-bg);
+      overflow: hidden;
+      color: #fff;
+      font-family: 'Trebuchet MS', system-ui, sans-serif;
+    }
+
+    #game-screen.active {
+      display: flex;
+    }
+
+    #stars {
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(circle, rgba(255,255,255,0.7) 0 1px, transparent 1px),
+        radial-gradient(circle, rgba(255,255,255,0.45) 0 1px, transparent 1px);
+      background-size: 80px 80px, 130px 130px;
+      background-position: 0 0, 40px 18px;
+      opacity: 0.5;
+    }
+
+    #hud {
+      position: absolute;
+      top: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 330px;
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      padding: 10px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--hud-border);
+      background: var(--hud-bg);
+      font-weight: 700;
+      backdrop-filter: blur(5px);
+      z-index: 5;
+    }
+
+    #arena {
+      position: relative;
+      width: min(92vw, 1000px);
+      height: min(72vh, 620px);
+      border-radius: 20px;
+      border: 1px solid rgba(95, 219, 255, 0.25);
+      box-shadow: inset 0 0 30px rgba(95, 219, 255, 0.12), 0 0 30px rgba(4, 12, 24, 0.8);
+      overflow: hidden;
+      background: linear-gradient(to bottom, rgba(13, 29, 53, 0.25), rgba(1, 2, 8, 0.78));
+      z-index: 2;
+    }
+
+    #player {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 74px;
+      height: 34px;
+      border-radius: 0 0 12px 12px;
+      background: linear-gradient(to top, #38ccff, #7de6ff);
+      box-shadow: 0 0 18px rgba(79, 224, 255, 0.75);
+      z-index: 3;
+    }
+
+    #enemy {
+      position: absolute;
+      width: 96px;
+      height: 96px;
+      object-fit: contain;
+      display: none;
+      filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.34));
+      z-index: 3;
+    }
+
+    #enemy.active {
+      display: block;
+      animation: floatEnemy 1.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes floatEnemy {
+      from { transform: translateY(-2px) scale(1); }
+      to { transform: translateY(6px) scale(1.05); }
+    }
+
+    #laser {
+      position: absolute;
+      width: 6px;
+      height: 0;
+      background: linear-gradient(to top, #fff, #9fe8ff);
+      border-radius: 999px;
+      box-shadow: 0 0 18px rgba(175, 235, 255, 0.9);
+      z-index: 4;
+      opacity: 0;
+    }
+
+    #instructions {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(95, 219, 255, 0.22);
+      color: #d8f8ff;
+      font-size: 0.95rem;
+      z-index: 5;
+      text-align: center;
+    }
+
+    .image-placeholder {
+      width: 100%;
+      min-height: 180px;
+      border-radius: 18px;
+      border: 2px dashed rgba(255, 255, 255, 0.45);
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, rgba(16, 39, 66, 0.72), rgba(22, 102, 117, 0.38));
+      color: #dbf9ff;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 12px;
+    }
+
+    .single-option-note {
+      margin: 0;
+      color: #e4f8ff;
+      opacity: 0.92;
+      font-size: 0.95rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body
+  class="video-stop-action-page"
+  style="--menu-backdrop-image: linear-gradient(135deg, #0f2342 0%, #091225 50%, #02050b 100%); --menu-side-image: none;"
+>
+  <button id="language-toggle" title="Changer de langue / Change language">FR / EN</button>
+
+  <div id="control-panel">
+    <div id="control-panel-options" class="control-panel-options">
+      <div class="game-menu-layout stop-action-menu-layout">
+        <div class="game-menu-main">
+          <div id="options-title-bar">
+            <h1 id="options-arcade-title">Arcade</h1>
+            <h2 id="options-main-title" class="translate" data-fr="Envahisseurs de l'espace" data-en="Space Invaders" data-ja="スペースインベーダー">Envahisseurs de l'espace</h2>
+          </div>
+
+          <p id="control-panel-instructions" class="control-panel-instructions translate"
+            data-fr="Mode switch normal. Un alien apparaît toutes les 10 secondes. Appuie sur ESPACE pour tirer."
+            data-en="Normal switch mode. An alien appears every 10 seconds. Press SPACE to shoot."
+            data-ja="通常スイッチモード。10秒ごとにエイリアンが出現。スペースキーで撃つ。">
+          </p>
+
+          <div id="mode-divider"></div>
+
+          <div id="options-inline-container" class="stop-action-options-inline-container">
+            <div class="option-item stop-action-mode-card">
+              <p class="stop-action-mode-description translate" data-fr="Type de contrôle" data-en="Input type" data-ja="入力タイプ">Type de contrôle</p>
+              <div id="input-mode-segmented-control" role="tablist" aria-label="Input mode selector">
+                <button type="button" class="stop-action-mode-btn input-mode-btn translate selected" aria-pressed="true" data-fr="Switch" data-en="Switch" data-ja="スイッチ">Switch</button>
+              </div>
+              <p class="single-option-note translate" data-fr="Préparé pour mode normal uniquement" data-en="Prepared for normal mode only" data-ja="通常モード専用">Préparé pour mode normal uniquement</p>
+            </div>
+
+            <div class="option-item stop-action-mode-card">
+              <div id="stop-action-mode-segmented-control" role="tablist" aria-label="Mode selector">
+                <button type="button" class="stop-action-mode-btn selected translate" aria-pressed="true" data-fr="Normal" data-en="Normal" data-ja="ノーマル">Normal</button>
+              </div>
+              <p class="stop-action-mode-description translate"
+                 data-fr="Difficulté actuelle : normal"
+                 data-en="Current difficulty: normal"
+                 data-ja="現在の難易度：ノーマル">
+                Difficulté actuelle : normal
+              </p>
+            </div>
+          </div>
+
+          <div id="mode-divider"></div>
+
+          <div id="button-container" class="button-container stop-action-button-container">
+            <button id="control-panel-start-button" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+          </div>
+        </div>
+
+        <aside class="game-menu-art" aria-hidden="true">
+          <div class="game-menu-art-card">
+            <div class="image-placeholder translate" data-fr="Image de jeu\n(placeholder)" data-en="Game image\n(placeholder)" data-ja="ゲーム画像\n（プレースホルダー）">Image de jeu (placeholder)</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div id="game-screen" aria-live="polite">
+    <div id="stars" aria-hidden="true"></div>
+    <div id="hud">
+      <span id="score-label" class="translate" data-fr="Score : 0" data-en="Score: 0" data-ja="スコア：0">Score : 0</span>
+      <span id="spawn-label" class="translate" data-fr="Prochain alien : 10s" data-en="Next alien: 10s" data-ja="次のエイリアン：10秒">Prochain alien : 10s</span>
+      <span id="status-label" class="translate" data-fr="Statut : en attente" data-en="Status: waiting" data-ja="ステータス：待機中">Statut : en attente</span>
+    </div>
+
+    <div id="arena">
+      <img id="enemy" alt="Alien cible" src="../../images/pictos/strawberry.png">
+      <div id="laser" aria-hidden="true"></div>
+      <div id="player" aria-hidden="true"></div>
+    </div>
+
+    <div id="instructions" class="translate"
+      data-fr="Appuie sur ESPACE pour tirer quand un alien apparaît."
+      data-en="Press SPACE to shoot when an alien appears."
+      data-ja="エイリアンが出たらスペースキーで撃とう。">
+      Appuie sur ESPACE pour tirer quand un alien apparaît.
+    </div>
+  </div>
+
+  <audio id="game-music" src="../../songs/space/spacequest1.mp3" preload="auto" loop></audio>
+
+  <script src="../../js/translationmain.js"></script>
+  <script>
+    (function () {
+      const spawnIntervalMs = 10000;
+      const enemyVisibleDurationMs = 6500;
+      const fruits = [
+        '../../images/pictos/strawberry.png',
+        '../../images/pictos/pineapple.png',
+        '../../images/pictos/watermelon.png',
+        '../../images/pictos/kiwi.png',
+        '../../images/pictos/grapes.png',
+        '../../images/pictos/mango.png'
+      ];
+
+      const controlPanel = document.getElementById('control-panel');
+      const startBtn = document.getElementById('control-panel-start-button');
+      const gameScreen = document.getElementById('game-screen');
+      const arena = document.getElementById('arena');
+      const enemy = document.getElementById('enemy');
+      const laser = document.getElementById('laser');
+      const scoreLabel = document.getElementById('score-label');
+      const spawnLabel = document.getElementById('spawn-label');
+      const statusLabel = document.getElementById('status-label');
+      const gameMusic = document.getElementById('game-music');
+      const languageToggle = document.getElementById('language-toggle');
+
+      let gameStarted = false;
+      let score = 0;
+      let enemyActive = false;
+      let spawnTimerId = null;
+      let countdownTimerId = null;
+      let enemyTimeoutId = null;
+      let secondsBeforeSpawn = Math.floor(spawnIntervalMs / 1000);
+
+      function updateStatus(textFr, textEn, textJa) {
+        statusLabel.dataset.fr = textFr;
+        statusLabel.dataset.en = textEn;
+        statusLabel.dataset.ja = textJa;
+        if (typeof translatePage === 'function') translatePage();
+      }
+
+      function updateScoreLabel() {
+        scoreLabel.dataset.fr = `Score : ${score}`;
+        scoreLabel.dataset.en = `Score: ${score}`;
+        scoreLabel.dataset.ja = `スコア：${score}`;
+      }
+
+      function updateSpawnLabel() {
+        spawnLabel.dataset.fr = `Prochain alien : ${secondsBeforeSpawn}s`;
+        spawnLabel.dataset.en = `Next alien: ${secondsBeforeSpawn}s`;
+        spawnLabel.dataset.ja = `次のエイリアン：${secondsBeforeSpawn}秒`;
+      }
+
+      function positionEnemy() {
+        const arenaRect = arena.getBoundingClientRect();
+        const maxX = Math.max(16, arenaRect.width - 112);
+        const x = Math.floor(Math.random() * maxX) + 8;
+        const y = Math.floor(Math.random() * Math.max(80, arenaRect.height * 0.45)) + 20;
+        enemy.style.left = `${x}px`;
+        enemy.style.top = `${y}px`;
+      }
+
+      function spawnEnemy() {
+        if (!gameStarted) return;
+        enemy.src = fruits[Math.floor(Math.random() * fruits.length)];
+        positionEnemy();
+        enemy.classList.add('active');
+        enemyActive = true;
+        updateStatus('Statut : cible détectée', 'Status: target detected', 'ステータス：ターゲット出現');
+
+        clearTimeout(enemyTimeoutId);
+        enemyTimeoutId = setTimeout(() => {
+          if (!enemyActive) return;
+          enemy.classList.remove('active');
+          enemyActive = false;
+          updateStatus('Statut : cible manquée', 'Status: target missed', 'ステータス：ターゲットを逃した');
+        }, enemyVisibleDurationMs);
+      }
+
+      function startSpawnCycle() {
+        clearInterval(spawnTimerId);
+        clearInterval(countdownTimerId);
+
+        secondsBeforeSpawn = Math.floor(spawnIntervalMs / 1000);
+        updateSpawnLabel();
+
+        countdownTimerId = setInterval(() => {
+          secondsBeforeSpawn = secondsBeforeSpawn <= 1 ? Math.floor(spawnIntervalMs / 1000) : secondsBeforeSpawn - 1;
+          updateSpawnLabel();
+          if (typeof translatePage === 'function') translatePage();
+        }, 1000);
+
+        spawnTimerId = setInterval(spawnEnemy, spawnIntervalMs);
+        setTimeout(spawnEnemy, 400);
+      }
+
+      function animateLaser() {
+        const arenaRect = arena.getBoundingClientRect();
+        const enemyRect = enemy.getBoundingClientRect();
+        const playerX = arenaRect.width / 2;
+        const topTarget = Math.max(0, enemyRect.top - arenaRect.top + enemyRect.height / 2);
+
+        laser.style.left = `${playerX - 3}px`;
+        laser.style.bottom = '56px';
+        laser.style.height = `${Math.max(20, arenaRect.height - topTarget - 56)}px`;
+        laser.style.opacity = '1';
+        setTimeout(() => {
+          laser.style.opacity = '0';
+          laser.style.height = '0';
+        }, 160);
+      }
+
+      function shoot() {
+        if (!gameStarted) return;
+        animateLaser();
+
+        if (!enemyActive) {
+          updateStatus('Statut : tir sans cible', 'Status: no target', 'ステータス：ターゲットなし');
+          if (typeof translatePage === 'function') translatePage();
+          return;
+        }
+
+        clearTimeout(enemyTimeoutId);
+        enemy.classList.remove('active');
+        enemyActive = false;
+        score += 1;
+        updateScoreLabel();
+        updateStatus('Statut : cible touchée', 'Status: target hit', 'ステータス：命中');
+
+        if (typeof translatePage === 'function') translatePage();
+      }
+
+      function startGame() {
+        if (gameStarted) return;
+        gameStarted = true;
+        controlPanel.classList.add('hidden');
+        gameScreen.classList.add('active');
+
+        updateScoreLabel();
+        updateSpawnLabel();
+        updateStatus('Statut : partie lancée', 'Status: game started', 'ステータス：ゲーム開始');
+
+        if (typeof translatePage === 'function') translatePage();
+
+        gameMusic.play().catch(() => {
+          // Autoplay can be blocked by browser policy.
+        });
+
+        startSpawnCycle();
+      }
+
+      startBtn.addEventListener('click', startGame);
+
+      window.addEventListener('keydown', (event) => {
+        if (event.code !== 'Space') return;
+        event.preventDefault();
+        shoot();
+      });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        if (typeof setLanguage === 'function') setLanguage('fr');
+        if (typeof translatePage === 'function') translatePage();
+      });
+
+      languageToggle?.addEventListener('pointerup', () => {
+        if (typeof toggleLanguage === 'function') toggleLanguage();
+      });
+    })();
+  </script>
+</body>
+</html>
