@@ -866,6 +866,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function setScoreInputsDisabled(disabled) {
+    if (scorePlayerNameInput) {
+      scorePlayerNameInput.disabled = Boolean(disabled);
+    }
+  }
+
   async function submitScore(game, playerName, score, mode) {
     const response = await fetch(scoreApiBase + '/score', {
       method: 'POST',
@@ -984,12 +990,13 @@ document.addEventListener('DOMContentLoaded', () => {
       scorePlayerNameInput.value = '';
     }
     setScoreStatusMessage('', false);
+    setScoreInputsDisabled(false);
     setScoreButtonsDisabled(false);
     updateScorePanelCopy();
   }
 
   async function handleScoreSubmission() {
-    if (!scoreFeatureEnabled || scoreSubmissionState === 'sending') {
+    if (!scoreFeatureEnabled || scoreSubmissionState === 'sending' || scoreSubmissionState === 'submitted') {
       return;
     }
 
@@ -1010,12 +1017,13 @@ document.addEventListener('DOMContentLoaded', () => {
       await submitScore(scoreGame, playerName.slice(0, 20), getFinalScoreValue(), getSelectedModeForScoreboard());
       scoreSubmissionState = 'submitted';
       setScoreStatusMessage(copy.submitSuccess, false);
+      setScoreInputsDisabled(true);
       await renderLeaderboard();
     } catch (error) {
       scoreSubmissionState = 'idle';
       setScoreStatusMessage(copy.submitError, true);
     } finally {
-      setScoreButtonsDisabled(false);
+      setScoreButtonsDisabled(scoreSubmissionState === 'submitted');
     }
   }
 
