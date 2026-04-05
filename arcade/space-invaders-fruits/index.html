@@ -75,6 +75,12 @@
       box-shadow: 0 0 14px rgba(120, 255, 140, 0.6);
       transition: height 80ms linear, background 120ms linear, box-shadow 120ms linear;
     }
+    body[data-input-mode="eyegaze"] {
+      cursor: none;
+    }
+    body[data-input-mode="eyegaze"] * {
+      cursor: none !important;
+    }
 
     #game-over {
       position: fixed;
@@ -313,7 +319,8 @@
             image,
             type: 'normal',
             hp: 1,
-            eyegazeTile: true
+            eyegazeTile: true,
+            resolved: false
           });
           return;
         }
@@ -452,6 +459,7 @@
 
           for (let j = bullets.length - 1; j >= 0; j -= 1) {
             const b = bullets[j];
+            if (e.eyegazeTile && e.resolved) continue;
             const dx = b.x - e.x;
             const dy = b.y - e.y;
             if ((dx * dx + dy * dy) <= ((e.size * 0.45) * (e.size * 0.45))) {
@@ -561,7 +569,15 @@
             ctx.fillRect(x, y, e.size, e.size);
             ctx.strokeRect(x, y, e.size, e.size);
 
-            if (hovered && hoverStartAt) {
+            if (e.resolved) {
+              ctx.fillStyle = 'rgba(255, 52, 52, 0.42)';
+              ctx.fillRect(x, y, e.size, e.size);
+              ctx.strokeStyle = 'rgba(255, 120, 120, 0.8)';
+              ctx.lineWidth = 2;
+              ctx.strokeRect(x, y, e.size, e.size);
+            }
+
+            if (!e.resolved && hovered && hoverStartAt) {
               const progress = Math.max(0, Math.min(1, (performance.now() - hoverStartAt) / EYEGAZE_DWELL_MS));
               const fillW = e.size * progress;
               const fillH = e.size * progress;
@@ -623,7 +639,7 @@
       function findEyegazeTarget() {
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
           const e = enemies[i];
-          if (!e.eyegazeTile) continue;
+          if (!e.eyegazeTile || e.resolved) continue;
           const half = e.size * 0.5;
           if (gazeX >= e.x - half && gazeX <= e.x + half && gazeY >= e.y - half && gazeY <= e.y + half) {
             return e;
@@ -634,6 +650,8 @@
 
       function launchEyegazeProjectile(target) {
         if (!target) return;
+        if (target.resolved) return;
+        target.resolved = true;
         const muzzleX = canvas.width * 0.5;
         const muzzleY = player.y - 16;
         const speed = 540;
