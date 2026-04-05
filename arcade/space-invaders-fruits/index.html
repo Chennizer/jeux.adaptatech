@@ -233,6 +233,7 @@
       let hoverStartAt = 0;
       const EYEGAZE_DWELL_MS = 1000;
       const EYEGAZE_ROW_STEP_MS = 10000;
+      const EYEGAZE_ROW_TRANSITION_MS = 2000;
 
       const stars = [];
       const bullets = [];
@@ -443,12 +444,12 @@
           const e = enemies[i];
           if (e.eyegazeTile) {
             const elapsed = performance.now() - (e.spawnAt || 0);
-            const row = Math.floor(elapsed / EYEGAZE_ROW_STEP_MS);
-            if (row >= 3) {
+            const animatedY = getEyegazeAnimatedY(elapsed);
+            if (animatedY === null) {
               enemies.splice(i, 1);
               continue;
             }
-            e.y = getEyegazeRowY(row);
+            e.y = animatedY;
           } else {
             e.y += e.speed * dt;
           }
@@ -499,6 +500,25 @@
         if (rowIndex <= 0) return top;
         if (rowIndex === 1) return middle;
         return bottom;
+      }
+
+      function getEyegazeAnimatedY(elapsedMs) {
+        const top = getEyegazeRowY(0);
+        const middle = getEyegazeRowY(1);
+        const bottom = getEyegazeRowY(2);
+
+        if (elapsedMs < EYEGAZE_ROW_STEP_MS) return top; // hold top row
+        if (elapsedMs < EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS) {
+          const t = (elapsedMs - EYEGAZE_ROW_STEP_MS) / EYEGAZE_ROW_TRANSITION_MS;
+          return top + (middle - top) * t; // smooth top -> middle
+        }
+        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 2) return middle; // hold middle row
+        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 2 + EYEGAZE_ROW_TRANSITION_MS) {
+          const t = (elapsedMs - EYEGAZE_ROW_STEP_MS * 2) / EYEGAZE_ROW_TRANSITION_MS;
+          return middle + (bottom - middle) * t; // smooth middle -> bottom
+        }
+        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 3) return bottom; // hold bottom row
+        return null; // disappear
       }
 
       function drawPlayer() {
