@@ -178,6 +178,7 @@
       const stars = [];
       const bullets = [];
       const enemies = [];
+      let nextEnemyId = 1;
       const STAR_COUNT = 220;
       const ENEMY_INTERVAL = 10000;
 
@@ -243,6 +244,7 @@
         const image = enemySprites[Math.floor(Math.random() * enemySprites.length)] || null;
         const size = 48;
         enemies.push({
+          id: nextEnemyId++,
           x: 30 + Math.random() * Math.max(60, canvas.width - 60),
           y: 70,
           size,
@@ -259,13 +261,16 @@
         const target = findNearestEnemy(muzzleX, muzzleY);
         let vx = 0;
         let vy = -speed;
+        let targetId = null;
+        let homing = false;
 
         if (target) {
-          const dx = target.x - muzzleX;
-          const dy = target.y - muzzleY;
-          const dist = Math.hypot(dx, dy) || 1;
-          vx = (dx / dist) * speed;
-          vy = (dy / dist) * speed;
+          targetId = target.id;
+          homing = true;
+          const arcDirection = target.x >= muzzleX ? 1 : -1;
+          const launchAngle = (-Math.PI / 2) + arcDirection * 0.48;
+          vx = Math.cos(launchAngle) * speed;
+          vy = Math.sin(launchAngle) * speed;
         }
 
         bullets.push({
@@ -273,6 +278,10 @@
           y: muzzleY,
           vx,
           vy,
+          speed,
+          targetId,
+          homing,
+          turnRate: 3.2,
           r: 6,
           trail: []
         });
@@ -299,6 +308,22 @@
           if (b.trail.length > 10) b.trail.pop();
           for (const p of b.trail) p.life -= dt;
           b.trail = b.trail.filter((p) => p.life > 0);
+
+          if (b.homing && b.targetId !== null) {
+            const targetEnemy = findEnemyById(b.targetId);
+            if (targetEnemy) {
+              const desiredAngle = Math.atan2(targetEnemy.y - b.y, targetEnemy.x - b.x);
+              const currentAngle = Math.atan2(b.vy, b.vx);
+              let delta = desiredAngle - currentAngle;
+              while (delta > Math.PI) delta -= Math.PI * 2;
+              while (delta < -Math.PI) delta += Math.PI * 2;
+              const maxTurn = b.turnRate * dt;
+              const clampedTurn = Math.max(-maxTurn, Math.min(maxTurn, delta));
+              const nextAngle = currentAngle + clampedTurn;
+              b.vx = Math.cos(nextAngle) * b.speed;
+              b.vy = Math.sin(nextAngle) * b.speed;
+            }
+          }
 
           b.x += b.vx * dt;
           b.y += b.vy * dt;
@@ -370,14 +395,22 @@
           }
 
           ctx.fillStyle = '#ffd66b';
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(Math.atan2(b.vy, b.vx));
+          ctx.fillStyle = '#ffc24b';
           ctx.beginPath();
-          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.moveTo(b.r + 2, 0);
+          ctx.lineTo(-b.r, -b.r * 0.7);
+          ctx.lineTo(-b.r, b.r * 0.7);
+          ctx.closePath();
           ctx.fill();
 
-          ctx.fillStyle = '#fff7cf';
+          ctx.fillStyle = '#fff4c4';
           ctx.beginPath();
-          ctx.arc(b.x - b.r * 0.25, b.y - b.r * 0.25, b.r * 0.45, 0, Math.PI * 2);
+          ctx.ellipse(-b.r * 0.2, 0, b.r * 0.5, b.r * 0.3, 0, 0, Math.PI * 2);
           ctx.fill();
+          ctx.restore();
         }
       }
 
@@ -395,6 +428,13 @@
           }
         }
         return best;
+      }
+
+      function findEnemyById(id) {
+        for (const enemy of enemies) {
+          if (enemy.id === id) return enemy;
+        }
+        return null;
       }
 
       function drawEnemies() {
