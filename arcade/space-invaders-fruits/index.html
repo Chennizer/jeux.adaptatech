@@ -232,6 +232,7 @@
       let hoveredEnemyId = null;
       let hoverStartAt = 0;
       const EYEGAZE_DWELL_MS = 1000;
+      const EYEGAZE_ROW_STEP_MS = 10000;
 
       const stars = [];
       const bullets = [];
@@ -304,17 +305,19 @@
           const tileSize = Math.min(window.innerWidth * 0.30, window.innerHeight * 0.30);
           const lanes = [0.2, 0.5, 0.8];
           const lane = lanes[Math.floor(Math.random() * lanes.length)];
+          const rowY = getEyegazeRowY(0);
           enemies.push({
             id: nextEnemyId++,
             x: window.innerWidth * lane,
-            y: tileSize * 0.5 + 20,
+            y: rowY,
             size: tileSize,
             speed: 0,
             image,
             type: 'normal',
             hp: 1,
             eyegazeTile: true,
-            resolved: false
+            resolved: false,
+            spawnAt: performance.now()
           });
           return;
         }
@@ -438,7 +441,17 @@
 
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
           const e = enemies[i];
-          if (inputMode !== 'eyegaze') e.y += e.speed * dt;
+          if (e.eyegazeTile) {
+            const elapsed = performance.now() - (e.spawnAt || 0);
+            const row = Math.floor(elapsed / EYEGAZE_ROW_STEP_MS);
+            if (row >= 3) {
+              enemies.splice(i, 1);
+              continue;
+            }
+            e.y = getEyegazeRowY(row);
+          } else {
+            e.y += e.speed * dt;
+          }
 
           if (e.y - e.size * 0.5 > canvas.height) {
             enemies.splice(i, 1);
@@ -477,6 +490,15 @@
         if (inputMode === 'eyegaze') {
           updateEyegazeDwell();
         }
+      }
+
+      function getEyegazeRowY(rowIndex) {
+        const top = canvas.height * 0.20;
+        const middle = canvas.height * 0.46;
+        const bottom = canvas.height * 0.72;
+        if (rowIndex <= 0) return top;
+        if (rowIndex === 1) return middle;
+        return bottom;
       }
 
       function drawPlayer() {
