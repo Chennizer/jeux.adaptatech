@@ -453,7 +453,7 @@
             const elapsed = performance.now() - (e.spawnAt || 0);
             const animatedY = getEyegazeAnimatedY(elapsed);
             if (animatedY === null) {
-              spawnEyegazeBottomBurst(e.x, getEyegazeRowY(2), e.size);
+              spawnEyegazeBottomBurst(e.x, getEyegazeRowY(getEyegazeRowCount() - 1), e.size);
               enemies.splice(i, 1);
               continue;
             }
@@ -519,14 +519,18 @@
       function getEyegazeRowY(rowIndex) {
         const size = getEyegazeTileSize();
         const fieldTop = canvas.height * 0.08;
+        const rows = getEyegazeRowCount();
+        const clampedRow = Math.max(0, Math.min(rows - 1, rowIndex));
         const topY = fieldTop;
-        return topY + size * 0.5 + rowIndex * (size + EYEGAZE_ROW_GAP_PX);
+        return topY + size * 0.5 + clampedRow * (size + EYEGAZE_ROW_GAP_PX);
       }
 
       function getEyegazeTileSize() {
-        const byWidth = canvas.width * 0.34;
+        const cols = getEyegazeColumnLanes().length;
+        const rows = getEyegazeRowCount();
+        const byWidth = canvas.width * (cols === 2 ? 0.44 : 0.34);
         const fieldHeight = canvas.height * 0.62;
-        const byHeight = (fieldHeight - EYEGAZE_ROW_GAP_PX * 2) / 3;
+        const byHeight = (fieldHeight - EYEGAZE_ROW_GAP_PX * (rows - 1)) / rows;
         return Math.max(110, Math.min(byWidth, byHeight));
       }
 
@@ -538,11 +542,11 @@
       }
 
       function getAvailableEyegazeLanes() {
-        const lanes = [0.16, 0.5, 0.84];
+        const lanes = getEyegazeColumnLanes();
         const occupied = new Set();
         const topY = getEyegazeRowY(0);
-        const middleY = getEyegazeRowY(1);
-        const topRowCutoff = (topY + middleY) * 0.5;
+        const nextRowY = getEyegazeRowY(1);
+        const topRowCutoff = (topY + nextRowY) * 0.5;
         for (const enemy of enemies) {
           if (!enemy.eyegazeTile) continue;
           if (typeof enemy.lane !== 'number') continue;
@@ -555,7 +559,22 @@
 
       function getEyegazeAnimatedY(elapsedMs) {
         const top = getEyegazeRowY(0);
-        const middle = getEyegazeRowY(1);
+        const second = getEyegazeRowY(1);
+        const isNormalGrid = difficulty === 'normal';
+
+        if (isNormalGrid) {
+          const bottomStartMs = EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS;
+          const bottomEndMs = bottomStartMs + EYEGAZE_DANGER_HOLD_MS;
+          if (elapsedMs < EYEGAZE_ROW_STEP_MS) return top; // hold top row
+          if (elapsedMs < EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS) {
+            const t = (elapsedMs - EYEGAZE_ROW_STEP_MS) / EYEGAZE_ROW_TRANSITION_MS;
+            return top + (second - top) * t; // smooth top -> bottom (2-row mode)
+          }
+          if (elapsedMs < bottomEndMs) return second; // danger hold at bottom row
+          return null;
+        }
+
+        const middle = second;
         const bottom = getEyegazeRowY(2);
         const bottomStartMs = EYEGAZE_ROW_STEP_MS * 2 + EYEGAZE_ROW_TRANSITION_MS;
         const bottomEndMs = bottomStartMs + EYEGAZE_DANGER_HOLD_MS;
@@ -576,31 +595,35 @@
 
       function drawEyegazeDangerLine() {
         if (inputMode !== 'eyegaze') return;
-        const y = getEyegazeRowY(2) + getEyegazeTileSize() * 0.5 + 18;
+        const y = getEyegazeRowY(getEyegazeRowCount() - 1) + getEyegazeTileSize() * 0.5 + 18;
         ctx.save();
         const gradient = ctx.createLinearGradient(0, y, canvas.width, y);
-        gradient.addColorStop(0, 'rgba(255, 80, 80, 0.08)');
-        gradient.addColorStop(0.5, 'rgba(255, 105, 70, 0.95)');
-        gradient.addColorStop(1, 'rgba(255, 80, 80, 0.08)');
+        gradient.addColorStop(0, 'rgba(120, 190, 255, 0.05)');
+        gradient.addColorStop(0.5, 'rgba(120, 190, 255, 0.95)');
+        gradient.addColorStop(1, 'rgba(120, 190, 255, 0.05)');
         ctx.strokeStyle = gradient;
-        ctx.lineWidth = 6;
-        ctx.setLineDash([14, 10]);
+        ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(12, y);
         ctx.lineTo(canvas.width - 12, y);
         ctx.stroke();
-        ctx.setLineDash([]);
-
-        for (let x = 26; x < canvas.width - 26; x += 52) {
-          ctx.fillStyle = 'rgba(255, 130, 95, 0.45)';
-          ctx.beginPath();
-          ctx.moveTo(x, y - 8);
-          ctx.lineTo(x + 10, y);
-          ctx.lineTo(x, y + 8);
-          ctx.closePath();
-          ctx.fill();
-        }
+        ctx.shadowColor = 'rgba(100, 180, 255, 0.9)';
+        ctx.shadowBlur = 18;
+        ctx.strokeStyle = 'rgba(135, 205, 255, 0.55)';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(12, y);
+        ctx.lineTo(canvas.width - 12, y);
+        ctx.stroke();
         ctx.restore();
+      }
+
+      function getEyegazeColumnLanes() {
+        return difficulty === 'normal' ? [0.3, 0.7] : [0.16, 0.5, 0.84];
+      }
+
+      function getEyegazeRowCount() {
+        return difficulty === 'normal' ? 2 : 3;
       }
 
       function drawPlayer() {
