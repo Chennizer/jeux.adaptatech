@@ -235,10 +235,12 @@
       const EYEGAZE_ROW_STEP_MS = 10000;
       const EYEGAZE_ROW_TRANSITION_MS = 2000;
       const EYEGAZE_ROW_GAP_PX = 24;
+      const EYEGAZE_ENTRY_MS = 1200;
 
       const stars = [];
       const bullets = [];
       const enemies = [];
+      const eyegazeBursts = [];
       let nextEnemyId = 1;
       const STAR_COUNT = 220;
 
@@ -447,6 +449,7 @@
             const elapsed = performance.now() - (e.spawnAt || 0);
             const animatedY = getEyegazeAnimatedY(elapsed);
             if (animatedY === null) {
+              triggerEyegazeBottomAttack(e);
               enemies.splice(i, 1);
               continue;
             }
@@ -508,22 +511,76 @@
       }
 
       function getEyegazeAnimatedY(elapsedMs) {
+        const size = getEyegazeTileSize();
+        const startY = -size * 0.55;
         const top = getEyegazeRowY(0);
         const middle = getEyegazeRowY(1);
         const bottom = getEyegazeRowY(2);
 
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS) return top; // hold top row
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS) {
-          const t = (elapsedMs - EYEGAZE_ROW_STEP_MS) / EYEGAZE_ROW_TRANSITION_MS;
+        if (elapsedMs < EYEGAZE_ENTRY_MS) {
+          const t = Math.max(0, Math.min(1, elapsedMs / EYEGAZE_ENTRY_MS));
+          return startY + (top - startY) * t; // slide in from top
+        }
+
+        const local = elapsedMs - EYEGAZE_ENTRY_MS;
+        if (local < EYEGAZE_ROW_STEP_MS) return top; // hold top row
+        if (local < EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS) {
+          const t = (local - EYEGAZE_ROW_STEP_MS) / EYEGAZE_ROW_TRANSITION_MS;
           return top + (middle - top) * t; // smooth top -> middle
         }
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 2) return middle; // hold middle row
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 2 + EYEGAZE_ROW_TRANSITION_MS) {
-          const t = (elapsedMs - EYEGAZE_ROW_STEP_MS * 2) / EYEGAZE_ROW_TRANSITION_MS;
+        if (local < EYEGAZE_ROW_STEP_MS * 2) return middle; // hold middle row
+        if (local < EYEGAZE_ROW_STEP_MS * 2 + EYEGAZE_ROW_TRANSITION_MS) {
+          const t = (local - EYEGAZE_ROW_STEP_MS * 2) / EYEGAZE_ROW_TRANSITION_MS;
           return middle + (bottom - middle) * t; // smooth middle -> bottom
         }
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 3) return bottom; // hold bottom row
+        if (local < EYEGAZE_ROW_STEP_MS * 3) return bottom; // hold bottom row
         return null; // disappear
+      }
+
+      function triggerEyegazeBottomAttack(enemy) {
+        if (!enemy) return;
+        eyegazeBursts.push({
+          x: enemy.x,
+          y: enemy.y,
+          startAt: performance.now(),
+          duration: 900
+        });
+      }
+
+      function drawEyegazeBursts() {
+        if (!eyegazeBursts.length) return;
+        const now = performance.now();
+        for (let i = eyegazeBursts.length - 1; i >= 0; i -= 1) {
+          const burst = eyegazeBursts[i];
+          const t = (now - burst.startAt) / burst.duration;
+          if (t >= 1) {
+            eyegazeBursts.splice(i, 1);
+            continue;
+          }
+
+          const alpha = 1 - t;
+          const radius = 20 + t * 120;
+          const shipX = canvas.width * 0.5;
+          const shipY = player.y - 16;
+
+          ctx.strokeStyle = `rgba(255, 90, 60, ${0.85 * alpha})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(shipX, shipY);
+          ctx.lineTo(burst.x, burst.y);
+          ctx.stroke();
+
+          ctx.fillStyle = `rgba(255, 120, 60, ${0.35 * alpha})`;
+          ctx.beginPath();
+          ctx.arc(burst.x, burst.y, radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(255, 230, 160, ${0.75 * alpha})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(burst.x, burst.y, radius * 0.6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
 
       function drawPlayer() {
@@ -764,6 +821,7 @@
 
         drawStars();
         drawEnemies();
+        drawEyegazeBursts();
         drawBullets();
         drawPlayer();
 
@@ -781,6 +839,7 @@
         lives = difficulty === 'competitive' ? 2 : difficulty === 'hard' ? 5 : 4;
         bullets.length = 0;
         enemies.length = 0;
+        eyegazeBursts.length = 0;
         enemySpawnTimer = 0;
         currentSpawnDelay = getSpawnDelayMs();
         motionTime = 0;
