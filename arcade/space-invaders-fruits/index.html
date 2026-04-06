@@ -105,12 +105,33 @@
       font-size: 12px;
       line-height: 1.5;
     }
-    #retry-eyegaze-text {
+    #retry-eyegaze-tile {
+      width: min(42vw, 320px);
+      aspect-ratio: 1 / 1;
+      margin: 12px auto 0;
+      border: 4px solid rgba(255,255,255,0.75);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.1);
+      position: relative;
       display: none;
-      margin-top: 14px;
-      font-size: clamp(20px, 4vw, 34px);
-      color: #fff;
-      text-shadow: 0 0 8px rgba(0,0,0,0.45);
+      overflow: hidden;
+    }
+    #retry-eyegaze-tile img {
+      width: 82%;
+      height: 82%;
+      object-fit: contain;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #retry-eyegaze-fill {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 52, 52, 0.42);
+      transform: scale(0);
+      transform-origin: center;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -189,10 +210,12 @@
 
   <div id="game-over" class="hidden">
     <div class="results-panel stop-action-results-panel">
-      <h2 class="translate" data-fr="Partie terminée" data-en="Game over" data-ja="ゲームオーバー">Partie terminée</h2>
       <p id="game-over-score"></p>
       <p id="retry-hint" class="retry-hint"></p>
-      <p id="retry-eyegaze-text"></p>
+      <div id="retry-eyegaze-tile" aria-hidden="true">
+        <div id="retry-eyegaze-fill"></div>
+        <img src="../../images/pictos/apple.png" alt="Retry tile">
+      </div>
       <button id="continue-button" class="button translate" data-fr="Recommencer" data-en="Restart" data-ja="もう一度">Recommencer</button>
     </div>
   </div>
@@ -209,7 +232,8 @@
       const gameOverScreen = document.getElementById('game-over');
       const restartButton = document.getElementById('continue-button');
       const retryHint = document.getElementById('retry-hint');
-      const retryEyegazeText = document.getElementById('retry-eyegaze-text');
+      const retryEyegazeTile = document.getElementById('retry-eyegaze-tile');
+      const retryEyegazeFill = document.getElementById('retry-eyegaze-fill');
       const music = document.getElementById('bg-music');
       const languageToggleButton = document.getElementById('language-toggle');
 
@@ -1041,7 +1065,8 @@
         if (retryRafId) cancelAnimationFrame(retryRafId);
         retryRafId = null;
         retryHoverStartAt = 0;
-        if (retryEyegazeText) retryEyegazeText.style.display = 'none';
+        if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
+        if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
         if (retryHint) retryHint.textContent = '';
         if (restartButton) restartButton.style.display = 'none';
 
@@ -1082,19 +1107,15 @@
         if (retryRafId) cancelAnimationFrame(retryRafId);
         retryRafId = null;
         retryHoverStartAt = 0;
-        if (retryEyegazeText) retryEyegazeText.style.display = 'none';
+        if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
         if (restartButton) restartButton.style.display = 'none';
         if (inputMode === 'eyegaze') {
-          const lang = (typeof getStoredLanguage === 'function' ? getStoredLanguage() : (document.documentElement.lang || 'fr')) || 'fr';
-          if (retryHint) retryHint.textContent = '';
-          if (retryEyegazeText) {
-            retryEyegazeText.textContent = lang === 'fr' ? 'Réessayer ?' : lang === 'ja' ? 'もう一度？' : 'Try again?';
-            retryEyegazeText.style.display = 'block';
-          }
+          if (retryHint) retryHint.textContent = 'Regarde la tuile pour recommencer';
+          if (retryEyegazeTile) retryEyegazeTile.style.display = 'block';
           startEyegazeRetryMonitor();
         } else {
           if (retryHint) retryHint.textContent = 'Press space to retry';
-          if (retryEyegazeText) retryEyegazeText.style.display = 'none';
+          if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
         }
         gameOverScreen.style.display = 'flex';
       }
@@ -1103,21 +1124,21 @@
         if (inputMode !== 'eyegaze') return;
         const loop = () => {
           if (running || !gameOverScreen || gameOverScreen.style.display !== 'flex') return;
-          const rect = retryEyegazeText?.getBoundingClientRect();
+          const rect = retryEyegazeTile?.getBoundingClientRect();
           if (!rect) return;
           const inside = gazeX >= rect.left && gazeX <= rect.right && gazeY >= rect.top && gazeY <= rect.bottom;
           const now = performance.now();
           if (inside) {
             if (!retryHoverStartAt) retryHoverStartAt = now;
             const progress = Math.max(0, Math.min(1, (now - retryHoverStartAt) / EYEGAZE_DWELL_MS));
-            if (retryEyegazeText) retryEyegazeText.style.opacity = `${0.5 + progress * 0.5}`;
+            if (retryEyegazeFill) retryEyegazeFill.style.transform = `scale(${progress})`;
             if (progress >= 1) {
               startGame();
               return;
             }
           } else {
             retryHoverStartAt = 0;
-            if (retryEyegazeText) retryEyegazeText.style.opacity = '1';
+            if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
           }
           retryRafId = requestAnimationFrame(loop);
         };
