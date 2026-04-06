@@ -235,7 +235,6 @@
       const EYEGAZE_ROW_STEP_MS = 10000;
       const EYEGAZE_ROW_TRANSITION_MS = 2000;
       const EYEGAZE_ROW_GAP_PX = 24;
-      const EYEGAZE_INTRO_SLIDE_MS = 1200;
 
       const stars = [];
       const bullets = [];
@@ -307,8 +306,9 @@
         const size = 48;
         if (inputMode === 'eyegaze') {
           const tileSize = getEyegazeTileSize();
-          const lanes = [0.2, 0.5, 0.8];
-          const lane = lanes[Math.floor(Math.random() * lanes.length)];
+          const availableLanes = getAvailableEyegazeLanes();
+          if (!availableLanes.length) return;
+          const lane = availableLanes[Math.floor(Math.random() * availableLanes.length)];
           const rowY = getEyegazeRowY(0);
           enemies.push({
             id: nextEnemyId++,
@@ -321,7 +321,9 @@
             hp: 1,
             eyegazeTile: true,
             resolved: false,
-            spawnAt: performance.now()
+            spawnAt: performance.now(),
+            lane,
+            introMs: getEyegazeIntroDurationMs(tileSize)
           });
           return;
         }
@@ -453,7 +455,8 @@
               enemies.splice(i, 1);
               continue;
             }
-            const introT = Math.max(0, Math.min(1, elapsed / EYEGAZE_INTRO_SLIDE_MS));
+            const introDuration = Math.max(300, e.introMs || 300);
+            const introT = Math.max(0, Math.min(1, elapsed / introDuration));
             const introStartY = -e.size;
             e.y = introStartY + (animatedY - introStartY) * introT;
           } else {
@@ -522,6 +525,23 @@
         const byWidth = canvas.width * 0.30;
         const byHeight = (canvas.height - EYEGAZE_ROW_GAP_PX * 2 - 32) / 3;
         return Math.max(110, Math.min(byWidth, byHeight));
+      }
+
+      function getEyegazeIntroDurationMs(tileSize) {
+        const rowDistance = Math.max(1, Math.abs(getEyegazeRowY(1) - getEyegazeRowY(0)));
+        const pxPerMs = rowDistance / EYEGAZE_ROW_TRANSITION_MS; // match row transition speed
+        const introDistance = getEyegazeRowY(0) + tileSize;
+        return Math.max(400, introDistance / Math.max(0.01, pxPerMs));
+      }
+
+      function getAvailableEyegazeLanes() {
+        const lanes = [0.2, 0.5, 0.8];
+        const occupied = new Set();
+        for (const enemy of enemies) {
+          if (!enemy.eyegazeTile) continue;
+          if (typeof enemy.lane === 'number') occupied.add(enemy.lane);
+        }
+        return lanes.filter((lane) => !occupied.has(lane));
       }
 
       function getEyegazeAnimatedY(elapsedMs) {
