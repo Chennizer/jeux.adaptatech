@@ -309,7 +309,7 @@
 
       function spawnEnemy() {
         const image = enemySprites[Math.floor(Math.random() * enemySprites.length)] || null;
-        const size = 48;
+        const size = inputMode === 'eyegaze' ? 48 : 48 * 3;
         if (inputMode === 'eyegaze') {
           const tileSize = getEyegazeTileSize();
           const availableLanes = getAvailableEyegazeLanes();
@@ -486,6 +486,19 @@
             }
           } else {
             e.y += e.speed * dt;
+            const shieldY = getDangerLineY();
+            if (e.y + e.size * 0.5 >= shieldY) {
+              spawnShieldImpactBurst(e.x, shieldY, e.size);
+              shieldFlashUntil = performance.now() + EYEGAZE_SHIELD_FLASH_MS;
+              enemies.splice(i, 1);
+              lives -= 1;
+              updateHud();
+              if (lives <= 0) {
+                endGame();
+                return;
+              }
+              continue;
+            }
           }
 
           if (e.y - e.size * 0.5 > canvas.height) {
@@ -507,6 +520,7 @@
             if ((dx * dx + dy * dy) <= ((e.size * 0.45) * (e.size * 0.45))) {
               bullets.splice(j, 1);
               if (e.eyegazeTile) {
+                spawnProjectileBurst(e.x, e.y, e.size);
                 enemies.splice(i, 1);
                 score += 10;
                 updateHud();
@@ -514,6 +528,7 @@
               }
               e.hp -= 1;
               if (e.hp <= 0) {
+                spawnProjectileBurst(e.x, e.y, e.size);
                 enemies.splice(i, 1);
                 score += e.type === 'tank' ? 20 : 10;
                 updateHud();
@@ -618,7 +633,6 @@
       }
 
       function drawEyegazeDangerLine() {
-        if (inputMode !== 'eyegaze') return;
         const y = getDangerLineY();
         ctx.save();
         const flashStrength = Math.max(0, Math.min(1, (shieldFlashUntil - performance.now()) / EYEGAZE_SHIELD_FLASH_MS));
@@ -641,11 +655,28 @@
         ctx.moveTo(12, y);
         ctx.lineTo(canvas.width - 12, y);
         ctx.stroke();
+
+        const layers = [
+          { off: 10, alpha: 0.28, width: 10 },
+          { off: 20, alpha: 0.18, width: 14 },
+          { off: 34, alpha: 0.10, width: 18 }
+        ];
+        for (const layer of layers) {
+          ctx.strokeStyle = `rgba(120, 190, 255, ${layer.alpha})`;
+          ctx.lineWidth = layer.width;
+          ctx.beginPath();
+          ctx.moveTo(20, y + layer.off);
+          ctx.lineTo(canvas.width - 20, y + layer.off);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
       function getDangerLineY() {
-        return getEyegazeRowY(getEyegazeRowCount() - 1) + getEyegazeTileSize() * 0.5 + 18;
+        if (inputMode === 'eyegaze') {
+          return getEyegazeRowY(getEyegazeRowCount() - 1) + getEyegazeTileSize() * 0.5 + 18;
+        }
+        return player.y - 34;
       }
 
       function getEyegazeColumnLanes() {
@@ -796,7 +827,8 @@
         for (const burst of fxBursts) {
           const alpha = Math.max(0, burst.life / burst.maxLife);
           for (const p of burst.particles) {
-            ctx.fillStyle = `rgba(255, 110, 70, ${0.65 * alpha})`;
+            const color = p.color || { r: 255, g: 110, b: 70 };
+            ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${0.65 * alpha})`;
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.r * alpha, 0, Math.PI * 2);
             ctx.fill();
@@ -815,7 +847,8 @@
             y,
             vx: Math.cos(a) * speed,
             vy: Math.sin(a) * speed * 0.75,
-            r: Math.max(2, size * 0.045 + Math.random() * 2)
+            r: Math.max(2, size * 0.045 + Math.random() * 2),
+            color: { r: 255, g: 110, b: 70 }
           });
         }
         fxBursts.push({
@@ -823,6 +856,42 @@
           maxLife: 0.7,
           particles
         });
+      }
+
+      function spawnProjectileBurst(x, y, size) {
+        const particles = [];
+        const count = 14;
+        for (let i = 0; i < count; i += 1) {
+          const a = (i / count) * Math.PI * 2;
+          const speed = 90 + Math.random() * 130;
+          particles.push({
+            x,
+            y,
+            vx: Math.cos(a) * speed,
+            vy: Math.sin(a) * speed,
+            r: Math.max(2, size * 0.03 + Math.random() * 1.8),
+            color: { r: 255, g: 230, b: 140 }
+          });
+        }
+        fxBursts.push({ life: 0.45, maxLife: 0.45, particles });
+      }
+
+      function spawnShieldImpactBurst(x, y, size) {
+        const particles = [];
+        const count = 18;
+        for (let i = 0; i < count; i += 1) {
+          const a = (i / count) * Math.PI * 2;
+          const speed = 70 + Math.random() * 120;
+          particles.push({
+            x,
+            y,
+            vx: Math.cos(a) * speed,
+            vy: Math.sin(a) * speed * 0.7,
+            r: Math.max(2, size * 0.028 + Math.random() * 2),
+            color: { r: 110, g: 190, b: 255 }
+          });
+        }
+        fxBursts.push({ life: 0.55, maxLife: 0.55, particles });
       }
 
       function updateEyegazeDwell() {
