@@ -232,11 +232,15 @@
       let gazeY = window.innerHeight * 0.5;
       let hoveredEnemyId = null;
       let hoverStartAt = 0;
+      let shieldFlashUntil = 0;
       const EYEGAZE_DWELL_MS = 1000;
       const EYEGAZE_ROW_STEP_MS = 10000;
       const EYEGAZE_ROW_TRANSITION_MS = 2000;
       const EYEGAZE_ROW_GAP_PX = 24;
       const EYEGAZE_DANGER_HOLD_MS = 4000;
+      const EYEGAZE_ATTACK_RISE_SPEED = 220;
+      const EYEGAZE_ATTACK_SHAKE_MS = 320;
+      const EYEGAZE_SHIELD_FLASH_MS = 450;
 
       const stars = [];
       const bullets = [];
@@ -450,17 +454,35 @@
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
           const e = enemies[i];
           if (e.eyegazeTile) {
-            const elapsed = performance.now() - (e.spawnAt || 0);
-            const animatedY = getEyegazeAnimatedY(elapsed);
-            if (animatedY === null) {
-              spawnEyegazeBottomBurst(e.x, getEyegazeRowY(getEyegazeRowCount() - 1), e.size);
-              enemies.splice(i, 1);
-              continue;
+            const now = performance.now();
+            if (e.attackState === 'ascending') {
+              const dangerY = getDangerLineY();
+              e.y -= EYEGAZE_ATTACK_RISE_SPEED * dt;
+              if ((e.y - e.size * 0.5) <= dangerY) {
+                e.attackState = 'shaking';
+                e.attackStartAt = now;
+                e.y = dangerY + e.size * 0.5;
+                shieldFlashUntil = now + EYEGAZE_SHIELD_FLASH_MS;
+              }
+            } else if (e.attackState === 'shaking') {
+              if (now - (e.attackStartAt || now) >= EYEGAZE_ATTACK_SHAKE_MS) {
+                spawnEyegazeBottomBurst(e.x, getDangerLineY(), e.size * 1.05);
+                enemies.splice(i, 1);
+                continue;
+              }
+            } else {
+              const elapsed = now - (e.spawnAt || 0);
+              const animatedY = getEyegazeAnimatedY(elapsed);
+              if (animatedY === null) {
+                e.attackState = 'ascending';
+                e.attackStartAt = now;
+                continue;
+              }
+              const introDuration = Math.max(300, e.introMs || 300);
+              const introT = Math.max(0, Math.min(1, elapsed / introDuration));
+              const introStartY = -e.size;
+              e.y = introStartY + (animatedY - introStartY) * introT;
             }
-            const introDuration = Math.max(300, e.introMs || 300);
-            const introT = Math.max(0, Math.min(1, elapsed / introDuration));
-            const introStartY = -e.size;
-            e.y = introStartY + (animatedY - introStartY) * introT;
           } else {
             e.y += e.speed * dt;
           }
@@ -478,6 +500,7 @@
 
           for (let j = bullets.length - 1; j >= 0; j -= 1) {
             const b = bullets[j];
+            if (e.attackState) continue;
             const dx = b.x - e.x;
             const dy = b.y - e.y;
             if ((dx * dx + dy * dy) <= ((e.size * 0.45) * (e.size * 0.45))) {
@@ -595,27 +618,33 @@
 
       function drawEyegazeDangerLine() {
         if (inputMode !== 'eyegaze') return;
-        const y = getEyegazeRowY(getEyegazeRowCount() - 1) + getEyegazeTileSize() * 0.5 + 18;
+        const y = getDangerLineY();
         ctx.save();
+        const flashStrength = Math.max(0, Math.min(1, (shieldFlashUntil - performance.now()) / EYEGAZE_SHIELD_FLASH_MS));
+        const redBoost = Math.round(120 * flashStrength);
         const gradient = ctx.createLinearGradient(0, y, canvas.width, y);
-        gradient.addColorStop(0, 'rgba(120, 190, 255, 0.05)');
-        gradient.addColorStop(0.5, 'rgba(120, 190, 255, 0.95)');
-        gradient.addColorStop(1, 'rgba(120, 190, 255, 0.05)');
+        gradient.addColorStop(0, `rgba(${120 + redBoost}, 190, 255, 0.05)`);
+        gradient.addColorStop(0.5, `rgba(${120 + redBoost}, ${190 - redBoost * 0.4}, ${255 - redBoost * 0.6}, 0.95)`);
+        gradient.addColorStop(1, `rgba(${120 + redBoost}, 190, 255, 0.05)`);
         ctx.strokeStyle = gradient;
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(12, y);
         ctx.lineTo(canvas.width - 12, y);
         ctx.stroke();
-        ctx.shadowColor = 'rgba(100, 180, 255, 0.9)';
-        ctx.shadowBlur = 18;
-        ctx.strokeStyle = 'rgba(135, 205, 255, 0.55)';
+        ctx.shadowColor = flashStrength > 0.01 ? 'rgba(255, 90, 90, 0.9)' : 'rgba(100, 180, 255, 0.9)';
+        ctx.shadowBlur = 18 + flashStrength * 8;
+        ctx.strokeStyle = flashStrength > 0.01 ? 'rgba(255, 130, 130, 0.7)' : 'rgba(135, 205, 255, 0.55)';
         ctx.lineWidth = 8;
         ctx.beginPath();
         ctx.moveTo(12, y);
         ctx.lineTo(canvas.width - 12, y);
         ctx.stroke();
         ctx.restore();
+      }
+
+      function getDangerLineY() {
+        return getEyegazeRowY(getEyegazeRowCount() - 1) - getEyegazeTileSize() * 0.52;
       }
 
       function getEyegazeColumnLanes() {
@@ -706,7 +735,11 @@
       function drawEnemies() {
         for (const e of enemies) {
           if (e.eyegazeTile) {
-            const x = e.x - e.size * 0.5;
+            const shakeOffset = e.attackState === 'shaking'
+              ? (Math.sin(performance.now() * 0.06) * 6)
+              : 0;
+            const renderX = e.x + shakeOffset;
+            const x = renderX - e.size * 0.5;
             const y = e.y - e.size * 0.5;
             const hovered = !e.resolved && hoveredEnemyId === e.id;
             ctx.fillStyle = 'rgba(255,255,255,0.14)';
@@ -816,7 +849,7 @@
       function findEyegazeTarget() {
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
           const e = enemies[i];
-          if (!e.eyegazeTile || e.resolved) continue;
+          if (!e.eyegazeTile || e.resolved || e.attackState) continue;
           const half = e.size * 0.5;
           if (gazeX >= e.x - half && gazeX <= e.x + half && gazeY >= e.y - half && gazeY <= e.y + half) {
             return e;
