@@ -235,6 +235,7 @@
       const EYEGAZE_ROW_STEP_MS = 10000;
       const EYEGAZE_ROW_TRANSITION_MS = 2000;
       const EYEGAZE_ROW_GAP_PX = 24;
+      const EYEGAZE_DANGER_HOLD_MS = 4000;
 
       const stars = [];
       const bullets = [];
@@ -516,14 +517,15 @@
 
       function getEyegazeRowY(rowIndex) {
         const size = getEyegazeTileSize();
-        const totalHeight = size * 3 + EYEGAZE_ROW_GAP_PX * 2;
-        const topY = Math.max(16, (canvas.height - totalHeight) * 0.5);
+        const fieldTop = canvas.height * 0.08;
+        const topY = fieldTop;
         return topY + size * 0.5 + rowIndex * (size + EYEGAZE_ROW_GAP_PX);
       }
 
       function getEyegazeTileSize() {
         const byWidth = canvas.width * 0.30;
-        const byHeight = (canvas.height - EYEGAZE_ROW_GAP_PX * 2 - 32) / 3;
+        const fieldHeight = canvas.height * 0.62;
+        const byHeight = (fieldHeight - EYEGAZE_ROW_GAP_PX * 2) / 3;
         return Math.max(110, Math.min(byWidth, byHeight));
       }
 
@@ -554,6 +556,8 @@
         const top = getEyegazeRowY(0);
         const middle = getEyegazeRowY(1);
         const bottom = getEyegazeRowY(2);
+        const bottomStartMs = EYEGAZE_ROW_STEP_MS * 2 + EYEGAZE_ROW_TRANSITION_MS;
+        const bottomEndMs = bottomStartMs + EYEGAZE_DANGER_HOLD_MS;
 
         if (elapsedMs < EYEGAZE_ROW_STEP_MS) return top; // hold top row
         if (elapsedMs < EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS) {
@@ -565,8 +569,21 @@
           const t = (elapsedMs - EYEGAZE_ROW_STEP_MS * 2) / EYEGAZE_ROW_TRANSITION_MS;
           return middle + (bottom - middle) * t; // smooth middle -> bottom
         }
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 3) return bottom; // hold bottom row
+        if (elapsedMs < bottomEndMs) return bottom; // danger hold at bottom row
         return null; // disappear
+      }
+
+      function drawEyegazeDangerLine() {
+        if (inputMode !== 'eyegaze') return;
+        const y = getEyegazeRowY(2) + getEyegazeTileSize() * 0.5 + 18;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 80, 80, 0.85)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(12, y);
+        ctx.lineTo(canvas.width - 12, y);
+        ctx.stroke();
+        ctx.restore();
       }
 
       function drawPlayer() {
@@ -839,6 +856,7 @@
         updateGame(dt);
 
         drawStars();
+        drawEyegazeDangerLine();
         drawEnemies();
         drawFxBursts();
         drawBullets();
