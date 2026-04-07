@@ -36,13 +36,28 @@
     .page {
       position: absolute;
       inset: 0;
-      display: none;
-    }
-
-    .page.active {
       display: flex;
       align-items: center;
       justify-content: center;
+      opacity: 0;
+      transform: translateX(0);
+      transition: opacity 600ms ease, transform 700ms ease;
+      pointer-events: none;
+    }
+
+    .page.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .page.entering {
+      opacity: 0;
+      transform: translateX(12%);
+    }
+
+    .page.exiting {
+      opacity: 0;
+      transform: translateX(-12%);
     }
 
     .story-page {
@@ -115,6 +130,12 @@
     .page.game-page {
       background: #000;
       padding: 0;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+
+    .page.game-page::after {
+      opacity: 0;
     }
 
     .game-frame {
@@ -180,23 +201,18 @@
       outline: none;
     }
 
-    .transition-overlay {
-      position: fixed;
+    .page::after {
+      content: "";
+      position: absolute;
       inset: 0;
-      background: #050505;
-      opacity: 0;
       pointer-events: none;
-      z-index: 30;
+      opacity: 0;
+      transition: opacity 600ms ease;
+      background: linear-gradient(90deg, rgba(0, 0, 0, 0.35), transparent 22%, transparent 78%, rgba(0, 0, 0, 0.35));
     }
 
-    .transition-overlay.active {
-      animation: sceneFade 900ms ease-in-out forwards;
-    }
-
-    @keyframes sceneFade {
-      0% { opacity: 0; }
-      40% { opacity: 0.85; }
-      100% { opacity: 0; }
+    .page.active::after {
+      opacity: 1;
     }
 
     :fullscreen .story-page {
@@ -262,28 +278,19 @@
 
   <button id="nextButton" class="next-button" type="button">Next</button>
   <button id="fullscreenButton" class="fullscreen-button" type="button">Fullscreen</button>
-  <div id="transitionOverlay" class="transition-overlay" aria-hidden="true"></div>
-
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const pages = Array.from(document.querySelectorAll('.page'));
       const nextButton = document.getElementById('nextButton');
       const fullscreenButton = document.getElementById('fullscreenButton');
-      const transitionOverlay = document.getElementById('transitionOverlay');
       const imageBasePath = '../../images/samuraikata/';
       const videoBasePath = '../../animations/samurai/';
       const fadeDurationMs = 4000;
+      const transitionDurationMs = 750;
       let currentIndex = 0;
 
       const storyTimers = new WeakMap();
       const gameSessions = new Map();
-
-      const triggerTransition = () => {
-        if (!transitionOverlay) return;
-        transitionOverlay.classList.remove('active');
-        void transitionOverlay.offsetHeight;
-        transitionOverlay.classList.add('active');
-      };
 
       const clearStoryTimers = (page) => {
         const timers = storyTimers.get(page);
@@ -531,7 +538,11 @@
         if (index === currentIndex) return;
 
         const previousPage = pages[currentIndex];
+        const nextPage = pages[index];
+        if (!nextPage) return;
+
         if (previousPage) {
+          previousPage.classList.add('exiting');
           previousPage.classList.remove('active');
           if (previousPage.dataset.type === 'story') {
             clearStoryTimers(previousPage);
@@ -539,20 +550,30 @@
           }
           if (previousPage.dataset.type === 'game') {
             stopGame(previousPage);
-            triggerTransition();
           }
+          previousPage.addEventListener(
+            'transitionend',
+            () => {
+              previousPage.classList.remove('exiting');
+            },
+            { once: true }
+          );
+          setTimeout(() => {
+            previousPage.classList.remove('exiting');
+          }, transitionDurationMs + 100);
         }
 
         currentIndex = index;
-        const page = pages[currentIndex];
-        if (!page) return;
-        page.classList.add('active');
+        nextPage.classList.add('active', 'entering');
+        requestAnimationFrame(() => {
+          nextPage.classList.remove('entering');
+        });
 
-        if (page.dataset.type === 'story') {
-          setupStoryPage(page);
+        if (nextPage.dataset.type === 'story') {
+          setupStoryPage(nextPage);
         }
-        if (page.dataset.type === 'game') {
-          loadGame(page.dataset.game, page);
+        if (nextPage.dataset.type === 'game') {
+          loadGame(nextPage.dataset.game, nextPage);
         }
       };
 
