@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="translate" data-fr="Arcade : Fruits de l'espace" data-en="Arcade: Space Fruits" data-ja="アーケード：宇宙フルーツ">Arcade : Fruits de l'espace</title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+  <style>
+    #langToggle {
+      position: fixed;
+      top: 14px;
+      right: 44px;
+      z-index: 11;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 2px solid #04c8bb;
+      background: #0b0f12;
+      color: #04c8bb;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 0 0 0 rgba(4, 200, 187, 0);
+      transition: box-shadow 0.2s ease, transform 0.05s ease, background 0.2s ease;
+      user-select: none;
+    }
+    #langToggle:hover { box-shadow: 0 0 0 3px rgba(4, 200, 187, 0.2); }
+
+    #startOptions{
+      display:flex; gap:12px; align-items:center; justify-content:center; margin:14px 0;
+      flex-wrap: wrap;
+    }
+
+    #segSwitch{
+      display:inline-flex; align-items:center;
+      border:2px solid #009688; border-radius:999px; overflow:hidden;
+      box-shadow:0 2px 6px rgba(0,0,0,.12);
+    }
+    #segSwitch .seg-btn{
+      padding:8px 14px; border:0; background:#fff; color:#009688;
+      font-weight:700; cursor:pointer; user-select:none;
+      font-size: 0.95rem;
+    }
+    #segSwitch .seg-btn[aria-selected="true"]{
+      background:#009688; color:#fff;
+    }
+    #promptOverlay #segSwitch{ border-color:#fff; }
+    #promptOverlay #segSwitch .seg-btn{ background:rgba(255,255,255,0.1); color:#fff; }
+    #promptOverlay #segSwitch .seg-btn[aria-selected="true"]{ background:#fff; color:#009688; }
+
+    #promptOverlay p {
+      max-width: min(900px, 90vw);
+      line-height: 1.5;
+    }
+
+    #startButton {
+      padding: 16px 32px;
+      border: none;
+      border-radius: 12px;
+      background: #009688;
+      color: #fff;
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+
+    #hud {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 8;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      border-radius: 10px;
+      padding: 8px 12px;
+      display: none;
+      font-size: 1.2rem;
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 12px;
+      padding: 10px 16px;
+      z-index: 8;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN / JA</button>
+
+  <div id="promptOverlay">
+    <p id="instructionText" class="translate translate-html"
+      data-fr="Un envahisseur-fruit apparaît toutes les 10 secondes.<br>Appuie sur ESPACE pour le détruire avant le prochain !"
+      data-en="A fruit invader appears every 10 seconds.<br>Press SPACE to destroy it before the next one!"
+      data-ja="10秒ごとにフルーツの侵略者が現れます。<br>次が来る前にスペースキーで撃ち落としましょう！">
+      Un envahisseur-fruit apparaît toutes les 10 secondes.<br>Appuie sur ESPACE pour le détruire avant le prochain !
+    </p>
+
+    <div id="startOptions">
+      <div id="segSwitch" role="tablist" aria-label="Control mode">
+        <button type="button" role="tab" id="segTwo" aria-selected="true" class="seg-btn">
+          <span class="translate" data-fr="2 switchs" data-en="2 switches" data-ja="2スイッチ">2 switchs</span>
+        </button>
+        <button type="button" role="tab" id="segOne" aria-selected="false" class="seg-btn">
+          <span class="translate" data-fr="1 switch" data-en="1 switch" data-ja="1スイッチ">1 switch</span>
+        </button>
+      </div>
+    </div>
+
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+  </div>
+
+  <div id="hud">
+    <span class="translate" data-fr="Score" data-en="Score" data-ja="スコア">Score</span> : <span id="scoreValue">0</span>
+  </div>
+  <div id="hint" class="translate" data-fr="Appuie sur ESPACE pour tirer" data-en="Press SPACE to shoot" data-ja="スペースキーで発射">Appuie sur ESPACE pour tirer</div>
+
+  <script src="../../js/translationmain.js"></script>
+  <script>
+    let lang = localStorage.getItem('language') || 'fr';
+    let started = false;
+    let oneSwitchMode = false;
+    let stars = [];
+    let invader = null;
+    let score = 0;
+    let lastSpawnMs = 0;
+    const spawnInterval = 10000;
+    let fruitImages = [];
+    let shotFlashMs = 0;
+    let currentSong = null;
+    const slowSongPaths = [
+      '../../songs/space/spacequest1.mp3',
+      '../../songs/space/spacequest2.mp3',
+      '../../songs/space/spacequest3.mp3'
+    ];
+    let slowSongs = [];
+
+    class Star {
+      constructor() { this.reset(); }
+      reset() {
+        this.x = random(-width / 2, width / 2);
+        this.y = random(-height / 2, height / 2);
+        this.z = random(width);
+      }
+      update() {
+        this.z -= 0.35;
+        if (this.z < 1) this.reset();
+      }
+      display() {
+        noStroke();
+        fill(255);
+        const sx = (this.x / this.z) * (width / 2);
+        const sy = (this.y / this.z) * (height / 2);
+        const r = map(this.z, 0, width, 4, 0);
+        ellipse(sx, sy, r, r);
+      }
+    }
+
+    function preload() {
+      const fruitPaths = [
+        '../../images/pictos/apple.png',
+        '../../images/pictos/strawberry.png',
+        '../../images/pictos/pineapple.png',
+        '../../images/pictos/watermelon.png',
+        '../../images/pictos/grapes.png',
+        '../../images/pictos/pear.png',
+        '../../images/pictos/kiwi.png',
+        '../../images/pictos/mango.png'
+      ];
+      fruitImages = fruitPaths.map((path) => loadImage(path));
+      slowSongs = slowSongPaths.map((path) => loadSound(path));
+    }
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight).position(0, 0);
+      for (let i = 0; i < 220; i++) stars.push(new Star());
+      applyLanguage(lang);
+    }
+
+    function draw() {
+      background(0, 20);
+      push();
+      translate(width / 2, height / 2);
+      for (const star of stars) {
+        star.update();
+        star.display();
+      }
+      pop();
+
+      if (!started) return;
+
+      fill(40, 180, 255);
+      noStroke();
+      triangle(width / 2, height - 120, width / 2 - 34, height - 50, width / 2 + 34, height - 50);
+
+      if (invader) {
+        invader.x += invader.vx;
+        if (invader.x < 80 || invader.x > width - 80) invader.vx *= -1;
+        imageMode(CENTER);
+        image(invader.img, invader.x, invader.y, 90, 90);
+      }
+
+      if (millis() - lastSpawnMs >= spawnInterval) {
+        spawnInvader();
+      }
+
+      if (millis() - shotFlashMs < 130) {
+        stroke(255, 255, 80);
+        strokeWeight(6);
+        line(width / 2, height - 85, width / 2, height - 220);
+      }
+    }
+
+    function spawnInvader() {
+      invader = {
+        x: random(120, width - 120),
+        y: random(90, Math.max(120, height * 0.35)),
+        vx: random([-2.6, -2, 2, 2.6]),
+        img: random(fruitImages)
+      };
+      lastSpawnMs = millis();
+    }
+
+    function shoot() {
+      if (!started) return;
+      shotFlashMs = millis();
+      if (!invader) return;
+      score += 1;
+      document.getElementById('scoreValue').textContent = String(score);
+      invader = null;
+    }
+
+    function keyPressed() {
+      if (keyCode === 32 || (!oneSwitchMode && keyCode === ENTER)) {
+        shoot();
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function applyLanguage(nextLang) {
+      lang = nextLang;
+      document.documentElement.lang = lang;
+      const nodes = document.querySelectorAll('.translate');
+      nodes.forEach((node) => {
+        const value = node.dataset[lang];
+        if (value == null) return;
+        if (node.classList.contains('translate-html')) {
+          node.innerHTML = value;
+        } else {
+          node.textContent = value;
+        }
+      });
+      localStorage.setItem('language', lang);
+    }
+
+    document.getElementById('langToggle').addEventListener('click', () => {
+      const next = lang === 'fr' ? 'en' : (lang === 'en' ? 'ja' : 'fr');
+      applyLanguage(next);
+    });
+
+    const segTwo = document.getElementById('segTwo');
+    const segOne = document.getElementById('segOne');
+    function selectSeg(which) {
+      const twoSelected = which === 'two';
+      segTwo.setAttribute('aria-selected', twoSelected ? 'true' : 'false');
+      segOne.setAttribute('aria-selected', twoSelected ? 'false' : 'true');
+      oneSwitchMode = !twoSelected;
+    }
+    segTwo.addEventListener('click', () => selectSeg('two'));
+    segOne.addEventListener('click', () => selectSeg('one'));
+
+    document.getElementById('startButton').addEventListener('click', async () => {
+      started = true;
+      score = 0;
+      document.getElementById('scoreValue').textContent = '0';
+      document.getElementById('promptOverlay').style.display = 'none';
+      document.getElementById('langToggle').style.display = 'none';
+      document.getElementById('hud').style.display = 'block';
+      document.getElementById('hint').style.display = 'block';
+      spawnInvader();
+      lastSpawnMs = millis();
+
+      if (!currentSong && slowSongs.length > 0) {
+        currentSong = random(slowSongs);
+        if (!currentSong.isPlaying()) {
+          await userStartAudio();
+          currentSong.loop();
+        }
+      }
+
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    });
+  </script>
+</body>
+</html>
