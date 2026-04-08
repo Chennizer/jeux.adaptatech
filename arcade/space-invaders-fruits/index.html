@@ -292,6 +292,7 @@
       const fxBursts = [];
       let nextEnemyId = 1;
       const STAR_COUNT = 220;
+      let sfxCtx = null;
 
       const player = {
         x: 0,
@@ -444,6 +445,7 @@
           r: 9,
           trail: []
         });
+        playSfx('launch');
         player.cooldown = usesAmmoMeter() ? 0.12 : 1.0;
       }
 
@@ -540,6 +542,7 @@
             const dangerY = getDangerLineY();
             if (e.y + e.size * 0.5 >= dangerY) {
               spawnShieldContactBurst(e.x, dangerY, e.size);
+              playSfx('shield');
               enemies.splice(i, 1);
               lives -= 1;
               updateHud();
@@ -570,10 +573,12 @@
             const dy = b.y - e.y;
             if ((dx * dx + dy * dy) <= ((e.size * 0.45) * (e.size * 0.45))) {
               bullets.splice(j, 1);
+              playSfx('hit');
               if (e.eyegazeTile) {
                 enemies.splice(i, 1);
                 score += 10;
                 spawnProjectileBurst(e.x, e.y, e.size);
+                playSfx('destroy');
                 updateHud();
                 break;
               }
@@ -582,6 +587,7 @@
                 enemies.splice(i, 1);
                 score += e.type === 'tank' ? 20 : 10;
                 spawnProjectileBurst(e.x, e.y, e.size);
+                playSfx('destroy');
                 updateHud();
               }
               break;
@@ -1074,7 +1080,88 @@
       }
 
       function updateCursorVisibility() {
-        document.body.style.cursor = (inputMode === 'eyegaze' && running) ? 'none' : '';
+        const eyegazeActive = inputMode === 'eyegaze' && (running || gameOverScreen?.style.display === 'flex');
+        document.body.style.cursor = eyegazeActive ? 'none' : '';
+      }
+
+      function getSfxContext() {
+        if (!window.AudioContext && !window.webkitAudioContext) return null;
+        if (!sfxCtx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          sfxCtx = new Ctx();
+        }
+        if (sfxCtx.state === 'suspended') sfxCtx.resume().catch(() => {});
+        return sfxCtx;
+      }
+
+      function playSfx(type) {
+        const ctx = getSfxContext();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g);
+        g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, now);
+
+        if (type === 'launch') {
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(520, now);
+          o.frequency.exponentialRampToValueAtTime(820, now + 0.08);
+          g.gain.exponentialRampToValueAtTime(0.05, now + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+          o.start(now);
+          o.stop(now + 0.14);
+          return;
+        }
+        if (type === 'hit') {
+          o.type = 'square';
+          o.frequency.setValueAtTime(360, now);
+          o.frequency.exponentialRampToValueAtTime(190, now + 0.07);
+          g.gain.exponentialRampToValueAtTime(0.035, now + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+          o.start(now);
+          o.stop(now + 0.11);
+          return;
+        }
+        if (type === 'destroy') {
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(240, now);
+          o.frequency.exponentialRampToValueAtTime(70, now + 0.26);
+          g.gain.exponentialRampToValueAtTime(0.06, now + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+          o.start(now);
+          o.stop(now + 0.32);
+          return;
+        }
+        if (type === 'shield') {
+          o.type = 'square';
+          o.frequency.setValueAtTime(140, now);
+          o.frequency.exponentialRampToValueAtTime(65, now + 0.32);
+          g.gain.exponentialRampToValueAtTime(0.075, now + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+          o.start(now);
+          o.stop(now + 0.38);
+          return;
+        }
+        if (type === 'retry') {
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(390, now);
+          o.frequency.exponentialRampToValueAtTime(540, now + 0.1);
+          g.gain.exponentialRampToValueAtTime(0.04, now + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+          o.start(now);
+          o.stop(now + 0.18);
+          return;
+        }
+        // start
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(260, now);
+        o.frequency.exponentialRampToValueAtTime(620, now + 0.18);
+        g.gain.exponentialRampToValueAtTime(0.045, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+        o.start(now);
+        o.stop(now + 0.26);
       }
 
       function getShotCost() {
@@ -1145,6 +1232,7 @@
         updateCursorVisibility();
 
         spawnEnemy();
+        playSfx('start');
         try { music.currentTime = 0; music.play(); } catch (_) {}
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen?.().catch(() => {});
@@ -1178,6 +1266,8 @@
           if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
         }
         gameOverScreen.style.display = 'flex';
+        updateCursorVisibility();
+        updateGazePointer(gazeX, gazeY);
       }
 
       function startEyegazeRetryMonitor() {
@@ -1193,6 +1283,7 @@
             const progress = Math.max(0, Math.min(1, (now - retryHoverStartAt) / EYEGAZE_DWELL_MS));
             if (retryEyegazeFill) retryEyegazeFill.style.transform = `scale(${progress})`;
             if (progress >= 1) {
+              playSfx('retry');
               startGame();
               return;
             }
@@ -1253,7 +1344,10 @@
         if (event.key === ' ' || event.code === 'Space') {
           event.preventDefault();
           if (running) shoot();
-          else if (inputMode !== 'eyegaze' && gameOverScreen?.style.display === 'flex') startGame();
+          else if (inputMode !== 'eyegaze' && gameOverScreen?.style.display === 'flex') {
+            playSfx('retry');
+            startGame();
+          }
         }
       });
 
@@ -1277,8 +1371,13 @@
         updateGazePointer(event.clientX, event.clientY);
       });
 
-      startButton.addEventListener('click', startGame);
-      restartButton.addEventListener('click', startGame);
+      startButton.addEventListener('click', () => {
+        startGame();
+      });
+      restartButton.addEventListener('click', () => {
+        playSfx('retry');
+        startGame();
+      });
 
       document.getElementById('language-toggle')?.addEventListener('pointerup', () => {
         toggleLanguage();
