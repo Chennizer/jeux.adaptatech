@@ -280,6 +280,7 @@
       let hoveredEnemyId = null;
       let hoverStartAt = 0;
       let shieldFlashUntil = 0;
+      let shieldFlashStartedAt = 0;
       let projectileFlashUntil = 0;
       let retryHoverStartAt = 0;
       let retryRafId = null;
@@ -290,7 +291,7 @@
       const EYEGAZE_DANGER_HOLD_MS = 4000;
       const EYEGAZE_ATTACK_RISE_SPEED = 220;
       const EYEGAZE_ATTACK_SHAKE_MS = 320;
-      const EYEGAZE_SHIELD_FLASH_MS = 450;
+      const EYEGAZE_SHIELD_FLASH_MS = 1350;
 
       const stars = [];
       const bullets = [];
@@ -515,7 +516,7 @@
                 e.attackState = 'shaking';
                 e.attackStartAt = now;
                 e.y = dangerY - e.size * 0.5;
-                shieldFlashUntil = now + EYEGAZE_SHIELD_FLASH_MS;
+                triggerShieldFlash(now);
                 lives -= 1;
                 updateHud();
                 if (lives <= 0) {
@@ -606,15 +607,16 @@
 
         for (let i = fxBursts.length - 1; i >= 0; i -= 1) {
           const burst = fxBursts[i];
-          burst.life -= dt;
+          const stepDt = dt * (typeof burst.timeScale === 'number' ? burst.timeScale : 1);
+          burst.life -= stepDt;
           if (burst.type === 'ring') {
             const expandSpeed = (burst.maxR - burst.r) * 7.5;
-            burst.r = Math.min(burst.maxR, burst.r + expandSpeed * dt);
+            burst.r = Math.min(burst.maxR, burst.r + expandSpeed * stepDt);
           } else if (burst.type === 'particles') {
             const drag = typeof burst.drag === 'number' ? burst.drag : 0.985;
             for (const p of burst.particles) {
-              p.x += p.vx * dt;
-              p.y += p.vy * dt;
+              p.x += p.vx * stepDt;
+              p.y += p.vy * stepDt;
               p.vx *= drag;
               p.vy *= drag;
             }
@@ -703,7 +705,10 @@
       function drawEyegazeDangerLine() {
         const y = getDangerLineY();
         ctx.save();
-        const flashStrength = Math.max(0, Math.min(1, (shieldFlashUntil - performance.now()) / EYEGAZE_SHIELD_FLASH_MS));
+        const now = performance.now();
+        const flashProgress = Math.max(0, Math.min(1, (now - shieldFlashStartedAt) / EYEGAZE_SHIELD_FLASH_MS));
+        const flashActive = now <= shieldFlashUntil ? 1 : 0;
+        const flashStrength = flashActive ? Math.sin(Math.PI * flashProgress) : 0;
         const redBoost = Math.round(120 * flashStrength);
         const gradient = ctx.createLinearGradient(0, y, canvas.width, y);
         gradient.addColorStop(0, `rgba(${120 + redBoost}, 190, 255, 0.05)`);
@@ -960,22 +965,21 @@
 
       function spawnProjectileBurst(x, y, size) {
         const particles = [];
-        const count = 28;
+        const count = 14;
         for (let i = 0; i < count; i += 1) {
           const a = (i / count) * Math.PI * 2;
-          const speed = 45 + Math.random() * 70;
+          const speed = 90 + Math.random() * 130;
           particles.push({
             x,
             y,
             vx: Math.cos(a) * speed,
             vy: Math.sin(a) * speed,
-            r: Math.max(2.2, size * 0.045 + Math.random() * 2.6)
+            r: Math.max(2, size * 0.03 + Math.random() * 2)
           });
         }
-        fxBursts.push({ life: 1.35, maxLife: 1.35, particles, drag: 0.994, type: 'particles', color: 'gold' });
-        fxBursts.push({ life: 0.84, maxLife: 0.84, type: 'ring', x, y, r: Math.max(10, size * 0.12), maxR: Math.max(62, size * 1.35) });
-        fxBursts.push({ life: 0.78, maxLife: 0.78, type: 'ring', x, y, r: Math.max(7, size * 0.08), maxR: Math.max(46, size * 1.05) });
-        fxBursts.push({ life: 0.3, maxLife: 0.3, type: 'flash', x, y, r: Math.max(36, size * 0.72) });
+        fxBursts.push({ life: 0.45, maxLife: 0.45, particles, type: 'particles', color: 'gold', timeScale: 0.33 });
+        fxBursts.push({ life: 0.28, maxLife: 0.28, type: 'ring', x, y, r: Math.max(10, size * 0.12), maxR: Math.max(44, size * 0.95), timeScale: 0.33 });
+        fxBursts.push({ life: 0.12, maxLife: 0.12, type: 'flash', x, y, r: Math.max(28, size * 0.55), timeScale: 0.33 });
         projectileFlashUntil = performance.now() + 70;
       }
 
@@ -993,8 +997,13 @@
             r: Math.max(2, size * 0.035 + Math.random() * 2)
           });
         }
-        shieldFlashUntil = performance.now() + EYEGAZE_SHIELD_FLASH_MS;
+        triggerShieldFlash();
         fxBursts.push({ life: 0.65, maxLife: 0.65, particles, type: 'particles', color: 'blue' });
+      }
+
+      function triggerShieldFlash(now = performance.now()) {
+        shieldFlashStartedAt = now;
+        shieldFlashUntil = now + EYEGAZE_SHIELD_FLASH_MS;
       }
 
       function drawImpactFlash() {
