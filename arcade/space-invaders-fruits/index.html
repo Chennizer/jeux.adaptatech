@@ -274,6 +274,7 @@
       let hoveredEnemyId = null;
       let hoverStartAt = 0;
       let shieldFlashUntil = 0;
+      let projectileFlashUntil = 0;
       let retryHoverStartAt = 0;
       let retryRafId = null;
       const EYEGAZE_DWELL_MS = 1000;
@@ -469,8 +470,8 @@
 
         for (let i = bullets.length - 1; i >= 0; i -= 1) {
           const b = bullets[i];
-          b.trail.unshift({ x: b.x, y: b.y, life: 0.35 });
-          if (b.trail.length > 10) b.trail.pop();
+          b.trail.unshift({ x: b.x, y: b.y, life: 0.45, r: b.r * (0.55 + Math.random() * 0.45) });
+          if (b.trail.length > 14) b.trail.pop();
           for (const p of b.trail) p.life -= dt;
           b.trail = b.trail.filter((p) => p.life > 0);
 
@@ -595,11 +596,16 @@
         for (let i = fxBursts.length - 1; i >= 0; i -= 1) {
           const burst = fxBursts[i];
           burst.life -= dt;
-          for (const p of burst.particles) {
-            p.x += p.vx * dt;
-            p.y += p.vy * dt;
-            p.vx *= 0.985;
-            p.vy *= 0.985;
+          if (burst.type === 'ring') {
+            const expandSpeed = (burst.maxR - burst.r) * 7.5;
+            burst.r = Math.min(burst.maxR, burst.r + expandSpeed * dt);
+          } else if (burst.type === 'particles') {
+            for (const p of burst.particles) {
+              p.x += p.vx * dt;
+              p.y += p.vy * dt;
+              p.vx *= 0.985;
+              p.vy *= 0.985;
+            }
           }
           if (burst.life <= 0) fxBursts.splice(i, 1);
         }
@@ -756,15 +762,19 @@
       }
 
       function drawBullets() {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
         for (const b of bullets) {
           for (const p of b.trail) {
-            const alpha = Math.max(0, p.life / 0.35) * 0.5;
-            ctx.fillStyle = `rgba(255, 170, 60, ${alpha})`;
+            const alpha = Math.max(0, p.life / 0.45);
+            ctx.fillStyle = `rgba(255, 150, 60, ${0.26 * alpha})`;
             ctx.beginPath();
-            ctx.arc(p.x, p.y, Math.max(1.5, b.r - 3), 0, Math.PI * 2);
+            ctx.arc(p.x, p.y, Math.max(1.4, p.r * (0.9 + alpha * 0.4)), 0, Math.PI * 2);
             ctx.fill();
           }
 
+          ctx.shadowColor = 'rgba(255, 198, 80, 0.85)';
+          ctx.shadowBlur = 16;
           ctx.fillStyle = '#ffd66b';
           ctx.save();
           ctx.translate(b.x, b.y);
@@ -783,6 +793,7 @@
           ctx.fill();
           ctx.restore();
         }
+        ctx.restore();
       }
 
       function findNearestEnemy(x, y) {
@@ -870,6 +881,32 @@
       function drawFxBursts() {
         for (const burst of fxBursts) {
           const alpha = Math.max(0, burst.life / burst.maxLife);
+          if (burst.type === 'ring') {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = `rgba(255, 235, 170, ${0.65 * alpha})`;
+            ctx.lineWidth = 3 + (1 - alpha) * 2;
+            ctx.beginPath();
+            ctx.arc(burst.x, burst.y, burst.r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            continue;
+          }
+
+          if (burst.type === 'flash') {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const grad = ctx.createRadialGradient(burst.x, burst.y, 0, burst.x, burst.y, burst.r);
+            grad.addColorStop(0, `rgba(255, 250, 230, ${0.52 * alpha})`);
+            grad.addColorStop(1, 'rgba(255, 250, 230, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(burst.x, burst.y, burst.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            continue;
+          }
+
           for (const p of burst.particles) {
             if (burst.color === 'blue') {
               ctx.fillStyle = `rgba(110, 190, 255, ${0.62 * alpha})`;
@@ -903,6 +940,7 @@
           life: 0.7,
           maxLife: 0.7,
           particles,
+          type: 'particles',
           color: 'orange'
         });
       }
@@ -921,7 +959,10 @@
             r: Math.max(2, size * 0.03 + Math.random() * 2)
           });
         }
-        fxBursts.push({ life: 0.45, maxLife: 0.45, particles, color: 'gold' });
+        fxBursts.push({ life: 0.45, maxLife: 0.45, particles, type: 'particles', color: 'gold' });
+        fxBursts.push({ life: 0.28, maxLife: 0.28, type: 'ring', x, y, r: Math.max(10, size * 0.12), maxR: Math.max(44, size * 0.95) });
+        fxBursts.push({ life: 0.12, maxLife: 0.12, type: 'flash', x, y, r: Math.max(28, size * 0.55) });
+        projectileFlashUntil = performance.now() + 70;
       }
 
       function spawnShieldContactBurst(x, y, size) {
@@ -939,7 +980,16 @@
           });
         }
         shieldFlashUntil = performance.now() + EYEGAZE_SHIELD_FLASH_MS;
-        fxBursts.push({ life: 0.65, maxLife: 0.65, particles, color: 'blue' });
+        fxBursts.push({ life: 0.65, maxLife: 0.65, particles, type: 'particles', color: 'blue' });
+      }
+
+      function drawImpactFlash() {
+        const strength = Math.max(0, Math.min(1, (projectileFlashUntil - performance.now()) / 70));
+        if (strength <= 0.01) return;
+        ctx.save();
+        ctx.fillStyle = `rgba(255, 250, 210, ${0.11 * strength})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
       }
 
       function updateEyegazeDwell() {
@@ -1055,6 +1105,7 @@
         drawEnemies();
         drawFxBursts();
         drawBullets();
+        drawImpactFlash();
         drawPlayer();
 
         rafId = requestAnimationFrame(tick);
