@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title class="translate" data-fr="Arcade : Fruits de l'espace" data-en="Arcade: Space Fruit Blaster" data-ja="アーケード：スペースフルーツブラスター">Arcade: Space Fruit Blaster</title>
+  <title class="translate" data-fr="Arcade : Space Adventure" data-en="Arcade: Space Adventure" data-ja="アーケード：スペースアドベンチャー">Arcade: Space Adventure</title>
   <link rel="stylesheet" href="../../css/control-panel.css">
   <link rel="stylesheet" href="../../css/games.css">
   <link rel="stylesheet" href="../../css/gaming.css">
@@ -148,13 +148,13 @@
         <div class="game-menu-main">
           <div id="options-title-bar">
             <h1 id="options-arcade-title">Arcade</h1>
-            <h2 id="options-main-title" class="translate" data-fr="Fruits de l'espace" data-en="Space Fruit Blaster" data-ja="スペースフルーツブラスター">Fruits de l'espace</h2>
+            <h2 id="options-main-title" class="translate" data-fr="Space Adventure" data-en="Space Adventure" data-ja="スペースアドベンチャー">Space Adventure</h2>
           </div>
 
           <p id="control-panel-instructions" class="control-panel-instructions translate"
-             data-fr="Des aliens-fruits apparaissent toutes les 10 secondes. Appuie sur espace pour tirer et les détruire !"
-             data-en="Fruit aliens appear every 10 seconds. Press space to shoot them down!"
-             data-ja="10秒ごとにフルーツエイリアンが現れます。スペースキーで撃ち落とそう！">
+             data-fr="Inspiré des classiques comme Space Invaders et Galaga, fraye-toi un chemin à travers une horde de vaisseaux ennemis."
+             data-en="Inspired by classics like Space Invaders and Galaga, fight your way through a horde of enemy ships."
+             data-ja="スペースインベーダーやギャラガのようなクラシック作品に着想を得て、敵艦の大群を突破しよう。">
           </p>
 
           <div id="mode-divider"></div>
@@ -220,7 +220,7 @@
     </div>
   </div>
 
-  <audio id="bg-music" src="../../songs/space/spacequest1.mp3" preload="auto" loop></audio>
+  <audio id="bg-music" preload="auto" loop></audio>
   <audio id="sfx-launch" src="../../sounds/spaceadventure/missile.mp3" preload="auto"></audio>
   <audio id="sfx-hit" src="../../sounds/spaceadventure/hit.mp3" preload="auto"></audio>
   <audio id="sfx-destroy" src="../../sounds/spaceadventure/shipdestroyed.mp3" preload="auto"></audio>
@@ -248,21 +248,29 @@
       const gameOverScore = document.getElementById('game-over-score');
       const ammoMeter = document.getElementById('ammo-meter');
       const ammoMeterFill = document.getElementById('ammo-meter-fill');
+      const ammoMeterTrack = document.querySelector('#ammo-meter .ammo-meter-track');
 
       const canvas = document.getElementById('game-canvas');
       const ctx = canvas.getContext('2d');
 
       const enemySprites = [];
-      const fruitPaths = [
-        '../../images/pictos/apple.png',
-        '../../images/pictos/orange.png',
-        '../../images/pictos/banana.png',
-        '../../images/pictos/strawberry.png',
-        '../../images/pictos/kiwi.png',
-        '../../images/pictos/grapes.png',
-        '../../images/pictos/lemon.png',
-        '../../images/pictos/pineapple.png'
+      const enemyImagePaths = [
+        '../../images/spaceadventure/enemy1.png',
+        '../../images/spaceadventure/enemy2.png',
+        '../../images/spaceadventure/enemy3.png',
+        '../../images/spaceadventure/enemy4.png',
+        '../../images/spaceadventure/enemy5.png',
+        '../../images/spaceadventure/enemy6.png'
       ];
+      const playerSprite = new Image();
+      playerSprite.src = '../../images/spaceadventure/blueship.png';
+      const tankEnemySprite = new Image();
+      tankEnemySprite.src = '../../images/spaceadventure/enemy2.png';
+      const musicPlaylist = [
+        '../../songs/space/spacequest1.mp3',
+        '../../songs/space/spacequestfast2.mp3'
+      ];
+      const BG_MUSIC_VOLUME = 0.5;
 
       let inputMode = 'switch';
       let difficulty = 'normal';
@@ -284,6 +292,7 @@
       let projectileFlashUntil = 0;
       let retryHoverStartAt = 0;
       let retryRafId = null;
+      let musicStartTimeoutId = null;
       const EYEGAZE_DWELL_MS = 1000;
       const EYEGAZE_ROW_STEP_MS = 10000;
       const EYEGAZE_ROW_TRANSITION_MS = 2000;
@@ -299,6 +308,10 @@
       const fxBursts = [];
       let nextEnemyId = 1;
       const STAR_COUNT = 220;
+      const SWITCH_ENEMY_VW = 0.15;
+      const PLAYER_SHIP_VW = 0.22;
+      const SHIELD_CONTACT_OFFSET_RATIO = 0.12;
+      const SHIELD_CONTACT_OFFSET_RATIO_TANK = 0.16;
 
       const player = {
         x: 0,
@@ -313,6 +326,7 @@
         canvas.height = window.innerHeight;
         player.y = canvas.height - 90;
         if (player.x === 0) player.x = canvas.width * 0.5;
+        updateAmmoMeterLayout();
       }
 
       function makeStars() {
@@ -351,7 +365,7 @@
       }
 
       function loadSprites() {
-        fruitPaths.forEach((path) => {
+        enemyImagePaths.forEach((path) => {
           const img = new Image();
           img.src = path;
           enemySprites.push(img);
@@ -389,20 +403,26 @@
           || (difficulty === 'competitive' && Math.random() < 0.5);
         const baseSpeed = 58;
         const speedMultiplier = difficulty === 'competitive' ? 1.5 : difficulty === 'hard' ? 1.25 : 1;
-        const switchSize = size * 3;
+        const switchSize = Math.max(120, canvas.width * SWITCH_ENEMY_VW);
+        const enemySize = isTank ? switchSize * 1.5 : switchSize;
         const leftSafeZone = canvas.width * 0.1; // keep left 1/10 clear for UI (ammo column)
-        const minX = Math.max(leftSafeZone + switchSize * 0.5, 30 + switchSize * 0.5);
-        const maxX = Math.max(minX, canvas.width - Math.max(60, switchSize * 0.5 + 20));
+        const minX = Math.max(leftSafeZone + enemySize * 0.5, 30 + enemySize * 0.5);
+        const maxX = Math.max(minX, canvas.width - Math.max(60, enemySize * 0.5 + 20));
         enemies.push({
           id: nextEnemyId++,
           x: minX + Math.random() * Math.max(0, maxX - minX),
           y: 70,
-          size: switchSize,
+          size: enemySize,
           speed: baseSpeed * speedMultiplier,
-          image,
+          image: isTank ? tankEnemySprite : image,
           type: isTank ? 'tank' : 'normal',
           hp: isTank ? 2 : 1
         });
+      }
+
+      function getEnemyShieldContactOffset(enemy) {
+        if (enemy.type === 'tank') return enemy.size * SHIELD_CONTACT_OFFSET_RATIO_TANK;
+        return enemy.size * SHIELD_CONTACT_OFFSET_RATIO;
       }
 
       function getSpawnDelayMs() {
@@ -517,12 +537,7 @@
                 e.attackStartAt = now;
                 e.y = dangerY - e.size * 0.5;
                 triggerShieldFlash(now);
-                lives -= 1;
-                updateHud();
-                if (lives <= 0) {
-                  endGame();
-                  return;
-                }
+                if (loseLife()) return;
               }
             } else if (e.attackState === 'shaking') {
               if (now - (e.attackStartAt || now) >= EYEGAZE_ATTACK_SHAKE_MS) {
@@ -546,28 +561,19 @@
           } else {
             e.y += e.speed * dt;
             const dangerY = getDangerLineY();
-            if (e.y + e.size * 0.5 >= dangerY) {
+            const enemyShieldBottom = e.y + getEnemyShieldContactOffset(e);
+            if (enemyShieldBottom >= dangerY) {
               spawnShieldContactBurst(e.x, dangerY, e.size);
               playSfx('shield');
               enemies.splice(i, 1);
-              lives -= 1;
-              updateHud();
-              if (lives <= 0) {
-                endGame();
-                return;
-              }
+              if (loseLife()) return;
               continue;
             }
           }
 
           if (inputMode === 'eyegaze' && e.y - e.size * 0.5 > canvas.height) {
             enemies.splice(i, 1);
-            lives -= 1;
-            updateHud();
-            if (lives <= 0) {
-              endGame();
-              return;
-            }
+            if (loseLife()) return;
             continue;
           }
 
@@ -589,6 +595,10 @@
                 break;
               }
               e.hp -= 1;
+              if (e.type === 'tank' && e.hp === 1) {
+                e.speed *= 0.5;
+                spawnTankDamageSmoke(e.x, e.y, e.size);
+              }
               if (e.hp <= 0) {
                 enemies.splice(i, 1);
                 score += e.type === 'tank' ? 20 : 10;
@@ -706,16 +716,18 @@
         const y = getDangerLineY();
         ctx.save();
         const now = performance.now();
+        const pulse = 0.5 + Math.sin(now * 0.0042) * 0.5;
+        const pulseStrength = 0.12 + pulse * 0.2;
         const flashProgress = Math.max(0, Math.min(1, (now - shieldFlashStartedAt) / EYEGAZE_SHIELD_FLASH_MS));
         const flashActive = now <= shieldFlashUntil ? 1 : 0;
         const flashStrength = flashActive ? Math.sin(Math.PI * flashProgress) : 0;
         const redBoost = Math.round(120 * flashStrength);
         const gradient = ctx.createLinearGradient(0, y, canvas.width, y);
         gradient.addColorStop(0, `rgba(${120 + redBoost}, 190, 255, 0.05)`);
-        gradient.addColorStop(0.5, `rgba(${120 + redBoost}, ${190 - redBoost * 0.4}, ${255 - redBoost * 0.6}, 0.95)`);
+        gradient.addColorStop(0.5, `rgba(${120 + redBoost}, ${190 - redBoost * 0.4}, ${255 - redBoost * 0.6}, ${0.6 + pulseStrength * 0.8})`);
         gradient.addColorStop(1, `rgba(${120 + redBoost}, 190, 255, 0.05)`);
         ctx.strokeStyle = gradient;
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 3.5 + pulse * 1.2;
         ctx.beginPath();
         ctx.moveTo(12, y);
         ctx.lineTo(canvas.width - 12, y);
@@ -731,10 +743,10 @@
         ctx.fillStyle = shieldGrad;
         ctx.fillRect(layerLeft, y, layerWidth, shieldDepth);
 
-        ctx.shadowColor = flashStrength > 0.01 ? 'rgba(255, 90, 90, 0.9)' : 'rgba(100, 180, 255, 0.9)';
-        ctx.shadowBlur = 18 + flashStrength * 8;
-        ctx.strokeStyle = flashStrength > 0.01 ? 'rgba(255, 130, 130, 0.7)' : 'rgba(135, 205, 255, 0.55)';
-        ctx.lineWidth = 8;
+        ctx.shadowColor = flashStrength > 0.01 ? 'rgba(255, 90, 90, 0.9)' : `rgba(100, 180, 255, ${0.62 + pulse * 0.3})`;
+        ctx.shadowBlur = 16 + pulse * 10 + flashStrength * 8;
+        ctx.strokeStyle = flashStrength > 0.01 ? 'rgba(255, 130, 130, 0.7)' : `rgba(135, 205, 255, ${0.42 + pulse * 0.24})`;
+        ctx.lineWidth = 7 + pulse * 2;
         ctx.beginPath();
         ctx.moveTo(12, y);
         ctx.lineTo(canvas.width - 12, y);
@@ -754,28 +766,46 @@
         return difficulty === 'normal' ? 2 : 3;
       }
 
+      function getPlayerRenderSize() {
+        if (playerSprite.complete && playerSprite.naturalWidth > 0) {
+          const aspectRatio = playerSprite.naturalHeight / playerSprite.naturalWidth || 0.8;
+          const baseShipWidth = Math.max(140, canvas.width * PLAYER_SHIP_VW);
+          const smallScreenScale = Math.max(0.9, Math.min(1, canvas.height / 1080));
+          const drawWidth = baseShipWidth * smallScreenScale;
+          const drawHeight = drawWidth * aspectRatio;
+          return { drawWidth, drawHeight };
+        }
+        return { drawWidth: 44, drawHeight: 44 };
+      }
+
       function drawPlayer() {
         const x = player.x;
         const y = player.y;
 
+        if (playerSprite.complete && playerSprite.naturalWidth > 0) {
+          const { drawWidth, drawHeight } = getPlayerRenderSize();
+          ctx.drawImage(playerSprite, x - drawWidth * 0.5, y - drawHeight * 0.55, drawWidth, drawHeight);
+          return;
+        }
+
         ctx.save();
         ctx.translate(x, y);
-
-        ctx.fillStyle = '#21e0ff';
+        ctx.fillStyle = '#2f8bff';
         ctx.beginPath();
         ctx.moveTo(0, -26);
         ctx.lineTo(-22, 18);
         ctx.lineTo(22, 18);
         ctx.closePath();
         ctx.fill();
-
-        ctx.fillStyle = '#005d8e';
-        ctx.fillRect(-34, 18, 68, 10);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-8, -3, 16, 8);
-
         ctx.restore();
+      }
+
+      function pickBackgroundTrack() {
+        const selectedTrack = musicPlaylist[Math.floor(Math.random() * musicPlaylist.length)] || musicPlaylist[0];
+        music.volume = BG_MUSIC_VOLUME;
+        if (music.src.endsWith(selectedTrack)) return;
+        music.src = selectedTrack;
+        music.load();
       }
 
       function drawBullets() {
@@ -880,13 +910,6 @@
 
           if (e.image && e.image.complete) {
             ctx.drawImage(e.image, e.x - e.size * 0.5, e.y - e.size * 0.5, e.size, e.size);
-            if (e.type === 'tank') {
-              ctx.strokeStyle = 'rgba(255, 110, 110, 0.95)';
-              ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.arc(e.x, e.y, e.size * 0.38, 0, Math.PI * 2);
-              ctx.stroke();
-            }
           } else {
             ctx.fillStyle = '#ff3b6b';
             ctx.beginPath();
@@ -930,6 +953,8 @@
               ctx.fillStyle = `rgba(110, 190, 255, ${0.62 * alpha})`;
             } else if (burst.color === 'gold') {
               ctx.fillStyle = `rgba(255, 210, 90, ${0.72 * alpha})`;
+            } else if (burst.color === 'smoke') {
+              ctx.fillStyle = `rgba(165, 175, 188, ${0.45 * alpha})`;
             } else {
               ctx.fillStyle = `rgba(255, 110, 70, ${0.65 * alpha})`;
             }
@@ -999,6 +1024,23 @@
         }
         triggerShieldFlash();
         fxBursts.push({ life: 0.65, maxLife: 0.65, particles, type: 'particles', color: 'blue' });
+      }
+
+      function spawnTankDamageSmoke(x, y, size) {
+        const particles = [];
+        const count = 24;
+        for (let i = 0; i < count; i += 1) {
+          const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * 0.8;
+          const speed = 40 + Math.random() * 70;
+          particles.push({
+            x: x + (Math.random() - 0.5) * size * 0.25,
+            y: y + (Math.random() - 0.5) * size * 0.2,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - Math.random() * 15,
+            r: 4 + Math.random() * 7
+          });
+        }
+        fxBursts.push({ life: 0.75, maxLife: 0.75, particles, type: 'particles', color: 'smoke', drag: 0.965 });
       }
 
       function triggerShieldFlash(now = performance.now()) {
@@ -1074,7 +1116,8 @@
 
       function updateHud() {
         scoreNode.textContent = `Score: ${score}`;
-        livesNode.textContent = `Lives: ${lives}`;
+        livesNode.style.display = hasLimitedLives() ? '' : 'none';
+        if (hasLimitedLives()) livesNode.textContent = `Lives: ${lives}`;
       }
 
       function getCurrentLanguage() {
@@ -1086,7 +1129,23 @@
         const scoreLabel = lang === 'fr' ? 'Score' : lang === 'ja' ? 'スコア' : 'Score';
         const livesLabel = lang === 'fr' ? 'Vies' : lang === 'ja' ? 'ライフ' : 'Lives';
         scoreNode.textContent = `${scoreLabel}: ${score}`;
-        livesNode.textContent = `${livesLabel}: ${lives}`;
+        livesNode.style.display = hasLimitedLives() ? '' : 'none';
+        if (hasLimitedLives()) livesNode.textContent = `${livesLabel}: ${lives}`;
+      }
+
+      function hasLimitedLives() {
+        return difficulty !== 'normal';
+      }
+
+      function loseLife() {
+        if (!hasLimitedLives()) return false;
+        lives -= 1;
+        updateHud();
+        if (lives <= 0) {
+          endGame();
+          return true;
+        }
+        return false;
       }
 
       function usesAmmoMeter() {
@@ -1124,12 +1183,31 @@
 
       function updateAmmoMeter() {
         if (!ammoMeter || !ammoMeterFill) return;
+        updateAmmoMeterLayout();
         ammoMeter.style.display = usesAmmoMeter() ? 'block' : 'none';
         const percent = Math.round(ammoEnergy * 100);
         const hue = Math.round(ammoEnergy * 120); // 0 red -> 120 green
         ammoMeterFill.style.height = `${percent}%`;
         ammoMeterFill.style.background = `hsl(${hue} 88% 52%)`;
         ammoMeterFill.style.boxShadow = `0 0 16px hsla(${hue} 95% 60% / 0.65)`;
+      }
+
+      function updateAmmoMeterLayout() {
+        if (!ammoMeter || !ammoMeterTrack) return;
+        if (inputMode === 'switch' && usesAmmoMeter()) {
+          const shieldY = getDangerLineY();
+          ammoMeter.style.left = '20px';
+          ammoMeter.style.top = `${Math.min(canvas.height - 210, shieldY + 18)}px`;
+          ammoMeter.style.transform = 'none';
+          ammoMeterTrack.style.width = '56px';
+          ammoMeterTrack.style.height = '180px';
+          return;
+        }
+        ammoMeter.style.left = '20px';
+        ammoMeter.style.top = '50%';
+        ammoMeter.style.transform = 'translateY(-50%)';
+        ammoMeterTrack.style.width = '72px';
+        ammoMeterTrack.style.height = '260px';
       }
 
       function tick(ts) {
@@ -1166,7 +1244,7 @@
         if (restartButton) restartButton.style.display = 'none';
 
         score = 0;
-        lives = difficulty === 'competitive' ? 2 : difficulty === 'hard' ? 5 : 4;
+        lives = difficulty === 'competitive' ? 2 : difficulty === 'hard' ? 5 : 0;
         bullets.length = 0;
         enemies.length = 0;
         enemySpawnTimer = 0;
@@ -1183,7 +1261,14 @@
 
         spawnEnemy();
         playSfx('start');
-        try { music.currentTime = 0; music.play(); } catch (_) {}
+        pickBackgroundTrack();
+        music.pause();
+        music.currentTime = 0;
+        if (musicStartTimeoutId) clearTimeout(musicStartTimeoutId);
+        musicStartTimeoutId = setTimeout(() => {
+          if (!running) return;
+          try { music.currentTime = 0; music.play(); } catch (_) {}
+        }, 3000);
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen?.().catch(() => {});
         }
@@ -1196,6 +1281,10 @@
       function endGame() {
         running = false;
         cancelAnimationFrame(rafId);
+        if (musicStartTimeoutId) {
+          clearTimeout(musicStartTimeoutId);
+          musicStartTimeoutId = null;
+        }
         music.pause();
         updateCursorVisibility();
         if (gazePointer) gazePointer.style.opacity = '0';
