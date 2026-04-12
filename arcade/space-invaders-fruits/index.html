@@ -647,8 +647,10 @@
       const STAR_COUNT = 220;
       const SWITCH_ENEMY_VW = 0.15;
       const PLAYER_SHIP_VW = 0.22;
-      const SHIELD_CONTACT_OFFSET_RATIO = 0.12;
-      const SHIELD_CONTACT_OFFSET_RATIO_TANK = 0.16;
+      const SHIELD_CONTACT_BASE_RATIO = 0.5;
+      const SHIELD_CONTACT_EXTRA_RATIO = 0.33;
+      const fractureCanvas = document.createElement('canvas');
+      const fractureCtx = fractureCanvas.getContext('2d');
 
       const player = {
         x: 0,
@@ -1073,12 +1075,12 @@ function findEnemyById(id) {
         let image = enemySprites[Math.floor(Math.random() * enemySprites.length)] || null;
 
         if (inputMode !== 'eyegaze') {
-          if (roll < (difficulty === 'competitive' ? 0.28 : difficulty === 'hard' ? 0.18 : 0.08)) {
+          if (roll < (difficulty === 'competitive' ? 0.14 : difficulty === 'hard' ? 0.18 : 0.08)) {
             type = 'laser';
             image = heavyEnemySprite;
           } else if (
             (difficulty === 'hard' && Math.random() < 0.35) ||
-            (difficulty === 'competitive' && Math.random() < 0.5)
+            (difficulty === 'competitive' && Math.random() < 0.22)
           ) {
             type = 'tank';
             image = heavyEnemySprite;
@@ -1135,14 +1137,19 @@ function findEnemyById(id) {
           hp: maxHp,
           maxHp,
           damageFlashUntil: 0,
-          smokeLevel: 0
+          smokeLevel: 0,
+          fractureLines: []
         });
       }
 
       function getEnemyShieldContactOffset(enemy) {
-        if (enemy.type === 'tank') return enemy.size * SHIELD_CONTACT_OFFSET_RATIO_TANK;
-        if (enemy.type === 'laser') return enemy.size * 0.145;
-        return enemy.size * SHIELD_CONTACT_OFFSET_RATIO;
+        const extraRatio = enemy.type === 'tank'
+          ? SHIELD_CONTACT_EXTRA_RATIO
+          : enemy.type === 'laser'
+            ? SHIELD_CONTACT_EXTRA_RATIO * 0.95
+            : SHIELD_CONTACT_EXTRA_RATIO * 0.9;
+
+        return enemy.size * (SHIELD_CONTACT_BASE_RATIO + extraRatio);
       }
 
       function getSpawnDelayMs() {
@@ -1204,8 +1211,8 @@ function findEnemyById(id) {
         if (enemy.hp > 0) {
           const slowRatio =
             enemy.type === 'laser'
-              ? (enemy.hp === 2 ? 0.82 : 0.62)
-              : 0.58;
+              ? (enemy.hp === 2 ? 0.68 : 0.42)
+              : 0.45;
 
           if (typeof enemy.baseSpeed === 'number') {
             enemy.speed = enemy.baseSpeed * slowRatio;
@@ -1213,7 +1220,7 @@ function findEnemyById(id) {
             enemy.speed *= slowRatio;
           }
 
-          spawnTankDamageSmoke(enemy.x, enemy.y, enemy.size * (0.9 + damageTaken * 0.18));
+          ensureEnemyFractures(enemy, damageTaken);
         }
       }
 
@@ -1402,6 +1409,7 @@ function findEnemyById(id) {
             for (const p of burst.particles) {
               p.x += p.vx * stepDt;
               p.y += p.vy * stepDt;
+
               p.vx *= drag;
               p.vy *= drag;
             }
@@ -1689,45 +1697,92 @@ function findEnemyById(id) {
         ctx.restore();
       }
 
+      function ensureEnemyFractures(enemy, damageLevel) {
+        if (!enemy || enemy.eyegazeTile) return;
+
+        if (!Array.isArray(enemy.fractureLines)) enemy.fractureLines = [];
+        const targetCount = Math.min(18, 4 + damageLevel * 5 + (enemy.type === 'laser' ? 2 : 0));
+
+        while (enemy.fractureLines.length < targetCount) {
+          const points = [];
+          const segments = 2 + Math.floor(Math.random() * 3);
+          const startX = (Math.random() - 0.5) * 0.56;
+          const startY = -0.28 + Math.random() * 0.5;
+          points.push({ x: startX, y: startY });
+
+          let px = startX;
+          let py = startY;
+          for (let i = 0; i < segments; i += 1) {
+            px += (Math.random() - 0.5) * 0.22;
+            py += 0.07 + Math.random() * 0.11;
+            points.push({
+              x: Math.max(-0.34, Math.min(0.34, px)),
+              y: Math.max(-0.34, Math.min(0.34, py))
+            });
+          }
+
+          enemy.fractureLines.push({
+            points,
+            thickness: 1.4 + Math.random() * 1.8,
+            pulseOffset: Math.random() * Math.PI * 2
+          });
+        }
+      }
+
       function drawEnemyDamageState(e) {
         if (e.eyegazeTile) return;
 
         const damageLevel = e.smokeLevel || ((e.maxHp || 1) - e.hp);
-        if (damageLevel <= 0) return;
+        if (damageLevel <= 0 || !e.image || !e.image.complete) return;
 
-        const x = e.x;
-        const y = e.y;
-        const size = e.size;
-        const flashActive = performance.now() < (e.damageFlashUntil || 0);
+        ensureEnemyFractures(e, damageLevel);
+        if (!e.fractureLines || !e.fractureLines.length) return;
 
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-over';
-
-        const plumeCount = Math.min(4, damageLevel + 1);
-        for (let i = 0; i < plumeCount; i += 1) {
-          const offsetX = (-0.16 + i * 0.1) * size;
-          const offsetY = (-0.22 - i * 0.04) * size;
-          const r = size * (0.08 + i * 0.02 + damageLevel * 0.015);
-
-          const grad = ctx.createRadialGradient(
-            x + offsetX,
-            y + offsetY,
-            0,
-            x + offsetX,
-            y + offsetY,
-            r
-          );
-          grad.addColorStop(0, `rgba(220,225,230,${flashActive ? 0.42 : 0.28})`);
-          grad.addColorStop(0.55, `rgba(130,140,150,${flashActive ? 0.3 : 0.22})`);
-          grad.addColorStop(1, 'rgba(80,85,95,0)');
-
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(x + offsetX, y + offsetY, r, 0, Math.PI * 2);
-          ctx.fill();
+        const sizePx = Math.max(2, Math.round(e.size));
+        if (fractureCanvas.width !== sizePx || fractureCanvas.height !== sizePx) {
+          fractureCanvas.width = sizePx;
+          fractureCanvas.height = sizePx;
         }
 
-        ctx.restore();
+        fractureCtx.clearRect(0, 0, sizePx, sizePx);
+
+        const pulseTime = performance.now() * 0.012;
+        const flashBoost = performance.now() < (e.damageFlashUntil || 0) ? 0.34 : 0;
+
+        fractureCtx.save();
+        fractureCtx.globalCompositeOperation = 'lighter';
+        fractureCtx.lineCap = 'round';
+        fractureCtx.lineJoin = 'round';
+
+        for (const crack of e.fractureLines) {
+          const pulse = 0.52 + 0.48 * Math.sin(pulseTime + crack.pulseOffset);
+          const alpha = Math.min(0.95, 0.24 + damageLevel * 0.08 + pulse * 0.24 + flashBoost);
+          const width = crack.thickness * (0.75 + pulse * 0.55);
+
+          fractureCtx.strokeStyle = `rgba(255, 36, 52, ${alpha})`;
+          fractureCtx.shadowColor = `rgba(255, 20, 40, ${Math.min(1, alpha + 0.16)})`;
+          fractureCtx.shadowBlur = 9 + pulse * 8;
+          fractureCtx.lineWidth = width;
+          fractureCtx.beginPath();
+
+          crack.points.forEach((pt, index) => {
+            const px = sizePx * 0.5 + pt.x * sizePx;
+            const py = sizePx * 0.5 + pt.y * sizePx;
+            if (index === 0) fractureCtx.moveTo(px, py);
+            else fractureCtx.lineTo(px, py);
+          });
+
+          fractureCtx.stroke();
+        }
+
+        fractureCtx.restore();
+
+        fractureCtx.save();
+        fractureCtx.globalCompositeOperation = 'destination-in';
+        fractureCtx.drawImage(e.image, 0, 0, sizePx, sizePx);
+        fractureCtx.restore();
+
+        ctx.drawImage(fractureCanvas, e.x - sizePx * 0.5, e.y - sizePx * 0.5, sizePx, sizePx);
       }
 
       function drawEnemies() {
@@ -1859,10 +1914,6 @@ function findEnemyById(id) {
               colorA = '255,190,70';
               colorB = '255,245,210';
               baseAlpha = 0.78;
-            } else if (burst.color === 'smoke') {
-              colorA = '165,175,188';
-              colorB = null;
-              baseAlpha = 0.38;
             } else if (burst.color === 'orange') {
               colorA = '255,120,70';
               colorB = '255,220,120';
@@ -1874,7 +1925,7 @@ function findEnemyById(id) {
             }
 
             ctx.save();
-            ctx.globalCompositeOperation = burst.color === 'smoke' ? 'source-over' : 'lighter';
+            ctx.globalCompositeOperation = 'lighter';
 
             const radius = Math.max(0.5, p.r * alpha);
             const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
@@ -2174,23 +2225,6 @@ function findEnemyById(id) {
           innerColor: '230,248,255',
           midColor: '120,200,255'
         });
-      }
-
-      function spawnTankDamageSmoke(x, y, size) {
-        const particles = [];
-        const count = 24;
-        for (let i = 0; i < count; i += 1) {
-          const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * 0.8;
-          const speed = 40 + Math.random() * 70;
-          particles.push({
-            x: x + (Math.random() - 0.5) * size * 0.25,
-            y: y + (Math.random() - 0.5) * size * 0.2,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed - Math.random() * 15,
-            r: 4 + Math.random() * 7
-          });
-        }
-        fxBursts.push({ life: 0.75, maxLife: 0.75, particles, type: 'particles', color: 'smoke', drag: 0.965 });
       }
 
       function triggerShieldFlash(now = performance.now()) {
