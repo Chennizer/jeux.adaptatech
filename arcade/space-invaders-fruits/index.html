@@ -144,6 +144,45 @@
       z-index: 2;
     }
 
+    .eyegaze-choice-tiles {
+      margin: 12px auto 0;
+      width: min(88vw, 760px);
+      display: none;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .eyegaze-choice-tile {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border: 4px solid rgba(255,255,255,0.75);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .eyegaze-choice-tile img {
+      width: 82%;
+      height: 82%;
+      object-fit: contain;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1;
+    }
+
+    .eyegaze-choice-fill {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 52, 52, 0.42);
+      transform: scale(0);
+      transform-origin: center;
+      pointer-events: none;
+      z-index: 2;
+    }
+
     .ship-select-panel {
       width: 100%;
       height: 100%;
@@ -502,7 +541,41 @@
         <div id="retry-eyegaze-fill"></div>
         <img src="../../images/spaceadventure/blueship.png" alt="Retry ship">
       </div>
+      <div id="eyegaze-choice-tiles" class="eyegaze-choice-tiles" aria-hidden="true">
+        <div id="retry-eyegaze-choice-tile" class="eyegaze-choice-tile">
+          <div id="retry-eyegaze-choice-fill" class="eyegaze-choice-fill"></div>
+          <img src="../../images/spaceadventure/blueship.png" alt="Retry ship">
+        </div>
+        <div id="score-eyegaze-choice-tile" class="eyegaze-choice-tile">
+          <div id="score-eyegaze-choice-fill" class="eyegaze-choice-fill"></div>
+          <img src="../../images/spaceadventure/redship.png" alt="Register score">
+        </div>
+      </div>
+      <button id="register-score-button" class="button translate" data-fr="Enregistrer ton score" data-en="Register your score" data-ja="スコアを登録">Register your score</button>
       <button id="continue-button" class="button translate" data-fr="Recommencer" data-en="Restart" data-ja="もう一度">Recommencer</button>
+    </div>
+  </div>
+  <div id="score-screen" class="hidden">
+    <div class="results-panel stop-action-results-panel">
+      <h2 class="translate" data-fr="Partie terminée" data-en="Game complete" data-ja="ゲーム終了">Partie terminée</h2>
+      <div class="stop-action-results-layout">
+        <section class="stop-action-results-column stop-action-results-column-score" aria-label="Score summary">
+          <p id="score-screen-score" class="stop-action-results-metric"></p>
+          <div id="score-register-panel" class="score-register-panel hidden" aria-live="polite">
+            <p id="score-register-question" class="stop-action-results-metric"></p>
+            <div class="score-register-form">
+              <label id="score-player-name-label" for="score-player-name" class="score-player-name-label"></label>
+              <input id="score-player-name" class="score-player-name-input" type="text" maxlength="20" autocomplete="name" />
+              <button id="score-submit" type="button" class="button"></button>
+            </div>
+            <p id="score-register-status" class="score-register-status" role="status"></p>
+          </div>
+        </section>
+        <section id="leaderboard-panel" class="stop-action-results-column leaderboard-panel hidden" aria-live="polite" aria-label="Leaderboard">
+          <h3 id="leaderboard-title" class="leaderboard-title"></h3>
+          <ol id="leaderboard-list" class="leaderboard-list"></ol>
+        </section>
+      </div>
     </div>
   </div>
 
@@ -524,9 +597,26 @@
       const hud = document.getElementById('hud');
       const gameOverScreen = document.getElementById('game-over');
       const restartButton = document.getElementById('continue-button');
+      const registerScoreButton = document.getElementById('register-score-button');
       const retryHint = document.getElementById('retry-hint');
       const retryEyegazeTile = document.getElementById('retry-eyegaze-tile');
       const retryEyegazeFill = document.getElementById('retry-eyegaze-fill');
+      const eyegazeChoiceTiles = document.getElementById('eyegaze-choice-tiles');
+      const retryEyegazeChoiceTile = document.getElementById('retry-eyegaze-choice-tile');
+      const retryEyegazeChoiceFill = document.getElementById('retry-eyegaze-choice-fill');
+      const scoreEyegazeChoiceTile = document.getElementById('score-eyegaze-choice-tile');
+      const scoreEyegazeChoiceFill = document.getElementById('score-eyegaze-choice-fill');
+      const scoreScreen = document.getElementById('score-screen');
+      const scoreScreenScore = document.getElementById('score-screen-score');
+      const scoreRegisterPanel = document.getElementById('score-register-panel');
+      const scoreRegisterQuestion = document.getElementById('score-register-question');
+      const scorePlayerNameLabel = document.getElementById('score-player-name-label');
+      const scorePlayerNameInput = document.getElementById('score-player-name');
+      const scoreSubmitButton = document.getElementById('score-submit');
+      const scoreRegisterStatus = document.getElementById('score-register-status');
+      const leaderboardPanel = document.getElementById('leaderboard-panel');
+      const leaderboardTitle = document.getElementById('leaderboard-title');
+      const leaderboardList = document.getElementById('leaderboard-list');
       const music = document.getElementById('bg-music');
       const menuMusic = document.getElementById('menu-music');
       const languageToggleButton = document.getElementById('language-toggle');
@@ -644,12 +734,19 @@
       let shieldFlashStartedAt = 0;
       let projectileFlashUntil = 0;
       let retryHoverStartAt = 0;
+      let retryChoiceHoverStartAt = 0;
+      let scoreChoiceHoverStartAt = 0;
       let retryRafId = null;
       let musicStartTimeoutId = null;
       let gameOverPending = false;
       let gameOverPendingAt = 0;
       let screenShakeUntil = 0;
       let screenShakeStrength = 0;
+      let switchIsDown = false;
+      let switchReadyForNextShot = true;
+      let scoreSubmissionState = 'idle';
+      const scoreApiBase = 'https://score-api-2.gui98789.workers.dev';
+      const scoreTopLimit = 5;
 
       const EYEGAZE_DWELL_MS = 1000;
       const EYEGAZE_ROW_STEP_MS = 10000;
@@ -2427,6 +2524,202 @@ function findEnemyById(id) {
         return (difficulty === 'hard' || difficulty === 'competitive') && inputMode !== 'eyegaze';
       }
 
+      function getScoreGameId() {
+        return inputMode === 'eyegaze' ? 'space-adventure-eyegaze' : 'space-adventure-switch';
+      }
+
+      function getSelectedModeForScoreboard() {
+        return ['normal', 'hard', 'competitive'].includes(difficulty) ? difficulty : 'normal';
+      }
+
+      function getScorePanelCopy() {
+        const lang = getCurrentLanguage();
+        const copy = {
+          fr: {
+            registerQuestion: 'Enregistre ton score dans le classement.',
+            nameLabel: 'Votre nom',
+            submit: 'Enregistrer',
+            sending: 'Enregistrement du score...',
+            submitSuccess: 'Score enregistré.',
+            submitError: 'Impossible d\'enregistrer le score pour le moment.',
+            emptyName: 'Veuillez entrer un nom.',
+            leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
+            emptyLeaderboard: 'Aucun score pour le moment.',
+            loadingLeaderboard: 'Chargement du classement...',
+            leaderboardError: 'Impossible de charger le classement.',
+            anonymous: 'Anonyme',
+            modes: { normal: 'Normal', hard: 'Difficile', competitive: 'Maître' }
+          },
+          en: {
+            registerQuestion: 'Save your score to the leaderboard.',
+            nameLabel: 'Your name',
+            submit: 'Submit score',
+            sending: 'Submitting score...',
+            submitSuccess: 'Score submitted.',
+            submitError: 'Unable to submit score right now.',
+            emptyName: 'Please enter a name.',
+            leaderboardTitle: (mode) => `Top ${scoreTopLimit} (${mode})`,
+            emptyLeaderboard: 'No scores yet.',
+            loadingLeaderboard: 'Loading leaderboard...',
+            leaderboardError: 'Unable to load leaderboard.',
+            anonymous: 'Anonymous',
+            modes: { normal: 'Normal', hard: 'Hard', competitive: 'Master' }
+          },
+          ja: {
+            registerQuestion: 'スコアをランキングに登録します。',
+            nameLabel: '名前',
+            submit: 'スコア登録',
+            sending: 'スコアを送信中...',
+            submitSuccess: 'スコアを登録しました。',
+            submitError: '現在スコアを登録できません。',
+            emptyName: '名前を入力してください。',
+            leaderboardTitle: (mode) => `トップ${scoreTopLimit}（${mode}）`,
+            emptyLeaderboard: 'まだスコアがありません。',
+            loadingLeaderboard: 'ランキングを読み込み中...',
+            leaderboardError: 'ランキングを読み込めません。',
+            anonymous: '匿名',
+            modes: { normal: 'ノーマル', hard: 'ハード', competitive: 'マスター' }
+          }
+        };
+        return copy[lang] || copy.en;
+      }
+
+      function getModeLabelForLeaderboard(mode, copy) {
+        return copy?.modes?.[mode] || mode;
+      }
+
+      function getLeaderboardMedal(index) {
+        return index === 0 ? '🥇 ' : index === 1 ? '🥈 ' : index === 2 ? '🥉 ' : '';
+      }
+
+      function setScoreStatusMessage(message, isError) {
+        if (!scoreRegisterStatus) return;
+        scoreRegisterStatus.textContent = message || '';
+        scoreRegisterStatus.classList.toggle('is-error', Boolean(isError));
+      }
+
+      function setScoreButtonsDisabled(disabled) {
+        if (scoreSubmitButton) scoreSubmitButton.disabled = Boolean(disabled);
+      }
+
+      function setScoreInputsDisabled(disabled) {
+        if (scorePlayerNameInput) scorePlayerNameInput.disabled = Boolean(disabled);
+      }
+
+      async function submitScore(game, playerName, scoreValue, mode) {
+        const response = await fetch(scoreApiBase + '/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game, playerName, score: scoreValue, mode })
+        });
+        if (!response.ok) throw new Error('submit_failed');
+        return response.json();
+      }
+
+      async function getLeaderboard(game, mode, limit) {
+        const params = new URLSearchParams({ game, mode, limit: String(limit) });
+        const response = await fetch(scoreApiBase + '/leaderboard?' + params.toString());
+        if (!response.ok) throw new Error('leaderboard_failed');
+        return response.json();
+      }
+
+      async function renderLeaderboard() {
+        if (!leaderboardPanel || !leaderboardList || !leaderboardTitle) return;
+        const copy = getScorePanelCopy();
+        const mode = getSelectedModeForScoreboard();
+        leaderboardTitle.textContent = copy.leaderboardTitle(getModeLabelForLeaderboard(mode, copy));
+        leaderboardPanel.classList.remove('hidden');
+        leaderboardList.innerHTML = '';
+        const loadingItem = document.createElement('li');
+        loadingItem.textContent = copy.loadingLeaderboard;
+        leaderboardList.appendChild(loadingItem);
+
+        try {
+          const data = await getLeaderboard(getScoreGameId(), mode, scoreTopLimit);
+          const rows = Array.isArray(data?.rows) ? data.rows : [];
+          leaderboardList.innerHTML = '';
+          if (!rows.length) {
+            const empty = document.createElement('li');
+            empty.textContent = copy.emptyLeaderboard;
+            leaderboardList.appendChild(empty);
+            return;
+          }
+          rows.slice(0, scoreTopLimit).forEach((row, index) => {
+            const item = document.createElement('li');
+            const name = typeof row?.player_name === 'string' && row.player_name.trim()
+              ? row.player_name.trim()
+              : copy.anonymous;
+            const value = Number.isFinite(Number(row?.score)) ? Number(row.score) : 0;
+            item.textContent = getLeaderboardMedal(index) + name + ' — ' + value;
+            leaderboardList.appendChild(item);
+          });
+        } catch (_) {
+          leaderboardList.innerHTML = '';
+          const err = document.createElement('li');
+          err.textContent = copy.leaderboardError;
+          leaderboardList.appendChild(err);
+        }
+      }
+
+      function updateScorePanelCopy() {
+        const copy = getScorePanelCopy();
+        if (scoreRegisterQuestion) scoreRegisterQuestion.textContent = copy.registerQuestion;
+        if (scorePlayerNameLabel) scorePlayerNameLabel.textContent = copy.nameLabel;
+        if (scoreSubmitButton) scoreSubmitButton.textContent = copy.submit;
+      }
+
+      function resetScorePanel() {
+        scoreSubmissionState = 'idle';
+        scoreRegisterPanel?.classList.remove('hidden');
+        leaderboardPanel?.classList.add('hidden');
+        if (leaderboardList) leaderboardList.innerHTML = '';
+        if (scorePlayerNameInput) scorePlayerNameInput.value = '';
+        setScoreStatusMessage('', false);
+        setScoreInputsDisabled(false);
+        setScoreButtonsDisabled(false);
+        updateScorePanelCopy();
+      }
+
+      async function handleScoreSubmission() {
+        if (scoreSubmissionState === 'sending' || scoreSubmissionState === 'submitted') return;
+        const copy = getScorePanelCopy();
+        const playerName = (scorePlayerNameInput?.value || '').trim();
+        if (!playerName) {
+          setScoreStatusMessage(copy.emptyName, true);
+          scorePlayerNameInput?.focus();
+          return;
+        }
+
+        scoreSubmissionState = 'sending';
+        setScoreButtonsDisabled(true);
+        setScoreStatusMessage(copy.sending, false);
+
+        try {
+          await submitScore(getScoreGameId(), playerName.slice(0, 20), score, getSelectedModeForScoreboard());
+          scoreSubmissionState = 'submitted';
+          setScoreStatusMessage(copy.submitSuccess, false);
+          setScoreInputsDisabled(true);
+          await renderLeaderboard();
+          setTimeout(() => {
+            scoreScreen.style.display = 'none';
+            startGame();
+          }, 700);
+        } catch (_) {
+          scoreSubmissionState = 'idle';
+          setScoreStatusMessage(copy.submitError, true);
+          setScoreButtonsDisabled(false);
+        }
+      }
+
+      function showScoreScreen() {
+        gameOverScreen.style.display = 'none';
+        const lang = getCurrentLanguage();
+        const finalScoreLabel = lang === 'fr' ? 'Score final' : lang === 'ja' ? '最終スコア' : 'Final score';
+        if (scoreScreenScore) scoreScreenScore.textContent = `${finalScoreLabel}: ${score}`;
+        resetScorePanel();
+        scoreScreen.style.display = 'flex';
+      }
+
       function updateCursorVisibility() {
         const eyegazeActive = inputMode === 'eyegaze' && (running || gameOverScreen?.style.display === 'flex');
         document.body.style.cursor = eyegazeActive ? 'none' : '';
@@ -2524,14 +2817,23 @@ function findEnemyById(id) {
         gameContainer.style.display = 'block';
         hud.style.display = 'block';
         gameOverScreen.style.display = 'none';
+        if (scoreScreen) scoreScreen.style.display = 'none';
         if (languageToggleButton) languageToggleButton.style.display = 'none';
         if (retryRafId) cancelAnimationFrame(retryRafId);
         retryRafId = null;
         retryHoverStartAt = 0;
+        retryChoiceHoverStartAt = 0;
+        scoreChoiceHoverStartAt = 0;
         if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
+        if (retryEyegazeChoiceFill) retryEyegazeChoiceFill.style.transform = 'scale(0)';
+        if (scoreEyegazeChoiceFill) scoreEyegazeChoiceFill.style.transform = 'scale(0)';
         if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
+        if (eyegazeChoiceTiles) eyegazeChoiceTiles.style.display = 'none';
         if (retryHint) retryHint.textContent = '';
         if (restartButton) restartButton.style.display = 'none';
+        if (registerScoreButton) registerScoreButton.style.display = 'none';
+        switchReadyForNextShot = true;
+        switchIsDown = false;
 
         score = 0;
         lives = getStartingShields();
@@ -2595,15 +2897,22 @@ function findEnemyById(id) {
         retryRafId = null;
         retryHoverStartAt = 0;
         if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
+        if (retryEyegazeChoiceFill) retryEyegazeChoiceFill.style.transform = 'scale(0)';
+        if (scoreEyegazeChoiceFill) scoreEyegazeChoiceFill.style.transform = 'scale(0)';
         if (restartButton) restartButton.style.display = 'none';
+        if (registerScoreButton) registerScoreButton.style.display = 'none';
 
         if (inputMode === 'eyegaze') {
-          if (retryHint) retryHint.textContent = lang === 'fr' ? 'Réessayer ?' : lang === 'ja' ? 'もう一度？' : 'Try again?';
-          if (retryEyegazeTile) retryEyegazeTile.style.display = 'block';
+          if (retryHint) retryHint.textContent = lang === 'fr' ? 'Choisis une option' : lang === 'ja' ? 'オプションを選んでください' : 'Choose an option';
+          if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
+          if (eyegazeChoiceTiles) eyegazeChoiceTiles.style.display = 'grid';
           startEyegazeRetryMonitor();
         } else {
           if (retryHint) retryHint.textContent = lang === 'fr' ? 'Appuie sur ton switch pour recommencer' : lang === 'ja' ? 'スイッチで再開' : 'Press your switch to retry';
           if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
+          if (eyegazeChoiceTiles) eyegazeChoiceTiles.style.display = 'none';
+          if (restartButton) restartButton.style.display = '';
+          if (registerScoreButton) registerScoreButton.style.display = '';
         }
 
         gameOverScreen.style.display = 'flex';
@@ -2615,22 +2924,31 @@ function findEnemyById(id) {
         if (inputMode !== 'eyegaze') return;
         const loop = () => {
           if (running || !gameOverScreen || gameOverScreen.style.display !== 'flex') return;
-          const rect = retryEyegazeTile?.getBoundingClientRect();
-          if (!rect) return;
-          const inside = gazeX >= rect.left && gazeX <= rect.right && gazeY >= rect.top && gazeY <= rect.bottom;
+          const retryRect = retryEyegazeChoiceTile?.getBoundingClientRect();
+          const scoreRect = scoreEyegazeChoiceTile?.getBoundingClientRect();
+          if (!retryRect || !scoreRect) return;
+          const insideRetry = gazeX >= retryRect.left && gazeX <= retryRect.right && gazeY >= retryRect.top && gazeY <= retryRect.bottom;
+          const insideScore = gazeX >= scoreRect.left && gazeX <= scoreRect.right && gazeY >= scoreRect.top && gazeY <= scoreRect.bottom;
           const now = performance.now();
-          if (inside) {
-            if (!retryHoverStartAt) retryHoverStartAt = now;
-            const progress = Math.max(0, Math.min(1, (now - retryHoverStartAt) / EYEGAZE_DWELL_MS));
-            if (retryEyegazeFill) retryEyegazeFill.style.transform = `scale(${progress})`;
-            if (progress >= 1) {
-              playSfx('retry');
-              startGame();
-              return;
-            }
+
+          if (insideRetry) {
+            if (!retryChoiceHoverStartAt) retryChoiceHoverStartAt = now;
+            const progress = Math.max(0, Math.min(1, (now - retryChoiceHoverStartAt) / EYEGAZE_DWELL_MS));
+            if (retryEyegazeChoiceFill) retryEyegazeChoiceFill.style.transform = `scale(${progress})`;
+            if (progress >= 1) { playSfx('retry'); startGame(); return; }
           } else {
-            retryHoverStartAt = 0;
-            if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
+            retryChoiceHoverStartAt = 0;
+            if (retryEyegazeChoiceFill) retryEyegazeChoiceFill.style.transform = 'scale(0)';
+          }
+
+          if (insideScore) {
+            if (!scoreChoiceHoverStartAt) scoreChoiceHoverStartAt = now;
+            const progress = Math.max(0, Math.min(1, (now - scoreChoiceHoverStartAt) / EYEGAZE_DWELL_MS));
+            if (scoreEyegazeChoiceFill) scoreEyegazeChoiceFill.style.transform = `scale(${progress})`;
+            if (progress >= 1) { showScoreScreen(); return; }
+          } else {
+            scoreChoiceHoverStartAt = 0;
+            if (scoreEyegazeChoiceFill) scoreEyegazeChoiceFill.style.transform = 'scale(0)';
           }
           retryRafId = requestAnimationFrame(loop);
         };
@@ -2688,11 +3006,25 @@ function findEnemyById(id) {
 
         if (event.key === ' ' || event.code === 'Space') {
           event.preventDefault();
-          if (running && !gameOverPending) shoot();
-          else if (!running && inputMode !== 'eyegaze' && gameOverScreen?.style.display === 'flex') {
+          if (switchIsDown) return;
+          switchIsDown = true;
+
+          if (running && !gameOverPending) {
+            if (switchReadyForNextShot) {
+              switchReadyForNextShot = false;
+              shoot();
+            }
+          } else if (!running && inputMode !== 'eyegaze' && gameOverScreen?.style.display === 'flex') {
             playSfx('retry');
             startGame();
           }
+        }
+      });
+
+      document.addEventListener('keyup', (event) => {
+        if (event.key === ' ' || event.code === 'Space') {
+          switchIsDown = false;
+          switchReadyForNextShot = true;
         }
       });
 
@@ -2729,12 +3061,23 @@ function findEnemyById(id) {
         playSfx('retry');
         startGame();
       });
+      registerScoreButton?.addEventListener('click', () => {
+        showScoreScreen();
+      });
+      scoreSubmitButton?.addEventListener('click', handleScoreSubmission);
+      scorePlayerNameInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          handleScoreSubmission();
+        }
+      });
 
       document.getElementById('language-toggle')?.addEventListener('pointerup', () => {
         toggleLanguage();
         updateHudLanguage();
         applyDifficulty(difficulty);
         updateShipPanelLanguage();
+        updateScorePanelCopy();
       });
 
       Array.from(document.querySelectorAll('.input-mode-btn')).forEach((button) => {
