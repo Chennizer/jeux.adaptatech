@@ -589,8 +589,8 @@
         }
       };
 
-      const tankEnemySprite = new Image();
-      tankEnemySprite.src = '../../images/spaceadventure/enemy2.png';
+      const heavyEnemySprite = new Image();
+      heavyEnemySprite.src = '../../images/spaceadventure/enemy1.png';
 
       const musicPlaylist = [
         '../../songs/space/spacequest1.mp3',
@@ -1075,13 +1075,13 @@ function findEnemyById(id) {
         if (inputMode !== 'eyegaze') {
           if (roll < (difficulty === 'competitive' ? 0.28 : difficulty === 'hard' ? 0.18 : 0.08)) {
             type = 'laser';
-            image = enemySprites[4] || image;
+            image = heavyEnemySprite;
           } else if (
             (difficulty === 'hard' && Math.random() < 0.35) ||
             (difficulty === 'competitive' && Math.random() < 0.5)
           ) {
             type = 'tank';
-            image = tankEnemySprite;
+            image = heavyEnemySprite;
           }
         }
 
@@ -1115,7 +1115,9 @@ function findEnemyById(id) {
         const baseSpeed = 58;
         const speedMultiplier = difficulty === 'competitive' ? 1.5 : difficulty === 'hard' ? 1.25 : 1;
         const switchSize = Math.max(120, canvas.width * SWITCH_ENEMY_VW);
-        const enemySize = type === 'tank' ? switchSize * 1.5 : type === 'laser' ? switchSize * 1.2 : switchSize;
+        const isHeavyEnemy = type === 'tank' || type === 'laser';
+        const enemySize = isHeavyEnemy ? switchSize * 1.5 : switchSize;
+        const actualSpeed = baseSpeed * speedMultiplier * (type === 'laser' ? 1.04 : 1);
         const leftSafeZone = canvas.width * 0.1;
         const minX = Math.max(leftSafeZone + enemySize * 0.5, 30 + enemySize * 0.5);
         const maxX = Math.max(minX, canvas.width - Math.max(60, enemySize * 0.5 + 20));
@@ -1126,12 +1128,14 @@ function findEnemyById(id) {
           x: minX + Math.random() * Math.max(0, maxX - minX),
           y: 70,
           size: enemySize,
-          speed: baseSpeed * speedMultiplier * (type === 'laser' ? 1.04 : 1),
+          speed: actualSpeed,
+          baseSpeed: actualSpeed,
           image,
           type,
           hp: maxHp,
           maxHp,
-          damageFlashUntil: 0
+          damageFlashUntil: 0,
+          smokeLevel: 0
         });
       }
 
@@ -1194,13 +1198,22 @@ function findEnemyById(id) {
         enemy.hp -= 1;
         enemy.damageFlashUntil = performance.now() + 140;
 
-        if (enemy.type === 'tank' && enemy.hp === 1) {
-          enemy.speed *= 0.55;
-          spawnTankDamageSmoke(enemy.x, enemy.y, enemy.size);
-        }
+        const damageTaken = Math.max(0, (enemy.maxHp || 1) - enemy.hp);
+        enemy.smokeLevel = damageTaken;
 
-        if (enemy.type === 'laser' && enemy.hp > 0) {
-          spawnLaserDamageBurst(enemy.x, enemy.y, enemy.size, enemy.maxHp - enemy.hp);
+        if (enemy.hp > 0) {
+          const slowRatio =
+            enemy.type === 'laser'
+              ? (enemy.hp === 2 ? 0.82 : 0.62)
+              : 0.58;
+
+          if (typeof enemy.baseSpeed === 'number') {
+            enemy.speed = enemy.baseSpeed * slowRatio;
+          } else {
+            enemy.speed *= slowRatio;
+          }
+
+          spawnTankDamageSmoke(enemy.x, enemy.y, enemy.size * (0.9 + damageTaken * 0.18));
         }
       }
 
@@ -1679,7 +1692,7 @@ function findEnemyById(id) {
       function drawEnemyDamageState(e) {
         if (e.eyegazeTile) return;
 
-        const damageLevel = (e.maxHp || 1) - e.hp;
+        const damageLevel = e.smokeLevel || ((e.maxHp || 1) - e.hp);
         if (damageLevel <= 0) return;
 
         const x = e.x;
@@ -1688,41 +1701,29 @@ function findEnemyById(id) {
         const flashActive = performance.now() < (e.damageFlashUntil || 0);
 
         ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalCompositeOperation = 'source-over';
 
-        if (e.type === 'tank') {
-          ctx.strokeStyle = flashActive ? 'rgba(255,220,180,0.95)' : 'rgba(255,180,120,0.68)';
-          ctx.lineWidth = 5;
+        const plumeCount = Math.min(4, damageLevel + 1);
+        for (let i = 0; i < plumeCount; i += 1) {
+          const offsetX = (-0.16 + i * 0.1) * size;
+          const offsetY = (-0.22 - i * 0.04) * size;
+          const r = size * (0.08 + i * 0.02 + damageLevel * 0.015);
+
+          const grad = ctx.createRadialGradient(
+            x + offsetX,
+            y + offsetY,
+            0,
+            x + offsetX,
+            y + offsetY,
+            r
+          );
+          grad.addColorStop(0, `rgba(220,225,230,${flashActive ? 0.42 : 0.28})`);
+          grad.addColorStop(0.55, `rgba(130,140,150,${flashActive ? 0.3 : 0.22})`);
+          grad.addColorStop(1, 'rgba(80,85,95,0)');
+
+          ctx.fillStyle = grad;
           ctx.beginPath();
-          ctx.arc(x, y, size * 0.34, 0, Math.PI * 2);
-          ctx.stroke();
-
-          ctx.strokeStyle = flashActive ? 'rgba(255,255,255,0.8)' : 'rgba(255,220,180,0.45)';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(x - size * 0.18, y - size * 0.18);
-          ctx.lineTo(x + size * 0.18, y + size * 0.18);
-          ctx.moveTo(x + size * 0.18, y - size * 0.18);
-          ctx.lineTo(x - size * 0.18, y + size * 0.18);
-          ctx.stroke();
-        }
-
-        if (e.type === 'laser') {
-          const pulse = 0.55 + Math.sin(performance.now() * 0.02) * 0.25;
-          for (let i = 0; i < damageLevel; i += 1) {
-            const r = size * (0.16 + i * 0.1);
-            ctx.strokeStyle = i === damageLevel - 1 && flashActive
-              ? `rgba(255,255,255,${0.75 * pulse})`
-              : `rgba(255,80,80,${0.4 + i * 0.18})`;
-            ctx.lineWidth = 3 + i;
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-
-          ctx.fillStyle = `rgba(255,70,70,${flashActive ? 0.22 : 0.12})`;
-          ctx.beginPath();
-          ctx.arc(x, y, size * 0.17, 0, Math.PI * 2);
+          ctx.arc(x + offsetX, y + offsetY, r, 0, Math.PI * 2);
           ctx.fill();
         }
 
