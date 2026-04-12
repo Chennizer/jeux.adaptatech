@@ -649,6 +649,8 @@
       const PLAYER_SHIP_VW = 0.22;
       const SHIELD_CONTACT_OFFSET_RATIO = 0.12;
       const SHIELD_CONTACT_OFFSET_RATIO_TANK = 0.16;
+      const fractureCanvas = document.createElement('canvas');
+      const fractureCtx = fractureCanvas.getContext('2d');
 
       const player = {
         x: 0,
@@ -1727,41 +1729,56 @@ function findEnemyById(id) {
         if (e.eyegazeTile) return;
 
         const damageLevel = e.smokeLevel || ((e.maxHp || 1) - e.hp);
-        if (damageLevel <= 0) return;
+        if (damageLevel <= 0 || !e.image || !e.image.complete) return;
 
         ensureEnemyFractures(e, damageLevel);
         if (!e.fractureLines || !e.fractureLines.length) return;
 
+        const sizePx = Math.max(2, Math.round(e.size));
+        if (fractureCanvas.width !== sizePx || fractureCanvas.height !== sizePx) {
+          fractureCanvas.width = sizePx;
+          fractureCanvas.height = sizePx;
+        }
+
+        fractureCtx.clearRect(0, 0, sizePx, sizePx);
+
         const pulseTime = performance.now() * 0.012;
         const flashBoost = performance.now() < (e.damageFlashUntil || 0) ? 0.34 : 0;
 
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        fractureCtx.save();
+        fractureCtx.globalCompositeOperation = 'lighter';
+        fractureCtx.lineCap = 'round';
+        fractureCtx.lineJoin = 'round';
 
         for (const crack of e.fractureLines) {
           const pulse = 0.52 + 0.48 * Math.sin(pulseTime + crack.pulseOffset);
           const alpha = Math.min(0.95, 0.24 + damageLevel * 0.08 + pulse * 0.24 + flashBoost);
           const width = crack.thickness * (0.75 + pulse * 0.55);
 
-          ctx.strokeStyle = `rgba(255, 36, 52, ${alpha})`;
-          ctx.shadowColor = `rgba(255, 20, 40, ${Math.min(1, alpha + 0.16)})`;
-          ctx.shadowBlur = 9 + pulse * 8;
-          ctx.lineWidth = width;
-          ctx.beginPath();
+          fractureCtx.strokeStyle = `rgba(255, 36, 52, ${alpha})`;
+          fractureCtx.shadowColor = `rgba(255, 20, 40, ${Math.min(1, alpha + 0.16)})`;
+          fractureCtx.shadowBlur = 9 + pulse * 8;
+          fractureCtx.lineWidth = width;
+          fractureCtx.beginPath();
 
           crack.points.forEach((pt, index) => {
-            const px = e.x + pt.x * e.size;
-            const py = e.y + pt.y * e.size;
-            if (index === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
+            const px = sizePx * 0.5 + pt.x * sizePx;
+            const py = sizePx * 0.5 + pt.y * sizePx;
+            if (index === 0) fractureCtx.moveTo(px, py);
+            else fractureCtx.lineTo(px, py);
           });
 
-          ctx.stroke();
+          fractureCtx.stroke();
         }
 
-        ctx.restore();
+        fractureCtx.restore();
+
+        fractureCtx.save();
+        fractureCtx.globalCompositeOperation = 'destination-in';
+        fractureCtx.drawImage(e.image, 0, 0, sizePx, sizePx);
+        fractureCtx.restore();
+
+        ctx.drawImage(fractureCanvas, e.x - sizePx * 0.5, e.y - sizePx * 0.5, sizePx, sizePx);
       }
 
       function drawEnemies() {
