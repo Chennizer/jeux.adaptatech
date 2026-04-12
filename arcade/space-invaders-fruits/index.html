@@ -195,6 +195,21 @@
       z-index: 2;
     }
 
+    #game-over.switch-score-screen .eyegaze-action-button-wrap {
+      width: min(100%, 140px);
+    }
+
+    #game-over.switch-score-screen .eyegaze-action-button-wrap .button {
+      border-radius: 16px;
+      padding: 8px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    #game-over.switch-score-screen .eyegaze-action-fill {
+      border-radius: 16px;
+    }
+
     #continue-button {
       width: min(100%, 280px);
       margin: 10px auto 0;
@@ -782,6 +797,7 @@
       const EYEGAZE_DANGER_HOLD_MS = 4000;
       const EYEGAZE_ATTACK_RISE_SPEED = 220;
       const EYEGAZE_RISE_SPEED_MULTIPLIER = { normal: 1, hard: 1.25, competitive: 1.4 };
+      const EYEGAZE_ROW_STEP_SPEED_MULTIPLIER = { normal: 1, hard: 1, competitive: 1.4 };
       const EYEGAZE_ATTACK_SHAKE_MS = 320;
       const EYEGAZE_SHIELD_FLASH_MS = 1350;
       const GAME_OVER_DELAY_MS = 900;
@@ -1618,17 +1634,23 @@ function findEnemyById(id) {
         return lanes.filter((lane) => !occupied.has(lane));
       }
 
+      function getEyegazeRowStepMs() {
+        const speedMultiplier = EYEGAZE_ROW_STEP_SPEED_MULTIPLIER[difficulty] || 1;
+        return EYEGAZE_ROW_STEP_MS / speedMultiplier;
+      }
+
       function getEyegazeAnimatedY(elapsedMs) {
         const top = getEyegazeRowY(0);
         const second = getEyegazeRowY(1);
+        const rowStepMs = getEyegazeRowStepMs();
         const isNormalGrid = difficulty === 'normal';
 
         if (isNormalGrid) {
-          const bottomStartMs = EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS;
+          const bottomStartMs = rowStepMs + EYEGAZE_ROW_TRANSITION_MS;
           const bottomEndMs = bottomStartMs + EYEGAZE_DANGER_HOLD_MS;
-          if (elapsedMs < EYEGAZE_ROW_STEP_MS) return top;
-          if (elapsedMs < EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS) {
-            const t = (elapsedMs - EYEGAZE_ROW_STEP_MS) / EYEGAZE_ROW_TRANSITION_MS;
+          if (elapsedMs < rowStepMs) return top;
+          if (elapsedMs < rowStepMs + EYEGAZE_ROW_TRANSITION_MS) {
+            const t = (elapsedMs - rowStepMs) / EYEGAZE_ROW_TRANSITION_MS;
             return top + (second - top) * t;
           }
           if (elapsedMs < bottomEndMs) return second;
@@ -1637,17 +1659,17 @@ function findEnemyById(id) {
 
         const middle = second;
         const bottom = getEyegazeRowY(2);
-        const bottomStartMs = EYEGAZE_ROW_STEP_MS * 2 + EYEGAZE_ROW_TRANSITION_MS;
+        const bottomStartMs = rowStepMs * 2 + EYEGAZE_ROW_TRANSITION_MS;
         const bottomEndMs = bottomStartMs + EYEGAZE_DANGER_HOLD_MS;
 
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS) return top;
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS + EYEGAZE_ROW_TRANSITION_MS) {
-          const t = (elapsedMs - EYEGAZE_ROW_STEP_MS) / EYEGAZE_ROW_TRANSITION_MS;
+        if (elapsedMs < rowStepMs) return top;
+        if (elapsedMs < rowStepMs + EYEGAZE_ROW_TRANSITION_MS) {
+          const t = (elapsedMs - rowStepMs) / EYEGAZE_ROW_TRANSITION_MS;
           return top + (middle - top) * t;
         }
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 2) return middle;
-        if (elapsedMs < EYEGAZE_ROW_STEP_MS * 2 + EYEGAZE_ROW_TRANSITION_MS) {
-          const t = (elapsedMs - EYEGAZE_ROW_STEP_MS * 2) / EYEGAZE_ROW_TRANSITION_MS;
+        if (elapsedMs < rowStepMs * 2) return middle;
+        if (elapsedMs < rowStepMs * 2 + EYEGAZE_ROW_TRANSITION_MS) {
+          const t = (elapsedMs - rowStepMs * 2) / EYEGAZE_ROW_TRANSITION_MS;
           return middle + (bottom - middle) * t;
         }
         if (elapsedMs < bottomEndMs) return bottom;
@@ -2676,6 +2698,7 @@ function findEnemyById(id) {
       function setScoreUiVisible(showScorePanel) {
         const show = Boolean(showScorePanel);
         gameOverMenuVisible = inputMode === 'switch' ? true : !show;
+        gameOverScreen?.classList.toggle('switch-score-screen', show && inputMode === 'switch');
         if (scoreUiLayout) scoreUiLayout.style.display = show ? 'grid' : 'none';
         if (scoreRegisterPanel) {
           scoreRegisterPanel.classList.toggle('hidden', !show);
@@ -2828,7 +2851,15 @@ function findEnemyById(id) {
         return (difficulty === 'hard' || difficulty === 'competitive') && inputMode !== 'eyegaze';
       }
 
+      function isSwitchScoreScreenVisible() {
+        return inputMode === 'switch' && gameOverScreen?.classList.contains('switch-score-screen');
+      }
+
       function updateCursorVisibility() {
+        if (isSwitchScoreScreenVisible()) {
+          document.body.style.cursor = '';
+          return;
+        }
         const inGameplayFlow = running || gameOverScreen?.style.display === 'flex';
         document.body.style.cursor = inGameplayFlow ? 'none' : '';
       }
