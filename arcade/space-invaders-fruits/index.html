@@ -175,6 +175,36 @@
       line-height: 1.2;
     }
 
+    .score-submit-wrap {
+      position: relative;
+      width: min(100%, 260px);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .score-submit-wrap .button {
+      width: 100%;
+      margin-top: 4px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .score-submit-dwell-fill {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      background: rgba(255, 52, 52, 0.42);
+      transform: scaleX(0);
+      transform-origin: left center;
+      pointer-events: none;
+    }
+
+    #score-cancel-retry {
+      margin-top: 2px;
+      width: min(100%, 260px);
+      display: none;
+    }
+
     .ship-select-panel {
       width: 100%;
       height: 100%;
@@ -548,7 +578,11 @@
             <div class="score-register-form">
               <label id="score-player-name-label" for="score-player-name" class="score-player-name-label"></label>
               <input id="score-player-name" class="score-player-name-input" type="text" maxlength="20" autocomplete="name" />
-              <button id="score-submit" type="button" class="button"></button>
+              <div class="score-submit-wrap">
+                <button id="score-submit" type="button" class="button"></button>
+                <div id="score-submit-dwell-fill" class="score-submit-dwell-fill" aria-hidden="true"></div>
+              </div>
+              <button id="score-cancel-retry" type="button" class="button"></button>
             </div>
             <p id="score-register-status" class="score-register-status" role="status"></p>
           </div>
@@ -605,6 +639,8 @@
       const scorePlayerNameLabel = document.getElementById('score-player-name-label');
       const scorePlayerNameInput = document.getElementById('score-player-name');
       const scoreSubmitButton = document.getElementById('score-submit');
+      const scoreSubmitDwellFill = document.getElementById('score-submit-dwell-fill');
+      const scoreCancelRetryButton = document.getElementById('score-cancel-retry');
       const scoreRegisterStatus = document.getElementById('score-register-status');
       const leaderboardPanel = document.getElementById('leaderboard-panel');
       const leaderboardTitle = document.getElementById('leaderboard-title');
@@ -731,6 +767,8 @@
       let scoreSubmissionState = 'idle';
       let gameOverMenuVisible = false;
       let switchIsDown = false;
+      let scoreSubmitHoverStartAt = 0;
+      let scoreSubmitRafId = null;
 
       const EYEGAZE_DWELL_MS = 1000;
       const EYEGAZE_ROW_STEP_MS = 10000;
@@ -2483,6 +2521,7 @@ function findEnemyById(id) {
             registerQuestion: 'Enregistre ton score dans le classement.',
             nameLabel: 'Votre nom',
             submit: 'Enregistrer',
+            retry: 'Recommencer',
             sending: 'Enregistrement du score...',
             submitSuccess: 'Score enregistré.',
             submitError: 'Impossible d\'enregistrer le score pour le moment.',
@@ -2498,6 +2537,7 @@ function findEnemyById(id) {
             registerQuestion: 'Save your score to the leaderboard.',
             nameLabel: 'Your name',
             submit: 'Submit score',
+            retry: 'Retry',
             sending: 'Submitting score...',
             submitSuccess: 'Score submitted.',
             submitError: 'Unable to submit score right now.',
@@ -2513,6 +2553,7 @@ function findEnemyById(id) {
             registerQuestion: 'スコアをランキングに登録します。',
             nameLabel: '名前',
             submit: 'スコア登録',
+            retry: 'もう一度',
             sending: 'スコアを送信中...',
             submitSuccess: 'スコアを登録しました。',
             submitError: '現在スコアを登録できません。',
@@ -2543,6 +2584,7 @@ function findEnemyById(id) {
         if (scoreRegisterQuestion) scoreRegisterQuestion.textContent = copy.registerQuestion;
         if (scorePlayerNameLabel) scorePlayerNameLabel.textContent = copy.nameLabel;
         if (scoreSubmitButton) scoreSubmitButton.textContent = copy.submit;
+        if (scoreCancelRetryButton) scoreCancelRetryButton.textContent = copy.retry;
         if (scoreSubmissionState === 'sending') setScoreStatusMessage(copy.sending, false);
       }
 
@@ -2562,6 +2604,52 @@ function findEnemyById(id) {
         }
       }
 
+      function resetScoreSubmitDwell() {
+        scoreSubmitHoverStartAt = 0;
+        if (scoreSubmitDwellFill) scoreSubmitDwellFill.style.transform = 'scaleX(0)';
+      }
+
+      function stopScoreSubmitMonitor() {
+        if (scoreSubmitRafId) cancelAnimationFrame(scoreSubmitRafId);
+        scoreSubmitRafId = null;
+        resetScoreSubmitDwell();
+      }
+
+      function startScoreSubmitMonitor() {
+        if (inputMode !== 'eyegaze') return;
+        stopScoreSubmitMonitor();
+
+        const loop = () => {
+          if (running || inputMode !== 'eyegaze' || !gameOverScreen || gameOverScreen.style.display !== 'flex') return;
+          if (scoreUiLayout?.style.display === 'none') return;
+          if (!scoreSubmitButton || scoreSubmitButton.disabled) {
+            resetScoreSubmitDwell();
+            scoreSubmitRafId = requestAnimationFrame(loop);
+            return;
+          }
+
+          const rect = scoreSubmitButton.getBoundingClientRect();
+          const inside = gazeX >= rect.left && gazeX <= rect.right && gazeY >= rect.top && gazeY <= rect.bottom;
+          const now = performance.now();
+
+          if (inside) {
+            if (!scoreSubmitHoverStartAt) scoreSubmitHoverStartAt = now;
+            const progress = Math.max(0, Math.min(1, (now - scoreSubmitHoverStartAt) / 1000));
+            if (scoreSubmitDwellFill) scoreSubmitDwellFill.style.transform = `scaleX(${progress})`;
+            if (progress >= 1) {
+              handleScoreSubmission();
+              resetScoreSubmitDwell();
+            }
+          } else {
+            resetScoreSubmitDwell();
+          }
+
+          scoreSubmitRafId = requestAnimationFrame(loop);
+        };
+
+        scoreSubmitRafId = requestAnimationFrame(loop);
+      }
+
       function setScoreUiVisible(showScorePanel) {
         const show = Boolean(showScorePanel);
         gameOverMenuVisible = inputMode === 'switch' ? true : !show;
@@ -2575,7 +2663,15 @@ function findEnemyById(id) {
           leaderboardPanel.style.display = show ? 'flex' : 'none';
         }
         restartButton.style.display = inputMode === 'switch' ? 'inline-flex' : 'none';
+        if (scoreCancelRetryButton) {
+          scoreCancelRetryButton.style.display = show && inputMode === 'eyegaze' ? 'inline-flex' : 'none';
+        }
         if (retryEyegazeTiles) retryEyegazeTiles.style.display = show || inputMode !== 'eyegaze' ? 'none' : 'grid';
+        if (show && inputMode === 'eyegaze') {
+          startScoreSubmitMonitor();
+        } else {
+          stopScoreSubmitMonitor();
+        }
       }
 
       async function submitScore(game, playerName, scoreValue, mode) {
@@ -2633,6 +2729,7 @@ function findEnemyById(id) {
 
       function resetScorePanel() {
         scoreSubmissionState = 'idle';
+        resetScoreSubmitDwell();
         if (scorePlayerNameInput) {
           scorePlayerNameInput.disabled = false;
           scorePlayerNameInput.value = '';
@@ -2819,6 +2916,7 @@ function findEnemyById(id) {
         if (retryEyegazeTiles) retryEyegazeTiles.style.display = 'none';
         if (retryHint) retryHint.textContent = '';
         if (restartButton) restartButton.style.display = 'none';
+        stopScoreSubmitMonitor();
         setScoreUiVisible(false);
         resetScorePanel();
 
@@ -2887,6 +2985,7 @@ function findEnemyById(id) {
         if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
         if (registerEyegazeFill) registerEyegazeFill.style.transform = 'scale(0)';
         if (restartButton) restartButton.style.display = 'none';
+        stopScoreSubmitMonitor();
         resetScorePanel();
         updateGameOverOptionLabels();
 
@@ -3066,6 +3165,10 @@ function findEnemyById(id) {
       });
 
       scoreSubmitButton?.addEventListener('click', handleScoreSubmission);
+      scoreCancelRetryButton?.addEventListener('click', () => {
+        playSfx('retry');
+        startGame();
+      });
       scorePlayerNameInput?.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
           event.preventDefault();
