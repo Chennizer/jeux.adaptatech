@@ -1073,12 +1073,12 @@ function findEnemyById(id) {
         let image = enemySprites[Math.floor(Math.random() * enemySprites.length)] || null;
 
         if (inputMode !== 'eyegaze') {
-          if (roll < (difficulty === 'competitive' ? 0.28 : difficulty === 'hard' ? 0.18 : 0.08)) {
+          if (roll < (difficulty === 'competitive' ? 0.14 : difficulty === 'hard' ? 0.18 : 0.08)) {
             type = 'laser';
             image = heavyEnemySprite;
           } else if (
             (difficulty === 'hard' && Math.random() < 0.35) ||
-            (difficulty === 'competitive' && Math.random() < 0.5)
+            (difficulty === 'competitive' && Math.random() < 0.22)
           ) {
             type = 'tank';
             image = heavyEnemySprite;
@@ -1135,7 +1135,8 @@ function findEnemyById(id) {
           hp: maxHp,
           maxHp,
           damageFlashUntil: 0,
-          smokeLevel: 0
+          smokeLevel: 0,
+          fractureLines: []
         });
       }
 
@@ -1204,8 +1205,8 @@ function findEnemyById(id) {
         if (enemy.hp > 0) {
           const slowRatio =
             enemy.type === 'laser'
-              ? (enemy.hp === 2 ? 0.82 : 0.62)
-              : 0.58;
+              ? (enemy.hp === 2 ? 0.68 : 0.42)
+              : 0.45;
 
           if (typeof enemy.baseSpeed === 'number') {
             enemy.speed = enemy.baseSpeed * slowRatio;
@@ -1213,10 +1214,7 @@ function findEnemyById(id) {
             enemy.speed *= slowRatio;
           }
 
-          spawnTankDamageSmoke(enemy.x, enemy.y, enemy.size * (0.9 + damageTaken * 0.18), {
-            stage: damageTaken,
-            enemyType: enemy.type
-          });
+          ensureEnemyFractures(enemy, damageTaken);
         }
       }
 
@@ -1405,12 +1403,6 @@ function findEnemyById(id) {
             for (const p of burst.particles) {
               p.x += p.vx * stepDt;
               p.y += p.vy * stepDt;
-
-              if (burst.color === 'smoke') {
-                p.vx += (p.swirl || 0) * stepDt * 18;
-                p.vy -= (burst.rise || 0) * stepDt;
-                p.r = Math.min(p.maxR || 30, p.r * (1 + stepDt * (burst.expandRate || 0)));
-              }
 
               p.vx *= drag;
               p.vy *= drag;
@@ -1699,42 +1691,74 @@ function findEnemyById(id) {
         ctx.restore();
       }
 
+      function ensureEnemyFractures(enemy, damageLevel) {
+        if (!enemy || enemy.eyegazeTile) return;
+
+        if (!Array.isArray(enemy.fractureLines)) enemy.fractureLines = [];
+        const targetCount = Math.min(18, 4 + damageLevel * 5 + (enemy.type === 'laser' ? 2 : 0));
+
+        while (enemy.fractureLines.length < targetCount) {
+          const points = [];
+          const segments = 2 + Math.floor(Math.random() * 3);
+          const startX = (Math.random() - 0.5) * 0.56;
+          const startY = -0.28 + Math.random() * 0.5;
+          points.push({ x: startX, y: startY });
+
+          let px = startX;
+          let py = startY;
+          for (let i = 0; i < segments; i += 1) {
+            px += (Math.random() - 0.5) * 0.22;
+            py += 0.07 + Math.random() * 0.11;
+            points.push({
+              x: Math.max(-0.34, Math.min(0.34, px)),
+              y: Math.max(-0.34, Math.min(0.34, py))
+            });
+          }
+
+          enemy.fractureLines.push({
+            points,
+            thickness: 1.4 + Math.random() * 1.8,
+            pulseOffset: Math.random() * Math.PI * 2
+          });
+        }
+      }
+
       function drawEnemyDamageState(e) {
         if (e.eyegazeTile) return;
 
         const damageLevel = e.smokeLevel || ((e.maxHp || 1) - e.hp);
         if (damageLevel <= 0) return;
 
-        const x = e.x;
-        const y = e.y;
-        const size = e.size;
-        const flashActive = performance.now() < (e.damageFlashUntil || 0);
+        ensureEnemyFractures(e, damageLevel);
+        if (!e.fractureLines || !e.fractureLines.length) return;
+
+        const pulseTime = performance.now() * 0.012;
+        const flashBoost = performance.now() < (e.damageFlashUntil || 0) ? 0.34 : 0;
 
         ctx.save();
-        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
-        const plumeCount = Math.min(4, damageLevel + 1);
-        for (let i = 0; i < plumeCount; i += 1) {
-          const offsetX = (-0.16 + i * 0.1) * size;
-          const offsetY = (-0.22 - i * 0.04) * size;
-          const r = size * (0.08 + i * 0.02 + damageLevel * 0.015);
+        for (const crack of e.fractureLines) {
+          const pulse = 0.52 + 0.48 * Math.sin(pulseTime + crack.pulseOffset);
+          const alpha = Math.min(0.95, 0.24 + damageLevel * 0.08 + pulse * 0.24 + flashBoost);
+          const width = crack.thickness * (0.75 + pulse * 0.55);
 
-          const grad = ctx.createRadialGradient(
-            x + offsetX,
-            y + offsetY,
-            0,
-            x + offsetX,
-            y + offsetY,
-            r
-          );
-          grad.addColorStop(0, `rgba(220,225,230,${flashActive ? 0.42 : 0.28})`);
-          grad.addColorStop(0.55, `rgba(130,140,150,${flashActive ? 0.3 : 0.22})`);
-          grad.addColorStop(1, 'rgba(80,85,95,0)');
-
-          ctx.fillStyle = grad;
+          ctx.strokeStyle = `rgba(255, 36, 52, ${alpha})`;
+          ctx.shadowColor = `rgba(255, 20, 40, ${Math.min(1, alpha + 0.16)})`;
+          ctx.shadowBlur = 9 + pulse * 8;
+          ctx.lineWidth = width;
           ctx.beginPath();
-          ctx.arc(x + offsetX, y + offsetY, r, 0, Math.PI * 2);
-          ctx.fill();
+
+          crack.points.forEach((pt, index) => {
+            const px = e.x + pt.x * e.size;
+            const py = e.y + pt.y * e.size;
+            if (index === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+
+          ctx.stroke();
         }
 
         ctx.restore();
@@ -1869,10 +1893,6 @@ function findEnemyById(id) {
               colorA = '255,190,70';
               colorB = '255,245,210';
               baseAlpha = 0.78;
-            } else if (burst.color === 'smoke') {
-              colorA = '132,142,156';
-              colorB = '216,224,235';
-              baseAlpha = 0.44;
             } else if (burst.color === 'orange') {
               colorA = '255,120,70';
               colorB = '255,220,120';
@@ -1884,7 +1904,7 @@ function findEnemyById(id) {
             }
 
             ctx.save();
-            ctx.globalCompositeOperation = burst.color === 'smoke' ? 'source-over' : 'lighter';
+            ctx.globalCompositeOperation = 'lighter';
 
             const radius = Math.max(0.5, p.r * alpha);
             const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
@@ -2183,41 +2203,6 @@ function findEnemyById(id) {
           r: Math.max(34, size * 0.62),
           innerColor: '230,248,255',
           midColor: '120,200,255'
-        });
-      }
-
-      function spawnTankDamageSmoke(x, y, size, options = {}) {
-        const particles = [];
-        const stage = Math.max(1, options.stage || 1);
-        const isLaser = options.enemyType === 'laser';
-        const count = Math.round((isLaser ? 28 : 24) + stage * 8);
-        const life = Math.min(1.25, 0.72 + stage * 0.16 + (isLaser ? 0.08 : 0));
-
-        for (let i = 0; i < count; i += 1) {
-          const spread = isLaser ? 1.02 : 0.84;
-          const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * spread;
-          const speed = 34 + Math.random() * 78 + stage * 8;
-          const radius = 3.8 + Math.random() * (6.8 + stage * 1.2);
-          particles.push({
-            x: x + (Math.random() - 0.5) * size * 0.34,
-            y: y + (Math.random() - 0.5) * size * 0.24,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed - Math.random() * (20 + stage * 4),
-            swirl: (Math.random() - 0.5) * (2.2 + stage * 0.35),
-            r: radius,
-            maxR: radius * (2 + Math.random() * 0.8)
-          });
-        }
-
-        fxBursts.push({
-          life,
-          maxLife: life,
-          particles,
-          type: 'particles',
-          color: 'smoke',
-          drag: 0.956,
-          rise: isLaser ? 34 : 28,
-          expandRate: 0.65
         });
       }
 
