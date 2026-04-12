@@ -111,10 +111,19 @@
       line-height: 1.5;
     }
 
-    #retry-eyegaze-tile {
+    .eyegaze-action-tiles {
+      display: none;
+      gap: 14px;
+      justify-content: center;
+      align-items: center;
+      margin: 12px auto 0;
+      width: min(90vw, 680px);
+    }
+
+    #retry-eyegaze-tile,
+    #score-eyegaze-tile {
       width: min(42vw, 320px);
       aspect-ratio: 1 / 1;
-      margin: 12px auto 0;
       border: 4px solid rgba(255,255,255,0.75);
       border-radius: 20px;
       background: rgba(255,255,255,0.1);
@@ -123,7 +132,8 @@
       overflow: hidden;
     }
 
-    #retry-eyegaze-tile img {
+    #retry-eyegaze-tile img,
+    #score-eyegaze-tile img {
       width: 82%;
       height: 82%;
       object-fit: contain;
@@ -134,7 +144,8 @@
       z-index: 1;
     }
 
-    #retry-eyegaze-fill {
+    #retry-eyegaze-fill,
+    #score-eyegaze-fill {
       position: absolute;
       inset: 0;
       background: rgba(255, 52, 52, 0.42);
@@ -377,6 +388,11 @@
       box-shadow: none;
     }
 
+    #register-score-button {
+      display: none;
+      margin: 12px auto 0;
+    }
+
   </style>
 </head>
 <body
@@ -496,13 +512,36 @@
 
   <div id="game-over" class="hidden">
     <div class="results-panel stop-action-results-panel">
-      <p id="game-over-score"></p>
-      <p id="retry-hint" class="retry-hint"></p>
-      <div id="retry-eyegaze-tile" aria-hidden="true">
-        <div id="retry-eyegaze-fill"></div>
-        <img src="../../images/spaceadventure/blueship.png" alt="Retry ship">
-      </div>
+      <section id="score-summary-panel" class="stop-action-results-column stop-action-results-column-score" aria-label="Score summary">
+        <p id="game-over-score"></p>
+        <p id="retry-hint" class="retry-hint"></p>
+        <button id="register-score-button" class="button translate" data-fr="Enregistrer ton score" data-en="Register your score" data-ja="スコアを登録">Register your score</button>
+        <div class="eyegaze-action-tiles" id="eyegaze-action-tiles" aria-hidden="true">
+          <div id="retry-eyegaze-tile">
+            <div id="retry-eyegaze-fill"></div>
+            <img src="../../images/spaceadventure/blueship.png" alt="Retry ship">
+          </div>
+          <div id="score-eyegaze-tile">
+            <div id="score-eyegaze-fill"></div>
+            <img src="../../images/spaceadventure/redship.png" alt="Score ship">
+          </div>
+        </div>
+      </section>
+      <section id="score-register-panel" class="score-register-panel hidden" aria-live="polite">
+        <p id="score-register-question" class="stop-action-results-metric"></p>
+        <div class="score-register-form">
+          <label id="score-player-name-label" for="score-player-name" class="score-player-name-label"></label>
+          <input id="score-player-name" class="score-player-name-input" type="text" maxlength="20" autocomplete="name" />
+          <button id="score-submit" type="button" class="button"></button>
+        </div>
+        <p id="score-register-status" class="score-register-status" role="status"></p>
+      </section>
+      <section id="leaderboard-panel" class="stop-action-results-column leaderboard-panel hidden" aria-live="polite" aria-label="Leaderboard">
+        <h3 id="leaderboard-title" class="leaderboard-title"></h3>
+        <ol id="leaderboard-list" class="leaderboard-list"></ol>
+      </section>
       <button id="continue-button" class="button translate" data-fr="Recommencer" data-en="Restart" data-ja="もう一度">Recommencer</button>
+      <button id="back-to-retry-button" class="button translate hidden" data-fr="Retour" data-en="Back" data-ja="戻る">Retour</button>
     </div>
   </div>
 
@@ -524,9 +563,14 @@
       const hud = document.getElementById('hud');
       const gameOverScreen = document.getElementById('game-over');
       const restartButton = document.getElementById('continue-button');
+      const backToRetryButton = document.getElementById('back-to-retry-button');
       const retryHint = document.getElementById('retry-hint');
+      const registerScoreButton = document.getElementById('register-score-button');
+      const eyegazeActionTiles = document.getElementById('eyegaze-action-tiles');
       const retryEyegazeTile = document.getElementById('retry-eyegaze-tile');
       const retryEyegazeFill = document.getElementById('retry-eyegaze-fill');
+      const scoreEyegazeTile = document.getElementById('score-eyegaze-tile');
+      const scoreEyegazeFill = document.getElementById('score-eyegaze-fill');
       const music = document.getElementById('bg-music');
       const menuMusic = document.getElementById('menu-music');
       const languageToggleButton = document.getElementById('language-toggle');
@@ -535,6 +579,16 @@
       const scoreNode = document.getElementById('hud-score');
       const livesNode = document.getElementById('hud-lives');
       const gameOverScore = document.getElementById('game-over-score');
+      const scoreSummaryPanel = document.getElementById('score-summary-panel');
+      const scoreRegisterPanel = document.getElementById('score-register-panel');
+      const scoreRegisterQuestion = document.getElementById('score-register-question');
+      const scorePlayerNameLabel = document.getElementById('score-player-name-label');
+      const scorePlayerNameInput = document.getElementById('score-player-name');
+      const scoreSubmitButton = document.getElementById('score-submit');
+      const scoreRegisterStatus = document.getElementById('score-register-status');
+      const leaderboardPanel = document.getElementById('leaderboard-panel');
+      const leaderboardTitle = document.getElementById('leaderboard-title');
+      const leaderboardList = document.getElementById('leaderboard-list');
       const ammoMeter = document.getElementById('ammo-meter');
       const ammoMeterFill = document.getElementById('ammo-meter-fill');
       const ammoMeterTrack = document.querySelector('#ammo-meter .ammo-meter-track');
@@ -621,6 +675,12 @@
       const menuBaseMusicPath = '../../songs/space/spacequest1.mp3';
       const BG_MUSIC_VOLUME = 0.5;
       const MENU_MUSIC_VOLUME = 0.28;
+      const SCORE_API_BASE = 'https://score-api-2.gui98789.workers.dev';
+      const SCORE_TOP_LIMIT = 5;
+      const SCORE_GAME_BY_INPUT = {
+        switch: 'space-adventure-switch',
+        eyegaze: 'space-adventure-eyegaze'
+      };
 
       let selectedShip = 'blue';
       let inputMode = 'switch';
@@ -644,12 +704,16 @@
       let shieldFlashStartedAt = 0;
       let projectileFlashUntil = 0;
       let retryHoverStartAt = 0;
+      let scoreHoverStartAt = 0;
       let retryRafId = null;
       let musicStartTimeoutId = null;
       let gameOverPending = false;
       let gameOverPendingAt = 0;
       let screenShakeUntil = 0;
       let screenShakeStrength = 0;
+      let scoreSubmissionState = 'idle';
+      let gameOverView = 'retry';
+      let switchShotReleased = true;
 
       const EYEGAZE_DWELL_MS = 1000;
       const EYEGAZE_ROW_STEP_MS = 10000;
@@ -2387,6 +2451,156 @@ function findEnemyById(id) {
         if (hasLimitedLives()) livesNode.textContent = `${livesLabel}: ${lives}`;
       }
 
+      function getScorePanelCopy() {
+        const lang = getCurrentLanguage();
+        if (lang === 'fr') {
+          return {
+            registerQuestion: 'Enregistre ton score dans le classement.',
+            nameLabel: 'Nom',
+            submit: 'Envoyer',
+            submitSuccess: 'Score enregistré !',
+            submitError: 'Impossible d’enregistrer le score.',
+            emptyName: 'Entre un nom pour continuer.',
+            sending: 'Envoi en cours…',
+            leaderboardTitle: (modeLabel) => `Top ${SCORE_TOP_LIMIT} (${modeLabel})`,
+            emptyLeaderboard: 'Aucun score pour le moment.',
+            loadingLeaderboard: 'Chargement du classement...',
+            leaderboardError: 'Impossible de charger le classement.',
+            anonymous: 'Anonyme',
+            back: 'Retour'
+          };
+        }
+        if (lang === 'ja') {
+          return {
+            registerQuestion: 'スコアをランキングに登録します。',
+            nameLabel: '名前',
+            submit: '送信',
+            submitSuccess: 'スコアを登録しました！',
+            submitError: 'スコアを登録できませんでした。',
+            emptyName: '名前を入力してください。',
+            sending: '送信中…',
+            leaderboardTitle: (modeLabel) => `トップ${SCORE_TOP_LIMIT}（${modeLabel}）`,
+            emptyLeaderboard: 'まだスコアがありません。',
+            loadingLeaderboard: 'ランキングを読み込み中...',
+            leaderboardError: 'ランキングを読み込めません。',
+            anonymous: '匿名',
+            back: '戻る'
+          };
+        }
+        return {
+          registerQuestion: 'Save your score to the leaderboard.',
+          nameLabel: 'Name',
+          submit: 'Submit',
+          submitSuccess: 'Score saved!',
+          submitError: 'Unable to save score.',
+          emptyName: 'Enter a name to continue.',
+          sending: 'Sending...',
+          leaderboardTitle: (modeLabel) => `Top ${SCORE_TOP_LIMIT} (${modeLabel})`,
+          emptyLeaderboard: 'No scores yet.',
+          loadingLeaderboard: 'Loading leaderboard...',
+          leaderboardError: 'Unable to load leaderboard.',
+          anonymous: 'Anonymous',
+          back: 'Back'
+        };
+      }
+
+      function getModeLabelForLeaderboard() {
+        const lang = getCurrentLanguage();
+        if (difficulty === 'hard') return lang === 'fr' ? 'Difficile' : lang === 'ja' ? 'ハード' : 'Hard';
+        if (difficulty === 'competitive') return lang === 'fr' ? 'Maître' : lang === 'ja' ? 'マスター' : 'Master';
+        return lang === 'fr' ? 'Normal' : lang === 'ja' ? 'ノーマル' : 'Normal';
+      }
+
+      function setScoreStatusMessage(message, isError) {
+        if (!scoreRegisterStatus) return;
+        scoreRegisterStatus.textContent = message || '';
+        scoreRegisterStatus.classList.toggle('is-error', Boolean(isError));
+      }
+
+      async function submitScore(playerName) {
+        const response = await fetch(SCORE_API_BASE + '/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            game: SCORE_GAME_BY_INPUT[inputMode] || SCORE_GAME_BY_INPUT.switch,
+            playerName,
+            score,
+            mode: difficulty
+          })
+        });
+        if (!response.ok) throw new Error('submit_failed');
+      }
+
+      async function fetchLeaderboard() {
+        const params = new URLSearchParams({
+          game: SCORE_GAME_BY_INPUT[inputMode] || SCORE_GAME_BY_INPUT.switch,
+          limit: String(SCORE_TOP_LIMIT),
+          mode: difficulty
+        });
+        const response = await fetch(SCORE_API_BASE + '/leaderboard?' + params.toString());
+        if (!response.ok) throw new Error('leaderboard_failed');
+        return response.json();
+      }
+
+      async function renderLeaderboard() {
+        if (!leaderboardPanel || !leaderboardList || !leaderboardTitle) return;
+        const copy = getScorePanelCopy();
+        leaderboardTitle.textContent = copy.leaderboardTitle(getModeLabelForLeaderboard());
+        leaderboardPanel.classList.remove('hidden');
+        leaderboardList.innerHTML = `<li>${copy.loadingLeaderboard}</li>`;
+        try {
+          const data = await fetchLeaderboard();
+          const rows = Array.isArray(data?.rows) ? data.rows : [];
+          leaderboardList.innerHTML = '';
+          if (!rows.length) {
+            leaderboardList.innerHTML = `<li>${copy.emptyLeaderboard}</li>`;
+            return;
+          }
+          rows.slice(0, SCORE_TOP_LIMIT).forEach((row, index) => {
+            const name = typeof row?.player_name === 'string' && row.player_name.trim() ? row.player_name.trim() : copy.anonymous;
+            const value = Number.isFinite(Number(row?.score)) ? Number(row.score) : 0;
+            const medal = ['🥇 ', '🥈 ', '🥉 '][index] || '';
+            const item = document.createElement('li');
+            item.textContent = `${medal}${name} — ${value}`;
+            leaderboardList.appendChild(item);
+          });
+        } catch (_) {
+          leaderboardList.innerHTML = `<li>${copy.leaderboardError}</li>`;
+        }
+      }
+
+      function showScoreScreen() {
+        gameOverView = 'score';
+        scoreSummaryPanel?.classList.add('hidden');
+        scoreRegisterPanel?.classList.remove('hidden');
+        backToRetryButton?.classList.remove('hidden');
+        restartButton?.classList.add('hidden');
+        const copy = getScorePanelCopy();
+        if (scoreRegisterQuestion) scoreRegisterQuestion.textContent = copy.registerQuestion;
+        if (scorePlayerNameLabel) scorePlayerNameLabel.textContent = copy.nameLabel;
+        if (scoreSubmitButton) scoreSubmitButton.textContent = copy.submit;
+        if (backToRetryButton) backToRetryButton.textContent = copy.back;
+        scoreSubmissionState = 'idle';
+        if (scorePlayerNameInput) {
+          scorePlayerNameInput.value = '';
+          scorePlayerNameInput.disabled = false;
+        }
+        if (scoreSubmitButton) scoreSubmitButton.disabled = false;
+        setScoreStatusMessage('', false);
+        leaderboardPanel?.classList.add('hidden');
+        if (leaderboardList) leaderboardList.innerHTML = '';
+      }
+
+      function showRetryScreen() {
+        gameOverView = 'retry';
+        scoreSummaryPanel?.classList.remove('hidden');
+        scoreRegisterPanel?.classList.add('hidden');
+        leaderboardPanel?.classList.add('hidden');
+        backToRetryButton?.classList.add('hidden');
+        restartButton?.classList.remove('hidden');
+        if (leaderboardList) leaderboardList.innerHTML = '';
+      }
+
       function getStartingShields() {
         if (difficulty === 'hard') return selectedShip === 'blue' ? 6 : 5;
         if (difficulty === 'competitive') return selectedShip === 'blue' ? 3 : 2;
@@ -2528,10 +2742,16 @@ function findEnemyById(id) {
         if (retryRafId) cancelAnimationFrame(retryRafId);
         retryRafId = null;
         retryHoverStartAt = 0;
+        scoreHoverStartAt = 0;
         if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
+        if (scoreEyegazeFill) scoreEyegazeFill.style.transform = 'scale(0)';
         if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
+        if (scoreEyegazeTile) scoreEyegazeTile.style.display = 'none';
+        if (eyegazeActionTiles) eyegazeActionTiles.style.display = 'none';
         if (retryHint) retryHint.textContent = '';
         if (restartButton) restartButton.style.display = 'none';
+        if (registerScoreButton) registerScoreButton.style.display = 'none';
+        showRetryScreen();
 
         score = 0;
         lives = getStartingShields();
@@ -2548,6 +2768,7 @@ function findEnemyById(id) {
         screenShakeStrength = 0;
         gameOverPending = false;
         gameOverPendingAt = 0;
+        switchShotReleased = true;
         player.x = canvas.width * 0.5;
         running = true;
         updateHudLanguage();
@@ -2594,16 +2815,26 @@ function findEnemyById(id) {
         if (retryRafId) cancelAnimationFrame(retryRafId);
         retryRafId = null;
         retryHoverStartAt = 0;
+        scoreHoverStartAt = 0;
         if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
+        if (scoreEyegazeFill) scoreEyegazeFill.style.transform = 'scale(0)';
         if (restartButton) restartButton.style.display = 'none';
+        showRetryScreen();
 
         if (inputMode === 'eyegaze') {
-          if (retryHint) retryHint.textContent = lang === 'fr' ? 'Réessayer ?' : lang === 'ja' ? 'もう一度？' : 'Try again?';
+          if (retryHint) retryHint.textContent = lang === 'fr' ? 'Choisis une action' : lang === 'ja' ? 'アクションを選んでください' : 'Choose an action';
+          if (eyegazeActionTiles) eyegazeActionTiles.style.display = 'flex';
           if (retryEyegazeTile) retryEyegazeTile.style.display = 'block';
+          if (scoreEyegazeTile) scoreEyegazeTile.style.display = 'block';
+          if (registerScoreButton) registerScoreButton.style.display = 'none';
           startEyegazeRetryMonitor();
         } else {
           if (retryHint) retryHint.textContent = lang === 'fr' ? 'Appuie sur ton switch pour recommencer' : lang === 'ja' ? 'スイッチで再開' : 'Press your switch to retry';
+          if (eyegazeActionTiles) eyegazeActionTiles.style.display = 'none';
           if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
+          if (scoreEyegazeTile) scoreEyegazeTile.style.display = 'none';
+          if (registerScoreButton) registerScoreButton.style.display = '';
+          switchShotReleased = false;
         }
 
         gameOverScreen.style.display = 'flex';
@@ -2614,12 +2845,15 @@ function findEnemyById(id) {
       function startEyegazeRetryMonitor() {
         if (inputMode !== 'eyegaze') return;
         const loop = () => {
-          if (running || !gameOverScreen || gameOverScreen.style.display !== 'flex') return;
-          const rect = retryEyegazeTile?.getBoundingClientRect();
-          if (!rect) return;
-          const inside = gazeX >= rect.left && gazeX <= rect.right && gazeY >= rect.top && gazeY <= rect.bottom;
+          if (running || gameOverView !== 'retry' || !gameOverScreen || gameOverScreen.style.display !== 'flex') return;
+          const retryRect = retryEyegazeTile?.getBoundingClientRect();
+          const scoreRect = scoreEyegazeTile?.getBoundingClientRect();
+          if (!retryRect || !scoreRect) return;
           const now = performance.now();
-          if (inside) {
+          const retryInside = gazeX >= retryRect.left && gazeX <= retryRect.right && gazeY >= retryRect.top && gazeY <= retryRect.bottom;
+          const scoreInside = gazeX >= scoreRect.left && gazeX <= scoreRect.right && gazeY >= scoreRect.top && gazeY <= scoreRect.bottom;
+
+          if (retryInside) {
             if (!retryHoverStartAt) retryHoverStartAt = now;
             const progress = Math.max(0, Math.min(1, (now - retryHoverStartAt) / EYEGAZE_DWELL_MS));
             if (retryEyegazeFill) retryEyegazeFill.style.transform = `scale(${progress})`;
@@ -2632,6 +2866,19 @@ function findEnemyById(id) {
             retryHoverStartAt = 0;
             if (retryEyegazeFill) retryEyegazeFill.style.transform = 'scale(0)';
           }
+
+          if (scoreInside) {
+            if (!scoreHoverStartAt) scoreHoverStartAt = now;
+            const progress = Math.max(0, Math.min(1, (now - scoreHoverStartAt) / EYEGAZE_DWELL_MS));
+            if (scoreEyegazeFill) scoreEyegazeFill.style.transform = `scale(${progress})`;
+            if (progress >= 1) {
+              showScoreScreen();
+              return;
+            }
+          } else {
+            scoreHoverStartAt = 0;
+            if (scoreEyegazeFill) scoreEyegazeFill.style.transform = 'scale(0)';
+          }
           retryRafId = requestAnimationFrame(loop);
         };
         retryRafId = requestAnimationFrame(loop);
@@ -2640,6 +2887,7 @@ function findEnemyById(id) {
       function applyInputMode(mode) {
         inputMode = mode === 'eyegaze' ? 'eyegaze' : 'switch';
         document.body.setAttribute('data-input-mode', inputMode);
+        switchShotReleased = true;
 
         const buttons = Array.from(document.querySelectorAll('.input-mode-btn'));
         buttons.forEach((button) => {
@@ -2683,16 +2931,61 @@ function findEnemyById(id) {
         updateAmmoMeter();
       }
 
+      async function handleScoreSubmit() {
+        if (scoreSubmissionState === 'sending' || scoreSubmissionState === 'submitted') return;
+        const copy = getScorePanelCopy();
+        const playerName = (scorePlayerNameInput?.value || '').trim();
+        if (!playerName) {
+          setScoreStatusMessage(copy.emptyName, true);
+          scorePlayerNameInput?.focus();
+          return;
+        }
+        scoreSubmissionState = 'sending';
+        if (scoreSubmitButton) scoreSubmitButton.disabled = true;
+        setScoreStatusMessage(copy.sending, false);
+        try {
+          await submitScore(playerName.slice(0, 20));
+          scoreSubmissionState = 'submitted';
+          setScoreStatusMessage(copy.submitSuccess, false);
+          if (scorePlayerNameInput) scorePlayerNameInput.disabled = true;
+          await renderLeaderboard();
+          setTimeout(() => {
+            playSfx('retry');
+            startGame();
+          }, 900);
+        } catch (_) {
+          scoreSubmissionState = 'idle';
+          if (scoreSubmitButton) scoreSubmitButton.disabled = false;
+          setScoreStatusMessage(copy.submitError, true);
+        }
+      }
+
       document.addEventListener('keydown', (event) => {
         if (!menuMusicStarted && assetsReady && !running) tryStartMenuMusic();
 
         if (event.key === ' ' || event.code === 'Space') {
           event.preventDefault();
-          if (running && !gameOverPending) shoot();
-          else if (!running && inputMode !== 'eyegaze' && gameOverScreen?.style.display === 'flex') {
-            playSfx('retry');
-            startGame();
+          if (running && !gameOverPending) {
+            if (inputMode === 'switch') {
+              if (!switchShotReleased) return;
+              switchShotReleased = false;
+            }
+            shoot();
           }
+          else if (!running && inputMode !== 'eyegaze' && gameOverScreen?.style.display === 'flex') {
+            if (!switchShotReleased) return;
+            switchShotReleased = false;
+            if (gameOverView === 'retry') {
+              playSfx('retry');
+              startGame();
+            }
+          }
+        }
+      });
+
+      document.addEventListener('keyup', (event) => {
+        if (event.key === ' ' || event.code === 'Space') {
+          switchShotReleased = true;
         }
       });
 
@@ -2730,11 +3023,35 @@ function findEnemyById(id) {
         startGame();
       });
 
+      registerScoreButton?.addEventListener('click', () => {
+        showScoreScreen();
+      });
+
+      backToRetryButton?.addEventListener('click', () => {
+        showRetryScreen();
+        if (inputMode === 'eyegaze') startEyegazeRetryMonitor();
+      });
+
+      scoreSubmitButton?.addEventListener('click', () => {
+        handleScoreSubmit();
+      });
+
+      scorePlayerNameInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          handleScoreSubmit();
+        }
+      });
+
       document.getElementById('language-toggle')?.addEventListener('pointerup', () => {
         toggleLanguage();
         updateHudLanguage();
         applyDifficulty(difficulty);
         updateShipPanelLanguage();
+        if (gameOverScreen?.style.display === 'flex') {
+          if (gameOverView === 'score') showScoreScreen();
+          else showGameOverScreen();
+        }
       });
 
       Array.from(document.querySelectorAll('.input-mode-btn')).forEach((button) => {
