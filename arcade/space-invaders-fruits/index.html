@@ -131,6 +131,7 @@
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
+      z-index: 1;
     }
 
     #retry-eyegaze-fill {
@@ -140,6 +141,7 @@
       transform: scale(0);
       transform-origin: center;
       pointer-events: none;
+      z-index: 2;
     }
 
     .ship-select-panel {
@@ -355,6 +357,26 @@
       padding-top: 8px;
       min-height: 38px;
     }
+
+    .ship-card:not(.selected) img {
+      filter: grayscale(1) brightness(0.58) contrast(0.9);
+      opacity: 0.72;
+    }
+
+    .ship-card:not(.selected) .ship-card-name,
+    .ship-card:not(.selected) .ship-card-tag,
+    .ship-card:not(.selected) .ship-card-stats,
+    .ship-card:not(.selected) .ship-card-trait {
+      opacity: 0.45;
+      color: #8fa0b6;
+    }
+
+    .ship-card:not(.selected) .ship-stat-segment.active {
+      background: rgba(170, 176, 188, 0.38);
+      border-color: rgba(200, 205, 215, 0.16);
+      box-shadow: none;
+    }
+
   </style>
 </head>
 <body
@@ -428,7 +450,7 @@
                       <div class="ship-stat-label ship-card-stat-label">SHIELDS</div>
                       <div class="ship-stat-bar ship-card-shields-bar"></div>
                     </div>
-                    <div class="ship-trait ship-card-trait">STRONGER AGAINST SMALLER SHIPS</div>
+                    <div class="ship-trait ship-card-trait">STRONGER AGAINST BIGGER SHIPS</div>
                   </div>
                 </button>
 
@@ -446,7 +468,7 @@
                       <div class="ship-stat-label ship-card-stat-label">SHIELDS</div>
                       <div class="ship-stat-bar ship-card-shields-bar"></div>
                     </div>
-                    <div class="ship-trait ship-card-trait">STRONGER AGAINST BIGGER SHIPS</div>
+                    <div class="ship-trait ship-card-trait">STRONGER AGAINST SMALLER SHIPS</div>
                   </div>
                 </button>
               </div>
@@ -463,7 +485,7 @@
 
   <div id="hud" class="hud">
     <div id="hud-score">Score: 0</div>
-    <div id="hud-lives">Lives: 3</div>
+    <div id="hud-lives">Shield: 3</div>
     <div id="ammo-meter" class="ammo-meter" aria-live="polite">
       <div class="ammo-meter-track">
         <div id="ammo-meter-fill" class="ammo-meter-fill"></div>
@@ -478,7 +500,7 @@
       <p id="retry-hint" class="retry-hint"></p>
       <div id="retry-eyegaze-tile" aria-hidden="true">
         <div id="retry-eyegaze-fill"></div>
-        <img src="../../images/pictos/apple.png" alt="Retry tile">
+        <img src="../../images/spaceadventure/blueship.png" alt="Retry ship">
       </div>
       <button id="continue-button" class="button translate" data-fr="Recommencer" data-en="Restart" data-ja="もう一度">Recommencer</button>
     </div>
@@ -551,9 +573,9 @@
           speed: 4,
           shields: 9,
           trait: {
-            fr: 'PLUS FORT CONTRE LES PETITS VAISSEAUX',
-            en: 'STRONGER AGAINST SMALLER SHIPS',
-            ja: '小型の敵に強い'
+            fr: 'PLUS FORT CONTRE LES GROS VAISSEAUX',
+            en: 'STRONGER AGAINST BIGGER SHIPS',
+            ja: '大型の敵に強い'
           },
           name: {
             fr: 'GUARDIAN SWITCH',
@@ -571,9 +593,9 @@
           speed: 9,
           shields: 3,
           trait: {
-            fr: 'PLUS FORT CONTRE LES GROS VAISSEAUX',
-            en: 'STRONGER AGAINST BIGGER SHIPS',
-            ja: '大型の敵に強い'
+            fr: 'PLUS FORT CONTRE LES PETITS VAISSEAUX',
+            en: 'STRONGER AGAINST SMALLER SHIPS',
+            ja: '小型の敵に強い'
           },
           name: {
             fr: 'CRIMSON GAZE',
@@ -647,8 +669,10 @@
       const STAR_COUNT = 220;
       const SWITCH_ENEMY_VW = 0.15;
       const PLAYER_SHIP_VW = 0.22;
-      const SHIELD_CONTACT_OFFSET_RATIO = 0.12;
-      const SHIELD_CONTACT_OFFSET_RATIO_TANK = 0.16;
+      const SHIELD_CONTACT_DELAY_RATIO = 0;
+      const PROJECTILE_HIT_BOTTOM_PENETRATION_RATIO = 0.33;
+      const fractureCanvas = document.createElement('canvas');
+      const fractureCtx = fractureCanvas.getContext('2d');
 
       const player = {
         x: 0,
@@ -957,8 +981,9 @@
       }
 
       function getEnemyMaxHp(enemy) {
-        if (enemy.type === 'laser') return 3;
-        if (enemy.type === 'tank') return 2;
+        if (enemy.type === 'laser' || enemy.type === 'tank') {
+          return selectedShip === 'red' ? 3 : 2;
+        }
         return 1;
       }
 
@@ -1073,12 +1098,12 @@ function findEnemyById(id) {
         let image = enemySprites[Math.floor(Math.random() * enemySprites.length)] || null;
 
         if (inputMode !== 'eyegaze') {
-          if (roll < (difficulty === 'competitive' ? 0.28 : difficulty === 'hard' ? 0.18 : 0.08)) {
+          if (roll < (difficulty === 'competitive' ? 0.14 : difficulty === 'hard' ? 0.18 : 0.08)) {
             type = 'laser';
             image = heavyEnemySprite;
           } else if (
             (difficulty === 'hard' && Math.random() < 0.35) ||
-            (difficulty === 'competitive' && Math.random() < 0.5)
+            (difficulty === 'competitive' && Math.random() < 0.22)
           ) {
             type = 'tank';
             image = heavyEnemySprite;
@@ -1135,14 +1160,17 @@ function findEnemyById(id) {
           hp: maxHp,
           maxHp,
           damageFlashUntil: 0,
-          smokeLevel: 0
+          smokeLevel: 0,
+          fractureLines: []
         });
       }
 
       function getEnemyShieldContactOffset(enemy) {
-        if (enemy.type === 'tank') return enemy.size * SHIELD_CONTACT_OFFSET_RATIO_TANK;
-        if (enemy.type === 'laser') return enemy.size * 0.145;
-        return enemy.size * SHIELD_CONTACT_OFFSET_RATIO;
+        return enemy.size * SHIELD_CONTACT_DELAY_RATIO;
+      }
+
+      function getEnemyProjectileHitCenterY(enemy) {
+        return enemy.y - enemy.size * PROJECTILE_HIT_BOTTOM_PENETRATION_RATIO;
       }
 
       function getSpawnDelayMs() {
@@ -1204,8 +1232,8 @@ function findEnemyById(id) {
         if (enemy.hp > 0) {
           const slowRatio =
             enemy.type === 'laser'
-              ? (enemy.hp === 2 ? 0.82 : 0.62)
-              : 0.58;
+              ? (enemy.hp === 2 ? 0.68 : 0.42)
+              : 0.45;
 
           if (typeof enemy.baseSpeed === 'number') {
             enemy.speed = enemy.baseSpeed * slowRatio;
@@ -1213,7 +1241,7 @@ function findEnemyById(id) {
             enemy.speed *= slowRatio;
           }
 
-          spawnTankDamageSmoke(enemy.x, enemy.y, enemy.size * (0.9 + damageTaken * 0.18));
+          ensureEnemyFractures(enemy, damageTaken);
         }
       }
 
@@ -1290,6 +1318,7 @@ function findEnemyById(id) {
                   e.attackStartAt = now;
                   e.y = dangerY - e.size * 0.5;
                   triggerShieldFlash(now);
+                  playSfx('shield');
                   if (loseLife()) return;
                 }
               } else if (e.attackState === 'shaking') {
@@ -1314,8 +1343,8 @@ function findEnemyById(id) {
             } else {
               e.y += e.speed * dt;
               const dangerY = getDangerLineY();
-              const enemyShieldBottom = e.y + getEnemyShieldContactOffset(e);
-              if (enemyShieldBottom >= dangerY) {
+              const enemyShieldContactY = e.y - getEnemyShieldContactOffset(e);
+              if (enemyShieldContactY >= dangerY) {
                 spawnShieldContactBurst(e.x, dangerY, e.size);
                 playSfx('shield');
                 enemies.splice(i, 1);
@@ -1335,9 +1364,11 @@ function findEnemyById(id) {
               if (e.attackState) continue;
               if (b.targetId !== null && b.targetId !== e.id) continue;
 
+              const hitCenterY = e.eyegazeTile ? e.y : getEnemyProjectileHitCenterY(e);
               const dx = b.x - e.x;
-              const dy = b.y - e.y;
-              if ((dx * dx + dy * dy) <= ((e.size * 0.45) * (e.size * 0.45))) {
+              const dy = b.y - hitCenterY;
+              const hitRadius = e.eyegazeTile ? e.size * 0.45 : e.size * 0.4;
+              if ((dx * dx + dy * dy) <= (hitRadius * hitRadius)) {
                 bullets.splice(j, 1);
                 playSfx('hit');
 
@@ -1402,6 +1433,7 @@ function findEnemyById(id) {
             for (const p of burst.particles) {
               p.x += p.vx * stepDt;
               p.y += p.vy * stepDt;
+
               p.vx *= drag;
               p.vy *= drag;
             }
@@ -1689,45 +1721,92 @@ function findEnemyById(id) {
         ctx.restore();
       }
 
+      function ensureEnemyFractures(enemy, damageLevel) {
+        if (!enemy || enemy.eyegazeTile) return;
+
+        if (!Array.isArray(enemy.fractureLines)) enemy.fractureLines = [];
+        const targetCount = Math.min(18, 4 + damageLevel * 5 + (enemy.type === 'laser' ? 2 : 0));
+
+        while (enemy.fractureLines.length < targetCount) {
+          const points = [];
+          const segments = 2 + Math.floor(Math.random() * 3);
+          const startX = (Math.random() - 0.5) * 0.56;
+          const startY = -0.28 + Math.random() * 0.5;
+          points.push({ x: startX, y: startY });
+
+          let px = startX;
+          let py = startY;
+          for (let i = 0; i < segments; i += 1) {
+            px += (Math.random() - 0.5) * 0.22;
+            py += 0.07 + Math.random() * 0.11;
+            points.push({
+              x: Math.max(-0.34, Math.min(0.34, px)),
+              y: Math.max(-0.34, Math.min(0.34, py))
+            });
+          }
+
+          enemy.fractureLines.push({
+            points,
+            thickness: 1.4 + Math.random() * 1.8,
+            pulseOffset: Math.random() * Math.PI * 2
+          });
+        }
+      }
+
       function drawEnemyDamageState(e) {
         if (e.eyegazeTile) return;
 
         const damageLevel = e.smokeLevel || ((e.maxHp || 1) - e.hp);
-        if (damageLevel <= 0) return;
+        if (damageLevel <= 0 || !e.image || !e.image.complete) return;
 
-        const x = e.x;
-        const y = e.y;
-        const size = e.size;
-        const flashActive = performance.now() < (e.damageFlashUntil || 0);
+        ensureEnemyFractures(e, damageLevel);
+        if (!e.fractureLines || !e.fractureLines.length) return;
 
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-over';
-
-        const plumeCount = Math.min(4, damageLevel + 1);
-        for (let i = 0; i < plumeCount; i += 1) {
-          const offsetX = (-0.16 + i * 0.1) * size;
-          const offsetY = (-0.22 - i * 0.04) * size;
-          const r = size * (0.08 + i * 0.02 + damageLevel * 0.015);
-
-          const grad = ctx.createRadialGradient(
-            x + offsetX,
-            y + offsetY,
-            0,
-            x + offsetX,
-            y + offsetY,
-            r
-          );
-          grad.addColorStop(0, `rgba(220,225,230,${flashActive ? 0.42 : 0.28})`);
-          grad.addColorStop(0.55, `rgba(130,140,150,${flashActive ? 0.3 : 0.22})`);
-          grad.addColorStop(1, 'rgba(80,85,95,0)');
-
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(x + offsetX, y + offsetY, r, 0, Math.PI * 2);
-          ctx.fill();
+        const sizePx = Math.max(2, Math.round(e.size));
+        if (fractureCanvas.width !== sizePx || fractureCanvas.height !== sizePx) {
+          fractureCanvas.width = sizePx;
+          fractureCanvas.height = sizePx;
         }
 
-        ctx.restore();
+        fractureCtx.clearRect(0, 0, sizePx, sizePx);
+
+        const pulseTime = performance.now() * 0.012;
+        const flashBoost = performance.now() < (e.damageFlashUntil || 0) ? 0.34 : 0;
+
+        fractureCtx.save();
+        fractureCtx.globalCompositeOperation = 'lighter';
+        fractureCtx.lineCap = 'round';
+        fractureCtx.lineJoin = 'round';
+
+        for (const crack of e.fractureLines) {
+          const pulse = 0.52 + 0.48 * Math.sin(pulseTime + crack.pulseOffset);
+          const alpha = Math.min(0.95, 0.24 + damageLevel * 0.08 + pulse * 0.24 + flashBoost);
+          const width = crack.thickness * (0.75 + pulse * 0.55);
+
+          fractureCtx.strokeStyle = `rgba(255, 36, 52, ${alpha})`;
+          fractureCtx.shadowColor = `rgba(255, 20, 40, ${Math.min(1, alpha + 0.16)})`;
+          fractureCtx.shadowBlur = 9 + pulse * 8;
+          fractureCtx.lineWidth = width;
+          fractureCtx.beginPath();
+
+          crack.points.forEach((pt, index) => {
+            const px = sizePx * 0.5 + pt.x * sizePx;
+            const py = sizePx * 0.5 + pt.y * sizePx;
+            if (index === 0) fractureCtx.moveTo(px, py);
+            else fractureCtx.lineTo(px, py);
+          });
+
+          fractureCtx.stroke();
+        }
+
+        fractureCtx.restore();
+
+        fractureCtx.save();
+        fractureCtx.globalCompositeOperation = 'destination-in';
+        fractureCtx.drawImage(e.image, 0, 0, sizePx, sizePx);
+        fractureCtx.restore();
+
+        ctx.drawImage(fractureCanvas, e.x - sizePx * 0.5, e.y - sizePx * 0.5, sizePx, sizePx);
       }
 
       function drawEnemies() {
@@ -1859,10 +1938,6 @@ function findEnemyById(id) {
               colorA = '255,190,70';
               colorB = '255,245,210';
               baseAlpha = 0.78;
-            } else if (burst.color === 'smoke') {
-              colorA = '165,175,188';
-              colorB = null;
-              baseAlpha = 0.38;
             } else if (burst.color === 'orange') {
               colorA = '255,120,70';
               colorB = '255,220,120';
@@ -1874,7 +1949,7 @@ function findEnemyById(id) {
             }
 
             ctx.save();
-            ctx.globalCompositeOperation = burst.color === 'smoke' ? 'source-over' : 'lighter';
+            ctx.globalCompositeOperation = 'lighter';
 
             const radius = Math.max(0.5, p.r * alpha);
             const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
@@ -2176,23 +2251,6 @@ function findEnemyById(id) {
         });
       }
 
-      function spawnTankDamageSmoke(x, y, size) {
-        const particles = [];
-        const count = 24;
-        for (let i = 0; i < count; i += 1) {
-          const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * 0.8;
-          const speed = 40 + Math.random() * 70;
-          particles.push({
-            x: x + (Math.random() - 0.5) * size * 0.25,
-            y: y + (Math.random() - 0.5) * size * 0.2,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed - Math.random() * 15,
-            r: 4 + Math.random() * 7
-          });
-        }
-        fxBursts.push({ life: 0.75, maxLife: 0.75, particles, type: 'particles', color: 'smoke', drag: 0.965 });
-      }
-
       function triggerShieldFlash(now = performance.now()) {
         shieldFlashStartedAt = now;
         shieldFlashUntil = now + EYEGAZE_SHIELD_FLASH_MS;
@@ -2313,7 +2371,7 @@ function findEnemyById(id) {
       function updateHud() {
         scoreNode.textContent = `Score: ${score}`;
         livesNode.style.display = hasLimitedLives() ? '' : 'none';
-        if (hasLimitedLives()) livesNode.textContent = `Lives: ${lives}`;
+        if (hasLimitedLives()) livesNode.textContent = `Shield: ${lives}`;
       }
 
       function getCurrentLanguage() {
@@ -2323,10 +2381,16 @@ function findEnemyById(id) {
       function updateHudLanguage() {
         const lang = getCurrentLanguage();
         const scoreLabel = lang === 'fr' ? 'Score' : lang === 'ja' ? 'スコア' : 'Score';
-        const livesLabel = lang === 'fr' ? 'Vies' : lang === 'ja' ? 'ライフ' : 'Lives';
+        const livesLabel = lang === 'fr' ? 'Bouclier' : lang === 'ja' ? 'シールド' : 'Shield';
         scoreNode.textContent = `${scoreLabel}: ${score}`;
         livesNode.style.display = hasLimitedLives() ? '' : 'none';
         if (hasLimitedLives()) livesNode.textContent = `${livesLabel}: ${lives}`;
+      }
+
+      function getStartingShields() {
+        if (difficulty === 'hard') return selectedShip === 'blue' ? 6 : 5;
+        if (difficulty === 'competitive') return selectedShip === 'blue' ? 3 : 2;
+        return 0;
       }
 
       function hasLimitedLives() {
@@ -2389,7 +2453,8 @@ function findEnemyById(id) {
       }
 
       function getAmmoRegenPerSecond() {
-        return difficulty === 'competitive' ? 0.22 : 0.3;
+        const baseRegen = difficulty === 'competitive' ? 0.22 : 0.3;
+        return selectedShip === 'blue' ? baseRegen * 0.7 : baseRegen;
       }
 
       function updateAmmoMeter() {
@@ -2469,7 +2534,7 @@ function findEnemyById(id) {
         if (restartButton) restartButton.style.display = 'none';
 
         score = 0;
-        lives = difficulty === 'competitive' ? 2 : difficulty === 'hard' ? 5 : 0;
+        lives = getStartingShields();
         bullets.length = 0;
         enemies.length = 0;
         fxBursts.length = 0;
@@ -2537,7 +2602,7 @@ function findEnemyById(id) {
           if (retryEyegazeTile) retryEyegazeTile.style.display = 'block';
           startEyegazeRetryMonitor();
         } else {
-          if (retryHint) retryHint.textContent = lang === 'fr' ? 'Appuie sur espace pour recommencer' : lang === 'ja' ? 'スペースキーで再開' : 'Press space to retry';
+          if (retryHint) retryHint.textContent = lang === 'fr' ? 'Appuie sur ton switch pour recommencer' : lang === 'ja' ? 'スイッチで再開' : 'Press your switch to retry';
           if (retryEyegazeTile) retryEyegazeTile.style.display = 'none';
         }
 
@@ -2605,7 +2670,7 @@ function findEnemyById(id) {
           desc.dataset.ja = '敵の速度と出現が速くなります。装甲敵も登場します。';
         } else if (difficulty === 'competitive') {
           desc.dataset.fr = 'Les ennemis sont encore plus rapides et apparaissent encore plus vite. Il y a moins de vies.';
-          desc.dataset.en = 'Enemies are even faster and spawn even faster. You also have fewer lives.';
+          desc.dataset.en = 'Enemies are even faster and spawn even faster. You also have fewer shields.';
           desc.dataset.ja = '敵はさらに速く出現もさらに早くなります。ライフも少なくなります。';
         } else {
           desc.dataset.fr = 'Cadence équilibrée pour commencer.';
