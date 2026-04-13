@@ -43,6 +43,10 @@
       display: none;
       z-index: 32;
     }
+    .ammo-meter.right {
+      left: auto;
+      right: 20px;
+    }
 
     .ammo-meter-track {
       width: 72px;
@@ -570,6 +574,11 @@
         <div id="ammo-meter-fill" class="ammo-meter-fill"></div>
       </div>
     </div>
+    <div id="ammo-meter-right" class="ammo-meter right" aria-live="polite">
+      <div class="ammo-meter-track">
+        <div id="ammo-meter-fill-right" class="ammo-meter-fill"></div>
+      </div>
+    </div>
   </div>
   <div id="gazePointer" aria-hidden="true"></div>
 
@@ -654,6 +663,9 @@
       const ammoMeter = document.getElementById('ammo-meter');
       const ammoMeterFill = document.getElementById('ammo-meter-fill');
       const ammoMeterTrack = document.querySelector('#ammo-meter .ammo-meter-track');
+      const ammoMeterRight = document.getElementById('ammo-meter-right');
+      const ammoMeterFillRight = document.getElementById('ammo-meter-fill-right');
+      const ammoMeterTrackRight = document.querySelector('#ammo-meter-right .ammo-meter-track');
       const scoreRegisterPanel = document.getElementById('score-register-panel');
       const scoreUiLayout = document.getElementById('score-ui-layout');
       const scoreRegisterQuestion = document.getElementById('score-register-question');
@@ -755,6 +767,7 @@
       const SCORE_TOP_LIMIT = 5;
       const SCORE_GAMES = {
         switch: 'space-adventure-switch',
+        switch2p: 'space-adventure-switch-2players',
         eyegaze: 'space-adventure-eyegaze'
       };
 
@@ -772,6 +785,7 @@
       let lastTs = 0;
       let motionTime = 0;
       let ammoEnergy = 1;
+      const ammoEnergyByShip = { blue: 1, red: 1 };
       let gazeX = window.innerWidth * 0.5;
       let gazeY = window.innerHeight * 0.5;
       let hoveredEnemyId = null;
@@ -1364,8 +1378,13 @@ function findEnemyById(id) {
 
         if (usesAmmoMeter()) {
           const cost = getShotCost();
-          if (ammoEnergy < cost) return;
-          ammoEnergy = Math.max(0, ammoEnergy - cost);
+          if (inputMode === 'switch2p') {
+            if (ammoEnergyByShip[ship] < cost) return;
+            ammoEnergyByShip[ship] = Math.max(0, ammoEnergyByShip[ship] - cost);
+          } else {
+            if (ammoEnergy < cost) return;
+            ammoEnergy = Math.max(0, ammoEnergy - cost);
+          }
           updateAmmoMeter();
         }
 
@@ -1431,7 +1450,12 @@ function findEnemyById(id) {
         players.red.cooldown = Math.max(0, players.red.cooldown - dt);
 
         if (usesAmmoMeter() && !gameOverPending) {
-          ammoEnergy = Math.min(1, ammoEnergy + getAmmoRegenPerSecond() * dt);
+          if (inputMode === 'switch2p') {
+            ammoEnergyByShip.blue = Math.min(1, ammoEnergyByShip.blue + getAmmoRegenPerSecond('blue') * dt);
+            ammoEnergyByShip.red = Math.min(1, ammoEnergyByShip.red + getAmmoRegenPerSecond('red') * dt);
+          } else {
+            ammoEnergy = Math.min(1, ammoEnergy + getAmmoRegenPerSecond(selectedShip) * dt);
+          }
           updateAmmoMeter();
         }
 
@@ -2606,7 +2630,9 @@ function findEnemyById(id) {
       }
 
       function getScoreGameKey() {
-        return inputMode === 'eyegaze' ? SCORE_GAMES.eyegaze : SCORE_GAMES.switch;
+        if (inputMode === 'eyegaze') return SCORE_GAMES.eyegaze;
+        if (inputMode === 'switch2p') return SCORE_GAMES.switch2p;
+        return SCORE_GAMES.switch;
       }
 
       function getSelectedModeForScoreboard() {
@@ -2943,20 +2969,38 @@ function findEnemyById(id) {
         return difficulty === 'competitive' ? 0.55 : 0.35;
       }
 
-      function getAmmoRegenPerSecond() {
+      function getAmmoRegenPerSecond(ship = selectedShip) {
         const baseRegen = difficulty === 'competitive' ? 0.22 : 0.3;
-        return selectedShip === 'blue' ? baseRegen * 0.7 : baseRegen;
+        return ship === 'blue' ? baseRegen * 0.7 : baseRegen;
+      }
+
+      function renderAmmoFill(fillNode, energy, ship = 'blue') {
+        if (!fillNode) return;
+        const percent = Math.round(energy * 100);
+        const hue = ship === 'red' ? 0 : Math.round(energy * 120);
+        fillNode.style.height = `${percent}%`;
+        fillNode.style.background = ship === 'red'
+          ? `hsl(${hue} 85% ${40 + energy * 16}%)`
+          : `hsl(${hue} 88% 52%)`;
+        fillNode.style.boxShadow = ship === 'red'
+          ? `0 0 16px hsla(${hue} 95% 60% / ${0.35 + energy * 0.35})`
+          : `0 0 16px hsla(${hue} 95% 60% / 0.65)`;
       }
 
       function updateAmmoMeter() {
         if (!ammoMeter || !ammoMeterFill) return;
         updateAmmoMeterLayout();
-        ammoMeter.style.display = usesAmmoMeter() ? 'block' : 'none';
-        const percent = Math.round(ammoEnergy * 100);
-        const hue = Math.round(ammoEnergy * 120);
-        ammoMeterFill.style.height = `${percent}%`;
-        ammoMeterFill.style.background = `hsl(${hue} 88% 52%)`;
-        ammoMeterFill.style.boxShadow = `0 0 16px hsla(${hue} 95% 60% / 0.65)`;
+        const show = usesAmmoMeter();
+        const showDual = show && inputMode === 'switch2p';
+        ammoMeter.style.display = show ? 'block' : 'none';
+        if (ammoMeterRight) ammoMeterRight.style.display = showDual ? 'block' : 'none';
+
+        if (showDual) {
+          renderAmmoFill(ammoMeterFill, ammoEnergyByShip.blue, 'blue');
+          renderAmmoFill(ammoMeterFillRight, ammoEnergyByShip.red, 'red');
+        } else {
+          renderAmmoFill(ammoMeterFill, ammoEnergy, selectedShip);
+        }
       }
 
       function updateAmmoMeterLayout() {
@@ -2971,6 +3015,14 @@ function findEnemyById(id) {
           ammoMeter.style.transform = 'none';
           ammoMeterTrack.style.width = '56px';
           ammoMeterTrack.style.height = `${barHeight}px`;
+          if (ammoMeterRight && ammoMeterTrackRight) {
+            ammoMeterRight.style.right = '20px';
+            ammoMeterRight.style.left = 'auto';
+            ammoMeterRight.style.top = `${top}px`;
+            ammoMeterRight.style.transform = 'none';
+            ammoMeterTrackRight.style.width = '56px';
+            ammoMeterTrackRight.style.height = `${barHeight}px`;
+          }
           return;
         }
         ammoMeter.style.left = '20px';
@@ -2978,6 +3030,14 @@ function findEnemyById(id) {
         ammoMeter.style.transform = 'translateY(-50%)';
         ammoMeterTrack.style.width = '72px';
         ammoMeterTrack.style.height = '260px';
+        if (ammoMeterRight && ammoMeterTrackRight) {
+          ammoMeterRight.style.right = '20px';
+          ammoMeterRight.style.left = 'auto';
+          ammoMeterRight.style.top = '50%';
+          ammoMeterRight.style.transform = 'translateY(-50%)';
+          ammoMeterTrackRight.style.width = '72px';
+          ammoMeterTrackRight.style.height = '260px';
+        }
       }
 
       function tick(ts) {
@@ -3040,6 +3100,8 @@ function findEnemyById(id) {
         currentSpawnDelay = getSpawnDelayMs();
         motionTime = 0;
         ammoEnergy = 1;
+        ammoEnergyByShip.blue = 1;
+        ammoEnergyByShip.red = 1;
         hoveredEnemyId = null;
         hoverStartAt = 0;
         screenShakeUntil = 0;
