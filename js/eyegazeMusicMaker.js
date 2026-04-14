@@ -1,0 +1,532 @@
+document.addEventListener('DOMContentLoaded', () => {
+  const gameOptionsModal = document.getElementById('game-options');
+  const tilePickerModal = document.getElementById('tile-picker-modal');
+  const tilePickerGrid = document.getElementById('tile-picker-grid');
+  const presetPickerGrid = document.getElementById('preset-picker-grid');
+  const tileContainer = document.getElementById('tile-container');
+  const chooseTilesButton = document.getElementById('choose-tiles-button');
+  const choosePresetsButton = document.getElementById('choose-presets-button');
+  const startGameButton = document.getElementById('start-game-button');
+  const pickerInstructions = document.getElementById('control-panel-instructions');
+  const tileCountInput = document.getElementById('tile-count');
+  const tileCountValueSpan = document.getElementById('tile-count-value');
+  const tileCountDisplay = document.getElementById('tile-count-display');
+  const volumeInput = document.getElementById('music-volume');
+  const volumeValue = document.getElementById('music-volume-value');
+  const stopAllToggle = document.getElementById('enable-stop-all');
+  const backgroundSelect = document.getElementById('background-color');
+  const fixationTimeInput = document.getElementById('fixation-time');
+  const fixationTimeValue = document.getElementById('fixation-time-value');
+  const showGazePointer = document.getElementById('showGazePointer');
+  const gazeSize = document.getElementById('gazeSize');
+  const gazeSizeVal = document.getElementById('gazeSizeVal');
+  const gazeOpacity = document.getElementById('gazeOpacity');
+  const gazeOpacityVal = document.getElementById('gazeOpacityVal');
+  const gazePointer = document.getElementById('gazePointer');
+  const languageToggle = document.getElementById('language-toggle');
+
+  const instruments = [
+    { id: 'drum', label: 'Drum', image: '../../images/pictos/balloon.png', sound: '../../sounds/beatles.mp3', color: '#ef4444' },
+    { id: 'bell', label: 'Bell', image: '../../images/pictos/apple.png', sound: '../../sounds/beatles.mp3', color: '#f59e0b' },
+    { id: 'piano', label: 'Piano', image: '../../images/pictos/avocado.png', sound: '../../sounds/beatles.mp3', color: '#10b981' },
+    { id: 'guitar', label: 'Guitar', image: '../../images/pictos/banana.png', sound: '../../sounds/beatles.mp3', color: '#3b82f6' },
+    { id: 'marimba', label: 'Marimba', image: '../../images/pictos/almond.png', sound: '../../sounds/beatles.mp3', color: '#8b5cf6' },
+    { id: 'synth', label: 'Synth', image: '../../images/pictos/assistivebike.png', sound: '../../sounds/beatles.mp3', color: '#ec4899' },
+    { id: 'flute', label: 'Flute', image: '../../images/pictos/assistiveswitches.png', sound: '../../sounds/beatles.mp3', color: '#22c55e' },
+    { id: 'bass', label: 'Bass', image: '../../images/pictos/angry.png', sound: '../../sounds/beatles.mp3', color: '#0ea5e9' },
+    { id: 'pad', label: 'Pad', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3', color: '#eab308' },
+    { id: 'vocals', label: 'Vocals', image: '../../images/pictos/OSD.png', sound: '../../sounds/beatles.mp3', color: '#f97316' }
+  ];
+  const presets = [
+    {
+      id: 'percussion',
+      label: 'Percussions',
+      image: '../../images/pictos/assistiveswitches.png',
+      instrumentIds: ['drum', 'marimba', 'bell'],
+      mode: 'instrument',
+    },
+    {
+      id: 'rock',
+      label: 'Rock band',
+      image: '../../images/pictos/assistivebike.png',
+      instrumentIds: ['drum', 'guitar', 'bass'],
+      mode: 'instrument',
+    },
+    {
+      id: 'ambient',
+      label: 'Ambient',
+      image: '../../images/pictos/OSD.png',
+      instrumentIds: ['pad', 'synth', 'flute'],
+      mode: 'instrument',
+    },
+    {
+      id: 'punk-rock',
+      label: 'Punk rock',
+      image: '../../images/pictos/balloon.png',
+      instrumentIds: ['drum', 'guitar', 'bass', 'vocals'],
+      mode: 'song',
+      tracks: {
+        drum: '../../sounds/beatles.mp3',
+        guitar: '../../sounds/arthur.mp3',
+        bass: '../../sounds/africaflute.mp3',
+        vocals: '../../sounds/belleetbete.mp3',
+      },
+    },
+  ];
+
+  let desiredTileCount = parseInt(tileCountInput.value, 10) || 3;
+  let fixationDelay = parseInt(fixationTimeInput.value, 10) || 2000;
+  let currentVolume = parseInt(volumeInput.value, 10) || 60;
+  let selectedIds = [];
+  let audioMap = new Map();
+  let tileMap = new Map();
+  let inGame = false;
+  let musicLine = null;
+  let equalizerBars = [];
+  let equalizerTimer = null;
+  let activeInstrumentIds = new Set();
+  let pickerMode = 'instrument';
+  let currentPreset = null;
+  let isSongMode = false;
+
+  function getInstrumentSound(instrument) {
+    if (currentPreset?.tracks?.[instrument.id]) {
+      return currentPreset.tracks[instrument.id];
+    }
+    return instrument.sound;
+  }
+
+  function startGame() {
+    tilePickerModal.style.display = 'none';
+    tileContainer.style.display = 'grid';
+    requestFullscreen();
+    inGame = true;
+    if (languageToggle) {
+      languageToggle.style.display = 'none';
+    }
+    buildGameTiles();
+    updatePointerStyle();
+  }
+
+  function updateVolumeDisplay() {
+    volumeValue.textContent = currentVolume;
+  }
+
+  function updateTileCountDisplay() {
+    tileCountValueSpan.textContent = desiredTileCount;
+    tileCountDisplay.textContent = desiredTileCount;
+  }
+
+  function updateFixationDisplay() {
+    fixationTimeValue.textContent = fixationDelay;
+    document.documentElement.style.setProperty('--hover-duration', `${fixationDelay}ms`);
+  }
+
+  function ensurePointerOverlay() {
+    if (!gazePointer) return;
+    const overlay = document.getElementById('gazePointerOverlay');
+    if (overlay && gazePointer.parentElement !== overlay) {
+      overlay.appendChild(gazePointer);
+    }
+  }
+
+  function updatePointerStyle() {
+    if (!gazePointer) return;
+    const size = parseInt(gazeSize.value, 10) || 36;
+    const opacity = parseInt(gazeOpacity.value, 10) || 100;
+    gazeSizeVal.textContent = size;
+    gazeOpacityVal.textContent = opacity;
+    gazePointer.style.setProperty('--gp-size', `${size}px`);
+    const pointerVisible = inGame && showGazePointer.checked;
+    gazePointer.style.opacity = pointerVisible ? opacity / 100 : 0;
+    document.body.classList.toggle('hide-native-cursor', pointerVisible);
+    if (!pointerVisible) {
+      gazePointer.classList.remove('gp-dwell');
+    }
+  }
+
+  function updateAudioVolume() {
+    audioMap.forEach(audio => {
+      audio.volume = currentVolume / 100;
+    });
+  }
+
+  function updateBackground() {
+    if (!backgroundSelect) return;
+    document.body.style.backgroundColor = backgroundSelect.value;
+  }
+
+  function trimSelections() {
+    if (selectedIds.length <= desiredTileCount) return;
+    selectedIds = selectedIds.slice(0, desiredTileCount);
+  }
+
+  function renderPicker() {
+    tilePickerGrid.innerHTML = '';
+    instruments.forEach(instrument => {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.style.backgroundImage = `url(${instrument.image})`;
+      tile.dataset.id = instrument.id;
+
+      const caption = document.createElement('span');
+      caption.className = 'caption';
+      caption.textContent = instrument.label;
+      tile.appendChild(caption);
+
+      if (selectedIds.includes(instrument.id)) {
+        tile.classList.add('selected');
+      }
+
+      tile.addEventListener('click', () => {
+        if (selectedIds.includes(instrument.id)) {
+          selectedIds = selectedIds.filter(id => id !== instrument.id);
+        } else if (selectedIds.length < desiredTileCount) {
+          selectedIds.push(instrument.id);
+        }
+        renderPicker();
+        updateStartState();
+      });
+
+      tilePickerGrid.appendChild(tile);
+    });
+  }
+
+  function applyPreset(preset) {
+    if (!preset) return;
+    currentPreset = preset;
+    isSongMode = preset.mode === 'song';
+    desiredTileCount = preset.instrumentIds.length;
+    tileCountInput.value = desiredTileCount;
+    selectedIds = [...preset.instrumentIds];
+    updateTileCountDisplay();
+    renderPicker();
+    updateStartState();
+  }
+
+  function renderPresets() {
+    if (!presetPickerGrid) return;
+    presetPickerGrid.innerHTML = '';
+    const filteredPresets = presets.filter(preset => (
+      pickerMode === 'preset' ? preset.mode === 'song' : preset.mode !== 'song'
+    ));
+    filteredPresets.forEach(preset => {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'preset-tile';
+      tile.style.backgroundImage = `url(${preset.image})`;
+      tile.setAttribute('aria-label', preset.label);
+
+      const caption = document.createElement('span');
+      caption.className = 'preset-caption';
+      caption.textContent = preset.label;
+      tile.appendChild(caption);
+
+      tile.addEventListener('click', () => {
+        applyPreset(preset);
+        if (pickerMode === 'preset') {
+          startGame();
+        }
+      });
+
+      presetPickerGrid.appendChild(tile);
+    });
+  }
+
+  function updateStartState() {
+    const ready = selectedIds.length === desiredTileCount;
+    startGameButton.disabled = !ready;
+  }
+
+  function requestFullscreen() {
+    const element = document.documentElement;
+    if (element.requestFullscreen) {
+      element.requestFullscreen();
+    } else if (element.webkitRequestFullscreen) {
+      element.webkitRequestFullscreen();
+    } else if (element.msRequestFullscreen) {
+      element.msRequestFullscreen();
+    }
+  }
+
+  function toggleInstrument(tile, instrument) {
+    const audio = audioMap.get(instrument.id);
+    if (!audio) return;
+
+    if (audio.paused) {
+      audio.currentTime = 0;
+      if (isSongMode) {
+        audio.volume = 1;
+        if (audio.paused) {
+          const playPromise = audio.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+          }
+        }
+      } else {
+        audio.play();
+      }
+      tile.classList.add('playing');
+      activeInstrumentIds.add(instrument.id);
+      updateEqualizerState();
+    } else {
+      if (isSongMode) {
+        audio.volume = 0;
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      tile.classList.remove('playing');
+      activeInstrumentIds.delete(instrument.id);
+      updateEqualizerState();
+    }
+  }
+
+  function updateEqualizerState() {
+    if (activeInstrumentIds.size > 0) {
+      startEqualizer();
+    } else {
+      stopEqualizer();
+      setEqualizerBars(0.15);
+    }
+  }
+
+  function stopAllSounds() {
+    audioMap.forEach(audio => {
+      if (isSongMode) {
+        audio.volume = 0;
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    });
+    tileMap.forEach(tile => {
+      tile.classList.remove('playing');
+    });
+    activeInstrumentIds.clear();
+    updateEqualizerState();
+  }
+
+  function setEqualizerBars(level = 0.2) {
+    const clamped = Math.max(0, Math.min(1, level));
+    equalizerBars.forEach(bar => {
+      const height = (20 + clamped * 80) * (0.7 + Math.random() * 0.6);
+      bar.style.height = `${Math.min(height, 100)}%`;
+      const normalized = Math.min(height / 100, 1);
+      const hue = 120 - 120 * normalized;
+      const lightness = 40 + 20 * (1 - normalized);
+      bar.style.backgroundColor = `hsl(${hue} 85% ${lightness}%)`;
+      bar.style.boxShadow = `0 0 10px hsl(${hue} 85% 55% / 0.65)`;
+    });
+  }
+
+  function startEqualizer() {
+    if (equalizerTimer) return;
+    equalizerTimer = window.setInterval(() => {
+      const total = Math.max(1, tileMap.size);
+      const ratio = Math.min(1, activeInstrumentIds.size / total);
+      const baseLevel = 0.15 + ratio * 0.75;
+      setEqualizerBars(baseLevel);
+    }, 140);
+  }
+
+  function stopEqualizer() {
+    if (equalizerTimer) {
+      window.clearInterval(equalizerTimer);
+      equalizerTimer = null;
+    }
+  }
+
+  function startSongPlayback() {
+    audioMap.forEach(audio => {
+      audio.loop = true;
+      audio.volume = 0;
+      audio.currentTime = 0;
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+      }
+    });
+  }
+
+  function buildGameTiles() {
+    tileContainer.innerHTML = '';
+    tileContainer.classList.add('music-grid');
+    tileContainer.style.setProperty('--pulse-phase', `${Math.floor(performance.now() % 1400)}ms`);
+    audioMap = new Map();
+    tileMap = new Map();
+    activeInstrumentIds = new Set();
+    stopEqualizer();
+    equalizerBars = [];
+    musicLine = document.createElement('div');
+    musicLine.className = 'music-line';
+    const musicLineTrack = document.createElement('div');
+    musicLineTrack.className = 'music-line-track music-eq';
+    const musicLineBars = document.createElement('div');
+    musicLineBars.className = 'music-line-bars';
+
+    const selected = instruments.filter(instrument => selectedIds.includes(instrument.id));
+    const columns = Math.min(3, Math.max(1, selected.length));
+    tileContainer.style.setProperty('--music-columns', columns);
+
+    const lineBarCount = 32;
+
+    selected.forEach(instrument => {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.style.backgroundImage = `url(${instrument.image})`;
+      tile.dataset.instrumentId = instrument.id;
+
+      const caption = document.createElement('span');
+      caption.className = 'caption';
+      caption.textContent = instrument.label;
+      tile.appendChild(caption);
+
+      const audio = new Audio(getInstrumentSound(instrument));
+      audio.loop = true;
+      audio.volume = currentVolume / 100;
+      audioMap.set(instrument.id, audio);
+
+      let hoverTimeout = null;
+
+      tile.addEventListener('pointerenter', () => {
+        if (gazePointer) gazePointer.classList.add('gp-dwell');
+        hoverTimeout = window.setTimeout(() => {
+          toggleInstrument(tile, instrument);
+          if (gazePointer) gazePointer.classList.remove('gp-dwell');
+        }, fixationDelay);
+      });
+
+      tile.addEventListener('pointerleave', () => {
+        if (hoverTimeout) {
+          window.clearTimeout(hoverTimeout);
+        }
+        if (gazePointer) gazePointer.classList.remove('gp-dwell');
+      });
+
+      tileContainer.appendChild(tile);
+      tileMap.set(instrument.id, tile);
+    });
+
+    for (let i = 0; i < lineBarCount; i += 1) {
+      const bar = document.createElement('div');
+      bar.className = 'music-line-bar';
+      musicLineBars.appendChild(bar);
+      equalizerBars.push(bar);
+    }
+
+    musicLineTrack.appendChild(musicLineBars);
+    musicLine.appendChild(musicLineTrack);
+    tileContainer.appendChild(musicLine);
+    updateEqualizerState();
+    if (isSongMode) {
+      startSongPlayback();
+    }
+
+    if (stopAllToggle?.checked) {
+      const stopTile = document.createElement('div');
+      stopTile.className = 'tile stop-all-tile';
+      stopTile.setAttribute('role', 'button');
+      stopTile.setAttribute('aria-label', 'Stop all');
+      stopTile.textContent = '✕';
+
+      let hoverTimeout = null;
+      stopTile.addEventListener('pointerenter', () => {
+        if (gazePointer) gazePointer.classList.add('gp-dwell');
+        hoverTimeout = window.setTimeout(() => {
+          stopAllSounds();
+          if (gazePointer) gazePointer.classList.remove('gp-dwell');
+        }, fixationDelay);
+      });
+
+      stopTile.addEventListener('pointerleave', () => {
+        if (hoverTimeout) {
+          window.clearTimeout(hoverTimeout);
+        }
+        if (gazePointer) gazePointer.classList.remove('gp-dwell');
+      });
+
+      tileContainer.appendChild(stopTile);
+    }
+  }
+
+  function openPicker(mode) {
+    pickerMode = mode;
+    if (pickerMode === 'preset') {
+      tilePickerGrid.style.display = 'none';
+      if (pickerInstructions) {
+        pickerInstructions.style.display = 'none';
+      }
+      startGameButton.style.display = 'none';
+    } else {
+      tilePickerGrid.style.display = '';
+      if (pickerInstructions) {
+        pickerInstructions.style.display = '';
+      }
+      startGameButton.style.display = '';
+    }
+    renderPresets();
+    renderPicker();
+  }
+
+  chooseTilesButton.addEventListener('click', () => {
+    openPicker('instrument');
+    desiredTileCount = parseInt(tileCountInput.value, 10) || 3;
+    trimSelections();
+    updateTileCountDisplay();
+    updateStartState();
+    gameOptionsModal.style.display = 'none';
+    tilePickerModal.style.display = 'flex';
+  });
+
+  choosePresetsButton?.addEventListener('click', () => {
+    openPicker('preset');
+    currentPreset = null;
+    isSongMode = false;
+    gameOptionsModal.style.display = 'none';
+    tilePickerModal.style.display = 'flex';
+  });
+
+  startGameButton.addEventListener('click', () => {
+    startGame();
+  });
+
+  tileCountInput.addEventListener('input', () => {
+    desiredTileCount = parseInt(tileCountInput.value, 10) || 3;
+    updateTileCountDisplay();
+    trimSelections();
+    renderPicker();
+    updateStartState();
+  });
+
+  volumeInput.addEventListener('input', () => {
+    currentVolume = parseInt(volumeInput.value, 10) || 0;
+    updateVolumeDisplay();
+    updateAudioVolume();
+  });
+
+  backgroundSelect?.addEventListener('change', updateBackground);
+
+  fixationTimeInput.addEventListener('input', () => {
+    fixationDelay = parseInt(fixationTimeInput.value, 10) || 2000;
+    updateFixationDisplay();
+  });
+
+  showGazePointer.addEventListener('change', updatePointerStyle);
+  gazeSize.addEventListener('input', updatePointerStyle);
+  gazeOpacity.addEventListener('input', updatePointerStyle);
+
+  document.addEventListener('pointermove', event => {
+    if (!gazePointer || !showGazePointer.checked) return;
+    gazePointer.style.transform = `translate(${event.clientX}px, ${event.clientY}px) translate(-50%, -50%)`;
+  });
+
+  ensurePointerOverlay();
+  updateVolumeDisplay();
+  updateTileCountDisplay();
+  updateFixationDisplay();
+  updatePointerStyle();
+  updateBackground();
+  openPicker('instrument');
+  updateStartState();
+});
