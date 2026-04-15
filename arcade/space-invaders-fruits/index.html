@@ -43,6 +43,10 @@
       display: none;
       z-index: 32;
     }
+    .ammo-meter.right {
+      left: auto;
+      right: 20px;
+    }
 
     .ammo-meter-track {
       width: 72px;
@@ -79,6 +83,35 @@
       background: hsl(120 85% 52%);
       box-shadow: 0 0 14px rgba(120, 255, 140, 0.6);
       transition: height 80ms linear, background 120ms linear, box-shadow 120ms linear;
+    }
+
+    #input-mode-segmented-control .stop-action-mode-btn,
+    #stop-action-mode-segmented-control .stop-action-mode-btn {
+      font-size: clamp(11px, 1.55vw, 15px);
+      padding-inline: clamp(8px, 1.2vw, 14px);
+      min-width: 0;
+    }
+
+    @media (min-height: 1000px) {
+      #input-mode-segmented-control .stop-action-mode-btn,
+      #stop-action-mode-segmented-control .stop-action-mode-btn {
+        font-size: clamp(12px, 1.7vw, 16px);
+      }
+    }
+
+    @media (max-height: 720px) {
+      #input-mode-segmented-control .stop-action-mode-btn,
+      #stop-action-mode-segmented-control .stop-action-mode-btn {
+        font-size: clamp(9px, 1.45vw, 12px);
+      }
+    }
+
+    @media (max-width: 900px) {
+      #input-mode-segmented-control .stop-action-mode-btn,
+      #stop-action-mode-segmented-control .stop-action-mode-btn {
+        font-size: clamp(10px, 2.5vw, 13px);
+        letter-spacing: 0.01em;
+      }
     }
 
     #game-over {
@@ -485,6 +518,7 @@
               <p class="stop-action-mode-description translate" data-fr="Type de contrôle" data-en="Input type" data-ja="入力タイプ">Type de contrôle</p>
               <div id="input-mode-segmented-control" role="tablist" aria-label="Input mode selector">
                 <button type="button" class="stop-action-mode-btn input-mode-btn translate selected" data-input-mode="switch" data-fr="Switch" data-en="Switch" data-ja="スイッチ" aria-pressed="true">Switch</button>
+                <button type="button" class="stop-action-mode-btn input-mode-btn translate" data-input-mode="switch2p" data-fr="Switch 2J" data-en="2P Switch" data-ja="2P スイッチ" aria-pressed="false">2P Switch</button>
                 <button type="button" class="stop-action-mode-btn input-mode-btn translate" data-input-mode="eyegaze" data-fr="Eyegaze" data-en="Eyegaze" data-ja="視線" aria-pressed="false">Eyegaze</button>
               </div>
             </div>
@@ -567,6 +601,11 @@
     <div id="ammo-meter" class="ammo-meter" aria-live="polite">
       <div class="ammo-meter-track">
         <div id="ammo-meter-fill" class="ammo-meter-fill"></div>
+      </div>
+    </div>
+    <div id="ammo-meter-right" class="ammo-meter right" aria-live="polite">
+      <div class="ammo-meter-track">
+        <div id="ammo-meter-fill-right" class="ammo-meter-fill"></div>
       </div>
     </div>
   </div>
@@ -653,6 +692,9 @@
       const ammoMeter = document.getElementById('ammo-meter');
       const ammoMeterFill = document.getElementById('ammo-meter-fill');
       const ammoMeterTrack = document.querySelector('#ammo-meter .ammo-meter-track');
+      const ammoMeterRight = document.getElementById('ammo-meter-right');
+      const ammoMeterFillRight = document.getElementById('ammo-meter-fill-right');
+      const ammoMeterTrackRight = document.querySelector('#ammo-meter-right .ammo-meter-track');
       const scoreRegisterPanel = document.getElementById('score-register-panel');
       const scoreUiLayout = document.getElementById('score-ui-layout');
       const scoreRegisterQuestion = document.getElementById('score-register-question');
@@ -691,6 +733,8 @@
       ];
 
       const playerSprite = new Image();
+      const bluePlayerSprite = new Image();
+      const redPlayerSprite = new Image();
       const playerSprites = {
         blue: '../../images/spaceadventure/blueship.png',
         red: '../../images/spaceadventure/redship.png'
@@ -753,6 +797,7 @@
       const SCORE_TOP_LIMIT = 5;
       const SCORE_GAMES = {
         switch: 'space-adventure-switch',
+        switch2p: 'space-adventure-switch-2players',
         eyegaze: 'space-adventure-eyegaze'
       };
 
@@ -770,6 +815,7 @@
       let lastTs = 0;
       let motionTime = 0;
       let ammoEnergy = 1;
+      const ammoEnergyByShip = { blue: 1, red: 1 };
       let gazeX = window.innerWidth * 0.5;
       let gazeY = window.innerHeight * 0.5;
       let hoveredEnemyId = null;
@@ -791,6 +837,7 @@
       let switchIsDown = false;
       let scoreSubmitHoverStartAt = 0;
       let scoreRetryHoverStartAt = 0;
+      let normalModeEndsAt = 0;
 
       const EYEGAZE_DWELL_MS = 1000;
       const EYEGAZE_ROW_STEP_MS = 10000;
@@ -808,6 +855,7 @@
       const EYEGAZE_ATTACK_SHAKE_MS = 320;
       const EYEGAZE_SHIELD_FLASH_MS = 1350;
       const GAME_OVER_DELAY_MS = 900;
+      const NORMAL_MODE_DURATION_MS = 5 * 60 * 1000;
 
       const stars = [];
       const bullets = [];
@@ -829,6 +877,10 @@
         width: 72,
         height: 28,
         cooldown: 0
+      };
+      const players = {
+        blue: { x: 0, y: 0, cooldown: 0 },
+        red: { x: 0, y: 0, cooldown: 0 }
       };
 
       function createSegments(container, total = 10) {
@@ -912,6 +964,10 @@
         canvas.height = window.innerHeight;
         player.y = canvas.height - 90;
         if (player.x === 0) player.x = canvas.width * 0.5;
+        players.blue.y = canvas.height - 90;
+        players.red.y = canvas.height - 90;
+        players.blue.x = canvas.width * 0.28;
+        players.red.x = canvas.width * 0.72;
         updateAmmoMeterLayout();
       }
 
@@ -1121,12 +1177,12 @@
         }
       }
 
-      function getProjectileStyle() {
-        return selectedShip === 'red' ? 'redLaser' : 'missile';
+      function getProjectileStyle(ship = selectedShip) {
+        return ship === 'red' ? 'redLaser' : 'missile';
       }
 
-      function getProjectileSpeed() {
-        return getProjectileStyle() === 'redLaser' ? 760 : 350;
+      function getProjectileSpeed(ship = selectedShip) {
+        return getProjectileStyle(ship) === 'redLaser' ? 760 : 350;
       }
 
       function getEnemyMaxHp(enemy) {
@@ -1136,8 +1192,8 @@
         return 1;
       }
 
-      function createProjectileData({ x, y, vx, vy, speed, targetId = null, homing = false }) {
-        const style = getProjectileStyle();
+      function createProjectileData({ x, y, vx, vy, speed, targetId = null, homing = false, ship = selectedShip }) {
+        const style = getProjectileStyle(ship);
         return {
           x,
           y,
@@ -1156,15 +1212,21 @@
       function applyShipChoice(shipId) {
         selectedShip = shipId === 'red' ? 'red' : 'blue';
         playerSprite.src = playerSprites[selectedShip];
-
-        shipCards.forEach((card) => {
-          const selected = card.dataset.ship === selectedShip;
-          card.classList.toggle('selected', selected);
-          card.setAttribute('aria-pressed', selected ? 'true' : 'false');
-        });
+        bluePlayerSprite.src = playerSprites.blue;
+        redPlayerSprite.src = playerSprites.red;
+        updateShipCardSelection();
 
         syncMenuMusicToSelection(menuMusicStarted || assetsReady);
         updateShipPanelLanguage();
+      }
+
+      function updateShipCardSelection() {
+        const twoPlayersSelected = inputMode === 'switch2p';
+        shipCards.forEach((card) => {
+          const selected = twoPlayersSelected ? true : card.dataset.ship === selectedShip;
+          card.classList.toggle('selected', selected);
+          card.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
       }
 
       function updateShipPanelLanguage() {
@@ -1331,6 +1393,7 @@ function findEnemyById(id) {
             ? 3000 + Math.random() * 1000
             : 10000;
 
+        if (inputMode === 'switch2p') return baseDelay * 0.5;
         if (inputMode !== 'eyegaze') return baseDelay;
 
         const spawnSpeedMultiplier = difficulty === 'hard'
@@ -1341,20 +1404,26 @@ function findEnemyById(id) {
         return baseDelay / spawnSpeedMultiplier;
       }
 
-      function shoot() {
-        if (!running || player.cooldown > 0 || gameOverPending) return;
+      function shoot(ship = selectedShip) {
+        const shooter = ship === 'red' ? players.red : ship === 'blue' ? players.blue : player;
+        if (!running || shooter.cooldown > 0 || gameOverPending) return;
         if (inputMode === 'eyegaze') return;
 
         if (usesAmmoMeter()) {
           const cost = getShotCost();
-          if (ammoEnergy < cost) return;
-          ammoEnergy = Math.max(0, ammoEnergy - cost);
+          if (inputMode === 'switch2p') {
+            if (ammoEnergyByShip[ship] < cost) return;
+            ammoEnergyByShip[ship] = Math.max(0, ammoEnergyByShip[ship] - cost);
+          } else {
+            if (ammoEnergy < cost) return;
+            ammoEnergy = Math.max(0, ammoEnergy - cost);
+          }
           updateAmmoMeter();
         }
 
-        const muzzleX = player.x;
-        const muzzleY = player.y - 16;
-        const speed = getProjectileSpeed();
+        const muzzleX = shooter.x;
+        const muzzleY = shooter.y - 16;
+        const speed = getProjectileSpeed(ship);
         const target = findNearestEnemy(muzzleX, muzzleY);
         let vx = 0;
         let vy = -speed;
@@ -1377,11 +1446,12 @@ function findEnemyById(id) {
           vy,
           speed,
           targetId,
-          homing
+          homing,
+          ship
         }));
 
         playSfx('launch');
-        player.cooldown = usesAmmoMeter() ? 0.12 : 1.0;
+        shooter.cooldown = usesAmmoMeter() ? 0.12 : 1.0;
       }
 
       function applyDamageToEnemy(enemy) {
@@ -1409,16 +1479,37 @@ function findEnemyById(id) {
 
       function updateGame(dt) {
         player.cooldown = Math.max(0, player.cooldown - dt);
+        players.blue.cooldown = Math.max(0, players.blue.cooldown - dt);
+        players.red.cooldown = Math.max(0, players.red.cooldown - dt);
+
+        if (!gameOverPending && difficulty === 'normal' && normalModeEndsAt > 0 && performance.now() >= normalModeEndsAt) {
+          triggerGameOverSequence();
+          return;
+        }
 
         if (usesAmmoMeter() && !gameOverPending) {
-          ammoEnergy = Math.min(1, ammoEnergy + getAmmoRegenPerSecond() * dt);
+          if (inputMode === 'switch2p') {
+            ammoEnergyByShip.blue = Math.min(1, ammoEnergyByShip.blue + getAmmoRegenPerSecond('blue') * dt);
+            ammoEnergyByShip.red = Math.min(1, ammoEnergyByShip.red + getAmmoRegenPerSecond('red') * dt);
+          } else {
+            ammoEnergy = Math.min(1, ammoEnergy + getAmmoRegenPerSecond(selectedShip) * dt);
+          }
           updateAmmoMeter();
         }
 
         motionTime += dt;
         const centerX = canvas.width * 0.5;
         const horizontalRange = canvas.width / 12;
-        player.x = centerX + Math.sin(motionTime * 0.6) * horizontalRange;
+        if (inputMode === 'switch2p') {
+          player.x = centerX;
+          const sway = Math.sin(motionTime * 0.8) * (canvas.width / 30);
+          players.blue.x = canvas.width * 0.28 + sway;
+          players.red.x = canvas.width * 0.72 - sway;
+        } else {
+          player.x = centerX + Math.sin(motionTime * 0.6) * horizontalRange;
+          players.blue.x = player.x;
+          players.red.x = player.x;
+        }
 
         if (!gameOverPending) {
           enemySpawnTimer += dt * 1000;
@@ -1455,6 +1546,9 @@ function findEnemyById(id) {
               const nextAngle = currentAngle + clampedTurn;
               b.vx = Math.cos(nextAngle) * b.speed;
               b.vy = Math.sin(nextAngle) * b.speed;
+            } else {
+              b.targetId = null;
+              b.homing = false;
             }
           }
 
@@ -1765,32 +1859,45 @@ function findEnemyById(id) {
       }
 
       function drawPlayer() {
-        const x = player.x;
-        const y = player.y;
+        if (inputMode === 'switch2p') {
+          drawSinglePlayerShip(players.blue, 'blue');
+          drawSinglePlayerShip(players.red, 'red');
+          return;
+        }
+        drawSinglePlayerShip(player, selectedShip);
+      }
+
+      function drawSinglePlayerShip(shipState, shipId) {
+        const shipSprite =
+          shipId === 'red'
+            ? redPlayerSprite
+            : (inputMode === 'switch2p' ? bluePlayerSprite : playerSprite);
+        const shipX = shipState.x;
+        const shipY = shipState.y;
         const now = performance.now();
         const failing = gameOverPending;
         const wobbleX = failing ? Math.sin((now - gameOverPendingAt) * 0.06) * 10 : 0;
         const wobbleRot = failing ? Math.sin((now - gameOverPendingAt) * 0.04) * 0.08 : 0;
         const flicker = failing ? (0.55 + Math.sin((now - gameOverPendingAt) * 0.09) * 0.22) : 1;
 
-        if (playerSprite.complete && playerSprite.naturalWidth > 0) {
+        if (shipSprite.complete && shipSprite.naturalWidth > 0) {
           const { drawWidth, drawHeight } = getPlayerRenderSize();
           ctx.save();
-          ctx.translate(x + wobbleX, y);
+          ctx.translate(shipX + wobbleX, shipY);
           ctx.rotate(wobbleRot);
           ctx.globalAlpha = flicker;
-          ctx.drawImage(playerSprite, -drawWidth * 0.5, -drawHeight * 0.55, drawWidth, drawHeight);
+          ctx.drawImage(shipSprite, -drawWidth * 0.5, -drawHeight * 0.55, drawWidth, drawHeight);
           ctx.restore();
 
           if (failing) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const glow = ctx.createRadialGradient(x + wobbleX, y, 0, x + wobbleX, y, drawWidth * 0.55);
+            const glow = ctx.createRadialGradient(shipX + wobbleX, shipY, 0, shipX + wobbleX, shipY, drawWidth * 0.55);
             glow.addColorStop(0, 'rgba(255,110,80,0.28)');
             glow.addColorStop(1, 'rgba(255,110,80,0)');
             ctx.fillStyle = glow;
             ctx.beginPath();
-            ctx.arc(x + wobbleX, y, drawWidth * 0.55, 0, Math.PI * 2);
+            ctx.arc(shipX + wobbleX, shipY, drawWidth * 0.55, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
           }
@@ -1798,7 +1905,7 @@ function findEnemyById(id) {
         }
 
         ctx.save();
-        ctx.translate(x + wobbleX, y);
+        ctx.translate(shipX + wobbleX, shipY);
         ctx.rotate(wobbleRot);
         ctx.globalAlpha = flicker;
         ctx.fillStyle = '#2f8bff';
@@ -2567,7 +2674,9 @@ function findEnemyById(id) {
       }
 
       function getScoreGameKey() {
-        return inputMode === 'eyegaze' ? SCORE_GAMES.eyegaze : SCORE_GAMES.switch;
+        if (inputMode === 'eyegaze') return SCORE_GAMES.eyegaze;
+        if (inputMode === 'switch2p') return SCORE_GAMES.switch2p;
+        return SCORE_GAMES.switch;
       }
 
       function getSelectedModeForScoreboard() {
@@ -2872,7 +2981,7 @@ function findEnemyById(id) {
       }
 
       function isSwitchScoreScreenVisible() {
-        return inputMode === 'switch' && gameOverScreen?.classList.contains('switch-score-screen');
+        return inputMode !== 'eyegaze' && gameOverScreen?.classList.contains('switch-score-screen');
       }
 
       function updateCursorVisibility() {
@@ -2904,25 +3013,44 @@ function findEnemyById(id) {
         return difficulty === 'competitive' ? 0.55 : 0.35;
       }
 
-      function getAmmoRegenPerSecond() {
+      function getAmmoRegenPerSecond(ship = selectedShip) {
         const baseRegen = difficulty === 'competitive' ? 0.22 : 0.3;
-        return selectedShip === 'blue' ? baseRegen * 0.7 : baseRegen;
+        return ship === 'blue' ? baseRegen * 0.7 : baseRegen;
+      }
+
+      function renderAmmoFill(fillNode, energy, ship = 'blue') {
+        if (!fillNode) return;
+        const percent = Math.round(energy * 100);
+        const hue = ship === 'red' ? 0 : Math.round(energy * 120);
+        fillNode.style.height = `${percent}%`;
+        fillNode.style.background = ship === 'red'
+          ? `hsl(${hue} 85% ${40 + energy * 16}%)`
+          : `hsl(${hue} 88% 52%)`;
+        fillNode.style.boxShadow = ship === 'red'
+          ? `0 0 16px hsla(${hue} 95% 60% / ${0.35 + energy * 0.35})`
+          : `0 0 16px hsla(${hue} 95% 60% / 0.65)`;
       }
 
       function updateAmmoMeter() {
         if (!ammoMeter || !ammoMeterFill) return;
         updateAmmoMeterLayout();
-        ammoMeter.style.display = usesAmmoMeter() ? 'block' : 'none';
-        const percent = Math.round(ammoEnergy * 100);
-        const hue = Math.round(ammoEnergy * 120);
-        ammoMeterFill.style.height = `${percent}%`;
-        ammoMeterFill.style.background = `hsl(${hue} 88% 52%)`;
-        ammoMeterFill.style.boxShadow = `0 0 16px hsla(${hue} 95% 60% / 0.65)`;
+        updateHudLayout();
+        const show = usesAmmoMeter();
+        const showDual = show && inputMode === 'switch2p';
+        ammoMeter.style.display = show ? 'block' : 'none';
+        if (ammoMeterRight) ammoMeterRight.style.display = showDual ? 'block' : 'none';
+
+        if (showDual) {
+          renderAmmoFill(ammoMeterFill, ammoEnergyByShip.blue, 'blue');
+          renderAmmoFill(ammoMeterFillRight, ammoEnergyByShip.red, 'red');
+        } else {
+          renderAmmoFill(ammoMeterFill, ammoEnergy, selectedShip);
+        }
       }
 
       function updateAmmoMeterLayout() {
         if (!ammoMeter || !ammoMeterTrack) return;
-        if (inputMode === 'switch' && usesAmmoMeter()) {
+        if (inputMode !== 'eyegaze' && usesAmmoMeter()) {
           const shieldY = getDangerLineY();
           const barHeight = 180;
           const availableSpace = Math.max(0, canvas.height - shieldY);
@@ -2932,6 +3060,14 @@ function findEnemyById(id) {
           ammoMeter.style.transform = 'none';
           ammoMeterTrack.style.width = '56px';
           ammoMeterTrack.style.height = `${barHeight}px`;
+          if (ammoMeterRight && ammoMeterTrackRight) {
+            ammoMeterRight.style.right = '20px';
+            ammoMeterRight.style.left = 'auto';
+            ammoMeterRight.style.top = `${top}px`;
+            ammoMeterRight.style.transform = 'none';
+            ammoMeterTrackRight.style.width = '56px';
+            ammoMeterTrackRight.style.height = `${barHeight}px`;
+          }
           return;
         }
         ammoMeter.style.left = '20px';
@@ -2939,6 +3075,23 @@ function findEnemyById(id) {
         ammoMeter.style.transform = 'translateY(-50%)';
         ammoMeterTrack.style.width = '72px';
         ammoMeterTrack.style.height = '260px';
+        if (ammoMeterRight && ammoMeterTrackRight) {
+          ammoMeterRight.style.right = '20px';
+          ammoMeterRight.style.left = 'auto';
+          ammoMeterRight.style.top = '50%';
+          ammoMeterRight.style.transform = 'translateY(-50%)';
+          ammoMeterTrackRight.style.width = '72px';
+          ammoMeterTrackRight.style.height = '260px';
+        }
+      }
+
+      function updateHudLayout() {
+        if (!hud) return;
+        if (inputMode === 'switch2p' && usesAmmoMeter()) {
+          hud.style.right = '110px';
+        } else {
+          hud.style.right = '18px';
+        }
       }
 
       function tick(ts) {
@@ -3001,12 +3154,15 @@ function findEnemyById(id) {
         currentSpawnDelay = getSpawnDelayMs();
         motionTime = 0;
         ammoEnergy = 1;
+        ammoEnergyByShip.blue = 1;
+        ammoEnergyByShip.red = 1;
         hoveredEnemyId = null;
         hoverStartAt = 0;
         screenShakeUntil = 0;
         screenShakeStrength = 0;
         gameOverPending = false;
         gameOverPendingAt = 0;
+        normalModeEndsAt = difficulty === 'normal' ? performance.now() + NORMAL_MODE_DURATION_MS : 0;
         player.x = canvas.width * 0.5;
         running = true;
         updateHudLanguage();
@@ -3141,7 +3297,7 @@ function findEnemyById(id) {
       }
 
       function applyInputMode(mode) {
-        inputMode = mode === 'eyegaze' ? 'eyegaze' : 'switch';
+        inputMode = mode === 'eyegaze' ? 'eyegaze' : mode === 'switch2p' ? 'switch2p' : 'switch';
         document.body.setAttribute('data-input-mode', inputMode);
 
         const buttons = Array.from(document.querySelectorAll('.input-mode-btn'));
@@ -3151,6 +3307,7 @@ function findEnemyById(id) {
           button.setAttribute('aria-pressed', selected ? 'true' : 'false');
         });
 
+        updateShipCardSelection();
         updateAmmoMeter();
         updateCursorVisibility();
       }
@@ -3176,9 +3333,9 @@ function findEnemyById(id) {
           desc.dataset.en = 'Enemies are even faster and spawn even faster. You also have fewer shields.';
           desc.dataset.ja = '敵はさらに速く出現もさらに早くなります。ライフも少なくなります。';
         } else {
-          desc.dataset.fr = 'Cadence équilibrée pour commencer.';
-          desc.dataset.en = 'Balanced pace to get started.';
-          desc.dataset.ja = '始めやすいバランス設定です。';
+          desc.dataset.fr = 'Cadence équilibrée pour commencer. Partie limitée à 5 minutes.';
+          desc.dataset.en = 'Balanced pace to get started. Match is limited to 5 minutes.';
+          desc.dataset.ja = '始めやすいバランス設定です。5分で終了します。';
         }
 
         const lang = getCurrentLanguage();
@@ -3193,11 +3350,14 @@ function findEnemyById(id) {
           event.preventDefault();
           if (switchIsDown) return;
           switchIsDown = true;
-          if (running && !gameOverPending) shoot();
+          if (running && !gameOverPending) shoot(inputMode === 'switch2p' ? 'blue' : selectedShip);
           else if (!running && inputMode !== 'eyegaze' && gameOverScreen?.style.display === 'flex' && gameOverMenuVisible) {
             playSfx('retry');
             startGame();
           }
+        } else if (event.key === 'Enter' && inputMode === 'switch2p') {
+          event.preventDefault();
+          if (running && !gameOverPending) shoot('red');
         }
       });
 
