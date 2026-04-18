@@ -327,7 +327,7 @@
     .gaze-target.dwell { transform: scale(1.06); }
     .gaze-target.dwell::after { width: 100%; height: 100%; }
 
-    .next-button, .fullscreen-button {
+    .fullscreen-button {
       position: fixed;
       padding: 12px 20px;
       border-radius: 999px;
@@ -342,9 +342,8 @@
       z-index: 20;
       box-shadow: 0 12px 32px rgba(0,0,0,.4);
     }
-    .next-button { bottom: 20px; right: 20px; }
     .fullscreen-button { top: 20px; right: 20px; }
-    .next-button[hidden], .fullscreen-button[hidden] { display: none; }
+    .fullscreen-button[hidden] { display: none; }
 
     .page.game-page { background: #000; padding: 0; align-items: stretch; justify-content: stretch; }
     .game-frame { width: 100%; height: 100%; display: block; background: #000; position: relative; overflow: hidden; }
@@ -469,7 +468,6 @@
     </section>
   </div>
 
-  <button id="nextButton" class="next-button" type="button" hidden>Next</button>
   <div id="chiCursor" aria-hidden="true"></div>
   <div id="transitionOverlay" class="transition-overlay" aria-hidden="true"></div>
 
@@ -489,6 +487,7 @@
       const chiCursor = document.getElementById('chiCursor');
       const imageBasePath = '../../images/samuraikata/';
       const videoBasePath = '../../animations/samurai/';
+      const STORY_LOOP_SRC = '../../songs/samurai/samuraisong4.mp3';
 
       const gameTemplates = { cherry: 'tpl-cherryblossom', meditation: 'tpl-meditation', lamp: 'tpl-lamp' };
       const templateCache = {};
@@ -598,11 +597,10 @@
         return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
       };
 
-      const playStoryMusic = (src) => {
-        if (!src) return;
-        if (storyMusicSrc !== src) {
-          storyMusicSrc = src;
-          storyMusic.src = src;
+      const playStoryMusic = () => {
+        if (storyMusicSrc !== STORY_LOOP_SRC) {
+          storyMusicSrc = STORY_LOOP_SRC;
+          storyMusic.src = STORY_LOOP_SRC;
           storyMusic.load();
         }
         storyMusic.play().catch(() => {});
@@ -656,14 +654,22 @@
         };
       };
 
-      const createDwellGate = (target, onDone) => {
+      const createDwellGate = (target, onDone, autoActivateMs = 0) => {
         let hold = null;
+        let autoTimer = null;
+
+        const finish = () => {
+          if (autoTimer) clearTimeout(autoTimer);
+          autoTimer = null;
+          target.classList.remove('dwell');
+          onDone();
+        };
+
         const start = () => {
           target.classList.add('dwell');
           hold = setTimeout(() => {
             hold = null;
-            target.classList.remove('dwell');
-            onDone();
+            finish();
           }, dwellMs);
         };
         const cancel = () => {
@@ -671,6 +677,13 @@
           hold = null;
           target.classList.remove('dwell');
         };
+        if (autoActivateMs > 0) {
+          autoTimer = setTimeout(() => {
+            if (hold) clearTimeout(hold);
+            hold = null;
+            finish();
+          }, autoActivateMs);
+        }
         target.addEventListener('mouseenter', start);
         target.addEventListener('mouseleave', cancel);
         target.addEventListener('focus', start);
@@ -685,6 +698,8 @@
           target.removeEventListener('blur', cancel);
           target.removeEventListener('touchstart', start);
           target.removeEventListener('touchend', cancel);
+          if (autoTimer) clearTimeout(autoTimer);
+          autoTimer = null;
         };
       };
 
@@ -701,9 +716,8 @@
         resetStoryMedia(page);
         const imageName = page.dataset.image;
         const fullText = page.dataset.text || '';
-        const audioPath = page.dataset.audio || '';
         const [textA, textB] = splitText(fullText);
-        playStoryMusic(audioPath);
+        playStoryMusic();
 
         image.src = `${imageBasePath}${imageName}`;
         image.alt = page.dataset.alt || '';
@@ -720,6 +734,7 @@
 
         const timers = { ids: [], cleanup: null };
         const manual = modeConfig[currentMode].manualAdvance;
+        const autoActivateMs = currentMode === 'autonomous' ? 30000 : 0;
 
         const step5 = () => playVideoThenAdvance(page, video, media);
         const step4 = () => {
@@ -735,7 +750,7 @@
           timers.cleanup = createDwellGate(gazeTarget, () => {
             gazeTarget.classList.remove('visible');
             step5();
-          });
+          }, autoActivateMs);
         };
         const step3 = () => {
           if (pages[currentIndex] !== page) return;
@@ -751,7 +766,7 @@
             timers.cleanup = createDwellGate(gazeTarget, () => {
               gazeTarget.classList.remove('visible');
               step4();
-            });
+            }, autoActivateMs);
           }, colorFadeWaitMs));
         };
         const step2 = () => {
@@ -773,7 +788,7 @@
           timers.cleanup = createDwellGate(gazeTarget, () => {
             gazeTarget.classList.remove('visible');
             step2();
-          });
+          }, autoActivateMs);
         };
 
         timers.ids.push(setTimeout(step1, 150));
@@ -928,9 +943,8 @@
       };
 
       const updateNextButton = () => {
-        const page = pages[currentIndex];
-        const show = isJourneyStarted && modeConfig[currentMode].manualAdvance && page && page.dataset.type !== 'landing';
-        nextButton.hidden = !show;
+        if (!nextButton) return;
+        nextButton.hidden = true;
       };
 
       const showPage = (index) => {
@@ -1060,7 +1074,7 @@
         showPage(1);
       });
 
-      nextButton.addEventListener('click', nextPage);
+      if (nextButton) nextButton.addEventListener('click', nextPage);
 
       document.addEventListener('keydown', (event) => {
         if (!isJourneyStarted) return;
