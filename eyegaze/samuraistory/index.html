@@ -342,13 +342,13 @@
 
     .gaze-target {
       position: absolute;
-      width: clamp(92px, 8.6vw, 132px);
-      height: clamp(92px, 8.6vw, 132px);
+      width: clamp(118px, 10.5vw, 168px);
+      height: clamp(118px, 10.5vw, 168px);
       border-radius: 50%;
-      border: 2px solid rgba(255,255,255,.5);
+      border: 2px solid rgba(170, 255, 170, .9);
       background:
-        radial-gradient(circle at 35% 30%, rgba(255,255,255,.4) 0 16%, rgba(255,84,84,.35) 34%, rgba(128,26,26,.26) 64%, rgba(68,0,0,.2) 100%);
-      box-shadow: 0 0 0 5px rgba(255,80,80,.13), 0 0 24px rgba(255,72,72,.45);
+        radial-gradient(circle at 35% 30%, rgba(255,255,255,.52) 0 16%, rgba(76, 255, 120, .62) 34%, rgba(24, 130, 54, .46) 64%, rgba(6, 60, 18, .34) 100%);
+      box-shadow: 0 0 0 6px rgba(76,255,120,.24), 0 0 28px rgba(76,255,120,.58);
       z-index: 6;
       opacity: 0;
       pointer-events: none;
@@ -363,7 +363,7 @@
       top: 50%;
       width: 0;
       height: 0;
-      background: rgba(255,40,40,.33);
+      background: rgba(70,255,120,.45);
       transform: translate(-50%, -50%);
       transition: width .95s linear, height .95s linear;
     }
@@ -392,6 +392,27 @@
 
     .page.game-page { background: #000; padding: 0; align-items: stretch; justify-content: stretch; }
     .game-frame { width: 100%; height: 100%; display: block; background: #000; position: relative; overflow: hidden; }
+    .conclusion-page {
+      background: #000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      position: relative;
+    }
+    .conclusion-title {
+      color: #f5f8fa;
+      font-family: Georgia, serif;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      font-size: clamp(2rem, 5vw, 4.4rem);
+      text-align: center;
+      opacity: .95;
+      text-shadow: 0 8px 26px rgba(0,0,0,.8);
+    }
+    .conclusion-target {
+      left: 88% !important;
+      top: 84% !important;
+    }
 
     .samurai-challenge {
       position: absolute;
@@ -563,6 +584,11 @@
       <div class="game-frame" data-game-host></div>
       <button class="samurai-challenge" data-samurai-challenge aria-label="Challenge"></button>
     </section>
+
+    <section class="page conclusion-page" data-type="conclusion">
+      <h2 class="conclusion-title">Thanks for playing</h2>
+      <button class="gaze-target conclusion-target" data-conclusion-target aria-label="Advance" type="button"></button>
+    </section>
   </div>
 
   <div id="chiCursor" aria-hidden="true"></div>
@@ -592,6 +618,7 @@
       const templateCache = {};
       const storyTimers = new WeakMap();
       const gameSessions = new Map();
+      let conclusionCleanup = null;
 
       const dwellMs = 1000;
       const colorFadeWaitMs = 3300;
@@ -921,9 +948,8 @@
         image.src = `${imageBasePath}${imageName}`;
         image.alt = page.dataset.alt || '';
 
-        const [xRaw, yRaw] = (page.dataset.target || '82,72').split(',');
-        gazeTarget.style.left = `${Math.min(94, Math.max(6, Number.parseFloat(xRaw) || 82))}%`;
-        gazeTarget.style.top = `${Math.min(92, Math.max(8, Number.parseFloat(yRaw) || 72))}%`;
+        gazeTarget.style.left = '88%';
+        gazeTarget.style.top = '84%';
 
         const hasVideo = page.dataset.novideo !== 'true';
         if (hasVideo) {
@@ -1193,6 +1219,18 @@
         nextButton.hidden = true;
       };
 
+      const setupConclusionPage = (page) => {
+        if (!page) return;
+        const target = page.querySelector('[data-conclusion-target]');
+        if (!target) return;
+        target.classList.add('visible');
+        if (conclusionCleanup) conclusionCleanup();
+        conclusionCleanup = createDwellGate(target, () => {
+          target.classList.remove('visible', 'dwell');
+          nextPage();
+        }, currentMode === 'story' ? 30000 : 0);
+      };
+
       const showPage = (index) => {
         if (index < 0 || index >= pages.length) return;
         const prev = pages[currentIndex];
@@ -1201,6 +1239,10 @@
           clearStoryTimers(prev);
           if (prev.dataset.type === 'story') resetStoryMedia(prev);
           if (prev.dataset.type === 'game') stopGame(prev);
+          if (prev.dataset.type === 'conclusion' && conclusionCleanup) {
+            conclusionCleanup();
+            conclusionCleanup = null;
+          }
         }
 
         currentIndex = index;
@@ -1212,6 +1254,7 @@
 
         if (page.dataset.type === 'story') setupStoryPage(page);
         if (page.dataset.type === 'game') loadGame(page.dataset.game, page);
+        if (page.dataset.type === 'conclusion') setupConclusionPage(page);
       };
 
       const nextPage = (withTransition = true) => {
