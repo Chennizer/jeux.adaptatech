@@ -5,7 +5,7 @@
     const BG_SRC = "../../images/samurai/lampbg.png";
 
     // Pointer image (square, per your update)
-    const POINTER_SRC = "../../images/samurai/chi.png";
+    const POINTER_SRC = "../../images/samurai/transparentchi.png";
 
     // Moonrock shards (random)
     const ROCK_SRCS = [
