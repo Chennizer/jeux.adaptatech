@@ -390,6 +390,7 @@
        LANTERNS (foreground)
     ======================= */
     const lanterns = [];
+    let litCount = 0;
 
     function chooseScatteredX(w) {
       const minX = SIDE_PAD_H + w * 0.5;
@@ -960,6 +961,7 @@ function drawRopes(t) {
           if (l.y <= l.restY + 0.5 || (l.y === prevY && p >= 1)) {
             l.y = l.restY;
             l.state = 'lit';
+            litCount++;
           }
         } else if (l.state === 'lit') {
           const dy = l.restY - l.y;
@@ -1102,6 +1104,7 @@ function drawRopes(t) {
       bgLanterns = [];
       activeShootingStar = null;
       nextStarTime = 0;
+      litCount = 0;
     }
 
     function rebuildWorld() {
@@ -1155,6 +1158,10 @@ function drawRopes(t) {
 
     window.startExperience = (options) => startExperience(options);
     window.stopExperience = stopExperience;
-    window.storyGameApi = { start: startExperience, stop: stopExperience };
+    window.storyGameApi = {
+      start: startExperience,
+      stop: stopExperience,
+      getProgress: () => litCount
+    };
   })();
   

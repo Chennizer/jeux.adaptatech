@@ -1013,7 +1013,11 @@
 
     window.startExperience = (options) => startExperience(options);
     window.stopExperience = stopExperience;
-    window.storyGameApi = { start: startExperience, stop: stopExperience };
+    window.storyGameApi = {
+      start: startExperience,
+      stop: stopExperience,
+      getProgress: () => launchCount
+    };
 
     window.requestAnimationFrame(() => startExperience());
 
