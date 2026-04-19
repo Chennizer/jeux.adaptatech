@@ -360,8 +360,15 @@
       display: none;
       z-index: 8;
       cursor: pointer;
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      text-align: center;
+      line-height: 1.2;
+      align-items: center;
+      justify-content: center;
     }
-    .samurai-challenge.visible { display: block; }
+    .samurai-challenge.visible { display: flex; }
 
     .transition-overlay {
       position: fixed;
@@ -505,6 +512,7 @@
       storyMusic.preload = 'auto';
       let storyMusicSrc = '';
       let activeSamuraiChallenge = null;
+      const samuraiTargets = { cherry: 15, meditation: 10, lamp: 10 };
 
       const modeConfig = {
         story: {
@@ -729,6 +737,8 @@
         const videoName = imageName.replace(/\.(jpg|jpeg|png)$/i, '.mp4');
         const videoPath = `${videoBasePath}${videoName}`;
         video.src = videoPath;
+        video.muted = true;
+        video.volume = 0;
         video.preload = 'auto';
         video.load();
 
@@ -810,6 +820,7 @@
         if (!session) return;
         if (activeSamuraiChallenge && activeSamuraiChallenge.page === page) {
           clearTimeout(activeSamuraiChallenge.timeoutId);
+          clearInterval(activeSamuraiChallenge.intervalId);
           activeSamuraiChallenge = null;
         }
         if (session.api && typeof session.api.stop === 'function') {
@@ -864,39 +875,44 @@
         return window.storyGameApi || null;
       };
 
-      const installSamuraiChallenge = (page) => {
+      const installSamuraiChallenge = (page, gameKey, api) => {
         const target = page.querySelector('[data-samurai-challenge]');
         if (!target) return;
         target.classList.toggle('visible', modeConfig[currentMode].enforceGameWin);
-        target.onmouseenter = null;
-        target.onmouseleave = null;
-        target.onfocus = null;
-        target.onblur = null;
+        target.textContent = '';
 
         if (!modeConfig[currentMode].enforceGameWin) return;
 
-        let hold = null;
+        const goal = samuraiTargets[gameKey] || 1;
+        const getProgress = () => {
+          if (!api || typeof api.getProgress !== 'function') return 0;
+          const value = Number(api.getProgress());
+          return Number.isFinite(value) ? value : 0;
+        };
+
         const complete = () => {
           if (activeSamuraiChallenge) {
             clearTimeout(activeSamuraiChallenge.timeoutId);
+            clearInterval(activeSamuraiChallenge.intervalId);
             activeSamuraiChallenge = null;
           }
           triggerTransition();
           setTimeout(() => { if (pages[currentIndex] === page) nextPage(); }, 300);
         };
-        const start = () => { hold = setTimeout(complete, 2000); };
-        const cancel = () => { if (hold) clearTimeout(hold); hold = null; };
-        target.onmouseenter = start;
-        target.onmouseleave = cancel;
-        target.onfocus = start;
-        target.onblur = cancel;
+
+        const intervalId = setInterval(() => {
+          if (pages[currentIndex] !== page || currentMode !== 'samurai') return;
+          const progress = getProgress();
+          target.textContent = `${Math.min(progress, goal)} / ${goal}`;
+          if (progress >= goal) complete();
+        }, 250);
 
         const timeoutId = setTimeout(() => {
           if (pages[currentIndex] !== page || currentMode !== 'samurai') return;
           showPage(currentIndex);
-        }, samuraiTimeoutMs);
+        }, Math.max(samuraiTimeoutMs, 120000));
 
-        activeSamuraiChallenge = { page, timeoutId };
+        activeSamuraiChallenge = { page, timeoutId, intervalId };
       };
 
       const loadGame = (key, page) => {
@@ -930,7 +946,7 @@
             } catch (_) {}
           }
 
-          installSamuraiChallenge(page);
+          installSamuraiChallenge(page, key, session.api);
 
           if (!modeConfig[currentMode].enforceGameWin && modeConfig[currentMode].autoGameAdvance) {
             setTimeout(() => {
