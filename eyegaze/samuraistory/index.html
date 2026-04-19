@@ -64,10 +64,10 @@
       text-align: center;
     }
     .language-switcher {
-      position: absolute;
+      position: fixed;
       top: clamp(12px, 1.4vw, 22px);
       right: clamp(12px, 1.4vw, 22px);
-      z-index: 5;
+      z-index: 25;
     }
     .lang-toggle {
       border: 1px solid rgba(252, 216, 147, .42);
@@ -429,6 +429,7 @@
       .menu-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
       .menu-controls { min-height: 300px; }
     }
+    body.playing .language-switcher { display: none; }
   </style>
 </head>
 <body>
@@ -929,6 +930,28 @@
         const timers = { ids: [], cleanup: null };
         const manual = modeConfig[currentMode].manualAdvance;
         const autoActivateMs = currentMode === 'story' ? 30000 : 0;
+        const bindAdvanceTargets = (onDone) => {
+          let finished = false;
+          let cleanA = null;
+          let cleanB = null;
+          const done = () => {
+            if (finished) return;
+            finished = true;
+            if (cleanA) cleanA();
+            if (cleanB) cleanB();
+            cleanA = null;
+            cleanB = null;
+            onDone();
+          };
+          cleanA = createDwellGate(caption, done, autoActivateMs);
+          cleanB = createDwellGate(gazeTarget, done, autoActivateMs);
+          return () => {
+            if (cleanA) cleanA();
+            if (cleanB) cleanB();
+            cleanA = null;
+            cleanB = null;
+          };
+        };
 
         const step5 = () => playVideoThenAdvance(page, video, media);
         const step4 = () => {
@@ -939,12 +962,14 @@
             timers.ids.push(setTimeout(step5, 900));
             return;
           }
+          gazeTarget.classList.add('visible');
           caption.classList.add('advanceable');
           if (timers.cleanup) timers.cleanup();
-          timers.cleanup = createDwellGate(caption, () => {
+          timers.cleanup = bindAdvanceTargets(() => {
             caption.classList.remove('advanceable', 'dwell');
+            gazeTarget.classList.remove('visible', 'dwell');
             step5();
-          }, autoActivateMs);
+          });
         };
         const step3 = () => {
           if (pages[currentIndex] !== page) return;
@@ -967,7 +992,18 @@
           if (pages[currentIndex] !== page) return;
           caption.textContent = textA;
           caption.classList.add('visible');
-          timers.ids.push(setTimeout(step3, 1100));
+          if (!manual) {
+            timers.ids.push(setTimeout(step3, 1100));
+            return;
+          }
+          gazeTarget.classList.add('visible');
+          caption.classList.add('advanceable');
+          if (timers.cleanup) timers.cleanup();
+          timers.cleanup = bindAdvanceTargets(() => {
+            caption.classList.remove('advanceable', 'dwell');
+            gazeTarget.classList.remove('visible', 'dwell');
+            step3();
+          });
         };
         const step1 = () => {
           if (pages[currentIndex] !== page) return;
