@@ -9,6 +9,7 @@
       color-scheme: dark;
       font-family: "Segoe UI", system-ui, sans-serif;
       --gold: #f2cf86;
+      --scene-transition-total: 4900ms;
     }
 
     * { box-sizing: border-box; }
@@ -422,8 +423,13 @@
       pointer-events: none;
       z-index: 30;
     }
-    .transition-overlay.active { animation: sceneFade 900ms ease-in-out forwards; }
-    @keyframes sceneFade { 0% { opacity: 0; } 40% { opacity: .85; } 100% { opacity: 0; } }
+    .transition-overlay.active { animation: sceneFade var(--scene-transition-total) linear forwards; }
+    @keyframes sceneFade {
+      0% { opacity: 0; }
+      45% { opacity: 1; }
+      55% { opacity: 1; }
+      100% { opacity: 0; }
+    }
 
     @media (max-width: 980px) {
       .menu-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -590,9 +596,14 @@
       const dwellMs = 1000;
       const colorFadeWaitMs = 3300;
       const samuraiTimeoutMs = 25000;
+      const transitionFadeOutMs = 2200;
+      const transitionBlackMs = 500;
+      const transitionFadeInMs = 2200;
+      const transitionSwitchDelayMs = transitionFadeOutMs + transitionBlackMs;
       let currentMode = 'story';
       let currentIndex = 0;
       let isJourneyStarted = false;
+      let isTransitioning = false;
       const storyMusic = new Audio();
       storyMusic.loop = true;
       storyMusic.preload = 'auto';
@@ -695,6 +706,9 @@
       };
 
       const triggerTransition = () => {
+        if (transitionOverlay) {
+          transitionOverlay.style.setProperty('--scene-transition-total', `${transitionFadeOutMs + transitionBlackMs + transitionFadeInMs}ms`);
+        }
         transitionOverlay.classList.remove('active');
         void transitionOverlay.offsetHeight;
         transitionOverlay.classList.add('active');
@@ -824,8 +838,7 @@
 
       const playVideoThenAdvance = (page, video, media) => {
         if (!video || !media || !video.src) {
-          triggerTransition();
-          setTimeout(() => { if (pages[currentIndex] === page) nextPage(); }, 260);
+          if (pages[currentIndex] === page) nextPage();
           return;
         }
         media.classList.add('video-playing');
@@ -834,8 +847,7 @@
         if (p && typeof p.catch === 'function') p.catch(() => {});
         video.onended = () => {
           if (pages[currentIndex] !== page) return;
-          triggerTransition();
-          setTimeout(() => { if (pages[currentIndex] === page) nextPage(); }, 300);
+          nextPage();
         };
       };
 
@@ -1116,8 +1128,7 @@
             clearInterval(activeSamuraiChallenge.intervalId);
             activeSamuraiChallenge = null;
           }
-          triggerTransition();
-          setTimeout(() => { if (pages[currentIndex] === page) nextPage(); }, 300);
+          if (pages[currentIndex] === page) nextPage();
         };
 
         const intervalId = setInterval(() => {
@@ -1171,8 +1182,7 @@
           if (!modeConfig[currentMode].enforceGameWin && modeConfig[currentMode].autoGameAdvance) {
             setTimeout(() => {
               if (pages[currentIndex] !== page) return;
-              triggerTransition();
-              setTimeout(() => { if (pages[currentIndex] === page) nextPage(); }, 260);
+              nextPage();
             }, 5200);
           }
         })();
@@ -1204,10 +1214,21 @@
         if (page.dataset.type === 'game') loadGame(page.dataset.game, page);
       };
 
-      const nextPage = () => {
+      const nextPage = (withTransition = true) => {
         if (!isJourneyStarted) return;
+        if (withTransition && isTransitioning) return;
         const n = (currentIndex + 1) % pages.length;
-        showPage(n === 0 ? 1 : n);
+        const target = n === 0 ? 1 : n;
+        if (!withTransition) {
+          showPage(target);
+          return;
+        }
+        isTransitioning = true;
+        triggerTransition();
+        setTimeout(() => {
+          if (isJourneyStarted) showPage(target);
+          isTransitioning = false;
+        }, transitionSwitchDelayMs);
       };
 
       const requestFullscreen = async () => {
@@ -1316,8 +1337,12 @@
         document.body.classList.add('playing');
         pauseMenuMusic();
         await requestFullscreen();
+        isTransitioning = true;
         triggerTransition();
-        showPage(1);
+        setTimeout(() => {
+          showPage(1);
+          isTransitioning = false;
+        }, transitionSwitchDelayMs);
       });
 
       languageToggleButton?.addEventListener('click', () => {
