@@ -2,7 +2,7 @@
     /* =======================
        TUNABLES
     ======================= */
-    const BG_SRC      = "../../images/samurai/lampbg.png";
+    const BG_SRC      = "../../images/samuraikata/texte1.jpg";
 
     // Two lamp variants
     const CLOSED1_SRC = "../../images/samurai/closedlamp1.png";

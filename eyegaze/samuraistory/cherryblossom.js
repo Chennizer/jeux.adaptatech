@@ -3,10 +3,11 @@
        CONFIG
     ======================= */
     const IMG_SRC = "../../images/samurai/cherryblossom.png";       // petal image
-    const BG_SRC  = "../../images/samurai/cherryblossombg.png";     // background image
+    const BG_SRC  = "../../images/samuraikata/cerisier.jpg";        // background image
     const SLASH_SOUND = "../../sounds/blade.mp3";
     const KATANA_SRC  = "../../images/samurai/katana.png";
     const SONG_SRC    = "../../songs/samurai/cherryblossomsong2.mp3"; // bg song
+    const ENABLE_BG_SONG = false; // keep shared story music constant during games
     const KATANA_DRAW_SRC = "../../sounds/katana.mp3";               // sword drawing SFX
 
     // Cursor limits and hotspot (in ORIGINAL image pixels)
@@ -491,7 +492,9 @@
       if (startOverlay) startOverlay.style.display = 'none';
       canvas.style.cursor = 'none';
 
-      try { bgSong.currentTime = 0; await bgSong.play(); } catch (e) {}
+      if (ENABLE_BG_SONG) {
+        try { bgSong.currentTime = 0; await bgSong.play(); } catch (e) {}
+      }
       try { katanaDraw.currentTime = 0; katanaDraw.pause(); } catch (e) {}
 
       gameState = 'intro';
@@ -508,7 +511,9 @@
       rafId = 0;
       resetGameState();
       canvas.style.cursor = 'default';
-      try { bgSong.pause(); bgSong.currentTime = 0; } catch (e) {}
+      if (ENABLE_BG_SONG) {
+        try { bgSong.pause(); bgSong.currentTime = 0; } catch (e) {}
+      }
       try { slashAudio.pause(); slashAudio.currentTime = 0; } catch (e) {}
       try { katanaDraw.pause(); katanaDraw.currentTime = 0; } catch (e) {}
     }

@@ -2,7 +2,7 @@
     /* =======================
        ASSETS
     ======================= */
-    const BG_SRC = "../../images/samurai/lampbg.png";
+    const BG_SRC = "../../images/samuraikata/luneattaqueboulechi.jpg";
 
     // Pointer image (square, per your update)
     const POINTER_SRC = "../../images/samurai/transparentchi.png";
