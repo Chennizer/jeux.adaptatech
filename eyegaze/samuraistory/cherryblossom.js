@@ -9,6 +9,7 @@
     const SONG_SRC    = "../../songs/samurai/cherryblossomsong2.mp3"; // bg song
     const ENABLE_BG_SONG = false; // keep shared story music constant during games
     const KATANA_DRAW_SRC = "../../sounds/katana.mp3";               // sword drawing SFX
+    const GAME_COLOR_REVEAL_MS = 120000;
 
     // Cursor limits and hotspot (in ORIGINAL image pixels)
     const CURSOR_MAX_PX = 124;
@@ -248,6 +249,7 @@
     ======================= */
     let gameState = 'idle';  // 'idle' | 'intro' | 'play'
     let introStartMs = 0;
+    let gameStartMs = 0;
     let started = false;
     let rafId = 0;
 
@@ -377,6 +379,10 @@
        BACKGROUND IMAGE (cover)
     ======================= */
     function drawBackgroundImage() {
+      const progress = Math.max(0, Math.min(1, (performance.now() - gameStartMs) / GAME_COLOR_REVEAL_MS));
+      const gray = 100 - (progress * 100);
+      ctx.save();
+      ctx.filter = `grayscale(${gray}%)`;
       if (bgImg.complete && bgImg.naturalWidth > 0) {
         const iw = bgImg.width, ih = bgImg.height;
         const scale = Math.max(W / iw, H / ih); // cover
@@ -389,6 +395,7 @@
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, W, H);
       }
+      ctx.restore();
     }
 
     /* =======================
@@ -420,7 +427,13 @@
       // Whole blossoms
       for (const b of blossoms) {
         ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle);
-        ctx.drawImage(img,-b.w/2,-b.h/2,b.w,b.h); ctx.restore();
+        ctx.drawImage(img,-b.w/2,-b.h/2,b.w,b.h);
+        ctx.strokeStyle = 'rgba(0,0,0,0.52)';
+        ctx.lineWidth = Math.max(2, Math.min(6, b.w * 0.018));
+        ctx.beginPath();
+        ctx.ellipse(0, 0, b.w * 0.36, b.h * 0.36, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
       // Shards
       const t = nowSec();
@@ -489,6 +502,7 @@
 
       started = true;
       resetGameState();
+      gameStartMs = performance.now();
       if (startOverlay) startOverlay.style.display = 'none';
       canvas.style.cursor = 'none';
 

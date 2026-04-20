@@ -110,6 +110,7 @@
     const CHI_POINTER_MAX = 118;
     const CHI_POINTER_BREATH = 0.05;
     const CHI_POINTER_BREATH_FREQ = 0.8;
+    const GAME_COLOR_REVEAL_MS = 120000;
 
     /* =======================
        SETUP
@@ -898,8 +899,13 @@ function drawRopes(t) {
     let lastT = performance.now();
     let started = false;
     let rafId = 0;
+    let gameStartMs = 0;
 
     function drawBackgroundImage() {
+      const progress = Math.max(0, Math.min(1, (performance.now() - gameStartMs) / GAME_COLOR_REVEAL_MS));
+      const gray = 100 - (progress * 100);
+      ctx.save();
+      ctx.filter = `grayscale(${gray}%)`;
       if (bgImg.complete && bgImg.naturalWidth > 0) {
         const iw = bgImg.width, ih = bgImg.height;
         const scale = Math.max(W / iw, H / ih); // cover
@@ -912,6 +918,7 @@ function drawRopes(t) {
         ctx.fillStyle = "#001028";
         ctx.fillRect(0, 0, W, H);
       }
+      ctx.restore();
     }
 
     function update(dt) {
@@ -1130,6 +1137,7 @@ function drawRopes(t) {
       resetGameState();
       quietAudio();
       started = true;
+      gameStartMs = performance.now();
       if (startOverlay) startOverlay.style.display = 'none';
       canvas.style.cursor = 'none';
 
