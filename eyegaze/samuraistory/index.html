@@ -10,6 +10,7 @@
       font-family: "Segoe UI", system-ui, sans-serif;
       --gold: #f2cf86;
       --scene-transition-total: 4900ms;
+      --dwell-fill-ms: 1000ms;
     }
 
     * { box-sizing: border-box; }
@@ -219,6 +220,15 @@
     }
     .dwell-control label { display: block; margin-bottom: 8px; }
     .dwell-control input[type="range"] { width: 100%; accent-color: #6de67f; }
+    .dwell-toggle {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: .86rem;
+    }
+    .dwell-toggle input[type="checkbox"] { accent-color: #6de67f; }
 
     .start-button {
       border-radius: 999px;
@@ -349,7 +359,7 @@
       height: 0;
       background: rgba(255,40,40,.33);
       transform: translate(-50%, -50%);
-      transition: width .95s linear, height .95s linear;
+      transition: width var(--dwell-fill-ms) linear, height var(--dwell-fill-ms) linear;
       pointer-events: none;
     }
     .story-caption.advanceable.dwell::after { width: 100%; height: 100%; }
@@ -369,6 +379,10 @@
       transition: opacity .2s ease, transform .2s ease;
       cursor: none;
     }
+    .gaze-target.large {
+      width: clamp(150px, 13.2vw, 220px);
+      height: clamp(150px, 13.2vw, 220px);
+    }
 
     .gaze-target::after {
       content: "";
@@ -380,7 +394,7 @@
       background: rgba(255,40,40,.45);
       transform: translate(-50%, -50%);
       border-radius: 50%;
-      transition: width .95s linear, height .95s linear;
+      transition: width var(--dwell-fill-ms) linear, height var(--dwell-fill-ms) linear;
     }
 
     .gaze-target.visible {
@@ -447,10 +461,7 @@
       opacity: .95;
       text-shadow: 0 8px 26px rgba(0,0,0,.8);
     }
-    .conclusion-target {
-      left: 86% !important;
-      top: 78% !important;
-    }
+    .conclusion-target {}
 
     .samurai-challenge {
       position: absolute;
@@ -516,6 +527,10 @@
           <div class="dwell-control">
             <label id="dwellLabel" for="dwellSlider">Dwell time: <span id="dwellValue">1.0s</span></label>
             <input id="dwellSlider" type="range" min="500" max="2000" step="100" value="1000" />
+            <label class="dwell-toggle" for="largeCircleToggle">
+              <input id="largeCircleToggle" type="checkbox" />
+              <span id="largeCircleLabel">Bigger green circle</span>
+            </label>
           </div>
           <div class="menu-footer">
             <button id="startJourneyButton" class="start-button" type="button" disabled>Loading…</button>
@@ -650,6 +665,8 @@
       const dwellSlider = document.getElementById('dwellSlider');
       const dwellValue = document.getElementById('dwellValue');
       const dwellLabel = document.getElementById('dwellLabel');
+      const largeCircleToggle = document.getElementById('largeCircleToggle');
+      const largeCircleLabel = document.getElementById('largeCircleLabel');
       const languageToggleButton = document.getElementById('language-toggle');
       const menuTitleLocalized = document.getElementById('menuTitleLocalized');
       const menuBlossoms = document.getElementById('menuBlossoms');
@@ -666,6 +683,7 @@
       let conclusionCleanup = null;
 
       let dwellMs = 1000;
+      let isLargeGazeTarget = false;
       const colorFadeWaitMs = 4950;
       const samuraiTimeoutMs = 25000;
       const storyGameDurationMs = 120000;
@@ -721,6 +739,7 @@
             samurai: 'The strict path: you manually progress and must succeed in mini-game challenges to continue.'
           },
           dwellLabel: 'Dwell time',
+          largeCircleLabel: 'Bigger green circle',
           scenes: {
             scene1: 'Scene 1 placeholder: the samurai story begins.',
             scene2: 'Scene 2 placeholder: transition to the next lesson.',
@@ -744,6 +763,7 @@
             samurai: 'La voie stricte : progression manuelle et réussite des mini-jeux obligatoire pour continuer.'
           },
           dwellLabel: 'Temps de maintien',
+          largeCircleLabel: 'Cercle vert plus grand',
           scenes: {
             scene1: 'Scène 1 (texte temporaire) : le récit du samouraï commence.',
             scene2: 'Scène 2 (texte temporaire) : transition vers la prochaine leçon.',
@@ -767,6 +787,7 @@
             samurai: '厳しい道：手動で進行し、ミニゲームを成功しないと先に進めません。'
           },
           dwellLabel: '滞留時間',
+          largeCircleLabel: '緑の円を大きくする',
           scenes: {
             scene1: 'シーン1（仮テキスト）：侍の物語が始まる。',
             scene2: 'シーン2（仮テキスト）：次の修行への移行。',
@@ -827,6 +848,20 @@
         const seconds = (dwellMs / 1000).toFixed(1);
         if (dwellValue) dwellValue.textContent = `${seconds}s`;
         if (dwellLabel) dwellLabel.childNodes[0].textContent = `${i18n[getUiLang()].dwellLabel}: `;
+        if (largeCircleLabel) largeCircleLabel.textContent = i18n[getUiLang()].largeCircleLabel;
+        document.documentElement.style.setProperty('--dwell-fill-ms', `${dwellMs}ms`);
+      };
+
+      const getTargetPosition = () => isLargeGazeTarget
+        ? { left: '84%', top: '74%' }
+        : { left: '86%', top: '78%' };
+
+      const applyTargetSettings = (target) => {
+        if (!target) return;
+        const pos = getTargetPosition();
+        target.style.left = pos.left;
+        target.style.top = pos.top;
+        target.classList.toggle('large', isLargeGazeTarget);
       };
 
       const renderMenuBlossoms = () => {
@@ -1003,8 +1038,7 @@
         image.src = `${imageBasePath}${imageName}`;
         image.alt = page.dataset.alt || '';
 
-        gazeTarget.style.left = '86%';
-        gazeTarget.style.top = '78%';
+        applyTargetSettings(gazeTarget);
 
         const hasVideo = page.dataset.novideo !== 'true';
         if (hasVideo) {
@@ -1293,6 +1327,7 @@
         if (!page) return;
         const target = page.querySelector('[data-conclusion-target]');
         if (!target) return;
+        applyTargetSettings(target);
         target.classList.add('visible', 'active');
         target.classList.remove('inactive');
         if (conclusionCleanup) conclusionCleanup();
@@ -1475,6 +1510,19 @@
         const clamped = Math.max(500, Math.min(2000, Number.isFinite(raw) ? raw : 1000));
         dwellMs = clamped;
         updateDwellUI();
+      });
+
+      largeCircleToggle?.addEventListener('change', () => {
+        isLargeGazeTarget = !!largeCircleToggle.checked;
+        const page = pages[currentIndex];
+        if (page?.dataset?.type === 'story') {
+          const target = page.querySelector('[data-gaze-target]');
+          applyTargetSettings(target);
+        }
+        if (page?.dataset?.type === 'conclusion') {
+          const target = page.querySelector('[data-conclusion-target]');
+          applyTargetSettings(target);
+        }
       });
 
       if (nextButton) nextButton.addEventListener('click', nextPage);
