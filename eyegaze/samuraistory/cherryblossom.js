@@ -12,7 +12,7 @@
     const GAME_COLOR_REVEAL_MS = 120000;
 
     // Cursor limits and hotspot (in ORIGINAL image pixels)
-    const CURSOR_MAX_PX = 124;
+    const CURSOR_MAX_PX = 170;
     const HOTSPOT_ORIG = { x: 12, y: 28 };
 
     // Play (normal game) settings
@@ -84,7 +84,7 @@
 
     // Background music
     const bgSong = new Audio(SONG_SRC);
-    bgSong.volume = 0.75;   // 75%
+    bgSong.volume = 0.8;    // 80%
     bgSong.loop = true;
 
     // Katana draw SFX (for the moment the sword cursor appears)
