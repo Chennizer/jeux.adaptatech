@@ -428,11 +428,6 @@
       for (const b of blossoms) {
         ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle);
         ctx.drawImage(img,-b.w/2,-b.h/2,b.w,b.h);
-        ctx.strokeStyle = 'rgba(0,0,0,0.52)';
-        ctx.lineWidth = Math.max(2, Math.min(6, b.w * 0.018));
-        ctx.beginPath();
-        ctx.ellipse(0, 0, b.w * 0.36, b.h * 0.36, 0, 0, Math.PI * 2);
-        ctx.stroke();
         ctx.restore();
       }
       // Shards
