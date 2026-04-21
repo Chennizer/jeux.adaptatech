@@ -54,16 +54,15 @@
     .menu-title-localized {
       position: absolute;
       top: clamp(16px, 2vw, 26px);
-      left: 0;
-      right: 0;
-      z-index: 2;
+      left: clamp(16px, 2vw, 28px);
+      z-index: 3;
       font-family: Georgia, serif;
       color: rgba(252, 220, 155, .95);
       font-size: clamp(1.1rem, 2vw, 2rem);
       letter-spacing: .04em;
       text-transform: uppercase;
       text-shadow: 0 5px 16px rgba(0,0,0,.5);
-      text-align: center;
+      text-align: left;
     }
     .language-switcher {
       position: fixed;
@@ -570,7 +569,6 @@
             <button id="language-toggle" class="lang-toggle" type="button" title="Changer de langue / Change language / 言語を変更">FR</button>
           </div>
           <div id="menuBlossoms" class="menu-blossoms" aria-hidden="true"></div>
-          <h2 id="menuTitleLocalized" class="menu-title-localized" data-fr="La puissance de l'esprit" data-en="The Power of the Mind">La puissance de l'esprit</h2>
           <div class="menu-row">
             <button class="mode-button active" data-mode="story" type="button"><strong>Story</strong></button>
             <button class="mode-button" data-mode="autonomous" type="button"><strong>Normal</strong></button>
@@ -591,6 +589,7 @@
         </div>
 
         <div class="menu-preview">
+          <h2 id="menuTitleLocalized" class="menu-title-localized" data-fr="La puissance de l'esprit" data-en="The Power of the Mind">La puissance de l'esprit</h2>
           <img id="menuPreviewImage" src="../../images/samuraikata/cerisier.jpg" alt="Mode preview" />
           <div class="menu-overlay">
             <h1 id="menuPreviewTitle">Story</h1>
@@ -1313,20 +1312,38 @@
           if (pages[currentIndex] !== page) return;
           caption.textContent = textB || `${textA} ${textB}`.trim();
           caption.classList.add('visible');
-          if (narrationEnabled) playNarration(`${FRENCH_NARRATION_BASE_PATH}scene${sceneNumber}p2fr.mp3`);
-          if (!manual) {
-            timers.ids.push(setTimeout(step5, 900));
+          if (timers.cleanup) {
+            timers.cleanup();
+            timers.cleanup = null;
+          }
+          setTargetState(false);
+          caption.classList.remove('advanceable', 'dwell');
+          gazeTarget.classList.remove('dwell');
+
+          const startVideoSoon = () => {
+            timers.ids.push(setTimeout(() => {
+              if (pages[currentIndex] !== page) return;
+              step5();
+            }, 2000));
+          };
+
+          if (narrationEnabled) {
+            const narrationSrc = `${FRENCH_NARRATION_BASE_PATH}scene${sceneNumber}p2fr.mp3`;
+            let handled = false;
+            const onNarrationEnded = () => {
+              if (handled) return;
+              handled = true;
+              startVideoSoon();
+            };
+            narrationAudio.addEventListener('ended', onNarrationEnded, { once: true });
+            playNarration(narrationSrc);
+            timers.ids.push(setTimeout(() => {
+              onNarrationEnded();
+            }, 20000));
             return;
           }
-          setTargetState(true);
-          caption.classList.add('advanceable');
-          if (timers.cleanup) timers.cleanup();
-          timers.cleanup = bindAdvanceTargets(() => {
-            caption.classList.remove('advanceable', 'dwell');
-            setTargetState(false);
-            gazeTarget.classList.remove('dwell');
-            step5();
-          });
+
+          startVideoSoon();
         };
         const step3 = () => {
           if (pages[currentIndex] !== page) return;
