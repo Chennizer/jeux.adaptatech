@@ -2,10 +2,10 @@
     /* =======================
        ASSETS
     ======================= */
-    const BG_SRC = "../../images/samurai/lampbg.png";
+    const BG_SRC = "../../images/samuraikata/luneattaqueboulechi.jpg";
 
     // Pointer image (square, per your update)
-    const POINTER_SRC = "../../images/samurai/chi.png";
+    const POINTER_SRC = "../../images/samurai/transparentchi.png";
 
     // Moonrock shards (random)
     const ROCK_SRCS = [
@@ -27,8 +27,8 @@
     /* =======================
        TUNABLES
     ======================= */
-    const MIN_DIAMETER = 100;
-    const MAX_DIAMETER = 200;
+    const MIN_DIAMETER = 140;
+    const MAX_DIAMETER = 280;
     const DWELL_MS     = 2000;
     const DECAY_PER_SEC= 0.5;
     const ENTRY_GRACE_MS = 200;
@@ -89,7 +89,8 @@
     const AURA_COLOR      = { r:120, g:220, b:255 };
     const RING_COUNT      = 3;
     const RING_ALPHA      = 0.18;
-    const RING_PULSE_HZ   = 1.0;
+    const RING_PULSE_HZ   = 1.8;
+    const GAME_COLOR_REVEAL_MS = 120000;
 
     // Inflow particles: near-rim and outer ring
     const INFLOW_RATE      = 60;
@@ -118,6 +119,7 @@
     const ctx = canvas.getContext('2d');
     let W = canvas.width  = window.innerWidth;
     let H = canvas.height = window.innerHeight;
+    let gameStartMs = 0;
 
     const bgImg = new Image(); bgImg.src = BG_SRC;
 
@@ -420,6 +422,10 @@
        BACKGROUND + FX
     ======================= */
     function drawBackground(){
+      const progress = Math.max(0, Math.min(1, (performance.now() - gameStartMs) / GAME_COLOR_REVEAL_MS));
+      const gray = 100 - (progress * 100);
+      ctx.save();
+      ctx.filter = `grayscale(${gray}%)`;
       if (bgImg.complete && bgImg.naturalWidth>0){
         const iw=bgImg.width, ih=bgImg.height;
         const sc=Math.max(W/iw, H/ih);
@@ -427,6 +433,7 @@
       } else {
         ctx.fillStyle="#041017"; ctx.fillRect(0,0,W,H);
       }
+      ctx.restore();
     }
 
     function drawShards(){
@@ -579,6 +586,12 @@
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
+
+      ctx.strokeStyle = `rgba(0,0,0,${0.75 - charge * 0.2})`;
+      ctx.lineWidth = Math.max(2, r * 0.08);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 1.01, 0, Math.PI * 2);
+      ctx.stroke();
 
       ctx.restore();
     }
@@ -862,7 +875,6 @@
 
     function render(){
       drawBackground();
-      drawMoon();
       drawInflow();
       drawOrb();        // draw the ball first
       drawPointer();    // then pointer on top of the ball
@@ -963,6 +975,7 @@
       if (started) return;
       resetMutableState();
       started = true;
+      gameStartMs = performance.now();
       if (startOverlay) startOverlay.style.display = 'none';
       resize();
 
