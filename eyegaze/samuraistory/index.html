@@ -675,6 +675,7 @@
       const videoBasePath = '../../animations/samurai/';
       const STORY_LOOP_SRC = '../../songs/samurai/samuraisong4.mp3';
       const MENU_LOOP_SRC = '../../songs/samurai/samuraisong2.mp3';
+      const FRENCH_NARRATION_BASE_PATH = '../../narration/samurai/';
 
       const gameTemplates = { cherry: 'tpl-cherryblossom', meditation: 'tpl-meditation', lamp: 'tpl-lamp' };
       const templateCache = {};
@@ -705,6 +706,9 @@
       menuMusic.preload = 'auto';
       menuMusic.volume = 0.8;
       menuMusic.src = MENU_LOOP_SRC;
+      const narrationAudio = new Audio();
+      narrationAudio.preload = 'auto';
+      narrationAudio.volume = 1;
       let activeSamuraiChallenge = null;
       const samuraiTargets = { cherry: 15, meditation: 10, lamp: 10 };
 
@@ -916,6 +920,22 @@
         menuMusic.pause();
       };
 
+      const stopNarration = () => {
+        narrationAudio.pause();
+        narrationAudio.currentTime = 0;
+        narrationAudio.removeAttribute('src');
+      };
+
+      const playNarration = (src) => {
+        if (!src) return;
+        if (narrationAudio.src !== new URL(src, window.location.href).href) {
+          narrationAudio.src = src;
+        }
+        narrationAudio.currentTime = 0;
+        const p = narrationAudio.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      };
+
       const updateGlobalChiCursor = (page = pages[currentIndex]) => {
         if (!chiCursor) return;
         if (!isJourneyStarted) {
@@ -1021,6 +1041,7 @@
 
       const setupStoryPage = (page) => {
         clearStoryTimers(page);
+        stopNarration();
 
         const media = page.querySelector('[data-story-media]');
         const image = page.querySelector('.story-image');
@@ -1032,9 +1053,12 @@
         resetStoryMedia(page);
         const imageName = page.dataset.image;
         const sceneKey = (page.dataset.image || '').replace(/\.(jpg|jpeg|png)$/i, '');
-        const sceneText = i18n[getUiLang()]?.scenes?.[sceneKey] || page.dataset.text || '';
+        const uiLang = getUiLang();
+        const sceneText = i18n[uiLang]?.scenes?.[sceneKey] || page.dataset.text || '';
         const fullText = sceneText;
         const [textA, textB] = splitText(fullText);
+        const narrationEnabled = uiLang === 'fr' && ['scene1', 'scene2', 'scene3'].includes(sceneKey);
+        const sceneNumber = sceneKey.replace('scene', '');
         playStoryMusic();
 
         image.src = `${imageBasePath}${imageName}`;
@@ -1093,6 +1117,7 @@
           if (pages[currentIndex] !== page) return;
           caption.textContent = `${textA} ${textB}`.trim();
           caption.classList.add('visible');
+          if (narrationEnabled) playNarration(`${FRENCH_NARRATION_BASE_PATH}scene${sceneNumber}p2fr.mp3`);
           if (!manual) {
             timers.ids.push(setTimeout(step5, 900));
             return;
@@ -1129,6 +1154,7 @@
           if (pages[currentIndex] !== page) return;
           caption.textContent = textA;
           caption.classList.add('visible');
+          if (narrationEnabled) playNarration(`${FRENCH_NARRATION_BASE_PATH}scene${sceneNumber}p1fr.mp3`);
           if (!manual) {
             timers.ids.push(setTimeout(step3, 1100));
             return;
@@ -1346,6 +1372,7 @@
           prev.classList.remove('active');
           clearStoryTimers(prev);
           if (prev.dataset.type === 'story') resetStoryMedia(prev);
+          stopNarration();
           if (prev.dataset.type === 'game') stopGame(prev);
           if (prev.dataset.type === 'conclusion' && conclusionCleanup) {
             conclusionCleanup();
