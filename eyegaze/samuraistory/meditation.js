@@ -603,49 +603,32 @@
     ======================= */
     function drawPointer(){
       if (!pointer.inside) return;
-      const ready = pointerImg && pointerImg.complete && pointerImg.naturalWidth > 0;
-
-      const t = performance.now()/1000;
-      const breathe = 1 + POINTER_BREATH * Math.sin(t*2*Math.PI*0.8);
-      const charge  = (orb && !launching) ? orb.charge : 0;
-      const scale   = breathe * (1 + POINTER_CHARGE_SCALE * charge);
-
-      // final side length, clamped to max
-      const size = Math.min(POINTER_PX_MAX, POINTER_BASE_PX * scale);
-      const w = size, h = size;
-
-      // mild pull toward the orb over expanded hover zone
-      let x = pointer.x, y = pointer.y;
-      if (orb && !launching){
-        const dx = orb.cx - x, dy = orb.cy - y;
-        const d  = Math.hypot(dx,dy) || 1;
-        const r  = radiusFromCharge(orb);
-        const exR = r * HOVER_RADIUS_MULT + HOVER_PAD_PX;
-
-        const near = 1 - Math.min(1, d / exR); // 0..1 inside expanded zone
-        const pull = 6 * (0.35 + 0.65*near) * (charge || 0); // up to ~6px
-        x += (dx/d)*pull; y += (dy/d)*pull;
-      }
-
-      // glow scales with size
-      const glowR = size * 0.8;
+      const charge = (orb && !launching) ? orb.charge : 0;
+      const x = pointer.x;
+      const y = pointer.y;
+      const size = 30;
+      const glowR = 18 + (charge * 6);
 
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const g = ctx.createRadialGradient(x, y, 0, x, y, glowR);
-      g.addColorStop(0, `rgba(255,255,255,${0.22 + 0.28*charge})`);
-      g.addColorStop(1, 'rgba(120,220,255,0)');
+      g.addColorStop(0, `rgba(56,189,248,${0.28 + 0.24*charge})`);
+      g.addColorStop(1, 'rgba(56,189,248,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(x, y, glowR, 0, Math.PI*2); ctx.fill();
 
       ctx.globalCompositeOperation = 'source-over';
-      if (ready){
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(pointerImg, x - w/2, y - h/2, w, h);
-      } else {
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(x, y, Math.max(2, size*0.08), 0, Math.PI*2); ctx.fill();
-      }
+      const core = ctx.createRadialGradient(x - 4, y - 5, 1, x, y, size * 0.5);
+      core.addColorStop(0, 'rgba(255,255,255,0.7)');
+      core.addColorStop(0.42, 'rgba(72,183,255,0.65)');
+      core.addColorStop(0.68, 'rgba(26,92,245,0.5)');
+      core.addColorStop(1, 'rgba(12,30,120,0.2)');
+      ctx.fillStyle = core;
+      ctx.beginPath(); ctx.arc(x, y, size * 0.5, 0, Math.PI*2); ctx.fill();
+
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(56,189,248,0.2)';
+      ctx.beginPath(); ctx.arc(x, y, size * 0.5 + 2, 0, Math.PI*2); ctx.stroke();
       ctx.restore();
     }
 
