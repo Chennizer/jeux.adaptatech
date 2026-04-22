@@ -12,7 +12,7 @@
     const GAME_COLOR_REVEAL_MS = 120000;
 
     // Cursor limits and hotspot (in ORIGINAL image pixels)
-    const CURSOR_MAX_PX = 170;
+    const CURSOR_MAX_PX = 124;
     const HOTSPOT_ORIG = { x: 12, y: 28 };
 
     // Play (normal game) settings
