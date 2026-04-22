@@ -809,6 +809,7 @@
           },
           dwellLabel: 'Dwell time',
           largeCircleLabel: 'Bigger green circle',
+          colorPrompt: 'Color it.',
           thanks: 'Thanks for playing',
           stats: {
             flowers: 'Flowers cut',
@@ -855,6 +856,7 @@
           },
           dwellLabel: 'Temps de maintien',
           largeCircleLabel: 'Cercle vert plus grand',
+          colorPrompt: 'Colore-le.',
           thanks: 'Merci d’avoir joué',
           stats: {
             flowers: 'Fleurs coupées',
@@ -901,6 +903,7 @@
           },
           dwellLabel: '滞留時間',
           largeCircleLabel: '緑の円を大きくする',
+          colorPrompt: '色をつけよう。',
           thanks: 'プレイしてくれてありがとう',
           stats: {
             flowers: '切った花',
@@ -1166,7 +1169,6 @@
         const finish = () => {
           if (autoTimer) clearTimeout(autoTimer);
           autoTimer = null;
-          target.classList.remove('dwell');
           onDone();
         };
 
@@ -1253,7 +1255,6 @@
         }
 
         const timers = { ids: [], cleanup: null };
-        const manual = modeConfig[currentMode].manualAdvance;
         const autoActivateMs = currentMode === 'story' ? 30000 : 0;
         const setTargetState = (isActive) => {
           gazeTarget.classList.add('visible');
@@ -1261,28 +1262,6 @@
           gazeTarget.classList.toggle('inactive', !isActive);
         };
         setTargetState(false);
-        const bindAdvanceTargets = (onDone) => {
-          let finished = false;
-          let cleanA = null;
-          let cleanB = null;
-          const done = () => {
-            if (finished) return;
-            finished = true;
-            if (cleanA) cleanA();
-            if (cleanB) cleanB();
-            cleanA = null;
-            cleanB = null;
-            onDone();
-          };
-          cleanA = createDwellGate(caption, done, autoActivateMs);
-          cleanB = createDwellGate(gazeTarget, done, autoActivateMs);
-          return () => {
-            if (cleanA) cleanA();
-            if (cleanB) cleanB();
-            cleanA = null;
-            cleanB = null;
-          };
-        };
 
         const step5 = () => playVideoThenAdvance(page, video, media);
         const step4 = () => {
@@ -1322,56 +1301,64 @@
 
           startVideoSoon();
         };
-        const step3 = () => {
+        let firstNarrationFinished = !narrationEnabled;
+        let firstNarrationWaiter = null;
+        if (narrationEnabled) {
+          const firstPartNarrationSrc = `${FRENCH_NARRATION_BASE_PATH}scene${sceneNumber}p1fr.mp3`;
+          const finishFirstNarration = () => {
+            if (firstNarrationFinished) return;
+            firstNarrationFinished = true;
+            if (typeof firstNarrationWaiter === 'function') {
+              const waiter = firstNarrationWaiter;
+              firstNarrationWaiter = null;
+              waiter();
+            }
+          };
+          narrationAudio.addEventListener('ended', finishFirstNarration, { once: true });
+          playNarration(firstPartNarrationSrc);
+          timers.ids.push(setTimeout(finishFirstNarration, 20000));
+        }
+
+        const waitFirstNarrationThenColorStage = (onDone) => {
+          const startDelay = () => {
+            timers.ids.push(setTimeout(() => {
+              if (pages[currentIndex] !== page) return;
+              onDone();
+            }, 2000));
+          };
+          if (firstNarrationFinished) {
+            startDelay();
+            return;
+          }
+          firstNarrationWaiter = startDelay;
+        };
+
+        const stepColorStage = () => {
           if (pages[currentIndex] !== page) return;
-          image.classList.add('colored');
+          caption.textContent = i18n[uiLang]?.colorPrompt || 'Color it.';
+          caption.classList.add('visible', 'advanceable');
+          caption.classList.remove('dwell');
           setTargetState(false);
-          if (!manual) {
-            timers.ids.push(setTimeout(step4, colorFadeWaitMs));
-            return;
-          }
-          timers.ids.push(setTimeout(() => {
-            if (pages[currentIndex] !== page) return;
-            setTargetState(true);
-            if (timers.cleanup) timers.cleanup();
-            timers.cleanup = createDwellGate(gazeTarget, () => {
-              setTargetState(false);
-              step4();
-            }, autoActivateMs);
-          }, colorFadeWaitMs));
-        };
-        const step2 = () => {
-          if (pages[currentIndex] !== page) return;
-          caption.textContent = textA;
-          caption.classList.add('visible');
-          if (narrationEnabled) playNarration(`${FRENCH_NARRATION_BASE_PATH}scene${sceneNumber}p1fr.mp3`);
-          if (!manual) {
-            timers.ids.push(setTimeout(step3, 1100));
-            return;
-          }
-          setTargetState(true);
-          caption.classList.add('advanceable');
           if (timers.cleanup) timers.cleanup();
-          timers.cleanup = bindAdvanceTargets(() => {
-            caption.classList.remove('advanceable', 'dwell');
-            setTargetState(false);
-            gazeTarget.classList.remove('dwell');
-            step3();
-          });
+          timers.cleanup = createDwellGate(caption, () => {
+            caption.classList.remove('advanceable');
+            image.classList.add('colored');
+            caption.classList.remove('dwell');
+            step4();
+          }, autoActivateMs);
         };
+
         const step1 = () => {
           if (pages[currentIndex] !== page) return;
           image.classList.remove('colored');
-          caption.classList.remove('visible');
-          caption.textContent = '';
-          if (!manual) {
-            timers.ids.push(setTimeout(step2, 900));
-            return;
-          }
-          setTargetState(true);
-          timers.cleanup = createDwellGate(gazeTarget, () => {
-            setTargetState(false);
-            step2();
+          caption.textContent = textA;
+          caption.classList.add('visible', 'advanceable');
+          setTargetState(false);
+          if (timers.cleanup) timers.cleanup();
+          timers.cleanup = createDwellGate(caption, () => {
+            caption.classList.remove('advanceable');
+            caption.classList.remove('dwell');
+            waitFirstNarrationThenColorStage(stepColorStage);
           }, autoActivateMs);
         };
 
