@@ -392,6 +392,7 @@
     ======================= */
     const lanterns = [];
     let litCount = 0;
+    let releasedCount = 0;
 
     function chooseScatteredX(w) {
       const minX = SIDE_PAD_H + w * 0.5;
@@ -567,10 +568,40 @@
           breakPt,
           frozen   // {p0,p1,p2} frozen at cut time
         };
+        releasedCount++;
 
         // ▼ NEW: play slice SFX right when the rope is cut
         playSfx(sfxKatanaSlice);
       }
+    }
+
+    function drawReleasedHUD() {
+      const pad = Math.max(10, Math.min(22, Math.floor((W + H) * 0.0115)));
+      const iconSize = Math.max(22, Math.min(38, Math.floor((W + H) * 0.018)));
+      const textSize = Math.max(18, Math.min(30, Math.floor((W + H) * 0.017)));
+      const xRight = W - pad;
+      const yTop = pad;
+      const text = `${releasedCount}`;
+
+      ctx.save();
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${textSize}px ui-rounded, ui-sans-serif, system-ui, Segoe UI, Roboto, Arial`;
+      ctx.fillStyle = '#ffd98f';
+      ctx.shadowColor = 'rgba(0,0,0,0.38)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      ctx.fillText(text, xRight, yTop + iconSize * 0.5);
+
+      const icon = imageHasDimensions(imgLit1) ? imgLit1 : imgClosed1;
+      if (imageHasDimensions(icon)) {
+        const textW = ctx.measureText(text).width;
+        const iconX = xRight - textW - 10 - iconSize;
+        const iconY = yTop;
+        ctx.shadowColor = 'rgba(0,0,0,0.22)';
+        ctx.drawImage(icon, iconX, iconY, iconSize, iconSize);
+      }
+      ctx.restore();
     }
 
     /* =======================
@@ -1043,6 +1074,7 @@ function drawRopes(t) {
       }
       ctx.restore();
 
+      drawReleasedHUD();
       drawChiPointer();
       drawKatanaPointer();
     }
@@ -1112,6 +1144,7 @@ function drawRopes(t) {
       activeShootingStar = null;
       nextStarTime = 0;
       litCount = 0;
+      releasedCount = 0;
     }
 
     function rebuildWorld() {
@@ -1169,7 +1202,7 @@ function drawRopes(t) {
     window.storyGameApi = {
       start: startExperience,
       stop: stopExperience,
-      getProgress: () => litCount
+      getProgress: () => releasedCount
     };
   })();
   

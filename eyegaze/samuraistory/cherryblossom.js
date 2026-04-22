@@ -84,7 +84,7 @@
 
     // Background music
     const bgSong = new Audio(SONG_SRC);
-    bgSong.volume = 0.8;    // 80%
+    bgSong.volume = 0.64;   // 80% of prior volume
     bgSong.loop = true;
 
     // Katana draw SFX (for the moment the sword cursor appears)
