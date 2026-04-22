@@ -46,7 +46,9 @@
     const RESPAWN_DELAY_MS = 2500;  // wait before next orb
 
     // For glow stops
-    const BALL_RGB       = "120,220,210";
+    const BALL_RGB       = "90,210,245";
+    const INFLOW_CORE_RGB = "96,232,190";
+    const INFLOW_EDGE_RGB = "74,150,255";
 
     // Local jitter only
     const ORB_SHAKE_MAX  = 8;
@@ -841,8 +843,12 @@
         const a = INFLOW_ALPHA * Math.max(0, Math.min(1, p.life/0.5));
         if (a <= 0.01) continue;
         ctx.globalAlpha = a;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, Math.PI*2);
-        ctx.fillStyle = 'white'; ctx.fill();
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 3.4);
+        glow.addColorStop(0, `rgba(${INFLOW_CORE_RGB},${Math.min(0.95, a + 0.2)})`);
+        glow.addColorStop(0.65, `rgba(${INFLOW_EDGE_RGB},${Math.max(0.18, a * 0.7)})`);
+        glow.addColorStop(1, `rgba(${INFLOW_EDGE_RGB},0)`);
+        ctx.beginPath(); ctx.arc(p.x, p.y, 3.4, 0, Math.PI*2);
+        ctx.fillStyle = glow; ctx.fill();
       }
       ctx.globalAlpha = 1;
       ctx.restore();
