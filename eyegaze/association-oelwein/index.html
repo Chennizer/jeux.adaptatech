@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="translate"
+          data-fr="Trouve l’image — Pictos"
+          data-en="Find the image — Icons">Trouve l’image — Pictos</title>
+
+  <!-- Shared styles -->
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <style>
+    /* Lang toggle button */
+    #langToggle {
+      position: fixed;
+      top: 10px; right: 10px;
+      z-index: 99999;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 10px; border: 2px solid #009688;
+      background: #fff; color: #009688; font-weight: 700; cursor: pointer;
+      user-select: none;
+    }
+    body.dark #langToggle { background:#111; color:#14b8a6; border-color:#14b8a6; }
+
+    /* Themes */
+    body.light { background-color: #fff; color: #000; }
+    body.dark  { background-color: #000; color: #fff; }
+
+    /* Game container */
+    .game-container {
+      width: 100%;
+      max-width: 100vw;
+      height: 100%;
+      display: none;             /* shown after Start */
+      flex-direction: row;
+      align-items: stretch;
+      justify-content: center;
+      gap: clamp(16px, 4vw, 32px);
+      padding: clamp(8px, 3vw, 24px);
+      box-sizing: border-box;
+    }
+
+    .reference-column {
+      flex: 0 0 clamp(260px, 32vw, 420px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: clamp(12px, 3vw, 20px);
+    }
+
+    .choices-column {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(6px, 2vw, 20px);
+      box-sizing: border-box;
+    }
+
+    @media (max-width: 820px) {
+      .game-container {
+        flex-direction: column;
+      }
+      .reference-column {
+        flex: 0 0 auto;
+        width: 100%;
+      }
+      .choices-column {
+        width: 100%;
+      }
+    }
+
+    /* Top strip card */
+    .top-strip{
+      width: 100%;
+      margin-top: 0;
+      padding: clamp(10px, 2.5vw, 18px);
+      border-radius: 14px;
+      border: 2px solid rgba(0,0,0,0.12);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+      transition: opacity 500ms ease;
+      margin-bottom: 0;
+      opacity: 1;
+
+      display: none;
+      flex: 0 0 auto;
+      overflow: hidden;
+      --top-cap: clamp(140px, 26vh, 320px);
+      max-height: var(--top-cap);
+
+      background: #ffffff;
+    }
+    .top-strip.fade-out { opacity: 0; }
+    .top-strip.hidden{ display: none !important; }
+    body.dark .top-strip{
+      border-color: rgba(255,255,255,0.18);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      background: #ffffff;
+    }
+
+    .top-center{
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(12px, 2vw, 20px);
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    #prompt{ margin:0; display:none; opacity:1; transition: opacity 500ms ease; }
+    #prompt .prompt-text{
+      font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+      letter-spacing: .2px;
+      text-wrap: balance;
+    }
+
+    .target-image{
+      flex: 0 0 auto;
+      width: min(36vmin, 320px);
+      max-width: 320px;
+      max-height: calc(var(--top-cap) - 24px);
+      object-fit: contain;
+      background: transparent;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .grid-outer{
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 100vw;
+    }
+
+    .letter-grid {
+      display: none;
+      width: 100%;
+      max-width: 100vw;
+      box-sizing: border-box;
+      place-content: center;
+      justify-items: stretch;
+      align-items: stretch;
+      margin: 0;
+    }
+    .letter-grid.no-input { pointer-events: none; }
+
+    .phase-indicator {
+      font-size: clamp(1.1rem, 2vw, 1.4rem);
+      font-weight: 700;
+      color: #0f172a;
+      text-align: center;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(20,184,166,0.12);
+      border: 2px solid rgba(20,184,166,0.25);
+    }
+
+    body.dark .phase-indicator {
+      color: #e0f2f1;
+      background: rgba(20,184,166,0.18);
+      border-color: rgba(45,212,191,0.4);
+    }
+
+    .word-card {
+      width: 100%;
+      max-width: 320px;
+      padding: clamp(12px, 3vw, 20px);
+      border-radius: 16px;
+      border: 2px solid rgba(0,0,0,0.1);
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    }
+
+    body.dark .word-card {
+      background: #1d1d1d;
+      color: #fff;
+      border-color: rgba(255,255,255,0.18);
+    }
+
+    .word-card .word-text {
+      font-size: clamp(1.6rem, 4vw, 2.5rem);
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .word-card .syllables {
+      font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+      font-weight: 600;
+      color: #0f172a;
+      text-align: center;
+    }
+
+    body.dark .word-card .syllables {
+      color: #c5f9f4;
+    }
+
+    #continueButton {
+      display: none;
+      padding: 12px 18px;
+      font-size: clamp(1rem, 2.2vw, 1.3rem);
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #14b8a6, #0f766e);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(15,118,110,0.2);
+    }
+
+    #continueButton.visible {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .letter-cell {
+      position: relative;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid rgba(0,0,0,0.15);
+      overflow: hidden;
+      transform: translateZ(0);
+      background-clip: padding-box;
+      background-color: #fff;
+      color: #000;
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      opacity: 1;
+      transition: opacity 500ms ease, transform 500ms ease, filter 500ms ease, background-color 300ms ease, box-shadow 250ms ease;
+    }
+    body.dark .letter-cell { background-color: #222; color: #fff; }
+
+    .letter-cell.word-mode {
+      flex-direction: column;
+      gap: 10px;
+      padding: clamp(12px, 3vw, 18px);
+    }
+
+    .word-cell-text {
+      font-size: clamp(1.3rem, 3vw, 2rem);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      text-align: center;
+    }
+
+    .word-cell-hint {
+      font-size: clamp(0.9rem, 2.2vw, 1.2rem);
+      opacity: 0.75;
+      text-align: center;
+    }
+
+    .cell-img{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .letter-cell.dim {
+      opacity: 0;
+      transform: scale(0.92);
+      filter: blur(1px);
+    }
+
+    .letter-cell.matched {
+      box-shadow: 0 0 0 4px rgba(20,184,166,0.35);
+    }
+
+    body.dark .letter-cell.matched {
+      box-shadow: 0 0 0 4px rgba(45,212,191,0.55);
+    }
+
+    .dwell-fill {
+      position: absolute;
+      background-color: rgba(255, 0, 0, 0.5);
+      top: 50%; left: 50%;
+      width: 0; height: 0;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      border-radius: 8px;
+    }
+
+    .flying-tile {
+      position: fixed;
+      left: 0; top: 0;
+      transform: translate3d(0, 0, 0) scale(1);
+      transform-origin: center center;
+
+      z-index: 9999;
+      pointer-events: none;
+      border-radius: 12px;
+      border: 2px solid rgba(0,0,0,0.15);
+      overflow: hidden;
+      background-color: inherit;
+      color: inherit;
+      backface-visibility: hidden;
+      will-change: transform;
+      contain: layout paint style;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .letter-grid.grid-locked { pointer-events: none; }
+    .letter-grid.grid-locked .letter-cell {
+      opacity: .35;
+      filter: grayscale(70%);
+      transition: opacity 250ms ease, filter 250ms ease;
+    }
+    @keyframes readyPop {
+      0% { transform: scale(.98); }
+      100% { transform: scale(1); }
+    }
+    .letter-grid.ready-pop .letter-cell { animation: readyPop 220ms ease; }
+
+    /* Reduced-motion wrong feedback */
+    @media (prefers-reduced-motion: reduce) {
+      .letter-cell.wrong-flash { box-shadow: inset 0 0 0 3px rgba(198,40,40,.5); }
+    }
+  </style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-B45TJG4GBJ');
+</script>
+</head>
+<body>
+
+<button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+<!-- Options -->
+<div id="game-options" class="modal">
+  <div id="options-title-bar">
+    <h2 id="options-main-title" class="translate"
+        data-fr="Trouve l’image — Pictos"
+        data-en="Find the image — Icons">Trouve l’image — Pictos</h2>
+  </div>
+
+  <div id="control-panel-options">
+    <div id="mode-divider"></div>
+
+    <div id="options-inline-container">
+      <!-- Col 1: Audio + TTS -->
+      <div class="options-column">
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="muteSFX">
+            <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds">Désactiver les sons</span>
+          </label>
+        </div>
+
+        <div class="option-item">
+          <label class="teal-label">
+            <input type="checkbox" id="ttsEnabled">
+            <span class="translate" data-fr="Lecture vocale" data-en="Voice reading (TTS)">Lecture vocale</span>
+          </label>
+        </div>
+        <div class="option-item">
+          <label for="sfxVol" class="teal-label">
+            <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:">Volume des sons:</span>
+            <span id="sfxVolVal">50</span>
+          </label>
+          <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="50">
+        </div>
+      </div>
+
+      <!-- Col 2: Category + choices -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="categorySelect" class="teal-label label-block translate"
+                 data-fr="Catégorie" data-en="Category">Catégorie</label>
+          <select id="categorySelect" class="styled-select"></select>
+        </div>
+
+        <div class="option-item">
+          <label for="choicesCount" class="teal-label">
+            <span class="translate" data-fr="Nombre de choix:" data-en="Number of choices:">Nombre de choix:</span>
+            <span id="choicesCountVal">2</span>
+          </label>
+          <input type="range" id="choicesCount" class="styled-slider" min="1" max="9" step="1" value="2">
+        </div>
+      </div>
+
+      <!-- Col 3: Dwell + layout scale + theme -->
+      <div class="options-column">
+        <div class="option-item">
+          <label for="dwellTimeSlider" class="teal-label">
+            <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:">Temps de fixation:</span>
+            <span id="dwellTimeVal">1500</span> ms
+          </label>
+          <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="5000" step="100" value="1500">
+        </div>
+        <div class="option-item">
+          <label for="layoutScale" class="teal-label">
+            <span class="translate" data-fr="Mise en page (taille):" data-en="Layout scale:">Mise en page (taille):</span>
+            <span id="layoutScaleVal"> 1.00</span>x
+          </label>
+          <input type="range" id="layoutScale" class="styled-slider" min="0.8" max="1.4" step="0.05" value="1.0">
+        </div>
+        <div class="option-item">
+          <label for="themeSelect" class="teal-label label-block translate"
+                 data-fr="Mode" data-en="Theme">Mode</label>
+          <select id="themeSelect" class="styled-select">
+            <option value="light" selected class="translate" data-fr="Clair" data-en="Light">Clair</option>
+            <option value="dark" class="translate" data-fr="Sombre" data-en="Dark">Sombre</option>
+          </select>
+        </div>
+
+        <div class="option-item gp-compact">
+          <label class="teal-label">
+            <input type="checkbox" id="showGazePointer" checked>
+            <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)">
+              Afficher le pointeur (cache la souris)
+            </span>
+          </label>
+
+          <details id="gpDetails">
+            <summary class="gp-summary">
+              <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options">
+                Options avancées du pointeur
+              </span>
+            </summary>
+
+            <div class="gp-advanced">
+              <div class="gp-row">
+                <label for="gazeSize" class="teal-label gp-label">
+                  <span class="translate" data-fr="Taille" data-en="Size">Taille</span>:
+                  <span id="gazeSizeVal">36</span> px
+                </label>
+                <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="100" step="2" value="36">
+              </div>
+
+              <div class="gp-row">
+                <label for="gazeOpacity" class="teal-label gp-label">
+                  <span class="translate" data-fr="Opacité" data-en="Opacity">Opacité</span>:
+                  <span id="gazeOpacityVal">100</span>%
+                </label>
+                <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div id="mode-divider"></div>
+    <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+</div>
+
+<!-- Game area -->
+<div class="game-container">
+  <div class="reference-column">
+    <div id="phaseIndicator" class="phase-indicator">Phase</div>
+
+    <div id="topStrip" class="top-strip">
+      <div class="top-center">
+        <h2 id="prompt">
+          <span class="prompt-text">
+            <span id="promptLead" class="translate" data-fr="Trouve" data-en="Find">Trouve</span>
+            &nbsp;<span id="promptWord">…</span>
+          </span>
+        </h2>
+        <img id="targetImage" class="target-image" alt="">
+      </div>
+    </div>
+
+    <div id="referenceWordCard" class="word-card" style="display:none;">
+      <div class="word-text" id="referenceWordText"></div>
+      <div class="syllables" id="referenceSyllables"></div>
+    </div>
+
+    <img id="referenceImage" class="target-image" alt="" style="display:none;">
+
+    <button id="continueButton" class="translate" data-fr="Continuer" data-en="Continue">Continuer</button>
+  </div>
+
+  <div class="choices-column">
+    <div class="grid-outer">
+      <div class="letter-grid" id="imageGrid"></div>
+    </div>
+  </div>
+</div>
+
+<div id="gazePointer" aria-hidden="true"></div>
+
+<!-- Audio -->
+<audio id="correctSound" src="../../sounds/victory.mp3"></audio>
+<audio id="wrongSound"   src="../../sounds/error.mp3"></audio>
+
+<!-- Helpers -->
+<script src="../../js/eyegaze-menu.js"></script>
+<script src="../../js/translationmain.js"></script>
+
+<script>
+/* =========================================================
+   EARLY GLOBALS (avoid TDZ for pictosData)
+   ========================================================= */
+var pictosData = null; // declare first so setLang() can safely read/guard it
+
+/* =========================
+   Language — storage as source of truth
+   ========================= */
+const LS_LANG_KEY = 'siteLanguage';
+const langToggle  = document.getElementById('langToggle');
+
+const PHASE_TEXT = {
+  matching: { fr: 'Associer', en: 'Match' },
+  selecting: { fr: 'Choisir', en: 'Select' },
+  naming: { fr: 'Nommer', en: 'Name' }
+};
+
+const PHASE_PROMPTS = {
+  matching: {
+    fr: { lead: 'Associe', tail: 'les mots identiques' },
+    en: { lead: 'Match', tail: 'the identical words' }
+  },
+  selecting: {
+    fr: { lead: 'Choisis', tail: '' },
+    en: { lead: 'Select', tail: '' }
+  },
+  naming: {
+    fr: { lead: 'Dis', tail: '' },
+    en: { lead: 'Say', tail: '' }
+  }
+};
+
+const MATCH_HINT = {
+  fr: 'Regarde bien les deux mêmes mots.',
+  en: 'Look closely at the two matching words.'
+};
+
+function getLang(){
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') return saved;
+  } catch(e){}
+  return (document.documentElement.lang === 'en') ? 'en' : 'fr';
+}
+
+function setLang(lang){
+  const safe = (lang === 'en') ? 'en' : 'fr';
+  document.documentElement.lang = safe;
+  try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e){}
+  document.querySelectorAll('.translate').forEach(el=>{
+    const fr = el.getAttribute('data-fr');
+    const en = el.getAttribute('data-en');
+    if (safe === 'fr' && fr != null) el.textContent = fr;
+    if (safe === 'en' && en != null) el.textContent = en;
+  });
+  // Only repopulate categories if data is loaded
+  if (window.pictosData) {
+    populateCategoriesSelect(document.getElementById('categorySelect').value);
+  }
+  updatePhaseIndicator();
+  refreshReferencePanels();
+}
+
+/* Normalize once on load */
+(function normalizeLangOnLoad(){
+  let initial = 'fr';
+  try {
+    const saved = localStorage.getItem(LS_LANG_KEY);
+    if (saved === 'en' || saved === 'fr') {
+      initial = saved;
+    } else {
+      initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+      localStorage.setItem(LS_LANG_KEY, initial);
+    }
+  } catch(e){
+    initial = (document.documentElement.lang === 'en') ? 'en' : 'fr';
+  }
+  setLang(initial);
+})();
+
+langToggle.addEventListener('click', ()=>{
+  setLang(getLang()==='fr' ? 'en' : 'fr');
+  choosePreferredVoice();
+});
+
+/* =========================
+   Load pictos (new JSON with {label, items})
+   ========================= */
+const PICTOS_JSON_PATH = '../../images/pictos/newindex.json';
+
+function populateCategoriesSelect(preserveKey){
+  const select = document.getElementById('categorySelect');
+  if (!select || !pictosData) return;
+  const lang = getLang();
+  const prev = preserveKey || select.value;
+  select.innerHTML = '';
+  Object.entries(pictosData.categories).forEach(([key, obj])=>{
+    const opt = document.createElement('option');
+    opt.value = key;
+    const lbl = obj.label?.[lang] || obj.label?.fr || obj.label?.en || key;
+    opt.textContent = lbl;
+    select.appendChild(opt);
+  });
+  if (prev && pictosData.categories[prev]) select.value = prev;
+}
+
+fetch(PICTOS_JSON_PATH)
+  .then(r => r.json())
+  .then(data => {
+    pictosData = data;
+    populateCategoriesSelect();
+  })
+  .catch(err => console.error('Erreur JSON pictos:', err));
+
+/* =========================
+   UI bindings
+   ========================= */
+const muteSFX      = document.getElementById('muteSFX');
+const sfxVol       = document.getElementById('sfxVol');
+const sfxVolVal    = document.getElementById('sfxVolVal');
+const dwellSlider  = document.getElementById('dwellTimeSlider');
+const dwellTimeVal = document.getElementById('dwellTimeVal');
+const themeSelect  = document.getElementById('themeSelect');
+const startButton  = document.getElementById('startButton');
+const ttsEnabled   = document.getElementById('ttsEnabled');
+const choicesCountEl = document.getElementById('choicesCount');
+const choicesCountVal= document.getElementById('choicesCountVal');
+
+const layoutScaleEl = document.getElementById('layoutScale');
+const layoutScaleVal= document.getElementById('layoutScaleVal');
+
+const showGazePointer = document.getElementById('showGazePointer');
+const gazeSize        = document.getElementById('gazeSize');
+const gazeSizeVal     = document.getElementById('gazeSizeVal');
+const gazeOpacity     = document.getElementById('gazeOpacity');
+const gazeOpacityVal  = document.getElementById('gazeOpacityVal');
+const gpDetails       = document.getElementById('gpDetails');
+const gazePointer     = document.getElementById('gazePointer');
+const phaseIndicatorEl = document.getElementById('phaseIndicator');
+const referenceWordCard = document.getElementById('referenceWordCard');
+const referenceWordText = document.getElementById('referenceWordText');
+const referenceSyllables = document.getElementById('referenceSyllables');
+const referenceImage = document.getElementById('referenceImage');
+const continueButton = document.getElementById('continueButton');
+
+function ensurePointerOverlay() {
+  if (!gazePointer) return null;
+  let overlay = document.getElementById('gazePointerOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'gazePointerOverlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '2147483647';
+    overlay.style.overflow = 'visible';
+    document.body.appendChild(overlay);
+  }
+  if (gazePointer.parentElement !== overlay) {
+    overlay.appendChild(gazePointer);
+  }
+  return overlay;
+}
+
+ensurePointerOverlay();
+
+sfxVol.addEventListener('input', () => sfxVolVal.textContent = sfxVol.value);
+dwellSlider.addEventListener('input', () => dwellTimeVal.textContent = dwellSlider.value);
+choicesCountEl.addEventListener('input', () => choicesCountVal.textContent = choicesCountEl.value);
+layoutScaleEl.addEventListener('input', () => {
+  layoutScaleVal.textContent = parseFloat(layoutScaleEl.value).toFixed(2);
+  if (document.querySelector('.game-container').style.display === 'flex') {
+    layoutScale = parseFloat(layoutScaleEl.value);
+    adjustGridSizes();
+  }
+});
+
+if (continueButton) {
+  continueButton.addEventListener('click', () => {
+    if (phase === 'naming') {
+      advancePhase();
+    }
+  });
+}
+
+(function initPointerControls(){
+  if (!gazePointer) return;
+
+  try {
+    const settings = window.eyegazeSettings;
+    if (settings) {
+      if (showGazePointer && typeof settings.showGazePointer === 'boolean') {
+        showGazePointer.checked = settings.showGazePointer;
+      }
+      if (gazeSize && typeof settings.gazePointerSize === 'number') {
+        const min = parseInt(gazeSize.min || '16', 10);
+        const max = parseInt(gazeSize.max || '100', 10);
+        const stored = Math.round(settings.gazePointerSize);
+        if (!Number.isNaN(stored)) {
+          gazeSize.value = Math.max(min, Math.min(max, stored));
+        }
+      }
+      if (gazeOpacity && typeof settings.gazePointerAlpha === 'number') {
+        const min = parseInt(gazeOpacity.min || '0', 10);
+        const max = parseInt(gazeOpacity.max || '100', 10);
+        const stored = Math.round(Math.max(0, Math.min(1, settings.gazePointerAlpha)) * 100);
+        gazeOpacity.value = Math.max(min || 0, Math.min(max || 100, stored));
+      }
+    }
+  } catch(e) {}
+
+  applyPointerToggle();
+  syncEyegazeSettingsFromUI();
+
+  if (showGazePointer) {
+    showGazePointer.addEventListener('change', () => {
+      applyPointerToggle();
+      syncEyegazeSettingsFromUI();
+    });
+  }
+
+  [gazeSize, gazeOpacity].forEach(ctrl => {
+    if (!ctrl) return;
+    ctrl.addEventListener('input', () => {
+      applyPointerToggle();
+      syncEyegazeSettingsFromUI();
+    });
+  });
+})();
+
+/* =========================
+   Persist TTS
+   ========================= */
+const LS_KEYS = { ttsEnabled: 'trouveimage:ttsEnabled' };
+(function initPersistedControls(){
+  try {
+    const en = localStorage.getItem(LS_KEYS.ttsEnabled);
+    if (en !== null) ttsEnabled.checked = (en === 'true');
+  } catch(e){}
+})();
+ttsEnabled.addEventListener('change', () => {
+  try { localStorage.setItem(LS_KEYS.ttsEnabled, String(ttsEnabled.checked)); } catch(e){}
+});
+
+/* =========================
+   Game state
+   ========================= */
+let currentCategory = null;
+let pool = [];
+let targetItem = null;
+let isReady = false;
+let layoutScale = 1.0;
+let phase = 'matching';
+let selectingChoices = [];
+let matchedMatchingIds = new Set();
+
+/* pointer-in-tile unlock */
+let hoveredTile = null;
+let lastPointer = { x: null, y: null };
+
+function pointerSizeFromControls() {
+  return parseInt(gazeSize?.value, 10) || 36;
+}
+
+function pointerOpacityFromControls() {
+  const raw = parseInt(gazeOpacity?.value, 10);
+  return Math.max(0, Math.min(1, (isNaN(raw) ? 100 : raw) / 100));
+}
+
+function setPointerPos(x, y) {
+  if (!gazePointer) return;
+  gazePointer.style.left = `${x}px`;
+  gazePointer.style.top = `${y}px`;
+}
+
+function setPointerDwell(active) {
+  if (!gazePointer) return;
+  gazePointer.classList.toggle('gp-dwell', !!active);
+}
+
+function isGameActive() {
+  return document.querySelector('.game-container')?.style.display === 'flex';
+}
+
+function applyPointerToggle() {
+  if (!gazePointer) return;
+  const size = pointerSizeFromControls();
+  const opct = pointerOpacityFromControls();
+  if (gazeSizeVal) gazeSizeVal.textContent = size;
+  if (gazeOpacityVal) gazeOpacityVal.textContent = Math.round(opct * 100);
+  gazePointer.style.setProperty('--gp-size', `${size}px`);
+  const enable = !!showGazePointer?.checked && isGameActive();
+  document.documentElement.classList.toggle('hide-native-cursor', enable);
+  if (!enable) {
+    setPointerDwell(false);
+    if (gpDetails) gpDetails.open = false;
+  }
+  gazePointer.style.opacity = enable ? opct : 0;
+  if (enable && lastPointer.x !== null && lastPointer.y !== null) {
+    setPointerPos(lastPointer.x, lastPointer.y);
+  }
+}
+
+if (gazePointer) {
+  const rawHandler = (event) => {
+    lastPointer.x = event.clientX;
+    lastPointer.y = event.clientY;
+    setPointerPos(event.clientX, event.clientY);
+  };
+
+  if ('onpointerrawupdate' in window) {
+    window.addEventListener('pointerrawupdate', rawHandler, { passive: true });
+  }
+  window.addEventListener('pointermove', rawHandler, { passive: true });
+
+  window.addEventListener('pointerleave', () => {
+    gazePointer._savedOpacity = gazePointer.style.opacity;
+    gazePointer.style.opacity = 0;
+  });
+
+  window.addEventListener('pointerenter', () => {
+    applyPointerToggle();
+    if (lastPointer.x !== null && lastPointer.y !== null) {
+      setPointerPos(lastPointer.x, lastPointer.y);
+    }
+  });
+}
+const cellItemMap = new WeakMap();
+
+const EDGE_PAD = 10;
+const MIN_TILE = 96;
+const GAP_MIN  = 80;
+const GAP_MAX  = 120;
+
+const correctAudio = document.getElementById('correctSound');
+const wrongAudio   = document.getElementById('wrongSound');
+
+/* Theme */
+function applyTheme(theme) {
+  document.body.classList.remove('light','dark');
+  document.body.classList.add(theme);
+}
+
+/* =========================
+   Label helpers (FR elision + EN join)
+   ========================= */
+function joinFr(article, word){
+  const a = (article || '').trim();
+  const w = (word || '').trim();
+  if (!a) return w;
+  if (!w) return a;
+  const endsWithApo = /[’'ʼ]$/.test(a);
+  return endsWithApo ? (a + w) : (a + ' ' + w);
+}
+function joinEn(article, word){
+  const a = (article || '').trim();
+  const w = (word || '').trim();
+  return [a, w].filter(Boolean).join(' ');
+}
+function labelFor(item, lang){
+  const lab = (lang === 'en') ? item.label?.en : item.label?.fr;
+  if (!lab) return '';
+  return (lang === 'en')
+    ? joinEn(lab.article, lab.word)
+    : joinFr(lab.article, lab.word);
+}
+
+function uppercaseWordFor(item, lang) {
+  const lab = (lang === 'en') ? item.label?.en : item.label?.fr;
+  const word = lab?.word || labelFor(item, lang);
+  return (word || '').toUpperCase();
+}
+
+function syllableBreakFor(item, lang) {
+  const lab = (lang === 'en') ? item.label?.en : item.label?.fr;
+  const base = lab?.word || labelFor(item, lang);
+  if (!base) return '';
+  const sanitized = base.replace(/[-]/g, '•').trim();
+  const chars = [];
+  for (const ch of sanitized) {
+    if (ch === ' ') {
+      chars.push(' ');
+    } else if (ch === '•') {
+      chars.push('•');
+    } else {
+      chars.push(ch.toUpperCase());
+    }
+  }
+  return chars
+    .map(ch => ch === ' ' ? ' ' : ch)
+    .join(' ')
+    .replace(/\s{3,}/g, '  ');
+}
+
+function updatePhaseIndicator() {
+  if (!phaseIndicatorEl) return;
+  const lang = getLang();
+  const meta = PHASE_TEXT[phase];
+  phaseIndicatorEl.textContent = meta ? (meta[lang] || meta.fr || '') : '';
+}
+
+function refreshReferencePanels() {
+  const lang = getLang();
+  const topStrip = document.getElementById('topStrip');
+  const prompt = document.getElementById('prompt');
+  const promptLead = document.getElementById('promptLead');
+  const promptWord = document.getElementById('promptWord');
+  const topImage = document.getElementById('targetImage');
+
+  if (!targetItem) {
+    if (topStrip) topStrip.style.display = 'none';
+    if (referenceWordCard) referenceWordCard.style.display = 'none';
+    if (referenceImage) referenceImage.style.display = 'none';
+    if (continueButton) continueButton.classList.remove('visible');
+    return;
+  }
+
+  const promptConfig = PHASE_PROMPTS[phase]?.[lang];
+  if (promptConfig && promptLead) {
+    promptLead.textContent = promptConfig.lead || '';
+  }
+
+  if (phase === 'matching') {
+    if (topStrip) topStrip.style.display = 'none';
+    if (prompt) prompt.style.display = 'none';
+    if (referenceWordCard) {
+      referenceWordCard.style.display = 'flex';
+      referenceWordText.textContent = uppercaseWordFor(targetItem, lang);
+      referenceSyllables.textContent = MATCH_HINT[lang] || MATCH_HINT.fr;
+    }
+    if (referenceImage) referenceImage.style.display = 'none';
+    if (continueButton) continueButton.classList.remove('visible');
+  } else if (phase === 'selecting') {
+    if (topStrip) topStrip.style.display = 'block';
+    if (prompt) prompt.style.display = 'block';
+    if (promptWord) promptWord.textContent = labelFor(targetItem, lang);
+    if (topImage) {
+      topImage.src = targetItem.srcAbs;
+      topImage.alt = labelFor(targetItem, lang);
+    }
+    if (referenceWordCard) referenceWordCard.style.display = 'none';
+    if (referenceImage) referenceImage.style.display = 'none';
+    if (continueButton) continueButton.classList.remove('visible');
+  } else if (phase === 'naming') {
+    if (topStrip) topStrip.style.display = 'none';
+    if (prompt) prompt.style.display = 'none';
+    if (referenceWordCard) {
+      referenceWordCard.style.display = 'flex';
+      referenceWordText.textContent = uppercaseWordFor(targetItem, lang);
+      referenceSyllables.textContent = syllableBreakFor(targetItem, lang);
+    }
+    if (referenceImage) {
+      referenceImage.style.display = 'block';
+      referenceImage.src = targetItem.srcAbs;
+      referenceImage.alt = labelFor(targetItem, lang);
+    }
+    if (continueButton) continueButton.classList.add('visible');
+  }
+}
+
+/* =========================
+   TTS
+   ========================= */
+let TTS_TROUVE_GAP_MS = 0; // 0ms => say as one utterance
+
+let preferredVoice = null;
+function choosePreferredVoice() {
+  const ss = window.speechSynthesis;
+  if (!ss || !ss.getVoices) return;
+  const voices = ss.getVoices() || [];
+  if (!voices.length) return;
+
+  const lang = getLang();
+  const by = (fn) => voices.find(fn);
+  if (lang === 'fr') {
+    preferredVoice =
+      by(v => /sylvie/i.test(v.name || '') && /^fr[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^fr[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^fr[-_]?FR/i.test(v.lang || '')) ||
+      by(v => (v.lang || '').toLowerCase().startsWith('fr')) ||
+      voices[0];
+  } else {
+    preferredVoice =
+      by(v => /^en[-_]?CA/i.test(v.lang || '')) ||
+      by(v => /^en[-_]?US/i.test(v.lang || '')) ||
+      by(v => /^en[-_]?GB/i.test(v.lang || '')) ||
+      by(v => (v.lang || '').toLowerCase().startsWith('en')) ||
+      voices[0];
+  }
+}
+function makeUtterance(text) {
+  const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
+  const sfxSetting = window.eyegazeSettings?.sfxVolume;
+  const uiVol = parseInt(sfxVol.value, 10);
+  const volPercent = (typeof sfxSetting === 'number') ? sfxSetting : (isNaN(uiVol) ? 50 : uiVol);
+  const volume = muted ? 0 : Math.max(0, Math.min(1, volPercent / 100));
+
+  const u = new SpeechSynthesisUtterance(text);
+  if (preferredVoice) { u.voice = preferredVoice; u.lang = preferredVoice.lang || (getLang()==='fr'?'fr-CA':'en-US'); }
+  else { u.lang = (getLang()==='fr'?'fr-CA':'en-US'); }
+  u.rate = 1.0;
+  u.volume = volume;
+  return u;
+}
+function voicesReady() {
+  return new Promise((resolve) => {
+    const ss = window.speechSynthesis;
+    if (!ss) return resolve();
+    const v = ss.getVoices();
+    if (v && v.length) return resolve();
+    const onChange = () => { ss.removeEventListener('voiceschanged', onChange); resolve(); };
+    ss.addEventListener('voiceschanged', onChange);
+  });
+}
+async function speakSequence(texts, gapMs = 0) {
+  if (!('speechSynthesis' in window)) return;
+  try { speechSynthesis.cancel(); } catch(e) {}
+  await voicesReady();
+  choosePreferredVoice();
+
+  if (gapMs <= 0 && texts.length === 2) {
+    const u = makeUtterance(`${texts[0]} ${texts[1]}`);
+    speechSynthesis.speak(u);
+    return;
+  }
+  texts.forEach((t) => {
+    const u = makeUtterance(t);
+    speechSynthesis.speak(u);
+  });
+}
+if ('speechSynthesis' in window) {
+  speechSynthesis.addEventListener('voiceschanged', choosePreferredVoice);
+  choosePreferredVoice();
+}
+
+function speakPhasePrompt() {
+  const enabled = !!ttsEnabled.checked || !!(window.eyegazeSettings?.ttsEnabled);
+  if (!enabled || !targetItem) return;
+
+  const lang = getLang();
+  const conf = PHASE_PROMPTS[phase]?.[lang];
+  if (!conf) return;
+
+  const parts = [];
+  if (conf.lead) parts.push(conf.lead);
+
+  if (phase === 'matching') {
+    if (conf.tail) parts.push(conf.tail);
+    parts.push(uppercaseWordFor(targetItem, lang));
+  } else if (phase === 'selecting') {
+    if (conf.tail) parts.push(conf.tail);
+    parts.push(labelFor(targetItem, lang));
+  } else if (phase === 'naming') {
+    if (conf.tail) parts.push(conf.tail);
+    parts.push(uppercaseWordFor(targetItem, lang));
+  }
+
+  speakSequence(parts, phase === 'selecting' ? TTS_TROUVE_GAP_MS : 0);
+}
+
+/* =========================
+   Lock / unlock
+   ========================= */
+function lockGrid() {
+  const grid = document.getElementById('imageGrid');
+  isReady = false;
+  stopHover();
+  if (grid) grid.classList.add('grid-locked');
+}
+function unlockGrid() {
+  const grid = document.getElementById('imageGrid');
+  isReady = true;
+  if (grid) {
+    grid.classList.remove('grid-locked');
+    grid.classList.add('ready-pop');
+    setTimeout(() => grid.classList.remove('ready-pop'), 260);
+  }
+  if (lastPointer.x !== null && lastPointer.y !== null) {
+    const el = document.elementFromPoint(lastPointer.x, lastPointer.y);
+    const tile = el && (el.closest ? el.closest('.letter-cell') : null);
+    if (tile) {
+      hoveredTile = tile;
+      const item = cellItemMap.get(tile);
+      if (item) startHover(tile, item);
+    }
+  }
+}
+
+/* =========================
+   Start
+   ========================= */
+function startGame() {
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen();
+  } else if (document.documentElement.webkitRequestFullscreen) {
+    document.documentElement.webkitRequestFullscreen();
+  } else if (document.documentElement.msRequestFullscreen) {
+    document.documentElement.msRequestFullscreen();
+  }
+
+  langToggle.style.display = 'none';
+
+  syncEyegazeSettingsFromUI();
+
+  applyTheme(themeSelect.value);
+  layoutScale = parseFloat(layoutScaleEl.value) || 1.0;
+
+  currentCategory = document.getElementById('categorySelect').value;
+
+  if (!pictosData || !pictosData.categories[currentCategory]) {
+    alert(getLang()==='fr' ? 'Catégorie non disponible.' : 'Category not available.');
+    return;
+  }
+  const base = pictosData.base || '';
+  const items = pictosData.categories[currentCategory].items || [];
+  pool = items.map(entry => {
+    return { file: entry.file, label: entry.label, srcAbs: base + entry.file };
+  });
+
+  document.querySelector('.game-container').style.display = 'flex';
+  const grid = document.getElementById('imageGrid');
+  grid.style.display = 'grid';
+
+  phase = 'matching';
+  matchedMatchingIds = new Set();
+  selectingChoices = [];
+
+  refreshReferencePanels();
+  beginNewWord();
+
+  try { if (window.eyegazeSettings?.hideOverlay) eyegazeSettings.hideOverlay(); } catch(e) {}
+  choosePreferredVoice();
+  applyPointerToggle();
+}
+startButton.addEventListener('click', startGame);
+
+/* =========================
+   Eyegaze sync
+   ========================= */
+function syncEyegazeSettingsFromUI() {
+  try {
+    if (window.eyegazeSettings) {
+      eyegazeSettings.sfxMuted  = !!muteSFX.checked;
+      eyegazeSettings.sfxVolume = parseInt(sfxVol.value, 10) || 50;
+      eyegazeSettings.dwellTime = parseInt(dwellSlider.value, 10) || 1500;
+      eyegazeSettings.ttsEnabled= !!ttsEnabled.checked;
+      eyegazeSettings.showGazePointer  = !!showGazePointer?.checked;
+      eyegazeSettings.gazePointerSize  = pointerSizeFromControls();
+      eyegazeSettings.gazePointerAlpha = pointerOpacityFromControls();
+    }
+  } catch(e) {}
+}
+
+window.addEventListener('resize', adjustGridSizes);
+document.getElementById('targetImage').addEventListener('load', adjustGridSizes);
+window.addEventListener('orientationchange', adjustGridSizes);
+
+function adjustGridSizes() {
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  const grid = document.getElementById('imageGrid');
+  const outer = grid.parentElement;
+  const cells = grid.querySelectorAll('.letter-cell');
+  if (!cells.length || !outer) return;
+
+  const columns = parseInt(grid.dataset.columns || '3', 10);
+  const rows    = Math.ceil(cells.length / columns);
+
+  const containerW = grid.clientWidth;
+
+  // Height available below the strip, stable
+  const outerRect = outer.getBoundingClientRect();
+  const containerH = Math.max(0, window.innerHeight - outerRect.top - 8);
+
+  const contentW = Math.max(0, containerW - 2 * EDGE_PAD);
+  const contentH = Math.max(0, containerH - 2 * EDGE_PAD);
+  const contentMin = Math.min(contentW, contentH);
+
+  let GAP = Math.round((contentMin * 0.02) / Math.max(0.8, layoutScale));
+  GAP = clamp(GAP, GAP_MIN, GAP_MAX);
+  grid.style.gap = GAP + 'px';
+
+  const sizeByW = (contentW - (columns - 1) * GAP) / columns;
+  const SAFETY = 8;
+  const sizeByH = ((contentH - (rows - 1) * GAP) / rows) - SAFETY;
+
+  const candidate = Math.floor(Math.min(sizeByW, sizeByH));
+  const size = Math.max(MIN_TILE, Math.min(candidate, Math.floor(candidate * layoutScale)));
+
+  const track = size + 'px';
+  grid.style.gridTemplateColumns = `repeat(${columns}, ${track})`;
+  grid.style.gridAutoRows        = track;
+}
+
+/* =========================
+   Round
+   ========================= */
+function beginNewWord(){
+  if (!pool.length) return;
+
+  const desired = Math.max(3, getDesiredChoicesCount());
+  const picks = pickNDistinct(pool, Math.min(desired, pool.length));
+  if (!picks.length) return;
+
+  targetItem = pickRandom(picks);
+  if (!targetItem) return;
+
+  if (!picks.some(item => item.file === targetItem.file)) {
+    picks[0] = targetItem;
+  }
+
+  selectingChoices = shuffle(picks.slice());
+  matchedMatchingIds = new Set();
+  phase = 'matching';
+
+  updatePhaseIndicator();
+  refreshReferencePanels();
+  renderCurrentPhase();
+}
+
+function renderCurrentPhase() {
+  updatePhaseIndicator();
+  refreshReferencePanels();
+  if (phase === 'matching') {
+    renderMatchingPhase();
+  } else if (phase === 'selecting') {
+    renderSelectingPhase();
+  } else if (phase === 'naming') {
+    renderNamingPhase();
+  }
+}
+
+function matchingDistractorItem() {
+  const alt = selectingChoices.find(item => item.file !== targetItem.file);
+  if (alt) return alt;
+  const fallback = pool.find(item => item.file !== targetItem.file);
+  return fallback || targetItem;
+}
+
+function renderMatchingPhase() {
+  const grid = document.getElementById('imageGrid');
+  if (!grid) return;
+
+  lockGrid();
+  grid.classList.remove('no-input');
+  grid.innerHTML = '';
+  grid.style.padding = EDGE_PAD + 'px';
+
+  const lang = getLang();
+  const cards = [
+    { role: 'target', id: 'target-a', item: targetItem },
+    { role: 'target', id: 'target-b', item: targetItem },
+    { role: 'distractor', id: 'distractor', item: matchingDistractorItem() }
+  ];
+  const deck = shuffle(cards);
+
+  const total = deck.length;
+  const columns = Math.min(total, 3);
+  grid.dataset.columns = String(columns);
+
+  deck.forEach(entry => {
+    const cell = document.createElement('div');
+    cell.className = 'letter-cell word-mode';
+
+    const wordSpan = document.createElement('div');
+    wordSpan.className = 'word-cell-text';
+    wordSpan.textContent = uppercaseWordFor(entry.item, lang);
+    cell.appendChild(wordSpan);
+
+    if (entry.role === 'target') {
+      const hint = document.createElement('div');
+      hint.className = 'word-cell-hint';
+      hint.textContent = MATCH_HINT[lang] || MATCH_HINT.fr;
+      cell.appendChild(hint);
+    }
+
+    const payload = { phase: 'matching', entry };
+    cellItemMap.set(cell, payload);
+
+    cell.addEventListener('pointerenter', () => {
+      hoveredTile = cell;
+      if (isReady) startHover(cell, payload);
+    });
+    cell.addEventListener('pointerleave', () => {
+      if (hoveredTile === cell) hoveredTile = null;
+      stopHover();
+    });
+
+    grid.appendChild(cell);
+  });
+
+  adjustGridSizes();
+  speakPhasePrompt();
+  setTimeout(unlockGrid, 800);
+}
+
+function renderSelectingPhase() {
+  const grid = document.getElementById('imageGrid');
+  if (!grid) return;
+
+  lockGrid();
+  grid.classList.remove('no-input');
+  grid.innerHTML = '';
+  grid.style.padding = EDGE_PAD + 'px';
+
+  const total = selectingChoices.length;
+  const columns = Math.min(3, Math.ceil(Math.sqrt(total)));
+  grid.dataset.columns = String(columns);
+
+  const lang = getLang();
+
+  selectingChoices.forEach(item => {
+    const cell = document.createElement('div');
+    cell.className = 'letter-cell';
+
+    const img = document.createElement('img');
+    img.src = item.srcAbs;
+    img.alt = labelFor(item, lang);
+    img.className = 'cell-img';
+    cell.appendChild(img);
+
+    const payload = { phase: 'selecting', item };
+    cellItemMap.set(cell, payload);
+
+    cell.addEventListener('pointerenter', () => {
+      hoveredTile = cell;
+      if (isReady) startHover(cell, payload);
+    });
+    cell.addEventListener('pointerleave', () => {
+      if (hoveredTile === cell) hoveredTile = null;
+      stopHover();
+    });
+
+    grid.appendChild(cell);
+  });
+
+  adjustGridSizes();
+  speakPhasePrompt();
+  setTimeout(unlockGrid, 3000);
+}
+
+function renderNamingPhase() {
+  const grid = document.getElementById('imageGrid');
+  if (!grid) return;
+
+  grid.classList.add('no-input');
+  grid.innerHTML = '';
+  grid.dataset.columns = '1';
+  grid.style.padding = EDGE_PAD + 'px';
+
+  stopHover();
+  lockGrid();
+  speakPhasePrompt();
+  setTimeout(() => {
+    isReady = false;
+  }, 200);
+}
+
+function advancePhase() {
+  if (phase === 'matching') {
+    phase = 'selecting';
+    renderCurrentPhase();
+  } else if (phase === 'selecting') {
+    phase = 'naming';
+    renderCurrentPhase();
+  } else if (phase === 'naming') {
+    beginNewWord();
+  }
+}
+
+/* =========================
+   Dwell
+   ========================= */
+let currentOverlay;
+let hoverTimeout;
+
+function startHover(tile, item) {
+  if (!isReady) return;
+
+  const hoverTime = (window.eyegazeSettings?.dwellTime) || parseInt(dwellSlider.value, 10) || 1500;
+
+  stopHover();
+  setPointerDwell(true);
+  currentOverlay = document.createElement('div');
+  currentOverlay.className = 'dwell-fill';
+  tile.appendChild(currentOverlay);
+
+  requestAnimationFrame(() => {
+    currentOverlay.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
+    currentOverlay.style.width = '0';
+    currentOverlay.style.height = '0';
+    requestAnimationFrame(() => {
+      currentOverlay.style.width = '100%';
+      currentOverlay.style.height = '100%';
+    });
+  });
+
+  hoverTimeout = setTimeout(() => {
+    handleSelection(tile, item);
+    stopHover();
+  }, hoverTime);
+}
+
+function stopHover() {
+  clearTimeout(hoverTimeout);
+  setPointerDwell(false);
+  if (currentOverlay && currentOverlay.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
+  currentOverlay = null;
+}
+
+/* =========================
+   WRONG feedback (shake / flash / vibrate)
+   ========================= */
+function wrongFeedback(el){
+  const prefersReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (prefersReduce) {
+    el.classList.add('wrong-flash');
+    setTimeout(() => el.classList.remove('wrong-flash'), 250);
+  } else if (el.animate) {
+    el.animate(
+      [
+        { transform: 'translateX(0)' },
+        { transform: 'translateX(-10px)' },
+        { transform: 'translateX(10px)' },
+        { transform: 'translateX(-7px)' },
+        { transform: 'translateX(7px)' },
+        { transform: 'translateX(-4px)' },
+        { transform: 'translateX(4px)' },
+        { transform: 'translateX(0)' }
+      ],
+      { duration: 420, easing: 'ease' }
+    );
+    const prevShadow = el.style.boxShadow;
+    el.style.boxShadow = 'inset 0 0 0 3px rgba(198,40,40,.45)';
+    setTimeout(() => { el.style.boxShadow = prevShadow || ''; }, 420);
+  } else {
+    const prev = el.style.transform;
+    el.style.transition = 'none';
+    let i = 0;
+    const seq = [0,-10,10,-7,7,-4,4,0];
+    const tick = () => {
+      el.style.transform = `translateX(${seq[i]}px)`;
+      if (++i < seq.length) setTimeout(tick, 52);
+      else { el.style.transform = prev || ''; el.style.transition = ''; }
+    };
+    tick();
+  }
+  try { if (navigator.vibrate) navigator.vibrate(60); } catch(e){}
+}
+
+/* =========================
+   Selection
+   ========================= */
+function handleSelection(tile, payload){
+  if (phase === 'matching') {
+    handleMatchingSelection(tile, payload);
+  } else if (phase === 'selecting') {
+    handleSelectingSelection(tile, payload);
+  }
+}
+
+function handleMatchingSelection(tile, payload) {
+  if (!payload || payload.phase !== 'matching') return;
+  const entry = payload.entry;
+  if (!entry || entry.role !== 'target') {
+    playSound(wrongAudio);
+    wrongFeedback(tile);
+    return;
+  }
+
+  if (matchedMatchingIds.has(entry.id)) return;
+  matchedMatchingIds.add(entry.id);
+
+  tile.classList.add('dim');
+  tile.classList.add('matched');
+  tile.style.pointerEvents = 'none';
+  playSound(correctAudio);
+
+  if (matchedMatchingIds.size >= 2) {
+    const grid = document.getElementById('imageGrid');
+    if (grid) grid.classList.add('no-input');
+    setTimeout(() => {
+      advancePhase();
+    }, 600);
+  }
+}
+
+function handleSelectingSelection(tile, payload) {
+  if (!payload || payload.phase !== 'selecting') return;
+  const item = payload.item;
+  const isCorrect = item && targetItem && (item.file === targetItem.file);
+  if (!isCorrect) {
+    playSound(wrongAudio);
+    wrongFeedback(tile);
+    return;
+  }
+
+  playSound(correctAudio);
+  const grid  = document.getElementById('imageGrid');
+  if (grid) {
+    grid.classList.add('no-input');
+    grid.querySelectorAll('.letter-cell').forEach(cell => { if (cell !== tile) cell.classList.add('dim'); });
+  }
+
+  setTimeout(() => {
+    advancePhase();
+  }, 600);
+}
+
+/* Sounds */
+function playSound(audioEl) {
+  const muted = !!(window.eyegazeSettings?.sfxMuted) || !!muteSFX.checked;
+  const sfxSetting = window.eyegazeSettings?.sfxVolume;
+  const uiVol = parseInt(sfxVol.value, 10);
+  const volPercent = (typeof sfxSetting === 'number') ? sfxSetting : (isNaN(uiVol) ? 50 : uiVol);
+
+  audioEl.volume = muted ? 0 : Math.max(0, Math.min(1, volPercent / 100));
+  try { audioEl.currentTime = 0; audioEl.play(); } catch(e) {}
+
+  setTimeout(() => { try { audioEl.pause(); audioEl.currentTime = 0; } catch(e){} }, 2000);
+}
+
+/* Utils */
+function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+function shuffle(a){
+  const arr = a.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function pickNDistinct(arr, n){
+  const pool = arr.slice();
+  const out = [];
+  while (pool.length && out.length < n){
+    const idx = Math.floor(Math.random() * pool.length);
+    out.push(pool.splice(idx,1)[0]);
+  }
+  return out;
+}
+function getDesiredChoicesCount(){
+  const wanted = parseInt(choicesCountEl.value, 10) || 6;
+  if (!pictosData || !pictosData.categories || !currentCategory) return Math.max(1, Math.min(9, wanted));
+  const available = (pictosData.categories[currentCategory]?.items || []).length || wanted;
+  return Math.max(1, Math.min(9, Math.min(wanted, available)));
+}
+
+/* Init voices on load */
+window.addEventListener('load', choosePreferredVoice);
+</script>
+</body>
+</html>
