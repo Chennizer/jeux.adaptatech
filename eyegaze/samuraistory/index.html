@@ -1088,10 +1088,29 @@
       };
       const applyBackButtonSettings = () => {
         if (!backButton) return;
-        backButton.style.left = '2.2vw';
+        const pos = getTargetPosition();
+        const primaryLeft = Number.parseFloat(pos.left);
+        const mirroredLeft = Number.isFinite(primaryLeft) ? 100 - primaryLeft : 14;
+        backButton.style.left = `${mirroredLeft}%`;
         backButton.style.right = 'auto';
-        backButton.style.bottom = '2.2vw';
+        backButton.style.top = pos.top;
+        backButton.style.bottom = 'auto';
         backButton.classList.toggle('large', isLargeGazeTarget);
+      };
+      const syncBackButtonStateFrom = (target) => {
+        if (!backButton) return;
+        const canGoBack = isJourneyStarted && currentIndex > 1;
+        if (!canGoBack || !target) {
+          backButton.hidden = true;
+          backButton.classList.remove('visible', 'active', 'inactive', 'dwell', 'dwell-complete');
+          return;
+        }
+        applyBackButtonSettings();
+        const visible = target.classList.contains('visible');
+        backButton.hidden = !visible;
+        backButton.classList.toggle('visible', visible);
+        backButton.classList.toggle('active', target.classList.contains('active'));
+        backButton.classList.toggle('inactive', target.classList.contains('inactive'));
       };
 
       const renderMenuBlossoms = () => {
@@ -1355,6 +1374,7 @@
           gazeTarget.classList.add('visible');
           gazeTarget.classList.toggle('active', isActive);
           gazeTarget.classList.toggle('inactive', !isActive);
+          syncBackButtonStateFrom(gazeTarget);
         };
         setTargetState(false);
         const bindAdvanceTargets = (onDone) => {
@@ -1678,14 +1698,14 @@
           backButtonCleanup = null;
         }
         const canGoBack = isJourneyStarted && currentIndex > 1;
-        backButton.hidden = !canGoBack;
         if (!canGoBack) {
+          backButton.hidden = true;
           backButton.classList.remove('visible', 'active', 'dwell', 'dwell-complete');
           return;
         }
-        applyBackButtonSettings();
-        backButton.classList.add('visible', 'active');
-        backButton.classList.remove('inactive');
+        const page = pages[currentIndex];
+        const primaryTarget = page?.querySelector('[data-gaze-target], [data-instruction-target], [data-conclusion-target]') || null;
+        syncBackButtonStateFrom(primaryTarget);
         backButtonCleanup = createDwellGate(backButton, () => prevPage(), 0);
       };
 
@@ -1726,6 +1746,7 @@
         applyTargetSettings(target);
         target.classList.add('visible', 'active');
         target.classList.remove('inactive');
+        syncBackButtonStateFrom(target);
         if (conclusionCleanup) conclusionCleanup();
         conclusionCleanup = createDwellGate(target, () => {
           target.classList.remove('visible', 'active', 'dwell');
@@ -1745,6 +1766,7 @@
         applyTargetSettings(target);
         target.classList.add('visible', 'active');
         target.classList.remove('inactive');
+        syncBackButtonStateFrom(target);
         captionEl.classList.add('visible', 'advanceable');
         captionEl.classList.remove('dwell');
         captionEl.innerHTML = `<span class="instruction-caption-title">${instruction?.title || 'Instruction'}</span>${instruction?.text || ''}`;
@@ -1800,7 +1822,6 @@
         if (!page) return;
         page.classList.add('active');
         updateNextButton();
-        updateBackButton();
         updateGlobalChiCursor(page);
 
         if (page.dataset.type === 'story') setupStoryPage(page);
@@ -1811,6 +1832,7 @@
           renderConclusionStats(page);
           setupConclusionPage(page);
         }
+        updateBackButton();
       };
 
       const nextPage = (withTransition = true) => {
