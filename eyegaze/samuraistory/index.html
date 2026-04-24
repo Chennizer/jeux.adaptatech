@@ -406,6 +406,24 @@
       width: clamp(150px, 13.2vw, 220px);
       height: clamp(150px, 13.2vw, 220px);
     }
+    .gaze-target.back-target {
+      width: clamp(59px, 5.25vw, 84px);
+      height: clamp(59px, 5.25vw, 84px);
+      border-color: rgba(248, 72, 72, .95);
+      background: rgba(205, 38, 38, .78);
+      box-shadow: 0 0 0 4px rgba(255,96,96,.2), 0 0 14px rgba(255,96,96,.3);
+      z-index: 32;
+    }
+    .gaze-target.back-target.large {
+      width: clamp(75px, 6.6vw, 110px);
+      height: clamp(75px, 6.6vw, 110px);
+    }
+    .gaze-target.back-target::after {
+      background: rgba(255, 170, 170, .42);
+    }
+    .gaze-target.back-target.active {
+      animation: backGazePulse 1.8s ease-in-out infinite;
+    }
 
     .gaze-target::after {
       content: "";
@@ -445,6 +463,10 @@
     @keyframes gazePulse {
       0%, 100% { transform: scale(1); box-shadow: 0 0 0 5px rgba(76,255,120,.18), 0 0 14px rgba(76,255,120,.28); }
       50% { transform: scale(1.08); box-shadow: 0 0 0 11px rgba(76,255,120,.08), 0 0 28px rgba(76,255,120,.44); }
+    }
+    @keyframes backGazePulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 4px rgba(255,96,96,.18), 0 0 14px rgba(255,96,96,.3); }
+      50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(255,96,96,.08), 0 0 26px rgba(255,96,96,.45); }
     }
 
     .fullscreen-button {
@@ -732,12 +754,14 @@
 
   <div id="chiCursor" aria-hidden="true"></div>
   <div id="transitionOverlay" class="transition-overlay" aria-hidden="true"></div>
+  <button id="backButton" class="gaze-target back-target" aria-label="Go to previous stage" type="button" hidden></button>
 
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const pages = Array.from(document.querySelectorAll('.page'));
       const storyPages = pages.filter((p) => p.dataset.type === 'story');
       const nextButton = document.getElementById('nextButton');
+      const backButton = document.getElementById('backButton');
       const transitionOverlay = document.getElementById('transitionOverlay');
       const modeButtons = Array.from(document.querySelectorAll('.mode-button'));
       const startJourneyButton = document.getElementById('startJourneyButton');
@@ -797,7 +821,7 @@
 
       const modeConfig = {
         story: {
-          previewImage: '../../images/samuraikata/cerisier.jpg',
+          previewImage: '../../images/samuraikata/boulediffuse.jpg',
           manualAdvance: true,
           enforceGameWin: false,
           autoGameAdvance: false,
@@ -809,7 +833,7 @@
           autoGameAdvance: false,
         },
         samurai: {
-          previewImage: '../../images/samuraikata/boulediffuse.jpg',
+          previewImage: '../../images/samuraikata/cerisier.jpg',
           manualAdvance: true,
           enforceGameWin: true,
           autoGameAdvance: false,
@@ -1062,6 +1086,44 @@
         target.style.top = pos.top;
         target.classList.toggle('large', isLargeGazeTarget);
       };
+      const applyBackButtonSettings = () => {
+        if (!backButton) return;
+        const pos = getTargetPosition();
+        const primaryLeft = Number.parseFloat(pos.left);
+        const mirroredLeft = Number.isFinite(primaryLeft) ? 100 - primaryLeft : 14;
+        const primaryTop = Number.parseFloat(pos.top);
+        const currentPage = pages[currentIndex];
+        const media = currentPage?.querySelector('[data-story-media], [data-instruction-media]') || currentPage;
+        const bounds = media?.getBoundingClientRect?.();
+        if (bounds && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
+          const pxLeft = bounds.left + (bounds.width * mirroredLeft / 100);
+          const pxTop = bounds.top + (bounds.height * (Number.isFinite(primaryTop) ? primaryTop : 78) / 100);
+          backButton.style.left = `${pxLeft}px`;
+          backButton.style.top = `${pxTop}px`;
+        } else {
+          backButton.style.left = `${mirroredLeft}%`;
+          backButton.style.top = pos.top;
+        }
+        backButton.style.right = 'auto';
+        backButton.style.bottom = 'auto';
+        backButton.style.transform = 'none';
+        backButton.classList.toggle('large', isLargeGazeTarget);
+      };
+      const syncBackButtonStateFrom = (target) => {
+        if (!backButton) return;
+        const canGoBack = isJourneyStarted && currentIndex > 1;
+        if (!canGoBack || !target) {
+          backButton.hidden = true;
+          backButton.classList.remove('visible', 'active', 'inactive', 'dwell', 'dwell-complete');
+          return;
+        }
+        applyBackButtonSettings();
+        const visible = target.classList.contains('visible');
+        backButton.hidden = !visible;
+        backButton.classList.toggle('visible', visible);
+        backButton.classList.toggle('active', target.classList.contains('active'));
+        backButton.classList.toggle('inactive', target.classList.contains('inactive'));
+      };
 
       const renderMenuBlossoms = () => {
         if (!menuBlossoms) return;
@@ -1293,10 +1355,7 @@
         const narrationEnabled = uiLang === 'fr' && ['scene1', 'scene2', 'scene3', 'scene5', 'scene6', 'scene7', 'scene9', 'scene10', 'scene11'].includes(sceneKey);
         const sceneNumber = sceneKey.replace('scene', '');
         const getNarrationSrc = (part) => {
-          const prefersFrSuffix = ['1', '2', '3', '5'].includes(sceneNumber);
-          const fileName = prefersFrSuffix
-            ? `scene${sceneNumber}p${part}fr.mp3`
-            : `scene${sceneNumber}p${part}.mp3`;
+          const fileName = `scene${sceneNumber}p${part}fr.mp3`;
           return `${FRENCH_NARRATION_BASE_PATH}${fileName}`;
         };
         playStoryMusic();
@@ -1327,6 +1386,7 @@
           gazeTarget.classList.add('visible');
           gazeTarget.classList.toggle('active', isActive);
           gazeTarget.classList.toggle('inactive', !isActive);
+          syncBackButtonStateFrom(gazeTarget);
         };
         setTargetState(false);
         const bindAdvanceTargets = (onDone) => {
@@ -1642,6 +1702,24 @@
         if (!nextButton) return;
         nextButton.hidden = true;
       };
+      let backButtonCleanup = null;
+      const updateBackButton = () => {
+        if (!backButton) return;
+        if (backButtonCleanup) {
+          backButtonCleanup();
+          backButtonCleanup = null;
+        }
+        const canGoBack = isJourneyStarted && currentIndex > 1;
+        if (!canGoBack) {
+          backButton.hidden = true;
+          backButton.classList.remove('visible', 'active', 'dwell', 'dwell-complete');
+          return;
+        }
+        const page = pages[currentIndex];
+        const primaryTarget = page?.querySelector('[data-gaze-target], [data-instruction-target], [data-conclusion-target]') || null;
+        syncBackButtonStateFrom(primaryTarget);
+        backButtonCleanup = createDwellGate(backButton, () => prevPage(), 0);
+      };
 
       const renderConclusionStats = (page) => {
         if (!page) return;
@@ -1680,6 +1758,7 @@
         applyTargetSettings(target);
         target.classList.add('visible', 'active');
         target.classList.remove('inactive');
+        syncBackButtonStateFrom(target);
         if (conclusionCleanup) conclusionCleanup();
         conclusionCleanup = createDwellGate(target, () => {
           target.classList.remove('visible', 'active', 'dwell');
@@ -1699,6 +1778,7 @@
         applyTargetSettings(target);
         target.classList.add('visible', 'active');
         target.classList.remove('inactive');
+        syncBackButtonStateFrom(target);
         captionEl.classList.add('visible', 'advanceable');
         captionEl.classList.remove('dwell');
         captionEl.innerHTML = `<span class="instruction-caption-title">${instruction?.title || 'Instruction'}</span>${instruction?.text || ''}`;
@@ -1764,6 +1844,7 @@
           renderConclusionStats(page);
           setupConclusionPage(page);
         }
+        updateBackButton();
       };
 
       const nextPage = (withTransition = true) => {
@@ -1771,6 +1852,22 @@
         if (withTransition && isTransitioning) return;
         const n = (currentIndex + 1) % pages.length;
         const target = n === 0 ? 1 : n;
+        if (!withTransition) {
+          showPage(target);
+          return;
+        }
+        isTransitioning = true;
+        triggerTransition();
+        setTimeout(() => {
+          if (isJourneyStarted) showPage(target);
+          isTransitioning = false;
+        }, transitionSwitchDelayMs);
+      };
+      const prevPage = (withTransition = true) => {
+        if (!isJourneyStarted) return;
+        if (withTransition && isTransitioning) return;
+        const target = Math.max(1, currentIndex - 1);
+        if (target === currentIndex) return;
         if (!withTransition) {
           showPage(target);
           return;
@@ -1940,14 +2037,20 @@
           const target = page.querySelector('[data-instruction-target]');
           applyTargetSettings(target);
         }
+        applyBackButtonSettings();
       });
 
       if (nextButton) nextButton.addEventListener('click', nextPage);
+      backButton?.addEventListener('click', () => prevPage());
 
       document.addEventListener('keydown', (event) => {
         if (!isJourneyStarted) return;
         if (event.key.toLowerCase() === 's') {
           nextPage();
+          return;
+        }
+        if (event.key === 'ArrowLeft') {
+          prevPage();
           return;
         }
         if (event.key === 'ArrowRight' || event.key === ' ') nextPage();
@@ -1957,6 +2060,9 @@
         if (!isJourneyStarted || !chiCursor) return;
         chiCursor.style.left = `${event.clientX}px`;
         chiCursor.style.top = `${event.clientY}px`;
+      });
+      window.addEventListener('resize', () => {
+        applyBackButtonSettings();
       });
 
       updateModeUI();
