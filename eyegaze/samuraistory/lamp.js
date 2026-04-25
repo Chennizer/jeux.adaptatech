@@ -110,7 +110,7 @@
     const CHI_POINTER_MAX = 118;
     const CHI_POINTER_BREATH = 0.05;
     const CHI_POINTER_BREATH_FREQ = 0.8;
-    const GAME_COLOR_REVEAL_MS = 120000;
+    const COLOR_REVEAL_TARGET = 5;
 
     /* =======================
        SETUP
@@ -933,7 +933,7 @@ function drawRopes(t) {
     let gameStartMs = 0;
 
     function drawBackgroundImage() {
-      const progress = Math.max(0, Math.min(1, (performance.now() - gameStartMs) / GAME_COLOR_REVEAL_MS));
+      const progress = Math.max(0, Math.min(1, releasedCount / COLOR_REVEAL_TARGET));
       const gray = 100 - (progress * 100);
       ctx.save();
       ctx.filter = `grayscale(${gray}%)`;

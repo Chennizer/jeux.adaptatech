@@ -92,7 +92,7 @@
     const RING_COUNT      = 3;
     const RING_ALPHA      = 0.18;
     const RING_PULSE_HZ   = 1.8;
-    const GAME_COLOR_REVEAL_MS = 120000;
+    const COLOR_REVEAL_TARGET = 3;
 
     // Inflow particles: near-rim and outer ring
     const INFLOW_RATE      = 60;
@@ -424,7 +424,7 @@
        BACKGROUND + FX
     ======================= */
     function drawBackground(){
-      const progress = Math.max(0, Math.min(1, (performance.now() - gameStartMs) / GAME_COLOR_REVEAL_MS));
+      const progress = Math.max(0, Math.min(1, launchCount / COLOR_REVEAL_TARGET));
       const gray = 100 - (progress * 100);
       ctx.save();
       ctx.filter = `grayscale(${gray}%)`;

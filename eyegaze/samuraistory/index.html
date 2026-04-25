@@ -644,6 +644,11 @@
       z-index: 30;
     }
     .transition-overlay.active { animation: sceneFade var(--scene-transition-total) linear forwards; }
+    body.transitioning .gaze-target {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      animation: none !important;
+    }
     @keyframes sceneFade {
       0% { opacity: 0; }
       45% { opacity: 1; }
@@ -881,7 +886,7 @@
       let dwellMs = 1000;
       let isLargeGazeTarget = false;
       const colorFadeWaitMs = 4950;
-      const samuraiTimeoutMs = 25000;
+      const samuraiTimeoutMs = 120000;
       const storyGameDurationMs = 120000;
       const transitionFadeOutMs = 2200;
       const transitionBlackMs = 500;
@@ -905,7 +910,7 @@
       narrationAudio.preload = 'auto';
       narrationAudio.volume = 1;
       let activeSamuraiChallenge = null;
-      const samuraiTargets = { cherry: 20, meditation: 10, lamp: 10 };
+      const samuraiTargets = { cherry: 5, meditation: 3, lamp: 5 };
 
       const modeConfig = {
         story: {
@@ -954,6 +959,7 @@
             time: 'Total time'
           },
           instructionHover: 'Hover this box (or the green orb) to continue.',
+          limitNote: 'Samurai mode: reach {goal} in under {seconds} seconds to continue.',
           instructions: {
             cherry: {
               title: 'Cherry Blossom Challenge',
@@ -1005,6 +1011,7 @@
             time: 'Temps total'
           },
           instructionHover: 'Survolez cette boîte (ou la boule verte) pour continuer.',
+          limitNote: 'Mode samouraï : atteignez {goal} en moins de {seconds} secondes pour continuer.',
           instructions: {
             cherry: {
               title: 'Défi 1 : Cerisier',
@@ -1056,6 +1063,7 @@
             time: '合計時間'
           },
           instructionHover: 'このボックス（または緑の球）にホバーして続行。',
+          limitNote: 'サムライモード：{seconds}秒以内に{goal}回達成すると続行できます。',
           instructions: {
             cherry: {
               title: '桜チャレンジ',
@@ -1201,9 +1209,17 @@
         }
       };
 
+      let transitionTargetHideTimer = null;
       const triggerTransition = () => {
+        const totalMs = transitionFadeOutMs + transitionBlackMs + transitionFadeInMs;
+        document.body.classList.add('transitioning');
+        if (transitionTargetHideTimer) clearTimeout(transitionTargetHideTimer);
+        transitionTargetHideTimer = setTimeout(() => {
+          document.body.classList.remove('transitioning');
+          transitionTargetHideTimer = null;
+        }, totalMs + 60);
         if (transitionOverlay) {
-          transitionOverlay.style.setProperty('--scene-transition-total', `${transitionFadeOutMs + transitionBlackMs + transitionFadeInMs}ms`);
+          transitionOverlay.style.setProperty('--scene-transition-total', `${totalMs}ms`);
         }
         transitionOverlay.classList.remove('active');
         void transitionOverlay.offsetHeight;
@@ -1824,7 +1840,7 @@
           ? setTimeout(() => {
               if (pages[currentIndex] !== page || currentMode !== 'samurai') return;
               showPage(currentIndex);
-            }, Math.max(samuraiTimeoutMs, 120000))
+            }, samuraiTimeoutMs)
           : null;
 
         activeSamuraiChallenge = { page, timeoutId, intervalId };
@@ -1961,7 +1977,13 @@
         syncBackButtonStateFrom(target);
         captionEl.classList.add('visible', 'advanceable');
         captionEl.classList.remove('dwell');
-        captionEl.innerHTML = `<span class="instruction-caption-title">${instruction?.title || 'Instruction'}</span>${instruction?.text || ''}`;
+        const limitTemplate = text?.limitNote || i18n.en.limitNote || '';
+        const goal = samuraiTargets[gameKey] || 1;
+        const seconds = Math.round(samuraiTimeoutMs / 1000);
+        const modeLimitNote = modeConfig[currentMode].enforceGameWin
+          ? `<br><br><strong>${limitTemplate.replace('{goal}', String(goal)).replace('{seconds}', String(seconds))}</strong>`
+          : '';
+        captionEl.innerHTML = `<span class="instruction-caption-title">${instruction?.title || 'Instruction'}</span>${instruction?.text || ''}${modeLimitNote}`;
 
         if (instructionCleanup) instructionCleanup();
         const autoActivateMs = currentMode === 'story' ? 30000 : 0;
