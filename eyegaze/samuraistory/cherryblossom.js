@@ -9,7 +9,7 @@
     const SONG_SRC    = "../../songs/samurai/cherryblossomsong2.mp3"; // bg song
     const ENABLE_BG_SONG = false; // keep shared story music constant during games
     const KATANA_DRAW_SRC = "../../sounds/katana.mp3";               // sword drawing SFX
-    const GAME_COLOR_REVEAL_MS = 120000;
+    const COLOR_REVEAL_SLICES = 5;
 
     // Cursor limits and hotspot (in ORIGINAL image pixels)
     const CURSOR_MAX_PX = 124;
@@ -379,7 +379,7 @@
        BACKGROUND IMAGE (cover)
     ======================= */
     function drawBackgroundImage() {
-      const progress = Math.max(0, Math.min(1, (performance.now() - gameStartMs) / GAME_COLOR_REVEAL_MS));
+      const progress = Math.max(0, Math.min(1, sliceCount / COLOR_REVEAL_SLICES));
       const gray = 100 - (progress * 100);
       ctx.save();
       ctx.filter = `grayscale(${gray}%)`;
