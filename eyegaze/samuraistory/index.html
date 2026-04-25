@@ -688,7 +688,7 @@
             <input id="dwellSlider" type="range" min="500" max="2000" step="100" value="1000" />
             <label class="dwell-toggle" for="largeCircleToggle">
               <input id="largeCircleToggle" type="checkbox" />
-              <span id="largeCircleLabel">Bigger green circle</span>
+              <span id="largeCircleLabel">Bigger dwell tiles</span>
             </label>
           </div>
           <div class="menu-footer">
@@ -867,7 +867,12 @@
       const chiCursor = document.getElementById('chiCursor');
       const imageBasePath = '../../images/samuraikata/';
       const videoBasePath = '../../animations/samurai/';
-      const STORY_LOOP_SRC = '../../songs/samurai/samuraisong4.mp3';
+      const STORY_LOOP_PLAYLIST = [
+        '../../songs/samurai/samuraisong4.mp3',
+        '../../songs/samurai/samuraisong5.mp3',
+        '../../songs/samurai/samuraisong6.mp3',
+        '../../songs/samurai/samuraisong7.mp3'
+      ];
       const MENU_LOOP_SRC = '../../songs/samurai/samuraisong2.mp3';
       const NARRATION_BASE_PATH = '../../narration/samurai/';
 
@@ -892,10 +897,11 @@
       let isJourneyStarted = false;
       let isTransitioning = false;
       const storyMusic = new Audio();
-      storyMusic.loop = true;
+      storyMusic.loop = false;
       storyMusic.preload = 'auto';
       storyMusic.volume = 0.64;
       let storyMusicSrc = '';
+      let storyMusicIndex = 0;
       const menuMusic = new Audio();
       menuMusic.loop = true;
       menuMusic.preload = 'auto';
@@ -940,7 +946,7 @@
             samurai: 'The strict path: you manually progress and must succeed in mini-game challenges to continue.'
           },
           dwellLabel: 'Dwell time',
-          largeCircleLabel: 'Bigger green circle',
+          largeCircleLabel: 'Bigger dwell tiles',
           aboutButton: 'About this game',
           aboutTitle: 'About this game',
           aboutBody: "This game is special because it is our first collaboration with an artist. All the background images were hand-drawn, and the story text was written together. Although AI can generate images and text, it is a great pleasure to work with real art to create a game. Hope you enjoy!",
@@ -991,7 +997,7 @@
             samurai: 'La voie stricte : progression manuelle et réussite des mini-jeux obligatoire pour continuer.'
           },
           dwellLabel: 'Temps de maintien',
-          largeCircleLabel: 'Cercle vert plus grand',
+          largeCircleLabel: 'Tuiles de maintien plus grandes',
           aboutButton: 'À propos du jeu',
           aboutTitle: 'À propos du jeu',
           aboutBody: "Ce jeu est spécial, car c’est notre première collaboration avec un artiste. Toutes les images de fond ont été dessinées à la main, et le texte de l’histoire a été écrit ensemble. Même s’il est agréable de pouvoir générer des images et des textes avec l’IA, c’est un grand plaisir de travailler avec de l’art réel pour créer un jeu. Nous espérons que vous apprécierez !",
@@ -1042,7 +1048,7 @@
             samurai: '厳しい道：手動で進行し、ミニゲームを成功しないと先に進めません。'
           },
           dwellLabel: '滞留時間',
-          largeCircleLabel: '緑の円を大きくする',
+          largeCircleLabel: '滞留タイルを大きくする',
           aboutButton: 'このゲームについて',
           aboutTitle: 'このゲームについて',
           aboutBody: 'このゲームが特別なのは、アーティストとの初めてのコラボレーションだからです。背景画像はすべて手描きで、物語の文章も共同で作りました。AIで画像や文章を生成できる時代ですが、本物のアートと一緒にゲームを作ることには大きな喜びがあります。楽しんでいただけたらうれしいです！',
@@ -1329,12 +1335,28 @@
         return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
       };
 
+      const setStoryMusicTrack = (index) => {
+        if (!STORY_LOOP_PLAYLIST.length) return;
+        storyMusicIndex = ((index % STORY_LOOP_PLAYLIST.length) + STORY_LOOP_PLAYLIST.length) % STORY_LOOP_PLAYLIST.length;
+        const nextSrc = STORY_LOOP_PLAYLIST[storyMusicIndex];
+        if (!nextSrc || storyMusicSrc === nextSrc) return;
+        storyMusicSrc = nextSrc;
+        storyMusic.src = nextSrc;
+        storyMusic.load();
+      };
+
+      const advanceStoryMusicTrack = () => {
+        if (!STORY_LOOP_PLAYLIST.length) return;
+        setStoryMusicTrack(storyMusicIndex + 1);
+        storyMusic.play().catch(() => {});
+      };
+
+      storyMusic.addEventListener('ended', advanceStoryMusicTrack);
+      storyMusic.addEventListener('error', advanceStoryMusicTrack);
+
       const playStoryMusic = () => {
-        if (storyMusicSrc !== STORY_LOOP_SRC) {
-          storyMusicSrc = STORY_LOOP_SRC;
-          storyMusic.src = STORY_LOOP_SRC;
-          storyMusic.load();
-        }
+        if (!STORY_LOOP_PLAYLIST.length) return;
+        setStoryMusicTrack(storyMusicIndex);
         storyMusic.play().catch(() => {});
       };
 
@@ -1860,9 +1882,10 @@
 
           installSamuraiChallenge(page, key, session.api);
 
-          if (currentMode === 'story') {
+          if (currentMode === 'story' || currentMode === 'autonomous') {
+            const modeSnapshot = currentMode;
             setTimeout(() => {
-              if (pages[currentIndex] !== page || currentMode !== 'story') return;
+              if (pages[currentIndex] !== page || currentMode !== modeSnapshot) return;
               nextPage();
             }, storyGameDurationMs);
           }
@@ -1899,12 +1922,19 @@
       };
 
       const getInstructionConstraintNote = (lang, gameKey) => {
-        if (currentMode !== 'samurai') return '';
         const goal = samuraiTargets[gameKey] || 1;
-        const seconds = Math.round(Math.max(samuraiTimeoutMs, 120000) / 1000);
-        if (lang === 'fr') return `Mode Samouraï : réussite obligatoire (${goal}) en ${seconds}s.`;
-        if (lang === 'ja') return `サムライモード：${seconds}秒以内に${goal}回達成が必要です。`;
-        return `Samurai mode: required to reach ${goal} within ${seconds}s.`;
+        const seconds = Math.round(Math.max(samuraiTimeoutMs, storyGameDurationMs) / 1000);
+        if (currentMode === 'samurai') {
+          if (lang === 'fr') return `Mode Samouraï : réussite obligatoire (${goal}) en ${seconds}s.`;
+          if (lang === 'ja') return `サムライモード：${seconds}秒以内に${goal}回達成が必要です。`;
+          return `Samurai mode: required to reach ${goal} within ${seconds}s.`;
+        }
+        if (currentMode === 'story' || currentMode === 'autonomous') {
+          if (lang === 'fr') return `Condition : atteindre ${goal} réussites ou attendre ${seconds}s.`;
+          if (lang === 'ja') return `条件：${goal}回達成、または${seconds}秒経過で次に進みます。`;
+          return `Condition: reach ${goal} successes, or continue after ${seconds}s.`;
+        }
+        return '';
       };
 
       const renderConclusionStats = (page) => {
@@ -2116,6 +2146,7 @@
       const gatherAssets = () => {
         const set = new Set();
         set.add(MENU_LOOP_SRC);
+        STORY_LOOP_PLAYLIST.forEach((track) => set.add(track));
         Object.values(modeConfig).forEach((m) => set.add(m.previewImage));
         storyPages.forEach((page) => {
           const img = page.dataset.image;
