@@ -398,7 +398,7 @@
       position: absolute;
       left: 50%;
       bottom: 2vw;
-      width: min(68vw, 880px);
+      width: min(61.2vw, 792px);
       min-height: 116px;
       z-index: 4;
       transform: translate(-50%, 12px);
@@ -605,7 +605,7 @@
       top: 50%;
       bottom: auto;
       transform: translate(-50%, -42%);
-      width: min(56vw, 620px);
+      width: min(50.4vw, 558px);
       min-height: 280px;
       border: 4px solid rgba(239, 146, 182, .95);
       box-shadow: 0 0 0 4px rgba(239, 146, 182, .28), 0 16px 34px rgba(0,0,0,.5);
@@ -616,6 +616,10 @@
       align-items: center;
       text-align: center;
       font-size: clamp(1.15rem, 1.9vw, 1.7rem);
+    }
+    .instruction-page .story-caption.locked {
+      opacity: .72;
+      pointer-events: none;
     }
     .instruction-page .story-caption.visible {
       transform: translate(-50%, -50%);
@@ -889,7 +893,11 @@
       let isLargeGazeTarget = false;
       const colorFadeWaitMs = 4950;
       const samuraiTimeoutMs = 25000;
-      const storyGameDurationMs = 120000;
+      const storyModeGameDurationMs = 60000;
+      const defaultGameDurationMs = 120000;
+      const menuReturnDelayMs = 30000;
+      const instructionLockMs = 10000;
+      const instructionAutoAdvanceAfterUnlockMs = 10000;
       const transitionFadeOutMs = 2200;
       const transitionBlackMs = 500;
       const transitionFadeInMs = 2200;
@@ -1413,6 +1421,8 @@
         return `${minutes}:${String(seconds).padStart(2, '0')}`;
       };
 
+      const getGameDurationMs = () => (currentMode === 'story' ? storyModeGameDurationMs : defaultGameDurationMs);
+
       const updateGlobalChiCursor = (page = pages[currentIndex]) => {
         if (!chiCursor) return;
         if (!isJourneyStarted) {
@@ -1755,6 +1765,13 @@
         if (!key) return;
         const session = gameSessions.get(key);
         if (!session) return;
+        let latestProgress = null;
+        if (session.api && typeof session.api.getProgress === 'function') {
+          try {
+            const value = Number(session.api.getProgress());
+            if (Number.isFinite(value)) latestProgress = value;
+          } catch (_) {}
+        }
         if (activeSamuraiChallenge && activeSamuraiChallenge.page === page) {
           clearTimeout(activeSamuraiChallenge.timeoutId);
           clearInterval(activeSamuraiChallenge.intervalId);
@@ -1766,11 +1783,7 @@
             if (maybe && typeof maybe.then === 'function') maybe.catch(() => {});
           } catch (_) {}
         }
-        if (session.api && typeof session.api.getProgress === 'function') {
-          try {
-            updateJourneyStat(key, session.api.getProgress());
-          } catch (_) {}
-        }
+        if (latestProgress !== null) updateJourneyStat(key, latestProgress);
         if (session.host) {
           session.host.innerHTML = '';
         }
@@ -1887,10 +1900,11 @@
 
           if (currentMode === 'story' || currentMode === 'autonomous') {
             const modeSnapshot = currentMode;
+            const gameDurationMs = getGameDurationMs();
             setTimeout(() => {
               if (pages[currentIndex] !== page || currentMode !== modeSnapshot) return;
               nextPage();
-            }, storyGameDurationMs);
+            }, gameDurationMs);
           }
 
           if (!modeConfig[currentMode].enforceGameWin && modeConfig[currentMode].autoGameAdvance) {
@@ -1926,7 +1940,7 @@
 
       const getInstructionConstraintNote = (lang, gameKey) => {
         const goal = samuraiTargets[gameKey] || 1;
-        const seconds = Math.round(Math.max(samuraiTimeoutMs, storyGameDurationMs) / 1000);
+        const seconds = Math.round(Math.max(samuraiTimeoutMs, getGameDurationMs()) / 1000);
         if (currentMode === 'samurai') {
           if (lang === 'fr') return `Mode Samouraï : réussite obligatoire (${goal}) en ${seconds}s.`;
           if (lang === 'ja') return `サムライモード：${seconds}秒以内に${goal}回達成が必要です。`;
@@ -1938,6 +1952,27 @@
           return `Condition: reach ${goal} successes, or continue after ${seconds}s.`;
         }
         return '';
+      };
+
+      const returnToMenu = (withTransition = true) => {
+        const finish = () => {
+          isJourneyStarted = false;
+          isTransitioning = false;
+          stopNarration();
+          pauseStoryMusic();
+          document.body.classList.remove('playing');
+          showPage(0);
+          updateGlobalChiCursor(pages[0]);
+          playMenuMusic();
+        };
+        if (!withTransition) {
+          finish();
+          return;
+        }
+        if (isTransitioning) return;
+        isTransitioning = true;
+        triggerTransition();
+        setTimeout(finish, transitionSwitchDelayMs);
       };
 
       const renderConclusionStats = (page) => {
@@ -1981,8 +2016,8 @@
         if (conclusionCleanup) conclusionCleanup();
         conclusionCleanup = createDwellGate(target, () => {
           target.classList.remove('visible', 'active', 'dwell');
-          nextPage();
-        }, currentMode === 'story' ? 30000 : 0);
+          returnToMenu();
+        }, menuReturnDelayMs);
       };
 
       const setupInstructionPage = (page) => {
@@ -1995,38 +2030,65 @@
         const target = page.querySelector('[data-instruction-target]');
         if (!target || !captionEl) return;
         applyTargetSettings(target);
-        target.classList.add('visible', 'active');
-        target.classList.remove('inactive');
+        target.classList.add('visible', 'inactive');
+        target.classList.remove('active');
         syncBackButtonStateFrom(target);
         captionEl.classList.add('visible', 'advanceable');
+        captionEl.classList.add('locked');
         captionEl.classList.remove('dwell');
         const constraintNote = getInstructionConstraintNote(lang, gameKey);
         captionEl.innerHTML = `<span class="instruction-caption-title">${instruction?.title || 'Instruction'}</span>${instruction?.text || ''}${constraintNote ? `<br><br><strong>${constraintNote}</strong>` : ''}`;
 
         if (instructionCleanup) instructionCleanup();
-        const autoActivateMs = currentMode === 'story' ? 30000 : 0;
         let cleanA = null;
         let cleanB = null;
+        let lockTimer = null;
+        let autoAdvanceTimer = null;
         let done = false;
         const proceed = () => {
           if (done) return;
           done = true;
+          if (lockTimer) clearTimeout(lockTimer);
+          if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
           if (cleanA) cleanA();
           if (cleanB) cleanB();
           cleanA = null;
           cleanB = null;
+          lockTimer = null;
+          autoAdvanceTimer = null;
           captionEl.classList.remove('dwell');
+          captionEl.classList.remove('locked');
           target.classList.remove('dwell');
           nextPage();
         };
-        cleanA = createDwellGate(captionEl, proceed, autoActivateMs);
-        cleanB = createDwellGate(target, proceed, autoActivateMs);
+
+        const unlock = () => {
+          if (done) return;
+          captionEl.classList.remove('locked');
+          target.classList.remove('inactive');
+          target.classList.add('active');
+          cleanA = createDwellGate(captionEl, proceed, 0);
+          cleanB = createDwellGate(target, proceed, 0);
+          autoAdvanceTimer = setTimeout(() => {
+            proceed();
+          }, instructionAutoAdvanceAfterUnlockMs);
+        };
+
+        lockTimer = setTimeout(unlock, instructionLockMs);
+
         instructionCleanup = () => {
+          if (lockTimer) clearTimeout(lockTimer);
+          if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
           if (cleanA) cleanA();
           if (cleanB) cleanB();
+          lockTimer = null;
+          autoAdvanceTimer = null;
           cleanA = null;
           cleanB = null;
           done = true;
+          captionEl.classList.remove('locked');
+          target.classList.remove('active');
+          target.classList.add('inactive');
         };
       };
 
