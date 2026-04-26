@@ -398,7 +398,7 @@
       position: absolute;
       left: 50%;
       bottom: 2vw;
-      width: min(68vw, 880px);
+      width: min(61.2vw, 792px);
       min-height: 116px;
       z-index: 4;
       transform: translate(-50%, 12px);
@@ -575,6 +575,8 @@
       justify-content: center;
       flex-direction: column;
       position: relative;
+      text-align: center;
+      gap: 12px;
     }
     .conclusion-title {
       color: #f5f8fa;
@@ -595,6 +597,7 @@
       box-shadow: 0 10px 24px rgba(0,0,0,.35);
       font-size: clamp(1rem, 1.5vw, 1.2rem);
       line-height: 1.55;
+      text-align: center;
     }
     .conclusion-stats p { margin: 6px 0; }
     .conclusion-stats strong { color: #f6dca4; }
@@ -605,17 +608,21 @@
       top: 50%;
       bottom: auto;
       transform: translate(-50%, -42%);
-      width: min(56vw, 620px);
+      width: min(50.4vw, 558px);
       min-height: 280px;
       border: 4px solid rgba(239, 146, 182, .95);
       box-shadow: 0 0 0 4px rgba(239, 146, 182, .28), 0 16px 34px rgba(0,0,0,.5);
-      background: linear-gradient(155deg, rgba(106, 48, 84, .9), rgba(148, 66, 112, .88));
+      background: linear-gradient(155deg, rgba(134, 78, 112, .86), rgba(176, 104, 142, .84));
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
       text-align: center;
       font-size: clamp(1.15rem, 1.9vw, 1.7rem);
+    }
+    .instruction-page .story-caption.locked {
+      opacity: .72;
+      pointer-events: none;
     }
     .instruction-page .story-caption.visible {
       transform: translate(-50%, -50%);
@@ -832,6 +839,7 @@
         <p><strong data-stat-chi-label>Chi balls sent</strong>: <span data-stat-chi>0</span></p>
         <p><strong data-stat-lanterns-label>Lanterns lit</strong>: <span data-stat-lanterns>0</span></p>
         <p><strong data-stat-time-label>Total time</strong>: <span data-stat-time>0:00</span></p>
+        <p><strong data-stat-score-label>Total score</strong>: <span data-stat-score>0</span></p>
       </div>
       <button class="gaze-target conclusion-target" data-conclusion-target aria-label="Advance" type="button"></button>
     </section>
@@ -889,7 +897,11 @@
       let isLargeGazeTarget = false;
       const colorFadeWaitMs = 4950;
       const samuraiTimeoutMs = 25000;
-      const storyGameDurationMs = 120000;
+      const storyModeGameDurationMs = 60000;
+      const defaultGameDurationMs = 120000;
+      const menuReturnDelayMs = 30000;
+      const instructionLockMs = 10000;
+      const instructionAutoAdvanceAfterUnlockMs = 10000;
       const transitionFadeOutMs = 2200;
       const transitionBlackMs = 500;
       const transitionFadeInMs = 2200;
@@ -914,6 +926,11 @@
       narrationAudio.volume = 1;
       let activeSamuraiChallenge = null;
       const samuraiTargets = { cherry: 20, meditation: 10, lamp: 10 };
+      const getModeTarget = (gameKey) => {
+        const baseTarget = samuraiTargets[gameKey] || 1;
+        if (currentMode === 'story') return Math.max(1, Math.ceil(baseTarget / 2));
+        return baseTarget;
+      };
 
       const modeConfig = {
         story: {
@@ -943,9 +960,9 @@
           start: 'Start Journey',
           modes: { story: 'Story', autonomous: 'Normal', samurai: 'Samurai' },
           descriptions: {
-            story: 'A cinematic guided experience where each beat unfolds automatically while you absorb the atmosphere.',
-            autonomous: 'A user-paced journey where you control progression, while mini-games remain open and non-blocking.',
-            samurai: 'The strict path: you manually progress and must succeed in mini-game challenges to continue.'
+            story: 'The story advances automatically after a delay, ideal for players who are learning to use eye-gaze.',
+            autonomous: 'The story must be advanced by the user, but mini-games are completed automatically after a delay.',
+            samurai: 'The user must advance the story and succeed in mini-games to progress.'
           },
           dwellLabel: 'Dwell time',
           largeCircleLabel: 'Bigger dwell tiles',
@@ -959,7 +976,8 @@
             flowers: 'Flowers cut',
             chi: 'Chi balls sent',
             lanterns: 'Lanterns lit',
-            time: 'Total time'
+            time: 'Total time',
+            score: 'Total score'
           },
           instructionHover: 'Hover this box (or the green orb) to continue.',
           instructions: {
@@ -994,9 +1012,9 @@
           start: 'Commencer',
           modes: { story: 'Histoire', autonomous: 'Normal', samurai: 'Samouraï' },
           descriptions: {
-            story: "Une expérience cinématique guidée où chaque moment se déroule automatiquement pendant que vous profitez de l'ambiance.",
-            autonomous: 'Une aventure au rythme du joueur où vous contrôlez la progression, avec des mini-jeux non bloquants.',
-            samurai: 'La voie stricte : progression manuelle et réussite des mini-jeux obligatoire pour continuer.'
+            story: "L'histoire défile automatiquement après un certain délai, parfait pour ceux qui apprennent à utiliser le contrôle oculaire.",
+            autonomous: "L'histoire doit être avancée par l'utilisateur, mais les mini-jeux seront réussis automatiquement après un certain délai.",
+            samurai: "L'utilisateur doit faire avancer l'histoire et réussir les mini-jeux pour progresser."
           },
           dwellLabel: 'Temps de maintien',
           largeCircleLabel: 'Tuiles de maintien plus grandes',
@@ -1010,7 +1028,8 @@
             flowers: 'Fleurs coupées',
             chi: 'Boules de chi envoyées',
             lanterns: 'Lanternes allumées',
-            time: 'Temps total'
+            time: 'Temps total',
+            score: 'Score total'
           },
           instructionHover: 'Survolez cette boîte (ou la boule verte) pour continuer.',
           instructions: {
@@ -1045,9 +1064,9 @@
           start: '開始',
           modes: { story: 'ストーリー', autonomous: 'ノーマル', samurai: 'サムライ' },
           descriptions: {
-            story: '雰囲気を味わいながら、各シーンが自動で進むシネマティック体験です。',
-            autonomous: '自分のペースで進行し、ミニゲームは開放されたままのモードです。',
-            samurai: '厳しい道：手動で進行し、ミニゲームを成功しないと先に進めません。'
+            story: '一定時間ごとに物語が自動で進み、視線操作を学び始めた方にも適したモードです。',
+            autonomous: '物語はユーザーが進めますが、ミニゲームは一定時間後に自動達成されます。',
+            samurai: '物語の進行とミニゲームの成功の両方が必要なモードです。'
           },
           dwellLabel: '滞留時間',
           largeCircleLabel: '滞留タイルを大きくする',
@@ -1061,7 +1080,8 @@
             flowers: '切った花',
             chi: '放った気弾',
             lanterns: '灯した灯籠',
-            time: '合計時間'
+            time: '合計時間',
+            score: '総合スコア'
           },
           instructionHover: 'このボックス（または緑の球）にホバーして続行。',
           instructions: {
@@ -1412,6 +1432,14 @@
         const seconds = totalSeconds % 60;
         return `${minutes}:${String(seconds).padStart(2, '0')}`;
       };
+      const computeTotalScore = ({ cherry, meditation, lamp, elapsedMs }) => {
+        const totalSuccesses = Math.max(0, Number(cherry) + Number(meditation) + Number(lamp));
+        const elapsedSeconds = Math.max(0, Math.floor((Number(elapsedMs) || 0) / 1000));
+        const timeBonus = Math.max(0, 1200 - elapsedSeconds);
+        return Math.max(0, Math.round(totalSuccesses * 100 + timeBonus));
+      };
+
+      const getGameDurationMs = () => (currentMode === 'story' ? storyModeGameDurationMs : defaultGameDurationMs);
 
       const updateGlobalChiCursor = (page = pages[currentIndex]) => {
         if (!chiCursor) return;
@@ -1755,6 +1783,13 @@
         if (!key) return;
         const session = gameSessions.get(key);
         if (!session) return;
+        let latestProgress = null;
+        if (session.api && typeof session.api.getProgress === 'function') {
+          try {
+            const value = Number(session.api.getProgress());
+            if (Number.isFinite(value)) latestProgress = value;
+          } catch (_) {}
+        }
         if (activeSamuraiChallenge && activeSamuraiChallenge.page === page) {
           clearTimeout(activeSamuraiChallenge.timeoutId);
           clearInterval(activeSamuraiChallenge.intervalId);
@@ -1766,11 +1801,7 @@
             if (maybe && typeof maybe.then === 'function') maybe.catch(() => {});
           } catch (_) {}
         }
-        if (session.api && typeof session.api.getProgress === 'function') {
-          try {
-            updateJourneyStat(key, session.api.getProgress());
-          } catch (_) {}
-        }
+        if (latestProgress !== null) updateJourneyStat(key, latestProgress);
         if (session.host) {
           session.host.innerHTML = '';
         }
@@ -1821,7 +1852,7 @@
         const target = page.querySelector('[data-samurai-challenge]');
         if (target) target.classList.add('visible');
 
-        const goal = samuraiTargets[gameKey] || 1;
+        const goal = getModeTarget(gameKey);
         const getProgress = () => {
           if (!api || typeof api.getProgress !== 'function') return 0;
           const value = Number(api.getProgress());
@@ -1887,10 +1918,11 @@
 
           if (currentMode === 'story' || currentMode === 'autonomous') {
             const modeSnapshot = currentMode;
+            const gameDurationMs = getGameDurationMs();
             setTimeout(() => {
               if (pages[currentIndex] !== page || currentMode !== modeSnapshot) return;
               nextPage();
-            }, storyGameDurationMs);
+            }, gameDurationMs);
           }
 
           if (!modeConfig[currentMode].enforceGameWin && modeConfig[currentMode].autoGameAdvance) {
@@ -1925,19 +1957,58 @@
       };
 
       const getInstructionConstraintNote = (lang, gameKey) => {
-        const goal = samuraiTargets[gameKey] || 1;
-        const seconds = Math.round(Math.max(samuraiTimeoutMs, storyGameDurationMs) / 1000);
+        const goal = getModeTarget(gameKey);
+        const seconds = Math.round(Math.max(samuraiTimeoutMs, getGameDurationMs()) / 1000);
+        const goalTextByLang = {
+          en: {
+            cherry: `cut ${goal} cherry blossom flowers`,
+            meditation: `launch ${goal} chi balls`,
+            lamp: `release ${goal} lanterns`
+          },
+          fr: {
+            cherry: `couper ${goal} fleurs de cerisier`,
+            meditation: `envoyer ${goal} boules de chi`,
+            lamp: `libérer ${goal} lanternes`
+          },
+          ja: {
+            cherry: `桜の花を${goal}枚切る`,
+            meditation: `気弾を${goal}回放つ`,
+            lamp: `灯籠を${goal}個解放する`
+          }
+        };
+        const goalText = goalTextByLang[lang]?.[gameKey] || goalTextByLang.en[gameKey] || `reach ${goal} successes`;
         if (currentMode === 'samurai') {
-          if (lang === 'fr') return `Mode Samouraï : réussite obligatoire (${goal}) en ${seconds}s.`;
-          if (lang === 'ja') return `サムライモード：${seconds}秒以内に${goal}回達成が必要です。`;
-          return `Samurai mode: required to reach ${goal} within ${seconds}s.`;
+          if (lang === 'fr') return `Mode Samouraï : vous devez ${goalText} en ${seconds}s.`;
+          if (lang === 'ja') return `サムライモード：${seconds}秒以内に${goalText}必要があります。`;
+          return `Samurai mode: you must ${goalText} within ${seconds}s.`;
         }
         if (currentMode === 'story' || currentMode === 'autonomous') {
-          if (lang === 'fr') return `Condition : atteindre ${goal} réussites ou attendre ${seconds}s.`;
-          if (lang === 'ja') return `条件：${goal}回達成、または${seconds}秒経過で次に進みます。`;
-          return `Condition: reach ${goal} successes, or continue after ${seconds}s.`;
+          if (lang === 'fr') return `Condition : ${goalText}, ou attendre ${seconds}s.`;
+          if (lang === 'ja') return `条件：${goalText}、または${seconds}秒後に次へ進みます。`;
+          return `Condition: ${goalText}, or continue after ${seconds}s.`;
         }
         return '';
+      };
+
+      const returnToMenu = (withTransition = true) => {
+        const finish = () => {
+          isJourneyStarted = false;
+          isTransitioning = false;
+          stopNarration();
+          pauseStoryMusic();
+          document.body.classList.remove('playing');
+          showPage(0);
+          updateGlobalChiCursor(pages[0]);
+          playMenuMusic();
+        };
+        if (!withTransition) {
+          finish();
+          return;
+        }
+        if (isTransitioning) return;
+        isTransitioning = true;
+        triggerTransition();
+        setTimeout(finish, transitionSwitchDelayMs);
       };
 
       const renderConclusionStats = (page) => {
@@ -1948,10 +2019,12 @@
         const chiValue = page.querySelector('[data-stat-chi]');
         const lanternsValue = page.querySelector('[data-stat-lanterns]');
         const timeValue = page.querySelector('[data-stat-time]');
+        const scoreValue = page.querySelector('[data-stat-score]');
         const flowersLabel = page.querySelector('[data-stat-flowers-label]');
         const chiLabel = page.querySelector('[data-stat-chi-label]');
         const lanternsLabel = page.querySelector('[data-stat-lanterns-label]');
         const timeLabel = page.querySelector('[data-stat-time-label]');
+        const scoreLabel = page.querySelector('[data-stat-score-label]');
 
         if (flowersValue) flowersValue.textContent = `${journeyStats.cherry}`;
         if (chiValue) chiValue.textContent = `${journeyStats.meditation}`;
@@ -1960,10 +2033,20 @@
         if (chiLabel) chiLabel.textContent = text?.stats?.chi || 'Chi balls sent';
         if (lanternsLabel) lanternsLabel.textContent = text?.stats?.lanterns || 'Lanterns lit';
         if (timeLabel) timeLabel.textContent = text?.stats?.time || 'Total time';
+        if (scoreLabel) scoreLabel.textContent = text?.stats?.score || 'Total score';
 
         const endTime = journeyStats.endedAt || Date.now();
         const elapsedMs = journeyStats.startedAt ? endTime - journeyStats.startedAt : 0;
         if (timeValue) timeValue.textContent = formatElapsed(elapsedMs);
+        if (scoreValue) {
+          const score = computeTotalScore({
+            cherry: journeyStats.cherry,
+            meditation: journeyStats.meditation,
+            lamp: journeyStats.lamp,
+            elapsedMs
+          });
+          scoreValue.textContent = `${score}`;
+        }
       };
 
       const setupConclusionPage = (page) => {
@@ -1981,8 +2064,8 @@
         if (conclusionCleanup) conclusionCleanup();
         conclusionCleanup = createDwellGate(target, () => {
           target.classList.remove('visible', 'active', 'dwell');
-          nextPage();
-        }, currentMode === 'story' ? 30000 : 0);
+          returnToMenu();
+        }, menuReturnDelayMs);
       };
 
       const setupInstructionPage = (page) => {
@@ -1995,38 +2078,68 @@
         const target = page.querySelector('[data-instruction-target]');
         if (!target || !captionEl) return;
         applyTargetSettings(target);
-        target.classList.add('visible', 'active');
-        target.classList.remove('inactive');
+        target.classList.add('visible', 'inactive');
+        target.classList.remove('active');
         syncBackButtonStateFrom(target);
         captionEl.classList.add('visible', 'advanceable');
+        captionEl.classList.add('locked');
         captionEl.classList.remove('dwell');
         const constraintNote = getInstructionConstraintNote(lang, gameKey);
         captionEl.innerHTML = `<span class="instruction-caption-title">${instruction?.title || 'Instruction'}</span>${instruction?.text || ''}${constraintNote ? `<br><br><strong>${constraintNote}</strong>` : ''}`;
 
         if (instructionCleanup) instructionCleanup();
-        const autoActivateMs = currentMode === 'story' ? 30000 : 0;
         let cleanA = null;
         let cleanB = null;
+        let lockTimer = null;
+        let autoAdvanceTimer = null;
         let done = false;
         const proceed = () => {
           if (done) return;
           done = true;
+          if (lockTimer) clearTimeout(lockTimer);
+          if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
           if (cleanA) cleanA();
           if (cleanB) cleanB();
           cleanA = null;
           cleanB = null;
+          lockTimer = null;
+          autoAdvanceTimer = null;
           captionEl.classList.remove('dwell');
+          captionEl.classList.remove('locked');
           target.classList.remove('dwell');
+          syncBackButtonStateFrom(target);
           nextPage();
         };
-        cleanA = createDwellGate(captionEl, proceed, autoActivateMs);
-        cleanB = createDwellGate(target, proceed, autoActivateMs);
+
+        const unlock = () => {
+          if (done) return;
+          captionEl.classList.remove('locked');
+          target.classList.remove('inactive');
+          target.classList.add('active');
+          syncBackButtonStateFrom(target);
+          cleanA = createDwellGate(captionEl, proceed, 0);
+          cleanB = createDwellGate(target, proceed, 0);
+          autoAdvanceTimer = setTimeout(() => {
+            proceed();
+          }, instructionAutoAdvanceAfterUnlockMs);
+        };
+
+        lockTimer = setTimeout(unlock, instructionLockMs);
+
         instructionCleanup = () => {
+          if (lockTimer) clearTimeout(lockTimer);
+          if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
           if (cleanA) cleanA();
           if (cleanB) cleanB();
+          lockTimer = null;
+          autoAdvanceTimer = null;
           cleanA = null;
           cleanB = null;
           done = true;
+          captionEl.classList.remove('locked');
+          target.classList.remove('active');
+          target.classList.add('inactive');
+          syncBackButtonStateFrom(target);
         };
       };
 
