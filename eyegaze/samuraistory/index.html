@@ -609,7 +609,7 @@
       min-height: 280px;
       border: 4px solid rgba(239, 146, 182, .95);
       box-shadow: 0 0 0 4px rgba(239, 146, 182, .28), 0 16px 34px rgba(0,0,0,.5);
-      background: linear-gradient(155deg, rgba(106, 48, 84, .9), rgba(148, 66, 112, .88));
+      background: linear-gradient(155deg, rgba(134, 78, 112, .86), rgba(176, 104, 142, .84));
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -922,6 +922,11 @@
       narrationAudio.volume = 1;
       let activeSamuraiChallenge = null;
       const samuraiTargets = { cherry: 20, meditation: 10, lamp: 10 };
+      const getModeTarget = (gameKey) => {
+        const baseTarget = samuraiTargets[gameKey] || 1;
+        if (currentMode === 'story') return Math.max(1, Math.ceil(baseTarget / 2));
+        return baseTarget;
+      };
 
       const modeConfig = {
         story: {
@@ -1834,7 +1839,7 @@
         const target = page.querySelector('[data-samurai-challenge]');
         if (target) target.classList.add('visible');
 
-        const goal = samuraiTargets[gameKey] || 1;
+        const goal = getModeTarget(gameKey);
         const getProgress = () => {
           if (!api || typeof api.getProgress !== 'function') return 0;
           const value = Number(api.getProgress());
@@ -1939,17 +1944,35 @@
       };
 
       const getInstructionConstraintNote = (lang, gameKey) => {
-        const goal = samuraiTargets[gameKey] || 1;
+        const goal = getModeTarget(gameKey);
         const seconds = Math.round(Math.max(samuraiTimeoutMs, getGameDurationMs()) / 1000);
+        const goalTextByLang = {
+          en: {
+            cherry: `cut ${goal} cherry blossom flowers`,
+            meditation: `launch ${goal} chi balls`,
+            lamp: `release ${goal} lanterns`
+          },
+          fr: {
+            cherry: `couper ${goal} fleurs de cerisier`,
+            meditation: `envoyer ${goal} boules de chi`,
+            lamp: `libérer ${goal} lanternes`
+          },
+          ja: {
+            cherry: `桜の花を${goal}枚切る`,
+            meditation: `気弾を${goal}回放つ`,
+            lamp: `灯籠を${goal}個解放する`
+          }
+        };
+        const goalText = goalTextByLang[lang]?.[gameKey] || goalTextByLang.en[gameKey] || `reach ${goal} successes`;
         if (currentMode === 'samurai') {
-          if (lang === 'fr') return `Mode Samouraï : réussite obligatoire (${goal}) en ${seconds}s.`;
-          if (lang === 'ja') return `サムライモード：${seconds}秒以内に${goal}回達成が必要です。`;
-          return `Samurai mode: required to reach ${goal} within ${seconds}s.`;
+          if (lang === 'fr') return `Mode Samouraï : vous devez ${goalText} en ${seconds}s.`;
+          if (lang === 'ja') return `サムライモード：${seconds}秒以内に${goalText}必要があります。`;
+          return `Samurai mode: you must ${goalText} within ${seconds}s.`;
         }
         if (currentMode === 'story' || currentMode === 'autonomous') {
-          if (lang === 'fr') return `Condition : atteindre ${goal} réussites ou attendre ${seconds}s.`;
-          if (lang === 'ja') return `条件：${goal}回達成、または${seconds}秒経過で次に進みます。`;
-          return `Condition: reach ${goal} successes, or continue after ${seconds}s.`;
+          if (lang === 'fr') return `Condition : ${goalText}, ou attendre ${seconds}s.`;
+          if (lang === 'ja') return `条件：${goalText}、または${seconds}秒後に次へ進みます。`;
+          return `Condition: ${goalText}, or continue after ${seconds}s.`;
         }
         return '';
       };
@@ -2059,6 +2082,7 @@
           captionEl.classList.remove('dwell');
           captionEl.classList.remove('locked');
           target.classList.remove('dwell');
+          syncBackButtonStateFrom(target);
           nextPage();
         };
 
@@ -2067,6 +2091,7 @@
           captionEl.classList.remove('locked');
           target.classList.remove('inactive');
           target.classList.add('active');
+          syncBackButtonStateFrom(target);
           cleanA = createDwellGate(captionEl, proceed, 0);
           cleanB = createDwellGate(target, proceed, 0);
           autoAdvanceTimer = setTimeout(() => {
@@ -2089,6 +2114,7 @@
           captionEl.classList.remove('locked');
           target.classList.remove('active');
           target.classList.add('inactive');
+          syncBackButtonStateFrom(target);
         };
       };
 
