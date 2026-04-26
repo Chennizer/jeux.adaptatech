@@ -216,7 +216,24 @@
     const pointer = { x: -9999, y: -9999, inside: false, prevX: -9999 };
     let cursorOrient = 'left';
 
-    function applyCurrentCursor() { canvas.style.cursor = 'none'; }
+    function updatePanelCursor() {
+      if (!modeSelector) return;
+      if (currentMode === 'katana') {
+        if (katanaCursorReady && katanaCursor.left && katanaCursor.left.canvas) {
+          modeSelector.style.cursor = `url("${katanaCursor.left.canvas.toDataURL('image/png')}") ${katanaCursor.left.hx} ${katanaCursor.left.hy}, crosshair`;
+          return;
+        }
+        modeSelector.style.cursor = 'crosshair';
+        return;
+      }
+      const chiHotspot = Math.round(Math.min(CHI_POINTER_MAX, CHI_POINTER_BASE) * 0.5);
+      modeSelector.style.cursor = `url("${CHI_POINTER_SRC}") ${chiHotspot} ${chiHotspot}, pointer`;
+    }
+
+    function applyCurrentCursor() {
+      canvas.style.cursor = 'none';
+      updatePanelCursor();
+    }
 
     function updatePointerFromEvent(e) {
       const rect = canvas.getBoundingClientRect();
@@ -1187,6 +1204,7 @@ function drawRopes(t) {
       quietAudio();
       resetGameState();
       canvas.style.cursor = 'default';
+      if (modeSelector) modeSelector.style.cursor = 'default';
     }
 
     if (startBtn) {
