@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title data-fr="Frost Kaleidoscope (Jeu Switch)" data-en="Frost Kaleidoscope (Switch Game)">
+    Frost Kaleidoscope (Jeu Switch)
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="../../css/otherswitch.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      background: radial-gradient(circle at center, #0d1b2a 0%, #070b14 55%, #04060a 100%);
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #fff;
+    }
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      z-index: 0;
+    }
+
+    #promptOverlay {
+      background: radial-gradient(circle at center, rgba(12, 22, 43, 0.98) 0%, rgba(4, 8, 16, 0.98) 70%);
+      text-shadow: 0 4px 16px rgba(18, 203, 196, 0.35);
+    }
+    #promptOverlay p {
+      max-width: min(90vw, 680px);
+      font-size: clamp(1.1rem, 1.2rem + 0.5vw, 1.65rem);
+      line-height: 1.6;
+    }
+    #startButton {
+      background: linear-gradient(120deg, #2ff0ff 0%, #18c5ff 45%, #8a6bff 100%);
+      color: #041018;
+      font-weight: 700;
+      box-shadow: 0 12px 24px rgba(24, 197, 255, 0.35);
+      border-radius: 14px;
+      border: none;
+      padding: 0.9rem 2.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    #startButton:hover {
+      filter: brightness(1.1);
+    }
+
+    #infoButton {
+      font-size: 28px;
+    }
+
+    #infoModal {
+      max-width: min(86vw, 460px);
+      background: rgba(2, 9, 18, 0.92);
+      border: 2px solid rgba(79, 223, 255, 0.55);
+      color: #f0fbff;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 16px 42px rgba(18, 203, 196, 0.28);
+    }
+    #infoModal p {
+      font-size: 1rem;
+      color: #d9f7ff;
+    }
+    #closeModal {
+      background: linear-gradient(120deg, #53f3ff 0%, #2f9cff 100%);
+      color: #03141f;
+      font-weight: 600;
+    }
+
+    #fullscreen-btn {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="promptOverlay">
+    <button id="infoButton" class="translate" data-fr="ⓘ" data-en="ⓘ">ⓘ</button>
+    <p class="translate"
+       data-fr="Appuie sur la barre d'espace pour peindre un nouveau mandala de glace. Chaque pression crée un motif symétrique lumineux qui se dissipe lentement."
+       data-en="Press the space bar to paint a fresh ice mandala. Each press blooms a luminous symmetric pattern that slowly drifts away.">
+      Appuie sur la barre d'espace pour peindre un nouveau mandala de glace. Chaque pression crée un motif symétrique lumineux qui se dissipe lentement.
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+
+  <div id="infoModal">
+    <p class="translate"
+       data-fr="Compétence : appui unique.<br>SENICT niveau 1.<br>Switch Progression Roadmap niveaux 8 à 10.<br><br>Conseil : invite l'élève à explorer différents rythmes d'appui pour voir comment les couleurs et les rotations changent."
+       data-en="Skill: single press.<br>SENICT level 1.<br>Switch Progression Roadmap levels 8 to 10.<br><br>Tip: encourage the learner to experiment with different press rhythms to see the colors and rotations shift.">
+      Compétence : appui unique.<br>SENICT niveau 1.<br>Switch Progression Roadmap niveaux 8 à 10.<br><br>Conseil : invite l'élève à explorer différents rythmes d'appui pour voir comment les couleurs et les rotations changent.
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close">Fermer</button>
+  </div>
+
+  <div id="settings-icon">⚙️</div>
+
+  <script src="../../js/translationonly.js"></script>
+  <script>
+    let started = false;
+    let mandalaLayers = [];
+    let shimmerDots = [];
+    let lastTrigger = -Infinity;
+    const MIN_TRIGGER_DELAY = 220;
+    let globalSpin = 0;
+    let targetSpin = 0;
+    let synth;
+
+    const COLOR_BANDS = [
+      [190, 60, 100],
+      [205, 55, 100],
+      [220, 52, 98],
+      [250, 45, 100],
+      [285, 55, 96],
+      [305, 48, 96]
+    ];
+
+    const overlay = document.getElementById('promptOverlay');
+    const infoBtn = document.getElementById('infoButton');
+    const infoModal = document.getElementById('infoModal');
+    const closeModal = document.getElementById('closeModal');
+    const startButton = document.getElementById('startButton');
+
+    infoBtn.addEventListener('click', () => {
+      infoModal.style.display = 'block';
+    });
+    closeModal.addEventListener('click', () => {
+      infoModal.style.display = 'none';
+    });
+
+    startButton.addEventListener('click', () => {
+      started = true;
+      overlay.style.display = 'none';
+      infoBtn.style.display = 'none';
+      resetMandala();
+      if (getAudioContext().state !== 'running') {
+        getAudioContext().resume();
+      }
+      if (!synth) {
+        synth = new p5.PolySynth();
+        synth.setADSR(0.01, 0.2, 0.15, 0.6);
+      }
+    });
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(HSB, 360, 100, 100, 1);
+      angleMode(RADIANS);
+      noCursor();
+      background(215, 45, 5);
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function draw() {
+      if (!started) {
+        return;
+      }
+
+      noStroke();
+      fill(215, 45, 5, 0.12);
+      rectMode(CENTER);
+      rect(width / 2, height / 2, width * 2, height * 2);
+
+      drawNebulaGlow();
+
+      push();
+      translate(width / 2, height / 2);
+      globalSpin = lerp(globalSpin, targetSpin, 0.012);
+      rotate(globalSpin);
+
+      for (let i = mandalaLayers.length - 1; i >= 0; i--) {
+        const layer = mandalaLayers[i];
+        const progress = constrain((millis() - layer.birth) / layer.life, 0, 1);
+        if (progress >= 1) {
+          mandalaLayers.splice(i, 1);
+          continue;
+        }
+        drawLayer(layer, progress);
+      }
+      pop();
+
+      for (let i = shimmerDots.length - 1; i >= 0; i--) {
+        const dot = shimmerDots[i];
+        dot.life += deltaTime;
+        const lifeNorm = dot.life / dot.maxLife;
+        if (lifeNorm >= 1) {
+          shimmerDots.splice(i, 1);
+          continue;
+        }
+        drawShimmer(dot, lifeNorm);
+      }
+    }
+
+    function drawNebulaGlow() {
+      push();
+      translate(width / 2, height / 2);
+      const baseRadius = max(width, height) * 0.6;
+      noStroke();
+      for (let i = 0; i < 3; i++) {
+        const alpha = 0.06 - i * 0.015;
+        if (alpha <= 0) continue;
+        fill(200 + i * 10, 70, 22 + i * 6, alpha);
+        ellipse(0, 0, baseRadius + i * 140);
+      }
+      pop();
+    }
+
+    function drawLayer(layer, progress) {
+      const eased = easeInOutCubic(progress);
+      const fade = 1 - pow(progress, 1.25);
+      const hueShift = layer.hueShift * progress;
+      const wobblePhase = frameCount * 0.03 + layer.noiseSeed;
+
+      const radialDrift = layer.radialDistance * eased;
+      const scaleFactor = layer.baseScale + layer.growth * eased;
+      const size = layer.size * scaleFactor;
+      const rotation = layer.baseRotation + layer.spin * progress;
+
+      push();
+      rotate(rotation);
+      translate(0, radialDrift);
+      const fillCol = color((layer.hue + hueShift + 360) % 360, layer.sat, min(100, layer.bright + progress * 10), fade * layer.alpha);
+      const strokeCol = color((layer.hue + hueShift + layer.strokeShift + 360) % 360, layer.sat * 0.85, 98, fade * layer.alpha * 0.85);
+
+      for (let s = 0; s < layer.symmetry; s++) {
+        push();
+        rotate((TWO_PI / layer.symmetry) * s);
+        drawShard(layer.points, size, fillCol, strokeCol, wobblePhase, layer.wobbleAmp, layer.tailStretch, eased);
+        scale(-1, 1);
+        drawShard(layer.points, size, fillCol, strokeCol, wobblePhase + 0.6, layer.wobbleAmp, layer.tailStretch, eased);
+        pop();
+      }
+      pop();
+    }
+
+    function drawShard(points, size, fillCol, strokeCol, wobblePhase, wobbleAmp, tailStretch, eased) {
+      noStroke();
+      fill(fillCol);
+      beginShape();
+      for (let i = 0; i < points.length; i++) {
+        const pt = points[i];
+        const offset = sin(wobblePhase + pt.waveOffset + eased * PI * 2) * wobbleAmp * pt.waveWeight;
+        vertex((pt.x + offset) * size, pt.y * size * (1 + tailStretch * eased));
+      }
+      endShape(CLOSE);
+
+      noFill();
+      stroke(strokeCol);
+      strokeWeight(1.2 + eased * 1.2);
+      beginShape();
+      for (let i = 0; i < points.length; i++) {
+        const pt = points[i];
+        const offset = sin(wobblePhase * 1.2 + pt.waveOffset * 1.4 + eased * PI * 1.2) * wobbleAmp * pt.waveWeight * 0.55;
+        vertex((pt.x + offset) * size, pt.y * size * (1 + tailStretch * eased));
+      }
+      endShape();
+    }
+
+    function drawShimmer(dot, lifeNorm) {
+      const eased = easeOutQuad(1 - lifeNorm);
+      const bright = 90 + eased * 10;
+      const alpha = 0.18 * eased;
+      noStroke();
+      fill(dot.hue, dot.sat, bright, alpha);
+      ellipse(dot.x, dot.y, dot.size * (0.8 + eased * 0.6));
+    }
+
+    function triggerMandala(initial = false) {
+      const now = millis();
+      if (!initial && now - lastTrigger < MIN_TRIGGER_DELAY) {
+        return;
+      }
+      lastTrigger = now;
+
+      const palette = random(COLOR_BANDS);
+      const hue = palette[0] + random(-12, 12);
+      const sat = palette[1] + random(-6, 6);
+      const bright = palette[2];
+      const symmetry = floor(random(5, 10));
+      const layers = floor(random(2, 5));
+      const baseRotation = random(TWO_PI);
+      const spinImpulse = random(-0.22, 0.26);
+      targetSpin += spinImpulse * 0.06;
+      const dim = min(width, height);
+
+      for (let i = 0; i < layers; i++) {
+        const layer = {
+          birth: now + i * random(16, 55),
+          life: random(3600, 5400),
+          hue: hue + random(-6, 5),
+          sat: constrain(sat + random(-5, 6), 40, 100),
+          bright,
+          alpha: random(0.46, 0.68),
+          hueShift: random(-20, 26),
+          strokeShift: random(-14, 16),
+          symmetry,
+          baseRotation: baseRotation + random(-0.22, 0.22),
+          spin: random(-PI * 0.45, PI * 0.45),
+          radialDistance: random(-0.08, 0.14) * dim,
+          size: random(dim * 0.3, dim * 0.48),
+          baseScale: random(0.7, 1.1),
+          growth: random(0.4, 0.8),
+          wobbleAmp: random(4, 12),
+          tailStretch: random(0.12, 0.3),
+          noiseSeed: random(1000),
+          points: makeShardPoints(),
+        };
+        mandalaLayers.push(layer);
+      }
+
+      spawnShimmers(hue, sat);
+      playChime(hue);
+    }
+
+    function makeShardPoints() {
+      const length = random(height * 0.16, height * 0.26);
+      const halfWidth = random(length * 0.12, length * 0.2);
+      const interiorSteps = floor(random(2, 5));
+      const pts = [{ x: 0, y: 0, waveOffset: random(TWO_PI), waveWeight: 0.12 }];
+
+      for (let i = 1; i <= interiorSteps; i++) {
+        const t = i / interiorSteps;
+        const eased = sin(t * PI * 0.9);
+        const offset = halfWidth * eased * random(0.75, 1);
+        const y = pow(t, 0.9) * length;
+        pts.push({
+          x: random(-offset, offset),
+          y,
+          waveOffset: random(TWO_PI),
+          waveWeight: 0.35 + t * 0.7
+        });
+      }
+
+      pts.push({ x: 0, y: length, waveOffset: random(TWO_PI), waveWeight: 1.2 });
+      const mirrored = [];
+      for (let i = pts.length - 2; i > 0; i--) {
+        const pt = pts[i];
+        mirrored.push({ x: -pt.x, y: pt.y, waveOffset: pt.waveOffset + PI, waveWeight: pt.waveWeight });
+      }
+
+      const full = pts.concat(mirrored);
+      // normalize for consistent scale
+      const maxY = full.reduce((max, pt) => Math.max(max, pt.y), 0);
+      const norm = maxY === 0 ? 1 : maxY;
+      return full.map(pt => ({
+        x: pt.x / norm,
+        y: pt.y / norm,
+        waveOffset: pt.waveOffset,
+        waveWeight: pt.waveWeight
+      }));
+    }
+
+    function spawnShimmers(hue, sat) {
+      const count = floor(random(24, 44));
+      for (let i = 0; i < count; i++) {
+        shimmerDots.push({
+          x: random(width),
+          y: random(height),
+          hue: (hue + random(-35, 35) + 360) % 360,
+          sat: constrain(sat + random(-20, 12), 20, 75),
+          size: random(2.5, 5.5),
+          life: 0,
+          maxLife: random(1400, 2400)
+        });
+      }
+    }
+
+    function playChime(hue) {
+      if (!synth) return;
+      const scale = [62, 65, 67, 69, 72, 76, 79, 81];
+      const note = random(scale);
+      const velocity = 0.18 + (hue % 90) / 500;
+      const duration = random(0.9, 1.6);
+      synth.play(midiToFreq(note), velocity, 0, duration);
+    }
+
+    function keyPressed() {
+      if (!started) return;
+      if (key === ' ' || keyCode === 32) {
+        triggerMandala();
+        return false;
+      }
+      if (keyCode === ENTER || keyCode === RETURN) {
+        resetMandala();
+        return false;
+      }
+    }
+
+    function mousePressed() {
+      if (!started) return;
+      triggerMandala();
+    }
+
+    function touchStarted() {
+      if (!started) return;
+      triggerMandala();
+      return false;
+    }
+
+    function resetMandala() {
+      mandalaLayers = [];
+      shimmerDots = [];
+      targetSpin = 0;
+      globalSpin = 0;
+      background(215, 45, 5);
+    }
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2;
+    }
+
+    function easeOutQuad(t) {
+      return 1 - (1 - t) * (1 - t);
+    }
+  </script>
+</body>
+</html>
