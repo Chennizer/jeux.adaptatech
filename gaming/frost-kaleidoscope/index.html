@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>Kaléidoscope givré — Jeu switch</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <link rel="stylesheet" href="../../css/otherswitch.css"/>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#07111f;color:#fff;font-family:"Inter",system-ui,sans-serif;}
+    canvas{display:block;position:fixed;inset:0;z-index:0;}
+    #langToggle{position:fixed;top:14px;right:14px;z-index:10001;padding:.4rem 1rem;border-radius:999px;border:2px solid #6fffe9;background:rgba(7,17,31,.75);color:#6fffe9;font-weight:700;cursor:pointer;letter-spacing:.02em;}
+    #promptOverlay{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1.5rem;gap:1.25rem;}
+    #promptOverlay p{max-width:min(720px,85vw);font-size:1.2rem;line-height:1.6;}
+    #startButton{padding:1rem 2.4rem;border-radius:14px;border:none;background:#6fffe9;color:#002b36;font-size:1.25rem;font-weight:700;cursor:pointer;}
+    #startButton:hover{filter:brightness(1.1);}    
+  </style>
+</head>
+<body>
+  <button id="langToggle" title="Changer de langue / Switch language">FR / EN</button>
+  <div id="promptOverlay">
+    <p class="translate" data-fr="Appuyez sur Espace pour peindre un nouveau motif de givre miroir." data-en="Press Space to paint a new mirrored frost pattern.">Appuyez sur Espace pour peindre un nouveau motif de givre miroir.</p>
+    <p class="translate" data-fr="Chaque pression ajoute des éclats tournoyants et des étincelles de glace." data-en="Each press launches swirling shards and icy sparkles.">Chaque pression ajoute des éclats tournoyants et des étincelles de glace.</p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+  <script>
+    let currentLang = (document.documentElement.lang || 'fr').toLowerCase() === 'en' ? 'en' : 'fr';
+    function applyTranslations(){
+      document.querySelectorAll('.translate').forEach(el=>{
+        const fr = el.getAttribute('data-fr');
+        const en = el.getAttribute('data-en');
+        const txt = currentLang === 'fr' ? fr : en;
+        if(txt != null){
+          if(['P','BUTTON','H1','H2','H3','DIV'].includes(el.tagName)) el.innerHTML = txt; else el.textContent = txt;
+        }
+      });
+      document.documentElement.lang = currentLang;
+      document.title = currentLang === 'fr' ? 'Kaléidoscope givré — Jeu switch' : 'Frost Kaleidoscope — Switch game';
+    }
+    document.getElementById('langToggle').addEventListener('pointerup', ()=>{
+      currentLang = currentLang === 'fr' ? 'en' : 'fr';
+      applyTranslations();
+    });
+    applyTranslations();
+
+    let started = false;
+    let shards = [];
+    let sparkles = [];
+    let bgTwinkle = [];
+    let lastPress = -Infinity;
+    let tapDelay = 650;
+
+    const palettes = [
+      ['#b5f5ff','#5cd4ff','#9be7ff','#ffffff'],
+      ['#d5e4ff','#70b7ff','#bdd7ff','#f8fbff'],
+      ['#9ff6ff','#4bc9ff','#97b6ff','#fef8ff'],
+      ['#c8f6ff','#6fffff','#bfb5ff','#ffffff']
+    ];
+
+    function startExperience(){
+      if(started) return;
+      started = true;
+      document.getElementById('promptOverlay')?.remove();
+      document.getElementById('langToggle').style.display = 'none';
+      if (typeof fullscreen === 'function') { fullscreen(true); } else { document.documentElement.requestFullscreen?.(); }
+    }
+
+    document.getElementById('startButton').addEventListener('pointerup', (ev)=>{
+      ev.preventDefault();
+      startExperience();
+    });
+
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      angleMode(RADIANS);
+      for(let i=0;i<120;i++){
+        bgTwinkle.push({
+          x: random(width),
+          y: random(height),
+          baseAlpha: random(20,70),
+          size: random(1,3),
+          speed: random(0.0006,0.0014),
+          phase: random(TWO_PI)
+        });
+      }
+    }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function draw(){
+      noStroke();
+      fill(7,17,31,40);
+      rect(0,0,width,height);
+
+      drawBackgroundGlow();
+
+      push();
+      translate(width/2, height/2);
+      shards = shards.filter(s => millis() - s.birth < s.life);
+      for(const s of shards){
+        const t = (millis() - s.birth) / s.life;
+        const eased = easeOutQuart(1 - constrain(t,0,1));
+        const spin = s.baseRotation + s.spin * (millis() - s.birth);
+        const alpha = (t < 0.1 ? map(t,0,0.1,0,1) : 1) * eased;
+        push();
+        rotate(spin);
+        const col = s.color;
+        stroke(red(col), green(col), blue(col), 160 * alpha);
+        strokeWeight(1.2 + s.weight * alpha);
+        fill(red(col), green(col), blue(col), 48 * alpha);
+        for(let i=0;i<s.sym;i++){
+          push();
+          rotate((TWO_PI / s.sym) * i);
+          drawShardShape(s.points);
+          scale(1,-1);
+          drawShardShape(s.points);
+          pop();
+        }
+        pop();
+      }
+      pop();
+
+      sparkles = sparkles.filter(sp => millis() - sp.birth < sp.life);
+      for(const sp of sparkles){
+        const t = (millis() - sp.birth) / sp.life;
+        const alpha = (1 - t) * sp.opacity;
+        const size = sp.size * (0.3 + t);
+        noStroke();
+        fill(sp.color.levels[0], sp.color.levels[1], sp.color.levels[2], alpha);
+        circle(sp.x, sp.y, size);
+      }
+    }
+
+    function drawBackgroundGlow(){
+      push();
+      noStroke();
+      for(const star of bgTwinkle){
+        const tw = star.baseAlpha + sin((millis()*star.speed)+star.phase)*30;
+        fill(100,160,255, tw);
+        circle(star.x, star.y, star.size);
+      }
+      pop();
+    }
+
+    function drawShardShape(points){
+      beginShape();
+      for(const p of points){
+        curveVertex(p.x, p.y);
+      }
+      endShape(CLOSE);
+    }
+
+    function triggerStamp(){
+      const now = millis();
+      if(now - lastPress < tapDelay) return;
+      lastPress = now;
+      const palette = random(palettes).map(c => color(c));
+      const baseCol = random(palette);
+      const sym = floor(random(6,11))*2;
+      const points = [];
+      const wedge = random(PI/10, PI/6);
+      const steps = floor(random(6,9));
+      const radiusBase = min(width,height) * random(0.18,0.38);
+      for(let i=0;i<steps;i++){
+        const t = i/(steps-1);
+        const ang = random(-wedge,wedge) * (0.5 + 0.5*cos(t*PI));
+        const r = radiusBase * (0.5 + 0.55*sin(t*PI) + random(-0.12,0.12));
+        const x = sin(ang) * r;
+        const y = -cos(ang) * r;
+        points.push({x,y});
+      }
+      shards.push({
+        points,
+        sym,
+        color: baseCol,
+        birth: now,
+        life: random(6000,9000),
+        baseRotation: random(TWO_PI),
+        spin: random(-0.0006,0.0006),
+        weight: random(2,4)
+      });
+      spawnSparkles(baseCol);
+    }
+
+    function spawnSparkles(baseCol){
+      const amt = 40;
+      for(let i=0;i<amt;i++){
+        const ang = random(TWO_PI);
+        const distR = random(40, min(width,height)/3);
+        const x = width/2 + cos(ang) * distR;
+        const y = height/2 + sin(ang) * distR;
+        const life = random(1200,2200);
+        sparkles.push({
+          x, y,
+          birth: millis(),
+          life,
+          color: baseCol,
+          size: random(4,9),
+          opacity: random(90,160)
+        });
+      }
+    }
+
+    function keyPressed(){
+      if(!started){
+        if(key === ' ' || keyCode === 32){
+          startExperience();
+        }
+        return;
+      }
+      if(key === ' ' || keyCode === 32){
+        triggerStamp();
+      } else if(keyCode === ENTER){
+        shards = [];
+        sparkles = [];
+      }
+    }
+
+    function touchStarted(){
+      if(!started){
+        startExperience();
+        return false;
+      }
+      triggerStamp();
+      return false;
+    }
+
+    function easeOutQuart(x){
+      return 1 - pow(1 - x, 4);
+    }
+  </script>
+</body>
+</html>
