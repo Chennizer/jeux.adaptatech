@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Lucioles - Jeu de fixation" data-en="Firefly Dwell Game" data-ja="ホタル - 注視ゲーム">Lucioles - Jeu de fixation</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
+  <style>
+    :root {
+      --sky: radial-gradient(120% 120% at 50% 35%, #1f2b53 0%, #0a0f1f 60%, #050710 100%);
+      --glow-yellow: #ffd166;
+      --glow-pink: #ff8fb1;
+      --glow-cyan: #7ae0ff;
+    }
+
+    body {
+      background: var(--sky);
+      color: #e7f7ff;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+    }
+
+    #gameArea {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      display: none;
+      background: var(--sky);
+    }
+
+    #ambientGlow {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(40% 30% at 20% 25%, rgba(255, 215, 128, 0.15), transparent 55%),
+                  radial-gradient(35% 30% at 75% 20%, rgba(122, 224, 255, 0.12), transparent 60%),
+                  radial-gradient(40% 35% at 50% 70%, rgba(255, 143, 177, 0.14), transparent 60%);
+      filter: blur(2px);
+      mix-blend-mode: screen;
+      opacity: 0.8;
+      z-index: 0;
+    }
+
+    #circleLayer,
+    #fireflyLayer {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    #fireflyLayer { z-index: 2; pointer-events: none; }
+
+    .glow-circle {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.28), rgba(0, 0, 0, 0.2));
+      box-shadow: 0 0 40px rgba(255, 255, 255, 0.35), 0 0 120px var(--halo, rgba(255, 209, 102, 0.3));
+      transition: transform 0.25s ease, opacity 0.35s ease;
+      cursor: none;
+      --progress: 0%;
+      isolation: isolate;
+    }
+
+    .glow-circle::before {
+      content: "";
+      position: absolute;
+      inset: 6%;
+      border-radius: 50%;
+      background: conic-gradient(
+        from -90deg,
+        rgba(255, 255, 255, 0.65) var(--progress),
+        rgba(255, 255, 255, 0.08) var(--progress)
+      );
+      opacity: 0;
+      transition: opacity 120ms ease;
+      mix-blend-mode: screen;
+    }
+
+    .glow-circle.charging::before { opacity: 1; }
+
+    .glow-circle.exploded {
+      opacity: 0;
+      transform: scale(1.2);
+    }
+
+    .ring {
+      position: absolute;
+      inset: -14%;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .firefly {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: radial-gradient(circle, #fff7c2 0%, #ffd166 50%, rgba(255, 255, 255, 0) 72%);
+      filter: drop-shadow(0 0 8px rgba(255, 209, 102, 0.8));
+      left: 0;
+      top: 0;
+      transform: translate(var(--x, 0px), var(--y, 0px)) scale(0.85);
+      opacity: 0;
+      animation: drift var(--duration, 2.6s) ease-out forwards;
+      mix-blend-mode: screen;
+    }
+
+    .firefly:nth-child(3n) { background: radial-gradient(circle, #e7f7ff 0%, #7ae0ff 50%, rgba(255, 255, 255, 0) 72%); }
+    .firefly:nth-child(3n+1) { background: radial-gradient(circle, #ffe5f1 0%, #ff8fb1 52%, rgba(255, 255, 255, 0) 72%); }
+
+    .firefly.celebrate {
+      animation: celebrate var(--celebrateDur, 2.4s) ease-in-out infinite alternate;
+      opacity: 1 !important;
+    }
+
+    @keyframes drift {
+      0% { opacity: 0; transform: translate(var(--x, 0px), var(--y, 0px)) scale(0.4); }
+      8% { opacity: 1; }
+      100% { opacity: 0; transform: translate(calc(var(--x, 0px) + var(--tx, 0px)), calc(var(--y, 0px) + var(--ty, 0px))) scale(1); }
+    }
+
+    @keyframes celebrate {
+      0% { transform: translate(var(--cx, 0px), var(--cy, 0px)) scale(1); filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.9)); }
+      50% { transform: translate(calc(var(--cx, 0px) + var(--wiggleX, 0px)), calc(var(--cy, 0px) - 12px)) scale(1.15); }
+      100% { transform: translate(calc(var(--cx, 0px) - var(--wiggleX, 0px)), calc(var(--cy, 0px) + 8px)) scale(0.9); }
+    }
+
+    #hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 3;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(122, 224, 255, 0.2);
+      border-radius: 14px;
+      padding: 12px 16px;
+      backdrop-filter: blur(8px);
+      max-width: min(480px, 80vw);
+    }
+
+    #hud h1 {
+      margin: 0 0 6px;
+      font-size: clamp(20px, 4vw, 26px);
+      color: #fff7c2;
+      letter-spacing: 0.3px;
+    }
+
+    #hud p {
+      margin: 4px 0 0;
+      line-height: 1.5;
+      font-size: 0.95rem;
+      color: #e4ecff;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 20;
+      padding: 8px 12px;
+      border: 2px solid #009688;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #009688;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #langToggle:focus-visible {
+      outline: 3px solid #4dd2ff;
+      outline-offset: 3px;
+    }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0;
+      transition: opacity 140ms ease;
+      mix-blend-mode: screen;
+    }
+
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.95), rgba(255, 215, 102, 0.7), rgba(122, 224, 255, 0.35));
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.9), 0 0 30px rgba(122, 224, 255, 0.7);
+      opacity: var(--gp-opacity, 1);
+    }
+
+    body.hide-native-cursor, body.hide-native-cursor * { cursor: none !important; }
+
+    @media (max-width: 720px) {
+      #hud { max-width: 90vw; }
+    }
+  </style>
+</head>
+<body class="menu-open">
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate" data-fr="Lucioles" data-en="Fireflies" data-ja="ホタル">Lucioles</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label">
+              <input type="checkbox" id="muteSFX">
+              <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds" data-ja="効果音をオフ">Désactiver les sons</span>
+            </label>
+          </div>
+
+          <div class="option-item">
+            <label for="sfxVol" class="teal-label">
+              <span class="translate" data-fr="Volume des sons:" data-en="Sound volume:" data-ja="効果音の音量：">Volume des sons:</span>
+              <span id="sfxVolVal">70</span>
+            </label>
+            <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="70">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="circleCount" class="teal-label label-block translate" data-fr="Nombre de cercles" data-en="Number of circles" data-ja="サークルの数">Nombre de cercles</label>
+            <input type="range" id="circleCount" class="styled-slider" min="3" max="8" step="1" value="5">
+            <div class="value-readout"><span id="circleCountVal">5</span></div>
+          </div>
+
+          <div class="option-item">
+            <label for="fireflyCount" class="teal-label label-block translate" data-fr="Lucioles par cercle" data-en="Fireflies per circle" data-ja="サークルごとのホタル">Lucioles par cercle</label>
+            <input type="range" id="fireflyCount" class="styled-slider" min="6" max="24" step="2" value="12">
+            <div class="value-readout"><span id="fireflyCountVal">12</span></div>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTimeSlider" class="teal-label">
+              <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:" data-ja="注視時間：">Temps de fixation:</span>
+              <span id="dwellTimeVal">1500</span> ms
+            </label>
+            <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="3500" step="100" value="1500">
+          </div>
+
+          <div class="option-item gp-compact">
+            <label class="teal-label">
+              <input type="checkbox" id="showGazePointer" checked>
+              <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)" data-ja="視線ポインターを表示（マウスを非表示）">Afficher le pointeur (cache la souris)</span>
+            </label>
+
+            <details id="gpDetails">
+              <summary class="gp-summary">
+                <span class="translate" data-fr="Options avancées du pointeur" data-en="Pointer advanced options" data-ja="ポインターの詳細設定">Options avancées du pointeur</span>
+              </summary>
+
+              <div class="gp-advanced">
+                <div class="gp-row">
+                  <label for="gazeSize" class="teal-label gp-label">
+                    <span class="translate" data-fr="Taille" data-en="Size" data-ja="サイズ">Taille</span>:
+                    <span id="gazeSizeVal">36</span> px
+                  </label>
+                  <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="120" step="2" value="36">
+                </div>
+
+                <div class="gp-row">
+                  <label for="gazeOpacity" class="teal-label gp-label">
+                    <span class="translate" data-fr="Opacité" data-en="Opacity" data-ja="不透明度">Opacité</span>:
+                    <span id="gazeOpacityVal">100</span>%
+                  </label>
+                  <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+    </div>
+  </div>
+
+  <div id="gameArea">
+    <div id="ambientGlow"></div>
+    <div id="circleLayer"></div>
+    <div id="fireflyLayer"></div>
+
+    <div id="hud">
+      <h1 class="translate" data-fr="Cueille les halos de couleur" data-en="Catch the glowing halos" data-ja="光る輪を集めよう">Cueille les halos de couleur</h1>
+      <p class="translate" data-fr="Fixe chaque cercle coloré jusqu'à ce qu'il éclate. Les lucioles s'envolent, puis dansent lorsque tous les cercles sont libérés." data-en="Dwell on each colored circle until it bursts. Fireflies fly out, then dance once every circle is cleared." data-ja="色のついた輪を見つめて破裂させましょう。ホタルが飛び出し、すべての輪を壊すと踊り始めます。">Fixe chaque cercle coloré jusqu'à ce qu'il éclate. Les lucioles s'envolent, puis dansent lorsque tous les cercles sont libérés.</p>
+    </div>
+  </div>
+
+  <div id="gazePointer"></div>
+
+  <script>
+    const langOrder = ['fr', 'en', 'ja'];
+    let currentLang = localStorage.getItem('fireflyLang') || 'fr';
+
+    function applyLanguage(lang){
+      const target = langOrder.includes(lang) ? lang : 'fr';
+      document.documentElement.lang = target;
+      document.querySelectorAll('.translate').forEach(el => {
+        const text = el.dataset[target];
+        if(text) el.textContent = text;
+      });
+      const toggle = document.getElementById('langToggle');
+      if(toggle){ toggle.textContent = target.toUpperCase(); }
+    }
+
+    function toggleLanguage(){
+      const idx = langOrder.indexOf(currentLang);
+      currentLang = langOrder[(idx + 1) % langOrder.length];
+      localStorage.setItem('fireflyLang', currentLang);
+      applyLanguage(currentLang);
+    }
+
+    const gameOptions = document.getElementById('game-options');
+    const startButton = document.getElementById('startButton');
+    const circleLayer = document.getElementById('circleLayer');
+    const fireflyLayer = document.getElementById('fireflyLayer');
+    const gameArea = document.getElementById('gameArea');
+    const gazePointer = document.getElementById('gazePointer');
+
+    const dwellSlider = document.getElementById('dwellTimeSlider');
+    const dwellLabel = document.getElementById('dwellTimeVal');
+    const circleCount = document.getElementById('circleCount');
+    const circleCountVal = document.getElementById('circleCountVal');
+    const fireflyCount = document.getElementById('fireflyCount');
+    const fireflyCountVal = document.getElementById('fireflyCountVal');
+    const sfxVol = document.getElementById('sfxVol');
+    const sfxVolVal = document.getElementById('sfxVolVal');
+    const muteToggle = document.getElementById('muteSFX');
+    const showGazePointer = document.getElementById('showGazePointer');
+    const gazeSize = document.getElementById('gazeSize');
+    const gazeSizeVal = document.getElementById('gazeSizeVal');
+    const gazeOpacity = document.getElementById('gazeOpacity');
+    const gazeOpacityVal = document.getElementById('gazeOpacityVal');
+
+    const state = {
+      dwellTime: parseInt(dwellSlider.value, 10),
+      circles: [],
+      activeHover: null,
+      hoverRAF: 0,
+      targetCircles: parseInt(circleCount.value, 10),
+      perCircleFireflies: parseInt(fireflyCount.value, 10)
+    };
+
+    let audioCtx;
+
+    function ensureAudio(){
+      if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      return audioCtx;
+    }
+
+    function playPop(){
+      if(muteToggle.checked) return;
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const vol = parseInt(sfxVol.value, 10) / 100;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(220, now + 0.22);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.35 * vol, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    }
+
+    function updateGazePointer(){
+      const show = showGazePointer.checked;
+      gazePointer.style.opacity = show ? 1 : 0;
+      document.body.classList.toggle('hide-native-cursor', show);
+      gazePointer.style.setProperty('--gp-size', `${gazeSize.value}px`);
+      gazePointer.style.setProperty('--gp-opacity', gazeOpacity.value / 100);
+      gazeSizeVal.textContent = gazeSize.value;
+      gazeOpacityVal.textContent = gazeOpacity.value;
+    }
+
+    function syncLabels(){
+      dwellLabel.textContent = dwellSlider.value;
+      circleCountVal.textContent = circleCount.value;
+      fireflyCountVal.textContent = fireflyCount.value;
+      sfxVolVal.textContent = sfxVol.value;
+      state.dwellTime = parseInt(dwellSlider.value, 10);
+      state.targetCircles = parseInt(circleCount.value, 10);
+      state.perCircleFireflies = parseInt(fireflyCount.value, 10);
+      updateGazePointer();
+    }
+
+    dwellSlider.addEventListener('input', syncLabels);
+    circleCount.addEventListener('input', syncLabels);
+    fireflyCount.addEventListener('input', syncLabels);
+    sfxVol.addEventListener('input', syncLabels);
+    gazeSize.addEventListener('input', updateGazePointer);
+    gazeOpacity.addEventListener('input', updateGazePointer);
+    showGazePointer.addEventListener('change', updateGazePointer);
+
+    function setPointerPosition(x, y){
+      gazePointer.style.transform = `translate(${x}px, ${y}px)`;
+    }
+
+    document.addEventListener('pointermove', (e) => {
+      setPointerPosition(e.clientX, e.clientY);
+    });
+
+    function randomColor(){
+      const palette = [
+        { fill: 'rgba(255, 209, 102, 0.9)', halo: 'rgba(255, 209, 102, 0.35)' },
+        { fill: 'rgba(122, 224, 255, 0.9)', halo: 'rgba(122, 224, 255, 0.35)' },
+        { fill: 'rgba(255, 143, 177, 0.9)', halo: 'rgba(255, 143, 177, 0.35)' },
+        { fill: 'rgba(164, 255, 210, 0.9)', halo: 'rgba(164, 255, 210, 0.32)' }
+      ];
+      return palette[Math.floor(Math.random() * palette.length)];
+    }
+
+    function spawnCircles(){
+      circleLayer.innerHTML = '';
+      state.circles = [];
+      let attempts = 0;
+      const toCreate = state.targetCircles;
+      while(state.circles.length < toCreate && attempts < toCreate * 8){
+        attempts++;
+        const size = 120 + Math.random() * 160;
+        const padding = size * 0.6;
+        const x = padding + Math.random() * (window.innerWidth - padding * 2);
+        const y = padding + Math.random() * (window.innerHeight - padding * 2);
+        const overlaps = state.circles.some(c => {
+          const dx = c.x - x;
+          const dy = c.y - y;
+          return Math.hypot(dx, dy) < (c.size + size) * 0.55;
+        });
+        if(overlaps) continue;
+
+        const colors = randomColor();
+        const circle = document.createElement('div');
+        circle.className = 'glow-circle';
+        circle.style.width = `${size}px`;
+        circle.style.height = `${size}px`;
+        circle.style.left = `${x - size/2}px`;
+        circle.style.top = `${y - size/2}px`;
+        circle.style.background = `radial-gradient(circle at 32% 32%, rgba(255,255,255,0.92), ${colors.fill}, rgba(0,0,0,0.22))`;
+        circle.style.setProperty('--halo', colors.halo);
+
+        const ring = document.createElement('div');
+        ring.className = 'ring';
+        circle.appendChild(ring);
+
+        const circleData = { el: circle, x, y, size, hovering: false };
+        circle.addEventListener('pointerenter', () => beginHover(circleData));
+        circle.addEventListener('pointerleave', cancelHover);
+
+        circleLayer.appendChild(circle);
+        state.circles.push(circleData);
+      }
+    }
+
+    function beginHover(circle){
+      cancelHover();
+      state.activeHover = { circle, start: performance.now() };
+      circle.el.classList.add('charging');
+      tickHover();
+    }
+
+    function tickHover(now = performance.now()){
+      if(!state.activeHover) return;
+      const { circle, start } = state.activeHover;
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / state.dwellTime, 1);
+      circle.el.style.setProperty('--progress', `${progress * 100}%`);
+      if(progress >= 1){
+        explodeCircle(circle);
+        cancelHover();
+      } else {
+        state.hoverRAF = requestAnimationFrame(tickHover);
+      }
+    }
+
+    function cancelHover(){
+      if(state.hoverRAF){ cancelAnimationFrame(state.hoverRAF); state.hoverRAF = 0; }
+      if(state.activeHover){
+        state.activeHover.circle.el.style.setProperty('--progress', '0%');
+        state.activeHover.circle.el.classList.remove('charging');
+      }
+      state.activeHover = null;
+    }
+
+    function explodeCircle(circle){
+      if(circle.exploded) return;
+      circle.exploded = true;
+      circle.el.classList.add('exploded');
+      playPop();
+      releaseFireflies(circle);
+      setTimeout(() => circle.el.remove(), 260);
+
+      if(state.circles.every(c => c.exploded)){
+        setTimeout(celebrateFireflies, 650);
+      }
+    }
+
+    function releaseFireflies(circle){
+      const count = state.perCircleFireflies;
+      for(let i = 0; i < count; i++){
+        const fly = document.createElement('div');
+        fly.className = 'firefly';
+        const angle = Math.random() * Math.PI * 2;
+        const dist = circle.size * (0.08 + Math.random() * 0.35);
+        const startX = circle.x + Math.cos(angle) * dist;
+        const startY = circle.y + Math.sin(angle) * dist;
+        const targetDist = circle.size * (0.8 + Math.random() * 1.1);
+        const tx = Math.cos(angle) * targetDist;
+        const ty = Math.sin(angle) * targetDist;
+        fly.style.setProperty('--x', `${startX}px`);
+        fly.style.setProperty('--y', `${startY}px`);
+        fly.style.setProperty('--tx', `${tx}px`);
+        fly.style.setProperty('--ty', `${ty}px`);
+        fly.style.setProperty('--duration', `${2 + Math.random() * 1.8}s`);
+        fireflyLayer.appendChild(fly);
+      }
+    }
+
+    function celebrateFireflies(){
+      const flies = Array.from(fireflyLayer.querySelectorAll('.firefly'));
+      flies.forEach((fly, idx) => {
+        const rect = fly.getBoundingClientRect();
+        fly.style.setProperty('--cx', `${rect.left + rect.width / 2}px`);
+        fly.style.setProperty('--cy', `${rect.top + rect.height / 2}px`);
+        fly.style.setProperty('--wiggleX', `${6 + Math.random() * 18}px`);
+        fly.style.setProperty('--celebrateDur', `${1.6 + Math.random() * 1.2}s`);
+        fly.classList.add('celebrate');
+      });
+
+      setTimeout(() => {
+        fireflyLayer.innerHTML = '';
+        spawnCircles();
+      }, 2600);
+    }
+
+    startButton.addEventListener('click', () => {
+      document.body.classList.remove('menu-open');
+      gameOptions.style.display = 'none';
+      gameArea.style.display = 'block';
+      syncLabels();
+      spawnCircles();
+      updateGazePointer();
+    });
+
+    document.getElementById('langToggle').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleLanguage();
+    });
+
+    applyLanguage(currentLang);
+    syncLabels();
+    updateGazePointer();
+  </script>
+</body>
+</html>
