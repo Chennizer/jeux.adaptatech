@@ -90,8 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Global variable for fixation delay (in ms), default 2000ms
   let fixationDelay = 2000;
-  // Global variable for tile size in vh; default 40
-  let tileSize = 40;
+  // Global variable for tile size in vh; default 42
+  let tileSize = 42;
 
   const tileChoiceMap = new WeakMap();
   const POINTER_MOVE_THRESHOLD = 10;
@@ -491,13 +491,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Tile Size Slider Setup (for final game tiles) with dynamic gap adjustment.
-  // Base: when tile size is 40vh, gap is 10vh.
+  // Base: when tile size is 42vh, gap is 4.5vh.
   if (tileSizeInput && tileSizeValue) {
     tileSizeInput.addEventListener('input', () => {
       tileSize = parseInt(tileSizeInput.value, 10);
       tileSizeValue.textContent = tileSize;
       document.documentElement.style.setProperty('--tile-size', tileSize + 'vh');
-      const newGap = 10 * (40 / tileSize);
+      const newGap = 4.5 * (42 / tileSize);
       document.documentElement.style.setProperty('--tile-gap', newGap + 'vh');
     });
   }
@@ -635,7 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const row = document.createElement('div');
       row.style.display = "flex";
       row.style.justifyContent = "center";
-      row.style.gap = "var(--tile-gap)";
+      row.style.gap = "var(--tile-gap-clamped, var(--tile-gap))";
       items.forEach(choice => row.appendChild(createTile(choice)));
       return row;
     };
