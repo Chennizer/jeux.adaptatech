@@ -283,6 +283,16 @@
       let remainingMatches = 0;
       let dragState = null;
 
+      function getPoint(event) {
+        if (event.touches && event.touches.length > 0) {
+          return event.touches[0];
+        }
+        if (event.changedTouches && event.changedTouches.length > 0) {
+          return event.changedTouches[0];
+        }
+        return event;
+      }
+
       const boardEl = document.getElementById('shadowBoard');
       const piecesEl = document.getElementById('shadowPieces');
       const statusEl = document.getElementById('shadowStatus');
@@ -372,6 +382,7 @@
           token.appendChild(img);
 
           token.addEventListener('pointerdown', (event) => beginDrag(event, token));
+          token.addEventListener('touchstart', (event) => beginDrag(event, token), { passive: false });
 
           piecesEl.appendChild(token);
         });
@@ -382,6 +393,7 @@
           return;
         }
         event.preventDefault();
+        const point = getPoint(event);
 
         const rect = token.getBoundingClientRect();
         const placeholder = document.createElement('div');
@@ -393,9 +405,9 @@
         dragState = {
           token,
           placeholder,
-          pointerId: event.pointerId,
-          offsetX: event.clientX - rect.left,
-          offsetY: event.clientY - rect.top,
+          pointerId: typeof event.pointerId === 'number' ? event.pointerId : null,
+          offsetX: point.clientX - rect.left,
+          offsetY: point.clientY - rect.top,
           currentSlot: null
         };
 
@@ -408,23 +420,33 @@
         token.style.margin = '0';
         token.style.zIndex = '2000';
 
-        token.setPointerCapture(event.pointerId);
+        if (typeof event.pointerId === 'number' && token.setPointerCapture) {
+          token.setPointerCapture(event.pointerId);
+        }
         document.body.appendChild(token);
 
-        moveToken(event.clientX, event.clientY);
+        moveToken(point.clientX, point.clientY);
 
-        token.addEventListener('pointermove', handleDragMove);
-        token.addEventListener('pointerup', endDrag);
-        token.addEventListener('pointercancel', cancelDrag);
+        window.addEventListener('pointermove', handleDragMove, { passive: false });
+        window.addEventListener('pointerup', endDrag, { passive: false });
+        window.addEventListener('pointercancel', cancelDrag, { passive: false });
+        window.addEventListener('touchmove', handleDragMove, { passive: false });
+        window.addEventListener('touchend', endDrag, { passive: false });
+        window.addEventListener('touchcancel', cancelDrag, { passive: false });
         statusEl.textContent = 'Dépose l’image sur la bonne ombre.';
       }
 
       function handleDragMove(event) {
-        if (!dragState || event.pointerId !== dragState.pointerId) {
+        if (!dragState) {
           return;
         }
-        moveToken(event.clientX, event.clientY);
-        highlightSlot(event.clientX, event.clientY);
+        if (dragState.pointerId !== null && typeof event.pointerId === 'number' && event.pointerId !== dragState.pointerId) {
+          return;
+        }
+        event.preventDefault();
+        const point = getPoint(event);
+        moveToken(point.clientX, point.clientY);
+        highlightSlot(point.clientX, point.clientY);
       }
 
       function moveToken(clientX, clientY) {
@@ -446,14 +468,20 @@
       }
 
       function endDrag(event) {
-        if (!dragState || event.pointerId !== dragState.pointerId) {
+        if (!dragState) {
+          return;
+        }
+        if (dragState.pointerId !== null && typeof event.pointerId === 'number' && event.pointerId !== dragState.pointerId) {
           return;
         }
 
         const { token } = dragState;
-        token.releasePointerCapture(event.pointerId);
+        if (typeof event.pointerId === 'number' && token.releasePointerCapture) {
+          token.releasePointerCapture(event.pointerId);
+        }
 
-        const slot = findSlotAtPoint(event.clientX, event.clientY);
+        const point = getPoint(event);
+        const slot = findSlotAtPoint(point.clientX, point.clientY);
         if (slot && slot.dataset.filled !== 'true') {
           completeAttempt(slot);
         } else {
@@ -467,7 +495,10 @@
       }
 
       function cancelDrag(event) {
-        if (!dragState || event.pointerId !== dragState.pointerId) {
+        if (!dragState) {
+          return;
+        }
+        if (dragState.pointerId !== null && typeof event.pointerId === 'number' && event.pointerId !== dragState.pointerId) {
           return;
         }
         resetToken();
@@ -544,9 +575,12 @@
         token.style.width = '';
         token.style.height = '';
 
-        token.removeEventListener('pointermove', handleDragMove);
-        token.removeEventListener('pointerup', endDrag);
-        token.removeEventListener('pointercancel', cancelDrag);
+        window.removeEventListener('pointermove', handleDragMove);
+        window.removeEventListener('pointerup', endDrag);
+        window.removeEventListener('pointercancel', cancelDrag);
+        window.removeEventListener('touchmove', handleDragMove);
+        window.removeEventListener('touchend', endDrag);
+        window.removeEventListener('touchcancel', cancelDrag);
 
         if (lockInPlace) {
           token.remove();
