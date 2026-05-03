@@ -50,6 +50,7 @@ let stars = [];
 let segments = [];
 const linkedPairs = new Set();
 let celebration = null;
+let bgStars = [];
 
 const CONSTELLATIONS = {
   real: {
@@ -84,7 +85,19 @@ function refreshShapeMenu() {
   }
 }
 
-function resize(){ canvas.width = innerWidth; canvas.height = innerHeight - document.querySelector('.top').offsetHeight; buildShape(); }
+function resize(){
+  canvas.width = innerWidth;
+  canvas.height = innerHeight - document.querySelector('.top').offsetHeight;
+  bgStars = Array.from({length: Math.max(180, Math.floor((canvas.width*canvas.height)/7000))}, () => ({
+    x: Math.random()*canvas.width,
+    y: Math.random()*canvas.height,
+    r: 0.6 + Math.random()*1.8,
+    a: 0.18 + Math.random()*0.5,
+    tw: Math.random()*Math.PI*2,
+    speed: 0.4 + Math.random()*1.6
+  }));
+  buildShape();
+}
 addEventListener('resize', resize);
 categoryEl.addEventListener('change', () => { currentCategory = categoryEl.value; refreshShapeMenu(); buildShape(); });
 shapeEl.addEventListener('change', buildShape);
@@ -138,7 +151,7 @@ function ensureAudio(){
   if (ensureAudio.ctx) return ensureAudio;
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const ctx = new Ctx();
-  const master = ctx.createGain(); master.gain.value = 0.75; master.connect(ctx.destination);
+  const master = ctx.createGain(); master.gain.value = 0.48; master.connect(ctx.destination);
 
   const convolver = ctx.createConvolver();
   const len = ctx.sampleRate * 2.8;
@@ -148,8 +161,8 @@ function ensureAudio(){
     for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, 2.5);
   }
   convolver.buffer = ir;
-  const wet = ctx.createGain(); wet.gain.value = 0.45;
-  const dry = ctx.createGain(); dry.gain.value = 0.7;
+  const wet = ctx.createGain(); wet.gain.value = 0.62;
+  const dry = ctx.createGain(); dry.gain.value = 0.46;
   convolver.connect(wet); wet.connect(master); dry.connect(master);
 
   ensureAudio.ctx = ctx; ensureAudio.master = master; ensureAudio.convolver = convolver; ensureAudio.wet = wet; ensureAudio.dry = dry;
@@ -163,7 +176,7 @@ function playChime(step){
   const scale = [0,4,7,12,14,19];
   const base = 330 * Math.pow(2, scale[step % scale.length]/12);
 
-  [1, 1.5, 2.5, 3.2].forEach((harm, i) => {
+  [1, 1.333, 2, 2.666, 3.2].forEach((harm, i) => {
     const o = a.ctx.createOscillator();
     const g = a.ctx.createGain();
     o.type = i % 2 === 0 ? 'triangle' : 'sine';
@@ -172,10 +185,10 @@ function playChime(step){
     o.connect(g);
     g.connect(a.dry);
     g.connect(a.convolver);
-    g.gain.exponentialRampToValueAtTime(0.14/(i+1), now+0.015);
-    g.gain.exponentialRampToValueAtTime(0.0001, now+1.2 + i*0.18);
-    o.start(now + i*0.015);
-    o.stop(now+1.45+i*0.18);
+    g.gain.exponentialRampToValueAtTime(0.08/(i+1), now+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now+1.6 + i*0.24);
+    o.start(now + i*0.02);
+    o.stop(now+1.9+i*0.22);
   });
 }
 
@@ -184,11 +197,21 @@ function draw(){
   ctx.fillStyle = '#000';
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // soft background stars
-  for (let i=0;i<120;i++) {
-    const x=(i*179)%canvas.width, y=(i*313)%canvas.height;
-    ctx.fillStyle='rgba(255,255,255,0.12)';
-    ctx.beginPath(); ctx.arc(x,y,1.2,0,Math.PI*2); ctx.fill();
+  // star field background (static positions + twinkle)
+  for (const st of bgStars) {
+    const twinkle = 0.55 + 0.45 * Math.sin(nowMs * 0.0012 * st.speed + st.tw);
+    const alpha = st.a * twinkle;
+    const r = st.r * (0.8 + twinkle * 0.5);
+    ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(st.x, st.y, r, 0, Math.PI*2); ctx.fill();
+    if (twinkle > 0.88) {
+      ctx.strokeStyle = `rgba(180,210,255,${(alpha*0.45).toFixed(3)})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(st.x-r*1.8, st.y); ctx.lineTo(st.x+r*1.8, st.y);
+      ctx.moveTo(st.x, st.y-r*1.8); ctx.lineTo(st.x, st.y+r*1.8);
+      ctx.stroke();
+    }
   }
 
   for (const seg of segments) {
