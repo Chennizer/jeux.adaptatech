@@ -11,6 +11,7 @@
     .top label { font-size:14px; display:flex; gap:6px; align-items:center; }
     button,input,select { font-size:14px; }
     #sky { display:block; width:100vw; height:calc(100vh - 68px); cursor:none; background:#000; }
+    #gazeDot{position:fixed;width:34px;height:34px;border-radius:50%;background:rgba(70,150,255,.85);box-shadow:0 0 18px rgba(70,150,255,.9);transform:translate(-50%,-50%);pointer-events:none;z-index:5;opacity:0;}
   </style>
 </head>
 <body>
@@ -28,6 +29,7 @@
     <button id="resetBtn">Réinitialiser</button>
   </div>
   <canvas id="sky"></canvas>
+  <div id="gazeDot"></div>
 
 <script>
 const canvas = document.getElementById('sky');
@@ -39,7 +41,7 @@ const muteEl = document.getElementById('mute');
 const pointer = {x:0,y:0,active:false};
 let stars = [];
 let segments = [];
-let nodeIndex = 0;
+const linkedPairs = new Set();
 
 const CONSTELLATIONS = {
   ursa: {
@@ -60,13 +62,15 @@ function resize(){ canvas.width = innerWidth; canvas.height = innerHeight - docu
 addEventListener('resize', resize);
 shapeEl.addEventListener('change', buildShape);
 scaleEl.addEventListener('input', buildShape);
-document.getElementById('resetBtn').addEventListener('click', () => { segments = []; nodeIndex = 0; });
+document.getElementById('resetBtn').addEventListener('click', () => { linkedPairs.clear(); for (const seg of segments) seg.lit = 0; for (const st of stars) st.glow = 0; });
 
 canvas.addEventListener('mousemove', e => {
   const r = canvas.getBoundingClientRect();
   pointer.x = e.clientX - r.left;
   pointer.y = e.clientY - r.top;
   pointer.active = true;
+  const d = document.getElementById('gazeDot');
+  d.style.opacity = 1; d.style.left = e.clientX + "px"; d.style.top = e.clientY + "px";
 });
 
 function buildShape(){
@@ -74,7 +78,7 @@ function buildShape(){
   const s = Number(scaleEl.value);
   const w = canvas.width, h = canvas.height;
   const cx = w*0.5, cy = h*0.52;
-  const span = Math.min(w,h) * 0.65 * s;
+  const span = Math.min(w,h) * 1.05 * s;
   stars = cfg.stars.map(([x,y]) => ({
     x: cx + ((x-50)/100)*span,
     y: cy + ((y-50)/100)*span,
@@ -82,7 +86,7 @@ function buildShape(){
     reached: false
   }));
   segments = cfg.links.map(([a,b]) => ({a,b,lit:0}));
-  nodeIndex = 0;
+  linkedPairs.clear();
 }
 
 function ensureAudio(){
@@ -143,7 +147,8 @@ function draw(){
   for (const seg of segments) {
     seg.lit = Math.max(0, seg.lit - 0.008);
     const a = stars[seg.a], b = stars[seg.b];
-    ctx.strokeStyle = `rgba(120,190,255,${0.15 + seg.lit*0.85})`;
+    if (seg.lit <= 0.001) continue;
+    ctx.strokeStyle = `rgba(120,190,255,${seg.lit})`;
     ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
   }
@@ -151,14 +156,23 @@ function draw(){
   for (let i=0;i<stars.length;i++) {
     const s = stars[i];
     s.glow = Math.max(0.15, s.glow - 0.01);
-    const near = pointer.active && Math.hypot(pointer.x-s.x,pointer.y-s.y) < 48;
-    if (near && i===nodeIndex) {
+    const near = pointer.active && Math.hypot(pointer.x-s.x,pointer.y-s.y) < 58;
+    if (near) {
       s.glow = 1;
-      s.reached = true;
-      nodeIndex = (nodeIndex + 1) % stars.length;
-      const link = segments.find(x => (x.a===i && x.b===nodeIndex) || (x.b===i && x.a===nodeIndex));
-      if (link) link.lit = 1;
-      playChime(5 + i*2);
+      let nearest = -1, best = Infinity;
+      for (let j=0;j<stars.length;j++) {
+        if (j===i) continue;
+        const d = Math.hypot(stars[j].x-s.x, stars[j].y-s.y);
+        if (d < best) { best = d; nearest = j; }
+      }
+      if (nearest >= 0) {
+        const key = i < nearest ? `${i}-${nearest}` : `${nearest}-${i}`;
+        if (!linkedPairs.has(key)) {
+          linkedPairs.add(key);
+          segments.push({a:i,b:nearest,lit:1});
+          playChime(5 + i*2);
+        }
+      }
     }
     const r = 6 + s.glow*8; // larger stars
     const grad = ctx.createRadialGradient(s.x,s.y,1,s.x,s.y,r*2.8);
