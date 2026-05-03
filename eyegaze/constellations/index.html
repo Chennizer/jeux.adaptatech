@@ -42,6 +42,8 @@ const pointer = {x:0,y:0,active:false};
 let stars = [];
 let segments = [];
 const linkedPairs = new Set();
+const shapeOrder = ['ursa','orion','cassiopeia'];
+let celebration = null;
 
 const CONSTELLATIONS = {
   ursa: {
@@ -62,7 +64,7 @@ function resize(){ canvas.width = innerWidth; canvas.height = innerHeight - docu
 addEventListener('resize', resize);
 shapeEl.addEventListener('change', buildShape);
 scaleEl.addEventListener('input', buildShape);
-document.getElementById('resetBtn').addEventListener('click', () => { linkedPairs.clear(); for (const seg of segments) seg.lit = 0; for (const st of stars) st.glow = 0; });
+document.getElementById('resetBtn').addEventListener('click', () => { celebration = null; linkedPairs.clear(); for (const seg of segments) seg.lit = 0; for (const st of stars) st.glow = 0; });
 
 canvas.addEventListener('mousemove', e => {
   const r = canvas.getBoundingClientRect();
@@ -134,6 +136,7 @@ function playChime(step){
 }
 
 function draw(){
+  const nowMs = performance.now();
   ctx.fillStyle = '#000';
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
@@ -145,7 +148,6 @@ function draw(){
   }
 
   for (const seg of segments) {
-    seg.lit = Math.max(0, seg.lit - 0.008);
     const a = stars[seg.a], b = stars[seg.b];
     if (seg.lit <= 0.001) continue;
     ctx.strokeStyle = `rgba(120,190,255,${seg.lit})`;
@@ -171,6 +173,14 @@ function draw(){
           linkedPairs.add(key);
           segments.push({a:i,b:nearest,lit:1});
           playChime(5 + i*2);
+
+          const touched = new Set();
+          for (const seg of segments) {
+            if (seg.lit > 0) { touched.add(seg.a); touched.add(seg.b); }
+          }
+          if (!celebration && touched.size === stars.length) {
+            celebration = { start: performance.now(), phase: 'twinkle' };
+          }
         }
       }
     }
@@ -183,6 +193,25 @@ function draw(){
     ctx.beginPath(); ctx.arc(s.x,s.y,r*2.1,0,Math.PI*2); ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2); ctx.fill();
+  }
+
+
+  if (celebration) {
+    const elapsed = nowMs - celebration.start;
+    if (elapsed < 2200) {
+      const pulse = 1 + 0.12 * Math.sin(nowMs * 0.02);
+      for (const st of stars) st.glow = Math.max(st.glow, 0.7 * pulse);
+    } else if (elapsed < 3600) {
+      const fade = Math.max(0, 1 - (elapsed - 2200) / 1400);
+      ctx.fillStyle = `rgba(0,0,0,${1-fade})`;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+    } else {
+      const idx = shapeOrder.indexOf(shapeEl.value);
+      const next = shapeOrder[(idx + 1) % shapeOrder.length];
+      shapeEl.value = next;
+      buildShape();
+      celebration = null;
+    }
   }
 
   requestAnimationFrame(draw);
