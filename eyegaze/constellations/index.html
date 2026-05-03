@@ -27,7 +27,9 @@
       <select id="shape"></select>
     </label>
     <label>Échelle <input id="scale" type="range" min="0.7" max="1.6" step="0.1" value="1"></label>
-    <label><input id="mute" type="checkbox"> Muet</label>
+    <label><input id="mute" type="checkbox"> Muet FX</label>
+    <label><input id="musicMute" type="checkbox"> Muet musique</label>
+    <label>Vol musique <input id="musicVol" type="range" min="0" max="100" value="28"></label>
     <button id="resetBtn">Réinitialiser</button>
   </div>
   <canvas id="sky"></canvas>
@@ -40,6 +42,8 @@ const categoryEl = document.getElementById('category');
 const shapeEl = document.getElementById('shape');
 const scaleEl = document.getElementById('scale');
 const muteEl = document.getElementById('mute');
+const musicMuteEl = document.getElementById('musicMute');
+const musicVolEl = document.getElementById('musicVol');
 
 const pointer = {x:0,y:0,active:false};
 let stars = [];
@@ -53,11 +57,13 @@ const CONSTELLATIONS = {
     orion: {label:'Orion', stars:[[20,15],[35,20],[50,30],[30,45],[47,48],[61,30],[68,16],[44,58],[55,62]], links:[[0,1],[1,2],[2,5],[5,6],[2,4],[4,3],[1,3],[7,8],[2,7],[4,8]]},
     cassiopeia: {label:'Cassiopée', stars:[[15,40],[28,26],[41,44],[56,26],[72,42]], links:[[0,1],[1,2],[2,3],[3,4]]},
     cygnus: {label:'Cygne', stars:[[50,14],[50,30],[50,46],[50,62],[35,30],[65,30],[32,48],[68,48]], links:[[0,1],[1,2],[2,3],[1,4],[1,5],[2,6],[2,7]]},
-    scorpius: {label:'Scorpion', stars:[[14,22],[26,26],[36,32],[46,40],[54,50],[62,58],[74,56],[78,46],[71,42]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8]]}
+    scorpius: {label:'Scorpion', stars:[[14,22],[26,26],[36,32],[46,40],[54,50],[62,58],[74,56],[78,46],[71,42]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8]]},
+    leo: {label:'Lion', stars:[[20,42],[32,33],[46,30],[58,34],[68,42],[74,52],[65,60],[53,63],[41,59],[30,52]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,0],[2,8]]},
+    lyra: {label:'Lyre', stars:[[40,20],[52,20],[62,30],[58,44],[44,46],[34,34]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,0],[1,4]]}
   },
   animal: {
-    dog: {label:'Chien', stars:[[18,50],[30,45],[43,42],[55,44],[68,46],[77,40],[73,33],[62,36],[49,34],[39,29],[28,33],[20,41]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[10,11],[11,0],[3,8]]},
-    cat: {label:'Chat', stars:[[20,52],[32,43],[50,40],[66,43],[78,52],[68,30],[58,22],[50,30],[42,22],[32,30]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,0],[2,7]]},
+    dog: {label:'Chien', stars:[[14,56],[24,49],[35,44],[48,42],[62,43],[74,41],[84,36],[80,28],[70,30],[58,30],[48,27],[38,25],[30,30],[22,38],[18,48]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,0],[3,9],[2,12]]},
+    cat: {label:'Chat', stars:[[18,56],[30,47],[46,44],[62,47],[76,56],[72,38],[64,22],[52,30],[40,22],[30,38],[44,52],[60,52]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,0],[2,10],[10,3],[2,11],[11,3]]},
     fish: {label:'Poisson', stars:[[18,44],[30,36],[48,34],[63,40],[63,48],[48,54],[30,52],[18,44],[72,44],[82,36],[82,52]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,0],[3,8],[8,9],[8,10]]},
     bird: {label:'Oiseau', stars:[[18,45],[30,35],[44,30],[58,35],[70,44],[58,52],[43,56],[30,52],[42,42],[52,44]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],[8,9],[2,8],[3,9]]}
   }
@@ -110,6 +116,24 @@ function buildShape(){
   linkedPairs.clear();
 }
 
+
+const bgMusic = new Audio('../../songs/space/spacebest3.mp3');
+bgMusic.loop = true;
+bgMusic.volume = (Number(musicVolEl.value) || 28) / 100;
+
+function ensureMusic() {
+  if (!musicMuteEl.checked) {
+    bgMusic.volume = (Number(musicVolEl.value) || 28) / 100;
+    bgMusic.play().catch(()=>{});
+  }
+}
+musicMuteEl.addEventListener('change', () => {
+  if (musicMuteEl.checked) bgMusic.pause();
+  else ensureMusic();
+});
+musicVolEl.addEventListener('input', () => { bgMusic.volume = (Number(musicVolEl.value)||28)/100; });
+window.addEventListener('pointerdown', ensureMusic, { once: true });
+
 function ensureAudio(){
   if (ensureAudio.ctx) return ensureAudio;
   const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -136,21 +160,22 @@ function playChime(step){
   if (muteEl.checked) return;
   const a = ensureAudio();
   const now = a.ctx.currentTime;
-  const base = 220 * Math.pow(2, step/12);
+  const scale = [0,4,7,12,14,19];
+  const base = 330 * Math.pow(2, scale[step % scale.length]/12);
 
-  [1, 2, 3.01].forEach((harm, i) => {
+  [1, 1.5, 2.5, 3.2].forEach((harm, i) => {
     const o = a.ctx.createOscillator();
     const g = a.ctx.createGain();
-    o.type = i === 0 ? 'sine' : 'triangle';
+    o.type = i % 2 === 0 ? 'triangle' : 'sine';
     o.frequency.value = base * harm;
     g.gain.value = 0.0001;
     o.connect(g);
     g.connect(a.dry);
     g.connect(a.convolver);
-    g.gain.exponentialRampToValueAtTime(0.12/(i+1), now+0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, now+1.8 + i*0.3);
-    o.start(now);
-    o.stop(now+2.2+i*0.2);
+    g.gain.exponentialRampToValueAtTime(0.14/(i+1), now+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, now+1.2 + i*0.18);
+    o.start(now + i*0.015);
+    o.stop(now+1.45+i*0.18);
   });
 }
 
