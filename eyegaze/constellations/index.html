@@ -17,12 +17,14 @@
 <body>
   <div class="top">
     <a href="../index.html">← Eyegaze</a>
-    <label>Constellation
-      <select id="shape">
-        <option value="ursa">Grande Ourse</option>
-        <option value="orion">Orion</option>
-        <option value="cassiopeia">Cassiopée</option>
+    <label>Catégorie
+      <select id="category">
+        <option value="real">Constellations réelles</option>
+        <option value="animal">Animaux (formes)</option>
       </select>
+    </label>
+    <label>Constellation
+      <select id="shape"></select>
     </label>
     <label>Échelle <input id="scale" type="range" min="0.7" max="1.6" step="0.1" value="1"></label>
     <label><input id="mute" type="checkbox"> Muet</label>
@@ -34,6 +36,7 @@
 <script>
 const canvas = document.getElementById('sky');
 const ctx = canvas.getContext('2d');
+const categoryEl = document.getElementById('category');
 const shapeEl = document.getElementById('shape');
 const scaleEl = document.getElementById('scale');
 const muteEl = document.getElementById('mute');
@@ -42,26 +45,42 @@ const pointer = {x:0,y:0,active:false};
 let stars = [];
 let segments = [];
 const linkedPairs = new Set();
-const shapeOrder = ['ursa','orion','cassiopeia'];
 let celebration = null;
 
 const CONSTELLATIONS = {
-  ursa: {
-    stars: [[8,22],[20,20],[30,26],[40,34],[53,44],[66,48],[78,45]],
-    links: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]]
+  real: {
+    ursa: {label:'Grande Ourse', stars:[[8,22],[20,20],[30,26],[40,34],[53,44],[66,48],[78,45]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]]},
+    orion: {label:'Orion', stars:[[20,15],[35,20],[50,30],[30,45],[47,48],[61,30],[68,16],[44,58],[55,62]], links:[[0,1],[1,2],[2,5],[5,6],[2,4],[4,3],[1,3],[7,8],[2,7],[4,8]]},
+    cassiopeia: {label:'Cassiopée', stars:[[15,40],[28,26],[41,44],[56,26],[72,42]], links:[[0,1],[1,2],[2,3],[3,4]]},
+    cygnus: {label:'Cygne', stars:[[50,14],[50,30],[50,46],[50,62],[35,30],[65,30],[32,48],[68,48]], links:[[0,1],[1,2],[2,3],[1,4],[1,5],[2,6],[2,7]]},
+    scorpius: {label:'Scorpion', stars:[[14,22],[26,26],[36,32],[46,40],[54,50],[62,58],[74,56],[78,46],[71,42]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8]]}
   },
-  orion: {
-    stars: [[20,15],[35,20],[50,30],[30,45],[47,48],[61,30],[68,16],[44,58],[55,62]],
-    links: [[0,1],[1,2],[2,5],[5,6],[2,4],[4,3],[1,3],[7,8],[2,7],[4,8]]
-  },
-  cassiopeia: {
-    stars: [[15,40],[28,26],[41,44],[56,26],[72,42]],
-    links: [[0,1],[1,2],[2,3],[3,4]]
+  animal: {
+    dog: {label:'Chien', stars:[[18,50],[30,45],[43,42],[55,44],[68,46],[77,40],[73,33],[62,36],[49,34],[39,29],[28,33],[20,41]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[10,11],[11,0],[3,8]]},
+    cat: {label:'Chat', stars:[[20,52],[32,43],[50,40],[66,43],[78,52],[68,30],[58,22],[50,30],[42,22],[32,30]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,0],[2,7]]},
+    fish: {label:'Poisson', stars:[[18,44],[30,36],[48,34],[63,40],[63,48],[48,54],[30,52],[18,44],[72,44],[82,36],[82,52]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,0],[3,8],[8,9],[8,10]]},
+    bird: {label:'Oiseau', stars:[[18,45],[30,35],[44,30],[58,35],[70,44],[58,52],[43,56],[30,52],[42,42],[52,44]], links:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],[8,9],[2,8],[3,9]]}
   }
 };
 
+let shapeOrder = [];
+let currentCategory = 'real';
+
+function refreshShapeMenu() {
+  const group = CONSTELLATIONS[currentCategory];
+  shapeEl.innerHTML = '';
+  shapeOrder = Object.keys(group);
+  for (const key of shapeOrder) {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = group[key].label;
+    shapeEl.appendChild(opt);
+  }
+}
+
 function resize(){ canvas.width = innerWidth; canvas.height = innerHeight - document.querySelector('.top').offsetHeight; buildShape(); }
 addEventListener('resize', resize);
+categoryEl.addEventListener('change', () => { currentCategory = categoryEl.value; refreshShapeMenu(); buildShape(); });
 shapeEl.addEventListener('change', buildShape);
 scaleEl.addEventListener('input', buildShape);
 document.getElementById('resetBtn').addEventListener('click', () => { celebration = null; linkedPairs.clear(); for (const seg of segments) seg.lit = 0; for (const st of stars) st.glow = 0; });
@@ -76,7 +95,7 @@ canvas.addEventListener('mousemove', e => {
 });
 
 function buildShape(){
-  const cfg = CONSTELLATIONS[shapeEl.value];
+  const cfg = CONSTELLATIONS[currentCategory][shapeEl.value];
   const s = Number(scaleEl.value);
   const w = canvas.width, h = canvas.height;
   const cx = w*0.5, cy = h*0.52;
@@ -161,27 +180,16 @@ function draw(){
     const near = pointer.active && Math.hypot(pointer.x-s.x,pointer.y-s.y) < 58;
     if (near) {
       s.glow = 1;
-      let nearest = -1, best = Infinity;
-      for (let j=0;j<stars.length;j++) {
-        if (j===i) continue;
-        const d = Math.hypot(stars[j].x-s.x, stars[j].y-s.y);
-        if (d < best) { best = d; nearest = j; }
-      }
-      if (nearest >= 0) {
-        const key = i < nearest ? `${i}-${nearest}` : `${nearest}-${i}`;
-        if (!linkedPairs.has(key)) {
-          linkedPairs.add(key);
-          segments.push({a:i,b:nearest,lit:1});
+      for (const seg of segments) {
+        if ((seg.a === i || seg.b === i) && seg.lit < 1) {
+          seg.lit = 1;
           playChime(5 + i*2);
-
-          const touched = new Set();
-          for (const seg of segments) {
-            if (seg.lit > 0) { touched.add(seg.a); touched.add(seg.b); }
-          }
-          if (!celebration && touched.size === stars.length) {
-            celebration = { start: performance.now(), phase: 'twinkle' };
-          }
         }
+      }
+
+      const allLit = segments.length > 0 && segments.every(seg => seg.lit >= 1);
+      if (!celebration && allLit) {
+        celebration = { start: performance.now(), phase: 'twinkle' };
       }
     }
     const r = 6 + s.glow*8; // larger stars
@@ -217,6 +225,7 @@ function draw(){
   requestAnimationFrame(draw);
 }
 
+refreshShapeMenu();
 resize();
 requestAnimationFrame(draw);
 </script>
