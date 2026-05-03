@@ -102,7 +102,7 @@ addEventListener('resize', resize);
 categoryEl.addEventListener('change', () => { currentCategory = categoryEl.value; refreshShapeMenu(); buildShape(); });
 shapeEl.addEventListener('change', buildShape);
 scaleEl.addEventListener('input', buildShape);
-document.getElementById('resetBtn').addEventListener('click', () => { celebration = null; linkedPairs.clear(); for (const seg of segments) seg.lit = 0; for (const st of stars) st.glow = 0; });
+document.getElementById('resetBtn').addEventListener('click', () => { celebration = null; linkedPairs.clear(); for (const seg of segments) { seg.lit = 0; seg.target = 0; } for (const st of stars) st.glow = 0; });
 
 canvas.addEventListener('mousemove', e => {
   const r = canvas.getBoundingClientRect();
@@ -131,7 +131,7 @@ function buildShape(){
     glow: 0,
     reached: false
   }));
-  segments = cfg.links.map(([a,b]) => ({a,b,lit:0}));
+  segments = cfg.links.map(([a,b]) => ({a,b,lit:0,target:0}));
   linkedPairs.clear();
 }
 
@@ -205,7 +205,7 @@ function draw(){
 
   // star field background (static positions + twinkle)
   for (const st of bgStars) {
-    const twinkle = 0.55 + 0.45 * Math.sin(nowMs * 0.0012 * st.speed + st.tw);
+    const twinkle = 0.55 + 0.45 * Math.sin(nowMs * 0.0004 * st.speed + st.tw);
     const alpha = st.a * twinkle;
     const r = st.r * (0.8 + twinkle * 0.5);
     ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
@@ -222,6 +222,7 @@ function draw(){
 
   for (const seg of segments) {
     const a = stars[seg.a], b = stars[seg.b];
+    seg.lit += (seg.target - seg.lit) * 0.04;
     if (seg.lit <= 0.001) continue;
     ctx.strokeStyle = `rgba(120,190,255,${seg.lit})`;
     ctx.lineWidth = 4;
@@ -230,18 +231,18 @@ function draw(){
 
   for (let i=0;i<stars.length;i++) {
     const s = stars[i];
-    s.glow = Math.max(0.15, s.glow - 0.01);
+    s.glow = Math.max(0.15, s.glow - 0.0033);
     const near = pointer.active && Math.hypot(pointer.x-s.x,pointer.y-s.y) < 58;
     if (near) {
       s.glow = 1;
       for (const seg of segments) {
-        if ((seg.a === i || seg.b === i) && seg.lit < 1) {
-          seg.lit = 1;
+        if ((seg.a === i || seg.b === i) && seg.target < 1) {
+          seg.target = 1;
           playChime(5 + i*2);
         }
       }
 
-      const allLit = segments.length > 0 && segments.every(seg => seg.lit >= 1);
+      const allLit = segments.length > 0 && segments.every(seg => seg.target >= 1);
       if (!celebration && allLit) {
         celebration = { start: performance.now(), phase: 'twinkle' };
       }
@@ -260,11 +261,11 @@ function draw(){
 
   if (celebration) {
     const elapsed = nowMs - celebration.start;
-    if (elapsed < 2200) {
+    if (elapsed < 6600) {
       const pulse = 1 + 0.12 * Math.sin(nowMs * 0.02);
       for (const st of stars) st.glow = Math.max(st.glow, 0.7 * pulse);
-    } else if (elapsed < 3600) {
-      const fade = Math.max(0, 1 - (elapsed - 2200) / 1400);
+    } else if (elapsed < 10800) {
+      const fade = Math.max(0, 1 - (elapsed - 6600) / 4200);
       ctx.fillStyle = `rgba(0,0,0,${1-fade})`;
       ctx.fillRect(0,0,canvas.width,canvas.height);
     } else {
