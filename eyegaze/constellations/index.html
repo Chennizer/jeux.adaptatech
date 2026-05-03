@@ -4,131 +4,177 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Constellations calmes</title>
-  <link rel="stylesheet" href="../../css/global.css" />
   <style>
     :root { color-scheme: dark; }
-    body { margin:0; font-family: Arial, sans-serif; background:#040816; color:#eaf1ff; }
-    .top { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px; background:#0b1530; position:sticky; top:0; z-index:2; }
+    body { margin:0; font-family: Arial, sans-serif; background:#000; color:#eaf1ff; }
+    .top { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px; background:#080808; border-bottom:1px solid #1f1f1f; position:sticky; top:0; z-index:2; }
     .top label { font-size:14px; display:flex; gap:6px; align-items:center; }
     button,input,select { font-size:14px; }
-    #sky { display:block; width:100vw; height:calc(100vh - 70px); cursor:none; }
+    #sky { display:block; width:100vw; height:calc(100vh - 68px); cursor:none; background:#000; }
   </style>
 </head>
 <body>
   <div class="top">
     <a href="../index.html">← Eyegaze</a>
-    <label>Vitesse <input id="speed" type="range" min="0.4" max="2" step="0.1" value="1"></label>
-    <label>Taille étoiles <input id="size" type="range" min="1" max="4" step="0.5" value="2"></label>
-    <label><input id="motion" type="checkbox"> Réduire mouvements</label>
+    <label>Constellation
+      <select id="shape">
+        <option value="ursa">Grande Ourse</option>
+        <option value="orion">Orion</option>
+        <option value="cassiopeia">Cassiopée</option>
+      </select>
+    </label>
+    <label>Échelle <input id="scale" type="range" min="0.7" max="1.6" step="0.1" value="1"></label>
     <label><input id="mute" type="checkbox"> Muet</label>
-    <button id="clearBtn">Effacer</button>
+    <button id="resetBtn">Réinitialiser</button>
   </div>
   <canvas id="sky"></canvas>
 
 <script>
 const canvas = document.getElementById('sky');
 const ctx = canvas.getContext('2d');
-const stars = [];
-const links = [];
-const pointer = {x: 0, y: 0, active: false};
-let lastNear = null;
-
-const speedEl = document.getElementById('speed');
-const sizeEl = document.getElementById('size');
-const motionEl = document.getElementById('motion');
+const shapeEl = document.getElementById('shape');
+const scaleEl = document.getElementById('scale');
 const muteEl = document.getElementById('mute');
 
-document.getElementById('clearBtn').addEventListener('click', ()=> { links.length=0; for (const s of stars) s.glow=0; });
+const pointer = {x:0,y:0,active:false};
+let stars = [];
+let segments = [];
+let nodeIndex = 0;
 
-function resize(){ canvas.width = innerWidth; canvas.height = innerHeight - document.querySelector('.top').offsetHeight; }
-addEventListener('resize', resize); resize();
-
-function buildStars() {
-  stars.length = 0;
-  const count = Math.floor((canvas.width * canvas.height) / 22000);
-  for (let i=0;i<count;i++) {
-    stars.push({
-      x: Math.random()*canvas.width,
-      y: Math.random()*canvas.height,
-      r: (0.8 + Math.random()*1.8),
-      tw: Math.random()*Math.PI*2,
-      glow: 0
-    });
+const CONSTELLATIONS = {
+  ursa: {
+    stars: [[8,22],[20,20],[30,26],[40,34],[53,44],[66,48],[78,45]],
+    links: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]]
+  },
+  orion: {
+    stars: [[20,15],[35,20],[50,30],[30,45],[47,48],[61,30],[68,16],[44,58],[55,62]],
+    links: [[0,1],[1,2],[2,5],[5,6],[2,4],[4,3],[1,3],[7,8],[2,7],[4,8]]
+  },
+  cassiopeia: {
+    stars: [[15,40],[28,26],[41,44],[56,26],[72,42]],
+    links: [[0,1],[1,2],[2,3],[3,4]]
   }
-}
-buildStars();
+};
+
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight - document.querySelector('.top').offsetHeight; buildShape(); }
+addEventListener('resize', resize);
+shapeEl.addEventListener('change', buildShape);
+scaleEl.addEventListener('input', buildShape);
+document.getElementById('resetBtn').addEventListener('click', () => { segments = []; nodeIndex = 0; });
 
 canvas.addEventListener('mousemove', e => {
-  const rect = canvas.getBoundingClientRect();
-  pointer.x = e.clientX - rect.left;
-  pointer.y = e.clientY - rect.top;
+  const r = canvas.getBoundingClientRect();
+  pointer.x = e.clientX - r.left;
+  pointer.y = e.clientY - r.top;
   pointer.active = true;
 });
 
-function nearestStar() {
-  let best = null, bestD = 120;
-  for (const s of stars) {
-    const d = Math.hypot(pointer.x - s.x, pointer.y - s.y);
-    if (d < bestD) { best = s; bestD = d; }
+function buildShape(){
+  const cfg = CONSTELLATIONS[shapeEl.value];
+  const s = Number(scaleEl.value);
+  const w = canvas.width, h = canvas.height;
+  const cx = w*0.5, cy = h*0.52;
+  const span = Math.min(w,h) * 0.65 * s;
+  stars = cfg.stars.map(([x,y]) => ({
+    x: cx + ((x-50)/100)*span,
+    y: cy + ((y-50)/100)*span,
+    glow: 0,
+    reached: false
+  }));
+  segments = cfg.links.map(([a,b]) => ({a,b,lit:0}));
+  nodeIndex = 0;
+}
+
+function ensureAudio(){
+  if (ensureAudio.ctx) return ensureAudio;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx();
+  const master = ctx.createGain(); master.gain.value = 0.75; master.connect(ctx.destination);
+
+  const convolver = ctx.createConvolver();
+  const len = ctx.sampleRate * 2.8;
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c=0;c<2;c++) {
+    const d = ir.getChannelData(c);
+    for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, 2.5);
   }
-  return best;
+  convolver.buffer = ir;
+  const wet = ctx.createGain(); wet.gain.value = 0.45;
+  const dry = ctx.createGain(); dry.gain.value = 0.7;
+  convolver.connect(wet); wet.connect(master); dry.connect(master);
+
+  ensureAudio.ctx = ctx; ensureAudio.master = master; ensureAudio.convolver = convolver; ensureAudio.wet = wet; ensureAudio.dry = dry;
+  return ensureAudio;
 }
 
-function chime(freq=660){
+function playChime(step){
   if (muteEl.checked) return;
-  const ac = chime.ac || (chime.ac = new (window.AudioContext||window.webkitAudioContext)());
-  const o = ac.createOscillator();
-  const g = ac.createGain();
-  o.type = 'sine'; o.frequency.value = freq;
-  g.gain.value = 0.0001;
-  o.connect(g); g.connect(ac.destination);
-  const t = ac.currentTime;
-  g.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-  o.start(); o.stop(t + 0.35);
+  const a = ensureAudio();
+  const now = a.ctx.currentTime;
+  const base = 220 * Math.pow(2, step/12);
+
+  [1, 2, 3.01].forEach((harm, i) => {
+    const o = a.ctx.createOscillator();
+    const g = a.ctx.createGain();
+    o.type = i === 0 ? 'sine' : 'triangle';
+    o.frequency.value = base * harm;
+    g.gain.value = 0.0001;
+    o.connect(g);
+    g.connect(a.dry);
+    g.connect(a.convolver);
+    g.gain.exponentialRampToValueAtTime(0.12/(i+1), now+0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, now+1.8 + i*0.3);
+    o.start(now);
+    o.stop(now+2.2+i*0.2);
+  });
 }
 
-function draw(t){
-  const spd = Number(speedEl.value);
-  ctx.fillStyle = '#040816';
+function draw(){
+  ctx.fillStyle = '#000';
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  for (const l of links) {
-    l.life -= 0.005 * spd;
-    if (l.life <= 0) continue;
-    ctx.strokeStyle = `rgba(160,210,255,${l.life})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(l.a.x, l.a.y);
-    ctx.lineTo(l.b.x, l.b.y);
-    ctx.stroke();
+  // soft background stars
+  for (let i=0;i<120;i++) {
+    const x=(i*179)%canvas.width, y=(i*313)%canvas.height;
+    ctx.fillStyle='rgba(255,255,255,0.12)';
+    ctx.beginPath(); ctx.arc(x,y,1.2,0,Math.PI*2); ctx.fill();
   }
 
-  for (const s of stars) {
-    const tw = motionEl.checked ? 0.4 : (0.6 + Math.sin(t*0.001 + s.tw) * 0.4);
-    s.glow = Math.max(0, s.glow - 0.01*spd);
-    const base = s.r * Number(sizeEl.value);
-    const rr = base + tw + s.glow * 4;
-    ctx.fillStyle = `rgba(210,230,255,${0.75 + s.glow*0.2})`;
-    ctx.beginPath();
-    ctx.arc(s.x,s.y,rr,0,Math.PI*2);
-    ctx.fill();
+  for (const seg of segments) {
+    seg.lit = Math.max(0, seg.lit - 0.008);
+    const a = stars[seg.a], b = stars[seg.b];
+    ctx.strokeStyle = `rgba(120,190,255,${0.15 + seg.lit*0.85})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
   }
 
-  if (pointer.active) {
-    const n = nearestStar();
-    if (n && n !== lastNear) {
-      n.glow = 1;
-      if (lastNear) {
-        links.push({a:lastNear,b:n,life:1});
-        chime(520 + Math.random()*260);
-      }
-      lastNear = n;
-      if (links.length > 120) links.splice(0, links.length-120);
+  for (let i=0;i<stars.length;i++) {
+    const s = stars[i];
+    s.glow = Math.max(0.15, s.glow - 0.01);
+    const near = pointer.active && Math.hypot(pointer.x-s.x,pointer.y-s.y) < 48;
+    if (near && i===nodeIndex) {
+      s.glow = 1;
+      s.reached = true;
+      nodeIndex = (nodeIndex + 1) % stars.length;
+      const link = segments.find(x => (x.a===i && x.b===nodeIndex) || (x.b===i && x.a===nodeIndex));
+      if (link) link.lit = 1;
+      playChime(5 + i*2);
     }
+    const r = 6 + s.glow*8; // larger stars
+    const grad = ctx.createRadialGradient(s.x,s.y,1,s.x,s.y,r*2.8);
+    grad.addColorStop(0,'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.4,'rgba(200,225,255,0.85)');
+    grad.addColorStop(1,'rgba(120,180,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(s.x,s.y,r*2.1,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2); ctx.fill();
   }
+
   requestAnimationFrame(draw);
 }
+
+resize();
 requestAnimationFrame(draw);
 </script>
 </body>
