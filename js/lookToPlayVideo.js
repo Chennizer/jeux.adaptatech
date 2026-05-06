@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoSource = document.getElementById('video-source');
   const youtubeDiv = document.getElementById('youtube-player');
   const lookZone = document.getElementById('look-zone');
-  const lookStatus = document.getElementById('look-status');
+  const lookVideoFrame = document.getElementById('look-video-frame');
   const gazePointer = document.getElementById('gazePointer');
   const languageToggle = document.getElementById('language-toggle');
 
@@ -71,8 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function setLookStatus(strings) {
-    setTranslatedText(lookStatus, strings);
+  function setAttentionPulse(shouldPulse) {
+    lookVideoFrame?.classList.toggle('needs-attention', shouldPulse);
   }
 
   function ensureFullscreen() {
@@ -432,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearPauseTimer();
     scheduleNoMovementPause();
     if (!selectedChoice) return;
-    setLookStatus({ fr: 'Lecture...', en: 'Playing...', ja: '再生中...' });
+    setAttentionPulse(false);
 
     if (selectedChoice.sourceType === 'youtube') {
       try {
@@ -457,13 +457,12 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.pause();
     }
     isPlaying = false;
-    setLookStatus({ fr: 'Regardez la vidéo pour jouer', en: 'Look at the video to play', ja: '動画を見ると再生します' });
+    setAttentionPulse(isVideoVisible());
   }
 
   function schedulePauseAfterGrace() {
     clearPauseTimer();
     clearNoMovementTimer();
-    setLookStatus({ fr: 'Pause dans 2 secondes...', en: 'Pausing in 2 seconds...', ja: '2秒後に一時停止...' });
     pauseTimer = setTimeout(() => {
       if (!isLooking) pauseCurrentVideo();
     }, LOOK_AWAY_GRACE_MS);
@@ -483,6 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearPauseTimer();
     clearNoMovementTimer();
     lastMovementPosition = null;
+    setAttentionPulse(false);
     isLooking = false;
     isPlaying = false;
     try { youtubePlayer?.stopVideo(); } catch {}
@@ -511,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
           onStateChange: event => {
             if (event.data === YT.PlayerState.ENDED) {
               isPlaying = false;
-              setLookStatus({ fr: 'Vidéo terminée', en: 'Video ended', ja: '動画が終了しました' });
+              setAttentionPulse(isVideoVisible());
             }
           },
         },
@@ -544,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
       videoPlayer.load();
     }
 
-    setLookStatus({ fr: 'Regardez la vidéo pour jouer', en: 'Look at the video to play', ja: '動画を見ると再生します' });
+    setAttentionPulse(true);
     ensureFullscreen();
   }
 
@@ -611,7 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   videoPlayer.addEventListener('ended', () => {
     isPlaying = false;
-    setLookStatus({ fr: 'Vidéo terminée', en: 'Video ended', ja: '動画が終了しました' });
+    setAttentionPulse(isVideoVisible());
   });
 
   window.addEventListener('beforeunload', () => {
