@@ -206,6 +206,11 @@ function draw(){
   ctx.fillStyle = '#000';
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
+  const celebrationElapsed = celebration ? nowMs - celebration.start : 0;
+  const celebrationActive = !!celebration && celebrationElapsed < 6600;
+  const celebrationWave = celebrationActive ? 0.5 + 0.5 * Math.sin(nowMs * 0.002) : 0;
+  const celebrationGrow = celebrationActive ? 1 + 0.35 * celebrationWave : 1;
+
   // star field background (static positions + twinkle)
   for (const st of bgStars) {
     const twinkle = 0.55 + 0.45 * Math.sin(nowMs * 0.0004 * st.speed + st.tw);
@@ -223,6 +228,13 @@ function draw(){
     }
   }
 
+  if (celebrationActive) {
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.scale(celebrationGrow, celebrationGrow);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+  }
+
   for (const seg of segments) {
     const a = stars[seg.a], b = stars[seg.b];
     if (seg.target > seg.lit) {
@@ -237,7 +249,7 @@ function draw(){
     const px = start.x + (end.x - start.x) * seg.lit;
     const py = start.y + (end.y - start.y) * seg.lit;
     ctx.strokeStyle = `rgba(120,190,255,${0.4 + 0.6*seg.lit})`;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = celebrationActive ? 4 + 5 * celebrationWave : 4;
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(px, py);
@@ -259,7 +271,7 @@ function draw(){
       }
 
     }
-    const r = 6 + s.glow*8; // larger stars
+    const r = (6 + s.glow*8) * (celebrationActive ? 1 + 0.75 * celebrationWave : 1); // larger stars
     const grad = ctx.createRadialGradient(s.x,s.y,1,s.x,s.y,r*2.8);
     grad.addColorStop(0,'rgba(255,255,255,0.95)');
     grad.addColorStop(0.4,'rgba(200,225,255,0.85)');
@@ -270,6 +282,8 @@ function draw(){
     ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2); ctx.fill();
   }
 
+  if (celebrationActive) ctx.restore();
+
 
 
   const allTriggered = segments.length > 0 && segments.every(seg => seg.target >= 1);
@@ -279,10 +293,10 @@ function draw(){
   }
 
   if (celebration) {
-    const elapsed = nowMs - celebration.start;
+    const elapsed = celebrationElapsed;
     if (elapsed < 6600) {
-      const pulse = 1 + 0.12 * Math.sin(nowMs * 0.02);
-      for (const st of stars) st.glow = Math.max(st.glow, 0.7 * pulse);
+      const pulse = 1 + 0.75 * (0.5 + 0.5 * Math.sin(nowMs * 0.002));
+      for (const st of stars) st.glow = Math.max(st.glow, 1.15 * pulse);
     } else if (elapsed < 10800) {
       const fade = Math.max(0, 1 - (elapsed - 6600) / 4200);
       ctx.fillStyle = `rgba(0,0,0,${1-fade})`;
