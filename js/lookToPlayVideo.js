@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const languageToggle = document.getElementById('language-toggle');
 
   const LOOK_AWAY_GRACE_MS = 2000;
+  const ZERO_MOVEMENT_PAUSE_MS = 3000;
   const YOUTUBE_STORAGE_KEY = 'lookToPlayYoutubeUrls';
   const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
   const sourceLabels = {
@@ -45,6 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let youtubeApiReady = Boolean(window.YT && window.YT.Player);
   let pendingYoutubeVideoId = null;
   let pauseTimer = null;
+  let noMovementTimer = null;
+  let lastMovementPosition = null;
   let isLooking = false;
   let isPlaying = false;
 
@@ -96,6 +99,42 @@ document.addEventListener('DOMContentLoaded', () => {
   function setPointerPos(x, y) {
     if (!gazePointer) return;
     gazePointer.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  }
+
+  function isVideoVisible() {
+    return videoContainer.style.display === 'flex';
+  }
+
+  function clearNoMovementTimer() {
+    if (noMovementTimer) {
+      clearTimeout(noMovementTimer);
+      noMovementTimer = null;
+    }
+  }
+
+  function scheduleNoMovementPause() {
+    clearNoMovementTimer();
+    if (!isVideoVisible()) return;
+    noMovementTimer = setTimeout(() => {
+      isLooking = false;
+      pauseCurrentVideo();
+    }, ZERO_MOVEMENT_PAUSE_MS);
+  }
+
+  function trackPointerMovement(event) {
+    const currentPosition = { x: event.clientX, y: event.clientY };
+    setPointerPos(currentPosition.x, currentPosition.y);
+
+    const moved = !lastMovementPosition ||
+      currentPosition.x !== lastMovementPosition.x ||
+      currentPosition.y !== lastMovementPosition.y;
+
+    if (moved) {
+      lastMovementPosition = currentPosition;
+      scheduleNoMovementPause();
+    }
+
+    return moved;
   }
 
   function setSource(source) {
@@ -391,6 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function playCurrentVideo() {
     clearPauseTimer();
+    scheduleNoMovementPause();
     if (!selectedChoice) return;
     setLookStatus({ fr: 'Lecture...', en: 'Playing...', ja: '再生中...' });
 
@@ -410,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function pauseCurrentVideo() {
     clearPauseTimer();
+    clearNoMovementTimer();
     if (selectedChoice?.sourceType === 'youtube') {
       try { youtubePlayer?.pauseVideo(); } catch {}
     } else {
@@ -421,6 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function schedulePauseAfterGrace() {
     clearPauseTimer();
+    clearNoMovementTimer();
     setLookStatus({ fr: 'Pause dans 2 secondes...', en: 'Pausing in 2 seconds...', ja: '2秒後に一時停止...' });
     pauseTimer = setTimeout(() => {
       if (!isLooking) pauseCurrentVideo();
@@ -439,6 +481,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resetPlayback() {
     clearPauseTimer();
+    clearNoMovementTimer();
+    lastMovementPosition = null;
     isLooking = false;
     isPlaying = false;
     try { youtubePlayer?.stopVideo(); } catch {}
@@ -486,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameOptionsModal.style.display = 'none';
     videoContainer.style.display = 'flex';
     if (languageToggle) languageToggle.style.display = 'none';
+    document.body.classList.add('look-video-active');
     gazePointer?.classList.add('look-visible', 'gp-dwell');
 
     if (selectedChoice.sourceType === 'youtube') {
@@ -508,6 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = 'none';
     tilePickerModal.style.display = 'flex';
     if (languageToggle) languageToggle.style.display = '';
+    document.body.classList.remove('look-video-active');
     gazePointer?.classList.remove('look-visible', 'gp-dwell');
   }
 
@@ -547,13 +593,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   lookZone.addEventListener('pointerenter', handleLookStart);
   lookZone.addEventListener('pointermove', event => {
-    setPointerPos(event.clientX, event.clientY);
+    trackPointerMovement(event);
     if (!isLooking) handleLookStart();
   });
   lookZone.addEventListener('pointerleave', handleLookEnd);
 
   document.addEventListener('pointermove', event => {
-    setPointerPos(event.clientX, event.clientY);
+    trackPointerMovement(event);
   });
 
   document.addEventListener('keydown', event => {
@@ -568,7 +614,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setLookStatus({ fr: 'Vidéo terminée', en: 'Video ended', ja: '動画が終了しました' });
   });
 
-  window.addEventListener('beforeunload', revokeLocalChoices);
+  window.addEventListener('beforeunload', () => {
+    clearNoMovementTimer();
+    revokeLocalChoices();
+  });
 
   ensurePointerOverlay();
   setSource('library');
