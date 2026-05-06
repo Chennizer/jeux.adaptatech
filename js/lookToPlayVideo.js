@@ -1,23 +1,26 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const sourceModal = document.getElementById('source-modal');
-  const pickerModal = document.getElementById('picker-modal');
-  const sourceButtons = Array.from(document.querySelectorAll('.source-pill'));
+  const gameOptionsModal = document.getElementById('game-options');
+  const tilePickerModal = document.getElementById('tile-picker-modal');
+  const sourceButtons = Array.from(document.querySelectorAll('#mode-segmented-control .mode-btn'));
+  const chooseSourceButton = document.getElementById('choose-source-button');
+  const sourceSummary = document.getElementById('source-summary');
   const libraryControls = document.getElementById('library-controls');
-  const localControls = document.getElementById('local-controls');
-  const youtubeControls = document.getElementById('youtube-controls');
+  const localImportControls = document.getElementById('local-import-controls');
+  const youtubeImportControls = document.getElementById('yt-import-controls');
   const categorySelect = document.getElementById('categorySelect');
-  const localVideoInput = document.getElementById('local-video-input');
-  const youtubeUrlInput = document.getElementById('youtube-url-input');
-  const youtubePlaylistInput = document.getElementById('youtube-playlist-input');
-  const addYoutubeButton = document.getElementById('add-youtube-button');
-  const importPlaylistButton = document.getElementById('import-playlist-button');
-  const pickerStatus = document.getElementById('picker-status');
-  const grid = document.getElementById('single-video-grid');
+  const addVideoButton = document.getElementById('add-video-file-button');
+  const addVideoInput = document.getElementById('add-video-input');
+  const addYoutubeButton = document.getElementById('add-video-url-button');
+  const addYoutubeInput = document.getElementById('add-video-url-input');
+  const playlistButton = document.getElementById('yt-playlist-import-button');
+  const playlistInput = document.getElementById('yt-playlist-url-input');
+  const clearButton = document.getElementById('clear-videos-button');
   const backButton = document.getElementById('back-to-source-button');
-  const startButton = document.getElementById('start-look-video-button');
-  const videoStage = document.getElementById('video-stage');
-  const videoFrame = document.getElementById('look-video-frame');
-  const video = document.getElementById('look-video');
+  const tilePickerGrid = document.getElementById('tile-picker-grid');
+  const startGameButton = document.getElementById('start-game-button');
+  const videoContainer = document.getElementById('video-container');
+  const videoPlayer = document.getElementById('video-player');
+  const videoSource = document.getElementById('video-source');
   const youtubeDiv = document.getElementById('youtube-player');
   const lookZone = document.getElementById('look-zone');
   const lookStatus = document.getElementById('look-status');
@@ -25,13 +28,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const languageToggle = document.getElementById('language-toggle');
 
   const LOOK_AWAY_GRACE_MS = 2000;
-  const STORAGE_KEY = 'lookToPlayYoutubeChoices';
-  const supportedSources = ['local', 'youtube', 'library'];
+  const YOUTUBE_STORAGE_KEY = 'lookToPlayYoutubeUrls';
+  const VIDEO_RX = /\.(mp4|webm|ogg|ogv|mov|m4v)$/i;
+  const sourceLabels = {
+    local: { fr: 'Source: Local', en: 'Source: Local', ja: 'ソース：ローカル' },
+    youtube: { fr: 'Source: YouTube', en: 'Source: YouTube', ja: 'ソース：YouTube' },
+    library: { fr: 'Source: Bibliothèque', en: 'Source: Library', ja: 'ソース：ライブラリ' },
+  };
 
-  let currentSource = null;
+  let currentSource = 'library';
   let currentCategory = 'all';
   let selectedChoice = null;
-  let localObjectUrl = null;
+  let localChoices = [];
   let youtubeChoices = [];
   let youtubePlayer = null;
   let youtubeApiReady = Boolean(window.YT && window.YT.Player);
@@ -47,15 +55,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  function setStatus(message = '') {
-    pickerStatus.textContent = message;
+  function getLanguage() {
+    const stored = localStorage.getItem('siteLanguage');
+    return ['fr', 'en', 'ja'].includes(stored) ? stored : 'fr';
   }
 
-  function setLookStatus(fr, en = fr, ja = en) {
-    lookStatus.textContent = fr;
-    lookStatus.dataset.fr = fr;
-    lookStatus.dataset.en = en;
-    lookStatus.dataset.ja = ja;
+  function setTranslatedText(element, strings) {
+    if (!element || !strings) return;
+    element.textContent = strings[getLanguage()] || strings.fr || strings.en || '';
+    Object.entries(strings).forEach(([lang, value]) => {
+      element.dataset[lang] = value;
+    });
+  }
+
+  function setLookStatus(strings) {
+    setTranslatedText(lookStatus, strings);
   }
 
   function ensureFullscreen() {
@@ -65,15 +79,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function updatePointer(event) {
+  function ensurePointerOverlay() {
     if (!gazePointer) return;
-    gazePointer.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
+    let overlay = document.getElementById('gazePointerOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'gazePointerOverlay';
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(overlay);
+    }
+    if (gazePointer.parentElement !== overlay) {
+      overlay.appendChild(gazePointer);
+    }
   }
 
-  function categoriesInclude(choice, category) {
-    if (category === 'all') return true;
-    const categories = Array.isArray(choice.category) ? choice.category : [choice.category];
-    return categories.includes(category);
+  function setPointerPos(x, y) {
+    if (!gazePointer) return;
+    gazePointer.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  }
+
+  function setSource(source) {
+    currentSource = source;
+    selectedChoice = null;
+    currentCategory = 'all';
+    if (categorySelect) categorySelect.value = 'all';
+
+    sourceButtons.forEach(button => {
+      button.classList.toggle('selected', button.dataset.source === source);
+    });
+
+    setTranslatedText(sourceSummary, sourceLabels[source]);
+    updateStartButtonState();
   }
 
   function isYouTubeUrl(url) {
@@ -83,7 +119,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function getYouTubeId(url) {
     try {
       const parsed = new URL(url);
-      if (parsed.hostname.includes('youtu.be')) return parsed.pathname.slice(1).split(/[?&]/)[0];
+      if (parsed.hostname.includes('youtu.be')) {
+        return parsed.pathname.slice(1).split(/[?&]/)[0];
+      }
       const id = parsed.searchParams.get('v');
       if (id) return id;
       const shorts = parsed.pathname.match(/\/shorts\/([a-zA-Z0-9_-]+)/);
@@ -116,53 +154,115 @@ document.addEventListener('DOMContentLoaded', () => {
     return url;
   }
 
-  function saveYoutubeChoices() {
+  function categoriesInclude(choice, category) {
+    if (category === 'all') return true;
+    const categories = Array.isArray(choice.category) ? choice.category : [choice.category];
+    return categories.includes(category);
+  }
+
+  function choicesForCurrentSource() {
+    if (currentSource === 'library') {
+      return mediaChoices
+        .filter(choice => categoriesInclude(choice, currentCategory))
+        .map(choice => ({ ...choice, sourceType: 'native' }));
+    }
+    if (currentSource === 'local') return localChoices;
+    if (currentSource === 'youtube') return youtubeChoices;
+    return [];
+  }
+
+  function updateStartButtonState() {
+    startGameButton.disabled = !selectedChoice?.video;
+  }
+
+  function populateTilePickerGrid() {
+    tilePickerGrid.innerHTML = '';
+    const choices = choicesForCurrentSource();
+
+    choices.forEach((choice, index) => {
+      const tileOption = document.createElement('div');
+      tileOption.classList.add('tile');
+      tileOption.setAttribute('data-index', index);
+      tileOption.style.backgroundImage = choice.image ? `url(${choice.image})` : 'none';
+      if (selectedChoice?.video === choice.video) {
+        tileOption.classList.add('selected');
+      }
+
+      const caption = document.createElement('div');
+      caption.classList.add('caption');
+      caption.textContent = choice.name || 'Vidéo';
+      tileOption.appendChild(caption);
+
+      tileOption.addEventListener('click', () => {
+        selectedChoice = choice;
+        updateStartButtonState();
+        populateTilePickerGrid();
+      });
+
+      tilePickerGrid.appendChild(tileOption);
+    });
+  }
+
+  window.populateTilePickerGrid = populateTilePickerGrid;
+
+  function showPicker() {
+    selectedChoice = null;
+    gameOptionsModal.style.display = 'none';
+    tilePickerModal.style.display = 'flex';
+    libraryControls.style.display = currentSource === 'library' ? 'flex' : 'none';
+    localImportControls.style.display = currentSource === 'local' ? 'block' : 'none';
+    youtubeImportControls.style.display = currentSource === 'youtube' ? 'block' : 'none';
+    clearButton.style.display = currentSource === 'youtube' ? '' : 'none';
+    populateTilePickerGrid();
+    updateStartButtonState();
+    ensureFullscreen();
+  }
+
+  function showSourceOptions() {
+    tilePickerModal.style.display = 'none';
+    gameOptionsModal.style.display = 'flex';
+  }
+
+  function saveYoutubeUrls() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(youtubeChoices.map(choice => choice.video)));
+      localStorage.setItem(YOUTUBE_STORAGE_KEY, JSON.stringify(youtubeChoices.map(choice => choice.video)));
     } catch {}
   }
 
-  async function loadYoutubeChoices() {
+  async function loadYoutubeUrls() {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      for (const url of saved) {
+      const urls = JSON.parse(localStorage.getItem(YOUTUBE_STORAGE_KEY) || '[]');
+      for (const url of urls) {
         const id = getYouTubeId(url);
         if (!id || youtubeChoices.some(choice => choice.video === url)) continue;
         youtubeChoices.push({
           name: await fetchVideoTitle(url),
           image: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
           video: url,
-          type: 'youtube',
+          sourceType: 'youtube',
         });
       }
     } catch {}
   }
 
-  async function addYoutubeUrl(url) {
-    const cleanUrl = url.trim();
-    const id = getYouTubeId(cleanUrl);
-    if (!id || !isYouTubeUrl(cleanUrl)) {
-      setStatus('URL YouTube invalide / Invalid YouTube URL');
-      return;
-    }
+  async function addYoutubeByUrl(url) {
+    const id = getYouTubeId(url.trim());
+    if (!id || !isYouTubeUrl(url.trim())) return;
 
     const canonicalUrl = `https://www.youtube.com/watch?v=${id}`;
-    let choice = youtubeChoices.find(item => item.video === canonicalUrl);
-    if (!choice) {
-      choice = {
+    if (!youtubeChoices.some(choice => choice.video === canonicalUrl)) {
+      youtubeChoices.push({
         name: await fetchVideoTitle(canonicalUrl),
         image: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
         video: canonicalUrl,
-        type: 'youtube',
-      };
-      youtubeChoices.push(choice);
-      saveYoutubeChoices();
+        sourceType: 'youtube',
+      });
+      saveYoutubeUrls();
     }
 
-    selectedChoice = choice;
-    setStatus('Vidéo YouTube ajoutée. / YouTube video added.');
-    renderGrid();
-    updateStartButton();
+    selectedChoice = youtubeChoices.find(choice => choice.video === canonicalUrl) || null;
+    populateTilePickerGrid();
+    updateStartButtonState();
   }
 
   async function fetchPlaylistVideoIds(apiKey, playlistId) {
@@ -176,9 +276,17 @@ document.addEventListener('DOMContentLoaded', () => {
       url.searchParams.set('key', apiKey);
       if (pageToken) url.searchParams.set('pageToken', pageToken);
       const response = await fetch(url);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-      data.items?.forEach(item => {
+      const text = await response.text();
+      if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+          const data = JSON.parse(text);
+          if (data.error?.message) message += ` – ${data.error.message}`;
+        } catch {}
+        throw new Error(message);
+      }
+      const data = JSON.parse(text);
+      (data.items || []).forEach(item => {
         if (item?.contentDetails?.videoId) ids.push(item.contentDetails.videoId);
       });
       pageToken = data.nextPageToken || '';
@@ -187,106 +295,91 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function importPlaylist() {
-    const playlistId = getPlaylistIdFromUrl(youtubePlaylistInput.value.trim());
+    const playlistId = getPlaylistIdFromUrl(playlistInput.value.trim());
     const apiKey = window.YT_API_KEY;
-    if (!playlistId) {
-      setStatus("URL de playlist invalide. / Invalid playlist URL.");
-      return;
-    }
-    if (!apiKey) {
-      setStatus('Clé API YouTube absente. / Missing YouTube API key.');
-      return;
-    }
+    if (!playlistId || !apiKey) return;
 
-    importPlaylistButton.disabled = true;
-    setStatus('Importation de la playlist... / Importing playlist...');
+    playlistButton.disabled = true;
     try {
       const ids = await fetchPlaylistVideoIds(apiKey, playlistId);
       for (const id of ids) {
-        const url = `https://www.youtube.com/watch?v=${id}`;
-        if (!youtubeChoices.some(choice => choice.video === url)) {
-          youtubeChoices.push({
-            name: await fetchVideoTitle(url),
-            image: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
-            video: url,
-            type: 'youtube',
-          });
-        }
+        await addYoutubeByUrl(`https://www.youtube.com/watch?v=${id}`);
       }
-      saveYoutubeChoices();
-      setStatus(`${ids.length} vidéos importées. / ${ids.length} videos imported.`);
-      renderGrid();
-    } catch (error) {
-      setStatus(`Import échoué: ${error.message}`);
+    } catch (err) {
+      console.error(err);
     } finally {
-      importPlaylistButton.disabled = false;
+      playlistButton.disabled = false;
+      populateTilePickerGrid();
     }
   }
 
-  function choicesForCurrentSource() {
-    if (currentSource === 'library') {
-      return (Array.isArray(window.mediaChoices) ? window.mediaChoices : mediaChoices)
-        .filter(choice => categoriesInclude(choice, currentCategory))
-        .map(choice => ({ ...choice, type: 'file' }));
-    }
-    if (currentSource === 'youtube') return youtubeChoices;
-    if (currentSource === 'local' && selectedChoice) return [selectedChoice];
-    return [];
+  async function makeThumbnailFromVideo(file) {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      video.src = url;
+
+      const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
+
+      video.addEventListener('loadedmetadata', () => {
+        try {
+          video.currentTime = Math.min(10, Math.max(0, (video.duration || 0) - 0.1));
+        } catch {}
+      }, { once: true });
+
+      video.addEventListener('seeked', () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 640;
+          canvas.height = 360;
+          const context = canvas.getContext('2d');
+          const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+          const width = video.videoWidth * scale;
+          const height = video.videoHeight * scale;
+          context.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } catch {
+          resolve('../../images/localvideosmultiplechoices.png');
+        }
+        cleanup();
+      }, { once: true });
+
+      video.addEventListener('error', () => {
+        cleanup();
+        resolve('../../images/localvideosmultiplechoices.png');
+      }, { once: true });
+
+      setTimeout(() => {
+        cleanup();
+        resolve('../../images/localvideosmultiplechoices.png');
+      }, 3000);
+    });
   }
 
-  function renderGrid() {
-    grid.innerHTML = '';
-    const choices = choicesForCurrentSource();
+  function revokeLocalChoices() {
+    localChoices.forEach(choice => {
+      try { URL.revokeObjectURL(choice.video); } catch {}
+    });
+  }
 
-    choices.forEach(choice => {
-      const tile = document.createElement('button');
-      tile.type = 'button';
-      tile.className = 'tile';
-      if (selectedChoice?.video === choice.video) tile.classList.add('selected');
-      if (choice.image) tile.style.backgroundImage = `url(${choice.image})`;
-      tile.innerHTML = `<span class="caption"></span>`;
-      tile.querySelector('.caption').textContent = choice.name || 'Vidéo';
-      tile.addEventListener('click', () => {
-        selectedChoice = choice;
-        renderGrid();
-        updateStartButton();
+  async function addLocalFiles(files) {
+    revokeLocalChoices();
+    localChoices = [];
+    for (const file of files) {
+      if (!VIDEO_RX.test(file.name)) continue;
+      localChoices.push({
+        name: file.name,
+        image: await makeThumbnailFromVideo(file),
+        video: URL.createObjectURL(file),
+        sourceType: 'native',
       });
-      grid.appendChild(tile);
-    });
-
-    if (!choices.length) {
-      const empty = document.createElement('p');
-      empty.className = 'status-note';
-      empty.textContent = currentSource === 'local'
-        ? 'Choisissez un fichier vidéo. / Choose a video file.'
-        : 'Aucune vidéo à afficher. / No videos to show.';
-      grid.appendChild(empty);
     }
-  }
-
-  function updateStartButton() {
-    startButton.disabled = !selectedChoice?.video;
-  }
-
-  function resetPickerForSource(source) {
-    currentSource = source;
-    selectedChoice = null;
-    currentCategory = 'all';
-    if (categorySelect) categorySelect.value = 'all';
-    setStatus('');
-
-    libraryControls.style.display = source === 'library' ? 'flex' : 'none';
-    localControls.style.display = source === 'local' ? 'flex' : 'none';
-    youtubeControls.style.display = source === 'youtube' ? 'block' : 'none';
-
-    sourceButtons.forEach(button => {
-      button.classList.toggle('selected', button.dataset.source === source);
-    });
-
-    sourceModal.style.display = 'none';
-    pickerModal.style.display = 'flex';
-    renderGrid();
-    updateStartButton();
+    selectedChoice = localChoices[0] || null;
+    populateTilePickerGrid();
+    updateStartButtonState();
   }
 
   function clearPauseTimer() {
@@ -296,66 +389,71 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function playSelectedMedia() {
+  function playCurrentVideo() {
     clearPauseTimer();
     if (!selectedChoice) return;
-    setLookStatus('Lecture...', 'Playing...', '再生中...');
-    if (selectedChoice.type === 'youtube') {
-      try { youtubePlayer?.playVideo(); isPlaying = true; } catch {}
+    setLookStatus({ fr: 'Lecture...', en: 'Playing...', ja: '再生中...' });
+
+    if (selectedChoice.sourceType === 'youtube') {
+      try {
+        youtubePlayer?.playVideo();
+        isPlaying = true;
+      } catch {}
     } else {
-      video.play().then(() => { isPlaying = true; }).catch(() => {
-        setLookStatus('Cliquez ou regardez de nouveau pour jouer', 'Click or look again to play', 'クリックするか、もう一度見て再生します');
+      videoPlayer.play().then(() => {
+        isPlaying = true;
+      }).catch(err => {
+        console.error(err);
       });
     }
   }
 
-  function pauseSelectedMedia() {
+  function pauseCurrentVideo() {
     clearPauseTimer();
-    if (selectedChoice?.type === 'youtube') {
+    if (selectedChoice?.sourceType === 'youtube') {
       try { youtubePlayer?.pauseVideo(); } catch {}
     } else {
-      video.pause();
+      videoPlayer.pause();
     }
     isPlaying = false;
-    setLookStatus('Regardez la vidéo pour jouer', 'Look at the video to play', '動画を見ると再生します');
+    setLookStatus({ fr: 'Regardez la vidéo pour jouer', en: 'Look at the video to play', ja: '動画を見ると再生します' });
   }
 
-  function scheduleGracePause() {
+  function schedulePauseAfterGrace() {
     clearPauseTimer();
-    setLookStatus('Pause dans 2 secondes...', 'Pausing in 2 seconds...', '2秒後に一時停止...');
+    setLookStatus({ fr: 'Pause dans 2 secondes...', en: 'Pausing in 2 seconds...', ja: '2秒後に一時停止...' });
     pauseTimer = setTimeout(() => {
-      if (!isLooking) pauseSelectedMedia();
+      if (!isLooking) pauseCurrentVideo();
     }, LOOK_AWAY_GRACE_MS);
   }
 
   function handleLookStart() {
     isLooking = true;
-    playSelectedMedia();
+    playCurrentVideo();
   }
 
   function handleLookEnd() {
     isLooking = false;
-    if (isPlaying) scheduleGracePause();
+    if (isPlaying) schedulePauseAfterGrace();
   }
 
-  function resetPlayers() {
+  function resetPlayback() {
     clearPauseTimer();
     isLooking = false;
     isPlaying = false;
     try { youtubePlayer?.stopVideo(); } catch {}
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    youtubeDiv.style.display = 'none';
-    video.style.display = 'block';
+    videoPlayer.pause();
+    videoPlayer.currentTime = 0;
   }
 
   function loadYoutubeVideo(videoId) {
     pendingYoutubeVideoId = videoId;
     if (!youtubeApiReady) return;
+
     pendingYoutubeVideoId = null;
-    video.style.display = 'none';
+    videoPlayer.style.display = 'none';
     youtubeDiv.style.display = 'block';
+
     if (!youtubePlayer) {
       youtubePlayer = new YT.Player('youtube-player', {
         host: 'https://www.youtube-nocookie.com',
@@ -363,120 +461,116 @@ document.addEventListener('DOMContentLoaded', () => {
         playerVars: { controls: 0, disablekb: 1, modestbranding: 1, rel: 0, playsinline: 1 },
         events: {
           onReady: () => {
-            if (isLooking) playSelectedMedia();
+            try { youtubePlayer.pauseVideo(); } catch {}
+            if (isLooking) playCurrentVideo();
           },
           onStateChange: event => {
             if (event.data === YT.PlayerState.ENDED) {
               isPlaying = false;
-              setLookStatus('Vidéo terminée', 'Video ended', '動画が終了しました');
+              setLookStatus({ fr: 'Vidéo terminée', en: 'Video ended', ja: '動画が終了しました' });
             }
           },
         },
       });
     } else {
       youtubePlayer.loadVideoById(videoId);
-      youtubePlayer.pauseVideo();
+      try { youtubePlayer.pauseVideo(); } catch {}
     }
   }
 
-  function startExperience() {
+  function startLookToPlay() {
     if (!selectedChoice?.video) return;
-    pickerModal.style.display = 'none';
-    sourceModal.style.display = 'none';
-    if (languageToggle) languageToggle.style.display = 'none';
-    resetPlayers();
 
-    if (selectedChoice.type === 'youtube') {
-      const videoId = getYouTubeId(selectedChoice.video);
-      loadYoutubeVideo(videoId);
+    resetPlayback();
+    tilePickerModal.style.display = 'none';
+    gameOptionsModal.style.display = 'none';
+    videoContainer.style.display = 'flex';
+    if (languageToggle) languageToggle.style.display = 'none';
+    gazePointer?.classList.add('look-visible', 'gp-dwell');
+
+    if (selectedChoice.sourceType === 'youtube') {
+      videoSource.removeAttribute('src');
+      videoPlayer.removeAttribute('src');
+      loadYoutubeVideo(getYouTubeId(selectedChoice.video));
     } else {
-      video.src = selectedChoice.video;
-      video.load();
+      youtubeDiv.style.display = 'none';
+      videoPlayer.style.display = 'block';
+      videoSource.src = selectedChoice.video;
+      videoPlayer.load();
     }
 
-    videoStage.style.display = 'flex';
-    setLookStatus('Regardez la vidéo pour jouer', 'Look at the video to play', '動画を見ると再生します');
+    setLookStatus({ fr: 'Regardez la vidéo pour jouer', en: 'Look at the video to play', ja: '動画を見ると再生します' });
     ensureFullscreen();
   }
 
   function returnToPicker() {
-    resetPlayers();
-    videoStage.style.display = 'none';
-    pickerModal.style.display = 'flex';
+    resetPlayback();
+    videoContainer.style.display = 'none';
+    tilePickerModal.style.display = 'flex';
     if (languageToggle) languageToggle.style.display = '';
+    gazePointer?.classList.remove('look-visible', 'gp-dwell');
   }
 
   sourceButtons.forEach(button => {
-    button.addEventListener('click', async () => {
-      const source = button.dataset.source;
-      if (!supportedSources.includes(source)) return;
-      if (source === 'youtube' && youtubeChoices.length === 0) {
-        await loadYoutubeChoices();
-      }
-      resetPickerForSource(source);
-    });
+    button.addEventListener('click', () => setSource(button.dataset.source));
   });
 
-  backButton.addEventListener('click', () => {
-    pickerModal.style.display = 'none';
-    sourceModal.style.display = 'flex';
-  });
+  chooseSourceButton.addEventListener('click', showPicker);
+  backButton.addEventListener('click', showSourceOptions);
+  startGameButton.addEventListener('click', startLookToPlay);
 
   categorySelect.addEventListener('change', event => {
     currentCategory = event.target.value;
     selectedChoice = null;
-    renderGrid();
-    updateStartButton();
+    populateTilePickerGrid();
+    updateStartButtonState();
   });
 
-  localVideoInput.addEventListener('change', event => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (localObjectUrl) URL.revokeObjectURL(localObjectUrl);
-    localObjectUrl = URL.createObjectURL(file);
-    selectedChoice = {
-      name: file.name,
-      image: '../../images/localvideosmultiplechoices.png',
-      video: localObjectUrl,
-      type: 'file',
-    };
-    setStatus('Vidéo locale prête. / Local video ready.');
-    renderGrid();
-    updateStartButton();
+  addVideoButton.addEventListener('click', () => addVideoInput.click());
+  addVideoInput.addEventListener('change', async () => {
+    await addLocalFiles(addVideoInput.files || []);
+    addVideoInput.value = '';
   });
 
-  addYoutubeButton.addEventListener('click', () => addYoutubeUrl(youtubeUrlInput.value));
-  youtubeUrlInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') addYoutubeUrl(youtubeUrlInput.value);
+  addYoutubeButton.addEventListener('click', () => addYoutubeByUrl(addYoutubeInput.value));
+  addYoutubeInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') addYoutubeByUrl(addYoutubeInput.value);
   });
-  importPlaylistButton.addEventListener('click', importPlaylist);
-  startButton.addEventListener('click', startExperience);
+  playlistButton.addEventListener('click', importPlaylist);
+  clearButton.addEventListener('click', () => {
+    youtubeChoices = [];
+    selectedChoice = null;
+    try { localStorage.removeItem(YOUTUBE_STORAGE_KEY); } catch {}
+    populateTilePickerGrid();
+    updateStartButtonState();
+  });
 
   lookZone.addEventListener('pointerenter', handleLookStart);
   lookZone.addEventListener('pointermove', event => {
-    updatePointer(event);
+    setPointerPos(event.clientX, event.clientY);
     if (!isLooking) handleLookStart();
   });
   lookZone.addEventListener('pointerleave', handleLookEnd);
-  videoFrame.addEventListener('click', () => {
-    isLooking = true;
-    playSelectedMedia();
+
+  document.addEventListener('pointermove', event => {
+    setPointerPos(event.clientX, event.clientY);
   });
 
-  document.addEventListener('pointermove', updatePointer);
   document.addEventListener('keydown', event => {
-    if (videoStage.style.display === 'flex' && (event.key === 'Escape' || event.key === 'Backspace')) {
+    if (videoContainer.style.display === 'flex' && (event.key === 'Escape' || event.key === 'Backspace')) {
       event.preventDefault();
       returnToPicker();
     }
   });
 
-  video.addEventListener('ended', () => {
+  videoPlayer.addEventListener('ended', () => {
     isPlaying = false;
-    setLookStatus('Vidéo terminée', 'Video ended', '動画が終了しました');
+    setLookStatus({ fr: 'Vidéo terminée', en: 'Video ended', ja: '動画が終了しました' });
   });
 
-  window.addEventListener('beforeunload', () => {
-    if (localObjectUrl) URL.revokeObjectURL(localObjectUrl);
-  });
+  window.addEventListener('beforeunload', revokeLocalChoices);
+
+  ensurePointerOverlay();
+  setSource('library');
+  loadYoutubeUrls();
 });
