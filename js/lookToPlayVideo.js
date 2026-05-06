@@ -101,6 +101,10 @@ document.addEventListener('DOMContentLoaded', () => {
     gazePointer.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
   }
 
+  function setPointerInsideVideo(isInside) {
+    gazePointer?.classList.toggle('look-hidden', isInside);
+  }
+
   function isVideoVisible() {
     return videoContainer.style.display === 'flex';
   }
@@ -469,11 +473,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleLookStart() {
+    setPointerInsideVideo(true);
     isLooking = true;
     playCurrentVideo();
   }
 
   function handleLookEnd() {
+    setPointerInsideVideo(false);
     isLooking = false;
     if (isPlaying) schedulePauseAfterGrace();
   }
@@ -483,6 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearNoMovementTimer();
     lastMovementPosition = null;
     setAttentionPulse(false);
+    setPointerInsideVideo(false);
     isLooking = false;
     isPlaying = false;
     try { youtubePlayer?.stopVideo(); } catch {}
@@ -531,6 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoContainer.style.display = 'flex';
     if (languageToggle) languageToggle.style.display = 'none';
     document.body.classList.add('look-video-active');
+    setPointerInsideVideo(false);
     gazePointer?.classList.add('look-visible', 'gp-dwell');
 
     if (selectedChoice.sourceType === 'youtube') {
@@ -554,6 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tilePickerModal.style.display = 'flex';
     if (languageToggle) languageToggle.style.display = '';
     document.body.classList.remove('look-video-active');
+    setPointerInsideVideo(false);
     gazePointer?.classList.remove('look-visible', 'gp-dwell');
   }
 
@@ -594,6 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
   lookZone.addEventListener('pointerenter', handleLookStart);
   lookZone.addEventListener('pointermove', event => {
     trackPointerMovement(event);
+    setPointerInsideVideo(true);
     if (!isLooking) handleLookStart();
   });
   lookZone.addEventListener('pointerleave', handleLookEnd);
