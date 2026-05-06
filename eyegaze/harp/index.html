@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title class="translate" data-fr="Harpe lumineuse" data-en="Light Harp" data-ja="光のハープ">Harpe lumineuse</title>
+
+  <!-- Keep these paths if the page is placed in the same folder structure as your other games. -->
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <style>
+    :root {
+      --harp-line: #f4f4f4;
+      --harp-shadow: rgba(255,255,255,0.10);
+      --string-color: rgba(255,255,255,0.92);
+      --string-glow: rgba(255,255,255,0.55);
+      --beam-color: rgba(255,255,255,0.26);
+      --aura: rgba(255,255,255,0.16);
+      --panel-bg: rgba(5, 10, 22, 0.92);
+      --gp-size: 36px;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body.light {
+      background: #e9e9e9;
+      color: #151515;
+      --harp-line: #2a2a2a;
+      --harp-shadow: rgba(0,0,0,0.10);
+      --string-color: rgba(42,42,42,0.90);
+      --string-glow: rgba(0,0,0,0.25);
+      --beam-color: rgba(0,0,0,0.12);
+      --aura: rgba(0,0,0,0.08);
+    }
+    body.dark  {
+      background: #343434;
+      color: #ffffff;
+      --harp-line: #f4f4f4;
+      --harp-shadow: rgba(255,255,255,0.12);
+      --string-color: rgba(255,255,255,0.92);
+      --string-glow: rgba(255,255,255,0.45);
+      --beam-color: rgba(255,255,255,0.22);
+      --aura: rgba(255,255,255,0.13);
+    }
+    body.menu-open { background: #000 !important; color: #ffffff; }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: #ffffff;
+      color: #009688;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+    body.dark #langToggle,
+    body.menu-open #langToggle {
+      background: #111111;
+      color: #14b8a6;
+      border-color: #14b8a6;
+    }
+
+    .value-badge {
+      display: inline-block;
+      min-width: 2ch;
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.12);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hide-native-cursor,
+    .hide-native-cursor * { cursor: none !important; }
+
+    .game-container {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+    }
+
+    .stars { display: none; }
+    @keyframes driftStars {
+      from { transform: translate3d(0,0,0); }
+      to   { transform: translate3d(-120px,60px,0); }
+    }
+
+    #harpStage {
+      position: relative;
+      width: min(820px, 88vw);
+      height: min(680px, 84vh);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      isolation: isolate;
+    }
+
+    #particleCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0.65;
+    }
+
+    .harp-frame {
+      position: absolute;
+      inset: 8% 16% 8% 14%;
+      pointer-events: none;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .harp-outline {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .harp-outline path,
+    .harp-outline line,
+    .harp-outline ellipse {
+      stroke: var(--harp-line);
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      filter: drop-shadow(0 0 6px var(--harp-shadow));
+    }
+
+    .harp-outline .pillar {
+      stroke-width: 8;
+    }
+
+    .harp-outline .body {
+      stroke-width: 8;
+    }
+
+    .harp-outline .brace {
+      stroke-width: 8;
+    }
+
+    .harp-outline .base {
+      fill: var(--harp-line);
+      stroke-width: 3;
+    }
+
+    .harp-outline .base-shadow {
+      fill: var(--harp-shadow);
+      stroke: none;
+      filter: none;
+    }
+
+    #strings {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+    }
+
+    .string-zone {
+      position: absolute;
+      top: var(--top);
+      left: var(--left);
+      width: var(--zone-width);
+      height: var(--height);
+      transform: translateX(-50%);
+      touch-action: none;
+      user-select: none;
+      outline: none;
+      border-radius: 999px;
+    }
+
+    .harp-string {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: var(--string-width);
+      height: 100%;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: var(--string-color);
+      box-shadow: 0 0 6px var(--harp-shadow);
+      transform-origin: 50% 0;
+      transition: box-shadow 120ms ease, filter 120ms ease;
+    }
+
+    .string-zone.is-low .harp-string {
+      background: var(--string-color);
+      box-shadow: 0 0 6px var(--harp-shadow);
+    }
+
+    .string-zone.active .harp-string {
+      animation: pluck 380ms ease-out;
+      filter: brightness(1.15);
+      box-shadow: 0 0 18px var(--string-glow), 0 0 36px var(--string-glow);
+    }
+
+    @keyframes pluck {
+      0%   { transform: translateX(-50%) skewX(0deg) scaleX(1); }
+      18%  { transform: translateX(-50%) skewX(-7deg) scaleX(1.5); }
+      36%  { transform: translateX(-50%) skewX(6deg) scaleX(1.25); }
+      56%  { transform: translateX(-50%) skewX(-3deg) scaleX(1.12); }
+      78%  { transform: translateX(-50%) skewX(1.8deg) scaleX(1.05); }
+      100% { transform: translateX(-50%) skewX(0deg) scaleX(1); }
+    }
+
+    .string-label { display: none; }
+
+    .dwell-fill {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 0;
+      height: 0;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: radial-gradient(circle, var(--aura), transparent 70%);
+      box-shadow: 0 0 26px var(--aura);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .light-beam {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 14px;
+      height: 100%;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: linear-gradient(180deg, transparent, var(--beam-color), transparent);
+      opacity: 0;
+      pointer-events: none;
+      filter: blur(1px);
+    }
+    .string-zone.active .light-beam { animation: beamFlash 560ms ease-out; }
+    @keyframes beamFlash {
+      0% { opacity: 0; transform: translateX(-50%) scaleX(0.4); }
+      18% { opacity: 1; transform: translateX(-50%) scaleX(1.7); }
+      100% { opacity: 0; transform: translateX(-50%) scaleX(0.7); }
+    }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      will-change: transform, opacity;
+    }
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff2424;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.16), 0 0 22px rgba(255,36,36,0.45);
+    }
+    #gazePointer.gp-dwell::before { animation: gpPulse 700ms ease-in-out infinite alternate; }
+    @keyframes gpPulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+
+    .gp-compact { display: flex; flex-direction: column; gap: 6px; }
+    .gp-summary { cursor: pointer; font-weight: 600; padding: 6px 0; opacity: 0.85; }
+    .gp-advanced { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 2px; }
+    .gp-row { display: grid; grid-template-columns: 1fr minmax(140px, 1.4fr); align-items: center; gap: 10px; }
+    .gp-label { white-space: nowrap; }
+    .gp-range { width: 100%; }
+    details#gpDetails { border-left: 3px solid rgba(0,150,136,0.25); padding-left: 10px; }
+
+    @media (max-width: 780px) {
+      #harpStage { width: 98vw; height: 82vh; }
+      .string-label { display: none; }
+
+      .string-zone:focus-visible { outline: 2px solid var(--harp-line); outline-offset: 4px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .stars, .string-zone.active .harp-string, .string-zone.active .light-beam, #gazePointer.gp-dwell::before { animation: none; }
+    }
+  </style>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body class="dark menu-open">
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate" data-fr="Harpe lumineuse" data-en="Light Harp" data-ja="光のハープ">Harpe lumineuse</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label">
+              <input type="checkbox" id="muteSFX">
+              <span class="translate" data-fr="Désactiver les sons" data-en="Disable sounds" data-ja="音をオフ">Désactiver les sons</span>
+            </label>
+          </div>
+
+          <div class="option-item">
+            <label for="sfxVol" class="teal-label">
+              <span class="translate" data-fr="Volume:" data-en="Volume:" data-ja="音量：">Volume:</span>
+              <span id="sfxVolVal" class="value-badge">90</span>
+            </label>
+            <input type="range" id="sfxVol" class="styled-slider" min="0" max="100" value="90">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="themeSelect" class="teal-label label-block translate" data-fr="Mode" data-en="Theme" data-ja="テーマ">Mode</label>
+            <select id="themeSelect" class="styled-select">
+              <option value="dark" selected class="translate" data-fr="Sombre" data-en="Dark" data-ja="ダーク">Sombre</option>
+              <option value="light" class="translate" data-fr="Clair" data-en="Light" data-ja="ライト">Clair</option>
+            </select>
+          </div>
+
+          <div class="option-item">
+            <label for="noteLength" class="teal-label">
+              <span class="translate" data-fr="Résonance:" data-en="Resonance:" data-ja="響き：">Résonance:</span>
+              <span id="noteLengthVal" class="value-badge">3.0</span>s
+            </label>
+            <input type="range" id="noteLength" class="styled-slider" min="0.8" max="6" step="0.1" value="3.0">
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTimeSlider" class="teal-label">
+              <span class="translate" data-fr="Temps de fixation:" data-en="Dwell time:" data-ja="注視時間：">Temps de fixation:</span>
+              <span id="dwellTimeVal" class="value-badge">500</span> ms
+            </label>
+            <input type="range" id="dwellTimeSlider" class="styled-slider" min="50" max="5000" step="50" value="500">
+          </div>
+
+          <div class="option-item gp-compact">
+            <label class="teal-label">
+              <input type="checkbox" id="showGazePointer" checked>
+              <span class="translate" data-fr="Afficher le pointeur" data-en="Show pointer" data-ja="ポインターを表示">Afficher le pointeur</span>
+            </label>
+
+            <details id="gpDetails">
+              <summary class="gp-summary translate" data-fr="Options du pointeur" data-en="Pointer options" data-ja="ポインター設定">Options du pointeur</summary>
+              <div class="gp-advanced">
+                <div class="gp-row">
+                  <label for="gazeSize" class="teal-label gp-label">
+                    <span class="translate" data-fr="Taille" data-en="Size" data-ja="サイズ">Taille</span>:
+                    <span id="gazeSizeVal">36</span> px
+                  </label>
+                  <input type="range" id="gazeSize" class="styled-slider gp-range" min="16" max="120" step="2" value="36">
+                </div>
+                <div class="gp-row">
+                  <label for="gazeOpacity" class="teal-label gp-label">
+                    <span class="translate" data-fr="Opacité" data-en="Opacity" data-ja="不透明度">Opacité</span>:
+                    <span id="gazeOpacityVal">100</span>%
+                  </label>
+                  <input type="range" id="gazeOpacity" class="styled-slider gp-range" min="20" max="100" step="5" value="100">
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+    </div>
+  </div>
+
+  <div class="game-container" id="gameContainer">
+    <div id="harpStage" role="group" aria-label="Harpe interactive">
+      <canvas id="particleCanvas"></canvas>
+      <div class="harp-frame" aria-hidden="true">
+        <svg class="harp-outline" viewBox="0 0 320 420" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+          <line class="pillar" x1="72" y1="28" x2="86" y2="303"></line>
+          <path class="body" d="M87 67
+                                   C119 54, 144 63, 158 86
+                                   C168 103, 175 126, 188 140
+                                   C201 154, 221 154, 241 137
+                                   C227 162, 208 184, 91 304"></path>
+          <line class="brace" x1="86" y1="304" x2="214" y2="146"></line>
+          <ellipse class="base" cx="90" cy="330" rx="34" ry="13"></ellipse>
+          <ellipse class="base-shadow" cx="90" cy="340" rx="29" ry="10" opacity="0.28"></ellipse>
+        </svg>
+      </div>
+      <div id="strings"></div>
+    </div>
+  </div>
+
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationmain.js"></script>
+
+  <script>
+  /* =========================
+     Language
+     ========================= */
+  const LS_LANG_KEY = 'siteLanguage';
+  const languages = ['fr', 'en', 'ja'];
+  const langToggle = document.getElementById('langToggle');
+
+  function getLang(){
+    try {
+      const saved = localStorage.getItem(LS_LANG_KEY);
+      if (languages.includes(saved)) return saved;
+    } catch(e) {}
+    return languages.includes(document.documentElement.lang) ? document.documentElement.lang : 'fr';
+  }
+
+  function setLang(lang){
+    const safe = languages.includes(lang) ? lang : 'fr';
+    document.documentElement.lang = safe;
+    try { localStorage.setItem(LS_LANG_KEY, safe); } catch(e) {}
+    document.querySelectorAll('.translate').forEach(el => {
+      const content = el.getAttribute(`data-${safe}`);
+      if (content != null) el.textContent = content;
+    });
+  }
+  setLang(getLang());
+
+  langToggle.addEventListener('click', () => {
+    const current = getLang();
+    const next = languages[(languages.indexOf(current) + 1) % languages.length];
+    setLang(next);
+  });
+
+  /* =========================
+     Controls
+     ========================= */
+  const startButton = document.getElementById('startButton');
+  const gameOptions = document.getElementById('game-options');
+  const gameContainer = document.getElementById('gameContainer');
+  const themeSelect = document.getElementById('themeSelect');
+  const muteSFX = document.getElementById('muteSFX');
+  const sfxVol = document.getElementById('sfxVol');
+  const sfxVolVal = document.getElementById('sfxVolVal');
+  const noteLength = document.getElementById('noteLength');
+  const noteLengthVal = document.getElementById('noteLengthVal');
+  const dwellSlider = document.getElementById('dwellTimeSlider');
+  const dwellTimeVal = document.getElementById('dwellTimeVal');
+
+  const showGazePointer = document.getElementById('showGazePointer');
+  const gazePointer = document.getElementById('gazePointer');
+  const gazeSize = document.getElementById('gazeSize');
+  const gazeSizeVal = document.getElementById('gazeSizeVal');
+  const gazeOpacity = document.getElementById('gazeOpacity');
+  const gazeOpacityVal = document.getElementById('gazeOpacityVal');
+
+  function reflectControls(){
+    sfxVolVal.textContent = sfxVol.value;
+    noteLengthVal.textContent = Number(noteLength.value).toFixed(1);
+    dwellTimeVal.textContent = dwellSlider.value;
+    gazeSizeVal.textContent = gazeSize.value;
+    gazeOpacityVal.textContent = gazeOpacity.value;
+    document.documentElement.style.setProperty('--gp-size', `${gazeSize.value}px`);
+  }
+  [sfxVol, noteLength, dwellSlider, gazeSize, gazeOpacity].forEach(el => el.addEventListener('input', reflectControls));
+  reflectControls();
+
+  function applyTheme(){
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(themeSelect.value === 'light' ? 'light' : 'dark');
+  }
+  themeSelect.addEventListener('change', applyTheme);
+  applyTheme();
+
+  /* =========================
+     Harp layout
+     ========================= */
+  const stringsEl = document.getElementById('strings');
+  const NOTES = [
+    { label: 'C3',  f: 130.81 }, { label: 'D3',  f: 146.83 }, { label: 'E3',  f: 164.81 },
+    { label: 'G3',  f: 196.00 }, { label: 'A3',  f: 220.00 }, { label: 'C4',  f: 261.63 },
+    { label: 'D4',  f: 293.66 }, { label: 'E4',  f: 329.63 }, { label: 'G4',  f: 392.00 },
+    { label: 'A4',  f: 440.00 }, { label: 'C5',  f: 523.25 }, { label: 'D5',  f: 587.33 },
+    { label: 'E5',  f: 659.25 }, { label: 'G5',  f: 783.99 }
+  ];
+
+  function buildStrings(){
+    stringsEl.innerHTML = '';
+    NOTES.forEach((note, i) => {
+      const t = i / (NOTES.length - 1);
+      const zone = document.createElement('div');
+      zone.className = 'string-zone' + (i < 4 ? ' is-low' : '');
+      zone.dataset.index = String(i);
+      zone.setAttribute('aria-label', `String ${i + 1}`);
+      zone.tabIndex = 0;
+      zone.style.setProperty('--left', `${31 + t * 30}%`);
+      zone.style.setProperty('--top', `${20 + t * 3.6}%`);
+      zone.style.setProperty('--height', `${57 - t * 17}%`);
+      zone.style.setProperty('--zone-width', `${Math.max(4.5, 7.2 - t * 1.5)}%`);
+      zone.style.setProperty('--string-width', `${Math.max(2, 5.2 - t * 2.6)}px`);
+      zone.innerHTML = `<div class="dwell-fill"></div><div class="light-beam"></div><div class="harp-string"></div>`;
+      stringsEl.appendChild(zone);
+    });
+  }
+  buildStrings();
+
+  const zones = Array.from(document.querySelectorAll('.string-zone'));
+
+  /* =========================
+     Audio: synthesized harp/plucked string
+     ========================= */
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioContextClass();
+  const master = audioCtx.createGain();
+  master.gain.value = 0.9;
+  master.connect(audioCtx.destination);
+
+  function createImpulse(duration = 4.2, decay = 3.5){
+    const length = Math.floor(audioCtx.sampleRate * duration);
+    const buffer = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        const n = Math.random() * 2 - 1;
+        data[i] = n * Math.pow(1 - i / length, decay) * 0.85;
+      }
+    }
+    const convolver = audioCtx.createConvolver();
+    convolver.buffer = buffer;
+    return convolver;
+  }
+
+  const dryBus = audioCtx.createGain();
+  const wetBus = audioCtx.createGain();
+  const reverb = createImpulse(4.8, 3.2);
+  dryBus.gain.value = 0.82;
+  wetBus.gain.value = 0.34;
+  dryBus.connect(master);
+  wetBus.connect(reverb).connect(master);
+
+  function currentVolume(){
+    return muteSFX.checked ? 0 : Math.pow(Number(sfxVol.value) / 100, 1.25);
+  }
+
+  function playHarpNote(index, velocity = 1){
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+    const note = NOTES[index];
+    const f = note.f;
+    const resonance = Number(noteLength.value);
+    const volume = currentVolume() * velocity;
+    if (volume <= 0.0001) return;
+
+    const voice = audioCtx.createGain();
+    voice.gain.setValueAtTime(0.0001, now);
+    voice.gain.linearRampToValueAtTime(0.85 * volume, now + 0.008);
+    voice.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.4, resonance));
+
+    const pan = audioCtx.createStereoPanner();
+    pan.pan.value = -0.56 + (index / (NOTES.length - 1)) * 1.12;
+
+    voice.connect(pan);
+    pan.connect(dryBus);
+    pan.connect(wetBus);
+
+    // Harp-like attack: soft bright partials that decay at different speeds.
+    const partials = [
+      { ratio: 1.00, gain: 1.00, decay: 1.00, type: 'triangle' },
+      { ratio: 2.01, gain: 0.42, decay: 0.62, type: 'sine' },
+      { ratio: 3.00, gain: 0.24, decay: 0.44, type: 'sine' },
+      { ratio: 4.02, gain: 0.14, decay: 0.32, type: 'sine' },
+      { ratio: 5.99, gain: 0.07, decay: 0.22, type: 'sine' }
+    ];
+
+    partials.forEach((p, k) => {
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = p.type;
+      osc.frequency.setValueAtTime(f * p.ratio, now);
+      osc.detune.setValueAtTime((Math.random() - 0.5) * (k === 0 ? 3 : 8), now);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(p.gain, now + 0.004 + k * 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.08, resonance * p.decay));
+      osc.connect(g).connect(voice);
+      osc.start(now);
+      osc.stop(now + resonance + 0.08);
+    });
+
+    // Small pluck noise through a lowpass, for a more physical string onset.
+    const noiseLength = Math.floor(audioCtx.sampleRate * 0.045);
+    const noiseBuffer = audioCtx.createBuffer(1, noiseLength, audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseLength; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / noiseLength, 2.8);
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseFilter = audioCtx.createBiquadFilter();
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.value = Math.min(5200, f * 10);
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.12 * volume, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+    noise.connect(noiseFilter).connect(noiseGain).connect(pan);
+    noise.start(now);
+    noise.stop(now + 0.06);
+  }
+
+  function harpSilenceAll(){
+    const now = audioCtx.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setTargetAtTime(0.0001, now, 0.04);
+    setTimeout(() => {
+      master.gain.cancelScheduledValues(audioCtx.currentTime);
+      master.gain.setTargetAtTime(0.9, audioCtx.currentTime, 0.08);
+    }, 140);
+  }
+
+  /* =========================
+     Particles
+     ========================= */
+  const particleCanvas = document.getElementById('particleCanvas');
+  const pctx = particleCanvas.getContext('2d');
+  let particles = [];
+
+  function resizeParticles(){
+    const rect = particleCanvas.getBoundingClientRect();
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    particleCanvas.width = Math.floor(rect.width * dpr);
+    particleCanvas.height = Math.floor(rect.height * dpr);
+    pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resizeParticles);
+
+  function spawnParticles(zone){
+    const stageRect = document.getElementById('harpStage').getBoundingClientRect();
+    const rect = zone.getBoundingClientRect();
+    const x = rect.left + rect.width / 2 - stageRect.left;
+    const y = rect.top + rect.height * 0.55 - stageRect.top;
+    const hue = 190 + Math.random() * 55;
+    for (let i = 0; i < 10; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 1.8,
+        vy: -Math.random() * 2.2 - 0.2,
+        life: 650 + Math.random() * 520,
+        age: 0,
+        size: 1.5 + Math.random() * 2.2,
+        hue
+      });
+    }
+  }
+
+  let lastFrame = performance.now();
+  function animateParticles(t){
+    const dt = Math.min(34, t - lastFrame);
+    lastFrame = t;
+    const w = particleCanvas.clientWidth;
+    const h = particleCanvas.clientHeight;
+    pctx.clearRect(0, 0, w, h);
+    pctx.globalCompositeOperation = 'lighter';
+    particles = particles.filter(p => {
+      p.age += dt;
+      p.x += p.vx * dt * 0.06;
+      p.y += p.vy * dt * 0.06;
+      p.vy += 0.006 * dt;
+      const a = Math.max(0, 1 - p.age / p.life);
+      pctx.beginPath();
+      const alpha = a * 0.55;
+      const isDark = document.body.classList.contains('dark');
+      pctx.fillStyle = isDark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha * 0.55})`;
+      pctx.arc(p.x, p.y, p.size * (0.7 + a), 0, Math.PI * 2);
+      pctx.fill();
+      return p.age < p.life;
+    });
+    pctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(animateParticles);
+  }
+  requestAnimationFrame(animateParticles);
+
+  /* =========================
+     Dwell activation
+     ========================= */
+  let hoverTimeout = null;
+  let activeZone = null;
+
+  function getDwellMs(){
+    try {
+      if (window.eyegazeSettings && typeof window.eyegazeSettings.dwellTime === 'number') {
+        return Math.max(50, window.eyegazeSettings.dwellTime);
+      }
+    } catch(e) {}
+    const v = parseInt(dwellSlider.value, 10);
+    return Math.max(50, isNaN(v) ? 500 : v);
+  }
+
+  function startHover(zone){
+    if (activeZone === zone) return;
+    stopHover();
+    activeZone = zone;
+    const fill = zone.querySelector('.dwell-fill');
+    if (!fill) return;
+    const dwellMs = getDwellMs();
+    fill.style.transition = 'none';
+    fill.style.width = '0';
+    fill.style.height = '0';
+    requestAnimationFrame(() => {
+      fill.style.transition = `width ${dwellMs}ms linear, height ${dwellMs}ms linear`;
+      fill.style.width = '160%';
+      fill.style.height = '36%';
+    });
+    gazePointer.classList.add('gp-dwell');
+    hoverTimeout = setTimeout(() => {
+      triggerString(zone, 0.92);
+      stopHover();
+    }, dwellMs);
+  }
+
+  function stopHover(){
+    clearTimeout(hoverTimeout);
+    hoverTimeout = null;
+    if (activeZone) {
+      const fill = activeZone.querySelector('.dwell-fill');
+      if (fill) {
+        fill.style.transition = 'none';
+        fill.style.width = '0';
+        fill.style.height = '0';
+      }
+    }
+    activeZone = null;
+    gazePointer.classList.remove('gp-dwell');
+  }
+
+  function triggerString(zone, velocity = 1){
+    const index = Number(zone.dataset.index);
+    if (!Number.isFinite(index)) return;
+    zone.classList.remove('active');
+    void zone.offsetWidth;
+    zone.classList.add('active');
+    playHarpNote(index, velocity);
+    spawnParticles(zone);
+    setTimeout(() => zone.classList.remove('active'), 580);
+  }
+
+  zones.forEach(zone => {
+    zone.addEventListener('pointerenter', () => startHover(zone));
+    zone.addEventListener('pointerleave', stopHover);
+    zone.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      stopHover();
+      triggerString(zone, 1);
+    });
+    zone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        triggerString(zone, 1);
+      }
+    });
+  });
+
+  // Optional keyboard notes: Q to P and A to D cover the strings.
+  const KEY_MAP = ['q','w','e','r','t','y','u','i','o','p','a','s','d','f'];
+  document.addEventListener('keydown', (e) => {
+    if (!document.body.classList.contains('playing')) return;
+    const idx = KEY_MAP.indexOf(e.key.toLowerCase());
+    if (idx >= 0 && zones[idx]) triggerString(zones[idx], 1);
+    if (e.key === 'Escape') harpSilenceAll();
+  });
+
+  /* =========================
+     Custom gaze pointer
+     ========================= */
+  let pointerVisible = false;
+  window.addEventListener('pointermove', (e) => {
+    if (!document.body.classList.contains('playing') || !showGazePointer.checked) return;
+    pointerVisible = true;
+    gazePointer.style.opacity = String(Number(gazeOpacity.value) / 100);
+    gazePointer.style.transform = `translate(${e.clientX}px, ${e.clientY}px) translate(-50%, -50%)`;
+  }, { passive: true });
+
+  function syncPointerVisibility(){
+    const show = showGazePointer.checked && document.body.classList.contains('playing');
+    document.body.classList.toggle('hide-native-cursor', show);
+    if (!show) gazePointer.style.opacity = '0';
+    else if (pointerVisible) gazePointer.style.opacity = String(Number(gazeOpacity.value) / 100);
+  }
+  showGazePointer.addEventListener('change', syncPointerVisibility);
+  gazeOpacity.addEventListener('input', syncPointerVisibility);
+
+  /* =========================
+     Start
+     ========================= */
+  startButton.addEventListener('click', async () => {
+    try { await audioCtx.resume(); } catch(e) {}
+    document.body.classList.remove('menu-open');
+    document.body.classList.add('playing');
+    applyTheme();
+    gameOptions.style.display = 'none';
+    gameContainer.style.display = 'flex';
+    langToggle.style.display = 'none';
+    resizeParticles();
+    syncPointerVisibility();
+
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Voix et lumières</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+
+  <style>
+    :root {
+      --panel-bg: rgba(8, 10, 18, 0.92);
+      --panel-border: rgba(255, 255, 255, 0.16);
+      --text: #ffffff;
+      --soft: rgba(255, 255, 255, 0.72);
+      --accent: #68f7ff;
+      --accent-2: #ff7add;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100%;
+      touch-action: manipulation;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #p5-canvas-holder {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: #000;
+    }
+
+    #startOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    #startPanel {
+      width: min(760px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 28px;
+      box-shadow: 0 30px 100px rgba(0, 0, 0, 0.65);
+      padding: 28px;
+      box-sizing: border-box;
+      backdrop-filter: blur(12px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 5vw, 4rem);
+      letter-spacing: -0.05em;
+      line-height: 0.95;
+    }
+
+    .subtitle {
+      margin: 0 0 24px;
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      line-height: 1.45;
+      color: var(--soft);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+
+    .option {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .option.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #e9fbff;
+      margin-bottom: 8px;
+    }
+
+    select,
+    input[type="range"] {
+      width: 100%;
+    }
+
+    select {
+      appearance: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(0, 0, 0, 0.36);
+      color: #fff;
+      font-size: 1rem;
+      outline: none;
+    }
+
+    input[type="range"] {
+      accent-color: var(--accent);
+    }
+
+    .valueRow {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--soft);
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+
+    .buttonRow {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    button {
+      border: none;
+      border-radius: 18px;
+      padding: 15px 16px;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      color: white;
+      background: linear-gradient(135deg, #0ecfff, #875cff);
+      box-shadow: 0 14px 30px rgba(0, 190, 255, 0.18);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
+    }
+
+    button.secondary {
+      background: rgba(255, 255, 255, 0.11);
+      box-shadow: none;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+
+    button.warning {
+      background: linear-gradient(135deg, #ff4fb8, #ff9a3c);
+    }
+
+    #tinyControls {
+      position: fixed;
+      z-index: 30;
+      left: 14px;
+      bottom: 14px;
+      display: none;
+      gap: 10px;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.46);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      padding: 10px;
+      backdrop-filter: blur(8px);
+      opacity: 0.18;
+      transition: opacity 0.25s ease;
+    }
+
+    #tinyControls:hover {
+      opacity: 1;
+    }
+
+    #tinyControls button {
+      padding: 9px 12px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      box-shadow: none;
+    }
+
+    #tinyControls input[type="range"] {
+      width: 150px;
+    }
+
+    #statusPill {
+      position: fixed;
+      z-index: 31;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 13px;
+      border-radius: 999px;
+      color: rgba(255, 255, 255, 0.88);
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+      font-size: 0.85rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+
+    #statusPill.visible {
+      opacity: 1;
+    }
+
+    @media (max-width: 700px) {
+      .grid,
+      .buttonRow {
+        grid-template-columns: 1fr;
+      }
+
+      #startPanel {
+        padding: 22px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="p5-canvas-holder"></div>
+
+  <div id="statusPill">Ready</div>
+
+  <div id="tinyControls">
+    <button id="tinyBackButton" class="secondary">Options</button>
+    <button id="tinyAzButton" class="warning">A → Z</button>
+    <input id="tinySlider" type="range" min="0" max="1" step="0.01" value="0.15" />
+  </div>
+
+  <div id="startOverlay">
+    <div id="startPanel">
+      <h1>Voix et lumières</h1>
+
+      <p class="subtitle">
+        Une activité plein écran où la voix, les sons et les vocalisations créent une animation visuelle calme,
+        colorée et réactive. Le micro peut être utilisé directement, ou remplacé par un mode test avec un curseur
+        et un test automatique A → Z.
+      </p>
+
+      <div class="grid">
+        <div class="option">
+          <label for="inputMode">Source sonore</label>
+          <select id="inputMode">
+            <option value="mic">Microphone réel</option>
+            <option value="slider">Mode test avec curseur</option>
+          </select>
+        </div>
+
+        <div class="option">
+          <label for="visualMode">Animation</label>
+          <select id="visualMode">
+            <option value="auto" selected>Automatique</option>
+            <option value="bubbles">Bulles lumineuses</option>
+            <option value="vortex">Vortex doux</option>
+            <option value="shapes">Formes concentriques</option>
+            <option value="aurora">Aurore lente</option>
+          </select>
+        </div>
+
+        <div class="option">
+          <label for="sensitivitySlider">Sensibilité</label>
+          <input id="sensitivitySlider" type="range" min="0.5" max="6" step="0.1" value="3.1" />
+          <div class="valueRow">
+            <span>Moins</span>
+            <span id="sensitivityValue">3.1</span>
+            <span>Plus</span>
+          </div>
+        </div>
+
+        <div class="option">
+          <label for="reverbSlider">Réverbération</label>
+          <input id="reverbSlider" type="range" min="0" max="1" step="0.01" value="0.55" />
+          <div class="valueRow">
+            <span>Discrète</span>
+            <span id="reverbValue">55%</span>
+            <span>Riche</span>
+          </div>
+        </div>
+
+        <div class="option full">
+          <label for="testSlider">Tester sans micro</label>
+          <input id="testSlider" type="range" min="0" max="1" step="0.01" value="0.15" />
+          <div class="valueRow">
+            <span>Son doux</span>
+            <span id="testValue">15%</span>
+            <span>Bruit fort</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="buttonRow">
+        <button id="startMicButton">Commencer avec micro</button>
+        <button id="startSliderButton" class="secondary">Commencer en test</button>
+        <button id="azTestButton" class="warning">Test A → Z</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /*
+      Voix et lumières
+      Version simplifiée visuellement:
+      - Fond noir
+      - Animations moins chargées
+      - Mouvements plus lents
+      - Couleurs plus riches
+      - Réverbération plus large pour le son synthétique de test
+    */
+
+    const els = {};
+
+    let canvas;
+
+    let mic;
+    let fft;
+
+    let reverb;
+    let delay;
+    let lowPass;
+    let synthOscA;
+    let synthOscB;
+    let synthNoise;
+
+    let started = false;
+    let inputMode = "slider";
+    let visualMode = "auto";
+
+    let azTesting = false;
+    let azStartTime = 0;
+    const azDuration = 16000;
+
+    let syntheticSoundOn = false;
+
+    let currentAutoMode = "bubbles";
+    let lastAutoSwitch = 0;
+
+    let smoothedVol = 0;
+    let previousVol = 0;
+    let soundAttack = 0;
+    let quietTimer = 0;
+
+    let features = {
+      vol: 0,
+      rawVol: 0,
+      bass: 0,
+      mid: 0,
+      treble: 0,
+      brightness: 0,
+      noisiness: 0,
+      attack: 0
+    };
+
+    let bubbles = [];
+    let vortexParticles = [];
+    let rings = [];
+    let auroraLines = [];
+
+    const palettes = [
+      ["#45f3ff", "#9b7cff", "#ff72da", "#fff2a8"],
+      ["#00ffd5", "#7cff89", "#ffe66d", "#7dc8ff"],
+      ["#ff6b9e", "#ffb35c", "#ffe77a", "#9dfcff"],
+      ["#73a7ff", "#b56cff", "#ff7fd5", "#ffffff"]
+    ];
+
+    let currentPaletteIndex = 0;
+
+    function cacheElements() {
+      [
+        "startOverlay",
+        "inputMode",
+        "visualMode",
+        "sensitivitySlider",
+        "sensitivityValue",
+        "reverbSlider",
+        "reverbValue",
+        "testSlider",
+        "testValue",
+        "startMicButton",
+        "startSliderButton",
+        "azTestButton",
+        "tinyControls",
+        "tinyBackButton",
+        "tinyAzButton",
+        "tinySlider",
+        "statusPill"
+      ].forEach(id => els[id] = document.getElementById(id));
+    }
+
+    function setup() {
+      cacheElements();
+
+      const holder = document.getElementById("p5-canvas-holder");
+      canvas = createCanvas(windowWidth, windowHeight);
+      canvas.parent(holder);
+
+      colorMode(RGB, 255, 255, 255, 255);
+      noStroke();
+
+      mic = new p5.AudioIn();
+      fft = new p5.FFT(0.86, 1024);
+
+      reverb = new p5.Reverb();
+      delay = new p5.Delay();
+      lowPass = new p5.LowPass();
+
+      createAurora();
+      bindUI();
+
+      background(0);
+    }
+
+    function bindUI() {
+      els.sensitivitySlider.addEventListener("input", () => {
+        els.sensitivityValue.textContent = Number(els.sensitivitySlider.value).toFixed(1);
+      });
+
+      els.reverbSlider.addEventListener("input", () => {
+        const value = Number(els.reverbSlider.value);
+        els.reverbValue.textContent = Math.round(value * 100) + "%";
+        updateReverbAmount();
+      });
+
+      els.testSlider.addEventListener("input", () => {
+        els.testValue.textContent = Math.round(Number(els.testSlider.value) * 100) + "%";
+        els.tinySlider.value = els.testSlider.value;
+      });
+
+      els.tinySlider.addEventListener("input", () => {
+        els.testSlider.value = els.tinySlider.value;
+        els.testValue.textContent = Math.round(Number(els.testSlider.value) * 100) + "%";
+        azTesting = false;
+      });
+
+      els.startMicButton.addEventListener("click", () => {
+        startExperience("mic", false);
+      });
+
+      els.startSliderButton.addEventListener("click", () => {
+        startExperience("slider", false);
+      });
+
+      els.azTestButton.addEventListener("click", () => {
+        startExperience("slider", true);
+      });
+
+      els.tinyAzButton.addEventListener("click", () => {
+        startAZTest();
+      });
+
+      els.tinyBackButton.addEventListener("click", () => {
+        showOptions();
+      });
+    }
+
+    function startExperience(mode, useAZ) {
+      inputMode = mode;
+      visualMode = els.visualMode.value;
+
+      userStartAudio();
+
+      if (mode === "mic") {
+        mic.start(
+          () => {
+            fft.setInput(mic);
+            setupMicReverb();
+            beginFullScreenExperience("Microphone actif");
+          },
+          () => {
+            inputMode = "slider";
+            setupSyntheticAudio();
+            beginFullScreenExperience("Micro non disponible — mode test");
+          }
+        );
+      } else {
+        setupSyntheticAudio();
+        beginFullScreenExperience(useAZ ? "Test A → Z" : "Mode test");
+      }
+
+      if (useAZ) startAZTest();
+      else azTesting = false;
+    }
+
+    function beginFullScreenExperience(message) {
+      started = true;
+      els.startOverlay.style.display = "none";
+      els.tinyControls.style.display = "flex";
+      applyFullscreen();
+      showStatus(message);
+    }
+
+    function setupMicReverb() {
+      try {
+        reverb.process(mic, 5.5, 4.2);
+        reverb.drywet(Number(els.reverbSlider.value) * 0.65);
+      } catch (e) {
+        console.warn("Mic reverb setup failed:", e);
+      }
+    }
+
+    function setupSyntheticAudio() {
+      if (!synthOscA) {
+        synthOscA = new p5.Oscillator("sine");
+        synthOscA.freq(160);
+        synthOscA.amp(0);
+        synthOscA.disconnect();
+        synthOscA.connect(lowPass);
+        synthOscA.start();
+      }
+
+      if (!synthOscB) {
+        synthOscB = new p5.Oscillator("triangle");
+        synthOscB.freq(240);
+        synthOscB.amp(0);
+        synthOscB.disconnect();
+        synthOscB.connect(lowPass);
+        synthOscB.start();
+      }
+
+      if (!synthNoise) {
+        synthNoise = new p5.Noise("pink");
+        synthNoise.amp(0);
+        synthNoise.disconnect();
+        synthNoise.connect(lowPass);
+        synthNoise.start();
+      }
+
+      try {
+        lowPass.freq(900);
+        lowPass.res(7);
+
+        reverb.process(lowPass, 7.5, 6.5);
+        delay.process(lowPass, 0.42, 0.42, 1800);
+
+        updateReverbAmount();
+      } catch (e) {
+        console.warn("Synthetic audio setup failed:", e);
+      }
+
+      syntheticSoundOn = true;
+    }
+
+    function updateReverbAmount() {
+      const amount = Number(els.reverbSlider.value);
+
+      try {
+        if (reverb) reverb.drywet(0.25 + amount * 0.65);
+        if (delay) delay.drywet(amount * 0.38);
+      } catch (e) {}
+    }
+
+    function startAZTest() {
+      inputMode = "slider";
+      setupSyntheticAudio();
+
+      started = true;
+      azTesting = true;
+      azStartTime = millis();
+
+      els.inputMode.value = "slider";
+      els.startOverlay.style.display = "none";
+      els.tinyControls.style.display = "flex";
+
+      applyFullscreen();
+      showStatus("Test A → Z");
+    }
+
+    function showOptions() {
+      started = false;
+      azTesting = false;
+      stopSyntheticAudio();
+
+      els.startOverlay.style.display = "flex";
+      els.tinyControls.style.display = "none";
+      showStatus("");
+    }
+
+    function stopSyntheticAudio() {
+      if (synthOscA) synthOscA.amp(0, 0.25);
+      if (synthOscB) synthOscB.amp(0, 0.25);
+      if (synthNoise) synthNoise.amp(0, 0.25);
+      syntheticSoundOn = false;
+    }
+
+    function applyFullscreen() {
+      const root = document.documentElement;
+
+      if (!document.fullscreenElement && root.requestFullscreen) {
+        root.requestFullscreen().catch(() => {});
+      }
+    }
+
+    function showStatus(text) {
+      if (!text) {
+        els.statusPill.classList.remove("visible");
+        return;
+      }
+
+      els.statusPill.textContent = text;
+      els.statusPill.classList.add("visible");
+
+      clearTimeout(showStatus.timer);
+      showStatus.timer = setTimeout(() => {
+        els.statusPill.classList.remove("visible");
+      }, 2000);
+    }
+
+    function draw() {
+      drawBlackBackground();
+
+      if (!started) {
+        drawIdlePreview();
+        return;
+      }
+
+      updateInputFeatures();
+      updateAutoMode();
+
+      const mode = visualMode === "auto" ? currentAutoMode : visualMode;
+
+      if (mode === "bubbles") drawBubblesMode();
+      else if (mode === "vortex") drawVortexMode();
+      else if (mode === "shapes") drawShapesMode();
+      else if (mode === "aurora") drawAuroraMode();
+
+      drawVerySoftVignette();
+    }
+
+    function drawBlackBackground() {
+      background(0, 0, 0, 42);
+    }
+
+    function updateInputFeatures() {
+      const sensitivity = Number(els.sensitivitySlider.value);
+
+      let rawVol = 0;
+      let bass = 0;
+      let mid = 0;
+      let treble = 0;
+      let brightness = 0;
+      let noisiness = 0;
+
+      if (inputMode === "mic") {
+        rawVol = mic.getLevel() * sensitivity * 4.2;
+        rawVol = constrain(rawVol, 0, 1);
+
+        fft.analyze();
+
+        bass = constrain(fft.getEnergy("bass") / 255, 0, 1);
+        mid = constrain(fft.getEnergy("mid") / 255, 0, 1);
+        treble = constrain(fft.getEnergy("treble") / 255, 0, 1);
+
+        brightness = constrain(treble * 0.7 + mid * 0.3, 0, 1);
+        noisiness = estimateNoisinessFromWaveform();
+      } else {
+        rawVol = getSimulatedVolume();
+
+        const t = millis() * 0.001;
+
+        bass = constrain(rawVol * 0.9 + sin(t * 1.4) * 0.05, 0, 1);
+        mid = constrain(rawVol * 0.78 + sin(t * 2.1 + 1.3) * 0.07, 0, 1);
+        treble = constrain(pow(rawVol, 1.2) + sin(t * 3.3) * 0.06, 0, 1);
+
+        brightness = constrain(map(rawVol, 0, 1, 0.1, 1.0) + sin(t * 1.2) * 0.05, 0, 1);
+        noisiness = constrain(pow(rawVol, 1.65) + random(-0.035, 0.04), 0, 1);
+
+        updateSyntheticAudio(rawVol, brightness, noisiness);
+      }
+
+      smoothedVol = lerp(smoothedVol, rawVol, rawVol > smoothedVol ? 0.16 : 0.055);
+      soundAttack = max(0, rawVol - previousVol);
+      previousVol = rawVol;
+
+      if (rawVol < 0.035) quietTimer += deltaTime;
+      else quietTimer = 0;
+
+      features.rawVol = rawVol;
+      features.vol = smoothedVol;
+      features.bass = bass;
+      features.mid = mid;
+      features.treble = treble;
+      features.brightness = brightness;
+      features.noisiness = noisiness;
+      features.attack = soundAttack;
+    }
+
+    function getSimulatedVolume() {
+      if (azTesting) {
+        const progress = constrain((millis() - azStartTime) / azDuration, 0, 1);
+
+        const shaped = pow(progress, 1.5);
+        const softPulse = sin(progress * TWO_PI * 6) * 0.018;
+        const vol = constrain(shaped + softPulse, 0, 1);
+
+        els.testSlider.value = vol;
+        els.tinySlider.value = vol;
+        els.testValue.textContent = Math.round(vol * 100) + "%";
+
+        if (progress >= 1) {
+          azTesting = false;
+          showStatus("Test terminé");
+        }
+
+        return vol;
+      }
+
+      return Number(els.testSlider.value);
+    }
+
+    function estimateNoisinessFromWaveform() {
+      const wave = fft.waveform(1024);
+
+      let crossings = 0;
+      for (let i = 1; i < wave.length; i++) {
+        const prev = wave[i - 1];
+        const now = wave[i];
+
+        if ((prev < 0 && now >= 0) || (prev >= 0 && now < 0)) {
+          crossings++;
+        }
+      }
+
+      return constrain(crossings / 190, 0, 1);
+    }
+
+    function updateSyntheticAudio(vol, brightness, noisiness) {
+      if (!syntheticSoundOn) setupSyntheticAudio();
+
+      if (!synthOscA || !synthOscB || !synthNoise) return;
+
+      const rootFreq = lerp(110, 420, brightness);
+      const harmonicFreq = rootFreq * lerp(1.48, 2.02, features.mid || 0.5);
+
+      const oscAmpA = constrain(vol * 0.12, 0, 0.12);
+      const oscAmpB = constrain(vol * (1 - noisiness * 0.35) * 0.055, 0, 0.06);
+      const noiseAmp = constrain(vol * noisiness * 0.055, 0, 0.055);
+
+      synthOscA.freq(rootFreq, 0.12);
+      synthOscB.freq(harmonicFreq, 0.16);
+
+      synthOscA.amp(oscAmpA, 0.16);
+      synthOscB.amp(oscAmpB, 0.18);
+      synthNoise.amp(noiseAmp, 0.18);
+
+      try {
+        lowPass.freq(lerp(450, 2400, brightness), 0.18);
+        lowPass.res(lerp(4, 10, vol));
+      } catch (e) {}
+    }
+
+    function updateAutoMode() {
+      if (visualMode !== "auto") return;
+
+      const now = millis();
+
+      if (features.attack > 0.11 && now - lastAutoSwitch > 2600) {
+        const modes = ["bubbles", "vortex", "shapes", "aurora"];
+        let next = currentAutoMode;
+
+        while (next === currentAutoMode) {
+          next = random(modes);
+        }
+
+        currentAutoMode = next;
+        currentPaletteIndex = floor(random(palettes.length));
+        lastAutoSwitch = now;
+
+        clearVisualSystems();
+      }
+
+      if (quietTimer > 6500 && now - lastAutoSwitch > 6500) {
+        const modes = ["bubbles", "vortex", "shapes", "aurora"];
+        currentAutoMode = random(modes);
+        currentPaletteIndex = floor(random(palettes.length));
+        lastAutoSwitch = now;
+        quietTimer = 0;
+
+        clearVisualSystems();
+      }
+    }
+
+    function clearVisualSystems() {
+      bubbles = [];
+      vortexParticles = [];
+      rings = [];
+      createAurora();
+    }
+
+    function drawIdlePreview() {
+      push();
+      translate(width / 2, height / 2);
+      noFill();
+
+      for (let i = 0; i < 5; i++) {
+        const r = 90 + i * 38 + sin(frameCount * 0.01 + i) * 5;
+        stroke(90, 230, 255, 28 + i * 12);
+        strokeWeight(2);
+        circle(0, 0, r * 2);
+      }
+
+      pop();
+    }
+
+    function drawBubblesMode() {
+      const vol = features.vol;
+
+      let spawnRate = 0;
+
+      if (vol > 0.035 && frameCount % 5 === 0) spawnRate = 1;
+      if (vol > 0.24 && frameCount % 4 === 0) spawnRate = 2;
+      if (vol > 0.58 && frameCount % 3 === 0) spawnRate = 3;
+
+      for (let i = 0; i < spawnRate; i++) {
+        bubbles.push(new Bubble());
+      }
+
+      if (features.attack > 0.08) {
+        for (let i = 0; i < 5 + features.attack * 35; i++) {
+          bubbles.push(new Bubble(true));
+        }
+      }
+
+      for (let i = bubbles.length - 1; i >= 0; i--) {
+        bubbles[i].update();
+        bubbles[i].display();
+
+        if (bubbles[i].dead()) {
+          bubbles.splice(i, 1);
+        }
+      }
+
+      while (bubbles.length > 120) bubbles.shift();
+    }
+
+    class Bubble {
+      constructor(burst = false) {
+        const cx = width / 2;
+        const cy = height / 2;
+
+        this.x = burst ? cx + random(-90, 90) : random(width * 0.22, width * 0.78);
+        this.y = burst ? cy + random(-70, 70) : height + random(30, 110);
+
+        this.vx = random(-0.35, 0.35) + map(features.mid, 0, 1, -0.16, 0.16);
+        this.vy = random(-0.8, -0.25) - features.vol * 1.8;
+
+        this.base = random(36, 120);
+        this.size = this.base * map(features.bass, 0, 1, 0.75, 1.6);
+
+        this.life = burst ? random(130, 210) : random(240, 420);
+        this.age = 0;
+        this.col = color(randomPaletteColor());
+        this.spin = random(TWO_PI);
+      }
+
+      update() {
+        this.age++;
+        this.spin += 0.012 + features.treble * 0.018;
+
+        this.x += this.vx + sin(this.spin) * 0.22;
+        this.y += this.vy;
+
+        this.vx *= 0.995;
+        this.vy *= 0.997;
+
+        this.size *= 1 + features.vol * 0.0025;
+      }
+
+      display() {
+        const a = map(this.age, 0, this.life, 180, 0);
+
+        push();
+        translate(this.x, this.y);
+        noFill();
+
+        stroke(red(this.col), green(this.col), blue(this.col), a);
+        strokeWeight(2.5 + features.treble * 2.5);
+        circle(0, 0, this.size);
+
+        stroke(255, 255, 255, a * 0.35);
+        strokeWeight(1.4);
+        circle(-this.size * 0.12, -this.size * 0.16, this.size * 0.28);
+
+        pop();
+      }
+
+      dead() {
+        return this.age > this.life || this.y < -180;
+      }
+    }
+
+    function drawVortexMode() {
+      const cx = width / 2;
+      const cy = height / 2;
+
+      if (features.vol > 0.03 && frameCount % 4 === 0) {
+        vortexParticles.push(new VortexParticle(cx, cy));
+      }
+
+      if (features.vol > 0.45 && frameCount % 5 === 0) {
+        vortexParticles.push(new VortexParticle(cx, cy));
+      }
+
+      if (features.attack > 0.1) {
+        for (let i = 0; i < 14 + features.attack * 40; i++) {
+          vortexParticles.push(new VortexParticle(cx, cy, true));
+        }
+      }
+
+      push();
+      translate(cx, cy);
+      rotate(frameCount * 0.0009);
+      noFill();
+
+      for (let i = 0; i < 4; i++) {
+        const r = min(width, height) * (0.13 + i * 0.08) + sin(frameCount * 0.01 + i) * 8;
+        stroke(255, 255, 255, 10 + features.vol * 22);
+        strokeWeight(1.2);
+        ellipse(0, 0, r * 2.2, r * 1.05);
+      }
+
+      pop();
+
+      for (let i = vortexParticles.length - 1; i >= 0; i--) {
+        vortexParticles[i].update();
+        vortexParticles[i].display();
+
+        if (vortexParticles[i].dead()) {
+          vortexParticles.splice(i, 1);
+        }
+      }
+
+      while (vortexParticles.length > 180) vortexParticles.shift();
+    }
+
+    class VortexParticle {
+      constructor(cx, cy, burst = false) {
+        this.cx = cx;
+        this.cy = cy;
+        this.angle = random(TWO_PI);
+        this.radius = burst ? random(15, 95) : random(8, 45);
+
+        this.radialSpeed = random(0.45, 1.7) + features.vol * 2.6;
+        this.angularSpeed = random(0.004, 0.018) + features.treble * 0.022;
+
+        this.size = random(5, 13) + features.bass * 7;
+        this.life = random(190, 320);
+        this.age = 0;
+        this.col = color(randomPaletteColor());
+      }
+
+      update() {
+        this.age++;
+        this.radius += this.radialSpeed;
+        this.angle += this.angularSpeed;
+        this.radialSpeed *= 0.998;
+      }
+
+      display() {
+        const wobble = sin(this.age * 0.035) * features.mid * 12;
+
+        const x = this.cx + cos(this.angle) * (this.radius + wobble);
+        const y = this.cy + sin(this.angle) * (this.radius * 0.64 + wobble);
+
+        const a = map(this.age, 0, this.life, 210, 0);
+
+        noStroke();
+        fill(red(this.col), green(this.col), blue(this.col), a);
+        circle(x, y, this.size);
+
+        stroke(red(this.col), green(this.col), blue(this.col), a * 0.35);
+        strokeWeight(1.2);
+
+        line(
+          x,
+          y,
+          this.cx + cos(this.angle - 0.05) * this.radius,
+          this.cy + sin(this.angle - 0.05) * this.radius * 0.64
+        );
+      }
+
+      dead() {
+        return this.age > this.life || this.radius > max(width, height) * 0.7;
+      }
+    }
+
+    function drawShapesMode() {
+      const cx = width / 2;
+      const cy = height / 2;
+
+      if (features.vol > 0.035 && frameCount % 14 === 0) {
+        rings.push(new Ring(cx, cy));
+      }
+
+      if (features.attack > 0.1) {
+        rings.push(new Ring(cx, cy, true));
+        rings.push(new Ring(cx, cy, true));
+      }
+
+      for (let i = rings.length - 1; i >= 0; i--) {
+        rings[i].update();
+        rings[i].display();
+
+        if (rings[i].dead()) {
+          rings.splice(i, 1);
+        }
+      }
+
+      while (rings.length > 35) rings.shift();
+    }
+
+    class Ring {
+      constructor(x, y, strong = false) {
+        this.x = x;
+        this.y = y;
+        this.radius = strong ? random(28, 70) : random(18, 50);
+        this.growth = strong ? random(2.3, 4.2) : random(1.1, 2.8);
+        this.growth += features.vol * 4.2;
+
+        this.life = strong ? random(150, 240) : random(180, 290);
+        this.age = 0;
+
+        this.sides = random([0, 0, 3, 4, 5, 6]);
+        this.rot = random(TWO_PI);
+        this.rotSpeed = random(-0.006, 0.006) + map(features.treble, 0, 1, -0.012, 0.012);
+
+        this.col = color(randomPaletteColor());
+      }
+
+      update() {
+        this.age++;
+        this.radius += this.growth;
+        this.growth *= 0.992;
+        this.rot += this.rotSpeed;
+      }
+
+      display() {
+        const a = map(this.age, 0, this.life, 205, 0);
+        const weight = map(features.treble, 0, 1, 2.4, 5.5);
+
+        push();
+        translate(this.x, this.y);
+        rotate(this.rot);
+
+        noFill();
+        stroke(red(this.col), green(this.col), blue(this.col), a);
+        strokeWeight(weight);
+
+        if (this.sides === 0) {
+          circle(0, 0, this.radius * 2);
+        } else {
+          beginShape();
+
+          for (let i = 0; i < this.sides; i++) {
+            const angle = TWO_PI / this.sides * i - HALF_PI;
+            const softWarp = 1 + sin(frameCount * 0.012 + i) * features.noisiness * 0.045;
+            vertex(cos(angle) * this.radius * softWarp, sin(angle) * this.radius * softWarp);
+          }
+
+          endShape(CLOSE);
+        }
+
+        pop();
+      }
+
+      dead() {
+        return this.age > this.life || this.radius > max(width, height) * 0.75;
+      }
+    }
+
+    function createAurora() {
+      auroraLines = [];
+
+      for (let i = 0; i < 6; i++) {
+        auroraLines.push({
+          offset: random(1000),
+          y: map(i, 0, 5, height * 0.28, height * 0.72),
+          col: color(randomPaletteColor())
+        });
+      }
+    }
+
+    function drawAuroraMode() {
+      push();
+      blendMode(ADD);
+      noFill();
+
+      const amp = map(features.vol, 0, 1, 24, 150);
+      const speed = map(features.brightness, 0, 1, 0.0012, 0.007);
+      const density = map(features.noisiness, 0, 1, 0.005, 0.012);
+
+      for (let j = 0; j < auroraLines.length; j++) {
+        const lineData = auroraLines[j];
+        const c = lineData.col;
+
+        const alpha = map(j, 0, auroraLines.length - 1, 34, 100) * (0.55 + features.vol * 0.55);
+
+        stroke(red(c), green(c), blue(c), alpha);
+        strokeWeight(3 + features.treble * 4);
+
+        beginShape();
+
+        for (let x = -40; x <= width + 40; x += 24) {
+          const n = noise(x * density, lineData.offset + frameCount * speed);
+          const y =
+            lineData.y +
+            map(n, 0, 1, -amp, amp) +
+            sin(x * 0.006 + frameCount * 0.008 + j) * amp * 0.12;
+
+          curveVertex(x, y);
+        }
+
+        endShape();
+      }
+
+      pop();
+
+      if (features.attack > 0.12) {
+        push();
+        blendMode(ADD);
+        noStroke();
+
+        const c = color(randomPaletteColor());
+        fill(red(c), green(c), blue(c), 55);
+        circle(width / 2, height / 2, min(width, height) * (0.18 + features.attack * 1.6));
+
+        pop();
+      }
+    }
+
+    function randomPaletteColor() {
+      const p = palettes[currentPaletteIndex % palettes.length];
+      return random(p);
+    }
+
+    function drawVerySoftVignette() {
+      push();
+      noFill();
+
+      for (let i = 0; i < 7; i++) {
+        stroke(0, 0, 0, map(i, 0, 6, 0, 65));
+        strokeWeight(36);
+        rect(i * 18, i * 18, width - i * 36, height - i * 36, 34);
+      }
+
+      pop();
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      createAurora();
+    }
+
+    function keyPressed() {
+      if (key === "Escape") {
+        showOptions();
+      }
+
+      if (key === "a" || key === "A") {
+        startAZTest();
+      }
+
+      if (key === "1") {
+        visualMode = "bubbles";
+        els.visualMode.value = "bubbles";
+        clearVisualSystems();
+        showStatus("Bulles lumineuses");
+      }
+
+      if (key === "2") {
+        visualMode = "vortex";
+        els.visualMode.value = "vortex";
+        clearVisualSystems();
+        showStatus("Vortex doux");
+      }
+
+      if (key === "3") {
+        visualMode = "shapes";
+        els.visualMode.value = "shapes";
+        clearVisualSystems();
+        showStatus("Formes concentriques");
+      }
+
+      if (key === "4") {
+        visualMode = "aurora";
+        els.visualMode.value = "aurora";
+        clearVisualSystems();
+        showStatus("Aurore lente");
+      }
+
+      if (key === "0") {
+        visualMode = "auto";
+        els.visualMode.value = "auto";
+        clearVisualSystems();
+        showStatus("Automatique");
+      }
+    }
+  </script>
+</body>
+</html>
