@@ -43,6 +43,14 @@ const activityChoices = [
     categories: ['nombres']
   },
   {
+    id: 'mario-peach-eyegaze',
+    name: { fr: 'Mario : Défi Peach (commande oculaire)', en: 'Mario: Peach Challenge (eye gaze)' },
+    shortName: { fr: 'Mario', en: 'Mario' },
+    image: '../../images/arcade/mariomoviecover.png',
+    href: '../mariomovie/index.html',
+    categories: ['decouverte']
+  },
+  {
     id: 'association',
     name: { fr: 'Pairage d’images', en: 'Image pairing' },
     shortName: { fr: 'Pairage', en: 'Matching' },

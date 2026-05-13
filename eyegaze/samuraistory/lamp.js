@@ -2,7 +2,7 @@
     /* =======================
        TUNABLES
     ======================= */
-    const BG_SRC      = "../../images/samurai/lampbg.png";
+    const BG_SRC      = "../../images/samuraikata/texte1.jpg";
 
     // Two lamp variants
     const CLOSED1_SRC = "../../images/samurai/closedlamp1.png";
@@ -110,6 +110,7 @@
     const CHI_POINTER_MAX = 118;
     const CHI_POINTER_BREATH = 0.05;
     const CHI_POINTER_BREATH_FREQ = 0.8;
+    const COLOR_REVEAL_RELEASES = 5;
 
     /* =======================
        SETUP
@@ -215,7 +216,24 @@
     const pointer = { x: -9999, y: -9999, inside: false, prevX: -9999 };
     let cursorOrient = 'left';
 
-    function applyCurrentCursor() { canvas.style.cursor = 'none'; }
+    function updatePanelCursor() {
+      if (!modeSelector) return;
+      if (currentMode === 'katana') {
+        if (katanaCursorReady && katanaCursor.left && katanaCursor.left.canvas) {
+          modeSelector.style.cursor = `url("${katanaCursor.left.canvas.toDataURL('image/png')}") ${katanaCursor.left.hx} ${katanaCursor.left.hy}, crosshair`;
+          return;
+        }
+        modeSelector.style.cursor = 'crosshair';
+        return;
+      }
+      const chiHotspot = Math.round(Math.min(CHI_POINTER_MAX, CHI_POINTER_BASE) * 0.5);
+      modeSelector.style.cursor = `url("${CHI_POINTER_SRC}") ${chiHotspot} ${chiHotspot}, pointer`;
+    }
+
+    function applyCurrentCursor() {
+      canvas.style.cursor = 'none';
+      updatePanelCursor();
+    }
 
     function updatePointerFromEvent(e) {
       const rect = canvas.getBoundingClientRect();
@@ -390,6 +408,8 @@
        LANTERNS (foreground)
     ======================= */
     const lanterns = [];
+    let litCount = 0;
+    let releasedCount = 0;
 
     function chooseScatteredX(w) {
       const minX = SIDE_PAD_H + w * 0.5;
@@ -565,10 +585,40 @@
           breakPt,
           frozen   // {p0,p1,p2} frozen at cut time
         };
+        releasedCount++;
 
         // ▼ NEW: play slice SFX right when the rope is cut
         playSfx(sfxKatanaSlice);
       }
+    }
+
+    function drawReleasedHUD() {
+      const pad = Math.max(10, Math.min(22, Math.floor((W + H) * 0.0115)));
+      const iconSize = Math.max(22, Math.min(38, Math.floor((W + H) * 0.018)));
+      const textSize = Math.max(18, Math.min(30, Math.floor((W + H) * 0.017)));
+      const xRight = W - pad;
+      const yTop = pad;
+      const text = `${releasedCount}`;
+
+      ctx.save();
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${textSize}px ui-rounded, ui-sans-serif, system-ui, Segoe UI, Roboto, Arial`;
+      ctx.fillStyle = '#ffd98f';
+      ctx.shadowColor = 'rgba(0,0,0,0.38)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      ctx.fillText(text, xRight, yTop + iconSize * 0.5);
+
+      const icon = imageHasDimensions(imgLit1) ? imgLit1 : imgClosed1;
+      if (imageHasDimensions(icon)) {
+        const textW = ctx.measureText(text).width;
+        const iconX = xRight - textW - 10 - iconSize;
+        const iconY = yTop;
+        ctx.shadowColor = 'rgba(0,0,0,0.22)';
+        ctx.drawImage(icon, iconX, iconY, iconSize, iconSize);
+      }
+      ctx.restore();
     }
 
     /* =======================
@@ -897,8 +947,13 @@ function drawRopes(t) {
     let lastT = performance.now();
     let started = false;
     let rafId = 0;
+    let gameStartMs = 0;
 
     function drawBackgroundImage() {
+      const progress = Math.max(0, Math.min(1, releasedCount / COLOR_REVEAL_RELEASES));
+      const gray = 100 - (progress * 100);
+      ctx.save();
+      ctx.filter = `grayscale(${gray}%)`;
       if (bgImg.complete && bgImg.naturalWidth > 0) {
         const iw = bgImg.width, ih = bgImg.height;
         const scale = Math.max(W / iw, H / ih); // cover
@@ -911,6 +966,7 @@ function drawRopes(t) {
         ctx.fillStyle = "#001028";
         ctx.fillRect(0, 0, W, H);
       }
+      ctx.restore();
     }
 
     function update(dt) {
@@ -960,6 +1016,7 @@ function drawRopes(t) {
           if (l.y <= l.restY + 0.5 || (l.y === prevY && p >= 1)) {
             l.y = l.restY;
             l.state = 'lit';
+            litCount++;
           }
         } else if (l.state === 'lit') {
           const dy = l.restY - l.y;
@@ -1034,6 +1091,7 @@ function drawRopes(t) {
       }
       ctx.restore();
 
+      drawReleasedHUD();
       drawChiPointer();
       drawKatanaPointer();
     }
@@ -1102,6 +1160,8 @@ function drawRopes(t) {
       bgLanterns = [];
       activeShootingStar = null;
       nextStarTime = 0;
+      litCount = 0;
+      releasedCount = 0;
     }
 
     function rebuildWorld() {
@@ -1127,6 +1187,7 @@ function drawRopes(t) {
       resetGameState();
       quietAudio();
       started = true;
+      gameStartMs = performance.now();
       if (startOverlay) startOverlay.style.display = 'none';
       canvas.style.cursor = 'none';
 
@@ -1143,6 +1204,7 @@ function drawRopes(t) {
       quietAudio();
       resetGameState();
       canvas.style.cursor = 'default';
+      if (modeSelector) modeSelector.style.cursor = 'default';
     }
 
     if (startBtn) {
@@ -1155,6 +1217,10 @@ function drawRopes(t) {
 
     window.startExperience = (options) => startExperience(options);
     window.stopExperience = stopExperience;
-    window.storyGameApi = { start: startExperience, stop: stopExperience };
+    window.storyGameApi = {
+      start: startExperience,
+      stop: stopExperience,
+      getProgress: () => releasedCount
+    };
   })();
   
