@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwitchBot Bot Controller</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --border: #d9deea;
+      --text: #1f2937;
+      --muted: #667085;
+      --accent: #4f46e5;
+      --accent-2: #eef2ff;
+      --danger: #b42318;
+      --success: #027a48;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+    }
+
+    .wrap {
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 30px;
+    }
+
+    .intro {
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(16, 24, 40, 0.05);
+    }
+
+    .section + .section {
+      margin-top: 22px;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+    }
+
+    .label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    select, button {
+      font: inherit;
+    }
+
+    select {
+      min-width: 220px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+    }
+
+    button {
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #fff;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .soft {
+      background: var(--accent-2);
+      border-color: #c7d2fe;
+      color: #3730a3;
+    }
+
+    .danger {
+      background: #fff5f5;
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+
+    .success {
+      background: #ecfdf3;
+      color: var(--success);
+      border-color: #abefc6;
+    }
+
+    .status {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+      min-height: 96px;
+    }
+
+    .device-box {
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 12px;
+      background: #fafafa;
+      border: 1px dashed var(--border);
+    }
+
+    .device-box strong {
+      display: inline-block;
+      min-width: 120px;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>SwitchBot Bot Controller</h1>
+    <p class="intro">
+      Connect to a SwitchBot Bot with Web Bluetooth, test it, and optionally remember it for this site.
+    </p>
+
+    <div class="card">
+      <div class="section">
+        <label class="label" for="botMode">Bot mode</label>
+        <select id="botMode">
+          <option value="press" selected>Press mode (momentary press)</option>
+          <option value="switch">Switch mode (separate ON / OFF)</option>
+        </select>
+        <div class="small">
+          Use Press mode for a normal one-time push. Use Switch mode only if your Bot is configured that way in the SwitchBot app.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Connection</div>
+        <div class="row">
+          <button id="connectBtn" class="primary">Connect to SwitchBot</button>
+          <button id="reconnectBtn" class="soft">Reconnect saved device</button>
+          <button id="rememberBtn" class="success" disabled>Remember this device</button>
+          <button id="forgetBtn" class="danger">Forget saved device</button>
+          <button id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+
+        <div class="device-box">
+          <div><strong>Selected device:</strong> <span id="deviceName">None</span></div>
+          <div><strong>Remembered device:</strong> <span id="savedDeviceName">None</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Commands</div>
+        <div class="row">
+          <button id="pressBtn" disabled class="primary">Press</button>
+          <button id="onBtn" disabled>Turn On</button>
+          <button id="offBtn" disabled>Turn Off</button>
+        </div>
+        <div class="small" id="commandHint">
+          In Press mode, only the Press button is used.
+        </div>
+      </div>
+
+      <div class="status" id="status">Ready.</div>
+    </div>
+  </div>
+
+  <script>
+    const SERVICE_UUID = "cba20d00-224d-11e6-9fb8-0002a5d5c51b";
+    const WRITE_CHAR_UUID = "cba20002-224d-11e6-9fb8-0002a5d5c51b";
+
+    const COMMANDS = {
+      press: new Uint8Array([0x57, 0x01, 0x00]),
+      on: new Uint8Array([0x57, 0x01, 0x01]),
+      off: new Uint8Array([0x57, 0x01, 0x02])
+    };
+
+    const STORAGE_KEYS = {
+      id: "savedSwitchBotId",
+      name: "savedSwitchBotName",
+      mode: "savedSwitchBotMode"
+    };
+
+    let device = null;
+    let server = null;
+    let writeCharacteristic = null;
+
+    const statusEl = document.getElementById("status");
+    const deviceNameEl = document.getElementById("deviceName");
+    const savedDeviceNameEl = document.getElementById("savedDeviceName");
+
+    const botModeEl = document.getElementById("botMode");
+    const commandHintEl = document.getElementById("commandHint");
+
+    const connectBtn = document.getElementById("connectBtn");
+    const reconnectBtn = document.getElementById("reconnectBtn");
+    const rememberBtn = document.getElementById("rememberBtn");
+    const forgetBtn = document.getElementById("forgetBtn");
+    const disconnectBtn = document.getElementById("disconnectBtn");
+
+    const pressBtn = document.getElementById("pressBtn");
+    const onBtn = document.getElementById("onBtn");
+    const offBtn = document.getElementById("offBtn");
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+      console.log(message);
+    }
+
+    function updateSelectedDeviceName() {
+      deviceNameEl.textContent = device ? (device.name || "(no name)") : "None";
+    }
+
+    function updateSavedDeviceName() {
+      const savedName = localStorage.getItem(STORAGE_KEYS.name);
+      const savedMode = localStorage.getItem(STORAGE_KEYS.mode);
+      if (savedName) {
+        savedDeviceNameEl.textContent = savedMode
+          ? `${savedName} (${savedMode} mode)`
+          : savedName;
+      } else {
+        savedDeviceNameEl.textContent = "None";
+      }
+    }
+
+    function updateCommandUI() {
+      const mode = botModeEl.value;
+      const connected = !!writeCharacteristic;
+
+      pressBtn.disabled = !connected;
+
+      if (mode === "press") {
+        onBtn.disabled = true;
+        offBtn.disabled = true;
+        commandHintEl.textContent = "In Press mode, only the Press button is used.";
+      } else {
+        onBtn.disabled = !connected;
+        offBtn.disabled = !connected;
+        commandHintEl.textContent = "In Switch mode, Turn On and Turn Off are enabled.";
+      }
+    }
+
+    function updateConnectionUI() {
+      const connected = !!writeCharacteristic;
+      connectBtn.disabled = connected;
+      disconnectBtn.disabled = !connected;
+      rememberBtn.disabled = !connected;
+      updateCommandUI();
+    }
+
+    function clearConnectionState() {
+      server = null;
+      writeCharacteristic = null;
+      if (device) {
+        try {
+          device.removeEventListener("gattserverdisconnected", handleDisconnected);
+        } catch (_) {}
+      }
+      device = null;
+      updateSelectedDeviceName();
+      updateConnectionUI();
+    }
+
+    function handleDisconnected() {
+      setStatus("Device disconnected.");
+      clearConnectionState();
+    }
+
+    async function ensureBluetoothAvailable() {
+      if (!navigator.bluetooth) {
+        throw new Error("Web Bluetooth is not available in this browser.");
+      }
+
+      if (navigator.bluetooth.getAvailability) {
+        const available = await navigator.bluetooth.getAvailability();
+        if (!available) {
+          throw new Error("Bluetooth is not available on this device right now.");
+        }
+      }
+    }
+
+    async function connectToDevice(chosenDevice) {
+      device = chosenDevice;
+      updateSelectedDeviceName();
+
+      device.addEventListener("gattserverdisconnected", handleDisconnected);
+
+      setStatus(`Connecting to ${device.name || "(no name)"}...`);
+
+      server = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      writeCharacteristic = await service.getCharacteristic(WRITE_CHAR_UUID);
+
+      updateConnectionUI();
+      setStatus(`Connected to ${device.name || "(no name)"}.`);
+    }
+
+    async function requestNewDevice() {
+      await ensureBluetoothAvailable();
+
+      setStatus("Opening Bluetooth device chooser...");
+
+      const chosenDevice = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID]
+      });
+
+      await connectToDevice(chosenDevice);
+    }
+
+    async function getRememberedDeviceObject() {
+      await ensureBluetoothAvailable();
+
+      const savedId = localStorage.getItem(STORAGE_KEYS.id);
+      if (!savedId) {
+        return null;
+      }
+
+      const devices = await navigator.bluetooth.getDevices();
+      return devices.find(d => d.id === savedId) || null;
+    }
+
+    async function reconnectSavedDevice() {
+      try {
+        const savedDevice = await getRememberedDeviceObject();
+
+        if (!savedDevice) {
+          setStatus("No remembered device is available for this site. Connect once first, then press Remember this device.");
+          return;
+        }
+
+        setStatus(`Found remembered device: ${savedDevice.name || "(no name)"}. Reconnecting...`);
+        await connectToDevice(savedDevice);
+      } catch (error) {
+        setStatus("Reconnect error: " + error.message);
+        console.error(error);
+      }
+    }
+
+    function rememberCurrentDevice() {
+      if (!device) {
+        setStatus("No connected device to remember.");
+        return;
+      }
+
+      localStorage.setItem(STORAGE_KEYS.id, device.id);
+      localStorage.setItem(STORAGE_KEYS.name, device.name || "Unnamed device");
+      localStorage.setItem(STORAGE_KEYS.mode, botModeEl.value);
+
+      updateSavedDeviceName();
+      setStatus(`Remembered ${device.name || "(no name)"} for this site.`);
+    }
+
+    function forgetSavedDevice() {
+      localStorage.removeItem(STORAGE_KEYS.id);
+      localStorage.removeItem(STORAGE_KEYS.name);
+      localStorage.removeItem(STORAGE_KEYS.mode);
+
+      updateSavedDeviceName();
+      setStatus("Saved device removed from this browser for this site.");
+    }
+
+    async function sendCommand(commandName) {
+      try {
+        if (!writeCharacteristic) {
+          throw new Error("Not connected to a SwitchBot.");
+        }
+
+        const mode = botModeEl.value;
+
+        if ((commandName === "on" || commandName === "off") && mode !== "switch") {
+          setStatus("Turn On / Turn Off are disabled because the page is set to Press mode.");
+          return;
+        }
+
+        const command = COMMANDS[commandName];
+        if (!command) {
+          throw new Error("Unknown command: " + commandName);
+        }
+
+        setStatus(`Sending command: ${commandName}`);
+
+        if (typeof writeCharacteristic.writeValueWithResponse === "function") {
+          await writeCharacteristic.writeValueWithResponse(command);
+        } else {
+          await writeCharacteristic.writeValue(command);
+        }
+
+        setStatus(`Command sent: ${commandName}`);
+      } catch (error) {
+        setStatus("Command error: " + error.message);
+        console.error(error);
+      }
+    }
+
+    async function disconnectDevice() {
+      try {
+        if (device && device.gatt && device.gatt.connected) {
+          device.gatt.disconnect();
+        } else {
+          clearConnectionState();
+          setStatus("No active connection.");
+        }
+      } catch (error) {
+        setStatus("Disconnect error: " + error.message);
+        console.error(error);
+      }
+    }
+
+    function applySavedModeIfPresent() {
+      const savedMode = localStorage.getItem(STORAGE_KEYS.mode);
+      if (savedMode === "press" || savedMode === "switch") {
+        botModeEl.value = savedMode;
+      }
+    }
+
+    connectBtn.addEventListener("click", async () => {
+      try {
+        await requestNewDevice();
+      } catch (error) {
+        setStatus("Connection error: " + error.message);
+        console.error(error);
+      }
+    });
+
+    reconnectBtn.addEventListener("click", reconnectSavedDevice);
+    rememberBtn.addEventListener("click", rememberCurrentDevice);
+    forgetBtn.addEventListener("click", forgetSavedDevice);
+    disconnectBtn.addEventListener("click", disconnectDevice);
+
+    pressBtn.addEventListener("click", () => sendCommand("press"));
+    onBtn.addEventListener("click", () => sendCommand("on"));
+    offBtn.addEventListener("click", () => sendCommand("off"));
+
+    botModeEl.addEventListener("change", () => {
+      updateCommandUI();
+      if (device) {
+        setStatus(`Bot mode set to ${botModeEl.value}.`);
+      }
+    });
+
+    applySavedModeIfPresent();
+    updateSavedDeviceName();
+    updateSelectedDeviceName();
+    updateConnectionUI();
+  </script>
+</body>
+</html>
