@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title data-fr="Graffiti lumineux" data-en="Graffiti Spray" data-ja="グラフィティスプレー">Graffiti Spray</title>
+  <link rel="stylesheet" href="../../css/otherswitch.css">
+
+  <!-- p5 + sounds -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
+  <script src="../../js/stonermusic.js"></script>
+  <script src="../../js/transitionSounds.js"></script>
+
+  <!-- SAME translation system as other games -->
+  <script src="../../js/translationmain.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #0b0f14;
+    }
+    canvas { display: block; }
+
+    #langToggle {
+      position: fixed;
+      top: 14px;
+      right: 44px;
+      z-index: 11;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 2px solid #5ce6d5;
+      background: #0b0f12;
+      color: #5ce6d5;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 0 0 0 rgba(92, 230, 213, 0);
+      transition: box-shadow 0.2s ease, transform 0.05s ease, background 0.2s ease;
+    }
+    #langToggle:hover { box-shadow: 0 0 0 3px rgba(92, 230, 213, 0.2); }
+    #langToggle:active { transform: translateY(1px); }
+  </style>
+</head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-B45TJG4GBJ');
+</script>
+<body>
+  <button id="langToggle" title="Changer de langue / Change language">FR</button>
+
+  <div id="promptOverlay">
+    <button id="infoButton" title="More info" class="translate" data-fr="ⓘ" data-en="ⓘ" data-ja="ⓘ">ⓘ</button>
+    <p class="translate" data-fr="Appuie sur la switch ou la barre d'espace pour projeter un nuage de peinture graffiti." data-en="Press the switch or spacebar to spray a burst of neon graffiti." data-ja="スイッチやスペースキーでネオングラフィティを噴射します。">
+      Graffiti lumineux: appuie pour faire jaillir un nuage coloré.
+    </p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+  </div>
+
+  <div id="infoModal">
+    <p class="translate" data-fr="Compétence: appuyer<br>SENICT switch skills niveau 1<br>Switch Progression Roadmap niveau 8 à 10." data-en="Skill: press<br>SENICT switch skills level 1<br>Switch Progression Roadmap levels 8 to 10." data-ja="スキル：押す<br>SENICTスイッチスキル レベル1<br>スイッチ習熟ロードマップ レベル8～10">
+      Compétence: appuyer<br>SENICT switch skills niveau 1<br>Switch Progression Roadmap niveau 8 à 10.
+    </p>
+    <button id="closeModal" class="translate" data-fr="Fermer" data-en="Close" data-ja="閉じる">Fermer</button>
+  </div>
+
+  <div id="settings-icon" title="Settings" class="translate" data-fr="⚙️" data-en="⚙️" data-ja="⚙️">⚙️</div>
+
+  <div id="menu">
+    <h3 data-fr="Musique et son" data-en="Music &amp; Sound" data-ja="音楽とサウンド">Musique et son</h3>
+    <label class="inline">
+      <span data-fr="Désactiver la musique" data-en="Disable music" data-ja="音楽をオフ">Désactiver la musique</span>
+      <input type="checkbox" id="muteToggle">
+    </label>
+    <label>
+      <span data-fr="Volume de la musique" data-en="Music volume" data-ja="音楽の音量">Volume de la musique</span>
+      <span id="musicVolumeValue">50</span>
+      <input type="range" id="musicVolumeSlider" min="1" max="100" value="50">
+    </label>
+    <h3 data-fr="Effets sonores" data-en="Sound effects" data-ja="効果音">Effets sonores</h3>
+    <label class="inline">
+      <span data-fr="Désactiver les sons" data-en="Disable sounds" data-ja="効果音をオフ">Désactiver les sons</span>
+      <input type="checkbox" id="muteSFXToggle">
+    </label>
+    <label>
+      <span data-fr="Volume des sons" data-en="Sound volume" data-ja="効果音の音量">Volume des sons</span>
+      <span id="starSoundVolumeValue">50</span>
+      <input type="range" id="starSoundVolumeSlider" min="1" max="100" value="50">
+    </label>
+    <h3 data-fr="Autres options" data-en="Other options" data-ja="その他のオプション">Options</h3>
+    <label class="inline">
+      <span data-fr="Activer clic/touch pour déclencher la pulvérisation" data-en="Enable click/touch to spray" data-ja="クリックやタッチでスプレー">
+        Activer clic/touch pour déclencher la pulvérisation
+      </span>
+      <input type="checkbox" id="clickTransitionToggle" checked>
+    </label>
+  </div>
+
+  <script src="../../js/translationonly.js"></script>
+
+  <script>
+    let musicFiles = [];
+    let currentMusic = null;
+    let transitionSoundFiles = [];
+
+    let started = false;
+    let isMuted = false;
+    let isSFXMuted = false;
+    let musicVolume = 0.5;
+    let starSoundVolume = 0.5;
+    let clickTransitionEnabled = true;
+
+    const palettes = [
+      { base: [255, 80, 124], accent: [0, 255, 204], glow: [255, 255, 255], dust: [255, 230, 140] },
+      { base: [255, 162, 58], accent: [88, 204, 255], glow: [255, 249, 196], dust: [255, 214, 255] },
+      { base: [148, 92, 255], accent: [0, 242, 166], glow: [197, 255, 255], dust: [255, 166, 238] },
+      { base: [255, 255, 255], accent: [255, 82, 111], glow: [255, 255, 255], dust: [140, 215, 255] },
+      { base: [82, 255, 181], accent: [255, 94, 173], glow: [255, 250, 226], dust: [255, 206, 120] }
+    ];
+
+    let bursts = [];
+
+    function preload() {
+      if (window.stonerMusicArray && window.stonerMusicArray.length > 0) {
+        for (let item of window.stonerMusicArray) {
+          musicFiles.push(loadSound(item.src, ()=>{}, (err)=>{ console.error(item.src, err); }));
+        }
+      }
+      if (window.transitionSoundsArray && window.transitionSoundsArray.length > 0) {
+        for (let item of window.transitionSoundsArray) {
+          transitionSoundFiles.push(loadSound(item.src, ()=>{}, (err)=>{ console.error(item.src, err); }));
+        }
+      }
+    }
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB, 255, 255, 255, 255);
+      background(12, 16, 24);
+      noStroke();
+    }
+
+    function draw() {
+      if (!started) return;
+      blendMode(BLEND);
+      fill(12, 16, 24, 24);
+      rect(0, 0, width, height);
+
+      const now = millis();
+      bursts = bursts.filter(b => now - b.created < b.duration + 1200);
+      for (let burst of bursts) {
+        drawBurst(burst, now);
+      }
+    }
+
+    function drawBurst(burst, now) {
+      const elapsed = now - burst.created;
+      const lifeT = constrain(elapsed / burst.duration, 0, 1);
+      const glowAlpha = map(1 - lifeT, 0, 1, 0, 90);
+
+      push();
+      blendMode(ADD);
+      noFill();
+      stroke(burst.palette.glow[0], burst.palette.glow[1], burst.palette.glow[2], glowAlpha);
+      strokeWeight(burst.haloWeight);
+      circle(burst.origin.x, burst.origin.y, burst.haloSize * (1 + 0.15 * sin(lifeT * PI)));
+      pop();
+
+      // Sprayed blobs
+      blendMode(BLEND);
+      for (let p of burst.particles) {
+        if (elapsed < p.delay) continue;
+        const t = constrain((elapsed - p.delay) / (burst.duration * 1.05), 0, 1);
+        const eased = easeOutCubic(t);
+        const pos = p5.Vector.lerp(burst.origin, p.target, eased + p.wobble * 0.02 * sin(now * 0.01 + p.seed));
+        const alpha = p.alpha * (1 - t * 0.85);
+        fill(p.color[0], p.color[1], p.color[2], alpha);
+        noStroke();
+        const size = p.size * (1 - 0.35 * t);
+        ellipse(pos.x, pos.y, size * 1.1, size);
+      }
+
+      // Drips
+      strokeCap(ROUND);
+      for (let d of burst.drips) {
+        if (elapsed < d.delay) continue;
+        const t = constrain((elapsed - d.delay) / (burst.duration * 0.7), 0, 1);
+        const dripY = d.start.y + d.length * t;
+        stroke(d.color[0], d.color[1], d.color[2], 200 * (1 - 0.4 * t));
+        strokeWeight(d.weight);
+        line(d.start.x, d.start.y, d.start.x, dripY);
+        noStroke();
+        fill(d.color[0], d.color[1], d.color[2], 220 * (1 - 0.5 * t));
+        ellipse(d.start.x, dripY + d.weight * 0.5, d.weight * 1.4, d.weight * 1.4);
+      }
+
+      // Tag-like strokes
+      for (let s of burst.strokes) {
+        if (elapsed < s.delay) continue;
+        const t = constrain((elapsed - s.delay) / (burst.duration * 0.8), 0, 1);
+        const alpha = s.alpha * (1 - 0.6 * t);
+        noFill();
+        stroke(s.color[0], s.color[1], s.color[2], alpha);
+        strokeWeight(s.weight * (1 - 0.2 * t));
+        arc(burst.origin.x + s.offset.x, burst.origin.y + s.offset.y, s.radius * 2, s.radius * 2, s.startAngle, s.endAngle + t * 0.6);
+      }
+
+      // Dust speckles
+      for (let speck of burst.specks) {
+        if (elapsed < speck.delay) continue;
+        const t = constrain((elapsed - speck.delay) / (burst.duration * 1.1), 0, 1);
+        const alpha = speck.alpha * (1 - t);
+        fill(speck.color[0], speck.color[1], speck.color[2], alpha);
+        noStroke();
+        ellipse(speck.pos.x, speck.pos.y, speck.size, speck.size);
+      }
+    }
+
+    function spray() {
+      const palette = random(palettes);
+      const origin = createVector(random(width * 0.12, width * 0.88), random(height * 0.18, height * 0.82));
+      const duration = random(1100, 1600);
+      const burst = {
+        origin,
+        created: millis(),
+        duration,
+        palette,
+        haloSize: random(180, 300),
+        haloWeight: random(24, 36),
+        particles: [],
+        drips: [],
+        strokes: [],
+        specks: []
+      };
+
+      const particleCount = floor(random(22, 34));
+      for (let i = 0; i < particleCount; i++) {
+        const angle = random(TWO_PI);
+        const radius = random(30, 140);
+        const target = createVector(origin.x + cos(angle) * radius, origin.y + sin(angle) * radius);
+        burst.particles.push({
+          target,
+          color: random([palette.base, palette.accent]),
+          alpha: random(150, 230),
+          size: random(30, 120),
+          delay: random(0, 140),
+          wobble: random(0.4, 1.1),
+          seed: random(1000)
+        });
+      }
+
+      const dripCount = floor(random(3, 7));
+      for (let i = 0; i < dripCount; i++) {
+        const offsetX = random(-50, 50);
+        const start = createVector(origin.x + offsetX, origin.y + random(-10, 30));
+        burst.drips.push({
+          start,
+          length: random(60, 180),
+          weight: random(6, 14),
+          color: random([palette.base, palette.accent]),
+          delay: random(120, 280)
+        });
+      }
+
+      const strokeCount = floor(random(2, 4));
+      for (let i = 0; i < strokeCount; i++) {
+        burst.strokes.push({
+          radius: random(120, 240),
+          weight: random(6, 14),
+          startAngle: random(-PI * 0.4, PI * 0.1),
+          endAngle: random(PI * 0.6, PI * 1.2),
+          color: random([palette.base, palette.accent]),
+          alpha: random(140, 210),
+          offset: createVector(random(-60, 60), random(-40, 40)),
+          delay: random(0, 180)
+        });
+      }
+
+      const speckCount = floor(random(30, 50));
+      for (let i = 0; i < speckCount; i++) {
+        const pos = createVector(origin.x + random(-180, 180), origin.y + random(-180, 180));
+        burst.specks.push({
+          pos,
+          size: random(3, 10),
+          color: random([palette.dust, palette.glow, palette.accent]),
+          alpha: random(80, 180),
+          delay: random(50, 280)
+        });
+      }
+
+      bursts.push(burst);
+
+      if (transitionSoundFiles.length > 0 && !isSFXMuted) {
+        let ts = random(transitionSoundFiles);
+        if (ts && ts.isLoaded()) {
+          ts.setVolume(starSoundVolume);
+          ts.play();
+        }
+      }
+    }
+
+    function easeOutCubic(x) {
+      return 1 - Math.pow(1 - x, 3);
+    }
+
+    function keyPressed() {
+      if (!started) return;
+      if (key === ' ') {
+        spray();
+      }
+    }
+
+    function mousePressed(event) {
+      const menu = document.getElementById("menu");
+      const settingsIcon = document.getElementById("settings-icon");
+      const langToggle = document.getElementById("langToggle");
+
+      if (menu.contains(event.target) || settingsIcon.contains(event.target) || (langToggle && langToggle.contains(event.target))) {
+        return;
+      }
+      if (!started) return;
+      if (clickTransitionEnabled) {
+        spray();
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function goFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => { console.error(err); });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    const langToggleEl = document.getElementById("langToggle");
+
+    document.getElementById("startButton").addEventListener("click", function() {
+      started = true;
+      document.getElementById("promptOverlay").style.display = "none";
+      if (langToggleEl) {
+        langToggleEl.style.display = "none";
+      }
+      goFullscreen();
+      document.getElementById("settings-icon").style.display = "flex";
+      if (window.stonerMusicArray && musicFiles.length > 0) {
+        currentMusic = random(musicFiles);
+        if (currentMusic && currentMusic.isLoaded()) {
+          currentMusic.setVolume(musicVolume);
+          currentMusic.loop();
+        }
+      }
+    });
+
+    document.getElementById("infoButton").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "block";
+    });
+
+    document.getElementById("closeModal").addEventListener("click", function() {
+      document.getElementById("infoModal").style.display = "none";
+    });
+
+    document.getElementById("settings-icon").addEventListener("click", function() {
+      document.getElementById("menu").classList.toggle("show");
+    });
+
+    const muteToggle = document.getElementById('muteToggle');
+    const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+    const musicVolumeValue = document.getElementById('musicVolumeValue');
+    const muteSFXToggle = document.getElementById('muteSFXToggle');
+    const starSoundVolumeSlider = document.getElementById('starSoundVolumeSlider');
+    const starSoundVolumeValue = document.getElementById('starSoundVolumeValue');
+    const clickTransitionToggle = document.getElementById('clickTransitionToggle');
+
+    muteToggle.addEventListener('change', () => {
+      isMuted = muteToggle.checked;
+      if (currentMusic) currentMusic.setVolume(isMuted ? 0 : musicVolume);
+    });
+
+    musicVolumeSlider.addEventListener('input', () => {
+      musicVolume = parseInt(musicVolumeSlider.value, 10) / 100;
+      musicVolumeValue.textContent = musicVolumeSlider.value;
+      if (currentMusic && !isMuted) currentMusic.setVolume(musicVolume);
+    });
+
+    muteSFXToggle.addEventListener('change', () => {
+      isSFXMuted = muteSFXToggle.checked;
+    });
+
+    starSoundVolumeSlider.addEventListener('input', () => {
+      starSoundVolume = parseInt(starSoundVolumeSlider.value, 10) / 100;
+      starSoundVolumeValue.textContent = starSoundVolumeSlider.value;
+    });
+
+    clickTransitionToggle.addEventListener('change', () => {
+      clickTransitionEnabled = clickTransitionToggle.checked;
+    });
+
+    document.addEventListener('click', function(event) {
+      const menu = document.getElementById("menu");
+      const settingsIcon = document.getElementById("settings-icon");
+      if (menu.classList.contains("show") && !menu.contains(event.target) && !settingsIcon.contains(event.target)) {
+        menu.classList.remove("show");
+      }
+    });
+
+    document.getElementById('langToggle')?.addEventListener('pointerup', () => {
+      if (typeof toggleLanguage === 'function') {
+        toggleLanguage();
+      }
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof updateLanguage === 'function') {
+        updateLanguage();
+      }
+    });
+  </script>
+</body>
+</html>
