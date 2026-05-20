@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Tiles (Camera + AI Vision)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0b1020; color: #fff; }
+    .top { padding: 12px 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: #111938; }
+    button { padding: 10px 14px; border-radius: 10px; border: 0; cursor: pointer; font-weight: 700; }
+    #startBtn { background: #37c27f; color: #001b10; }
+    #homeBtn { background: #84a5ff; color: #05123d; text-decoration: none; display: inline-block; }
+    #status { opacity: .9; }
+    .stage { position: relative; width: min(100vw, 1200px); margin: 0 auto; }
+    video, canvas { width: 100%; height: auto; display: block; border-radius: 12px; }
+    #overlay { position: absolute; inset: 0; }
+    .panel { padding: 12px 16px; }
+    .hint { color: #a4c1ff; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <button id="startBtn">Start camera</button>
+    <a id="homeBtn" href="../index.html">Back to Eye-Gaze Menu</a>
+    <span id="status">Ready.</span>
+  </div>
+
+  <div class="stage">
+    <video id="camera" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="panel">
+    <strong>Idea prototype:</strong> detected faces become interactive tiles.
+    <div class="hint">Tap/click a face square to greet the person. Works best in Chromium browsers that support the Face Detection API.</div>
+    <p id="actionText">Action: none yet.</p>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const statusEl = document.getElementById('status');
+    const actionText = document.getElementById('actionText');
+    const video = document.getElementById('camera');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
+
+    let detector = null;
+    let lastFaces = [];
+    let running = false;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function resizeCanvas() {
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+    }
+
+    function drawFaceTiles(faces) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 4;
+      ctx.font = '20px Arial';
+      ctx.textBaseline = 'top';
+
+      faces.forEach((face, index) => {
+        const { x, y, width, height } = face.boundingBox;
+        ctx.strokeStyle = '#33ff99';
+        ctx.fillStyle = 'rgba(51, 255, 153, 0.14)';
+        ctx.fillRect(x, y, width, height);
+        ctx.strokeRect(x, y, width, height);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(`Face Tile ${index + 1}`, x + 8, y + 8);
+      });
+    }
+
+    function hitFaceTile(px, py) {
+      return lastFaces.find((face) => {
+        const box = face.boundingBox;
+        return px >= box.x && px <= box.x + box.width && py >= box.y && py <= box.y + box.height;
+      });
+    }
+
+    async function detectLoop() {
+      if (!running) return;
+
+      try {
+        const faces = await detector.detect(video);
+        lastFaces = faces;
+        drawFaceTiles(faces);
+        setStatus(`Tracking ${faces.length} face tile(s).`);
+      } catch (err) {
+        console.error(err);
+        setStatus(`Detection error: ${err.message}`);
+      }
+
+      requestAnimationFrame(detectLoop);
+    }
+
+    canvas.addEventListener('click', (event) => {
+      if (!lastFaces.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (event.clientX - rect.left) * scaleX;
+      const y = (event.clientY - rect.top) * scaleY;
+
+      const face = hitFaceTile(x, y);
+      if (face) {
+        actionText.textContent = 'Action: 👋 Hi! Face tile selected.';
+      }
+    });
+
+    startBtn.addEventListener('click', async () => {
+      if (!('FaceDetector' in window)) {
+        setStatus('Face Detection API not supported in this browser.');
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        video.srcObject = stream;
+        await video.play();
+        resizeCanvas();
+
+        detector = new FaceDetector({ fastMode: true, maxDetectedFaces: 8 });
+        running = true;
+        setStatus('Camera started. Looking for faces...');
+        detectLoop();
+      } catch (err) {
+        console.error(err);
+        setStatus(`Camera error: ${err.message}`);
+      }
+    });
+
+    video.addEventListener('loadedmetadata', resizeCanvas);
+    window.addEventListener('resize', resizeCanvas);
+  </script>
+</body>
+</html>
