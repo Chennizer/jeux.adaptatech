@@ -33,7 +33,7 @@
 
   <div class="panel">
     <strong>Idea prototype:</strong> detected faces become interactive tiles.
-    <div class="hint">Tap/click a face square to greet the person. Works best in Chromium browsers that support the Face Detection API.</div>
+    <div class="hint">Tap/click a face square to greet the person. Uses native FaceDetector when available, otherwise falls back to MediaPipe face detection.</div>
     <p id="actionText">Action: none yet.</p>
   </div>
 
@@ -46,12 +46,11 @@
     const ctx = canvas.getContext('2d');
 
     let detector = null;
+    let detectorName = '';
     let lastFaces = [];
     let running = false;
 
-    function setStatus(text) {
-      statusEl.textContent = text;
-    }
+    function setStatus(text) { statusEl.textContent = text; }
 
     function resizeCanvas() {
       canvas.width = video.videoWidth || 1280;
@@ -63,7 +62,6 @@
       ctx.lineWidth = 4;
       ctx.font = '20px Arial';
       ctx.textBaseline = 'top';
-
       faces.forEach((face, index) => {
         const { x, y, width, height } = face.boundingBox;
         ctx.strokeStyle = '#33ff99';
@@ -77,24 +75,71 @@
 
     function hitFaceTile(px, py) {
       return lastFaces.find((face) => {
-        const box = face.boundingBox;
-        return px >= box.x && px <= box.x + box.width && py >= box.y && py <= box.y + box.height;
+        const b = face.boundingBox;
+        return px >= b.x && px <= b.x + b.width && py >= b.y && py <= b.y + b.height;
       });
+    }
+
+    async function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function createDetector() {
+      if ('FaceDetector' in window) {
+        detectorName = 'Native FaceDetector';
+        const nativeDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 8 });
+        return { detect: (input) => nativeDetector.detect(input) };
+      }
+
+      detectorName = 'MediaPipe fallback';
+      setStatus('Loading MediaPipe fallback model...');
+      await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+
+      const vision = await window.FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+      );
+      const mpDetector = await window.FaceDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite'
+        },
+        runningMode: 'VIDEO',
+        minDetectionConfidence: 0.5
+      });
+
+      return {
+        detect: async (input) => {
+          const ts = performance.now();
+          const out = mpDetector.detectForVideo(input, ts);
+          const detections = out.detections || [];
+          return detections.map((d) => ({
+            boundingBox: {
+              x: d.boundingBox.originX,
+              y: d.boundingBox.originY,
+              width: d.boundingBox.width,
+              height: d.boundingBox.height
+            }
+          }));
+        }
+      };
     }
 
     async function detectLoop() {
       if (!running) return;
-
       try {
         const faces = await detector.detect(video);
         lastFaces = faces;
         drawFaceTiles(faces);
-        setStatus(`Tracking ${faces.length} face tile(s).`);
+        setStatus(`${detectorName}: tracking ${faces.length} face tile(s).`);
       } catch (err) {
         console.error(err);
         setStatus(`Detection error: ${err.message}`);
       }
-
       requestAnimationFrame(detectLoop);
     }
 
@@ -105,32 +150,24 @@
       const scaleY = canvas.height / rect.height;
       const x = (event.clientX - rect.left) * scaleX;
       const y = (event.clientY - rect.top) * scaleY;
-
-      const face = hitFaceTile(x, y);
-      if (face) {
+      if (hitFaceTile(x, y)) {
         actionText.textContent = 'Action: 👋 Hi! Face tile selected.';
       }
     });
 
     startBtn.addEventListener('click', async () => {
-      if (!('FaceDetector' in window)) {
-        setStatus('Face Detection API not supported in this browser.');
-        return;
-      }
-
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
         video.srcObject = stream;
         await video.play();
         resizeCanvas();
-
-        detector = new FaceDetector({ fastMode: true, maxDetectedFaces: 8 });
+        detector = await createDetector();
         running = true;
-        setStatus('Camera started. Looking for faces...');
+        setStatus(`${detectorName} ready. Looking for faces...`);
         detectLoop();
       } catch (err) {
         console.error(err);
-        setStatus(`Camera error: ${err.message}`);
+        setStatus(`Startup error: ${err.message}`);
       }
     });
 
