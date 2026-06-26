@@ -33,10 +33,11 @@
 
   <div class="panel">
     <strong>Idea prototype:</strong> detected faces become interactive tiles.
-    <div class="hint">Tap/click a face square to greet the person. Uses native FaceDetector when available, otherwise falls back to MediaPipe face detection.</div>
+    <div class="hint">Tap/click a face square to greet the person. Uses the local clmtrackr face tracker so it does not depend on experimental browser FaceDetector support.</div>
     <p id="actionText">Action: none yet.</p>
   </div>
 
+  <script src="../../lib/clmtrackr.js"></script>
   <script>
     const startBtn = document.getElementById('startBtn');
     const statusEl = document.getElementById('status');
@@ -45,16 +46,48 @@
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
 
-    let detector = null;
-    let detectorName = '';
+    const tracker = new clm.tracker({ useWebGL: false });
+    tracker.init();
+
     let lastFaces = [];
     let running = false;
 
     function setStatus(text) { statusEl.textContent = text; }
 
     function resizeCanvas() {
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
+      const width = video.videoWidth || 1280;
+      const height = video.videoHeight || 720;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+    }
+
+    function positionsToFaceTile(positions) {
+      if (!positions || !positions.length) return [];
+
+      const xs = positions.map((point) => point[0]);
+      const ys = positions.map((point) => point[1]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const width = maxX - minX;
+      const height = maxY - minY;
+      const paddingX = width * 0.28;
+      const paddingTop = height * 0.45;
+      const paddingBottom = height * 0.18;
+
+      const x = Math.max(0, minX - paddingX);
+      const y = Math.max(0, minY - paddingTop);
+      return [{
+        boundingBox: {
+          x,
+          y,
+          width: Math.min(canvas.width - x, width + paddingX * 2),
+          height: Math.min(canvas.height - y, height + paddingTop + paddingBottom)
+        }
+      }];
     }
 
     function drawFaceTiles(faces) {
@@ -80,66 +113,12 @@
       });
     }
 
-    async function loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = resolve;
-        s.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-        document.head.appendChild(s);
-      });
-    }
-
-    async function createDetector() {
-      if ('FaceDetector' in window) {
-        detectorName = 'Native FaceDetector';
-        const nativeDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 8 });
-        return { detect: (input) => nativeDetector.detect(input) };
-      }
-
-      detectorName = 'MediaPipe fallback';
-      setStatus('Loading MediaPipe fallback model...');
-      await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
-
-      const vision = await window.FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
-      );
-      const mpDetector = await window.FaceDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite'
-        },
-        runningMode: 'VIDEO',
-        minDetectionConfidence: 0.5
-      });
-
-      return {
-        detect: async (input) => {
-          const ts = performance.now();
-          const out = mpDetector.detectForVideo(input, ts);
-          const detections = out.detections || [];
-          return detections.map((d) => ({
-            boundingBox: {
-              x: d.boundingBox.originX,
-              y: d.boundingBox.originY,
-              width: d.boundingBox.width,
-              height: d.boundingBox.height
-            }
-          }));
-        }
-      };
-    }
-
-    async function detectLoop() {
+    function detectLoop() {
       if (!running) return;
-      try {
-        const faces = await detector.detect(video);
-        lastFaces = faces;
-        drawFaceTiles(faces);
-        setStatus(`${detectorName}: tracking ${faces.length} face tile(s).`);
-      } catch (err) {
-        console.error(err);
-        setStatus(`Detection error: ${err.message}`);
-      }
+      resizeCanvas();
+      lastFaces = positionsToFaceTile(tracker.getCurrentPosition());
+      drawFaceTiles(lastFaces);
+      setStatus(`Local tracker: tracking ${lastFaces.length} face tile(s).`);
       requestAnimationFrame(detectLoop);
     }
 
@@ -156,17 +135,24 @@
     });
 
     startBtn.addEventListener('click', async () => {
+      startBtn.disabled = true;
+      setStatus('Starting camera...');
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Camera access is not available in this browser.');
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
         video.srcObject = stream;
         await video.play();
         resizeCanvas();
-        detector = await createDetector();
+        tracker.start(video);
         running = true;
-        setStatus(`${detectorName} ready. Looking for faces...`);
+        setStatus('Local tracker ready. Looking for faces...');
         detectLoop();
       } catch (err) {
         console.error(err);
+        startBtn.disabled = false;
         setStatus(`Startup error: ${err.message}`);
       }
     });
