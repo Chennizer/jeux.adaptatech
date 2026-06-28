@@ -1,7 +1,7 @@
 (() => {
   const STORAGE_SETTINGS = 'lectureOculaireSettings';
   const STORAGE_LOG = 'lectureOculaireLog';
-  const DEFAULT_SETTINGS = { dwellTimeMs: 1500, choiceCount: 2, showPointer: true, autoNext: true, showPrompt: true };
+  const DEFAULT_SETTINGS = { dwellTimeMs: 1500, choiceCount: 2, showPointer: true, autoNext: true, showPrompt: true, ttsEnabled: true };
   const EDGE_PAD = 22;
   const GAP_MIN = 14;
   const GAP_MAX = 42;
@@ -22,6 +22,7 @@
   const autoNext = $('autoNext');
   const showPrompt = $('showPrompt');
   const showGazePointer = $('showGazePointer');
+  const ttsEnabled = $('ttsEnabled');
   const gazePointer = $('gazePointer');
 
   let settings = loadSettings();
@@ -69,6 +70,7 @@
     autoNext.checked = settings.autoNext;
     showPrompt.checked = settings.showPrompt;
     showGazePointer.checked = settings.showPointer;
+    ttsEnabled.checked = settings.ttsEnabled;
     applyPointerToggle();
   }
 
@@ -87,9 +89,13 @@
     topStrip.style.display = settings.showPrompt ? 'block' : 'none';
     prompt.style.display = settings.showPrompt ? 'block' : 'none';
     grid.style.display = 'grid';
-    document.body.classList.toggle('hide-native-cursor', settings.showPointer);
+    applyPointerToggle();
     try { if (window.eyegazeSettings?.hideOverlay) window.eyegazeSettings.hideOverlay(); } catch (e) {}
     renderActivity();
+  }
+
+  function isGameRunning() {
+    return gameContainer.style.display === 'flex';
   }
 
   function currentActivity() {
@@ -112,6 +118,7 @@
     else renderChoices(activity);
 
     adjustGridSizes();
+    speakActivity(activity);
     setTimeout(() => { isReady = true; grid.classList.add('ready-pop'); }, 350);
     setTimeout(() => grid.classList.remove('ready-pop'), 620);
   }
@@ -225,10 +232,11 @@
   }
 
   function finishSession() {
+    stopSpeech();
     currentActivityIndex = 0;
     gameContainer.style.display = 'none';
     gameOptions.style.display = 'flex';
-    document.body.classList.remove('hide-native-cursor');
+    applyPointerToggle();
   }
 
   function limitChoices(choices, answer) {
@@ -255,6 +263,26 @@
     grid.style.gridTemplateColumns = `repeat(${columns}, ${size}px)`;
     grid.style.gridAutoRows = `${size}px`;
     cells.forEach((cell) => { cell.style.fontSize = `${Math.max(36, Math.floor(size * 0.42))}px`; });
+  }
+
+  function speakActivity(activity) {
+    if (!settings.ttsEnabled || !('speechSynthesis' in window)) return;
+    const parts = [activity.prompt];
+    if (activity.model) parts.push(activity.model);
+    speak(parts.join('. '));
+  }
+
+  function speak(text) {
+    stopSpeech();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'fr-CA';
+    utterance.rate = 0.88;
+    utterance.pitch = 1;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function stopSpeech() {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }
 
   function logEvent(extra) {
@@ -284,8 +312,9 @@
 
   function applyPointerToggle() {
     if (!gazePointer) return;
-    gazePointer.style.opacity = settings.showPointer ? '1' : '0';
-    document.body.classList.toggle('hide-native-cursor', settings.showPointer && gameContainer.style.display === 'flex');
+    const active = settings.showPointer && isGameRunning();
+    gazePointer.style.opacity = active ? '1' : '0';
+    document.body.classList.toggle('hide-native-cursor', active);
   }
 
   function bindControls() {
@@ -302,11 +331,12 @@
     autoNext.addEventListener('change', () => { settings.autoNext = autoNext.checked; saveSettings(); });
     showPrompt.addEventListener('change', () => { settings.showPrompt = showPrompt.checked; saveSettings(); });
     showGazePointer.addEventListener('change', () => { settings.showPointer = showGazePointer.checked; applyPointerToggle(); saveSettings(); });
+    ttsEnabled.addEventListener('change', () => { settings.ttsEnabled = ttsEnabled.checked; saveSettings(); });
     $('startButton').addEventListener('click', startGame);
     $('exportJson').addEventListener('click', exportJson);
     window.addEventListener('resize', adjustGridSizes);
     window.addEventListener('pointermove', (event) => {
-      if (!settings.showPointer || !gazePointer) return;
+      if (!settings.showPointer || !isGameRunning() || !gazePointer) return;
       gazePointer.style.transform = `translate(${event.clientX}px, ${event.clientY}px) translate(-50%, -50%)`;
     });
   }
