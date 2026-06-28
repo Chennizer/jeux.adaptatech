@@ -1,18 +1,27 @@
 (() => {
   const STORAGE_SETTINGS = 'lectureOculaireSettings';
   const STORAGE_LOG = 'lectureOculaireLog';
-  const DEFAULT_SETTINGS = { dwellTimeMs: 1200, choiceCount: 2, showPointer: true, autoNext: true };
+  const DEFAULT_SETTINGS = { dwellTimeMs: 1500, choiceCount: 2, showPointer: true, autoNext: true, showPrompt: true };
+  const EDGE_PAD = 22;
+  const GAP_MIN = 14;
+  const GAP_MAX = 42;
+  const MIN_TILE = 120;
 
   const $ = (id) => document.getElementById(id);
-  const lessonGrid = $('lesson-grid');
-  const lessonScreen = $('lesson-screen');
-  const activityScreen = $('activity-screen');
-  const activityHost = $('activity-host');
-  const activityTitle = $('activity-title');
-  const modelText = $('model-text');
-  const feedback = $('feedback');
-  const progressPill = $('progress-pill');
-  const typePill = $('type-pill');
+  const gameOptions = $('game-options');
+  const gameContainer = document.querySelector('.game-container');
+  const topStrip = $('topStrip');
+  const prompt = $('prompt');
+  const promptText = $('promptText');
+  const targetText = document.querySelector('#prompt .target-letter');
+  const grid = $('choiceGrid');
+  const dwellSlider = $('dwellTimeSlider');
+  const dwellTimeVal = $('dwellTimeVal');
+  const lessonSelect = $('lessonSelect');
+  const choiceCount = $('choiceCount');
+  const autoNext = $('autoNext');
+  const showPrompt = $('showPrompt');
+  const showGazePointer = $('showGazePointer');
   const gazePointer = $('gazePointer');
 
   let settings = loadSettings();
@@ -20,15 +29,15 @@
   let currentLesson = null;
   let currentActivityIndex = 0;
   let currentEncoding = '';
-  let repeatCountForActivity = 0;
-  let dwellTimer = null;
-  let dwellStartedAt = 0;
-  let activeDwellElement = null;
-  let dwellFrame = null;
+  let hoverTimeout = null;
+  let activeHoverTile = null;
+  let currentOverlay = null;
+  let isReady = false;
+  let repeats = 0;
 
   function loadSettings() {
     try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || '{}') }; }
-    catch { return { ...DEFAULT_SETTINGS }; }
+    catch (e) { return { ...DEFAULT_SETTINGS }; }
   }
 
   function saveSettings() {
@@ -37,43 +46,49 @@
 
   function loadLog() {
     try { return JSON.parse(localStorage.getItem(STORAGE_LOG) || '[]'); }
-    catch { return []; }
+    catch (e) { return []; }
   }
 
   function saveLog() {
     localStorage.setItem(STORAGE_LOG, JSON.stringify(log));
   }
 
-  function activityTypeLabel(type) {
-    const labels = {
-      'phonemic-awareness': 'J’entends',
-      'grapheme-phoneme': 'Je vois',
-      decoding: 'Je lis',
-      encoding: 'Je construis',
-      comprehension: 'Je comprends',
-    };
-    return labels[type] || 'Lecture';
+  function initEyegaze() {
+    if (typeof initEyegazeMenu === 'function') initEyegazeMenu();
+    if (typeof setEyegazeDwellTime === 'function') {
+      settings.dwellTimeMs = setEyegazeDwellTime(settings.dwellTimeMs);
+    } else if (window.eyegazeSettings) {
+      window.eyegazeSettings.dwellTime = settings.dwellTimeMs;
+    }
   }
 
-  function renderLessons() {
-    lessonGrid.innerHTML = '';
-    LECTURE_OCULAIRE_LESSONS.forEach((lesson) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'lesson-card dwellable';
-      button.innerHTML = `<strong>${lesson.title}</strong><span>${lesson.focus}</span>`;
-      button.addEventListener('click', () => startLesson(lesson.id));
-      lessonGrid.appendChild(button);
-    });
-    bindDwellTargets();
+  function syncSettingsUi() {
+    dwellSlider.value = settings.dwellTimeMs;
+    dwellTimeVal.textContent = settings.dwellTimeMs;
+    choiceCount.value = String(settings.choiceCount);
+    autoNext.checked = settings.autoNext;
+    showPrompt.checked = settings.showPrompt;
+    showGazePointer.checked = settings.showPointer;
+    applyPointerToggle();
   }
 
-  function startLesson(lessonId) {
-    currentLesson = LECTURE_OCULAIRE_LESSONS.find((lesson) => lesson.id === lessonId);
+  function populateLessons() {
+    lessonSelect.innerHTML = LECTURE_OCULAIRE_LESSONS.map((lesson) => (
+      `<option value="${escapeAttr(lesson.id)}">${lesson.title}</option>`
+    )).join('');
+  }
+
+  function startGame() {
+    currentLesson = LECTURE_OCULAIRE_LESSONS.find((lesson) => lesson.id === lessonSelect.value) || LECTURE_OCULAIRE_LESSONS[0];
     currentActivityIndex = 0;
-    repeatCountForActivity = 0;
-    lessonScreen.hidden = true;
-    activityScreen.hidden = false;
+    repeats = 0;
+    gameOptions.style.display = 'none';
+    gameContainer.style.display = 'flex';
+    topStrip.style.display = settings.showPrompt ? 'block' : 'none';
+    prompt.style.display = settings.showPrompt ? 'block' : 'none';
+    grid.style.display = 'grid';
+    document.body.classList.toggle('hide-native-cursor', settings.showPointer);
+    try { if (window.eyegazeSettings?.hideOverlay) window.eyegazeSettings.hideOverlay(); } catch (e) {}
     renderActivity();
   }
 
@@ -82,96 +97,164 @@
   }
 
   function renderActivity() {
-    const activity = currentActivity();
-    if (!activity) return showLessonScreen();
-
+    stopHover();
+    isReady = false;
     currentEncoding = '';
-    repeatCountForActivity = 0;
-    feedback.className = 'feedback';
-    feedback.textContent = '';
-    progressPill.textContent = `Activité ${currentActivityIndex + 1}/${currentLesson.activities.length}`;
-    typePill.textContent = activityTypeLabel(activity.type);
-    activityTitle.textContent = activity.prompt;
-    modelText.textContent = activity.model || '';
+    repeats = 0;
+    const activity = currentActivity();
+    if (!activity) return finishSession();
 
-    if (activity.type === 'encoding') {
-      renderEncodingActivity(activity);
-    } else {
-      renderChoiceActivity(activity);
-    }
-    bindDwellTargets();
+    promptText.textContent = promptLabel(activity);
+    targetText.textContent = activity.promptTarget || activity.answer;
+    grid.innerHTML = '';
+
+    if (activity.type === 'encoding') renderEncoding(activity);
+    else renderChoices(activity);
+
+    adjustGridSizes();
+    setTimeout(() => { isReady = true; grid.classList.add('ready-pop'); }, 350);
+    setTimeout(() => grid.classList.remove('ready-pop'), 620);
   }
 
-  function renderChoiceActivity(activity) {
+  function promptLabel(activity) {
+    if (activity.type === 'encoding') return activity.prompt;
+    return activity.prompt.replace(activity.answer, '').trim() || activity.prompt;
+  }
+
+  function renderChoices(activity) {
     const choices = limitChoices(activity.choices || [], activity.answer);
-    activityHost.innerHTML = `<div class="choice-grid">${choices.map((choice) => `
-      <button class="gaze-choice dwellable" type="button" data-choice="${escapeAttr(choice)}"><span>${choice}</span></button>
-    `).join('')}</div>`;
-    activityHost.querySelectorAll('[data-choice]').forEach((button) => {
-      button.addEventListener('click', () => selectChoice(button.dataset.choice, button));
-    });
+    choices.forEach((choice) => addTile(choice, () => handleAnswer(choice)));
   }
 
-  function renderEncodingActivity(activity) {
+  function renderEncoding(activity) {
+    const display = document.createElement('div');
+    display.id = 'encodingDisplay';
+    display.textContent = '—';
+    grid.appendChild(display);
+
     const keys = currentLesson.keyboard || currentLesson.graphemes || [];
-    activityHost.innerHTML = `
-      <div id="encoding-display" class="encoding-display" aria-live="polite">—</div>
-      <div class="encoding-keyboard">
-        ${keys.map((key) => `<button class="keyboard-key dwellable" type="button" data-key="${escapeAttr(key)}"><span>${key}</span></button>`).join('')}
-        <button class="keyboard-key dwellable" type="button" data-action="erase"><span>⌫</span></button>
-        <button class="keyboard-key dwellable" type="button" data-action="validate"><span>✓</span></button>
-      </div>`;
-    activityHost.querySelectorAll('[data-key]').forEach((button) => {
-      button.addEventListener('click', () => {
-        currentEncoding += button.dataset.key;
-        updateEncodingDisplay();
+    keys.forEach((key) => addTile(key, () => {
+      currentEncoding += key;
+      display.textContent = currentEncoding || '—';
+    }));
+    addTile('⌫', () => {
+      currentEncoding = currentEncoding.slice(0, -1);
+      display.textContent = currentEncoding || '—';
+    });
+    addTile('✓', () => handleAnswer(currentEncoding));
+  }
+
+  function addTile(label, onSelect) {
+    const tile = document.createElement('div');
+    tile.className = 'letter-cell';
+    tile.innerHTML = `<span class="cell-char">${label}</span>`;
+    tile.tabIndex = 0;
+    tile.addEventListener('click', onSelect);
+    tile.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onSelect();
+      }
+    });
+    tile.addEventListener('pointerenter', () => { if (isReady) startHover(tile); });
+    tile.addEventListener('pointerleave', () => stopHover());
+    grid.appendChild(tile);
+  }
+
+  function startHover(tile) {
+    if (activeHoverTile === tile && currentOverlay) return;
+    const hoverTime = window.eyegazeSettings?.dwellTime || settings.dwellTimeMs;
+    stopHover();
+    activeHoverTile = tile;
+    currentOverlay = document.createElement('div');
+    currentOverlay.className = 'dwell-fill';
+    tile.appendChild(currentOverlay);
+
+    requestAnimationFrame(() => {
+      currentOverlay.style.transition = `width ${hoverTime}ms linear, height ${hoverTime}ms linear`;
+      currentOverlay.style.width = '0';
+      currentOverlay.style.height = '0';
+      requestAnimationFrame(() => {
+        if (!currentOverlay) return;
+        currentOverlay.style.width = '100%';
+        currentOverlay.style.height = '100%';
       });
     });
-    activityHost.querySelector('[data-action="erase"]').addEventListener('click', () => {
-      currentEncoding = currentEncoding.slice(0, -1);
-      updateEncodingDisplay();
-    });
-    activityHost.querySelector('[data-action="validate"]').addEventListener('click', () => selectChoice(currentEncoding, null));
+
+    if (gazePointer) gazePointer.classList.add('gp-dwell');
+    hoverTimeout = setTimeout(() => {
+      tile.click();
+      stopHover();
+    }, hoverTime);
   }
 
-  function updateEncodingDisplay() {
-    $('encoding-display').textContent = currentEncoding || '—';
+  function stopHover() {
+    clearTimeout(hoverTimeout);
+    hoverTimeout = null;
+    if (currentOverlay?.parentElement) currentOverlay.parentElement.removeChild(currentOverlay);
+    currentOverlay = null;
+    activeHoverTile = null;
+    if (gazePointer) gazePointer.classList.remove('gp-dwell');
   }
 
-  function limitChoices(choices, answer) {
-    const unique = Array.from(new Set([answer, ...choices]));
-    return unique.slice(0, Math.max(2, settings.choiceCount));
-  }
-
-  function selectChoice(value, button) {
+  function handleAnswer(value) {
     const activity = currentActivity();
     const correct = normalize(value) === normalize(activity.answer);
-    if (button) button.classList.add(correct ? 'correct' : 'incorrect');
-    feedback.className = `feedback ${correct ? 'good' : 'retry'}`;
-    feedback.textContent = correct ? 'Bravo, c’est correct.' : 'À reprendre. On peut essayer encore.';
+    const selectedTile = activeHoverTile;
     logEvent({ kind: 'answer', selected: value, correct });
-    updateSummary();
-    if (correct && settings.autoNext) {
-      setTimeout(nextActivity, 1200);
+
+    if (!correct) {
+      if (selectedTile) {
+        selectedTile.classList.add('wrong-flash');
+        setTimeout(() => selectedTile.classList.remove('wrong-flash'), 350);
+      }
+      return;
     }
+
+    isReady = false;
+    if (selectedTile) selectedTile.classList.add('correct');
+    setTimeout(() => {
+      if (settings.autoNext) nextActivity();
+    }, 650);
   }
 
   function nextActivity() {
     currentActivityIndex += 1;
-    if (currentActivityIndex >= currentLesson.activities.length) {
-      feedback.className = 'feedback good';
-      feedback.textContent = 'Séance terminée. Retour aux leçons.';
-      setTimeout(showLessonScreen, 1400);
-      return;
-    }
-    renderActivity();
+    if (currentActivityIndex >= currentLesson.activities.length) finishSession();
+    else renderActivity();
   }
 
-  function showLessonScreen() {
-    activityScreen.hidden = true;
-    lessonScreen.hidden = false;
-    currentLesson = null;
-    bindDwellTargets();
+  function finishSession() {
+    currentActivityIndex = 0;
+    gameContainer.style.display = 'none';
+    gameOptions.style.display = 'flex';
+    document.body.classList.remove('hide-native-cursor');
+  }
+
+  function limitChoices(choices, answer) {
+    const all = Array.from(new Set([answer, ...choices]));
+    return all.slice(0, Math.max(2, settings.choiceCount));
+  }
+
+  function adjustGridSizes() {
+    const cells = Array.from(grid.querySelectorAll('.letter-cell'));
+    if (!cells.length) return;
+    const count = cells.length;
+    const columns = count <= 2 ? count : Math.min(3, Math.ceil(Math.sqrt(count)));
+    const rows = Math.ceil(count / columns) + (grid.querySelector('#encodingDisplay') ? 1 : 0);
+    const outer = grid.parentElement;
+    const contentW = Math.max(0, grid.clientWidth - 2 * EDGE_PAD);
+    const contentH = Math.max(0, (outer?.clientHeight || grid.clientHeight) - 2 * EDGE_PAD);
+    const gap = Math.max(GAP_MIN, Math.min(GAP_MAX, Math.round(Math.min(contentW, contentH) * 0.025)));
+    const maxByW = (contentW - (columns - 1) * gap) / columns;
+    const maxByH = (contentH - (rows - 1) * gap) / rows;
+    const size = Math.max(MIN_TILE, Math.floor(Math.min(maxByW, maxByH)));
+
+    grid.style.padding = `${EDGE_PAD}px`;
+    grid.style.gap = `${gap}px`;
+    grid.style.gridTemplateColumns = `repeat(${columns}, ${size}px)`;
+    grid.style.gridAutoRows = `${size}px`;
+    cells.forEach((cell) => { cell.style.fontSize = `${Math.max(36, Math.floor(size * 0.42))}px`; });
   }
 
   function logEvent(extra) {
@@ -179,144 +262,14 @@
     log.push({
       at: new Date().toISOString(),
       lessonId: currentLesson?.id || null,
-      lessonTitle: currentLesson?.title || null,
       activityId: activity?.id || null,
       activityType: activity?.type || null,
       prompt: activity?.prompt || null,
       expected: activity?.answer || null,
-      repeats: repeatCountForActivity,
+      repeats,
       ...extra,
     });
     saveLog();
-  }
-
-  function updateSummary() {
-    const answers = log.filter((entry) => entry.kind === 'answer');
-    $('correct-count').textContent = answers.filter((entry) => entry.correct).length;
-    $('error-count').textContent = answers.filter((entry) => !entry.correct).length;
-    $('help-count').textContent = log.filter((entry) => entry.kind === 'help').length;
-    $('repeat-count').textContent = log.filter((entry) => entry.kind === 'repeat').length;
-  }
-
-  function handleRegulation(action) {
-    if (action === 'repeat') {
-      repeatCountForActivity += 1;
-      feedback.className = 'feedback help';
-      feedback.textContent = currentActivity()?.prompt || 'On répète.';
-      logEvent({ kind: 'repeat' });
-    }
-    if (action === 'help') {
-      feedback.className = 'feedback help';
-      feedback.textContent = currentActivity()?.model || 'L’adulte peut donner un indice.';
-      logEvent({ kind: 'help' });
-    }
-    if (action === 'pause') {
-      feedback.className = 'feedback help';
-      feedback.textContent = 'Pause. On reprend quand l’élève est disponible.';
-      logEvent({ kind: 'pause' });
-    }
-    if (action === 'unknown') {
-      feedback.className = 'feedback retry';
-      feedback.textContent = 'Réponse notée : je ne sais pas.';
-      logEvent({ kind: 'unknown', correct: false });
-    }
-    if (action === 'again') renderActivity();
-    updateSummary();
-  }
-
-  function bindDwellTargets() {
-    document.querySelectorAll('.dwellable').forEach((element) => {
-      if (element.dataset.dwellBound) return;
-      element.dataset.dwellBound = 'true';
-      const fill = document.createElement('span');
-      fill.className = 'dwell-fill';
-      element.prepend(fill);
-      element.addEventListener('pointerenter', () => startDwell(element));
-      element.addEventListener('pointerleave', cancelDwell);
-      element.addEventListener('pointerdown', cancelDwell);
-    });
-  }
-
-  function startDwell(element) {
-    cancelDwell();
-    activeDwellElement = element;
-    dwellStartedAt = performance.now();
-    dwellTimer = setTimeout(() => {
-      const target = activeDwellElement;
-      cancelDwell();
-      target?.click();
-    }, settings.dwellTimeMs);
-    animateDwell();
-  }
-
-  function animateDwell() {
-    if (!activeDwellElement) return;
-    const fill = activeDwellElement.querySelector('.dwell-fill');
-    const elapsed = performance.now() - dwellStartedAt;
-    const pct = Math.min(100, (elapsed / settings.dwellTimeMs) * 100);
-    if (fill) fill.style.width = `${pct}%`;
-    dwellFrame = requestAnimationFrame(animateDwell);
-  }
-
-  function cancelDwell() {
-    if (dwellTimer) clearTimeout(dwellTimer);
-    if (dwellFrame) cancelAnimationFrame(dwellFrame);
-    if (activeDwellElement) {
-      const fill = activeDwellElement.querySelector('.dwell-fill');
-      if (fill) fill.style.width = '0%';
-    }
-    dwellTimer = null;
-    dwellFrame = null;
-    activeDwellElement = null;
-  }
-
-  function syncSettingsUi() {
-    $('dwell-time').value = settings.dwellTimeMs;
-    $('dwell-time-value').textContent = settings.dwellTimeMs;
-    $('choice-count').value = settings.choiceCount;
-    $('show-pointer').checked = settings.showPointer;
-    $('auto-next').checked = settings.autoNext;
-    document.body.classList.toggle('show-gaze-pointer', settings.showPointer);
-  }
-
-  function bindSettings() {
-    $('settings-toggle').addEventListener('click', () => { $('settings-panel').hidden = !$('settings-panel').hidden; });
-    $('dwell-time').addEventListener('input', (event) => {
-      settings.dwellTimeMs = Number(event.target.value);
-      $('dwell-time-value').textContent = settings.dwellTimeMs;
-      saveSettings();
-    });
-    $('choice-count').addEventListener('change', (event) => {
-      settings.choiceCount = Number(event.target.value);
-      saveSettings();
-      if (currentLesson) renderActivity();
-    });
-    $('show-pointer').addEventListener('change', (event) => {
-      settings.showPointer = event.target.checked;
-      document.body.classList.toggle('show-gaze-pointer', settings.showPointer);
-      saveSettings();
-    });
-    $('auto-next').addEventListener('change', (event) => {
-      settings.autoNext = event.target.checked;
-      saveSettings();
-    });
-    $('fullscreen-button').addEventListener('click', () => document.documentElement.requestFullscreen?.());
-    $('clear-log-button').addEventListener('click', () => {
-      log = [];
-      saveLog();
-      updateSummary();
-    });
-    $('export-json-button').addEventListener('click', exportJson);
-    $('back-to-lessons').addEventListener('click', showLessonScreen);
-    document.querySelectorAll('[data-action]').forEach((button) => {
-      if (button.closest('.encoding-keyboard')) return;
-      button.addEventListener('click', () => handleRegulation(button.dataset.action));
-    });
-    window.addEventListener('pointermove', (event) => {
-      if (!settings.showPointer || !gazePointer) return;
-      gazePointer.style.left = `${event.clientX}px`;
-      gazePointer.style.top = `${event.clientY}px`;
-    });
   }
 
   function exportJson() {
@@ -329,6 +282,35 @@
     URL.revokeObjectURL(url);
   }
 
+  function applyPointerToggle() {
+    if (!gazePointer) return;
+    gazePointer.style.opacity = settings.showPointer ? '1' : '0';
+    document.body.classList.toggle('hide-native-cursor', settings.showPointer && gameContainer.style.display === 'flex');
+  }
+
+  function bindControls() {
+    dwellSlider.addEventListener('input', () => {
+      const val = typeof setEyegazeDwellTime === 'function'
+        ? setEyegazeDwellTime(dwellSlider.value)
+        : parseInt(dwellSlider.value, 10) || 1500;
+      settings.dwellTimeMs = val;
+      if (window.eyegazeSettings) window.eyegazeSettings.dwellTime = val;
+      dwellTimeVal.textContent = val;
+      saveSettings();
+    });
+    choiceCount.addEventListener('change', () => { settings.choiceCount = parseInt(choiceCount.value, 10) || 2; saveSettings(); });
+    autoNext.addEventListener('change', () => { settings.autoNext = autoNext.checked; saveSettings(); });
+    showPrompt.addEventListener('change', () => { settings.showPrompt = showPrompt.checked; saveSettings(); });
+    showGazePointer.addEventListener('change', () => { settings.showPointer = showGazePointer.checked; applyPointerToggle(); saveSettings(); });
+    $('startButton').addEventListener('click', startGame);
+    $('exportJson').addEventListener('click', exportJson);
+    window.addEventListener('resize', adjustGridSizes);
+    window.addEventListener('pointermove', (event) => {
+      if (!settings.showPointer || !gazePointer) return;
+      gazePointer.style.transform = `translate(${event.clientX}px, ${event.clientY}px) translate(-50%, -50%)`;
+    });
+  }
+
   function normalize(value) {
     return String(value || '').trim().toLocaleLowerCase('fr-CA');
   }
@@ -338,9 +320,9 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    initEyegaze();
+    populateLessons();
     syncSettingsUi();
-    bindSettings();
-    renderLessons();
-    updateSummary();
+    bindControls();
   });
 })();
