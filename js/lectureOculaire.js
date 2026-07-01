@@ -154,6 +154,7 @@
   function addTile(label, onSelect) {
     const tile = document.createElement('div');
     tile.className = 'letter-cell';
+    tile.dataset.label = String(label);
     tile.innerHTML = `<span class="cell-char">${label}</span>`;
     tile.tabIndex = 0;
     tile.addEventListener('click', onSelect);
@@ -262,15 +263,39 @@
     grid.style.gap = `${gap}px`;
     grid.style.gridTemplateColumns = `repeat(${columns}, ${size}px)`;
     grid.style.gridAutoRows = `${size}px`;
-    cells.forEach((cell) => { cell.style.fontSize = `${Math.max(36, Math.floor(size * 0.42))}px`; });
+    cells.forEach((cell) => {
+      const text = cell.dataset.label || cell.textContent || '';
+      const length = Array.from(text.trim()).length || 1;
+      const ratio = length <= 2 ? 0.52 : Math.max(0.22, 1.55 / length);
+      cell.style.fontSize = `${Math.max(28, Math.floor(size * ratio))}px`;
+    });
   }
 
   function speakActivity(activity) {
     if (!settings.ttsEnabled || !('speechSynthesis' in window)) return;
+    speak(speechTextForActivity(activity));
+  }
+  function speechTextForActivity(activity) {
     const parts = [activity.prompt];
     if (activity.model) parts.push(activity.model);
-    speak(parts.join('. '));
+    return parts.join('. ').replace(/\/([^/]+)\//g, (_match, phoneme) => phonemeSpeech(phoneme));
   }
+
+  function phonemeSpeech(rawPhoneme) {
+    const phoneme = String(rawPhoneme || '').trim().toLocaleLowerCase('fr-CA');
+    const sounds = {
+      m: 'mmm',
+      s: 'sss',
+      l: 'lll',
+      p: 'p',
+      ch: 'chhh',
+      a: 'a',
+      i: 'i',
+      ou: 'ou',
+    };
+    return sounds[phoneme] || phoneme;
+  }
+
 
   function speak(text) {
     stopSpeech();
