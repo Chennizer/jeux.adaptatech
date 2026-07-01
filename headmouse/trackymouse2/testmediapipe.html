@@ -6,34 +6,29 @@
   <style>
     html,body{margin:0;height:100%;background:#1a1a1a;overflow:hidden}
     #video{
-      position:absolute;top:16px;left:16px;width:220px;height:165px;
+      position:absolute;top:16px;left:16px;
       object-fit:cover;border:2px solid #fff;border-radius:14px;
       box-shadow:0 0 18px #000a;z-index:2;
     }
-    #overlay{position:fixed;inset:0;pointer-events:none}
+    #overlay{
+      position:absolute;top:16px;left:16px;pointer-events:none;z-index:3;
+    }
   </style>
 </head>
 <body>
   <video id="video" autoplay muted playsinline></video>
   <canvas id="overlay"></canvas>
 
-  <script type="module">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection/dist/face-landmarks-detection.min.js"></script>
+  <script>
     (async () => {
-      /* ---------------------------------------------------------------
-         1.  Dynamically import TFJS (bundle) and the face-landmarks model
-             – no hard-coded “dist/…js” paths, so 404s disappear.
-      ----------------------------------------------------------------*/
-      const tf  = await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/+esm');
-      const fld = await import('https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@3.0.1/+esm');
-
       /* ---------------------------------------------------------------
          2.  DOM setup
       ----------------------------------------------------------------*/
       const video  = document.getElementById('video');
       const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('overlay'));
       const ctx    = canvas.getContext('2d');
-      const resize = () => { canvas.width = innerWidth; canvas.height = innerHeight; };
-      addEventListener('resize', resize); resize();
 
       /* ---------------------------------------------------------------
          3.  Webcam
@@ -41,43 +36,78 @@
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
       await new Promise(r => video.onloadedmetadata = r);
+      const {videoWidth:vw, videoHeight:vh} = video;
+      video.width = canvas.width = vw;
+      video.height = canvas.height = vh;
+      video.style.width = canvas.style.width = vw + 'px';
+      video.style.height = canvas.style.height = vh + 'px';
 
       /* ---------------------------------------------------------------
          4.  TFJS backend + model
       ----------------------------------------------------------------*/
-      await tf.setBackend('webgl'); await tf.ready();
+      await tf.setBackend('webgl');
+      await tf.ready();
 
-      const model = await fld.load(
-        fld.SupportedPackages.mediapipe_facemesh,
-        { maxFaces: 1, shouldLoadIrisModel: true }
+      const model = await faceLandmarksDetection.createDetector(
+        faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
+        { runtime: 'tfjs', maxFaces: 1, refineLandmarks: true }
       );
 
       /* ---------------------------------------------------------------
          5.  Helpers
       ----------------------------------------------------------------*/
-      const L=[468,469,470,471], R=[473,474,475,476];         // iris indices
-      const mid = (a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+      const L=[33,133,159,145,468,469,470,471],               // left eye landmarks
+            R=[362,263,386,374,473,474,475,476];              // right eye landmarks
+      const irisCenter = pts => pts.slice(4).reduce((s,p)=>[s[0]+p[0],s[1]+p[1]],[0,0]).map(v=>v/4);
 
       /* ---------------------------------------------------------------
          6.  Render loop
       ----------------------------------------------------------------*/
       async function draw(){
-        const faces = await model.estimateFaces({ input: video, flipHorizontal: true });
+        const faces = await model.estimateFaces(video, { flipHorizontal: true });
         ctx.clearRect(0,0,canvas.width,canvas.height);
 
         if (faces.length){
-          const mesh = faces[0].scaledMesh;
-          const l = L.map(i=>mesh[i]), r = R.map(i=>mesh[i]);
+          const {keypoints: mesh, box: {xMin, yMin, width: bW, height: bH}} = faces[0];
 
-          const lC = l.reduce((s,p)=>[s[0]+p[0],s[1]+p[1]],[0,0]).map(v=>v/l.length);
-          const rC = r.reduce((s,p)=>[s[0]+p[0],s[1]+p[1]],[0,0]).map(v=>v/r.length);
-          const gaze = mid(lC, rC);
+          for (const {x,y} of mesh) {
+            ctx.beginPath();
+            ctx.arc(x,y,1.5,0,Math.PI*2);
+            ctx.fillStyle = '#0ff';
+            ctx.fill();
+          }
 
+          const lPts = L.map(i=>[mesh[i].x, mesh[i].y]),
+                rPts = R.map(i=>[mesh[i].x, mesh[i].y]);
+
+          const [lOuter,lInner,lUpper,lLower] = lPts.slice(0,4),
+                [rOuter,rInner,rUpper,rLower] = rPts.slice(0,4);
+
+          const lIris = irisCenter(lPts),
+                rIris = irisCenter(rPts);
+
+          const lx = (lIris[0]-lOuter[0])/(lInner[0]-lOuter[0]),
+                ly = (lIris[1]-lUpper[1])/(lLower[1]-lUpper[1]);
+          const rx = (rIris[0]-rOuter[0])/(rInner[0]-rOuter[0]),
+                ry = (rIris[1]-rUpper[1])/(rLower[1]-rUpper[1]);
+
+          const normX = Math.min(Math.max((lx+rx)/2,0),1);
+          const normY = Math.min(Math.max((ly+ry)/2,0),1);
+          const screenX = xMin + normX * bW;
+          const screenY = yMin + normY * bH;
+
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(gaze[0], gaze[1], 24, 0, Math.PI*2);
-          ctx.fillStyle = 'rgba(255,215,0,.65)';
-          ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-          ctx.fill(); ctx.stroke();
+          ctx.moveTo(screenX-20, screenY);
+          ctx.lineTo(screenX+20, screenY);
+          ctx.moveTo(screenX, screenY-20);
+          ctx.lineTo(screenX, screenY+20);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, 4, 0, Math.PI*2);
+          ctx.fillStyle = '#ffd700';
+          ctx.fill();
         }
         requestAnimationFrame(draw);
       }
