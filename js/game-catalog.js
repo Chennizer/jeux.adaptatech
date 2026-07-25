@@ -167,12 +167,12 @@
   function renderCard(tile, category, detail) {
     const lang = language(); const id = `catalogue-info-${Math.random().toString(36).slice(2, 9)}`;
     const panel = document.createElement('section'); panel.className = 'catalogue-info-panel'; panel.id = id; panel.setAttribute('aria-label', labels[lang].info); panel.innerHTML = panelMarkup(detail, lang);
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'catalogue-info-button'; button.setAttribute('aria-expanded', 'false'); button.setAttribute('aria-controls', id); button.textContent = labels[lang].info;
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'catalogue-info-button'; button.setAttribute('aria-expanded', 'false'); button.setAttribute('aria-controls', id); button.setAttribute('aria-label', labels[lang].info); button.title = labels[lang].info; button.textContent = 'i';
     button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); const open = tile.classList.toggle('catalogue-info-open'); button.setAttribute('aria-expanded', String(open)); });
     tile._catalogueDetail = { category, detail }; tile.classList.add('catalogue-info-enhanced'); tile.append(button, panel);
   }
   function refreshLocalizedCards() {
-    const lang = language(); document.querySelectorAll('.catalogue-info-enhanced').forEach(tile => { const stored = tile._catalogueDetail; const panel = tile.querySelector('.catalogue-info-panel'); const button = tile.querySelector('.catalogue-info-button'); if (!stored || !panel || !button) return; panel.setAttribute('aria-label', labels[lang].info); panel.innerHTML = panelMarkup(stored.detail, lang); button.textContent = labels[lang].info; });
+    const lang = language(); document.querySelectorAll('.catalogue-info-enhanced').forEach(tile => { const stored = tile._catalogueDetail; const panel = tile.querySelector('.catalogue-info-panel'); const button = tile.querySelector('.catalogue-info-button'); if (!stored || !panel || !button) return; panel.setAttribute('aria-label', labels[lang].info); panel.innerHTML = panelMarkup(stored.detail, lang); button.setAttribute('aria-label', labels[lang].info); button.title = labels[lang].info; });
   }
   function enhance() {
     const category = document.body.dataset.catalogueCategory; if (!categories[category]) return;
