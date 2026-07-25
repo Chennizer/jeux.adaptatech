@@ -102,14 +102,17 @@
     const method = category === 'gaze' ? 'gaze' : category === 'touch' || category === 'educational' ? 'touch' : 'switch';
     const demands = typeof demand === 'object' ? demand : { [method]: demand };
     const methods = Object.keys(demands);
-    const accessMethods = Object.fromEntries(['fr', 'en', 'ja'].map(lang => [lang, methods.map(name => accessNames[name][lang])]));
+    const accessMethods = {};
+    ['fr', 'en', 'ja'].forEach(lang => {
+      accessMethods[lang] = methods.map(name => accessNames[name][lang]);
+    });
     hrefs.split('|').forEach(href => {
       activityProfiles[`${category}:${href.toLowerCase()}`] = {
         summary: profiles[profile],
         accessMethods,
-        switchDemand: demands.switch ?? null,
-        gazeDemand: demands.gaze ?? null,
-        touchDemand: demands.touch ?? null,
+        switchDemand: demands.switch == null ? null : demands.switch,
+        gazeDemand: demands.gaze == null ? null : demands.gaze,
+        touchDemand: demands.touch == null ? null : demands.touch,
         setup: categories[category].setup,
         sessionLength: categories[category].sessionLength
       };
@@ -173,7 +176,15 @@
   }
   function enhance() {
     const category = document.body.dataset.catalogueCategory; if (!categories[category]) return;
-    document.querySelectorAll('.tile-container > .tile').forEach(tile => { const link = tile.querySelector(':scope > a'); if (!link) return; const key = `${category}:${link.getAttribute('href').toLowerCase()}`; const detail = activityProfiles[key]; if (detail) renderCard(tile, category, detail); });
+    document.querySelectorAll('.tile-container > .tile').forEach(tile => {
+      // The game link is already the tile's first child. Avoid :scope here because
+      // several older browsers used with assistive devices reject that selector.
+      const link = Array.prototype.find.call(tile.children, child => child.tagName === 'A');
+      if (!link) return;
+      const href = link.getAttribute('href');
+      const detail = href && activityProfiles[`${category}:${href.toLowerCase()}`];
+      if (detail) renderCard(tile, category, detail);
+    });
     new MutationObserver(refreshLocalizedCards).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
   }
   window.gameCatalog = { categories, interactionScale, activities: activityProfiles };
