@@ -112,7 +112,9 @@
     button.className = 'catalogue-info-button';
     button.setAttribute('aria-expanded', 'false');
     button.setAttribute('aria-controls', id);
-    button.textContent = text.info;
+    button.setAttribute('aria-label', text.info);
+    button.title = text.info;
+    button.textContent = 'i';
     button.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -133,7 +135,8 @@
       if (!info || !panel || !button) return;
       panel.setAttribute('aria-label', text.info);
       panel.innerHTML = panelMarkup(info, lang);
-      button.textContent = text.info;
+      button.setAttribute('aria-label', text.info);
+      button.title = text.info;
     });
   }
 
