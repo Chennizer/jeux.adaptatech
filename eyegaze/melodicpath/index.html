@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Chemin mélodique" data-en="Melody Path" data-ja="メロディ・パス">Chemin mélodique</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.min.js"></script>
+
+  <style>
+    :root {
+      --path-glow: rgba(64, 206, 255, 0.7);
+      --path-base: rgba(255, 255, 255, 0.18);
+      --accent: #35d0ba;
+      --accent-strong: #53f3ff;
+      --bg-dark: #05070d;
+      --bg-mid: #0d1726;
+      --ui-panel: rgba(7, 17, 28, 0.78);
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 25% 25%, #182b43, var(--bg-dark) 65%);
+      color: #e6f7ff;
+      font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid var(--accent);
+      background: #0b1621;
+      color: var(--accent);
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    #game-options {
+      background: #000;
+    }
+
+    #options-inline-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .game-stage {
+      position: fixed;
+      inset: 0;
+      display: none;
+    }
+
+    #pathCanvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    #hud {
+      position: fixed;
+      left: 24px;
+      top: 24px;
+      z-index: 10;
+      padding: 14px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(53, 208, 186, 0.35);
+      background: var(--ui-panel);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 230px;
+    }
+
+    #hud h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    #hud p {
+      margin: 0;
+      font-size: 0.9rem;
+      opacity: 0.85;
+    }
+
+    #resetButton {
+      margin-top: 8px;
+      align-self: flex-start;
+      border: 1px solid rgba(83, 243, 255, 0.6);
+      background: rgba(6, 19, 30, 0.6);
+      color: #e8fbff;
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    #resetButton:hover,
+    #resetButton:focus-visible {
+      background: rgba(83, 243, 255, 0.16);
+      border-color: rgba(83, 243, 255, 0.9);
+      outline: none;
+    }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 42px);
+      height: var(--gp-size, 42px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 90, 90, 0.9);
+      box-shadow: 0 0 20px rgba(255, 90, 90, 0.55);
+      background: radial-gradient(circle, rgba(255, 90, 90, 0.4), transparent 70%);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 12;
+    }
+
+    body.playing #gazePointer {
+      opacity: 1;
+    }
+
+    body.hide-native-cursor,
+    body.hide-native-cursor * {
+      cursor: none !important;
+    }
+  </style>
+</head>
+<body>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate"
+          data-fr="Chemin mélodique"
+          data-en="Melody Path"
+          data-ja="メロディ・パス">Chemin mélodique</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTimeSlider" class="teal-label">
+              <span class="translate" data-fr="Temps de fixation" data-en="Dwell time" data-ja="注視時間">Temps de fixation</span> :
+              <span id="dwellTimeVal">1500</span> ms
+            </label>
+            <input type="range" id="dwellTimeSlider" class="styled-slider" min="500" max="4000" step="100" value="1500" />
+          </div>
+          <div class="option-item">
+            <label for="pathWidth" class="teal-label">
+              <span class="translate" data-fr="Épaisseur du chemin" data-en="Path width" data-ja="パスの太さ">Épaisseur du chemin</span> :
+              <span id="pathWidthVal">110</span> px
+            </label>
+            <input type="range" id="pathWidth" class="styled-slider" min="80" max="160" step="5" value="110" />
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="melodyMode" class="teal-label label-block translate"
+                   data-fr="Mélodie" data-en="Melody" data-ja="メロディ">Mélodie</label>
+            <select id="melodyMode" class="styled-select">
+              <option value="soft" selected class="translate" data-fr="Doux" data-en="Soft" data-ja="やさしい">Doux</option>
+              <option value="bright" class="translate" data-fr="Clair" data-en="Bright" data-ja="明るい">Clair</option>
+            </select>
+          </div>
+          <div class="option-item">
+            <label for="showGazePointer" class="teal-label">
+              <input type="checkbox" id="showGazePointer" checked />
+              <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)" data-ja="視線ポインターを表示（マウスを非表示）">Afficher le pointeur (cache la souris)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="gazeSize" class="teal-label">
+              <span class="translate" data-fr="Taille du pointeur" data-en="Pointer size" data-ja="ポインターサイズ">Taille du pointeur</span> :
+              <span id="gazeSizeVal">42</span> px
+            </label>
+            <input type="range" id="gazeSize" class="styled-slider" min="20" max="90" step="2" value="42" />
+          </div>
+          <div class="option-item">
+            <label for="gazeOpacity" class="teal-label">
+              <span class="translate" data-fr="Opacité du pointeur" data-en="Pointer opacity" data-ja="ポインター不透明度">Opacité du pointeur</span> :
+              <span id="gazeOpacityVal">100</span> %
+            </label>
+            <input type="range" id="gazeOpacity" class="styled-slider" min="40" max="100" step="5" value="100" />
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+    </div>
+  </div>
+
+  <div class="game-stage" id="gameStage">
+    <canvas id="pathCanvas"></canvas>
+    <div id="hud">
+      <h1 class="translate" data-fr="Suivez le chemin" data-en="Follow the path" data-ja="パスをたどって">Suivez le chemin</h1>
+      <p id="statusText" class="translate"
+         data-fr="Restez sur la lueur pour jouer la mélodie." data-en="Stay on the glow to play the melody." data-ja="光の道に沿ってメロディを奏でましょう。">Restez sur la lueur pour jouer la mélodie.</p>
+      <button id="resetButton" class="translate" data-fr="Recommencer" data-en="Reset" data-ja="やり直す">Recommencer</button>
+    </div>
+  </div>
+
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationmain.js"></script>
+
+  <script>
+    const startButton = document.getElementById('startButton');
+    const gameStage = document.getElementById('gameStage');
+    const gazePointer = document.getElementById('gazePointer');
+    const showGazePointer = document.getElementById('showGazePointer');
+    const gazeSize = document.getElementById('gazeSize');
+    const gazeSizeVal = document.getElementById('gazeSizeVal');
+    const gazeOpacity = document.getElementById('gazeOpacity');
+    const gazeOpacityVal = document.getElementById('gazeOpacityVal');
+    const pathWidth = document.getElementById('pathWidth');
+    const pathWidthVal = document.getElementById('pathWidthVal');
+    const melodyMode = document.getElementById('melodyMode');
+    const statusText = document.getElementById('statusText');
+    const resetButton = document.getElementById('resetButton');
+    const langToggle = document.getElementById('langToggle');
+
+    const canvas = document.getElementById('pathCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let audioStarted = false;
+    let synth = null;
+    let melodyNotes = [];
+    let points = [];
+    let currentIndex = 0;
+    let dwellStart = 0;
+    let pointer = { x: 0, y: 0, active: false };
+    let lastTriggered = -1;
+    let animationFrame = null;
+
+    const basePath = [
+      { x: 0.08, y: 0.7 },
+      { x: 0.22, y: 0.45 },
+      { x: 0.35, y: 0.55 },
+      { x: 0.52, y: 0.35 },
+      { x: 0.68, y: 0.52 },
+      { x: 0.82, y: 0.32 },
+      { x: 0.93, y: 0.5 }
+    ];
+
+    function updatePointerSettings() {
+      const size = parseInt(gazeSize.value, 10);
+      const opacity = parseInt(gazeOpacity.value, 10) / 100;
+      gazeSizeVal.textContent = size;
+      gazeOpacityVal.textContent = Math.round(opacity * 100);
+      gazePointer.style.setProperty('--gp-size', `${size}px`);
+      gazePointer.style.opacity = showGazePointer.checked ? opacity : 0;
+      document.body.classList.toggle('hide-native-cursor', showGazePointer.checked);
+    }
+
+    function updatePathWidth() {
+      pathWidthVal.textContent = pathWidth.value;
+    }
+
+    function setMelody() {
+      if (melodyMode.value === 'bright') {
+        melodyNotes = ['C4', 'E4', 'G4', 'A4', 'G4', 'E4', 'D4'];
+      } else {
+        melodyNotes = ['A3', 'C4', 'D4', 'E4', 'D4', 'C4', 'A3'];
+      }
+    }
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      points = basePath.map(point => ({
+        x: point.x * window.innerWidth,
+        y: point.y * window.innerHeight
+      }));
+    }
+
+    function ensureAudio() {
+      if (audioStarted) return;
+      audioStarted = true;
+      Tone.start();
+      const reverb = new Tone.Reverb({ decay: 2.2, wet: 0.25 }).toDestination();
+      synth = new Tone.Synth({
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.03, decay: 0.2, sustain: 0.3, release: 0.8 }
+      }).connect(reverb);
+    }
+
+    function resetProgress() {
+      currentIndex = 0;
+      lastTriggered = -1;
+      dwellStart = 0;
+      statusText.setAttribute('data-fr', 'Restez sur la lueur pour jouer la mélodie.');
+      statusText.setAttribute('data-en', 'Stay on the glow to play the melody.');
+      statusText.setAttribute('data-ja', '光の道に沿ってメロディを奏でましょう。');
+      if (typeof updateLanguage === 'function') {
+        updateLanguage();
+      }
+    }
+
+    function triggerNote(index) {
+      if (!synth || index >= melodyNotes.length) return;
+      synth.triggerAttackRelease(melodyNotes[index], '8n');
+    }
+
+    function updateProgress(time) {
+      if (!pointer.active || currentIndex >= points.length) return;
+      const target = points[currentIndex];
+      const dx = pointer.x - target.x;
+      const dy = pointer.y - target.y;
+      const dist = Math.hypot(dx, dy);
+      const triggerRadius = Math.max(50, parseInt(pathWidth.value, 10) * 0.45);
+
+      if (dist <= triggerRadius) {
+        if (!dwellStart) dwellStart = time;
+        const dwellElapsed = time - dwellStart;
+        const dwellTarget = window.eyegazeSettings?.dwellTime || 1500;
+        if (dwellElapsed >= dwellTarget && currentIndex !== lastTriggered) {
+          triggerNote(currentIndex);
+          lastTriggered = currentIndex;
+          currentIndex += 1;
+          dwellStart = 0;
+          if (currentIndex >= points.length) {
+            statusText.setAttribute('data-fr', 'Mélodie terminée 🎵');
+            statusText.setAttribute('data-en', 'Melody complete 🎵');
+            statusText.setAttribute('data-ja', 'メロディ完成 🎵');
+            if (typeof updateLanguage === 'function') {
+              updateLanguage();
+            }
+          }
+        }
+      } else {
+        dwellStart = 0;
+      }
+    }
+
+    function drawPath() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const gradient = ctx.createLinearGradient(0, 0, window.innerWidth, window.innerHeight);
+      gradient.addColorStop(0, 'rgba(15, 30, 48, 0.95)');
+      gradient.addColorStop(1, 'rgba(5, 7, 13, 0.95)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+      const lineWidth = parseInt(pathWidth.value, 10);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--path-base');
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+
+      if (currentIndex > 0) {
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--path-glow');
+        ctx.shadowBlur = 26;
+        ctx.shadowColor = 'rgba(83, 243, 255, 0.75)';
+        ctx.lineWidth = lineWidth * 0.75;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          if (index > currentIndex - 1) return;
+          if (index === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
+        });
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      const pulse = (Math.sin(performance.now() / 380) + 1) / 2;
+      const nextPoint = points[currentIndex];
+
+      points.forEach((point, index) => {
+        const isCompleted = index < currentIndex;
+        const isNext = point === nextPoint;
+        const radius = isCompleted ? 16 : 18;
+
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = isCompleted ? 'rgba(83, 243, 255, 0.9)' : 'rgba(255, 255, 255, 0.35)';
+        ctx.fill();
+
+        if (isNext) {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, radius + 12 + pulse * 8, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(83, 243, 255, ${0.35 + pulse * 0.4})`;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      });
+
+      if (pointer.active) {
+        const target = points[currentIndex];
+        if (target) {
+          const dx = pointer.x - target.x;
+          const dy = pointer.y - target.y;
+          const dist = Math.hypot(dx, dy);
+          const triggerRadius = Math.max(50, parseInt(pathWidth.value, 10) * 0.45);
+          if (dist <= triggerRadius && dwellStart) {
+            const dwellTarget = window.eyegazeSettings?.dwellTime || 1500;
+            const progress = Math.min((performance.now() - dwellStart) / dwellTarget, 1);
+            ctx.beginPath();
+            ctx.arc(target.x, target.y, 34, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    function animate(time) {
+      updateProgress(time);
+      drawPath();
+      animationFrame = requestAnimationFrame(animate);
+    }
+
+    function startGame() {
+      ensureAudio();
+      resetProgress();
+      setMelody();
+      updatePointerSettings();
+      updatePathWidth();
+      gameStage.style.display = 'block';
+      document.body.classList.add('playing');
+      window.eyegazeSettings?.hideOverlay();
+      if (!animationFrame) {
+        animationFrame = requestAnimationFrame(animate);
+      }
+    }
+
+    function stopAnimation() {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+    }
+
+    window.addEventListener('pointermove', (event) => {
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+      pointer.active = true;
+      gazePointer.style.transform = `translate(${pointer.x}px, ${pointer.y}px) translate(-50%, -50%)`;
+    });
+
+    window.addEventListener('pointerleave', () => {
+      pointer.active = false;
+      dwellStart = 0;
+    });
+
+    resetButton.addEventListener('click', resetProgress);
+
+    startButton.addEventListener('click', () => {
+      startGame();
+    });
+
+    pathWidth.addEventListener('input', updatePathWidth);
+    melodyMode.addEventListener('change', setMelody);
+
+    showGazePointer.addEventListener('change', updatePointerSettings);
+    gazeSize.addEventListener('input', updatePointerSettings);
+    gazeOpacity.addEventListener('input', updatePointerSettings);
+
+    window.addEventListener('resize', () => {
+      resizeCanvas();
+    });
+
+    langToggle.addEventListener('click', () => {
+      if (typeof toggleLanguage === 'function') toggleLanguage();
+    });
+
+    initEyegazeMenu();
+    setMelody();
+    resizeCanvas();
+    updatePointerSettings();
+    updatePathWidth();
+  </script>
+</body>
+</html>
