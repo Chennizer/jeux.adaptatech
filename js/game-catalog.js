@@ -158,8 +158,7 @@
     const text = labels[lang];
     if (info.jiaoStage) {
       return `<p class="catalogue-summary">${localized(info.summary, lang)}</p>
-        <p class="catalogue-jiao-stage">${localized(info.jiaoStage, lang)}</p>
-        <span class="catalogue-badge catalogue-demand-badge">${localized(info.switchDemand, lang)}</span>`;
+        <p class="catalogue-jiao-stage">${localized(info.jiaoStage, lang)}</p>`;
     }
     const demands = [info.switchDemand, info.gazeDemand, info.touchDemand]
       .filter(Boolean).map(item => localized(item, lang));
