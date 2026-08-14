@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Nombre-événement" data-en="Number as Event" data-ja="イベントとしての数">Nombre-événement</title>
+
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+  <script src="../../js/translationmain.js"></script>
+
+  <style>
+    :root {
+      --accent: #4dd0e1;
+      --accent-2: #ff9b73;
+      --bg-deep: radial-gradient(circle at 25% 25%, #0f1a33, #060b16 60%);
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+      background: #050912;
+      color: #e8f7ff;
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      background: var(--bg-deep);
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid var(--accent);
+      background: rgba(0, 0, 0, 0.4);
+      color: var(--accent);
+      font-weight: 700;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+
+    #game-options.modal {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #control-panel-options {
+      width: min(720px, 90vw);
+    }
+
+    #options-inline-container {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .option-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .note {
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: 0.85;
+    }
+
+    #startButton {
+      margin-top: 12px;
+      width: 100%;
+    }
+
+    #ui-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px;
+      z-index: 5;
+    }
+
+    #banner {
+      align-self: flex-start;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid rgba(77, 208, 225, 0.35);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      min-width: 220px;
+      backdrop-filter: blur(6px);
+    }
+
+    #numberLabel {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    #banner small {
+      display: block;
+      margin-top: 4px;
+      opacity: 0.8;
+    }
+
+    #helperText {
+      align-self: center;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #f0fbff;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(5px);
+    }
+
+    #endSession {
+      align-self: flex-end;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 2px solid rgba(255, 155, 115, 0.75);
+      background: rgba(0, 0, 0, 0.45);
+      color: #ffd7c4;
+      font-weight: 700;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(4px);
+    }
+
+    #gazeCue {
+      position: fixed;
+      width: 48px;
+      height: 48px;
+      margin-left: -24px;
+      margin-top: -24px;
+      border-radius: 50%;
+      pointer-events: none;
+      border: 3px solid rgba(255, 155, 115, 0.85);
+      box-shadow: 0 0 20px rgba(255, 155, 115, 0.5);
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 6;
+      background: radial-gradient(circle, rgba(255, 211, 196, 0.5) 0%, rgba(255, 155, 115, 0.15) 65%, transparent 90%);
+    }
+
+    body.playing #gazeCue {
+      opacity: 1;
+    }
+
+    #gazeCue.active {
+      transform: scale(1.08);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 class="translate" data-fr="Nombre-événement" data-en="Number as Event" data-ja="イベントとしての数">Nombre-événement</h2>
+    </div>
+    <div id="control-panel-options">
+      <p class="translate" data-fr="Chaque regard déclenche un nombre raconté et exactement autant de lumières." data-en="Every gaze triggers a spoken number and exactly that many light moments." data-ja="視線が当たるたびに数字を聞き、その数だけ光のイベントが起こります。">Chaque regard déclenche un nombre raconté et exactement autant de lumières.</p>
+
+      <div id="options-inline-container">
+        <div class="option-item">
+          <label class="translate" for="maxNumber" data-fr="Plus grand nombre" data-en="Highest number" data-ja="最大の数">Plus grand nombre</label>
+          <input type="range" id="maxNumber" min="3" max="9" value="6">
+          <div><span id="maxNumberVal">6</span></div>
+        </div>
+        <div class="option-item">
+          <label class="translate" for="cooldown" data-fr="Délai entre deux annonces" data-en="Delay between announcements" data-ja="呼び上げの間隔">Délai entre deux annonces</label>
+          <input type="range" id="cooldown" min="400" max="2000" step="100" value="1000">
+          <div><span id="cooldownVal">1000</span> ms</div>
+        </div>
+      </div>
+
+      <p class="note translate" data-fr="Appuyez sur Démarrer pour passer en plein écran. Regardez ou déplacez le pointeur n'importe où pour lancer un nouvel événement lumineux." data-en="Press Start to go fullscreen. Look or move the pointer anywhere to launch the next light event." data-ja="開始を押すとフルスクリーンになります。画面のどこかを見つめるかポインターを動かすと次の光のイベントが始まります。">Appuyez sur Démarrer pour passer en plein écran. Regardez ou déplacez le pointeur n'importe où pour lancer un nouvel événement lumineux.</p>
+
+      <button id="startButton" class="button translate" data-fr="Démarrer" data-en="Start" data-ja="開始">Démarrer</button>
+    </div>
+  </div>
+
+  <canvas id="scene" aria-label="Espace lumineux" role="presentation"></canvas>
+
+  <div id="ui-layer">
+    <div id="banner">
+      <div id="numberLabel" class="translate" data-fr="Prêt" data-en="Ready" data-ja="準備完了">Prêt</div>
+      <small id="eventHint" class="translate" data-fr="Regardez n'importe où pour entendre un nombre." data-en="Look anywhere to hear a number." data-ja="どこかを見ると数字が聞こえます。">Regardez n'importe où pour entendre un nombre.</small>
+    </div>
+    <div id="helperText" class="translate" data-fr="Chaque nombre devient une série d'étincelles." data-en="Each number becomes a series of sparks." data-ja="数字の分だけ光がはじけます。">Chaque nombre devient une série d'étincelles.</div>
+    <button id="endSession" class="translate" data-fr="Retour au menu" data-en="Back to menu" data-ja="メニューに戻る">Retour au menu</button>
+  </div>
+
+  <div id="gazeCue"></div>
+
+  <script>
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+    const langBtn = document.getElementById('langToggle');
+    const startBtn = document.getElementById('startButton');
+    const endBtn = document.getElementById('endSession');
+    const gazeCue = document.getElementById('gazeCue');
+    const numberLabel = document.getElementById('numberLabel');
+    const helperText = document.getElementById('helperText');
+    const maxNumberInput = document.getElementById('maxNumber');
+    const cooldownInput = document.getElementById('cooldown');
+    const maxNumberVal = document.getElementById('maxNumberVal');
+    const cooldownVal = document.getElementById('cooldownVal');
+
+    const numberWords = {
+      en: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'],
+      fr: ['un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'],
+      ja: ['いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう']
+    };
+
+    let playing = false;
+    let lastTrigger = 0;
+    let particles = [];
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function speakNumber(n) {
+      const lang = typeof getStoredLanguage === 'function' ? getStoredLanguage() : 'en';
+      const words = numberWords[lang] || numberWords.en;
+      const utterance = new SpeechSynthesisUtterance(words[n - 1] || String(n));
+      utterance.lang = lang === 'fr' ? 'fr-FR' : lang === 'ja' ? 'ja-JP' : 'en-US';
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utterance);
+    }
+
+    function setLabelText(n) {
+      const lang = typeof getStoredLanguage === 'function' ? getStoredLanguage() : 'fr';
+      const words = numberWords[lang] || numberWords.en;
+      const label = words[n - 1] || n;
+      numberLabel.textContent = label;
+      helperText.textContent = n === 1
+        ? (lang === 'fr' ? 'Une seule lumière apparaît.' : lang === 'ja' ? '光がひとつ現れます。' : 'A single light appears.')
+        : (lang === 'fr' ? `${n} éclats s'allument.` : lang === 'ja' ? `${n} つの光が弾けます。` : `${n} light bursts.`);
+    }
+
+    function createPulse(x, y, hue) {
+      particles.push({ type: 'pulse', x, y, r: 0, maxR: 120 + Math.random() * 90, alpha: 1, hue });
+    }
+
+    function createSpark(x, y, hue) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 2.5;
+      particles.push({ type: 'spark', x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0, maxLife: 80 + Math.random() * 30, hue });
+    }
+
+    function createDrop(x, y, hue) {
+      const sway = (Math.random() - 0.5) * 0.8;
+      particles.push({ type: 'drop', x, y, vy: 1.5 + Math.random() * 2.2, sway, life: 0, maxLife: 120, hue });
+    }
+
+    function triggerNumberEvent(x, y) {
+      const now = performance.now();
+      const cooldown = Number(cooldownInput.value);
+      if (now - lastTrigger < cooldown) return;
+      lastTrigger = now;
+
+      const maxN = Number(maxNumberInput.value);
+      const n = Math.floor(Math.random() * maxN) + 1;
+      const baseHue = Math.floor(Math.random() * 360);
+
+      speakNumber(n);
+      setLabelText(n);
+
+      for (let i = 0; i < n; i++) {
+        const offsetX = x + (Math.random() - 0.5) * clamp(canvas.width * 0.08, 60, 160);
+        const offsetY = y + (Math.random() - 0.5) * clamp(canvas.height * 0.08, 60, 160);
+        const hue = (baseHue + i * 18) % 360;
+        createPulse(offsetX, offsetY, hue);
+        createSpark(offsetX, offsetY, hue);
+        if (Math.random() > 0.35) createDrop(offsetX, offsetY, hue);
+      }
+
+      gazeCue.classList.add('active');
+      setTimeout(() => gazeCue.classList.remove('active'), 240);
+    }
+
+    function drawBackground() {
+      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      g.addColorStop(0, '#090f21');
+      g.addColorStop(0.5, '#07162b');
+      g.addColorStop(1, '#050b19');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function render() {
+      drawBackground();
+      ctx.globalCompositeOperation = 'lighter';
+
+      particles = particles.filter(p => {
+        if (p.type === 'pulse') {
+          p.r += 3.2;
+          p.alpha -= 0.012;
+          ctx.beginPath();
+          ctx.fillStyle = `hsla(${p.hue}, 85%, 65%, ${Math.max(0, p.alpha)})`;
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+          return p.alpha > 0;
+        }
+        if (p.type === 'spark') {
+          p.life++;
+          p.x += p.vx;
+          p.y += p.vy;
+          ctx.beginPath();
+          ctx.fillStyle = `hsla(${p.hue}, 90%, 75%, ${1 - p.life / p.maxLife})`;
+          ctx.arc(p.x, p.y, 3 + Math.random() * 2, 0, Math.PI * 2);
+          ctx.fill();
+          return p.life < p.maxLife;
+        }
+        if (p.type === 'drop') {
+          p.life++;
+          p.x += Math.sin(p.life * 0.08) * p.sway;
+          p.y += p.vy;
+          ctx.strokeStyle = `hsla(${p.hue}, 90%, 70%, ${1 - p.life / p.maxLife})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x, p.y + 10 + Math.random() * 6);
+          ctx.stroke();
+          return p.life < p.maxLife && p.y < canvas.height + 40;
+        }
+        return false;
+      });
+
+      ctx.globalCompositeOperation = 'source-over';
+      requestAnimationFrame(render);
+    }
+
+    function startExperience() {
+      playing = true;
+      document.body.classList.add('playing');
+      document.getElementById('game-options').style.display = 'none';
+      resize();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      lastTrigger = 0;
+    }
+
+    function resetExperience() {
+      playing = false;
+      document.body.classList.remove('playing');
+      document.getElementById('game-options').style.display = '';
+      particles = [];
+      numberLabel.textContent = numberLabel.getAttribute('data-fr');
+      helperText.textContent = helperText.getAttribute('data-fr');
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function handlePointer(e) {
+      if (!playing) return;
+      const x = e.clientX || (e.touches && e.touches[0].clientX) || canvas.width / 2;
+      const y = e.clientY || (e.touches && e.touches[0].clientY) || canvas.height / 2;
+      gazeCue.style.transform = `translate(${x}px, ${y}px)`;
+      triggerNumberEvent(x, y);
+    }
+
+    function initControls() {
+      startBtn.addEventListener('click', startExperience);
+      endBtn.addEventListener('click', resetExperience);
+      langBtn.addEventListener('click', toggleLanguage);
+
+      maxNumberInput.addEventListener('input', () => {
+        maxNumberVal.textContent = maxNumberInput.value;
+      });
+      cooldownInput.addEventListener('input', () => {
+        cooldownVal.textContent = cooldownInput.value;
+      });
+
+      ['pointermove', 'pointerdown', 'touchstart'].forEach(evt => {
+        window.addEventListener(evt, handlePointer, { passive: true });
+      });
+
+      window.addEventListener('resize', resize);
+      resize();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initControls();
+      render();
+    });
+  </script>
+</body>
+</html>
