@@ -1,0 +1,1281 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Courbe des comportements agressifs — v23</title>
+<style>
+:root{
+  --green-bg:#4f7f11;
+  --ui-bg:rgba(42,78,8,.44);
+  --ui-brd:rgba(255,255,255,.22);
+  --ui-on:rgba(255,255,255,.18);
+  --ui-off:rgba(0,0,0,.18);
+  --recovery:#7ba1c9;
+  --control:#d9ddb5;
+  --control-text:#384114;
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;width:100%;height:100%;overflow:hidden;
+  background:var(--green-bg);font-family:Arial,Helvetica,sans-serif
+}
+.screen{
+  position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;
+  background:var(--green-bg)
+}
+svg{
+  display:block;width:100vw;height:100vh;height:100dvh;
+  background:var(--green-bg)
+}
+.title{
+  font-family:Georgia,"Times New Roman",serif;font-size:40px;font-weight:700;
+  fill:#d9dfca;stroke:#1f2b0b;stroke-width:1.2;paint-order:stroke fill
+}
+.outer-circle{fill:#d1d1d1;stroke:#ededed;stroke-width:4}
+.axis{stroke:#efefef;stroke-width:4}
+.phase-line{stroke:#eef6d8;stroke-width:2.3}
+
+.outer-pill ellipse{
+  stroke:rgba(255,255,255,.28);
+  stroke-width:2;
+}
+.outer-pill text{
+  font-size:14px;
+  font-weight:800;
+  text-anchor:middle;
+  dominant-baseline:middle;
+  pointer-events:none;
+}
+.outer-pill.control text{fill:var(--control-text)}
+.outer-pill.recovery text{fill:#fff}
+
+.bubble,.cause-item,.center-step,.outer-pill{
+  cursor:pointer;
+  transition:opacity .2s ease;
+}
+.bubble:hover ellipse,.center-step:hover ellipse,.outer-pill:hover ellipse{
+  filter:brightness(1.07);
+  stroke-width:3.5;
+}
+.bubble ellipse,.center-step ellipse{
+  stroke:#3b3b3b;
+  stroke-width:2.1;
+  transition:stroke-width .2s ease, filter .25s ease;
+}
+.bubble text,.center-step text{
+  font-weight:900;font-size:15px;fill:#fff;text-anchor:middle;
+  dominant-baseline:middle;pointer-events:none
+}
+.bubble.yellow text{fill:#1d1d1d}
+.hidden{opacity:0;pointer-events:none}
+
+.cause-ring{fill:#f7f7f7;stroke:#7f7f7f;stroke-width:2.5}
+.cause-sep{stroke:#b7b7b7;stroke-width:2;stroke-linecap:round}
+.cause-text{
+  fill:#5e84bb;font-weight:800;font-size:15px;
+  text-anchor:middle;dominant-baseline:middle;letter-spacing:-.1px
+}
+.cause-text.small{font-size:14px}
+.cause-hit{
+  fill:rgba(0,0,0,.001);
+  pointer-events:all;
+}
+.cause-item:hover .cause-hit{fill:rgba(89,126,167,.10)}
+
+.center-step text{fill:#dbe6ff;font-size:19px}
+
+.steps-dock{
+  position:fixed;
+  left:14px;
+  top:50%;
+  transform:translateY(-50%);
+  z-index:20;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:8px;
+}
+.steps-toggle{
+  min-width:122px;
+  min-height:42px;
+  padding:8px 12px;
+  border:1px solid rgba(255,255,255,.28);
+  background:linear-gradient(145deg,rgba(255,255,255,.20),rgba(255,255,255,.09));
+  color:#fff;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+  backdrop-filter:blur(8px);
+  transition:transform .18s ease,background .18s ease,opacity .18s ease;
+  text-align:center;
+  font-size:11.5px;
+  font-weight:800;
+  line-height:1.15;
+}
+.steps-toggle:hover{
+  transform:scale(1.02);
+  background:linear-gradient(145deg,rgba(255,255,255,.28),rgba(255,255,255,.13));
+}
+.step-panel{
+  width:176px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:14px;
+  border:1px solid rgba(255,255,255,.20);
+  background:linear-gradient(155deg,rgba(36,74,6,.80),rgba(47,91,10,.62));
+  backdrop-filter:blur(10px);
+  border-radius:18px;
+  color:#fff;
+  box-shadow:0 14px 34px rgba(0,0,0,.20);
+  transform-origin:top left;
+  transition:opacity .18s ease,transform .22s ease,max-height .22s ease,padding .22s ease;
+  overflow:hidden;
+  max-height:420px;
+}
+.steps-dock:not(.open) .step-panel{
+  opacity:0;
+  transform:translateY(-8px) scale(.97);
+  pointer-events:none;
+  max-height:0;
+  padding-top:0;
+  padding-bottom:0;
+  border-width:0;
+}
+.steps-dock.open .step-panel{
+  opacity:1;
+  transform:translateY(0) scale(1);
+  max-height:420px;
+}
+.step-panel h3{
+  margin:0;
+  font-size:13px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  opacity:.96;
+}
+.step-sub{
+  font-size:10.5px;
+  opacity:.72;
+  margin:-2px 0 3px;
+}
+.step-btn{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  width:100%;
+  border:1px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.11);
+  color:#fff;
+  border-radius:12px;
+  padding:8px 9px;
+  font-size:11.5px;
+  font-weight:700;
+  cursor:pointer;
+  text-align:left;
+  transition:background .15s ease,opacity .15s ease,transform .12s ease,border-color .15s ease;
+}
+.step-btn:hover{
+  transform:translateX(2px);
+  background:rgba(255,255,255,.18);
+  border-color:rgba(255,255,255,.24);
+}
+.step-btn.off{
+  background:rgba(0,0,0,.14);
+  opacity:.52;
+}
+.step-num{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:23px;
+  height:23px;
+  border-radius:8px;
+  background:rgba(255,255,255,.17);
+  border:1px solid rgba(255,255,255,.18);
+  font-size:11px;
+  font-weight:800;
+  flex:0 0 23px;
+}
+.step-label{
+  line-height:1.08;
+}
+
+.fullscreen-wrap{position:fixed;right:15px;bottom:15px;z-index:20}
+.fs-btn{
+  width:34px;height:34px;padding:0;border:1px solid rgba(255,255,255,.28);
+  background:rgba(255,255,255,.12);backdrop-filter:blur(5px);color:#fff;
+  border-radius:50%;font-size:14px;cursor:pointer;opacity:.76
+}
+.fs-btn:hover{background:rgba(255,255,255,.22);opacity:1}
+
+dialog{
+  width:min(760px,92vw);
+  border:2px solid var(--note-accent,#8a8a8a);
+  border-radius:8px;
+  padding:0;
+  position:relative;
+  background:var(--note-bg,#fffdf4);
+  box-shadow:0 18px 44px rgba(0,0,0,.24);
+  overflow:hidden;
+}
+dialog::backdrop{background:rgba(0,0,0,.42)}
+dialog::after{
+  content:'';
+  position:absolute;
+  top:0;
+  right:0;
+  width:34px;
+  height:34px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.58) 0 49%, rgba(0,0,0,.10) 50% 100%);
+  clip-path:polygon(0 0,100% 0,100% 100%);
+}
+.dialog-head{
+  display:flex;
+  justify-content:space-between;
+  gap:20px;
+  align-items:flex-start;
+  padding:18px 22px 12px;
+  border-bottom:1px solid var(--note-border,#d8d3c5);
+  background:rgba(255,255,255,.28);
+}
+.dialog-head h2{
+  margin:0;
+  font-size:26px;
+  color:#2c3527;
+}
+.close{
+  border:1px solid rgba(0,0,0,.12);
+  background:rgba(255,255,255,.68);
+  width:32px;
+  height:32px;
+  border-radius:6px;
+  cursor:pointer;
+  font-size:18px;
+  color:#2f372a;
+}
+.dialog-body{
+  padding:18px 22px 22px;
+  line-height:1.45;
+  max-height:min(70vh,680px);
+  overflow:auto;
+  background:var(--note-bg,#fffdf4);
+}
+.detail-kicker{
+  display:inline-block;
+  margin:0 0 10px;
+  padding:0 0 0 10px;
+  border-left:4px solid var(--note-accent,#8a8a8a);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  color:#475043;
+}
+.detail-intro{
+  margin:0 0 16px;
+  font-size:15px;
+  color:#354033;
+}
+.detail-grid{
+  display:block;
+}
+.detail-card{
+  background:rgba(255,255,255,.58);
+  border:1px solid rgba(0,0,0,.09);
+  border-left:6px solid var(--note-accent,#8a8a8a);
+  border-radius:4px;
+  padding:12px 13px;
+  margin:0 0 11px;
+  box-shadow:none;
+}
+.detail-card.full{grid-column:auto}
+.detail-card h3{
+  margin:0 0 8px;
+  font-size:12px;
+  color:#3e4639;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.detail-card ul{
+  margin:0;
+  padding-left:18px;
+}
+.detail-card li{margin:4px 0}
+.detail-card p{margin:0}
+.detail-card.avoid{
+  background:rgba(255,255,255,.58);
+}
+.detail-card.avoid h3,
+.detail-card.questions h3{
+  color:#3e4639;
+}
+.detail-card.questions{
+  background:rgba(255,255,255,.58);
+}
+.detail-source{
+  display:none;
+}
+
+@media(max-width:980px){
+  .steps-dock{left:8px}
+  .step-panel{width:162px}
+  .steps-dock.open .step-panel{max-height:420px}
+}
+</style>
+</head>
+<body>
+
+<div class="screen">
+<svg viewBox="0 0 1200 850" preserveAspectRatio="xMidYMid meet" role="img"
+     aria-labelledby="svgTitle svgDesc">
+
+<title id="svgTitle">La courbe des comportements agressifs</title>
+<desc id="svgDesc">Courbe interactive des comportements agressifs avec définitions, manifestations et interventions.</desc>
+
+<text x="600" y="44" text-anchor="middle" class="title">
+  La courbe des comportements agressifs
+</text>
+
+<!-- grand cercle -->
+<circle cx="600" cy="452" r="388" class="outer-circle"/>
+<line x1="600" y1="64" x2="600" y2="840" class="axis"/>
+<line x1="212" y1="452" x2="988" y2="452" class="axis"/>
+
+<!-- Étape 5 : récupération - repères extérieurs en bulles -->
+<g data-step="5">
+  <line x1="185" y1="185" x2="320" y2="252" class="phase-line"/>
+  <line x1="1014" y1="200" x2="884" y2="263" class="phase-line"/>
+  <line x1="188" y1="704" x2="344" y2="653" class="phase-line"/>
+
+  <g class="outer-pill recovery" data-key="outer-recovery">
+    <ellipse cx="122" cy="185" rx="94" ry="23" fill="var(--recovery)"/>
+    <text x="122" y="185">en RÉCUPÉRATION</text>
+  </g>
+  <g class="outer-pill recovery" data-key="outer-recovery">
+    <ellipse cx="1110" cy="200" rx="94" ry="23" fill="var(--recovery)"/>
+    <text x="1110" y="200">en RÉCUPÉRATION</text>
+  </g>
+  <g class="outer-pill recovery" data-key="outer-recovery">
+    <ellipse cx="118" cy="704" rx="94" ry="23" fill="var(--recovery)"/>
+    <text x="118" y="704">en RÉCUPÉRATION</text>
+  </g>
+</g>
+
+<!-- Étape 6 : contrôle - repères extérieurs en bulles -->
+<g data-step="6">
+  <line x1="185" y1="136" x2="315" y2="213" class="phase-line"/>
+  <line x1="1012" y1="150" x2="885" y2="226" class="phase-line"/>
+  <line x1="188" y1="761" x2="352" y2="707" class="phase-line"/>
+  <line x1="1017" y1="707" x2="861" y2="649" class="phase-line"/>
+
+  <g class="outer-pill control" data-key="outer-control">
+    <ellipse cx="109" cy="136" rx="82" ry="23" fill="var(--control)"/>
+    <text x="109" y="136">en CONTRÔLE</text>
+  </g>
+  <g class="outer-pill control" data-key="outer-control">
+    <ellipse cx="1107" cy="150" rx="82" ry="23" fill="var(--control)"/>
+    <text x="1107" y="150">en CONTRÔLE</text>
+  </g>
+  <g class="outer-pill control" data-key="outer-control">
+    <ellipse cx="106" cy="761" rx="82" ry="23" fill="var(--control)"/>
+    <text x="106" y="761">en CONTRÔLE</text>
+  </g>
+  <g class="outer-pill control" data-key="outer-control">
+    <ellipse cx="1106" cy="707" rx="82" ry="23" fill="var(--control)"/>
+    <text x="1106" y="707">en CONTRÔLE</text>
+  </g>
+</g>
+
+<!-- Cercle blanc des causes -->
+<circle cx="600" cy="452" r="165" class="cause-ring"/>
+
+<!-- Étape 1 : causes avec mise en page plus équilibrée -->
+<g data-step="1">
+  <!-- petites lignes de séparation -->
+  <line x1="553" y1="405" x2="505" y2="357" class="cause-sep"/>
+  <line x1="647" y1="405" x2="695" y2="357" class="cause-sep"/>
+  <line x1="553" y1="499" x2="505" y2="547" class="cause-sep"/>
+  <line x1="647" y1="499" x2="695" y2="547" class="cause-sep"/>
+
+  <!-- zone haute -->
+  <g class="cause-item" data-key="env">
+    <path class="cause-hit" d="M600 287 L695 357 L647 405 L553 405 L505 357 Z"/>
+    <text x="600" y="338" class="cause-text">Environnement</text>
+    <text x="600" y="372" class="cause-text">Stress</text>
+  </g>
+
+  <!-- zone gauche -->
+  <g class="cause-item" data-key="routine">
+    <path class="cause-hit" d="M435 452 L505 357 L553 405 L553 499 L505 547 Z"/>
+    <g transform="rotate(-90 488 452)">
+      <text x="488" y="421" class="cause-text small">Routine</text>
+      <text x="488" y="452" class="cause-text">Psychologique</text>
+      <text x="488" y="483" class="cause-text">Physique</text>
+    </g>
+  </g>
+
+  <!-- zone droite -->
+  <g class="cause-item" data-key="imp">
+    <path class="cause-hit" d="M765 452 L695 357 L647 405 L647 499 L695 547 Z"/>
+    <g transform="rotate(90 712 452)">
+      <text x="712" y="421" class="cause-text small">Impulsivité</text>
+      <text x="712" y="452" class="cause-text">Frustration</text>
+      <text x="712" y="483" class="cause-text">Colère</text>
+    </g>
+  </g>
+
+  <!-- zone basse : remontée et plus compacte -->
+  <g class="cause-item" data-key="med">
+    <path class="cause-hit" d="M600 617 L695 547 L647 499 L553 499 L505 547 Z"/>
+    <text x="600" y="532" class="cause-text">Médical</text>
+    <text x="600" y="554" class="cause-text">Santé mentale</text>
+    <text x="600" y="576" class="cause-text">Neurologique</text>
+    <text x="600" y="598" class="cause-text">Traumatisme</text>
+  </g>
+</g>
+
+<!-- Étape 2 -->
+<g class="center-step" data-step="2" data-key="centre-anx">
+  <ellipse cx="600" cy="452" rx="67" ry="61" fill="#808080"/>
+  <text x="600" y="452">ANXIÉTÉ</text>
+</g>
+
+<!-- Étape 4 : comportements d'agression -->
+<g class="bubble" data-step="4" data-key="panic">
+  <ellipse cx="505" cy="190" rx="77" ry="37" fill="#ef3325"/>
+  <text x="505" y="182">
+    <tspan x="505">en État de</tspan><tspan x="505" dy="20">PANIQUE</tspan>
+  </text>
+</g>
+
+<g class="bubble" data-step="4" data-key="acting">
+  <ellipse cx="748" cy="195" rx="96" ry="39" fill="#d93842"/>
+  <text x="748" y="187">
+    <tspan x="748">En ACTING-OUT</tspan><tspan x="748" dy="20">gens ou matériel</tspan>
+  </text>
+</g>
+
+<g class="bubble" data-step="4" data-key="actingin">
+  <ellipse cx="858" cy="338" rx="91" ry="87" fill="#f58a62"/>
+  <text x="858" y="296">
+    <tspan x="858">Tentative de</tspan>
+    <tspan x="858" dy="20">suicide</tspan>
+    <tspan x="858" dy="23">en ACTING-IN</tspan>
+    <tspan x="858" dy="22" font-size="13">Automutilation</tspan>
+    <tspan x="858" dy="19" font-size="13">Conduite à risque</tspan>
+  </text>
+</g>
+
+<g class="bubble" data-step="4" data-key="prov">
+  <ellipse cx="387" cy="286" rx="83" ry="31" fill="#ff7e17"/>
+  <text x="387" y="286">en PROVOCATION</text>
+</g>
+
+<g class="bubble yellow" data-step="4" data-key="opp">
+  <ellipse cx="338" cy="374" rx="58" ry="31" fill="#ecc91c"/>
+  <text x="338" y="374">OPPOSITION</text>
+</g>
+
+<g class="bubble" data-step="4" data-key="symb">
+  <ellipse cx="305" cy="482" rx="76" ry="43" fill="#15933a"/>
+  <text x="305" y="471">
+    <tspan x="305">AGRESSIONS</tspan><tspan x="305" dy="22">SYMBOLIQUES</tspan>
+  </text>
+</g>
+
+<g class="bubble" data-step="4" data-key="pert">
+  <ellipse cx="329" cy="579" rx="84" ry="42" fill="#1e9840"/>
+  <text x="329" y="568">
+    <tspan x="329">COMPORTEMENTS</tspan><tspan x="329" dy="22">PERTURBATEURS</tspan>
+  </text>
+</g>
+
+<g class="bubble" data-step="4" data-key="activation">
+  <ellipse cx="474" cy="655" rx="59" ry="38" fill="#009900"/>
+  <text x="474" y="646">
+    <tspan x="474">en</tspan><tspan x="474" dy="21">ACTIVATION</tspan>
+  </text>
+</g>
+
+<!-- Étape 3 -->
+<g class="bubble" data-step="3" data-key="anxiety">
+  <ellipse cx="485" cy="741" rx="108" ry="33" fill="#0a9f19"/>
+  <text x="485" y="732">
+    <tspan x="485">COMPORTEMENTS</tspan>
+    <tspan x="485" dy="20">DÛ À UN ÉTAT D'ANXIÉTÉ</tspan>
+  </text>
+</g>
+
+<!-- Étape 5 -->
+<g class="bubble" data-step="5" data-key="recovery">
+  <ellipse cx="810" cy="584" rx="90" ry="55" fill="#7ba1c9"/>
+  <text x="810" y="574">
+    <tspan x="810">en</tspan><tspan x="810" dy="22">RÉCUPÉRATION</tspan>
+  </text>
+</g>
+
+</svg>
+</div>
+
+<div class="steps-dock" id="stepsDock">
+  <button class="steps-toggle" id="stepsToggle" type="button" aria-expanded="false" aria-controls="stepsPanel" title="Afficher les étapes">
+    Les 6 étapes<br>d’une crise
+  </button>
+
+  <div class="step-panel" id="stepsPanel" aria-label="Sélection des 6 étapes">
+    <h3>Étapes</h3>
+    <div class="step-sub">Afficher ou masquer les éléments</div>
+    <button class="step-btn" data-toggle-step="1"><span class="step-num">1</span><span class="step-label">Causes</span></button>
+    <button class="step-btn" data-toggle-step="2"><span class="step-num">2</span><span class="step-label">Anxiété</span></button>
+    <button class="step-btn" data-toggle-step="3"><span class="step-num">3</span><span class="step-label">État d’anxiété</span></button>
+    <button class="step-btn" data-toggle-step="4" title="Comportements d’agression"><span class="step-num">4</span><span class="step-label">Comportements d’agression</span></button>
+    <button class="step-btn" data-toggle-step="5"><span class="step-num">5</span><span class="step-label">Récupération</span></button>
+    <button class="step-btn" data-toggle-step="6"><span class="step-num">6</span><span class="step-label">Contrôle</span></button>
+  </div>
+</div>
+
+<div class="fullscreen-wrap">
+  <button class="fs-btn" id="fullscreenBtn" onclick="toggleFullscreen()" title="Plein écran" aria-label="Plein écran">⛶</button>
+</div>
+
+<dialog id="detailDialog">
+  <div class="dialog-head">
+    <div>
+      <h2 id="dialogTitle">Élément</h2>
+    </div>
+    <button class="close" aria-label="Fermer" onclick="detailDialog.close()">×</button>
+  </div>
+  <div class="dialog-body" id="dialogBody"></div>
+</dialog>
+
+<script>
+const detailDialog=document.getElementById('detailDialog');
+const screenEl=document.querySelector('.screen');
+const fullscreenBtn=document.getElementById('fullscreenBtn');
+
+const details={
+  "centre-anx":{
+    title:"Anxiété",
+    intro:"L’anxiété est présentée comme un état affectif marqué par un sentiment d’insécurité, souvent accompagné de modifications physiques ou neurovégétatives. La personne demeure généralement encore réceptive et peut parfois parler de sa souffrance ou de la situation anxiogène.",
+    observe:[
+      "Indicateurs physiques et psychologiques propres à la personne",
+      "Malaise, inquiétude, peur ou anticipation du pire",
+      "Rigidité accrue pour rendre les événements plus prévisibles",
+      "Réactions de type figer, foncer ou fuir",
+      "Signes précurseurs parfois discrets, mais présents avant l’escalade"
+    ],
+    understand:"À ce niveau, la communication peut encore être très efficace. C’est donc un moment privilégié pour reconnaître le malaise, comprendre ce qui se passe et intervenir avant que l’activation augmente.",
+    questions:[
+      "Qu’est-ce qui semble insécurisant ou anxiogène ici et maintenant?",
+      "Y a-t-il un changement, une surcharge, une douleur, une frustration ou un besoin non satisfait?",
+      "Quels signes précurseurs sont habituels chez cette personne?",
+      "Quels mots, gestes, sons, odeurs ou repères sont habituellement apaisants ou, au contraire, activants?"
+    ],
+    intervene:[
+      "Reconnaître le malaise ou la souffrance.",
+      "Chercher les causes possibles.",
+      "Vérifier ce qui ne va pas ou convenir d’un moment pour en reparler si ce n’est pas possible immédiatement.",
+      "Favoriser la communication et la compréhension quand la personne est disponible.",
+      "Proposer différents moyens pour diminuer l’anxiété.",
+      "Offrir de l’encadrement, une structure et une routine prévisible.",
+      "Utiliser le moyen de communication le plus fonctionnel pour la personne.",
+      "Créer et maintenir un lien de confiance.",
+      "Utiliser des outils d’observation et d’analyse pour mieux comprendre les déclencheurs et les signes précurseurs.",
+      "Préparer la personne aux changements et lui donner des repères pour y faire face.",
+      "Utiliser, dans certaines situations, la restructuration cognitive ou une désensibilisation graduelle.",
+      "Faire un aménagement préventif de l’environnement, statique ou dynamique.",
+      "Développer la qualité de vie et utiliser une approche positive.",
+      "Ajuster les demandes aux capacités de la personne.",
+      "Choisir les priorités d’intervention plutôt que d’intervenir sur tout."
+    ],
+    means:[
+      "Décharge motrice : sport, activité corporelle, danse, trampoline, ballon d’exercice, natation, vélo, marche ou autre activité adaptée.",
+      "Activités d’apaisement : relaxation, musique, massage, bain, objet antistress ou stimulation sensorielle adaptée.",
+      "Occupation / diversion : livre, casse-tête, dessin, peinture, pâte à modeler, journal, jeu adapté aux intérêts, activité manuelle, film, spectacle, cuisine ou repas partagé.",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour apaiser.",
+      "Réduire les mots, gestes, sons ou odeurs connus pour augmenter l’anxiété.",
+      "Prévoir un coin de détente ou un espace d’apaisement lorsque cela aide réellement la personne."
+    ],
+    avoid:[
+      "Multiplier les demandes lorsque l’anxiété augmente",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour augmenter l’anxiété",
+      "Attendre que la crise soit avancée avant de tenir compte des signes précurseurs"
+    ]
+  },
+
+  "outer-recovery":{
+    title:"Récupération",
+    intro:"La récupération correspond à la période qui suit le comportement agressif. La personne reprend progressivement possession de ses forces psychologiques et physiques et revient graduellement vers un état fonctionnel.",
+    observe:[
+      "Diminution graduelle de l’intensité",
+      "Retour progressif vers des comportements plus fonctionnels",
+      "Fatigue ou besoin de calme possible",
+      "Signes de récupération parfois très spécifiques à la personne"
+    ],
+    intervene:[
+      "Accompagner la personne dans son retour au calme.",
+      "Proposer une activité apaisante visant la reprise complète de l’auto-contrôle.",
+      "Laisser la personne ventiler lorsque cela l’aide.",
+      "Respecter son rythme et attendre la disponibilité avant de revenir sur l’événement."
+    ],
+    avoid:[
+      "Faire immédiatement un retour détaillé sur la crise",
+      "Confondre diminution de l’intensité et disponibilité complète"
+    ]
+  },
+
+  "outer-control":{
+    title:"Auto-contrôle",
+    intro:"L’auto-contrôle correspond au fait de pouvoir de nouveau maîtriser davantage ses réactions et ses comportements. C’est le moment où une démarche de compréhension et d’apprentissage redevient possible.",
+    observe:[
+      "La personne peut comprendre, choisir et réfléchir davantage",
+      "Elle peut reprendre une relation ou une activité sans se réactiver",
+      "Elle tolère mieux un retour sur la situation"
+    ],
+    intervene:[
+      "Reprendre la situation avec la personne seulement lorsqu’elle est disponible.",
+      "Faire le retour dans un but de compréhension et d’apprentissage, et non de réprimande ou d’accusation.",
+      "Évaluer avec ou pour la personne les causes de la situation.",
+      "Examiner comment la situation a été comprise ou évaluée par la personne.",
+      "Chercher des solutions concrètes.",
+      "Élaborer ou ajuster un plan d’action individualisé.",
+      "À court terme, mettre en place des moyens qui ont du sens ici et maintenant pour aider la personne à se sentir bien et fonctionner avec les autres et l’environnement.",
+      "À moyen terme, poursuivre la démarche en enseignant de nouveaux comportements et moyens adaptés aux besoins identifiés.",
+      "Tenir compte de l’âge, du développement cognitif, de la santé mentale, des besoins propres à la personne et de sa situation."
+    ],
+    avoid:[
+      "Transformer le retour sur la situation en accusation",
+      "Faire le retour avant que la personne soit réellement disponible"
+    ]
+  },
+
+  panic:{
+    title:"État de panique",
+    intro:"L’état de panique est décrit comme une terreur extrême et soudaine. La personne peut se sentir prise au piège, voir disparaître les solutions possibles, perdre ses repères et ne plus pouvoir utiliser efficacement ses moyens habituels pour réduire l’anxiété.",
+    observe:[
+      "Terreur, peur ou affolement intense",
+      "Perte de repères et sentiment d’être sans solution",
+      "Forte réduction de la disponibilité au message verbal",
+      "Indicateurs physiques et psychologiques très marqués",
+      "Dans certains cas, phobie ou hallucinations pouvant contribuer à la panique"
+    ],
+    understand:"À ce stade, les longs discours sont peu efficaces. Il vaut mieux utiliser des mots et gestes simples, un ton calme et réduire les stimuli.",
+    intervene:[
+      "Chercher les causes possibles.",
+      "Rassurer dans l’« ici et maintenant ».",
+      "Garder une attitude calme.",
+      "Utiliser un ton et un débit rassurants.",
+      "Utiliser le langage du corps de façon simple et non menaçante.",
+      "Utiliser des mots et des gestes clés plutôt que de longs discours.",
+      "Nommer la personne et expliquer clairement ses intentions.",
+      "Diminuer les stimuli dans l’environnement.",
+      "Favoriser l’expression de ce que la personne ressent et valider l’émotion.",
+      "Si la personne y est réceptive, l’aider à retrouver des repères simples et à remettre la situation en perspective.",
+      "Retirer les objets qui pourraient blesser.",
+      "Garder les mains visibles lorsque cela peut réduire l’inquiétude ou la méfiance.",
+      "Demeurer à proximité si la personne recherche la sécurité et que cela l’apaise.",
+      "Utiliser des techniques de respiration ou de relaxation déjà apprises.",
+      "Utiliser la clarification.",
+      "Utiliser le reflet.",
+      "Utiliser la reprogrammation.",
+      "Permettre une décharge affective sécuritaire.",
+      "Offrir une aide au bon moment.",
+      "Utiliser le modeling lorsque cela aide.",
+      "À plus long terme, travailler une désensibilisation lorsque cela est indiqué."
+    ],
+    safety:[
+      "S’il existe un potentiel de danger, garder une distance de sécurité adaptée.",
+      "La progression de la panique vers le passage à l’acte peut être rapide : surveiller particulièrement le non-verbal de l’intervenant.",
+      "Appliquer le filet de sécurité prévu par le milieu lorsque nécessaire."
+    ],
+    avoid:[
+      "Faire de longs discours",
+      "Adopter une posture ou des gestes pouvant être interprétés comme menaçants",
+      "Surcharger la personne de demandes ou de stimuli"
+    ]
+  },
+
+  acting:{
+    title:"Acting-out — personnes ou matériel",
+    intro:"À ce niveau, l’agressivité est dirigée vers l’extérieur. La personne peut perdre le contrôle ou tenter de reprendre du contrôle sur une situation qu’elle vit comme incontrôlable.",
+    observe:[
+      "Agression physique dirigée vers autrui",
+      "Agression ou destruction dirigée vers le matériel",
+      "Intensité élevée et priorité donnée à la sécurité",
+      "Possibilité d’effet d’entraînement ou de contamination entre pairs"
+    ],
+    understand:"Il s’agit d’un niveau que l’intervention préventive cherche à éviter. Les mesures de contrôle externe ne sont pas présentées comme des moyens de prévention; lorsqu’elles sont nécessaires et autorisées, elles doivent être limitées au temps requis pour retrouver la sécurité.",
+    intervene:[
+      "Chercher les causes possibles.",
+      "Rester attentif à sa propre sécurité.",
+      "Assurer la protection et la sécurité des autres personnes.",
+      "Désamorcer lorsque cela est encore possible.",
+      "Faire un appel direct et demander de l’aide.",
+      "Utiliser une intervention physique de sécurité uniquement s’il y a un danger réel et seulement selon la formation, les procédures et les autorisations du milieu.",
+      "Aider à déplacer ou canaliser la colère de manière sécuritaire.",
+      "Utiliser un espace d’apaisement si cela favorise réellement le retour au calme.",
+      "Nommer l’agression lorsque cela est utile et sécuritaire.",
+      "Appliquer une conséquence ou une sanction seulement dans certains cas et seulement lorsqu’elle est prévue et appropriée.",
+      "Pour une agression envers le matériel, définir en équipe les paramètres d’intervention et ajuster l’environnement.",
+      "Utiliser le système de communication prévu pour appeler de l’aide.",
+      "Appliquer le filet de sécurité.",
+      "Appliquer le plan d’action individualisé."
+    ],
+    safety:[
+      "Intervention physique ou maintien uniquement en situation de danger et selon les procédures du milieu.",
+      "Appeler les services d’urgence selon le besoin et la procédure établie.",
+      "Prévoir un système clair pour obtenir rapidement du soutien.",
+      "Surveiller les phénomènes d’entraînement ou de contamination entre pairs.",
+      "Une mesure de contrôle externe doit cesser dès que la sécurité est rétablie."
+    ],
+    avoid:[
+      "Utiliser une mesure de contrôle externe comme stratégie préventive",
+      "Poursuivre une mesure de contrôle une fois la sécurité rétablie",
+      "Chercher à résoudre le problème de fond pendant l’acting-out"
+    ]
+  },
+
+  actingin:{
+    title:"Acting-in / automutilation / conduite à risque",
+    intro:"Dans l’acting-in, l’agressivité est dirigée vers soi. Il faut chercher ce qui peut expliquer le comportement plutôt que lui attribuer automatiquement une intention.",
+    observe:[
+      "Automutilation ou gestes dirigés vers soi",
+      "Conduites à risque ou atteinte potentielle à la sécurité",
+      "Manifestations pouvant avoir des fonctions très différentes d’une personne à l’autre"
+    ],
+    questions:[
+      "Hypothèse médicale ou douleur?",
+      "Le comportement réduit-il momentanément l’anxiété ou la colère?",
+      "Peut-il servir de mode de communication?",
+      "Y a-t-il des besoins sensoriels, des hallucinations ou une fragmentation importante?",
+      "Le comportement semble-t-il déplacer ou exprimer une souffrance?"
+    ],
+    intervene:[
+      "Chercher les causes possibles.",
+      "Rester attentif à sa propre sécurité.",
+      "Assurer la sécurité de la personne.",
+      "Sécuriser la personne.",
+      "Sécuriser l’environnement.",
+      "Ajouter du personnel ou de la surveillance selon les besoins.",
+      "Prévoir un suivi médical.",
+      "Prévoir un suivi psychologique.",
+      "Apaiser la personne.",
+      "Identifier et traiter la cause autant que possible afin de réduire les comportements dirigés vers soi."
+    ],
+    safety:[
+      "Appeler les services d’urgence selon le besoin et la procédure du milieu.",
+      "Éviter certaines interventions physiques lorsqu’elles risquent d’augmenter l’intensité de la crise."
+    ],
+    avoid:[
+      "Conclure automatiquement à une intention précise",
+      "Répondre uniquement au comportement sans investiguer la cause"
+    ]
+  },
+
+  prov:{
+    title:"Provocation",
+    intro:"La provocation est décrite comme une action ou des paroles qui cherchent à susciter chez l’autre un défi ou une réaction, souvent agressive. La personne peut rechercher les « boutons rouges » de l’intervenant ou, dans certains cas, simplement rechercher la réaction elle-même.",
+    observe:[
+      "Défis, menaces, paroles ou gestes visant une réaction",
+      "Recherche des points sensibles de l’intervenant",
+      "Escalade possible lorsque l’intervenant répond personnellement au contenu",
+      "Chez certaines personnes, la réaction obtenue peut être le résultat recherché"
+    ],
+    understand:"La personne qui menace peut être très démunie de moyens à ce moment et percevoir son entourage comme une attaque. Le comportement peut aussi susciter de l’anxiété chez l’intervenant, ce qui augmente le risque de contre-agir.",
+    intervene:[
+      "Chercher les causes possibles.",
+      "Ne pas prendre le contenu personnellement; se centrer sur la souffrance ou le besoin plutôt que sur la menace.",
+      "Parler d’une voix calme avec un ton rassurant.",
+      "Rappeler que l’intervenant est disponible pour aider.",
+      "Dire simplement que l’on comprend que la situation est difficile et inviter la personne à en dire plus si elle le peut.",
+      "Offrir un temps d’arrêt ou orienter vers une activité.",
+      "Éloigner temporairement la personne ou le groupe de la situation lorsque cela réduit l’escalade.",
+      "Réorganiser le programme ou la situation.",
+      "Mettre des limites avec une attitude non punitive et non agressive.",
+      "Utiliser l’humour thérapeutique lorsque cela dédramatise et que le lien le permet.",
+      "Renforcer positivement les signes de retour au calme.",
+      "Rappeler une règle en la reliant au fonctionnement du milieu ou au cadre commun plutôt qu’à un rapport personnel.",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour apaiser ou désamorcer.",
+      "Utiliser le silence lorsque cela évite d’alimenter la provocation.",
+      "Utiliser l’interprétation, la clarification, la reformulation ou la reprogrammation lorsque la personne est réceptive.",
+      "Aider à réduire la colère.",
+      "Évaluer la faisabilité des menaces pour mieux estimer le niveau réel de danger.",
+      "Renforcer et valoriser la récupération."
+    ],
+    safety:[
+      "Si la situation devient explosive, garder une distance de sécurité.",
+      "Éviter de rester seul dans un endroit isolé lorsque le risque augmente.",
+      "Quitter pour aller chercher du soutien si nécessaire.",
+      "Si la présence de l’intervenant aggrave la situation, se retirer ou utiliser un médiateur.",
+      "Prévoir un filet de sécurité lorsque la situation est connue comme pouvant dégénérer.",
+      "Utiliser les outils d’estimation de la dangerosité prévus dans le milieu."
+    ],
+    avoid:[
+      "Contre-agir.",
+      "Répondre à la menace par la menace.",
+      "Laisser son non-verbal communiquer de l’hostilité ou du défi.",
+      "Renforcer involontairement le comportement en donnant exactement la réaction recherchée.",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour déclencher la provocation."
+    ]
+  },
+
+  opp:{
+    title:"Opposition",
+    intro:"L’opposition est définie comme une résistance passive ou une action contraire à ce qui est souhaité. Elle peut être active ou passive. Le « non » n’est pas négatif en soi et peut, dans certaines situations, représenter une affirmation.",
+    observe:[
+      "Refus ou difficulté à collaborer",
+      "Indiscipline, révolte ou action contraire à la demande",
+      "Mutisme ou nonchalance comme formes plus passives",
+      "Réaction à une consigne, une attente ou une situation vécue comme envahissante ou menaçante"
+    ],
+    questions:[
+      "La personne a-t-elle peur ou se sent-elle envahie / agressée?",
+      "La consigne est-elle claire et comprise?",
+      "Les exigences sont-elles trop élevées pour ses capacités?",
+      "Le comportement observé correspond-il réellement à un refus de collaborer?"
+    ],
+    intervene:[
+      "Chercher les causes possibles.",
+      "Vérifier l’état de la personne : peur, sentiment d’être envahie ou agressée, inconfort ou autre difficulté.",
+      "Vérifier que la consigne est claire et comprise.",
+      "Vérifier que les exigences sont adaptées aux capacités de la personne.",
+      "Donner un délai d’exécution.",
+      "Faire avec la personne ou l’accompagner.",
+      "Mettre des mots simples sur ce qui se passe.",
+      "Utiliser l’ignorance intentionnelle dans certains cas, en ciblant le comportement plutôt que la personne.",
+      "Offrir des choix; privilégier les choix qui soutiennent la motivation.",
+      "Évaluer la priorité et les enjeux avant d’insister.",
+      "S’assurer que le comportement observé correspond réellement à un refus de collaborer.",
+      "Mettre des limites concises et raisonnables, avec une explication simple.",
+      "Utiliser des signes non verbaux.",
+      "S’appuyer sur le groupe ou une alliance positive lorsque cela aide.",
+      "Faire diversion.",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour apaiser ou désamorcer l’opposition.",
+      "Demeurer à proximité lorsque cela sécurise la personne.",
+      "Utiliser l’attention sélective.",
+      "Utiliser l’injonction paradoxale seulement dans des contextes précis où cette approche est connue et appropriée.",
+      "Faire évaluer la situation par la personne lorsqu’elle en est capable.",
+      "Rassurer.",
+      "Recadrer.",
+      "Accompagner la personne lorsqu’une peur est en jeu.",
+      "Rappeler les conséquences possibles de façon simple et non menaçante.",
+      "Susciter la motivation avec des renforçateurs adaptés.",
+      "Valoriser la collaboration dès que la personne se remet en mouvement ou répond à la demande."
+    ],
+    means:[
+      "Choix positifs ou négatifs, en sachant que les choix positifs soutiennent davantage la motivation.",
+      "Proximité ou contact uniquement si cela est sécurisant, accepté et prévu dans les pratiques du milieu.",
+      "Restriction de l’espace ou du matériel seulement si elle est prévue, nécessaire et conforme aux procédures.",
+      "Attention sélective ou ignorance intentionnelle dans certains cas."
+    ],
+    avoid:[
+      "Faire du rapport de force l’objectif",
+      "Interpréter automatiquement le « non » comme de la mauvaise volonté",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour déclencher l’opposition"
+    ]
+  },
+
+  symb:{
+    title:"Agressions symboliques / signes précurseurs de crise",
+    intro:"Les agressions symboliques correspondent aux signes précurseurs de crise. Ce sont des signes qui peuvent annoncer ou favoriser une montée de tension avant l’apparition de comportements agressifs plus intenses. Ils peuvent agir comme déclencheurs ou comme contributeurs à la crise.",
+    understand:"Ces signes ne sont pas les mêmes pour tout le monde. Certains sont généraux, d’autres sont propres à la personne, et d’autres encore viennent de signes extérieurs associés au contexte.",
+    observe:[
+      "Signes généraux : agitation, impatience, mutisme, paraverbal plus intense, réactions physiologiques ou mimiques inhabituelles.",
+      "Regard qui change : fuyant, fixe, hostile, dénigrant ou apeuré.",
+      "Signes spécifiques : signes ou symptômes particuliers à cette personne.",
+      "Signes extérieurs : éléments visibles associés au contexte ou à un groupe, par exemple tatouages, vêtements, couleurs ou autres signes distinctifs.",
+      "Un même signe peut agir comme déclencheur ou simplement contribuer à la montée."
+    ],
+    questions:[
+      "Quels signes annoncent habituellement une montée chez cette personne?",
+      "Quels signes sont généraux et lesquels sont vraiment propres à elle?",
+      "Y a-t-il un élément extérieur qui semble déclencher ou augmenter la tension?",
+      "Ce signe apparaît-il avant la crise, pendant la montée ou seulement dans certains contextes?"
+    ],
+    intervene:[
+      "Repérer les signes le plus tôt possible.",
+      "Décrire ce qui est observé sans interpréter l’intention.",
+      "Chercher ce qui peut déclencher ou contribuer à la montée.",
+      "Utiliser les moyens connus pour diminuer l’anxiété avant que l’intensité augmente.",
+      "Adapter l’environnement ou la demande lorsque le signe semble lié au contexte.",
+      "Consigner les signes spécifiques à la personne dans le plan d’intervention ou le plan d’action."
+    ],
+    avoid:[
+      "Attendre l’apparition d’un comportement agressif plus intense avant d’intervenir.",
+      "Donner la même signification à un signe chez toutes les personnes.",
+      "Prêter une intention au comportement à partir d’un signe isolé."
+    ]
+  },
+  pert:{
+    title:"Comportements perturbateurs",
+    intro:"Les comportements perturbateurs sont des changements du fonctionnement habituel qui peuvent apparaître pendant la montée. Ils doivent être compris en lien avec les signes précurseurs, les besoins et le contexte.",
+    observe:[
+      "Modification notable du comportement habituel",
+      "Agitation, retrait, ralentissement ou changement de participation",
+      "Augmentation de manifestations physiques ou psychologiques connues",
+      "Comportements qui perturbent l’activité ou la relation sans être encore au niveau d’une agression intense"
+    ],
+    intervene:[
+      "Observer et décrire précisément ce qui change",
+      "Chercher les hypothèses causales",
+      "Réduire les demandes non prioritaires",
+      "Ajuster le contexte physique ou social",
+      "Utiliser les stratégies préventives et moyens d’apaisement déjà reconnus pour la personne"
+    ],
+    avoid:[
+      "Réduire l’analyse à l’intention supposée",
+      "Augmenter la pression alors que plusieurs signes précurseurs sont déjà présents"
+    ]
+  },
+
+  activation:{
+    title:"Activation",
+    intro:"L’activation est décrite comme un état d’anxiété aigu alimenté par une émotion intense, notamment la colère, et souvent déclenché par une frustration. La personne peut alors s’auto-alimenter et se diriger vers une escalade.",
+    observe:[
+      "Augmentation du ton et du débit verbal",
+      "Difficulté accrue à gérer les émotions",
+      "Tendance à « s’alimenter » ou « se pomper »",
+      "La personne peut soit se calmer, soit se désorganiser davantage"
+    ],
+    understand:"Ce n’est généralement pas le bon moment pour régler le problème de fond. Si le sujet est lui-même anxiogène, insister peut augmenter l’activation.",
+    intervene:[
+      "Chercher les causes possibles.",
+      "Faire diversion, de préférence à partir des intérêts de la personne, ou utiliser un temps d’arrêt lorsque cela convient.",
+      "Se centrer sur le message et le besoin plutôt que sur l’attitude.",
+      "Utiliser un ton calme et rassurant.",
+      "Utiliser l’humour seulement si le lien est solide et que cela apaise réellement.",
+      "Passer par le corps : respiration, marche douce ou autres moyens appris.",
+      "Faire du modeling lorsque cela aide la personne.",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour apaiser.",
+      "Reformuler.",
+      "Permettre une décharge affective sécuritaire.",
+      "Offrir une aide au bon moment.",
+      "Aider à déplacer ou canaliser la colère de manière sécuritaire.",
+      "Utiliser des techniques de relaxation.",
+      "Éloigner temporairement la personne ou le groupe de la situation lorsque cela réduit l’activation.",
+      "Utiliser un silence volontaire tout en demeurant à proximité si cela est aidant.",
+      "Retirer l’attention de certains comportements lorsque cette stratégie est appropriée.",
+      "Valoriser les signes de récupération."
+    ],
+    means:[
+      "Mots, gestes, sons ou odeurs clés connus pour apaiser",
+      "Retrait d’attention dans certains contextes",
+      "Éloignement préventif de la personne ou du groupe lorsque cela réduit l’activation"
+    ],
+    avoid:[
+      "Chercher à régler immédiatement le sujet qui alimente l’activation.",
+      "Utiliser des mots, gestes, sons ou odeurs connus pour augmenter l’activation.",
+      "Réagir au ton ou à l’attitude au point de perdre de vue le message."
+    ]
+  },
+
+  anxiety:{
+    title:"Comportements dus à un état d’anxiété / signes précurseurs",
+    intro:"Cette phase correspond aux manifestations observables d’un état d’anxiété alors que la personne demeure encore généralement accessible à une intervention préventive et à la communication.",
+    observe:[
+      "Indicateurs physiques ou neurovégétatifs",
+      "Indicateurs psychologiques : malaise, inquiétude, peur, tension",
+      "Signes précurseurs spécifiques à la personne",
+      "Rigidité ou recherche de prévisibilité",
+      "Modification de la communication, du comportement ou du niveau de participation"
+    ],
+    intervene:[
+      "Reconnaître le malaise ou la souffrance.",
+      "Chercher les causes possibles.",
+      "Vérifier ce qui ne va pas et favoriser la communication lorsque c’est possible.",
+      "Proposer différents moyens pour diminuer l’anxiété.",
+      "Offrir un cadre, une structure et une routine prévisible.",
+      "Utiliser le moyen de communication le plus adapté.",
+      "Créer un lien de confiance et une alliance avec la personne.",
+      "Utiliser des outils d’observation et d’analyse pour suivre les signes précurseurs.",
+      "Préparer la personne aux changements.",
+      "Utiliser, dans certaines situations, une restructuration cognitive ou une désensibilisation graduelle.",
+      "Faire un aménagement préventif de l’environnement.",
+      "Ajuster les demandes aux capacités de la personne.",
+      "Choisir les priorités d’intervention."
+    ],
+    means:[
+      "Décharge motrice : sport, activité corporelle, danse, trampoline, ballon d’exercice, natation, vélo ou marche.",
+      "Activités d’apaisement : relaxation, musique, massage, bain, objet antistress ou stimulation sensorielle adaptée.",
+      "Occupation / diversion : lecture, casse-tête, dessin, peinture, pâte à modeler, journal, jeu, activité manuelle, film, spectacle, cuisine ou repas partagé.",
+      "Mots, gestes, sons ou odeurs connus pour apaiser.",
+      "Coin de détente ou espace d’apaisement lorsque cela aide."
+    ],
+    avoid:[
+      "Attendre que la disponibilité relationnelle soit perdue",
+      "Utiliser des déclencheurs connus ou des exigences disproportionnées"
+    ]
+  },
+
+  recovery:{
+    title:"Récupération",
+    intro:"Période suivant le comportement agressif au cours de laquelle la personne reprend graduellement ses forces psychologiques et physiques et retourne vers un état fonctionnel.",
+    observe:[
+      "Baisse graduelle de l’intensité",
+      "Comportements visant à retrouver l’équilibre",
+      "Signes de récupération propres à la personne"
+    ],
+    intervene:[
+      "Accompagner la personne dans son retour au calme.",
+      "Proposer une activité apaisante visant la reprise complète de l’auto-contrôle.",
+      "Laisser la personne ventiler lorsque cela l’aide.",
+      "Respecter son rythme et attendre la disponibilité avant de revenir sur l’événement."
+    ],
+    avoid:[
+      "Débriefing immédiat",
+      "Reprise trop rapide des exigences ou de la situation déclenchante"
+    ]
+  },
+
+  env:{
+    title:"Causes — Environnement / Stress",
+    intro:"L’environnement physique et social peut contribuer à l’anxiété, à la tension et à l’escalade. Il faut considérer les liens entre la personne, son milieu, les intervenants et la famille afin de dégager des causes possibles et des ajustements utiles.",
+    questions:[
+      "L’organisation du milieu favorise-t-elle le bien-être et la sécurité?",
+      "Les lieux soutiennent-ils les apprentissages, les relations, l’autonomie, l’occupation et la détente?",
+      "La couleur des lieux, le mobilier, l’accès aux activités ou la programmation contribuent-ils au stress?",
+      "Le ratio intervenants/personnes est-il adéquat?",
+      "Un espace hypo-sensoriel, de détente ou d’apaisement serait-il pertinent?"
+    ],
+    intervene:[
+      "Ajuster l’environnement physique et social",
+      "Réduire les sources de stress ou de surcharge",
+      "Créer des possibilités de détente et d’apaisement",
+      "Réorganiser les activités, le mobilier ou les attentes lorsque cela améliore le fonctionnement",
+      "Viser à réduire l’anxiété et la colère et à créer un état de bien-être"
+    ]
+  },
+
+  routine:{
+    title:"Causes — Routine / Psychologique / Physique",
+    intro:"Les besoins, l’état physique ou psychologique, les routines et les ressources disponibles peuvent modifier la capacité d’adaptation de la personne.",
+    questions:[
+      "Les besoins de sécurité physique et psychologique sont-ils satisfaits?",
+      "Y a-t-il assez de stabilité et de prévisibilité?",
+      "Les besoins primaires sont-ils satisfaits : manger, boire, dormir, territoire / espace?",
+      "Des besoins d’appartenance, de pouvoir, de liberté ou de plaisir sont-ils en jeu?",
+      "La personne peut-elle communiquer selon ses besoins spécifiques?",
+      "Y a-t-il un besoin de soins médicaux, de traitement, d’accompagnement ou de support?"
+    ],
+    intervene:[
+      "Renforcer les ressources et compétences de la personne",
+      "Développer l’autonomie et les moyens de communication adaptés",
+      "Planifier des activités et apprentissages correspondant à ses besoins",
+      "Mobiliser les services et suivis psychologiques, sociaux, médicaux, de réadaptation ou d’ergothérapie lorsque pertinents"
+    ]
+  },
+
+  imp:{
+    title:"Causes — Impulsivité / Frustration / Colère",
+    intro:"Une frustration peut augmenter la colère ou une autre émotion intense. Si la personne a de la difficulté à se réguler, la tension peut continuer à monter.",
+    questions:[
+      "Quelle frustration ou quel obstacle a précédé la montée?",
+      "La personne dispose-t-elle d’un moyen acceptable pour exprimer la colère ou la frustration?",
+      "Est-elle en train de s’auto-alimenter dans l’activation?",
+      "Quels moyens corporels ou stratégies de régulation ont déjà été appris?"
+    ],
+    intervene:[
+      "Réduire l’activation avant de revenir au problème",
+      "Utiliser diversion, respiration, marche douce, relaxation ou autres moyens appris",
+      "Déplacer ou canaliser la colère de manière sécuritaire",
+      "Utiliser des clés sensorielles ou relationnelles connues pour apaiser",
+      "Valoriser toute récupération"
+    ]
+  },
+
+  med:{
+    title:"Causes — Médical / Santé mentale / Neurologique / Traumatisme",
+    intro:"Il faut aussi considérer les causes médicales, psychologiques ou neurologiques, surtout lorsqu’un comportement change soudainement, devient inhabituel ou est dirigé vers soi.",
+    questions:[
+      "Y a-t-il douleur, inconfort, condition médicale ou changement de traitement?",
+      "Le comportement peut-il avoir une fonction sensorielle ou physiologique?",
+      "Observe-t-on hallucinations, souffrance psychologique ou fragmentation importante?",
+      "Un besoin de suivi médical ou psychologique est-il présent?",
+      "Le comportement pourrait-il servir de communication ou de déplacement d’une souffrance?"
+    ],
+    intervene:[
+      "Documenter précisément les changements observables",
+      "Chercher les hypothèses causales en équipe",
+      "Sécuriser la personne et l’environnement au besoin",
+      "Mobiliser les suivis médicaux ou psychologiques pertinents",
+      "Identifier et traiter la cause autant que possible plutôt que seulement le comportement"
+    ]
+  }
+};
+
+const detailNoteStyles = {
+  "centre-anx":      {accent:"#808080", bg:"#F0F0F0", border:"#C9C9C9"},
+  "outer-recovery":  {accent:"#7ba1c9", bg:"#EEF5FB", border:"#B8CFE4"},
+  "outer-control":   {accent:"#C8CEA3", bg:"#F5F7EA", border:"#D8DEC0"},
+  "panic":           {accent:"#ef3325", bg:"#FDEAE7", border:"#F2B8B1"},
+  "acting":          {accent:"#d93842", bg:"#FCE9EB", border:"#EAB5BA"},
+  "actingin":        {accent:"#f58a62", bg:"#FEF0E8", border:"#F4C8B6"},
+  "prov":            {accent:"#ff7e17", bg:"#FFF1E4", border:"#F8C8A1"},
+  "opp":             {accent:"#ecc91c", bg:"#FFF9DE", border:"#EAD974"},
+  "symb":            {accent:"#15933a", bg:"#E9F6ED", border:"#B5DEBF"},
+  "pert":            {accent:"#1e9840", bg:"#EBF7EE", border:"#B7E1C1"},
+  "activation":      {accent:"#009900", bg:"#E8F8E8", border:"#A8D7A8"},
+  "anxiety":         {accent:"#0a9f19", bg:"#EAF8EC", border:"#B3E0B8"},
+  "recovery":        {accent:"#7ba1c9", bg:"#EEF5FB", border:"#B8CFE4"},
+  "env":             {accent:"#5e84bb", bg:"#F0F5FB", border:"#C3D3EA"},
+  "routine":         {accent:"#5e84bb", bg:"#F0F5FB", border:"#C3D3EA"},
+  "imp":             {accent:"#5e84bb", bg:"#F0F5FB", border:"#C3D3EA"},
+  "med":             {accent:"#5e84bb", bg:"#F0F5FB", border:"#C3D3EA"}
+};
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function listCard(title,items,extraClass=''){
+  if(!items || !items.length) return '';
+  return `<section class="detail-card ${extraClass}">
+    <h3>${esc(title)}</h3>
+    <ul>${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+  </section>`;
+}
+function textCard(title,text,extraClass=''){
+  if(!text) return '';
+  return `<section class="detail-card ${extraClass}">
+    <h3>${esc(title)}</h3>
+    <p>${esc(text)}</p>
+  </section>`;
+}
+function openDetail(key){
+  const d=details[key]; if(!d) return;
+  const note = detailNoteStyles[key] || {accent:"#8c8c8c", bg:"#fffdf4", border:"#d8d3c5"};
+
+  detailDialog.style.setProperty('--note-accent', note.accent);
+  detailDialog.style.setProperty('--note-bg', note.bg);
+  detailDialog.style.setProperty('--note-border', note.border);
+
+  document.getElementById('dialogTitle').textContent=d.title;
+
+  let body='';
+  body += '<div class="detail-kicker">Définition</div>';
+  if(d.intro) body+=`<p class="detail-intro">${esc(d.intro)}</p>`;
+
+  body+='<div class="detail-grid">';
+  body+=listCard('Ce qu’on observe',d.observe);
+  body+=textCard('À comprendre',d.understand);
+  body+=listCard('Questions à se poser',d.questions,'questions');
+  body+=listCard('Comment intervenir',d.intervene);
+  body+=listCard('Moyens / exemples',d.means);
+  body+=listCard('Sécurité',d.safety,'questions');
+  body+=listCard('À éviter',d.avoid,'avoid');
+  body+='</div>';
+
+  document.getElementById('dialogBody').innerHTML=body;
+  detailDialog.showModal();
+}
+document.querySelectorAll('[data-key]').forEach(el=>{
+  el.addEventListener('click',()=>openDetail(el.dataset.key));
+});
+
+// Hover SVG robuste : agrandissement progressif à 150 % sur 3 secondes.
+const hoverAnimations = new WeakMap();
+
+function animateSvgScale(el, targetScale, duration){
+  const previous = hoverAnimations.get(el);
+  if(previous) cancelAnimationFrame(previous.raf);
+
+  let bbox;
+  try { bbox = el.getBBox(); } catch(e) { return; }
+  const cx = bbox.x + bbox.width / 2;
+  const cy = bbox.y + bbox.height / 2;
+
+  const current = Number(el.dataset.hoverScale || 1);
+  const start = performance.now();
+
+  function frame(now){
+    const p = Math.min(1, (now - start) / duration);
+    // ease-in-out très doux
+    const eased = p < .5 ? 2*p*p : 1 - Math.pow(-2*p + 2, 2)/2;
+    const s = current + (targetScale - current) * eased;
+
+    el.setAttribute(
+      'transform',
+      `translate(${cx} ${cy}) scale(${s}) translate(${-cx} ${-cy})`
+    );
+    el.dataset.hoverScale = String(s);
+
+    if(p < 1){
+      const raf = requestAnimationFrame(frame);
+      hoverAnimations.set(el, {raf});
+    }else{
+      el.dataset.hoverScale = String(targetScale);
+      hoverAnimations.delete(el);
+      if(targetScale === 1) el.removeAttribute('transform');
+    }
+  }
+
+  const raf = requestAnimationFrame(frame);
+  hoverAnimations.set(el, {raf});
+}
+
+document.querySelectorAll('.bubble, .cause-item, .center-step, .outer-pill').forEach(el=>{
+  el.dataset.hoverScale = '1';
+
+  el.addEventListener('mouseenter',()=>{
+    animateSvgScale(el, 1.5, 3000);
+  });
+
+  el.addEventListener('mouseleave',()=>{
+    animateSvgScale(el, 1, 450);
+  });
+});
+
+const stepState={1:true,2:true,3:true,4:true,5:true,6:true};
+function applyStepState(step){
+  document.querySelectorAll('[data-step="'+step+'"]').forEach(el=>{
+    el.classList.toggle('hidden',!stepState[step]);
+  });
+  const btn=document.querySelector('.step-btn[data-toggle-step="'+step+'"]');
+  if(btn) btn.classList.toggle('off',!stepState[step]);
+}
+document.querySelectorAll('.step-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const step=btn.dataset.toggleStep;
+    stepState[step]=!stepState[step];
+    applyStepState(step);
+  });
+});
+Object.keys(stepState).forEach(applyStepState);
+
+// Colonne des étapes : fermée par défaut
+const stepsDock=document.getElementById('stepsDock');
+const stepsToggle=document.getElementById('stepsToggle');
+
+function setStepsOpen(open){
+  stepsDock.classList.toggle('open',open);
+  stepsToggle.setAttribute('aria-expanded',String(open));
+  stepsToggle.title=open?'Masquer « Les 6 étapes d’une crise »':'Afficher « Les 6 étapes d’une crise »';
+}
+stepsToggle.addEventListener('click',()=>{
+  setStepsOpen(!stepsDock.classList.contains('open'));
+});
+setStepsOpen(false);
+
+async function toggleFullscreen(){
+  try{
+    if(!document.fullscreenElement){await screenEl.requestFullscreen();}
+    else{await document.exitFullscreen();}
+  }catch(e){}
+}
+function updateFullscreenButton(){
+  fullscreenBtn.textContent=document.fullscreenElement?'⤢':'⛶';
+  fullscreenBtn.title=document.fullscreenElement?'Quitter le plein écran':'Plein écran';
+  fullscreenBtn.setAttribute('aria-label',fullscreenBtn.title);
+}
+document.addEventListener('fullscreenchange',updateFullscreenButton);
+updateFullscreenButton();
+</script>
+</body>
+</html>
