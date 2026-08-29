@@ -4,18 +4,21 @@
   const FAVORITES_KEY = 'adaptatechFavoriteGames';
   const languages = ['fr', 'en', 'ja'];
   const copy = {
-    fr: { results: n => `${n} activité${n > 1 ? 's' : ''} trouvée${n > 1 ? 's' : ''}`, favorites: n => `Mes activités (${n})`, empty: 'Aucune activité ne correspond à ces filtres.', noFavorites: "Vous n’avez pas encore ajouté d’activité favorite.", add: 'Ajouter aux activités favorites', remove: 'Retirer des activités favorites', loadError: 'Le catalogue ne peut pas être chargé pour le moment.' },
-    en: { results: n => `${n} matching ${n === 1 ? 'activity' : 'activities'}`, favorites: n => `My activities (${n})`, empty: 'No activities match these filters.', noFavorites: 'You have not added any favorite activities yet.', add: 'Add to favorite activities', remove: 'Remove from favorite activities', loadError: 'The catalogue cannot be loaded right now.' },
-    ja: { results: n => `該当するアクティビティ：${n}件`, favorites: n => `マイアクティビティ（${n}）`, empty: '条件に合うアクティビティはありません。', noFavorites: 'お気に入りのアクティビティはまだありません。', add: 'お気に入りに追加', remove: 'お気に入りから削除', loadError: '現在カタログを読み込めません。' }
+    fr: { results: n => `${n} activité${n > 1 ? 's' : ''} trouvée${n > 1 ? 's' : ''}`, favorites: n => `Mes activités (${n})`, senict: levels => `SENICT : niveau${levels.length > 1 ? 'x' : ''} ${levels.join(', ')}`, empty: 'Aucune activité ne correspond à ces filtres.', noFavorites: "Vous n’avez pas encore ajouté d’activité favorite.", add: 'Ajouter aux activités favorites', remove: 'Retirer des activités favorites', loadError: 'Le catalogue ne peut pas être chargé pour le moment.' },
+    en: { results: n => `${n} matching ${n === 1 ? 'activity' : 'activities'}`, favorites: n => `My activities (${n})`, senict: levels => `SENICT: level${levels.length > 1 ? 's' : ''} ${levels.join(', ')}`, empty: 'No activities match these filters.', noFavorites: 'You have not added any favorite activities yet.', add: 'Add to favorite activities', remove: 'Remove from favorite activities', loadError: 'The catalogue cannot be loaded right now.' },
+    ja: { results: n => `該当するアクティビティ：${n}件`, favorites: n => `マイアクティビティ（${n}）`, senict: levels => `SENICT：レベル ${levels.join('、')}`, empty: '条件に合うアクティビティはありません。', noFavorites: 'お気に入りのアクティビティはまだありません。', add: 'お気に入りに追加', remove: 'お気に入りから削除', loadError: '現在カタログを読み込めません。' }
   };
 
   const root = document.getElementById('activityFinder');
   if (!root) return;
 
   const form = root.querySelector('form');
+  const panel = root.querySelector('.activity-finder__panel');
   const results = root.querySelector('.activity-finder__results');
   const grid = root.querySelector('.activity-finder__grid');
   const summary = root.querySelector('.activity-finder__summary');
+  const details = root.querySelector('.activity-finder__details');
+  const openButton = root.querySelector('.activity-finder__open');
   const favoritesButton = root.querySelector('.activity-finder__favorites');
   let games = [];
   let mode = 'filters';
@@ -59,6 +62,12 @@
     title.className = 'activity-card__title';
     title.textContent = titleFor(game);
     link.append(image, title);
+    if (Array.isArray(game.senictLevels) && game.senictLevels.length) {
+      const senict = document.createElement('span');
+      senict.className = 'activity-card__senict';
+      senict.textContent = copy[language()].senict(game.senictLevels);
+      link.append(senict);
+    }
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -81,7 +90,19 @@
   function filteredGames() {
     const access = form.elements.access.value;
     const objective = form.elements.objective.value;
-    return games.filter(game => (!access || game.access.includes(access)) && (!objective || game.objectives.includes(objective)));
+    const senict = Number(form.elements.senict.value);
+    return games.filter(game =>
+      (!access || game.access.includes(access)) &&
+      (!objective || game.objectives.includes(objective)) &&
+      (!senict || (Array.isArray(game.senictLevels) && game.senictLevels.includes(senict)))
+    );
+  }
+
+  function setExpanded(expanded) {
+    details.hidden = !expanded;
+    panel.classList.toggle('is-expanded', expanded);
+    openButton.setAttribute('aria-expanded', String(expanded));
+    favoritesButton.setAttribute('aria-expanded', String(expanded));
   }
 
   function render(items, favoritesOnly) {
@@ -106,7 +127,14 @@
     results.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
   });
 
+  openButton.addEventListener('click', () => {
+    const expanded = details.hidden;
+    setExpanded(expanded);
+    if (expanded) form.elements.access.focus();
+  });
+
   favoritesButton.addEventListener('click', () => {
+    setExpanded(true);
     mode = 'favorites';
     const favorites = readFavorites();
     render(games.filter(game => favorites.has(game.id)), true);
