@@ -172,18 +172,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function preloadVideos(videoUrls, loadingIndicator) {
     let loaded = 0;
+    const markLoaded = () => {
+      loaded++;
+      loadingIndicator.textContent = `Chargement... (${loaded}/${videoUrls.length})`;
+    };
     return Promise.all(videoUrls.map(url => new Promise(resolve => {
+      if (isYouTubeUrl(url)) {
+        markLoaded();
+        resolve();
+        return;
+      }
       const vid = document.createElement('video');
       vid.preload = 'auto';
       vid.src = url;
       vid.addEventListener('canplaythrough', () => {
-        loaded++;
-        loadingIndicator.textContent = `Chargement... (${loaded}/${videoUrls.length})`;
+        markLoaded();
         resolve();
       });
       vid.addEventListener('error', () => {
-        loaded++;
-        loadingIndicator.textContent = `Chargement... (${loaded}/${videoUrls.length})`;
+        markLoaded();
         console.error("Error preloading", url);
         resolve();
       });
