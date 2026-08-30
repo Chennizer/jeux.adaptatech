@@ -4,16 +4,16 @@
   const FAVORITES_KEY = 'adaptatechFavoriteGames';
   const languages = ['fr', 'en', 'ja'];
   const copy = {
-    fr: { results: n => `${n} activité${n > 1 ? 's' : ''} trouvée${n > 1 ? 's' : ''}`, favorites: n => `Mes activités (${n})`, senict: levels => `SENICT : niveau${levels.length > 1 ? 'x' : ''} ${levels.join(', ')}`, empty: 'Aucune activité ne correspond à ces filtres.', noFavorites: "Vous n’avez pas encore ajouté d’activité favorite.", add: 'Ajouter aux activités favorites', remove: 'Retirer des activités favorites', loadError: 'Le catalogue ne peut pas être chargé pour le moment.' },
-    en: { results: n => `${n} matching ${n === 1 ? 'activity' : 'activities'}`, favorites: n => `My activities (${n})`, senict: levels => `SENICT: level${levels.length > 1 ? 's' : ''} ${levels.join(', ')}`, empty: 'No activities match these filters.', noFavorites: 'You have not added any favorite activities yet.', add: 'Add to favorite activities', remove: 'Remove from favorite activities', loadError: 'The catalogue cannot be loaded right now.' },
-    ja: { results: n => `該当するアクティビティ：${n}件`, favorites: n => `マイアクティビティ（${n}）`, senict: levels => `SENICT：レベル ${levels.join('、')}`, empty: '条件に合うアクティビティはありません。', noFavorites: 'お気に入りのアクティビティはまだありません。', add: 'お気に入りに追加', remove: 'お気に入りから削除', loadError: '現在カタログを読み込めません。' }
+    fr: { results: n => `${n} activité${n > 1 ? 's' : ''} trouvée${n > 1 ? 's' : ''}`, favorites: 'Favoris', favoritesCount: n => `${n} activité${n > 1 ? 's' : ''} favorite${n > 1 ? 's' : ''}`, senict: levels => `SENICT : niveau${levels.length > 1 ? 'x' : ''} ${levels.join(', ')}`, empty: 'Aucune activité ne correspond à ces filtres.', noFavorites: "Vous n’avez pas encore ajouté d’activité favorite.", add: 'Ajouter aux activités favorites', remove: 'Retirer des activités favorites', loadError: 'Le catalogue ne peut pas être chargé pour le moment.' },
+    en: { results: n => `${n} matching ${n === 1 ? 'activity' : 'activities'}`, favorites: 'Favorites', favoritesCount: n => `${n} favorite ${n === 1 ? 'activity' : 'activities'}`, senict: levels => `SENICT: level${levels.length > 1 ? 's' : ''} ${levels.join(', ')}`, empty: 'No activities match these filters.', noFavorites: 'You have not added any favorite activities yet.', add: 'Add to favorite activities', remove: 'Remove from favorite activities', loadError: 'The catalogue cannot be loaded right now.' },
+    ja: { results: n => `該当するアクティビティ：${n}件`, favorites: 'お気に入り', favoritesCount: n => `お気に入り：${n}件`, senict: levels => `SENICT：レベル ${levels.join('、')}`, empty: '条件に合うアクティビティはありません。', noFavorites: 'お気に入りのアクティビティはまだありません。', add: 'お気に入りに追加', remove: 'お気に入りから削除', loadError: '現在カタログを読み込めません。' }
   };
 
   const root = document.getElementById('activityFinder');
   if (!root) return;
 
   const form = root.querySelector('form');
-  const panel = root.querySelector('.activity-finder__panel');
+  const panel = root;
   const results = root.querySelector('.activity-finder__results');
   const grid = root.querySelector('.activity-finder__grid');
   const summary = root.querySelector('.activity-finder__summary');
@@ -60,7 +60,9 @@
   }
 
   function updateFavoritesButton() {
-    favoritesButton.textContent = `★ ${copy[language()].favorites(readFavorites().size)}`;
+    const count = readFavorites().size;
+    favoritesButton.textContent = `☆ ${copy[language()].favorites}`;
+    favoritesButton.setAttribute('aria-label', `${copy[language()].favorites}, ${copy[language()].favoritesCount(count)}`);
   }
 
   function makeCard(game, favorites) {
@@ -124,7 +126,7 @@
   function render(items, favoritesOnly) {
     const favorites = readFavorites();
     grid.replaceChildren();
-    summary.textContent = favoritesOnly ? copy[language()].favorites(items.length) : copy[language()].results(items.length);
+    summary.textContent = favoritesOnly ? copy[language()].favoritesCount(items.length) : copy[language()].results(items.length);
     if (!items.length) {
       const empty = document.createElement('p');
       empty.className = 'activity-finder__empty';
