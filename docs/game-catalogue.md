@@ -4,6 +4,8 @@
 
 Each activity has a stable `id` (used in `localStorage`), translated titles, its existing URL and image, and filter metadata. Arrays are used for `access`, `skills`, and `objectives` so that future finder controls can be added without changing the card or favorites code. `ageStyle` is included now for the planned childlike / neutral / teen-adult filter. Where an activity itself explicitly identifies SENICT and Switch Progression Roadmap levels, these are recorded in `senictLevels` and `switchRoadmap`; uncertain levels are intentionally left unset rather than inferred.
 
+The compact homepage panel uses the curated `popular` flag. Keep roughly 10–15 popular activities available for each access method and only mark activities that are linked from a public section menu.
+
 To add an activity:
 
 1. Add one object with a unique, permanent `id` to `data/games.json`.

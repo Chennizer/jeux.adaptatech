@@ -91,7 +91,7 @@
     const access = form.elements.access.value;
     const objective = form.elements.objective.value;
     const senict = Number(form.elements.senict.value);
-    return games.filter(game =>
+    return games.filter(game => game.popular &&
       (!access || game.access.includes(access)) &&
       (!objective || game.objectives.includes(objective)) &&
       (!senict || (Array.isArray(game.senictLevels) && game.senictLevels.includes(senict)))
@@ -120,20 +120,26 @@
     results.hidden = false;
   }
 
-  form.addEventListener('submit', event => {
-    event.preventDefault();
+  function updatePopularResults() {
     mode = 'filters';
     render(filteredGames(), false);
-    results.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
-  });
+  }
+
+  form.addEventListener('change', updatePopularResults);
 
   openButton.addEventListener('click', () => {
-    const expanded = details.hidden;
-    setExpanded(expanded);
-    if (expanded) form.elements.access.focus();
+    const shouldCollapse = !details.hidden && mode === 'filters';
+    if (shouldCollapse) {
+      setExpanded(false);
+      return;
+    }
+    form.hidden = false;
+    setExpanded(true);
+    updatePopularResults();
   });
 
   favoritesButton.addEventListener('click', () => {
+    form.hidden = true;
     setExpanded(true);
     mode = 'favorites';
     const favorites = readFavorites();
@@ -156,13 +162,15 @@
       const catalogueIds = new Set(games.map(game => game.id));
       const availableFavorites = new Set(Array.from(readFavorites()).filter(id => catalogueIds.has(id)));
       writeFavorites(availableFavorites);
-      form.querySelector('button[type="submit"]').disabled = false;
+      openButton.disabled = false;
+      favoritesButton.disabled = false;
       updateFavoritesButton();
     })
     .catch(() => {
       summary.textContent = copy[language()].loadError;
       results.hidden = false;
-      form.querySelector('button[type="submit"]').disabled = true;
+      openButton.disabled = true;
+      favoritesButton.disabled = true;
     });
 
   updateFavoritesButton();
