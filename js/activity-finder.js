@@ -102,7 +102,8 @@
   function filteredGames() {
     const access = form.elements.access.value;
     const objective = form.elements.objective.value;
-    return games.filter(game => game.popular &&
+    return games.filter(game => Array.isArray(game.popularFor) &&
+      (access ? game.popularFor.includes(access) : game.popularFor.length > 0) &&
       (!access || game.accessMethods.includes(access)) &&
       (!objective || game.objectives.includes(objective))
     );

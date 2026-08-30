@@ -4,7 +4,7 @@
 
 Each activity has a stable `id` (used in `localStorage`), translated titles, its existing URL and image, and filter metadata. `accessMethods` lists only the independent `switch`, `eyegaze`, and `touch` pathways. Each supported pathway in `senictProgressions` stores one or more `senictLevel`, `senictLabel`, optional `senictCategory`, `skills`, and `difficultyWithinLevel` records. `ageStyle` is included for the planned childlike / neutral / teen-adult filter.
 
-The compact homepage panel currently filters the curated `popular` activities by access method and objective. Progression metadata remains in the catalogue for a later finder version, but is intentionally not exposed in the current interface.
+The compact homepage panel currently filters curated activities by access method and objective. `popularFor` lists the pathways in which an activity should appear as popular, allowing a multi-access activity to be highlighted for Eye Gaze without necessarily appearing under Touch. Progression metadata remains in the catalogue for a later finder version, but is intentionally not exposed in the current interface.
 
 ## Progression coverage
 
