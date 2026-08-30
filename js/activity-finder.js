@@ -3,11 +3,6 @@
 
   const FAVORITES_KEY = 'adaptatechFavoriteGames';
   const languages = ['fr', 'en', 'ja'];
-  const senictTaxonomy = {
-    eyegaze: ['Learning to Look', 'Making Patterns', 'Looking at Targets', 'Developing Dwell Clicking', 'Demonstrating Preferences', 'Find the Right One', 'Extending Control'],
-    switch: ['Experiential Learning', 'Make Something Happen', 'Playing With Two Switches', 'One Switch or Two?', 'Introducing Formal Scanning', 'Choosing Independently', 'Independent Choice'],
-    touch: ['Experiential / Learning to Touch', 'Touch Anywhere', 'Touch Something', 'Touch and Hold', 'Big to Small Targets', 'Touch in a Sequence', 'Drag and Drop']
-  };
   const copy = {
     fr: { results: n => `${n} activité${n > 1 ? 's' : ''} trouvée${n > 1 ? 's' : ''}`, favorites: 'Favoris', favoritesCount: n => `${n} activité${n > 1 ? 's' : ''} favorite${n > 1 ? 's' : ''}`, empty: 'Aucune activité ne correspond à ces filtres.', noFavorites: "Vous n’avez pas encore ajouté d’activité favorite.", add: 'Ajouter aux activités favorites', remove: 'Retirer des activités favorites', loadError: 'Le catalogue ne peut pas être chargé pour le moment.' },
     en: { results: n => `${n} matching ${n === 1 ? 'activity' : 'activities'}`, favorites: 'Favorites', favoritesCount: n => `${n} favorite ${n === 1 ? 'activity' : 'activities'}`, empty: 'No activities match these filters.', noFavorites: 'You have not added any favorite activities yet.', add: 'Add to favorite activities', remove: 'Remove from favorite activities', loadError: 'The catalogue cannot be loaded right now.' },
@@ -85,14 +80,6 @@
     title.className = 'activity-card__title';
     title.textContent = titleFor(game);
     link.append(image, title);
-    const selectedAccess = form.elements.access.value;
-    const progressions = game.senictProgressions && game.senictProgressions[selectedAccess];
-    if (Array.isArray(progressions) && progressions.length) {
-      const senict = document.createElement('span');
-      senict.className = 'activity-card__senict';
-      senict.textContent = progressions.map(item => `${item.senictLevel}. ${item.senictLabel}`).join(' · ');
-      link.append(senict);
-    }
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -115,37 +102,10 @@
   function filteredGames() {
     const access = form.elements.access.value;
     const objective = form.elements.objective.value;
-    const senict = Number(form.elements.senict.value);
     return games.filter(game => game.popular &&
       (!access || game.accessMethods.includes(access)) &&
-      (!objective || game.objectives.includes(objective)) &&
-      (!senict || (game.senictProgressions && Array.isArray(game.senictProgressions[access]) && game.senictProgressions[access].some(item => item.senictLevel === senict)))
+      (!objective || game.objectives.includes(objective))
     );
-  }
-
-  function populateSenictOptions(resetSelection) {
-    const select = form.elements.senict;
-    const access = form.elements.access.value;
-    const previous = resetSelection ? '' : select.value;
-    select.replaceChildren();
-    const first = document.createElement('option');
-    first.value = '';
-    if (!access || !senictTaxonomy[access]) {
-      first.textContent = language() === 'fr' ? 'Choisir d’abord un accès' : language() === 'ja' ? '先に操作方法を選択' : 'Choose an access method first';
-      select.append(first);
-      select.disabled = true;
-      return;
-    }
-    first.textContent = language() === 'fr' ? 'Toutes les étapes' : language() === 'ja' ? 'すべての段階' : 'All stages';
-    select.append(first);
-    senictTaxonomy[access].forEach((label, index) => {
-      const option = document.createElement('option');
-      option.value = String(index + 1);
-      option.textContent = `${index + 1}. ${label}`;
-      select.append(option);
-    });
-    select.disabled = false;
-    if (Array.from(select.options).some(option => option.value === previous)) select.value = previous;
   }
 
   function setExpanded(expanded) {
@@ -176,10 +136,7 @@
     render(filteredGames(), false);
   }
 
-  form.addEventListener('change', event => {
-    if (event.target === form.elements.access) populateSenictOptions(true);
-    updatePopularResults();
-  });
+  form.addEventListener('change', updatePopularResults);
 
   openButton.addEventListener('click', () => {
     const shouldCollapse = !details.hidden && mode === 'filters';
@@ -204,7 +161,6 @@
 
   new MutationObserver(() => {
     updateFavoritesButton();
-    populateSenictOptions(false);
     if (!results.hidden) render(mode === 'favorites' ? games.filter(game => readFavorites().has(game.id)) : filteredGames(), mode === 'favorites');
   }).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 
