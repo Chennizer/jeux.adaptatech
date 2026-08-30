@@ -61,7 +61,7 @@
 
   function updateFavoritesButton() {
     const count = readFavorites().size;
-    favoritesButton.textContent = count ? '★' : '☆';
+    favoritesButton.textContent = `${count ? '★' : '☆'} ${copy[language()].favorites}`;
     favoritesButton.setAttribute('aria-label', `${copy[language()].favorites}, ${copy[language()].favoritesCount(count)}`);
   }
 
@@ -150,6 +150,11 @@
   });
 
   favoritesButton.addEventListener('click', () => {
+    if (!details.hidden && mode === 'favorites') {
+      setExpanded(false);
+      panel.classList.remove('is-favorites');
+      return;
+    }
     form.hidden = true;
     setExpanded(true);
     mode = 'favorites';
