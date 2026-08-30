@@ -61,7 +61,7 @@
 
   function updateFavoritesButton() {
     const count = readFavorites().size;
-    favoritesButton.textContent = `☆ ${copy[language()].favorites}`;
+    favoritesButton.textContent = count ? '★' : '☆';
     favoritesButton.setAttribute('aria-label', `${copy[language()].favorites}, ${copy[language()].favoritesCount(count)}`);
   }
 
