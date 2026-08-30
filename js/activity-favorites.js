@@ -34,10 +34,26 @@
     return game.title[language()] || game.title.fr || game.title.en || game.id;
   }
 
+  function starIcon(selected) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    svg.setAttribute('class', 'favorite-star-icon');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    path.setAttribute('d', 'M12 2.8 14.8 8.5 21.1 9.4 16.5 13.8 17.6 20.1 12 17.1 6.4 20.1 7.5 13.8 2.9 9.4 9.2 8.5Z');
+    path.setAttribute('fill', selected ? 'currentColor' : 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.8');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.append(path);
+    return svg;
+  }
+
   function updateButton(button, game, selected) {
     button.setAttribute('aria-pressed', String(selected));
     button.setAttribute('aria-label', `${messages[language()][selected ? 'remove' : 'add']} : ${titleFor(game)}`);
-    button.textContent = selected ? '★' : '☆';
+    button.replaceChildren(starIcon(selected));
   }
 
   function addButtons() {
