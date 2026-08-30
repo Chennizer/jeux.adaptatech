@@ -122,6 +122,7 @@
 
   function updatePopularResults() {
     mode = 'filters';
+    panel.classList.remove('is-favorites');
     render(filteredGames(), false);
   }
 
@@ -142,6 +143,7 @@
     form.hidden = true;
     setExpanded(true);
     mode = 'favorites';
+    panel.classList.add('is-favorites');
     const favorites = readFavorites();
     render(games.filter(game => favorites.has(game.id)), true);
     results.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });

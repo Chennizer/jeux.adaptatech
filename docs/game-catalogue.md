@@ -6,6 +6,10 @@ Each activity has a stable `id` (used in `localStorage`), translated titles, its
 
 The compact homepage panel uses the curated `popular` flag. Keep roughly 10–15 popular activities available for each access method and only mark activities that are linked from a public section menu.
 
+## Progression coverage
+
+The SENICT roadmap documented on this site is a switch-specific progression, so it must not be presented as an eye-gaze or touchscreen scale. The popular switch selection currently includes documented SENICT levels 1, 2, 4, and 6. No activity that is both published in a public menu and explicitly labelled level 3 or 5 was found; these are catalogue gaps rather than levels to infer without evidence. The eye-gaze selection instead spans fixation/cause-effect, dwell and choice, literacy/learning, and creative activities. The touchscreen selection spans simple cause-effect, sensory exploration, choice/communication, and creative activities.
+
 To add an activity:
 
 1. Add one object with a unique, permanent `id` to `data/games.json`.
