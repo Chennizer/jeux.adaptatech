@@ -153,6 +153,9 @@
     })
     .then(catalogue => {
       games = Array.isArray(catalogue.games) ? catalogue.games : [];
+      const catalogueIds = new Set(games.map(game => game.id));
+      const availableFavorites = new Set(Array.from(readFavorites()).filter(id => catalogueIds.has(id)));
+      writeFavorites(availableFavorites);
       form.querySelector('button[type="submit"]').disabled = false;
       updateFavoritesButton();
     })
