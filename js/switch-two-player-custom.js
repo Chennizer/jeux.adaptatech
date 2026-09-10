@@ -316,28 +316,42 @@ function getPlaylistIdFromUrl(url) {
   return null;
 }
 
+function getYouTubeApiEndpoint(endpoint, params = {}, apiKey = '') {
+  const base = window.YT_API_PROXY_URL || window.YOUTUBE_API_PROXY_URL || 'https://www.googleapis.com/youtube/v3/';
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  const normalizedEndpoint = endpoint.replace(/^\/+/, '');
+  const url = new URL(normalizedEndpoint, normalizedBase);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
+  });
+  if (apiKey && !window.YT_API_PROXY_OMIT_KEY) url.searchParams.set('key', apiKey);
+  return url.toString();
+}
+
+async function fetchYouTubeApi(endpoint, params = {}, apiKey = '') {
+  const resp = await fetch(getYouTubeApiEndpoint(endpoint, params, apiKey));
+  const text = await resp.text();
+  if (!resp.ok) {
+    let msg = `HTTP ${resp.status}`;
+    try {
+      const j = JSON.parse(text);
+      if (j.error?.message) msg += ` – ${j.error.message}`;
+    } catch {}
+    throw new Error(msg);
+  }
+  return text ? JSON.parse(text) : {};
+}
+
 async function fetchPlaylistVideoIds(apiKey, playlistId) {
   const ids = [];
   let pageToken = "";
   while (true) {
-    const q = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
-    q.searchParams.set("part", "contentDetails");
-    q.searchParams.set("maxResults", "50");
-    q.searchParams.set("playlistId", playlistId);
-    q.searchParams.set("key", apiKey);
-    if (pageToken) q.searchParams.set("pageToken", pageToken);
-
-    const resp = await fetch(q.toString());
-    const text = await resp.text();
-    if (!resp.ok) {
-      let msg = `HTTP ${resp.status}`;
-      try {
-        const j = JSON.parse(text);
-        if (j.error?.message) msg += ` – ${j.error.message}`;
-      } catch {}
-      throw new Error(msg);
-    }
-    const data = JSON.parse(text);
+    const data = await fetchYouTubeApi('playlistItems', {
+      part: 'contentDetails',
+      maxResults: '50',
+      playlistId,
+      pageToken
+    }, apiKey);
     (data.items || []).forEach(it => {
       const vid = it?.contentDetails?.videoId;
       if (vid) ids.push(vid);
@@ -354,22 +368,15 @@ async function validateEmbeddableIds(apiKey, ids) {
   const blocked = new Map();       // id -> reason
   const thumbs = new Map();        // id -> bestThumbUrl
   const titles = new Map();        // id -> title
+  const channels = new Map();      // id -> channel title
+  const durations = new Map();     // id -> formatted duration
 
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50);
-    const u = new URL("https://www.googleapis.com/youtube/v3/videos");
-    u.searchParams.set("part", "status,snippet");
-    u.searchParams.set("id", chunk.join(","));
-    u.searchParams.set("key", apiKey);
-
-    const r = await fetch(u.toString());
-    const t = await r.text();
-    if (!r.ok) {
-      let msg = `HTTP ${r.status}`;
-      try { const j = JSON.parse(t); if (j.error?.message) msg += ` – ${j.error.message}`; } catch {}
-      throw new Error(msg);
-    }
-    const j = JSON.parse(t);
+    const j = await fetchYouTubeApi('videos', {
+      part: 'status,snippet,contentDetails',
+      id: chunk.join(',')
+    }, apiKey);
     (j.items || []).forEach(item => {
       const s = item.status || {};
       const emb = s.embeddable === true;
@@ -378,6 +385,8 @@ async function validateEmbeddableIds(apiKey, ids) {
         embeddable.add(item.id);
         const sn = item.snippet || {};
         titles.set(item.id, sn.title || '');
+        channels.set(item.id, sn.channelTitle || '');
+        durations.set(item.id, formatYouTubeDuration(item.contentDetails?.duration || ''));
         const th = sn.thumbnails || {};
         const best = th.maxres?.url || th.standard?.url || th.high?.url || th.medium?.url || th.default?.url || '';
         if (best) thumbs.set(item.id, best);
@@ -387,22 +396,50 @@ async function validateEmbeddableIds(apiKey, ids) {
       }
     });
   }
-  return { ok: Array.from(embeddable), blocked, thumbs, titles };
+  return { ok: Array.from(embeddable), blocked, thumbs, titles, channels, durations };
+}
+
+function formatYouTubeDuration(isoDuration) {
+  const match = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(isoDuration || '');
+  if (!match) return '';
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
+  if (hours) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+async function searchYouTubeVideos(apiKey, query) {
+  const data = await fetchYouTubeApi('search', {
+    part: 'snippet',
+    maxResults: '12',
+    q: query,
+    safeSearch: 'moderate',
+    type: 'video'
+  }, apiKey);
+  const ids = (data.items || [])
+    .map(item => item?.id?.videoId)
+    .filter(Boolean);
+  if (!ids.length) return [];
+
+  const { ok, thumbs, titles, channels, durations } = await validateEmbeddableIds(apiKey, ids);
+  const okSet = new Set(ok);
+  return ids.filter(id => okSet.has(id)).map(id => ({
+    id,
+    url: `https://www.youtube.com/watch?v=${id}`,
+    title: titles.get(id) || '',
+    channel: channels.get(id) || '',
+    duration: durations.get(id) || '',
+    thumbUrl: thumbs.get(id) || ''
+  }));
 }
 
 /* Validate a single YouTube URL before adding */
 async function validateSingleYouTubeUrl(url, apiKey) {
   const id = getYouTubeId(url);
   if (!id || !apiKey) return { ok: true, reason: '' }; // fail-open if no key
-  const u = new URL("https://www.googleapis.com/youtube/v3/videos");
-  u.searchParams.set("part", "status");
-  u.searchParams.set("id", id);
-  u.searchParams.set("key", apiKey);
-  const r = await fetch(u.toString());
-  const t = await r.text();
-  if (!r.ok) return { ok: true, reason: '' }; // fail-open on quota/etc.
   try {
-    const j = JSON.parse(t);
+    const j = await fetchYouTubeApi('videos', { part: 'status', id }, apiKey);
     const it = (j.items || [])[0];
     if (!it) return { ok: true, reason: '' };
     const s = it.status || {};
@@ -454,6 +491,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistInput = document.getElementById('yt-playlist-url-input');
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
+  const ytSearchInput = document.getElementById('yt-search-input');
+  const ytSearchButton = document.getElementById('yt-search-button');
+  const ytSearchResults = document.getElementById('yt-search-results');
   const localImportStatus = document.getElementById('local-import-status');
   const clearAllButton = document.getElementById('clear-all-button');
   const categoriesToggle = document.getElementById('categories-toggle');
@@ -1579,6 +1619,204 @@ document.addEventListener('DOMContentLoaded', async () => {
         ytPlaylistStatus.textContent = "Import échoué: " + (err?.message || "erreur inconnue");
       } finally {
         ytPlaylistBtn.disabled = false;
+      }
+    });
+  }
+
+  function setYoutubeSearchStatus(message) {
+    if (ytPlaylistStatus) ytPlaylistStatus.textContent = message || '';
+  }
+
+  function clearYoutubeSearchResults() {
+    if (!ytSearchResults) return;
+    ytSearchResults.innerHTML = '';
+    ytSearchResults.classList.remove('has-results');
+  }
+
+  function openYoutubePreview(result) {
+    const existing = document.querySelector('.youtube-preview-backdrop');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'youtube-preview-backdrop';
+    const dialog = document.createElement('div');
+    dialog.className = 'youtube-preview-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+
+    const header = document.createElement('div');
+    header.className = 'youtube-preview-header';
+    const title = document.createElement('div');
+    title.className = 'youtube-preview-title';
+    title.textContent = result.title || result.url;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'youtube-preview-close';
+    close.setAttribute('aria-label', 'Close preview');
+    close.textContent = '×';
+    header.append(title, close);
+
+    const frame = document.createElement('iframe');
+    frame.className = 'youtube-preview-frame';
+    frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+    frame.allowFullscreen = true;
+    frame.src = `https://www.youtube-nocookie.com/embed/${result.id}?autoplay=1&rel=0`;
+
+    const onEsc = (event) => {
+      if (event.key === 'Escape' && document.body.contains(backdrop)) dismiss();
+    };
+    const dismiss = () => {
+      document.removeEventListener('keydown', onEsc);
+      backdrop.remove();
+    };
+    close.addEventListener('click', dismiss);
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) dismiss();
+    });
+    document.addEventListener('keydown', onEsc);
+
+    dialog.append(header, frame);
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+  }
+
+  async function addYoutubeSearchResult(result, button) {
+    if (!result?.url) return;
+    const previousText = button ? button.textContent : '';
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Ajout…';
+    }
+    try {
+      const videoId = getYouTubeId(result.url);
+      if (videoId) {
+        const { ok, blocked, thumbs, titles } = await validateEmbeddableIds(window.YT_API_KEY, [videoId]);
+        if (!ok.includes(videoId)) {
+          setYoutubeSearchStatus(`Cette vidéo ne peut pas être intégrée (${blocked.get(videoId) || 'validation échouée'}).`);
+          return;
+        }
+        result.thumbUrl = thumbs.get(videoId) || result.thumbUrl;
+        result.title = titles.get(videoId) || result.title;
+      }
+      await addYoutubeUrlCard(result.url, {
+        thumbUrl: result.thumbUrl || null,
+        title: result.title || null
+      });
+      renumberCards();
+      updateSelectedMedia();
+      if (urlVideoList) saveYoutubeUrls();
+      setYoutubeSearchStatus(`Vidéo ajoutée: ${result.title || result.url}`);
+    } catch (err) {
+      console.error(err);
+      setYoutubeSearchStatus(`Ajout échoué: ${err?.message || 'erreur inconnue'}`);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = previousText;
+      }
+    }
+  }
+
+  function renderYoutubeSearchResults(results) {
+    if (!ytSearchResults) return;
+    clearYoutubeSearchResults();
+    results.forEach(result => {
+      const card = document.createElement('div');
+      card.className = 'youtube-search-card';
+      card.tabIndex = 0;
+      card.dataset.videoId = result.id;
+
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = result.thumbUrl || `https://i.ytimg.com/vi/${result.id}/hqdefault.jpg`;
+
+      const duration = document.createElement('div');
+      duration.className = 'youtube-search-duration';
+      duration.textContent = result.duration || '--:--';
+
+      const body = document.createElement('div');
+      body.className = 'youtube-search-card-body';
+      const title = document.createElement('div');
+      title.className = 'youtube-search-title';
+      title.textContent = result.title || 'YouTube video';
+      const channel = document.createElement('div');
+      channel.className = 'youtube-search-meta';
+      channel.textContent = result.channel || '';
+      body.append(title, channel);
+
+      const actions = document.createElement('div');
+      actions.className = 'youtube-search-actions';
+      const preview = document.createElement('button');
+      preview.type = 'button';
+      preview.className = 'button outline';
+      preview.textContent = 'Preview';
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'button primary';
+      add.textContent = 'Ajouter';
+      actions.append(preview, add);
+
+      const select = () => {
+        Array.from(ytSearchResults.querySelectorAll('.youtube-search-card.selected')).forEach(el => el.classList.remove('selected'));
+        card.classList.add('selected');
+      };
+      card.addEventListener('click', select);
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          select();
+        }
+      });
+      preview.addEventListener('click', (event) => {
+        event.stopPropagation();
+        select();
+        openYoutubePreview(result);
+      });
+      add.addEventListener('click', (event) => {
+        event.stopPropagation();
+        select();
+        addYoutubeSearchResult(result, add);
+      });
+
+      card.append(img, duration, body, actions);
+      ytSearchResults.appendChild(card);
+    });
+    ytSearchResults.classList.toggle('has-results', results.length > 0);
+  }
+
+  async function runYoutubeSearch() {
+    if (!ytSearchInput || !ytSearchButton) return;
+    const query = ytSearchInput.value.trim();
+    if (!query) {
+      setYoutubeSearchStatus('Veuillez entrer une recherche YouTube.');
+      return;
+    }
+    const apiKey = window.YT_API_KEY || '';
+    if (!apiKey && !window.YT_API_PROXY_URL && !window.YOUTUBE_API_PROXY_URL) {
+      setYoutubeSearchStatus('Clé API absente (window.YT_API_KEY).');
+      return;
+    }
+    ytSearchButton.disabled = true;
+    clearYoutubeSearchResults();
+    setYoutubeSearchStatus('Recherche en cours…');
+    try {
+      const results = await searchYouTubeVideos(apiKey, query);
+      renderYoutubeSearchResults(results);
+      setYoutubeSearchStatus(results.length ? `${results.length} résultat(s) intégrable(s).` : 'Aucun résultat intégrable trouvé.');
+    } catch (err) {
+      console.error(err);
+      setYoutubeSearchStatus(`Recherche échouée: ${err?.message || 'erreur inconnue'}`);
+    } finally {
+      ytSearchButton.disabled = false;
+    }
+  }
+
+  if (ytSearchButton && ytSearchInput) {
+    ytSearchButton.addEventListener('click', runYoutubeSearch);
+    ytSearchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        runYoutubeSearch();
       }
     });
   }
