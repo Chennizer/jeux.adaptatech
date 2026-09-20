@@ -5,9 +5,10 @@
   const modes = [
     ['sequence-once', 'Vidéo puis image', 'Regarder une fois, puis passer à la suite.'],
     ['sequence-repeat', 'Vidéo répétable', 'Toucher l’image pour revoir la vidéo.'],
-    ['gallery', 'Galerie', 'Choisir librement une vidéo dans la grille.']
+    ['gallery', 'Galerie', 'Choisir librement une vidéo dans la grille.'],
+    ['sequence-guided', 'Séquence', 'Toucher chaque vidéo dans l’ordre, puis la regarder jusqu’au bout.']
   ];
-  let gridObserver, gridPage = 0;
+  let gridObserver, gridPage = 0, cancelDrag = () => {}, suppressClickUntil = 0;
   let activities = [], activity, student = false, index = 0, phase = '', generation = 0, holdTimer;
   let saved = Promise.resolve(), saveError = false, pendingSaves = 0, actionableAt = 0;
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -29,6 +30,7 @@
   function clean() {
     generation++;
     gridObserver?.disconnect();
+    cancelDrag();
     document.body.classList.remove('vm-playing');
     clearTimeout(holdTimer);
     holdTimer = null;
@@ -55,21 +57,23 @@
     let urls = [];
     function draw() {
       const { width, height } = grid.getBoundingClientRect();
-      const columns = Math.max(1, Math.min(4, Math.floor((width + 16) / 216)));
-      const rows = Math.max(1, Math.min(3, Math.floor((height + 16) / 196)));
-      const capacity = columns * rows;
+      const gap = parseFloat(getComputedStyle(grid).gap) || 16;
+      const { capacity } = VideoGrid.layout(width, height, activity.videos.length, gap);
       const pages = Math.max(1, Math.ceil(activity.videos.length / capacity));
       gridPage = Math.max(0, Math.min(gridPage, pages - 1));
-      const layout = `${columns}:${rows}:${gridPage}`;
+      const visibleCount = Math.min(capacity, activity.videos.length - gridPage * capacity);
+      const { columns, rows } = VideoGrid.layout(width, height, visibleCount, gap);
+      const layout = `${columns}:${rows}:${capacity}:${gridPage}`;
       if (layout === lastLayout) return;
       lastLayout = layout;
+      cancelDrag();
       urls.forEach(VideoUtils.release); urls = [];
       grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
       grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
       const videos = activity.videos.slice(gridPage * capacity, (gridPage + 1) * capacity);
       grid.innerHTML = videos.length ? videos.map((video, i) => {
         const url = VideoUtils.url(video.thumbnailBlob); urls.push(url);
-        return `<button class="vm-video-tile" data-video="${video.id}" aria-label="${isStudent ? '' : 'Modifier : '}${escape(video.title)}"><img src="${url}" alt=""><span>${isStudent ? '' : `${gridPage * capacity + i + 1}. `}${escape(video.title)}</span></button>`;
+        return `<button class="vm-video-tile" data-video="${video.id}" aria-label="${isStudent ? '' : 'Modifier : '}${escape(video.title)}"><img src="${url}" alt="" draggable="false"><span>${isStudent ? '' : `${gridPage * capacity + i + 1}. `}${escape(video.title)}</span></button>`;
       }).join('') : '<p class="vm-empty">Ajoutez une vidéo pour commencer.</p>';
       nav.innerHTML = `<button data-prev aria-label="Page précédente" ${gridPage === 0 ? 'disabled' : ''}>←</button><span role="status">${gridPage + 1} / ${pages}</span><button data-next-page aria-label="Page suivante" ${gridPage === pages - 1 ? 'disabled' : ''}>→</button>`;
       nav.style.visibility = pages > 1 ? 'visible' : 'hidden';
@@ -82,16 +86,80 @@
       nav.querySelector('[data-prev]').onclick = () => changePage(-1);
       nav.querySelector('[data-next-page]').onclick = () => changePage(1);
       grid.querySelectorAll('[data-video]').forEach(card => card.onclick = () => {
+        if (Date.now() < suppressClickUntil) return;
         const video = activity.videos.find(item => item.id === card.dataset.video);
         if (isStudent) {
           if (phase !== 'gallery' || Date.now() < actionableAt) return;
           index = activity.videos.indexOf(video); play();
         } else editVideo(video);
       });
+      if (!isStudent) enableReordering(grid);
     }
     draw();
     gridObserver = new ResizeObserver(draw);
     gridObserver.observe(grid);
+  }
+  function enableReordering(grid) {
+    let drag = null;
+    function clear() {
+      if (!drag) return;
+      const current = drag;
+      drag = null;
+      current.card.classList.remove('dragging');
+      current.target?.classList.remove('drop-target');
+      current.ghost?.remove();
+      if (current.card.hasPointerCapture(current.pointerId)) current.card.releasePointerCapture(current.pointerId);
+    }
+    cancelDrag = clear;
+    grid.querySelectorAll('[data-video]').forEach(card => {
+      card.classList.add('vm-reorderable');
+      card.title = 'Toucher pour modifier, glisser pour déplacer';
+      card.oncontextmenu = event => event.preventDefault();
+      card.onpointerdown = event => {
+        if (event.button !== 0 || !event.isPrimary || drag) return;
+        drag = { card, pointerId: event.pointerId, x: event.clientX, y: event.clientY, active: false, target: null };
+        card.setPointerCapture(event.pointerId);
+      };
+      card.onpointermove = event => {
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 10) return;
+        event.preventDefault();
+        if (!drag.active) {
+          drag.active = true;
+          card.classList.add('dragging');
+          const rect = card.getBoundingClientRect();
+          drag.ghost = card.cloneNode(true);
+          drag.ghost.removeAttribute('data-video');
+          drag.ghost.removeAttribute('aria-label');
+          drag.ghost.setAttribute('aria-hidden', 'true');
+          drag.ghost.className = 'vm-drag-ghost';
+          drag.ghost.style.width = `${Math.min(200, rect.width)}px`;
+          root.append(drag.ghost);
+        }
+        drag.ghost.style.left = `${event.clientX + 12}px`;
+        drag.ghost.style.top = `${event.clientY + 12}px`;
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-video]');
+        drag.target?.classList.remove('drop-target');
+        drag.target = target && target !== card && grid.contains(target) ? target : null;
+        drag.target?.classList.add('drop-target');
+      };
+      card.onpointerup = event => {
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        const { active, target } = drag;
+        if (active) {
+          event.preventDefault();
+          suppressClickUntil = Date.now() + 500;
+        }
+        const fromId = card.dataset.video, toId = target?.dataset.video;
+        clear();
+        if (active && toId && VideoGrid.move(activity.videos, fromId, toId)) {
+          save(); teacher();
+          root.querySelector(`[data-video="${fromId}"]`)?.focus();
+        }
+      };
+      card.onpointercancel = card.onlostpointercapture = clear;
+      card.onkeydown = event => { if (event.key === 'Escape') clear(); };
+    });
   }
   function settings() {
     const dialog = modal(`<h2>Réglages</h2><label>Activité<select id="activity-select">${activities.map(item => `<option value="${item.id}" ${item.id === activity.id ? 'selected' : ''}>${escape(item.title || 'Sans titre')}</option>`).join('')}</select></label>
@@ -105,12 +173,13 @@
   }
   function editVideo(video) {
     const i = activity.videos.indexOf(video);
-    const dialog = modal(`<h2>${escape(video.title)}</h2><div class="vm-edit-actions">${button('Modifier le titre', 'rename')}${button('Remplacer la vidéo', 'replace')}<button data-action="earlier" ${i === 0 ? 'disabled' : ''}>← Avant</button><button data-action="later" ${i === activity.videos.length - 1 ? 'disabled' : ''}>Après →</button>${button('Supprimer', 'delete', 'danger')}<button data-close class="primary">Fermer</button></div>`);
+    const dialog = modal(`<h2>${escape(video.title)}</h2><div class="vm-edit-actions">${button('Modifier le titre', 'rename')}${button('Remplacer la vidéo', 'replace')}<button data-action="earlier" ${i === 0 ? 'disabled' : ''}>← Avant</button><button data-action="later" ${i === activity.videos.length - 1 ? 'disabled' : ''}>Après →</button>${button('Placer à…', 'position')}${button('Supprimer', 'delete', 'danger')}<button data-close class="primary">Fermer</button></div>`);
     dialog.querySelector('[data-close]').onclick = () => dialog.close();
     dialog.querySelectorAll('[data-action]').forEach(control => control.onclick = () => {
       const action = control.dataset.action;
       dialog.close();
       if (action === 'rename') editTitle(video);
+      if (action === 'position') choosePosition(video);
       if (action === 'replace') importVideo(video);
       if (action === 'delete') {
         const confirm = modal(`<h2>Supprimer cette vidéo ?</h2><p>${escape(video.title)}</p><div class="vm-toolbar"><button class="danger" data-confirm>Supprimer</button><button data-cancel>Annuler</button></div>`);
@@ -124,6 +193,16 @@
         activity.videos.forEach((item, order) => item.order = order); save(); teacher();
       }
     });
+  }
+  function choosePosition(video) {
+    const dialog = modal(`<form><h2>Placer la vidéo</h2><label>Position dans la séquence<select name="position">${activity.videos.map((item, i) => `<option value="${item.id}" ${item.id === video.id ? 'selected' : ''}>${i + 1} — ${escape(item.title)}</option>`).join('')}</select></label><div class="vm-toolbar"><button class="primary">Déplacer</button><button type="button" data-cancel>Annuler</button></div></form>`);
+    dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
+    dialog.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      const target = dialog.querySelector('select').value;
+      dialog.close();
+      if (VideoGrid.move(activity.videos, video.id, target)) { save(); teacher(); }
+    };
   }
   function newActivity() {
     activity = { id: uid(), title: 'Nouvelle activité', studentMode: 'sequence-once', videos: [] };
@@ -210,6 +289,24 @@
     pagedGrid(true);
     root.querySelector('#paged-grid button')?.focus();
   }
+  function sequenceChoice() {
+    studentShell();
+    if (index >= activity.videos.length) { finished(); return; }
+    phase = 'choice'; actionableAt = Date.now() + 500;
+    const item = activity.videos[index];
+    root.querySelector('#student-content').innerHTML = `<div class="vm-sequence-choice"><button class="vm-video-tile" data-start-step aria-label="Lire ${escape(item.title)}"><img src="${VideoUtils.url(item.thumbnailBlob)}" alt=""><span>▶ ${escape(item.title)}</span></button><p>Étape ${index + 1} sur ${activity.videos.length}</p></div>`;
+    const choice = root.querySelector('[data-start-step]');
+    choice.onclick = () => {
+      if (phase !== 'choice' || Date.now() < actionableAt) return;
+      play();
+    };
+    choice.focus();
+  }
+  function finished() {
+    studentShell(); phase = 'finished';
+    root.querySelector('#student-content').innerHTML = '<h2 class="vm-finish" tabindex="-1">Terminé</h2>';
+    root.querySelector('.vm-finish').focus();
+  }
   function still() {
     studentShell(); phase = 'still';
     actionableAt = Date.now() + 500;
@@ -221,7 +318,7 @@
     next.onclick = () => {
       if (phase !== 'still' || Date.now() < actionableAt) return; phase = 'transition';
       if (++index < activity.videos.length) play();
-      else { studentShell(); phase = 'finished'; root.querySelector('#student-content').innerHTML = '<h2 class="vm-finish" tabindex="-1">Terminé</h2>'; root.querySelector('.vm-finish').focus(); }
+      else finished();
     };
     (repeat ? root.querySelector('[data-repeat]') : next).focus();
   }
@@ -255,7 +352,11 @@
     video.onloadedmetadata = () => { if (token === generation) message.textContent = 'Préparation de la lecture…'; };
     video.oncanplay = () => { if (token === generation && !video.paused) message.textContent = ''; };
     video.onplaying = () => { if (token === generation) { starting = false; message.textContent = ''; retry.hidden = true; } };
-    video.onended = () => { if (token !== generation || phase !== 'playing') return; activity.studentMode === 'gallery' ? gallery() : still(); };
+    video.onended = () => {
+      if (token !== generation || phase !== 'playing') return;
+      if (activity.studentMode === 'sequence-guided') { index++; sequenceChoice(); }
+      else activity.studentMode === 'gallery' ? gallery() : still();
+    };
     video.onerror = failed;
     retry.onclick = () => { if (video.error) video.load(); begin(); };
     video.src = VideoUtils.url(item.videoBlob);
@@ -279,13 +380,15 @@
     if (action === 'add') importVideo();
     if (action === 'student' && activity.videos.length) {
       index = 0; gridPage = 0;
-      activity.studentMode === 'gallery' ? gallery() : play();
+      if (activity.studentMode === 'gallery') gallery();
+      else if (activity.studentMode === 'sequence-guided') sequenceChoice();
+      else play();
     }
   });
   document.addEventListener('keydown', event => {
     if (student && event.code === 'Space' && event.repeat) event.preventDefault();
   });
-  window.addEventListener('blur', () => { clearTimeout(holdTimer); holdTimer = null; root.querySelector('.exit-hold')?.classList.remove('holding'); });
+  window.addEventListener('blur', () => { cancelDrag(); clearTimeout(holdTimer); holdTimer = null; root.querySelector('.exit-hold')?.classList.remove('holding'); });
   window.addEventListener('beforeunload', event => { if (saveError || pendingSaves) { event.preventDefault(); event.returnValue = ''; } });
   try {
     await VideoDB.open(); activities = await VideoDB.all();

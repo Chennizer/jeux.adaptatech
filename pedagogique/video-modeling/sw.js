@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'adaptatech-video-modeling-';
-const CACHE_NAME = CACHE_PREFIX + 'v2';
-const ASSETS = ['./', './index.html', './css/base.css?v=2', './css/video-modeling.css?v=2', './js/db.js?v=2', './js/video-utils.js?v=2', './js/video-modeling.js?v=2'];
+const CACHE_NAME = CACHE_PREFIX + 'v3';
+const ASSETS = ['./', './index.html', './css/base.css?v=3', './css/video-modeling.css?v=3', './js/db.js?v=3', './js/video-utils.js?v=3', './js/video-modeling.js?v=3', './js/grid-utils.js?v=3'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
