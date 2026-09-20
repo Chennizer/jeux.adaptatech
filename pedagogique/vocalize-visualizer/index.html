@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vocalisation visuelle (PMLD)</title>
+  <link rel="stylesheet" href="../../css/global.css" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: Arial, sans-serif; background: radial-gradient(circle at top, #162339, #060912 65%); color: #fff; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .panel { display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); margin-bottom:14px; }
+    .card { background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); border-radius: 12px; padding:12px; }
+    button, select, input[type="range"] { width:100%; }
+    label { font-size:.9rem; display:block; margin-bottom:4px; }
+    canvas { width:100%; height:62vh; background: rgba(2,5,17,.7); border:1px solid rgba(255,255,255,.16); border-radius: 16px; }
+    .status { font-size:.92rem; opacity:.9; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Vocalisation visuelle (PMLD)</h1>
+  <p>Utilisez la voix (ou le mode testeur) pour déclencher des animations inspirées de bulles, formes et vortex.</p>
+
+  <div class="panel">
+    <div class="card">
+      <button id="startMic">Démarrer micro</button>
+      <p class="status" id="micStatus">Micro inactif</p>
+    </div>
+    <div class="card">
+      <label for="mode">Mode d'entrée</label>
+      <select id="mode">
+        <option value="mic">Micro</option>
+        <option value="test">Testeur (slider)</option>
+      </select>
+      <label for="testAmp">Intensité testeur</label>
+      <input id="testAmp" type="range" min="0" max="100" value="20" />
+    </div>
+    <div class="card">
+      <label for="reverbMix">Reverb (mix)</label>
+      <input id="reverbMix" type="range" min="0" max="1" step="0.01" value="0.35" />
+      <label for="reverbSec">Durée reverb (s)</label>
+      <input id="reverbSec" type="range" min="0.5" max="4" step="0.1" value="2" />
+      <p class="status" id="stats">Niveau: 0 | Pitch: 0 Hz</p>
+    </div>
+  </div>
+
+  <canvas id="viz"></canvas>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('viz');
+  const ctx = canvas.getContext('2d');
+  const modeEl = document.getElementById('mode');
+  const testAmpEl = document.getElementById('testAmp');
+  const statusEl = document.getElementById('micStatus');
+  const statsEl = document.getElementById('stats');
+  const startBtn = document.getElementById('startMic');
+  const reverbMixEl = document.getElementById('reverbMix');
+  const reverbSecEl = document.getElementById('reverbSec');
+
+  let w=0,h=0,audioCtx, analyser, dataArr, freqArr, sourceNode, dryGain, wetGain, convolver;
+  let level=0, centroid=0, zcr=0, pitch=0, pulse=0;
+  const bubbles=[];
+
+  function resize(){ canvas.width = canvas.clientWidth*devicePixelRatio; canvas.height = canvas.clientHeight*devicePixelRatio; w=canvas.width; h=canvas.height; }
+  addEventListener('resize', resize); resize();
+
+  function makeImpulse(seconds=2){
+    const rate = audioCtx.sampleRate;
+    const len = rate * seconds;
+    const ir = audioCtx.createBuffer(2, len, rate);
+    for(let c=0;c<2;c++){
+      const ch = ir.getChannelData(c);
+      for(let i=0;i<len;i++){
+        ch[i] = (Math.random()*2-1) * Math.pow(1-i/len, 2.2);
+      }
+    }
+    return ir;
+  }
+
+  function setupAudioGraph(){
+    convolver = audioCtx.createConvolver();
+    convolver.buffer = makeImpulse(Number(reverbSecEl.value));
+    analyser = audioCtx.createAnalyser(); analyser.fftSize=2048;
+    dataArr = new Float32Array(analyser.fftSize);
+    freqArr = new Uint8Array(analyser.frequencyBinCount);
+    dryGain = audioCtx.createGain(); dryGain.gain.value=0.95;
+    wetGain = audioCtx.createGain(); wetGain.gain.value=Number(reverbMixEl.value);
+  }
+
+  reverbMixEl.addEventListener('input', ()=>{ if(wetGain) wetGain.gain.value = Number(reverbMixEl.value); });
+  reverbSecEl.addEventListener('change', ()=>{ if(audioCtx){ convolver.buffer = makeImpulse(Number(reverbSecEl.value)); }});
+
+  async function startMic(){
+    if(!audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); setupAudioGraph(); }
+    const stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    if(sourceNode) sourceNode.disconnect();
+    sourceNode = audioCtx.createMediaStreamSource(stream);
+    sourceNode.connect(analyser);
+    sourceNode.connect(dryGain).connect(audioCtx.destination);
+    sourceNode.connect(convolver).connect(wetGain).connect(audioCtx.destination);
+    statusEl.textContent = 'Micro actif';
+  }
+
+  startBtn.addEventListener('click', async ()=>{
+    try { await startMic(); } catch(e){ statusEl.textContent = 'Micro indisponible: utilisez le mode testeur'; modeEl.value='test'; }
+  });
+
+  function computeFeatures(){
+    if(modeEl.value==='test'){
+      const v=Number(testAmpEl.value)/100;
+      level = v; centroid = 400 + v*2600; zcr = 0.04 + v*0.25; pitch = 120 + v*460;
+      return;
+    }
+    if(!analyser) return;
+    analyser.getFloatTimeDomainData(dataArr);
+    analyser.getByteFrequencyData(freqArr);
+    let sum=0, z=0;
+    for(let i=0;i<dataArr.length;i++) sum += dataArr[i]*dataArr[i];
+    for(let i=1;i<dataArr.length;i++) if((dataArr[i-1]>=0)!=(dataArr[i]>=0)) z++;
+    level = Math.min(1, Math.sqrt(sum/dataArr.length)*3.2);
+    zcr = z/dataArr.length;
+    let num=0, den=0;
+    for(let i=0;i<freqArr.length;i++){ const f=i*audioCtx.sampleRate/analyser.fftSize; const m=freqArr[i]; num+=f*m; den+=m; }
+    centroid = den? num/den : 0;
+    pitch = estimatePitch(dataArr, audioCtx.sampleRate);
+  }
+
+  function estimatePitch(buf, sampleRate){
+    let bestLag=-1, best=0;
+    const minLag=Math.floor(sampleRate/600), maxLag=Math.floor(sampleRate/70);
+    for(let lag=minLag; lag<maxLag; lag++){
+      let corr=0;
+      for(let i=0; i<buf.length-lag; i++) corr += buf[i]*buf[i+lag];
+      if(corr>best){ best=corr; bestLag=lag; }
+    }
+    return bestLag>0 ? Math.round(sampleRate/bestLag) : 0;
+  }
+
+  function render(){
+    requestAnimationFrame(render);
+    computeFeatures();
+    pulse += 0.01 + level*0.08;
+    ctx.fillStyle = `rgba(4,8,20,${0.15 + (1-level)*0.2})`;
+    ctx.fillRect(0,0,w,h);
+
+    const hue = Math.max(170, Math.min(340, 170 + centroid/12));
+
+    // vortex
+    for(let i=0;i<120;i++){
+      const t = pulse + i*0.15;
+      const rad = (i/120)*(Math.min(w,h)*0.45)*(0.25+level);
+      const x = w/2 + Math.cos(t*1.6 + zcr*9)*rad;
+      const y = h/2 + Math.sin(t*1.3 + zcr*7)*rad;
+      const s = 1 + (i%5) + level*4;
+      ctx.fillStyle = `hsla(${hue+i},90%,60%,${0.08+level*0.12})`;
+      ctx.beginPath(); ctx.arc(x,y,s,0,Math.PI*2); ctx.fill();
+    }
+
+    // shapes burst on transients
+    if(level>0.18 && Math.random()<0.35){
+      bubbles.push({x:Math.random()*w,y:h+20,r:8+level*46,v:-2-level*8,life:1,h:hue,shape:Math.random()});
+    }
+
+    for(let i=bubbles.length-1;i>=0;i--){
+      const b=bubbles[i]; b.y += b.v; b.life -= 0.012; b.r += 0.4 + zcr*2.5;
+      ctx.strokeStyle = `hsla(${b.h+pitch/8},100%,70%,${b.life})`;
+      ctx.lineWidth = 2 + level*4;
+      ctx.beginPath();
+      if(b.shape < 0.33){ ctx.arc(b.x,b.y,b.r,0,Math.PI*2); }
+      else if(b.shape < 0.66){ ctx.rect(b.x-b.r,b.y-b.r,b.r*2,b.r*2); }
+      else { ctx.moveTo(b.x,b.y-b.r); ctx.lineTo(b.x+b.r,b.y+b.r); ctx.lineTo(b.x-b.r,b.y+b.r); ctx.closePath(); }
+      ctx.stroke();
+      if(b.life<=0 || b.y<-50) bubbles.splice(i,1);
+    }
+
+    statsEl.textContent = `Niveau: ${level.toFixed(2)} | Pitch: ${pitch||0} Hz | Centroid: ${Math.round(centroid)} Hz | ZCR: ${zcr.toFixed(2)}`;
+  }
+  render();
+})();
+</script>
+</body>
+</html>
