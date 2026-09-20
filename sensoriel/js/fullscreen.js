@@ -121,6 +121,25 @@
     }
   }
 
+
+  function enforceKioskViewport() {
+    doc.documentElement.style.overflow = 'hidden';
+    if (doc.body) {
+      doc.body.style.overflow = 'hidden';
+      doc.body.style.overscrollBehavior = 'none';
+      doc.body.style.touchAction = 'none';
+    }
+    doc.documentElement.style.overscrollBehavior = 'none';
+
+    doc.addEventListener('touchmove', (event) => {
+      const target = event.target;
+      const allow = target && target.closest && target.closest('input, textarea, [contenteditable="true"], select');
+      if (!allow) {
+        event.preventDefault();
+      }
+    }, { passive: false });
+  }
+
   let iosZoomDisabled = false;
 
   function disableIOSZoom() {
@@ -168,6 +187,7 @@
 
   doc.addEventListener('visibilitychange', handleVisibilityReturn);
   doc.addEventListener('DOMContentLoaded', () => {
+    enforceKioskViewport();
     disableIOSZoom();
     if (shouldMaintainFullscreen()) {
       maintainFullscreen();

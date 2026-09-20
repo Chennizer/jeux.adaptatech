@@ -47,6 +47,13 @@
     return global.themes['default'] || {};
   }
 
+  function resolveThemeDataFromSession(sessionOrSelections) {
+    const selections = sessionOrSelections && sessionOrSelections.selections
+      ? sessionOrSelections.selections
+      : sessionOrSelections;
+    return getThemeData(selections || {});
+  }
+
   function loadSession() {
     let selections;
     try {
@@ -75,7 +82,7 @@
       selections.completionDestination = 'accessyoutube';
     }
 
-    const themeData = getThemeData(selections);
+    const themeData = resolveThemeDataFromSession(selections);
 
     return { selections, currentGameIndex, themeData };
   }
@@ -206,6 +213,19 @@
     }
   }
 
+  function ensureGameOrder(session) {
+    const activeSession = session || loadSession();
+    if (!activeSession) {
+      return null;
+    }
+    if (!Array.isArray(activeSession.selections.gameOrder) || activeSession.selections.gameOrder.length === 0) {
+      console.warn('Game order is missing from session.');
+      redirectToMain();
+      return null;
+    }
+    return activeSession;
+  }
+
   function setupReinforcerRedirect() {
     const button = document.getElementById('reinforcerButton');
     if (!button) {
@@ -241,15 +261,44 @@
     return global.reinforcerOverlay.init(config);
   }
 
+  function startNextStep(reinforcerController, options) {
+    const config = options || {};
+    const reinforcerType = config.reinforcerType || 'shortvideo';
+    if (reinforcerController && typeof reinforcerController.show === 'function') {
+      reinforcerController.show({ reinforcerType });
+      return;
+    }
+    advanceToNextGame();
+  }
+
+  function runSessionFlow(options) {
+    const config = options || {};
+    const session = ensureGameOrder(config.session || loadSession());
+    if (!session) {
+      return null;
+    }
+    const themeData = resolveThemeDataFromSession(session);
+    const reinforcerController = setupSharedReinforcer(session, Object.assign({}, config.reinforcerOptions, {
+      reinforcerType: config.reinforcerType || (session.selections && session.selections.reinforcerType) || 'shortvideo',
+      themeData,
+      onAdvance: config.onAdvance || advanceToNextGame
+    }));
+    return { session, themeData, reinforcerController };
+  }
+
   global.sessionHelpers = {
     getGameFileById,
     loadSession,
+    resolveThemeDataFromSession,
+    ensureGameOrder,
     ensureCurrentGame,
     getCurrentGameOptions,
     showActivityOverlay,
     updateActivityMarker,
     advanceToNextGame,
     setupReinforcerRedirect,
-    setupSharedReinforcer
+    setupSharedReinforcer,
+    startNextStep,
+    runSessionFlow
   };
 })(window);

@@ -642,7 +642,31 @@ const DEFAULT_IMAGE = '../images/default_reinforcer.png';
     };
   }
 
+  function bootstrapReinforcerPage(options) {
+    const opts = options || {};
+    if (global.SensorielFullscreen && typeof global.SensorielFullscreen.ensure === 'function') {
+      global.SensorielFullscreen.ensure();
+    }
+
+    const sessionFlow = global.sessionHelpers && typeof global.sessionHelpers.runSessionFlow === 'function'
+      ? global.sessionHelpers.runSessionFlow(opts)
+      : null;
+
+    if (!sessionFlow || !sessionFlow.session) {
+      return null;
+    }
+
+    if (global.sessionHelpers && typeof global.sessionHelpers.startNextStep === 'function') {
+      global.sessionHelpers.startNextStep(sessionFlow.reinforcerController, {
+        reinforcerType: sessionFlow.session.selections.reinforcerType || 'shortvideo'
+      });
+    }
+
+    return sessionFlow;
+  }
+
   global.reinforcerOverlay = {
-    init
+    init,
+    bootstrapReinforcerPage
   };
 })(window);
