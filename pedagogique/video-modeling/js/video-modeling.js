@@ -383,6 +383,8 @@
       if (activity.studentMode === 'gallery') gallery();
       else if (activity.studentMode === 'sequence-guided') sequenceChoice();
       else play();
+      // Gallery and guided sequence enter fullscreen before any video is selected.
+      if (phase !== 'playing') VideoUtils.enterFullscreen(root, () => student);
     }
   });
   document.addEventListener('keydown', event => {

@@ -11,6 +11,7 @@ Le mode Séquence présente une seule carte à la fois. L’élève doit la touc
 
 En Mode intervenant, glisser une carte sur une autre pour modifier l’ordre à la souris ou au tactile. Un simple appui ouvre ses commandes : Avant / Après ou Placer à… permettent aussi de choisir sa position, y compris sur une autre page. L’ordre est sauvegardé automatiquement et utilisé par les séquences.
 En Mode élève, la vidéo occupe toute la fenêtre et demande le plein écran du navigateur lorsque disponible. Les proportions sont conservées. Si Safari refuse le plein écran, la lecture continue dans toute la fenêtre.
+Le plein écran est demandé dès l’appui sur Mode élève, y compris pour la galerie et la séquence avant le choix de la première vidéo.
 Maintenir le coin supérieur gauche pendant 3 secondes pour revenir au mode intervenant. Au clavier, placer le focus sur ce coin et maintenir Espace ou Entrée.
 
 ## Stockage
