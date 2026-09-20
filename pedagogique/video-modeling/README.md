@@ -3,6 +3,8 @@ Application HTML/CSS/JavaScript sans dépendance ni compte, pour le video modeli
 
 ## Utilisation
 Créer une activité, importer ou filmer des vidéos, modifier les titres et l’ordre avec Avant / Après, puis choisir Vidéo puis image, Vidéo répétable ou Galerie.
+Le bouton Réglages regroupe le choix et la création des activités ainsi que le mode élève. Toucher une carte en création pour modifier son titre, remplacer sa vidéo, la déplacer ou la supprimer. Les grilles occupent la hauteur disponible sans défilement ; les flèches de pagination donnent accès aux vidéos supplémentaires, en création comme en galerie élève. Le nombre de cartes par page s’adapte à la taille de l’écran.
+Cette page n’est pas référencée depuis les portails du site pour le moment et ne comporte pas de lien de retour vers le portail pédagogique.
 En Mode élève, la vidéo occupe toute la fenêtre et demande le plein écran du navigateur lorsque disponible. Les proportions sont conservées. Si Safari refuse le plein écran, la lecture continue dans toute la fenêtre.
 Maintenir le coin supérieur gauche pendant 3 secondes pour revenir au mode intervenant. Au clavier, placer le focus sur ce coin et maintenir Espace ou Entrée.
 

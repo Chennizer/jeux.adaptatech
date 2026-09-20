@@ -7,6 +7,7 @@
     ['sequence-repeat', 'Vidéo répétable', 'Toucher l’image pour revoir la vidéo.'],
     ['gallery', 'Galerie', 'Choisir librement une vidéo dans la grille.']
   ];
+  let gridObserver, gridPage = 0;
   let activities = [], activity, student = false, index = 0, phase = '', generation = 0, holdTimer;
   let saved = Promise.resolve(), saveError = false, pendingSaves = 0, actionableAt = 0;
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -27,6 +28,7 @@
   }
   function clean() {
     generation++;
+    gridObserver?.disconnect();
     document.body.classList.remove('vm-playing');
     clearTimeout(holdTimer);
     holdTimer = null;
@@ -38,20 +40,94 @@
     VideoUtils.exitFullscreen(root);
     document.body.classList.remove('student');
     root.innerHTML = `
-      <header class="vm-header"><a class="vm-link" href="../index.html">← Outils pédagogiques</a><h1>Activités vidéo</h1>${button('Mode élève →', 'student', 'primary')}</header>
-      <div class="vm-toolbar"><label>Activité<select id="activity-select">${activities.map(item => `<option value="${item.id}" ${item.id === activity.id ? 'selected' : ''}>${escape(item.title || 'Sans titre')}</option>`).join('')}</select></label>${button('+ Nouvelle activité', 'new')}</div>
-      <section class="vm-panel"><label>Titre de l’activité<input class="vm-title" id="activity-title" value="${escape(activity.title)}" placeholder="Ex. Faire une collation"></label>
-      <fieldset class="vm-modes"><legend>Présentation pour l’élève</legend>${modes.map(([value, title, description]) => `<label><input type="radio" name="student-mode" value="${value}" ${activity.studentMode === value ? 'checked' : ''}><span>${title}<small>${description}</small></span></label>`).join('')}</fieldset></section>
-      <h2>Les vidéos <span>(${activity.videos.length})</span></h2>
-      <div class="vm-grid">${activity.videos.map((video, i) => `<article class="vm-card" data-id="${video.id}"><img src="${VideoUtils.url(video.thumbnailBlob)}" alt=""><h3>${i + 1}. ${escape(video.title)}</h3><div class="vm-card-actions">${button('Modifier le titre', 'rename')}${button('Remplacer', 'replace')}<button data-action="earlier" ${i === 0 ? 'disabled' : ''} aria-label="Déplacer ${escape(video.title)} avant">← Avant</button><button data-action="later" ${i === activity.videos.length - 1 ? 'disabled' : ''} aria-label="Déplacer ${escape(video.title)} après">Après →</button>${button('Supprimer', 'delete', 'danger')}</div></article>`).join('')}${button('+ Ajouter une vidéo', 'add', 'vm-add')}</div>
-      <p class="vm-note">Les vidéos sont conservées uniquement sur cet appareil. Elles peuvent être effacées si vous supprimez les données du navigateur. Utilisez le même navigateur pour retrouver vos activités.</p>
-      <p class="vm-note">Pour revenir du Mode élève : maintenez le coin supérieur gauche pendant 3 secondes (ou maintenez Espace sur ce coin avec le clavier).</p>
-      ${button('Réessayer la sauvegarde', 'save')}`;
+      <header class="vm-header"><h1>Activités vidéo</h1>${button('Réglages', 'settings')}${button('Mode élève →', 'student', 'primary')}</header>
+      <div class="vm-toolbar vm-activity-bar"><input class="vm-title" id="activity-title" aria-label="Titre de l’activité" value="${escape(activity.title)}" placeholder="Titre de l’activité">${button('+ Vidéo', 'add')}</div>
+      <div class="vm-grid" id="paged-grid" aria-label="Vidéos de l’activité"></div>
+      <nav class="vm-pagination" aria-label="Pages de vidéos"></nav>
+      <p class="vm-note">Les vidéos sont conservées uniquement sur cet appareil.</p>`;
     root.querySelector('[data-action="student"]').disabled = !activity.videos.length;
+    pagedGrid(false);
+  }
+  function pagedGrid(isStudent) {
+    const grid = root.querySelector('#paged-grid');
+    const nav = root.querySelector('.vm-pagination');
+    let lastLayout = '';
+    let urls = [];
+    function draw() {
+      const { width, height } = grid.getBoundingClientRect();
+      const columns = Math.max(1, Math.min(4, Math.floor((width + 16) / 216)));
+      const rows = Math.max(1, Math.min(3, Math.floor((height + 16) / 196)));
+      const capacity = columns * rows;
+      const pages = Math.max(1, Math.ceil(activity.videos.length / capacity));
+      gridPage = Math.max(0, Math.min(gridPage, pages - 1));
+      const layout = `${columns}:${rows}:${gridPage}`;
+      if (layout === lastLayout) return;
+      lastLayout = layout;
+      urls.forEach(VideoUtils.release); urls = [];
+      grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+      grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+      const videos = activity.videos.slice(gridPage * capacity, (gridPage + 1) * capacity);
+      grid.innerHTML = videos.length ? videos.map((video, i) => {
+        const url = VideoUtils.url(video.thumbnailBlob); urls.push(url);
+        return `<button class="vm-video-tile" data-video="${video.id}" aria-label="${isStudent ? '' : 'Modifier : '}${escape(video.title)}"><img src="${url}" alt=""><span>${isStudent ? '' : `${gridPage * capacity + i + 1}. `}${escape(video.title)}</span></button>`;
+      }).join('') : '<p class="vm-empty">Ajoutez une vidéo pour commencer.</p>';
+      nav.innerHTML = `<button data-prev aria-label="Page précédente" ${gridPage === 0 ? 'disabled' : ''}>←</button><span role="status">${gridPage + 1} / ${pages}</span><button data-next-page aria-label="Page suivante" ${gridPage === pages - 1 ? 'disabled' : ''}>→</button>`;
+      nav.style.visibility = pages > 1 ? 'visible' : 'hidden';
+      function changePage(delta) {
+        if (Date.now() < actionableAt) return;
+        actionableAt = Date.now() + 400;
+        gridPage += delta; draw();
+        grid.querySelector('button')?.focus();
+      }
+      nav.querySelector('[data-prev]').onclick = () => changePage(-1);
+      nav.querySelector('[data-next-page]').onclick = () => changePage(1);
+      grid.querySelectorAll('[data-video]').forEach(card => card.onclick = () => {
+        const video = activity.videos.find(item => item.id === card.dataset.video);
+        if (isStudent) {
+          if (phase !== 'gallery' || Date.now() < actionableAt) return;
+          index = activity.videos.indexOf(video); play();
+        } else editVideo(video);
+      });
+    }
+    draw();
+    gridObserver = new ResizeObserver(draw);
+    gridObserver.observe(grid);
+  }
+  function settings() {
+    const dialog = modal(`<h2>Réglages</h2><label>Activité<select id="activity-select">${activities.map(item => `<option value="${item.id}" ${item.id === activity.id ? 'selected' : ''}>${escape(item.title || 'Sans titre')}</option>`).join('')}</select></label>
+      <fieldset class="vm-modes"><legend>Présentation pour l’élève</legend>${modes.map(([value, title]) => `<label><input type="radio" name="student-mode" value="${value}" ${activity.studentMode === value ? 'checked' : ''}><span>${title}</span></label>`).join('')}</fieldset>
+      <p class="vm-note">Sortir du Mode élève : maintenir le coin supérieur gauche 3 secondes.</p>
+      <div class="vm-toolbar">${button('+ Activité', 'create-activity')}<button data-close class="primary">Fermer</button></div>
+      ${saveError ? button('Réessayer la sauvegarde', 'retry-save') : ''}`);
+    dialog.querySelector('[data-close]').onclick = () => dialog.close();
+    dialog.querySelector('[data-action="create-activity"]').onclick = () => { dialog.close(); newActivity(); };
+    dialog.querySelector('[data-action="retry-save"]')?.addEventListener('click', save);
+  }
+  function editVideo(video) {
+    const i = activity.videos.indexOf(video);
+    const dialog = modal(`<h2>${escape(video.title)}</h2><div class="vm-edit-actions">${button('Modifier le titre', 'rename')}${button('Remplacer la vidéo', 'replace')}<button data-action="earlier" ${i === 0 ? 'disabled' : ''}>← Avant</button><button data-action="later" ${i === activity.videos.length - 1 ? 'disabled' : ''}>Après →</button>${button('Supprimer', 'delete', 'danger')}<button data-close class="primary">Fermer</button></div>`);
+    dialog.querySelector('[data-close]').onclick = () => dialog.close();
+    dialog.querySelectorAll('[data-action]').forEach(control => control.onclick = () => {
+      const action = control.dataset.action;
+      dialog.close();
+      if (action === 'rename') editTitle(video);
+      if (action === 'replace') importVideo(video);
+      if (action === 'delete') {
+        const confirm = modal(`<h2>Supprimer cette vidéo ?</h2><p>${escape(video.title)}</p><div class="vm-toolbar"><button class="danger" data-confirm>Supprimer</button><button data-cancel>Annuler</button></div>`);
+        confirm.querySelector('[data-cancel]').onclick = () => confirm.close();
+        confirm.querySelector('[data-confirm]').onclick = () => { activity.videos = activity.videos.filter(item => item.id !== video.id); activity.videos.forEach((item, order) => item.order = order); save(); confirm.close(); teacher(); };
+      }
+      if (['earlier', 'later'].includes(action)) {
+        const j = i + (action === 'earlier' ? -1 : 1);
+        if (j < 0 || j >= activity.videos.length) return;
+        [activity.videos[i], activity.videos[j]] = [activity.videos[j], activity.videos[i]];
+        activity.videos.forEach((item, order) => item.order = order); save(); teacher();
+      }
+    });
   }
   function newActivity() {
     activity = { id: uid(), title: 'Nouvelle activité', studentMode: 'sequence-once', videos: [] };
-    activities.push(activity); save(); teacher();
+    activities.push(activity); gridPage = 0; save(); teacher();
   }
   function modal(html) {
     const dialog = document.createElement('dialog');
@@ -130,10 +206,9 @@
   function gallery() {
     studentShell(); phase = 'gallery';
     actionableAt = Date.now() + 500;
-    const content = root.querySelector('#student-content');
-    content.innerHTML = `<div class="vm-grid vm-gallery">${activity.videos.map((video, i) => `<button data-play="${i}"><img src="${VideoUtils.url(video.thumbnailBlob)}" alt=""><span>${escape(video.title)}</span></button>`).join('')}</div>`;
-    content.querySelectorAll('[data-play]').forEach(card => card.onclick = () => { if (phase !== 'gallery' || Date.now() < actionableAt) return; index = Number(card.dataset.play); play(); });
-    content.querySelector('button')?.focus();
+    root.querySelector('#student-content').innerHTML = '<div class="vm-grid vm-gallery" id="paged-grid" aria-label="Choisir une vidéo"></div><nav class="vm-pagination" aria-label="Pages de vidéos"></nav>';
+    pagedGrid(true);
+    root.querySelector('#paged-grid button')?.focus();
   }
   function still() {
     studentShell(); phase = 'still';
@@ -189,37 +264,21 @@
   root.addEventListener('input', event => {
     if (event.target.id === 'activity-title') {
       activity.title = event.target.value;
-      root.querySelector('#activity-select').selectedOptions[0].textContent = activity.title || 'Sans titre'; save();
+      save();
     }
   });
   root.addEventListener('change', async event => {
     if (event.target.name === 'student-mode') { activity.studentMode = event.target.value; save(); }
-    if (event.target.id === 'activity-select') { activity = activities.find(item => item.id === event.target.value); teacher(); }
+    if (event.target.id === 'activity-select') { activity = activities.find(item => item.id === event.target.value); gridPage = 0; root.querySelector('dialog')?.close(); teacher(); }
   });
   root.addEventListener('click', async event => {
     const target = event.target.closest('[data-action]');
     if (!target || student || target.closest('dialog')) return;
     const action = target.dataset.action;
-    const video = activity.videos.find(item => item.id === target.closest('[data-id]')?.dataset.id);
-    if (action === 'save') save();
-    if (action === 'new') newActivity();
+    if (action === 'settings') settings();
     if (action === 'add') importVideo();
-    if (action === 'replace') importVideo(video);
-    if (action === 'rename') editTitle(video);
-    if (action === 'delete') {
-      const dialog = modal(`<h2>Supprimer cette vidéo ?</h2><p>${escape(video.title)}</p><div class="vm-toolbar"><button class="danger" data-confirm>Supprimer</button><button data-cancel>Annuler</button></div>`);
-      dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
-      dialog.querySelector('[data-confirm]').onclick = () => { activity.videos = activity.videos.filter(item => item.id !== video.id); activity.videos.forEach((item, i) => item.order = i); save(); dialog.close(); teacher(); };
-    }
-    if (['earlier', 'later'].includes(action)) {
-      const i = activity.videos.indexOf(video), j = i + (action === 'earlier' ? -1 : 1);
-      if (j < 0 || j >= activity.videos.length) return;
-      [activity.videos[i], activity.videos[j]] = [activity.videos[j], activity.videos[i]];
-      activity.videos.forEach((item, order) => item.order = order); save(); teacher();
-      root.querySelector(`[data-id="${video.id}"] [data-action="rename"]`).focus();
-    }
     if (action === 'student' && activity.videos.length) {
-      index = 0;
+      index = 0; gridPage = 0;
       activity.studentMode === 'gallery' ? gallery() : play();
     }
   });
@@ -239,3 +298,4 @@
   }
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(() => {});
 })();
+
