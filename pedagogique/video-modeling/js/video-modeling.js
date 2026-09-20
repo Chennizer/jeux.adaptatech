@@ -31,7 +31,7 @@
     generation++;
     gridObserver?.disconnect();
     cancelDrag();
-    document.body.classList.remove('vm-playing');
+    document.body.classList.remove('vm-playing', 'vm-guided');
     clearTimeout(holdTimer);
     holdTimer = null;
     root.querySelectorAll('video').forEach(video => { video.pause(); video.removeAttribute('src'); video.load(); });
@@ -271,6 +271,7 @@
   }
   function studentShell() {
     clean(); student = true; document.body.classList.add('student');
+    document.body.classList.toggle('vm-guided', activity.studentMode === 'sequence-guided');
     root.innerHTML = `<button class="exit-hold" aria-label="Maintenir 3 secondes pour revenir au mode intervenant">···</button><h1 class="vm-student-title">${escape(activity.title)}</h1><div id="student-content"></div>`;
     const exit = root.querySelector('.exit-hold');
     const cancel = () => { clearTimeout(holdTimer); holdTimer = null; exit.classList.remove('holding'); };
@@ -281,6 +282,19 @@
     exit.oncontextmenu = event => event.preventDefault();
     exit.onkeydown = event => { if ([' ', 'Enter'].includes(event.key)) { event.preventDefault(); if (!event.repeat) start(); } };
     exit.onkeyup = cancel;
+    if (activity.studentMode === 'sequence-guided') {
+      const total = activity.videos.length;
+      const step = Math.min(index + 1, total);
+      const complete = index >= total;
+      const progress = document.createElement('footer');
+      progress.className = 'vm-sequence-progress';
+      progress.setAttribute('role', 'status');
+      progress.setAttribute('aria-live', 'polite');
+      progress.setAttribute('aria-atomic', 'true');
+      progress.setAttribute('aria-label', complete ? `Séquence terminée : ${total} étapes sur ${total}` : `Étape ${step} sur ${total}`);
+      progress.innerHTML = `<div aria-hidden="true" class="vm-progress-label">${complete ? 'Séquence terminée' : 'Étape'}</div><div aria-hidden="true" class="vm-progress-numbers"><strong class="vm-progress-current">${step}</strong><span class="vm-progress-separator">sur</span><strong class="vm-progress-total">${total}</strong></div>`;
+      root.append(progress);
+    }
   }
   function gallery() {
     studentShell(); phase = 'gallery';
@@ -294,7 +308,7 @@
     if (index >= activity.videos.length) { finished(); return; }
     phase = 'choice'; actionableAt = Date.now() + 500;
     const item = activity.videos[index];
-    root.querySelector('#student-content').innerHTML = `<div class="vm-sequence-choice"><button class="vm-video-tile" data-start-step aria-label="Lire ${escape(item.title)}"><img src="${VideoUtils.url(item.thumbnailBlob)}" alt=""><span>▶ ${escape(item.title)}</span></button><p>Étape ${index + 1} sur ${activity.videos.length}</p></div>`;
+    root.querySelector('#student-content').innerHTML = `<div class="vm-sequence-choice"><button class="vm-video-tile" data-start-step aria-label="Lire ${escape(item.title)}"><img src="${VideoUtils.url(item.thumbnailBlob)}" alt=""><span>▶ ${escape(item.title)}</span></button></div>`;
     const choice = root.querySelector('[data-start-step]');
     choice.onclick = () => {
       if (phase !== 'choice' || Date.now() < actionableAt) return;
@@ -327,7 +341,7 @@
     document.body.classList.add('vm-playing');
     const token = generation, item = activity.videos[index];
     root.querySelector('#student-content').innerHTML = `<div class="vm-stage vm-player"><video aria-label="${escape(item.title)}" playsinline preload="auto" disablepictureinpicture disableremoteplayback tabindex="-1"></video><div class="vm-playback-feedback"><p role="status">Chargement de la vidéo…</p><button class="primary" data-retry hidden>Lire la vidéo</button></div></div>`;
-    const video = root.querySelector('video'), message = root.querySelector('[role="status"]'), retry = root.querySelector('[data-retry]');
+    const video = root.querySelector('video'), message = root.querySelector('.vm-playback-feedback [role="status"]'), retry = root.querySelector('[data-retry]');
     let starting = false;
     function failed() {
       if (token !== generation) return;

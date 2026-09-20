@@ -8,6 +8,7 @@ Cette page n’est pas référencée depuis les portails du site pour le moment 
 La grille utilise la surface disponible selon le nombre de vidéos : une seule grande carte, deux cartes côte à côte ou empilées selon l’écran, quatre cartes en grille, etc. La pagination ne sert que lorsque les cartes deviendraient trop petites.
 
 Le mode Séquence présente une seule carte à la fois. L’élève doit la toucher pour lancer la vidéo ; pendant la lecture, aucune commande ne permet de passer à la suivante. À la fin, seule la carte suivante apparaît et attend un nouvel appui. Après la dernière vidéo, « Terminé » s’affiche.
+Un bandeau fixe au bas de l’écran affiche « Étape 1 sur 4 » avec de grands chiffres contrastés. Il reste au même endroit pendant le choix et la lecture ; l’étape actuelle est encadrée. Sans animation ni clignotement, le repère n’est pas cliquable et ne permet pas de sauter une étape. La vidéo conserve ses proportions au-dessus du bandeau.
 
 En Mode intervenant, glisser une carte sur une autre pour modifier l’ordre à la souris ou au tactile. Un simple appui ouvre ses commandes : Avant / Après ou Placer à… permettent aussi de choisir sa position, y compris sur une autre page. L’ordre est sauvegardé automatiquement et utilisé par les séquences.
 En Mode élève, la vidéo occupe toute la fenêtre et demande le plein écran du navigateur lorsque disponible. Les proportions sont conservées. Si Safari refuse le plein écran, la lecture continue dans toute la fenêtre.
