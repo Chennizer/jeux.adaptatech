@@ -8,7 +8,7 @@
     ['gallery', 'Galerie', 'Choisir librement une vidéo dans la grille.'],
     ['sequence-guided', 'Séquence', 'Toucher chaque vidéo dans l’ordre, puis la regarder jusqu’au bout.']
   ];
-  let gridObserver, gridPage = 0, cancelDrag = () => {}, suppressClickUntil = 0;
+  let gridObserver, progressObserver, gridPage = 0, cancelDrag = () => {}, suppressClickUntil = 0;
   let activities = [], activity, student = false, index = 0, phase = '', generation = 0, holdTimer;
   let saved = Promise.resolve(), saveError = false, pendingSaves = 0, actionableAt = 0;
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -30,6 +30,7 @@
   function clean() {
     generation++;
     gridObserver?.disconnect();
+    progressObserver?.disconnect();
     cancelDrag();
     document.body.classList.remove('vm-playing', 'vm-guided');
     clearTimeout(holdTimer);
@@ -291,9 +292,27 @@
       progress.setAttribute('role', 'status');
       progress.setAttribute('aria-live', 'polite');
       progress.setAttribute('aria-atomic', 'true');
-      progress.setAttribute('aria-label', complete ? `Séquence terminée : ${total} étapes sur ${total}` : `Étape ${step} sur ${total}`);
-      progress.innerHTML = `<div aria-hidden="true" class="vm-progress-label">${complete ? 'Séquence terminée' : 'Étape'}</div><div aria-hidden="true" class="vm-progress-numbers"><strong class="vm-progress-current">${step}</strong><span class="vm-progress-separator">sur</span><strong class="vm-progress-total">${total}</strong></div>`;
+      progress.setAttribute('aria-label', complete ? `Séquence terminée : ${total} étapes sur ${total}` : `Étape ${step} sur ${total} : ${activity.videos[step - 1].title}`);
       root.append(progress);
+      let previousRange = '', thumbnailUrls = [];
+      function renderProgress() {
+        if (!progress.isConnected) return;
+        const visible = Math.min(total, Math.max(1, Math.min(7, Math.floor((progress.clientWidth - 56) / 112))));
+        const start = Math.max(0, Math.min(step - 1 - Math.floor(visible / 2), total - visible));
+        const end = start + visible;
+        const range = `${start}:${end}`;
+        if (range === previousRange) return;
+        previousRange = range;
+        thumbnailUrls.forEach(VideoUtils.release); thumbnailUrls = [];
+        progress.innerHTML = `<div class="vm-sequence-strip" aria-hidden="true">${start > 0 ? '<span class="vm-sequence-more">…</span>' : ''}${activity.videos.slice(start, end).map((video, offset) => {
+          const url = VideoUtils.url(video.thumbnailBlob); thumbnailUrls.push(url);
+          const current = start + offset === step - 1;
+          return `<div class="vm-sequence-thumb${current ? ' is-current' : ''}"><div class="vm-sequence-thumb-image"><img src="${url}" alt="" draggable="false"></div><span class="vm-sequence-thumb-title">${escape(video.title)}</span></div>`;
+        }).join('')}${end < total ? '<span class="vm-sequence-more">…</span>' : ''}</div>`;
+      }
+      renderProgress();
+      progressObserver = new ResizeObserver(renderProgress);
+      progressObserver.observe(progress);
     }
   }
   function gallery() {
