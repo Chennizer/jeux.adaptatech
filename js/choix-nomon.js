@@ -1,80 +1,144 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const choices = mediaChoices.slice(0, 12);
+  const gameOptions = document.getElementById('game-options');
+  const tilePickerModal = document.getElementById('tile-picker-modal');
+  const tilePickerGrid = document.getElementById('tile-picker-grid');
+  const tileCountInput = document.getElementById('tile-count');
+  const tileCountValue = document.getElementById('tile-count-value');
+  const tileCountDisplay = document.getElementById('tile-count-display');
+  const categorySelect = document.getElementById('categorySelect');
+  const startButton = document.getElementById('start-game-button');
+  const game = document.getElementById('nomon-game');
   const grid = document.getElementById('video-grid');
-  const speedSelect = document.getElementById('rotation-speed');
-  const pauseButton = document.getElementById('pause-clocks');
-  const status = document.getElementById('status');
+  const status = document.getElementById('nomon-status');
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
-  const closeVideoButton = document.getElementById('close-video');
-  let revolutionMs = Number(speedSelect.value);
+  let selectedIndices = mediaChoices.slice(0, 12).map((_, index) => index);
+  let activeIndices = [];
+  let phaseOffsets = [];
+  let selectionStage = 0;
+  let revolutionMs = 8000;
   let startTime = performance.now();
-  let pausedAt = null;
-  let candidateIndex = 0;
   let videoOpen = false;
 
-  const tiles = choices.map((choice, index) => {
-    const tile = document.createElement('button');
-    tile.type = 'button';
-    tile.className = 'video-choice';
-    tile.dataset.index = index;
-    tile.setAttribute('aria-label', `${choice.name}. Horloge ${index + 1} sur 12.`);
-    tile.innerHTML = `
-      <img src="${choice.image}" alt="" loading="eager">
-      <span class="title">${choice.name}</span>
-      <span class="nomon-clock" aria-hidden="true">
-        <span class="clock-hand"></span><span class="clock-pin"></span>
-      </span>`;
-    tile.addEventListener('click', event => {
-      // Pointer and direct-access users may still activate a tile normally.
-      if (event.detail > 0) playChoice(index);
+  function desiredCount() { return Number(tileCountInput.value); }
+
+  function updatePickerState() {
+    tileCountValue.textContent = desiredCount();
+    tileCountDisplay.textContent = desiredCount();
+    startButton.disabled = selectedIndices.length !== desiredCount();
+  }
+
+  function categoryMatches(choice) {
+    const category = categorySelect.value;
+    return category === 'all' || choice.category === category ||
+      (Array.isArray(choice.category) && choice.category.includes(category));
+  }
+
+  function populatePicker() {
+    tilePickerGrid.innerHTML = '';
+    mediaChoices.forEach((choice, index) => {
+      if (!categoryMatches(choice) && !selectedIndices.includes(index)) return;
+      const tile = document.createElement('div');
+      tile.className = `tile${selectedIndices.includes(index) ? ' selected' : ''}`;
+      tile.style.backgroundImage = `url(${choice.image})`;
+      tile.innerHTML = `<div class="caption">${choice.name}</div>`;
+      tile.addEventListener('click', () => {
+        if (selectedIndices.includes(index)) {
+          selectedIndices = selectedIndices.filter(item => item !== index);
+        } else if (selectedIndices.length < desiredCount()) {
+          selectedIndices.push(index);
+        }
+        updatePickerState();
+        populatePicker();
+      });
+      tilePickerGrid.appendChild(tile);
     });
-    grid.appendChild(tile);
-    return tile;
+  }
+
+  tileCountInput.addEventListener('input', () => {
+    selectedIndices = selectedIndices.slice(0, desiredCount());
+    updatePickerState();
+    populatePicker();
+  });
+  categorySelect.addEventListener('change', populatePicker);
+  document.getElementById('choose-tiles-button').addEventListener('click', () => {
+    gameOptions.style.display = 'none';
+    tilePickerModal.style.display = 'flex';
+    populatePicker();
   });
 
-  function circularDistance(value, target) {
-    const difference = Math.abs(value - target);
-    return Math.min(difference, 1 - difference);
+  function resetNomon() {
+    selectionStage = 0;
+    activeIndices = selectedIndices.map((_, index) => index);
+    phaseOffsets = activeIndices.map((_, index) => index / activeIndices.length);
+    startTime = performance.now();
+    grid.querySelectorAll('.nomon-tile').forEach(tile => tile.classList.remove('shortlisted', 'eliminated', 'confirmed'));
+    status.textContent = '1 / 2 — Appuyez lorsque les horloges souhaitées sont près de midi';
   }
 
-  function currentPhase(index, now) {
-    const elapsed = (pausedAt ?? now) - startTime;
-    return ((elapsed / revolutionMs) + (index / choices.length)) % 1;
-  }
-
-  function drawClocks(now) {
-    let nearestDistance = Infinity;
-    let nearestIndex = 0;
-    tiles.forEach((tile, index) => {
-      const phase = currentPhase(index, now);
-      tile.querySelector('.clock-hand').style.transform = `rotate(${phase * 360}deg)`;
-      const distance = circularDistance(phase, 0);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestIndex = index;
-      }
+  function renderGame() {
+    grid.innerHTML = '';
+    selectedIndices.forEach((mediaIndex, index) => {
+      const choice = mediaChoices[mediaIndex];
+      const tile = document.createElement('div');
+      tile.className = 'nomon-tile';
+      tile.dataset.index = index;
+      tile.style.backgroundImage = `url(${choice.image})`;
+      tile.innerHTML = `<div class="caption">${choice.name}</div><div class="nomon-clock"><div class="clock-hand"></div><div class="clock-pin"></div></div>`;
+      grid.appendChild(tile);
     });
-    if (nearestIndex !== candidateIndex) {
-      tiles[candidateIndex]?.classList.remove('nomon-candidate');
-      candidateIndex = nearestIndex;
-      tiles[candidateIndex].classList.add('nomon-candidate');
-    }
-    requestAnimationFrame(drawClocks);
+    resetNomon();
   }
 
-  function playChoice(index) {
-    const choice = choices[index];
-    tiles[index].classList.add('nomon-selected');
-    status.textContent = `Sélection : ${choice.name}`;
-    window.setTimeout(() => tiles[index].classList.remove('nomon-selected'), 450);
+  function phaseFor(index, now) {
+    const activePosition = activeIndices.indexOf(index);
+    if (activePosition < 0) return 0;
+    return (((now - startTime) / revolutionMs) + phaseOffsets[activePosition]) % 1;
+  }
+
+  function distanceFromNoon(index, now) {
+    const phase = phaseFor(index, now);
+    return Math.min(phase, 1 - phase);
+  }
+
+  function animate(now) {
+    grid.querySelectorAll('.nomon-tile').forEach((tile, index) => {
+      if (!activeIndices.includes(index)) return;
+      tile.querySelector('.clock-hand').style.transform = `rotate(${phaseFor(index, now) * 360}deg)`;
+    });
+    requestAnimationFrame(animate);
+  }
+
+  function shortlist(now) {
+    const numberToKeep = Math.min(3, activeIndices.length);
+    activeIndices = activeIndices
+      .map(index => ({ index, distance: distanceFromNoon(index, now) }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, numberToKeep)
+      .map(item => item.index);
+    grid.querySelectorAll('.nomon-tile').forEach((tile, index) => {
+      tile.classList.toggle('shortlisted', activeIndices.includes(index));
+      tile.classList.toggle('eliminated', !activeIndices.includes(index));
+    });
+    phaseOffsets = activeIndices.map((_, index) => index / activeIndices.length);
+    startTime = now;
+    selectionStage = 1;
+    status.textContent = '2 / 2 — Appuyez de nouveau pour confirmer parmi les trois choix';
+  }
+
+  function confirm(now) {
+    const chosenIndex = activeIndices.reduce((closest, index) =>
+      distanceFromNoon(index, now) < distanceFromNoon(closest, now) ? index : closest,
+    activeIndices[0]);
+    grid.children[chosenIndex].classList.add('confirmed');
+    playVideo(selectedIndices[chosenIndex]);
+  }
+
+  function playVideo(mediaIndex) {
     videoOpen = true;
     videoContainer.hidden = false;
-    videoPlayer.src = choice.video;
-    videoPlayer.play().catch(() => {
-      status.textContent = 'La lecture automatique a été bloquée. Touchez la vidéo pour démarrer.';
-      videoPlayer.controls = true;
-    });
+    videoPlayer.src = mediaChoices[mediaIndex].video;
+    videoPlayer.play().catch(() => { videoPlayer.controls = true; });
   }
 
   function closeVideo() {
@@ -84,44 +148,36 @@ document.addEventListener('DOMContentLoaded', () => {
     videoPlayer.controls = false;
     videoContainer.hidden = true;
     videoOpen = false;
+    resetNomon();
   }
 
-  function activateSwitch(event) {
+  function switchPress(event) {
     if (event.repeat) return;
-    if (videoOpen) {
-      closeVideo();
-      return;
-    }
-    playChoice(candidateIndex);
+    if (videoOpen) return closeVideo();
+    if (game.hidden) return;
+    const now = performance.now();
+    if (selectionStage === 0) shortlist(now);
+    else confirm(now);
   }
 
+  startButton.addEventListener('click', () => {
+    if (startButton.disabled) return;
+    revolutionMs = Number(document.getElementById('rotation-speed').value);
+    tilePickerModal.style.display = 'none';
+    game.hidden = false;
+    renderGame();
+  });
   document.addEventListener('keydown', event => {
-    if (event.code === 'Space' || event.code === 'Enter') {
+    if (event.code !== 'Space' && event.code !== 'Enter') return;
+    if (!game.hidden || videoOpen) {
       event.preventDefault();
-      activateSwitch(event);
+      switchPress(event);
     }
   });
-  closeVideoButton.addEventListener('click', closeVideo);
+  document.getElementById('close-video').addEventListener('click', closeVideo);
   videoPlayer.addEventListener('ended', closeVideo);
+  document.getElementById('langToggle')?.addEventListener('click', toggleLanguage);
 
-  speedSelect.addEventListener('change', () => {
-    revolutionMs = Number(speedSelect.value);
-    startTime = performance.now();
-    pausedAt = null;
-    pauseButton.textContent = 'Pause';
-  });
-
-  pauseButton.addEventListener('click', () => {
-    if (pausedAt === null) {
-      pausedAt = performance.now();
-      pauseButton.textContent = 'Reprendre';
-    } else {
-      startTime += performance.now() - pausedAt;
-      pausedAt = null;
-      pauseButton.textContent = 'Pause';
-    }
-  });
-
-  tiles[0].classList.add('nomon-candidate');
-  requestAnimationFrame(drawClocks);
+  updatePickerState();
+  requestAnimationFrame(animate);
 });
