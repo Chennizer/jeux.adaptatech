@@ -9,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const startButton = document.getElementById('start-game-button');
   const game = document.getElementById('nomon-game');
   const grid = document.getElementById('video-grid');
-  const status = document.getElementById('nomon-status');
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
   const youtubePlayer = document.getElementById('youtube-player');
@@ -159,13 +158,39 @@ document.addEventListener('DOMContentLoaded', () => {
     startTime = performance.now();
     redistributeActiveClocks(startTime);
     grid.querySelectorAll('.nomon-tile').forEach(tile => tile.classList.remove('shortlisted', 'eliminated', 'confirmed'));
-    status.textContent = `1 / ${totalRounds()} — Appuyez lorsque les horloges souhaitées sont près de midi`;
   }
 
   function redistributeActiveClocks(now) {
-    // Put every remaining hand in a new, evenly spaced position. The half-slot
-    // offset prevents one clock from starting directly on the fixed noon arm.
-    phaseOffsets = activeIndices.map((_, index) => (index + 0.5) / activeIndices.length);
+    // Keep the phases maximally separated, but shuffle which tile receives
+    // each phase so neighbouring tiles do not show neighbouring hand angles.
+    const evenlySpacedPhases = activeIndices.map((_, index) => (index + 0.5) / activeIndices.length);
+    const isCompleteGrid = activeIndices.every((tileIndex, index) => tileIndex === index);
+    if (isCompleteGrid) {
+      const split = Math.ceil(activeIndices.length / 2);
+      const alternatingSlots = [];
+      for (let index = 0; index < split; index += 1) {
+        alternatingSlots.push(index);
+        if (index + split < activeIndices.length) alternatingSlots.push(index + split);
+      }
+      if (Math.random() < 0.5) alternatingSlots.reverse();
+      const randomRotation = Math.random();
+      phaseOffsets = alternatingSlots.map(slot => ((slot + 0.5) / activeIndices.length + randomRotation) % 1);
+    } else {
+      let attempts = 0;
+      do {
+        phaseOffsets = [...evenlySpacedPhases];
+        for (let index = phaseOffsets.length - 1; index > 0; index -= 1) {
+          const randomIndex = Math.floor(Math.random() * (index + 1));
+          [phaseOffsets[index], phaseOffsets[randomIndex]] = [phaseOffsets[randomIndex], phaseOffsets[index]];
+        }
+        attempts += 1;
+      } while (attempts < 100 && activeIndices.some((tileIndex, position) => {
+        const neighbourPosition = activeIndices.indexOf(tileIndex + 1);
+        if (neighbourPosition < 0) return false;
+        const difference = Math.abs(phaseOffsets[position] - phaseOffsets[neighbourPosition]);
+        return Math.min(difference, 1 - difference) < 0.14;
+      }));
+    }
     startTime = now;
     activeIndices.forEach((tileIndex, activePosition) => {
       const hand = grid.children[tileIndex]?.querySelector('.clock-hand');
@@ -222,8 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     redistributeActiveClocks(now);
     selectionStage += 1;
-    const nextAction = selectionStage === totalRounds() - 1 ? 'confirmer le choix' : 'réduire encore les choix';
-    status.textContent = `${selectionStage + 1} / ${totalRounds()} — Appuyez pour ${nextAction}`;
   }
 
   function confirm(now) {
@@ -292,6 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     revolutionMs = Number(document.getElementById('rotation-speed').value);
     tilePickerModal.style.display = 'none';
+    document.getElementById('langToggle').style.display = 'none';
     game.hidden = false;
     renderGame();
   });
