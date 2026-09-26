@@ -12,16 +12,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const status = document.getElementById('nomon-status');
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
+  const youtubePlayer = document.getElementById('youtube-player');
+  const sourceSelect = document.getElementById('video-source');
+  const enableTimeLimit = document.getElementById('enable-time-limit');
+  const timeLimitContainer = document.getElementById('time-limit-container');
+  const timeLimitSeconds = document.getElementById('time-limit-seconds');
   const threeRoundsCheckbox = document.getElementById('three-rounds');
   const pressSound = new Audio('../../sounds/success3.mp3');
   pressSound.preload = 'auto';
   let selectedIndices = mediaChoices.slice(0, 12).map((_, index) => index);
+  const localChoices = [];
+  const youtubeChoices = [];
+  let currentChoices = mediaChoices;
   let activeIndices = [];
   let phaseOffsets = [];
   let selectionStage = 0;
   let revolutionMs = 8000;
   let startTime = performance.now();
   let videoOpen = false;
+  let videoTimeLimitTimeout = null;
 
   function desiredCount() { return Number(tileCountInput.value); }
   function totalRounds() { return threeRoundsCheckbox.checked ? 3 : 2; }
@@ -40,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function populatePicker() {
     tilePickerGrid.innerHTML = '';
-    mediaChoices.forEach((choice, index) => {
+    currentChoices.forEach((choice, index) => {
       if (!categoryMatches(choice) && !selectedIndices.includes(index)) return;
       const tile = document.createElement('div');
       tile.className = `tile${selectedIndices.includes(index) ? ' selected' : ''}`;
@@ -65,6 +74,24 @@ document.addEventListener('DOMContentLoaded', () => {
     populatePicker();
   });
   categorySelect.addEventListener('change', populatePicker);
+  enableTimeLimit.addEventListener('change', () => {
+    timeLimitContainer.hidden = !enableTimeLimit.checked;
+  });
+
+  function updateSource() {
+    const source = sourceSelect.value;
+    currentChoices = source === 'local' ? localChoices : source === 'youtube' ? youtubeChoices : mediaChoices;
+    selectedIndices = currentChoices.slice(0, desiredCount()).map((_, index) => index);
+    categorySelect.value = 'all';
+    categorySelect.disabled = source !== 'catalogue';
+    document.getElementById('local-import-controls').hidden = source !== 'local';
+    const youtubeControls = document.getElementById('youtube-import-controls');
+    youtubeControls.hidden = source !== 'youtube';
+    youtubeControls.style.display = source === 'youtube' ? 'flex' : 'none';
+    updatePickerState();
+    populatePicker();
+  }
+  sourceSelect.addEventListener('change', updateSource);
   document.getElementById('choose-tiles-button').addEventListener('click', () => {
     gameOptions.style.display = 'none';
     tilePickerModal.style.display = 'flex';
@@ -95,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
     grid.innerHTML = '';
     grid.className = `count-${selectedIndices.length}`;
     selectedIndices.forEach((mediaIndex, index) => {
-      const choice = mediaChoices[mediaIndex];
+      const choice = currentChoices[mediaIndex];
       const tile = document.createElement('div');
       tile.className = 'nomon-tile';
       tile.dataset.index = index;
@@ -153,17 +180,34 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function playVideo(mediaIndex) {
+    const choice = currentChoices[mediaIndex];
     videoOpen = true;
     videoContainer.hidden = false;
-    videoPlayer.src = mediaChoices[mediaIndex].video;
-    videoPlayer.play().catch(() => { videoPlayer.controls = true; });
+    if (choice.youtubeId) {
+      videoPlayer.hidden = true;
+      youtubePlayer.hidden = false;
+      youtubePlayer.src = `https://www.youtube-nocookie.com/embed/${choice.youtubeId}?autoplay=1&rel=0`;
+    } else {
+      youtubePlayer.hidden = true;
+      videoPlayer.hidden = false;
+      videoPlayer.src = choice.video;
+      videoPlayer.play().catch(() => { videoPlayer.controls = true; });
+    }
+    if (enableTimeLimit.checked) {
+      const seconds = Math.max(1, Number(timeLimitSeconds.value) || 30);
+      videoTimeLimitTimeout = window.setTimeout(closeVideo, seconds * 1000);
+    }
   }
 
   function closeVideo() {
+    if (videoTimeLimitTimeout) window.clearTimeout(videoTimeLimitTimeout);
+    videoTimeLimitTimeout = null;
     videoPlayer.pause();
     videoPlayer.removeAttribute('src');
     videoPlayer.load();
     videoPlayer.controls = false;
+    youtubePlayer.src = '';
+    youtubePlayer.hidden = true;
     videoContainer.hidden = true;
     videoOpen = false;
     resetNomon();
@@ -205,8 +249,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('close-video').addEventListener('click', closeVideo);
   videoPlayer.addEventListener('ended', closeVideo);
+  document.getElementById('add-local-videos').addEventListener('click', () => document.getElementById('local-video-input').click());
+  document.getElementById('local-video-input').addEventListener('change', event => {
+    Array.from(event.target.files).forEach(file => {
+      localChoices.push({ name: file.name, image: '../../images/custom-videos.svg', video: URL.createObjectURL(file), category: 'custom' });
+    });
+    updateSource();
+    event.target.value = '';
+  });
+  document.getElementById('add-youtube-video').addEventListener('click', () => {
+    const input = document.getElementById('youtube-url');
+    const match = input.value.trim().match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([\w-]{6,})/);
+    if (!match) return;
+    const id = match[1];
+    youtubeChoices.push({ name: `YouTube — ${id}`, image: `https://img.youtube.com/vi/${id}/mqdefault.jpg`, video: input.value.trim(), youtubeId: id, category: 'custom' });
+    input.value = '';
+    updateSource();
+  });
   document.getElementById('langToggle')?.addEventListener('click', toggleLanguage);
 
-  updatePickerState();
+  updateSource();
   requestAnimationFrame(animate);
 });
