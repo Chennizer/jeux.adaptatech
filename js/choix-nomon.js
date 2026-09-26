@@ -47,6 +47,61 @@ document.addEventListener('DOMContentLoaded', () => {
       (Array.isArray(choice.category) && choice.category.includes(category));
   }
 
+  // Match the local-video choice page: seek into the file and capture a
+  // letterboxed JPEG frame instead of showing a generic placeholder.
+  function makeThumbnailFromVideo(file) {
+    return new Promise(resolve => {
+      const temporaryUrl = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      let settled = false;
+      const finish = image => {
+        if (settled) return;
+        settled = true;
+        URL.revokeObjectURL(temporaryUrl);
+        resolve(image);
+      };
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      video.src = temporaryUrl;
+      video.addEventListener('loadedmetadata', () => {
+        try {
+          video.currentTime = Math.min(10, Math.max(0, (video.duration || 0) - 0.1));
+        } catch { finish(''); }
+      }, { once: true });
+      video.addEventListener('seeked', () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 640;
+          canvas.height = 360;
+          const context = canvas.getContext('2d');
+          const width = video.videoWidth || 640;
+          const height = video.videoHeight || 360;
+          const scale = Math.min(canvas.width / width, canvas.height / height);
+          const drawWidth = width * scale;
+          const drawHeight = height * scale;
+          context.drawImage(video, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight);
+          finish(canvas.toDataURL('image/jpeg', 0.85));
+        } catch { finish(''); }
+      }, { once: true });
+      video.addEventListener('error', () => finish(''), { once: true });
+      window.setTimeout(() => finish(''), 3000);
+    });
+  }
+
+  // Match the YouTube choice page: ask noembed for the public video title and
+  // fall back to the URL if metadata cannot be retrieved.
+  async function fetchYoutubeTitle(url) {
+    try {
+      const response = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+      if (response.ok) {
+        const metadata = await response.json();
+        if (metadata?.title) return metadata.title;
+      }
+    } catch {}
+    return url;
+  }
+
   function populatePicker() {
     tilePickerGrid.innerHTML = '';
     currentChoices.forEach((choice, index) => {
@@ -250,20 +305,33 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('close-video').addEventListener('click', closeVideo);
   videoPlayer.addEventListener('ended', closeVideo);
   document.getElementById('add-local-videos').addEventListener('click', () => document.getElementById('local-video-input').click());
-  document.getElementById('local-video-input').addEventListener('change', event => {
-    Array.from(event.target.files).forEach(file => {
-      localChoices.push({ name: file.name, image: '../../images/custom-videos.svg', video: URL.createObjectURL(file), category: 'custom' });
-    });
+  document.getElementById('local-video-input').addEventListener('change', async event => {
+    const files = Array.from(event.target.files);
+    for (const file of files) {
+      const thumbnail = await makeThumbnailFromVideo(file);
+      localChoices.push({
+        name: file.name,
+        image: thumbnail || '../../images/custom-videos.svg',
+        video: URL.createObjectURL(file),
+        category: 'custom'
+      });
+      updateSource();
+    }
     updateSource();
     event.target.value = '';
   });
-  document.getElementById('add-youtube-video').addEventListener('click', () => {
+  document.getElementById('add-youtube-video').addEventListener('click', async () => {
+    const addButton = document.getElementById('add-youtube-video');
     const input = document.getElementById('youtube-url');
-    const match = input.value.trim().match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([\w-]{6,})/);
+    const url = input.value.trim();
+    const match = url.match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([\w-]{6,})/);
     if (!match) return;
     const id = match[1];
-    youtubeChoices.push({ name: `YouTube — ${id}`, image: `https://img.youtube.com/vi/${id}/mqdefault.jpg`, video: input.value.trim(), youtubeId: id, category: 'custom' });
+    addButton.disabled = true;
+    const title = await fetchYoutubeTitle(url);
+    youtubeChoices.push({ name: title, image: `https://img.youtube.com/vi/${id}/mqdefault.jpg`, video: url, youtubeId: id, category: 'custom' });
     input.value = '';
+    addButton.disabled = false;
     updateSource();
   });
   document.getElementById('langToggle')?.addEventListener('click', toggleLanguage);
