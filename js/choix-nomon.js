@@ -74,10 +74,21 @@ document.addEventListener('DOMContentLoaded', () => {
   function resetNomon() {
     selectionStage = 0;
     activeIndices = selectedIndices.map((_, index) => index);
-    phaseOffsets = activeIndices.map((_, index) => index / activeIndices.length);
     startTime = performance.now();
+    redistributeActiveClocks(startTime);
     grid.querySelectorAll('.nomon-tile').forEach(tile => tile.classList.remove('shortlisted', 'eliminated', 'confirmed'));
     status.textContent = `1 / ${totalRounds()} — Appuyez lorsque les horloges souhaitées sont près de midi`;
+  }
+
+  function redistributeActiveClocks(now) {
+    // Put every remaining hand in a new, evenly spaced position. The half-slot
+    // offset prevents one clock from starting directly on the fixed noon arm.
+    phaseOffsets = activeIndices.map((_, index) => (index + 0.5) / activeIndices.length);
+    startTime = now;
+    activeIndices.forEach((tileIndex, activePosition) => {
+      const hand = grid.children[tileIndex]?.querySelector('.clock-hand');
+      if (hand) hand.style.transform = `rotate(${phaseOffsets[activePosition] * 360}deg)`;
+    });
   }
 
   function renderGame() {
@@ -115,7 +126,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function shortlist(now) {
-    const numberToKeep = Math.ceil(activeIndices.length / 2);
+    const numberToKeep = totalRounds() === 2
+      ? Math.min(3, Math.ceil(activeIndices.length / 2))
+      : Math.ceil(activeIndices.length / 2);
     activeIndices = activeIndices
       .map(index => ({ index, distance: distanceFromNoon(index, now) }))
       .sort((a, b) => a.distance - b.distance)
@@ -125,8 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.classList.toggle('shortlisted', activeIndices.includes(index));
       tile.classList.toggle('eliminated', !activeIndices.includes(index));
     });
-    phaseOffsets = activeIndices.map((_, index) => index / activeIndices.length);
-    startTime = now;
+    redistributeActiveClocks(now);
     selectionStage += 1;
     const nextAction = selectionStage === totalRounds() - 1 ? 'confirmer le choix' : 'réduire encore les choix';
     status.textContent = `${selectionStage + 1} / ${totalRounds()} — Appuyez pour ${nextAction}`;
