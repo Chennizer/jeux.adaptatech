@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const status = document.getElementById('nomon-status');
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
+  const threeRoundsCheckbox = document.getElementById('three-rounds');
   const pressSound = new Audio('../../sounds/success3.mp3');
   pressSound.preload = 'auto';
   let selectedIndices = mediaChoices.slice(0, 12).map((_, index) => index);
@@ -23,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let videoOpen = false;
 
   function desiredCount() { return Number(tileCountInput.value); }
+  function totalRounds() { return threeRoundsCheckbox.checked ? 3 : 2; }
 
   function updatePickerState() {
     tileCountValue.textContent = desiredCount();
@@ -75,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     phaseOffsets = activeIndices.map((_, index) => index / activeIndices.length);
     startTime = performance.now();
     grid.querySelectorAll('.nomon-tile').forEach(tile => tile.classList.remove('shortlisted', 'eliminated', 'confirmed'));
-    status.textContent = '1 / 2 — Appuyez lorsque les horloges souhaitées sont près de midi';
+    status.textContent = `1 / ${totalRounds()} — Appuyez lorsque les horloges souhaitées sont près de midi`;
   }
 
   function renderGame() {
@@ -113,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function shortlist(now) {
-    const numberToKeep = Math.min(3, activeIndices.length);
+    const numberToKeep = Math.ceil(activeIndices.length / 2);
     activeIndices = activeIndices
       .map(index => ({ index, distance: distanceFromNoon(index, now) }))
       .sort((a, b) => a.distance - b.distance)
@@ -125,8 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     phaseOffsets = activeIndices.map((_, index) => index / activeIndices.length);
     startTime = now;
-    selectionStage = 1;
-    status.textContent = '2 / 2 — Appuyez de nouveau pour confirmer parmi les trois choix';
+    selectionStage += 1;
+    const nextAction = selectionStage === totalRounds() - 1 ? 'confirmer le choix' : 'réduire encore les choix';
+    status.textContent = `${selectionStage + 1} / ${totalRounds()} — Appuyez pour ${nextAction}`;
   }
 
   function confirm(now) {
@@ -161,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pressSound.currentTime = 0;
     pressSound.play().catch(() => {});
     const now = performance.now();
-    if (selectionStage === 0) shortlist(now);
+    if (selectionStage < totalRounds() - 1) shortlist(now);
     else confirm(now);
   }
 
