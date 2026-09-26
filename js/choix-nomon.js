@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const status = document.getElementById('nomon-status');
   const videoContainer = document.getElementById('video-container');
   const videoPlayer = document.getElementById('video-player');
+  const pressSound = new Audio('../../sounds/success3.mp3');
+  pressSound.preload = 'auto';
   let selectedIndices = mediaChoices.slice(0, 12).map((_, index) => index);
   let activeIndices = [];
   let phaseOffsets = [];
@@ -78,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderGame() {
     grid.innerHTML = '';
+    grid.className = `count-${selectedIndices.length}`;
     selectedIndices.forEach((mediaIndex, index) => {
       const choice = mediaChoices[mediaIndex];
       const tile = document.createElement('div');
@@ -155,6 +158,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.repeat) return;
     if (videoOpen) return closeVideo();
     if (game.hidden) return;
+    pressSound.currentTime = 0;
+    pressSound.play().catch(() => {});
     const now = performance.now();
     if (selectionStage === 0) shortlist(now);
     else confirm(now);
@@ -162,6 +167,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   startButton.addEventListener('click', () => {
     if (startButton.disabled) return;
+    if (!document.fullscreenElement) {
+      const requestFullscreen = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
+      if (requestFullscreen) {
+        try {
+          const result = requestFullscreen.call(document.documentElement);
+          if (result?.catch) result.catch(() => {});
+        } catch {}
+      }
+    }
     revolutionMs = Number(document.getElementById('rotation-speed').value);
     tilePickerModal.style.display = 'none';
     game.hidden = false;
