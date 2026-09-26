@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const timeLimitContainer = document.getElementById('time-limit-container');
   const timeLimitSeconds = document.getElementById('time-limit-seconds');
   const threeRoundsCheckbox = document.getElementById('three-rounds');
+  const explanationModal = document.getElementById('explanation-modal');
   const pressSound = new Audio('../../sounds/success3.mp3');
   pressSound.preload = 'auto';
   let selectedIndices = mediaChoices.slice(0, 12).map((_, index) => index);
@@ -33,6 +34,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function desiredCount() { return Number(tileCountInput.value); }
   function totalRounds() { return threeRoundsCheckbox.checked ? 3 : 2; }
+
+  function closeExplanation() {
+    explanationModal.hidden = true;
+  }
+
+  document.getElementById('open-explanation').addEventListener('click', () => {
+    explanationModal.hidden = false;
+    document.getElementById('close-explanation').focus();
+  });
+  document.getElementById('close-explanation').addEventListener('click', closeExplanation);
+  explanationModal.addEventListener('click', event => {
+    if (event.target === explanationModal) closeExplanation();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !explanationModal.hidden) closeExplanation();
+  });
 
   function updatePickerState() {
     tileCountValue.textContent = desiredCount();
