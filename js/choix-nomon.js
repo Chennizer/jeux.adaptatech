@@ -23,8 +23,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // The options panel is transformed for its entrance layout. Move the fixed
   // overlay outside that containing block so it centers against the viewport.
   document.body.appendChild(explanationModal);
-  const pressSound = new Audio('../../sounds/success3.mp3');
-  pressSound.preload = 'auto';
+  const advanceSound = new Audio('../../sounds/woosh.mp3');
+  const selectionSound = new Audio('../../sounds/success3.mp3');
+  advanceSound.preload = 'auto';
+  selectionSound.preload = 'auto';
   let selectedIndices = mediaChoices.slice(0, 12).map((_, index) => index);
   const localChoices = [];
   const youtubeChoices = [];
@@ -339,11 +341,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.repeat) return;
     if (videoOpen) return closeVideo();
     if (game.hidden) return;
-    pressSound.currentTime = 0;
-    pressSound.play().catch(() => {});
     const now = performance.now();
-    if (selectionStage < totalRounds() - 1) shortlist(now);
-    else confirm(now);
+    if (selectionStage < totalRounds() - 1) {
+      advanceSound.currentTime = 0;
+      advanceSound.play().catch(() => {});
+      shortlist(now);
+    } else {
+      selectionSound.currentTime = 0;
+      selectionSound.play().catch(() => {});
+      confirm(now);
+    }
   }
 
   startButton.addEventListener('click', () => {
