@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const resumeVideo = document.getElementById('resume-video');
   const threeRoundsCheckbox = document.getElementById('three-rounds');
   const explanationModal = document.getElementById('explanation-modal');
+  // The options panel is transformed for its entrance layout. Move the fixed
+  // overlay outside that containing block so it centers against the viewport.
+  document.body.appendChild(explanationModal);
   const pressSound = new Audio('../../sounds/success3.mp3');
   pressSound.preload = 'auto';
   let selectedIndices = mediaChoices.slice(0, 12).map((_, index) => index);
