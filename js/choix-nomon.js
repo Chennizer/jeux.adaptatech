@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const enableTimeLimit = document.getElementById('enable-time-limit');
   const timeLimitContainer = document.getElementById('time-limit-container');
   const timeLimitSeconds = document.getElementById('time-limit-seconds');
+  const resumeVideoContainer = document.getElementById('resume-video-container');
+  const resumeVideo = document.getElementById('resume-video');
   const threeRoundsCheckbox = document.getElementById('three-rounds');
   const explanationModal = document.getElementById('explanation-modal');
   const pressSound = new Audio('../../sounds/success3.mp3');
@@ -31,6 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let startTime = performance.now();
   let videoOpen = false;
   let videoTimeLimitTimeout = null;
+  let currentVideoChoice = null;
+  let playbackStartedAt = 0;
+  const videoResumePositions = new Map();
 
   function desiredCount() { return Number(tileCountInput.value); }
   function totalRounds() { return threeRoundsCheckbox.checked ? 3 : 2; }
@@ -147,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
   categorySelect.addEventListener('change', populatePicker);
   enableTimeLimit.addEventListener('change', () => {
     timeLimitContainer.hidden = !enableTimeLimit.checked;
+    resumeVideoContainer.hidden = !enableTimeLimit.checked;
   });
 
   function updateSource() {
@@ -276,25 +282,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function playVideo(mediaIndex) {
     const choice = currentChoices[mediaIndex];
+    currentVideoChoice = choice;
+    const resumePosition = resumeVideo.checked ? (videoResumePositions.get(choice.video) || 0) : 0;
+    if (!resumeVideo.checked) videoResumePositions.delete(choice.video);
+    playbackStartedAt = performance.now();
     videoOpen = true;
     videoContainer.hidden = false;
     if (choice.youtubeId) {
       videoPlayer.hidden = true;
       youtubePlayer.hidden = false;
-      youtubePlayer.src = `https://www.youtube-nocookie.com/embed/${choice.youtubeId}?autoplay=1&rel=0`;
+      youtubePlayer.src = `https://www.youtube-nocookie.com/embed/${choice.youtubeId}?autoplay=1&rel=0&start=${Math.floor(resumePosition)}`;
     } else {
       youtubePlayer.hidden = true;
       videoPlayer.hidden = false;
       videoPlayer.src = choice.video;
-      videoPlayer.play().catch(() => { videoPlayer.controls = true; });
+      videoPlayer.onloadedmetadata = () => {
+        if (resumePosition > 0 && resumePosition < videoPlayer.duration) videoPlayer.currentTime = resumePosition;
+        videoPlayer.play().catch(() => { videoPlayer.controls = true; });
+      };
     }
     if (enableTimeLimit.checked) {
       const seconds = Math.max(1, Number(timeLimitSeconds.value) || 30);
-      videoTimeLimitTimeout = window.setTimeout(closeVideo, seconds * 1000);
+      videoTimeLimitTimeout = window.setTimeout(() => closeVideo({ rememberPosition: true }), seconds * 1000);
     }
   }
 
-  function closeVideo() {
+  function closeVideo({ rememberPosition = false } = {}) {
+    if (currentVideoChoice) {
+      if (rememberPosition && resumeVideo.checked) {
+        const position = currentVideoChoice.youtubeId
+          ? (videoResumePositions.get(currentVideoChoice.video) || 0) + ((performance.now() - playbackStartedAt) / 1000)
+          : videoPlayer.currentTime;
+        videoResumePositions.set(currentVideoChoice.video, position);
+      } else if (!rememberPosition) {
+        videoResumePositions.delete(currentVideoChoice.video);
+      }
+    }
     if (videoTimeLimitTimeout) window.clearTimeout(videoTimeLimitTimeout);
     videoTimeLimitTimeout = null;
     videoPlayer.pause();
@@ -305,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
     youtubePlayer.hidden = true;
     videoContainer.hidden = true;
     videoOpen = false;
+    currentVideoChoice = null;
     resetNomon();
   }
 
