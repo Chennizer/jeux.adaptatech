@@ -375,8 +375,6 @@ document.addEventListener('DOMContentLoaded', () => {
     addButton.disabled = false;
     updateSource();
   });
-  document.getElementById('langToggle')?.addEventListener('click', toggleLanguage);
-
   updateSource();
   requestAnimationFrame(animate);
 });
