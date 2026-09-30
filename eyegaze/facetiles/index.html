@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Face Tiles AR</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0a0f1f; color: #fff; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    h1 { margin: 0 0 8px; }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    button { border: 0; border-radius: 10px; background: #2f5dff; color: white; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #1a2342; border: 1px solid #384879; }
+    .hint { color: #cfd5ff; font-size: 14px; }
+    #stage { position: relative; border-radius: 12px; overflow: hidden; background: #000; }
+    video { width: 100%; height: auto; display: block; }
+    .overlay { position: absolute; inset: 0; pointer-events: none; }
+    .face-tile {
+      position: absolute;
+      border: 3px solid #44f28d;
+      border-radius: 10px;
+      box-shadow: 0 0 0 2px rgba(0,0,0,.4) inset;
+      pointer-events: auto;
+      cursor: pointer;
+      transition: transform .1s ease;
+      background: rgba(68,242,141,.08);
+    }
+    .face-tile:focus, .face-tile:hover { transform: scale(1.03); }
+    .badge { position: absolute; top: -30px; left: 0; background: #44f28d; color: #000; font-weight: 700; padding: 4px 8px; border-radius: 8px; font-size: 12px; }
+    .dwell { position: absolute; bottom: -26px; left: 0; height: 6px; background: #ffd166; border-radius: 8px; width: 0%; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Face Tiles (Camera + AI Vision)</h1>
+    <p class="hint">Each detected face becomes an interactive tile. Hover 1.2s (eye-gaze style) or click to trigger actions like saying "Hi!".</p>
+    <div class="controls">
+      <button id="startBtn">Start camera</button>
+      <button id="speakBtn" class="secondary">Say hi to all</button>
+      <span id="status" class="hint">Idle.</span>
+    </div>
+    <div id="stage">
+      <video id="video" autoplay muted playsinline></video>
+      <div id="overlay" class="overlay"></div>
+    </div>
+  </div>
+
+<script>
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const statusEl = document.getElementById('status');
+const startBtn = document.getElementById('startBtn');
+const speakBtn = document.getElementById('speakBtn');
+
+let detector;
+let loopId;
+let faces = [];
+
+function talk(text){
+  if (!('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1;
+  speechSynthesis.speak(u);
+}
+
+async function initDetector(){
+  if (!('FaceDetector' in window)) {
+    statusEl.textContent = 'FaceDetector API unavailable in this browser. Use recent Chrome/Edge on Android/Desktop.';
+    return false;
+  }
+  detector = new FaceDetector({ fastMode: true, maxDetectedFaces: 6 });
+  return true;
+}
+
+async function startCamera(){
+  const ok = await initDetector();
+  if (!ok) return;
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+  video.srcObject = stream;
+  await video.play();
+  statusEl.textContent = 'Camera started. Looking for faces...';
+  detectLoop();
+}
+
+function mkTile(face, i){
+  const b = face.boundingBox;
+  const tile = document.createElement('button');
+  tile.className = 'face-tile';
+  tile.style.left = `${b.x}px`;
+  tile.style.top = `${b.y}px`;
+  tile.style.width = `${b.width}px`;
+  tile.style.height = `${b.height}px`;
+  tile.setAttribute('aria-label', `Face ${i+1}`);
+
+  const label = document.createElement('div');
+  label.className = 'badge';
+  label.textContent = `Face ${i+1}`;
+
+  const dwell = document.createElement('div');
+  dwell.className = 'dwell';
+
+  let dwellTimer;
+  let t0;
+  function startDwell(){
+    t0 = performance.now();
+    dwellTimer = setInterval(() => {
+      const pct = Math.min(100, ((performance.now() - t0) / 1200) * 100);
+      dwell.style.width = pct + '%';
+      if (pct >= 100) {
+        clearInterval(dwellTimer);
+        dwell.style.width = '0%';
+        talk(`Hi face ${i+1}`);
+      }
+    }, 30);
+  }
+  function endDwell(){ clearInterval(dwellTimer); dwell.style.width = '0%'; }
+
+  tile.addEventListener('mouseenter', startDwell);
+  tile.addEventListener('mouseleave', endDwell);
+  tile.addEventListener('click', () => talk(`Hi face ${i+1}`));
+
+  tile.append(label, dwell);
+  return tile;
+}
+
+async function detectLoop(){
+  if (!detector || video.readyState < 2) {
+    loopId = requestAnimationFrame(detectLoop);
+    return;
+  }
+  try {
+    faces = await detector.detect(video);
+    overlay.innerHTML = '';
+    faces.forEach((f, i) => overlay.appendChild(mkTile(f, i)));
+    statusEl.textContent = `${faces.length} face tile(s) active.`;
+  } catch (e) {
+    statusEl.textContent = 'Detection error: ' + e.message;
+  }
+  loopId = requestAnimationFrame(detectLoop);
+}
+
+startBtn.addEventListener('click', startCamera);
+speakBtn.addEventListener('click', () => {
+  if (!faces.length) return talk('I cannot see a face yet.');
+  talk(`Hi everyone! I can see ${faces.length} faces.`);
+});
+</script>
+</body>
+</html>
