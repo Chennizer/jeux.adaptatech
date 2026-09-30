@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Découvre l'image" data-en="Discover the Picture" data-ja="絵を見つけよう">Découvre l'image</title>
+
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <style>
+    :root {
+      --bg: #f7fbf8;
+      --card-bg: #ffffff;
+      --card-border: #009688;
+      --covered: #101820;
+      --covered-soft: #1f3036;
+      --success: #36c26f;
+      --pointer-size: 38px;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: Arial, sans-serif;
+    }
+
+    body.playing { cursor: none; }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: #061115;
+      color: #00bfa5;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* Match the existing eyegaze option menu shell. */
+    #game-options.modal {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #control-panel-options { padding: 14px 20px 20px; }
+    #options-inline-container { margin-top: 12px; }
+    #mode-divider { margin: 10px 0; }
+
+    .option-item .hint {
+      display: block;
+      margin-top: 6px;
+      color: #555;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    #gameArea {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: min(4vw, 42px);
+      background: var(--bg);
+    }
+
+    body.playing #gameArea { display: flex; }
+
+    #pictureGrid {
+      width: min(92vw, 92vh);
+      height: min(92vw, 92vh);
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: clamp(14px, 3vw, 34px);
+    }
+
+    .picto-card {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      border: 6px solid var(--card-border);
+      border-radius: 28px;
+      background: var(--card-bg);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+      transition: transform 240ms ease, box-shadow 240ms ease, border-color 240ms ease;
+    }
+
+    .picto-card.is-revealing {
+      box-shadow: 0 0 0 8px rgba(0, 150, 136, 0.16), 0 15px 36px rgba(0, 0, 0, 0.18);
+      transform: scale(1.01);
+    }
+
+    .picto-card.is-discovered {
+      border-color: var(--success);
+      box-shadow: 0 0 0 8px rgba(54, 194, 111, 0.14), 0 15px 36px rgba(0, 0, 0, 0.18);
+    }
+
+    .picto-card img {
+      width: 78%;
+      height: 78%;
+      object-fit: contain;
+      pointer-events: none;
+      transition: transform 360ms ease;
+    }
+
+    .picto-card.is-discovered img {
+      animation: discovered-wiggle 1350ms ease-in-out both;
+    }
+
+    @keyframes discovered-wiggle {
+      0% { transform: translate(0, 0) rotate(0deg) scale(0.72); }
+      18% { transform: translate(-10px, -7px) rotate(-5deg) scale(1.06); }
+      36% { transform: translate(11px, 6px) rotate(5deg) scale(1.04); }
+      55% { transform: translate(-6px, 9px) rotate(-3deg) scale(1.02); }
+      74% { transform: translate(6px, -5px) rotate(2deg) scale(1.03); }
+      100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+    }
+
+    .cover-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      transition: opacity 260ms ease, transform 260ms ease;
+      z-index: 2;
+    }
+
+    .picto-card.is-discovered .cover-canvas {
+      opacity: 0;
+      transform: scale(1.04);
+    }
+
+    .progress-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 3;
+      min-width: 54px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #263532;
+      border: 2px solid rgba(0, 150, 136, 0.7);
+      font-weight: 800;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .picto-card.is-discovered .progress-badge {
+      background: var(--success);
+      color: #fff;
+      border-color: var(--success);
+    }
+
+    #statusPill {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: none;
+      min-width: min(620px, 86vw);
+      padding: 12px 20px;
+      border: 3px solid #009688;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.94);
+      color: #263532;
+      text-align: center;
+      font-size: clamp(1rem, 2.2vw, 1.35rem);
+      font-weight: 800;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+    }
+
+    body.playing #statusPill { display: block; }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--pointer-size);
+      height: var(--pointer-size);
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: #ff0000;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 10000;
+      box-shadow: 0 0 0 4px rgba(255, 0, 0, 0.18), 0 0 18px rgba(255, 0, 0, 0.48);
+      transition: opacity 160ms ease;
+    }
+
+    body.playing.show-pointer #gazePointer { opacity: 0.82; }
+
+    body.high-contrast {
+      --bg: #000;
+      --card-bg: #000;
+      --card-border: #fff;
+      --covered: #000;
+      --covered-soft: #111;
+      --success: #00ff66;
+    }
+
+    body.high-contrast #statusPill,
+    body.high-contrast .progress-badge {
+      background: #000;
+      color: #fff200;
+      border-color: #fff200;
+    }
+
+    body.high-contrast .picto-card img {
+      filter: contrast(1.1) saturate(1.2);
+    }
+
+    @media (max-width: 720px) {
+      #pictureGrid {
+        width: min(94vw, 82vh);
+        height: min(94vw, 82vh);
+        gap: 12px;
+      }
+
+      .picto-card {
+        border-width: 4px;
+        border-radius: 18px;
+      }
+    }
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body class="menu-open show-pointer">
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <div id="game-options" class="modal">
+    <div id="options-title-bar">
+      <h2 id="options-main-title" class="translate"
+          data-fr="Découvre l'image"
+          data-en="Discover the Picture"
+          data-ja="絵を見つけよう">Découvre l'image</h2>
+    </div>
+
+    <div id="control-panel-options">
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label for="categorySelect" class="teal-label label-block translate" data-fr="Thème" data-en="Theme" data-ja="テーマ">Thème</label>
+            <select id="categorySelect" class="styled-select">
+              <option value="animaux" class="translate" data-fr="Chargement..." data-en="Loading..." data-ja="読み込み中...">Chargement...</option>
+            </select>
+            <span class="hint translate" data-fr="Quatre images seront placées dans les coins." data-en="Four pictures will be placed in the corners." data-ja="4つの絵を角に配置します。">Quatre images seront placées dans les coins.</span>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="revealSizeSlider" class="teal-label">
+              <span class="translate" data-fr="Taille de révélation" data-en="Reveal size" data-ja="見える範囲">Taille de révélation</span> :
+              <span id="revealSizeVal">130</span> px
+            </label>
+            <input type="range" id="revealSizeSlider" class="styled-slider" min="70" max="230" step="10" value="130">
+          </div>
+          <div class="option-item">
+            <label class="teal-label" for="highContrastToggle">
+              <input type="checkbox" id="highContrastToggle">
+              <span class="translate" data-fr="Mode contraste élevé" data-en="High contrast mode" data-ja="高コントラスト">Mode contraste élevé</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label" for="showGazePointer">
+              <input type="checkbox" id="showGazePointer" checked>
+              <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)" data-ja="視線ポインターを表示（マウスを非表示）">Afficher le pointeur</span>
+            </label>
+          </div>
+          <div class="option-item">
+            <label class="teal-label" for="soundToggle">
+              <input type="checkbox" id="soundToggle" checked>
+              <span class="translate" data-fr="Son de découverte" data-en="Discovery sound" data-ja="発見音">Son de découverte</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+      <button id="startButton" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始" disabled>Commencer</button>
+    </div>
+  </div>
+
+  <main id="gameArea" aria-live="polite">
+    <div id="pictureGrid" aria-label="Images cachées"></div>
+  </main>
+  <div id="statusPill" class="translate" data-fr="Regarde une image cachée pour la révéler." data-en="Look at a hidden picture to reveal it." data-ja="隠れた絵を見て、少しずつ見つけよう。">Regarde une image cachée pour la révéler.</div>
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationmain.js"></script>
+  <script>
+    const MANIFEST_URL = '../../images/pictos/index.json';
+    const LAST_CATEGORY_KEY = 'magicWindow:lastCategory';
+    const COMPLETE_THRESHOLD = 80;
+    const GRID_CELLS = 10;
+
+    const categorySelect = document.getElementById('categorySelect');
+    const revealSizeSlider = document.getElementById('revealSizeSlider');
+    const revealSizeVal = document.getElementById('revealSizeVal');
+    const highContrastToggle = document.getElementById('highContrastToggle');
+    const showGazePointer = document.getElementById('showGazePointer');
+    const soundToggle = document.getElementById('soundToggle');
+    const startButton = document.getElementById('startButton');
+    const gameOptions = document.getElementById('game-options');
+    const pictureGrid = document.getElementById('pictureGrid');
+    const gazePointer = document.getElementById('gazePointer');
+    const statusPill = document.getElementById('statusPill');
+    const langToggle = document.getElementById('langToggle');
+
+    let categories = [];
+    let currentCards = [];
+    let revealSize = Number(revealSizeSlider.value) || 130;
+    let audioContext = null;
+    let hoveredTile = null;
+
+    function getCurrentLang() {
+      const stored = localStorage.getItem('siteLanguage') || document.documentElement.lang || 'fr';
+      return ['fr', 'en', 'ja'].includes(stored) ? stored : 'fr';
+    }
+
+    function localized(value, fallback = '') {
+      const lang = getCurrentLang();
+      if (!value) return fallback;
+      if (typeof value === 'string') return value;
+      return value[lang] || value.en || value.fr || fallback;
+    }
+
+    function itemName(item) {
+      if (!item) return '';
+      if (item.name) return localized(item.name, item.file);
+      const label = item.label?.[getCurrentLang()] || item.label?.fr || item.label?.en;
+      if (label && typeof label === 'object') return [label.article, label.word].filter(Boolean).join(' ');
+      return item.file.replace(/\.[^.]+$/, '').replaceAll('-', ' ');
+    }
+
+    async function loadManifest() {
+      const response = await fetch(MANIFEST_URL, { cache: 'force-cache' });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      const data = await response.json();
+      const rawBase = typeof data.base === 'string' ? data.base : './';
+      const base = new URL(rawBase, response.url).href;
+      return Object.entries(data.categories || {}).map(([key, value]) => {
+        const items = Array.isArray(value?.items) ? value.items : [];
+        return {
+          key,
+          label: value.label || key,
+          items: items.map(item => ({
+            ...(typeof item === 'string' ? { file: item } : item),
+            src: new URL(typeof item === 'string' ? item : item.file, base).href
+          })).filter(item => item.file)
+        };
+      }).filter(category => category.items.length);
+    }
+
+    function populateCategorySelect() {
+      categorySelect.innerHTML = '';
+      categories.forEach(category => {
+        const label = localized(category.label, category.key);
+        const option = new Option(`${label} (${category.items.length})`, category.key);
+        if (category.label?.fr) option.setAttribute('data-fr', `${category.label.fr} (${category.items.length})`);
+        if (category.label?.en) option.setAttribute('data-en', `${category.label.en} (${category.items.length})`);
+        if (category.label?.ja) option.setAttribute('data-ja', `${category.label.ja} (${category.items.length})`);
+        categorySelect.add(option);
+      });
+
+      const saved = localStorage.getItem(LAST_CATEGORY_KEY);
+      categorySelect.value = saved && categories.some(category => category.key === saved)
+        ? saved
+        : categories.some(category => category.key === 'animaux') ? 'animaux' : categories[0].key;
+
+      if (typeof updateLanguage === 'function') updateLanguage();
+    }
+
+    function selectedCategory() {
+      return categories.find(category => category.key === categorySelect.value) || categories[0];
+    }
+
+    function pickFourItems() {
+      const category = selectedCategory();
+      const shuffled = category.items.slice().sort(() => Math.random() - 0.5);
+      const picked = shuffled.slice(0, 4);
+      while (picked.length < 4) picked.push(category.items[picked.length % category.items.length]);
+      return picked;
+    }
+
+    function paintCover(card) {
+      const tile = card.tile;
+      const canvas = card.canvas;
+      const rect = tile.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(rect.width * ratio));
+      canvas.height = Math.max(1, Math.round(rect.height * ratio));
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      const gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 0, rect.width / 2, rect.height / 2, Math.max(rect.width, rect.height) * 0.74);
+      gradient.addColorStop(0, getComputedStyle(document.body).getPropertyValue('--covered-soft').trim() || '#1f3036');
+      gradient.addColorStop(1, getComputedStyle(document.body).getPropertyValue('--covered').trim() || '#101820');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.font = `900 ${Math.max(56, rect.width * 0.34)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', rect.width / 2, rect.height / 2);
+    }
+
+    function resizeCovers() {
+      currentCards.forEach(card => {
+        if (card.discovered) return;
+        paintCover(card);
+        card.revealedCells.clear();
+        setProgress(card, 0);
+      });
+    }
+
+    function renderGrid() {
+      pictureGrid.innerHTML = '';
+      currentCards = pickFourItems().map((item, index) => ({
+        item,
+        index,
+        discovered: false,
+        revealedCells: new Set(),
+        tile: null,
+        canvas: null,
+        badge: null
+      }));
+
+      currentCards.forEach(card => {
+        const tile = document.createElement('div');
+        tile.className = 'picto-card';
+        tile.dataset.index = String(card.index);
+        tile.setAttribute('role', 'button');
+        tile.setAttribute('aria-label', itemName(card.item));
+        tile.innerHTML = `
+          <img src="${card.item.src}" alt="${itemName(card.item)}">
+          <canvas class="cover-canvas" aria-hidden="true"></canvas>
+          <span class="progress-badge" aria-hidden="true">0%</span>
+        `;
+        pictureGrid.appendChild(tile);
+        card.tile = tile;
+        card.canvas = tile.querySelector('.cover-canvas');
+        card.badge = tile.querySelector('.progress-badge');
+      });
+
+      requestAnimationFrame(() => {
+        currentCards.forEach(paintCover);
+        updateStatus();
+      });
+    }
+
+    function setProgress(card, percent) {
+      card.badge.textContent = `${percent}%`;
+    }
+
+    function updateStatus() {
+      const discovered = currentCards.filter(card => card.discovered).length;
+      if (discovered === currentCards.length && currentCards.length > 0) {
+        statusPill.textContent = localized({ fr: 'Bravo! Nouvelle série...', en: 'Great! New set...', ja: 'すごい！つぎのセット...' });
+        window.setTimeout(renderGrid, 1900);
+        return;
+      }
+
+      const messages = {
+        fr: `${discovered} / 4 découvertes. Regarde une image pour l'effacer petit à petit.`,
+        en: `${discovered} / 4 discovered. Look at a picture to erase its cover.`,
+        ja: `${discovered} / 4 見つけた。絵を見てカバーを消そう。`
+      };
+      statusPill.textContent = messages[getCurrentLang()] || messages.fr;
+    }
+
+    function markRevealedCells(card, x, y, width, height) {
+      for (let row = 0; row < GRID_CELLS; row += 1) {
+        for (let col = 0; col < GRID_CELLS; col += 1) {
+          const centerX = ((col + 0.5) / GRID_CELLS) * width;
+          const centerY = ((row + 0.5) / GRID_CELLS) * height;
+          if (Math.hypot(centerX - x, centerY - y) <= revealSize) {
+            card.revealedCells.add(`${col}:${row}`);
+          }
+        }
+      }
+
+      const percent = Math.min(100, Math.round((card.revealedCells.size / (GRID_CELLS * GRID_CELLS)) * 100));
+      setProgress(card, percent);
+      if (percent >= COMPLETE_THRESHOLD) completeCard(card);
+    }
+
+    function revealAt(tile, clientX, clientY) {
+      const card = currentCards[Number(tile.dataset.index)];
+      if (!card || card.discovered) return;
+
+      const rect = tile.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+
+      const ctx = card.canvas.getContext('2d');
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, revealSize);
+      gradient.addColorStop(0, 'rgba(0,0,0,1)');
+      gradient.addColorStop(0.62, 'rgba(0,0,0,0.82)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, revealSize, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      markRevealedCells(card, x, y, rect.width, rect.height);
+    }
+
+    function playPlaceholderNoise() {
+      if (!soundToggle.checked) return;
+      try {
+        audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioContext.currentTime;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.13);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        osc.connect(gain).connect(audioContext.destination);
+        osc.start(now);
+        osc.stop(now + 0.24);
+      } catch (error) {}
+    }
+
+    function completeCard(card) {
+      if (card.discovered) return;
+      card.discovered = true;
+      card.canvas.getContext('2d').clearRect(0, 0, card.canvas.width, card.canvas.height);
+      card.tile.classList.remove('is-revealing');
+      card.tile.classList.add('is-discovered');
+      setProgress(card, 100);
+      playPlaceholderNoise();
+      updateStatus();
+    }
+
+    function updateSettings() {
+      revealSize = Number(revealSizeSlider.value) || 130;
+      revealSizeVal.textContent = revealSize;
+      document.body.classList.toggle('high-contrast', highContrastToggle.checked);
+      document.body.classList.toggle('show-pointer', showGazePointer.checked);
+    }
+
+    function startGame() {
+      localStorage.setItem(LAST_CATEGORY_KEY, categorySelect.value);
+      updateSettings();
+      gameOptions.style.display = 'none';
+      if (langToggle) langToggle.style.display = 'none';
+      document.body.classList.add('playing');
+      document.body.classList.remove('menu-open');
+      renderGrid();
+      try { document.documentElement.requestFullscreen?.(); } catch (error) {}
+    }
+
+    function updatePointer(event) {
+      gazePointer.style.left = `${event.clientX}px`;
+      gazePointer.style.top = `${event.clientY}px`;
+    }
+
+    function bindEvents() {
+      revealSizeSlider.addEventListener('input', updateSettings);
+      highContrastToggle.addEventListener('change', () => {
+        updateSettings();
+        resizeCovers();
+      });
+      showGazePointer.addEventListener('change', updateSettings);
+      categorySelect.addEventListener('change', () => localStorage.setItem(LAST_CATEGORY_KEY, categorySelect.value));
+      startButton.addEventListener('click', startGame);
+      window.addEventListener('resize', resizeCovers);
+
+      document.addEventListener('pointermove', event => {
+        updatePointer(event);
+        const tile = event.target.closest?.('.picto-card');
+        if (hoveredTile && hoveredTile !== tile) hoveredTile.classList.remove('is-revealing');
+        hoveredTile = tile || null;
+        if (!tile) return;
+        tile.classList.add('is-revealing');
+        revealAt(tile, event.clientX, event.clientY);
+      });
+
+      document.addEventListener('pointerdown', event => {
+        updatePointer(event);
+        const tile = event.target.closest?.('.picto-card');
+        if (tile) revealAt(tile, event.clientX, event.clientY);
+      });
+    }
+
+    async function init() {
+      bindEvents();
+      updateSettings();
+      try {
+        categories = await loadManifest();
+        populateCategorySelect();
+        startButton.disabled = false;
+      } catch (error) {
+        categorySelect.innerHTML = '';
+        const option = new Option(`Erreur: ${error.message}`, '');
+        categorySelect.add(option);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+  <script src="../../js/home-button.js"></script>
+</body>
+</html>
