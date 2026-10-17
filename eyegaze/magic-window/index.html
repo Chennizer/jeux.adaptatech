@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Découvre l'image" data-en="Magic Window" data-ja="マジックウィンドウ">Découvre l'image</title>
+
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+
+  <style>
+    :root {
+      --mw-teal: #00a89d;
+      --mw-teal-dark: #006f68;
+      --mw-orange: #f28c38;
+      --mw-night: #061417;
+      --mw-panel: #f8fffd;
+      --mw-text: #073b3a;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at 30% 24%, #114348 0%, #071c21 42%, #02070a 100%);
+      color: #ffffff;
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      touch-action: none;
+    }
+
+    body.playing,
+    body.playing * {
+      cursor: none !important;
+    }
+
+    #magicCanvas {
+      position: fixed;
+      inset: 0;
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #061417;
+    }
+
+    #game-options.modal {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      overflow-y: auto;
+    }
+
+    .magic-panel {
+      width: min(1080px, 96vw);
+      max-height: 92vh;
+      overflow-y: auto;
+      background: var(--mw-panel);
+      color: var(--mw-text);
+      border: 6px solid var(--mw-teal);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      padding: 22px;
+    }
+
+    .magic-header {
+      display: grid;
+      gap: 8px;
+      text-align: center;
+      margin-bottom: 18px;
+    }
+
+    .magic-header h1 {
+      margin: 0;
+      color: var(--mw-teal-dark);
+      font-size: clamp(1.8rem, 4vw, 3.2rem);
+      line-height: 1.05;
+    }
+
+    .magic-header p {
+      max-width: 820px;
+      margin: 0 auto;
+      font-size: clamp(1rem, 2vw, 1.3rem);
+      line-height: 1.4;
+      color: #335958;
+    }
+
+    .setup-grid {
+      display: grid;
+      grid-template-columns: minmax(250px, 1fr) minmax(280px, 1.1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .setup-card {
+      background: #ffffff;
+      border: 2px solid #bde7e2;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0, 90, 85, 0.1);
+    }
+
+    .setup-card h2 {
+      margin: 0 0 12px;
+      color: var(--mw-teal-dark);
+      font-size: 1.25rem;
+    }
+
+    .category-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      gap: 10px;
+      max-height: 44vh;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .category-button {
+      min-height: 76px;
+      border: 3px solid #d8efed;
+      border-radius: 15px;
+      background: linear-gradient(180deg, #ffffff 0%, #effbf9 100%);
+      color: var(--mw-text);
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .category-button:hover,
+    .category-button:focus,
+    .category-button.active {
+      border-color: var(--mw-orange);
+      box-shadow: 0 8px 18px rgba(242, 140, 56, 0.24);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    .category-button small {
+      display: block;
+      margin-top: 4px;
+      color: #53706f;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .option-row {
+      margin-bottom: 14px;
+    }
+
+    .option-row label,
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--mw-text);
+      font-weight: 800;
+    }
+
+    .option-row input[type="range"] {
+      width: 100%;
+      margin-top: 8px;
+      accent-color: var(--mw-teal);
+    }
+
+    .value-badge {
+      display: inline-block;
+      min-width: 3ch;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e1f5f2;
+      color: var(--mw-teal-dark);
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .checkbox-row {
+      justify-content: flex-start;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #eefaf8;
+      border: 1px solid #cdece8;
+    }
+
+    .checkbox-row input {
+      width: 22px;
+      height: 22px;
+      accent-color: var(--mw-teal);
+    }
+
+    .preview-card {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 14px;
+      background: #eefaf8;
+      margin-top: 12px;
+    }
+
+    #previewImage {
+      width: 92px;
+      height: 92px;
+      object-fit: contain;
+      border-radius: 16px;
+      background: #ffffff;
+      border: 2px solid #d8efed;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+
+    #previewName {
+      margin: 0;
+      font-size: 1.2rem;
+      color: var(--mw-teal-dark);
+      font-weight: 900;
+    }
+
+    #previewHint {
+      margin: 4px 0 0;
+      color: #4c6867;
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .magic-button {
+      min-width: 170px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--mw-teal);
+      color: #ffffff;
+      padding: 14px 22px;
+      font-size: 1.1rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(0, 168, 157, 0.28);
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    .magic-button:hover,
+    .magic-button:focus {
+      background: var(--mw-teal-dark);
+      transform: translateY(-1px);
+      outline: 3px solid rgba(242, 140, 56, 0.45);
+    }
+
+    .magic-button.secondary {
+      background: #ffffff;
+      color: var(--mw-teal-dark);
+      border: 3px solid var(--mw-teal);
+      box-shadow: none;
+    }
+
+    #hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 5;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 16px;
+      background: rgba(0, 19, 22, 0.72);
+      border: 2px solid rgba(0, 191, 165, 0.42);
+      color: #eafffb;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
+    }
+
+    body.playing #hud {
+      display: flex;
+    }
+
+    #hudThumb {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      border-radius: 12px;
+      padding: 5px;
+      background: #ffffff;
+    }
+
+    #hudTitle {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 900;
+    }
+
+    #hudSubtitle {
+      margin: 2px 0 0;
+      font-size: 0.92rem;
+      opacity: 0.84;
+    }
+
+    #gazePointer {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      z-index: 6;
+      width: 54px;
+      height: 54px;
+      margin-left: -27px;
+      margin-top: -27px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 89, 89, 0.95);
+      background: radial-gradient(circle, rgba(255, 89, 89, 0.32) 0%, rgba(255, 89, 89, 0.08) 62%, transparent 72%);
+      box-shadow: 0 0 22px rgba(255, 89, 89, 0.62), 0 0 42px rgba(255, 189, 89, 0.32);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.12s ease;
+      transform: scale(0.98);
+    }
+
+    body.playing #gazePointer {
+      opacity: 1;
+    }
+
+    #nextZone {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 7;
+      width: 172px;
+      min-height: 96px;
+      display: none;
+      place-items: center;
+      padding: 12px;
+      border-radius: 28px;
+      border: 4px solid rgba(255, 255, 255, 0.72);
+      background: rgba(0, 168, 157, 0.86);
+      color: #ffffff;
+      text-align: center;
+      font-size: 1.14rem;
+      font-weight: 900;
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28);
+      overflow: hidden;
+    }
+
+    body.playing #nextZone {
+      display: grid;
+    }
+
+    #nextZone::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0 0;
+      height: var(--next-progress, 0%);
+      background: rgba(255, 255, 255, 0.26);
+      transition: height 0.08s linear;
+    }
+
+    #nextZone span {
+      position: relative;
+      z-index: 1;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 1001;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 2px solid var(--mw-teal);
+      background: #ffffff;
+      color: var(--mw-teal-dark);
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    body.playing #langToggle {
+      opacity: 0.2;
+    }
+
+    .loading-note,
+    .error-note {
+      text-align: center;
+      font-weight: 800;
+      color: #4d6c6a;
+      padding: 14px;
+    }
+
+    .error-note {
+      color: #a33a2b;
+    }
+
+    @media (max-width: 780px) {
+      .setup-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .magic-panel {
+        padding: 16px;
+      }
+
+      #nextZone {
+        width: 140px;
+        min-height: 78px;
+        right: 12px;
+        bottom: 12px;
+      }
+    }
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body>
+  <button id="langToggle" title="Basculer la langue / Toggle language">FR / EN</button>
+
+  <canvas id="magicCanvas" aria-hidden="true"></canvas>
+
+  <div id="hud" aria-live="polite">
+    <img id="hudThumb" alt="">
+    <div>
+      <p id="hudTitle">Découvre l'image</p>
+      <p id="hudSubtitle" class="translate" data-fr="Regarde l'écran pour révéler l'image." data-en="Look around to reveal the picture." data-ja="画面を見て絵を出しましょう。">Regarde l'écran pour révéler l'image.</p>
+    </div>
+  </div>
+
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <button id="nextZone" type="button">
+    <span class="translate" data-fr="Image suivante" data-en="Next picture" data-ja="次の絵">Image suivante</span>
+  </button>
+
+  <div id="game-options" class="modal">
+    <div class="magic-panel" role="dialog" aria-labelledby="magicTitle" aria-modal="true">
+      <div class="magic-header">
+        <h1 id="magicTitle" class="translate" data-fr="Découvre l'image" data-en="Magic Window" data-ja="マジックウィンドウ">Découvre l'image</h1>
+        <p class="translate" data-fr="Un jeu sans erreur pour débuter au contrôle oculaire : l'élève regarde l'écran et une image se dévoile comme par magie." data-en="A no-fail beginner eye-gaze game: the learner looks around and the picture appears like magic." data-ja="はじめての視線入力に使える、失敗のないゲームです。見ると絵が魔法のように現れます。">Un jeu sans erreur pour débuter au contrôle oculaire : l'élève regarde l'écran et une image se dévoile comme par magie.</p>
+      </div>
+
+      <div class="setup-grid">
+        <section class="setup-card" aria-labelledby="categoryTitle">
+          <h2 id="categoryTitle" class="translate" data-fr="Choisir un thème" data-en="Choose a theme" data-ja="テーマを選ぶ">Choisir un thème</h2>
+          <div id="categoryGrid" class="category-grid">
+            <p class="loading-note translate" data-fr="Chargement des pictogrammes..." data-en="Loading pictograms..." data-ja="ピクトグラムを読み込み中...">Chargement des pictogrammes...</p>
+          </div>
+        </section>
+
+        <section class="setup-card" aria-labelledby="settingsTitle">
+          <h2 id="settingsTitle" class="translate" data-fr="Réglages débutants" data-en="Beginner settings" data-ja="初心者設定">Réglages débutants</h2>
+
+          <div class="option-row">
+            <label for="revealRadius">
+              <span class="translate" data-fr="Taille de la fenêtre" data-en="Window size" data-ja="窓の大きさ">Taille de la fenêtre</span>
+              <span><span id="revealRadiusVal" class="value-badge">150</span> px</span>
+            </label>
+            <input id="revealRadius" type="range" min="80" max="300" value="150" step="10">
+          </div>
+
+          <div class="option-row">
+            <label for="imageSize">
+              <span class="translate" data-fr="Taille de l'image" data-en="Picture size" data-ja="絵の大きさ">Taille de l'image</span>
+              <span><span id="imageSizeVal" class="value-badge">70</span>%</span>
+            </label>
+            <input id="imageSize" type="range" min="45" max="92" value="70" step="1">
+          </div>
+
+          <div class="option-row">
+            <label for="dwellTime">
+              <span class="translate" data-fr="Temps sur « image suivante »" data-en="Next picture dwell" data-ja="次への注視時間">Temps sur « image suivante »</span>
+              <span><span id="dwellTimeVal" class="value-badge">1500</span> ms</span>
+            </label>
+            <input id="dwellTime" type="range" min="600" max="4000" value="1500" step="100">
+          </div>
+
+          <div class="option-row checkbox-row">
+            <input id="instantReveal" type="checkbox" checked>
+            <label for="instantReveal" class="translate" data-fr="Révélation immédiate au regard" data-en="Instant reveal where the learner looks" data-ja="見た場所をすぐに表示">Révélation immédiate au regard</label>
+          </div>
+
+          <div class="option-row checkbox-row">
+            <input id="highContrast" type="checkbox" checked>
+            <label for="highContrast" class="translate" data-fr="Fond sombre à contraste élevé" data-en="High-contrast dark background" data-ja="高コントラストの暗い背景">Fond sombre à contraste élevé</label>
+          </div>
+
+          <div class="option-row checkbox-row">
+            <input id="soundToggle" type="checkbox" checked>
+            <label for="soundToggle" class="translate" data-fr="Petits sons de renforcement" data-en="Gentle reinforcement sounds" data-ja="やさしい効果音">Petits sons de renforcement</label>
+          </div>
+
+          <div class="preview-card">
+            <img id="previewImage" src="" alt="">
+            <div>
+              <p id="previewName" class="translate" data-fr="Aperçu" data-en="Preview" data-ja="プレビュー">Aperçu</p>
+              <p id="previewHint" class="translate" data-fr="Le premier pictogramme sera choisi au hasard dans le thème." data-en="The first pictogram will be chosen randomly from the theme." data-ja="最初の絵はテーマからランダムに選ばれます。">Le premier pictogramme sera choisi au hasard dans le thème.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="action-row">
+        <button id="startButton" class="magic-button" type="button" disabled>
+          <span class="translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</span>
+        </button>
+        <button id="randomButton" class="magic-button secondary" type="button" disabled>
+          <span class="translate" data-fr="Changer l'aperçu" data-en="Change preview" data-ja="プレビュー変更">Changer l'aperçu</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/translationmain.js"></script>
+  <script src="../../js/home-button.js"></script>
+  <script>
+    (() => {
+      const manifestUrl = '../../images/pictos/index.json';
+      const lastCategoryKey = 'magicWindow:lastCategory';
+
+      const canvas = document.getElementById('magicCanvas');
+      const ctx = canvas.getContext('2d');
+      const overlayCanvas = document.createElement('canvas');
+      const overlayCtx = overlayCanvas.getContext('2d');
+      const categoryGrid = document.getElementById('categoryGrid');
+      const startButton = document.getElementById('startButton');
+      const randomButton = document.getElementById('randomButton');
+      const gameOptions = document.getElementById('game-options');
+      const revealRadius = document.getElementById('revealRadius');
+      const revealRadiusVal = document.getElementById('revealRadiusVal');
+      const imageSize = document.getElementById('imageSize');
+      const imageSizeVal = document.getElementById('imageSizeVal');
+      const dwellTime = document.getElementById('dwellTime');
+      const dwellTimeVal = document.getElementById('dwellTimeVal');
+      const instantReveal = document.getElementById('instantReveal');
+      const highContrast = document.getElementById('highContrast');
+      const soundToggle = document.getElementById('soundToggle');
+      const previewImage = document.getElementById('previewImage');
+      const previewName = document.getElementById('previewName');
+      const hudThumb = document.getElementById('hudThumb');
+      const hudTitle = document.getElementById('hudTitle');
+      const gazePointer = document.getElementById('gazePointer');
+      const nextZone = document.getElementById('nextZone');
+      const langToggle = document.getElementById('langToggle');
+
+      let categories = [];
+      let selectedCategory = null;
+      let currentItem = null;
+      let currentImage = null;
+      let playing = false;
+      let pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, active: false };
+      let revealSpots = [];
+      let sparkles = [];
+      let lastRevealAt = 0;
+      let nextDwellStart = 0;
+      let animationFrame = null;
+      let audioContext = null;
+
+      function getLanguage() {
+        const htmlLang = document.documentElement.lang;
+        try {
+          const saved = localStorage.getItem('siteLanguage');
+          if (saved) return saved;
+        } catch (e) {}
+        return htmlLang || 'fr';
+      }
+
+      function localText(value, fallback = '') {
+        const lang = getLanguage();
+        if (!value) return fallback;
+        if (typeof value === 'string') return value;
+        if (value[lang]) {
+          if (typeof value[lang] === 'string') return value[lang];
+          if (value[lang].article || value[lang].word) return `${value[lang].article || ''} ${value[lang].word || ''}`.trim();
+        }
+        if (value.fr) {
+          if (typeof value.fr === 'string') return value.fr;
+          return `${value.fr.article || ''} ${value.fr.word || ''}`.trim();
+        }
+        if (value.en) {
+          if (typeof value.en === 'string') return value.en;
+          return `${value.en.article || ''} ${value.en.word || ''}`.trim();
+        }
+        return fallback;
+      }
+
+      function categoryLabel(category) {
+        return localText(category?.label, category?.key || '');
+      }
+
+      function itemLabel(item) {
+        return localText(item?.name, localText(item?.label, item?.file || ''));
+      }
+
+      function normalizeItem(item, baseUrl) {
+        const file = typeof item === 'string' ? item : item.file;
+        return {
+          ...(typeof item === 'object' ? item : {}),
+          file,
+          src: new URL(file, baseUrl).href
+        };
+      }
+
+      async function fetchManifest() {
+        const res = await fetch(manifestUrl, { cache: 'force-cache' });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const data = await res.json();
+        const baseUrl = new URL(data.base || '.', res.url);
+        return Object.entries(data.categories || {}).map(([key, value]) => {
+          const rawItems = Array.isArray(value) ? value : (value.items || []);
+          return {
+            key,
+            label: value.label || key,
+            items: rawItems.map(item => normalizeItem(item, baseUrl)).filter(item => item.file)
+          };
+        }).filter(category => category.items.length);
+      }
+
+      function chooseRandomItem(category = selectedCategory) {
+        if (!category || !category.items.length) return null;
+        const next = category.items[Math.floor(Math.random() * category.items.length)];
+        currentItem = next;
+        previewImage.src = next.src;
+        previewImage.alt = itemLabel(next);
+        previewName.textContent = itemLabel(next);
+        startButton.disabled = false;
+        randomButton.disabled = false;
+        return next;
+      }
+
+      function saveCategory(key) {
+        try { localStorage.setItem(lastCategoryKey, key); } catch (e) {}
+      }
+
+      function renderCategories() {
+        const saved = (() => {
+          try { return localStorage.getItem(lastCategoryKey); } catch (e) { return null; }
+        })();
+        selectedCategory = categories.find(category => category.key === saved)
+          || categories.find(category => category.key === 'animaux')
+          || categories[0];
+
+        categoryGrid.innerHTML = '';
+        categories.forEach(category => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'category-button';
+          button.dataset.category = category.key;
+          button.innerHTML = `${categoryLabel(category)}<small>${category.items.length}</small>`;
+          button.addEventListener('click', () => {
+            selectedCategory = category;
+            saveCategory(category.key);
+            document.querySelectorAll('.category-button').forEach(btn => btn.classList.toggle('active', btn === button));
+            chooseRandomItem(category);
+          });
+          categoryGrid.appendChild(button);
+        });
+
+        const activeButton = categoryGrid.querySelector(`[data-category="${selectedCategory.key}"]`);
+        if (activeButton) activeButton.classList.add('active');
+        chooseRandomItem(selectedCategory);
+      }
+
+      function syncRange(input, output) {
+        output.textContent = input.value;
+        input.addEventListener('input', () => {
+          output.textContent = input.value;
+          if (input === dwellTime && typeof setEyegazeDwellTime === 'function') {
+            setEyegazeDwellTime(input.value);
+          }
+        });
+      }
+
+      function resize() {
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        const width = Math.floor(window.innerWidth * dpr);
+        const height = Math.floor(window.innerHeight * dpr);
+        canvas.width = width;
+        canvas.height = height;
+        overlayCanvas.width = width;
+        overlayCanvas.height = height;
+        canvas.style.width = `${window.innerWidth}px`;
+        canvas.style.height = `${window.innerHeight}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
+      }
+
+      function imageBounds(img) {
+        const maxW = window.innerWidth * (Number(imageSize.value) / 100);
+        const maxH = window.innerHeight * (Number(imageSize.value) / 100);
+        const ratio = img.width / img.height;
+        let width = maxW;
+        let height = width / ratio;
+        if (height > maxH) {
+          height = maxH;
+          width = height * ratio;
+        }
+        return {
+          x: (window.innerWidth - width) / 2,
+          y: (window.innerHeight - height) / 2,
+          width,
+          height
+        };
+      }
+
+      function addSparkles(x, y) {
+        for (let i = 0; i < 8; i += 1) {
+          sparkles.push({
+            x,
+            y,
+            vx: (Math.random() - 0.5) * 3,
+            vy: (Math.random() - 0.5) * 3,
+            size: 4 + Math.random() * 9,
+            life: 1
+          });
+        }
+      }
+
+      function addReveal(x, y, radiusScale = 1) {
+        const now = performance.now();
+        if (now - lastRevealAt < 45) return;
+        lastRevealAt = now;
+        const radius = Number(revealRadius.value) * radiusScale;
+        revealSpots.push({ x, y, radius, born: now });
+        if (revealSpots.length > 180) revealSpots.shift();
+        addSparkles(x, y);
+        if (soundToggle.checked && revealSpots.length % 10 === 0) playTone(520 + Math.random() * 260, 0.055, 0.035);
+      }
+
+      function drawBackground() {
+        if (highContrast.checked) {
+          const gradient = ctx.createRadialGradient(window.innerWidth * 0.28, window.innerHeight * 0.22, 0, window.innerWidth * 0.5, window.innerHeight * 0.5, window.innerWidth * 0.78);
+          gradient.addColorStop(0, '#154e55');
+          gradient.addColorStop(0.54, '#071c21');
+          gradient.addColorStop(1, '#02070a');
+          ctx.fillStyle = gradient;
+        } else {
+          const gradient = ctx.createLinearGradient(0, 0, window.innerWidth, window.innerHeight);
+          gradient.addColorStop(0, '#fff7df');
+          gradient.addColorStop(0.48, '#d7f8f1');
+          gradient.addColorStop(1, '#f9d8ec');
+          ctx.fillStyle = gradient;
+        }
+        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      }
+
+      function drawPicture() {
+        if (!currentImage) return;
+        const bounds = imageBounds(currentImage);
+        ctx.save();
+        ctx.shadowColor = highContrast.checked ? 'rgba(0,0,0,0.5)' : 'rgba(0,90,85,0.18)';
+        ctx.shadowBlur = 28;
+        ctx.fillStyle = highContrast.checked ? 'rgba(255,255,255,0.94)' : 'rgba(255,255,255,0.82)';
+        roundRect(ctx, bounds.x - 22, bounds.y - 22, bounds.width + 44, bounds.height + 44, 34);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.drawImage(currentImage, bounds.x, bounds.y, bounds.width, bounds.height);
+        ctx.restore();
+      }
+
+      function drawOverlay() {
+        overlayCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        overlayCtx.globalCompositeOperation = 'source-over';
+        overlayCtx.fillStyle = highContrast.checked ? 'rgba(0, 0, 0, 0.91)' : 'rgba(255, 255, 255, 0.78)';
+        overlayCtx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+        overlayCtx.globalCompositeOperation = 'destination-out';
+        revealSpots.forEach(spot => {
+          const gradient = overlayCtx.createRadialGradient(spot.x, spot.y, 0, spot.x, spot.y, spot.radius);
+          gradient.addColorStop(0, 'rgba(0,0,0,1)');
+          gradient.addColorStop(0.68, 'rgba(0,0,0,0.95)');
+          gradient.addColorStop(1, 'rgba(0,0,0,0)');
+          overlayCtx.fillStyle = gradient;
+          overlayCtx.beginPath();
+          overlayCtx.arc(spot.x, spot.y, spot.radius, 0, Math.PI * 2);
+          overlayCtx.fill();
+        });
+
+        ctx.drawImage(overlayCanvas, 0, 0, window.innerWidth, window.innerHeight);
+      }
+
+      function drawSparkles() {
+        sparkles = sparkles.filter(sparkle => sparkle.life > 0.02);
+        sparkles.forEach(sparkle => {
+          sparkle.x += sparkle.vx;
+          sparkle.y += sparkle.vy;
+          sparkle.life *= 0.94;
+          ctx.save();
+          ctx.globalAlpha = sparkle.life;
+          ctx.fillStyle = highContrast.checked ? '#ffe680' : '#ffffff';
+          ctx.shadowColor = '#fff0a8';
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.arc(sparkle.x, sparkle.y, sparkle.size * sparkle.life, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        drawBackground();
+        drawPicture();
+        if (playing) drawOverlay();
+        drawSparkles();
+      }
+
+      function loop() {
+        if (playing && pointer.active && instantReveal.checked) {
+          addReveal(pointer.x, pointer.y);
+        }
+        draw();
+        animationFrame = requestAnimationFrame(loop);
+      }
+
+      function roundRect(context, x, y, width, height, radius) {
+        const r = Math.min(radius, width / 2, height / 2);
+        context.beginPath();
+        context.moveTo(x + r, y);
+        context.arcTo(x + width, y, x + width, y + height, r);
+        context.arcTo(x + width, y + height, x, y + height, r);
+        context.arcTo(x, y + height, x, y, r);
+        context.arcTo(x, y, x + width, y, r);
+        context.closePath();
+      }
+
+      function playTone(frequency, duration = 0.08, volume = 0.05) {
+        if (!soundToggle.checked) return;
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = frequency;
+        gain.gain.setValueAtTime(volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + duration);
+      }
+
+      function loadImage(item) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = item.src;
+        });
+      }
+
+      async function setPicture(item) {
+        currentItem = item;
+        currentImage = await loadImage(item);
+        revealSpots = [];
+        sparkles = [];
+        const label = itemLabel(item);
+        hudThumb.src = item.src;
+        hudThumb.alt = label;
+        hudTitle.textContent = label;
+        draw();
+      }
+
+      async function nextPicture() {
+        if (!selectedCategory) return;
+        let next = chooseRandomItem(selectedCategory);
+        if (selectedCategory.items.length > 1) {
+          let guard = 0;
+          while (next && currentItem && next.file === currentItem.file && guard < 8) {
+            next = chooseRandomItem(selectedCategory);
+            guard += 1;
+          }
+        }
+        if (next) {
+          await setPicture(next);
+          playTone(740, 0.12, 0.045);
+        }
+      }
+
+      async function startGame() {
+        if (!currentItem) return;
+        gameOptions.style.display = 'none';
+        document.body.classList.add('playing');
+        playing = true;
+        if (typeof setEyegazeDwellTime === 'function') setEyegazeDwellTime(dwellTime.value);
+        await setPicture(currentItem);
+        addReveal(window.innerWidth / 2, window.innerHeight / 2, 1.2);
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+        if (!animationFrame) loop();
+      }
+
+      function updatePointer(event) {
+        pointer = { x: event.clientX, y: event.clientY, active: true };
+        gazePointer.style.left = `${event.clientX}px`;
+        gazePointer.style.top = `${event.clientY}px`;
+        gazePointer.style.transform = 'scale(1)';
+      }
+
+      function handleManualReveal(event) {
+        if (!playing || instantReveal.checked) return;
+        addReveal(event.clientX, event.clientY, 1.25);
+        playTone(620, 0.09, 0.04);
+      }
+
+      function isInNextZone(x, y) {
+        const rect = nextZone.getBoundingClientRect();
+        return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+      }
+
+      function updateNextDwell(event) {
+        if (!playing) return;
+        if (!isInNextZone(event.clientX, event.clientY)) {
+          nextDwellStart = 0;
+          nextZone.style.setProperty('--next-progress', '0%');
+          return;
+        }
+        const now = performance.now();
+        if (!nextDwellStart) nextDwellStart = now;
+        const progress = Math.min(1, (now - nextDwellStart) / Number(dwellTime.value));
+        nextZone.style.setProperty('--next-progress', `${progress * 100}%`);
+        if (progress >= 1) {
+          nextDwellStart = 0;
+          nextZone.style.setProperty('--next-progress', '0%');
+          nextPicture();
+        }
+      }
+
+      function bindEvents() {
+        syncRange(revealRadius, revealRadiusVal);
+        syncRange(imageSize, imageSizeVal);
+        syncRange(dwellTime, dwellTimeVal);
+
+        const storedDwell = Number(window.eyegazeSettings?.dwellTime);
+        if (Number.isFinite(storedDwell)) {
+          dwellTime.value = Math.max(Number(dwellTime.min), Math.min(Number(dwellTime.max), storedDwell));
+          dwellTimeVal.textContent = dwellTime.value;
+        }
+
+        startButton.addEventListener('click', startGame);
+        randomButton.addEventListener('click', () => chooseRandomItem(selectedCategory));
+        nextZone.addEventListener('click', nextPicture);
+        window.addEventListener('resize', resize);
+        window.addEventListener('pointermove', event => {
+          updatePointer(event);
+          updateNextDwell(event);
+        });
+        window.addEventListener('pointerdown', event => {
+          updatePointer(event);
+          handleManualReveal(event);
+        });
+        [highContrast, imageSize].forEach(control => control.addEventListener('input', draw));
+        langToggle?.addEventListener('click', () => {
+          setTimeout(() => {
+            renderCategories();
+            if (currentItem) {
+              previewName.textContent = itemLabel(currentItem);
+              hudTitle.textContent = itemLabel(currentItem);
+            }
+          }, 0);
+        });
+      }
+
+      async function init() {
+        bindEvents();
+        resize();
+        try {
+          categories = await fetchManifest();
+          renderCategories();
+        } catch (error) {
+          categoryGrid.innerHTML = `<p class="error-note">Impossible de charger les pictogrammes. ${error.message}</p>`;
+        }
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
