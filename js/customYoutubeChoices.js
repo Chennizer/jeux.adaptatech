@@ -1,24 +1,98 @@
 // Builds mediaChoices from YouTube URLs or playlists
 const mediaChoices = [];
 const YT_STORAGE_KEY = 'choiceYoutubeUrls';
+const YT_SHARE_PARAM = 'videos';
+const YT_STATUS_TIMEOUT_MS = 5000;
+let ytStatusTimer = null;
 
 function isYouTubeUrl(url) {
   return /^(https?:\/\/)?(www\.|m\.)?((youtube\.com\/\S+)|(youtu\.be\/\S+))$/.test(url);
 }
 
-function getYouTubeId(url) {
+function normalizeYouTubeUrl(urlOrId) {
+  const id = getYouTubeId(urlOrId);
+  return id ? `https://www.youtube.com/watch?v=${id}` : null;
+}
+
+function getYouTubeId(urlOrId) {
+  const value = String(urlOrId || '').trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
   try {
-    const u = new URL(url);
+    const u = new URL(value);
     if (u.hostname.includes('youtu.be')) {
-      return u.pathname.slice(1);
+      const id = u.pathname.split('/').filter(Boolean)[0];
+      return id || null;
     }
     const id = u.searchParams.get('v');
     if (id) return id;
-    const m = url.match(/\/embed\/([a-zA-Z0-9_-]+)/);
-    return m ? m[1] : null;
+    const shorts = u.pathname.match(/\/shorts\/([a-zA-Z0-9_-]{11})/);
+    if (shorts) return shorts[1];
+    const embed = u.pathname.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+    return embed ? embed[1] : null;
   } catch {
-    return null;
+    const m = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
   }
+}
+
+function extractYouTubeIds(text) {
+  const ids = [];
+  const seen = new Set();
+  const parts = String(text || '')
+    .split(/[\s,]+/)
+    .map(part => part.trim())
+    .filter(Boolean);
+
+  for (const part of parts) {
+    const id = getYouTubeId(part);
+    if (id && !seen.has(id)) {
+      ids.push(id);
+      seen.add(id);
+    }
+  }
+  return ids;
+}
+
+function getStoredVideoIds() {
+  const saved = localStorage.getItem(YT_STORAGE_KEY);
+  if (!saved) return [];
+  const urls = JSON.parse(saved);
+  return Array.isArray(urls) ? urls.map(getYouTubeId).filter(Boolean) : [];
+}
+
+function getIdsFromShareUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(YT_SHARE_PARAM);
+  if (!value) return [];
+  return value.split(',').map(getYouTubeId).filter(Boolean);
+}
+
+function hasVideoId(id) {
+  return mediaChoices.some(choice => getYouTubeId(choice.video) === id);
+}
+
+function setImportStatus(message, tone = 'info') {
+  const status = document.getElementById('yt-import-status');
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.tone = tone;
+  if (ytStatusTimer) clearTimeout(ytStatusTimer);
+  if (message) {
+    ytStatusTimer = setTimeout(() => {
+      status.textContent = '';
+      status.dataset.tone = '';
+    }, YT_STATUS_TIMEOUT_MS);
+  }
+}
+
+function updateYoutubeLibraryCount() {
+  const countEl = document.getElementById('yt-library-count');
+  const shareButton = document.getElementById('share-youtube-setup-button');
+  if (countEl) {
+    const count = mediaChoices.length;
+    countEl.textContent = count ? ` • ${count} vidéo${count > 1 ? 's' : ''} enregistrée${count > 1 ? 's' : ''}` : ' • 0 vidéo enregistrée';
+  }
+  if (shareButton) shareButton.disabled = mediaChoices.length === 0;
 }
 
 async function fetchVideoTitle(url) {
@@ -43,7 +117,7 @@ function getPlaylistIdFromUrl(url) {
   return null;
 }
 
-async function fetchPlaylistVideoIds(apiKey, playlistId) {
+async function fetchPlaylistVideoIds(apiKey, playlistId, onProgress) {
   const ids = [];
   let pageToken = '';
   while (true) {
@@ -68,6 +142,7 @@ async function fetchPlaylistVideoIds(apiKey, playlistId) {
       const vid = it?.contentDetails?.videoId;
       if (vid) ids.push(vid);
     });
+    if (typeof onProgress === 'function') onProgress(ids.length);
     pageToken = data.nextPageToken || '';
     if (!pageToken) break;
   }
@@ -93,7 +168,8 @@ async function validateEmbeddableIds(apiKey, ids) {
   return ok;
 }
 
-async function addVideoById(id) {
+async function addVideoById(id, { silent = false } = {}) {
+  if (!id || hasVideoId(id)) return false;
   const url = `https://www.youtube.com/watch?v=${id}`;
   const title = await fetchVideoTitle(url);
   mediaChoices.push({
@@ -103,27 +179,71 @@ async function addVideoById(id) {
     category: 'custom'
   });
   saveYoutubeUrls();
+  updateYoutubeLibraryCount();
+  if (!silent) setImportStatus(`Ajouté: ${title}`, 'success');
+  return true;
+}
+
+async function addVideosByIds(ids, { silent = false } = {}) {
+  let added = 0;
+  let skipped = 0;
+  for (const id of ids) {
+    if (await addVideoById(id, { silent: true })) added++;
+    else skipped++;
+  }
+  if (!silent) {
+    const parts = [`${added} vidéo${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''}`];
+    if (skipped) parts.push(`${skipped} doublon${skipped > 1 ? 's' : ''} ignoré${skipped > 1 ? 's' : ''}`);
+    setImportStatus(parts.join(' • '), added ? 'success' : 'warning');
+  }
+  updateYoutubeLibraryCount();
+  return added;
 }
 
 function saveYoutubeUrls() {
   try {
-    const urls = mediaChoices.map(m => m.video);
+    const urls = mediaChoices.map(m => normalizeYouTubeUrl(m.video)).filter(Boolean);
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(urls));
   } catch {}
 }
 
 async function loadStoredYoutubeUrls() {
-  const saved = localStorage.getItem(YT_STORAGE_KEY);
-  if (!saved) return;
+  let ids = [];
   try {
-    const urls = JSON.parse(saved);
-    for (const url of urls) {
-      const id = getYouTubeId(url);
-      if (id) await addVideoById(id);
-    }
+    ids = [...getStoredVideoIds(), ...getIdsFromShareUrl()];
   } catch (e) {
     console.error('Failed to load stored YouTube URLs', e);
   }
+  await addVideosByIds(ids, { silent: true });
+  if (getIdsFromShareUrl().length) {
+    setImportStatus('Configuration chargée depuis le lien partagé.', 'success');
+  }
+}
+
+function buildShareUrl() {
+  const ids = mediaChoices.map(choice => getYouTubeId(choice.video)).filter(Boolean);
+  const url = new URL(window.location.href);
+  if (ids.length) url.searchParams.set(YT_SHARE_PARAM, ids.join(','));
+  else url.searchParams.delete(YT_SHARE_PARAM);
+  return url.toString();
+}
+
+async function copyShareUrl() {
+  const shareUrl = buildShareUrl();
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(shareUrl);
+  } else {
+    const scratch = document.createElement('textarea');
+    scratch.value = shareUrl;
+    scratch.setAttribute('readonly', '');
+    scratch.style.position = 'fixed';
+    scratch.style.left = '-9999px';
+    document.body.appendChild(scratch);
+    scratch.select();
+    document.execCommand('copy');
+    document.body.removeChild(scratch);
+  }
+  setImportStatus('Lien copié. Vous pouvez le partager avec une famille, une classe ou un collègue.', 'success');
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -132,18 +252,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   const playlistBtn = document.getElementById('yt-playlist-import-button');
   const playlistInput = document.getElementById('yt-playlist-url-input');
   const clearButton = document.getElementById('clear-videos-button');
+  const shareButton = document.getElementById('share-youtube-setup-button');
 
   await loadStoredYoutubeUrls();
+  updateYoutubeLibraryCount();
   if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
 
   if (addUrlBtn && addUrlInput) {
-    addUrlBtn.addEventListener('click', async () => {
-      const url = addUrlInput.value.trim();
-      const id = getYouTubeId(url);
-      if (!id) { console.error('URL YouTube invalide'); return; }
-      await addVideoById(id);
-      addUrlInput.value = '';
-      if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+    const addFromInput = async () => {
+      const ids = extractYouTubeIds(addUrlInput.value);
+      if (!ids.length) {
+        setImportStatus('Collez au moins une URL YouTube valide.', 'warning');
+        return;
+      }
+      addUrlBtn.disabled = true;
+      try {
+        await addVideosByIds(ids);
+        addUrlInput.value = '';
+        if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
+      } finally {
+        addUrlBtn.disabled = false;
+      }
+    };
+    addUrlBtn.addEventListener('click', addFromInput);
+    addUrlInput.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        addFromInput();
+      }
     });
   }
 
@@ -152,23 +288,34 @@ document.addEventListener('DOMContentLoaded', async () => {
       const url = playlistInput.value.trim();
       const pid = getPlaylistIdFromUrl(url);
       const apiKey = window.YT_API_KEY;
-      if (!url) { console.error('Veuillez entrer une URL de playlist.'); return; }
-      if (!pid) { console.error("URL invalide: impossible d'extraire l'identifiant de playlist."); return; }
-      if (!apiKey) { console.error('Clé API absente (window.YT_API_KEY).'); return; }
+      if (!url) { setImportStatus('Veuillez entrer une URL de playlist.', 'warning'); return; }
+      if (!pid) { setImportStatus("URL invalide: impossible d'extraire l'identifiant de playlist.", 'warning'); return; }
+      if (!apiKey) { setImportStatus('Clé API absente (window.YT_API_KEY).', 'warning'); return; }
       playlistBtn.disabled = true;
+      setImportStatus('Import de la playlist en cours...', 'info');
       try {
-        const ids = await fetchPlaylistVideoIds(apiKey, pid);
+        const ids = await fetchPlaylistVideoIds(apiKey, pid, count => {
+          setImportStatus(`Lecture de la playlist... ${count} vidéo${count > 1 ? 's' : ''} trouvée${count > 1 ? 's' : ''}`, 'info');
+        });
         const ok = await validateEmbeddableIds(apiKey, ids);
-        for (const id of ok) {
-          await addVideoById(id);
-        }
+        await addVideosByIds([...ok]);
+        playlistInput.value = '';
         if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
       } catch (err) {
         console.error(err);
-        console.error('Import échoué: ' + (err?.message || 'erreur'));
+        setImportStatus('Import échoué: ' + (err?.message || 'erreur'), 'warning');
       } finally {
         playlistBtn.disabled = false;
       }
+    });
+  }
+
+  if (shareButton) {
+    shareButton.addEventListener('click', () => {
+      copyShareUrl().catch(err => {
+        console.error(err);
+        setImportStatus('Impossible de copier le lien automatiquement.', 'warning');
+      });
     });
   }
 
@@ -176,6 +323,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearButton.addEventListener('click', () => {
       mediaChoices.length = 0;
       try { localStorage.removeItem(YT_STORAGE_KEY); } catch {}
+      updateYoutubeLibraryCount();
+      setImportStatus('Bibliothèque YouTube effacée.', 'success');
       if (typeof populateTilePickerGrid === 'function') populateTilePickerGrid();
     });
   }
