@@ -30,6 +30,16 @@ function getYouTubeId(url) {
   return match ? match[1] : null;
 }
 
+function normalizeYouTubeUrl(url) {
+  const id = getYouTubeId(url);
+  return id ? `https://www.youtube.com/watch?v=${id}` : url;
+}
+
+function extractUrlsFromText(text) {
+  const urlMatches = String(text || '').match(/https?:\/\/[^\s<>'"]+/gi) || [];
+  return urlMatches.map(url => url.replace(/[),.;]+$/, ''));
+}
+
 // ---------- NEW: YouTube thumbnail helpers (no-API fallback) ----------
 function getYouTubeThumbCandidates(id) {
   return [
@@ -454,6 +464,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ytPlaylistInput = document.getElementById('yt-playlist-url-input');
   const ytPlaylistBtn = document.getElementById('yt-playlist-import-button');
   const ytPlaylistStatus = document.getElementById('yt-playlist-status');
+  const videoSearchInput = document.getElementById('video-search-input');
+  const videoSelectionCount = document.getElementById('video-selection-count');
+  const selectVisibleButton = document.getElementById('select-visible-button');
+  const deselectVisibleButton = document.getElementById('deselect-visible-button');
   const localImportStatus = document.getElementById('local-import-status');
   const clearAllButton = document.getElementById('clear-all-button');
   const categoriesToggle = document.getElementById('categories-toggle');
@@ -1194,6 +1208,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     return keptUrls;
   }
 
+  function getVisibleVideoCards() {
+    return Array.from(document.querySelectorAll('.video-card'))
+      .filter(card => !card.classList.contains('filtered-out'));
+  }
+
+  function updateSelectionCount() {
+    if (!videoSelectionCount) return;
+    const cards = Array.from(document.querySelectorAll('.video-card'));
+    const visibleCards = getVisibleVideoCards();
+    const selectedVisible = visibleCards.filter(card => card.classList.contains('selected')).length;
+    const hiddenCount = cards.length - visibleCards.length;
+    const suffix = hiddenCount ? ` (${hiddenCount} filtrée${hiddenCount > 1 ? 's' : ''})` : '';
+    videoSelectionCount.textContent = `${selectedVisible} sélectionnée${selectedVisible > 1 ? 's' : ''} / ${visibleCards.length}${suffix}`;
+  }
+
+  function applyVideoSearchFilter() {
+    const query = (videoSearchInput?.value || '').trim().toLowerCase();
+    Array.from(document.querySelectorAll('.video-card')).forEach(card => {
+      const title = card.querySelector('.video-name')?.textContent || '';
+      const url = card.dataset.src || '';
+      const matches = !query || `${title} ${url}`.toLowerCase().includes(query);
+      card.classList.toggle('filtered-out', !matches);
+    });
+    updateSelectionCount();
+  }
+
+  function setVisibleSelection(selected) {
+    getVisibleVideoCards().forEach(card => {
+      card.classList.toggle('selected', selected);
+      card.classList.toggle('deselected', !selected);
+    });
+    updateSelectedMedia();
+  }
+
   async function loadStoredYoutubeUrls() {
     if (!urlVideoList) return;
     const state = getCategoryState();
@@ -1242,6 +1290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     card.append(badge, img, cap);
     (urlVideoList || videoSelectionDiv).appendChild(card);
     initCard(card);
+    refreshVideoSelectionTools();
     if (!opts.skipCategoryAssign) {
       assignUrlToCategories(url);
       applyCategoryButtons(card);
@@ -1252,6 +1301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       fetchVideoTitle(url).then(title => {
         cap.textContent = title;
         cap.title = title;
+        applyVideoSearchFilter();
       }).catch(()=>{});
     }
 
@@ -1267,6 +1317,50 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Non-YouTube URL: no thumbnail here
       img.remove();
     }
+  }
+
+  function refreshVideoSelectionTools() {
+    applyVideoSearchFilter();
+    updateSelectionCount();
+  }
+
+  async function addUrlsFromText(text) {
+    const urls = uniquePreserveOrder(extractUrlsFromText(text).map(normalizeYouTubeUrl));
+    if (!urls.length) return 0;
+    const existing = new Set(getCurrentUrlListFromDom());
+    let added = 0;
+    let skipped = 0;
+
+    for (const url of urls) {
+      if (existing.has(url)) {
+        skipped++;
+        continue;
+      }
+
+      if (isYouTubeUrl(url) && window.YT_API_KEY) {
+        try {
+          const { ok, reason } = await validateSingleYouTubeUrl(url, window.YT_API_KEY);
+          if (!ok) {
+            skipped++;
+            console.warn(`Skipped YouTube URL (${reason}):`, url);
+            continue;
+          }
+        } catch {}
+      }
+
+      await addYoutubeUrlCard(url);
+      existing.add(url);
+      added++;
+    }
+
+    renumberCards();
+    updateSelectedMedia();
+    if (urlVideoList) saveYoutubeUrls();
+    if (ytPlaylistStatus && (added || skipped)) {
+      ytPlaylistStatus.textContent = `${added} URL ajoutée${added > 1 ? 's' : ''}${skipped ? `, ${skipped} ignorée${skipped > 1 ? 's' : ''}` : ''}.`;
+    }
+    refreshVideoSelectionTools();
+    return added;
   }
 
   function getCurrentUrlListFromDom() {
@@ -1407,6 +1501,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
   videoCardsArray.forEach(initCard);
   renumberCards();
+  refreshVideoSelectionTools();
 
   // Apply saved local order on startup (after cards exist)
   loadLocalOrderForCurrentSet();
@@ -1514,28 +1609,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Add single URL (with validation)
+  // Add one or many URLs pasted into the URL field (with validation when configured)
   if (addVideoUrlButton && addVideoUrlInput) {
     addVideoUrlButton.addEventListener('click', async () => {
-      const url = addVideoUrlInput.value.trim();
-      if (!url) return;
+      const text = addVideoUrlInput.value.trim();
+      if (!text) return;
 
-      if (isYouTubeUrl(url) && window.YT_API_KEY) {
-        try {
-          const { ok, reason } = await validateSingleYouTubeUrl(url, window.YT_API_KEY);
-          if (!ok) {
-            alert(`Cette vidéo ne peut pas être intégrée (${reason}).`);
-            addVideoUrlInput.value = '';
-            return; // DO NOT add card
-          }
-        } catch {}
+      addVideoUrlButton.disabled = true;
+      if (ytPlaylistStatus) ytPlaylistStatus.textContent = 'Ajout en cours…';
+      try {
+        const added = await addUrlsFromText(text);
+        if (!added && ytPlaylistStatus) ytPlaylistStatus.textContent = 'Aucune nouvelle URL valide trouvée.';
+        addVideoUrlInput.value = '';
+      } finally {
+        addVideoUrlButton.disabled = false;
       }
-
-      await addYoutubeUrlCard(url);
-      addVideoUrlInput.value = '';
-      renumberCards();
-      updateSelectedMedia();
-      if (urlVideoList) saveYoutubeUrls();
+    });
+    addVideoUrlInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addVideoUrlButton.click();
+      }
+    });
+    addVideoUrlInput.addEventListener('paste', () => {
+      if (ytPlaylistStatus) ytPlaylistStatus.textContent = 'Astuce: collez plusieurs URLs, puis cliquez Ajouter URL.';
     });
   }
 
@@ -1572,6 +1669,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           renumberCards();
           updateSelectedMedia();
           if (urlVideoList) saveYoutubeUrls();
+          refreshVideoSelectionTools();
           ytPlaylistStatus.textContent = `Import terminé: ${added} ajouté(s)${refused ? `, ${refused} ignoré(s)` : ''}.`;
         }
       } catch (err) {
@@ -1598,6 +1696,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  if (videoSearchInput) {
+    videoSearchInput.addEventListener('input', applyVideoSearchFilter);
+  }
+  if (selectVisibleButton) {
+    selectVisibleButton.addEventListener('click', () => setVisibleSelection(true));
+  }
+  if (deselectVisibleButton) {
+    deselectVisibleButton.addEventListener('click', () => setVisibleSelection(false));
+  }
+
   // updateSelectedMedia: reset ordering when list/order changes
   function updateSelectedMedia() {
     videoCardsArray = Array.from(document.querySelectorAll('.video-card'));
@@ -1611,6 +1719,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     renumberCards();
+    updateSelectionCount();
 
     startButton.style.display = selectedMedia.length ? 'block' : 'none';
     if (urlVideoList) saveYoutubeUrls();
