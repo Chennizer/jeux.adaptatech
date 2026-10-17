@@ -69,13 +69,15 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Retrieve game selections and theme information from localStorage and themes.js
-      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-      const mediaOption = selections.mediaOption || "";
+      const flow = window.sessionHelpers && typeof window.sessionHelpers.runSessionFlow === 'function'
+        ? window.sessionHelpers.runSessionFlow()
+        : null;
+      if (!flow || !flow.session) {
+        return;
+      }
+      const selections = flow.session.selections || {};
       const reinforcerType = selections.reinforcerType || 'shortvideo';
-      const themeData = (window.themes && window.themes[mediaOption])
-                        ? window.themes[mediaOption]
-                        : window.themes["default"] || {};
+      const themeData = flow.themeData || {};
 
       // Set up audio element sources from theme data
       document.getElementById('error-sound').src = themeData.errorSound || "../sounds/error.mp3";
@@ -83,34 +85,14 @@
       document.getElementById('word-reward-sound').src = themeData.reinforcerSound || "../sounds/success3.mp3";
       document.getElementById('final-reward-sound').src = themeData.finalRewardSound || "../sounds/victory.mp3";
 
-      // Show the activity overlay with the game index
-      let overallGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-      if (isNaN(overallGameIndex)) {
-        alert("Game selections not found. Redirecting to main page.");
-        window.location.href = "main.html";
-        return;
-      }
-      // (Optionally: check that the current game ID matches what you expect.)
-
-      const activityOverlay = document.getElementById('activityNumberOverlay');
-      const numberTextEl = activityOverlay.querySelector('.number-text');
-      numberTextEl.textContent = (overallGameIndex + 1).toString();
-      activityOverlay.style.display = 'flex';
-
-      // When the user clicks/touches the overlay, hide it and start the game.
       function hideOverlayAndStart() {
-        if (themeData.startSound) {
-          let sfx = new Audio(themeData.startSound);
-          sfx.play().catch(err => console.warn('Sound play error:', err));
-        }
-        activityOverlay.style.display = 'none';
-        document.removeEventListener('click', hideOverlayAndStart);
-        document.removeEventListener('touchend', hideOverlayAndStart);
-        // Call your game‐specific start function
         startGame();
       }
-      document.addEventListener('click', hideOverlayAndStart);
-      document.addEventListener('touchend', hideOverlayAndStart);
+      if (window.sessionHelpers && typeof window.sessionHelpers.showActivityOverlay === 'function') {
+        window.sessionHelpers.showActivityOverlay(hideOverlayAndStart, flow.session);
+      } else {
+        hideOverlayAndStart();
+      }
 
       const resolveGameFile = (gameId) => {
         if (!gameId) {
@@ -163,23 +145,7 @@
         }, 2000); // 2-second delay
       }
 
-      let reinforcerController = null;
-      if (window.sessionHelpers && typeof window.sessionHelpers.setupSharedReinforcer === 'function') {
-        const session = sessionHelpers.loadSession ? sessionHelpers.loadSession() : null;
-        if (session) {
-          reinforcerController = sessionHelpers.setupSharedReinforcer(session, {
-            reinforcerType,
-            onAdvance: navigateToNextGame
-          });
-        }
-      }
-      if (!reinforcerController && window.reinforcerOverlay && typeof window.reinforcerOverlay.init === 'function') {
-        reinforcerController = window.reinforcerOverlay.init({
-          reinforcerType,
-          themeData,
-          onAdvance: navigateToNextGame
-        });
-      }
+      const reinforcerController = flow.reinforcerController;
 
       // Generic function to show the final reinforcer overlay.
       function showFinalReinforcerVideo() {
@@ -187,8 +153,8 @@
         finalRewardSound.play().catch(error => {
           console.error('Error playing final reward sound:', error);
         });
-        if (reinforcerController && typeof reinforcerController.show === 'function') {
-          reinforcerController.show({ reinforcerType });
+        if (window.sessionHelpers && typeof window.sessionHelpers.startNextStep === 'function') {
+          window.sessionHelpers.startNextStep(reinforcerController, { reinforcerType });
         } else {
           navigateToNextGame();
         }

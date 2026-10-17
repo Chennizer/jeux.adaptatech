@@ -10,6 +10,8 @@
   <script src="../js/themes.js"></script>
   <script src="js/games-config.js"></script>
   <script src="js/session-helpers.js"></script>
+  <script src="js/reinforcer-overlay.js"></script>
+  <script src="js/fullscreen.js"></script>
   <link rel="stylesheet" href="../css/ipadteachh.css">
   <style>
     *, *::before, *::after {
@@ -179,186 +181,17 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Attempt auto-fullscreen on page load
-      const docElm = document.documentElement;
-      if (docElm.requestFullscreen) {
-        docElm.requestFullscreen().catch(err => {
-          console.error('Auto-fullscreen failed:', err);
-        });
-      } else if (docElm.mozRequestFullScreen) { // Firefox
-        docElm.mozRequestFullScreen().catch(err => {
-          console.error('Auto-fullscreen failed:', err);
-        });
-      } else if (docElm.webkitRequestFullscreen) { // Chrome, Safari, Opera
-        docElm.webkitRequestFullscreen().catch(err => {
-          console.error('Auto-fullscreen failed:', err);
-        });
-      } else if (docElm.msRequestFullscreen) { // IE/Edge
-        docElm.msRequestFullscreen().catch(err => {
-          console.error('Auto-fullscreen failed:', err);
-        });
-      }
-
-      // Retrieve selections and theme data from localStorage and themes.js
-      const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-      const mediaOption = selections.mediaOption || "default";
-      const themeData = (window.themes && window.themes[mediaOption]) ||
-                        (window.themes && window.themes["default"]) || {};
-
-      // Determine reinforcer type ("shortvideo" or "image")
-      const reinforcerType = selections.reinforcerType || "shortvideo";
-
-      // Get elements for video, play button, image, and interaction blocker overlay.
-      const reinforcerVideo = document.getElementById('reinforcerVideo');
-      const reinforcerSource = document.getElementById('reinforcerVideoSource');
-      const reinforcerImage = document.getElementById('reinforcerImage');
-      const playButton = document.getElementById('playButton');
-      const videoOverlayCover = document.getElementById('videoOverlayCover');
-      const socialContainer = document.getElementById('socialReinforcer');
-      const socialProgressFill = socialContainer ? socialContainer.querySelector('.progress-fill') : null;
-      const socialProgressRemaining = socialContainer ? socialContainer.querySelector('.progress-remaining') : null;
-
-      // Ensure the overlay is visible
-      document.getElementById('reinforcerOverlay').style.display = 'flex';
-
-      if (reinforcerType === "shortvideo") {
-        // Set the video source from the theme or use a fallback video.
-        if (themeData.reinforcerVideos && themeData.reinforcerVideos.length > 0) {
-          const randomIndex = Math.floor(Math.random() * themeData.reinforcerVideos.length);
-          reinforcerSource.src = themeData.reinforcerVideos[randomIndex];
-        } else {
-          reinforcerSource.src = "../videos/africa.mp4";
-        }
-        reinforcerVideo.load();
-        reinforcerVideo.controls = false;
-        // Hide video until the user clicks play.
-        reinforcerVideo.style.display = 'none';
-        // Show the play button.
-        playButton.style.display = 'block';
-
-        // On play button click, request fullscreen (fallback) and play the video.
-        playButton.addEventListener('click', function() {
-          // Request fullscreen as fallback (triggered by user gesture)
-          if (docElm.requestFullscreen) {
-            docElm.requestFullscreen().catch(err => {
-              console.error('Fullscreen request failed:', err);
-            });
-          } else if (docElm.mozRequestFullScreen) {
-            docElm.mozRequestFullScreen().catch(err => {
-              console.error('Fullscreen request failed:', err);
-            });
-          } else if (docElm.webkitRequestFullscreen) {
-            docElm.webkitRequestFullscreen().catch(err => {
-              console.error('Fullscreen request failed:', err);
-            });
-          } else if (docElm.msRequestFullscreen) {
-            docElm.msRequestFullscreen().catch(err => {
-              console.error('Fullscreen request failed:', err);
-            });
-          }
-          
-          reinforcerVideo.play().then(() => {
-            reinforcerVideo.style.display = 'block';
-            playButton.style.display = 'none';
-            // Show the overlay to block further user interaction with the video.
-            videoOverlayCover.style.display = 'block';
-          }).catch(err => {
-            console.error("Video play error:", err);
+      if (window.reinforcerOverlay && typeof window.reinforcerOverlay.bootstrapReinforcerPage === 'function') {
+        window.reinforcerOverlay.bootstrapReinforcerPage();
+      } else if (window.sessionHelpers && typeof window.sessionHelpers.runSessionFlow === 'function') {
+        const flow = window.sessionHelpers.runSessionFlow();
+        if (flow && typeof window.sessionHelpers.startNextStep === 'function') {
+          window.sessionHelpers.startNextStep(flow.reinforcerController, {
+            reinforcerType: flow.session && flow.session.selections
+              ? flow.session.selections.reinforcerType
+              : 'shortvideo'
           });
-        });
-
-        // Navigate to the next game when the video ends.
-        reinforcerVideo.addEventListener('ended', function() {
-          navigateToNextGame();
-        }, { once: true });
-      } else if (reinforcerType === "image") {
-        // If the reinforcer is an image, select a random image.
-        let imageSrc = "";
-        if (themeData.images && themeData.images.length > 0) {
-          const randomIndex = Math.floor(Math.random() * themeData.images.length);
-          imageSrc = themeData.images[randomIndex];
-        } else {
-          imageSrc = "../images/default_reinforcer.png";
         }
-        // Hide video and play button, then show the image.
-        reinforcerVideo.style.display = 'none';
-        playButton.style.display = 'none';
-        reinforcerImage.src = imageSrc;
-        reinforcerImage.style.display = 'block';
-        // After 10 seconds, navigate to the next game.
-        setTimeout(() => {
-          navigateToNextGame();
-        }, 10000);
-      } else if (reinforcerType === "social") {
-        reinforcerVideo.style.display = 'none';
-        playButton.style.display = 'none';
-        reinforcerImage.style.display = 'none';
-        if (socialContainer) {
-          socialContainer.style.display = 'flex';
-          const durationMs = 30000;
-          const startTime = Date.now();
-          let intervalId = null;
-          const updateProgress = () => {
-            const elapsed = Date.now() - startTime;
-            const remaining = Math.max(durationMs - elapsed, 0);
-            const progress = Math.min(elapsed / durationMs, 1);
-            if (socialProgressFill) {
-              socialProgressFill.style.width = `${progress * 100}%`;
-            }
-            if (socialProgressRemaining) {
-              socialProgressRemaining.textContent = String(Math.ceil(remaining / 1000));
-            }
-            if (remaining <= 0) {
-              if (intervalId !== null) {
-                clearInterval(intervalId);
-              }
-              navigateToNextGame();
-            }
-          };
-          updateProgress();
-          intervalId = setInterval(updateProgress, 200);
-        } else {
-          setTimeout(() => {
-            navigateToNextGame();
-          }, 30000);
-        }
-      }
-
-      const resolveGameFile = (gameId) => {
-        if (!gameId) {
-          return '';
-        }
-        if (window.sessionHelpers && typeof window.sessionHelpers.getGameFileById === 'function') {
-          return window.sessionHelpers.getGameFileById(gameId);
-        }
-        if (Array.isArray(window.gamesConfig)) {
-          const match = window.gamesConfig.find(game => game && game.id === gameId);
-          if (match && match.file) {
-            return match.file;
-          }
-        }
-        return `${gameId}.html`;
-      };
-
-      // Navigate to the next game.
-      function navigateToNextGame() {
-        if (window.sessionHelpers && typeof window.sessionHelpers.advanceToNextGame === 'function') {
-          sessionHelpers.advanceToNextGame();
-          return;
-        }
-        const selections = JSON.parse(localStorage.getItem('gameSelections')) || {};
-        let currentGameIndex = parseInt(localStorage.getItem('currentGameIndex'), 10);
-        currentGameIndex += 1;
-        localStorage.setItem('currentGameIndex', currentGameIndex);
-        if (Array.isArray(selections.gameOrder) && currentGameIndex < selections.gameOrder.length) {
-          const nextGameId = selections.gameOrder[currentGameIndex];
-          const nextGameFile = resolveGameFile(nextGameId);
-          if (nextGameFile) {
-            window.location.href = nextGameFile;
-            return;
-          }
-        }
-        window.location.href = "completion.html";
       }
     });
   </script>
