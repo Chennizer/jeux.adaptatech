@@ -1,8 +1,8 @@
 // translateStatic.js
 document.addEventListener('DOMContentLoaded', () => {
   const supported = ['en', 'ja', 'fr'];
-  const userLang = (localStorage.getItem('siteLanguage') || 'en');
-  const lang = supported.includes(userLang) ? userLang : 'en';
+  const userLang = (localStorage.getItem('siteLanguage') || 'fr');
+  const lang = supported.includes(userLang) ? userLang : 'fr';
 
   const getText = (el) => {
     for (const code of [lang, ...supported.filter(code => code !== lang)]) {
