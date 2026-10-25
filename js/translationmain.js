@@ -3,8 +3,8 @@ const SUPPORTED_LANGUAGES = ['en', 'ja', 'fr'];
 const LANGUAGE_LABELS = { en: 'EN', fr: 'FR', ja: '日本語' };
 
 function getStoredLanguage() {
-  const stored = localStorage.getItem('siteLanguage') || document.documentElement.lang || 'en';
-  return SUPPORTED_LANGUAGES.includes(stored) ? stored : 'en';
+  const stored = localStorage.getItem('siteLanguage') || 'fr';
+  return SUPPORTED_LANGUAGES.includes(stored) ? stored : 'fr';
 }
 
 function nextLanguage(lang) {
