@@ -28,7 +28,7 @@ During play, only the drawing, zeppelin, and paint effects are visible. There ar
 - **Space or Enter:** start, release one paint blob per fresh press, resume, and replay. Map switch hardware to either key. Holding does not repeat.
 - **Mouse or touch:** Start from the menu, then press anywhere in the drawing.
 - **Escape / leaving fullscreen:** return to the menu with progress preserved. Changing tabs or leaving the window also pauses.
-- **Settings:** three flight speeds, optional aiming line (off initially), near-miss assistance, and sound (off initially).
+- **Settings:** three flight speeds, optional aiming line (off initially), near-miss assistance, plus separate music/effects toggles and volume sliders. Audio preferences are remembered. Music and paint sounds start enabled at gentle levels, after Start only.
 - **Completion:** after the visual celebration settles, a fresh press starts another drawing in the same scene. A held switch cannot accidentally replay.
 
 ## Paint effects
@@ -41,10 +41,30 @@ All effects share the game frame clock: returning to the menu freezes everything
 
 No timer, collision, lost life, or penalty. Misses leave harmless paint dabs.
 
+## Music and sounds
+
+Audio reuses the existing repository library; no new recordings or external downloads are added.
+
+| Scene | Background music |
+| --- | --- |
+| City | `songs/zenitude/v5calmmusic4.mp3` |
+| Forest | `songs/spring/spring3.mp3` |
+| Village | `songs/zenitude/v5calmmusic1.mp3` |
+| Farm | `songs/bees/beesmusic3.mp3` |
+
+These recordings come from the site's Calm, Plant/Spring, and Bees collections. Music loops at a low initial volume (17%) with a gentle fade-in. The source recordings retain their existing loop boundaries/quiet tails. Only the active scene's soundtrack loads.
+
+- **Release:** `sounds/bubbles/bubble3.mp3`, a quiet, slightly higher soft pop.
+- **Landing:** the same bubble sample, slower and lower for a paint plop.
+- **Colour spread/glitter:** `sounds/space/twinklingstar1.mp3`, softly faded to match the slower fill.
+- **Completed drawing:** `sounds/success4.mp3`, a short chime with a gentle music dip.
+
+Effects start at 40% with additional per-sample attenuation. Closely spaced inputs coalesce sound effects and there is a six-voice limit. Music and effects are independently adjustable/mutable on the menu, without playing preview sounds there. Music starts only in the user's Start gesture, pauses on the menu/tab/window exit, and continues from its previous position on Continue. Replaying the same scene keeps its soundtrack flowing; changing scenes selects its own track. Transient effects stop on pause/replay/scene changes and do not restart late after an asynchronous load. Unsupported audio or missing library files never block painting.
+
 ## Try it
 
-Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. A tile also appears in the Switch Games (`gaming/`) catalogue. All assets are local, including `scenes.js` and the menu illustration at `images/color-the-city.svg`. No external libraries, fonts, media downloads, or build steps.
+Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. A tile also appears in the Switch Games (`gaming/`) catalogue. All assets are local, including `scenes.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the menu illustration at `images/color-the-city.svg`. No external libraries, fonts, media downloads, or build steps.
 
 ## Prototype checks
 
-Browser checks cover both fully offscreen reversals, leftward paint drops, same-scene direction/progress preservation, scene-change cleanup, all four white drawings, a complete 12-part round and replay for every scene, animation cleanup, localized menu choices, and narrow-screen overflow. Slow-paint checks also cover visible in-flight drops after 0.9 seconds, sustained clipped fills, staggered glints, frozen pause/resume state, overlapping fills in all four scenes, final reveal/replay timing, shimmer cleanup, and reduced motion. Earlier checks cover native/full-viewport fullscreen, Escape/Continue, held Space/Enter, and pointer/touch. Physical switch hardware and screen reader testing remain to be done on the target device.
+Browser checks cover both fully offscreen reversals, leftward paint drops, same-scene direction/progress preservation, scene-change cleanup, all four white drawings, a complete 12-part round and replay for every scene, animation cleanup, localized menu choices, and narrow-screen overflow. Slow-paint checks also cover visible in-flight drops after 0.9 seconds, sustained clipped fills, staggered glints, frozen pause/resume state, overlapping fills in all four scenes, final reveal/replay timing, shimmer cleanup, and reduced motion. Earlier checks cover native/full-viewport fullscreen, Escape/Continue, held Space/Enter, and pointer/touch. Audio checks cover silent menus, actual decoded music/effect playback, held input, pause/stop, Continue position, mute/volume preferences, scene soundtrack changes, bounded overlap, and missing/unsupported audio fallback. Physical switch hardware and screen reader testing remain to be done on the target device.

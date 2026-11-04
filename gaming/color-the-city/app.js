@@ -9,7 +9,7 @@
     en: {
       games: 'Switch games', language: 'Language', title: 'A world of colour.',
       pause: 'Pause', resume: 'Continue', settings: 'Settings',
-      soundLabel: 'Little sounds', soundOff: 'Off', soundOn: 'On',
+      soundLabel: 'Paint sounds', musicLabel: 'Music', musicVolume: 'Music volume', effectsVolume: 'Sound volume', soundOff: 'Off', soundOn: 'On',
       space: 'SPACE', orSwitch: 'switch · click · touch',
       settingsHint: 'Your drawing can wait.', speed: 'Zeppelin speed',
       slow: 'Gentle', normal: 'Easygoing', fast: 'Brisk',
@@ -30,7 +30,7 @@
     fr: {
       games: 'Jeux pour switch', language: 'Langue', title: 'Un monde de couleurs.',
       pause: 'Pause', resume: 'Continuer', settings: 'Réglages',
-      soundLabel: 'Petits sons', soundOff: 'Désactivés', soundOn: 'Activés',
+      soundLabel: 'Sons de peinture', musicLabel: 'Musique', musicVolume: 'Volume de la musique', effectsVolume: 'Volume des sons', soundOff: 'Désactivés', soundOn: 'Activés',
       space: 'ESPACE', orSwitch: 'switch · clic · toucher',
       settingsHint: 'Le dessin t’attend.', speed: 'Vitesse du zeppelin',
       slow: 'Douce', normal: 'Tranquille', fast: 'Rapide',
@@ -51,7 +51,7 @@
     ja: {
       games: 'スイッチゲーム', language: '言語', title: '世界を彩ろう。',
       pause: '一時停止', resume: '続ける', settings: '設定',
-      soundLabel: '小さな音', soundOff: 'オフ', soundOn: 'オン',
+      soundLabel: '絵の具の音', musicLabel: '音楽', musicVolume: '音楽の音量', effectsVolume: '効果音の音量', soundOff: 'オフ', soundOn: 'オン',
       space: 'スペース', orSwitch: 'スイッチ・クリック・タッチ',
       settingsHint: '絵は待っているよ。', speed: '飛行船の速さ',
       slow: 'ゆっくり', normal: 'ふつう', fast: 'はやい',
@@ -101,8 +101,6 @@
   let airshipX = initialAirshipX;
   let direction = 1;
   let lastTime = null;
-  let soundEnabled = false;
-  let audio;
   let feedbackKey = 'initial';
   let totalPainted = 0;
   let drops = [];
@@ -234,19 +232,18 @@
     $('progress').setAttribute('aria-label', text[lang].paintedLabel);
     announce(feedbackKey); updateUI();
   }
-  function tone(success = false) {
-    if (!soundEnabled) return;
+  function configureAudio() {
+    window.PaintAudio.configure({
+      music: $('musicEnabled').checked, effects: $('sound').checked,
+      musicVolume: Number($('musicVolume').value) / 100,
+      effectsVolume: Number($('effectsVolume').value) / 100
+    });
     try {
-      audio ||= new (window.AudioContext || window.webkitAudioContext)();
-      if (audio.state === 'suspended') audio.resume().catch(() => {});
-      const now = audio.currentTime;
-      const oscillator = audio.createOscillator(), gain = audio.createGain();
-      oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(success ? 523.25 : 349.23, now);
-      oscillator.frequency.exponentialRampToValueAtTime(success ? 783.99 : 440, now + .13);
-      gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(.07, now + .015); gain.gain.exponentialRampToValueAtTime(.0001, now + .3);
-      oscillator.connect(gain); gain.connect(audio.destination); oscillator.start(now); oscillator.stop(now + .32);
-      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-    } catch (_) { /* Visual play remains available when audio is unavailable. */ }
+      localStorage.setItem('colourCityAudio', JSON.stringify({
+        music: $('musicEnabled').checked, effects: $('sound').checked,
+        musicVolume: Number($('musicVolume').value), effectsVolume: Number($('effectsVolume').value)
+      }));
+    } catch (_) { /* Audio preferences are optional. */ }
   }
   function targetAt(x) {
     const margin = $('assist').checked ? 14 : 0;
@@ -397,9 +394,9 @@
         celebrateHouse(b, colour);
       }
       splash(drop.x, drop.landingY, colour, b.painted === b.floors);
-      tone(true); announce('hit'); updateUI();
+      window.PaintAudio.effect('impact'); window.PaintAudio.effect('fill'); announce('hit'); updateUI();
       if (totalPainted === totalFloors) {
-        setPhase('complete'); announce('win'); winWait = reducedMotion.matches ? .35 : PAINT.fill + PAINT.glitterTail + .2;
+        setPhase('complete'); announce('win'); window.PaintAudio.effect('complete'); winWait = reducedMotion.matches ? .35 : PAINT.fill + PAINT.glitterTail + .2;
         buildings.forEach((house, i) => celebrateHouse(house, currentPalette()[i], true));
       }
     } else {
@@ -408,10 +405,12 @@
         const el = svg('ellipse', { cx: drop.x, cy: WORLD.groundY + 15, rx: 28, ry: 8, fill: drop.colour }, $('streetDetails'));
         pageSplashes.push(el); if (pageSplashes.length > 20) pageSplashes.shift().remove();
       }
+      window.PaintAudio.effect('impact');
       announce(b ? 'already' : 'miss');
     }
   }
   function startScene() {
+    window.PaintAudio.reset(activeScene);
     totalPainted = 0; winWait = 0; flightTime = 0; bucketPulse = 0;
     drops.forEach(d => d.el.remove()); drops = []; clearEffects(); pageSplashes = [];
     buildScene(); airshipX = initialAirshipX; direction = 1;
@@ -444,6 +443,7 @@
     } catch (_) { fullscreenPending = false; }
   }
   function enterGame() {
+    window.PaintAudio.start(selectedScene);
     requestGameFullscreen();
     menuOpen = false; $('options').open = false;
     if (selectedScene !== activeScene || phase === 'ready' || phase === 'complete') {
@@ -455,6 +455,7 @@
   }
   function returnToMenu() {
     if (menuOpen) return;
+    window.PaintAudio.pause();
     if (phase === 'playing') setPhase('paused');
     menuOpen = true; fullscreenAttempt++; fullscreenPending = false;
     updateUI(); $('mainAction').focus({ preventScroll: true });
@@ -485,7 +486,7 @@
     const outletY = WORLD.outletY + bob();
     g.setAttribute('transform', `translate(${airshipX} ${outletY})`);
     drops.push({ x: airshipX, y: outletY, originY: outletY, age: 0, fallDuration: PAINT.fallMin + PAINT.fallExtra * Math.min(1, Math.max(0, landingY - outletY - 31) / 450), target, landingY, colour, el: g, shape, shine, trails });
-    bucketPulse = PAINT.bucketPulse; tone(); announce('falling');
+    bucketPulse = PAINT.bucketPulse; window.PaintAudio.effect('release'); announce('falling');
   }
   function frame(time) {
     const dt = lastTime === null ? 0 : Math.min((time - lastTime) / 1000, .05);
@@ -560,7 +561,17 @@
   });
   $('playSurface').addEventListener('click', event => { if (event.detail === 0) activate(); });
   $('mainAction').addEventListener('click', activate);
-  $('sound').addEventListener('change', () => { soundEnabled = $('sound').checked; tone(); });
+  try {
+    const saved = JSON.parse(localStorage.getItem('colourCityAudio') || 'null');
+    if (saved) {
+      if (typeof saved.music === 'boolean') $('musicEnabled').checked = saved.music;
+      if (typeof saved.effects === 'boolean') $('sound').checked = saved.effects;
+      if (Number.isFinite(saved.musicVolume)) $('musicVolume').value = Math.max(0, Math.min(100, saved.musicVolume));
+      if (Number.isFinite(saved.effectsVolume)) $('effectsVolume').value = Math.max(0, Math.min(100, saved.effectsVolume));
+    }
+  } catch (_) { /* Audio preferences are optional. */ }
+  ['musicEnabled', 'sound', 'musicVolume', 'effectsVolume'].forEach(id => $(id).addEventListener('input', configureAudio));
+  configureAudio();
   $('guide').addEventListener('change', drawAirship);
   $('assist').addEventListener('change', drawAirship);
   $('language').addEventListener('change', event => {
