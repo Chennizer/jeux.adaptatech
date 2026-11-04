@@ -2,11 +2,11 @@
   'use strict';
   // Reuse the site's existing audio library; nothing plays on the menu.
   const tracks = {
-    city: '../../songs/zenitude/v5calmmusic4.mp3',
+    city: '../../songs/artgallery1.mp3',
     forest: '../../songs/spring/spring3.mp3',
-    village: '../../songs/zenitude/v5calmmusic1.mp3',
+    village: '../../songs/season/spring1.mp3',
     farm: '../../songs/bees/beesmusic3.mp3',
-    planets: '../../songs/zenitude/v5calmmusic4.mp3'
+    planets: '../../songs/space/space1.mp3'
   };
   const samples = {
     release: { path: '../../sounds/bubbles/bubble3.mp3', gain: .36, rate: 1.12, cooldown: .09, max: .5 },

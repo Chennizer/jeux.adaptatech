@@ -57,13 +57,13 @@ Audio reuses the existing repository library; no new recordings or external down
 
 | Scene | Background music |
 | --- | --- |
-| City | `songs/zenitude/v5calmmusic4.mp3` |
+| City | `songs/artgallery1.mp3` (Art Gallery / painting) |
 | Forest | `songs/spring/spring3.mp3` |
-| Village | `songs/zenitude/v5calmmusic1.mp3` |
+| Village | `songs/season/spring1.mp3` (pastoral spring) |
 | Farm | `songs/bees/beesmusic3.mp3` |
-| Planets | `songs/zenitude/v5calmmusic4.mp3` |
+| Planets | `songs/space/space1.mp3` (Space) |
 
-These recordings come from the site's Calm, Plant/Spring, and Bees collections. Music loops at a low initial volume (17%) with a gentle fade-in. The source recordings retain their existing loop boundaries/quiet tails. Only the active scene's soundtrack loads.
+These recordings follow the scenes' themes: Art Gallery for the painted city, Plant/Spring for the forest, seasonal spring for the village, Bees for the farm, and Space for the planets. They reuse the same themed collections as the site's painting, nature and stars activities. Music loops at a low initial volume (17%) with a gentle fade-in. The source recordings retain their existing loop boundaries/quiet tails. Only the active scene's soundtrack loads.
 
 - **Release:** `sounds/bubbles/bubble3.mp3`, a quiet, slightly higher soft pop.
 - **Landing:** the same bubble sample, slower and lower for a paint plop.
@@ -78,4 +78,4 @@ Serve the repository, for example with `python -m http.server 8000`, then open `
 
 ## Prototype checks
 
-Browser checks cover both fully offscreen reversals, leftward paint drops, same-scene direction/progress preservation, scene-change cleanup, all four white drawings, a complete 12-part round and replay for the original scenes, animation cleanup, localized menu choices, and narrow-screen overflow. Slow-paint checks also cover visible in-flight drops after 0.9 seconds, sustained clipped fills, staggered glints, frozen pause/resume state, overlapping fills in all four scenes, final reveal/replay timing, shimmer cleanup, and reduced motion. Earlier checks cover native/full-viewport fullscreen, Escape/Continue, held Space/Enter, and pointer/touch. Audio checks cover silent menus, actual decoded music/effect playback, held input, pause/stop, Continue position, mute/volume preferences, scene soundtrack changes, bounded overlap, and missing/unsupported audio fallback. Colour-mode checks cover the 12-second automatic interval, pause remainder, manual Enter/hold/NumpadEnter, stable colours while crossing objects, captured in-flight colours, synchronized paint indicators, slower fills, full rounds/replays for the refined forest and planets, localized menus and mobile overflow. Physical switch hardware and screen reader testing remain to be done on the target device.
+Browser checks cover both fully offscreen reversals, leftward paint drops, same-scene direction/progress preservation, scene-change cleanup, all four white drawings, a complete 12-part round and replay for the original scenes, animation cleanup, localized menu choices, and narrow-screen overflow. Slow-paint checks also cover visible in-flight drops after 0.9 seconds, sustained clipped fills, staggered glints, frozen pause/resume state, overlapping fills in all four scenes, final reveal/replay timing, shimmer cleanup, and reduced motion. Earlier checks cover native/full-viewport fullscreen, Escape/Continue, held Space/Enter, and pointer/touch. Audio checks cover all five thematic soundtrack mappings, real playback/pause/Continue for each, silent menus, decoded effects, held input, pause/stop, Continue position, mute/volume preferences, scene soundtrack changes, bounded overlap, and missing/unsupported audio fallback. Colour-mode checks cover the 12-second automatic interval, pause remainder, manual Enter/hold/NumpadEnter, stable colours while crossing objects, captured in-flight colours, synchronized paint indicators, slower fills, full rounds/replays for the refined forest and planets, localized menus and mobile overflow. Physical switch hardware and screen reader testing remain to be done on the target device.
