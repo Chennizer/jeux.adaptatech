@@ -1,20 +1,36 @@
-# A World of Colour / Un monde de couleurs
+# Colorful / Coloré / カラフル
 
-A standalone colouring-book prototype with automatic one-switch play and a manual colour-selection mode. A giant rainbow zeppelin flies over a white drawing board. A fresh press releases paint onto one of four large objects. Finish all 12 parts, enjoy the visual celebration, then press again for a fresh drawing and palette.
+A standalone colouring-book prototype with automatic one-switch play and a manual colour-selection mode. A giant rainbow zeppelin flies over a white drawing board. Each fresh press releases paint onto a large outlined object. Complete the drawing to reveal a colourful themed landscape, then continue automatically to another composition.
 
 ## Choose a drawing
 
 The initial menu offers five illustrated choices:
 
-- **City:** four oversized storybook buildings.
+- **City:** oversized storybook buildings.
 - **Forest:** a scalloped pine, broad oak, apple tree, and weeping willow, with connected organic canopies and branching details.
 - **Village:** cottage, windmill, clock tower, and bakery.
 - **Farm:** barn, silo, tractor, and a giant sunflower planter.
 - **Planets:** ringed, cratered, banded, and star-patterned worlds floating on the white page.
 
-Each scene has its own real outline artwork, paint regions, collision silhouettes, and palette. All start white. Scene names and controls support French, English, and Japanese. The selected scene is remembered when local storage is available.
+Each scene has its own outline artwork, paint regions, collision silhouettes, and palette. All start white. The title, scene names, difficulty descriptions, and controls support French, English, and Japanese. The selected scene and difficulty are remembered when local storage is available.
 
-Selecting a different scene and pressing Start begins a fresh drawing. Continue on the same scene preserves the current colours, falling drops, animation progress, zeppelin position, and direction. Changing the menu choice back before starting also leaves the current drawing intact.
+Each scene has **ten composition templates** that vary motif order, size, placement, and mirroring. A separate shuffle bag for each scene uses all ten before repeating, and prevents an immediate repeat when a new bag starts. Difficulty determines how many motifs from the chosen composition appear.
+
+Selecting a different scene or difficulty and pressing Start begins a fresh drawing. Continue during an unfinished drawing preserves its colours, falling drops, animation progress, zeppelin position, and direction. Changing a menu choice back before starting also leaves that drawing intact.
+
+## Difficulty
+
+The menu slider has five steps, from left to right:
+
+| Level | Objects | Hits needed per object | Total successful hits |
+| --- | --- | --- | --- |
+| 1 | 2 | 1 | 2 |
+| 2 | 3 | 1 | 3 |
+| 3 | 3 | 2 | 6 |
+| 4 | 4 | 2 | 8 |
+| 5 | 4 | 3 | 12 |
+
+At levels 1 and 2, one paint hit fills the whole object, including its roof and final details, with the slow spreading animation. At levels 3 and 4, the first hit colours two of its three main regions and the second finishes it. At level 5, each hit colours one main region. The selected difficulty stays active as new compositions appear.
 
 ## Colour modes
 
@@ -31,7 +47,7 @@ The zeppelin starts flying to the right. It must finish leaving the drawing befo
 
 ## Menu and fullscreen play
 
-The menu follows the site's shared game-options style (`css/choiceeyegaze.css`): a dark backdrop, white panel, teal title/borders and an orange Start button. It contains scene/mode choices, a current-colour preview and optional language, speed, sound, aiming, and assistance settings. Start requests native fullscreen directly from the click, touch, or switch gesture. Where fullscreen is unsupported or denied, the game fills the browser viewport.
+The menu follows the site's shared game-options style (`css/choiceeyegaze.css`): a dark backdrop, white panel, teal title/borders and an orange Start button. It scales its card, type, illustrations, spacing, and choice grid with the viewport, stacking the configuration on narrower screens. It contains scene/mode choices, the five-step difficulty slider, a current-colour preview and optional language, speed, sound, aiming, and assistance settings. Start requests native fullscreen directly from the click, touch, or switch gesture. Where fullscreen is unsupported or denied, the game fills the browser viewport.
 
 During play, only the drawing, zeppelin, and paint effects are visible. There are no titles, labels, counters, buttons, settings, instructions, or completion text. The entire drawing accepts click/touch and is the sole focusable game control. Status and progress remain available to assistive technology without visible overlays.
 
@@ -39,17 +55,29 @@ During play, only the drawing, zeppelin, and paint effects are visible. There ar
 - **Mouse or touch:** Start from the menu, then press anywhere in the drawing.
 - **Escape / leaving fullscreen:** return to the menu with progress preserved. Changing tabs or leaving the window also pauses.
 - **Settings:** three flight speeds, optional aiming line (off initially), near-miss assistance, plus separate music/effects toggles and volume sliders. Audio preferences are remembered. Music and paint sounds start enabled at gentle levels, after Start only.
-- **Completion:** after the visual celebration settles, a fresh press starts another drawing in the same scene. A held switch cannot accidentally replay.
+- **Completion:** the final fill and shimmer finish before a colourful background fades in. After a short viewing pause, it fades back to white and the next shuffled composition starts automatically. A fresh press can advance once the reveal has had time to appear; holding the switch never repeats.
 
 ## Paint effects
 
 Each press gives the paint a short, visible release swell, followed by a gentle vertical descent. Drop travel lasts about 1.5–2.25 seconds including the swell, depending on distance; it no longer accelerates into a fast fall. Soft trails follow the drop, and contact makes a slower splat with a few arcing droplets and an expanding ring.
 
-Colour spreads for 4.2 seconds, with a short shimmer tail. Organic reveal shapes are fitted to each part's actual bounds so small windows/roofs and large canopies do not fill all at once. A faint sheen and small, staggered gold/white glints appear only inside the already-coloured shape, beneath static outlines and details. Each glint gently appears and fades once. Completed objects settle and emit stars. The final replay lock allows the entire last fill and shimmer to finish.
+Colour spreads for 4.2 seconds, with a short shimmer tail. Organic reveal shapes are fitted to each part's actual bounds so small windows/roofs and large canopies do not fill all at once. A faint sheen and small, staggered gold/white glints appear only inside the already-coloured shape, beneath static outlines and details. Each glint gently appears and fades once. Completed objects settle and emit stars. The completion sequence allows the entire last fill and shimmer to finish before revealing the background.
 
-All effects share the game frame clock: returning to the menu freezes everything, and Continue resumes it. Final reveals finish after the logical win. Replay and scene changes clear old drops, clips, particles, and transforms. Reduced-motion preferences retain the slower essential drop movement but use immediate fills and a brief static splat, with no glitter, sheen, decorative trails, particles, stars, bobbing, or object movement. Essential flight/drop movement remains.
+All effects share the game frame clock: returning to the menu freezes motion and effects, and Continue resumes an unfinished drawing. Final reveals finish after the logical win. New compositions and scene changes clear old drops, clips, particles, and transforms. Reduced-motion preferences retain the slower essential drop movement but use immediate fills and a brief static splat, with no glitter, sheen, decorative trails, particles, stars, bobbing, or object movement. Essential flight/drop movement remains.
 
-No timer, collision, lost life, or penalty. Misses leave harmless paint dabs.
+There is no time limit, lost life, or penalty. Misses leave harmless paint dabs.
+
+## Completion landscapes
+
+The white drawing board remains blank behind the objects throughout painting. Once everything is coloured, a separate full-viewport SVG landscape slowly appears behind the finished drawing:
+
+- **City:** a colourful sunset with distant city silhouettes.
+- **Forest:** a green woodland sky, warm sunlight, layered trees and firefly-like points.
+- **Village:** a pastel sunrise above hills and distant cottages.
+- **Farm:** a blue countryside sky above green and golden fields.
+- **Planets:** a rich galaxy with nebula clouds, stars, a moon and orbital arcs.
+
+Each theme has ten deterministic background variations matched to the composition. The normal completion sequence starts the background after the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 4.5 seconds, then fades to white before the next drawing. Reduced motion uses shorter fades without decorative movement. The background stays behind the outlined objects and zeppelin, with no text or controls appearing during the celebration.
 
 ## Music and sounds
 
@@ -74,8 +102,10 @@ Effects start at 40% with additional per-sample attenuation. Closely spaced inpu
 
 ## Try it
 
-Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. A tile also appears in the Switch Games (`gaming/`) catalogue. All assets are local, including `scenes.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the menu illustration at `images/color-the-city.svg`. No external libraries, fonts, media downloads, or build steps.
+Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. A tile also appears in the Switch Games (`gaming/`) catalogue. All assets are local, including `scenes.js`, `templates.js`, `backgrounds.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the menu illustration at `images/color-the-city.svg`. No external libraries, fonts, media downloads, or build steps.
 
 ## Prototype checks
 
-Browser checks cover both fully offscreen reversals, leftward paint drops, same-scene direction/progress preservation, scene-change cleanup, all four white drawings, a complete 12-part round and replay for the original scenes, animation cleanup, localized menu choices, and narrow-screen overflow. Slow-paint checks also cover visible in-flight drops after 0.9 seconds, sustained clipped fills, staggered glints, frozen pause/resume state, overlapping fills in all four scenes, final reveal/replay timing, shimmer cleanup, and reduced motion. Earlier checks cover native/full-viewport fullscreen, Escape/Continue, held Space/Enter, and pointer/touch. Audio checks cover all five thematic soundtrack mappings, real playback/pause/Continue for each, silent menus, decoded effects, held input, pause/stop, Continue position, mute/volume preferences, scene soundtrack changes, bounded overlap, and missing/unsupported audio fallback. Colour-mode checks cover the 12-second automatic interval, pause remainder, manual Enter/hold/NumpadEnter, stable colours while crossing objects, captured in-flight colours, synchronized paint indicators, slower fills, full rounds/replays for the refined forest and planets, localized menus and mobile overflow. Physical switch hardware and screen reader testing remain to be done on the target device.
+The existing browser regression scripts cover fullscreen and pause/Continue, both offscreen flight reversals, held switch input, slow clipped fills and glitter, colour modes, active-colour indicators, all five thematic soundtrack mappings, audio preferences and fallback behavior, localization, and narrow-screen overflow.
+
+Composition checks cover completed rounds in all 25 scene/difficulty combinations, exact hit counts and whole-object fills, captured drop colours, intermediate two-hit fills, completion background timing and automatic advancement. A separate geometry sweep covers all 250 scene/template/difficulty combinations (800 objects), with no clipping or overlapping assisted hit regions; 500 shuffled drawings cover complete bags and no immediate repeats at their boundaries. Lifecycle checks cover native fullscreen, held inputs, paused fills, retained layouts, saved difficulty, and reduced-motion progression. Localized menus and open settings fit widths from 320 to 2560 pixels without horizontal overflow. Physical switch hardware and screen reader testing remain to be done on the target device.

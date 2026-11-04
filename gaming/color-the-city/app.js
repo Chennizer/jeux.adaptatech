@@ -8,7 +8,7 @@
   const COLOUR_CYCLE_SECONDS = 12;
   const text = {
     en: {
-      games: 'Switch games', language: 'Language', title: 'A world of colour.',
+      games: 'Switch games', language: 'Language', title: 'Colorful',
       pause: 'Pause', resume: 'Continue', settings: 'Settings',
       soundLabel: 'Paint sounds', musicLabel: 'Music', musicVolume: 'Music volume', effectsVolume: 'Sound volume', soundOff: 'Off', soundOn: 'On',
       space: 'SPACE', orSwitch: 'switch · click · touch',
@@ -23,13 +23,13 @@
       completeTitle: 'Oh, what a lovely place.', completeCopy: 'All yours. Press again for a fresh drawing.',
       initial: 'Press to drop a little colour onto the drawing.', falling: 'Here comes a splash…',
       hit: 'A little more lovely.', miss: 'A splash on the page! The zeppelin will come around again.',
-      already: 'This part of the drawing is already full of colour.', win: 'All {total} parts painted. Your drawing is complete!',
+      already: 'This part of the drawing is already full of colour.', win: 'Your drawing is complete! A new picture will appear after the celebration.',
       paused: 'Paused. Press again to continue.', sceneTitle: 'Colouring board',
-      sceneDescription: 'A giant rainbow zeppelin flies back and forth over a white drawing. Press to drop paint and colour one part.',
-      paintedLabel: 'Painted parts', chooseScene: 'Choose your drawing', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.'
+      sceneDescription: 'A giant rainbow zeppelin flies back and forth over a white drawing. Press to drop paint and add colour to an object.',
+      paintedLabel: 'Successful paint hits', chooseScene: 'Choose your drawing', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.', difficulty: 'Difficulty', difficultyDetails: ['2 objects · 1 hit each', '3 objects · 1 hit each', '3 objects · 2 hits each', '4 objects · 2 hits each', '4 objects · 3 hits each']
     },
     fr: {
-      games: 'Jeux pour switch', language: 'Langue', title: 'Un monde de couleurs.',
+      games: 'Jeux pour switch', language: 'Langue', title: 'Coloré',
       pause: 'Pause', resume: 'Continuer', settings: 'Réglages',
       soundLabel: 'Sons de peinture', musicLabel: 'Musique', musicVolume: 'Volume de la musique', effectsVolume: 'Volume des sons', soundOff: 'Désactivés', soundOn: 'Activés',
       space: 'ESPACE', orSwitch: 'switch · clic · toucher',
@@ -44,13 +44,13 @@
       completeTitle: 'Comme c’est joli !', completeCopy: 'C’est ta création. Appuie pour un nouveau dessin.',
       initial: 'Appuie pour laisser tomber de la couleur sur le dessin.', falling: 'Une touche de couleur arrive…',
       hit: 'Encore un peu plus joli.', miss: 'Une tache sur la page ! Le zeppelin va revenir.',
-      already: 'Cette partie du dessin est déjà pleine de couleurs.', win: 'Les {total} parties sont coloriées. Ton dessin est terminé !',
+      already: 'Cette partie du dessin est déjà pleine de couleurs.', win: 'Ton dessin est terminé ! Un nouveau dessin arrive après la célébration.',
       paused: 'En pause. Appuie pour continuer.', sceneTitle: 'Tableau de coloriage',
-      sceneDescription: 'Un grand zeppelin arc-en-ciel fait des allers-retours au-dessus d’un dessin blanc. Appuie pour colorier une partie.',
-      paintedLabel: 'Parties coloriées', chooseScene: 'Choisis ton dessin', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.'
+      sceneDescription: 'Un grand zeppelin arc-en-ciel fait des allers-retours au-dessus d’un dessin blanc. Appuie pour ajouter de la couleur à un objet.',
+      paintedLabel: 'Touches de peinture réussies', chooseScene: 'Choisis ton dessin', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.', difficulty: 'Difficulté', difficultyDetails: ['2 objets · 1 touche chacun', '3 objets · 1 touche chacun', '3 objets · 2 touches chacun', '4 objets · 2 touches chacun', '4 objets · 3 touches chacun']
     },
     ja: {
-      games: 'スイッチゲーム', language: '言語', title: '世界を彩ろう。',
+      games: 'スイッチゲーム', language: '言語', title: 'カラフル',
       pause: '一時停止', resume: '続ける', settings: '設定',
       soundLabel: '絵の具の音', musicLabel: '音楽', musicVolume: '音楽の音量', effectsVolume: '効果音の音量', soundOff: 'オフ', soundOn: 'オン',
       space: 'スペース', orSwitch: 'スイッチ・クリック・タッチ',
@@ -65,10 +65,10 @@
       completeTitle: 'すてきな絵ができたね。', completeCopy: 'あなたの作品だよ。もう一度押すと新しい絵に。',
       initial: '押すと、絵に色がつくよ。', falling: '絵の具が落ちてくるよ…',
       hit: 'もっとすてきになったね。', miss: 'ページに色がついたね！飛行船はまた戻ってくるよ。',
-      already: 'ここはもう色いっぱい。', win: '{total}か所すべて塗れたね。絵の完成！',
+      already: 'ここはもう色いっぱい。', win: '絵の完成！お祝いのあとに、新しい絵が出てくるよ。',
       paused: '一時停止中。もう一度押すと続けられます。', sceneTitle: 'お絵描きボード',
       sceneDescription: '大きな虹色の飛行船が白い絵の上を行ったり来たりします。押すとひとつずつ色がつきます。',
-      paintedLabel: '塗った部分', chooseScene: '絵を選ぼう', sceneCity: '街', sceneForest: '森', sceneVillage: '村', sceneFarm: '農場', scenePlanets: '惑星', chooseMode: 'モードを選ぼう', autoMode: 'ひとつのスイッチ', autoModeHelp: '色は12秒ごとに変わります。スペースかエンターで絵の具を落とします。', manualMode: '色を選ぶ', manualModeHelp: 'スペースで絵の具を落とし、エンターで次の色を選びます。', activeColour: '選択中の色', manualHint: 'スペース・スイッチ・タッチ：絵の具。エンター：次の色。Esc：メニュー。'
+      paintedLabel: '絵の具が当たった回数', chooseScene: '絵を選ぼう', sceneCity: '街', sceneForest: '森', sceneVillage: '村', sceneFarm: '農場', scenePlanets: '惑星', chooseMode: 'モードを選ぼう', autoMode: 'ひとつのスイッチ', autoModeHelp: '色は12秒ごとに変わります。スペースかエンターで絵の具を落とします。', manualMode: '色を選ぶ', manualModeHelp: 'スペースで絵の具を落とし、エンターで次の色を選びます。', activeColour: '選択中の色', manualHint: 'スペース・スイッチ・タッチ：絵の具。エンター：次の色。Esc：メニュー。', difficulty: '難しさ', difficultyDetails: ['2つの物・それぞれ1回', '3つの物・それぞれ1回', '3つの物・それぞれ2回', '4つの物・それぞれ2回', '4つの物・それぞれ3回']
     }
   };
   const palettes = [
@@ -85,13 +85,18 @@
   let selectedScene = 'city';
   try { const saved = localStorage.getItem('colourCityScene'); if (Object.hasOwn(sceneLabels, saved)) selectedScene = saved; } catch (_) { /* Scene storage is optional. */ }
   let activeScene = selectedScene;
+  let selectedDifficulty = 5;
+  try { const value = Number(localStorage.getItem('colorfulDifficulty')); if (Number.isInteger(value) && value >= 1 && value <= 5) selectedDifficulty = value; } catch (_) {}
+  let activeDifficulty = selectedDifficulty;
+  let activeTemplate = window.PaintTemplates.get(activeScene, 0);
+  let completionAge = 0;
   let selectedColourMode = 'auto';
   try { const mode = localStorage.getItem('colourCityMode'); if (mode === 'manual') selectedColourMode = mode; } catch (_) {}
   let activeColourMode = selectedColourMode;
   let paintColourIndex = 0;
   let colourElapsed = 0;
   let buildings = cityBuildings;
-  let totalFloors = 12;
+  let requiredHits = 12;
   const initialAirshipX = Math.max(WORLD.halfShipWidth + 4, buildings[0].x + buildings[0].width / 2);
   let lang = 'fr';
   try { const saved = localStorage.getItem('siteLanguage'); if (text[saved]) lang = saved; } catch (_) { /* Storage is optional. */ }
@@ -108,7 +113,7 @@
   let direction = 1;
   let lastTime = null;
   let feedbackKey = 'initial';
-  let totalPainted = 0;
+  let completedHits = 0;
   let drops = [];
   let effects = [];
   let pageSplashes = [];
@@ -125,11 +130,22 @@
   function inkPath(d, parent, attrs = {}) {
     return svg('path', { d, fill: 'none', stroke: INK, 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', ...attrs }, parent);
   }
-  function roofY(b, x) {
+  function modelRoofY(b, x) {
     if (b.surfaceAt) return b.surfaceAt(x);
     const radius = b.width / 2 + 12;
     const position = Math.max(-1, Math.min(1, (x - b.x - b.width / 2) / radius));
     return b.top + 3 - b.roofHeight * (b.roofKind === 'dome' ? Math.sqrt(1 - position * position) : 1 - Math.abs(position));
+  }
+  function roofY(b, x) {
+    if (!b.layout) return modelRoofY(b, x);
+    const { sx, sy, tx, ty } = b.layout;
+    return modelRoofY(b, (x - tx) / sx) * sy + ty;
+  }
+  function modelPoint(b, x, y) {
+    return b.layout ? { x: (x - b.layout.tx) / b.layout.sx, y: (y - b.layout.ty) / b.layout.sy } : { x, y };
+  }
+  function worldPoint(b, x, y) {
+    return b.layout ? { x: x * b.layout.sx + b.layout.tx, y: y * b.layout.sy + b.layout.ty } : { x, y };
   }
   function buildCity() {
     $('buildings').replaceChildren();
@@ -190,7 +206,7 @@
         inkPath(`M${b.x + 163} ${b.top - 20}v-31h23v43m-9-58q-18-16-5-28q17-15 27 1q10 17-9 21`, g, { fill: '#fff', 'stroke-width': 2.5 });
       }
     });
-    $('progress').max = totalFloors;
+    $('progress').max = requiredHits;
   }
   function buildScene() {
     if (activeScene === 'city') {
@@ -201,9 +217,18 @@
       if (activeScene !== 'planets') inkPath('M24 652Q191 648 320 651T650 650T960 652T1180 650', $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
       buildings = window.PaintSceneArt[activeScene].render({ parent: $('buildings'), svg, inkPath, groundY: WORLD.groundY, ink: INK });
     }
+    const placed = window.PaintTemplates.place(buildings, {
+      scene: activeScene, difficulty: activeDifficulty, template: activeTemplate,
+      parent: $('buildings'), svg, surfaceY: modelRoofY
+    });
+    buildings = placed.targets;
+    $('streetDetails').replaceChildren();
+    if (activeScene !== 'planets') inkPath(`M24 ${placed.baseline + 2}Q300 ${placed.baseline - 2} 600 ${placed.baseline + 1}T1180 ${placed.baseline}`, $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
     $('buildings').dataset.scene = activeScene;
-    totalFloors = buildings.reduce((total, b) => total + b.floors, 0);
-    $('progress').max = totalFloors;
+    $('buildings').dataset.template = `${activeScene}-${String(activeTemplate.id + 1).padStart(2, '0')}`;
+    $('buildings').dataset.difficulty = activeDifficulty;
+    requiredHits = buildings.reduce((total, b) => total + b.requiredHits, 0);
+    $('progress').max = requiredHits;
   }
   function currentPalette() {
     if (activeScene === 'city') return palettes[paletteIndex % palettes.length];
@@ -246,19 +271,23 @@
   }
   function announce(key) {
     feedbackKey = key;
-    $('feedback').textContent = text[lang][key].replace('{total}', totalFloors);
+    $('feedback').textContent = text[lang][key].replace('{total}', requiredHits);
   }
   function setPhase(next) { phase = next; $('playSurface').dataset.state = phase; updateUI(); }
   function updateUI() {
     const t = text[lang];
-    $('actionLabel').textContent = t[selectedScene !== activeScene ? 'start' : phase === 'paused' ? 'resume' : phase === 'complete' ? 'replay' : 'start'];
+    $('actionLabel').textContent = t[selectedScene !== activeScene || selectedDifficulty !== activeDifficulty ? 'start' : phase === 'paused' ? 'resume' : phase === 'complete' ? 'replay' : 'start'];
     $('menu').hidden = !menuOpen;
     $('game').hidden = menuOpen;
     $('menu').inert = !menuOpen;
     document.body.classList.toggle('playing', !menuOpen);
-    $('progress').value = totalPainted;
+    $('progress').value = completedHits;
     document.querySelector('.menu-hint').textContent = text[lang][selectedColourMode === 'manual' ? 'manualHint' : 'menuHint'];
     updateMenuColour();
+    $('difficulty').value = selectedDifficulty;
+    const detail = text[lang].difficultyDetails[selectedDifficulty - 1];
+    $('difficultyDescription').textContent = `${selectedDifficulty} — ${detail}`;
+    $('difficulty').setAttribute('aria-valuetext', detail);
   }
   function translate() {
     document.documentElement.lang = lang;
@@ -285,7 +314,7 @@
   }
   function targetAt(x) {
     const margin = $('assist').checked ? 14 : 0;
-    return buildings.find(b => x >= b.x - margin && x <= b.x + b.width + margin);
+    return buildings.find(b => x >= b.hitX - margin && x <= b.hitX + b.hitWidth + margin);
   }
   function bob() { return reducedMotion.matches ? 0 : Math.sin(flightTime * 1.8) * 4; }
   function drawAirship() {
@@ -387,7 +416,7 @@
   function paintRun(b, floor, x, colour) {
     if (reducedMotion.matches || b.surfaceAt) return;
     const y = b.origins?.[floor]?.y ?? WORLD.groundY - (floor + 1) * b.floorHeight + 6;
-    const startY = roofY(b, x);
+    const startY = modelRoofY(b, x);
     // The coloured streak travels behind the line drawing and its windows.
     const streak = svg('path', { d: `M${x} ${startY}Q${x - 12} ${(startY + y) / 2} ${x} ${y}`, fill: 'none', stroke: colour, 'stroke-width': 13, 'stroke-linecap': 'round', opacity: .8 });
     b.group.insertBefore(streak, b.outlines);
@@ -401,7 +430,8 @@
   function celebrateHouse(b, colour, finale = false) {
     if (reducedMotion.matches) return;
     const g = svg('g', {}, $('effects'));
-    const cx = b.x + b.width / 2, cy = b.top - b.roofHeight - 14;
+    const point = worldPoint(b, b.x + b.width / 2, b.top - b.roofHeight - 14);
+    const cx = point.x, cy = point.y;
     const stars = Array.from({ length: finale ? 11 : 7 }, (_, i) => {
       const angle = Math.PI + (i + .5) / (finale ? 11 : 7) * Math.PI;
       return { el: svg('path', { d: 'M0-10 3-3 10 0 3 3 0 10-3 3-10 0-3-3Z', fill: i % 2 ? colour : '#ffe18a' }, g), vx: Math.cos(angle) * (75 + i % 3 * 26), vy: Math.sin(angle) * 105 - 20 };
@@ -412,50 +442,76 @@
       star.el.setAttribute('opacity', Math.min(1, (1 - t) * 3));
     }), () => g.remove());
   }
+  function completionTiming() {
+    return reducedMotion.matches
+      ? { delay: .35, fade: .4, hold: 4.5, out: .4 }
+      : { delay: PAINT.fill + PAINT.glitterTail, fade: 1.8, hold: 4.5, out: .9 };
+  }
+  function setBackgroundOpacity(value) {
+    $('completionSky').style.opacity = value;
+    $('drawingPaper').setAttribute('opacity', 1 - value);
+  }
+  function finishDrawing() {
+    setPhase('complete'); announce('win'); window.PaintAudio.effect('complete');
+    completionAge = 0;
+    const timing = completionTiming();
+    winWait = timing.delay + timing.fade + 2;
+    window.PaintBackgrounds.render({ scene: activeScene, variant: activeTemplate.id, parent: $('completionArt'), svg });
+    setBackgroundOpacity(0);
+    buildings.forEach(house => celebrateHouse(house, house.lastPaint || activePaintColour(), true));
+  }
   function land(drop) {
     const b = drop.target;
-    if (b && b.painted < b.floors) {
-      const floor = b.floors - b.painted - 1;
+    if (b && b.hits < b.requiredHits) {
       const colour = drop.colour;
-      const origin = b.origins?.[floor];
-      const y = origin?.y ?? WORLD.groundY - (floor + 1) * b.floorHeight + 8;
-      const originX = origin?.x ?? Math.max(b.x + 12, Math.min(b.x + b.width - 12, drop.x));
-      animateColour(b.floorEls[floor], colour, originX, y);
-      b.floorEls[floor].classList.add('painted');
-      if (b.painted === 0) animateColour(b.roof, colour, drop.x, drop.landingY, PAINT.fill * .75);
-      paintRun(b, floor, originX, colour);
-      b.painted++; totalPainted++; b.lastPaint = colour;
+      const contact = modelPoint(b, drop.x, drop.landingY);
+      const nextPartCount = Math.ceil((b.hits + 1) * b.floorEls.length / b.requiredHits);
+      for (let part = b.painted; part < nextPartCount; part++) {
+        const floor = b.floorEls.length - part - 1;
+        const origin = b.origins?.[floor];
+        const y = origin?.y ?? WORLD.groundY - (floor + 1) * b.floorHeight + 8;
+        const originX = origin?.x ?? Math.max(b.x + 12, Math.min(b.x + b.width - 12, contact.x));
+        animateColour(b.floorEls[floor], colour, originX, y);
+        b.floorEls[floor].classList.add('painted');
+        paintRun(b, floor, originX, colour);
+      }
+      if (b.hits === 0) animateColour(b.roof, colour, contact.x, contact.y, PAINT.fill * .75);
+      b.painted = nextPartCount; b.hits++; completedHits++; b.lastPaint = colour;
+      b.group.dataset.hits = b.hits; b.group.dataset.parts = b.painted;
+      b.placement.dataset.hits = b.hits;
       b.bounce = reducedMotion.matches ? 0 : .45;
-      if (b.painted === b.floors) {
+      if (b.hits === b.requiredHits) {
         animateColour(b.door, colour, b.x + b.width - 57, WORLD.groundY - 40, PAINT.fill * .8);
         celebrateHouse(b, colour);
+        b.placement.classList.add('object-complete');
       }
-      splash(drop.x, drop.landingY, colour, b.painted === b.floors);
+      splash(drop.x, drop.landingY, colour, b.hits === b.requiredHits);
       window.PaintAudio.effect('impact'); window.PaintAudio.effect('fill'); announce('hit'); updateUI();
-      if (totalPainted === totalFloors) {
-        setPhase('complete'); announce('win'); window.PaintAudio.effect('complete'); winWait = reducedMotion.matches ? .35 : PAINT.fill + PAINT.glitterTail + .2;
-        buildings.forEach((house, i) => celebrateHouse(house, house.lastPaint || activePaintColour(), true));
-      }
+      if (completedHits === requiredHits) finishDrawing();
     } else {
       splash(drop.x, drop.landingY, drop.colour);
       if (!b) {
         const el = svg('ellipse', { cx: drop.x, cy: WORLD.groundY + 15, rx: 28, ry: 8, fill: drop.colour }, $('streetDetails'));
         pageSplashes.push(el); if (pageSplashes.length > 20) pageSplashes.shift().remove();
       }
-      window.PaintAudio.effect('impact');
-      announce(b ? 'already' : 'miss');
+      window.PaintAudio.effect('impact'); announce(b ? 'already' : 'miss');
     }
+  }
+  function nextDrawing() {
+    paletteIndex = (paletteIndex + 1) % (activeScene === 'city' ? palettes.length : window.PaintSceneArt[activeScene].palette.length);
+    startScene();
   }
   function startScene() {
     window.PaintAudio.reset(activeScene);
-    totalPainted = 0; winWait = 0; flightTime = 0; bucketPulse = 0;
+    completedHits = 0; winWait = 0; completionAge = 0; flightTime = 0; bucketPulse = 0;
     drops.forEach(d => d.el.remove()); drops = []; clearEffects(); pageSplashes = [];
-    buildScene(); airshipX = initialAirshipX; direction = 1;
+    setBackgroundOpacity(0); $('completionArt').replaceChildren();
+    activeTemplate = window.PaintTemplates.next(activeScene);
+    buildScene();
+    airshipX = Math.max(WORLD.halfShipWidth + 4, buildings[0].hitX + buildings[0].hitWidth / 2); direction = 1;
     paintColourIndex = 0; colourElapsed = 0; activeColourMode = selectedColourMode;
     buildings.forEach(target => { target.lastPaint = null; });
-    updateColourIndicator();
-    updateSceneDescription();
-    drawAirship(); setPhase('playing'); announce('initial');
+    updateColourIndicator(); updateSceneDescription(); drawAirship(); setPhase('playing'); announce('initial');
   }
   function requestGameFullscreen() {
     if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
@@ -486,9 +542,10 @@
     window.PaintAudio.start(selectedScene);
     requestGameFullscreen();
     menuOpen = false; $('options').open = false;
-    if (selectedScene !== activeScene || phase === 'ready' || phase === 'complete') {
+    if (selectedScene !== activeScene || selectedDifficulty !== activeDifficulty || phase === 'ready' || phase === 'complete') {
       if (selectedScene !== activeScene) { activeScene = selectedScene; paletteIndex = 0; }
       else if (phase === 'complete') paletteIndex = (paletteIndex + 1) % (activeScene === 'city' ? palettes.length : window.PaintSceneArt[activeScene].palette.length);
+      activeDifficulty = selectedDifficulty;
       startScene();
     } else {
       if (activeColourMode !== selectedColourMode) { activeColourMode = selectedColourMode; colourElapsed = 0; }
@@ -512,7 +569,7 @@
     if (menuOpen) { enterGame(); return; }
     if (phase === 'complete') {
       if (winWait > 0) return;
-      paletteIndex = (paletteIndex + 1) % (activeScene === 'city' ? palettes.length : window.PaintSceneArt[activeScene].palette.length); startScene(); return;
+      nextDrawing(); return;
     }
     if (phase !== 'playing') return;
     const target = targetAt(airshipX);
@@ -593,6 +650,15 @@
         if (effect.age >= effect.duration) { effect.cleanup(); return false; } return true;
       });
     }
+    if (!menuOpen && phase === 'complete') {
+      completionAge += dt;
+      const { delay, fade, hold, out } = completionTiming();
+      let opacity = 0;
+      if (completionAge >= delay + fade + hold) opacity = Math.max(0, 1 - (completionAge - delay - fade - hold) / out);
+      else if (completionAge >= delay) opacity = Math.min(1, (completionAge - delay) / fade);
+      setBackgroundOpacity(opacity * opacity * (3 - 2 * opacity));
+      if (completionAge >= delay + fade + hold + out) nextDrawing();
+    }
     requestAnimationFrame(frame);
   }
   document.addEventListener('keydown', event => {
@@ -661,6 +727,11 @@
       try { localStorage.setItem('colourCityMode', selectedColourMode); } catch (_) {}
       updateUI();
     });
+  });
+  $('difficulty').addEventListener('input', event => {
+    selectedDifficulty = Number(event.target.value);
+    try { localStorage.setItem('colorfulDifficulty', selectedDifficulty); } catch (_) {}
+    updateUI();
   });
   buildScene(); translate(); updateColourIndicator(); drawAirship(); requestAnimationFrame(frame);
 })();
