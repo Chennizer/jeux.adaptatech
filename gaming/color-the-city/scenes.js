@@ -9,10 +9,10 @@
       roofHeight: 0, floorEls: [], origins: [], group, paint, outlines, bounce: 0,
       roof: null, door: null, surfaceAt: () => top };
   }
-  function addRegion(ctx, target, d, origin) {
+  function addRegion(ctx, target, d, origin, outline = true) {
     target.floorEls.push(ctx.svg('path', { d, fill: '#fff', class: 'floor' }, target.paint));
     target.origins.push(origin);
-    ctx.inkPath(d, target.outlines, { fill: 'none', 'stroke-width': 3 });
+    if (outline) ctx.inkPath(d, target.outlines, { fill: 'none', 'stroke-width': 3 });
   }
   function draw(ctx, target, d, attrs = {}) {
     return ctx.inkPath(d, target.outlines, attrs);
@@ -41,58 +41,108 @@
     draw(ctx, target, `M${x} 650v${y + width / 2 - 650}a${width / 2} ${width / 2} 0 0 1 ${width} 0V650Z`, { fill: '#fff' });
     circle(ctx, target, x + width - 10, 630, 2, { fill: ctx.ink });
   }
+  // Forest paths use absolute local coordinates, so each silhouette can be
+  // shared by its paint regions and the paint-drop collision surface.
+  function localPath(x, d) {
+    return d.replace(/([MLCQ])([^MLCQZ]*)/g, (_, command, values) =>
+      command + values.trim().split(/[ ,]+/).map((n, i) => Number(n) + (i % 2 ? 0 : x)).join(' '));
+  }
+  function silhouetteSurface(x, d) {
+    const points = [];
+    let current = [0, 0], first = current;
+    for (const match of d.matchAll(/([MLCQZ])([^MLCQZ]*)/g)) {
+      const command = match[1], values = match[2].trim().split(/[ ,]+/).filter(Boolean).map(Number);
+      if (command === 'M') {
+        current = values; first = current; points.push(current);
+      } else if (command === 'L' || command === 'Z') {
+        current = command === 'Z' ? first : values; points.push(current);
+      } else {
+        const start = current, cubic = command === 'C';
+        for (let step = 1; step <= 32; step++) {
+          const t = step / 32, u = 1 - t;
+          points.push([0, 1].map(axis => cubic
+            ? u * u * u * start[axis] + 3 * u * u * t * values[axis] + 3 * u * t * t * values[axis + 2] + t * t * t * values[axis + 4]
+            : u * u * start[axis] + 2 * u * t * values[axis] + t * t * values[axis + 2]));
+        }
+        current = values.slice(-2);
+      }
+    }
+    return point => {
+      const px = point - x;
+      let top = Infinity;
+      for (let i = 1; i < points.length; i++) {
+        const a = points[i - 1], b = points[i], dx = b[0] - a[0];
+        if (Math.abs(dx) < .0001) {
+          if (Math.abs(px - a[0]) < .001) top = Math.min(top, a[1], b[1]);
+        } else if (px >= Math.min(a[0], b[0]) && px <= Math.max(a[0], b[0])) {
+          top = Math.min(top, a[1] + (px - a[0]) * (b[1] - a[1]) / dx);
+        }
+      }
+      return top;
+    };
+  }
+  function canopy(ctx, target, regions, outline, seams) {
+    for (const [d, y] of regions) addRegion(ctx, target, localPath(target.x, d), { x: target.x + 114, y }, false);
+    draw(ctx, target, localPath(target.x, outline));
+    draw(ctx, target, localPath(target.x, seams), { 'stroke-width': 2.5 });
+    target.surfaceAt = silhouetteSurface(target.x, outline);
+  }
   function renderForest(ctx) {
     const targets = [];
-    // A layered pine: three broad branches become three generous paint areas.
+    // A soft storybook fir: scalloped boughs form one connected silhouette.
     {
-      const t = createTarget(ctx, 0, 324), x = t.x, cx = x + 114;
-      trunk(ctx, t, 34, 555);
-      addRegion(ctx, t, `M${cx} 440  ${x + 228} 590H${x}Z`, { x: cx, y: 506 });
-      addRegion(ctx, t, `M${cx} 390 ${x + 199} 515H${x + 29}Z`, { x: cx, y: 446 });
-      addRegion(ctx, t, `M${cx} 324 ${x + 170} 432H${x + 58}Z`, { x: cx, y: 364 });
-      t.surfaceAt = point => {
-        const dx = Math.abs(point - cx);
-        return Math.min(dx <= 56 ? 324 + dx * 108 / 56 : Infinity,
-          dx <= 85 ? 390 + dx * 125 / 85 : Infinity, 440 + Math.min(114, dx) * 150 / 114);
-      };
-      draw(ctx, t, `M${cx} 459l-12 20m12-20 12 20M${cx - 43} 543l-11 16m83-16 11 16`, { 'stroke-width': 2 });
+      const t = createTarget(ctx, 0, 320), x = t.x;
+      trunk(ctx, t, 34, 551);
+      canopy(ctx, t, [
+        ['M31 470 Q45 477 62 474 C45 507 22 534 0 552 Q18 569 44 565 C64 579 86 584 114 578 C142 584 164 579 184 565 Q210 569 228 552 C206 534 183 507 166 474 Q183 477 197 470 Q114 505 31 470Z', 540],
+        ['M68 401 Q80 406 92 404 C76 431 56 454 31 470 Q114 505 197 470 C172 454 152 431 136 404 Q148 406 160 401 Q114 424 68 401Z', 448],
+        ['M114 320 C106 353 91 379 68 401 Q114 424 160 401 C137 379 122 353 114 320Z', 370]
+      ], 'M114 320 C106 353 91 379 68 401 Q80 406 92 404 C76 431 56 454 31 470 Q45 477 62 474 C45 507 22 534 0 552 Q18 569 44 565 C64 579 86 584 114 578 C142 584 164 579 184 565 Q210 569 228 552 C206 534 183 507 166 474 Q183 477 197 470 C172 454 152 431 136 404 Q148 406 160 401 C137 379 122 353 114 320Z',
+      'M68 401 Q114 424 160 401 M31 470 Q114 505 197 470');
+      draw(ctx, t, localPath(x, 'M114 557 L114 518 M114 538 L95 524 M114 538 L133 524 M108 380 L114 391 L120 380 M54 538 L64 545 L74 538 M153 542 L164 549 L175 542'), { 'stroke-width': 2 });
       targets.push(t);
     }
-    // A broad round tree, split into three curved colouring-book bands.
+    // An old oak, with broad cloud-shaped shoulders and a branching trunk.
     {
-      const t = createTarget(ctx, 1, 336), x = t.x, cx = x + 114, cy = 450, r = 114;
-      const dx = Math.sqrt(r * r - 38 * 38), left = cx - dx, right = cx + dx;
-      trunk(ctx, t, 36, 535);
-      addRegion(ctx, t, `M${left} 488A114 114 0 0 0 ${right} 488Z`, { x: cx, y: 514 });
-      addRegion(ctx, t, `M${left} 412H${right}A114 114 0 0 1 ${right} 488H${left}A114 114 0 0 1 ${left} 412Z`, { x: cx, y: 450 });
-      addRegion(ctx, t, `M${left} 412A114 114 0 0 1 ${right} 412Z`, { x: cx, y: 373 });
-      t.surfaceAt = point => ellipseTop(Math.max(x, Math.min(x + 228, point)), cx, cy, r, r);
-      draw(ctx, t, `M${cx} 552v-72m0 23-33-23m33 23 34-23M${cx - 70} 438q-13-13-19 0q4 15 19 0m133 24q-12-13-18 0q4 15 18 0`, { 'stroke-width': 2.5 });
+      const t = createTarget(ctx, 1, 340), x = t.x;
+      trunk(ctx, t, 36, 522);
+      canopy(ctx, t, [
+        ['M24 515 C77 503 141 529 194 509 C188 538 162 550 141 541 C118 560 94 561 72 542 C48 549 25 536 24 515Z', 540],
+        ['M26 424 C86 407 160 434 215 414 C228 427 228 450 228 470 C228 493 214 512 194 509 C141 529 77 503 24 515 C8 510 0 491 0 469 C0 444 8 429 26 424Z', 469],
+        ['M26 424 C17 400 32 374 57 374 C62 346 93 336 115 351 C137 329 168 344 175 368 C204 366 223 388 215 414 C160 434 86 407 26 424Z', 383]
+      ], 'M0 469 C0 444 8 429 26 424 C17 400 32 374 57 374 C62 346 93 336 115 351 C137 329 168 344 175 368 C204 366 223 388 215 414 C228 427 228 450 228 470 C228 493 214 512 194 509 C188 538 162 550 141 541 C118 560 94 561 72 542 C48 549 25 536 24 515 C8 510 0 491 0 469Z',
+      'M26 424 C86 407 160 434 215 414 M24 515 C77 503 141 529 194 509');
+      draw(ctx, t, localPath(x, 'M114 553 L114 477 M114 512 Q88 488 73 476 M114 499 Q138 480 154 461 M61 454 Q44 437 39 455 Q47 472 61 454 M165 389 Q175 370 188 385 Q183 402 165 389 M86 387 Q72 371 65 388 Q74 401 86 387'), { 'stroke-width': 2.3 });
       targets.push(t);
     }
-    // An orchard tree: three cloud-like clusters and large unpainted apples.
+    // A single rounded apple canopy, with a few generous fruit stencils.
     {
-      const t = createTarget(ctx, 2, 361), x = t.x, cx = x + 114;
-      trunk(ctx, t, 32, 540);
-      addRegion(ctx, t, `M${cx - 88} 494a88 88 0 1 0 176 0a88 88 0 1 0-176 0Z`, { x: cx, y: 502 });
-      addRegion(ctx, t, `M${x} 425a64 64 0 1 0 128 0a64 64 0 1 0-128 0Z`, { x: x + 64, y: 425 });
-      addRegion(ctx, t, `M${x + 100} 425a64 64 0 1 0 128 0a64 64 0 1 0-128 0Z`, { x: x + 164, y: 425 });
-      t.surfaceAt = point => Math.min(ellipseTop(point, cx, 494, 88, 88), ellipseTop(point, x + 64, 425, 64, 64), ellipseTop(point, x + 164, 425, 64, 64));
-      [[45,420],[166,405],[115,513],[167,519]].forEach(([ax,ay]) => {
-        circle(ctx, t, x + ax, ay, 13);
-        draw(ctx, t, `M${x + ax} ${ay - 13}q-2-8 5-12m-4 5q12-10 17-1q-8 8-17 1`, { 'stroke-width': 2 });
-      });
+      const t = createTarget(ctx, 2, 340), x = t.x;
+      trunk(ctx, t, 32, 519);
+      canopy(ctx, t, [
+        ['M24 509 C78 502 136 525 193 493 C192 516 173 535 150 531 C133 554 102 553 85 533 C61 542 29 531 24 509Z', 532],
+        ['M37 419 C88 402 160 435 218 417 C228 428 228 446 228 460 C228 483 214 496 193 493 C136 525 78 502 24 509 C9 507 0 484 0 458 C0 433 17 416 37 419Z', 463],
+        ['M37 419 C29 393 43 369 65 374 C72 345 99 336 119 353 C145 333 177 348 181 373 C207 369 228 391 218 417 C160 435 88 402 37 419Z', 382]
+      ], 'M0 458 C0 433 17 416 37 419 C29 393 43 369 65 374 C72 345 99 336 119 353 C145 333 177 348 181 373 C207 369 228 391 218 417 C228 428 228 446 228 460 C228 483 214 496 193 493 C192 516 173 535 150 531 C133 554 102 553 85 533 C61 542 29 531 24 509 C9 507 0 484 0 458Z',
+      'M37 419 C88 402 160 435 218 417 M24 509 C78 502 136 525 193 493');
+      draw(ctx, t, localPath(x, 'M114 554 L114 495 M114 519 L91 502 M114 508 L137 489'), { 'stroke-width': 2.3 });
+      for (const [ax, ay] of [[73, 390], [169, 390], [47, 469], [161, 469]]) {
+        draw(ctx, t, localPath(x, `M${ax} ${ay - 12} C${ax - 23} ${ay - 25} ${ax - 23} ${ay + 17} ${ax} ${ay + 19} C${ax + 23} ${ay + 17} ${ax + 23} ${ay - 25} ${ax} ${ay - 12}Z`), { fill: '#fff', 'stroke-width': 2.2 });
+        draw(ctx, t, localPath(x, `M${ax} ${ay - 12} Q${ax - 2} ${ay - 23} ${ax + 4} ${ay - 27} M${ax + 3} ${ay - 19} Q${ax + 12} ${ay - 33} ${ax + 20} ${ay - 23} Q${ax + 13} ${ay - 14} ${ax + 3} ${ay - 19}`), { 'stroke-width': 1.8 });
+      }
       targets.push(t);
     }
-    // A tall, gently stacked canopy gives the last tree a different silhouette.
+    // A weeping willow: long hanging leaves follow a roomy umbrella canopy.
     {
-      const t = createTarget(ctx, 3, 320), x = t.x, cx = x + 114;
-      trunk(ctx, t, 30, 570);
-      addRegion(ctx, t, `M${x} 548a114 62 0 1 0 228 0a114 62 0 1 0-228 0Z`, { x: cx, y: 552 });
-      addRegion(ctx, t, `M${x + 15} 472a99 76 0 1 0 198 0a99 76 0 1 0-198 0Z`, { x: cx, y: 471 });
-      addRegion(ctx, t, `M${x + 40} 400a74 80 0 1 0 148 0a74 80 0 1 0-148 0Z`, { x: cx, y: 395 });
-      t.surfaceAt = point => Math.min(ellipseTop(point, cx, 548, 114, 62), ellipseTop(point, cx, 472, 99, 76), ellipseTop(point, cx, 400, 74, 80));
-      draw(ctx, t, `M${cx} 590v-90m0 44-27-20m27 20 29-20M${cx - 15} 364q-14-14-20 1q5 15 20-1m37 72q13-15 21-2q-4 16-21 2`, { 'stroke-width': 2.5 });
+      const t = createTarget(ctx, 3, 340), x = t.x;
+      trunk(ctx, t, 30, 553);
+      canopy(ctx, t, [
+        ['M4 494 C74 508 159 518 224 494 C227 514 228 535 228 552 Q216 539 204 558 Q193 548 181 568 Q169 558 157 576 Q144 565 131 582 Q121 574 114 586 Q106 575 97 582 Q85 565 71 576 Q59 557 47 568 Q36 548 24 558 Q12 540 0 552 C0 526 2 510 4 494Z', 548],
+        ['M19 430 C76 416 157 451 209 430 C220 466 224 481 224 494 C159 518 74 508 4 494 C7 473 11 468 19 430Z', 472],
+        ['M19 430 C34 401 67 364 114 340 C161 355 195 395 209 430 C157 451 76 416 19 430Z', 396]
+      ], 'M0 552 C0 526 2 510 4 494 C7 473 11 468 19 430 C34 401 67 364 114 340 C161 355 195 395 209 430 C220 466 224 481 224 494 C227 514 228 535 228 552 Q216 539 204 558 Q193 548 181 568 Q169 558 157 576 Q144 565 131 582 Q121 574 114 586 Q106 575 97 582 Q85 565 71 576 Q59 557 47 568 Q36 548 24 558 Q12 540 0 552Z',
+      'M19 430 C76 416 157 451 209 430 M4 494 C74 508 159 518 224 494');
+      draw(ctx, t, localPath(x, 'M29 453 Q20 494 24 531 M48 442 Q39 486 46 545 M73 451 Q63 503 70 549 M98 453 Q88 505 95 555 M129 459 Q139 509 133 557 M155 457 Q167 503 159 549 M181 452 Q193 491 184 542 M202 452 Q213 490 207 528 M114 599 L114 559 M114 581 L102 567 M114 578 L126 563'), { 'stroke-width': 2, opacity: .85 });
       targets.push(t);
     }
     return targets;
@@ -248,6 +298,74 @@ function renderFarm(ctx) {
   return targets;
 }
 
+  function planetBody(ctx, target, cy, radius, ripple = 9) {
+    const cx = target.x + 114, upper = cy - radius / 3, lower = cy + radius / 3;
+    const dx = Math.sqrt(radius * radius - radius * radius / 9), left = cx - dx, right = cx + dx;
+    const upperSeam = `C${cx - radius / 3} ${upper - ripple} ${cx + radius / 3} ${upper + ripple} ${right} ${upper}`;
+    const lowerSeam = `C${cx - radius / 3} ${lower + ripple} ${cx + radius / 3} ${lower - ripple} ${right} ${lower}`;
+    addRegion(ctx, target, `M${left} ${lower}${lowerSeam}A${radius} ${radius} 0 0 1 ${left} ${lower}Z`, { x: cx, y: cy + radius * .65 }, false);
+    addRegion(ctx, target, `M${left} ${upper}${upperSeam}A${radius} ${radius} 0 0 1 ${right} ${lower}C${cx + radius / 3} ${lower - ripple} ${cx - radius / 3} ${lower + ripple} ${left} ${lower}A${radius} ${radius} 0 0 1 ${left} ${upper}Z`, { x: cx, y: cy }, false);
+    addRegion(ctx, target, `M${left} ${upper}A${radius} ${radius} 0 0 1 ${right} ${upper}C${cx + radius / 3} ${upper + ripple} ${cx - radius / 3} ${upper - ripple} ${left} ${upper}Z`, { x: cx, y: cy - radius * .65 }, false);
+    circle(ctx, target, cx, cy, radius, { fill: 'none', 'stroke-width': 3 });
+    draw(ctx, target, `M${left} ${upper}${upperSeam}M${left} ${lower}${lowerSeam}`, { 'stroke-width': 2.3 });
+    target.surfaceAt = point => ellipseTop(Math.max(cx - radius, Math.min(cx + radius, point)), cx, cy, radius, radius);
+  }
+  function star(ctx, target, cx, cy, radius, rotation = -Math.PI / 2) {
+    let d = '';
+    for (let i = 0; i < 10; i++) {
+      const a = rotation + i * Math.PI / 5, r = i % 2 ? radius * .45 : radius;
+      d += `${i ? 'L' : 'M'}${(cx + Math.cos(a) * r).toFixed(2)} ${(cy + Math.sin(a) * r).toFixed(2)}`;
+    }
+    draw(ctx, target, d + 'Z', { fill: '#fff', 'stroke-width': 2.2 });
+  }
+  function renderPlanets(ctx) {
+    const targets = [];
+    // Saturn's wide paper ribbon curls around a smaller, three-part globe.
+    {
+      const t = createTarget(ctx, 0, 385), x = t.x, cx = x + 114, cy = 470;
+      planetBody(ctx, t, cy, 85, 7);
+      draw(ctx, t, `M${x} ${cy}C${x} ${cy - 24} ${x + 24} ${cy - 33} ${x + 36} ${cy - 34}M${x + 192} ${cy - 34}C${x + 214} ${cy - 30} ${x + 228} ${cy - 17} ${x + 228} ${cy}`, { 'stroke-width': 2.8 });
+      draw(ctx, t, `M${x} ${cy}A114 36 0 0 0 ${x + 228} ${cy}L${x + 210} ${cy}A96 19 0 0 1 ${x + 18} ${cy}Z`, { fill: '#fff', 'stroke-width': 2.8 });
+      draw(ctx, t, `M${x + 20} ${cy + 15}C${x + 65} ${cy + 35} ${x + 166} ${cy + 35} ${x + 210} ${cy + 15}`, { 'stroke-width': 1.5 });
+      circle(ctx, t, cx - 22, cy - 53, 9, { 'stroke-width': 1.8 });
+      t.surfaceAt = point => Math.min(ellipseTop(point, cx, cy, 85, 85), ellipseTop(point, cx, cy, 114, 36));
+      targets.push(t);
+    }
+    // A cratered moon with soft, oversized bowls and a little crescent shine.
+    {
+      const t = createTarget(ctx, 1, 362), x = t.x, cx = x + 114, cy = 472;
+      planetBody(ctx, t, cy, 110, 6);
+      for (const [dx, dy, rx, ry] of [[-45, -57, 23, 18], [42, -53, 16, 13], [-61, 20, 19, 15], [35, 19, 29, 23], [-9, 76, 14, 10]]) {
+        ctx.svg('ellipse', { cx: cx + dx, cy: cy + dy, rx, ry, fill: '#fff', stroke: ctx.ink, 'stroke-width': 2.3 }, t.outlines);
+        draw(ctx, t, `M${cx + dx - rx * .58} ${cy + dy + 2}Q${cx + dx} ${cy + dy + ry * .85} ${cx + dx + rx * .58} ${cy + dy + 2}`, { 'stroke-width': 1.6 });
+      }
+      draw(ctx, t, `M${x + 34} 403Q${x + 19} 421 ${x + 16} 441M${x + 26} 452L${x + 25} 458`, { 'stroke-width': 2 });
+      targets.push(t);
+    }
+    // Broad, flowing cloud belts and one great oval storm make a gas giant.
+    {
+      const t = createTarget(ctx, 2, 365), x = t.x, cx = x + 114, cy = 475;
+      planetBody(ctx, t, cy, 110, 23);
+      draw(ctx, t, `M${x + 42} 392C${x + 80} 384 ${x + 139} 409 ${x + 181} 390M${x + 18} 422C${x + 65} 404 ${x + 160} 447 ${x + 213} 423M${x + 5} 470C${x + 71} 449 ${x + 135} 491 ${x + 223} 473M${x + 24} 538C${x + 83} 563 ${x + 149} 523 ${x + 206} 539M${x + 57} 568C${x + 92} 580 ${x + 138} 558 ${x + 170} 569`, { 'stroke-width': 2 });
+      ctx.svg('ellipse', { cx: cx + 26, cy: cy + 17, rx: 31, ry: 17, fill: '#fff', stroke: ctx.ink, 'stroke-width': 2.4 }, t.outlines);
+      draw(ctx, t, `M${cx + 6} ${cy + 20}Q${cx + 27} ${cy + 34} ${cx + 47} ${cy + 17}`, { 'stroke-width': 1.7 });
+      targets.push(t);
+    }
+    // A make-believe star garden: a globe of big, white paper-cut stars.
+    {
+      const t = createTarget(ctx, 3, 365), x = t.x, cx = x + 114, cy = 473;
+      planetBody(ctx, t, cy, 108, 14);
+      star(ctx, t, cx - 42, cy - 53, 24, -1.35);
+      star(ctx, t, cx + 45, cy - 34, 17, -1.8);
+      star(ctx, t, cx - 35, cy + 30, 16, -1.4);
+      star(ctx, t, cx + 32, cy + 58, 23, -1.8);
+      for (const [dx, dy, r] of [[12, -77, 4], [-77, -1, 4], [74, 14, 5], [-2, 5, 4], [-8, 83, 3]]) circle(ctx, t, cx + dx, cy + dy, r, { 'stroke-width': 1.8 });
+      draw(ctx, t, `M${x + 24} 425Q${x + 17} 439 ${x + 15} 452M${x + 193} 535L${x + 187} 543`, { 'stroke-width': 2 });
+      targets.push(t);
+    }
+    return targets;
+  }
+
   function safeRender(render, ctx) {
     return render(ctx).map(target => {
       const surface = target.surfaceAt;
@@ -263,6 +381,7 @@ function renderFarm(ctx) {
   window.PaintSceneArt = {
     forest: { palette: ['#a9d6b0', '#c6dda1', '#f2c58c', '#a5d8c7'], render: ctx => safeRender(renderForest, ctx) },
     village: { palette: ['#ffd19f', '#c8bae8', '#a5cfe3', '#f4b6bf'], render: ctx => safeRender(renderVillage, ctx) },
-    farm: { palette: ['#f5aaa0', '#c5b6e3', '#a9d1e5', '#f6d575'], render: ctx => safeRender(renderFarm, ctx) }
+    farm: { palette: ['#f5aaa0', '#c5b6e3', '#a9d1e5', '#f6d575'], render: ctx => safeRender(renderFarm, ctx) },
+    planets: { palette: ['#c7b8ed', '#addde4', '#f1c2aa', '#ddbadf'], render: ctx => safeRender(renderPlanets, ctx) }
   };
 })();

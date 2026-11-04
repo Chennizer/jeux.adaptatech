@@ -3,8 +3,9 @@
   const $ = id => document.getElementById(id);
   const SVG = 'http://www.w3.org/2000/svg';
   const INK = '#45404f';
-  const WORLD = { width: 1200, groundY: 650, airshipY: 112, outletY: 282, halfShipWidth: 235 };
-  const PAINT = { release: .24, fallMin: 1.25, fallExtra: .75, fill: 2.8, glitterTail: .45, bucketPulse: .48 };
+  const WORLD = { width: 1200, groundY: 650, airshipY: 96, outletY: 282, halfShipWidth: 235 };
+  const PAINT = { release: .24, fallMin: 1.25, fallExtra: .75, fill: 4.2, glitterTail: .45, bucketPulse: .48 };
+  const COLOUR_CYCLE_SECONDS = 12;
   const text = {
     en: {
       games: 'Switch games', language: 'Language', title: 'A world of colour.',
@@ -25,7 +26,7 @@
       already: 'This part of the drawing is already full of colour.', win: 'All {total} parts painted. Your drawing is complete!',
       paused: 'Paused. Press again to continue.', sceneTitle: 'Colouring board',
       sceneDescription: 'A giant rainbow zeppelin flies back and forth over a white drawing. Press to drop paint and colour one part.',
-      paintedLabel: 'Painted parts', chooseScene: 'Choose your drawing', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm'
+      paintedLabel: 'Painted parts', chooseScene: 'Choose your drawing', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.'
     },
     fr: {
       games: 'Jeux pour switch', language: 'Langue', title: 'Un monde de couleurs.',
@@ -46,7 +47,7 @@
       already: 'Cette partie du dessin est déjà pleine de couleurs.', win: 'Les {total} parties sont coloriées. Ton dessin est terminé !',
       paused: 'En pause. Appuie pour continuer.', sceneTitle: 'Tableau de coloriage',
       sceneDescription: 'Un grand zeppelin arc-en-ciel fait des allers-retours au-dessus d’un dessin blanc. Appuie pour colorier une partie.',
-      paintedLabel: 'Parties coloriées', chooseScene: 'Choisis ton dessin', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme'
+      paintedLabel: 'Parties coloriées', chooseScene: 'Choisis ton dessin', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.'
     },
     ja: {
       games: 'スイッチゲーム', language: '言語', title: '世界を彩ろう。',
@@ -67,7 +68,7 @@
       already: 'ここはもう色いっぱい。', win: '{total}か所すべて塗れたね。絵の完成！',
       paused: '一時停止中。もう一度押すと続けられます。', sceneTitle: 'お絵描きボード',
       sceneDescription: '大きな虹色の飛行船が白い絵の上を行ったり来たりします。押すとひとつずつ色がつきます。',
-      paintedLabel: '塗った部分', chooseScene: '絵を選ぼう', sceneCity: '街', sceneForest: '森', sceneVillage: '村', sceneFarm: '農場'
+      paintedLabel: '塗った部分', chooseScene: '絵を選ぼう', sceneCity: '街', sceneForest: '森', sceneVillage: '村', sceneFarm: '農場', scenePlanets: '惑星', chooseMode: 'モードを選ぼう', autoMode: 'ひとつのスイッチ', autoModeHelp: '色は12秒ごとに変わります。スペースかエンターで絵の具を落とします。', manualMode: '色を選ぶ', manualModeHelp: 'スペースで絵の具を落とし、エンターで次の色を選びます。', activeColour: '選択中の色', manualHint: 'スペース・スイッチ・タッチ：絵の具。エンター：次の色。Esc：メニュー。'
     }
   };
   const palettes = [
@@ -80,10 +81,15 @@
     { x: 628, width: 228, floorHeight: 86, roofKind: 'gable', roofHeight: 74 },
     { x: 914, width: 228, floorHeight: 72, roofKind: 'gable', roofHeight: 38 }
   ].map(b => ({ ...b, floors: 3, top: WORLD.groundY - 3 * b.floorHeight, painted: 0, floorEls: [], roof: null, door: null }));
-  const sceneLabels = { city: 'sceneCity', forest: 'sceneForest', village: 'sceneVillage', farm: 'sceneFarm' };
+  const sceneLabels = { city: 'sceneCity', forest: 'sceneForest', village: 'sceneVillage', farm: 'sceneFarm', planets: 'scenePlanets' };
   let selectedScene = 'city';
-  try { const saved = localStorage.getItem('colourCityScene'); if (sceneLabels[saved]) selectedScene = saved; } catch (_) { /* Scene storage is optional. */ }
+  try { const saved = localStorage.getItem('colourCityScene'); if (Object.hasOwn(sceneLabels, saved)) selectedScene = saved; } catch (_) { /* Scene storage is optional. */ }
   let activeScene = selectedScene;
+  let selectedColourMode = 'auto';
+  try { const mode = localStorage.getItem('colourCityMode'); if (mode === 'manual') selectedColourMode = mode; } catch (_) {}
+  let activeColourMode = selectedColourMode;
+  let paintColourIndex = 0;
+  let colourElapsed = 0;
   let buildings = cityBuildings;
   let totalFloors = 12;
   const initialAirshipX = Math.max(WORLD.halfShipWidth + 4, buildings[0].x + buildings[0].width / 2);
@@ -192,7 +198,7 @@
       buildCity();
     } else {
       $('buildings').replaceChildren(); $('streetDetails').replaceChildren();
-      inkPath('M24 652Q191 648 320 651T650 650T960 652T1180 650', $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
+      if (activeScene !== 'planets') inkPath('M24 652Q191 648 320 651T650 650T960 652T1180 650', $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
       buildings = window.PaintSceneArt[activeScene].render({ parent: $('buildings'), svg, inkPath, groundY: WORLD.groundY, ink: INK });
     }
     $('buildings').dataset.scene = activeScene;
@@ -203,6 +209,36 @@
     if (activeScene === 'city') return palettes[paletteIndex % palettes.length];
     const colours = window.PaintSceneArt[activeScene].palette;
     return colours.map((_, index) => colours[(index + paletteIndex) % colours.length]);
+  }
+  function activePaintColour() { return currentPalette()[paintColourIndex % currentPalette().length]; }
+  function updateColourIndicator() {
+    const colour = activePaintColour();
+    ['paintBucket', 'paintGondola', 'activePaint'].forEach(id => $(id).setAttribute('fill', colour));
+    $('airship').dataset.colour = colour;
+    const label = `${text[lang].activeColour}: ${paintColourIndex + 1} / ${currentPalette().length}`;
+    $('paint-colour-title').textContent = label;
+    $('playSurface').setAttribute('aria-label', `${text[lang].drop}. ${label}`);
+    updateMenuColour();
+  }
+  function updateMenuColour() {
+    let palette, index = 0;
+    if (selectedScene !== activeScene) {
+      palette = selectedScene === 'city' ? palettes[0] : window.PaintSceneArt[selectedScene].palette;
+    } else if (phase === 'complete') {
+      const colours = activeScene === 'city' ? palettes : window.PaintSceneArt[activeScene].palette;
+      const next = (paletteIndex + 1) % colours.length;
+      palette = activeScene === 'city' ? palettes[next] : colours.map((_, i) => colours[(i + next) % colours.length]);
+    } else {
+      palette = currentPalette(); index = paintColourIndex % palette.length;
+    }
+    $('menuColourSwatch').style.backgroundColor = palette[index];
+    $('menuColourName').textContent = `${index + 1} / ${palette.length}`;
+  }
+  function nextPaintColour() {
+    paintColourIndex = (paintColourIndex + 1) % currentPalette().length;
+    colourElapsed = 0;
+    updateColourIndicator();
+    $('feedback').textContent = `${text[lang].activeColour}: ${paintColourIndex + 1} / ${currentPalette().length}`;
   }
   function updateSceneDescription() {
     $('scene-title').textContent = `${text[lang][sceneLabels[activeScene]]} · ${text[lang].sceneTitle}`;
@@ -221,6 +257,8 @@
     $('menu').inert = !menuOpen;
     document.body.classList.toggle('playing', !menuOpen);
     $('progress').value = totalPainted;
+    document.querySelector('.menu-hint').textContent = text[lang][selectedColourMode === 'manual' ? 'manualHint' : 'menuHint'];
+    updateMenuColour();
   }
   function translate() {
     document.documentElement.lang = lang;
@@ -228,7 +266,7 @@
     $('language').value = lang;
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = text[lang][el.dataset.i18n]; });
     updateSceneDescription();
-    $('playSurface').setAttribute('aria-label', text[lang].drop);
+    updateColourIndicator();
     $('progress').setAttribute('aria-label', text[lang].paintedLabel);
     announce(feedbackKey); updateUI();
   }
@@ -260,9 +298,8 @@
     $('aimGuide').style.display = $('guide').checked ? '' : 'none';
     $('aimMark').style.display = $('guide').checked ? '' : 'none';
     const bucket = $('paintBucket');
-    bucket.setAttribute('fill', target ? currentPalette()[buildings.indexOf(target)] : '#ffe18a');
     const pulse = reducedMotion.matches ? 0 : Math.sin((1 - bucketPulse / PAINT.bucketPulse) * Math.PI) * Math.min(1, bucketPulse * 30);
-    bucket.setAttribute('transform', `translate(0 140) scale(${1 + pulse * .22} ${1 - pulse * .16}) translate(0 -140)`);
+    bucket.setAttribute('transform', `translate(0 145) scale(${1 + pulse * .22} ${1 - pulse * .16}) translate(0 -145)`);
   }
   function addEffect(duration, update, cleanup = () => {}) {
     const effect = { age: 0, duration, update, cleanup };
@@ -379,25 +416,25 @@
     const b = drop.target;
     if (b && b.painted < b.floors) {
       const floor = b.floors - b.painted - 1;
-      const colour = currentPalette()[buildings.indexOf(b)];
+      const colour = drop.colour;
       const origin = b.origins?.[floor];
       const y = origin?.y ?? WORLD.groundY - (floor + 1) * b.floorHeight + 8;
       const originX = origin?.x ?? Math.max(b.x + 12, Math.min(b.x + b.width - 12, drop.x));
       animateColour(b.floorEls[floor], colour, originX, y);
       b.floorEls[floor].classList.add('painted');
-      animateColour(b.roof, colour, drop.x, drop.landingY, 1.9);
+      if (b.painted === 0) animateColour(b.roof, colour, drop.x, drop.landingY, PAINT.fill * .75);
       paintRun(b, floor, originX, colour);
-      b.painted++; totalPainted++;
+      b.painted++; totalPainted++; b.lastPaint = colour;
       b.bounce = reducedMotion.matches ? 0 : .45;
       if (b.painted === b.floors) {
-        animateColour(b.door, colour, b.x + b.width - 57, WORLD.groundY - 40, 2.1);
+        animateColour(b.door, colour, b.x + b.width - 57, WORLD.groundY - 40, PAINT.fill * .8);
         celebrateHouse(b, colour);
       }
       splash(drop.x, drop.landingY, colour, b.painted === b.floors);
       window.PaintAudio.effect('impact'); window.PaintAudio.effect('fill'); announce('hit'); updateUI();
       if (totalPainted === totalFloors) {
         setPhase('complete'); announce('win'); window.PaintAudio.effect('complete'); winWait = reducedMotion.matches ? .35 : PAINT.fill + PAINT.glitterTail + .2;
-        buildings.forEach((house, i) => celebrateHouse(house, currentPalette()[i], true));
+        buildings.forEach((house, i) => celebrateHouse(house, house.lastPaint || activePaintColour(), true));
       }
     } else {
       splash(drop.x, drop.landingY, drop.colour);
@@ -414,6 +451,9 @@
     totalPainted = 0; winWait = 0; flightTime = 0; bucketPulse = 0;
     drops.forEach(d => d.el.remove()); drops = []; clearEffects(); pageSplashes = [];
     buildScene(); airshipX = initialAirshipX; direction = 1;
+    paintColourIndex = 0; colourElapsed = 0; activeColourMode = selectedColourMode;
+    buildings.forEach(target => { target.lastPaint = null; });
+    updateColourIndicator();
     updateSceneDescription();
     drawAirship(); setPhase('playing'); announce('initial');
   }
@@ -450,7 +490,10 @@
       if (selectedScene !== activeScene) { activeScene = selectedScene; paletteIndex = 0; }
       else if (phase === 'complete') paletteIndex = (paletteIndex + 1) % (activeScene === 'city' ? palettes.length : window.PaintSceneArt[activeScene].palette.length);
       startScene();
-    } else { setPhase('playing'); announce('initial'); }
+    } else {
+      if (activeColourMode !== selectedColourMode) { activeColourMode = selectedColourMode; colourElapsed = 0; }
+      setPhase('playing'); announce('initial');
+    }
     updateUI(); lastTime = null; $('playSurface').focus({ preventScroll: true });
   }
   function returnToMenu() {
@@ -474,7 +517,7 @@
     if (phase !== 'playing') return;
     const target = targetAt(airshipX);
     const landingY = target ? roofY(target, airshipX) : WORLD.groundY + 15;
-    const colour = target ? currentPalette()[buildings.indexOf(target)] : '#ffe18a';
+    const colour = activePaintColour();
     const g = svg('g', { class: 'paint-drop' }, $('drops'));
     const trails = reducedMotion.matches ? [] : [0, 1, 2].map(i => svg('circle', { r: 5 - i, fill: colour, opacity: .6 - i * .13 }, g));
     const shape = svg('path', { d: 'M0-20C-6-10-17 0-17 10A17 17 0 0 0 17 10C17 0 6-10 0-20Z', fill: colour, stroke: INK, 'stroke-width': 2.2 }, g);
@@ -493,6 +536,13 @@
     lastTime = time;
     if (!menuOpen && phase === 'playing') {
       flightTime += dt; bucketPulse = Math.max(0, bucketPulse - dt);
+      if (activeColourMode === 'auto') {
+        colourElapsed += dt;
+        if (colourElapsed >= COLOUR_CYCLE_SECONDS) {
+          const remainder = colourElapsed - COLOUR_CYCLE_SECONDS;
+          nextPaintColour(); colourElapsed = remainder;
+        }
+      }
       airshipX += direction * Number($('speed').value) * dt;
       const rightEdge = WORLD.width + WORLD.halfShipWidth;
       const leftEdge = -WORLD.halfShipWidth;
@@ -552,7 +602,12 @@
     if (menuOpen && control && control !== $('mainAction')) return;
     event.preventDefault();
     if (event.repeat || heldKeys.has(event.code)) return;
-    heldKeys.add(event.code); activate();
+    heldKeys.add(event.code);
+    if (!menuOpen && activeColourMode === 'manual' && ['Enter', 'NumpadEnter'].includes(event.code)) {
+      if (phase === 'playing') nextPaintColour();
+      return;
+    }
+    activate();
   });
   document.addEventListener('keyup', event => heldKeys.delete(event.code));
   $('playSurface').addEventListener('pointerdown', event => {
@@ -598,5 +653,14 @@
       updateUI();
     });
   });
-  buildScene(); translate(); drawAirship(); requestAnimationFrame(frame);
+  document.querySelectorAll('input[name="colourMode"]').forEach(input => {
+    input.checked = input.value === selectedColourMode;
+    input.addEventListener('change', () => {
+      if (!input.checked) return;
+      selectedColourMode = input.value;
+      try { localStorage.setItem('colourCityMode', selectedColourMode); } catch (_) {}
+      updateUI();
+    });
+  });
+  buildScene(); translate(); updateColourIndicator(); drawAirship(); requestAnimationFrame(frame);
 })();

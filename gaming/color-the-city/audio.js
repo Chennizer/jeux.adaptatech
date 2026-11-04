@@ -5,12 +5,13 @@
     city: '../../songs/zenitude/v5calmmusic4.mp3',
     forest: '../../songs/spring/spring3.mp3',
     village: '../../songs/zenitude/v5calmmusic1.mp3',
-    farm: '../../songs/bees/beesmusic3.mp3'
+    farm: '../../songs/bees/beesmusic3.mp3',
+    planets: '../../songs/zenitude/v5calmmusic4.mp3'
   };
   const samples = {
     release: { path: '../../sounds/bubbles/bubble3.mp3', gain: .36, rate: 1.12, cooldown: .09, max: .5 },
     impact: { path: '../../sounds/bubbles/bubble3.mp3', gain: .52, rate: .78, cooldown: .12, max: .7 },
-    fill: { path: '../../sounds/space/twinklingstar1.mp3', gain: .9, rate: 1, cooldown: .55, delay: .15, max: 3.1, fade: .65 },
+    fill: { path: '../../sounds/space/twinklingstar1.mp3', gain: .9, rate: .85, cooldown: .55, delay: .15, max: 4.3, fade: .85 },
     complete: { path: '../../sounds/success4.mp3', gain: .45, rate: .95, cooldown: 1.5, delay: .25, max: 2.2, fade: .35 }
   };
   let settings = { music: true, effects: true, musicVolume: .17, effectsVolume: .4 };
