@@ -33,9 +33,11 @@ During play, only the drawing, zeppelin, and paint effects are visible. There ar
 
 ## Paint effects
 
-The bucket squeezes as each drop releases. Paint stretches, accelerates, and trails smaller beads. Contact makes a broad splat, arcing droplets, and an expanding ring. Organic colour blots spread through the target's paintable parts beneath static outlines and details. Completed objects settle and emit stars.
+Each press gives the paint a short, visible release swell, followed by a gentle vertical descent. Drop travel lasts about 1.5–2.25 seconds including the swell, depending on distance; it no longer accelerates into a fast fall. Soft trails follow the drop, and contact makes a slower splat with a few arcing droplets and an expanding ring.
 
-All effects share the game frame clock: returning to the menu freezes everything, and Continue resumes it. Final reveals finish after the logical win. Replay and scene changes clear old drops, clips, particles, and transforms. Reduced-motion preferences use immediate fills and a brief static splat, with no decorative trails, particles, stars, bobbing, or object movement. Essential flight/drop movement remains.
+Colour spreads for 2.8 seconds, with a short shimmer tail. Organic reveal shapes are fitted to each part's actual bounds so small windows/roofs and large canopies do not fill all at once. A faint sheen and small, staggered gold/white glints appear only inside the already-coloured shape, beneath static outlines and details. Each glint gently appears and fades once. Completed objects settle and emit stars. The final replay lock allows the entire last fill and shimmer to finish.
+
+All effects share the game frame clock: returning to the menu freezes everything, and Continue resumes it. Final reveals finish after the logical win. Replay and scene changes clear old drops, clips, particles, and transforms. Reduced-motion preferences retain the slower essential drop movement but use immediate fills and a brief static splat, with no glitter, sheen, decorative trails, particles, stars, bobbing, or object movement. Essential flight/drop movement remains.
 
 No timer, collision, lost life, or penalty. Misses leave harmless paint dabs.
 
@@ -45,4 +47,4 @@ Serve the repository, for example with `python -m http.server 8000`, then open `
 
 ## Prototype checks
 
-Browser checks cover both fully offscreen reversals, leftward paint drops, same-scene direction/progress preservation, scene-change cleanup, all four white drawings, a complete 12-part round and replay for every scene, animation cleanup, localized menu choices, and narrow-screen overflow. Earlier checks also cover native/full-viewport fullscreen, Escape/Continue, held Space/Enter, pointer/touch, reduced motion, and completion effects. Physical switch hardware and screen reader testing remain to be done on the target device.
+Browser checks cover both fully offscreen reversals, leftward paint drops, same-scene direction/progress preservation, scene-change cleanup, all four white drawings, a complete 12-part round and replay for every scene, animation cleanup, localized menu choices, and narrow-screen overflow. Slow-paint checks also cover visible in-flight drops after 0.9 seconds, sustained clipped fills, staggered glints, frozen pause/resume state, overlapping fills in all four scenes, final reveal/replay timing, shimmer cleanup, and reduced motion. Earlier checks cover native/full-viewport fullscreen, Escape/Continue, held Space/Enter, and pointer/touch. Physical switch hardware and screen reader testing remain to be done on the target device.

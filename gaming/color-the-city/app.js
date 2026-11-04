@@ -3,7 +3,8 @@
   const $ = id => document.getElementById(id);
   const SVG = 'http://www.w3.org/2000/svg';
   const INK = '#45404f';
-  const WORLD = { width: 1200, groundY: 650, airshipY: 112, outletY: 282, fallSpeed: 390, halfShipWidth: 235 };
+  const WORLD = { width: 1200, groundY: 650, airshipY: 112, outletY: 282, halfShipWidth: 235 };
+  const PAINT = { release: .24, fallMin: 1.25, fallExtra: .75, fill: 2.8, glitterTail: .45, bucketPulse: .48 };
   const text = {
     en: {
       games: 'Switch games', language: 'Language', title: 'A world of colour.',
@@ -263,7 +264,7 @@
     $('aimMark').style.display = $('guide').checked ? '' : 'none';
     const bucket = $('paintBucket');
     bucket.setAttribute('fill', target ? currentPalette()[buildings.indexOf(target)] : '#ffe18a');
-    const pulse = reducedMotion.matches ? 0 : Math.sin((1 - bucketPulse / .28) * Math.PI) * Math.min(1, bucketPulse * 30);
+    const pulse = reducedMotion.matches ? 0 : Math.sin((1 - bucketPulse / PAINT.bucketPulse) * Math.PI) * Math.min(1, bucketPulse * 30);
     bucket.setAttribute('transform', `translate(0 140) scale(${1 + pulse * .22} ${1 - pulse * .16}) translate(0 -140)`);
   }
   function addEffect(duration, update, cleanup = () => {}) {
@@ -274,23 +275,56 @@
     effects.forEach(effect => effect.cleanup()); effects = [];
     $('effects').replaceChildren(); $('paintDefs').replaceChildren();
   }
-  function animateColour(el, colour, x, y, duration = .9) {
-    if (!el) return;
-    // Reserve the final colour immediately; only its reveal is animated.
-    if (el.getAttribute('fill') === colour) return;
+  function animateColour(el, colour, x, y, duration = PAINT.fill) {
+    if (!el || el.getAttribute('fill') === colour) return;
+    // Reserve the final colour immediately; the slow reveal is purely visual.
     el.setAttribute('fill', colour);
     if (reducedMotion.matches) return;
+    const box = el.getBBox();
+    const originX = Math.max(box.x, Math.min(box.x + box.width, x));
+    const originY = Math.max(box.y, Math.min(box.y + box.height, y));
+    const reach = Math.max(...[box.x, box.x + box.width].flatMap(px =>
+      [box.y, box.y + box.height].map(py => Math.hypot(px - originX, (py - originY) / .72)))) + 36;
     const id = `paint-reveal-${++nextClipId}`;
-    const clip = svg('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, $('paintDefs'));
-    const blobs = [-22, 0, 24].map((offset, index) => svg('ellipse', { cx: x + offset, cy: y + index * 8, rx: 0, ry: 0 }, clip));
+    const revealClip = svg('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, $('paintDefs'));
+    const blobs = [-22, 0, 24].map((offset, index) => svg('ellipse', { cx: originX + offset, cy: originY + index * 8, rx: 0, ry: 0 }, revealClip));
     el.setAttribute('clip-path', `url(#${id})`);
-    addEffect(duration, t => {
+
+    // Both clips are needed: sparkle only on the actual, already-coloured shape.
+    const shapeClip = svg('clipPath', { id: `${id}-shape`, clipPathUnits: 'userSpaceOnUse' }, $('paintDefs'));
+    const silhouette = el.cloneNode(false);
+    ['id', 'class', 'clip-path', 'stroke'].forEach(name => silhouette.removeAttribute(name));
+    shapeClip.appendChild(silhouette);
+    const shimmer = svg('g', { class: 'paint-shimmer', 'clip-path': `url(#${id}-shape)`, 'pointer-events': 'none' });
+    const revealed = svg('g', { 'clip-path': `url(#${id})` }, shimmer);
+    el.parentNode.insertBefore(shimmer, el.nextSibling);
+    const sheen = svg('ellipse', { cx: 0, cy: 0, rx: Math.max(12, box.width * .13), ry: Math.max(25, box.height * 1.2), fill: '#fffdf5', opacity: 0 }, revealed);
+    const points = [[.18,.24],[.68,.23],[.42,.64],[.83,.67],[.25,.79],[.58,.44]];
+    const glints = points.map(([px, py], i) => ({
+      el: svg('path', { d: 'M0-6Q1-1 6 0Q1 1 0 6Q-1 1-6 0Q-1-1 0-6Z', fill: i % 2 ? '#fffdf4' : '#fff2c5', stroke: '#d9b96e', 'stroke-width': .55, opacity: 0 }, revealed),
+      x: box.x + box.width * px, y: box.y + box.height * py,
+      delay: duration * (.12 + i * .125),
+      life: Math.min(.85 + i % 2 * .2, duration * (1 - .12 - i * .125) + PAINT.glitterTail)
+    }));
+    addEffect(duration + PAINT.glitterTail, (_t, age) => {
+      const t = Math.min(1, age / duration);
       blobs.forEach((blob, i) => {
-        const progress = Math.max(0, Math.min(1, t * 1.22 - i * .09));
-        const radius = progress * progress * (3 - 2 * progress) * 370;
+        const progress = Math.max(0, Math.min(1, (t - i * .05) / (1 - i * .05)));
+        const radius = progress * progress * (3 - 2 * progress) * reach;
         blob.setAttribute('rx', radius); blob.setAttribute('ry', radius * .72);
       });
-    }, () => { el.removeAttribute('clip-path'); clip.remove(); });
+      const sweep = Math.max(0, Math.min(1, (t - .12) / .88));
+      sheen.setAttribute('transform', `translate(${box.x - box.width * .2 + sweep * box.width * 1.4} ${box.y + box.height / 2}) rotate(-18)`);
+      sheen.setAttribute('opacity', Math.sin(Math.PI * sweep) * .14);
+      glints.forEach((glint, i) => {
+        const local = Math.max(0, Math.min(1, (age - glint.delay) / glint.life));
+        const glow = Math.pow(Math.sin(Math.PI * local), 2);
+        glint.el.setAttribute('transform', `translate(${glint.x} ${glint.y - local * 3}) rotate(${i % 2 ? 15 : -10}) scale(${.35 + glow * .65})`);
+        glint.el.setAttribute('opacity', glow * .8);
+      });
+    }, () => {
+      el.removeAttribute('clip-path'); revealClip.remove(); shapeClip.remove(); shimmer.remove();
+    });
   }
   function splash(x, y, colour, large = false) {
     const g = svg('g', {}, $('effects'));
@@ -300,18 +334,18 @@
       return;
     }
     const ring = svg('ellipse', { cx: x, cy: y + 3, rx: 1, ry: 1, fill: 'none', stroke: colour, 'stroke-width': 4 }, g);
-    const particles = Array.from({ length: large ? 14 : 10 }, (_, i) => {
-      const angle = Math.PI + (i + .5) / (large ? 14 : 10) * Math.PI;
-      const speed = 95 + (i % 4) * 34;
+    const particles = Array.from({ length: large ? 10 : 7 }, (_, i) => {
+      const angle = Math.PI + (i + .5) / (large ? 10 : 7) * Math.PI;
+      const speed = 60 + (i % 4) * 26;
       return { el: svg('ellipse', { rx: 4 + i % 3, ry: 7 + i % 3, fill: colour }, g), vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 30 };
     });
-    addEffect(.9, (t, age) => {
+    addEffect(1.15, (t, age) => {
       const pop = t < .2 ? .2 + t * 6.5 : 1.5 - (t - .2) * .35;
       shape.setAttribute('transform', `translate(${x} ${y}) scale(${pop} ${pop * .4})`);
       shape.setAttribute('opacity', Math.min(1, (1 - t) * 3));
       ring.setAttribute('rx', 12 + t * 85); ring.setAttribute('ry', 3 + t * 18); ring.setAttribute('opacity', (1 - t) * .65);
       particles.forEach(p => {
-        p.el.setAttribute('transform', `translate(${x + p.vx * age} ${y + p.vy * age + 230 * age * age}) rotate(${p.vx * age})`);
+        p.el.setAttribute('transform', `translate(${x + p.vx * age} ${y + p.vy * age + 125 * age * age}) rotate(${p.vx * age})`);
         p.el.setAttribute('opacity', Math.min(1, (1 - t) * 2.3));
       });
     }, () => g.remove());
@@ -325,7 +359,7 @@
     b.group.insertBefore(streak, b.outlines);
     const length = streak.getTotalLength();
     streak.setAttribute('stroke-dasharray', length); streak.setAttribute('stroke-dashoffset', length);
-    addEffect(.65, t => {
+    addEffect(1.65, t => {
       streak.setAttribute('stroke-dashoffset', length * (1 - Math.min(1, t * 1.8)));
       streak.setAttribute('opacity', .8 * (1 - Math.max(0, t - .6) / .4));
     }, () => streak.remove());
@@ -354,18 +388,18 @@
       const originX = origin?.x ?? Math.max(b.x + 12, Math.min(b.x + b.width - 12, drop.x));
       animateColour(b.floorEls[floor], colour, originX, y);
       b.floorEls[floor].classList.add('painted');
-      animateColour(b.roof, colour, drop.x, drop.landingY, .65);
+      animateColour(b.roof, colour, drop.x, drop.landingY, 1.9);
       paintRun(b, floor, originX, colour);
       b.painted++; totalPainted++;
       b.bounce = reducedMotion.matches ? 0 : .45;
       if (b.painted === b.floors) {
-        animateColour(b.door, colour, b.x + b.width - 57, WORLD.groundY - 40, .7);
+        animateColour(b.door, colour, b.x + b.width - 57, WORLD.groundY - 40, 2.1);
         celebrateHouse(b, colour);
       }
       splash(drop.x, drop.landingY, colour, b.painted === b.floors);
       tone(true); announce('hit'); updateUI();
       if (totalPainted === totalFloors) {
-        setPhase('complete'); announce('win'); winWait = reducedMotion.matches ? .35 : 1.6;
+        setPhase('complete'); announce('win'); winWait = reducedMotion.matches ? .35 : PAINT.fill + PAINT.glitterTail + .2;
         buildings.forEach((house, i) => celebrateHouse(house, currentPalette()[i], true));
       }
     } else {
@@ -450,8 +484,8 @@
     }
     const outletY = WORLD.outletY + bob();
     g.setAttribute('transform', `translate(${airshipX} ${outletY})`);
-    drops.push({ x: airshipX, y: outletY, originY: outletY, age: 0, velocity: 90, target, landingY, colour, el: g, shape, shine, trails });
-    bucketPulse = .28; tone(); announce('falling');
+    drops.push({ x: airshipX, y: outletY, originY: outletY, age: 0, fallDuration: PAINT.fallMin + PAINT.fallExtra * Math.min(1, Math.max(0, landingY - outletY - 31) / 450), target, landingY, colour, el: g, shape, shine, trails });
+    bucketPulse = PAINT.bucketPulse; tone(); announce('falling');
   }
   function frame(time) {
     const dt = lastTime === null ? 0 : Math.min((time - lastTime) / 1000, .05);
@@ -470,11 +504,14 @@
       const active = drops; drops = [];
       active.forEach(drop => {
         if (phase !== 'playing') { drop.el.remove(); return; }
-        drop.age += dt; drop.velocity = Math.min(660, drop.velocity + 900 * dt); drop.y += drop.velocity * dt;
-        const birth = Math.min(1, drop.age / .09);
-        const stretch = 1 + Math.min(.5, drop.velocity / 1200);
-        const bulbBottom = reducedMotion.matches ? 27 : 27 * birth * stretch;
-        if (drop.y + bulbBottom >= drop.landingY) { drop.el.remove(); land(drop); }
+        drop.age += dt;
+        const progress = Math.max(0, Math.min(1, (drop.age - PAINT.release) / drop.fallDuration));
+        const birth = Math.min(1, drop.age / PAINT.release);
+        const stretch = reducedMotion.matches ? 1 : 1 + progress * .14;
+        const bulbBottom = 27 * stretch;
+        const distance = Math.max(0, drop.landingY - bulbBottom - drop.originY);
+        drop.y = drop.originY + distance * Math.pow(progress, 1.35);
+        if (progress >= 1) { drop.el.remove(); land(drop); }
         else {
           drop.el.setAttribute('transform', `translate(${drop.x} ${drop.y})`);
           if (!reducedMotion.matches) {
@@ -483,7 +520,7 @@
             drop.trails.forEach((trail, i) => {
               const distance = 27 + i * 16;
               trail.setAttribute('cy', -Math.min(drop.y - drop.originY, distance));
-              trail.setAttribute('cx', Math.sin(drop.age * 9 + i) * 3);
+              trail.setAttribute('cx', Math.sin(drop.age * 4 + i) * 1.5);
               trail.setAttribute('opacity', drop.y - drop.originY > distance ? .6 - i * .13 : 0);
             });
           }
