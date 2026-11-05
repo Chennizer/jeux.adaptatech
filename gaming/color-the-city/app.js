@@ -9,14 +9,14 @@
   const text = {
     en: {
       games: 'Switch games', language: 'Language', title: 'Colorful',
-      pause: 'Pause', resume: 'Continue', settings: 'Settings',
+      pause: 'Pause', resume: 'Continue', settings: 'Settings', close: 'Close', gameSettings: 'Game', audioSettings: 'Audio', autoModeShort: 'Automatic', manualModeShort: 'Manual',
       soundLabel: 'Paint sounds', musicLabel: 'Music', musicVolume: 'Music volume', effectsVolume: 'Sound volume', soundOff: 'Off', soundOn: 'On',
       space: 'SPACE', orSwitch: 'switch · click · touch',
-      settingsHint: 'Your drawing can wait.', speed: 'Zeppelin speed',
+      settingsHint: 'Your drawing can wait.', speed: 'Speed',
       slow: 'Gentle', normal: 'Easygoing', fast: 'Brisk',
       guide: 'Aiming guide', guideHint: 'A little line shows where the paint will fall.',
       assist: 'A helping hand', assistHint: 'Drops near the drawing gently find their way to it.',
-      done: 'Done', start: 'Let’s paint', drop: 'Drop some colour', replay: 'Another drawing',
+      done: 'Done', start: 'Start', drop: 'Drop some colour', replay: 'Another drawing',
       readyTitle: 'A blank page. A little magic.', readyCopy: 'One press. A splash of colour. A little magic.',
       menuHint: 'Space or Enter · switch · click · touch. Escape returns to this menu.',
       pausedTitle: 'A little daydream.', pausedCopy: 'Press again when you’re ready.',
@@ -30,14 +30,14 @@
     },
     fr: {
       games: 'Jeux pour switch', language: 'Langue', title: 'Coloré',
-      pause: 'Pause', resume: 'Continuer', settings: 'Réglages',
+      pause: 'Pause', resume: 'Continuer', settings: 'Réglages', close: 'Fermer', gameSettings: 'Jeu', audioSettings: 'Audio', autoModeShort: 'Auto', manualModeShort: 'Manuel',
       soundLabel: 'Sons de peinture', musicLabel: 'Musique', musicVolume: 'Volume de la musique', effectsVolume: 'Volume des sons', soundOff: 'Désactivés', soundOn: 'Activés',
       space: 'ESPACE', orSwitch: 'switch · clic · toucher',
-      settingsHint: 'Le dessin t’attend.', speed: 'Vitesse du zeppelin',
+      settingsHint: 'Le dessin t’attend.', speed: 'Vitesse',
       slow: 'Douce', normal: 'Tranquille', fast: 'Rapide',
       guide: 'Guide de visée', guideHint: 'Une petite ligne montre où la peinture tombera.',
       assist: 'Coup de pouce', assistHint: 'Les gouttes proches du dessin le rejoignent.',
-      done: 'Terminé', start: 'C’est parti !', drop: 'Une goutte de couleur', replay: 'Un autre dessin',
+      done: 'Terminé', start: 'Commencer', drop: 'Une goutte de couleur', replay: 'Un autre dessin',
       readyTitle: 'Une page blanche. Un peu de magie.', readyCopy: 'Une pression. Une touche de couleur. Un peu de magie.',
       menuHint: 'Espace ou Entrée · switch · clic · toucher. Échap pour revenir au menu.',
       pausedTitle: 'Une petite rêverie.', pausedCopy: 'Appuie à nouveau quand tu veux.',
@@ -51,10 +51,10 @@
     },
     ja: {
       games: 'スイッチゲーム', language: '言語', title: 'カラフル',
-      pause: '一時停止', resume: '続ける', settings: '設定',
+      pause: '一時停止', resume: '続ける', settings: '設定', close: '閉じる', gameSettings: 'ゲーム', audioSettings: '音声', autoModeShort: '自動', manualModeShort: '手動',
       soundLabel: '絵の具の音', musicLabel: '音楽', musicVolume: '音楽の音量', effectsVolume: '効果音の音量', soundOff: 'オフ', soundOn: 'オン',
       space: 'スペース', orSwitch: 'スイッチ・クリック・タッチ',
-      settingsHint: '絵は待っているよ。', speed: '飛行船の速さ',
+      settingsHint: '絵は待っているよ。', speed: '速さ',
       slow: 'ゆっくり', normal: 'ふつう', fast: 'はやい',
       guide: 'ねらいのガイド', guideHint: '絵の具が落ちる場所を線で示します。',
       assist: 'おたすけ', assistHint: '近くに落ちた絵の具が絵に届きます。',
@@ -287,7 +287,17 @@
     $('difficulty').value = selectedDifficulty;
     const detail = text[lang].difficultyDetails[selectedDifficulty - 1];
     $('difficultyDescription').textContent = `${selectedDifficulty} — ${detail}`;
+    $('difficultyValue').textContent = `${selectedDifficulty} / 5`;
     $('difficulty').setAttribute('aria-valuetext', detail);
+  }
+  function selectSettingsTab(selected, focus = false) {
+    document.querySelectorAll('.settings-tabs [role="tab"]').forEach(tab => {
+      const active = tab.id === selected;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      $(tab.getAttribute('aria-controls')).hidden = !active;
+      if (active && focus) tab.focus({ preventScroll: true });
+    });
   }
   function translate() {
     document.documentElement.lang = lang;
@@ -541,7 +551,8 @@
   function enterGame() {
     window.PaintAudio.start(selectedScene);
     requestGameFullscreen();
-    menuOpen = false; $('options').open = false;
+    if ($('options').open) $('options').close();
+    menuOpen = false;
     if (selectedScene !== activeScene || selectedDifficulty !== activeDifficulty || phase === 'ready' || phase === 'complete') {
       if (selectedScene !== activeScene) { activeScene = selectedScene; paletteIndex = 0; }
       else if (phase === 'complete') paletteIndex = (paletteIndex + 1) % (activeScene === 'city' ? palettes.length : window.PaintSceneArt[activeScene].palette.length);
@@ -565,7 +576,7 @@
     }
   }
   function activate() {
-    if (document.hidden) return;
+    if (document.hidden || $('options').open) return;
     if (menuOpen) { enterGame(); return; }
     if (phase === 'complete') {
       if (winWait > 0) return;
@@ -662,6 +673,8 @@
     requestAnimationFrame(frame);
   }
   document.addEventListener('keydown', event => {
+    // Native dialog controls keep their keyboard behavior and cannot start play.
+    if ($('options').open) return;
     if (event.key === 'Escape' && !menuOpen) { event.preventDefault(); returnToMenu(); return; }
     if (!['Space', 'Enter', 'NumpadEnter'].includes(event.code)) return;
     const control = event.target.closest('button,a,input,select,textarea,summary,[contenteditable="true"]');
@@ -682,6 +695,50 @@
   });
   $('playSurface').addEventListener('click', event => { if (event.detail === 0) activate(); });
   $('mainAction').addEventListener('click', activate);
+  $('settingsButton').addEventListener('click', () => {
+    if (!menuOpen || $('options').open) return;
+    heldKeys.clear();
+    selectSettingsTab('gameTab');
+    $('options').showModal();
+    $('closeSettings').focus({ preventScroll: true });
+  });
+  $('closeSettings').addEventListener('click', () => $('options').close());
+  $('options').addEventListener('close', () => {
+    heldKeys.clear();
+    if (menuOpen) $('settingsButton').focus({ preventScroll: true });
+  });
+  $('options').addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    const controls = [...$('options').querySelectorAll('button,input,select,[tabindex]')]
+      .filter(el => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus({ preventScroll: true });
+    }
+  });
+  let backdropPress = false;
+  function outsideSettings(event) {
+    const box = $('options').getBoundingClientRect();
+    return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+  }
+  $('options').addEventListener('pointerdown', event => {
+    backdropPress = event.target === $('options') && outsideSettings(event);
+  });
+  $('options').addEventListener('click', event => {
+    if (backdropPress && event.target === $('options') && outsideSettings(event)) $('options').close();
+    backdropPress = false;
+  });
+  document.querySelectorAll('.settings-tabs [role="tab"]').forEach(tab => {
+    tab.addEventListener('click', () => selectSettingsTab(tab.id));
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 'gameTab' : event.key === 'End' ? 'audioTab' : tab.id === 'gameTab' ? 'audioTab' : 'gameTab';
+      selectSettingsTab(next, true);
+    });
+  });
   try {
     const saved = JSON.parse(localStorage.getItem('colourCityAudio') || 'null');
     if (saved) {
@@ -698,7 +755,8 @@
   $('language').addEventListener('change', event => {
     lang = event.target.value;
     try { localStorage.setItem('siteLanguage', lang); } catch (_) { /* Storage is optional. */ }
-    translate(); $('mainAction').focus({ preventScroll: true });
+    translate();
+    if (!$('options').open) $('mainAction').focus({ preventScroll: true });
   });
   document.addEventListener('fullscreenchange', () => {
     const active = Boolean(document.fullscreenElement);
