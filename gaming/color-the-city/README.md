@@ -37,7 +37,7 @@ At levels 1 and 2, one paint hit fills the whole object, including its roof and 
 - **One switch / automatic:** holds the active colour for 12 seconds, then selects the next palette colour. Space or Enter drops paint. Crossing from one object to another does not change the colour.
 - **Choose the colour / manual:** Space, click, or touch drops paint. Each fresh Enter or NumpadEnter press cycles to the next colour without dropping paint. Holding Enter changes it only once. The colour never changes on a timer in this mode.
 
-The settings modal offers Automatic and Manual modes and remembers the chosen mode. Keyboard instructions remain available to assistive technology without explanatory paragraphs on screen. Switching modes on Continue preserves the drawing and selected colour; the automatic timer restarts with a fresh interval. Normal pause/Continue in the same mode preserves the timer remainder.
+The menu's segmented Automatic/Manual selector remembers the chosen mode. Keyboard instructions remain available to assistive technology without explanatory paragraphs on screen. Switching modes on Continue preserves the drawing and selected colour; the automatic timer restarts with a fresh interval. Normal pause/Continue in the same mode preserves the timer remainder.
 
 A large paint-drop badge on the zeppelin, its coloured gondola, and its enlarged paint tank all show the active colour. An accessible stage label also identifies it. Every drop captures its colour on release, so a later selection change cannot recolour a drop already in flight. Painted areas retain their own chosen colours; later hits on other parts do not repaint a completed roof.
 
@@ -47,9 +47,9 @@ The zeppelin starts flying to the right. It must finish leaving the drawing befo
 
 ## Menu and fullscreen play
 
-The menu follows the recent Mario and Mario: Peach Challenge pages: a full-height light control panel on the left and a large illustration on the right. It shows only the title, five scene pictograms, difficulty, Start, back and settings. Narrow portrait screens use a single control panel; short landscape screens compact the choices into one row. There are no visible explanatory paragraphs, colour counters, or keyboard reminders, and the menu does not scroll.
+The menu directly loads `css/video-stop-action.css`, the same stylesheet as `arcade/mariomovie/` and `arcade/space-invaders-fruits/` (Space Adventure in the Arcade portal). It uses their light control rail, orange pixel Arcade heading, small game title, black-bordered segmented mode selector, and compact orange Start button. The right-hand scene chooser follows the spatial game's illustrated ship cards: five large selectable thumbnails, a dark background and a clear selected outline. Thumbnails reuse the actual scene artwork without changing the gameplay drawing. Layouts adapt to portrait and short landscape screens without scrolling. There are no visible explanatory paragraphs, colour counters, or keyboard reminders.
 
-Settings open in a native modal dialog. The Game tab holds colour mode, language, speed, aiming and assistance; the Audio tab holds music/effects toggles and volumes. Only one short panel appears at a time, with no scrolling. Tab stays inside the modal, Escape/X/backdrop closes it, and focus returns to Settings. Space/Enter inside the modal never starts the game. Language changes keep focus inside the modal.
+Settings open in a native modal dialog. The Game tab holds language, speed, aiming and assistance; the Audio tab holds music/effects toggles and volumes. Only one short panel appears at a time, with no scrolling. Tab stays inside the modal, Escape/X/backdrop closes it, and focus returns to Settings. Space/Enter inside the modal never starts the game. Language changes keep focus inside the modal.
 
 Start requests native fullscreen directly from the click, touch, or switch gesture. Where fullscreen is unsupported or denied, the game fills the browser viewport.
 
@@ -106,7 +106,7 @@ Effects start at 40% with additional per-sample attenuation. Closely spaced inpu
 
 ## Try it
 
-Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. A tile also appears in the Switch Games (`gaming/`) catalogue. All assets are local, including `scenes.js`, `templates.js`, `backgrounds.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the menu illustration at `images/color-the-city.svg`. No external libraries, fonts, media downloads, or build steps.
+Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. A tile also appears in the Switch Games (`gaming/`) catalogue. All assets are local, including `scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads, or build steps are required.
 
 ## Prototype checks
 
@@ -115,3 +115,5 @@ The existing browser regression scripts cover fullscreen and pause/Continue, bot
 Composition checks cover completed rounds in all 25 scene/difficulty combinations, exact hit counts and whole-object fills, captured drop colours, intermediate two-hit fills, completion background timing and automatic advancement. A separate geometry sweep covers all 250 scene/template/difficulty combinations (800 objects), with no clipping or overlapping assisted hit regions; 500 shuffled drawings cover complete bags and no immediate repeats at their boundaries. Lifecycle checks cover native fullscreen, held inputs, paused fills, retained layouts, saved difficulty, and reduced-motion progression. Localized menus and open settings fit widths from 320 to 2560 pixels without horizontal overflow. Physical switch hardware and screen reader testing remain to be done on the target device.
 
 The simplified menu and both settings tabs were checked in all three languages at ten portrait/landscape sizes from 320×480 and 568×320 to 2560×1440, with additional 320×320 checks. Controls remain within the viewport without scrolling or clipped content. Modal checks cover Tab/Shift+Tab wrapping, arrow/Home/End tab selection, Escape/X/backdrop dismissal and focus return, switch-key isolation, retained focus when translating, saved mode/audio preferences, and manual painting/Continue after adjusting settings.
+
+The Arcade menu revision repeats those layout and interaction checks at eleven sizes including 320×320, with the actual shared stylesheet and local pixel font loaded. Checks also verify five independent scene previews, scene/mode selection, exact Arcade heading colour, manual painting, saved audio settings and retained drawings after returning from the modal.

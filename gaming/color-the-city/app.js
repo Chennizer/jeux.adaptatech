@@ -8,7 +8,7 @@
   const COLOUR_CYCLE_SECONDS = 12;
   const text = {
     en: {
-      games: 'Switch games', language: 'Language', title: 'Colorful',
+      games: 'Switch games', language: 'Language', title: 'Colorful', scenes: 'Scenes',
       pause: 'Pause', resume: 'Continue', settings: 'Settings', close: 'Close', gameSettings: 'Game', audioSettings: 'Audio', autoModeShort: 'Automatic', manualModeShort: 'Manual',
       soundLabel: 'Paint sounds', musicLabel: 'Music', musicVolume: 'Music volume', effectsVolume: 'Sound volume', soundOff: 'Off', soundOn: 'On',
       space: 'SPACE', orSwitch: 'switch · click · touch',
@@ -29,7 +29,7 @@
       paintedLabel: 'Successful paint hits', chooseScene: 'Choose your drawing', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.', difficulty: 'Difficulty', difficultyDetails: ['2 objects · 1 hit each', '3 objects · 1 hit each', '3 objects · 2 hits each', '4 objects · 2 hits each', '4 objects · 3 hits each']
     },
     fr: {
-      games: 'Jeux pour switch', language: 'Langue', title: 'Coloré',
+      games: 'Jeux pour switch', language: 'Langue', title: 'Coloré', scenes: 'Scènes',
       pause: 'Pause', resume: 'Continuer', settings: 'Réglages', close: 'Fermer', gameSettings: 'Jeu', audioSettings: 'Audio', autoModeShort: 'Auto', manualModeShort: 'Manuel',
       soundLabel: 'Sons de peinture', musicLabel: 'Musique', musicVolume: 'Volume de la musique', effectsVolume: 'Volume des sons', soundOff: 'Désactivés', soundOn: 'Activés',
       space: 'ESPACE', orSwitch: 'switch · clic · toucher',
@@ -50,7 +50,7 @@
       paintedLabel: 'Touches de peinture réussies', chooseScene: 'Choisis ton dessin', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.', difficulty: 'Difficulté', difficultyDetails: ['2 objets · 1 touche chacun', '3 objets · 1 touche chacun', '3 objets · 2 touches chacun', '4 objets · 2 touches chacun', '4 objets · 3 touches chacun']
     },
     ja: {
-      games: 'スイッチゲーム', language: '言語', title: 'カラフル',
+      games: 'スイッチゲーム', language: '言語', title: 'カラフル', scenes: 'シーン',
       pause: '一時停止', resume: '続ける', settings: '設定', close: '閉じる', gameSettings: 'ゲーム', audioSettings: '音声', autoModeShort: '自動', manualModeShort: '手動',
       soundLabel: '絵の具の音', musicLabel: '音楽', musicVolume: '音楽の音量', effectsVolume: '効果音の音量', soundOff: 'オフ', soundOn: 'オン',
       space: 'スペース', orSwitch: 'スイッチ・クリック・タッチ',
