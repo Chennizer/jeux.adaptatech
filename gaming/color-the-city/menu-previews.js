@@ -7,8 +7,10 @@
     const scene = choice.querySelector('input[name="drawingScene"]')?.value;
     const artwork = window.PaintSceneArt?.[scene];
     if (scene !== 'city' && !artwork) return;
+    choice.dataset.world = scene;
 
-    // Each thumbnail owns its artwork; gameplay creates separate targets later.
+    // These independent pictures preview the colours the player will bring back.
+    // The card's restoration state is styled separately from gameplay artwork.
     const prefix = `menu-preview-${index}-`;
     const svg = (tag, attrs = {}, parent) => {
       const node = document.createElementNS(SVG, tag);
@@ -25,7 +27,7 @@
       class: 'scene-preview', viewBox: '0 260 620 440',
       'aria-hidden': 'true', focusable: 'false'
     });
-    svg('rect', { x: 0, y: 260, width: 620, height: 440, fill: '#fff' }, preview);
+    svg('rect', { x: 0, y: 260, width: 620, height: 440, fill: '#fbfcf8', class: 'preview-paper' }, preview);
 
     if (scene === 'city') {
       // The existing cover already contains the city and its paint zeppelin.
@@ -34,6 +36,10 @@
         width: 620, height: 440, preserveAspectRatio: 'xMidYMid meet'
       }, preview);
     } else {
+      svg('path', {
+        d: 'M0 647Q135 618 302 645T620 638V700H0Z',
+        fill: scene === 'planets' ? '#eeeaf6' : '#eaf0e3'
+      }, preview);
       const inkPath = (d, parent, attrs = {}) => svg('path', {
         d, fill: 'none', stroke: INK, 'stroke-width': 3,
         'stroke-linecap': 'round', 'stroke-linejoin': 'round', ...attrs

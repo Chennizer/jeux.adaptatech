@@ -1,8 +1,8 @@
-# Colorful / Coloré / カラフル
+# Recolor / リカラー
 
-A standalone colouring-book prototype with automatic one-switch play and a manual colour-selection mode. A giant rainbow zeppelin flies over a white drawing board. Each fresh press releases paint onto a large outlined object. Complete the drawing to reveal a colourful themed landscape, then continue automatically to another composition.
+A standalone switch painting game: the colours have disappeared and the worlds have become sad. A giant rainbow zeppelin carries paint across each pale landscape. Every fresh press releases a slow drop that restores colour, warmth and joy. Complete a world, enjoy its colourful transformation, then continue the journey to the next one.
 
-## Choose a drawing
+## A journey through five worlds
 
 The initial menu offers five illustrated choices:
 
@@ -12,11 +12,13 @@ The initial menu offers five illustrated choices:
 - **Farm:** barn, silo, tractor, and a giant sunflower planter.
 - **Planets:** ringed, cratered, banded, and star-patterned worlds floating on the white page.
 
-Each scene has its own outline artwork, paint regions, collision silhouettes, and palette. All start white. The title, scene names, difficulty descriptions, and controls support French, English, and Japanese. The selected scene and difficulty are remembered when local storage is available.
+Each world has its own outline artwork, paint regions, collision silhouettes, palette and soundtrack. Objects begin white against a subdued atmosphere. Successful paint hits gradually clear the grey mood and bring warmer light to the landscape. The title is Recolor in French/English and リカラー in Japanese; the story, world names, difficulty descriptions and controls are localized in all three languages.
+
+The journey follows **City → Forest → Village → Farm → Planets → City**, using a fresh composition on each visit. Any world remains directly selectable on the menu. Completed worlds regain colour on the menu map, and their restored state is remembered in `recolorRestoredWorlds` when local storage is available. Scene, difficulty, colour mode and audio choices are also remembered. This is a gentle journey with no time limit, lost lives or penalties.
 
 Each scene has **ten composition templates** that vary motif order, size, placement, and mirroring. A separate shuffle bag for each scene uses all ten before repeating, and prevents an immediate repeat when a new bag starts. Difficulty determines how many motifs from the chosen composition appear.
 
-Selecting a different scene or difficulty and pressing Start begins a fresh drawing. Continue during an unfinished drawing preserves its colours, falling drops, animation progress, zeppelin position, and direction. Changing a menu choice back before starting also leaves that drawing intact.
+Selecting a different world or difficulty and pressing Start begins a fresh drawing. Continue during an unfinished drawing preserves its colours, falling drops, animation progress, zeppelin position and direction. Changing a menu choice back before starting also leaves that drawing intact. After completing a world, the menu action becomes Next world and continues the route.
 
 ## Difficulty
 
@@ -47,7 +49,9 @@ The zeppelin starts flying to the right. It must finish leaving the drawing befo
 
 ## Menu and fullscreen play
 
-The menu directly loads `css/video-stop-action.css`, the same stylesheet as `arcade/mariomovie/` and `arcade/space-invaders-fruits/` (Space Adventure in the Arcade portal). It uses their light control rail, orange pixel Arcade heading, small game title, black-bordered segmented mode selector, and compact orange Start button. The right-hand scene chooser follows the spatial game's illustrated ship cards: five large selectable thumbnails, a dark background and a clear selected outline. Thumbnails reuse the actual scene artwork without changing the gameplay drawing. Layouts adapt to portrait and short landscape screens without scrolling. There are no visible explanatory paragraphs, colour counters, or keyboard reminders.
+The menu loads `css/video-stop-action.css`, shared with the site's Arcade games, and adapts it to Recolor's journey. A light control rail contains a small Arcade heading, a clearer game title, one short story line, Automatic/Manual selection, difficulty and Start. The segmented selector has adjoining equal areas without the previous gap between them. Title spacing and control sizing adapt to the viewport without scrolling.
+
+Five illustrated world cards sit on a pale paper-sky travel map. Muted previews show the missing colours; selection and previously restored worlds bring colour back to the cards. The restored state has an accessible description as well as its visual treatment. Thumbnails reuse independent copies of the scene artwork, so menu previews never change the gameplay drawing. The menu has no long explanations, colour counters or visible keyboard reminders.
 
 Settings open in a native modal dialog. The Game tab holds language, speed, aiming and assistance; the Audio tab holds music/effects toggles and volumes. Only one short panel appears at a time, with no scrolling. Tab stays inside the modal, Escape/X/backdrop closes it, and focus returns to Settings. Space/Enter inside the modal never starts the game. Language changes keep focus inside the modal.
 
@@ -55,11 +59,11 @@ Start requests native fullscreen directly from the click, touch, or switch gestu
 
 During play, only the drawing, zeppelin, and paint effects are visible. There are no titles, labels, counters, buttons, settings, instructions, or completion text. The entire drawing accepts click/touch and is the sole focusable game control. Status and progress remain available to assistive technology without visible overlays.
 
-- **Space:** start, drop paint, resume, and replay in either mode. **Enter** also drops paint in automatic mode; in manual play it only cycles colours. Enter still activates Start on the menu. Map switch hardware accordingly; holding never repeats.
+- **Space:** start, drop paint, resume, and continue to the next world in either mode. **Enter** also drops paint in automatic mode; in manual play it only cycles colours. Enter still activates Start on the menu. Map switch hardware accordingly; holding never repeats.
 - **Mouse or touch:** Start from the menu, then press anywhere in the drawing.
 - **Escape / leaving fullscreen:** return to the menu with progress preserved. Changing tabs or leaving the window also pauses.
 - **Settings:** three flight speeds, optional aiming line (off initially), near-miss assistance, plus separate music/effects toggles and volume sliders. Audio preferences are remembered. Music and paint sounds start enabled at gentle levels, after Start only.
-- **Completion:** the final fill and shimmer finish before a colourful background fades in. After a short viewing pause, it fades back to white and the next shuffled composition starts automatically. A fresh press can advance once the reveal has had time to appear; holding the switch never repeats.
+- **Completion:** the final fill and shimmer finish before the complete colourful landscape fades in. It remains on screen for 6.5 seconds, then fades to white and automatically begins the next world. A fresh press can advance once the reveal has had time to appear; holding the switch never repeats.
 
 ## Paint effects
 
@@ -67,13 +71,19 @@ Each press gives the paint a short, visible release swell, followed by a gentle 
 
 Colour spreads for 4.2 seconds, with a short shimmer tail. Organic reveal shapes are fitted to each part's actual bounds so small windows/roofs and large canopies do not fill all at once. A faint sheen and small, staggered gold/white glints appear only inside the already-coloured shape, beneath static outlines and details. Each glint gently appears and fades once. Completed objects settle and emit stars. The completion sequence allows the entire last fill and shimmer to finish before revealing the background.
 
-All effects share the game frame clock: returning to the menu freezes motion and effects, and Continue resumes an unfinished drawing. Final reveals finish after the logical win. New compositions and scene changes clear old drops, clips, particles, and transforms. Reduced-motion preferences retain the slower essential drop movement but use immediate fills and a brief static splat, with no glitter, sheen, decorative trails, particles, stars, bobbing, or object movement. Essential flight/drop movement remains.
+All effects share the game frame clock: returning to the menu freezes motion and effects, and Continue resumes an unfinished drawing. Final reveals finish after the logical win. New compositions and world changes clear old drops, clips, particles, life details and transforms. Reduced-motion preferences retain essential flight/drop movement but use immediate paint fills, static restoration details and shorter background fades, with no glitter, sheen, decorative trails, bobbing or object movement.
 
-There is no time limit, lost life, or penalty. Misses leave harmless paint dabs.
+## Colour brings life back
+
+The mostly white drawing board starts with a faint grey atmosphere: clouds and quiet hills in the terrestrial worlds, or a faded moon and stars around the planets. As successful hits restore the drawing, the atmosphere gradually becomes lighter and warmer. The full completion landscape remains the final reveal.
+
+Finishing an object adds a small lasting response after its slow fill has completed: warm details around buildings, birds/leaves or flowers in nature, and little celestial details around planets. These reactions make each restored object feel alive without adding controls or text. They remain through the celebration and clear when the next world starts.
+
+`atmosphere.js` and `restoration.js` update only from the shared game frame loop. They do not own animation timers, so pause freezes them with the drawing. Reduced motion reveals static details instead of decorative movement. Misses still leave harmless paint dabs.
 
 ## Completion landscapes
 
-The white drawing board remains blank behind the objects throughout painting. Once everything is coloured, a separate full-viewport SVG landscape slowly appears behind the finished drawing:
+The pale world gains subtle warmth during painting. Once every object is coloured, a separate full-viewport SVG landscape slowly appears behind the finished drawing:
 
 - **City:** a colourful sunset with distant city silhouettes.
 - **Forest:** a green woodland sky, warm sunlight, layered trees and firefly-like points.
@@ -81,7 +91,7 @@ The white drawing board remains blank behind the objects throughout painting. On
 - **Farm:** a blue countryside sky above green and golden fields.
 - **Planets:** a rich galaxy with nebula clouds, stars, a moon and orbital arcs.
 
-Each theme has ten deterministic background variations matched to the composition. The normal completion sequence starts the background after the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 4.5 seconds, then fades to white before the next drawing. Reduced motion uses shorter fades without decorative movement. The background stays behind the outlined objects and zeppelin, with no text or controls appearing during the celebration.
+Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next world. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. The landscape stays behind the outlined objects and zeppelin, with no text or controls appearing during the celebration.
 
 ## Music and sounds
 
@@ -102,18 +112,14 @@ These recordings follow the scenes' themes: Art Gallery for the painted city, Pl
 - **Colour spread/glitter:** `sounds/space/twinklingstar1.mp3`, softly faded to match the slower fill.
 - **Completed drawing:** `sounds/success4.mp3`, a short chime with a gentle music dip.
 
-Effects start at 40% with additional per-sample attenuation. Closely spaced inputs coalesce sound effects and there is a six-voice limit. Music and effects are independently adjustable/mutable in the settings modal, without playing preview sounds there. Music starts only in the user's Start gesture, pauses on the menu/tab/window exit, and continues from its previous position on Continue. Replaying the same scene keeps its soundtrack flowing; changing scenes selects its own track. Transient effects stop on pause/replay/scene changes and do not restart late after an asynchronous load. Unsupported audio or missing library files never block painting.
+Effects start at 40% with additional per-sample attenuation. Closely spaced inputs coalesce sound effects and there is a six-voice limit. Music and effects are independently adjustable/mutable in the settings modal, without playing preview sounds there. Music starts only in the user's Start gesture, pauses on the menu/tab/window exit, and continues from its previous position on Continue. Moving to another world selects its thematic soundtrack automatically. Transient effects stop on pause/new compositions/world changes and do not restart late after an asynchronous load. Unsupported audio or missing library files never block painting.
 
 ## Try it
 
-Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. A tile also appears in the Switch Games (`gaming/`) catalogue. All assets are local, including `scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads, or build steps are required.
+Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. The existing URL is retained, and the Switch Games (`gaming/`) catalogue lists Recolor. All assets are local, including `scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `atmosphere.js`, `restoration.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads or build steps are required.
 
 ## Prototype checks
 
-The existing browser regression scripts cover fullscreen and pause/Continue, both offscreen flight reversals, held switch input, slow clipped fills and glitter, colour modes, active-colour indicators, all five thematic soundtrack mappings, audio preferences and fallback behavior, localization, and narrow-screen overflow.
+The earlier prototype regression checks cover fullscreen and pause/Continue, both offscreen flight reversals, held switch input, slow clipped fills and glitter, colour modes, active-colour indicators, thematic soundtracks and audio lifecycle, saved settings, localization and modal keyboard behavior. Earlier composition checks cover all 25 world/difficulty rounds, all 250 template/difficulty combinations (800 objects) without clipping or overlapping assisted hit regions, and 500 shuffled drawings without repeats at bag boundaries.
 
-Composition checks cover completed rounds in all 25 scene/difficulty combinations, exact hit counts and whole-object fills, captured drop colours, intermediate two-hit fills, completion background timing and automatic advancement. A separate geometry sweep covers all 250 scene/template/difficulty combinations (800 objects), with no clipping or overlapping assisted hit regions; 500 shuffled drawings cover complete bags and no immediate repeats at their boundaries. Lifecycle checks cover native fullscreen, held inputs, paused fills, retained layouts, saved difficulty, and reduced-motion progression. Localized menus and open settings fit widths from 320 to 2560 pixels without horizontal overflow. Physical switch hardware and screen reader testing remain to be done on the target device.
-
-The simplified menu and both settings tabs were checked in all three languages at ten portrait/landscape sizes from 320×480 and 568×320 to 2560×1440, with additional 320×320 checks. Controls remain within the viewport without scrolling or clipped content. Modal checks cover Tab/Shift+Tab wrapping, arrow/Home/End tab selection, Escape/X/backdrop dismissal and focus return, switch-key isolation, retained focus when translating, saved mode/audio preferences, and manual painting/Continue after adjusting settings.
-
-The Arcade menu revision repeats those layout and interaction checks at eleven sizes including 320×320, with the actual shared stylesheet and local pixel font loaded. Checks also verify five independent scene previews, scene/mode selection, exact Arcade heading colour, manual painting, saved audio settings and retained drawings after returning from the modal.
+Recolor checks passed the title/story, map and both settings panels at eleven portrait/landscape sizes from 320×320 to 2560×1440 in French, English and Japanese. Both pill states have no gap, equal halves and immediately readable labels. Completed rounds in all five worlds cover all five difficulty settings, grey-to-warm progress, delayed life details, exact pause freezing, completed backgrounds, automatic world changes, cleanup and remembered map colours. Focused reduced-motion checks confirm static visual decorations, no glitter, paused life, next-world transition and held manual Enter behavior. A real-audio check confirms automatic City → Forest soundtrack switching after one Start, followed by pause/Continue with position retained. Isolated atmosphere checks cover all 50 scene/variant combinations; restoration checks cover all five themes, bounded reactions, delay, duplicate protection, finite geometry and cleanup. Screenshots, syntax, unique HTML IDs and whitespace were checked. Physical switch hardware and screen reader testing remain to be done on the target device.
