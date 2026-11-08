@@ -22,7 +22,7 @@ This pass covers the five existing settings, the blank-to-restored transformatio
 | Farm | Barn, silo, tractor and sunflower against a restored countryside and golden fields; small flowers and butterflies. | Large objects remain distinct. Completion now clears the zeppelin from the finished panorama. |
 | Planets | A faded moon and pale worlds become a rich galaxy, with moving stars and small moons. | Strongest contrast between initial and restored scenes. Corrected orbit geometry; reduced motion retains fixed ornaments. |
 
-The white drawing-board treatment, thick outlines and restrained pastel object colours remain shared across settings. Completed panoramas supply the stronger thematic colour. The menu uses a paper map rather than applying a space background to terrestrial scenes. Newly coloured accents and decorations preserve the one-switch interaction and existing difficulty settings.
+The white drawing-board treatment, thick outlines and restrained pastel object colours remain shared across settings. Completed panoramas supply the stronger thematic colour. The menu uses a paper map rather than applying a space background to terrestrial scenes. Its active card is identified by a native radio dot, a thick teal frame and a teal caption; completion checkmarks are removed and hover remains visually separate from selection. Newly coloured accents and decorations preserve the one-switch interaction and existing difficulty settings.
 
 ## Music and effects
 
@@ -44,20 +44,17 @@ The bubble release/landing samples, fill twinkle and completion chime retain sep
 
 The twinkle recording's audible content ends before its configured voice/fade finishes. A future listening pass could tighten its envelope or compare another sample. Likewise, Forest and Farm could benefit from longer alternative recordings if their short loops become repetitive. This pass does not trim musical endings or substitute unreviewed recordings.
 
-## More traditional arcade settings to consider
+## Traditional video-game worlds to consider
 
-These would retain two to four large targets, the five difficulty settings, slow drops and one colouring objective.
+The intended reference is classic video-game environments: platformers, space shooters and fantasy adventures. Each proposal keeps the same slow one-switch painting, two to four large objects, five difficulty settings and shuffled layouts.
 
-| Proposed setting | Paintable objects | Restoration payoff |
+| Proposed setting | Video-game reference | Paintable objects and restoration payoff |
 | --- | --- | --- |
-| **Neon Carnival — first recommendation** | Ferris wheel, carousel, rocket ride and arcade cabinet. | An unlit fairground fills with coloured bulbs and gentle ride motion. |
-| **Retro Racetrack** | Race car, pit garage, starting lights and trophy tower. | Flags, wheels and track lights animate around a vivid circuit. |
-| **Pinball Garden** | Giant bumpers, star gates, curved ramps and a jackpot tower. | Lights come on; a ball performs a short completion celebration without adding pinball controls. |
-| **Toy Factory** | Robot, toy train, wind-up bird and toy rocket. | The restored toys make small friendly movements. |
-| **Coral Arcade** | Submarine, octopus, coral towers and treasure arch. | Bubbles and fish return to a luminous reef. |
-| **Pixel Islands** | Floating platforms, crystal towers, a small castle and giant flowers. | Stars and a colourful platform-game landscape appear. |
+| **Pixel Kingdom — first recommendation** | Colourful side-scrolling platformers. | Chunky blocks, pipes, giant flowers and a castle; colour restores bright hills, clouds and a flag on the castle. |
+| **Star Squadron** | Classic space-shooter stages. | Friendly ships, satellites, asteroid outposts and a space station; engines, windows and a vivid starfield light up as colour returns. |
+| **Crystal Dungeon** | Fantasy adventure and dungeon games. | Treasure chests, giant crystals, stone towers and a friendly dragon statue; torches and magical light reveal the completed cavern. |
 
-Candidate assets for a later listening pass include `songs/confetti.mp3` for Carnival (137.1 s, −16.2 LUFS) and `songs/synth/synth1.mp3`, metadata title *Neon Heartbeat*, for a neon setting (117.5 s, −14.9 LUFS). These are audition candidates, not selected soundtracks. The existing Space Arcade alternatives measure substantially louder than the current set and should not be substituted solely because of their names.
+These are proposed new settings, not implemented levels. A later listening pass could compare melodic chiptune for Pixel Kingdom, the existing Space collections for Star Squadron, and gentle fantasy music for Crystal Dungeon. No new soundtrack has been chosen. The earlier physical-arcade/carnival suggestions are superseded by this direction.
 
 ## Verification
 
