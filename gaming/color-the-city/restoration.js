@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const NS = 'http://www.w3.org/2000/svg', INK = '#4c5260';
+  const ORBIT_ANGLE = -16, ORBIT_COS = Math.cos(ORBIT_ANGLE*Math.PI/180), ORBIT_SIN = Math.sin(ORBIT_ANGLE*Math.PI/180);
   let state = null, lives = [], restored = new WeakSet();
   function add(tag, attrs, parent) {
     if (state.svg) return state.svg(tag, attrs, parent);
@@ -46,7 +47,7 @@
     add('circle',{cx:10,cy:-5.5,r:1.5,fill:'#35434e'},root);
     path('M-3 11-5 15m8-4 1 4',{'stroke-width':1.3},root);
     const wing=path('M-7 1Q-1-5 5 1Q1 8-5 7Z',{fill:'#fff7d4',stroke:'#687875','stroke-width':1},root);
-    life.bird={root,wing,x:Math.max(26,Math.min(1174,x)),y:Math.max(326,y)};
+    life.bird={root,wing,x:Math.max(26,Math.min(1174,x)),y:Math.max(30,Math.min(680,y))};
   }
   function butterfly(life,x,y,colour) {
     const root=add('g',{class:'restored-butterfly'},life.root), wings=add('g',{},root);
@@ -86,13 +87,17 @@
     const center=point(target,target.x+target.width/2,473),rx=Math.min(149,target.hitWidth?target.hitWidth*.57:135*life.scale),ry=rx*.4;
     life.orbit={center,rx,ry,stars:[]};
     add('ellipse',{cx:center.x,cy:center.y,rx,ry,fill:'none',stroke:'#d7c3ef','stroke-width':1.4,opacity:.6,
-      transform:`rotate(-16 ${center.x} ${center.y})`},life.root);
+      transform:`rotate(${ORBIT_ANGLE} ${center.x} ${center.y})`},life.root);
     for(let i=0;i<3;i++) {
       const el=path('M0-8 2.5-2.5 8 0 2.5 2.5 0 8-2.5 2.5-8 0-2.5-2.5Z',
         {fill:i%2?'#fff2b4':'#f4c6db',stroke:'#c8a5d4','stroke-width':.8},life.root);
       life.orbit.stars.push({el,phase:i*Math.PI*2/3});
     }
     life.moon=add('circle',{r:7*life.scale,fill:'#fff4c7',stroke:'#d9c996','stroke-width':1},life.root);
+  }
+  function orbitPoint({center,rx,ry},angle) {
+    const x=Math.cos(angle)*rx,y=Math.sin(angle)*ry;
+    return {x:center.x+x*ORBIT_COS-y*ORBIT_SIN,y:center.y+x*ORBIT_SIN+y*ORBIT_COS};
   }
   function restore({target,colour='#b9dfcf',worldPoint}) {
     if(!state || !target || restored.has(target) || lives.length>=4) return null;
@@ -119,7 +124,8 @@
     } else {
       windows(life,target,point);bird(life,perch.x,perch.y,'#a8dcd4');
       if(state.scene==='city' && motif===3 || state.scene==='village' && motif===0) {
-        const vent=point(target,target.x+180,target.top-40);chimney(life,vent.x,vent.y);
+        const source=target.chimney || {x:target.x+175,y:target.top-51};
+        const vent=point(target,source.x,source.y);chimney(life,vent.x,vent.y);
       }
     }
     update(life);return life.root;
@@ -147,14 +153,14 @@
     life.windows.forEach((el,i)=>el.setAttribute('opacity',reduced ? .9 : .83+Math.sin(age*.6+i*.7)*.08));
     life.smoke?.forEach(p=>p.el.setAttribute('transform',`translate(${reduced?0:Math.sin(age*.7+p.i)*5} ${reduced?0:-Math.sin(age*.45+p.i)*3})`));
     if(life.orbit) {
-      const {center,rx,ry,stars}=life.orbit,theta=reduced ? .2 : age*.2;
+      const {stars}=life.orbit,theta=reduced ? .2 : age*.2;
       stars.forEach(({el,phase},i)=>{
-        const a=theta+phase+life.phase,x=center.x+Math.cos(a)*rx,y=center.y+Math.sin(a)*ry-Math.cos(a)*rx*.26;
-        el.setAttribute('transform',`translate(${x} ${y}) rotate(${reduced?0:age*8+i*22}) scale(${life.scale*(i===1 ? .8 : 1)})`);
+        const position=orbitPoint(life.orbit,theta+phase+life.phase);
+        el.setAttribute('transform',`translate(${position.x} ${position.y}) rotate(${reduced?0:age*8+i*22}) scale(${life.scale*(i===1 ? .8 : 1)})`);
       });
-      const a=theta+life.phase+1.2;
-      life.moon.setAttribute('cx',center.x+Math.cos(a)*rx);
-      life.moon.setAttribute('cy',center.y+Math.sin(a)*ry-Math.cos(a)*rx*.26);
+      const position=orbitPoint(life.orbit,theta+life.phase+1.2);
+      life.moon.setAttribute('cx',position.x);
+      life.moon.setAttribute('cy',position.y);
     }
   }
   function frame(dt) {

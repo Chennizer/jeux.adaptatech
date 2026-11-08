@@ -52,6 +52,7 @@
         target.floorEls.forEach(region => region.setAttribute('fill', colour));
         target.roof?.setAttribute('fill', colour);
         target.door?.setAttribute('fill', colour);
+        target.accents?.forEach(accent => accent.el.setAttribute('fill', accent.colour));
       });
     }
 

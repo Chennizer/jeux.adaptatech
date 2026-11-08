@@ -1,24 +1,24 @@
 # Recolor / リカラー
 
-A standalone switch painting game: the colours have disappeared and the worlds have become sad. A giant rainbow zeppelin carries paint across each pale landscape. Every fresh press releases a slow drop that restores colour, warmth and joy. Complete a world, enjoy its colourful transformation, then continue the journey to the next one.
+A standalone switch painting game: the colours have disappeared and the worlds have become sad. A giant rainbow zeppelin carries paint across each pale landscape. Every fresh press releases a slow drop that restores colour, warmth and joy. Complete a picture, enjoy its colourful transformation, then restore another layout in the same chosen world.
 
-## A journey through five worlds
+## Choose a setting
 
 The initial menu offers five illustrated choices:
 
 - **City:** oversized storybook buildings.
-- **Forest:** a scalloped pine, broad oak, apple tree, and weeping willow, with connected organic canopies and branching details.
+- **Forest:** a scalloped pine, broad oak, apple tree, and weeping willow, with connected organic canopies and branching details. Full restoration also fills the trunks with warm brown and the apples with red/gold accents.
 - **Village:** cottage, windmill, clock tower, and bakery.
 - **Farm:** barn, silo, tractor, and a giant sunflower planter.
 - **Planets:** ringed, cratered, banded, and star-patterned worlds floating on the white page.
 
 Each world has its own outline artwork, paint regions, collision silhouettes, palette and soundtrack. Objects begin white against a subdued atmosphere. Successful paint hits gradually clear the grey mood and bring warmer light to the landscape. The title is Recolor in French/English and リカラー in Japanese; the story, world names, difficulty descriptions and controls are localized in all three languages.
 
-The journey follows **City → Forest → Village → Farm → Planets → City**, using a fresh composition on each visit. Any world remains directly selectable on the menu. Completed worlds regain colour on the menu map, and their restored state is remembered in `recolorRestoredWorlds` when local storage is available. Scene, difficulty, colour mode and audio choices are also remembered. This is a gentle journey with no time limit, lost lives or penalties.
+The selected setting stays active across automatic repeats, manual replay, pause/Continue and reload. Completing Forest produces another Forest composition; Planets stays Planets. Only an explicit menu selection changes the setting. Completed worlds regain colour on the menu map, and their restored state is remembered in `recolorRestoredWorlds` when local storage is available. Scene, difficulty, colour mode and audio choices are also remembered. This is a gentle journey with no time limit, lost lives or penalties.
 
 Each scene has **ten composition templates** that vary motif order, size, placement, and mirroring. A separate shuffle bag for each scene uses all ten before repeating, and prevents an immediate repeat when a new bag starts. Difficulty determines how many motifs from the chosen composition appear.
 
-Selecting a different world or difficulty and pressing Start begins a fresh drawing. Continue during an unfinished drawing preserves its colours, falling drops, animation progress, zeppelin position and direction. Changing a menu choice back before starting also leaves that drawing intact. After completing a world, the menu action becomes Next world and continues the route.
+Selecting a different world or difficulty and pressing Start begins a fresh drawing. Continue during an unfinished drawing preserves its colours, falling drops, animation progress, zeppelin position and direction. Changing a menu choice back before starting also leaves that drawing intact. After completing a picture, the menu action offers another picture in the same setting.
 
 ## Difficulty
 
@@ -59,11 +59,11 @@ Start requests native fullscreen directly from the click, touch, or switch gestu
 
 During play, only the drawing, zeppelin, and paint effects are visible. There are no titles, labels, counters, buttons, settings, instructions, or completion text. The entire drawing accepts click/touch and is the sole focusable game control. Status and progress remain available to assistive technology without visible overlays.
 
-- **Space:** start, drop paint, resume, and continue to the next world in either mode. **Enter** also drops paint in automatic mode; in manual play it only cycles colours. Enter still activates Start on the menu. Map switch hardware accordingly; holding never repeats.
+- **Space:** start, drop paint, resume, and start another picture in the selected setting in either mode. **Enter** also drops paint in automatic mode; in manual play it only cycles colours. Enter still activates Start on the menu. Map switch hardware accordingly; holding never repeats.
 - **Mouse or touch:** Start from the menu, then press anywhere in the drawing.
 - **Escape / leaving fullscreen:** return to the menu with progress preserved. Changing tabs or leaving the window also pauses.
 - **Settings:** three flight speeds, optional aiming line (off initially), near-miss assistance, plus separate music/effects toggles and volume sliders. Audio preferences are remembered. Music and paint sounds start enabled at gentle levels, after Start only.
-- **Completion:** the final fill and shimmer finish before the complete colourful landscape fades in. It remains on screen for 6.5 seconds, then fades to white and automatically begins the next world. A fresh press can advance once the reveal has had time to appear; holding the switch never repeats.
+- **Completion:** the final fill and shimmer finish before the complete colourful landscape fades in. It remains on screen for 6.5 seconds, then fades to white and automatically begins a new composition in the selected setting. A fresh press can advance once the reveal has had time to appear; holding the switch never repeats.
 
 ## Paint effects
 
@@ -77,7 +77,7 @@ All effects share the game frame clock: returning to the menu freezes motion and
 
 The mostly white drawing board starts with a faint grey atmosphere: clouds and quiet hills in the terrestrial worlds, or a faded moon and stars around the planets. As successful hits restore the drawing, the atmosphere gradually becomes lighter and warmer. The full completion landscape remains the final reveal.
 
-Finishing an object adds a small lasting response after its slow fill has completed: warm details around buildings, birds/leaves or flowers in nature, and little celestial details around planets. These reactions make each restored object feel alive without adding controls or text. They remain through the celebration and clear when the next world starts.
+Finishing an object adds a small lasting response after its slow fill has completed: warm details around buildings, birds/leaves or flowers in nature, and little celestial details around planets. These reactions make each restored object feel alive without adding controls or text. They remain through the celebration and clear when the next composition starts.
 
 `atmosphere.js` and `restoration.js` update only from the shared game frame loop. They do not own animation timers, so pause freezes them with the drawing. Reduced motion reveals static details instead of decorative movement. Misses still leave harmless paint dabs.
 
@@ -91,7 +91,7 @@ The pale world gains subtle warmth during painting. Once every object is coloure
 - **Farm:** a blue countryside sky above green and golden fields.
 - **Planets:** a rich galaxy with nebula clouds, stars, a moon and orbital arcs.
 
-Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next world. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. The landscape stays behind the outlined objects and zeppelin, with no text or controls appearing during the celebration.
+Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next composition in the selected setting. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. The zeppelin finishes exiting during the celebration, leaving the restored panorama clear. The landscape stays behind the outlined objects, with no text or controls appearing during the celebration.
 
 ## Music and sounds
 
@@ -110,9 +110,9 @@ These recordings follow the scenes' themes: Art Gallery for the painted city, Pl
 - **Release:** `sounds/bubbles/bubble3.mp3`, a quiet, slightly higher soft pop.
 - **Landing:** the same bubble sample, slower and lower for a paint plop.
 - **Colour spread/glitter:** `sounds/space/twinklingstar1.mp3`, softly faded to match the slower fill.
-- **Completed drawing:** `sounds/success4.mp3`, a short chime with a gentle music dip.
+- **Completed drawing:** `sounds/success4.mp3`, a short chime with a gentle music dip, triggered on the game frame clock when the completed background starts appearing, after the final fill and shimmer.
 
-Effects start at 40% with additional per-sample attenuation. Closely spaced inputs coalesce sound effects and there is a six-voice limit. Music and effects are independently adjustable/mutable in the settings modal, without playing preview sounds there. Music starts only in the user's Start gesture, pauses on the menu/tab/window exit, and continues from its previous position on Continue. Moving to another world selects its thematic soundtrack automatically. Transient effects stop on pause/new compositions/world changes and do not restart late after an asynchronous load. Unsupported audio or missing library files never block painting.
+Effects start at 40% with additional per-sample attenuation. Closely spaced inputs coalesce sound effects and there is a six-voice limit. Music and effects are independently adjustable/mutable in the settings modal, without playing preview sounds there. Music starts only in the user's Start gesture, pauses on the menu/tab/window exit, and continues from its previous position on Continue. Repeating a setting keeps its soundtrack playing without reloading or rewinding it. Choosing a different world in the menu selects that world’s soundtrack. Transient effects stop on pause/new compositions/world changes and do not restart late after an asynchronous load. Unsupported audio or missing library files never block painting.
 
 ## Try it
 
@@ -122,4 +122,8 @@ Serve the repository, for example with `python -m http.server 8000`, then open `
 
 The earlier prototype regression checks cover fullscreen and pause/Continue, both offscreen flight reversals, held switch input, slow clipped fills and glitter, colour modes, active-colour indicators, thematic soundtracks and audio lifecycle, saved settings, localization and modal keyboard behavior. Earlier composition checks cover all 25 world/difficulty rounds, all 250 template/difficulty combinations (800 objects) without clipping or overlapping assisted hit regions, and 500 shuffled drawings without repeats at bag boundaries.
 
-Recolor checks passed the title/story, map and both settings panels at eleven portrait/landscape sizes from 320×320 to 2560×1440 in French, English and Japanese. Both pill states have no gap, equal halves and immediately readable labels. Completed rounds in all five worlds cover all five difficulty settings, grey-to-warm progress, delayed life details, exact pause freezing, completed backgrounds, automatic world changes, cleanup and remembered map colours. Focused reduced-motion checks confirm static visual decorations, no glitter, paused life, next-world transition and held manual Enter behavior. A real-audio check confirms automatic City → Forest soundtrack switching after one Start, followed by pause/Continue with position retained. Isolated atmosphere checks cover all 50 scene/variant combinations; restoration checks cover all five themes, bounded reactions, delay, duplicate protection, finite geometry and cleanup. Screenshots, syntax, unique HTML IDs and whitespace were checked. Physical switch hardware and screen reader testing remain to be done on the target device.
+Current Recolor checks cover the title/story, map and both settings panels at eleven portrait/landscape sizes from 320×320 to 2560×1440 in French, English and Japanese. Both pill states have no gap, equal halves and immediately readable labels. Completed rounds in all five settings cover all five difficulty settings, gradual colour and life, exact pause freezing, backgrounds, new shuffled layouts in the same setting, retained selection/storage, cleanup and reduced motion. Manual held Enter changes colour once without dropping paint.
+
+The graphics/audio review additionally checks 640 restoration objects across 200 non-city layout/difficulty combinations, with no clipping or bad bird perches after the fixes, and 10,240 planet-orbit positions with no reduced-motion changes. Focused audio checks confirm the completion effect at approximately 4.65 seconds normally or 0.35 seconds with reduced motion, once only, with no paused/stale chime. Same-setting repeat retains one music source/load and advances playback without rewinding; pause/Continue preserves the position. Screenshots, syntax, unique HTML IDs and whitespace were checked. Physical switch hardware and screen reader testing remain to be done on the target device.
+
+See [ART_AUDIO_REVIEW.md](ART_AUDIO_REVIEW.md) for the per-theme visual review, measured music levels and loop observations, changes made and proposed arcade settings.

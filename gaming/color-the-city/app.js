@@ -16,14 +16,14 @@
       slow: 'Gentle', normal: 'Easygoing', fast: 'Brisk',
       guide: 'Aiming guide', guideHint: 'A little line shows where the paint will fall.',
       assist: 'A helping hand', assistHint: 'Drops near the drawing gently find their way to it.',
-      done: 'Done', start: 'Start', drop: 'Drop some colour', replay: 'Next world',
+      done: 'Done', start: 'Start', drop: 'Drop some colour', replay: 'Another picture',
       readyTitle: 'A blank page. A little magic.', readyCopy: 'One press. A splash of colour. A little magic.',
       menuHint: 'Space or Enter · switch · click · touch. Escape returns to this menu.',
       pausedTitle: 'A little daydream.', pausedCopy: 'Press again when you’re ready.',
       completeTitle: 'Oh, what a lovely place.', completeCopy: 'All yours. Press again for a fresh drawing.',
       initial: 'The colours have disappeared. Press to bring colour back to this world.', falling: 'Here comes a splash…',
       hit: 'Colour is returning to this world.', miss: 'A splash on the page! The zeppelin will come around again.',
-      already: 'This part of the drawing is already full of colour.', win: 'This world has its colours back! Enjoy it before the journey continues.',
+      already: 'This part of the drawing is already full of colour.', win: 'This picture has its colours back! Another picture in this world comes next.',
       paused: 'Paused. Press again to continue.', sceneTitle: 'Colouring board',
       sceneDescription: 'A sad world has lost its colours. A rainbow zeppelin flies overhead. Press to return colour and life to the landscape.',
       paintedLabel: 'Successful paint hits', chooseScene: 'Choose a world', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.', difficulty: 'Difficulty', difficultyDetails: ['2 objects · 1 hit each', '3 objects · 1 hit each', '3 objects · 2 hits each', '4 objects · 2 hits each', '4 objects · 3 hits each']
@@ -37,14 +37,14 @@
       slow: 'Douce', normal: 'Tranquille', fast: 'Rapide',
       guide: 'Guide de visée', guideHint: 'Une petite ligne montre où la peinture tombera.',
       assist: 'Coup de pouce', assistHint: 'Les gouttes proches du dessin le rejoignent.',
-      done: 'Terminé', start: 'Commencer', drop: 'Une goutte de couleur', replay: 'Monde suivant',
+      done: 'Terminé', start: 'Commencer', drop: 'Une goutte de couleur', replay: 'Un autre paysage',
       readyTitle: 'Une page blanche. Un peu de magie.', readyCopy: 'Une pression. Une touche de couleur. Un peu de magie.',
       menuHint: 'Espace ou Entrée · switch · clic · toucher. Échap pour revenir au menu.',
       pausedTitle: 'Une petite rêverie.', pausedCopy: 'Appuie à nouveau quand tu veux.',
       completeTitle: 'Comme c’est joli !', completeCopy: 'C’est ta création. Appuie pour un nouveau dessin.',
       initial: 'Les couleurs ont disparu. Appuie pour redonner de la couleur à ce monde.', falling: 'Une touche de couleur arrive…',
       hit: 'Les couleurs reviennent dans ce monde.', miss: 'Une tache sur la page ! Le zeppelin va revenir.',
-      already: 'Cette partie du dessin est déjà pleine de couleurs.', win: 'Ce monde a retrouvé ses couleurs ! Profite du paysage, puis le voyage continue.',
+      already: 'Cette partie du dessin est déjà pleine de couleurs.', win: 'Ce paysage a retrouvé ses couleurs ! Un autre paysage de ce monde arrive ensuite.',
       paused: 'En pause. Appuie pour continuer.', sceneTitle: 'Tableau de coloriage',
       sceneDescription: 'Un monde triste a perdu ses couleurs. Un zeppelin arc-en-ciel le survole. Appuie pour rendre ses couleurs et sa joie au paysage.',
       paintedLabel: 'Touches de peinture réussies', chooseScene: 'Choisis un monde', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.', difficulty: 'Difficulté', difficultyDetails: ['2 objets · 1 touche chacun', '3 objets · 1 touche chacun', '3 objets · 2 touches chacun', '4 objets · 2 touches chacun', '4 objets · 3 touches chacun']
@@ -58,14 +58,14 @@
       slow: 'ゆっくり', normal: 'ふつう', fast: 'はやい',
       guide: 'ねらいのガイド', guideHint: '絵の具が落ちる場所を線で示します。',
       assist: 'おたすけ', assistHint: '近くに落ちた絵の具が絵に届きます。',
-      done: '完了', start: 'はじめよう', drop: '色を落とす', replay: '次の世界',
+      done: '完了', start: 'はじめよう', drop: '色を落とす', replay: '次の景色',
       readyTitle: '白いページに、小さな魔法。', readyCopy: 'ひと押しで、色と小さな魔法。',
       menuHint: 'スペース・エンター・スイッチ・クリック・タッチ。Escでメニューに戻ります。',
       pausedTitle: 'ちょっとひとやすみ。', pausedCopy: '準備ができたら、もう一度押そう。',
       completeTitle: 'すてきな絵ができたね。', completeCopy: 'あなたの作品だよ。もう一度押すと新しい絵に。',
       initial: '色が消えた世界。押すと、少しずつ色が戻るよ。', falling: '絵の具が落ちてくるよ…',
       hit: '世界に色が戻ってきたね。', miss: 'ページに色がついたね！飛行船はまた戻ってくるよ。',
-      already: 'ここはもう色いっぱい。', win: '世界に色が戻ったよ！景色を楽しんだら、次の世界へ。',
+      already: 'ここはもう色いっぱい。', win: '景色に色が戻ったよ！次も同じ世界の新しい景色が出てくるよ。',
       paused: '一時停止中。もう一度押すと続けられます。', sceneTitle: 'お絵描きボード',
       sceneDescription: '色をなくして寂しくなった世界。虹色の飛行船から絵の具を落として、色と笑顔を取り戻そう。',
       paintedLabel: '絵の具が当たった回数', chooseScene: '世界を選ぼう', sceneCity: '街', sceneForest: '森', sceneVillage: '村', sceneFarm: '農場', scenePlanets: '惑星', chooseMode: 'モードを選ぼう', autoMode: 'ひとつのスイッチ', autoModeHelp: '色は12秒ごとに変わります。スペースかエンターで絵の具を落とします。', manualMode: '色を選ぶ', manualModeHelp: 'スペースで絵の具を落とし、エンターで次の色を選びます。', activeColour: '選択中の色', manualHint: 'スペース・スイッチ・タッチ：絵の具。エンター：次の色。Esc：メニュー。', difficulty: '難しさ', difficultyDetails: ['2つの物・それぞれ1回', '3つの物・それぞれ1回', '3つの物・それぞれ2回', '4つの物・それぞれ2回', '4つの物・それぞれ3回']
@@ -82,11 +82,11 @@
     { x: 914, width: 228, floorHeight: 72, roofKind: 'gable', roofHeight: 38 }
   ].map(b => ({ ...b, floors: 3, top: WORLD.groundY - 3 * b.floorHeight, painted: 0, floorEls: [], roof: null, door: null }));
   const sceneLabels = { city: 'sceneCity', forest: 'sceneForest', village: 'sceneVillage', farm: 'sceneFarm', planets: 'scenePlanets' };
-  const worldRoute = Object.keys(sceneLabels);
+  const sceneKeys = Object.keys(sceneLabels);
   const restoredWorlds = new Set();
   try {
     const saved = JSON.parse(localStorage.getItem('recolorRestoredWorlds') || '[]');
-    if (Array.isArray(saved)) saved.filter(scene => worldRoute.includes(scene)).forEach(scene => restoredWorlds.add(scene));
+    if (Array.isArray(saved)) saved.filter(scene => sceneKeys.includes(scene)).forEach(scene => restoredWorlds.add(scene));
   } catch (_) { /* The journey also works without storage. */ }
   let selectedScene = 'city';
   try { const saved = localStorage.getItem('colourCityScene'); if (Object.hasOwn(sceneLabels, saved)) selectedScene = saved; } catch (_) { /* Scene storage is optional. */ }
@@ -96,6 +96,7 @@
   let activeDifficulty = selectedDifficulty;
   let activeTemplate = window.PaintTemplates.get(activeScene, 0);
   let completionAge = 0;
+  let completionChimed = false;
   let selectedColourMode = 'auto';
   try { const mode = localStorage.getItem('colourCityMode'); if (mode === 'manual') selectedColourMode = mode; } catch (_) {}
   let activeColourMode = selectedColourMode;
@@ -478,8 +479,8 @@
   function finishDrawing() {
     restoredWorlds.add(activeScene);
     try { localStorage.setItem('recolorRestoredWorlds', JSON.stringify([...restoredWorlds])); } catch (_) {}
-    setPhase('complete'); announce('win'); window.PaintAudio.effect('complete');
-    completionAge = 0;
+    setPhase('complete'); announce('win');
+    completionAge = 0; completionChimed = false;
     const timing = completionTiming();
     winWait = timing.delay + timing.fade + 2;
     window.PaintBackgrounds.render({ scene: activeScene, variant: activeTemplate.id, parent: $('completionArt'), svg });
@@ -511,6 +512,7 @@
       b.bounce = reducedMotion.matches ? 0 : .45;
       if (b.hits === b.requiredHits) {
         animateColour(b.door, colour, b.x + b.width - 57, WORLD.groundY - 40, PAINT.fill * .8);
+        b.accents?.forEach(accent => animateColour(accent.el, accent.colour, accent.x, accent.y));
         celebrateHouse(b, colour);
         b.placement.classList.add('object-complete');
         window.PaintRestoration.restore({ target: b, colour, worldPoint });
@@ -527,18 +529,13 @@
       window.PaintAudio.effect('impact'); announce(b ? 'already' : 'miss');
     }
   }
-  function followingWorld(scene) { return worldRoute[(worldRoute.indexOf(scene) + 1) % worldRoute.length]; }
   function nextDrawing() {
-    activeScene = followingWorld(activeScene);
-    selectedScene = activeScene;
-    document.querySelectorAll('input[name="drawingScene"]').forEach(input => { input.checked = input.value === selectedScene; });
-    try { localStorage.setItem('colourCityScene', selectedScene); } catch (_) {}
     paletteIndex = (paletteIndex + 1) % (activeScene === 'city' ? palettes.length : window.PaintSceneArt[activeScene].palette.length);
     startScene();
   }
   function startScene() {
     window.PaintAudio.reset(activeScene);
-    completedHits = 0; winWait = 0; completionAge = 0; flightTime = 0; bucketPulse = 0;
+    completedHits = 0; winWait = 0; completionAge = 0; completionChimed = false; flightTime = 0; bucketPulse = 0;
     drops.forEach(d => d.el.remove()); drops = []; clearEffects(); pageSplashes = [];
     setBackgroundOpacity(0); $('completionArt').replaceChildren();
     activeTemplate = window.PaintTemplates.next(activeScene);
@@ -574,12 +571,12 @@
     } catch (_) { fullscreenPending = false; }
   }
   function enterGame() {
-    const continueJourney = phase === 'complete' && selectedScene === activeScene && selectedDifficulty === activeDifficulty;
-    window.PaintAudio.start(continueJourney ? followingWorld(activeScene) : selectedScene);
+    const replaySameSetting = phase === 'complete' && selectedScene === activeScene && selectedDifficulty === activeDifficulty;
+    window.PaintAudio.start(selectedScene);
     requestGameFullscreen();
     if ($('options').open) $('options').close();
     menuOpen = false;
-    if (continueJourney) {
+    if (replaySameSetting) {
       nextDrawing();
     } else if (selectedScene !== activeScene || selectedDifficulty !== activeDifficulty || phase === 'ready' || phase === 'complete') {
       if (selectedScene !== activeScene) { activeScene = selectedScene; paletteIndex = 0; }
@@ -692,8 +689,18 @@
       window.PaintRestoration.frame(dt);
     }
     if (!menuOpen && phase === 'complete') {
+      // Let the zeppelin finish its pass, leaving the restored panorama clear.
+      flightTime += dt;
+      const exitX = direction > 0 ? WORLD.width + WORLD.halfShipWidth : -WORLD.halfShipWidth;
+      const nextX = airshipX + direction * Number($('speed').value) * dt;
+      airshipX = direction > 0 ? Math.min(exitX, nextX) : Math.max(exitX, nextX);
+      drawAirship();
       completionAge += dt;
       const { delay, fade, hold, out } = completionTiming();
+      if (!completionChimed && completionAge >= delay) {
+        completionChimed = true;
+        window.PaintAudio.effect('complete');
+      }
       let opacity = 0;
       if (completionAge >= delay + fade + hold) opacity = Math.max(0, 1 - (completionAge - delay - fade - hold) / out);
       else if (completionAge >= delay) opacity = Math.min(1, (completionAge - delay) / fade);

@@ -6,8 +6,8 @@
     const paint = ctx.svg('g', { class: 'scene-paint' }, group);
     const outlines = ctx.svg('g', { class: 'scene-outlines' }, group);
     return { x: positions[index], width: 228, floors: 3, painted: 0, top, floorHeight: 80,
-      roofHeight: 0, floorEls: [], origins: [], group, paint, outlines, bounce: 0,
-      roof: null, door: null, surfaceAt: () => top };
+      roofHeight: 0, floorEls: [], origins: [], accents: [], group, paint, outlines, bounce: 0,
+      roof: null, door: null, chimney: null, surfaceAt: () => top };
   }
   function addRegion(ctx, target, d, origin, outline = true) {
     target.floorEls.push(ctx.svg('path', { d, fill: '#fff', class: 'floor' }, target.paint));
@@ -16,6 +16,12 @@
   }
   function draw(ctx, target, d, attrs = {}) {
     return ctx.inkPath(d, target.outlines, attrs);
+  }
+  function addAccent(ctx, target, d, colour, origin, attrs = {}) {
+    const el = ctx.svg('path', { d, fill: '#fff', class: 'accent-colour' }, target.paint);
+    target.accents.push({ el, colour, x: origin.x, y: origin.y });
+    draw(ctx, target, d, { fill: 'none', ...attrs });
+    return el;
   }
   function circle(ctx, target, cx, cy, r, attrs = {}) {
     return ctx.svg('circle', { cx, cy, r, fill: '#fff', stroke: ctx.ink, 'stroke-width': 2.5, ...attrs }, target.outlines);
@@ -26,7 +32,8 @@
   }
   function trunk(ctx, target, width = 32, top = 545) {
     const cx = target.x + 114;
-    draw(ctx, target, `M${cx - width / 2} ${top}v${650 - top}h${width}V${top}`, { fill: '#fff' });
+    addAccent(ctx, target, `M${cx - width / 2} ${top}v${650 - top}h${width}V${top}`,
+      '#cfa47d', { x: cx, y: top + 12 });
     draw(ctx, target, `M${cx} 641v-50m0 18-10-12m10 25 9-9`, { 'stroke-width': 2 });
   }
   function drawWindow(ctx, target, x, y, round = false) {
@@ -127,7 +134,8 @@
       'M37 419 C88 402 160 435 218 417 M24 509 C78 502 136 525 193 493');
       draw(ctx, t, localPath(x, 'M114 554 L114 495 M114 519 L91 502 M114 508 L137 489'), { 'stroke-width': 2.3 });
       for (const [ax, ay] of [[73, 390], [169, 390], [47, 469], [161, 469]]) {
-        draw(ctx, t, localPath(x, `M${ax} ${ay - 12} C${ax - 23} ${ay - 25} ${ax - 23} ${ay + 17} ${ax} ${ay + 19} C${ax + 23} ${ay + 17} ${ax + 23} ${ay - 25} ${ax} ${ay - 12}Z`), { fill: '#fff', 'stroke-width': 2.2 });
+        addAccent(ctx, t, localPath(x, `M${ax} ${ay - 12} C${ax - 23} ${ay - 25} ${ax - 23} ${ay + 17} ${ax} ${ay + 19} C${ax + 23} ${ay + 17} ${ax + 23} ${ay - 25} ${ax} ${ay - 12}Z`),
+          ax > 100 ? '#f3c77f' : '#ef9a91', { x: x + ax, y: ay }, { 'stroke-width': 2.2 });
         draw(ctx, t, localPath(x, `M${ax} ${ay - 12} Q${ax - 2} ${ay - 23} ${ax + 4} ${ay - 27} M${ax + 3} ${ay - 19} Q${ax + 12} ${ay - 33} ${ax + 20} ${ay - 23} Q${ax + 13} ${ay - 14} ${ax + 3} ${ay - 19}`), { 'stroke-width': 1.8 });
       }
       targets.push(t);
@@ -159,6 +167,7 @@
       drawWindow(ctx, t, x + 37, 583, true); door(ctx, t, x + 145);
       circle(ctx, t, x + 114, 417, 16);
       draw(ctx, t, `M${x + 168} 402v-50h26v69M${x + 176} 339q-13-19 4-24q16-5 20 10`, { fill: '#fff', 'stroke-width': 2.5 });
+      t.chimney = { x: x + 181, y: 352 };
       targets.push(t);
     }
     {
