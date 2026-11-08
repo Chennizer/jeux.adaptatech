@@ -87,7 +87,87 @@
       }
     }
 
-    if (scene === 'planets' || scene === 'space') {
+    if (scene === 'kingdom') {
+      const kingdom = [
+        ['#4b9fe5', '#a4ddf5', '#fff0bf', '#9cd66f', '#5ebc91'],
+        ['#6b9deb', '#c9dcff', '#ffe7b8', '#a4d785', '#72bf94'],
+        ['#529dc8', '#b6e6e8', '#fff2bb', '#8ed6a2', '#53b9a9'],
+        ['#8d9ce7', '#d8d9fc', '#ffdcb0', '#b1d57e', '#79bc90'],
+        ['#54afd9', '#b3e4ee', '#ffedb2', '#a0d276', '#57b99a']
+      ][choice % 5];
+      daySky(kingdom);
+      const cloudInk = '#fafff7';
+      for (let i = 0; i < 4; i++) {
+        const x = 40 + i * 320 + (choice % 2 ? 35 : 0), y = 100 + (i + choice) % 3 * 35;
+        path(`M${x} ${y}h22v-17h40v-14h38v14h30v17h22v25H${x}Z`, cloudInk, { opacity: .45 });
+      }
+      // Chunky hills and little floating islands recall a platformer stage.
+      path(`M-60 647V513Q50 ${359 + choice * 4} 165 514V647Z`, kingdom[4], { opacity: .43 });
+      path('M1000 647V483Q1110 314 1220 483V647Z', kingdom[4], { opacity: .4 });
+      path('M90 674V566Q263 336 436 566V674Z', kingdom[3], { opacity: .72 });
+      path('M699 675V548Q885 340 1071 548V675Z', kingdom[3], { opacity: .66 });
+      for (const x of [216, 862]) {
+        add('rect', { x, y: 503, width: 8, height: 20, rx: 4, fill: '#4d9c82', opacity: .38 }, art);
+        add('rect', { x: x + 30, y: 503, width: 8, height: 20, rx: 4, fill: '#4d9c82', opacity: .38 }, art);
+      }
+      const islands = add('g', { opacity: .52 }, art);
+      for (let i = 0; i < 3; i++) {
+        const x = 55 + i * 460 + choice % 2 * 22, y = 283 + (i + choice) % 2 * 22;
+        add('path', { d: `M${x} ${y}h118v19h-18v13h-18v14h-46v-14h-18v-13h-18Z`, fill: '#d0ae88' }, islands);
+        add('path', { d: `M${x - 3} ${y}v-10h124v10l-15 7-16-7-16 7-16-7-16 7-16-7-16 7Z`, fill: '#75c88a' }, islands);
+      }
+      const castleX = choice % 2 ? 610 : 535;
+      path(`M${castleX - 40} 594V506h18v14h18v-23h18v23h18v-14h18v88Z`, '#d6b8e9', { opacity: .55 });
+      path(`M${castleX - 50} 509l19-29 19 29m24 0 19-29 19 29`, '#b18ad4', { opacity: .55 });
+      path('M0 670H1200V720H0Z', '#cfaa7e');
+      path('M0 670V655H1200V670L1180 680 1160 670 1140 680 1120 670 1100 680 1080 670H0Z', '#76c884');
+      for (let i = 0; i < 25; i++) {
+        add('rect', { x: i * 50, y: 696 + i % 2 * 7, width: 24, height: 8, rx: 2, fill: '#b78c6f', opacity: .43 }, art);
+      }
+      return;
+    }
+
+    if (scene === 'dungeon') {
+      const magic = [
+        ['#28244c', '#5c4b86', '#a8e8e5', '#b28be3', '#f6c984'],
+        ['#26314e', '#405b7e', '#9de7ee', '#97b2ef', '#f0b4d6'],
+        ['#37224c', '#705080', '#c8eebc', '#c195e8', '#f5d58c'],
+        ['#233f4a', '#426e77', '#a1e2df', '#84c5dc', '#e7c497'],
+        ['#30224f', '#674f8f', '#c1def8', '#da9edc', '#ffce89']
+      ][choice % 5];
+      add('rect', { width: 1200, height: 720, fill: gradient('cavern', [[0, magic[0]], [.6, magic[1]], [1, '#57557c']]) }, art);
+      const caveGlow = gradient('cave-glow', [[0, magic[2], .38], [.5, magic[2], .12], [1, magic[2], 0]], {}, true);
+      ellipse(600 + (choice - 4) * 38, 459, 520, 300, caveGlow);
+      const archX = 600 + (choice % 3 - 1) * 120;
+      path(`M${archX - 105} 667V399Q${archX} 241 ${archX + 105} 399V667Z`, '#292f59', { opacity: .4 });
+      path(`M${archX - 82} 663V405Q${archX} 282 ${archX + 82} 405V663Z`, gradient('portal', [[0, magic[2], .22], [1, magic[3], .02]]));
+      path('M0 0H1200V82L1167 150 1132 77 1079 112 1028 63 976 133 938 56 888 94 840 48 774 104 726 54 674 96 621 51 564 114 517 61 462 99 405 46 348 118 297 65 244 96 189 53 135 134 91 70 42 120 0 77Z', '#242841', { opacity: .7 });
+      path('M0 0H58V398L39 365 27 501 0 555Z', '#263349', { opacity: .62 });
+      path('M1200 0H1142V398L1161 365 1173 501 1200 555Z', '#263349', { opacity: .62 });
+      // Faceted crystals frame the cavern, leaving the four paint targets clear.
+      for (const [x, y, scale] of [[46, 582, .86], [1116, 574, 1], [155, 628, .45], [1008, 638, .5]]) {
+        const g = add('g', { transform: `translate(${x} ${y}) scale(${scale})`, opacity: .65 }, art);
+        add('path', { d: 'M-25 74-37-1-17-54 8-5 0 74Z', fill: magic[3] }, g);
+        add('path', { d: 'M0 74-1-23 21-79 43-20 29 74Z', fill: magic[2] }, g);
+        add('path', { d: 'M21-79 19 60 29 74 43-20Z', fill: '#e0eff6', opacity: .45 }, g);
+      }
+      const torchGlow = gradient('torch-glow', [[0, magic[4], .4], [.4, magic[4], .12], [1, magic[4], 0]], {}, true);
+      for (const x of [80, 1120]) {
+        circle(x, 276, 118, torchGlow);
+        path(`M${x - 6} 292v31h12v-31Z`, '#be9cb2');
+        path(`M${x} 252Q${x - 19} 272 ${x - 9} 288Q${x} 302 ${x + 11} 286Q${x + 20} 272 ${x} 252Z`, magic[4]);
+        path(`M${x} 269Q${x - 8} 282 ${x} 291Q${x + 10} 281 ${x} 269Z`, '#fff0b7');
+      }
+      path('M0 674Q300 627 600 665T1200 660V720H0Z', '#68618e');
+      path('M0 704Q320 666 600 696T1200 689V720H0Z', '#8b78aa');
+      for (let i = 0; i < 31; i++) {
+        const x = 72 + random() * 1056, y = 124 + random() * 530;
+        circle(x, y, 1 + random() * 1.5, i % 2 ? magic[2] : '#ffe5b2', { opacity: .3 + random() * .4 });
+      }
+      return;
+    }
+
+    if (scene === 'planets' || scene === 'space' || scene === 'squadron') {
       const space = [
         ['#171746', '#3f307b', '#ee6acb', '#55c9e8'],
         ['#111d4c', '#384087', '#a57cff', '#67e1dc'],
@@ -121,6 +201,22 @@
       ellipse(600, 548, 550, 118, 'none', { stroke: '#b9d7f9', 'stroke-width': 1.4, opacity: 0.17, transform: `rotate(${-7 + choice} 600 548)` });
       ellipse(600, 548, 460, 86, 'none', { stroke: '#efb9ef', 'stroke-width': 1, opacity: 0.18, transform: `rotate(${14 - choice} 600 548)` });
       path('M0 686Q300 642 600 686T1200 686V720H0Z', gradient('space-ground', [[0, '#b77cb6', 0.1], [1, '#8873c5', 0.45]]));
+      if (scene === 'squadron') {
+        // A navigation grid, docking horizon and friendly distant ships distinguish
+        // the space-shooter setting from the spherical Planets world.
+        const lanes = add('g', { fill: 'none', stroke: '#8fe8ee', 'stroke-width': 1.2, opacity: .18 }, art);
+        for (let i = 0; i < 9; i++) add('path', { d: `M${-420 + i * 250} 720L${525 + i * 19} 460` }, lanes);
+        for (let i = 0; i < 5; i++) add('path', { d: `M0 ${495 + i * i * 12}H1200` }, lanes);
+        for (let i = 0; i < 5; i++) {
+          const x = 105 + i * 245, y = 255 + (i + choice) % 3 * 30;
+          path(`M${x - 17} ${y + 11}l17-23 17 23-17-6Z`, '#cde7ff', { opacity: .4 });
+          path(`M${x - 4} ${y + 11}l4 11 4-11`, '#f8c5e8', { opacity: .55 });
+        }
+        const stationX = choice % 2 ? 940 : 260;
+        ellipse(stationX, 174, 95, 18, 'none', { stroke: '#9dd6e7', 'stroke-width': 5, opacity: .26, transform: `rotate(-12 ${stationX} 174)` });
+        path(`M${stationX - 18} 155h36v38h-36Z`, '#b5c6e5', { opacity: .3 });
+        path('M0 697H1200', 'none', { stroke: '#b7eaf6', 'stroke-width': 2, opacity: .4 });
+      }
       return;
     }
 

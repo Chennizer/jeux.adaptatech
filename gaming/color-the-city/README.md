@@ -4,13 +4,16 @@ A standalone switch painting game: the colours have disappeared and the worlds h
 
 ## Choose a setting
 
-The initial menu offers five illustrated choices:
+The initial menu offers eight illustrated choices:
 
 - **City:** oversized storybook buildings.
 - **Forest:** a scalloped pine, broad oak, apple tree, and weeping willow, with connected organic canopies and branching details. Full restoration also fills the trunks with warm brown and the apples with red/gold accents.
 - **Village:** cottage, windmill, clock tower, and bakery.
 - **Farm:** barn, silo, tractor, and a giant sunflower planter.
 - **Planets:** ringed, cratered, banded, and star-patterned worlds floating on the white page.
+- **Pixel Kingdom:** chunky blocks, a pipe, a giant flower and a castle, inspired by platform games.
+- **Star Squadron:** a friendly ship, satellite, asteroid outpost and space station, inspired by space shooters.
+- **Crystal Dungeon:** a treasure chest, giant crystals, a stone tower and a friendly dragon statue, inspired by fantasy adventures.
 
 Each world has its own outline artwork, paint regions, collision silhouettes, palette and soundtrack. Objects begin white against a subdued atmosphere. Successful paint hits gradually clear the grey mood and bring warmer light to the landscape. The title is Recolor in French/English and リカラー in Japanese; the story, world names, difficulty descriptions and controls are localized in all three languages.
 
@@ -51,7 +54,7 @@ The zeppelin starts flying to the right. It must finish leaving the drawing befo
 
 The menu loads `css/video-stop-action.css`, shared with the site's Arcade games, and adapts it to Recolor's journey. A light control rail contains a small Arcade heading, a clearer game title, one short story line, Automatic/Manual selection, difficulty and Start. The segmented selector has adjoining equal areas without the previous gap between them. Title spacing and control sizing adapt to the viewport without scrolling.
 
-Five illustrated world cards sit on a pale paper-sky travel map. Muted previews show the missing colours; selection and previously restored worlds bring colour back to the cards. The current choice has a visible native radio dot, a persistent thick teal frame, and a teal caption with white text. Hover has a lighter treatment and never changes the choice. Restoration progress adds no checkmark badge and cannot override the selected frame; its accessible description and preview colour remain available. Thumbnails reuse independent copies of the scene artwork, so menu previews never change the gameplay drawing. The menu has no long explanations, colour counters or visible keyboard reminders.
+Eight illustrated world cards sit on a pale paper-sky travel map. Muted previews show the missing colours; selection and previously restored worlds bring colour back to the cards. The current choice has a visible native radio dot, a persistent thick teal frame, and a teal caption with white text. Hover has a lighter treatment and never changes the choice. Restoration progress adds no checkmark badge and cannot override the selected frame; its accessible description and preview colour remain available. Thumbnails reuse independent copies of the scene artwork, so menu previews never change the gameplay drawing. The menu has no long explanations, colour counters or visible keyboard reminders. All eight cards remain directly available: four columns on desktop, three in taller portrait layouts, and two in compact portrait layouts, with no pagination or scrolling.
 
 Settings open in a native modal dialog. The Game tab holds language, speed, aiming and assistance; the Audio tab holds music/effects toggles and volumes. Only one short panel appears at a time, with no scrolling. Tab stays inside the modal, Escape/X/backdrop closes it, and focus returns to Settings. Space/Enter inside the modal never starts the game. Language changes keep focus inside the modal.
 
@@ -75,7 +78,7 @@ All effects share the game frame clock: returning to the menu freezes motion and
 
 ## Colour brings life back
 
-The mostly white drawing board starts with a faint grey atmosphere: clouds and quiet hills in the terrestrial worlds, or a faded moon and stars around the planets. As successful hits restore the drawing, the atmosphere gradually becomes lighter and warmer. The full completion landscape remains the final reveal.
+The mostly white drawing board starts with a faint grey atmosphere: clouds and quiet hills in the terrestrial worlds, a faded moon and stars around the planets, a quiet navigation beacon for Star Squadron, or a dim lantern for Crystal Dungeon. As successful hits restore the drawing, the atmosphere gradually becomes lighter and warmer. The full completion landscape remains the final reveal.
 
 Finishing an object adds a small lasting response after its slow fill has completed: warm details around buildings, birds/leaves or flowers in nature, and little celestial details around planets. These reactions make each restored object feel alive without adding controls or text. They remain through the celebration and clear when the next composition starts.
 
@@ -90,6 +93,9 @@ The pale world gains subtle warmth during painting. Once every object is coloure
 - **Village:** a pastel sunrise above hills and distant cottages.
 - **Farm:** a blue countryside sky above green and golden fields.
 - **Planets:** a rich galaxy with nebula clouds, stars, a moon and orbital arcs.
+- **Pixel Kingdom:** bright hills, floating block islands, clouds and a distant castle.
+- **Star Squadron:** a vivid starfield, navigation lanes and distant friendly spacecraft.
+- **Crystal Dungeon:** a glowing layered cavern, crystals, torches and a magical portal.
 
 Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next composition in the selected setting. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. The zeppelin finishes exiting during the celebration, leaving the restored panorama clear. The landscape stays behind the outlined objects, with no text or controls appearing during the celebration.
 
@@ -104,8 +110,11 @@ Audio reuses the existing repository library; no new recordings or external down
 | Village | `songs/season/spring1.mp3` (pastoral spring) |
 | Farm | `songs/bees/beesmusic3.mp3` |
 | Planets | `songs/space/space1.mp3` (Space) |
+| Pixel Kingdom | `songs/marioarcademusic.mp3` (platformer) |
+| Star Squadron | `songs/space/spacearcade1.mp3` (space shooter) |
+| Crystal Dungeon | `songs/eyegazefirefly1.mp3` (glowing magic) |
 
-These recordings follow the scenes' themes: Art Gallery for the painted city, Plant/Spring for the forest, seasonal spring for the village, Bees for the farm, and Space for the planets. They reuse the same themed collections as the site's painting, nature and stars activities. Music loops at a low initial volume (17%) with a gentle fade-in. The source recordings retain their existing loop boundaries/quiet tails. Only the active scene's soundtrack loads.
+These recordings follow the scenes' themes: Art Gallery for the painted city, Plant/Spring for the forest, seasonal spring for the village, Bees for the farm, and Space for the planets. They reuse the same themed collections as the site's painting, nature and stars activities. The new settings use the existing Mario Arcade and Space Arcade game recordings, plus Firefly for the magical cavern. Star Squadron applies a 0.72 music gain because its source measures louder than the other themes; this also applies during the completion dip and recovery. Music loops at a low initial volume (17%) with a gentle fade-in. The source recordings retain their existing loop boundaries/quiet tails. Only the active scene's soundtrack loads.
 
 - **Release:** `sounds/bubbles/bubble3.mp3`, a quiet, slightly higher soft pop.
 - **Landing:** the same bubble sample, slower and lower for a paint plop.
@@ -116,7 +125,7 @@ Effects start at 40% with additional per-sample attenuation. Closely spaced inpu
 
 ## Try it
 
-Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. The existing URL is retained, and the Switch Games (`gaming/`) catalogue lists Recolor. All assets are local, including `scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `atmosphere.js`, `restoration.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads or build steps are required.
+Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. The existing URL is retained, and the Switch Games (`gaming/`) catalogue lists Recolor. All assets are local, including `scenes.js`, `arcade-scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `atmosphere.js`, `restoration.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads or build steps are required.
 
 ## Prototype checks
 
@@ -124,8 +133,14 @@ The earlier prototype regression checks cover fullscreen and pause/Continue, bot
 
 Current Recolor checks cover the title/story, map and both settings panels at eleven portrait/landscape sizes from 320×320 to 2560×1440 in French, English and Japanese. Both pill states have no gap, equal halves and immediately readable labels. Completed rounds in all five settings cover all five difficulty settings, gradual colour and life, exact pause freezing, backgrounds, new shuffled layouts in the same setting, retained selection/storage, cleanup and reduced motion. Manual held Enter changes colour once without dropping paint.
 
-Selection checks cover all five image cards with every world already restored, at those eleven sizes in all three languages. Exactly one radio, teal frame and teal caption identify the active world; completion adds no checkmark. Image clicks, touch taps, native arrow-key selection, distinct hover, reload and Start/Continue preserve the expected choice. Cards and captions fit without scrolling and no JavaScript errors were reported.
+Selection checks cover all eight image cards with every world already restored, at those eleven sizes in all three languages. Exactly one radio, teal frame and teal caption identify the active world; completion adds no checkmark. Image clicks, touch taps, native arrow-key selection, distinct hover, reload and Start/Continue preserve the expected choice. Cards and captions fit without scrolling and no JavaScript errors were reported.
 
 The graphics/audio review additionally checks 640 restoration objects across 200 non-city layout/difficulty combinations, with no clipping or bad bird perches after the fixes, and 10,240 planet-orbit positions with no reduced-motion changes. Focused audio checks confirm the completion effect at approximately 4.65 seconds normally or 0.35 seconds with reduced motion, once only, with no paused/stale chime. Same-setting repeat retains one music source/load and advances playback without rewinding; pause/Continue preserves the position. Screenshots, syntax, unique HTML IDs and whitespace were checked. Physical switch hardware and screen reader testing remain to be done on the target device.
 
-See [ART_AUDIO_REVIEW.md](ART_AUDIO_REVIEW.md) for the per-theme visual review, measured music levels and loop observations, changes made and proposed arcade settings.
+The original five-world browser regression also passes after the additions, including completion, same-setting repeat, pause/Continue, reduced motion, mode controls and both settings panels.
+
+The three added worlds complete all fifteen normal world/difficulty rounds and three reduced-motion rounds. End-to-end checks confirm final region/accent fills and clip cleanup, full background reveals, exact pause/Continue freezing, another shuffled layout in the same world, restoration cleanup, manual colour changes without dropping paint and retained selection/restoration flags after reload. No JavaScript errors were reported.
+
+The three added video-game worlds pass geometry checks across all 150 layout/difficulty combinations: 480 placed objects, 39,000 surface samples and 28,800 restoration positions. Each has ten distinct completion backgrounds. Their regions and accents begin white, assisted hit areas do not overlap, restored details wait for the fill, and reduced-motion decorations remain static. All eight menu cards, both colour modes and both modal panels fit at the eleven sizes in all three languages. Actual Chromium media checks confirm Start unlocks all three new recordings, playback advances, Escape pauses, Continue retains the position and changing worlds chooses the expected track with a single audio element.
+
+See [ART_AUDIO_REVIEW.md](ART_AUDIO_REVIEW.md) for the per-theme visual review, measured music levels and loop observations, changes made and the three added video-game settings.

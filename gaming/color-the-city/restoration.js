@@ -99,11 +99,54 @@
     const x=Math.cos(angle)*rx,y=Math.sin(angle)*ry;
     return {x:center.x+x*ORBIT_COS-y*ORBIT_SIN,y:center.y+x*ORBIT_SIN+y*ORBIT_COS};
   }
+  function arcadeLife(life,target,point,colour) {
+    const source=target.lifeAnchor || {x:target.x+target.width/2,y:target.top+25};
+    const anchor=point(target,source.x,source.y),motif=target.motif || '';
+    const x=Math.max(48,Math.min(1152,anchor.x));
+    const y=Math.max(80,Math.min(state.scene==='squadron'?675:680,anchor.y));
+    const root=add('g',{class:`restored-${state.scene}-${motif}`,transform:`translate(${x} ${y}) scale(${life.scale})`},life.root);
+    life.arcade={root,x,y,motif,sparks:[],rings:[],flag:null};
+    const scene=state.scene;
+    if(scene==='kingdom' && motif==='castle') {
+      path('M0 0V-42',{stroke:'#6a7589','stroke-width':2.5},root);
+      const flag=path('M1-42H37L29-30 37-18H1Z',{fill:'#ff9bb8',stroke:'#c9799d','stroke-width':1.3},root);
+      add('circle',{cx:0,cy:-45,r:3,fill:'#ffe4a1',stroke:'#b79a6a','stroke-width':1},root);
+      life.arcade.flag=flag;
+    } else if(scene==='squadron') {
+      const engine=motif==='ship';
+      for(let i=0;i<3;i++) {
+        const ring=add('ellipse',{cx:0,cy:engine?11:0,rx:11+i*8,ry:engine?8+i*7:11+i*8,
+          fill:i===0?'#c3f2fa':'none',stroke:i===0?'#a4dbe7':'#b1e9ee','stroke-width':1.4,opacity:.48-i*.12},root);
+        life.arcade.rings.push({el:ring,index:i});
+      }
+      if(engine) path('M-8 9Q-12 23 0 33Q12 23 8 9Z',{fill:'#b9eff3',stroke:'#95c7dc','stroke-width':1.2,opacity:.65},root);
+      else {
+        add('circle',{r:5,fill:'#fff3bf',stroke:'#a3d4dc','stroke-width':1},root);
+        path('M-15 0h-7m37 0h7M0-15v-7m0 37v7',{stroke:'#c4edf3','stroke-width':1.5},root);
+      }
+    } else {
+      const dungeon=scene==='dungeon';
+      if(dungeon) {
+        add('ellipse',{rx:27,ry:19,fill:'#b9e8ed',opacity:.14},root);
+        add('ellipse',{rx:17,ry:12,fill:'#fff0bd',opacity:.2},root);
+      }
+      const count=dungeon?5:3;
+      for(let i=0;i<count;i++) {
+        const el=path('M0-6 1.8-1.8 6 0 1.8 1.8 0 6-1.8 1.8-6 0-1.8-1.8Z',
+          {fill:i%2?'#fff1b9':dungeon?'#c0eff2':colour,stroke:dungeon?'#acbddc':'#c6b38f','stroke-width':.8},root);
+        life.arcade.sparks.push({el,index:i});
+      }
+      if(scene==='kingdom' && motif==='block') {
+        const gem=path('M0-52 9-43 0-34-9-43Z',{fill:'#ffe49b',stroke:'#c3a16e','stroke-width':1.3},root);
+        life.arcade.gem=gem;
+      }
+    }
+  }
   function restore({target,colour='#b9dfcf',worldPoint}) {
     if(!state || !target || restored.has(target) || lives.length>=4) return null;
     const point=worldPoint || ((b,x,y)=>b.layout?{x:x*b.layout.sx+b.layout.tx,y:y*b.layout.sy+b.layout.ty}:{x,y});
     const life={root:add('g',{class:'restored-life','data-object':target.placement?.dataset.object ?? lives.length,
-      'data-life-age':0,opacity:0,'pointer-events':'none','aria-hidden':'true'},state.parent),age:0,
+      'data-life-age':0,'data-scene':state.scene,opacity:0,'pointer-events':'none','aria-hidden':'true'},state.parent),age:0,
       scale:Math.min(1.2,Math.max(.8,Math.abs(target.layout?.sy || 1))),phase:lives.length*1.7+Number(state.variant)*.2,flowers:[],windows:[]};
     restored.add(target);lives.push(life);
     const center=point(target,target.x+target.width/2,target.top),base=point(target,target.x+target.width/2,650);
@@ -112,7 +155,8 @@
     const top=target.surfaceAt?target.surfaceAt(perchX):target.top-(target.roofHeight || 0)*roofShape;
     const perch=point(target,perchX,top-15);
     const motif=Number(target.placement?.dataset.motif ?? target.group?.dataset.building ?? 0);
-    if(state.scene==='planets') orbit(life,target,point);
+    if(['kingdom','squadron','dungeon'].includes(state.scene)) arcadeLife(life,target,point,colour);
+    else if(state.scene==='planets') orbit(life,target,point);
     else if(state.scene==='forest') {
       bird(life,perch.x,perch.y,'#f7cf81');
       flower(life,base.x-39*life.scale,Math.min(707,base.y),colour,0);
@@ -152,6 +196,22 @@
     }
     life.windows.forEach((el,i)=>el.setAttribute('opacity',reduced ? .9 : .83+Math.sin(age*.6+i*.7)*.08));
     life.smoke?.forEach(p=>p.el.setAttribute('transform',`translate(${reduced?0:Math.sin(age*.7+p.i)*5} ${reduced?0:-Math.sin(age*.45+p.i)*3})`));
+    if(life.arcade) {
+      const a=life.arcade;
+      if(a.flag) a.flag.setAttribute('transform',`scale(${reduced?1:1+Math.sin(age*.85+life.phase)*.035} 1)`);
+      if(a.gem) a.gem.setAttribute('transform',`translate(0 ${reduced?0:Math.sin(age*.8+life.phase)*2.5})`);
+      a.rings.forEach(({el,index})=>{
+        const pulse=reduced?1:1+Math.sin(age*.9+index*.6)*.045;
+        el.setAttribute('transform',`scale(${pulse})`);
+      });
+      a.sparks.forEach(({el,index},i)=>{
+        const theta=index*Math.PI*2/a.sparks.length+(reduced?0:age*.15)+life.phase;
+        const radius=state.scene==='dungeon'?23:26;
+        const sx=Math.cos(theta)*radius,sy=Math.sin(theta)*radius*.66-(state.scene==='kingdom'?12:0);
+        const size=reduced?1:.88+Math.sin(age*.85+i*1.7)*.12;
+        el.setAttribute('transform',`translate(${sx} ${sy}) scale(${size})`);
+      });
+    }
     if(life.orbit) {
       const {stars}=life.orbit,theta=reduced ? .2 : age*.2;
       stars.forEach(({el,phase},i)=>{

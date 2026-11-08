@@ -13,7 +13,7 @@
     { order: [0,3,2,1], sizes: [.95,1.03,.94,1.04], shifts: [-7,11,-12,6], mirrors: 2 },
     { order: [3,2,1,0], sizes: [1.02,.9,1.04,.96], shifts: [10,-5,3,-10], mirrors: 4 }
   ];
-  const sceneOffsets = { city: 0, forest: 1, village: 2, farm: 3, planets: 0 };
+  const sceneOffsets = { city: 0, forest: 1, village: 2, farm: 3, planets: 0, kingdom: 1, squadron: 2, dungeon: 3 };
   const bags = new Map();
   function get(scene, id) {
     const base = compositions[id];
@@ -55,7 +55,7 @@
       const center = centers[slot] + template.shifts[slot];
       const tx = center - (b.x + b.width / 2) * sx;
       let ty = baseline - 650 * sy;
-      if (scene === 'planets') ty += [0,-15,12,-5][(slot + template.id) % 4];
+      if (scene === 'planets' || scene === 'squadron') ty += [0,-15,12,-5][(slot + template.id) % 4];
       const topSurface = Math.min(...Array.from({length:33}, (_,i)=>surfaceY(b, b.x + b.width*i/32))) * sy + ty;
       if (topSurface < 318) ty += 318 - topSurface;
       const edgeA = b.x * sx + tx, edgeB = (b.x + b.width) * sx + tx;

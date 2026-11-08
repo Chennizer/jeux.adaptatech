@@ -26,7 +26,7 @@
       already: 'This part of the drawing is already full of colour.', win: 'This picture has its colours back! Another picture in this world comes next.',
       paused: 'Paused. Press again to continue.', sceneTitle: 'Colouring board',
       sceneDescription: 'A sad world has lost its colours. A rainbow zeppelin flies overhead. Press to return colour and life to the landscape.',
-      paintedLabel: 'Successful paint hits', chooseScene: 'Choose a world', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.', difficulty: 'Difficulty', difficultyDetails: ['2 objects · 1 hit each', '3 objects · 1 hit each', '3 objects · 2 hits each', '4 objects · 2 hits each', '4 objects · 3 hits each']
+      paintedLabel: 'Successful paint hits', chooseScene: 'Choose a world', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', sceneKingdom: 'Pixel Kingdom', sceneSquadron: 'Star Squadron', sceneDungeon: 'Crystal Dungeon', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.', difficulty: 'Difficulty', difficultyDetails: ['2 objects · 1 hit each', '3 objects · 1 hit each', '3 objects · 2 hits each', '4 objects · 2 hits each', '4 objects · 3 hits each']
     },
     fr: {
       games: 'Jeux pour switch', language: 'Langue', title: 'Recolor', scenes: 'Mondes', story: 'Les couleurs ont disparu. Redonne vie aux mondes.', worldRestored: 'Couleurs retrouvées', worldMissing: 'En attente de couleurs',
@@ -47,7 +47,7 @@
       already: 'Cette partie du dessin est déjà pleine de couleurs.', win: 'Ce paysage a retrouvé ses couleurs ! Un autre paysage de ce monde arrive ensuite.',
       paused: 'En pause. Appuie pour continuer.', sceneTitle: 'Tableau de coloriage',
       sceneDescription: 'Un monde triste a perdu ses couleurs. Un zeppelin arc-en-ciel le survole. Appuie pour rendre ses couleurs et sa joie au paysage.',
-      paintedLabel: 'Touches de peinture réussies', chooseScene: 'Choisis un monde', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.', difficulty: 'Difficulté', difficultyDetails: ['2 objets · 1 touche chacun', '3 objets · 1 touche chacun', '3 objets · 2 touches chacun', '4 objets · 2 touches chacun', '4 objets · 3 touches chacun']
+      paintedLabel: 'Touches de peinture réussies', chooseScene: 'Choisis un monde', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', sceneKingdom: 'Royaume pixel', sceneSquadron: 'Escadron stellaire', sceneDungeon: 'Donjon de cristal', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.', difficulty: 'Difficulté', difficultyDetails: ['2 objets · 1 touche chacun', '3 objets · 1 touche chacun', '3 objets · 2 touches chacun', '4 objets · 2 touches chacun', '4 objets · 3 touches chacun']
     },
     ja: {
       games: 'スイッチゲーム', language: '言語', title: 'リカラー', scenes: '世界', story: '色が消えてしまった世界に、彩りを取り戻そう。', worldRestored: '色を取り戻した世界', worldMissing: '色を待つ世界',
@@ -68,7 +68,7 @@
       already: 'ここはもう色いっぱい。', win: '景色に色が戻ったよ！次も同じ世界の新しい景色が出てくるよ。',
       paused: '一時停止中。もう一度押すと続けられます。', sceneTitle: 'お絵描きボード',
       sceneDescription: '色をなくして寂しくなった世界。虹色の飛行船から絵の具を落として、色と笑顔を取り戻そう。',
-      paintedLabel: '絵の具が当たった回数', chooseScene: '世界を選ぼう', sceneCity: '街', sceneForest: '森', sceneVillage: '村', sceneFarm: '農場', scenePlanets: '惑星', chooseMode: 'モードを選ぼう', autoMode: 'ひとつのスイッチ', autoModeHelp: '色は12秒ごとに変わります。スペースかエンターで絵の具を落とします。', manualMode: '色を選ぶ', manualModeHelp: 'スペースで絵の具を落とし、エンターで次の色を選びます。', activeColour: '選択中の色', manualHint: 'スペース・スイッチ・タッチ：絵の具。エンター：次の色。Esc：メニュー。', difficulty: '難しさ', difficultyDetails: ['2つの物・それぞれ1回', '3つの物・それぞれ1回', '3つの物・それぞれ2回', '4つの物・それぞれ2回', '4つの物・それぞれ3回']
+      paintedLabel: '絵の具が当たった回数', chooseScene: '世界を選ぼう', sceneCity: '街', sceneForest: '森', sceneVillage: '村', sceneFarm: '農場', scenePlanets: '惑星', sceneKingdom: 'ピクセル王国', sceneSquadron: 'スター飛行隊', sceneDungeon: 'クリスタル洞窟', chooseMode: 'モードを選ぼう', autoMode: 'ひとつのスイッチ', autoModeHelp: '色は12秒ごとに変わります。スペースかエンターで絵の具を落とします。', manualMode: '色を選ぶ', manualModeHelp: 'スペースで絵の具を落とし、エンターで次の色を選びます。', activeColour: '選択中の色', manualHint: 'スペース・スイッチ・タッチ：絵の具。エンター：次の色。Esc：メニュー。', difficulty: '難しさ', difficultyDetails: ['2つの物・それぞれ1回', '3つの物・それぞれ1回', '3つの物・それぞれ2回', '4つの物・それぞれ2回', '4つの物・それぞれ3回']
     }
   };
   const palettes = [
@@ -81,7 +81,7 @@
     { x: 628, width: 228, floorHeight: 86, roofKind: 'gable', roofHeight: 74 },
     { x: 914, width: 228, floorHeight: 72, roofKind: 'gable', roofHeight: 38 }
   ].map(b => ({ ...b, floors: 3, top: WORLD.groundY - 3 * b.floorHeight, painted: 0, floorEls: [], roof: null, door: null }));
-  const sceneLabels = { city: 'sceneCity', forest: 'sceneForest', village: 'sceneVillage', farm: 'sceneFarm', planets: 'scenePlanets' };
+  const sceneLabels = { city: 'sceneCity', forest: 'sceneForest', village: 'sceneVillage', farm: 'sceneFarm', planets: 'scenePlanets', kingdom: 'sceneKingdom', squadron: 'sceneSquadron', dungeon: 'sceneDungeon' };
   const sceneKeys = Object.keys(sceneLabels);
   const restoredWorlds = new Set();
   try {
@@ -221,7 +221,7 @@
       buildCity();
     } else {
       $('buildings').replaceChildren(); $('streetDetails').replaceChildren();
-      if (activeScene !== 'planets') inkPath('M24 652Q191 648 320 651T650 650T960 652T1180 650', $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
+      if (activeScene !== 'planets' && activeScene !== 'squadron') inkPath('M24 652Q191 648 320 651T650 650T960 652T1180 650', $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
       buildings = window.PaintSceneArt[activeScene].render({ parent: $('buildings'), svg, inkPath, groundY: WORLD.groundY, ink: INK });
     }
     const placed = window.PaintTemplates.place(buildings, {
@@ -230,7 +230,7 @@
     });
     buildings = placed.targets;
     $('streetDetails').replaceChildren();
-    if (activeScene !== 'planets') inkPath(`M24 ${placed.baseline + 2}Q300 ${placed.baseline - 2} 600 ${placed.baseline + 1}T1180 ${placed.baseline}`, $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
+    if (activeScene !== 'planets' && activeScene !== 'squadron') inkPath(`M24 ${placed.baseline + 2}Q300 ${placed.baseline - 2} 600 ${placed.baseline + 1}T1180 ${placed.baseline}`, $('streetDetails'), { stroke: '#aaa2b4', 'stroke-width': 2 });
     $('buildings').dataset.scene = activeScene;
     $('buildings').dataset.template = `${activeScene}-${String(activeTemplate.id + 1).padStart(2, '0')}`;
     $('buildings').dataset.difficulty = activeDifficulty;

@@ -6,7 +6,10 @@
     forest: '../../songs/spring/spring3.mp3',
     village: '../../songs/season/spring1.mp3',
     farm: '../../songs/bees/beesmusic3.mp3',
-    planets: '../../songs/space/space1.mp3'
+    planets: '../../songs/space/space1.mp3',
+    kingdom: '../../songs/marioarcademusic.mp3',
+    squadron: '../../songs/space/spacearcade1.mp3',
+    dungeon: '../../songs/eyegazefirefly1.mp3'
   };
   const samples = {
     release: { path: '../../sounds/bubbles/bubble3.mp3', gain: .36, rate: 1.12, cooldown: .09, max: .5 },
@@ -68,12 +71,16 @@
     }
     return buffers.get(path);
   }
+  function musicLevel() {
+    // The shooter's recording measures about 3 dB louder than the other worlds.
+    return settings.musicVolume * (currentScene === 'squadron' ? .72 : 1);
+  }
   function configure(next) {
     settings = { ...settings, ...next };
     settings.musicVolume = Math.max(0, Math.min(1, Number(settings.musicVolume) || 0));
     settings.effectsVolume = Math.max(0, Math.min(1, Number(settings.effectsVolume) || 0));
     if (context && musicGain && effectsGain) {
-      gainTo(musicGain, active && settings.music ? settings.musicVolume : 0);
+      gainTo(musicGain, active && settings.music ? musicLevel() : 0);
       gainTo(effectsGain, settings.effects ? settings.effectsVolume : 0);
     }
     if (!settings.music) music.pause();
@@ -95,7 +102,7 @@
       }
       musicGain.gain.cancelScheduledValues(context.currentTime);
       musicGain.gain.setValueAtTime(0, context.currentTime);
-      musicGain.gain.setTargetAtTime(settings.musicVolume, context.currentTime, .35);
+      musicGain.gain.setTargetAtTime(musicLevel(), context.currentTime, .35);
       try {
         const playing = music.play();
         if (playing) playing.then(() => { if (!active) music.pause(); }).catch(() => {});
@@ -139,8 +146,8 @@
     try { source.start(when); source.stop(when + duration); } catch (_) { voices.delete(voice); source.disconnect(); gain.disconnect(); }
     if (kind === 'complete' && settings.music && musicGain) {
       musicGain.gain.cancelScheduledValues(now);
-      musicGain.gain.setTargetAtTime(settings.musicVolume * .6, now, .15);
-      musicGain.gain.setTargetAtTime(settings.musicVolume, now + 2.5, .45);
+      musicGain.gain.setTargetAtTime(musicLevel() * .6, now, .15);
+      musicGain.gain.setTargetAtTime(musicLevel(), now + 2.5, .45);
     }
   }
   window.PaintAudio = { configure, start, pause, reset, effect };

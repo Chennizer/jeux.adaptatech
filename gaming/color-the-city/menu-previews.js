@@ -38,15 +38,18 @@
     } else {
       svg('path', {
         d: 'M0 647Q135 618 302 645T620 638V700H0Z',
-        fill: scene === 'planets' ? '#eeeaf6' : '#eaf0e3'
+        fill: ['planets', 'squadron', 'dungeon'].includes(scene) ? '#eeeaf6' : '#eaf0e3'
       }, preview);
       const inkPath = (d, parent, attrs = {}) => svg('path', {
         d, fill: 'none', stroke: INK, 'stroke-width': 3,
         'stroke-linecap': 'round', 'stroke-linejoin': 'round', ...attrs
       }, parent);
-      if (scene !== 'planets') inkPath('M24 652Q300 648 600 651T1180 650', preview, { stroke: '#c4bdce', 'stroke-width': 2 });
+      if (scene !== 'planets' && scene !== 'squadron') inkPath('M24 652Q300 648 600 651T1180 650', preview, { stroke: '#c4bdce', 'stroke-width': 2 });
       const parent = svg('g', {}, preview);
       const targets = artwork.render({ parent, svg, inkPath, groundY: 650, ink: INK });
+      // The card frames two large motifs; omit the others so their edges cannot
+      // appear as clipped fragments at the right of the thumbnail.
+      targets.slice(2).forEach(target => target.group.remove());
       targets.forEach((target, targetIndex) => {
         const colour = artwork.palette[targetIndex % artwork.palette.length];
         target.floorEls.forEach(region => region.setAttribute('fill', colour));
