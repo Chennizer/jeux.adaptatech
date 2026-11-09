@@ -13,6 +13,14 @@
   };
   let serial = 0, root, faded, hope, clouds, lamp, stars;
   let progress = 0, target = 0, celebration = 0, age = 0, reduced = false, offset = 0;
+  const drawn = new WeakMap();
+  function set(node, name, value) {
+    let values = drawn.get(node);
+    if (!values) { values = new Map(); drawn.set(node, values); }
+    const next = String(value);
+    if (values.get(name) === next) return;
+    values.set(name, next); node.setAttribute(name, next);
+  }
   const unit = value => Math.max(0, Math.min(1, Number(value) || 0));
   function clear() {
     root?.remove();
@@ -22,16 +30,16 @@
   function draw() {
     if (!root) return;
     const p = progress * progress * (3 - 2 * progress);
-    root.setAttribute('opacity', 1 - celebration);
-    root.dataset.progress = progress.toFixed(3);
-    faded.setAttribute('opacity', 1 - p * .84);
-    hope.setAttribute('opacity', p);
+    set(root, 'opacity', (1 - celebration).toFixed(3));
+    set(root, 'data-progress', progress.toFixed(3));
+    set(faded, 'opacity', (1 - p * .84).toFixed(3));
+    set(hope, 'opacity', p.toFixed(3));
     if (clouds) {
-      clouds.setAttribute('opacity', .78 - p * .6);
-      clouds.setAttribute('transform', `translate(${reduced ? 0 : Math.sin(age * .12 + offset) * 3} 0)`);
+      set(clouds, 'opacity', (.78 - p * .6).toFixed(3));
+      set(clouds, 'transform', `translate(${(reduced ? 0 : Math.sin(age * .12 + offset) * 3).toFixed(2)} 0)`);
     }
-    if (lamp) lamp.setAttribute('transform', `translate(0 ${-p * 13 + (reduced ? 0 : Math.sin(age * .3) * p * 1.5)})`);
-    if (stars) stars.setAttribute('opacity', reduced ? .68 : .64 + Math.sin(age * .55) * .04);
+    if (lamp) set(lamp, 'transform', `translate(0 ${(-p * 13 + (reduced ? 0 : Math.sin(age * .3) * p * 1.5)).toFixed(2)})`);
+    if (stars) set(stars, 'opacity', (reduced ? .68 : .64 + Math.sin(age * .55) * .04).toFixed(3));
   }
   function reset({ scene = 'city', variant = 0, parent, svg, reducedMotion = false } = {}) {
     clear();
@@ -149,7 +157,7 @@
   }
   function setCelebration(value) { celebration = unit(value); draw(); }
   function frame(dt) {
-    if (!root) return;
+    if (!root || reduced || celebration >= 1) return;
     const step = Math.max(0, Math.min(1, Number(dt) || 0));
     age += step;
     if (!reduced) progress += (target - progress) * (1 - Math.exp(-step / 1.7));

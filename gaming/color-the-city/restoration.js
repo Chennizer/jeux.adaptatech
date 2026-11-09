@@ -146,7 +146,7 @@
     if(!state || !target || restored.has(target) || lives.length>=4) return null;
     const point=worldPoint || ((b,x,y)=>b.layout?{x:x*b.layout.sx+b.layout.tx,y:y*b.layout.sy+b.layout.ty}:{x,y});
     const life={root:add('g',{class:'restored-life','data-object':target.placement?.dataset.object ?? lives.length,
-      'data-life-age':0,'data-scene':state.scene,opacity:0,'pointer-events':'none','aria-hidden':'true'},state.parent),age:0,
+      'data-revealed':'false','data-scene':state.scene,opacity:0,'pointer-events':'none','aria-hidden':'true'},state.parent),age:0,reveal:0,
       scale:Math.min(1.2,Math.max(.8,Math.abs(target.layout?.sy || 1))),phase:lives.length*1.7+Number(state.variant)*.2,flowers:[],windows:[]};
     restored.add(target);lives.push(life);
     const center=point(target,target.x+target.width/2,target.top),base=point(target,target.x+target.width/2,650);
@@ -175,10 +175,13 @@
     update(life);return life.root;
   }
   function update(life) {
+    if (life.age < (state.reducedMotion ? .1 : 4.2)) return;
     const reduced=state.reducedMotion,age=Math.max(0,life.age-(reduced ? .1 : 4.2));
     const progress=reduced?Number(life.age>=.1):Math.min(1,age/1.8),reveal=progress*progress*(3-2*progress);
-    life.root.setAttribute('opacity',reveal);life.root.dataset.lifeAge=life.age.toFixed(3);
-    life.root.dataset.revealed=progress>=1?'true':'false';
+    if(life.reveal!==reveal) {
+      life.root.setAttribute('opacity',reveal);life.reveal=reveal;
+      if(progress>=1) life.root.dataset.revealed='true';
+    }
     life.flowers.forEach(f=>{
       const tilt=reduced?0:Math.sin(age*.9+f.phase)*4;
       f.head.setAttribute('transform',`translate(${f.x} ${f.y}) rotate(${tilt}) scale(${life.scale*(.15+.85*reveal)})`);
@@ -225,7 +228,10 @@
   }
   function frame(dt) {
     if(!state || !Number.isFinite(dt) || dt<=0)return;
-    lives.forEach(life=>{life.age+=dt;update(life);});
+    lives.forEach(life=>{
+      if(state.reducedMotion && life.reveal===1) return;
+      life.age+=dt;update(life);
+    });
   }
   window.PaintRestoration={reset,restore,frame,clear};
 })();

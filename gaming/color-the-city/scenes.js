@@ -26,15 +26,31 @@
   function circle(ctx, target, cx, cy, r, attrs = {}) {
     return ctx.svg('circle', { cx, cy, r, fill: '#fff', stroke: ctx.ink, 'stroke-width': 2.5, ...attrs }, target.outlines);
   }
+  function ellipsePath(cx, cy, rx, ry) {
+    return `M${cx - rx} ${cy}A${rx} ${ry} 0 1 1 ${cx + rx} ${cy}A${rx} ${ry} 0 1 1 ${cx - rx} ${cy}Z`;
+  }
+  function flowerOutline(cx, cy) {
+    const count = 12, rx = 105, ry = 86, half = Math.PI / count;
+    const point = (a, size) => [cx + Math.cos(a) * rx * size, cy + Math.sin(a) * ry * size];
+    const first = point(-Math.PI / 2 - half, .66);
+    let d = `M${first[0]} ${first[1]}`;
+    for (let i = 0; i < count; i++) {
+      const a = -Math.PI / 2 + i * Math.PI * 2 / count;
+      const p = point(a - half * .68, 1.14), q = point(a + half * .68, 1.14), end = point(a + half, .66);
+      d += `C${p[0]} ${p[1]} ${q[0]} ${q[1]} ${end[0]} ${end[1]}`;
+    }
+    return d + 'Z';
+  }
   function ellipseTop(x, cx, cy, rx, ry) {
     const u = (x - cx) / rx;
     return Math.abs(u) <= 1 ? cy - ry * Math.sqrt(1 - u * u) : Infinity;
   }
   function trunk(ctx, target, width = 32, top = 545) {
     const cx = target.x + 114;
-    addAccent(ctx, target, `M${cx - width / 2} ${top}v${650 - top}h${width}V${top}`,
-      '#cfa47d', { x: cx, y: top + 12 });
-    draw(ctx, target, `M${cx} 641v-50m0 18-10-12m10 25 9-9`, { 'stroke-width': 2 });
+    addAccent(ctx, target, `M${cx - width / 2} ${top}Q${cx - width * .38} ${top + 52} ${cx - width * .48} 627L${cx - width * .82} 650H${cx + width * .82}L${cx + width * .48} 627Q${cx + width * .38} ${top + 52} ${cx + width / 2} ${top}Z`,
+      '#cfa47d', { x: cx, y: top + 12 }, { stroke: 'none' });
+    draw(ctx, target, `M${cx - width / 2} ${top}Q${cx - width * .38} ${top + 52} ${cx - width * .48} 627L${cx - width * .82} 650H${cx + width * .82}L${cx + width * .48} 627Q${cx + width * .38} ${top + 52} ${cx + width / 2} ${top}`);
+    draw(ctx, target, `M${cx - 5} 642Q${cx + 3} 617 ${cx} 593M${cx} 609l-9-10m9 24 9-11`, { 'stroke-width': 2 });
   }
   function drawWindow(ctx, target, x, y, round = false) {
     if (round) {
@@ -60,7 +76,7 @@
     for (const match of d.matchAll(/([MLCQZ])([^MLCQZ]*)/g)) {
       const command = match[1], values = match[2].trim().split(/[ ,]+/).filter(Boolean).map(Number);
       if (command === 'M') {
-        current = values; first = current; points.push(current);
+        current = values; first = current; if (points.length) points.push(null); points.push(current);
       } else if (command === 'L' || command === 'Z') {
         current = command === 'Z' ? first : values; points.push(current);
       } else {
@@ -74,11 +90,22 @@
         current = values.slice(-2);
       }
     }
+    // Index the original flattened edges by x. Each query visits only the
+    // few edges in its half-pixel column, preserving overhang discontinuities
+    // exactly rather than interpolating between two unrelated branches.
+    const step = .5, columns = Array.from({ length: 457 }, () => []);
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      if (!a || !b) continue;
+      const dx = b[0] - a[0];
+      const first = Math.max(0, Math.floor((Math.min(a[0], b[0]) - .001) / step));
+      const last = Math.min(456, Math.floor((Math.max(a[0], b[0]) + .001) / step));
+      for (let column = first; column <= last; column++) columns[column].push({ a, b, dx });
+    }
     return point => {
-      const px = point - x;
+      const px = Math.max(0, Math.min(228, point - x));
       let top = Infinity;
-      for (let i = 1; i < points.length; i++) {
-        const a = points[i - 1], b = points[i], dx = b[0] - a[0];
+      for (const { a, b, dx } of columns[Math.floor(px / step)]) {
         if (Math.abs(dx) < .0001) {
           if (Math.abs(px - a[0]) < .001) top = Math.min(top, a[1], b[1]);
         } else if (px >= Math.min(a[0], b[0]) && px <= Math.max(a[0], b[0])) {
@@ -88,6 +115,7 @@
       return top;
     };
   }
+
   function canopy(ctx, target, regions, outline, seams) {
     for (const [d, y] of regions) addRegion(ctx, target, localPath(target.x, d), { x: target.x + 114, y }, false);
     draw(ctx, target, localPath(target.x, outline));
@@ -106,7 +134,7 @@
         ['M114 320 C106 353 91 379 68 401 Q114 424 160 401 C137 379 122 353 114 320Z', 370]
       ], 'M114 320 C106 353 91 379 68 401 Q80 406 92 404 C76 431 56 454 31 470 Q45 477 62 474 C45 507 22 534 0 552 Q18 569 44 565 C64 579 86 584 114 578 C142 584 164 579 184 565 Q210 569 228 552 C206 534 183 507 166 474 Q183 477 197 470 C172 454 152 431 136 404 Q148 406 160 401 C137 379 122 353 114 320Z',
       'M68 401 Q114 424 160 401 M31 470 Q114 505 197 470');
-      draw(ctx, t, localPath(x, 'M114 557 L114 518 M114 538 L95 524 M114 538 L133 524 M108 380 L114 391 L120 380 M54 538 L64 545 L74 538 M153 542 L164 549 L175 542'), { 'stroke-width': 2 });
+      draw(ctx, t, localPath(x, 'M114 559 Q111 537 114 516 M114 539 Q98 533 91 521 M114 540 Q131 532 138 520 M105 378 Q114 388 122 378 M53 536 Q64 548 76 536 M151 539 Q165 551 177 539 M81 451 Q88 459 95 451 M135 452 Q142 460 149 452'), { 'stroke-width': 2 });
       targets.push(t);
     }
     // An old oak, with broad cloud-shaped shoulders and a branching trunk.
@@ -119,7 +147,7 @@
         ['M26 424 C17 400 32 374 57 374 C62 346 93 336 115 351 C137 329 168 344 175 368 C204 366 223 388 215 414 C160 434 86 407 26 424Z', 383]
       ], 'M0 469 C0 444 8 429 26 424 C17 400 32 374 57 374 C62 346 93 336 115 351 C137 329 168 344 175 368 C204 366 223 388 215 414 C228 427 228 450 228 470 C228 493 214 512 194 509 C188 538 162 550 141 541 C118 560 94 561 72 542 C48 549 25 536 24 515 C8 510 0 491 0 469Z',
       'M26 424 C86 407 160 434 215 414 M24 515 C77 503 141 529 194 509');
-      draw(ctx, t, localPath(x, 'M114 553 L114 477 M114 512 Q88 488 73 476 M114 499 Q138 480 154 461 M61 454 Q44 437 39 455 Q47 472 61 454 M165 389 Q175 370 188 385 Q183 402 165 389 M86 387 Q72 371 65 388 Q74 401 86 387'), { 'stroke-width': 2.3 });
+      draw(ctx, t, localPath(x, 'M114 554 Q110 514 114 477 M114 515 Q88 490 73 476 M114 500 Q138 481 154 461 M61 454 Q44 435 39 455 Q47 474 61 454 M43 454L56 454 M165 389 Q175 368 188 385 Q183 404 165 389 M170 389L184 383 M86 387 Q72 369 65 388 Q74 403 86 387 M70 386L81 389'), { 'stroke-width': 2.3 });
       targets.push(t);
     }
     // A single rounded apple canopy, with a few generous fruit stencils.
@@ -132,7 +160,7 @@
         ['M37 419 C29 393 43 369 65 374 C72 345 99 336 119 353 C145 333 177 348 181 373 C207 369 228 391 218 417 C160 435 88 402 37 419Z', 382]
       ], 'M0 458 C0 433 17 416 37 419 C29 393 43 369 65 374 C72 345 99 336 119 353 C145 333 177 348 181 373 C207 369 228 391 218 417 C228 428 228 446 228 460 C228 483 214 496 193 493 C192 516 173 535 150 531 C133 554 102 553 85 533 C61 542 29 531 24 509 C9 507 0 484 0 458Z',
       'M37 419 C88 402 160 435 218 417 M24 509 C78 502 136 525 193 493');
-      draw(ctx, t, localPath(x, 'M114 554 L114 495 M114 519 L91 502 M114 508 L137 489'), { 'stroke-width': 2.3 });
+      draw(ctx, t, localPath(x, 'M114 555 Q110 525 114 495 M113 521 Q98 511 88 498 M114 510 Q130 501 139 486 M91 445Q102 434 111 444Q104 454 91 445 M118 398Q128 384 139 395Q133 407 118 398'), { 'stroke-width': 2.3 });
       for (const [ax, ay] of [[73, 390], [169, 390], [47, 469], [161, 469]]) {
         addAccent(ctx, t, localPath(x, `M${ax} ${ay - 12} C${ax - 23} ${ay - 25} ${ax - 23} ${ay + 17} ${ax} ${ay + 19} C${ax + 23} ${ay + 17} ${ax + 23} ${ay - 25} ${ax} ${ay - 12}Z`),
           ax > 100 ? '#f3c77f' : '#ef9a91', { x: x + ax, y: ay }, { 'stroke-width': 2.2 });
@@ -150,7 +178,7 @@
         ['M19 430 C34 401 67 364 114 340 C161 355 195 395 209 430 C157 451 76 416 19 430Z', 396]
       ], 'M0 552 C0 526 2 510 4 494 C7 473 11 468 19 430 C34 401 67 364 114 340 C161 355 195 395 209 430 C220 466 224 481 224 494 C227 514 228 535 228 552 Q216 539 204 558 Q193 548 181 568 Q169 558 157 576 Q144 565 131 582 Q121 574 114 586 Q106 575 97 582 Q85 565 71 576 Q59 557 47 568 Q36 548 24 558 Q12 540 0 552Z',
       'M19 430 C76 416 157 451 209 430 M4 494 C74 508 159 518 224 494');
-      draw(ctx, t, localPath(x, 'M29 453 Q20 494 24 531 M48 442 Q39 486 46 545 M73 451 Q63 503 70 549 M98 453 Q88 505 95 555 M129 459 Q139 509 133 557 M155 457 Q167 503 159 549 M181 452 Q193 491 184 542 M202 452 Q213 490 207 528 M114 599 L114 559 M114 581 L102 567 M114 578 L126 563'), { 'stroke-width': 2, opacity: .85 });
+      draw(ctx, t, localPath(x, 'M29 453 Q18 493 25 535 M48 442 Q36 487 46 548 M73 451 Q61 502 70 553 M98 453 Q87 506 95 558 M129 459 Q141 510 133 560 M155 457 Q169 503 159 553 M181 452 Q195 492 184 546 M202 452 Q215 490 207 532 M114 599 Q111 578 114 559 M114 582 Q105 576 101 565 M114 579 Q123 571 128 560'), { 'stroke-width': 2, opacity: .85 });
       targets.push(t);
     }
     return targets;
@@ -158,15 +186,16 @@
   function renderVillage(ctx) {
     const targets = [];
     {
-      const t = createTarget(ctx, 0, 366), x = t.x;
+      const t = createTarget(ctx, 0, 352), x = t.x;
       addRegion(ctx, t, `M${x} 548h228v102H${x}Z`, { x: x + 114, y: 565 });
       addRegion(ctx, t, `M${x} 446h228v102H${x}Z`, { x: x + 114, y: 470 });
       addRegion(ctx, t, `M${x} 446  ${x + 114} 366 ${x + 228} 446Z`, { x: x + 114, y: 405 });
-      t.surfaceAt = point => 366 + Math.min(114, Math.abs(point - x - 114)) * 80 / 114;
+      t.surfaceAt = point => point >= x + 168 && point <= x + 194 ? 352 : 366 + Math.min(114, Math.abs(point - x - 114)) * 80 / 114;
       drawWindow(ctx, t, x + 35, 477); drawWindow(ctx, t, x + 153, 477);
       drawWindow(ctx, t, x + 37, 583, true); door(ctx, t, x + 145);
       circle(ctx, t, x + 114, 417, 16);
-      draw(ctx, t, `M${x + 168} 402v-50h26v69M${x + 176} 339q-13-19 4-24q16-5 20 10`, { fill: '#fff', 'stroke-width': 2.5 });
+      addAccent(ctx, t, `M${x + 168} 402v-50h26v69Z`, '#d8b5a0', { x: x + 181, y: 368 }, { 'stroke-width': 2.5 });
+      draw(ctx, t, `M${x + 13} 449H${x + 215}M${x + 65} 419l17-12m65 0 17 12M${x + 27} 523h55m65 0h55M${x + 13} 639h111`, { 'stroke-width': 2 });
       t.chimney = { x: x + 181, y: 352 };
       targets.push(t);
     }
@@ -183,7 +212,9 @@
       door(ctx, t, x + 128); drawWindow(ctx, t, x + 45, 573);
       circle(ctx, t, cx, 471, 13);
       // The sails stay still, so only the zeppelin competes for visual attention.
-      draw(ctx, t, `M${cx - 10} 464l-57-48 13-15 54 51m9 12 48-57 15 13-51 54m-10 9 57 48-13 15-54-51m-9-12-48 57-15-13 51-54Z`, { fill: '#fff', 'stroke-width': 2.5 });
+      const sails = `M${cx - 7} 461l-62-46 17-18 53 57Z M${cx + 10} 464l46-62 18 17-57 53Z M${cx + 7} 481l62 46-17 18-53-57Z M${cx - 10} 478l-46 62-18-17 57-53Z`;
+      addAccent(ctx, t, sails, '#f3dec2', { x: cx, y: 471 }, { 'stroke-width': 2.5 });
+      draw(ctx, t, `M${x + 33} 613h42M${x + 182} 614h25`, { 'stroke-width': 2 });
       circle(ctx, t, cx, 471, 10);
       targets.push(t);
     }
@@ -197,7 +228,8 @@
         return (p >= 28 && p <= 64 || p >= 96 && p <= 132 || p >= 164 && p <= 200) ? 366 : 390;
       };
       circle(ctx, t, x + 114, 427, 27);
-      draw(ctx, t, `M${x + 114} 410v18l13 8`, { 'stroke-width': 2.5 });
+      draw(ctx, t, `M${x + 114} 404v5m0 36v5M${x + 91} 427h5m36 0h5M${x + 114} 410v18l13 8`, { 'stroke-width': 2.5 });
+      draw(ctx, t, `M${x + 14} 465h200M${x + 14} 644h115M${x + 17} 550h29m-12-13v13m153 0h26m-13-13v13`, { 'stroke-width': 2 });
       drawWindow(ctx, t, x + 42, 497, true); drawWindow(ctx, t, x + 147, 497, true);
       drawWindow(ctx, t, x + 41, 586); door(ctx, t, x + 146);
       targets.push(t);
@@ -209,8 +241,10 @@
       addRegion(ctx, t, `M${x} 430a114 80 0 0 1 228 0Z`, { x: x + 114, y: 385 });
       t.surfaceAt = point => ellipseTop(Math.max(x, Math.min(x + 228, point)), x + 114, 430, 114, 80);
       // A large bread motif makes this a bakery without any written labels.
-      draw(ctx, t, `M${x + 65} 482c-4-36 95-36 99 0v22H${x + 65}Zm19-17 11 19m11-24 11 22m12-19 11 18`, { fill: '#fff', 'stroke-width': 2.5 });
-      draw(ctx, t, `M${x + 10} 532h208l-8 24q-18 14-35 0q-18 14-35 0q-18 14-35 0q-18 14-35 0q-18 14-35 0q-18 14-17 0Z`, { fill: '#fff', 'stroke-width': 2.5 });
+      addAccent(ctx, t, `M${x + 65} 482c-4-36 95-36 99 0v22H${x + 65}Z`, '#edc58b', { x: x + 114, y: 482 }, { 'stroke-width': 2.5 });
+      draw(ctx, t, `M${x + 84} 466l10 18m13-24 10 22m12-19 11 18`, { 'stroke-width': 2.5 });
+      addAccent(ctx, t, `M${x + 10} 532h208l-8 24q-18 14-35 0q-18 14-35 0q-18 14-35 0q-18 14-35 0q-18 14-35 0q-18 14-17 0Z`, '#f5d6c7', { x: x + 114, y: 548 }, { 'stroke-width': 2.5 });
+      draw(ctx, t, `M${x + 45} 533v22m35-22v22m35-22v22m35-22v22m35-22v22M${x + 14} 639h100`, { 'stroke-width': 2 });
       drawWindow(ctx, t, x + 37, 588); door(ctx, t, x + 145);
       targets.push(t);
     }
@@ -221,12 +255,12 @@ function renderFarm(ctx) {
   const targets = [];
   // A generous, three-part storybook barn.
   {
-    const t = createTarget(ctx, 0, 385), x = t.x, w = t.width;
+    const t = createTarget(ctx, 0, 367), x = t.x, w = t.width;
     addRegion(ctx, t, `M${x} 555H${x + w}V650H${x}Z`, { x: x + 114, y: 565 });
     addRegion(ctx, t, `M${x} 460H${x + w}V555H${x}Z`, { x: x + 114, y: 474 });
-    addRegion(ctx, t, `M${x} 460L${x + 114} 385L${x + w} 460Z`, { x: x + 114, y: 416 });
-    t.surfaceAt = px => 385 + 75 * Math.min(1, Math.abs(px - x - 114) / 114);
-    draw(ctx, t, `M${x - 1} 460L${x + 114} 385L${x + w + 1} 460M${x + 7} 465V644M${x + 221} 465V644`, { 'stroke-width': 4 });
+    addRegion(ctx, t, `M${x} 460L${x + 40} 392L${x + 114} 367L${x + 188} 392L${x + w} 460Z`, { x: x + 114, y: 413 });
+    t.surfaceAt = px => { const dx = Math.min(114, Math.abs(px - x - 114)); return dx <= 74 ? 367 + dx * 25 / 74 : 392 + (dx - 74) * 68 / 40; };
+    draw(ctx, t, `M${x} 460L${x + 40} 392L${x + 114} 367L${x + 188} 392L${x + w} 460M${x + 7} 465V644M${x + 221} 465V644`, { 'stroke-width': 4 });
     draw(ctx, t, `M${x + 51} 650V562H${x + 177}V650M${x + 114} 562V650M${x + 55} 568L${x + 173} 646M${x + 173} 568L${x + 55} 646`, { 'stroke-width': 3 });
     circle(ctx, t, x + 114, 432, 18);
     draw(ctx, t, `M${x + 114} 415V449M${x + 97} 432H${x + 131}`, { 'stroke-width': 2 });
@@ -244,12 +278,12 @@ function renderFarm(ctx) {
     addRegion(ctx, t, `M${x} 440H${x + 228}V545H${x}Z`, { x: cx, y: 456 });
     addRegion(ctx, t, `M${x} 440A114 85 0 0 1 ${x + 228} 440Z`, { x: cx, y: 385 });
     t.surfaceAt = px => 440 - 85 * Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(-1, Math.min(1, (px - cx) / 114)), 2)));
-    draw(ctx, t, `M${x + 1} 440V650H${x + 227}V440M${x} 453H${x + 228}M${x} 532H${x + 228}M${x} 558H${x + 228}M${x} 637H${x + 228}`, { 'stroke-width': 2.5 });
+    draw(ctx, t, `M${x + 1} 440V650H${x + 227}V440M${x} 453Q${cx} 465 ${x + 228} 453M${x} 532Q${cx} 544 ${x + 228} 532M${x} 558Q${cx} 570 ${x + 228} 558M${x} 637Q${cx} 649 ${x + 228} 637`, { 'stroke-width': 2.5 });
     draw(ctx, t, `M${x + 181} 451V640M${x + 205} 451V640`, { 'stroke-width': 2.5 });
     for (let yy = 463; yy < 640; yy += 22) draw(ctx, t, `M${x + 181} ${yy}h24`, { 'stroke-width': 2 });
     draw(ctx, t, `M${x + 53} 650v-47a30 30 0 0 1 60 0v47`, { 'stroke-width': 3 });
-    circle(ctx, t, x + 78, 490, 21);
-    draw(ctx, t, `M${x + 78} 470v40M${x + 58} 490h40`, { 'stroke-width': 2 });
+    addAccent(ctx, t, `M${x + 78} 477q-24-23-26-4q2 18 26 20q24-2 26-20q-2-19-26 4Z M${x + 78} 500q-24-23-26-4q2 18 26 20q24-2 26-20q-2-19-26 4Z`, '#e6cb83', { x: x + 78, y: 497 }, { 'stroke-width': 2 });
+    draw(ctx, t, `M${x + 78} 462v64`, { 'stroke-width': 2.5 });
     targets.push(t);
   }
   // A friendly, broad tractor: body, cabin and roof are separate paint areas.
@@ -267,19 +301,19 @@ function renderFarm(ctx) {
       return 480;
     };
     draw(ctx, t, `M${x + 13} 416L${x + 41} 386H${x + 138}`, { 'stroke-width': 3 });
-    draw(ctx, t, `M${x + 185} 480V443H${x + 201}V480Z`, { fill: '#fff', 'stroke-width': 3 });
-    draw(ctx, t, `M${x + 39} 420h69v53H${x + 39}Z`, { fill: '#fff', 'stroke-width': 2.5 });
+    addAccent(ctx, t, `M${x + 185} 480V443H${x + 201}V480Z`, '#a6acbd', { x: x + 193, y: 459 }, { 'stroke-width': 3 });
+    addAccent(ctx, t, `M${x + 39} 420h69v53H${x + 39}Z`, '#c5e7ed', { x: x + 73, y: 447 }, { 'stroke-width': 2.5 });
     draw(ctx, t, `M${x + 75} 421v51M${x + 109} 476l17 18M${x + 105} 472l8 8M${x + 143} 514h66M${x + 149} 526h53M${x + 149} 538h53`, { 'stroke-width': 2.5 });
-    circle(ctx, t, x + 59, 592, 58, { 'stroke-width': 4 });
-    circle(ctx, t, x + 59, 592, 29, { 'stroke-width': 3 });
-    circle(ctx, t, x + 186, 613, 37, { 'stroke-width': 4 });
-    circle(ctx, t, x + 186, 613, 15, { 'stroke-width': 2.5 });
+    addAccent(ctx, t, ellipsePath(x + 59, 592, 58, 58) + ellipsePath(x + 186, 613, 37, 37), '#a4a9b8', { x: x + 112, y: 605 }, { 'stroke-width': 4 });
+    addAccent(ctx, t, ellipsePath(x + 59, 592, 29, 29) + ellipsePath(x + 186, 613, 15, 15), '#efd296', { x: x + 112, y: 605 }, { 'stroke-width': 2.5 });
+    let tread = '';
     for (let i = 0; i < 8; i++) {
       const angle = i * Math.PI / 4;
       const ax = x + 59 + Math.cos(angle) * 38, ay = 592 + Math.sin(angle) * 38;
       const bx = x + 59 + Math.cos(angle) * 51, by = 592 + Math.sin(angle) * 51;
-      draw(ctx, t, `M${ax.toFixed(1)} ${ay.toFixed(1)}L${bx.toFixed(1)} ${by.toFixed(1)}`, { 'stroke-width': 3 });
+      tread += `M${ax.toFixed(1)} ${ay.toFixed(1)}L${bx.toFixed(1)} ${by.toFixed(1)}`;
     }
+    draw(ctx, t, tread, { 'stroke-width': 3 });
     draw(ctx, t, `M${x + 130} 580h22M${x + 10} 535Q${x + 63} 498 ${x + 114} 538`, { 'stroke-width': 3 });
     targets.push(t);
   }
@@ -288,18 +322,13 @@ function renderFarm(ctx) {
     const t = createTarget(ctx, 3, 344), x = t.x, cx = x + 114, cy = 430;
     addRegion(ctx, t, `M${x} 590H${x + 228}L${x + 209} 650H${x + 19}Z`, { x: cx, y: 603 });
     addRegion(ctx, t, `M${cx - 8} 480H${cx + 8}V590H${cx - 8}ZM${cx} 548Q${x + 34} 486 ${x + 13} 517Q${x + 37} 569 ${cx} 565ZM${cx} 555Q${x + 196} 487 ${x + 216} 520Q${x + 191} 573 ${cx} 570Z`, { x: cx, y: 530 });
-    addRegion(ctx, t, `M${cx - 105} ${cy}A105 86 0 1 1 ${cx + 105} ${cy}A105 86 0 1 1 ${cx - 105} ${cy}Z`, { x: cx, y: 382 });
-    t.surfaceAt = px => {
-      const u = (px - cx) / 105;
-      return Math.abs(u) <= 1 ? cy - 86 * Math.sqrt(Math.max(0, 1 - u * u)) : 590;
-    };
-    circle(ctx, t, cx, cy, 36, { 'stroke-width': 3 });
-    for (let i = 0; i < 14; i++) {
-      const a = i * Math.PI * 2 / 14;
-      const ax = cx + Math.cos(a) * 43, ay = cy + Math.sin(a) * 39;
-      const bx = cx + Math.cos(a) * 91, by = cy + Math.sin(a) * 75;
-      draw(ctx, t, `M${ax.toFixed(1)} ${ay.toFixed(1)}Q${(bx + Math.sin(a) * 5).toFixed(1)} ${(by - Math.cos(a) * 5).toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`, { 'stroke-width': 2.5 });
-    }
+    const petals = flowerOutline(cx, cy);
+    addRegion(ctx, t, petals, { x: cx, y: 382 });
+    const plantSilhouette = petals + `M${cx - 8} 480L${cx + 8} 480L${cx + 8} 590L${cx - 8} 590Z M${cx} 548Q${x + 34} 486 ${x + 13} 517Q${x + 37} 569 ${cx} 565Z M${cx} 555Q${x + 196} 487 ${x + 216} 520Q${x + 191} 573 ${cx} 570Z`;
+    const plantSurface = silhouetteSurface(0, plantSilhouette.replace(/([MLCQ])([^MLCQZ]*)/g, (_, command, values) => command + values.trim().split(/[ ,]+/).map((n, i) => Number(n) - (i % 2 ? 0 : x)).join(' ')));
+    t.surfaceAt = px => Math.min(590, plantSurface(px - x));
+    addAccent(ctx, t, ellipsePath(cx, cy, 36, 36), '#d8ad75', { x: cx, y: cy }, { 'stroke-width': 3 });
+    addAccent(ctx, t, `M${cx} 548Q${x + 34} 486 ${x + 13} 517Q${x + 37} 569 ${cx} 565Z M${cx} 555Q${x + 196} 487 ${x + 216} 520Q${x + 191} 573 ${cx} 570Z`, '#a8d3a5', { x: cx, y: 551 }, { 'stroke-width': 2.5 });
     for (const [dx, dy] of [[-12, -9], [12, -9], [0, 10], [-18, 12], [18, 12]]) circle(ctx, t, cx + dx, cy + dy, 2.5, { fill: ctx.ink, stroke: 'none' });
     draw(ctx, t, `M${x + 7} 605H${x + 221}M${cx - 4} 552L${x + 33} 526M${cx + 4} 558L${x + 195} 530`, { 'stroke-width': 2 });
     targets.push(t);
@@ -325,7 +354,7 @@ function renderFarm(ctx) {
       const a = rotation + i * Math.PI / 5, r = i % 2 ? radius * .45 : radius;
       d += `${i ? 'L' : 'M'}${(cx + Math.cos(a) * r).toFixed(2)} ${(cy + Math.sin(a) * r).toFixed(2)}`;
     }
-    draw(ctx, target, d + 'Z', { fill: '#fff', 'stroke-width': 2.2 });
+    addAccent(ctx, target, d + 'Z', '#fff0bf', { x: cx, y: cy }, { 'stroke-width': 2.2 });
   }
   function renderPlanets(ctx) {
     const targets = [];
@@ -334,7 +363,7 @@ function renderFarm(ctx) {
       const t = createTarget(ctx, 0, 385), x = t.x, cx = x + 114, cy = 470;
       planetBody(ctx, t, cy, 85, 7);
       draw(ctx, t, `M${x} ${cy}C${x} ${cy - 24} ${x + 24} ${cy - 33} ${x + 36} ${cy - 34}M${x + 192} ${cy - 34}C${x + 214} ${cy - 30} ${x + 228} ${cy - 17} ${x + 228} ${cy}`, { 'stroke-width': 2.8 });
-      draw(ctx, t, `M${x} ${cy}A114 36 0 0 0 ${x + 228} ${cy}L${x + 210} ${cy}A96 19 0 0 1 ${x + 18} ${cy}Z`, { fill: '#fff', 'stroke-width': 2.8 });
+      addAccent(ctx, t, `M${x} ${cy}A114 36 0 0 0 ${x + 228} ${cy}L${x + 210} ${cy}A96 19 0 0 1 ${x + 18} ${cy}Z`, '#e6d5b2', { x: cx, y: cy + 19 }, { 'stroke-width': 2.8 });
       draw(ctx, t, `M${x + 20} ${cy + 15}C${x + 65} ${cy + 35} ${x + 166} ${cy + 35} ${x + 210} ${cy + 15}`, { 'stroke-width': 1.5 });
       circle(ctx, t, cx - 22, cy - 53, 9, { 'stroke-width': 1.8 });
       t.surfaceAt = point => Math.min(ellipseTop(point, cx, cy, 85, 85), ellipseTop(point, cx, cy, 114, 36));
@@ -344,8 +373,9 @@ function renderFarm(ctx) {
     {
       const t = createTarget(ctx, 1, 362), x = t.x, cx = x + 114, cy = 472;
       planetBody(ctx, t, cy, 110, 6);
-      for (const [dx, dy, rx, ry] of [[-45, -57, 23, 18], [42, -53, 16, 13], [-61, 20, 19, 15], [35, 19, 29, 23], [-9, 76, 14, 10]]) {
-        ctx.svg('ellipse', { cx: cx + dx, cy: cy + dy, rx, ry, fill: '#fff', stroke: ctx.ink, 'stroke-width': 2.3 }, t.outlines);
+      const craters = [[-45, -57, 23, 18], [42, -53, 16, 13], [-61, 20, 19, 15], [35, 19, 29, 23], [-9, 76, 14, 10]];
+      addAccent(ctx, t, craters.map(([dx, dy, rx, ry]) => ellipsePath(cx + dx, cy + dy, rx, ry)).join(' '), '#b9b6d8', { x: cx, y: cy }, { 'stroke-width': 2.3 });
+      for (const [dx, dy, rx, ry] of craters) {
         draw(ctx, t, `M${cx + dx - rx * .58} ${cy + dy + 2}Q${cx + dx} ${cy + dy + ry * .85} ${cx + dx + rx * .58} ${cy + dy + 2}`, { 'stroke-width': 1.6 });
       }
       draw(ctx, t, `M${x + 34} 403Q${x + 19} 421 ${x + 16} 441M${x + 26} 452L${x + 25} 458`, { 'stroke-width': 2 });
@@ -356,7 +386,7 @@ function renderFarm(ctx) {
       const t = createTarget(ctx, 2, 365), x = t.x, cx = x + 114, cy = 475;
       planetBody(ctx, t, cy, 110, 23);
       draw(ctx, t, `M${x + 42} 392C${x + 80} 384 ${x + 139} 409 ${x + 181} 390M${x + 18} 422C${x + 65} 404 ${x + 160} 447 ${x + 213} 423M${x + 5} 470C${x + 71} 449 ${x + 135} 491 ${x + 223} 473M${x + 24} 538C${x + 83} 563 ${x + 149} 523 ${x + 206} 539M${x + 57} 568C${x + 92} 580 ${x + 138} 558 ${x + 170} 569`, { 'stroke-width': 2 });
-      ctx.svg('ellipse', { cx: cx + 26, cy: cy + 17, rx: 31, ry: 17, fill: '#fff', stroke: ctx.ink, 'stroke-width': 2.4 }, t.outlines);
+      addAccent(ctx, t, ellipsePath(cx + 26, cy + 17, 31, 17), '#efc5ac', { x: cx + 26, y: cy + 17 }, { 'stroke-width': 2.4 });
       draw(ctx, t, `M${cx + 6} ${cy + 20}Q${cx + 27} ${cy + 34} ${cx + 47} ${cy + 17}`, { 'stroke-width': 1.7 });
       targets.push(t);
     }

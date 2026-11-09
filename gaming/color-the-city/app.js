@@ -1,11 +1,16 @@
 (() => {
   'use strict';
-  const $ = id => document.getElementById(id);
+  const elements = new Map();
+  const $ = id => {
+    if (!elements.has(id)) elements.set(id, document.getElementById(id));
+    return elements.get(id);
+  };
   const SVG = 'http://www.w3.org/2000/svg';
   const INK = '#45404f';
   const WORLD = { width: 1200, groundY: 650, airshipY: 96, outletY: 282, halfShipWidth: 235 };
   const PAINT = { release: .24, fallMin: 1.25, fallExtra: .75, fill: 4.2, glitterTail: .45, bucketPulse: .48 };
   const COLOUR_CYCLE_SECONDS = 12;
+  const FLIGHT = { speed: 1.3, turnOverhang: 60, turnEase: 100 };
   const text = {
     en: {
       games: 'Switch games', language: 'Language', title: 'Recolor', scenes: 'Worlds', story: 'The colours have disappeared. Bring the worlds back to life.', worldRestored: 'Colours restored', worldMissing: 'Waiting for colour',
@@ -118,6 +123,8 @@
   let nextClipId = 0;
   let airshipX = initialAirshipX;
   let direction = 1;
+  let guideVisible = null, bucketWasPulsing = false;
+  let paintBounds = new WeakMap();
   let lastTime = null;
   let feedbackKey = 'initial';
   let completedHits = 0;
@@ -167,6 +174,12 @@
       b.group = group;
       b.outlines = g;
       b.bounce = 0;
+      b.accents = [];
+      const detail = (d, colour, x, y, attrs = {}) => {
+        const el = svg('path', { d, fill: '#fff', class: 'accent-colour' }, paintLayer);
+        b.accents.push({ el, colour, x, y });
+        inkPath(d, g, { 'stroke-width': 2.2, ...attrs });
+      };
       for (let floor = 0; floor < b.floors; floor++) {
         const y = WORLD.groundY - (floor + 1) * b.floorHeight;
         b.floorEls.push(svg('rect', { x: b.x + 1, y: y + 1, width: b.width - 2, height: b.floorHeight, fill: '#fff', class: 'floor' }, paintLayer));
@@ -196,21 +209,28 @@
       inkPath(doorPath, g);
       svg('circle', { cx: doorX + 34, cy: 630, r: 2.5, fill: INK }, g);
       if (i === 0) {
-        // A scalloped, uncoloured shop awning.
-        inkPath(`M${b.x + 16} 574h196l-9 17q-14 14-27 0q-14 14-28 0q-14 14-28 0q-14 14-28 0q-14 14-28 0q-14 14-28 0q-14 14-27 0Z`, g, { fill: '#fff', 'stroke-width': 2.5 });
+        // A broad shop canopy with four clear scallops, filled with its picture.
+        detail(`M${b.x + 15} 571h198l-9 25q-22 19-45 0q-24 19-47 0q-23 19-47 0q-22 19-43 0Z`,
+          '#efb1a4', b.x + 114, 582);
+        inkPath(`M${b.x + 20} 578h188M${b.x + 66} 579v17m47-17v17m47-17v17`, g, { 'stroke-width': 2 });
       }
       if (i === 1) {
         const cx = b.x + b.width / 2, peak = base - b.roofHeight;
-        inkPath(`M${cx} ${peak}v-28m0 0q-26-18-32-3q8 20 32 3m0 0q14-24 29-15q-1 20-29 15`, g, { fill: '#fff', 'stroke-width': 2.5 });
+        inkPath(`M${cx} ${peak}v-28`, g, { 'stroke-width': 2.5 });
+        detail(`M${cx} ${peak - 28}q-25-21-34-5q9 21 34 5m0 0q14-26 31-16q-1 22-31 16Z`, '#a6cda4', cx, peak - 38);
+        inkPath(`M${b.x + 31} 548h164v18q-82 9-164 0Zm10 0v-13m30 13v-13m31 13v-13m31 13v-13m31 13v-13m30 13v-13`, g, { 'stroke-width': 2 });
       }
       if (i === 2) {
         const cx = b.x + b.width / 2, sy = base - b.roofHeight - 28;
         inkPath(`M${cx} ${sy + 18}v10`, g, { 'stroke-width': 2.5 });
-        inkPath(`M${cx} ${sy - 17}l5 11 13 1-10 9 3 13-11-7-11 7 3-13-10-9 13-1Z`, g, { fill: '#fff', 'stroke-width': 2.5 });
+        detail(`M${cx} ${sy - 17}l5 11 13 1-10 9 3 13-11-7-11 7 3-13-10-9 13-1Z`, '#ffe29b', cx, sy);
+        inkPath(`M${b.x + 27} 569q87-14 174 0M${b.x + 27} 574q87-14 174 0`, g, { 'stroke-width': 2 });
       }
       if (i === 3) {
-        // A little loop of chimney smoke, drawn rather than animated.
-        inkPath(`M${b.x + 163} ${b.top - 20}v-31h23v43m-9-58q-18-16-5-28q17-15 27 1q10 17-9 21`, g, { fill: '#fff', 'stroke-width': 2.5 });
+        b.chimney = { x: b.x + 175, y: b.top - 55 };
+        detail(`M${b.x + 162} ${b.top - 8}v-42h27v43Z`, '#d6a995', b.x + 175, b.top - 30);
+        detail(`M${b.x + 156} ${b.top - 57}h39v10h-39Z`, '#e7bdac', b.x + 175, b.top - 52);
+        inkPath(`M${b.x + 164} ${b.top - 30}h22m-11-17v17m-11 13h22`, g, { 'stroke-width': 1.8 });
       }
     });
     $('progress').max = requiredHits;
@@ -236,9 +256,18 @@
     $('buildings').dataset.difficulty = activeDifficulty;
     requiredHits = buildings.reduce((total, b) => total + b.requiredHits, 0);
     $('progress').max = requiredHits;
+    // Warm this cache after the board is visible. Hidden SVGs report empty
+    // bounds in Chromium, which would hide the paint until its clip is removed.
+    paintBounds = new WeakMap();
     window.PaintAtmosphere.reset({ scene: activeScene, variant: activeTemplate.id, parent: $('worldAtmosphere'), svg, reducedMotion: reducedMotion.matches });
     window.PaintRestoration.reset({ scene: activeScene, variant: activeTemplate.id, parent: $('worldLife'), svg, reducedMotion: reducedMotion.matches });
     $('game').dataset.worldProgress = '0';
+  }
+  function measurePaintBounds() {
+    buildings.forEach(target => {
+      [ ...target.floorEls, target.roof, target.door, ...(target.accents || []).map(a => a.el) ]
+        .filter(Boolean).forEach(region => paintBounds.set(region, region.getBBox()));
+    });
   }
   function currentPalette() {
     if (activeScene === 'city') return palettes[paletteIndex % palettes.length];
@@ -341,18 +370,40 @@
     return buildings.find(b => x >= b.hitX - margin && x <= b.hitX + b.hitWidth + margin);
   }
   function bob() { return reducedMotion.matches ? 0 : Math.sin(flightTime * 1.8) * 4; }
+  function flightSpeed() { return Number($('speed').value) * FLIGHT.speed; }
+  function advanceFlight(dt) {
+    const left = -FLIGHT.turnOverhang, right = WORLD.width + FLIGHT.turnOverhang;
+    const distance = Math.min(right - airshipX, airshipX - left);
+    const t = Math.max(0, Math.min(1, distance / FLIGHT.turnEase));
+    const ease = .35 + .65 * t * t * (3 - 2 * t);
+    airshipX += direction * flightSpeed() * ease * dt;
+    if (direction > 0 && airshipX >= right) {
+      airshipX = right - (airshipX - right); direction = -1;
+    } else if (direction < 0 && airshipX <= left) {
+      airshipX = left + (left - airshipX); direction = 1;
+    }
+  }
   function drawAirship() {
-    $('airship').setAttribute('transform', `translate(${airshipX} ${WORLD.airshipY + bob()}) scale(${direction} 1)`);
-    const target = targetAt(airshipX);
-    const bottom = target ? roofY(target, airshipX) : WORLD.groundY;
-    $('aimGuide').setAttribute('x1', airshipX); $('aimGuide').setAttribute('x2', airshipX);
-    $('aimGuide').setAttribute('y1', WORLD.outletY + bob()); $('aimGuide').setAttribute('y2', bottom);
-    $('aimMark').setAttribute('cx', airshipX); $('aimMark').setAttribute('cy', bottom);
-    $('aimGuide').style.display = $('guide').checked ? '' : 'none';
-    $('aimMark').style.display = $('guide').checked ? '' : 'none';
+    const rise = bob(), showGuide = $('guide').checked;
+    $('airship').setAttribute('transform', `translate(${airshipX} ${WORLD.airshipY + rise}) scale(${direction} 1)`);
+    if (guideVisible !== showGuide) {
+      guideVisible = showGuide;
+      $('aimGuide').style.display = showGuide ? '' : 'none';
+      $('aimMark').style.display = showGuide ? '' : 'none';
+    }
+    if (showGuide) {
+      const target = targetAt(airshipX);
+      const bottom = target ? roofY(target, airshipX) : WORLD.groundY;
+      $('aimGuide').setAttribute('x1', airshipX); $('aimGuide').setAttribute('x2', airshipX);
+      $('aimGuide').setAttribute('y1', WORLD.outletY + rise); $('aimGuide').setAttribute('y2', bottom);
+      $('aimMark').setAttribute('cx', airshipX); $('aimMark').setAttribute('cy', bottom);
+    }
     const bucket = $('paintBucket');
     const pulse = reducedMotion.matches ? 0 : Math.sin((1 - bucketPulse / PAINT.bucketPulse) * Math.PI) * Math.min(1, bucketPulse * 30);
-    bucket.setAttribute('transform', `translate(0 145) scale(${1 + pulse * .22} ${1 - pulse * .16}) translate(0 -145)`);
+    if (bucketPulse > 0 || bucketWasPulsing) {
+      bucket.setAttribute('transform', `translate(0 145) scale(${1 + pulse * .22} ${1 - pulse * .16}) translate(0 -145)`);
+      bucketWasPulsing = bucketPulse > 0;
+    }
   }
   function addEffect(duration, update, cleanup = () => {}) {
     const effect = { age: 0, duration, update, cleanup };
@@ -367,14 +418,18 @@
     // Reserve the final colour immediately; the slow reveal is purely visual.
     el.setAttribute('fill', colour);
     if (reducedMotion.matches) return;
-    const box = el.getBBox();
+    let box = paintBounds.get(el);
+    if (!box || box.width <= 0 || box.height <= 0) {
+      box = el.getBBox(); paintBounds.set(el, box);
+    }
     const originX = Math.max(box.x, Math.min(box.x + box.width, x));
     const originY = Math.max(box.y, Math.min(box.y + box.height, y));
     const reach = Math.max(...[box.x, box.x + box.width].flatMap(px =>
       [box.y, box.y + box.height].map(py => Math.hypot(px - originX, (py - originY) / .72)))) + 36;
     const id = `paint-reveal-${++nextClipId}`;
-    const revealClip = svg('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, $('paintDefs'));
-    const blobs = [-22, 0, 24].map((offset, index) => svg('ellipse', { cx: originX + offset, cy: originY + index * 8, rx: 0, ry: 0 }, revealClip));
+    const revealClip = svg('clipPath', { id, clipPathUnits: 'userSpaceOnUse', transform: `translate(${originX} ${originY}) scale(0)` }, $('paintDefs'));
+    // Basic shapes are direct clipPath children for consistent SVG clipping.
+    [-.08, 0, .09].forEach((offset, index) => svg('ellipse', { cx: offset, cy: index === 1 ? 0 : index * .025, rx: 1, ry: .72 }, revealClip));
     el.setAttribute('clip-path', `url(#${id})`);
 
     // Both clips are needed: sparkle only on the actual, already-coloured shape.
@@ -386,28 +441,38 @@
     const revealed = svg('g', { 'clip-path': `url(#${id})` }, shimmer);
     el.parentNode.insertBefore(shimmer, el.nextSibling);
     const sheen = svg('ellipse', { cx: 0, cy: 0, rx: Math.max(12, box.width * .13), ry: Math.max(25, box.height * 1.2), fill: '#fffdf5', opacity: 0 }, revealed);
-    const points = [[.18,.24],[.68,.23],[.42,.64],[.83,.67],[.25,.79],[.58,.44]];
+    const points = [[.18,.24],[.68,.23],[.42,.64],[.83,.67]];
     const glints = points.map(([px, py], i) => ({
       el: svg('path', { d: 'M0-6Q1-1 6 0Q1 1 0 6Q-1 1-6 0Q-1-1 0-6Z', fill: i % 2 ? '#fffdf4' : '#fff2c5', stroke: '#d9b96e', 'stroke-width': .55, opacity: 0 }, revealed),
       x: box.x + box.width * px, y: box.y + box.height * py,
-      delay: duration * (.12 + i * .125),
-      life: Math.min(.85 + i % 2 * .2, duration * (1 - .12 - i * .125) + PAINT.glitterTail)
+      delay: duration * (.18 + i * .18), life: .85 + i % 2 * .2, visible: false
     }));
+    let spreadDone = false, sheenVisible = false;
     addEffect(duration + PAINT.glitterTail, (_t, age) => {
       const t = Math.min(1, age / duration);
-      blobs.forEach((blob, i) => {
-        const progress = Math.max(0, Math.min(1, (t - i * .05) / (1 - i * .05)));
-        const radius = progress * progress * (3 - 2 * progress) * reach;
-        blob.setAttribute('rx', radius); blob.setAttribute('ry', radius * .72);
-      });
+      if (!spreadDone) {
+        const radius = t * t * (3 - 2 * t) * reach;
+        revealClip.setAttribute('transform', `translate(${originX} ${originY}) scale(${radius})`);
+        spreadDone = t === 1;
+      }
       const sweep = Math.max(0, Math.min(1, (t - .12) / .88));
-      sheen.setAttribute('transform', `translate(${box.x - box.width * .2 + sweep * box.width * 1.4} ${box.y + box.height / 2}) rotate(-18)`);
-      sheen.setAttribute('opacity', Math.sin(Math.PI * sweep) * .14);
+      const showSheen = sweep > 0 && sweep < 1;
+      if (showSheen) {
+        sheen.setAttribute('transform', `translate(${box.x - box.width * .2 + sweep * box.width * 1.4} ${box.y + box.height / 2}) rotate(-18)`);
+        sheen.setAttribute('opacity', Math.sin(Math.PI * sweep) * .14);
+      } else if (sheenVisible) sheen.setAttribute('opacity', 0);
+      sheenVisible = showSheen;
       glints.forEach((glint, i) => {
         const local = Math.max(0, Math.min(1, (age - glint.delay) / glint.life));
+        const visible = local > 0 && local < 1;
+        if (!visible) {
+          if (glint.visible) glint.el.setAttribute('opacity', 0);
+          glint.visible = false; return;
+        }
         const glow = Math.pow(Math.sin(Math.PI * local), 2);
         glint.el.setAttribute('transform', `translate(${glint.x} ${glint.y - local * 3}) rotate(${i % 2 ? 15 : -10}) scale(${.35 + glow * .65})`);
         glint.el.setAttribute('opacity', glow * .8);
+        glint.visible = true;
       });
     }, () => {
       el.removeAttribute('clip-path'); revealClip.remove(); shapeClip.remove(); shimmer.remove();
@@ -518,7 +583,8 @@
         window.PaintRestoration.restore({ target: b, colour, worldPoint });
       }
       splash(drop.x, drop.landingY, colour, b.hits === b.requiredHits);
-      window.PaintAudio.effect('impact'); window.PaintAudio.effect('fill'); announce('hit'); updateUI();
+      window.PaintAudio.effect('impact'); window.PaintAudio.effect('fill'); announce('hit');
+      $('progress').value = completedHits;
       if (completedHits === requiredHits) finishDrawing();
     } else {
       splash(drop.x, drop.landingY, drop.colour);
@@ -543,7 +609,8 @@
     airshipX = Math.max(WORLD.halfShipWidth + 4, buildings[0].hitX + buildings[0].hitWidth / 2); direction = 1;
     paintColourIndex = 0; colourElapsed = 0; activeColourMode = selectedColourMode;
     buildings.forEach(target => { target.lastPaint = null; });
-    updateColourIndicator(); updateSceneDescription(); drawAirship(); setPhase('playing'); announce('initial');
+    updateColourIndicator(); updateSceneDescription(); drawAirship(); setPhase('playing');
+    measurePaintBounds(); announce('initial');
   }
   function requestGameFullscreen() {
     if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
@@ -636,14 +703,7 @@
           nextPaintColour(); colourElapsed = remainder;
         }
       }
-      airshipX += direction * Number($('speed').value) * dt;
-      const rightEdge = WORLD.width + WORLD.halfShipWidth;
-      const leftEdge = -WORLD.halfShipWidth;
-      if (direction > 0 && airshipX > rightEdge) {
-        airshipX = rightEdge - (airshipX - rightEdge); direction = -1;
-      } else if (direction < 0 && airshipX < leftEdge) {
-        airshipX = leftEdge + (leftEdge - airshipX); direction = 1;
-      }
+      advanceFlight(dt);
       drawAirship();
       const active = drops; drops = [];
       active.forEach(drop => {
@@ -677,9 +737,11 @@
     if (!menuOpen && (phase === 'playing' || phase === 'complete')) {
       winWait = Math.max(0, winWait - dt);
       buildings.forEach(b => {
+        if (b.bounce <= 0) return;
         b.bounce = Math.max(0, b.bounce - dt);
         const rise = b.bounce > 0 ? Math.sin((1 - b.bounce / .45) * Math.PI) * 5 : 0;
-        b.group.setAttribute('transform', `translate(0 ${-rise})`);
+        if (b.bounce > 0) b.group.setAttribute('transform', `translate(0 ${-rise})`);
+        else b.group.removeAttribute('transform');
       });
       effects = effects.filter(effect => {
         effect.age += dt; effect.update(Math.min(1, effect.age / effect.duration), effect.age);
@@ -692,7 +754,7 @@
       // Let the zeppelin finish its pass, leaving the restored panorama clear.
       flightTime += dt;
       const exitX = direction > 0 ? WORLD.width + WORLD.halfShipWidth : -WORLD.halfShipWidth;
-      const nextX = airshipX + direction * Number($('speed').value) * dt;
+      const nextX = airshipX + direction * flightSpeed() * dt;
       airshipX = direction > 0 ? Math.min(exitX, nextX) : Math.max(exitX, nextX);
       drawAirship();
       completionAge += dt;

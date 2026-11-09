@@ -48,7 +48,7 @@ A large paint-drop badge on the zeppelin, its coloured gondola, and its enlarged
 
 ## Zeppelin flight
 
-The zeppelin starts flying to the right. It must finish leaving the drawing before reversing, then re-enters from that same edge facing left. The left edge works the same way, producing continuous back-and-forth passes. Speed and altitude remain predictable. Its paint outlet stays under its centre when mirrored, so drops still fall vertically. Already-falling drops keep their original position and target.
+The zeppelin starts flying to the right and reverses while still partly visible at each edge. Its centre turns near x = −60 and 1260 on the 1200-unit board, instead of waiting until the whole airship has left. A short easing zone slows approach and departure at both edges. All three cruising speeds are 30% faster: 58.5, 97.5 and 156 units/second. Its paint outlet stays under its centre when mirrored, so drops still fall vertically. Already-falling drops keep their original position and target. Completion still lets the zeppelin leave fully so the restored panorama remains clear.
 
 ## Menu and fullscreen play
 
@@ -83,6 +83,12 @@ The mostly white drawing board starts with a faint grey atmosphere: clouds and q
 Finishing an object adds a small lasting response after its slow fill has completed: warm details around buildings, birds/leaves or flowers in nature, and little celestial details around planets. These reactions make each restored object feel alive without adding controls or text. They remain through the celebration and clear when the next composition starts.
 
 `atmosphere.js` and `restoration.js` update only from the shared game frame loop. They do not own animation timers, so pause freezes them with the drawing. Reduced motion reveals static details instead of decorative movement. Misses still leave harmless paint dabs.
+
+## Refined artwork and rendering
+
+All 32 motifs across the eight settings have been refined. The Star Squadron outpost is a clear observatory with a glass dome, airlock, windows, solar panel and communications mast on a small cratered asteroid. Other changes clarify spacecraft glass and dish shapes, fantasy silhouettes, trees, windmill sails, bakery bread/awning, barn roof, grain silo, tractor wheels/glass, sunflower petals, planetary details and the city's canopy, balcony, roof ornament and brick chimney. New accent surfaces start white and fill on the object's final required hit.
+
+Painting keeps its 4.2-second spread and clipped glints. Each reveal scales one shared three-lobed shape, while glints and sheen update only during their visible intervals. Static paint bounds are measured together after the game board becomes visible; zero-size cached bounds are rejected. Hidden guides, settled building transforms, unrevealed life details and finished reduced-motion decorations no longer receive redundant per-frame updates. Atmosphere values are cached and expensive curved collision surfaces use exact spatial edge indexes.
 
 ## Completion landscapes
 
@@ -129,7 +135,7 @@ Serve the repository, for example with `python -m http.server 8000`, then open `
 
 ## Prototype checks
 
-The earlier prototype regression checks cover fullscreen and pause/Continue, both offscreen flight reversals, held switch input, slow clipped fills and glitter, colour modes, active-colour indicators, thematic soundtracks and audio lifecycle, saved settings, localization and modal keyboard behavior. Earlier composition checks cover all 25 world/difficulty rounds, all 250 template/difficulty combinations (800 objects) without clipping or overlapping assisted hit regions, and 500 shuffled drawings without repeats at bag boundaries.
+The earlier prototype regression checks cover fullscreen and pause/Continue, both flight reversals, held switch input, slow clipped fills and glitter, colour modes, active-colour indicators, thematic soundtracks and audio lifecycle, saved settings, localization and modal keyboard behavior. Earlier composition checks cover all 25 world/difficulty rounds, all 250 template/difficulty combinations (800 objects) without clipping or overlapping assisted hit regions, and 500 shuffled drawings without repeats at bag boundaries.
 
 Current Recolor checks cover the title/story, map and both settings panels at eleven portrait/landscape sizes from 320×320 to 2560×1440 in French, English and Japanese. Both pill states have no gap, equal halves and immediately readable labels. Completed rounds in all five settings cover all five difficulty settings, gradual colour and life, exact pause freezing, backgrounds, new shuffled layouts in the same setting, retained selection/storage, cleanup and reduced motion. Manual held Enter changes colour once without dropping paint.
 
@@ -142,5 +148,9 @@ The original five-world browser regression also passes after the additions, incl
 The three added worlds complete all fifteen normal world/difficulty rounds and three reduced-motion rounds. End-to-end checks confirm final region/accent fills and clip cleanup, full background reveals, exact pause/Continue freezing, another shuffled layout in the same world, restoration cleanup, manual colour changes without dropping paint and retained selection/restoration flags after reload. No JavaScript errors were reported.
 
 The three added video-game worlds pass geometry checks across all 150 layout/difficulty combinations: 480 placed objects, 39,000 surface samples and 28,800 restoration positions. Each has ten distinct completion backgrounds. Their regions and accents begin white, assisted hit areas do not overlap, restored details wait for the fill, and reduced-motion decorations remain static. All eight menu cards, both colour modes and both modal panels fit at the eleven sizes in all three languages. Actual Chromium media checks confirm Start unlocks all three new recordings, playback advances, Escape pauses, Continue retains the position and changing worlds chooses the expected track with a single audio element.
+
+The refinement checks cover all 400 world/template/difficulty combinations (1,280 objects), exact indexed collision equivalence and all 32 motifs through actual painting. Motion checks measure 58.5 / 97.5 / 156 units/second, both earlier turns with zero fully invisible playing frames, exact corner pause/Continue and unchanged vertical release anchors. Pixel-based intermediate-fill checks cover all 165 main/accent regions across the eight worlds: positive visible geometry caches, growing painted area at 0.5 / 1.5 / 3.5 seconds, visible colour in every region before cleanup, partial-fill pause freezing and full clip/shimmer cleanup. The full original-world and arcade-world regressions, plus extra City/Forest/Village rounds at difficulty 5, pass after the refinements.
+
+Final Chromium profiling with visibly growing paint shows approximately 56% fewer SVG attribute writes, 46–48% less animation callback work and 35–37% less renderer task time in the normal Forest/Dungeon twelve-drop bursts. The 4× CPU stress case still misses frames; the full measurements and limits are documented in the graphics review.
 
 See [ART_AUDIO_REVIEW.md](ART_AUDIO_REVIEW.md) for the per-theme visual review, measured music levels and loop observations, changes made and the three added video-game settings.
