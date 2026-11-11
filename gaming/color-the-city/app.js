@@ -13,7 +13,7 @@
   const FLIGHT = { speed: 1.3, turnOverhang: 60, turnEase: 100 };
   const text = {
     en: {
-      games: 'Switch games', language: 'Language', title: 'Recolor', scenes: 'Worlds', story: 'The colours have disappeared. Bring the worlds back to life.', worldRestored: 'Colours restored', worldMissing: 'Waiting for colour',
+      games: 'Arcade games', language: 'Language', title: 'Recolor', scenes: 'Worlds', story: 'The colours have disappeared. Bring the worlds back to life.', worldRestored: 'Colours restored', worldMissing: 'Waiting for colour',
       pause: 'Pause', resume: 'Continue', settings: 'Settings', close: 'Close', gameSettings: 'Game', audioSettings: 'Audio', autoModeShort: 'Automatic', manualModeShort: 'Manual',
       soundLabel: 'Paint sounds', musicLabel: 'Music', musicVolume: 'Music volume', effectsVolume: 'Sound volume', soundOff: 'Off', soundOn: 'On',
       space: 'SPACE', orSwitch: 'switch · click · touch',
@@ -34,7 +34,7 @@
       paintedLabel: 'Successful paint hits', chooseScene: 'Choose a world', sceneCity: 'City', sceneForest: 'Forest', sceneVillage: 'Village', sceneFarm: 'Farm', scenePlanets: 'Planets', sceneKingdom: 'Pixel Kingdom', sceneSquadron: 'Star Squadron', sceneDungeon: 'Crystal Dungeon', chooseMode: 'Choose your mode', autoMode: 'One switch', autoModeHelp: 'Colours change every 12 seconds. Space or Enter drops paint.', manualMode: 'Choose the colour', manualModeHelp: 'Space drops paint. Enter selects the next colour.', activeColour: 'Active colour', manualHint: 'Space / switch / tap: paint. Enter: next colour. Escape: menu.', difficulty: 'Difficulty', difficultyDetails: ['2 objects · 1 hit each', '3 objects · 1 hit each', '3 objects · 2 hits each', '4 objects · 2 hits each', '4 objects · 3 hits each']
     },
     fr: {
-      games: 'Jeux pour switch', language: 'Langue', title: 'Recolor', scenes: 'Mondes', story: 'Les couleurs ont disparu. Redonne vie aux mondes.', worldRestored: 'Couleurs retrouvées', worldMissing: 'En attente de couleurs',
+      games: 'Jeux arcade', language: 'Langue', title: 'Recolor', scenes: 'Mondes', story: 'Les couleurs ont disparu. Redonne vie aux mondes.', worldRestored: 'Couleurs retrouvées', worldMissing: 'En attente de couleurs',
       pause: 'Pause', resume: 'Continuer', settings: 'Réglages', close: 'Fermer', gameSettings: 'Jeu', audioSettings: 'Audio', autoModeShort: 'Auto', manualModeShort: 'Manuel',
       soundLabel: 'Sons de peinture', musicLabel: 'Musique', musicVolume: 'Volume de la musique', effectsVolume: 'Volume des sons', soundOff: 'Désactivés', soundOn: 'Activés',
       space: 'ESPACE', orSwitch: 'switch · clic · toucher',
@@ -55,7 +55,7 @@
       paintedLabel: 'Touches de peinture réussies', chooseScene: 'Choisis un monde', sceneCity: 'Ville', sceneForest: 'Forêt', sceneVillage: 'Village', sceneFarm: 'Ferme', scenePlanets: 'Planètes', sceneKingdom: 'Royaume pixel', sceneSquadron: 'Escadron stellaire', sceneDungeon: 'Donjon de cristal', chooseMode: 'Choisis ton mode', autoMode: 'Une switch', autoModeHelp: 'Les couleurs changent toutes les 12 secondes. Espace ou Entrée pour peindre.', manualMode: 'Choisir la couleur', manualModeHelp: 'Espace pour peindre. Entrée pour changer de couleur.', activeColour: 'Couleur active', manualHint: 'Espace / switch / toucher : peindre. Entrée : couleur suivante. Échap : menu.', difficulty: 'Difficulté', difficultyDetails: ['2 objets · 1 touche chacun', '3 objets · 1 touche chacun', '3 objets · 2 touches chacun', '4 objets · 2 touches chacun', '4 objets · 3 touches chacun']
     },
     ja: {
-      games: 'スイッチゲーム', language: '言語', title: 'リカラー', scenes: '世界', story: '色が消えてしまった世界に、彩りを取り戻そう。', worldRestored: '色を取り戻した世界', worldMissing: '色を待つ世界',
+      games: 'アーケードゲーム', language: '言語', title: 'リカラー', scenes: '世界', story: '色が消えてしまった世界に、彩りを取り戻そう。', worldRestored: '色を取り戻した世界', worldMissing: '色を待つ世界',
       pause: '一時停止', resume: '続ける', settings: '設定', close: '閉じる', gameSettings: 'ゲーム', audioSettings: '音声', autoModeShort: '自動', manualModeShort: '手動',
       soundLabel: '絵の具の音', musicLabel: '音楽', musicVolume: '音楽の音量', effectsVolume: '効果音の音量', soundOff: 'オフ', soundOn: 'オン',
       space: 'スペース', orSwitch: 'スイッチ・クリック・タッチ',
@@ -346,6 +346,11 @@
     document.documentElement.lang = lang;
     document.title = text[lang].title + ' · Adaptatech';
     $('language').value = lang;
+    const next = { en: 'ja', ja: 'fr', fr: 'en' }[lang];
+    const label = { en: 'EN', ja: '日本語', fr: 'FR' }[next];
+    $('language-toggle').textContent = label;
+    $('language-toggle').classList.toggle('lang-ja-label', next === 'ja');
+    $('language-toggle').setAttribute('aria-label', `${text[lang].language}: ${label}`);
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = text[lang][el.dataset.i18n]; });
     updateSceneDescription();
     updateColourIndicator();
@@ -851,6 +856,11 @@
   configureAudio();
   $('guide').addEventListener('change', drawAirship);
   $('assist').addEventListener('change', drawAirship);
+  $('language-toggle').addEventListener('click', () => {
+    lang = { en: 'ja', ja: 'fr', fr: 'en' }[lang];
+    try { localStorage.setItem('siteLanguage', lang); } catch (_) { /* Storage is optional. */ }
+    translate();
+  });
   $('language').addEventListener('change', event => {
     lang = event.target.value;
     try { localStorage.setItem('siteLanguage', lang); } catch (_) { /* Storage is optional. */ }

@@ -56,6 +56,8 @@ The menu loads `css/video-stop-action.css`, shared with the site's Arcade games,
 
 Eight illustrated world cards sit on a pale paper-sky travel map. Muted previews show the missing colours; selection and previously restored worlds bring colour back to the cards. The current choice has a visible native radio dot, a persistent thick teal frame, and a teal caption with white text. Hover has a lighter treatment and never changes the choice. Restoration progress adds no checkmark badge and cannot override the selected frame; its accessible description and preview colour remain available. Thumbnails reuse independent copies of the scene artwork, so menu previews never change the gameplay drawing. The menu has no long explanations, colour counters or visible keyboard reminders. All eight cards remain directly available: four columns on desktop, three in taller portrait layouts, and two in compact portrait layouts, with no pagination or scrolling.
 
+The top-right language button uses the shared Arcade styling and cycles English → Japanese → French, matching the other games. It remembers `siteLanguage`, stays synchronized with the language setting and is hidden during play. The back link returns to the Arcade catalogue. The existing game URL is retained for saved links.
+
 Settings open in a native modal dialog. The Game tab holds language, speed, aiming and assistance; the Audio tab holds music/effects toggles and volumes. Only one short panel appears at a time, with no scrolling. Tab stays inside the modal, Escape/X/backdrop closes it, and focus returns to Settings. Space/Enter inside the modal never starts the game. Language changes keep focus inside the modal.
 
 Start requests native fullscreen directly from the click, touch, or switch gesture. Where fullscreen is unsupported or denied, the game fills the browser viewport.
@@ -131,7 +133,7 @@ Effects start at 40% with additional per-sample attenuation. Closely spaced inpu
 
 ## Try it
 
-Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. The existing URL is retained, and the Switch Games (`gaming/`) catalogue lists Recolor. All assets are local, including `scenes.js`, `arcade-scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `atmosphere.js`, `restoration.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads or build steps are required.
+Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. The existing URL is retained, and the Arcade (`arcade/`) catalogue lists Recolor. All assets are local, including `scenes.js`, `arcade-scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `atmosphere.js`, `restoration.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads or build steps are required.
 
 ## Prototype checks
 
@@ -154,3 +156,5 @@ The refinement checks cover all 400 world/template/difficulty combinations (1,28
 Final Chromium profiling with visibly growing paint shows approximately 56% fewer SVG attribute writes, 46–48% less animation callback work and 35–37% less renderer task time in the normal Forest/Dungeon twelve-drop bursts. The 4× CPU stress case still misses frames; the full measurements and limits are documented in the graphics review.
 
 See [ART_AUDIO_REVIEW.md](ART_AUDIO_REVIEW.md) for the per-theme visual review, measured music levels and loop observations, changes made and the three added video-game settings.
+
+Language/navigation checks cover the shared Arcade language button in all three languages at eleven viewport sizes: no overlap or scrolling, keyboard activation without starting play, synchronization with settings, reload persistence, hiding during play, the Arcade tile/back link and removal from the Switch Games catalogue. No JavaScript errors were reported.
