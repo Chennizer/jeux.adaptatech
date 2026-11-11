@@ -1,6 +1,6 @@
 # Recolor / リカラー
 
-A standalone switch painting game: the colours have disappeared and the worlds have become sad. A giant rainbow zeppelin carries paint across each pale landscape. Every fresh press releases a slow drop that restores colour, warmth and joy. Complete a picture, enjoy its colourful transformation, then restore another layout in the same chosen world.
+A standalone switch and eye-gaze painting game: the colours have disappeared and the worlds have become sad. A giant rainbow zeppelin carries paint across each pale landscape. Every fresh switch press or completed gaze selection releases a slow drop that restores colour, warmth and joy. Complete a picture, enjoy its colourful transformation, then restore another layout in the same chosen world.
 
 ## Choose a setting
 
@@ -37,6 +37,18 @@ The menu slider has five steps, from left to right:
 
 At levels 1 and 2, one paint hit fills the whole object, including its roof and final details, with the slow spreading animation. At levels 3 and 4, the first hit colours two of its three main regions and the second finishes it. At level 5, each hit colours one main region. The selected difficulty stays active as new compositions appear.
 
+## Switch and eye-gaze input
+
+The menu's Switch / Eyegaze selector remembers `recolorInputMode`. Switch input retains the moving zeppelin, keyboard/click/touch painting and Automatic/Manual colour choices.
+
+In **Eyegaze**, the zeppelin rests at the centre (x = 600). Look at a paintable object for **1.5 seconds**. A transparent red overlay, using the Arcade dwell colour `rgba(255, 0, 0, 0.52)`, rises from the bottom inside the object's silhouette. Looking away or changing objects resets a partial selection. The full overlay stays visible while the zeppelin travels to the selected object; it clears as the paint is released. The zeppelin then flies back to the centre. Only one delivery runs at a time; clicks and switch keys cannot add duplicate drops or queue another flight.
+
+A continued fixation on an unfinished object starts another dwell after the zeppelin returns and its previous drop has landed. The selected difficulty still determines whether an object needs one, two or three paint hits. Completed objects cannot be selected again. Colours change automatically every twelve seconds in eye-gaze mode; the separate colour-mode selector reappears with its remembered choice in Switch mode.
+
+Eye tracking uses the same pointer movement supplied by the site's other eye-gaze activities, so a mouse can also exercise the interaction. The target uses a large object-sized hit area, while the red fill is clipped to the actual drawing. Fixation does not require artificial pointer movement or repeated clicks. Pointer exit/cancellation, resize and pause clear a partial dwell. A committed flight and already released paint freeze on pause and resume on Continue. Changing input mode in the menu preserves the unfinished picture, clears gaze overlays and ends the previous mode’s flight plan. Already released drops keep their original target.
+
+All worlds, difficulty levels, slow paint/glitter and restored backgrounds remain available. After the last paint drop, eye-gaze mode returns the zeppelin to its central resting position through the celebration, then starts another composition in the same chosen world. No new gameplay text or buttons are added.
+
 ## Colour modes
 
 - **One switch / automatic:** holds the active colour for 12 seconds, then selects the next palette colour. Space or Enter drops paint. Crossing from one object to another does not change the colour.
@@ -48,7 +60,7 @@ A large paint-drop badge on the zeppelin, its coloured gondola, and its enlarged
 
 ## Zeppelin flight
 
-The zeppelin starts flying to the right and reverses while still partly visible at each edge. Its centre turns near x = −60 and 1260 on the 1200-unit board, instead of waiting until the whole airship has left. A short easing zone slows approach and departure at both edges. All three cruising speeds are 30% faster: 58.5, 97.5 and 156 units/second. Its paint outlet stays under its centre when mirrored, so drops still fall vertically. Already-falling drops keep their original position and target. Completion still lets the zeppelin leave fully so the restored panorama remains clear.
+In Switch mode, the zeppelin starts flying to the right and reverses while still partly visible at each edge. Its centre turns near x = −60 and 1260 on the 1200-unit board, instead of waiting until the whole airship has left. A short easing zone slows approach and departure at both edges. All three cruising speeds are 30% faster: 58.5, 97.5 and 156 units/second. Its paint outlet stays under its centre when mirrored, so drops still fall vertically. Already-falling drops keep their original position and target. Completion still lets the zeppelin leave fully so the restored panorama remains clear.
 
 ## Menu and fullscreen play
 
@@ -105,7 +117,7 @@ The pale world gains subtle warmth during painting. Once every object is coloure
 - **Star Squadron:** a vivid starfield, navigation lanes and distant friendly spacecraft.
 - **Crystal Dungeon:** a glowing layered cavern, crystals, torches and a magical portal.
 
-Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next composition in the selected setting. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. The zeppelin finishes exiting during the celebration, leaving the restored panorama clear. The landscape stays behind the outlined objects, with no text or controls appearing during the celebration.
+Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next composition in the selected setting. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. In Switch mode the zeppelin finishes exiting during the celebration, leaving the restored panorama clear. In Eyegaze it returns to its central resting position. The landscape stays behind the outlined objects, with no text or controls appearing during the celebration.
 
 ## Music and sounds
 
@@ -133,7 +145,7 @@ Effects start at 40% with additional per-sample attenuation. Closely spaced inpu
 
 ## Try it
 
-Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. The existing URL is retained, and the Arcade (`arcade/`) catalogue lists Recolor. All assets are local, including `scenes.js`, `arcade-scenes.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `atmosphere.js`, `restoration.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads or build steps are required.
+Serve the repository, for example with `python -m http.server 8000`, then open `/gaming/color-the-city/`. The existing URL is retained, and the Arcade (`arcade/`) catalogue lists Recolor. All assets are local, including `scenes.js`, `arcade-scenes.js`, `eyegaze.js`, `menu-previews.js`, `templates.js`, `backgrounds.js`, `atmosphere.js`, `restoration.js`, `audio.js`, the existing `songs/` and `sounds/` files, and the city cover at `images/color-the-city.svg`. The Arcade heading self-hosts Press Start 2P from the official Google Fonts collection; its SIL Open Font License is included at `fonts/pressstart2p-OFL.txt`. No external libraries, font requests, media downloads or build steps are required.
 
 ## Prototype checks
 
@@ -158,3 +170,5 @@ Final Chromium profiling with visibly growing paint shows approximately 56% fewe
 See [ART_AUDIO_REVIEW.md](ART_AUDIO_REVIEW.md) for the per-theme visual review, measured music levels and loop observations, changes made and the three added video-game settings.
 
 Language/navigation checks cover the shared Arcade language button in all three languages at eleven viewport sizes: no overlap or scrolling, keyboard activation without starting play, synchronization with settings, reload persistence, hiding during play, the Arcade tile/back link and removal from the Switch Games catalogue. No JavaScript errors were reported.
+
+Eye-gaze browser checks cover complete rounds in all eight worlds, stationary central waiting, the 1.5-second clipped red dwell, leaving/changing targets, a single delivery at a time, ignored extra clicks/keys, return to centre, repeated fixation for two/three-hit objects, completed-object exclusion, pause/resume during a flight and cancellation of partial dwells, same-world shuffled repeats, mode changes during an unfinished picture, remembered input choice and reduced motion. Both input modes fit eleven viewport sizes in French/English/Japanese without scrolling. Additional switch checks cover native input-radio keyboard navigation, saved manual colours and held-key behavior. Eye tracker hardware validation remains to be done on the target device.

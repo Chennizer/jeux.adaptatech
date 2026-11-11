@@ -17,7 +17,7 @@
       pause: 'Pause', resume: 'Continue', settings: 'Settings', close: 'Close', gameSettings: 'Game', audioSettings: 'Audio', autoModeShort: 'Automatic', manualModeShort: 'Manual',
       soundLabel: 'Paint sounds', musicLabel: 'Music', musicVolume: 'Music volume', effectsVolume: 'Sound volume', soundOff: 'Off', soundOn: 'On',
       space: 'SPACE', orSwitch: 'switch · click · touch',
-      settingsHint: 'Your drawing can wait.', speed: 'Speed',
+      inputMode: 'Input type', switchInput: 'Switch', gazeInput: 'Eyegaze', gazeHint: 'Look at an object until the red overlay fills. The zeppelin will paint it and return.', gazeInitial: 'Look at an object to bring its colours back.', settingsHint: 'Your drawing can wait.', speed: 'Speed',
       slow: 'Gentle', normal: 'Easygoing', fast: 'Brisk',
       guide: 'Aiming guide', guideHint: 'A little line shows where the paint will fall.',
       assist: 'A helping hand', assistHint: 'Drops near the drawing gently find their way to it.',
@@ -38,7 +38,7 @@
       pause: 'Pause', resume: 'Continuer', settings: 'Réglages', close: 'Fermer', gameSettings: 'Jeu', audioSettings: 'Audio', autoModeShort: 'Auto', manualModeShort: 'Manuel',
       soundLabel: 'Sons de peinture', musicLabel: 'Musique', musicVolume: 'Volume de la musique', effectsVolume: 'Volume des sons', soundOff: 'Désactivés', soundOn: 'Activés',
       space: 'ESPACE', orSwitch: 'switch · clic · toucher',
-      settingsHint: 'Le dessin t’attend.', speed: 'Vitesse',
+      inputMode: 'Contrôle', switchInput: 'Switch', gazeInput: 'Regard', gazeHint: 'Regarde un objet jusqu’à ce que le rouge le remplisse. Le zeppelin ira le peindre et reviendra.', gazeInitial: 'Regarde un objet pour lui redonner ses couleurs.', settingsHint: 'Le dessin t’attend.', speed: 'Vitesse',
       slow: 'Douce', normal: 'Tranquille', fast: 'Rapide',
       guide: 'Guide de visée', guideHint: 'Une petite ligne montre où la peinture tombera.',
       assist: 'Coup de pouce', assistHint: 'Les gouttes proches du dessin le rejoignent.',
@@ -59,7 +59,7 @@
       pause: '一時停止', resume: '続ける', settings: '設定', close: '閉じる', gameSettings: 'ゲーム', audioSettings: '音声', autoModeShort: '自動', manualModeShort: '手動',
       soundLabel: '絵の具の音', musicLabel: '音楽', musicVolume: '音楽の音量', effectsVolume: '効果音の音量', soundOff: 'オフ', soundOn: 'オン',
       space: 'スペース', orSwitch: 'スイッチ・クリック・タッチ',
-      settingsHint: '絵は待っているよ。', speed: '速さ',
+      inputMode: '入力方法', switchInput: 'スイッチ', gazeInput: '視線', gazeHint: '赤い色がいっぱいになるまで物を見つめると、飛行船が色を落として戻ります。', gazeInitial: '物を見つめて色を取り戻そう。', settingsHint: '絵は待っているよ。', speed: '速さ',
       slow: 'ゆっくり', normal: 'ふつう', fast: 'はやい',
       guide: 'ねらいのガイド', guideHint: '絵の具が落ちる場所を線で示します。',
       assist: 'おたすけ', assistHint: '近くに落ちた絵の具が絵に届きます。',
@@ -105,6 +105,9 @@
   let selectedColourMode = 'auto';
   try { const mode = localStorage.getItem('colourCityMode'); if (mode === 'manual') selectedColourMode = mode; } catch (_) {}
   let activeColourMode = selectedColourMode;
+  let selectedInputMode = 'switch';
+  try { if (localStorage.getItem('recolorInputMode') === 'eyegaze') selectedInputMode = 'eyegaze'; } catch (_) {}
+  let activeInputMode = selectedInputMode;
   let paintColourIndex = 0;
   let colourElapsed = 0;
   let buildings = cityBuildings;
@@ -281,7 +284,7 @@
     $('airship').dataset.colour = colour;
     const label = `${text[lang].activeColour}: ${paintColourIndex + 1} / ${currentPalette().length}`;
     $('paint-colour-title').textContent = label;
-    $('playSurface').setAttribute('aria-label', `${text[lang].drop}. ${label}`);
+    $('playSurface').setAttribute('aria-label', `${text[lang][activeInputMode === 'eyegaze' ? 'gazeHint' : 'drop']}. ${label}`);
     updateMenuColour();
   }
   function updateMenuColour() {
@@ -306,22 +309,24 @@
   }
   function updateSceneDescription() {
     $('scene-title').textContent = `${text[lang][sceneLabels[activeScene]]} · ${text[lang].sceneTitle}`;
-    $('scene-description').textContent = text[lang].sceneDescription;
+    $('scene-description').textContent = text[lang][activeInputMode === 'eyegaze' ? 'gazeHint' : 'sceneDescription'];
   }
   function announce(key) {
     feedbackKey = key;
-    $('feedback').textContent = text[lang][key].replace('{total}', requiredHits);
+    $('feedback').textContent = text[lang][activeInputMode === 'eyegaze' && key === 'initial' ? 'gazeInitial' : key].replace('{total}', requiredHits);
   }
   function setPhase(next) { phase = next; $('playSurface').dataset.state = phase; updateUI(); }
   function updateUI() {
     const t = text[lang];
+    document.querySelector('.colour-mode-choices').hidden = selectedInputMode === 'eyegaze';
+    $('game').dataset.inputMode = activeInputMode;
     $('actionLabel').textContent = t[selectedScene !== activeScene || selectedDifficulty !== activeDifficulty ? 'start' : phase === 'paused' ? 'resume' : phase === 'complete' ? 'replay' : 'start'];
     $('menu').hidden = !menuOpen;
     $('game').hidden = menuOpen;
     $('menu').inert = !menuOpen;
     document.body.classList.toggle('playing', !menuOpen);
     $('progress').value = completedHits;
-    document.querySelector('.menu-hint').textContent = text[lang][selectedColourMode === 'manual' ? 'manualHint' : 'menuHint'];
+    document.querySelector('.menu-hint').textContent = selectedInputMode === 'eyegaze' ? t.gazeHint : text[lang][selectedColourMode === 'manual' ? 'manualHint' : 'menuHint'];
     updateMenuColour();
     $('difficulty').value = selectedDifficulty;
     const detail = text[lang].difficultyDetails[selectedDifficulty - 1];
@@ -547,6 +552,7 @@
     window.PaintAtmosphere.setCelebration(value);
   }
   function finishDrawing() {
+    window.PaintGaze.finish();
     restoredWorlds.add(activeScene);
     try { localStorage.setItem('recolorRestoredWorlds', JSON.stringify([...restoredWorlds])); } catch (_) {}
     setPhase('complete'); announce('win');
@@ -605,17 +611,20 @@
     startScene();
   }
   function startScene() {
+    window.PaintGaze.clear();
     window.PaintAudio.reset(activeScene);
     completedHits = 0; winWait = 0; completionAge = 0; completionChimed = false; flightTime = 0; bucketPulse = 0;
     drops.forEach(d => d.el.remove()); drops = []; clearEffects(); pageSplashes = [];
     setBackgroundOpacity(0); $('completionArt').replaceChildren();
     activeTemplate = window.PaintTemplates.next(activeScene);
     buildScene();
-    airshipX = Math.max(WORLD.halfShipWidth + 4, buildings[0].hitX + buildings[0].hitWidth / 2); direction = 1;
-    paintColourIndex = 0; colourElapsed = 0; activeColourMode = selectedColourMode;
+    airshipX = activeInputMode === 'eyegaze' ? 600 : Math.max(WORLD.halfShipWidth + 4, buildings[0].hitX + buildings[0].hitWidth / 2); direction = 1;
+    paintColourIndex = 0; colourElapsed = 0; activeColourMode = activeInputMode === 'eyegaze' ? 'auto' : selectedColourMode;
     buildings.forEach(target => { target.lastPaint = null; });
     updateColourIndicator(); updateSceneDescription(); drawAirship(); setPhase('playing');
-    measurePaintBounds(); announce('initial');
+    measurePaintBounds();
+    if (activeInputMode === 'eyegaze') window.PaintGaze.reset({ targets: buildings, svg, worldPoint });
+    announce('initial');
   }
   function requestGameFullscreen() {
     if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
@@ -648,6 +657,8 @@
     requestGameFullscreen();
     if ($('options').open) $('options').close();
     menuOpen = false;
+    const inputChanged = activeInputMode !== selectedInputMode;
+    activeInputMode = selectedInputMode;
     if (replaySameSetting) {
       nextDrawing();
     } else if (selectedScene !== activeScene || selectedDifficulty !== activeDifficulty || phase === 'ready' || phase === 'complete') {
@@ -656,13 +667,22 @@
       activeDifficulty = selectedDifficulty;
       startScene();
     } else {
-      if (activeColourMode !== selectedColourMode) { activeColourMode = selectedColourMode; colourElapsed = 0; }
-      setPhase('playing'); announce('initial');
+      const nextColourMode = activeInputMode === 'eyegaze' ? 'auto' : selectedColourMode;
+      if (activeColourMode !== nextColourMode) { activeColourMode = nextColourMode; colourElapsed = 0; }
+      if (inputChanged) {
+        window.PaintGaze.clear();
+        if (activeInputMode === 'eyegaze') { airshipX = 600; direction = 1; }
+        updateColourIndicator(); updateSceneDescription(); drawAirship();
+      }
+      setPhase('playing');
+      if (inputChanged && activeInputMode === 'eyegaze') window.PaintGaze.reset({ targets: buildings, svg, worldPoint });
+      announce('initial');
     }
     updateUI(); lastTime = null; $('playSurface').focus({ preventScroll: true });
   }
   function returnToMenu() {
     if (menuOpen) return;
+    window.PaintGaze.suspend();
     window.PaintAudio.pause();
     if (phase === 'playing') setPhase('paused');
     menuOpen = true; fullscreenAttempt++; fullscreenPending = false;
@@ -679,8 +699,10 @@
       if (winWait > 0) return;
       nextDrawing(); return;
     }
-    if (phase !== 'playing') return;
-    const target = targetAt(airshipX);
+    if (phase !== 'playing' || activeInputMode === 'eyegaze') return;
+    releasePaint(targetAt(airshipX));
+  }
+  function releasePaint(target) {
     const landingY = target ? roofY(target, airshipX) : WORLD.groundY + 15;
     const colour = activePaintColour();
     const g = svg('g', { class: 'paint-drop' }, $('drops'));
@@ -708,7 +730,11 @@
           nextPaintColour(); colourElapsed = remainder;
         }
       }
-      advanceFlight(dt);
+      if (activeInputMode === 'eyegaze') {
+        const pose = window.PaintGaze.frame(dt, { speed: flightSpeed(), pending: drops.length > 0 });
+        airshipX = pose.x; direction = pose.direction;
+        if (pose.dropTarget) releasePaint(pose.dropTarget);
+      } else advanceFlight(dt);
       drawAirship();
       const active = drops; drops = [];
       active.forEach(drop => {
@@ -758,9 +784,14 @@
     if (!menuOpen && phase === 'complete') {
       // Let the zeppelin finish its pass, leaving the restored panorama clear.
       flightTime += dt;
-      const exitX = direction > 0 ? WORLD.width + WORLD.halfShipWidth : -WORLD.halfShipWidth;
-      const nextX = airshipX + direction * flightSpeed() * dt;
-      airshipX = direction > 0 ? Math.min(exitX, nextX) : Math.max(exitX, nextX);
+      if (activeInputMode === 'eyegaze') {
+        const pose = window.PaintGaze.frame(dt, { speed: flightSpeed(), pending: false });
+        airshipX = pose.x; direction = pose.direction;
+      } else {
+        const exitX = direction > 0 ? WORLD.width + WORLD.halfShipWidth : -WORLD.halfShipWidth;
+        const nextX = airshipX + direction * flightSpeed() * dt;
+        airshipX = direction > 0 ? Math.min(exitX, nextX) : Math.max(exitX, nextX);
+      }
       drawAirship();
       completionAge += dt;
       const { delay, fade, hold, out } = completionTiming();
@@ -786,6 +817,7 @@
     event.preventDefault();
     if (event.repeat || heldKeys.has(event.code)) return;
     heldKeys.add(event.code);
+    if (!menuOpen && activeInputMode === 'eyegaze') return;
     if (!menuOpen && activeColourMode === 'manual' && ['Enter', 'NumpadEnter'].includes(event.code)) {
       if (phase === 'playing') nextPaintColour();
       return;
@@ -795,9 +827,17 @@
   document.addEventListener('keyup', event => heldKeys.delete(event.code));
   $('playSurface').addEventListener('pointerdown', event => {
     if (!event.isPrimary || event.button !== 0) return;
-    event.preventDefault(); activate(); $('playSurface').focus({ preventScroll: true });
+    event.preventDefault();
+    if (activeInputMode === 'eyegaze') window.PaintGaze.move(event, $('scene'));
+    else activate();
+    $('playSurface').focus({ preventScroll: true });
   });
   $('playSurface').addEventListener('click', event => { if (event.detail === 0) activate(); });
+  $('playSurface').addEventListener('pointermove', event => {
+    if (!menuOpen && phase === 'playing' && activeInputMode === 'eyegaze') window.PaintGaze.move(event, $('scene'));
+  });
+  ['pointerleave', 'pointercancel'].forEach(name => $('playSurface').addEventListener(name, () => window.PaintGaze.suspend()));
+  window.addEventListener('resize', () => window.PaintGaze.suspend());
   $('mainAction').addEventListener('click', activate);
   $('settingsButton').addEventListener('click', () => {
     if (!menuOpen || $('options').open) return;
@@ -883,6 +923,15 @@
       if (!input.checked) return;
       selectedScene = input.value;
       try { localStorage.setItem('colourCityScene', selectedScene); } catch (_) { /* Scene storage is optional. */ }
+      updateUI();
+    });
+  });
+  document.querySelectorAll('input[name="inputMode"]').forEach(input => {
+    input.checked = input.value === selectedInputMode;
+    input.addEventListener('change', () => {
+      if (!input.checked) return;
+      selectedInputMode = input.value;
+      try { localStorage.setItem('recolorInputMode', selectedInputMode); } catch (_) {}
       updateUI();
     });
   });

@@ -4,8 +4,10 @@ This review covers the five original settings and the three added video-game wor
 
 ## Changes made
 
+- **Eye-gaze painting added.** A 1.5-second translucent red fill is clipped to the chosen object. The zeppelin waits centrally, visits one selected object, drops paint and returns; all eight worlds retain their artwork, gradual colour/glitter and themed music. Switch play remains available.
+
 - **All 32 motifs refined.** The ambiguous Star Squadron object is now an observatory/airlock on a cratered asteroid, with windows, a solar panel and communication mast. Every other setting also receives clearer forms or paintable details while retaining the large white drawing-board style.
-- **Earlier, faster turns.** Cruising speeds are 30% higher. The zeppelin turns while partly visible at both edges, with eased approach/departure. Completion still clears it from the restored panorama.
+- **Earlier, faster turns.** Cruising speeds are 30% higher. The zeppelin turns while partly visible at both edges, with eased approach/departure. Switch completion still clears it from the restored panorama; eye-gaze completion returns it to the centre.
 - **Less work during painting.** Shared reveal transforms, visible-only glints, cached geometry after the board becomes visible, exact indexed silhouette queries and fewer redundant DOM writes reduce animation work. Intermediate fills are checked in addition to finished artwork.
 
 - **Three video-game worlds added.** Pixel Kingdom, Star Squadron and Crystal Dungeon each include four motifs, ten shuffled layouts, a distinct restored landscape and a soundtrack from the existing library. All eight choices retain the clear selected radio/frame/caption and fit without menu scrolling.
@@ -74,7 +76,7 @@ Star Squadron's 0.72 music gain reduces playback by about 2.85 dB, bringing its 
 
 ## Rendering measurements
 
-A frozen pre-refinement snapshot and the final version were profiled in Chromium at 1440×900, with audio off and reduced motion disabled. Each run includes five seconds of flight, then twelve simultaneous paint drops across all four objects at difficulty 5 and ten seconds of fill/completion effects. Cached paint bounds are checked after the board becomes visible. Separate pixel tests verify that the actual paint appears and grows during the fill, so reduced work is not measured from empty clips.
+A frozen pre-refinement snapshot and the final version were profiled in Chromium at 1440×900, with audio off and reduced motion disabled. Each Switch-mode run includes five seconds of flight, then twelve simultaneous paint drops across all four objects at difficulty 5 and ten seconds of fill/completion effects. Cached paint bounds are checked after the board becomes visible. Separate pixel tests verify that the actual paint appears and grows during the fill, so reduced work is not measured from empty clips.
 
 | Normal burst metric | Forest before → after | Crystal Dungeon before → after |
 | --- | ---: | ---: |
