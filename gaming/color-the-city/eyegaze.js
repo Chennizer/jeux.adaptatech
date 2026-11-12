@@ -35,8 +35,8 @@
         });
       const root = svg('g', { class: 'gaze-dwell', 'clip-path': `url(#${id})`,
         'pointer-events': 'none', 'aria-hidden': 'true', 'data-dwell': 0 }, target.group);
-      const fill = svg('rect', { x: box.x, y: box.y, width: box.width,
-        height: box.height, transform: 'scale(0)', fill: 'rgba(255, 0, 0, 0.52)' }, root);
+      const fill = svg('circle', { cx: box.x + box.width / 2, cy: box.y + box.height / 2,
+        r: Math.hypot(box.width, box.height) / 2, transform: 'scale(0)', fill: 'rgba(255, 0, 0, 0.52)' }, root);
       const a = worldPoint(target, box.x, box.y), b = worldPoint(target, box.x + box.width, box.y + box.height);
       return { target, root, defs, fill, box, left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
         top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) };

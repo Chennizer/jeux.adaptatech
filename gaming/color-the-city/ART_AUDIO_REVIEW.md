@@ -4,9 +4,11 @@ This review covers the five original settings and the three added video-game wor
 
 ## Changes made
 
-- **Centred dwell and optional hover palette.** Object selection now expands from its centre using one eased transform, and delivery flights use smoother acceleration/deceleration. Eye-gaze settings can enable seven round colour swatches, matching the drawing pages’ 650 ms hover selection and active ring. The drawing reserves a side column, and the selected colour is held until changed.
+- **Circular dwell and shared gaze pointer.** The selection fill is now a true expanding circle, clipped to the object. A red pointer follows eye-gaze input over the scene and palette without intercepting it, and hides outside play. The palette control is visible on the main eye-gaze menu instead of hidden in Settings; saved choices are retained.
 
-- **Eye-gaze painting added.** A 1.5-second translucent red fill expands smoothly from the centre and is clipped to the chosen object. The zeppelin waits centrally, visits one selected object, drops paint and returns; all eight worlds retain their artwork, gradual colour/glitter and themed music. Switch play remains available.
+- **Centred dwell and optional hover palette.** Object selection now expands from its centre using one eased transform, and delivery flights use smoother acceleration/deceleration. A visible eye-gaze menu checkbox controls seven round colour swatches, enabled by default when no preference is saved, matching the drawing pages’ 650 ms hover selection and active ring. The drawing reserves a side column, and the selected colour is held until changed.
+
+- **Eye-gaze painting added.** A 1.5-second translucent red fill expands as a smooth circle from the centre and is clipped to the chosen object. The zeppelin waits centrally, visits one selected object, drops paint and returns; all eight worlds retain their artwork, gradual colour/glitter and themed music. Switch play remains available.
 
 - **All 32 motifs refined.** The ambiguous Star Squadron object is now an observatory/airlock on a cratered asteroid, with windows, a solar panel and communication mast. Every other setting also receives clearer forms or paintable details while retaining the large white drawing-board style.
 - **Earlier, faster turns.** Cruising speeds are 30% higher. The zeppelin turns while partly visible at both edges, with eased approach/departure. Switch completion still clears it from the restored panorama; eye-gaze completion returns it to the centre.

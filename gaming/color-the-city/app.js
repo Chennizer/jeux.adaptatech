@@ -109,9 +109,10 @@
   let selectedInputMode = 'switch';
   try { if (localStorage.getItem('recolorInputMode') === 'eyegaze') selectedInputMode = 'eyegaze'; } catch (_) {}
   let activeInputMode = selectedInputMode;
-  let selectedPaletteEnabled = false, savedPaletteIndex = 1;
+  let selectedPaletteEnabled = true, savedPaletteIndex = 1;
   try {
-    selectedPaletteEnabled = localStorage.getItem('recolorPaletteEnabled') === 'true';
+    const palettePreference = localStorage.getItem('recolorPaletteEnabled');
+    if (palettePreference !== null) selectedPaletteEnabled = palettePreference === 'true';
     const stored = Number(localStorage.getItem('recolorPaletteColour'));
     if (localStorage.getItem('recolorPaletteColour') !== null && Number.isInteger(stored) && stored >= 0 && stored < GAZE_COLOURS.length) savedPaletteIndex = stored;
   } catch (_) {}
@@ -144,6 +145,17 @@
   let pageSplashes = [];
   let paletteIndex = 0;
   const heldKeys = new Set();
+  let gazePoint = null;
+  function updateGazePointer() {
+    const visible = !menuOpen && activeInputMode === 'eyegaze' && gazePoint !== null && !document.hidden;
+    const pointer = $('gazePointer');
+    pointer.hidden = !visible; pointer.style.opacity = visible ? '1' : '0';
+    if (visible) pointer.style.transform = `translate3d(${gazePoint.x}px, ${gazePoint.y}px, 0) translate(-50%, -50%)`;
+  }
+  function clearGazePointer() {
+    gazePoint = null; updateGazePointer();
+    window.PaintGaze.suspend(); window.PaintColourPalette.suspend();
+  }
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
   function svg(tag, attrs = {}, parent) {
@@ -338,6 +350,7 @@
     $('game').classList.toggle('has-colour-palette', showPalette);
     document.querySelector('.colour-mode-choices').hidden = selectedInputMode === 'eyegaze';
     $('game').dataset.inputMode = activeInputMode;
+    updateGazePointer();
     $('actionLabel').textContent = t[selectedScene !== activeScene || selectedDifficulty !== activeDifficulty ? 'start' : phase === 'paused' ? 'resume' : phase === 'complete' ? 'replay' : 'start'];
     $('menu').hidden = !menuOpen;
     $('game').hidden = menuOpen;
@@ -862,7 +875,13 @@
     if (!menuOpen && phase === 'playing' && activeInputMode === 'eyegaze') window.PaintGaze.move(event, $('scene'));
   });
   ['pointerleave', 'pointercancel'].forEach(name => $('playSurface').addEventListener(name, () => window.PaintGaze.suspend()));
-  window.addEventListener('resize', () => { window.PaintGaze.suspend(); window.PaintColourPalette.suspend(); });
+  window.addEventListener('resize', clearGazePointer);
+  document.addEventListener('pointermove', event => {
+    if (event.isPrimary === false || event.pointerType === 'touch') return;
+    gazePoint = { x: event.clientX, y: event.clientY }; updateGazePointer();
+  });
+  document.documentElement.addEventListener('pointerleave', clearGazePointer);
+  document.addEventListener('pointercancel', clearGazePointer);
   $('mainAction').addEventListener('click', activate);
   $('settingsButton').addEventListener('click', () => {
     if (!menuOpen || $('options').open) return;
