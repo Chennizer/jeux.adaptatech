@@ -3,8 +3,12 @@
   const HOME = 600, DWELL = 1.5;
   let objects = [], pointer = null, focus = null, elapsed = 0, leg = null;
   let waiting = false, finished = false, serial = 0;
+  function fillProgress(object, progress) {
+    const { x, y, width, height } = object.box, cx = x + width / 2, cy = y + height / 2;
+    object.fill.setAttribute('transform', `translate(${cx} ${cy}) scale(${progress}) translate(${-cx} ${-cy})`);
+  }
   function cancelDwell() {
-    if (focus) { focus.fill.setAttribute('height', 0); focus.root.dataset.dwell = '0'; }
+    if (focus) { fillProgress(focus, 0); focus.root.dataset.dwell = '0'; }
     focus = null; elapsed = 0;
   }
   function suspend() { cancelDwell(); pointer = null; }
@@ -31,8 +35,8 @@
         });
       const root = svg('g', { class: 'gaze-dwell', 'clip-path': `url(#${id})`,
         'pointer-events': 'none', 'aria-hidden': 'true', 'data-dwell': 0 }, target.group);
-      const fill = svg('rect', { x: box.x, y: box.y + box.height, width: box.width,
-        height: 0, fill: 'rgba(255, 0, 0, 0.52)' }, root);
+      const fill = svg('rect', { x: box.x, y: box.y, width: box.width,
+        height: box.height, transform: 'scale(0)', fill: 'rgba(255, 0, 0, 0.52)' }, root);
       const a = worldPoint(target, box.x, box.y), b = worldPoint(target, box.x + box.width, box.y + box.height);
       return { target, root, defs, fill, box, left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
         top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) };
@@ -58,13 +62,13 @@
   function frame(dt, { speed, pending }) {
     if (leg) {
       leg.age += dt;
-      const p = Math.min(1, leg.age / leg.duration), ease = p * p * (3 - 2 * p);
+      const p = Math.min(1, leg.age / leg.duration), ease = p * p * p * (p * (p * 6 - 15) + 10);
       const result = { x: leg.from + (leg.to - leg.from) * ease,
         direction: leg.to >= leg.from ? 1 : -1 };
       if (p === 1) {
         if (leg.target) {
           result.dropTarget = leg.target;
-          leg.highlight.fill.setAttribute('height', 0);
+          fillProgress(leg.highlight, 0);
           leg.highlight.root.dataset.dwell = '0';
           leg = travel(leg.to, HOME, speed);
         } else { leg = null; waiting = true; result.direction = 1; }
@@ -77,9 +81,9 @@
     if (next !== focus) { cancelDwell(); focus = next; }
     if (focus) {
       elapsed += dt;
-      const p = Math.min(1, elapsed / DWELL), height = focus.box.height * p;
-      focus.fill.setAttribute('y', focus.box.y + focus.box.height - height);
-      focus.fill.setAttribute('height', height); focus.root.dataset.dwell = p.toFixed(3);
+      const p = Math.min(1, elapsed / DWELL);
+      fillProgress(focus, p * p * (3 - 2 * p));
+      focus.root.dataset.dwell = p.toFixed(3);
       if (p === 1) {
         const selected = focus, target = selected.target;
         focus = null; elapsed = 0;

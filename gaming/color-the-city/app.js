@@ -10,6 +10,7 @@
   const WORLD = { width: 1200, groundY: 650, airshipY: 96, outletY: 282, halfShipWidth: 235 };
   const PAINT = { release: .24, fallMin: 1.25, fallExtra: .75, fill: 4.2, glitterTail: .45, bucketPulse: .48 };
   const COLOUR_CYCLE_SECONDS = 12;
+  const GAZE_COLOURS = ['#000000', '#FF6B6B', '#FFD166', '#06D6A0', '#118AB2', '#9B59B6', '#FF9F1C'];
   const FLIGHT = { speed: 1.3, turnOverhang: 60, turnEase: 100 };
   const text = {
     en: {
@@ -17,7 +18,7 @@
       pause: 'Pause', resume: 'Continue', settings: 'Settings', close: 'Close', gameSettings: 'Game', audioSettings: 'Audio', autoModeShort: 'Automatic', manualModeShort: 'Manual',
       soundLabel: 'Paint sounds', musicLabel: 'Music', musicVolume: 'Music volume', effectsVolume: 'Sound volume', soundOff: 'Off', soundOn: 'On',
       space: 'SPACE', orSwitch: 'switch · click · touch',
-      inputMode: 'Input type', switchInput: 'Switch', gazeInput: 'Eyegaze', gazeHint: 'Look at an object until the red overlay fills. The zeppelin will paint it and return.', gazeInitial: 'Look at an object to bring its colours back.', settingsHint: 'Your drawing can wait.', speed: 'Speed',
+      colourPalette: 'Colour palette', paletteColourNames: ['Black', 'Red', 'Yellow', 'Green', 'Blue', 'Purple', 'Orange'], inputMode: 'Input type', switchInput: 'Switch', gazeInput: 'Eyegaze', gazeHint: 'Look at an object until the red overlay fills. The zeppelin will paint it and return.', gazeInitial: 'Look at an object to bring its colours back.', settingsHint: 'Your drawing can wait.', speed: 'Speed',
       slow: 'Gentle', normal: 'Easygoing', fast: 'Brisk',
       guide: 'Aiming guide', guideHint: 'A little line shows where the paint will fall.',
       assist: 'A helping hand', assistHint: 'Drops near the drawing gently find their way to it.',
@@ -38,7 +39,7 @@
       pause: 'Pause', resume: 'Continuer', settings: 'Réglages', close: 'Fermer', gameSettings: 'Jeu', audioSettings: 'Audio', autoModeShort: 'Auto', manualModeShort: 'Manuel',
       soundLabel: 'Sons de peinture', musicLabel: 'Musique', musicVolume: 'Volume de la musique', effectsVolume: 'Volume des sons', soundOff: 'Désactivés', soundOn: 'Activés',
       space: 'ESPACE', orSwitch: 'switch · clic · toucher',
-      inputMode: 'Contrôle', switchInput: 'Switch', gazeInput: 'Regard', gazeHint: 'Regarde un objet jusqu’à ce que le rouge le remplisse. Le zeppelin ira le peindre et reviendra.', gazeInitial: 'Regarde un objet pour lui redonner ses couleurs.', settingsHint: 'Le dessin t’attend.', speed: 'Vitesse',
+      colourPalette: 'Palette de couleurs', paletteColourNames: ['Noir', 'Rouge', 'Jaune', 'Vert', 'Bleu', 'Violet', 'Orange'], inputMode: 'Contrôle', switchInput: 'Switch', gazeInput: 'Regard', gazeHint: 'Regarde un objet jusqu’à ce que le rouge le remplisse. Le zeppelin ira le peindre et reviendra.', gazeInitial: 'Regarde un objet pour lui redonner ses couleurs.', settingsHint: 'Le dessin t’attend.', speed: 'Vitesse',
       slow: 'Douce', normal: 'Tranquille', fast: 'Rapide',
       guide: 'Guide de visée', guideHint: 'Une petite ligne montre où la peinture tombera.',
       assist: 'Coup de pouce', assistHint: 'Les gouttes proches du dessin le rejoignent.',
@@ -59,7 +60,7 @@
       pause: '一時停止', resume: '続ける', settings: '設定', close: '閉じる', gameSettings: 'ゲーム', audioSettings: '音声', autoModeShort: '自動', manualModeShort: '手動',
       soundLabel: '絵の具の音', musicLabel: '音楽', musicVolume: '音楽の音量', effectsVolume: '効果音の音量', soundOff: 'オフ', soundOn: 'オン',
       space: 'スペース', orSwitch: 'スイッチ・クリック・タッチ',
-      inputMode: '入力方法', switchInput: 'スイッチ', gazeInput: '視線', gazeHint: '赤い色がいっぱいになるまで物を見つめると、飛行船が色を落として戻ります。', gazeInitial: '物を見つめて色を取り戻そう。', settingsHint: '絵は待っているよ。', speed: '速さ',
+      colourPalette: 'カラーパレット', paletteColourNames: ['黒', '赤', '黄', '緑', '青', '紫', 'オレンジ'], inputMode: '入力方法', switchInput: 'スイッチ', gazeInput: '視線', gazeHint: '赤い色がいっぱいになるまで物を見つめると、飛行船が色を落として戻ります。', gazeInitial: '物を見つめて色を取り戻そう。', settingsHint: '絵は待っているよ。', speed: '速さ',
       slow: 'ゆっくり', normal: 'ふつう', fast: 'はやい',
       guide: 'ねらいのガイド', guideHint: '絵の具が落ちる場所を線で示します。',
       assist: 'おたすけ', assistHint: '近くに落ちた絵の具が絵に届きます。',
@@ -108,6 +109,13 @@
   let selectedInputMode = 'switch';
   try { if (localStorage.getItem('recolorInputMode') === 'eyegaze') selectedInputMode = 'eyegaze'; } catch (_) {}
   let activeInputMode = selectedInputMode;
+  let selectedPaletteEnabled = false, savedPaletteIndex = 1;
+  try {
+    selectedPaletteEnabled = localStorage.getItem('recolorPaletteEnabled') === 'true';
+    const stored = Number(localStorage.getItem('recolorPaletteColour'));
+    if (localStorage.getItem('recolorPaletteColour') !== null && Number.isInteger(stored) && stored >= 0 && stored < GAZE_COLOURS.length) savedPaletteIndex = stored;
+  } catch (_) {}
+  let activePaletteEnabled = selectedPaletteEnabled;
   let paintColourIndex = 0;
   let colourElapsed = 0;
   let buildings = cityBuildings;
@@ -272,7 +280,10 @@
         .filter(Boolean).forEach(region => paintBounds.set(region, region.getBBox()));
     });
   }
+  function usesGazePalette() { return activeInputMode === 'eyegaze' && activePaletteEnabled; }
+  function colourMode() { return activeInputMode === 'eyegaze' ? (usesGazePalette() ? 'palette' : 'auto') : selectedColourMode; }
   function currentPalette() {
+    if (usesGazePalette()) return GAZE_COLOURS;
     if (activeScene === 'city') return palettes[paletteIndex % palettes.length];
     const colours = window.PaintSceneArt[activeScene].palette;
     return colours.map((_, index) => colours[(index + paletteIndex) % colours.length]);
@@ -285,11 +296,14 @@
     const label = `${text[lang].activeColour}: ${paintColourIndex + 1} / ${currentPalette().length}`;
     $('paint-colour-title').textContent = label;
     $('playSurface').setAttribute('aria-label', `${text[lang][activeInputMode === 'eyegaze' ? 'gazeHint' : 'drop']}. ${label}`);
+    window.PaintColourPalette.select(paintColourIndex);
     updateMenuColour();
   }
   function updateMenuColour() {
     let palette, index = 0;
-    if (selectedScene !== activeScene) {
+    if (usesGazePalette()) {
+      palette = GAZE_COLOURS; index = paintColourIndex;
+    } else if (selectedScene !== activeScene) {
       palette = selectedScene === 'city' ? palettes[0] : window.PaintSceneArt[selectedScene].palette;
     } else if (phase === 'complete') {
       const colours = activeScene === 'city' ? palettes : window.PaintSceneArt[activeScene].palette;
@@ -318,6 +332,10 @@
   function setPhase(next) { phase = next; $('playSurface').dataset.state = phase; updateUI(); }
   function updateUI() {
     const t = text[lang];
+    $('paletteSetting').hidden = selectedInputMode !== 'eyegaze';
+    const showPalette = !menuOpen && usesGazePalette();
+    window.PaintColourPalette.show(showPalette);
+    $('game').classList.toggle('has-colour-palette', showPalette);
     document.querySelector('.colour-mode-choices').hidden = selectedInputMode === 'eyegaze';
     $('game').dataset.inputMode = activeInputMode;
     $('actionLabel').textContent = t[selectedScene !== activeScene || selectedDifficulty !== activeDifficulty ? 'start' : phase === 'paused' ? 'resume' : phase === 'complete' ? 'replay' : 'start'];
@@ -351,6 +369,7 @@
     document.documentElement.lang = lang;
     document.title = text[lang].title + ' · Adaptatech';
     $('language').value = lang;
+    window.PaintColourPalette.labels(text[lang].colourPalette, text[lang].paletteColourNames);
     const next = { en: 'ja', ja: 'fr', fr: 'en' }[lang];
     const label = { en: 'EN', ja: '日本語', fr: 'FR' }[next];
     $('language-toggle').textContent = label;
@@ -619,7 +638,7 @@
     activeTemplate = window.PaintTemplates.next(activeScene);
     buildScene();
     airshipX = activeInputMode === 'eyegaze' ? 600 : Math.max(WORLD.halfShipWidth + 4, buildings[0].hitX + buildings[0].hitWidth / 2); direction = 1;
-    paintColourIndex = 0; colourElapsed = 0; activeColourMode = activeInputMode === 'eyegaze' ? 'auto' : selectedColourMode;
+    paintColourIndex = usesGazePalette() ? savedPaletteIndex : 0; colourElapsed = 0; activeColourMode = colourMode();
     buildings.forEach(target => { target.lastPaint = null; });
     updateColourIndicator(); updateSceneDescription(); drawAirship(); setPhase('playing');
     measurePaintBounds();
@@ -658,7 +677,8 @@
     if ($('options').open) $('options').close();
     menuOpen = false;
     const inputChanged = activeInputMode !== selectedInputMode;
-    activeInputMode = selectedInputMode;
+    const paletteChanged = activePaletteEnabled !== selectedPaletteEnabled;
+    activeInputMode = selectedInputMode; activePaletteEnabled = selectedPaletteEnabled;
     if (replaySameSetting) {
       nextDrawing();
     } else if (selectedScene !== activeScene || selectedDifficulty !== activeDifficulty || phase === 'ready' || phase === 'complete') {
@@ -667,11 +687,14 @@
       activeDifficulty = selectedDifficulty;
       startScene();
     } else {
-      const nextColourMode = activeInputMode === 'eyegaze' ? 'auto' : selectedColourMode;
+      const nextColourMode = colourMode();
       if (activeColourMode !== nextColourMode) { activeColourMode = nextColourMode; colourElapsed = 0; }
-      if (inputChanged) {
-        window.PaintGaze.clear();
-        if (activeInputMode === 'eyegaze') { airshipX = 600; direction = 1; }
+      if (inputChanged || paletteChanged) {
+        paintColourIndex = usesGazePalette() ? savedPaletteIndex : paintColourIndex % currentPalette().length;
+        if (inputChanged) {
+          window.PaintGaze.clear();
+          if (activeInputMode === 'eyegaze') { airshipX = 600; direction = 1; }
+        }
         updateColourIndicator(); updateSceneDescription(); drawAirship();
       }
       setPhase('playing');
@@ -682,7 +705,7 @@
   }
   function returnToMenu() {
     if (menuOpen) return;
-    window.PaintGaze.suspend();
+    window.PaintGaze.suspend(); window.PaintColourPalette.suspend();
     window.PaintAudio.pause();
     if (phase === 'playing') setPhase('paused');
     menuOpen = true; fullscreenAttempt++; fullscreenPending = false;
@@ -780,6 +803,7 @@
       });
       window.PaintAtmosphere.frame(dt);
       window.PaintRestoration.frame(dt);
+      window.PaintColourPalette.frame(dt);
     }
     if (!menuOpen && phase === 'complete') {
       // Let the zeppelin finish its pass, leaving the restored panorama clear.
@@ -813,6 +837,7 @@
     if (event.key === 'Escape' && !menuOpen) { event.preventDefault(); returnToMenu(); return; }
     if (!['Space', 'Enter', 'NumpadEnter'].includes(event.code)) return;
     const control = event.target.closest('button,a,input,select,textarea,summary,[contenteditable="true"]');
+    if (!menuOpen && event.target.closest('#colourPalette')) return;
     if (menuOpen && control && control !== $('mainAction')) return;
     event.preventDefault();
     if (event.repeat || heldKeys.has(event.code)) return;
@@ -837,7 +862,7 @@
     if (!menuOpen && phase === 'playing' && activeInputMode === 'eyegaze') window.PaintGaze.move(event, $('scene'));
   });
   ['pointerleave', 'pointercancel'].forEach(name => $('playSurface').addEventListener(name, () => window.PaintGaze.suspend()));
-  window.addEventListener('resize', () => window.PaintGaze.suspend());
+  window.addEventListener('resize', () => { window.PaintGaze.suspend(); window.PaintColourPalette.suspend(); });
   $('mainAction').addEventListener('click', activate);
   $('settingsButton').addEventListener('click', () => {
     if (!menuOpen || $('options').open) return;
@@ -894,6 +919,11 @@
   } catch (_) { /* Audio preferences are optional. */ }
   ['musicEnabled', 'sound', 'musicVolume', 'effectsVolume'].forEach(id => $(id).addEventListener('input', configureAudio));
   configureAudio();
+  $('paletteEnabled').checked = selectedPaletteEnabled;
+  $('paletteEnabled').addEventListener('change', () => {
+    selectedPaletteEnabled = $('paletteEnabled').checked;
+    try { localStorage.setItem('recolorPaletteEnabled', String(selectedPaletteEnabled)); } catch (_) {}
+  });
   $('guide').addEventListener('change', drawAirship);
   $('assist').addEventListener('change', drawAirship);
   $('language-toggle').addEventListener('click', () => {
@@ -948,6 +978,14 @@
     selectedDifficulty = Number(event.target.value);
     try { localStorage.setItem('colorfulDifficulty', selectedDifficulty); } catch (_) {}
     updateUI();
+  });
+  window.PaintColourPalette.mount({ parent: $('colourPalette'), colours: GAZE_COLOURS,
+    onInteraction: () => window.PaintGaze.suspend(),
+    onPick: index => {
+      paintColourIndex = savedPaletteIndex = index; colourElapsed = 0;
+      try { localStorage.setItem('recolorPaletteColour', String(index)); } catch (_) {}
+      updateColourIndicator();
+    }
   });
   buildScene(); translate(); updateColourIndicator(); drawAirship(); requestAnimationFrame(frame);
 })();
