@@ -4,6 +4,8 @@ This review covers the five original settings and the three added video-game wor
 
 ## Changes made
 
+- **Dwell timing follows visible coverage.** A bounded static silhouette mask supplies a radial area lookup for each object. The circle reveals roughly the same fraction of artwork as elapsed dwell time, so rounded or sparse shapes do not look finished while selection is still counting. All 32 shapes pass independent raster-area checks, with selection at 1.5 seconds.
+
 - **Circular dwell and shared gaze pointer.** The selection fill is now a true expanding circle, clipped to the object. A red pointer follows eye-gaze input over the scene and palette without intercepting it, and hides outside play. The palette control is visible on the main eye-gaze menu instead of hidden in Settings; saved choices are retained.
 
 - **Centred dwell and optional hover palette.** Object selection now expands from its centre using one eased transform, and delivery flights use smoother acceleration/deceleration. A visible eye-gaze menu checkbox controls seven round colour swatches, enabled by default when no preference is saved, matching the drawing pages’ 650 ms hover selection and active ring. The drawing reserves a side column, and the selected colour is held until changed.
