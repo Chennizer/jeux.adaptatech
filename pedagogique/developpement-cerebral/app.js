@@ -2,6 +2,7 @@ import { buildMaturationWindows, ageParts } from './maturation.js';
 import { loadCorticalData, sampleThickness, regionName } from './cortical-data.js';
 import { buildSurfaceGraph, surfaceDistances, UNREACHED } from './cortical-network.js';
 import { EPILEPSY_EFFECTS, epilepsyEffect } from './epilepsy-effects.js';
+import { loadBrainstem, createBrainstem } from './brainstem.js';
 
 const $ = (id) => document.getElementById(id);
 const range = $('age');
@@ -12,6 +13,8 @@ const about = $('about');
 const scientificButton = $('scientific');
 const epilepsyButton = $('epilepsy');
 const effectSelect = $('epilepsy-effect');
+const stemViewButton = $('brainstem-view');
+let showBrainstem = true;
 let selectedEffect = EPILEPSY_EFFECTS[0];
 let developmentDelayMonths = Number($('development-delay').value);
 let age = Number(range.value) / 12;
@@ -29,6 +32,7 @@ let paint = () => {};
 let resetViews = () => {};
 let clearFocal = () => {};
 let restartFocalEffect = () => {};
+let updateSecondaryView = () => {};
 
 const minimumAge = () => scientificMode ? 5 : 0;
 const seizureMoving = () => seizureRunning && !reducedMotion.matches;
@@ -57,6 +61,8 @@ function setEpilepsyMode(active) {
 function updateEffectControls() {
   $('epilepsy-options').hidden = !epilepsyMode;
   $('development-options').hidden = !selectedEffect.usesIllustration;
+  $('replay-row').hidden = selectedEffect.usesIllustration;
+  $('experience').style.setProperty('--effect-accent', selectedEffect.color);
   effectSelect.value = selectedEffect.id;
   $('effect-description').textContent = selectedEffect.description;
   const parts = ageParts(developmentDelayMonths / 12);
@@ -148,6 +154,14 @@ $('reset').addEventListener('click', () => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) { setPlaying(false); stopSeizureAnimation(); } });
 $('information').addEventListener('click', () => { setPlaying(false); stopSeizureAnimation(); about.showModal(); });
 epilepsyButton.addEventListener('click', () => setEpilepsyMode(!epilepsyMode));
+$('replay-focal').addEventListener('click', () => restartFocalEffect());
+stemViewButton.addEventListener('click', () => {
+  showBrainstem = !showBrainstem;
+  stemViewButton.setAttribute('aria-pressed', String(showBrainstem));
+  const label = showBrainstem ? 'Revenir à la vue du dessus' : 'Afficher la vue dégagée du tronc cérébral';
+  stemViewButton.title = label;
+  updateSecondaryView(); requestPaint();
+});
 $('clear-focal').addEventListener('click', () => { clearFocal(); $('announcement').textContent = 'Foyer effacé.'; });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !about.open && epilepsyMode) setEpilepsyMode(false);
@@ -227,6 +241,7 @@ function showFailure(message, error) {
   $('reset').disabled = true;
   scientificButton.disabled = true;
   epilepsyButton.disabled = true;
+  stemViewButton.disabled = true;
   setEpilepsyMode(false);
   stage.setAttribute('aria-busy', 'false');
   $('loading').hidden = true;
@@ -246,9 +261,10 @@ async function initialize() {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.NoToneMapping;
 
-    const [response, corticalData] = await Promise.all([
+    const [response, corticalData, stemData] = await Promise.all([
       fetch('./assets/cortex.bin'),
       loadCorticalData().catch((error) => { console.warn('Mode IRM indisponible', error); return null; }),
+      loadBrainstem(),
     ]);
     if (!response.ok) throw new Error(`Cortex HTTP ${response.status}`);
     const buffer = await response.arrayBuffer();
@@ -276,6 +292,8 @@ async function initialize() {
     geometry.setAttribute('corticalThickness', new THREE.BufferAttribute(thickness, 1));
     geometry.setAttribute('seizureDistance', new THREE.BufferAttribute(focalDistances, 1));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    geometry.computeBoundingBox();
+    const corticalCenter = geometry.boundingBox.getCenter(new THREE.Vector3());
     geometry.center();
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
@@ -288,6 +306,8 @@ async function initialize() {
     const staticSeizureUniform = { value: 0 };
     const effectUniform = { value: 0 };
     const delayUniform = { value: developmentDelayMonths / 12 };
+    const radiusUniform = { value: selectedEffect.radius };
+    const cutawayUniform = { value: 0 };
     const focalColor = new THREE.Color('#a06ac2');
     const palette = ['#e84335', '#f48d32', '#e9cc49', '#a4bf51', '#39a76a'].map((color) => new THREE.Color(color));
     const material = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
@@ -300,13 +320,15 @@ async function initialize() {
       shader.uniforms.uFocalColor = { value: focalColor };
       shader.uniforms.uEpilepsyEffect = effectUniform;
       shader.uniforms.uDevelopmentDelay = delayUniform;
+      shader.uniforms.uEffectRadius = radiusUniform;
+      shader.uniforms.uCutaway = cutawayUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec4 maturation;\nattribute float sulcalDepth;\nattribute float corticalThickness;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vKnown;\nvarying float vSeizureDistance;\nuniform float uAge;\nuniform float uScientific;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\n${shader.vertexShader}`;
+      shader.vertexShader = `attribute vec4 maturation;\nattribute float sulcalDepth;\nattribute float corticalThickness;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vKnown;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uScientific;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${shader.vertexShader}`;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         float effectiveAge = uAge;
         if (uScientific < 0.5 && uSeizure > 0.5 && uEpilepsyEffect > 1.5) {
-          float influence = 1.0 - smoothstep(0.0, 35.0, seizureDistance);
+          float influence = 1.0 - smoothstep(0.0, uEffectRadius, seizureDistance);
           effectiveAge = max(0.0, uAge - uDevelopmentDelay * influence);
         }
         float later = smoothstep(maturation.x, maturation.y, effectiveAge);
@@ -314,9 +336,10 @@ async function initialize() {
         vMaturity = uScientific > 0.5 ? clamp((4.0 - corticalThickness) / 2.5, 0.0, 1.0) : mix(later, infant, maturation.z);
         vKnown = step(0.0, corticalThickness);
         vSulc = sulcalDepth;
-        vSeizureDistance = min(100.0, seizureDistance);
+        vSeizureDistance = min(160.0, seizureDistance);
+        vSurfacePoint = transformed;
       `);
-      shader.fragmentShader = `varying float vMaturity;\nvarying float vSulc;\nvarying float vKnown;\nvarying float vSeizureDistance;\nuniform float uScientific;\nuniform float uSeizure;\nuniform float uSeizureTime;\nuniform float uStaticSeizure;\nuniform float uEpilepsyEffect;\nuniform vec3 uFocalColor;\nuniform vec3 uColor0;\nuniform vec3 uColor1;\nuniform vec3 uColor2;\nuniform vec3 uColor3;\nuniform vec3 uColor4;\n${shader.fragmentShader}`;
+      shader.fragmentShader = `varying float vMaturity;\nvarying float vSulc;\nvarying float vKnown;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uScientific;\nuniform float uSeizure;\nuniform float uSeizureTime;\nuniform float uStaticSeizure;\nuniform float uEpilepsyEffect;\nuniform float uEffectRadius;\nuniform float uCutaway;\nuniform vec3 uFocalColor;\nuniform vec3 uColor0;\nuniform vec3 uColor1;\nuniform vec3 uColor2;\nuniform vec3 uColor3;\nuniform vec3 uColor4;\n${shader.fragmentShader}`;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
         #include <color_fragment>
         float p = clamp(vMaturity, 0.0, 1.0) * 4.0;
@@ -324,18 +347,29 @@ async function initialize() {
                     p < 2.0 ? mix(uColor1, uColor2, p - 1.0) :
                     p < 3.0 ? mix(uColor2, uColor3, p - 2.0) : mix(uColor3, uColor4, p - 3.0);
         if (uScientific > 0.5 && vKnown < 0.99) heat = vec3(0.43, 0.45, 0.41);
-        float focus = 0.90 * (1.0 - smoothstep(2.0, 18.0, vSeizureDistance));
-        float radius = min(uSeizureTime, 4.0) * 14.0;
-        float spread = 0.90 * (1.0 - smoothstep(max(0.0, radius - 12.0), radius + 6.0, vSeizureDistance));
-        spread *= smoothstep(0.0, 1.0, uSeizureTime) * (1.0 - smoothstep(6.0, 10.0, uSeizureTime));
-        float focalMix = 0.0;
+        float coverage = 0.0;
+        float edge = 0.0;
         if (uEpilepsyEffect < 0.5) {
-          focalMix = uSeizure * max(focus, spread * (1.0 - uStaticSeizure));
+          float phase = uStaticSeizure > 0.5 ? 1.0 : smoothstep(0.0, 8.0, uSeizureTime);
+          float front = mix(22.0, uEffectRadius, phase);
+          coverage = uSeizure * (1.0 - smoothstep(front - 9.0, front + 6.0, vSeizureDistance));
+          edge = uSeizure * (1.0 - smoothstep(1.2, 4.0, abs(vSeizureDistance - front)));
+          heat = mix(heat, uFocalColor, coverage * 0.85);
         } else if (uEpilepsyEffect < 1.5) {
-          float localRadius = uStaticSeizure > 0.5 ? 16.0 : 16.0 + 4.0 * sin(uSeizureTime * 1.5707963);
-          focalMix = uSeizure * 0.90 * (1.0 - smoothstep(2.0, localRadius, vSeizureDistance));
+          float breath = uStaticSeizure > 0.5 ? 1.0 : 1.0 + 0.09 * sin(uSeizureTime * 1.5707963);
+          float localRadius = uEffectRadius * breath;
+          coverage = uSeizure * (1.0 - smoothstep(localRadius * 0.45, localRadius, vSeizureDistance));
+          float rings = min(abs(vSeizureDistance - localRadius * 0.55), abs(vSeizureDistance - localRadius));
+          edge = uSeizure * (1.0 - smoothstep(1.0, 3.0, rings));
+          heat = mix(heat, uFocalColor, coverage * 0.85);
+        } else {
+          coverage = uSeizure * (1.0 - smoothstep(uEffectRadius * 0.7, uEffectRadius, vSeizureDistance));
+          edge = uSeizure * (1.0 - smoothstep(1.0, 3.0, abs(vSeizureDistance - uEffectRadius * 0.8)));
+          float stripe = 1.0 - smoothstep(0.07, 0.18, abs(fract((vSurfacePoint.x + vSurfacePoint.y) * 0.16) - 0.5));
+          heat = mix(heat, uFocalColor, coverage * (0.08 + stripe * 0.28));
         }
-        heat = mix(heat, uFocalColor, focalMix);
+        heat = mix(heat, mix(uFocalColor, vec3(1.0), 0.55), edge * 0.9);
+        if (uCutaway > 0.5) diffuseColor.a = mix(0.12, 0.94, max(coverage, edge));
         float groove = 1.0 - 0.38 * smoothstep(-0.5, 1.3, vSulc);
         diffuseColor.rgb = heat * groove;
       `);
@@ -344,6 +378,14 @@ async function initialize() {
     const scene = new THREE.Scene();
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
+    const ghostMaterial = material.clone();
+    ghostMaterial.transparent = true;
+    ghostMaterial.opacity = 0.12;
+    ghostMaterial.depthWrite = false;
+    ghostMaterial.side = THREE.DoubleSide;
+    ghostMaterial.onBeforeCompile = material.onBeforeCompile;
+    const stem = createBrainstem(THREE, stemData, corticalCenter);
+    scene.add(stem.mesh);
     const focalMarker = new THREE.Mesh(new THREE.SphereGeometry(1.8, 12, 8), new THREE.MeshBasicMaterial({ color: focalColor }));
     focalMarker.visible = false;
     scene.add(focalMarker);
@@ -355,6 +397,9 @@ async function initialize() {
       const readout = $('focal-readout');
       readout.hidden = focalVertex < 0;
       $('clear-focal').hidden = focalVertex < 0;
+      $('replay-focal').disabled = focalVertex < 0;
+      const state = focalVertex < 0 ? 'Choisissez une zone' : selectedEffect.animation === 'spread' ? (seizureRunning ? 'Diffusion en cours' : 'Zone atteinte conservée') : 'Activité localisée';
+      $('effect-state').textContent = state;
       if (focalVertex < 0) { readout.textContent = ''; delete readout.dataset.region; return; }
       const id = corticalData?.vertexLabels[focalVertex] || 0;
       let value = scientificMode && id ? ` · ${thicknessFormat.format(parcelThickness[id - 1])} mm` : '';
@@ -396,9 +441,19 @@ async function initialize() {
     const topCamera = new THREE.OrthographicCamera();
     lateralCamera.near = topCamera.near = 1;
     lateralCamera.far = topCamera.far = 1000;
-    topCamera.position.set(0, 400, 0);
-    topCamera.up.set(1, 0, 0);
-    topCamera.lookAt(0, 0, 0);
+    updateSecondaryView = () => {
+      $('brain').setAttribute('aria-label', showBrainstem ? 'Cerveau de côté et vue en transparence du tronc cérébral' : 'Cerveau de côté et du dessus');
+      if (showBrainstem) {
+        topCamera.position.set(150, -180, -350);
+        topCamera.up.set(0, 1, 0);
+        topCamera.lookAt(0, -18, 0);
+      } else {
+        topCamera.position.set(0, 400, 0);
+        topCamera.up.set(1, 0, 0);
+        topCamera.lookAt(0, 0, 0);
+      }
+    };
+    updateSecondaryView();
     let yaw = -Math.PI / 2;
     let pitch = 0.06;
     const updateLateral = () => {
@@ -419,6 +474,11 @@ async function initialize() {
       camera.updateMatrixWorld();
       raycaster.setFromCamera(pointer, camera);
       const hit = raycaster.intersectObject(mesh, false)[0];
+      const stemHit = raycaster.intersectObject(stem.mesh, false)[0];
+      if (stemHit && ((showBrainstem && surface === $('superior')) || !hit || stemHit.distance < hit.distance)) {
+        $('announcement').textContent = 'Choisissez une zone du cortex pour ces scénarios d’épilepsie.';
+        return;
+      }
       if (!hit) return;
       let nearest = -1;
       let nearestDistance = Infinity;
@@ -428,7 +488,7 @@ async function initialize() {
         if (distance < nearestDistance) { nearestDistance = distance; nearest = vertex; }
       }
       focalVertex = nearest;
-      focalDistances.set(surfaceDistances(surfaceGraph, nearest));
+      focalDistances.set(surfaceDistances(surfaceGraph, nearest, 120));
       geometry.attributes.seizureDistance.needsUpdate = true;
       focalMarker.position.fromBufferAttribute(geometry.attributes.position, nearest);
       hitNormal.fromBufferAttribute(geometry.attributes.normal, nearest).normalize();
@@ -487,7 +547,7 @@ async function initialize() {
 
     let width = 0;
     let height = 0;
-    const box = geometry.boundingBox;
+    const box = geometry.boundingBox.clone().union(stem.mesh.geometry.boundingBox);
     const corners = [];
     for (const x of [box.min.x, box.max.x]) {
       for (const y of [box.min.y, box.max.y]) {
@@ -495,7 +555,7 @@ async function initialize() {
       }
     }
     const projected = new THREE.Vector3();
-    function renderView(element, camera, baseHeight) {
+    function renderView(element, camera, baseHeight, cutaway = false) {
       const bounds = element.getBoundingClientRect();
       const stageBounds = stage.getBoundingClientRect();
       const aspect = bounds.width / bounds.height;
@@ -518,7 +578,10 @@ async function initialize() {
       const bottom = stageBounds.bottom - bounds.bottom;
       renderer.setViewport(left, bottom, bounds.width, bounds.height);
       renderer.setScissor(left, bottom, bounds.width, bounds.height);
+      cutawayUniform.value = cutaway ? 1 : 0;
+      mesh.material = cutaway ? ghostMaterial : material;
       renderer.render(scene, camera);
+      mesh.material = material;
     }
     paint = (value) => {
       if (stage.clientWidth !== width || stage.clientHeight !== height) {
@@ -534,6 +597,10 @@ async function initialize() {
       staticSeizureUniform.value = reducedMotion.matches ? 1 : 0;
       effectUniform.value = selectedEffect.shader;
       delayUniform.value = developmentDelayMonths / 12;
+      radiusUniform.value = selectedEffect.radius;
+      focalColor.set(selectedEffect.color);
+      focalMarker.material.color.copy(focalColor);
+      stem.update(value, scientificMode);
       if (scientificMode && corticalData && lastThicknessAge !== value) {
         sampleThickness(corticalData, value, parcelThickness);
         for (let i = 0; i < vertexCount; i++) {
@@ -548,7 +615,7 @@ async function initialize() {
       renderer.clear();
       renderer.setScissorTest(true);
       renderView($('lateral'), lateralCamera, 172);
-      renderView($('superior'), topCamera, 214);
+      renderView($('superior'), topCamera, 214, showBrainstem);
       renderer.setScissorTest(false);
     };
     new ResizeObserver(requestPaint).observe(stage);
@@ -566,6 +633,7 @@ async function initialize() {
     playButton.disabled = false;
     $('reset').disabled = false;
     epilepsyButton.disabled = false;
+    stemViewButton.disabled = false;
     scientificButton.disabled = !corticalData;
     if (!corticalData) scientificButton.title = 'Données IRM indisponibles. Rechargez la page pour réessayer.';
   } catch (error) {
