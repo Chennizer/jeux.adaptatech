@@ -1,95 +1,77 @@
-# Sources, mesures et limites
+# Sources, représentation et limites
 
-## Ce qui est réellement basé sur des données
+## Anatomie réelle, couleurs illustratives
 
-Le bouton **IRM** affiche l’**épaisseur corticale régionale en millimètres**, de 5 à 20 ans, sur l’atlas anatomique **Destrieux 2010 : 74 régions par hémisphère**. Il remplace les découpages et calendriers illustratifs par les labels de l’atlas sur fsaverage5 et les prédictions d’un modèle de référence publié.
+La page représente une **progression schématique de 0 à 20 ans**. Les limites de certaines régions viennent d’un atlas réel, mais les courbes de couleur sont des paramètres d’animation : elles ne mesurent pas une maturité, une capacité individuelle, la myéline ou une épaisseur. Une région rouge est déjà fonctionnelle ; une région bleue n’est pas nécessairement arrivée au terme de son développement.
 
-Sources principales :
+Le cortex et le cervelet ont la forme fixe d’un gabarit moyen **adulte**. Le curseur ne simule ni la croissance anatomique ni la variabilité entre personnes. La palette à sept repères rouge → orange → jaune → vert → turquoise → bleu → bleu profond est interpolée en continu et expliquée dans l’aide.
 
-- Lotter et al. (2024), *Regional patterns of human cortex development correlate with underlying neurobiology*, Nature Communications 15, 7987. DOI : https://doi.org/10.1038/s41467-024-52366-7.
-- Rutherford et al. (2022), *Charting brain growth and aging at high spatial precision*, eLife 11:e72904. DOI : https://doi.org/10.7554/eLife.72904.
-- Données extraites, atlas et code des auteurs : https://github.com/LeonDLotter/CTdev ; archive https://doi.org/10.5281/zenodo.7902901.
-- Atlas : Destrieux et al. (2010), *Automatic parcellation of human cortical gyri and sulci using standard anatomical nomenclature*, NeuroImage. DOI : https://doi.org/10.1016/j.neuroimage.2010.06.010.
+## Repérage des régions corticales
 
-### Extraction reproductible
+L’atlas **Destrieux 2010** fournit 74 régions par hémisphère sur fsaverage5 :
 
-Le script `tools/prepare-scientific-data.py` utilise le commit `418ff157bd8036e01a5d823754bbd7cff5fdda1b` du dépôt des auteurs. Il retient le 50e centile de chaque courbe féminine et masculine, aux 31 âges semestriels de 5 à 20 ans inclus. Les prédictions inférieures à 5 ans présentes dans les fichiers des auteurs sont **exclues** : l’article restreint son analyse à partir de 5 ans parce que la chaîne FreeSurfer utilisée n’est pas adaptée aux très jeunes enfants.
+- Destrieux et al. (2010), *Automatic parcellation of human cortical gyri and sulci using standard anatomical nomenclature*. https://doi.org/10.1016/j.neuroimage.2010.06.010.
+- Labels distribués par le dépôt [CTdev](https://github.com/LeonDLotter/CTdev), commit `418ff157bd8036e01a5d823754bbd7cff5fdda1b`, archive https://doi.org/10.5281/zenodo.7902901.
 
-L’affichage prend la **moyenne arithmétique des deux médianes de modèle**. Ce n’est pas une médiane obtenue sur une population regroupée, une mesure individuelle ni une prédiction du futur d’un enfant. L’interpolation linéaire entre estimations semestrielles permet un curseur mensuel ; ces valeurs intermédiaires ne sont pas de nouvelles observations IRM. Les valeurs publiées sont conservées à six décimales dans le fichier de données. Les empreintes SHA-256 des entrées et les DOI sont enregistrés dans ses métadonnées.
+`tools/prepare-atlas.py` extrait uniquement les labels de sommet et les noms anatomiques des fichiers GIFTI, sans mesure développementale ni prédiction d’épaisseur. Il vérifie les 20 484 sommets et les identifiants 0–148. `assets/atlas-source.json` conserve les noms, le commit et les empreintes des entrées ; `assets/destrieux-labels.bin` conserve les labels uint16. Le clic sur le cortex lit la région dans ce même atlas.
 
-Les labels d’atlas sont conservés sommet par sommet sur la grille fsaverage5 commune aux deux hémisphères. Le script vérifie le nombre de sommets, tous les identifiants et la correspondance de chaque nom d’atlas avec la ligne de la table de prédictions. Il ne déduit pas une région à partir de sa position approximative dans le cerveau.
+## Bandes sensorielles et motrices dorsales
 
-### Sens des couleurs
+Les labels des gyri postcentral et précentral, de la région paracentrale et des sillons centraux définissent des bandes à progression illustrative précoce dans chaque hémisphère. Les régions visuelles primaires sont approchées par le cunéus, le gyrus lingual, le pôle occipital et le sillon calcarin. Toutes les régions dorsales d’association ne sont pas assimilées à des aires sensorielles primaires.
 
-L’échelle fixe va de **4 mm en rouge à 1,5 mm en bleu**. Elle encode une épaisseur, pas une valeur de « développement ». Un cortex plus fin n’est pas systématiquement meilleur, plus fonctionnel ou plus mature. L’épaisseur et ses variations reflètent plusieurs propriétés biologiques et des effets de mesure. Une région peut avoir une trajectoire différente d’une autre ; aucune progression artificiellement monotone n’est imposée aux courbes IRM. Les surfaces sans label sont grises.
+Deoni et al. (2015), *Cortical maturation and myelination in healthy toddlers and young children*, https://pmc.ncbi.nlm.nih.gov/articles/PMC4463864/, fournit un repère général : la myélinisation est relativement précoce dans les cortex sensorimoteurs et sensoriels primaires. Cette étude ne fournit pas les valeurs numériques des fenêtres d’animation.
 
-L’éclairage et l’accentuation des sillons améliorent la lisibilité du relief et ne représentent pas des données biologiques supplémentaires. La surface reste un gabarit moyen adulte fixe, sans croissance anatomique ni atlas spécifique à chaque âge. Les incertitudes et différences individuelles ne sont pas affichées sous forme de cartes ; la carte est une référence agrégée.
+## Audition et réseau du langage
 
-## Petite enfance : limite conservée explicitement
+Des fenêtres illustratives distinctes concernent :
 
-Le mode **Illustration** garde son curseur de la naissance à 20 ans, ses zones et ses deux phases schématiques. Il permet d’expliquer visuellement les différences entre 6 mois, 1 an et 2 ans. Il ne devient pas une carte scientifique parce qu’un mode IRM a été ajouté.
+| Ensemble | Labels Destrieux par hémisphère | Représentation |
+| --- | --- | --- |
+| Audition primaire | 33 : gyrus temporal transverse / Heschl | Phase infantile plus précoce |
+| Audition associative | 34 : temporal supérieur ; 36 : planum temporale ; 35 : planum polare | Changements précoces puis raffinement prolongé |
+| Régions temporales du réseau du langage | 38 : temporal moyen ; 73 : sillon temporal supérieur | Trajectoires distinctes de l’audition primaire |
+| Régions frontales inférieures | 12 : operculaire ; 14 : triangulaire ; 13 : orbitaire | Phase précoce présente, puis progression plus étalée |
+| Régions pariétales associées | 25 : angulaire ; 26 : supramarginal | Raffinement prolongé |
 
-Le mode IRM commence à 5 ans et n’extrapole pas vers la naissance. Pour étendre une version fondée sur les données à tout l’intervalle 0–20 ans, il faudrait une chaîne infantile dédiée et une harmonisation entre cohortes et atlas, avec une validation des raccordements. Un exemple de travail spécifiquement consacré à cette période est Wang et al. (2019), *Developmental topography of cortical thickness during infancy*, https://doi.org/10.1073/pnas.1821523116 (210 IRM longitudinales chez 43 nourrissons, âges planifiés de 1 à 24 mois). Ce travail est cité comme piste et n’alimente pas les couleurs de l’application.
+Les labels de droite ajoutent 74 à l’identifiant. Ces régions sont des **repères anatomiques**, pas une parcellisation fonctionnelle exacte de l’audition ou du langage. Le réseau du langage est distribué, participe aussi à d’autres fonctions et est actif dès la petite enfance. La même logique de progression est représentée dans les deux hémisphères, sans simuler les changements de latéralisation. Les paramètres dans `maturation.js` sont illustratifs, sans ajustement aux courbes de ces publications :
 
-## Cortex sensorimoteur dorsal et nouvelle palette
+- Deoni et al. (2015), cité ci-dessus : contexte de myélinisation sensorielle précoce.
+- Emerson et al. (2016), *Longitudinal Study of the Emerging Functional Connectivity Asymmetry of Primary Language Regions during Infancy*, https://pmc.ncbi.nlm.nih.gov/articles/PMC5083015/ : évolution de l’organisation fonctionnelle des régions temporales et frontales pendant la petite enfance.
+- Perani et al. (2011), *Neural language networks at birth*, https://doi.org/10.1073/pnas.1102991108 : activité du réseau auditif et langagier chez le nouveau-né. Une couleur précoce moins avancée ne signifie donc pas qu’un réseau est inactif.
 
-Le repérage précoce utilise les **labels anatomiques Destrieux** déjà distribués avec le mode IRM : gyrus postcentral (somatosensoriel), gyrus précentral (moteur), région paracentrale et sillons centraux, dans chaque hémisphère. Des paramètres précoces concernent aussi le cunéus, le gyrus lingual, le pôle occipital, le sillon calcarin et le gyrus temporal transverse. Les zones d’association dorsales ne sont pas toutes assimilées à des aires sensorielles primaires. Si les actifs d’atlas sont indisponibles, le champ spatial illustratif reste disponible.
+La myélinisation, la connectivité, la croissance et la performance ne sont pas des mesures interchangeables. Elles ne sont pas fusionnées ici en un score scientifique global.
 
-Les limites sont anatomiques, mais les calendriers sont **illustratifs** : ils renforcent la phase des premiers mois dans ces régions et conservent une évolution ultérieure. Le mode IRM garde intégralement ses valeurs. Le repère général est Deoni et al. (2015), *Cortical maturation and myelination in healthy toddlers and young children*, https://pmc.ncbi.nlm.nih.gov/articles/PMC4463864/ : la myélinisation est plus précoce dans les cortex sensorimoteurs et sensoriels primaires que dans certaines régions d’association. Cet article n’a pas servi à ajuster numériquement les fenêtres d’animation.
+## Cervelet
 
-L’échelle de `colour-scale.js` utilise sept repères **rouge → orange → jaune → vert → turquoise → bleu → bleu profond**, avec interpolation continue. En illustration, elle représente une progression schématique sans pourcentage, et le bleu ne signifie pas que la maturation est achevée. En IRM, la même palette représente uniquement l’épaisseur, de 4 mm rouge à 1,5 mm bleu, en passant par 2,75 mm vert. Les unités et les bornes restent affichées.
+Les deux surfaces cérébelleuses proviennent des labels FreeSurfer **7+8 à gauche et 46+47 à droite** (substance blanche et cortex réunis) du fichier adulte `fsaverage/mri/aseg.mgz`, distribué par [MNE testing data](https://github.com/mne-tools/mne-testing-data/blob/20cc221d737a37a6ee3a9c007e91bd69541fefe9/subjects/fsaverage/mri/aseg.mgz). Le script `tools/prepare-cerebellum.py` vérifie l’empreinte de l’entrée, applique un lissage gaussien de sigma 0,65 voxel, extrait la surface à 0,5 par marching cubes et utilise **vox2ras_tkr** pour l’aligner avec le cortex. Il oriente les triangles vers l’extérieur.
 
-## Cervelet et structures sous-corticales / limbiques
+L’ensemble compte 32 694 sommets et 65 376 triangles. Les bornes RAS, offsets, labels et paramètres figurent dans `assets/cerebellum-source.json`. La géométrie n’est pas subdivisée en lobules mesurés. La couleur illustre une participation sensorimotrice précoce et un raffinement qui continue ensuite ; `cerebellumColourStage()` n’est pas une courbe ajustée à des mesures.
 
-Les surfaces proviennent de la segmentation adulte FreeSurfer `fsaverage/mri/aseg.mgz`, distribuée par [MNE testing data](https://github.com/mne-tools/mne-testing-data/blob/20cc221d737a37a6ee3a9c007e91bd69541fefe9/subjects/fsaverage/mri/aseg.mgz), au commit `20cc221d737a37a6ee3a9c007e91bd69541fefe9`. Le script `tools/prepare-deep-structures.py` vérifie l’empreinte de l’entrée, extrait les masques, applique un filtre gaussien de sigma 0,65 voxel, extrait les surfaces à 0,5 par marching cubes et utilise la matrice **vox2ras_tkr** pour rejoindre les coordonnées du cortex. Les triangles sont orientés vers l’extérieur.
+Repères : *Functional development of the human cerebellum from birth to age five* (2025), https://www.nature.com/articles/s41467-025-61465-y ; *Longitudinal development of the cerebellum in human infants during the first 800 days* (2023), https://pubmed.ncbi.nlm.nih.gov/36964904/.
 
-Les 16 maillages représentent les paires gauche/droite :
+## Carte « À cet âge »
 
-| Structure | Labels FreeSurfer |
-| --- | --- |
-| Cervelet (cortex et substance blanche réunis) | 7 + 8 / 46 + 47 |
-| Thalamus | 10 / 49 |
-| Noyau caudé | 11 / 50 |
-| Putamen | 12 / 51 |
-| Pallidum | 13 / 52 |
-| Hippocampe | 17 / 53 |
-| Amygdale | 18 / 54 |
-| Noyau accumbens | 26 / 58 |
+`age-insights.js` contient dix regroupements pédagogiques : 0–3, 3–6 et 6–12 mois ; 1–2, 2–3, 3–5, 5–8, 8–12, 12–16 et 16–20 ans. Chaque carte donne deux exemples de fonctions ou d’apprentissages qui évoluent pendant cette période. Les textes dépendent de l’âge global sélectionné, sans être déduits des couleurs ou d’un scénario focal.
 
-Le tronc cérébral (label 16) n’est plus extrait ni affiché. L’empreinte du fichier d’entrée, les bornes RAS, les paramètres et les offsets de chaque surface sont conservés dans `assets/deep-structures-source.json`. L’ensemble compte 67 279 sommets et 134 490 triangles. Il s’agit d’un gabarit adulte fixe sans croissance anatomique ni parcellisation des lobules cérébelleux. La transparence du cortex dégage ces structures ; le bouton Structures rétablit une vue du dessus opaque.
+Ces plages sont **éditoriales**, pas des seuils biologiques ou des dates d’acquisition individuelle. Elles ne sont pas un outil de dépistage. Les expériences, l’environnement, les langues et l’enseignement contribuent aux apprentissages. Les repères sont des paraphrases générales, sans reprise de tableaux normatifs ni de scores :
 
-Sources pour la chronologie générale :
+- ASHA, *Communication Milestones*, https://www.asha.org/public/developmental-milestones/communication-milestones/ ; exemples pour [la naissance à un an](https://www.asha.org/public/developmental-milestones/communication-milestones-birth-to-1-year/) et [19–24 mois](https://www.asha.org/public/developmental-milestones/communication-milestones-19-to-24-months/). Les autres tranches ASHA jusqu’à cinq ans sont liées depuis cet index.
+- NIMH, *The Teen Brain: 7 Things to Know*, https://www.nimh.nih.gov/health/publications/the-teen-brain-7-things-to-know : raffinement à l’adolescence, apprentissage, relations et planification. Le développement ne se termine pas à 20 ans.
 
-- *Functional development of the human cerebellum from birth to age five* (2025), https://www.nature.com/articles/s41467-025-61465-y : organisation précoce des connexions cérébellocorticales et développement fonctionnel différencié.
-- *Longitudinal development of the cerebellum in human infants during the first 800 days* (2023), https://pubmed.ncbi.nlm.nih.gov/36964904/ : changements précoces rapides avec différences entre sous-régions.
-- *A global multicohort study to map subcortical brain development and cognition in infancy and early childhood* (2023), https://www.nature.com/articles/s41593-023-01501-6 : trajectoires distinctes du thalamus, hippocampe, amygdale, caudé, putamen et pallidum.
-- *Typical development of basal ganglia, hippocampus, amygdala and cerebellum from age 7 to 24* (2014), https://pubmed.ncbi.nlm.nih.gov/24705201/ : changements qui se poursuivent pendant l’adolescence.
+## Mode épilepsie
 
-Les couleurs différenciées de `structureColourStage()` comprennent un repère initial, une phase infantile rapide et un raffinement plus lent. **Ces paramètres sont choisis pour l’illustration et ne sont pas ajustés à ces études.** Les volumes, la connectivité, la myéline et les fonctions n’ont pas une trajectoire interchangeable ; aucune de ces mesures n’est convertie ici en un score global de maturité. Le cervelet n’est pas considéré comme achevé à la naissance, et les structures limbiques ne deviennent pas toutes matures tôt. En mode IRM, toutes ces structures restent grises, car l’épaisseur corticale de référence ne leur est pas attribuable.
+Le ray casting choisit le sommet cortical le plus proche du triangle touché. Le cervelet n’est pas une cible corticale. Le menu est généré depuis le registre `epilepsy-effects.js` et conserve le foyer lors d’un changement d’effet :
 
-## Mode épilepsie : activité focale schématique
+1. **Diffusion violette** : zone qui s’étend pendant huit secondes, puis reste affichée après l’arrêt de l’animation à dix secondes. Relancer rejoue l’expansion.
+2. **Activité locale rose** : zone avec deux anneaux et pulsation lente de quatre secondes, sans diffusion.
+3. **Développement local hypothétique** : âge effectif illustratif diminué autour du foyer, selon un décalage choisi de 0 à 60 mois, borné à zéro. Les hachures et le contour ambrés identifient le scénario même à décalage nul.
 
-Le bouton active un curseur de ciblage. Le clic dans l’une des deux vues est projeté sur la vraie surface par ray casting ; le sommet le plus proche du triangle touché devient le foyer. L’identité anatomique est lue dans le même atlas. Un autre clic remplace le foyer ; la croix l’efface ; le bouton ou Échap désactive le mode. La sélection est également disponible avec Entrée sur le cerveau, après rotation au clavier.
+Les distances sont des plus courts chemins sur les arêtes du maillage, dans le même hémisphère. Les rayons (96, 34 et 58 mm sur le gabarit adulte) sont des paramètres de lisibilité et non des étendues cliniques. Ces effets sont des illustrations géométriques sans connectome, conduction axonale, EEG, diagnostic ou prédiction de l’impact d’une crise sur le développement. Une propagation profonde, distante ou vers l’autre hémisphère n’est pas simulée.
 
-Le menu est construit à partir du registre `epilepsy-effects.js`, pour permettre l’ajout de choix ultérieurs. Les trois choix initiaux sont :
-
-1. **Crise focale avec diffusion** : une zone violette s’étend sur la surface pendant huit secondes, puis la zone atteinte reste affichée après l’arrêt de l’animation à dix secondes. Le bouton Relancer rejoue l’expansion depuis le même foyer.
-2. **Activité électrique localisée** : une zone rose avec deux anneaux qui pulse lentement sur une période de quatre secondes, sans onde de diffusion. Avec réduction des animations, elle reste statique.
-3. **Développement local (hypothèse)** : une zone ambrée hachurée distingue le scénario. Un décalage choisi de 0 à 60 mois (36 mois par défaut) est appliqué à l’âge effectif du modèle illustratif autour du foyer, avec une influence qui décroît avec la distance de surface et un âge effectif borné à zéro. Il s’agit d’un paramètre de scénario, sans calibration biologique ni estimation d’un effet de l’épilepsie. Le mode Illustration est imposé pour ce choix. Revenir à l’IRM ferme le scénario et affiche les valeurs de référence inchangées.
-
-La diffusion violette utilise les plus courts chemins pondérés sur les arêtes du maillage. Elle suit la surface et reste dans l’hémisphère du foyer. Elle s’étend progressivement jusqu’à un rayon géodésique illustratif de 96 mm et conserve sa zone colorée ; elle ne revient plus à un simple point. L’activité locale utilise un rayon de 34 mm et le scénario de développement un rayon de 58 mm, avec une influence décroissante. Ces rayons sont des paramètres de lisibilité sur le gabarit adulte et ne sont pas des étendues cliniques mesurées. Le point central est seulement un repère de sélection. La pulsation locale est une variation douce de rayon. Il n’y a pas de flash ni de clignotement brusque. La préférence de réduction des animations donne une représentation statique distincte pour chaque effet : diffusion finale violette, zone rose à anneaux ou hachures ambrées. Les animations s’arrêtent lorsque l’aide s’ouvre ou que l’onglet est masqué.
-
-Ce mécanisme est une **illustration géométrique**, sans connectome, conduction axonale, modèles neuronaux, EEG, symptômes, diagnostic ou estimation d’un risque de crise. Il n’est pas un modèle Epileptor, ne reproduit pas toutes les formes d’épilepsie et ne prédit pas l’impact d’une crise sur le développement. Les crises focales réelles peuvent se propager dans des réseaux distants, profonds ou controlatéraux ; cet aspect n’est pas simulé ici.
-
-Références conceptuelles :
-
-- ILAE, classification des crises mise à jour en 2025 : https://www.ilae.org/guidelines/definition-and-classification/updated-classification-of-epileptic-seizures-2025 ; DOI https://doi.org/10.1111/epi.18338.
-- ILAE, crises focales : https://www.epilepsydiagnosis.org/seizure/focal-seizure-groupoverview.html.
+La réduction des animations donne trois formes statiques distinctes. Les animations s’arrêtent lorsque l’aide s’ouvre ou que l’onglet est masqué. Référence conceptuelle : [ILAE, classification 2025](https://www.ilae.org/guidelines/definition-and-classification/updated-classification-of-epileptic-seizures-2025), https://doi.org/10.1111/epi.18338.
 
 ## Licences et vérification
 
-La surface `assets/deep-structures.bin` dérive de données FreeSurfer ; elle conserve séparément la licence FreeSurfer v1.0 complète dans `assets/freesurfer-license.txt`, avec l’avis MGH et les modifications décrites dans `THIRD_PARTY_NOTICES.txt`.
+L’atlas adapté reste sous **CC BY-NC-SA 4.0**, avec le texte complet dans `assets/ctdev-license.txt`. Le cervelet garde séparément la licence **FreeSurfer v1.0** dans `assets/freesurfer-license.txt`. Les sources, avis et modifications sont conservés dans `THIRD_PARTY_NOTICES.txt` et ne sont pas remplacés par la licence générale du code.
 
-Les fichiers `assets/cortical-thickness.json` et `assets/destrieux-labels.bin` sont des adaptations du dépôt CTdev, conservées sous **CC BY-NC-SA 4.0**. Le texte complet est dans `assets/ctdev-license.txt`. Ces conditions s’appliquent à ces données séparément du code de l’application ; les données ne sont pas placées sous la licence générale du dépôt. Les modifications apportées sont l’extraction des âges, la sélection des médianes, l’arrondi et le changement de conteneur de l’atlas.
-
-Les tests `tests/scientific-model.test.mjs` vérifient les 16 maillages fermés et orientés en RAS de surface, les bandes sensorielles précoces dans les deux hémisphères et la nouvelle palette, les points publiés, l’interpolation, l’exclusion des âges non couverts, les identifiants anatomiques et la propagation sur des composants de surface séparés. Ils vérifient l’implémentation et ne constituent pas une validation clinique de l’application.
+Les tests vérifient les maillages cérébelleux fermés et orientés, les identités anatomiques, les trajectoires auditives/langagières et dorsales des deux côtés, la couverture des 241 sélections mensuelles par la carte, la palette et les composants disjoints du cortex. Ils vérifient l’implémentation et ne constituent pas une validation clinique.

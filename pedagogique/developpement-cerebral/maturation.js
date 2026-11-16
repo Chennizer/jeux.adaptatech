@@ -82,7 +82,23 @@ const SENSORY_WINDOWS = new Map([
   [68, [0.66, 0.60, 18]], [69, [0.68, 0.57, 18]], // precentral sulci
   [11, [0.72, 0.50, 16]], [22, [0.69, 0.55, 17]], // visual: cuneus, lingual
   [42, [0.73, 0.50, 16]], [44, [0.75, 0.48, 16]], // occipital pole, calcarine
-  [33, [0.67, 0.65, 18]], // transverse temporal: primary auditory
+]);
+
+// Anatomical proxies for a distributed, bilateral auditory/language network.
+// These different colour windows are illustrative, not functional boundaries,
+// fitted developmental estimates, or an assertion of inactivity in red regions.
+const AUDITORY_LANGUAGE_WINDOWS = new Map([
+  [33, [0, 18, 0.74, 0.48]], // Heschl / transverse temporal: primary auditory
+  [34, [0, 22, 0.52, 0.85]], // superior temporal: auditory association
+  [36, [0, 23, 0.48, 0.95]], // planum temporale
+  [35, [0, 25, 0.36, 1.15]], // planum polare
+  [38, [0, 26, 0.36, 1.25]], // middle temporal: broader language network
+  [73, [0, 26, 0.38, 1.15]], // superior temporal sulcus
+  [12, [0, 27, 0.28, 1.40]], // inferior frontal, opercular part
+  [14, [0, 29, 0.24, 1.50]], // inferior frontal, triangular part
+  [13, [0, 30, 0.22, 1.70]], // inferior frontal, orbital part
+  [25, [0, 27, 0.31, 1.20]], // angular
+  [26, [0, 26, 0.38, 1.00]], // supramarginal
 ]);
 
 export function buildMaturationWindows(positions, sulcalDepth, corticalLabels = null) {
@@ -125,6 +141,8 @@ export function buildMaturationWindows(positions, sulcalDepth, corticalLabels = 
       windows[i * 4 + 2] = Math.max(windows[i * 4 + 2], sensory[0]);
       windows[i * 4 + 3] = Math.min(windows[i * 4 + 3], sensory[1]);
     }
+    const auditoryLanguage = AUDITORY_LANGUAGE_WINDOWS.get(label ? (label - 1) % 74 + 1 : 0);
+    if (auditoryLanguage) windows.set(auditoryLanguage, i * 4);
   }
   return windows;
 }

@@ -1,27 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { sampleThickness, regionName } from '../cortical-data.js';
+import { regionName } from '../cortical-atlas.js';
 import { buildSurfaceGraph, surfaceDistances, UNREACHED } from '../cortical-network.js';
-import { structureColourStage } from '../deep-structures.js';
+import { cerebellumColourStage } from '../cerebellum.js';
+import { AGE_INSIGHTS, insightForAge } from '../age-insights.js';
 import { buildMaturationWindows, maturityAtAge } from '../maturation.js';
 import { BRAIN_PALETTE, setScaleColour } from '../colour-scale.js';
 import { Color } from '../vendor/three.module.min.js';
 
-const dataset = JSON.parse(await readFile(new URL('../assets/cortical-thickness.json', import.meta.url), 'utf8'));
+const atlasSource = JSON.parse(await readFile(new URL('../assets/atlas-source.json', import.meta.url), 'utf8'));
 
-test('sixteen internal surfaces preserve anatomy, labels and outward closed geometry', async () => {
-  const bytes = await readFile(new URL('../assets/deep-structures.bin', import.meta.url));
-  const source = JSON.parse(await readFile(new URL('../assets/deep-structures-source.json', import.meta.url), 'utf8'));
+test('paired cerebellar surfaces preserve anatomy, labels and outward closed geometry', async () => {
+  const bytes = await readFile(new URL('../assets/cerebellum.bin', import.meta.url));
+  const source = JSON.parse(await readFile(new URL('../assets/cerebellum-source.json', import.meta.url), 'utf8'));
   assert.equal(source.commit, '20cc221d737a37a6ee3a9c007e91bd69541fefe9');
-  assert.equal(bytes.readUInt32LE(0), 0x44535431);
-  assert.equal(bytes.readUInt32LE(12), 16);
-  assert.equal(source.parts.length, 16);
+  assert.equal(bytes.readUInt32LE(0), 0x43424C31);
+  assert.equal(bytes.readUInt32LE(12), 2);
+  assert.equal(source.parts.length, 2);
   const count = bytes.readUInt32LE(4), indexCount = bytes.readUInt32LE(8);
   assert.equal(count, source.vertices);
   assert.equal(indexCount, source.triangles * 3);
   assert.equal(bytes.length, 16 + count * 12 + indexCount * 4);
-  assert.deepEqual(source.parts.flatMap(p => p.labels).sort((a,b) => a-b), [7,8,10,11,12,13,17,18,26,46,47,49,50,51,52,53,54,58]);
+  assert.deepEqual(source.parts.flatMap(p => p.labels).sort((a,b) => a-b), [7,8,46,47]);
   for (const part of source.parts) {
     const points = Array.from({ length: part.vertices }, (_, i) => [0,1,2].map(j => bytes.readFloatLE(16 + (part.vertexOffset + i) * 12 + j * 4)));
     for (let j = 0; j < 3; j++) {
@@ -49,19 +50,15 @@ test('sixteen internal surfaces preserve anatomy, labels and outward closed geom
   }
 });
 
-test('internal colour timelines differ and keep changing after early function', () => {
-  const kinds = ['cerebellum','thalamus','caudate','putamen','pallidum','hippocampus','amygdala','accumbens'];
-  assert.equal(new Set(kinds.map(k => structureColourStage(k, 1))).size, kinds.length);
-  for (const kind of kinds) {
-    assert(structureColourStage(kind, 0) > 0 && structureColourStage(kind, 0) < 0.5);
-    assert(structureColourStage(kind, 0.5) > structureColourStage(kind, 0));
-    assert(structureColourStage(kind, 2) > structureColourStage(kind, 0.5));
-    assert(structureColourStage(kind, 20) > structureColourStage(kind, 5));
-    assert(structureColourStage(kind, 20) < 1);
-  }
+test('cerebellar colour continues changing beyond its early phase', () => {
+  assert(cerebellumColourStage(0) > 0 && cerebellumColourStage(0) < 0.5);
+  assert(cerebellumColourStage(0.5) > cerebellumColourStage(0));
+  assert(cerebellumColourStage(2) > cerebellumColourStage(0.5));
+  assert(cerebellumColourStage(20) > cerebellumColourStage(5));
+  assert(cerebellumColourStage(20) < 1);
 });
 
-test('atlas-based dorsal sensory and motor bands progress early in both hemispheres', async () => {
+test('dorsal sensory bands and distinct auditory/language trajectories use both anatomical hemispheres', async () => {
   const bytes = await readFile(new URL('../assets/cortex.bin', import.meta.url));
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const count = new DataView(buffer).getUint32(4, true);
@@ -82,6 +79,15 @@ test('atlas-based dorsal sensory and motor bands progress early in both hemisphe
     assert(at6m > mean(offset + 5, 0.5) + 0.2);
     assert(at1y > at6m + 0.08 && at2y > at1y + 0.04);
   }
+  for (const offset of [0,74]) {
+    assert(mean(offset + 33, 0.5) > mean(offset + 34, 0.5) + 0.1, 'primary audition progresses ahead of auditory association');
+    assert(mean(offset + 34, 0.5) > mean(offset + 12, 0.5) + 0.1, 'temporal and frontal trajectories differ');
+    assert(mean(offset + 33, 2) > mean(offset + 14, 2) + 0.4);
+    for (const region of [33,34,36,35,38,73,12,14,13,25,26]) {
+      assert(mean(offset + region, 1) > mean(offset + region, 0.5));
+      assert(mean(offset + region, 20) > mean(offset + region, 8) + 0.05, 'continued refinement, including language regions');
+    }
+  }
   const fallback = buildMaturationWindows(positions, sulcal);
   assert(fallback.every(Number.isFinite));
 });
@@ -96,22 +102,28 @@ test('display palette passes through green and reaches blue with clamped endpoin
   assert.equal(setScaleColour(colour, 2, palette).getHexString(), '4056ad');
 });
 
-test('published regional estimates are used only inside the supported age range', () => {
-  assert.equal(dataset.source.commit, '418ff157bd8036e01a5d823754bbd7cff5fdda1b');
-  assert.equal(dataset.regions.length, 148);
-  assert.equal(sampleThickness(dataset, 0.5), null);
-  assert.equal(sampleThickness(dataset, 4.99), null);
-  assert.equal(sampleThickness(dataset, 20.01), null);
-  assert(Math.abs(sampleThickness(dataset, 5)[0] - 2.772572) < 1e-6);
-  assert(Math.abs(sampleThickness(dataset, 20)[0] - 2.466887) < 1e-6);
-  const a = sampleThickness(dataset, 5);
-  const b = sampleThickness(dataset, 5.5);
-  const between = sampleThickness(dataset, 5.25);
-  for (let i = 0; i < 148; i++) assert(Math.abs(between[i] - (a[i] + b[i]) / 2) < 1e-6);
+test('age insights cover every month and keep both examples within an explicit range', () => {
+  assert.equal(AGE_INSIGHTS[0].from, 0);
+  assert.equal(AGE_INSIGHTS.at(-1).to, 241);
+  for (let i = 1; i < AGE_INSIGHTS.length; i++) assert.equal(AGE_INSIGHTS[i].from, AGE_INSIGHTS[i-1].to);
+  for (let month = 0; month <= 240; month++) {
+    const insight = insightForAge(month / 12);
+    assert(insight.from <= month && insight.to > month);
+    assert(insight.title && insight.range);
+    assert.equal(insight.items.length, 2);
+    assert(insight.items.every(([label,text]) => label.length > 3 && text.length > 20));
+  }
+  assert.equal(insightForAge(-1), AGE_INSIGHTS[0]);
+  assert.equal(insightForAge(21), AGE_INSIGHTS.at(-1));
+  assert.equal(insightForAge(0.5).title, 'Babiller et échanger');
+  assert.equal(insightForAge(2).title, 'Assembler les mots et les idées');
+  assert.equal(insightForAge(20).title, 'Affiner ses stratégies');
 });
 
 test('atlas labels match the mesh and retain left/right anatomical identities', async () => {
   const bytes = await readFile(new URL('../assets/destrieux-labels.bin', import.meta.url));
+  assert.equal(atlasSource.commit, '418ff157bd8036e01a5d823754bbd7cff5fdda1b');
+  assert.equal(atlasSource.regions.length, 148);
   assert.equal(bytes.length, 20484 * 2);
   const labels = Array.from({ length: 20484 }, (_, i) => bytes.readUInt16LE(i * 2));
   assert(labels.slice(0, 10242).every(label => label >= 0 && label <= 74));

@@ -1,85 +1,55 @@
 # Développement cérébral — prototype interactif
 
-Page statique : `/pedagogique/developpement-cerebral/`. Elle utilise le même hébergement que le reste du dépôt, sans service Sites, compilation ni requête externe à l’exécution.
-
-Deux affichages sont disponibles avec le bouton latéral **IRM** : l’illustration de la naissance à 20 ans, et des épaisseurs corticales de référence sur **148 régions anatomiques entre 5 et 20 ans**. Le second affichage utilise des données publiées en millimètres, avec une échelle fixe ; ses couleurs ne sont pas un score de maturité. La sélection du mode IRM depuis un âge inférieur à 5 ans place le curseur à 5 ans ; revenir à l’illustration retrouve l’âge initial.
+Page statique : `/pedagogique/developpement-cerebral/`, sur l’hébergement existant, sans compilation ni requête externe à l’exécution. L’interface est en français.
 
 ## Utilisation
 
-Le curseur de 0 à 20 ans modifie les deux vues du cerveau en continu. Lecture/pause, remise à zéro et plein écran sont accessibles par des boutons. La vue de côté peut être tournée à la souris, au doigt ou avec les flèches lorsque le cerveau a le focus (Début rétablit l’orientation). Le curseur natif fonctionne au clavier. Les vues se superposent sur un écran étroit. Le bouton d’information ouvre les explications, sources et crédits ; aucune annotation n’est superposée au cerveau.
+Deux vues du cortex et du cervelet, de côté et du dessus, évoluent ensemble avec un curseur **mensuel de 0 à 20 ans**. Lecture/pause, remise à zéro, aide et plein écran sont disponibles. La vue de côté se tourne à la souris, au toucher ou avec les flèches lorsque le cerveau a le focus ; Début rétablit l’orientation. L’âge s’affiche en mois avant un an, puis en années et mois.
 
-Le **cervelet** est visible sous le cortex. Le bouton **Structures** alterne la seconde vue entre une vue oblique en transparence, qui dégage les structures sous-corticales et limbiques, et la vue du dessus. La scène contient 16 surfaces anatomiques appariées : cervelet, thalamus, noyau caudé, putamen, pallidum, hippocampe, amygdale et noyau accumbens. Le tronc cérébral a été retiré.
+La carte **« À cet âge »** accompagne le curseur : un titre, une période et deux exemples de grands changements. Elle couvre dix périodes, de 0–3 mois à 16–20 ans. Sur grand écran, elle s’ouvre à droite du curseur ; sur petit écran, son résumé reste visible et ses détails se déplient au-dessus, sans réduire la place du cerveau. Le clavier, Échap et le toucher fonctionnent. Les textes suivent l’âge global, y compris pendant un scénario focal.
 
-Le curseur se règle mois par mois. L’âge s’affiche en mois avant le premier anniversaire (« 6 mois »), puis en années et mois (« 1 an 6 mois »). Pendant la lecture, les couleurs évoluent en continu entre les mois.
+Le seul mode de couleurs est une **illustration** continue à sept repères : rouge, orange, jaune, vert, turquoise, bleu et bleu profond. L’échelle reste visible. Elle n’est pas un pourcentage de maturité, un bilan individuel ou une mesure d’épaisseur. Une région rouge est déjà fonctionnelle et le bleu ne signifie pas un développement achevé.
 
-Le bouton **Épilepsie** active un curseur de ciblage et un menu de trois effets : **crise focale avec diffusion**, **activité électrique localisée** et **développement local hypothétique**. Un clic ou un toucher dans l’une des deux vues choisit le foyer ; un autre clic le déplace. La croix l’efface ; Échap ou le bouton quitte le mode. Il reste possible de tourner la vue de côté en faisant glisser. Au clavier, Entrée sur le cerveau sélectionne le centre de la vue de côté, après orientation avec les flèches. La diffusion colore une zone violette qui s’étend pendant huit secondes, puis reste visible. **Relancer** permet de revoir son expansion. L’activité localisée est rose avec deux anneaux et une pulsation lente ; elle conserve une zone plus petite. L’hypothèse de développement est ambrée et hachurée. La réduction des animations conserve ces différences et affiche directement la zone de diffusion finale. Le ciblage est réservé au cortex ; toucher le cervelet ou une structure interne invite à choisir une zone corticale.
+Le bouton **Épilepsie** active le ciblage cortical et un menu extensible :
 
-L’hypothèse de développement propose un décalage local réglable de 0 à 60 mois. Elle passe en mode Illustration et ne modifie jamais les données IRM. Le bouton IRM quitte cette hypothèse pour retrouver les valeurs de référence. Le menu conserve le foyer lorsque l’on change d’effet.
+- **Crise focale avec diffusion** : expansion violette pendant huit secondes, puis zone atteinte persistante. Relancer rejoue l’expansion.
+- **Activité électrique localisée** : zone rose plus petite, deux anneaux et pulsation douce de quatre secondes.
+- **Développement local (hypothèse)** : zone ambrée hachurée, avec un décalage illustratif de 0 à 60 mois, borné à zéro au niveau de l’âge effectif.
 
-Pour essayer localement, depuis la racine du dépôt :
+Un clic ou un toucher choisit le foyer ; un autre le déplace. Changer d’effet conserve le foyer. La croix l’efface ; le bouton ou Échap quitte le mode. Entrée sur le cerveau sélectionne le centre de la vue de côté, après orientation au clavier. Faire glisser continue de tourner le cerveau. Le cervelet n’est pas une cible corticale. La réduction des animations conserve les trois effets sous une forme statique distincte. Les effets restent pédagogiques, sans modèle neuronal, EEG ni prédiction clinique.
 
-```sh
-python3 -m http.server 5173
-```
+## Audition, langage et régions précoces
 
-Ouvrir `http://localhost:5173/pedagogique/developpement-cerebral/` dans un navigateur avec WebGL 2. Un chargement par `file://` ne fonctionne pas pour les modules et le modèle binaire.
+Le modèle combine 64 sous-zones illustratives par hémisphère avec des **repères anatomiques Destrieux** :
 
-## Portée scientifique
+- Gyri postcentral et précentral, région paracentrale et sillons centraux : bandes sensorielles et motrices dorsales précoces, conservées dans les deux hémisphères.
+- Régions visuelles : cunéus, gyrus lingual, pôle occipital et sillon calcarin.
+- Audition primaire : gyrus temporal transverse, repère anatomique du gyrus de Heschl.
+- Audition associative et langage : gyrus temporal supérieur, planum temporale, planum polare, gyrus temporal moyen et sillon temporal supérieur ; régions frontales inférieures operculaire, triangulaire et orbitaire ; gyri angulaire et supramarginal.
 
-Le détail des sources, des extractions, de l’échelle de couleurs et des limites est dans [SCIENTIFIC_SOURCES.md](SCIENTIFIC_SOURCES.md).
+Les fenêtres de couleur de l’audition primaire, des régions temporales et des régions frontales sont différentes. Elles rendent visibles des changements précoces et un raffinement prolongé. Les régions sont des repères gyralement définis, pas des limites fonctionnelles exactes. Le langage est distribué et n’est pas réduit à deux centres. Les paramètres restent illustratifs, sans ajustement à des données longitudinales ni simulation de latéralisation.
 
-### Mode IRM
+Les exemples de la carte reposent sur des repères généraux de communication et de développement. Les tranches sont éditoriales ; elles ne décrivent pas une bascule biologique à une date précise. Les textes ne sont pas calculés à partir de la couleur des régions. Sources et limites : [SCIENTIFIC_SOURCES.md](SCIENTIFIC_SOURCES.md).
 
-- Courbes de référence de Lotter et al. (2024), issues du modèle de Rutherford et al. (2022), avec l’atlas Destrieux 2010 sur fsaverage5. Il s’agit de prédictions d’un modèle de population, pas d’IRM d’une personne.
-- Moyenne arithmétique des médianes féminine et masculine, interpolée entre les 31 estimations semestrielles de 5 à 20 ans. Les fichiers amont contiennent des âges extrapolés plus jeunes ; ils sont exclus de l’application conformément à la plage utilisée dans l’étude.
-- Échelle **4 mm rouge → 1,5 mm bleu**, avec zones non parcellisées en gris. Plus fin ne signifie pas systématiquement plus mature. Aucune trajectoire monotone n’est forcée sur les valeurs publiées.
-- Données dérivées sous **CC BY-NC-SA 4.0** ; crédits et licence conservés séparément du code.
+## Anatomie et fichiers
 
-### Mode Illustration
-
-- La géométrie réelle est la surface corticale moyenne **adulte** fsaverage5, distribuée par Nilearn 0.12.1 à partir de FreeSurfer. Il ne s’agit pas d’un modèle anatomique de nouveau-né ni d’une simulation de croissance. Le cervelet et les structures internes proviennent de la segmentation fsaverage compatible (voir ci-dessous).
-- Sept grandes tendances spatiales en coordonnées RAS sont déclinées en **64 sous-zones par hémisphère**, réparties sur la surface corticale. Chaque sous-zone a un calendrier distinct et reproductible pour faire coexister des poches rouges, oranges, jaunes, vertes, turquoise et bleues au même âge. Leurs bords se mélangent localement avec une légère variation liée aux sillons. Ces zones et leurs courbes, dans `maturation.js`, sont **illustratives**, sans ajustement à des données longitudinales. Les régions sensorielles et motrices ci-dessous utilisent toutefois les limites anatomiques de l’atlas. Les âges de début/fin sont des paramètres d’animation.
-- Chaque sous-zone combine une progression dès les premiers mois et une phase plus lente étalée sur l’enfance et l’adolescence. La part et la vitesse de la phase initiale varient selon les zones, avec davantage de changements précoces dans les zones sensorielles. Ce choix visuel rend 6 mois, 1 an et 2 ans distincts tout en conservant une évolution après 5 ans.
-- Les labels Destrieux du gyrus postcentral, du gyrus précentral, de la région paracentrale et des sillons centraux placent des bandes dorsales à progression précoce dans les deux hémisphères. Les régions visuelles et auditives primaires sont aussi ciblées. Les contours sont anatomiques ; les paramètres de progression restent illustratifs. Les données IRM ne sont pas modifiées par ces choix.
-- Une interpolation progressive à sept repères transforme le rouge en orange, jaune, vert, turquoise puis bleu. L’échelle est visible sous l’âge ; le bleu ne signifie pas un développement achevé. Elle indique une maturation relative schématique, sans exprimer un pourcentage, une capacité individuelle ou une mesure de matière grise. Le rouge ne signifie pas qu’une région est inactive.
-- Les régions antérieures restent partiellement jaunes à 20 ans pour ne pas suggérer une maturation achevée à cet âge. La maturation varie selon la mesure étudiée et se poursuit au-delà de 20 ans.
-- Les sous-zones servent à enrichir visuellement la progression. La carte ancienne des images de référence ne doit pas être assimilée directement à un indice global de maturité.
-
-Repère général : [NIMH — The Teen Brain: 7 Things to Know](https://www.nimh.nih.gov/health/publications/the-teen-brain-7-things-to-know).
-
-### Cervelet et structures sous-corticales / limbiques
-
-- Anatomie réelle : labels FreeSurfer du cervelet et de sept structures internes, bilatéralement, dans `fsaverage/mri/aseg.mgz`, distribué par MNE testing data au commit `20cc221d737a37a6ee3a9c007e91bd69541fefe9`. La matrice de surface RAS conserve leur alignement avec le cortex.
-- Le cervelet a des fonctions sensorimotrices précoces, tout en continuant à se raffiner. Les structures internes ont des trajectoires distinctes pendant l’enfance et l’adolescence. `structureColourStage()` utilise une phase précoce puis une phase plus lente, avec des paramètres différents selon la structure. Ces valeurs servent uniquement à l’animation ; ce ne sont pas des pourcentages ni des courbes ajustées à des mesures.
-- En mode IRM, le cervelet et ces structures restent **gris** : les données d’épaisseur corticale ne les couvrent pas. Les scénarios d’épilepsie restent corticaux.
-- Sources : [développement fonctionnel du cervelet de la naissance à 5 ans](https://www.nature.com/articles/s41467-025-61465-y), [trajectoires sous-corticales pendant la petite enfance](https://www.nature.com/articles/s41593-023-01501-6), [myélinisation corticale précoce](https://pmc.ncbi.nlm.nih.gov/articles/PMC4463864/). Elles orientent la chronologie générale sans fournir la carte de couleurs de l’application.
-
-## Rendu et fichiers
-
-- Three.js 0.170.0, copié localement dans `vendor/`, sous licence MIT.
-- `assets/cortex.bin` : deux hémisphères, 20 484 sommets, 40 960 triangles ; profondeur des sillons pour accentuer le relief. En-tête de quatre uint32 little-endian (`0x42524E31`, nombre de sommets, nombre d’indices, réservé), puis positions RAS float32, profondeurs float32 et indices uint16.
-- `assets/deep-structures.bin` : 16 surfaces, 67 279 sommets, 134 490 triangles. En-tête de quatre uint32 little-endian (`0x44535431`, total sommets, total indices, nombre de parties), puis positions RAS float32 et indices uint32 locaux à chaque partie. Les offsets et labels sont dans `assets/deep-structures-source.json`. `tools/prepare-deep-structures.py --segmentation chemin/aseg.mgz` reproduit le fichier avec NumPy, SciPy, NiBabel et scikit-image, après vérification de l’empreinte de l’entrée. La licence FreeSurfer reste séparée dans `assets/freesurfer-license.txt`.
-- `tools/prepare-cortex.py` reproduit le modèle depuis la version 0.12.1 de Nilearn avec la bibliothèque standard Python. La topologie et les coordonnées sont conservées. La permutation des axes et le centrage se font à l’affichage.
-- Les couleurs sont calculées dans un matériau éclairé avec un paramètre d’âge partagé par les deux vues. Le rendu se déclenche uniquement lors d’un changement, d’une rotation, d’un redimensionnement ou pendant la lecture.
-- Le mode de réduction des animations respecte la lecture volontaire, en avançant alors par années entières. La lecture s’arrête si l’onglet est masqué ou si l’aide est ouverte.
-- Les crédits et licences des éléments tiers sont conservés dans `THIRD_PARTY_NOTICES.txt` et ne sont pas remplacés par la licence générale du dépôt.
-
-Source anatomique : [Nilearn, fetch_surf_fsaverage](https://nilearn.github.io/stable/modules/generated/nilearn.datasets.fetch_surf_fsaverage.html).
-
-## Données et activité focale
-
-- `assets/cortical-thickness.json` contient les médianes régionales, les âges, les DOI, le commit amont et les empreintes des sources. `assets/destrieux-labels.bin` contient un uint16 little-endian par sommet, de 0 (sans label) à 148. La correspondance des noms et identifiants est vérifiée par le script de préparation.
-- `tools/prepare-scientific-data.py` reproduit ces actifs avec Python 3 et NumPy. Il ne charge aucun objet pickle et ne refait pas l’ajustement statistique des auteurs.
-- `cortical-data.js` interpole les courbes sans extrapolation hors de la plage 5–20 ans. Les valeurs corticales restent inchangées lorsque l’activité focale est affichée.
-- `cortical-network.js` construit le graphe des arêtes du cortex et calcule des distances de surface par Dijkstra. La diffusion est une illustration géométrique locale, sans connectome, modèle neuronal, EEG, prédiction clinique ou estimation d’un effet sur le développement.
-- `epilepsy-effects.js` contient le registre des choix du menu, leurs descriptions, leur famille de rendu et leur besoin éventuel du mode Illustration. De nouveaux choix peuvent être ajoutés à ce registre ; une famille de rendu nouvelle nécessite aussi son implémentation dans le matériau. L’activité locale pulse lentement sur une période de quatre secondes, sans diffusion. L’hypothèse de développement utilise un âge effectif réduit autour du foyer et borné à zéro, selon le décalage choisi ; elle ne représente pas un effet biologique mesuré de l’épilepsie.
+- `assets/cortex.bin` : surface adulte fsaverage5 distribuée par Nilearn 0.12.1, 20 484 sommets et 40 960 triangles, avec profondeur des sillons. En-tête uint32 little-endian (`0x42524E31`, sommets, indices, réservé), puis positions RAS float32, profondeurs float32 et indices uint16. `tools/prepare-cortex.py` reproduit le fichier.
+- `assets/cerebellum.bin` : deux hémisphères cérébelleux, 32 694 sommets et 65 376 triangles, extraits des labels FreeSurfer 7+8 et 46+47. En-tête uint32 (`0x43424C31`, total sommets, total indices, nombre de parties), positions RAS float32 puis indices uint32 locaux à chaque partie. Les offsets, labels, empreintes et bornes sont dans `assets/cerebellum-source.json`.
+- `tools/prepare-cerebellum.py --segmentation chemin/aseg.mgz` reproduit le cervelet avec NumPy, SciPy, NiBabel et scikit-image. L’entrée est vérifiée par SHA-256. Le gabarit fsaverage est fixé au commit MNE testing data `20cc221d737a37a6ee3a9c007e91bd69541fefe9`.
+- `assets/destrieux-labels.bin` : un uint16 par sommet, 0 sans label, 1–74 à gauche et 75–148 à droite. `tools/prepare-atlas.py` extrait seulement les labels anatomiques au commit CTdev `418ff157bd8036e01a5d823754bbd7cff5fdda1b`. Les noms et empreintes figurent dans `assets/atlas-source.json`.
+- `maturation.js` définit les fenêtres illustratives, `age-insights.js` les repères textuels, `colour-scale.js` la palette, `cortical-network.js` les distances géodésiques du cortex et `epilepsy-effects.js` le registre extensible des effets.
+- Three.js 0.170.0 est servi depuis `vendor/`. Le rendu se déclenche à la demande ou pendant une animation. Le cortex et le cervelet gardent une anatomie adulte fixe, sans simulation de croissance.
+- Les actifs d’atlas restent sous **CC BY-NC-SA 4.0** et le cervelet sous la licence **FreeSurfer v1.0**, séparément du code. Les avis complets sont dans `THIRD_PARTY_NOTICES.txt` et les fichiers de licence associés.
 
 ## Vérification
 
-Depuis la racine du dépôt, avec Node 22 ou plus récent :
+Depuis la racine du dépôt :
 
 ```sh
+python3 -m http.server 5173
 node --test pedagogique/developpement-cerebral/tests/scientific-model.test.mjs
 ```
 
-Les tests couvrent l’intégrité, la fermeture, l’orientation et les coordonnées des 16 structures internes, les bandes sensorielles dorsales précoces, les couleurs de l’échelle, les valeurs publiées, l’interpolation, l’absence d’extrapolation vers la petite enfance, les identifiants anatomiques et l’impossibilité d’une propagation par le maillage vers l’autre hémisphère. Le parcours navigateur vérifie séparément le ciblage dans les deux vues, le tactile, le clavier, les changements de mode et le rendu.
+Ouvrir `http://localhost:5173/pedagogique/developpement-cerebral/` avec WebGL 2. Les modules et fichiers binaires nécessitent HTTP, pas `file://`.
+
+Les tests couvrent les maillages fermés et orientés du cervelet, les identités anatomiques, les bandes dorsales et les trajectoires auditives/langagières bilatérales, la palette, les 241 choix mensuels de la carte et l’absence de propagation entre hémisphères disjoints. Le parcours navigateur vérifie les interactions, les textes selon l’âge, le rendu, les petits écrans et les scénarios focaux.
