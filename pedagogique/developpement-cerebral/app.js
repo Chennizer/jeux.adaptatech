@@ -5,6 +5,7 @@ import { EPILEPSY_EFFECTS, epilepsyEffect } from './epilepsy-effects.js';
 import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
 import { BRAIN_PALETTE } from './colour-scale.js';
+import { PROFILE_DOMAINS, DEVELOPMENT_PROFILES, profileLevel, buildProfileInfluences } from './development-profiles.js';
 
 const $ = (id) => document.getElementById(id);
 const range = $('age');
@@ -14,6 +15,12 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const about = $('about');
 const epilepsyButton = $('epilepsy');
 const effectSelect = $('epilepsy-effect');
+const profilesButton = $('profiles');
+let currentPanel = null;
+let selectedProfile = DEVELOPMENT_PROFILES[0];
+const profileValues = new Float32Array(3);
+let comparingProfile = false;
+let profileInitialized = false;
 let selectedEffect = EPILEPSY_EFFECTS[0];
 let developmentDelayMonths = Number($('development-delay').value);
 let age = Number(range.value) / 12;
@@ -47,16 +54,17 @@ function setEpilepsyMode(active) {
   epilepsyButton.setAttribute('aria-label', label);
   epilepsyButton.title = label;
   if (!active) clearFocal();
+  if (active) currentPanel = 'epilepsy';
+  else if (currentPanel === 'epilepsy') currentPanel = null;
   updateEffectControls();
   $('announcement').textContent = active ? 'Mode épilepsie : cliquez sur une zone du cerveau, ou utilisez Entrée sur le cerveau.' : 'Mode épilepsie désactivé.';
   requestPaint();
 }
 
 function updateEffectControls() {
-  $('epilepsy-options').hidden = !epilepsyMode;
+  updatePanels();
   $('development-options').hidden = !selectedEffect.hasDelay;
   $('replay-row').hidden = selectedEffect.hasDelay;
-  $('experience').classList.toggle('delay-effect', selectedEffect.hasDelay);
   $('experience').style.setProperty('--effect-accent', selectedEffect.color);
   effectSelect.value = selectedEffect.id;
   $('effect-description').textContent = selectedEffect.description;
@@ -94,17 +102,91 @@ function setAge(value) {
   requestPaint();
 }
 
-let currentInsight = null;
+function updatePanels() {
+  $('profile-options').hidden = currentPanel !== 'profile';
+  $('epilepsy-options').hidden = currentPanel !== 'epilepsy' || !epilepsyMode;
+  profilesButton.setAttribute('aria-expanded', String(currentPanel === 'profile'));
+  epilepsyButton.setAttribute('aria-expanded', String(currentPanel === 'epilepsy' && epilepsyMode));
+  const label = epilepsyMode && currentPanel !== 'epilepsy' ? 'Afficher les réglages de l’épilepsie : ciblage actif' : epilepsyMode ? 'Désactiver le mode épilepsie' : 'Activer le mode épilepsie : choisir un foyer';
+  epilepsyButton.setAttribute('aria-label', label); epilepsyButton.title = label;
+}
+
+const hasProfileVariation = () => profileValues.some(value => value !== 0);
+const showingProfile = () => hasProfileVariation() && !comparingProfile;
+let currentInsightKey = '';
 function updateAgeInsight() {
   const insight = insightForAge(age);
-  if (insight === currentInsight) return;
-  currentInsight = insight;
+  const active = showingProfile();
+  const key = `${insight.from}:${active}:${selectedProfile.id}:${profileValues.join(',')}`;
+  if (key === currentInsightKey) return;
+  currentInsightKey = key;
   $('age-insight').dataset.phase = String(insight.from);
   $('insight-range').textContent = insight.range;
-  $('insight-title').textContent = insight.title;
-  $('insight-themes').textContent = insight.themes.join(' · ');
+  $('stage-context').textContent = active ? 'Profil illustratif' : comparingProfile ? 'Repère illustratif' : 'En développement';
+  $('insight-title').textContent = active ? selectedProfile.title || 'Un profil singulier' : insight.title;
+  $('insight-themes').textContent = active ? PROFILE_DOMAINS
+    .flatMap((domain, i) => profileValues[i] === 0 ? [] : [`${domain.id === 'attention' ? 'Attention' : domain.label} ${profileLevel(profileValues[i]).toLowerCase()}`]).join(' · ') : insight.themes.join(' · ');
 }
-updateAgeInsight();
+
+function updateProfileControls() {
+  $('development-profile').value = selectedProfile.id;
+  PROFILE_DOMAINS.forEach((domain, i) => {
+    const input = $(`profile-${domain.id}`);
+    input.value = String(profileValues[i]);
+    input.setAttribute('aria-valuetext', profileLevel(profileValues[i]));
+    input.style.setProperty('--position', `${(profileValues[i] + 1) * 50}%`);
+    $(`value-${domain.id}`).textContent = profileLevel(profileValues[i]);
+  });
+  $('experience').classList.toggle('profile-active', hasProfileVariation());
+  $('compare-profile').disabled = !hasProfileVariation();
+  $('compare-profile').setAttribute('aria-pressed', String(comparingProfile));
+  $('compare-profile').textContent = comparingProfile ? 'Revenir au profil' : 'Voir le repère au même âge';
+  updateAgeInsight(); requestPaint();
+}
+
+function selectProfile(id) {
+  selectedProfile = DEVELOPMENT_PROFILES.find(profile => profile.id === id) || DEVELOPMENT_PROFILES[0];
+  if (selectedProfile.values) profileValues.set(selectedProfile.values);
+  comparingProfile = false; profileInitialized = true;
+  setPlaying(false); updateProfileControls();
+}
+$('development-profile').replaceChildren(...DEVELOPMENT_PROFILES.map(profile => {
+  const option = document.createElement('option'); option.value = profile.id; option.textContent = profile.label; return option;
+}));
+for (const [i, domain] of PROFILE_DOMAINS.entries()) {
+  const row = document.createElement('div'); row.className = 'profile-domain';
+  const heading = document.createElement('div'); heading.className = 'profile-domain-heading';
+  const label = document.createElement('label'); label.htmlFor = `profile-${domain.id}`; label.textContent = domain.label;
+  const output = document.createElement('output'); output.id = `value-${domain.id}`; output.htmlFor = `profile-${domain.id}`;
+  const input = document.createElement('input'); input.id = `profile-${domain.id}`; input.type = 'range'; input.min = '-1'; input.max = '1'; input.step = '1'; input.value = '0';
+  heading.append(label, output); row.append(heading, input); $('profile-domains').append(row);
+  input.addEventListener('input', () => {
+    profileValues[i] = Number(input.value); selectedProfile = DEVELOPMENT_PROFILES.at(-1); comparingProfile = false;
+    setPlaying(false); updateProfileControls();
+  });
+  input.addEventListener('change', () => { $('announcement').textContent = `${domain.label} : ${profileLevel(profileValues[i])}. Profil illustratif.`; });
+}
+$('development-profile').addEventListener('change', () => {
+  selectProfile($('development-profile').value);
+  $('announcement').textContent = `Profil illustratif : ${selectedProfile.label}. L’âge reste inchangé.`;
+});
+profilesButton.addEventListener('click', () => {
+  if (currentPanel === 'profile') currentPanel = null;
+  else {
+    if (!profileInitialized) selectProfile('language_attention');
+    currentPanel = 'profile';
+  }
+  setPlaying(false); updatePanels(); requestPaint();
+});
+for (const [closeId, trigger] of [['close-profiles', profilesButton], ['close-epilepsy', epilepsyButton]]) {
+  $(closeId).addEventListener('click', () => { currentPanel = null; updatePanels(); trigger.focus(); });
+}
+$('compare-profile').addEventListener('click', () => {
+  comparingProfile = !comparingProfile;
+  setPlaying(false); updateProfileControls();
+  $('announcement').textContent = comparingProfile ? 'Repère illustratif au même âge.' : 'Retour au profil illustratif, au même âge.';
+});
+updateProfileControls();
 
 function requestPaint() {
   if (ready && !frame) frame = requestAnimationFrame(tick);
@@ -141,7 +223,7 @@ function tick(time) {
 
 let yearlyAccumulator = 0;
 function announceAge() {
-  $('announcement').textContent = `${range.getAttribute('aria-valuetext')}. ${insightForAge(age).title}.`;
+  $('announcement').textContent = `${range.getAttribute('aria-valuetext')}. ${$('insight-title').textContent}. ${showingProfile() ? 'Profil illustratif.' : ''}`;
 }
 
 range.addEventListener('input', () => { setPlaying(false); setAge(Number(range.value) / 12); });
@@ -155,16 +237,23 @@ playButton.addEventListener('click', () => {
 $('reset').addEventListener('click', () => {
   setPlaying(false);
   setEpilepsyMode(false);
+  currentPanel = null; selectProfile('reference'); updatePanels();
   setAge(0);
   resetViews();
   announceAge();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { setPlaying(false); stopSeizureAnimation(); } });
 $('information').addEventListener('click', () => { setPlaying(false); stopSeizureAnimation(); about.showModal(); });
-epilepsyButton.addEventListener('click', () => setEpilepsyMode(!epilepsyMode));
+epilepsyButton.addEventListener('click', () => {
+  if (epilepsyMode && currentPanel !== 'epilepsy') { currentPanel = 'epilepsy'; updatePanels(); }
+  else setEpilepsyMode(!epilepsyMode);
+});
 $('replay-focal').addEventListener('click', () => restartFocalEffect());
 $('clear-focal').addEventListener('click', () => { clearFocal(); $('announcement').textContent = 'Foyer effacé.'; });
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !about.open && currentPanel === 'profile') {
+    currentPanel = null; updatePanels(); profilesButton.focus(); return;
+  }
   if (event.key === 'Escape' && !about.open && epilepsyMode) setEpilepsyMode(false);
 });
 reducedMotion.addEventListener('change', () => { if (reducedMotion.matches) stopSeizureAnimation(); requestPaint(); });
@@ -207,12 +296,14 @@ document.addEventListener('fullscreenchange', () => {
 $('retry').addEventListener('click', () => location.reload());
 
 function showFailure(message, error) {
+  currentPanel = null;
   setPlaying(false);
   ready = false;
   range.disabled = true;
   playButton.disabled = true;
   $('reset').disabled = true;
   epilepsyButton.disabled = true;
+  profilesButton.disabled = true;
   setEpilepsyMode(false);
   stage.setAttribute('aria-busy', 'false');
   $('loading').hidden = true;
@@ -267,8 +358,11 @@ async function initialize() {
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     const surfaceGraph = buildSurfaceGraph(positions, indices);
+    geometry.setAttribute('profileInfluence', new THREE.BufferAttribute(buildProfileInfluences(vertexLabels, surfaceGraph), 3));
 
     const ageUniform = { value: age };
+    const profileVector = new THREE.Vector3();
+    const profileUniform = { value: profileVector };
     const seizureUniform = { value: 0 };
     const seizureTimeUniform = { value: 0 };
     const staticSeizureUniform = { value: 0 };
@@ -280,6 +374,7 @@ async function initialize() {
     const material = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uAge = ageUniform;
+      shader.uniforms.uProfile = profileUniform;
       shader.uniforms.uSeizure = seizureUniform;
       shader.uniforms.uSeizureTime = seizureTimeUniform;
       shader.uniforms.uStaticSeizure = staticSeizureUniform;
@@ -288,7 +383,7 @@ async function initialize() {
       shader.uniforms.uDevelopmentDelay = delayUniform;
       shader.uniforms.uEffectRadius = radiusUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec4 maturation;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${shader.vertexShader}`;
+      shader.vertexShader = `attribute vec4 maturation;\nattribute vec3 profileInfluence;\nuniform vec3 uProfile;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${shader.vertexShader}`;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         float effectiveAge = uAge;
@@ -299,6 +394,10 @@ async function initialize() {
         float later = smoothstep(maturation.x, maturation.y, effectiveAge);
         float infant = 1.0 - exp(-max(0.0, effectiveAge) / maturation.w);
         vMaturity = mix(later, infant, maturation.z);
+        float profileShift = clamp(dot(profileInfluence, uProfile), -1.0, 1.0);
+        float profileStrength = (1.0 - exp(-max(0.0, effectiveAge) / 1.5)) * 0.3;
+        float profileRoom = 1.0 - abs(vMaturity - 0.5) * 1.2;
+        vMaturity = clamp(vMaturity + profileShift * profileStrength * profileRoom, 0.0, 1.0);
         vSulc = sulcalDepth;
         vSeizureDistance = min(160.0, seizureDistance);
         vSurfacePoint = transformed;
@@ -540,7 +639,8 @@ async function initialize() {
       radiusUniform.value = selectedEffect.radius;
       focalColor.set(selectedEffect.color);
       focalMarker.material.color.copy(focalColor);
-      cerebellum.update(value);
+      profileVector.set(...(showingProfile() ? profileValues : [0, 0, 0]));
+      cerebellum.update(value, profileVector.z * .7);
       updateFocalReadout();
       renderer.setScissorTest(false);
       renderer.clear();
@@ -564,6 +664,8 @@ async function initialize() {
     playButton.disabled = false;
     $('reset').disabled = false;
     epilepsyButton.disabled = false;
+    profilesButton.disabled = !vertexLabels;
+    if (!vertexLabels) profilesButton.title = 'Atlas anatomique indisponible. Rechargez la page pour réessayer.';
   } catch (error) {
     renderer?.dispose();
     showFailure('Le cerveau n’a pas pu être affiché. Vérifiez votre connexion et la disponibilité de WebGL dans votre navigateur.', error);

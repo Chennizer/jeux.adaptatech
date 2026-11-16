@@ -58,7 +58,23 @@ Ces plages sont **éditoriales**, pas des seuils biologiques ou des dates d’ac
 - ASHA, *Communication Milestones*, https://www.asha.org/public/developmental-milestones/communication-milestones/ ; exemples pour [la naissance à un an](https://www.asha.org/public/developmental-milestones/communication-milestones-birth-to-1-year/) et [19–24 mois](https://www.asha.org/public/developmental-milestones/communication-milestones-19-to-24-months/). Les autres tranches ASHA jusqu’à cinq ans sont liées depuis cet index.
 - NIMH, *The Teen Brain: 7 Things to Know*, https://www.nimh.nih.gov/health/publications/the-teen-brain-7-things-to-know : raffinement à l’adolescence, apprentissage, relations et planification. Le développement ne se termine pas à 20 ans.
 
+## Profils contrastés : une métaphore pédagogique
+
+L’objectif est de montrer qu’à un même âge, des points d’appui et des besoins de soutien peuvent coexister. Les exemples « langage en appui / attention à soutenir », « attention en appui / langage à soutenir » et « coordination en appui / langage à soutenir » sont des **scénarios éditoriaux**, pas des profils diagnostiques ou des observations d’élèves. La personnalisation propose trois réglages qualitatifs, sans âge mental, QI ni mesure des capacités.
+
+Source de cadrage : [AAIDD, Defining Criteria for Intellectual Disability](https://www.aaidd.org/intellectual-disability/definition). L’AAIDD souligne la coexistence possible de forces et de limitations et l’importance des soutiens individualisés. La déficience intellectuelle relève d’une évaluation du fonctionnement intellectuel et adaptatif ; la présente illustration ne permet ni de la reconnaître ni de la simuler à partir de trois réglages. Aucun exemple n’est intitulé « déficience intellectuelle » ou associé à un diagnostic.
+
+Les fonctions reposent sur des réseaux distribués qui se chevauchent. Les poids de `development-profiles.js` sont des approximations spatiales choisies pour la démonstration, sans ajustement à un connectome, à des observations IRM ou à des données psychométriques. Le langage concerne surtout des repères temporaux, frontaux inférieurs et pariétaux ; l’attention, des repères frontopariétaux et cingulaires ; la coordination, des repères sensorimoteurs et le cervelet. L’influence du cervelet reste globale, sans attribution à des lobules fonctionnels mesurés. Une aisance en langage ne se traduit pas scientifiquement par une avance anatomique locale.
+
+Le maillage reçoit trois influences par sommet, identiques dans leur principe pour les deux hémisphères. Trois passes de lissage suivent les arêtes corticales (65 % du sommet, 35 % de la moyenne des voisins). Elles ne traversent pas de composante disjointe. Les influences communes sont normalisées pour que leur somme ne dépasse pas un : des ajustements opposés peuvent se compenser dans les zones partagées.
+
+Les réglages valent −1, 0 ou +1 uniquement dans le code ; l’interface affiche « À soutenir », « Intermédiaire » ou « En appui ». Le mélange modifie le paramètre de couleur de base avec une intensité bornée, croissant progressivement après la naissance : `0,3 × (1 − exp(−âge/1,5))`, pondérée par l’influence spatiale et une marge dépendant de la couleur de base. Le résultat est borné à l’intervalle 0–1. Ce calcul ne décale pas l’âge global et ne constitue pas une mesure de maturité. À réglages nuls, le rendu est identique au repère illustratif.
+
+Le bouton de comparaison conserve exactement l’âge et les choix ; il annule temporairement les contributions du profil. Le profil persiste lorsque son volet est réduit et peut se combiner aux scénarios focaux. Cette combinaison n’est pas un modèle causal entre déficience intellectuelle, épilepsie et développement. Sans atlas, les profils sont désactivés et l’illustration ordinaire reste utilisable.
+
 ## Mode épilepsie
+
+Le menu, les réglages, le statut, le nom de région, Relancer et Effacer le foyer sont regroupés dans le volet de droite. Réduire le volet conserve le mode de ciblage ; le rouvrir conserve le foyer.
 
 Le ray casting choisit le sommet cortical le plus proche du triangle touché. Le cervelet n’est pas une cible corticale. Le menu est généré depuis le registre `epilepsy-effects.js` et conserve le foyer lors d’un changement d’effet :
 
@@ -74,4 +90,4 @@ La réduction des animations donne trois formes statiques distinctes. Les animat
 
 L’atlas adapté reste sous **CC BY-NC-SA 4.0**, avec le texte complet dans `assets/ctdev-license.txt`. Le cervelet garde séparément la licence **FreeSurfer v1.0** dans `assets/freesurfer-license.txt`. Les sources, avis et modifications sont conservés dans `THIRD_PARTY_NOTICES.txt` et ne sont pas remplacés par la licence générale du code.
 
-Les tests vérifient les maillages cérébelleux fermés et orientés, les identités anatomiques, les trajectoires auditives/langagières et dorsales des deux côtés, la couverture des 241 sélections mensuelles par les repères, la palette et les composants disjoints du cortex. Ils vérifient l’implémentation et ne constituent pas une validation clinique.
+Les tests vérifient les maillages cérébelleux fermés et orientés, les identités anatomiques, les trajectoires auditives/langagières et dorsales des deux côtés, la couverture des 241 sélections mensuelles par les repères, la palette et les composants disjoints du cortex. Les tests des profils vérifient aussi les bornes et l’identité du réglage zéro, les influences distribuées/partagées et le lissage sur composantes disjointes. Ils vérifient l’implémentation et ne constituent pas une validation clinique.

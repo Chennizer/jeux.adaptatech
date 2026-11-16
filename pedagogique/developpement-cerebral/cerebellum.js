@@ -1,4 +1,5 @@
 import { BRAIN_PALETTE, setScaleColour } from './colour-scale.js';
+import { profileColourStage } from './development-profiles.js';
 
 export async function loadCerebellum() {
   const [meshResponse, sourceResponse] = await Promise.all([
@@ -44,14 +45,14 @@ export function createCerebellum(THREE, data, corticalCenter) {
     mesh.name = part.name; mesh.userData.kind = part.kind;
     meshes.push(mesh); group.add(mesh); box.union(geometry.boundingBox);
   }
-  let lastAge;
+  let lastAge, lastAdjustment;
   return {
     group, meshes, box,
-    update(age) {
-      if (age === lastAge) return;
-      lastAge = age;
+    update(age, adjustment = 0) {
+      if (age === lastAge && adjustment === lastAdjustment) return;
+      lastAge = age; lastAdjustment = adjustment;
       for (const mesh of meshes) {
-        setScaleColour(mesh.material.color, cerebellumColourStage(age), palette);
+        setScaleColour(mesh.material.color, profileColourStage(cerebellumColourStage(age), age, adjustment), palette);
       }
     },
   };

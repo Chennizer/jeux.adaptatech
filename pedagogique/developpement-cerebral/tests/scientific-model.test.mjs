@@ -8,8 +8,59 @@ import { AGE_INSIGHTS, insightForAge } from '../age-insights.js';
 import { buildMaturationWindows, maturityAtAge } from '../maturation.js';
 import { BRAIN_PALETTE, setScaleColour } from '../colour-scale.js';
 import { Color } from '../vendor/three.module.min.js';
+import { buildProfileInfluences, profileColourStage, DEVELOPMENT_PROFILES } from '../development-profiles.js';
 
 const atlasSource = JSON.parse(await readFile(new URL('../assets/atlas-source.json', import.meta.url), 'utf8'));
+
+test('profile variations stay bounded, preserve the zero setting and do not imply an age shift', () => {
+  for (const profile of DEVELOPMENT_PROFILES.filter(item => item.values)) {
+    assert.equal(profile.values.length, 3);
+    assert(profile.values.every(value => [-1,0,1].includes(value)));
+  }
+  for (const age of [0,.5,2,8,20]) for (const base of [0,.1,.5,.9,1]) {
+    assert.equal(profileColourStage(base, age, 0), base);
+    const low = profileColourStage(base, age, -1), high = profileColourStage(base, age, 1);
+    assert(low >= 0 && high <= 1 && low <= base && high >= base);
+    if (age === 0) assert.equal(low, high);
+  }
+  assert(profileColourStage(.5, 8, 1) - profileColourStage(.5, 8, -1) > .5);
+});
+
+test('profile smoothing does not transfer a domain across disconnected hemispheres', () => {
+  const graph = buildSurfaceGraph(new Float32Array([0,0,0, 3,0,0, 0,4,0, 0,0,1, 3,0,1, 0,4,1]), new Uint16Array([0,1,2, 3,4,5]));
+  const influences = buildProfileInfluences(new Uint16Array([34,34,34,0,0,0]), graph);
+  assert(influences[0] > .9);
+  assert(influences.subarray(9).every(value => value === 0));
+  assert(buildProfileInfluences(null, graph).every(value => value === 0));
+});
+
+test('language and attention profiles affect distributed and overlapping anatomical influences', async () => {
+  const bytes = await readFile(new URL('../assets/cortex.bin', import.meta.url));
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const header = new DataView(buffer), count = header.getUint32(4, true);
+  const positions = new Float32Array(buffer, 16, count * 3);
+  const triangles = new Uint16Array(buffer, 16 + count * 16, header.getUint32(8, true));
+  const atlas = await readFile(new URL('../assets/destrieux-labels.bin', import.meta.url));
+  const labels = Uint16Array.from({ length: count }, (_, i) => atlas.readUInt16LE(i * 2));
+  const influences = buildProfileInfluences(labels, buildSurfaceGraph(positions, triangles));
+  const mean = (region, channel) => {
+    let total = 0, n = 0;
+    for (let i = 0; i < count; i++) if (labels[i] === region) { total += influences[i * 3 + channel]; n++; }
+    return total / n;
+  };
+  for (let i = 0; i < count; i++) {
+    const weights = influences.subarray(i * 3, i * 3 + 3);
+    assert(weights.every(value => Number.isFinite(value) && value >= 0 && value <= 1));
+    assert(weights.reduce((sum, value) => sum + value, 0) <= 1.00001);
+  }
+  for (const offset of [0,74]) {
+    assert(mean(offset + 34, 0) > .75 && mean(offset + 34, 1) < .1);
+    assert(mean(offset + 15, 1) > .75 && mean(offset + 15, 0) < .1);
+    assert(mean(offset + 25, 0) > .3 && mean(offset + 25, 1) > .15);
+    assert(mean(offset + 29, 2) > .75);
+    assert(mean(offset + 42, 0) + mean(offset + 42, 1) + mean(offset + 42, 2) < .05);
+  }
+});
 
 test('paired cerebellar surfaces preserve anatomy, labels and outward closed geometry', async () => {
   const bytes = await readFile(new URL('../assets/cerebellum.bin', import.meta.url));
