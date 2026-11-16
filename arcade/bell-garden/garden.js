@@ -7,8 +7,9 @@
       inputMode: 'Type de contrôle', tapMode: 'Tactile', gazeMode: 'Regard', switchMode: 'Switch', switchType: 'Mode switch',
       scanMode: 'Une switch : balayage', stepMode: 'Deux switches : avancer / jouer',
       dwellTime: 'Temps de fixation', scanTime: 'Intervalle de balayage', background: 'Fond',
-      skyTheme: 'Jardin', darkTheme: 'Noir', lightTheme: 'Blanc', options: 'Options', volume: 'Volume',
-      mute: 'Désactiver les sons', gentleEffects: 'Réduire les animations', fullscreen: 'Plein écran',
+      skyTheme: 'Jardin', darkTheme: 'Noir', lightTheme: 'Blanc', options: 'Options', volume: 'Volume des fleurs',
+      music: 'Musique', musicVolume: 'Volume de la musique', musicUnavailable: 'La musique n’a pas pu démarrer. Réessayez en appuyant sur Commencer.',
+      mute: 'Couper les clochettes', gentleEffects: 'Réduire les animations', fullscreen: 'Plein écran',
       start: 'Commencer', resume: 'Reprendre', backToArcade: 'Retour à l’arcade',
       tapHint: 'Touchez une fleur. Clavier : flèches puis Espace, ou touches 1 à 6.',
       gazeHint: 'Fixez une fleur pour la faire chanter. Regardez ailleurs pour la rejouer.',
@@ -23,8 +24,9 @@
       inputMode: 'Input type', tapMode: 'Touch', gazeMode: 'Eyegaze', switchMode: 'Switch', switchType: 'Switch mode',
       scanMode: 'One switch: scanning', stepMode: 'Two switches: move / play',
       dwellTime: 'Dwell time', scanTime: 'Scanning interval', background: 'Background',
-      skyTheme: 'Garden', darkTheme: 'Black', lightTheme: 'White', options: 'Options', volume: 'Volume',
-      mute: 'Disable sounds', gentleEffects: 'Reduce animations', fullscreen: 'Fullscreen',
+      skyTheme: 'Garden', darkTheme: 'Black', lightTheme: 'White', options: 'Options', volume: 'Flower volume',
+      music: 'Music', musicVolume: 'Music volume', musicUnavailable: 'Music couldn’t start. Press Start to try again.',
+      mute: 'Mute the bells', gentleEffects: 'Reduce animations', fullscreen: 'Fullscreen',
       start: 'Start', resume: 'Resume', backToArcade: 'Back to the arcade',
       tapHint: 'Touch a flower. Keyboard: arrows then Space, or keys 1–6.',
       gazeHint: 'Look at a flower to make it sing. Look away before playing it again.',
@@ -39,8 +41,9 @@
       inputMode: '入力タイプ', tapMode: 'タッチ', gazeMode: '視線', switchMode: 'スイッチ', switchType: 'スイッチモード',
       scanMode: '1スイッチ：スキャン', stepMode: '2スイッチ：移動・演奏',
       dwellTime: '注視時間', scanTime: 'スキャン間隔', background: '背景',
-      skyTheme: '庭', darkTheme: '黒', lightTheme: '白', options: '設定', volume: '音量',
-      mute: '音を無効にする', gentleEffects: 'アニメーションを減らす', fullscreen: '全画面',
+      skyTheme: '庭', darkTheme: '黒', lightTheme: '白', options: '設定', volume: '花の音量',
+      music: '音楽', musicVolume: '音楽の音量', musicUnavailable: '音楽を開始できませんでした。「開始」を押して再試行してください。',
+      mute: 'ベルを消音', gentleEffects: 'アニメーションを減らす', fullscreen: '全画面',
       start: '開始', resume: '再開', backToArcade: 'アーケードに戻る',
       tapHint: '花に触れてください。矢印キーで選び、スペースキーで演奏。1〜6キーでも演奏できます。',
       gazeHint: '花を見つめて音を鳴らしましょう。同じ花を鳴らすには一度視線を外してください。',
@@ -75,6 +78,8 @@
   let audio = null;
   let master = null;
   let audioFailed = false;
+  let musicFailed = false;
+  let windowActive = true;
 
   try {
     const storedLanguage = localStorage.getItem('siteLanguage');
@@ -82,17 +87,25 @@
     const saved = JSON.parse(localStorage.getItem('bellGardenSettings') || 'null');
     if (saved && typeof saved === 'object') {
       if (['tap', 'gaze', 'scan', 'step'].includes(saved.mode)) pendingMode = saved.mode;
-      for (const [id, min, max, key] of [['dwell-time', 300, 2500, 'dwell'], ['scan-time', 600, 4000, 'scan'], ['volume', 0, 100, 'volume']]) {
+      for (const [id, min, max, key] of [['dwell-time', 300, 2500, 'dwell'], ['scan-time', 600, 4000, 'scan'], ['volume', 0, 100, 'volume'], ['music-volume', 0, 100, 'musicVolume']]) {
         if (Number.isFinite(saved[key])) $(id).value = Math.min(max, Math.max(min, saved[key]));
       }
       if (['sky', 'dark', 'light'].includes(saved.theme)) $('theme').value = saved.theme;
-      for (const [id, key] of [['gentle-effects', 'gentle'], ['mute-toggle', 'muted'], ['fullscreen-toggle', 'fullscreen']]) {
+      for (const [id, key] of [['gentle-effects', 'gentle'], ['mute-toggle', 'muted'], ['fullscreen-toggle', 'fullscreen'], ['music-enabled', 'music']]) {
         if (typeof saved[key] === 'boolean') $(id).checked = saved[key];
       }
+      if (saved.muted && typeof saved.music !== 'boolean') $('music-enabled').checked = false;
     }
   } catch (_) { /* The game also works when browser storage is unavailable. */ }
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) $('gentle-effects').checked = true;
   $('switch-mode').value = pendingMode === 'step' ? 'step' : 'scan';
+
+  const music = window.BellGardenMusic.create($('garden-music'), {
+    canPlay,
+    enabled: () => $('music-enabled').checked,
+    volume: () => Number($('music-volume').value) / 100,
+    onFailure: showMusicFailure
+  });
 
   art.kinds.forEach((kind, index) => {
     const button = document.createElement('button');
@@ -100,7 +113,9 @@
     button.className = 'flower';
     button.dataset.index = index;
     button.dataset.flower = kind.name;
-    button.style.setProperty('--plant-height', [80, 86, 94, 81, 88, 91][index] + '%');
+    button.style.setProperty('--plant-size', kind.size);
+    button.style.setProperty('--crown-factor', kind.crown);
+    button.style.setProperty('--height-cap', kind.cap);
     button.style.setProperty('--sway-duration', [8.2, 9.1, 7.8, 8.8, 9.6, 8.5][index] + 's');
     button.style.setProperty('--sway-delay', [-3.2, -6.1, -1.8, -4.7, -2.4, -5.5][index] + 's');
     button.style.setProperty('--sway-angle', [1.2, 1.5, .9, 1.4, 1.6, 1.3][index] + 'deg');
@@ -128,7 +143,7 @@
   });
 
   function text(key) { return copy[language][key]; }
-  function canPlay() { return started && !menuOpen && !document.hidden; }
+  function canPlay() { return started && !menuOpen && !document.hidden && windowActive; }
 
   function updateLanguage() {
     document.documentElement.lang = language;
@@ -143,6 +158,7 @@
     $('control-panel-start-button').textContent = text(started ? 'resume' : 'start');
     $('play-hint').textContent = text(mode + 'Hint');
     if (audioFailed) $('audio-status').textContent = text('soundUnavailable');
+    if (musicFailed) $('music-status').textContent = text('musicUnavailable');
     updateModeFields();
   }
 
@@ -160,6 +176,7 @@
     $('dwell-value').textContent = $('dwell-time').value + ' ms';
     $('scan-value').textContent = (Number($('scan-time').value) / 1000).toLocaleString(language, { maximumFractionDigits: 1 }) + ' s';
     $('volume-value').textContent = $('volume').value + ' %';
+    $('music-volume-value').textContent = $('music-volume').value + ' %';
   }
 
   function selectFlower(index, visible = true) {
@@ -199,6 +216,12 @@
     $('audio-notice').hidden = !failed;
     if (failed !== audioFailed) $('audio-status').textContent = failed ? text('soundUnavailable') : '';
     audioFailed = failed;
+  }
+
+  function showMusicFailure(failed) {
+    $('music-notice').hidden = !failed;
+    if (failed !== musicFailed) $('music-status').textContent = failed ? text('musicUnavailable') : '';
+    musicFailed = failed;
   }
 
   function ensureAudio() {
@@ -290,12 +313,14 @@
   function playFlower(index) {
     if (!canPlay()) return;
     ringBell(index);
+    if (!$('mute-toggle').checked) music.duck();
     animateFlower(index);
     if (mode !== 'scan') selectFlower(index, mode === 'step');
   }
 
   function pauseGarden() {
     document.body.classList.add('garden-paused');
+    music.pause();
     stopScanning();
     cancelDwell();
     dwellLocked = null;
@@ -309,6 +334,7 @@
     if (!canPlay()) return;
     document.body.classList.remove('garden-paused');
     startScanning();
+    music.resume();
   }
 
   function openMenu() {
@@ -327,13 +353,15 @@
       localStorage.setItem('bellGardenSettings', JSON.stringify({
         mode, dwell: Number($('dwell-time').value), scan: Number($('scan-time').value),
         volume: Number($('volume').value), gentle: $('gentle-effects').checked,
-        theme: $('theme').value, muted: $('mute-toggle').checked, fullscreen: $('fullscreen-toggle').checked
+        theme: $('theme').value, muted: $('mute-toggle').checked, fullscreen: $('fullscreen-toggle').checked,
+        music: $('music-enabled').checked, musicVolume: Number($('music-volume').value)
       }));
     } catch (_) { /* Session settings still work without storage. */ }
   }
 
   function startGarden() {
     ensureAudio();
+    windowActive = true;
     mode = pendingMode;
     started = true;
     menuOpen = false;
@@ -350,6 +378,7 @@
     selectFlower(selected, mode === 'scan' || mode === 'step');
     garden.focus({ preventScroll: true });
     startScanning();
+    music.start();
     if ($('fullscreen-toggle').checked && !document.fullscreenElement) {
       document.documentElement.requestFullscreen?.()?.catch(() => {});
     } else if (!$('fullscreen-toggle').checked && document.fullscreenElement) {
@@ -367,11 +396,13 @@
   });
   $('control-panel-start-button').addEventListener('click', startGarden);
   $('settings-button').addEventListener('click', openMenu);
-  ['dwell-time', 'scan-time', 'volume'].forEach(id => $(id).addEventListener('input', () => {
+  ['dwell-time', 'scan-time', 'volume', 'music-volume'].forEach(id => $(id).addEventListener('input', () => {
     updateModeFields();
     if (id === 'volume') updateVolume();
+    if (id === 'music-volume') music.update();
   }));
   $('mute-toggle').addEventListener('change', updateVolume);
+  $('music-enabled').addEventListener('change', () => music.update());
   $('language-toggle').addEventListener('click', () => {
     language = { fr: 'en', en: 'ja', ja: 'fr' }[language];
     try { localStorage.setItem('siteLanguage', language); } catch (_) { /* Session language still changes. */ }
@@ -399,8 +430,8 @@
     if (document.hidden) pauseGarden();
     else resumeGarden();
   });
-  window.addEventListener('blur', pauseGarden);
-  window.addEventListener('focus', resumeGarden);
+  window.addEventListener('blur', () => { windowActive = false; pauseGarden(); });
+  window.addEventListener('focus', () => { windowActive = true; resumeGarden(); });
   window.addEventListener('pagehide', pauseGarden);
 
   updateLanguage();

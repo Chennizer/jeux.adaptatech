@@ -8,9 +8,10 @@ const vm = require('node:vm');
 // Web Audio doubles. These checks do not substitute for browser or hardware QA.
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const artScript = fs.readFileSync(path.join(__dirname, '../garden-art.js'), 'utf8');
+const musicScript = fs.readFileSync(path.join(__dirname, '../garden-music.js'), 'utf8');
 const script = fs.readFileSync(path.join(__dirname, '../garden.js'), 'utf8');
 
-function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, saved } = {}) {
+function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, musicBlocked = false, saved } = {}) {
   let now = 0;
   let timerId = 0;
   const jobs = new Map();
@@ -84,11 +85,27 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
     }
     focus() { document.activeElement = this; this.emit('focus'); }
   }
+  class MediaElement extends Element {
+    constructor() {
+      super('audio');
+      this.paused = true;
+      this.volume = 1;
+      this.currentTime = 0;
+      this.playCalls = 0;
+    }
+    play() {
+      this.playCalls++;
+      if (musicBlocked) return Promise.reject(Object.assign(new Error('Playback blocked'), { name: 'NotAllowedError' }));
+      this.paused = false;
+      return Promise.resolve();
+    }
+    pause() { this.paused = true; }
+  }
   const elements = new Map();
   const translated = [];
   for (const match of html.matchAll(/<([\w-]+)\b([^>]*)>/g)) {
     const attrs = Object.fromEntries([...match[2].matchAll(/([\w-]+)="([^"]*)"/g)].map(m => [m[1], m[2]]));
-    const element = new Element(match[1]);
+    const element = match[1] === 'audio' ? new MediaElement() : new Element(match[1]);
     if (attrs.id) elements.set(attrs.id, element);
     if (attrs.class) element.className = attrs.class;
     if (attrs.value) element.value = attrs.value;
@@ -163,6 +180,7 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
     setInterval: (fn, delay) => schedule(fn, delay, delay), clearInterval: id => jobs.delete(id)
   };
   vm.runInNewContext(artScript, context);
+  vm.runInNewContext(musicScript, context);
   vm.runInNewContext(script, context);
   const flowers = $('garden').children;
   const key = (code, values = {}) => document.emit('keydown', { target: $('garden'), code, key: code, ...values });
@@ -451,4 +469,104 @@ test('ambient motion pauses with visibility and resumes only when gameplay is ac
   h.document.hidden = false;
   h.document.emit('visibilitychange');
   assert.equal(h.$('control-panel').hidden, false);
+});
+
+test('background music starts with play, preserves position across the menu, and stays silent in inactive windows', () => {
+  const h = harness();
+  const player = h.$('garden-music');
+  assert.equal(player.playCalls, 0);
+  h.start();
+  assert.equal(player.paused, false);
+  assert.equal(player.volume, .2);
+  assert.equal(player.src, '../../songs/spring/spring1.mp3');
+  player.currentTime = 24;
+  h.click('settings-button');
+  assert.equal(player.paused, true);
+  h.start();
+  assert.equal(player.currentTime, 24);
+  assert.equal(player.paused, false);
+  h.window.emit('blur');
+  assert.equal(player.paused, true);
+  h.document.emit('visibilitychange');
+  assert.equal(player.paused, true);
+  h.window.emit('focus');
+  assert.equal(player.paused, false);
+  h.document.hidden = true;
+  h.document.emit('visibilitychange');
+  assert.equal(player.paused, true);
+});
+
+test('music advances through the spring/summer playlist and loops without restarting on each note', () => {
+  const h = harness();
+  h.start();
+  const player = h.$('garden-music');
+  h.flowers[0].emit('pointerdown');
+  assert.equal(player.playCalls, 1);
+  assert.ok(Math.abs(player.volume - .07) < .00001);
+  h.advance(900);
+  assert.equal(player.volume, .2);
+  player.emit('ended');
+  assert.equal(player.src, '../../songs/spring/spring3.mp3');
+  player.emit('ended');
+  assert.equal(player.src, '../../songs/season/summer1.mp3');
+  player.emit('ended');
+  assert.equal(player.src, '../../songs/spring/spring1.mp3');
+  assert.equal(player.playCalls, 4);
+});
+
+test('music and flower audio have independent volume/mute settings that are saved', () => {
+  const h = harness({ saved: { music: false, musicVolume: 35 } });
+  h.start();
+  const player = h.$('garden-music');
+  assert.equal(player.playCalls, 0);
+  h.flowers[0].emit('pointerdown');
+  assert.equal(h.played(), 1);
+  h.click('settings-button');
+  h.$('music-enabled').checked = true;
+  h.$('music-enabled').emit('change');
+  assert.equal(player.playCalls, 0);
+  h.$('mute-toggle').checked = true;
+  h.$('mute-toggle').emit('change');
+  h.$('music-volume').value = '30';
+  h.$('music-volume').emit('input');
+  h.start();
+  assert.equal(player.paused, false);
+  assert.equal(player.volume, .3);
+  assert.equal(h.audioContexts[0].gains[0].gain.value, 0);
+  const saved = JSON.parse(h.storage.get('bellGardenSettings'));
+  assert.equal(saved.music, true);
+  assert.equal(saved.musicVolume, 30);
+  h.$('music-enabled').checked = false;
+  h.$('music-enabled').emit('change');
+  assert.equal(player.paused, true);
+});
+
+test('missing music tracks have bounded retries, report an accessible error, and leave flowers playable', () => {
+  const h = harness();
+  h.start();
+  const player = h.$('garden-music');
+  player.emit('error');
+  assert.equal(player.src, '../../songs/spring/spring3.mp3');
+  player.emit('error');
+  assert.equal(player.src, '../../songs/season/summer1.mp3');
+  player.emit('error');
+  assert.equal(player.paused, true);
+  assert.equal(player.playCalls, 3);
+  assert.equal(h.$('music-notice').hidden, false);
+  h.window.emit('focus');
+  assert.equal(player.playCalls, 3);
+  h.flowers[1].emit('pointerdown');
+  assert.equal(h.played(), 1);
+});
+
+test('autoplay rejection does not loop through tracks or interrupt visual play', async () => {
+  const h = harness({ musicBlocked: true });
+  h.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(h.$('garden-music').playCalls, 1);
+  assert.equal(h.$('garden-music').paused, true);
+  assert.equal(h.$('music-notice').hidden, false);
+  h.flowers[0].emit('pointerdown');
+  assert.equal(h.flowers[0].classList.contains('is-playing'), true);
 });

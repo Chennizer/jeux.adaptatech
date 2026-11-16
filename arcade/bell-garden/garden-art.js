@@ -3,19 +3,19 @@
   'use strict';
 
   const kinds = Object.freeze([
-    { name: 'bell', light: '#ffb4bf', color: '#f24f7d', shade: '#c92762' },
-    { name: 'daisy', light: '#fff0a3', color: '#ffca38', shade: '#e89a16' },
-    { name: 'tulip', light: '#c4b0ff', color: '#9963ee', shade: '#6740b1' },
-    { name: 'anemone', light: '#a0efe1', color: '#24c7b7', shade: '#0c8f92' },
-    { name: 'poppy', light: '#ffc078', color: '#ff8046', shade: '#dc4c32' },
-    { name: 'cosmos', light: '#ffb9e4', color: '#e85eaf', shade: '#ba3387' }
+    { name: 'bell', light: '#ffb4c3', color: '#ff568b', shade: '#c92762', size: 158, crown: 1.18, cap: .86 },
+    { name: 'daisy', light: '#fff5a3', color: '#ffd035', shade: '#e99911', size: 190, crown: 1.22, cap: .99 },
+    { name: 'tulip', light: '#d4b5ff', color: '#a96af5', shade: '#7340bd', size: 148, crown: 1.06, cap: .81 },
+    { name: 'anemone', light: '#b0f6df', color: '#28d4b2', shade: '#099c89', size: 174, crown: 1.19, cap: .95 },
+    { name: 'poppy', light: '#ffd089', color: '#ff9146', shade: '#e45b30', size: 136, crown: 1.28, cap: .73 },
+    { name: 'cosmos', light: '#ffc5e9', color: '#f369bd', shade: '#c23991', size: 180, crown: 1.13, cap: .90 }
   ]);
 
   function crown(index) {
     const kind = kinds[index];
     const id = 'garden-petal-' + kind.name;
     const fill = 'url(#' + id + ')';
-    const petal = ' fill="' + fill + '" stroke="' + kind.shade + '" stroke-width="1.4"';
+    const petal = ' fill="' + fill + '" stroke="' + kind.shade + '" stroke-width="2.8" stroke-linejoin="round"';
     const vein = ' fill="none" stroke="' + kind.shade + '" stroke-width="1.6" stroke-opacity=".4" stroke-linecap="round"';
     let shape;
 
@@ -30,7 +30,7 @@
         '<circle cx="139" cy="228" r="12" fill="#ffd976" stroke="#cf982f" stroke-width="2"/>' +
         '<ellipse cx="136" cy="224" rx="4" ry="3" fill="#fff5c9"/></g>';
     } else if (kind.name === 'daisy') {
-      const petals = Array.from({ length: 12 }, (_, i) => '<ellipse class="petal" cx="140" cy="78" rx="23" ry="48" transform="rotate(' + (i * 30 + 9) + ' 140 140)"' + petal + '/>').join('');
+      const petals = Array.from({ length: 12 }, (_, i) => '<ellipse class="petal" cx="140" cy="78" rx="27" ry="50" transform="rotate(' + (i * 30 + 9) + ' 140 140)"' + petal + '/>').join('');
       const seeds = Array.from({ length: 12 }, (_, i) => {
         const a = i * Math.PI / 6;
         return '<circle cx="' + (140 + Math.cos(a) * 24).toFixed(2) + '" cy="' + (140 + Math.sin(a) * 24).toFixed(2) + '" r="2.8" fill="#a96821" opacity=".6"/>';
@@ -85,8 +85,8 @@
   ];
 
   function stem(index) {
-    const leaf = ' fill="#5caa66" stroke="#3c8656" stroke-width="1.5"';
-    const light = ' fill="#87bd73" stroke="#518d5c" stroke-width="1.5"';
+    const leaf = ' fill="#59bb60" stroke="#318c49" stroke-width="2.6" stroke-linejoin="round"';
+    const light = ' fill="#97d36a" stroke="#4c9b4f" stroke-width="2.6" stroke-linejoin="round"';
     let leaves;
     if (index === 2) {
       leaves = '<path d="M137 320C72 289 80 165 61 132C125 152 145 249 137 320Z"' + leaf + '/>' +
@@ -103,8 +103,8 @@
         '<path d="M132 278L67 238M148 225L207 178" fill="none" stroke="#c7e0a1" stroke-opacity=".7" stroke-width="2"/>';
     }
     return '<svg class="stem-art" viewBox="0 0 280 340" preserveAspectRatio="none" aria-hidden="true">' +
-      '<path class="plant-stem" d="' + stemPaths[index] + '" fill="none" stroke="#42875c" stroke-width="9" stroke-linecap="round"/>' +
-      '<path d="' + stemPaths[index] + '" fill="none" stroke="#8dbc78" stroke-width="2.5" stroke-linecap="round"/>' +
+      '<path class="plant-stem" d="' + stemPaths[index] + '" fill="none" stroke="#36924f" stroke-width="13" stroke-linecap="round"/>' +
+      '<path d="' + stemPaths[index] + '" fill="none" stroke="#9edb7a" stroke-width="3.5" stroke-linecap="round"/>' +
       '<g class="leaf-sway">' + leaves + '</g></svg>';
   }
 
