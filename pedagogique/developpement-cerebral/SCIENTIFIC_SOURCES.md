@@ -49,9 +49,9 @@ L’ensemble compte 32 694 sommets et 65 376 triangles. Les bornes RAS, offsets,
 
 Repères : *Functional development of the human cerebellum from birth to age five* (2025), https://www.nature.com/articles/s41467-025-61465-y ; *Longitudinal development of the cerebellum in human infants during the first 800 days* (2023), https://pubmed.ncbi.nlm.nih.gov/36964904/.
 
-## Carte « À cet âge »
+## Repères intégrés par âge
 
-`age-insights.js` contient dix regroupements pédagogiques : 0–3, 3–6 et 6–12 mois ; 1–2, 2–3, 3–5, 5–8, 8–12, 12–16 et 16–20 ans. Chaque carte donne deux exemples de fonctions ou d’apprentissages qui évoluent pendant cette période. Les textes dépendent de l’âge global sélectionné, sans être déduits des couleurs ou d’un scénario focal.
+`age-insights.js` contient dix regroupements pédagogiques : 0–3, 3–6 et 6–12 mois ; 1–2, 2–3, 3–5, 5–8, 8–12, 12–16 et 16–20 ans. Chaque période affiche un titre court et trois mots-clés relatifs aux fonctions ou aux apprentissages qui évoluent. Ces repères sont superposés à la vue, sans réduire la surface de rendu ni ajouter de panneau détaillé. Les textes dépendent de l’âge global sélectionné, sans être déduits des couleurs ou d’un scénario focal.
 
 Ces plages sont **éditoriales**, pas des seuils biologiques ou des dates d’acquisition individuelle. Elles ne sont pas un outil de dépistage. Les expériences, l’environnement, les langues et l’enseignement contribuent aux apprentissages. Les repères sont des paraphrases générales, sans reprise de tableaux normatifs ni de scores :
 
@@ -74,4 +74,4 @@ La réduction des animations donne trois formes statiques distinctes. Les animat
 
 L’atlas adapté reste sous **CC BY-NC-SA 4.0**, avec le texte complet dans `assets/ctdev-license.txt`. Le cervelet garde séparément la licence **FreeSurfer v1.0** dans `assets/freesurfer-license.txt`. Les sources, avis et modifications sont conservés dans `THIRD_PARTY_NOTICES.txt` et ne sont pas remplacés par la licence générale du code.
 
-Les tests vérifient les maillages cérébelleux fermés et orientés, les identités anatomiques, les trajectoires auditives/langagières et dorsales des deux côtés, la couverture des 241 sélections mensuelles par la carte, la palette et les composants disjoints du cortex. Ils vérifient l’implémentation et ne constituent pas une validation clinique.
+Les tests vérifient les maillages cérébelleux fermés et orientés, les identités anatomiques, les trajectoires auditives/langagières et dorsales des deux côtés, la couverture des 241 sélections mensuelles par les repères, la palette et les composants disjoints du cortex. Ils vérifient l’implémentation et ne constituent pas une validation clinique.

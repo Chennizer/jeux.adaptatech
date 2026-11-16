@@ -102,7 +102,7 @@ test('display palette passes through green and reaches blue with clamped endpoin
   assert.equal(setScaleColour(colour, 2, palette).getHexString(), '4056ad');
 });
 
-test('age insights cover every month and keep both examples within an explicit range', () => {
+test('compact stage themes cover every month within an explicit age range', () => {
   assert.equal(AGE_INSIGHTS[0].from, 0);
   assert.equal(AGE_INSIGHTS.at(-1).to, 241);
   for (let i = 1; i < AGE_INSIGHTS.length; i++) assert.equal(AGE_INSIGHTS[i].from, AGE_INSIGHTS[i-1].to);
@@ -110,13 +110,13 @@ test('age insights cover every month and keep both examples within an explicit r
     const insight = insightForAge(month / 12);
     assert(insight.from <= month && insight.to > month);
     assert(insight.title && insight.range);
-    assert.equal(insight.items.length, 2);
-    assert(insight.items.every(([label,text]) => label.length > 3 && text.length > 20));
+    assert.equal(insight.themes.length, 3);
+    assert(insight.themes.every(text => text.length > 2 && text.length < 22));
   }
   assert.equal(insightForAge(-1), AGE_INSIGHTS[0]);
   assert.equal(insightForAge(21), AGE_INSIGHTS.at(-1));
   assert.equal(insightForAge(0.5).title, 'Babiller et échanger');
-  assert.equal(insightForAge(2).title, 'Assembler les mots et les idées');
+  assert.equal(insightForAge(2).title, 'Relier les mots');
   assert.equal(insightForAge(20).title, 'Affiner ses stratégies');
 });
 

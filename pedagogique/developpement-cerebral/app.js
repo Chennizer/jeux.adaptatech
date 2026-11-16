@@ -56,6 +56,7 @@ function updateEffectControls() {
   $('epilepsy-options').hidden = !epilepsyMode;
   $('development-options').hidden = !selectedEffect.hasDelay;
   $('replay-row').hidden = selectedEffect.hasDelay;
+  $('experience').classList.toggle('delay-effect', selectedEffect.hasDelay);
   $('experience').style.setProperty('--effect-accent', selectedEffect.color);
   effectSelect.value = selectedEffect.id;
   $('effect-description').textContent = selectedEffect.description;
@@ -101,15 +102,8 @@ function updateAgeInsight() {
   $('age-insight').dataset.phase = String(insight.from);
   $('insight-range').textContent = insight.range;
   $('insight-title').textContent = insight.title;
-  insight.items.forEach(([label, text], i) => {
-    $(`insight-label-${i}`).textContent = label;
-    $(`insight-text-${i}`).textContent = text;
-  });
+  $('insight-themes').textContent = insight.themes.join(' · ');
 }
-const insightLayout = matchMedia('(min-width: 1000px) and (min-height: 600px)');
-$('age-insight').open = insightLayout.matches;
-insightLayout.addEventListener('change', () => { $('age-insight').open = insightLayout.matches; });
-$('age-insight').addEventListener('toggle', requestPaint);
 updateAgeInsight();
 
 function requestPaint() {
@@ -171,15 +165,7 @@ epilepsyButton.addEventListener('click', () => setEpilepsyMode(!epilepsyMode));
 $('replay-focal').addEventListener('click', () => restartFocalEffect());
 $('clear-focal').addEventListener('click', () => { clearFocal(); $('announcement').textContent = 'Foyer effacé.'; });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !about.open && !insightLayout.matches && $('age-insight').open) {
-    $('age-insight').open = false;
-    $('age-insight').querySelector('summary').focus();
-    return;
-  }
   if (event.key === 'Escape' && !about.open && epilepsyMode) setEpilepsyMode(false);
-});
-document.addEventListener('pointerdown', (event) => {
-  if (!insightLayout.matches && $('age-insight').open && !about.open && !$('age-insight').contains(event.target)) $('age-insight').open = false;
 });
 reducedMotion.addEventListener('change', () => { if (reducedMotion.matches) stopSeizureAnimation(); requestPaint(); });
 effectSelect.replaceChildren(...EPILEPSY_EFFECTS.map((effect) => {
@@ -506,7 +492,6 @@ async function initialize() {
 
     let width = 0;
     let height = 0;
-    let insightSpace = 0;
     const box = geometry.boundingBox.clone().union(cerebellum.box);
     const corners = [];
     for (const x of [box.min.x, box.max.x]) {
@@ -541,16 +526,10 @@ async function initialize() {
       renderer.render(scene, camera);
     }
     paint = (value) => {
-      const nextInsightSpace = Math.max(60, Math.floor($('age-insight').getBoundingClientRect().top - 24));
-      if (nextInsightSpace !== insightSpace) {
-        insightSpace = nextInsightSpace;
-        $('age-insight').style.setProperty('--insight-space', `${insightSpace}px`);
-      }
       if (stage.clientWidth !== width || stage.clientHeight !== height) {
         width = stage.clientWidth;
         height = stage.clientHeight;
         renderer.setSize(width, height, false);
-        $('experience').style.setProperty('--feature-center', `${stage.offsetTop + height / 2}px`);
       }
       if (!width || !height) return;
       ageUniform.value = value;

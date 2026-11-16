@@ -6,7 +6,7 @@ Page statique : `/pedagogique/developpement-cerebral/`, sur l’hébergement exi
 
 Deux vues du cortex et du cervelet, de côté et du dessus, évoluent ensemble avec un curseur **mensuel de 0 à 20 ans**. Lecture/pause, remise à zéro, aide et plein écran sont disponibles. La vue de côté se tourne à la souris, au toucher ou avec les flèches lorsque le cerveau a le focus ; Début rétablit l’orientation. L’âge s’affiche en mois avant un an, puis en années et mois.
 
-La carte **« À cet âge »** accompagne le curseur : un titre, une période et deux exemples de grands changements. Elle couvre dix périodes, de 0–3 mois à 16–20 ans. Sur grand écran, elle s’ouvre à droite du curseur ; sur petit écran, son résumé reste visible et ses détails se déplient au-dessus, sans réduire la place du cerveau. Le clavier, Échap et le toucher fonctionnent. Les textes suivent l’âge global, y compris pendant un scénario focal.
+Le graphique occupe **tout l’écran**, avec des commandes superposées qui ne réduisent pas sa surface. Les repères par âge sont intégrés en haut de la vue : un titre court, la période et trois mots-clés. Par exemple : « Babiller et échanger — Babillage · Imitation · Échanges ». Les dix périodes évoluent avec le curseur, de 0–3 mois à 16–20 ans. Aucun encadré ni volet détaillé ne masque le graphique. L’âge exact et le curseur restent centrés en bas. En paysage très court, seul le titre est conservé pour donner la priorité au cerveau. Les textes suivent l’âge global, y compris pendant un scénario focal. Le panneau des scénarios s’ouvre au-dessus des commandes sans redimensionner le cerveau.
 
 Le seul mode de couleurs est une **illustration** continue à sept repères : rouge, orange, jaune, vert, turquoise, bleu et bleu profond. L’échelle reste visible. Elle n’est pas un pourcentage de maturité, un bilan individuel ou une mesure d’épaisseur. Une région rouge est déjà fonctionnelle et le bleu ne signifie pas un développement achevé.
 
@@ -29,7 +29,7 @@ Le modèle combine 64 sous-zones illustratives par hémisphère avec des **repè
 
 Les fenêtres de couleur de l’audition primaire, des régions temporales et des régions frontales sont différentes. Elles rendent visibles des changements précoces et un raffinement prolongé. Les régions sont des repères gyralement définis, pas des limites fonctionnelles exactes. Le langage est distribué et n’est pas réduit à deux centres. Les paramètres restent illustratifs, sans ajustement à des données longitudinales ni simulation de latéralisation.
 
-Les exemples de la carte reposent sur des repères généraux de communication et de développement. Les tranches sont éditoriales ; elles ne décrivent pas une bascule biologique à une date précise. Les textes ne sont pas calculés à partir de la couleur des régions. Sources et limites : [SCIENTIFIC_SOURCES.md](SCIENTIFIC_SOURCES.md).
+Les thèmes affichés reposent sur des repères généraux de communication et de développement. Les tranches sont éditoriales ; elles ne décrivent pas une bascule biologique à une date précise. Les textes ne sont pas calculés à partir de la couleur des régions. Sources et limites : [SCIENTIFIC_SOURCES.md](SCIENTIFIC_SOURCES.md).
 
 ## Anatomie et fichiers
 
@@ -52,4 +52,4 @@ node --test pedagogique/developpement-cerebral/tests/scientific-model.test.mjs
 
 Ouvrir `http://localhost:5173/pedagogique/developpement-cerebral/` avec WebGL 2. Les modules et fichiers binaires nécessitent HTTP, pas `file://`.
 
-Les tests couvrent les maillages fermés et orientés du cervelet, les identités anatomiques, les bandes dorsales et les trajectoires auditives/langagières bilatérales, la palette, les 241 choix mensuels de la carte et l’absence de propagation entre hémisphères disjoints. Le parcours navigateur vérifie les interactions, les textes selon l’âge, le rendu, les petits écrans et les scénarios focaux.
+Les tests couvrent les maillages fermés et orientés du cervelet, les identités anatomiques, les bandes dorsales et les trajectoires auditives/langagières bilatérales, la palette, les repères des 241 choix mensuels et l’absence de propagation entre hémisphères disjoints. Le parcours navigateur vérifie les interactions, les textes selon l’âge, le rendu, les petits écrans et les scénarios focaux.
