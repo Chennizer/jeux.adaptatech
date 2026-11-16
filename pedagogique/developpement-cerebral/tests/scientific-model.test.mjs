@@ -3,51 +3,97 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { sampleThickness, regionName } from '../cortical-data.js';
 import { buildSurfaceGraph, surfaceDistances, UNREACHED } from '../cortical-network.js';
-import { brainstemColourStage } from '../brainstem.js';
+import { structureColourStage } from '../deep-structures.js';
+import { buildMaturationWindows, maturityAtAge } from '../maturation.js';
+import { BRAIN_PALETTE, setScaleColour } from '../colour-scale.js';
+import { Color } from '../vendor/three.module.min.js';
 
 const dataset = JSON.parse(await readFile(new URL('../assets/cortical-thickness.json', import.meta.url), 'utf8'));
 
-test('brainstem is a closed outward-oriented surface in cortical RAS coordinates', async () => {
-  const bytes = await readFile(new URL('../assets/brainstem.bin', import.meta.url));
-  const source = JSON.parse(await readFile(new URL('../assets/brainstem-source.json', import.meta.url), 'utf8'));
+test('sixteen internal surfaces preserve anatomy, labels and outward closed geometry', async () => {
+  const bytes = await readFile(new URL('../assets/deep-structures.bin', import.meta.url));
+  const source = JSON.parse(await readFile(new URL('../assets/deep-structures-source.json', import.meta.url), 'utf8'));
   assert.equal(source.commit, '20cc221d737a37a6ee3a9c007e91bd69541fefe9');
-  assert.equal(source.label, 16);
-  assert.equal(bytes.readUInt32LE(0), 0x42535431);
+  assert.equal(bytes.readUInt32LE(0), 0x44535431);
+  assert.equal(bytes.readUInt32LE(12), 16);
+  assert.equal(source.parts.length, 16);
   const count = bytes.readUInt32LE(4), indexCount = bytes.readUInt32LE(8);
   assert.equal(count, source.vertices);
   assert.equal(indexCount, source.triangles * 3);
-  assert.equal(bytes.length, 16 + count * 12 + indexCount * 2);
-  const points = Array.from({ length: count }, (_, i) => [0,1,2].map(j => bytes.readFloatLE(16 + i * 12 + j * 4)));
-  for (let j = 0; j < 3; j++) {
-    assert(points.every(p => Number.isFinite(p[j])));
-    assert(Math.abs(Math.min(...points.map(p => p[j])) - source.boundsRAS[0][j]) < 1e-4);
-    assert(Math.abs(Math.max(...points.map(p => p[j])) - source.boundsRAS[1][j]) < 1e-4);
-  }
-  // A scanner-affine mix-up would shift this structure away from the cortex.
-  assert(source.boundsRAS[0][2] < -65 && source.boundsRAS[1][2] < 5);
-  assert(source.boundsRAS[0][0] > -20 && source.boundsRAS[1][0] < 20);
-  let volume = 0;
-  const edges = new Map();
-  for (let i = 0; i < indexCount; i += 3) {
-    const triangle = [0,1,2].map(j => bytes.readUInt16LE(16 + count * 12 + (i + j) * 2));
-    assert(triangle.every(v => v < count));
-    const [a,b,c] = triangle.map(v => points[v]);
-    volume += a[0]*(b[1]*c[2]-b[2]*c[1]) + a[1]*(b[2]*c[0]-b[0]*c[2]) + a[2]*(b[0]*c[1]-b[1]*c[0]);
+  assert.equal(bytes.length, 16 + count * 12 + indexCount * 4);
+  assert.deepEqual(source.parts.flatMap(p => p.labels).sort((a,b) => a-b), [7,8,10,11,12,13,17,18,26,46,47,49,50,51,52,53,54,58]);
+  for (const part of source.parts) {
+    const points = Array.from({ length: part.vertices }, (_, i) => [0,1,2].map(j => bytes.readFloatLE(16 + (part.vertexOffset + i) * 12 + j * 4)));
     for (let j = 0; j < 3; j++) {
-      const x = triangle[j], y = triangle[(j + 1) % 3];
-      const key = `${Math.min(x,y)}:${Math.max(x,y)}`;
-      edges.set(key, (edges.get(key) || 0) + 1);
+      assert(points.every(p => Number.isFinite(p[j])));
+      assert(Math.abs(Math.min(...points.map(p => p[j])) - part.boundsRAS[0][j]) < 1e-4);
+      assert(Math.abs(Math.max(...points.map(p => p[j])) - part.boundsRAS[1][j]) < 1e-4);
     }
+    // Native tkregister RAS must align the paired structures with the cortex.
+    assert(points.every(([x,y,z]) => Math.abs(x) < 75 && y > -115 && y < 40 && z > -80 && z < 50));
+    assert(points.every(([x]) => part.id.endsWith('left') ? x < 3 : x > -3));
+    let volume = 0;
+    const edges = new Map();
+    for (let i = 0; i < part.triangles * 3; i += 3) {
+      const triangle = [0,1,2].map(j => bytes.readUInt32LE(16 + count * 12 + (part.indexOffset + i + j) * 4));
+      assert(triangle.every(v => v < part.vertices));
+      const [a,b,c] = triangle.map(v => points[v]);
+      volume += a[0]*(b[1]*c[2]-b[2]*c[1]) + a[1]*(b[2]*c[0]-b[0]*c[2]) + a[2]*(b[0]*c[1]-b[1]*c[0]);
+      for (let j = 0; j < 3; j++) {
+        const x = triangle[j], y = triangle[(j + 1) % 3], key = `${Math.min(x,y)}:${Math.max(x,y)}`;
+        edges.set(key, (edges.get(key) || 0) + 1);
+      }
+    }
+    assert([...edges.values()].every(n => n === 2), `${part.name} must be a closed manifold`);
+    assert(volume / 6 > 50 && volume / 6 < 100000, `${part.name}: outward normals and physical scale`);
   }
-  assert([...edges.values()].every(n => n === 2), 'surface must have no boundary or non-manifold edges');
-  assert(volume / 6 > 20000 && volume / 6 < 35000, 'normals must point outward and retain physical scale');
 });
 
-test('qualitative brainstem colour starts early and continues changing after birth', () => {
-  assert(brainstemColourStage(0) > 0.75);
-  assert(brainstemColourStage(0.5) > brainstemColourStage(0));
-  assert(brainstemColourStage(2) > brainstemColourStage(0.5));
-  assert(brainstemColourStage(20) < 1);
+test('internal colour timelines differ and keep changing after early function', () => {
+  const kinds = ['cerebellum','thalamus','caudate','putamen','pallidum','hippocampus','amygdala','accumbens'];
+  assert.equal(new Set(kinds.map(k => structureColourStage(k, 1))).size, kinds.length);
+  for (const kind of kinds) {
+    assert(structureColourStage(kind, 0) > 0 && structureColourStage(kind, 0) < 0.5);
+    assert(structureColourStage(kind, 0.5) > structureColourStage(kind, 0));
+    assert(structureColourStage(kind, 2) > structureColourStage(kind, 0.5));
+    assert(structureColourStage(kind, 20) > structureColourStage(kind, 5));
+    assert(structureColourStage(kind, 20) < 1);
+  }
+});
+
+test('atlas-based dorsal sensory and motor bands progress early in both hemispheres', async () => {
+  const bytes = await readFile(new URL('../assets/cortex.bin', import.meta.url));
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const count = new DataView(buffer).getUint32(4, true);
+  const positions = new Float32Array(buffer, 16, count * 3);
+  const sulcal = new Float32Array(buffer, 16 + count * 12, count);
+  const atlas = await readFile(new URL('../assets/destrieux-labels.bin', import.meta.url));
+  const labels = Uint16Array.from({ length: count }, (_, i) => atlas.readUInt16LE(i * 2));
+  const windows = buildMaturationWindows(positions, sulcal, labels);
+  const mean = (id, age) => {
+    let total = 0, n = 0;
+    for (let i = 0; i < count; i++) if (labels[i] === id) {
+      total += maturityAtAge(age, ...windows.subarray(i * 4, i * 4 + 4)); n++;
+    }
+    assert(n > 0); return total / n;
+  };
+  for (const offset of [0,74]) for (const region of [3,28,29,45,67,69]) {
+    const at6m = mean(offset + region, 0.5), at1y = mean(offset + region, 1), at2y = mean(offset + region, 2);
+    assert(at6m > mean(offset + 5, 0.5) + 0.2);
+    assert(at1y > at6m + 0.08 && at2y > at1y + 0.04);
+  }
+  const fallback = buildMaturationWindows(positions, sulcal);
+  assert(fallback.every(Number.isFinite));
+});
+
+test('display palette passes through green and reaches blue with clamped endpoints', () => {
+  const palette = BRAIN_PALETTE.map(c => new Color(c));
+  const colour = new Color();
+  assert.equal(setScaleColour(colour, 0, palette).getHexString(), 'e84335');
+  assert.equal(setScaleColour(colour, 0.5, palette).getHexString(), '58b56b');
+  assert.equal(setScaleColour(colour, 1, palette).getHexString(), '4056ad');
+  assert.equal(setScaleColour(colour, -1, palette).getHexString(), 'e84335');
+  assert.equal(setScaleColour(colour, 2, palette).getHexString(), '4056ad');
 });
 
 test('published regional estimates are used only inside the supported age range', () => {

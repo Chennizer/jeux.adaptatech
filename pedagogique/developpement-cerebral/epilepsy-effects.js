@@ -2,7 +2,7 @@
 // A new rendering family also needs its corresponding shader branch.
 export const EPILEPSY_EFFECTS = Object.freeze([
   { id: 'spread', label: 'Crise focale avec diffusion', description: 'La zone violette s’étend puis reste visible. Relancez pour revoir sa propagation.', shader: 0, animation: 'spread', usesIllustration: false, radius: 96, color: '#9560c7' },
-  { id: 'local', label: 'Activité électrique localisée', description: 'Une zone bleue reste localisée, avec des anneaux et une pulsation lente.', shader: 1, animation: 'pulse', usesIllustration: false, radius: 34, color: '#347fd3' },
+  { id: 'local', label: 'Activité électrique localisée', description: 'Une zone rose reste localisée, avec des anneaux et une pulsation lente.', shader: 1, animation: 'pulse', usesIllustration: false, radius: 34, color: '#c24491' },
   { id: 'development', label: 'Développement local (hypothèse)', description: 'La zone ambrée et hachurée montre un décalage choisi, sans prédiction médicale.', shader: 2, animation: 'none', usesIllustration: true, radius: 58, color: '#b97522' },
 ]);
 

@@ -71,7 +71,21 @@ function createPatches(positions) {
   return patches;
 }
 
-export function buildMaturationWindows(positions, sulcalDepth) {
+// Destrieux anatomical labels locate early sensory/motor bands accurately.
+// The timings below remain illustrative; labels do not supply maturity data.
+const SENSORY_WINDOWS = new Map([
+  [3, [0.70, 0.55, 17]], // paracentral (dorsal/medial sensorimotor)
+  [28, [0.74, 0.50, 16]], // postcentral: primary somatosensory
+  [29, [0.70, 0.55, 17]], // precentral: primary motor
+  [45, [0.72, 0.52, 17]], // central sulcus
+  [67, [0.68, 0.55, 18]], // postcentral sulcus
+  [68, [0.66, 0.60, 18]], [69, [0.68, 0.57, 18]], // precentral sulci
+  [11, [0.72, 0.50, 16]], [22, [0.69, 0.55, 17]], // visual: cuneus, lingual
+  [42, [0.73, 0.50, 16]], [44, [0.75, 0.48, 16]], // occipital pole, calcarine
+  [33, [0.67, 0.65, 18]], // transverse temporal: primary auditory
+]);
+
+export function buildMaturationWindows(positions, sulcalDepth, corticalLabels = null) {
   const patches = createPatches(positions);
   // Per vertex: slower phase start/end, infant share, infant time constant.
   const windows = new Float32Array(positions.length / 3 * 4);
@@ -103,6 +117,14 @@ export function buildMaturationWindows(positions, sulcalDepth) {
     windows[i * 4 + 1] = end / total;
     windows[i * 4 + 2] = earlyShare / total;
     windows[i * 4 + 3] = earlyYears / total;
+    const label = corticalLabels?.[i] || 0;
+    const sensory = SENSORY_WINDOWS.get(label ? (label - 1) % 74 + 1 : 0);
+    if (sensory) {
+      windows[i * 4] = 0;
+      windows[i * 4 + 1] = Math.min(windows[i * 4 + 1], sensory[2]);
+      windows[i * 4 + 2] = Math.max(windows[i * 4 + 2], sensory[0]);
+      windows[i * 4 + 3] = Math.min(windows[i * 4 + 3], sensory[1]);
+    }
   }
   return windows;
 }
