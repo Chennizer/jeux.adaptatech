@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const DWELL = .65;
-  let container, pick, interact, buttons = [], selected = -1, hover = null, elapsed = 0, visible = false;
+  let container, pick, interact, canHover, buttons = [], selected = -1, hover = null, elapsed = 0, visible = false;
   function suspend() {
     if (hover) hover.querySelector('.palette-dwell').style.transform = 'scale(0)';
     hover = null; elapsed = 0;
@@ -15,8 +15,8 @@
     suspend();
     if (index !== selected) pick(index);
   }
-  function mount({ parent, colours, onPick, onInteraction }) {
-    container = parent; pick = onPick; interact = onInteraction;
+  function mount({ parent, colours, onPick, onInteraction, hoverEnabled = () => true }) {
+    container = parent; pick = onPick; interact = onInteraction; canHover = hoverEnabled;
     buttons = colours.map((colour, index) => {
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'colour-swatch';
@@ -24,7 +24,7 @@
       const fill = document.createElement('span'); fill.className = 'palette-dwell';
       fill.setAttribute('aria-hidden', 'true'); button.appendChild(fill);
       button.addEventListener('pointerenter', event => {
-        if (!visible || event.isPrimary === false) return;
+        if (!visible || !canHover() || event.isPrimary === false) return;
         interact(); suspend();
         if (selected !== index) hover = button;
       });

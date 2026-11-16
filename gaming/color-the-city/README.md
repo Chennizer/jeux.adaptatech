@@ -1,6 +1,6 @@
 # Recolor / リカラー
 
-A standalone switch and eye-gaze painting game: the colours have disappeared and the worlds have become sad. A giant rainbow zeppelin carries paint across each pale landscape. Every fresh switch press or completed gaze selection releases a slow drop that restores colour, warmth and joy. Complete a picture, enjoy its colourful transformation, then restore another layout in the same chosen world.
+A standalone switch, eye-gaze and touch painting game: the colours have disappeared and the worlds have become sad. A giant rainbow zeppelin carries paint across each pale landscape. Every fresh switch press, completed gaze selection or tap on a shape releases a slow drop that restores colour, warmth and joy. Complete a picture, enjoy its colourful transformation, then restore another layout in the same chosen world.
 
 ## Choose a setting
 
@@ -37,9 +37,13 @@ The menu slider has five steps, from left to right:
 
 At levels 1 and 2, one paint hit fills the whole object, including its roof and final details, with the slow spreading animation. At levels 3 and 4, the first hit colours two of its three main regions and the second finishes it. At level 5, each hit colours one main region. The selected difficulty stays active as new compositions appear.
 
-## Switch and eye-gaze input
+## Switch, eye-gaze and touch input
 
-The menu's Switch / Eyegaze selector remembers `recolorInputMode`. Switch input retains the moving zeppelin, keyboard/click/touch painting and Automatic/Manual colour choices.
+The menu's Switch / Eyegaze / Touch selector remembers `recolorInputMode`. Switch input retains the moving zeppelin, keyboard/click/touch painting and Automatic/Manual colour choices.
+
+In **Touch / Tactile / タッチ**, the side palette is always visible, including when the separate eye-gaze palette preference is off. Tap a colour, then tap an unfinished shape: the zeppelin flies from the centre, drops paint on it and returns. Mouse clicks work too. There is no object dwell, red gaze pointer or hover colour selection in this mode. One tap supplies one hit at the selected difficulty; holding or hovering does not repeat it. Blank space, completed shapes and extra taps during a delivery are ignored. The chosen colour stays active across pictures and reloads. Touch skips creation of gaze overlays and silhouette coverage masks.
+
+Eye-gaze and Touch deliveries give every outward and return leg the same duration as the trip to the outermost object in the current composition, using the chosen flight speed. The existing 0.45–2.5-second limits and smooth acceleration/deceleration remain. Nearby objects therefore get a gentler visit instead of a rushed short flight; the outermost trip keeps its previous timing. Both modes pause and resume committed deliveries and return to the centre during completion.
 
 In **Eyegaze**, the zeppelin rests at the centre (x = 600). Look at a paintable object for **1.5 seconds**. A transparent red overlay, using the Arcade dwell colour `rgba(255, 0, 0, 0.52)`, expands as a true circle from the centre, clipped inside the object's silhouette. Circle growth follows the visible area of the actual silhouette and is driven by one SVG transform on the game clock. A small static mask is measured once per object to build a radial coverage lookup table. At 90% of the dwell time about 90% of the object is red; full coverage and selection both occur at the 1.5-second boundary, including on small or rounded objects. There is no canvas readback during the dwell. Looking away or changing objects resets a partial selection. The full overlay stays visible while the zeppelin travels to the selected object; it clears as the paint is released. The zeppelin then flies back to the centre. Only one delivery runs at a time; clicks and switch keys cannot add duplicate drops or queue another flight.
 
@@ -47,7 +51,7 @@ A continued fixation on an unfinished object starts another dwell after the zepp
 
 Eye tracking uses the same pointer movement supplied by the site's other eye-gaze activities, so a mouse can also exercise the interaction. The target uses a large object-sized hit area, while the red fill is clipped to the actual drawing. Fixation does not require artificial pointer movement or repeated clicks. Pointer exit/cancellation, resize and pause clear a partial dwell. A committed flight and already released paint freeze on pause and resume on Continue. Changing input mode in the menu preserves the unfinished picture, clears gaze overlays and ends the previous mode’s flight plan. Already released drops keep their original target.
 
-All worlds, difficulty levels, slow paint/glitter and restored backgrounds remain available. After the last paint drop, eye-gaze mode returns the zeppelin to its central resting position through the celebration, then starts another composition in the same chosen world. By default, no gameplay text or buttons are added. The optional side palette adds only colour swatches.
+All worlds, difficulty levels, slow paint/glitter and restored backgrounds remain available. After the last paint drop, eye-gaze and touch modes return the zeppelin to its central resting position through the celebration, then start another composition in the same chosen world. Gameplay has no visible text. The optional eye-gaze palette and always-visible touch palette add only colour swatches.
 
 ## Optional hover colour palette
 
@@ -55,7 +59,7 @@ Choose **Eyegaze / Regard** on the main menu. Its visible **Colour palette** che
 
 The chosen colour updates the zeppelin badge, gondola and paint tank, and stays selected until another is chosen. Palette mode disables timed colour cycling and remembers the colour in `recolorPaletteColour`, including across new pictures and reloads. An already falling drop keeps its release colour. Hovering the palette cancels a partial object dwell without queuing a paint delivery. A committed flight continues if the palette option is changed while paused. Menu/tab exit and resize cancel unfinished palette hovers, so no late colour change can occur.
 
-The drawing and its completion background reserve space beside the palette; swatches never cover objects. The palette is hidden on the menu and in Switch mode. Switching it off restores automatic eye-gaze colours and the full drawing area; Switch Automatic/Manual preferences are retained separately. A 28 px red gaze pointer uses the shared Arcade styling, follows primary pointer movement over the drawing and palette, and never intercepts input. It hides on the menu, in Switch mode, on pointer exit/cancellation, pause and resize. The circular object dwell remains 1.5 seconds, including with reduced motion, and delivery movement now uses a smooth acceleration/deceleration curve.
+The drawing and its completion background reserve space beside the palette; swatches never cover objects. The palette is hidden on the menu and in Switch mode. Switching it off restores automatic eye-gaze colours and the full drawing area; Switch Automatic/Manual preferences are retained separately. Touch always keeps its palette. A 28 px red gaze pointer uses the shared Arcade styling, follows primary pointer movement over the drawing and palette, and never intercepts input. It hides on the menu, in Switch and Touch modes, on pointer exit/cancellation, pause and resize. The circular object dwell remains 1.5 seconds, including with reduced motion, and delivery movement uses a smooth acceleration/deceleration curve.
 
 ## Colour modes
 
@@ -125,7 +129,7 @@ The pale world gains subtle warmth during painting. Once every object is coloure
 - **Star Squadron:** a vivid starfield, navigation lanes and distant friendly spacecraft.
 - **Crystal Dungeon:** a glowing layered cavern, crystals, torches and a magical portal.
 
-Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next composition in the selected setting. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. In Switch mode the zeppelin finishes exiting during the celebration, leaving the restored panorama clear. In Eyegaze it returns to its central resting position. The landscape stays behind the outlined objects, with no text or controls appearing during the celebration.
+Each theme has ten deterministic background variations matched to the composition. The normal completion sequence waits for the final 4.2-second fill and shimmer tail, fades in over 1.8 seconds, holds for 6.5 seconds, then fades to white over 0.9 seconds before the next composition in the selected setting. Reduced motion uses shorter fades and the same viewing hold. The grey atmosphere fades away as the final background appears. In Switch mode the zeppelin finishes exiting during the celebration, leaving the restored panorama clear. In Eyegaze and Touch it returns to its central resting position. The landscape stays behind the outlined objects, with no text or controls appearing during the celebration.
 
 ## Music and sounds
 
@@ -188,3 +192,5 @@ Circular-fill/pointer checks confirm a circular shape with equal screen width/he
 Dwell-area checks rasterize all 32 object silhouettes independently at a different resolution and compare visible red area at 0%, 10%, 25%, 50%, 75%, 90%, 98% and 100% of the timer. The maximum observed coverage difference is approximately 2.1 percentage points; no object appears fully filled at 90% or 98%, and actual selection still triggers at 1.5 seconds.
 
 The home page features Recolor as Game of the Week, using its existing zeppelin cover and game URL. The title and natural description are localized in French, English and Japanese. Browser checks cover the three languages, image loading, mobile/tablet/desktop card layouts and navigation into the game.
+
+Touch browser checks use actual touchscreen events for colour selection and shapes. They cover all eight worlds through completion/background/same-world repeat, an always-visible palette with the eye-gaze preference off, no hover selection or gaze overlays, blank/completed targets, ignored busy taps, pause/Continue, three-hit objects, held colours and reload persistence. Nearby and edge deliveries have matching measured durations at all three speeds (about 2.52 / 1.82 / 1.14 seconds in the tested composition, including frame rounding). Eye-gaze selection and Switch movement/Space painting still pass. All three input choices fit eleven viewport sizes in all three languages (99 combinations), with native arrow-key navigation and no scrolling or JavaScript errors.

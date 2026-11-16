@@ -5,6 +5,7 @@
   const maskCanvas = document.createElement('canvas');
   let objects = [], pointer = null, focus = null, elapsed = 0, leg = null;
   let waiting = false, finished = false, serial = 0;
+  let dwellEnabled = true, referenceDistance = 430;
   function measureCoverage(regions, box) {
     const limit = Math.hypot(box.width, box.height) / 2;
     const fallback = { radius: limit, scales: null };
@@ -75,11 +76,14 @@
   }
   function suspend() { cancelDwell(); pointer = null; }
   function clear() {
-    suspend(); objects.forEach(o => { o.root.remove(); o.defs.remove(); });
+    suspend(); objects.forEach(o => { o.root?.remove(); o.defs?.remove(); });
     objects = []; leg = null; waiting = finished = false;
   }
-  function reset({ targets, svg, worldPoint }) {
+  function reset({ targets, svg, worldPoint, dwell = true }) {
     clear();
+    dwellEnabled = dwell;
+    // Give short visits the same gentle cadence as the outermost object.
+    referenceDistance = Math.max(...targets.map(t => Math.abs(t.hitX + t.hitWidth / 2 - HOME)));
     objects = targets.map(target => {
       const regions = [...target.floorEls, target.roof, target.door, ...(target.accents || []).map(a => a.el)].filter(Boolean);
       // Use static artwork, excluding any in-progress shimmer or bounce.
@@ -87,6 +91,10 @@
       const left = Math.min(...boxes.map(b => b.x)), top = Math.min(...boxes.map(b => b.y));
       const box = { x: left, y: top, width: Math.max(...boxes.map(b => b.x + b.width)) - left,
         height: Math.max(...boxes.map(b => b.y + b.height)) - top };
+      const a = worldPoint(target, box.x, box.y), b = worldPoint(target, box.x + box.width, box.y + box.height);
+      const bounds = { target, box, left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
+        top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) };
+      if (!dwellEnabled) return bounds;
       const coverage = measureCoverage(regions, box);
       const id = `gaze-silhouette-${++serial}`;
       const defs = svg('defs', {}, target.group);
@@ -100,9 +108,7 @@
         'pointer-events': 'none', 'aria-hidden': 'true', 'data-dwell': 0 }, target.group);
       const fill = svg('circle', { cx: box.x + box.width / 2, cy: box.y + box.height / 2,
         r: coverage.radius, transform: 'scale(0)', fill: 'rgba(255, 0, 0, 0.52)' }, root);
-      const a = worldPoint(target, box.x, box.y), b = worldPoint(target, box.x + box.width, box.y + box.height);
-      return { target, root, defs, fill, box, coverage, left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
-        top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) };
+      return { ...bounds, root, defs, fill, coverage };
     });
   }
   function move(event, scene) {
@@ -120,7 +126,17 @@
       pointer.x <= o.right && pointer.y >= o.top && pointer.y <= o.bottom) || null;
   }
   function travel(from, to, speed, target = null) {
-    return { from, to, age: 0, duration: Math.max(.45, Math.min(2.5, Math.abs(to - from) / (speed * 2.5))), target };
+    return { from, to, age: 0, duration: Math.max(.45, Math.min(2.5, referenceDistance / (speed * 2.5))), target };
+  }
+  function choose(event, scene, speed) {
+    if (leg || finished) return false;
+    move(event, scene);
+    const selected = candidate();
+    suspend();
+    if (!selected) return false;
+    waiting = false;
+    leg = travel(HOME, selected.target.hitX + selected.target.hitWidth / 2, speed, selected.target);
+    return true;
   }
   function frame(dt, { speed, pending }) {
     if (leg) {
@@ -131,15 +147,17 @@
       if (p === 1) {
         if (leg.target) {
           result.dropTarget = leg.target;
-          fillProgress(leg.highlight, 0);
-          leg.highlight.root.dataset.dwell = '0';
+          if (leg.highlight) {
+            fillProgress(leg.highlight, 0);
+            leg.highlight.root.dataset.dwell = '0';
+          }
           leg = travel(leg.to, HOME, speed);
         } else { leg = null; waiting = true; result.direction = 1; }
       }
       return result;
     }
     if (waiting) { if (pending) return { x: HOME, direction: 1 }; waiting = false; }
-    if (finished || pending) return { x: HOME, direction: 1 };
+    if (finished || pending || !dwellEnabled) return { x: HOME, direction: 1 };
     const next = candidate();
     if (next !== focus) { cancelDwell(); focus = next; }
     if (focus) {
@@ -157,6 +175,6 @@
     return { x: HOME, direction: 1 };
   }
   function finish() { suspend(); finished = true; }
-  window.PaintGaze = { reset, clear, move, suspend, finish, frame,
+  window.PaintGaze = { reset, clear, move, choose, suspend, finish, frame,
     get state() { return leg ? (leg.target ? 'outbound' : 'returning') : waiting ? 'settling' : 'idle'; } };
 })();
