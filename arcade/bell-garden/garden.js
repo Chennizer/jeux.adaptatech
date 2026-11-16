@@ -59,10 +59,7 @@
   const modeButtons = ['mode-tap', 'mode-gaze', 'mode-switch'].map($);
   const flowers = [];
   const frequencies = [261.63, 293.66, 329.63, 392, 440, 523.25];
-  const palette = [
-    ['#ff4f6d', '#ba204a'], ['#ffca25', '#dd8e00'], ['#9860ff', '#642dc1'],
-    ['#12cbb5', '#008e7f'], ['#ff852b', '#cd4b0d'], ['#eb4bca', '#aa208e']
-  ];
+  const art = window.BellGardenArt;
   const animationTimers = new Map();
   const voices = new Set();
   let language = 'fr';
@@ -97,28 +94,17 @@
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) $('gentle-effects').checked = true;
   $('switch-mode').value = pendingMode === 'step' ? 'step' : 'scan';
 
-  const plantMarkup = '<span class="plant" aria-hidden="true">' +
-    '<svg class="plant-art" viewBox="0 0 240 400" preserveAspectRatio="none" aria-hidden="true">' +
-    '<path class="plant-stem" d="M119 391C114 333 129 287 120 229V152"/>' +
-    '<path class="plant-leaf" d="M121 325C70 325 35 300 26 263C77 260 109 287 121 325Z"/>' +
-    '<path class="plant-leaf plant-leaf-light" d="M122 284C166 283 205 250 211 217C161 215 129 245 122 284Z"/>' +
-    '<path d="M106 39C96 21 111 9 120 4C135 17 140 28 132 41" fill="#239c3c"/>' +
-    '<path class="bell-petal" d="M52 112C55 83 50 27 119 25C185 23 183 83 189 112C191 127 205 139 222 150C198 181 43 181 18 150C38 136 49 125 52 112Z"/>' +
-    '<path d="M86 48C65 67 79 111 57 133" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="10" stroke-linecap="round"/>' +
-    '<ellipse class="bell-rim" cx="120" cy="152" rx="101" ry="19"/>' +
-    '<path d="M120 155V189" stroke="#815015" stroke-width="6" stroke-linecap="round"/>' +
-    '<circle cx="120" cy="195" r="17" fill="#ffe04b" stroke="#c58b00" stroke-width="3"/>' +
-    '</svg></span><span class="dwell-fill" aria-hidden="true"></span>';
-
-  palette.forEach(([petal, rim], index) => {
+  art.kinds.forEach((kind, index) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'flower';
     button.dataset.index = index;
-    button.style.setProperty('--petal', petal);
-    button.style.setProperty('--rim', rim);
-    button.style.setProperty('--plant-height', [72, 86, 77, 95, 82, 91][index] + '%');
-    button.innerHTML = plantMarkup;
+    button.dataset.flower = kind.name;
+    button.style.setProperty('--plant-height', [80, 86, 94, 81, 88, 91][index] + '%');
+    button.style.setProperty('--sway-duration', [8.2, 9.1, 7.8, 8.8, 9.6, 8.5][index] + 's');
+    button.style.setProperty('--sway-delay', [-3.2, -6.1, -1.8, -4.7, -2.4, -5.5][index] + 's');
+    button.style.setProperty('--sway-angle', [1.2, 1.5, .9, 1.4, 1.6, 1.3][index] + 'deg');
+    button.innerHTML = art.flower(index);
     garden.append(button);
     flowers.push(button);
     button.addEventListener('pointerdown', event => {
@@ -309,6 +295,7 @@
   }
 
   function pauseGarden() {
+    document.body.classList.add('garden-paused');
     stopScanning();
     cancelDwell();
     dwellLocked = null;
@@ -316,6 +303,12 @@
     animationTimers.forEach(timer => clearTimeout(timer));
     animationTimers.clear();
     flowers.forEach(flower => flower.classList.remove('is-playing'));
+  }
+
+  function resumeGarden() {
+    if (!canPlay()) return;
+    document.body.classList.remove('garden-paused');
+    startScanning();
   }
 
   function openMenu() {
@@ -348,6 +341,7 @@
     screen.hidden = false;
     $('language-toggle').hidden = true;
     document.body.classList.add('garden-running');
+    document.body.classList.remove('garden-paused');
     document.body.classList.toggle('gentle', $('gentle-effects').checked);
     document.body.dataset.theme = $('theme').value;
     updateVolume();
@@ -403,10 +397,10 @@
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) pauseGarden();
-    else startScanning();
+    else resumeGarden();
   });
   window.addEventListener('blur', pauseGarden);
-  window.addEventListener('focus', startScanning);
+  window.addEventListener('focus', resumeGarden);
   window.addEventListener('pagehide', pauseGarden);
 
   updateLanguage();

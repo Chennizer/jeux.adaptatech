@@ -7,6 +7,7 @@ const vm = require('node:vm');
 // Exercise the actual page script with deterministic time and lightweight DOM/
 // Web Audio doubles. These checks do not substitute for browser or hardware QA.
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const artScript = fs.readFileSync(path.join(__dirname, '../garden-art.js'), 'utf8');
 const script = fs.readFileSync(path.join(__dirname, '../garden.js'), 'utf8');
 
 function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, saved } = {}) {
@@ -156,11 +157,13 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
   };
   const window = Object.assign(new Events(), { matchMedia: () => ({ matches: false }) });
   if (audioSupport) window.AudioContext = AudioContext;
-  vm.runInNewContext(script, {
+  const context = {
     document, window, localStorage,
     setTimeout: (fn, delay) => schedule(fn, delay), clearTimeout: id => jobs.delete(id),
     setInterval: (fn, delay) => schedule(fn, delay, delay), clearInterval: id => jobs.delete(id)
-  });
+  };
+  vm.runInNewContext(artScript, context);
+  vm.runInNewContext(script, context);
   const flowers = $('garden').children;
   const key = (code, values = {}) => document.emit('keydown', { target: $('garden'), code, key: code, ...values });
   const click = id => $(id).emit('click');
@@ -173,7 +176,7 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
     } else click('mode-' + next);
   };
   const played = () => (audioContexts[0]?.oscillators.length || 0) / 4;
-  return { $, document, flowers, translated, audioContexts, storage, advance, key, click, start, selectMode, played };
+  return { $, document, window, flowers, translated, audioContexts, storage, advance, key, click, start, selectMode, played };
 
 }
 
@@ -417,4 +420,35 @@ test('fullscreen is optional and start still works when the browser does not off
   h.start();
   assert.equal(requests, 1);
   assert.equal(h.$('game-screen').hidden, false);
+});
+
+test('six botanical silhouettes share the same controls and keep text out of their artwork', () => {
+  const h = harness();
+  assert.deepEqual(h.flowers.map(flower => flower.dataset.flower), ['bell', 'daisy', 'tulip', 'anemone', 'poppy', 'cosmos']);
+  const crowns = h.flowers.map(flower => flower.markup.match(/<svg class="flower-crown"[\s\S]*?<\/svg>/)[0]);
+  assert.equal(new Set(crowns).size, 6);
+  assert.ok(crowns.every(crown => !crown.includes('preserveAspectRatio="none"')));
+  assert.ok(h.flowers.every(flower => flower.markup.includes('root-art')));
+  assert.ok(h.flowers.every(flower => flower.markup.replace(/<[^>]+>/g, '').trim() === ''));
+});
+
+test('ambient motion pauses with visibility and resumes only when gameplay is active', () => {
+  const h = harness({ mode: 'scan' });
+  h.start();
+  h.window.emit('blur');
+  assert.equal(h.document.body.classList.contains('garden-paused'), true);
+  h.advance(4000);
+  assert.equal(h.flowers[0].classList.contains('is-selected'), true);
+  h.window.emit('focus');
+  assert.equal(h.document.body.classList.contains('garden-paused'), false);
+  h.advance(1500);
+  assert.equal(h.flowers[1].classList.contains('is-selected'), true);
+  h.click('settings-button');
+  h.window.emit('focus');
+  assert.equal(h.document.body.classList.contains('garden-paused'), true);
+  h.document.hidden = true;
+  h.document.emit('visibilitychange');
+  h.document.hidden = false;
+  h.document.emit('visibilitychange');
+  assert.equal(h.$('control-panel').hidden, false);
 });
