@@ -72,18 +72,15 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
     set className(value) { this.classes = new Set(value.split(/\s+/)); }
     set innerHTML(value) {
       this.markup = value;
-      this.noteName = new Element('span');
+
     }
     append(element) { this.children.push(element); }
-    querySelector(selector) { return selector === '.note-name' ? this.noteName : null; }
     setAttribute(key, value) { this.attributes[key] = String(value); }
     getAttribute(key) { return this.attributes[key]; }
     closest() {
       return ['input', 'select', 'textarea', 'a'].includes(this.tagName) ||
         (this.tagName === 'button' && !this.classes.has('flower')) ? this : null;
     }
-    showModal() { this.open = true; }
-    close() { this.open = false; }
     focus() { document.activeElement = this; this.emit('focus'); }
   }
   const elements = new Map();
@@ -94,23 +91,23 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
     if (attrs.id) elements.set(attrs.id, element);
     if (attrs.class) element.className = attrs.class;
     if (attrs.value) element.value = attrs.value;
+    element.hidden = /\bhidden\b/.test(match[2]);
+    element.checked = /\bchecked\b/.test(match[2]);
+    if (attrs['data-input-mode']) element.dataset.inputMode = attrs['data-input-mode'];
     if (attrs['data-i18n']) {
       element.dataset.i18n = attrs['data-i18n'];
       translated.push(element);
     }
   }
   const $ = id => elements.get(id);
-  $('input-mode').value = mode;
-  $('note-count').textContent = '0';
-  $('awakened-count').textContent = '0 / 6';
-  const scene = new Element();
+  $('theme').value = 'sky';
+  $('switch-mode').value = 'scan';
   const document = Object.assign(new Events(), {
     hidden: false,
     body: new Element('body'),
     documentElement: new Element('html'),
     getElementById: $,
     createElement: tag => new Element(tag),
-    querySelector: selector => selector === '.garden-scene' ? scene : null,
     querySelectorAll: selector => selector === '[data-i18n]' ? translated : []
   });
 
@@ -152,7 +149,7 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
     }
   }
   const storage = new Map([['siteLanguage', 'en']]);
-  if (saved) storage.set('bellGardenSettings', JSON.stringify(saved));
+  storage.set('bellGardenSettings', JSON.stringify({ mode, ...saved }));
   const localStorage = {
     getItem(key) { if (brokenStorage) throw new Error('Storage disabled'); return storage.get(key) || null; },
     setItem(key, value) { if (brokenStorage) throw new Error('Storage disabled'); storage.set(key, value); }
@@ -167,28 +164,54 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, sav
   const flowers = $('garden').children;
   const key = (code, values = {}) => document.emit('keydown', { target: $('garden'), code, key: code, ...values });
   const click = id => $(id).emit('click');
-  const start = () => click('start-button');
-  return { $, document, scene, flowers, translated, audioContexts, storage, advance, key, click, start };
+  const start = () => click('control-panel-start-button');
+  const selectMode = next => {
+    if (next === 'scan' || next === 'step') {
+      click('mode-switch');
+      $('switch-mode').value = next;
+      $('switch-mode').emit('change');
+    } else click('mode-' + next);
+  };
+  const played = () => (audioContexts[0]?.oscillators.length || 0) / 4;
+  return { $, document, flowers, translated, audioContexts, storage, advance, key, click, start, selectMode, played };
+
 }
 
-test('audio starts after entry; a pointer tap rings once and all six flowers awaken', () => {
+test('the shared arcade menu opens first; play has no visible words, labels or counters', () => {
   const h = harness();
+  assert.match(html, /css\/video-stop-action\.css/);
+  assert.match(html, /game-menu-layout stop-action-menu-layout/);
+  assert.match(html, /game-menu-art-image/);
+  assert.equal(h.$('control-panel').hidden, false);
+  assert.equal(h.$('game-screen').hidden, true);
   assert.equal(h.audioContexts.length, 0);
-  assert.equal(h.$('settings-dialog').open, true);
-  assert.equal(h.flowers.length, 6);
+  const gameMarkup = html.match(/<main id="game-screen"[\s\S]*?<\/main>/)[0];
+  assert.equal(gameMarkup.replace(/<[^>]+>/g, '').trim(), '');
   h.start();
-  assert.equal(h.$('settings-dialog').open, false);
+  assert.equal(h.$('control-panel').hidden, true);
+  assert.equal(h.$('game-screen').hidden, false);
+  assert.equal(h.$('language-toggle').hidden, true);
+  assert.equal(h.document.body.classList.contains('garden-running'), true);
+  assert.equal(h.flowers.length, 6);
+  assert.ok(h.flowers.every(flower => flower.markup.replace(/<[^>]+>/g, '').trim() === ''));
+  assert.ok(h.flowers.every(flower => flower.getAttribute('aria-label')));
+});
+
+test('a pointer tap rings once; all six flowers have distinct notes and immediate feedback', () => {
+  const h = harness();
+  h.start();
   for (const flower of h.flowers) {
     flower.emit('pointerdown');
     flower.emit('click', { detail: 1 });
+    assert.equal(flower.classList.contains('is-playing'), true);
   }
-  assert.equal(Number(h.$('note-count').textContent), 6);
-  assert.equal(h.$('awakened-count').textContent, '6 / 6');
-  assert.equal(h.scene.classList.contains('garden-complete'), true);
-  assert.equal(h.audioContexts[0].oscillators.length, 24);
-  h.flowers[0].emit('click'); // Screen-reader/native keyboard activation.
-  assert.equal(Number(h.$('note-count').textContent), 7);
-  assert.equal(h.$('awakened-count').textContent, '6 / 6');
+  assert.equal(h.played(), 6);
+  const fundamentals = h.audioContexts[0].oscillators.filter((_, i) => i % 4 === 0).map(o => o.frequency.value);
+  assert.equal(new Set(fundamentals).size, 6);
+  h.flowers[0].emit('click');
+  assert.equal(h.played(), 7);
+  h.advance(700);
+  assert.ok(h.flowers.every(flower => !flower.classList.contains('is-playing')));
 });
 
 test('dwell cancels on leaving, fires once per visit, and cannot double-fire after a tap', () => {
@@ -197,29 +220,29 @@ test('dwell cancels on leaving, fires once per visit, and cannot double-fire aft
   const flower = h.flowers[0];
   flower.emit('pointerenter', { pointerType: 'mouse' });
   h.advance(799);
-  assert.equal(h.$('note-count').textContent, '0');
+  assert.equal(h.played(), 0);
   flower.emit('pointerleave');
   h.advance(1000);
-  assert.equal(h.$('note-count').textContent, '0');
+  assert.equal(h.played(), 0);
   flower.emit('pointerenter', { pointerType: 'mouse' });
   h.advance(800);
-  assert.equal(Number(h.$('note-count').textContent), 1);
+  assert.equal(h.played(), 1);
   h.advance(3200);
-  assert.equal(Number(h.$('note-count').textContent), 1);
+  assert.equal(h.played(), 1);
   flower.emit('pointerleave');
   flower.emit('pointerenter', { pointerType: 'mouse' });
   h.advance(400);
   flower.emit('pointerdown');
   flower.emit('click', { detail: 1 });
   h.advance(1000);
-  assert.equal(Number(h.$('note-count').textContent), 2);
+  assert.equal(h.played(), 2);
   flower.emit('pointerleave');
   flower.emit('pointerenter', { pointerType: 'touch' });
   h.advance(1000);
-  assert.equal(Number(h.$('note-count').textContent), 2);
+  assert.equal(h.played(), 2);
 });
 
-test('one-switch scanning moves the outline, ignores held keys, and pauses in options and hidden tabs', () => {
+test('one-switch scanning advances, ignores held switches and pauses in the menu and hidden tabs', () => {
   const h = harness({ mode: 'scan' });
   h.start();
   assert.equal(h.flowers[0].classList.contains('is-selected'), true);
@@ -227,11 +250,11 @@ test('one-switch scanning moves the outline, ignores held keys, and pauses in op
   assert.equal(h.flowers[1].classList.contains('is-selected'), true);
   h.key('Space');
   h.key('Space', { repeat: true });
-  assert.equal(Number(h.$('note-count').textContent), 1);
+  assert.equal(h.played(), 1);
   h.click('settings-button');
   h.advance(4000);
   h.key('Space');
-  assert.equal(Number(h.$('note-count').textContent), 1);
+  assert.equal(h.played(), 1);
   assert.equal(h.flowers[1].classList.contains('is-selected'), true);
   h.start();
   h.document.hidden = true;
@@ -244,132 +267,154 @@ test('one-switch scanning moves the outline, ignores held keys, and pauses in op
   assert.equal(h.flowers[2].classList.contains('is-selected'), true);
 });
 
-test('two switches separate moving from playing; form controls keep their keyboard input', () => {
+test('two switches separate moving and playing, while form controls keep their keys', () => {
   const h = harness({ mode: 'step' });
   h.start();
   h.key('Enter');
   h.key('Enter', { repeat: true });
   assert.equal(h.flowers[1].classList.contains('is-selected'), true);
-  assert.equal(h.$('note-count').textContent, '0');
+  assert.equal(h.played(), 0);
   h.key('Space');
-  assert.equal(Number(h.$('note-count').textContent), 1);
-  assert.equal(h.flowers[1].classList.contains('is-discovered'), true);
+  assert.equal(h.played(), 1);
+  assert.equal(h.flowers[1].classList.contains('is-playing'), true);
   h.key('Space', { target: h.$('volume') });
   h.key('Digit6', { key: '6', ctrlKey: true });
-  assert.equal(Number(h.$('note-count').textContent), 1);
+  assert.equal(h.played(), 1);
 });
 
-test('keyboard arrows move focus so native Enter activates the selected flower', () => {
+test('keyboard arrows move focus and number keys play notes directly', () => {
   const h = harness();
   h.start();
   h.key('ArrowRight');
   assert.equal(h.document.activeElement, h.flowers[1]);
   h.document.activeElement.emit('click');
-  assert.equal(Number(h.$('note-count').textContent), 1);
-  assert.equal(h.flowers[1].classList.contains('is-discovered'), true);
+  assert.equal(h.played(), 1);
   h.key('ArrowLeft');
   h.key('ArrowLeft');
   assert.equal(h.document.activeElement, h.flowers[5]);
+  h.key('Digit6', { key: '6' });
+  assert.equal(h.played(), 2);
+  assert.equal(h.flowers[5].classList.contains('is-playing'), true);
 });
 
-test('demo never advances player progress, is interrupted by playing, and can be stopped', () => {
-  const h = harness();
+test('the gear and Escape reopen the menu, cancel dwell and stop all sounding notes', () => {
+  const h = harness({ mode: 'gaze' });
   h.start();
-  h.click('demo-button');
-  h.advance(1000);
-  assert.equal(h.$('note-count').textContent, '0');
-  assert.equal(h.$('awakened-count').textContent, '0 / 6');
-  assert.ok(h.audioContexts[0].oscillators.length > 0);
-  h.flowers[3].emit('pointerdown');
-  assert.equal(h.$('demo-button').getAttribute('aria-pressed'), 'false');
-  const played = h.audioContexts[0].oscillators.length;
-  h.advance(7000);
-  assert.equal(h.audioContexts[0].oscillators.length, played);
-  assert.equal(Number(h.$('note-count').textContent), 1);
-  h.click('demo-button');
-  h.advance(0);
-  h.click('demo-button');
-  const stopped = h.audioContexts[0].oscillators.length;
-  h.advance(7000);
-  assert.equal(h.audioContexts[0].oscillators.length, stopped);
-});
-
-test('reset clears discovery, celebrations, sound, and scheduled demo notes', () => {
-  const h = harness();
+  h.flowers[1].emit('pointerdown');
+  h.flowers[0].emit('pointerenter', { pointerType: 'mouse' });
+  h.advance(400);
+  h.click('settings-button');
+  assert.equal(h.$('control-panel').hidden, false);
+  assert.equal(h.$('game-screen').hidden, true);
+  assert.equal(h.$('language-toggle').hidden, false);
+  assert.equal(h.$('control-panel-start-button').textContent, 'Resume');
+  h.advance(3000);
+  assert.equal(h.played(), 1);
+  assert.ok(h.audioContexts[0].oscillators.every(o => o.ended && o.disconnected));
   h.start();
-  h.flowers.forEach(flower => flower.emit('pointerdown'));
-  h.click('demo-button');
-  h.advance(0);
-  h.click('reset-button');
-  const played = h.audioContexts[0].oscillators.length;
-  h.advance(7000);
-  assert.equal(h.audioContexts[0].oscillators.length, played);
-  assert.equal(h.$('note-count').textContent, '0');
-  assert.equal(h.$('awakened-count').textContent, '0 / 6');
-  assert.equal(h.scene.classList.contains('garden-complete'), false);
-  assert.ok(h.flowers.every(flower => !flower.classList.contains('is-discovered')));
-  assert.ok(h.audioContexts[0].oscillators.every(oscillator => oscillator.ended && oscillator.disconnected));
+  h.flowers[0].emit('pointerenter', { pointerType: 'mouse' });
+  h.advance(800);
+  assert.equal(h.played(), 2);
+  h.key('Escape', { target: h.$('settings-button') });
+  assert.equal(h.$('control-panel').hidden, false);
 });
 
-test('rapid playing releases audio nodes, volume and mute operate on the master gain', () => {
+test('rapid playing has bounded polyphony, and menu volume/mute control the master gain', () => {
   const h = harness();
   h.start();
   const audio = h.audioContexts[0];
   assert.equal(audio.gains[0].gain.value, .55);
   for (let i = 0; i < 30; i++) h.flowers[i % 6].emit('pointerdown');
-  assert.equal(Number(h.$('note-count').textContent), 30);
+  assert.equal(h.played(), 30);
   h.advance(50);
-  assert.ok(audio.oscillators.filter(oscillator => !oscillator.ended).length <= 48);
-  h.click('mute-button');
+  assert.ok(audio.oscillators.filter(o => !o.ended).length <= 48);
+  h.click('settings-button');
+  h.$('mute-toggle').checked = true;
+  h.$('mute-toggle').emit('change');
   assert.equal(audio.gains[0].gain.value, 0);
-  h.click('mute-button');
-  assert.equal(audio.gains[0].gain.value, .55);
+  h.$('mute-toggle').checked = false;
+  h.$('mute-toggle').emit('change');
   h.$('volume').value = '25';
   h.$('volume').emit('input');
   assert.equal(audio.gains[0].gain.value, .25);
   h.advance(3000);
-  assert.ok(audio.oscillators.every(oscillator => oscillator.ended && oscillator.disconnected));
+  assert.ok(audio.oscillators.every(o => o.ended && o.disconnected));
 });
 
-test('all languages update note labels and the shared language preference', () => {
+test('all menu translations and invisible flower names follow the shared language', () => {
   const h = harness();
-  assert.ok(h.translated.every(element => typeof element.textContent === 'string' && element.textContent.length > 0));
+  assert.ok(h.translated.every(e => typeof e.textContent === 'string' && e.textContent.length > 0));
   assert.match(h.flowers[0].getAttribute('aria-label'), /Play bell C/);
-  h.click('language-button');
+  h.click('language-toggle');
   assert.equal(h.document.documentElement.lang, 'ja');
   assert.equal(h.storage.get('siteLanguage'), 'ja');
   assert.match(h.flowers[0].getAttribute('aria-label'), /ド/);
-  assert.ok(h.translated.every(element => typeof element.textContent === 'string' && element.textContent.length > 0));
-  h.click('language-button');
+  assert.ok(h.translated.every(e => typeof e.textContent === 'string' && e.textContent.length > 0));
+  h.click('language-toggle');
   assert.equal(h.document.documentElement.lang, 'fr');
   assert.match(h.flowers[0].getAttribute('aria-label'), /Do/);
-  assert.ok(h.translated.every(element => typeof element.textContent === 'string' && element.textContent.length > 0));
+  assert.ok(h.translated.every(e => typeof e.textContent === 'string' && e.textContent.length > 0));
 });
 
-test('the garden remains playable when audio or browser storage is unavailable', () => {
+test('visual play remains available without audio or storage; errors do not add visible game text', () => {
   const h = harness({ audioSupport: false, brokenStorage: true });
   h.start();
   h.flowers[0].emit('pointerdown');
-  assert.equal(Number(h.$('note-count').textContent), 1);
-  assert.equal(h.$('awakened-count').textContent, '1 / 6');
+  assert.equal(h.flowers[0].classList.contains('is-playing'), true);
   assert.equal(h.$('audio-notice').hidden, false);
-  h.click('language-button');
+  assert.equal(h.$('control-panel').hidden, true);
+  assert.match(h.$('audio-status').textContent, /son/);
+  h.click('settings-button');
+  h.click('language-toggle');
   assert.equal(h.document.documentElement.lang, 'en');
 });
 
-test('saved settings are restored with bounded values, and options cancel a pending dwell', () => {
-  const h = harness({ saved: { mode: 'gaze', dwell: 9999, scan: -500, volume: 200, gentle: true } });
+test('saved settings restore safely, including background, mute and reduced animations', () => {
+  const h = harness({ saved: { mode: 'gaze', dwell: 9999, scan: -500, volume: 200, gentle: true, theme: 'dark', muted: true } });
   assert.equal(Number(h.$('dwell-time').value), 2500);
   assert.equal(Number(h.$('scan-time').value), 600);
   assert.equal(Number(h.$('volume').value), 100);
+  assert.equal(h.$('mode-gaze').getAttribute('aria-pressed'), 'true');
+  h.start();
+  assert.equal(h.document.body.dataset.theme, 'dark');
   assert.equal(h.document.body.classList.contains('gentle'), true);
-  h.start();
-  h.flowers[0].emit('pointerenter', { pointerType: 'mouse' });
-  h.advance(1000);
+  assert.equal(h.audioContexts[0].gains[0].gain.value, 0);
   h.click('settings-button');
-  h.advance(3000);
-  assert.equal(h.$('note-count').textContent, '0');
-  h.$('input-mode').value = 'scan';
+  h.$('theme').value = 'light';
+  h.selectMode('scan');
   h.start();
-  assert.equal(JSON.parse(h.storage.get('bellGardenSettings')).mode, 'scan');
+  const saved = JSON.parse(h.storage.get('bellGardenSettings'));
+  assert.equal(saved.mode, 'scan');
+  assert.equal(saved.theme, 'light');
+  assert.equal(h.$('scan-field').hidden, false);
+  assert.equal(h.$('dwell-field').hidden, true);
+});
+
+test('switch selection and dwell controls expose only the relevant settings', () => {
+  const h = harness();
+  assert.equal(h.$('switch-field').hidden, true);
+  assert.equal(h.$('dwell-field').hidden, true);
+  h.selectMode('gaze');
+  assert.equal(h.$('dwell-field').hidden, false);
+  h.selectMode('step');
+  assert.equal(h.$('switch-field').hidden, false);
+  assert.equal(h.$('dwell-field').hidden, true);
+  assert.equal(h.$('scan-field').hidden, true);
+  h.start();
+  h.key('Enter');
+  h.key('Space');
+  assert.equal(h.flowers[1].classList.contains('is-playing'), true);
+});
+
+test('fullscreen is optional and start still works when the browser does not offer it', () => {
+  const h = harness();
+  let requests = 0;
+  h.document.documentElement.requestFullscreen = () => { requests++; return Promise.resolve(); };
+  h.start();
+  assert.equal(requests, 1);
+  h.click('settings-button');
+  h.$('fullscreen-toggle').checked = false;
+  h.start();
+  assert.equal(requests, 1);
+  assert.equal(h.$('game-screen').hidden, false);
 });

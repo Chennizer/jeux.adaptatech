@@ -3,109 +3,112 @@
 
   const copy = {
     fr: {
-      arcade: 'Arcade', eyebrow: 'Un petit monde musical', title: 'Jardin de clochettes',
-      subtitle: 'Chaque fleur a une chanson. À vous de la découvrir.', settings: 'Options', yourGarden: 'Votre jardin',
-      awakened: 'fleurs éveillées', gardenMessage: 'Un peu de curiosité, beaucoup de musique.',
-      complete: 'Tout le jardin s’est éveillé ! Continuez à le faire chanter.', listen: 'Écouter', stop: 'Arrêter',
-      footer: 'Explorez à votre rythme. Il n’y a pas de fausse note.', notesPlayed: 'notes jouées',
-      welcome: 'Bienvenue au jardin', dialogTitle: 'Faites fleurir la musique.',
-      dialogDescription: 'Six fleurs, six clochettes. Choisissez votre façon de jouer, puis explorez librement.',
-      inputMode: 'Comment voulez-vous jouer ?', tapMode: 'Toucher / souris / clavier', gazeMode: 'Contrôle oculaire (fixation)',
-      scanMode: 'Une switch (balayage automatique)', stepMode: 'Deux switches (avancer et jouer)',
-      dwellTime: 'Temps de fixation', scanTime: 'Intervalle de balayage', volume: 'Volume des clochettes',
-      gentleEffects: 'Réduire les animations', start: 'Entrer dans le jardin', resume: 'Retour au jardin', backToArcade: 'Retour à l’arcade',
-      tapHint: 'Touchez une fleur pour la faire chanter. Au clavier : flèches puis Espace, ou touches 1 à 6.',
-      gazeHint: 'Fixez une fleur jusqu’à ce que le cercle soit rempli. Regardez ailleurs pour rejouer la même fleur.',
-      scanHint: 'Appuyez sur Espace (switch) pour jouer la fleur encadrée. Le cadre avance tout seul.',
-      stepHint: 'Entrée (switch 1) : fleur suivante. Espace (switch 2) : jouer la fleur encadrée.',
-      reset: 'Recommencer le jardin', mute: 'Couper le son', unmute: 'Activer le son', flowerGroup: 'Fleurs musicales',
-      playNote: 'Jouer la clochette', soundUnavailable: 'Le son n’a pas pu démarrer. Touchez une fleur pour réessayer ; le jardin reste jouable sans son.',
-      language: 'Changer la langue', notes: ['Do', 'Ré', 'Mi', 'Sol', 'La', 'Do aigu']
+      title: 'Jardin de clochettes', instructions: 'Faites chanter les fleurs au toucher, au regard ou avec une switch.',
+      inputMode: 'Type de contrôle', tapMode: 'Tactile', gazeMode: 'Regard', switchMode: 'Switch', switchType: 'Mode switch',
+      scanMode: 'Une switch : balayage', stepMode: 'Deux switches : avancer / jouer',
+      dwellTime: 'Temps de fixation', scanTime: 'Intervalle de balayage', background: 'Fond',
+      skyTheme: 'Jardin', darkTheme: 'Noir', lightTheme: 'Blanc', options: 'Options', volume: 'Volume',
+      mute: 'Désactiver les sons', gentleEffects: 'Réduire les animations', fullscreen: 'Plein écran',
+      start: 'Commencer', resume: 'Reprendre', backToArcade: 'Retour à l’arcade',
+      tapHint: 'Touchez une fleur. Clavier : flèches puis Espace, ou touches 1 à 6.',
+      gazeHint: 'Fixez une fleur pour la faire chanter. Regardez ailleurs pour la rejouer.',
+      scanHint: 'Espace : jouer la fleur encadrée. Le cadre avance automatiquement.',
+      stepHint: 'Entrée : fleur suivante. Espace : jouer la fleur encadrée.',
+      flowerGroup: 'Fleurs musicales', playNote: 'Jouer la clochette', language: 'Changer la langue',
+      soundUnavailable: 'Le son n’a pas pu démarrer. Appuyez sur Commencer pour réessayer.',
+      notes: ['Do', 'Ré', 'Mi', 'Sol', 'La', 'Do aigu']
     },
     en: {
-      arcade: 'Arcade', eyebrow: 'A little world of music', title: 'Bell Garden',
-      subtitle: 'Every flower has a song. Find yours.', settings: 'Settings', yourGarden: 'Your garden',
-      awakened: 'flowers awakened', gardenMessage: 'A little curiosity. A lot of music.',
-      complete: 'Your whole garden is awake! Keep making it sing.', listen: 'Listen', stop: 'Stop',
-      footer: 'Explore at your own pace. There are no wrong notes.', notesPlayed: 'notes played',
-      welcome: 'Welcome to the garden', dialogTitle: 'Let your music bloom.',
-      dialogDescription: 'Six flowers, six little bells. Choose how you’d like to play, then make yourself at home.',
-      inputMode: 'How would you like to play?', tapMode: 'Touch / mouse / keyboard', gazeMode: 'Eye gaze (dwell)',
-      scanMode: 'One switch (automatic scanning)', stepMode: 'Two switches (move and play)',
-      dwellTime: 'Dwell time', scanTime: 'Scanning interval', volume: 'Bell volume',
-      gentleEffects: 'Reduce animations', start: 'Enter the garden', resume: 'Back to the garden', backToArcade: 'Back to the arcade',
-      tapHint: 'Touch a flower to make it sing. Keyboard: arrows then Space, or keys 1–6.',
-      gazeHint: 'Look at a flower until its circle fills. Look away before playing the same flower again.',
-      scanHint: 'Press Space (switch) to play the outlined flower. The outline moves automatically.',
-      stepHint: 'Enter (switch 1): next flower. Space (switch 2): play the outlined flower.',
-      reset: 'Start a fresh garden', mute: 'Mute sound', unmute: 'Enable sound', flowerGroup: 'Musical flowers',
-      playNote: 'Play bell', soundUnavailable: 'Sound couldn’t start. Touch a flower to try again; you can still explore the garden without sound.',
-      language: 'Change language', notes: ['C', 'D', 'E', 'G', 'A', 'High C']
+      title: 'Bell Garden', instructions: 'Make the flowers sing with touch, eye gaze or a switch.',
+      inputMode: 'Input type', tapMode: 'Touch', gazeMode: 'Eyegaze', switchMode: 'Switch', switchType: 'Switch mode',
+      scanMode: 'One switch: scanning', stepMode: 'Two switches: move / play',
+      dwellTime: 'Dwell time', scanTime: 'Scanning interval', background: 'Background',
+      skyTheme: 'Garden', darkTheme: 'Black', lightTheme: 'White', options: 'Options', volume: 'Volume',
+      mute: 'Disable sounds', gentleEffects: 'Reduce animations', fullscreen: 'Fullscreen',
+      start: 'Start', resume: 'Resume', backToArcade: 'Back to the arcade',
+      tapHint: 'Touch a flower. Keyboard: arrows then Space, or keys 1–6.',
+      gazeHint: 'Look at a flower to make it sing. Look away before playing it again.',
+      scanHint: 'Space: play the outlined flower. The outline advances automatically.',
+      stepHint: 'Enter: next flower. Space: play the outlined flower.',
+      flowerGroup: 'Musical flowers', playNote: 'Play bell', language: 'Change language',
+      soundUnavailable: 'Sound couldn’t start. Press Start to try again.',
+      notes: ['C', 'D', 'E', 'G', 'A', 'High C']
     },
     ja: {
-      arcade: 'アーケード', eyebrow: '小さな音楽の世界', title: 'ベルの庭',
-      subtitle: 'どの花にも音があります。見つけてみましょう。', settings: '設定', yourGarden: 'あなたの庭',
-      awakened: '目覚めた花', gardenMessage: '好奇心から、音楽が生まれます。',
-      complete: 'すべての花が目覚めました！もっと音楽を楽しみましょう。', listen: '聴く', stop: '停止',
-      footer: '自分のペースで楽しみましょう。間違った音はありません。', notesPlayed: '回の演奏',
-      welcome: '庭へようこそ', dialogTitle: '音楽の花を咲かせよう。',
-      dialogDescription: '6つの花と6つのベル。遊び方を選んで、自由に音を楽しみましょう。',
-      inputMode: '遊び方を選んでください', tapMode: 'タッチ・マウス・キーボード', gazeMode: '視線入力（注視）',
-      scanMode: '1スイッチ（自動スキャン）', stepMode: '2スイッチ（移動と演奏）',
-      dwellTime: '注視時間', scanTime: 'スキャン間隔', volume: 'ベルの音量', gentleEffects: 'アニメーションを減らす',
-      start: '庭に入る', resume: '庭に戻る', backToArcade: 'アーケードに戻る',
-      tapHint: '花に触れて音を鳴らしましょう。キーボード：矢印キーで選び、スペースキーで演奏。1〜6キーでも演奏できます。',
-      gazeHint: '円がいっぱいになるまで花を見つめましょう。同じ花を鳴らすには一度視線を外してください。',
-      scanHint: 'スペースキー（スイッチ）で枠のある花を演奏します。枠は自動で移動します。',
-      stepHint: 'Enter（スイッチ1）：次の花。スペース（スイッチ2）：枠のある花を演奏。',
-      reset: '庭を最初から始める', mute: '消音', unmute: '音を有効にする', flowerGroup: '音楽の花',
-      playNote: 'ベルを演奏', soundUnavailable: '音を開始できませんでした。花に触れて再試行してください。音なしでも庭を楽しめます。',
-      language: '言語を変更', notes: ['ド', 'レ', 'ミ', 'ソ', 'ラ', '高いド']
+      title: 'ベルの庭', instructions: 'タッチ、視線、スイッチで花の音を楽しみましょう。',
+      inputMode: '入力タイプ', tapMode: 'タッチ', gazeMode: '視線', switchMode: 'スイッチ', switchType: 'スイッチモード',
+      scanMode: '1スイッチ：スキャン', stepMode: '2スイッチ：移動・演奏',
+      dwellTime: '注視時間', scanTime: 'スキャン間隔', background: '背景',
+      skyTheme: '庭', darkTheme: '黒', lightTheme: '白', options: '設定', volume: '音量',
+      mute: '音を無効にする', gentleEffects: 'アニメーションを減らす', fullscreen: '全画面',
+      start: '開始', resume: '再開', backToArcade: 'アーケードに戻る',
+      tapHint: '花に触れてください。矢印キーで選び、スペースキーで演奏。1〜6キーでも演奏できます。',
+      gazeHint: '花を見つめて音を鳴らしましょう。同じ花を鳴らすには一度視線を外してください。',
+      scanHint: 'スペースキーで枠のある花を演奏します。枠は自動で移動します。',
+      stepHint: 'Enter：次の花。スペース：枠のある花を演奏。',
+      flowerGroup: '音楽の花', playNote: 'ベルを演奏', language: '言語を変更',
+      soundUnavailable: '音を開始できませんでした。「開始」を押して再試行してください。',
+      notes: ['ド', 'レ', 'ミ', 'ソ', 'ラ', '高いド']
     }
   };
 
   const $ = id => document.getElementById(id);
   const garden = $('garden');
-  const dialog = $('settings-dialog');
-  const modeInput = $('input-mode');
+  const panel = $('control-panel');
+  const screen = $('game-screen');
+  const modeButtons = ['mode-tap', 'mode-gaze', 'mode-switch'].map($);
   const flowers = [];
-  const dots = [];
   const frequencies = [261.63, 293.66, 329.63, 392, 440, 523.25];
   const palette = [
-    ['#e8a1ad', '#bc6c86'], ['#edd080', '#c69c4f'], ['#a8afe0', '#7b82b6'],
-    ['#87bfb1', '#4f9183'], ['#eab08e', '#c48166'], ['#c8a4cf', '#9e75a8']
+    ['#ff4f6d', '#ba204a'], ['#ffca25', '#dd8e00'], ['#9860ff', '#642dc1'],
+    ['#12cbb5', '#008e7f'], ['#ff852b', '#cd4b0d'], ['#eb4bca', '#aa208e']
   ];
   const animationTimers = new Map();
-  const demoTimers = new Set();
   const voices = new Set();
-  const discovered = new Set();
   let language = 'fr';
   let started = false;
+  let menuOpen = true;
   let mode = 'tap';
+  let pendingMode = 'tap';
   let selected = 0;
-  let noteCount = 0;
   let scanTimer = null;
   let dwellTimer = null;
   let dwellTarget = null;
   let dwellLocked = null;
-  let playingDemo = false;
-  let muted = false;
   let audio = null;
   let master = null;
+  let audioFailed = false;
 
   try {
     const storedLanguage = localStorage.getItem('siteLanguage');
     if (copy[storedLanguage]) language = storedLanguage;
     const saved = JSON.parse(localStorage.getItem('bellGardenSettings') || 'null');
     if (saved && typeof saved === 'object') {
-      if (['tap', 'gaze', 'scan', 'step'].includes(saved.mode)) modeInput.value = saved.mode;
+      if (['tap', 'gaze', 'scan', 'step'].includes(saved.mode)) pendingMode = saved.mode;
       for (const [id, min, max, key] of [['dwell-time', 300, 2500, 'dwell'], ['scan-time', 600, 4000, 'scan'], ['volume', 0, 100, 'volume']]) {
         if (Number.isFinite(saved[key])) $(id).value = Math.min(max, Math.max(min, saved[key]));
       }
-      if (typeof saved.gentle === 'boolean') $('gentle-effects').checked = saved.gentle;
+      if (['sky', 'dark', 'light'].includes(saved.theme)) $('theme').value = saved.theme;
+      for (const [id, key] of [['gentle-effects', 'gentle'], ['mute-toggle', 'muted'], ['fullscreen-toggle', 'fullscreen']]) {
+        if (typeof saved[key] === 'boolean') $(id).checked = saved[key];
+      }
     }
-  } catch (_) { /* The garden also works when browser storage is unavailable. */ }
+  } catch (_) { /* The game also works when browser storage is unavailable. */ }
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) $('gentle-effects').checked = true;
+  $('switch-mode').value = pendingMode === 'step' ? 'step' : 'scan';
+
+  const plantMarkup = '<span class="plant" aria-hidden="true">' +
+    '<svg class="plant-art" viewBox="0 0 240 400" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path class="plant-stem" d="M119 391C114 333 129 287 120 229V152"/>' +
+    '<path class="plant-leaf" d="M121 325C70 325 35 300 26 263C77 260 109 287 121 325Z"/>' +
+    '<path class="plant-leaf plant-leaf-light" d="M122 284C166 283 205 250 211 217C161 215 129 245 122 284Z"/>' +
+    '<path d="M106 39C96 21 111 9 120 4C135 17 140 28 132 41" fill="#239c3c"/>' +
+    '<path class="bell-petal" d="M52 112C55 83 50 27 119 25C185 23 183 83 189 112C191 127 205 139 222 150C198 181 43 181 18 150C38 136 49 125 52 112Z"/>' +
+    '<path d="M86 48C65 67 79 111 57 133" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="10" stroke-linecap="round"/>' +
+    '<ellipse class="bell-rim" cx="120" cy="152" rx="101" ry="19"/>' +
+    '<path d="M120 155V189" stroke="#815015" stroke-width="6" stroke-linecap="round"/>' +
+    '<circle cx="120" cy="195" r="17" fill="#ffe04b" stroke="#c58b00" stroke-width="3"/>' +
+    '</svg></span><span class="dwell-fill" aria-hidden="true"></span>';
 
   palette.forEach(([petal, rim], index) => {
     const button = document.createElement('button');
@@ -114,25 +117,16 @@
     button.dataset.index = index;
     button.style.setProperty('--petal', petal);
     button.style.setProperty('--rim', rim);
-    button.style.setProperty('--lift', `${[2, -15, 5, -9, 0, -18][index]}px`);
-    button.innerHTML = '<svg class="plant-art" aria-hidden="true"><use href="#bell-plant"/></svg>' +
-      '<svg class="dwell-ring" viewBox="0 0 166 166" aria-hidden="true"><circle cx="83" cy="83" r="76" pathLength="1"/></svg>' +
-      '<span class="sparkles" aria-hidden="true"></span><span class="note-label"><span class="note-name"></span><span class="note-number" aria-hidden="true">' + (index + 1) + '</span></span>';
+    button.style.setProperty('--plant-height', [72, 86, 77, 95, 82, 91][index] + '%');
+    button.innerHTML = plantMarkup;
     garden.append(button);
     flowers.push(button);
-    const dot = document.createElement('span');
-    dot.className = 'growth-dot';
-    dot.style.setProperty('--petal', petal);
-    $('growth-dots').append(dot);
-    dots.push(dot);
-
     button.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
       cancelDwell();
       dwellLocked = button;
       playFlower(index);
     });
-    // Native keyboard activation, screen readers, and synthesized eye-tracker clicks.
     button.addEventListener('click', event => { if (event.detail === 0) playFlower(index); });
     button.addEventListener('pointerenter', event => {
       if (event.pointerType !== 'touch') beginDwell(button, index);
@@ -143,44 +137,43 @@
     });
     button.addEventListener('pointercancel', () => { cancelDwell(); dwellLocked = null; });
     button.addEventListener('focus', () => {
-      if (started && mode !== 'scan') selectFlower(index, mode === 'step');
+      if (canPlay() && mode !== 'scan') selectFlower(index, mode === 'step');
     });
   });
 
   function text(key) { return copy[language][key]; }
-  function canPlay() { return started && !dialog.open && !document.hidden; }
+  function canPlay() { return started && !menuOpen && !document.hidden; }
 
   function updateLanguage() {
     document.documentElement.lang = language;
-    document.title = `${text('title')} · Adaptatech`;
+    document.title = text('title') + ' · Adaptatech';
     document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = text(element.dataset.i18n); });
     const next = { fr: 'en', en: 'ja', ja: 'fr' }[language];
-    $('language-button').textContent = { fr: 'FR', en: 'EN', ja: '日本語' }[next];
-    $('language-button').setAttribute('aria-label', `${text('language')} (${next})`);
+    $('language-toggle').textContent = { fr: 'FR', en: 'EN', ja: '日本語' }[next];
+    $('language-toggle').setAttribute('aria-label', text('language') + ' (' + next + ')');
     garden.setAttribute('aria-label', text('flowerGroup'));
-    flowers.forEach((flower, index) => {
-      flower.querySelector('.note-name').textContent = text('notes')[index];
-      flower.setAttribute('aria-label', `${text('playNote')} ${text('notes')[index]}`);
-    });
-    $('reset-button').setAttribute('aria-label', text('reset'));
-    $('reset-button').title = text('reset');
-    $('start-label').textContent = text(started ? 'resume' : 'start');
-    $('garden-message').textContent = text(discovered.size === flowers.length ? 'complete' : 'gardenMessage');
-    $('audio-notice').textContent = text('soundUnavailable');
+    flowers.forEach((flower, index) => flower.setAttribute('aria-label', text('playNote') + ' ' + text('notes')[index]));
+    $('settings-button').setAttribute('aria-label', text('options'));
+    $('control-panel-start-button').textContent = text(started ? 'resume' : 'start');
+    $('play-hint').textContent = text(mode + 'Hint');
+    if (audioFailed) $('audio-status').textContent = text('soundUnavailable');
     updateModeFields();
-    updateDemoButton();
-    updateMuteButton();
   }
 
   function updateModeFields() {
-    const nextMode = modeInput.value;
-    $('dwell-field').hidden = nextMode !== 'gaze';
-    $('scan-field').hidden = nextMode !== 'scan';
-    $('mode-description').textContent = text(`${nextMode}Hint`);
-    $('play-hint').textContent = text(`${mode}Hint`);
-    $('dwell-value').textContent = `${$('dwell-time').value} ms`;
-    $('scan-value').textContent = `${(Number($('scan-time').value) / 1000).toLocaleString(language, { maximumFractionDigits: 1 })} s`;
-    $('volume-value').textContent = `${$('volume').value} %`;
+    const switchMode = pendingMode === 'scan' || pendingMode === 'step';
+    modeButtons.forEach(button => {
+      const active = button.dataset.inputMode === (switchMode ? 'switch' : pendingMode);
+      button.classList.toggle('selected', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    $('switch-field').hidden = !switchMode;
+    $('dwell-field').hidden = pendingMode !== 'gaze';
+    $('scan-field').hidden = pendingMode !== 'scan';
+    $('mode-description').textContent = text(pendingMode + 'Hint');
+    $('dwell-value').textContent = $('dwell-time').value + ' ms';
+    $('scan-value').textContent = (Number($('scan-time').value) / 1000).toLocaleString(language, { maximumFractionDigits: 1 }) + ' s';
+    $('volume-value').textContent = $('volume').value + ' %';
   }
 
   function selectFlower(index, visible = true) {
@@ -199,7 +192,7 @@
     cancelDwell();
     if (!canPlay() || mode !== 'gaze' || dwellLocked === button) return;
     dwellTarget = button;
-    button.style.setProperty('--dwell-time', `${$('dwell-time').value}ms`);
+    button.style.setProperty('--dwell-time', $('dwell-time').value + 'ms');
     button.classList.add('is-dwelling');
     dwellTimer = setTimeout(() => {
       cancelDwell();
@@ -208,22 +201,18 @@
     }, Number($('dwell-time').value));
   }
 
-  function stopScanning() {
-    clearInterval(scanTimer);
-    scanTimer = null;
-  }
-
+  function stopScanning() { clearInterval(scanTimer); scanTimer = null; }
   function startScanning() {
     stopScanning();
     if (!canPlay() || mode !== 'scan') return;
     selectFlower(selected);
-    scanTimer = setInterval(() => {
-      if (canPlay() && !playingDemo) selectFlower(selected + 1);
-    }, Number($('scan-time').value));
+    scanTimer = setInterval(() => { if (canPlay()) selectFlower(selected + 1); }, Number($('scan-time').value));
   }
 
   function showAudioFailure(failed) {
     $('audio-notice').hidden = !failed;
+    if (failed !== audioFailed) $('audio-status').textContent = failed ? text('soundUnavailable') : '';
+    audioFailed = failed;
   }
 
   function ensureAudio() {
@@ -251,7 +240,7 @@
   }
 
   function updateVolume() {
-    if (master) master.gain.setTargetAtTime(muted ? 0 : Number($('volume').value) / 100, audio.currentTime, .02);
+    if (master) master.gain.setTargetAtTime($('mute-toggle').checked ? 0 : Number($('volume').value) / 100, audio.currentTime, .02);
   }
 
   function silence() {
@@ -299,177 +288,126 @@
     });
   }
 
+
   function animateFlower(index) {
     const flower = flowers[index];
     clearTimeout(animationTimers.get(flower));
     flower.classList.remove('is-playing');
-    // Restart the animation when the same bell is played repeatedly.
     void flower.offsetWidth;
     flower.classList.add('is-playing');
     animationTimers.set(flower, setTimeout(() => {
       flower.classList.remove('is-playing');
       animationTimers.delete(flower);
-    }, 900));
+    }, 700));
   }
 
-  function playFlower(index, source = 'player') {
+  function playFlower(index) {
     if (!canPlay()) return;
-    if (source === 'player' && playingDemo) stopDemo(true);
     ringBell(index);
     animateFlower(index);
-    if (source !== 'player') return;
     if (mode !== 'scan') selectFlower(index, mode === 'step');
-    $('note-count').textContent = ++noteCount;
-    discovered.add(index);
-    flowers[index].classList.add('is-discovered');
-    dots[index].classList.add('is-grown');
-    $('awakened-count').textContent = `${discovered.size} / ${flowers.length}`;
-    if (discovered.size === flowers.length) {
-      document.querySelector('.garden-scene').classList.add('garden-complete');
-      if ($('garden-message').textContent !== text('complete')) $('garden-message').textContent = text('complete');
-    }
   }
 
-  function updateDemoButton() {
-    $('demo-label').textContent = text(playingDemo ? 'stop' : 'listen');
-    $('demo-icon').textContent = playingDemo ? '■' : '♫';
-    $('demo-button').setAttribute('aria-pressed', String(playingDemo));
-  }
-
-  function stopDemo(quiet = false) {
-    demoTimers.forEach(timer => clearTimeout(timer));
-    demoTimers.clear();
-    playingDemo = false;
-    if (quiet) silence();
-    updateDemoButton();
-  }
-
-  function startDemo() {
-    if (!canPlay()) return;
-    if (playingDemo) { stopDemo(true); return; }
-    cancelDwell();
-    ensureAudio();
-    playingDemo = true;
-    updateDemoButton();
-    const melody = [0, 2, 3, 4, 3, 2, 1, 0];
-    const schedule = (callback, delay) => {
-      const timer = setTimeout(() => { demoTimers.delete(timer); callback(); }, delay);
-      demoTimers.add(timer);
-    };
-    melody.forEach((index, step) => schedule(() => playFlower(index, 'demo'), step * 460));
-    schedule(() => stopDemo(), (melody.length - 1) * 460 + 2200);
-  }
-
-  function updateMuteButton() {
-    $('mute-button').setAttribute('aria-pressed', String(muted));
-    $('mute-button').setAttribute('aria-label', text(muted ? 'unmute' : 'mute'));
-    $('mute-button').title = text(muted ? 'unmute' : 'mute');
-    $('sound-icon').setAttribute('href', muted ? '#icon-muted' : '#icon-sound');
-  }
-
-  function resetGarden() {
-    stopDemo(true);
+  function pauseGarden() {
+    stopScanning();
     cancelDwell();
     dwellLocked = null;
+    silence();
     animationTimers.forEach(timer => clearTimeout(timer));
     animationTimers.clear();
-    discovered.clear();
-    noteCount = 0;
-    flowers.forEach(flower => flower.classList.remove('is-playing', 'is-discovered'));
-    dots.forEach(dot => dot.classList.remove('is-grown'));
-    document.querySelector('.garden-scene').classList.remove('garden-complete');
-    $('note-count').textContent = '0';
-    $('awakened-count').textContent = '0 / 6';
-    $('garden-message').textContent = text('gardenMessage');
-    selectFlower(0, mode === 'scan' || mode === 'step');
-    startScanning();
-    garden.focus({ preventScroll: true });
+    flowers.forEach(flower => flower.classList.remove('is-playing'));
+  }
+
+  function openMenu() {
+    pauseGarden();
+    menuOpen = true;
+    screen.hidden = true;
+    panel.hidden = false;
+    $('language-toggle').hidden = false;
+    document.body.classList.remove('garden-running');
+    updateLanguage();
+    $('control-panel-start-button').focus({ preventScroll: true });
   }
 
   function saveSettings() {
     try {
       localStorage.setItem('bellGardenSettings', JSON.stringify({
         mode, dwell: Number($('dwell-time').value), scan: Number($('scan-time').value),
-        volume: Number($('volume').value), gentle: $('gentle-effects').checked
+        volume: Number($('volume').value), gentle: $('gentle-effects').checked,
+        theme: $('theme').value, muted: $('mute-toggle').checked, fullscreen: $('fullscreen-toggle').checked
       }));
-    } catch (_) { /* Settings can still be used for this session. */ }
+    } catch (_) { /* Session settings still work without storage. */ }
   }
 
   function startGarden() {
-    ensureAudio(); // Called from a user gesture to unlock browser audio.
-    mode = modeInput.value;
+    ensureAudio();
+    mode = pendingMode;
     started = true;
-    dialog.close();
+    menuOpen = false;
+    panel.hidden = true;
+    screen.hidden = false;
+    $('language-toggle').hidden = true;
+    document.body.classList.add('garden-running');
     document.body.classList.toggle('gentle', $('gentle-effects').checked);
+    document.body.dataset.theme = $('theme').value;
+    updateVolume();
     saveSettings();
     updateLanguage();
     selectFlower(selected, mode === 'scan' || mode === 'step');
     garden.focus({ preventScroll: true });
     startScanning();
+    if ($('fullscreen-toggle').checked && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.()?.catch(() => {});
+    } else if (!$('fullscreen-toggle').checked && document.fullscreenElement) {
+      document.exitFullscreen?.()?.catch(() => {});
+    }
   }
 
-  $('start-button').addEventListener('click', startGarden);
-  $('settings-button').addEventListener('click', () => {
-    stopScanning();
-    cancelDwell();
-    dwellLocked = null;
-    stopDemo(true);
-    $('start-label').textContent = text(started ? 'resume' : 'start');
-    dialog.showModal();
+  modeButtons.forEach(button => button.addEventListener('click', () => {
+    pendingMode = button.dataset.inputMode === 'switch' ? $('switch-mode').value : button.dataset.inputMode;
+    updateModeFields();
+  }));
+  $('switch-mode').addEventListener('change', () => {
+    if (pendingMode === 'scan' || pendingMode === 'step') pendingMode = $('switch-mode').value;
+    updateModeFields();
   });
-  dialog.addEventListener('cancel', event => { event.preventDefault(); startGarden(); });
-  modeInput.addEventListener('change', updateModeFields);
+  $('control-panel-start-button').addEventListener('click', startGarden);
+  $('settings-button').addEventListener('click', openMenu);
   ['dwell-time', 'scan-time', 'volume'].forEach(id => $(id).addEventListener('input', () => {
     updateModeFields();
-    if (id === 'volume') {
-      if (Number($('volume').value) > 0 && muted) { muted = false; updateMuteButton(); }
-      updateVolume();
-    }
+    if (id === 'volume') updateVolume();
   }));
-  $('language-button').addEventListener('click', () => {
+  $('mute-toggle').addEventListener('change', updateVolume);
+  $('language-toggle').addEventListener('click', () => {
     language = { fr: 'en', en: 'ja', ja: 'fr' }[language];
     try { localStorage.setItem('siteLanguage', language); } catch (_) { /* Session language still changes. */ }
     updateLanguage();
   });
-  $('mute-button').addEventListener('click', () => {
-    muted = !muted;
-    if (!muted && Number($('volume').value) === 0) { $('volume').value = '55'; updateModeFields(); saveSettings(); }
-    if (!muted) ensureAudio();
-    updateVolume();
-    updateMuteButton();
-    if (mode === 'scan' || mode === 'step') garden.focus({ preventScroll: true });
-  });
-  $('demo-button').addEventListener('click', () => {
-    startDemo();
-    if (mode === 'scan' || mode === 'step') garden.focus({ preventScroll: true });
-  });
-  $('reset-button').addEventListener('click', resetGarden);
 
   document.addEventListener('keydown', event => {
     if (!canPlay() || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+    if (event.code === 'Escape') { event.preventDefault(); openMenu(); return; }
     if (event.target.closest('input, select, textarea, a, button:not(.flower), [contenteditable]')) return;
     const code = event.code;
     if (['Space', 'Enter', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(code) || /^[1-6]$/.test(event.key)) {
-      if (code === 'Enter' && mode !== 'step') return; // Preserve native flower button activation.
+      if (code === 'Enter' && mode !== 'step') return;
       event.preventDefault();
-      if (event.repeat) return; // Holding a switch must not generate a stream of notes.
+      if (event.repeat) return;
       if (code === 'Space') playFlower(selected);
       else if (code === 'Enter') selectFlower(selected + 1);
       else if (code.startsWith('Arrow')) {
         selectFlower(selected + (code === 'ArrowRight' || code === 'ArrowDown' ? 1 : -1));
         if (mode === 'tap' || mode === 'gaze') flowers[selected].focus({ preventScroll: true });
-      }
-      else playFlower(Number(event.key) - 1);
+      } else playFlower(Number(event.key) - 1);
     }
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { stopScanning(); cancelDwell(); dwellLocked = null; stopDemo(true); }
+    if (document.hidden) pauseGarden();
     else startScanning();
   });
-  window.addEventListener('blur', () => { cancelDwell(); dwellLocked = null; });
-  window.addEventListener('pagehide', () => { stopScanning(); cancelDwell(); stopDemo(true); });
+  window.addEventListener('blur', pauseGarden);
+  window.addEventListener('focus', startScanning);
+  window.addEventListener('pagehide', pauseGarden);
 
   updateLanguage();
-  document.body.classList.toggle('gentle', $('gentle-effects').checked);
-  dialog.showModal();
 })();

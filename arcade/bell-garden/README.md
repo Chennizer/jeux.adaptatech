@@ -1,28 +1,27 @@
 # Bell Garden prototype
 
-Open `arcade/bell-garden/index.html` directly, or choose **Jardin de clochettes / Bell Garden** in the arcade menu. The activity is also registered in `data/games.json` for the activity finder and favorites.
+Open `arcade/bell-garden/index.html`, or choose **Jardin de clochettes / Bell Garden** in the arcade menu. The activity is registered in `data/games.json` for the activity finder and favorites.
 
-Six illustrated flowers play synthesized pentatonic bell notes (C, D, E, G, A, high C). Each distinct flower awakens once; awakening all six reveals a butterfly. Play can continue indefinitely, without scoring penalties or time limits. **Listen** plays a demonstration without advancing the player's progress. Playing a flower interrupts the demonstration.
+The entrance uses the shared arcade control-panel styles and layout. During play, six large, brightly coloured flowers fill the screen. There are no visible words, note labels, counters, scores, or demo controls. Activating a flower immediately plays a pentatonic bell note (C, D, E, G, A, high C) and animates that plant. Play continues freely without a goal or time limit.
 
 ## Controls
 
 - **Touch / mouse / keyboard:** press a flower; use keys 1–6, or arrows and Space. Focused flower buttons also support native Enter activation.
-- **Eye gaze:** dwell on a flower for 300–2500 ms (default 800 ms). The progress ring shows the remaining dwell. Look away before activating the same flower again. Touch and synthesized clicks remain available.
+- **Eye gaze:** dwell for 300–2500 ms (default 800 ms). A fill shows progress. Look away before activating the same flower again.
 - **One switch:** automatic scanning at 600–4000 ms per flower (default 1500 ms); Space plays the outlined flower.
 - **Two switches:** Enter advances the outline; Space plays that flower.
+- **Options:** use the gear icon or Escape to return to the arcade-style menu. Playback, scanning, and pending dwell pause while the menu is open or the tab is hidden. Holding a switch does not repeat notes.
 
-Options pause scanning, pending dwell activation, and the demo. Holding a switch does not repeat notes. Hiding the tab stops scanning, pending dwell, demo playback, and sounding notes. Reset clears the session's progress. Master volume, mute, and reduced-animation support are included.
+All settings stay in the menu: garden, black, or white background; volume; mute; reduced animations; and optional fullscreen. Input mode, timings, and settings are saved locally when storage is available. The site language preference is shared with the other pages (French, English, Japanese). Screen-reader labels and instructions remain available without introducing visible text in play.
 
-The page follows the site's `siteLanguage` preference (French, English, Japanese). Input mode, dwell, scanning speed, volume, and reduced-animation settings are saved locally when storage is available. The garden still works with storage disabled and provides visual feedback when Web Audio is unavailable.
-
-There are no build steps, external assets, libraries, or audio downloads. Web Audio starts only after the initial user interaction. Real eye-tracker and switch hardware testing remains necessary before treating this as a finished accessible activity.
+There are no build steps, libraries, or audio downloads. Audio uses Web Audio and starts after a user interaction. The arcade font is loaded from the repository. The game remains visually playable if audio or local storage is unavailable.
 
 ## Automated checks
 
-From the repository root, run:
+From the repository root:
 
 ```sh
 node --test arcade/bell-garden/tests/garden.test.cjs
 ```
 
-The checks exercise the page script with deterministic DOM, timing, and Web Audio doubles. They cover activation, dwell cancellation, both switch modes, keyboard navigation, demo interruption, reset, sound cleanup, translations, and unavailable storage/audio. They do not verify browser rendering or physical assistive devices.
+The checks exercise the page script with deterministic DOM, timing, and Web Audio doubles, including input modes, menu transitions, keyboard navigation, audio cleanup, saved settings, and translations. They also check that the game contains no visible text. Browser rendering and real assistive devices still need manual verification.
