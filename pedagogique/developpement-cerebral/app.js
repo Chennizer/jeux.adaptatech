@@ -1,4 +1,4 @@
-import { maturationWindow, formatAge } from './maturation.js';
+import { buildMaturationWindows, formatAge } from './maturation.js';
 
 const $ = (id) => document.getElementById(id);
 const range = $('age');
@@ -148,11 +148,10 @@ async function initialize() {
     const sulcalDepth = new Float32Array(buffer, 16 + vertexCount * 12, vertexCount);
     const indices = new Uint16Array(buffer, 16 + vertexCount * 16, indexCount);
     const positions = new Float32Array(vertexCount * 3);
-    const windows = new Float32Array(vertexCount * 2);
+    const windows = buildMaturationWindows(native, sulcalDepth);
     for (let i = 0; i < vertexCount; i++) {
       const [x, y, z] = native.subarray(i * 3, i * 3 + 3);
       positions.set([y, z, x], i * 3);
-      windows.set(maturationWindow(x, y, z), i * 2);
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));

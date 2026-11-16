@@ -17,10 +17,10 @@ Ouvrir `http://localhost:5173/pedagogique/developpement-cerebral/` dans un navig
 ## Portée scientifique
 
 - La géométrie réelle est la surface corticale moyenne **adulte** fsaverage5, distribuée par Nilearn 0.12.1 à partir de FreeSurfer. Il ne s’agit pas d’un modèle anatomique de nouveau-né ni d’une simulation de croissance. Le cervelet et le tronc cérébral ne sont pas représentés.
-- Les zones sont des noyaux spatiaux approximatifs en coordonnées RAS, et non un atlas parcellisé. Leurs courbes, dans `maturation.js`, sont **illustratives**, sans ajustement à des données longitudinales ou validation clinique. Les âges de début/fin des noyaux sont des paramètres d’animation, pas des estimations scientifiques.
+- Sept grandes tendances spatiales en coordonnées RAS sont déclinées en **64 sous-zones par hémisphère**, réparties sur la surface corticale. Chaque sous-zone a un calendrier distinct et reproductible pour faire coexister des poches rouges, oranges, jaunes et vertes au même âge. Leurs bords se mélangent localement avec une légère variation liée aux sillons. Ces zones et leurs courbes, dans `maturation.js`, sont **illustratives**, sans atlas parcellisé ni ajustement à des données longitudinales. Les âges de début/fin sont des paramètres d’animation.
 - Une interpolation progressive transforme le rouge en orange, jaune, puis vert. Elle indique une maturation relative schématique, sans exprimer un pourcentage, une capacité individuelle ou une mesure de matière grise. Le rouge ne signifie pas qu’une région est inactive.
 - Les régions antérieures restent partiellement jaunes à 20 ans pour ne pas suggérer une maturation achevée à cet âge. La maturation varie selon la mesure étudiée et se poursuit au-delà de 20 ans.
-- Pour une version scientifique, remplacer les courbes et la segmentation par un jeu de données validé avec un spécialiste. La carte ancienne des images de référence ne doit pas être assimilée directement à un indice global de maturité.
+- Les sous-zones servent à enrichir visuellement la progression. La carte ancienne des images de référence ne doit pas être assimilée directement à un indice global de maturité.
 
 Repère général : [NIMH — The Teen Brain: 7 Things to Know](https://www.nimh.nih.gov/health/publications/the-teen-brain-7-things-to-know).
 
