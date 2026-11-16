@@ -1,4 +1,4 @@
-import { buildMaturationWindows, formatAge } from './maturation.js';
+import { buildMaturationWindows, ageParts } from './maturation.js';
 
 const $ = (id) => document.getElementById(id);
 const range = $('age');
@@ -6,7 +6,7 @@ const stage = $('stage');
 const playButton = $('play');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const about = $('about');
-let age = Number(range.value);
+let age = Number(range.value) / 12;
 let playing = false;
 let ready = false;
 let frame = 0;
@@ -28,10 +28,10 @@ function setPlaying(next) {
 
 function setAge(value) {
   age = Math.max(0, Math.min(20, value));
-  range.value = age.toFixed(1);
-  range.style.setProperty('--position', `${age * 5}%`);
-  const displayed = formatAge(Math.round(age * 10) / 10);
-  const unit = age < 2 ? 'an' : 'ans';
+  const selectedMonths = Math.round(age * 12);
+  range.value = String(selectedMonths);
+  range.style.setProperty('--position', `${selectedMonths / 240 * 100}%`);
+  const { value: displayed, unit } = ageParts(age);
   $('age-value').textContent = displayed;
   $('age-unit').textContent = unit;
   range.setAttribute('aria-valuetext', `${displayed} ${unit}`);
@@ -71,7 +71,7 @@ function announceAge() {
   $('announcement').textContent = range.getAttribute('aria-valuetext');
 }
 
-range.addEventListener('input', () => { setPlaying(false); setAge(Number(range.value)); });
+range.addEventListener('input', () => { setPlaying(false); setAge(Number(range.value) / 12); });
 range.addEventListener('change', announceAge);
 playButton.addEventListener('click', () => {
   if (!playing && age >= 20) setAge(0);
@@ -156,7 +156,7 @@ async function initialize() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('sulcalDepth', new THREE.BufferAttribute(sulcalDepth, 1));
-    geometry.setAttribute('maturation', new THREE.BufferAttribute(windows, 2));
+    geometry.setAttribute('maturation', new THREE.BufferAttribute(windows, 4));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
     geometry.center();
     geometry.computeVertexNormals();
@@ -168,8 +168,8 @@ async function initialize() {
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uAge = ageUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec2 maturation;\nattribute float sulcalDepth;\nvarying float vMaturity;\nvarying float vSulc;\nuniform float uAge;\n${shader.vertexShader}`;
-      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvMaturity = smoothstep(maturation.x, maturation.y, uAge);\nvSulc = sulcalDepth;`);
+      shader.vertexShader = `attribute vec4 maturation;\nattribute float sulcalDepth;\nvarying float vMaturity;\nvarying float vSulc;\nuniform float uAge;\n${shader.vertexShader}`;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nfloat later = smoothstep(maturation.x, maturation.y, uAge);\nfloat infant = 1.0 - exp(-max(0.0, uAge) / maturation.w);\nvMaturity = mix(later, infant, maturation.z);\nvSulc = sulcalDepth;`);
       shader.fragmentShader = `varying float vMaturity;\nvarying float vSulc;\nuniform vec3 uColor0;\nuniform vec3 uColor1;\nuniform vec3 uColor2;\nuniform vec3 uColor3;\nuniform vec3 uColor4;\n${shader.fragmentShader}`;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
         #include <color_fragment>

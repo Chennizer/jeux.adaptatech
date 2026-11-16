@@ -50,7 +50,12 @@ function createPatches(positions) {
     const shift = (variation(patch, 1) * 2 - 1) * 5.2;
     const start = Math.max(0, baseStart + shift * 0.35 + variation(patch, 2) * 2);
     const end = Math.max(start + 5.5, baseEnd * (0.82 + variation(patch, 3) * 0.4) + shift);
-    patches.push({ x, y, z, start, end });
+    // An immediate infant phase makes changes visible before the slower phase.
+    // Timing and amplitude are illustrative, with stronger early sensory changes.
+    const earlyPriority = Math.max(0, Math.min(1, (29 - baseEnd) / 17));
+    const earlyShare = Math.max(0.12, Math.min(0.8, 0.12 + earlyPriority * 0.64 + (variation(patch, 4) - 0.5) * 0.2));
+    const earlyYears = 0.3 + (1 - earlyPriority) * 1.9 + variation(patch, 5) * 0.35;
+    patches.push({ x, y, z, start, end, earlyShare, earlyYears });
     let furthest = -1;
     for (let i = 0; i < count; i++) {
       const dx = Math.abs(positions[i * 3]) - x;
@@ -68,7 +73,8 @@ function createPatches(positions) {
 
 export function buildMaturationWindows(positions, sulcalDepth) {
   const patches = createPatches(positions);
-  const windows = new Float32Array(positions.length / 3 * 2);
+  // Per vertex: slower phase start/end, infant share, infant time constant.
+  const windows = new Float32Array(positions.length / 3 * 4);
   for (let i = 0; i < positions.length / 3; i++) {
     const x = Math.abs(positions[i * 3]);
     const depth = sulcalDepth[i];
@@ -78,6 +84,8 @@ export function buildMaturationWindows(positions, sulcalDepth) {
     let total = 0;
     let start = 0;
     let end = 0;
+    let earlyShare = 0;
+    let earlyYears = 0;
     for (const patch of patches) {
       const dx = x - patch.x;
       const dy = y - patch.y;
@@ -88,18 +96,29 @@ export function buildMaturationWindows(positions, sulcalDepth) {
       total += weight;
       start += weight * patch.start;
       end += weight * patch.end;
+      earlyShare += weight * patch.earlyShare;
+      earlyYears += weight * patch.earlyYears;
     }
-    windows[i * 2] = start / total;
-    windows[i * 2 + 1] = end / total;
+    windows[i * 4] = start / total;
+    windows[i * 4 + 1] = end / total;
+    windows[i * 4 + 2] = earlyShare / total;
+    windows[i * 4 + 3] = earlyYears / total;
   }
   return windows;
 }
 
-export function maturityAtAge(age, start, end) {
+export function maturityAtAge(age, start, end, earlyShare = 0, earlyYears = 1) {
   const t = Math.max(0, Math.min(1, (age - start) / (end - start)));
-  return t * t * (3 - 2 * t);
+  const later = t * t * (3 - 2 * t);
+  const infant = 1 - Math.exp(-Math.max(0, age) / earlyYears);
+  return later * (1 - earlyShare) + infant * earlyShare;
 }
 
-export function formatAge(age) {
-  return new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 1 }).format(age);
+export function ageParts(age) {
+  const months = Math.max(0, Math.min(240, Math.round(age * 12)));
+  if (months < 12) return { value: String(months), unit: 'mois' };
+  const years = Math.floor(months / 12);
+  const remainder = months % 12;
+  const unit = years === 1 ? 'an' : 'ans';
+  return { value: String(years), unit: remainder ? `${unit} ${remainder} mois` : unit };
 }

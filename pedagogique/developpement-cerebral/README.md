@@ -6,6 +6,8 @@ Page statique : `/pedagogique/developpement-cerebral/`. Elle utilise le même h�
 
 Le curseur de 0 à 20 ans modifie les deux vues du cortex en continu. Lecture/pause, remise à zéro et plein écran sont accessibles par des boutons. La vue de côté peut être tournée à la souris, au doigt ou avec les flèches lorsque le cerveau a le focus (Début rétablit l’orientation). Le curseur natif fonctionne au clavier. Les vues se superposent sur un écran étroit. Le bouton d’information ouvre les explications, sources et crédits ; aucune annotation n’est superposée au cerveau.
 
+Le curseur se règle mois par mois. L’âge s’affiche en mois avant le premier anniversaire (« 6 mois »), puis en années et mois (« 1 an 6 mois »). Pendant la lecture, les couleurs évoluent en continu entre les mois.
+
 Pour essayer localement, depuis la racine du dépôt :
 
 ```sh
@@ -18,6 +20,7 @@ Ouvrir `http://localhost:5173/pedagogique/developpement-cerebral/` dans un navig
 
 - La géométrie réelle est la surface corticale moyenne **adulte** fsaverage5, distribuée par Nilearn 0.12.1 à partir de FreeSurfer. Il ne s’agit pas d’un modèle anatomique de nouveau-né ni d’une simulation de croissance. Le cervelet et le tronc cérébral ne sont pas représentés.
 - Sept grandes tendances spatiales en coordonnées RAS sont déclinées en **64 sous-zones par hémisphère**, réparties sur la surface corticale. Chaque sous-zone a un calendrier distinct et reproductible pour faire coexister des poches rouges, oranges, jaunes et vertes au même âge. Leurs bords se mélangent localement avec une légère variation liée aux sillons. Ces zones et leurs courbes, dans `maturation.js`, sont **illustratives**, sans atlas parcellisé ni ajustement à des données longitudinales. Les âges de début/fin sont des paramètres d’animation.
+- Chaque sous-zone combine une progression dès les premiers mois et une phase plus lente étalée sur l’enfance et l’adolescence. La part et la vitesse de la phase initiale varient selon les zones, avec davantage de changements précoces dans les zones sensorielles. Ce choix visuel rend 6 mois, 1 an et 2 ans distincts tout en conservant une évolution après 5 ans.
 - Une interpolation progressive transforme le rouge en orange, jaune, puis vert. Elle indique une maturation relative schématique, sans exprimer un pourcentage, une capacité individuelle ou une mesure de matière grise. Le rouge ne signifie pas qu’une région est inactive.
 - Les régions antérieures restent partiellement jaunes à 20 ans pour ne pas suggérer une maturation achevée à cet âge. La maturation varie selon la mesure étudiée et se poursuit au-delà de 20 ans.
 - Les sous-zones servent à enrichir visuellement la progression. La carte ancienne des images de référence ne doit pas être assimilée directement à un indice global de maturité.
