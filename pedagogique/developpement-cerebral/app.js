@@ -126,7 +126,12 @@ function updateAgeInsight() {
   $('scale-detail').textContent = active ? 'Variations par domaine' : 'Le développement continue';
   $('illustration-scale').setAttribute('aria-label', active ? 'Contrastes illustratifs des réseaux, sans mesure de maturité ou de capacité' : 'Progression illustrative du rouge au vert puis au bleu, sans pourcentage de maturité');
   $('insight-title').textContent = insight.title;
-  $('insight-themes').textContent = insight.themes.join(' · ');
+  $('insight-themes').replaceChildren(...insight.regions.flatMap(region => {
+    const note = document.createElement('span'); note.className = 'stage-region';
+    const area = document.createElement('strong'); area.textContent = `${region.area} : `;
+    note.append(area, document.createTextNode(region.text));
+    return [note, document.createTextNode(' ')];
+  }));
 }
 
 function updateProfileControls() {
