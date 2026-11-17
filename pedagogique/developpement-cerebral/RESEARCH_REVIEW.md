@@ -79,7 +79,7 @@ Chaque trajectoire définit huit repères à **0, 0,5, 1, 2, 5, 10, 15 et 20 ans
 
 `colourAtAge` interpole ces repères avec une courbe cubique monotone sur `log(1 + âge)`. Les pentes intérieures sont des moyennes harmoniques pondérées des pentes adjacentes ; elles évitent les dépassements et gardent une continuité de pente entre périodes. Après vingt ans, la couleur poursuit asymptotiquement son évolution, sans date de fin fixée. Le shader utilise la même interpolation. Deux passes de lissage local (82 % du sommet, 18 % de ses voisins) adoucissent les frontières, sans changer la topologie ni relier les hémisphères.
 
-Sans atlas, une interpolation spatiale grossière sert de secours, sans variations aléatoires. Le cervelet conserve son interpolation qualitative distincte et son gabarit adulte. Les profils et les scénarios d’épilepsie ne sont pas validés par ces publications ; aucune couleur ne permet de déduire une DI ou une performance scolaire.
+Sans atlas, une interpolation spatiale grossière sert de secours, sans variations aléatoires. Le cervelet conserve son interpolation qualitative distincte et son gabarit adulte. Les profils ne sont pas validés par ces publications ; aucune couleur ne permet de déduire une DI ou une performance scolaire.
 
 ## Comprendre les mots, l’attente et les étapes
 

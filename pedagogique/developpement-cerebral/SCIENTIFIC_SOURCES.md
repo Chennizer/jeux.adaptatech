@@ -1,6 +1,6 @@
 # Sources, représentation et limites
 
-La [revue documentaire du 17 novembre 2026](RESEARCH_REVIEW.md) examine douze études développementales et une étude de compréhension du langage : populations, âges, régions, mesures et limites. Le volet « Repères & sources → Les études » permet de les consulter par région dans la page. Les tendances sont étayées qualitativement ; aucune publication ne valide les teintes ou les valeurs numériques de l’animation.
+La [revue documentaire du 17 novembre 2026](RESEARCH_REVIEW.md) examine douze études développementales et une étude de compréhension du langage : populations, âges, régions, mesures et limites. Le volet « Sources → Les études » permet de les consulter par région dans la page. Les tendances sont étayées qualitativement ; aucune publication ne valide les teintes ou les valeurs numériques de l’animation.
 
 ## Anatomie réelle, couleurs illustratives
 
@@ -55,7 +55,7 @@ Repères : *Functional development of the human cerebellum from birth to age fiv
 
 ## Repères intégrés par âge
 
-`age-insights.js` contient dix regroupements pédagogiques : 0–3, 3–6 et 6–12 mois ; 1–2, 2–3, 3–5, 5–8, 8–12, 12–16 et 16–20 ans. Chaque période affiche un titre court et deux phrases reliant des régions cérébrales aux fonctions ou apprentissages qui évoluent. Les noms des régions sont en gras et les explications restent petites et brèves, y compris en paysage court. Ces repères sont superposés à la vue, sans réduire la surface de rendu ni ajouter de panneau détaillé. Les textes dépendent de l’âge global sélectionné, sans être déduits des couleurs ou d’un scénario focal.
+`age-insights.js` contient dix regroupements pédagogiques : 0–3, 3–6 et 6–12 mois ; 1–2, 2–3, 3–5, 5–8, 8–12, 12–16 et 16–20 ans. Chaque période affiche un titre court et deux phrases reliant des régions cérébrales aux fonctions ou apprentissages qui évoluent. Les noms des régions sont en gras et les explications restent petites et brèves, y compris en paysage court. Ces repères sont superposés à la vue, sans réduire la surface de rendu ni ajouter de panneau détaillé. Les textes dépendent de l’âge global sélectionné, sans être déduits des couleurs.
 
 Ces régions participent aussi à d’autres fonctions et sont déjà actives avant les périodes où elles sont citées. Les phrases décrivent une évolution générale et ne déduisent pas une compétence ou une performance de la couleur d’une région. Ces plages sont **éditoriales**, pas des seuils biologiques ou des dates d’acquisition individuelle. Elles ne sont pas un outil de dépistage. Les expériences, l’environnement, les langues et l’enseignement contribuent aux apprentissages. Les repères sont des paraphrases générales, sans reprise de tableaux normatifs ni de scores :
 
@@ -80,21 +80,7 @@ Avec les réglages `v` compris entre −1 et 0, la fraction de couleur restante 
 
 Pour le cervelet, la fraction restante est `(1 + 0,35 × motricité) × (1 + coordination)`. La coordination au maximum peut donc atteindre le rouge ; la motricité a une influence partielle distincte. Les autres curseurs ne modifient pas directement sa couleur. Les poids et les teintes ne sont pas des données lobulaires mesurées. Une couleur rouge ne signifie ni zéro capacité, ni une absence de fonctionnement. Les réglages ne changent jamais l’âge global.
 
-Fermer le volet conserve les choix ; les ramener tous à droite restitue le repère au même âge. La remise à zéro globale rétablit le repère à la naissance. Les profils et les scénarios focaux peuvent coexister, sans modèle causal entre DI, épilepsie et développement. Sans atlas, les profils sont désactivés.
-
-## Mode épilepsie
-
-Le menu, les réglages, le statut, le nom de région, Relancer et Effacer le foyer sont regroupés dans le volet de droite. Réduire le volet conserve le mode de ciblage ; le rouvrir conserve le foyer.
-
-Le ray casting choisit le sommet cortical le plus proche du triangle touché. Le cervelet n’est pas une cible corticale. Le menu est généré depuis le registre `epilepsy-effects.js` et conserve le foyer lors d’un changement d’effet :
-
-1. **Diffusion violette** : zone qui s’étend pendant huit secondes, puis reste affichée après l’arrêt de l’animation à dix secondes. Relancer rejoue l’expansion.
-2. **Activité locale rose** : zone avec deux anneaux et pulsation lente de quatre secondes, sans diffusion.
-3. **Développement local hypothétique** : âge effectif illustratif diminué autour du foyer, selon un décalage choisi de 0 à 60 mois, borné à zéro. Les hachures et le contour ambrés identifient le scénario même à décalage nul.
-
-Les distances sont des plus courts chemins sur les arêtes du maillage, dans le même hémisphère. Les rayons (96, 34 et 58 mm sur le gabarit adulte) sont des paramètres de lisibilité et non des étendues cliniques. Ces effets sont des illustrations géométriques sans connectome, conduction axonale, EEG, diagnostic ou prédiction de l’impact d’une crise sur le développement. Une propagation profonde, distante ou vers l’autre hémisphère n’est pas simulée.
-
-La réduction des animations donne trois formes statiques distinctes. Les animations s’arrêtent lorsque l’aide s’ouvre ou que l’onglet est masqué. Référence conceptuelle : [ILAE, classification 2025](https://www.ilae.org/guidelines/definition-and-classification/updated-classification-of-epileptic-seizures-2025), https://doi.org/10.1111/epi.18338.
+Fermer le volet conserve les choix ; les ramener tous à droite restitue le repère au même âge. La remise à zéro globale rétablit le repère à la naissance. Sans atlas, les profils sont désactivés.
 
 ## Licences et vérification
 

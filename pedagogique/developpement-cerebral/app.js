@@ -1,7 +1,6 @@
 import { buildMaturationCurves, COLOUR_CURVE_GLSL, ageParts } from './maturation.js';
-import { loadCorticalAtlas, regionName } from './cortical-atlas.js';
-import { buildSurfaceGraph, surfaceDistances, UNREACHED } from './cortical-network.js';
-import { EPILEPSY_EFFECTS, epilepsyEffect } from './epilepsy-effects.js';
+import { loadCorticalAtlas } from './cortical-atlas.js';
+import { buildSurfaceGraph } from './cortical-network.js';
 import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
 import { mountResearch } from './research-evidence.js';
@@ -15,65 +14,16 @@ const playButton = $('play');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const about = $('about');
 mountResearch(about);
-const epilepsyButton = $('epilepsy');
-const effectSelect = $('epilepsy-effect');
 const profilesButton = $('profiles');
 let currentPanel = null;
 const profileValues = new Float32Array(PROFILE_DOMAINS.length);
-let selectedEffect = EPILEPSY_EFFECTS[0];
-let developmentDelayMonths = Number($('development-delay').value);
 let age = Number(range.value) / 12;
-let epilepsyMode = false;
-let seizureRunning = false;
-let seizureElapsed = 0;
-let seizureStarted = 0;
 let playing = false;
 let ready = false;
 let frame = 0;
 let previousTime = 0;
 let paint = () => {};
 let resetViews = () => {};
-let clearFocal = () => {};
-let restartFocalEffect = () => {};
-
-const seizureMoving = () => seizureRunning && !reducedMotion.matches;
-
-function stopSeizureAnimation() {
-  seizureRunning = false;
-  seizureElapsed = 10;
-  requestPaint();
-}
-
-function setEpilepsyMode(active) {
-  epilepsyMode = active;
-  setPlaying(false);
-  epilepsyButton.setAttribute('aria-pressed', String(active));
-  $('experience').classList.toggle('epilepsy-mode', active);
-  const label = active ? 'Désactiver le mode épilepsie' : 'Activer le mode épilepsie : choisir un foyer';
-  epilepsyButton.setAttribute('aria-label', label);
-  epilepsyButton.title = label;
-  if (!active) clearFocal();
-  if (active) currentPanel = 'epilepsy';
-  else if (currentPanel === 'epilepsy') currentPanel = null;
-  updateEffectControls();
-  $('announcement').textContent = active ? 'Mode épilepsie : cliquez sur une zone du cerveau, ou utilisez Entrée sur le cerveau.' : 'Mode épilepsie désactivé.';
-  requestPaint();
-}
-
-function updateEffectControls() {
-  updatePanels();
-  $('development-options').hidden = !selectedEffect.hasDelay;
-  $('replay-row').hidden = selectedEffect.hasDelay;
-  $('experience').style.setProperty('--effect-accent', selectedEffect.color);
-  effectSelect.value = selectedEffect.id;
-  $('effect-description').textContent = selectedEffect.description;
-  const parts = ageParts(developmentDelayMonths / 12);
-  const label = `${parts.value} ${parts.unit}`;
-  $('delay-value').textContent = label;
-  $('development-delay').setAttribute('aria-valuetext', label);
-  $('development-delay').style.setProperty('--position', `${developmentDelayMonths / 60 * 100}%`);
-  requestPaint();
-}
 
 function setPlaying(next) {
   playing = next;
@@ -103,11 +53,7 @@ function setAge(value) {
 
 function updatePanels() {
   $('profile-options').hidden = currentPanel !== 'profile';
-  $('epilepsy-options').hidden = currentPanel !== 'epilepsy' || !epilepsyMode;
   profilesButton.setAttribute('aria-expanded', String(currentPanel === 'profile'));
-  epilepsyButton.setAttribute('aria-expanded', String(currentPanel === 'epilepsy' && epilepsyMode));
-  const label = epilepsyMode && currentPanel !== 'epilepsy' ? 'Afficher les réglages de l’épilepsie : ciblage actif' : epilepsyMode ? 'Désactiver le mode épilepsie' : 'Activer le mode épilepsie : choisir un foyer';
-  epilepsyButton.setAttribute('aria-label', label); epilepsyButton.title = label;
 }
 
 const hasProfileVariation = () => profileValues.some(value => value !== 0);
@@ -165,9 +111,7 @@ profilesButton.addEventListener('click', () => {
   currentPanel = currentPanel === 'profile' ? null : 'profile';
   setPlaying(false); updatePanels();
 });
-for (const [closeId, trigger] of [['close-profiles', profilesButton], ['close-epilepsy', epilepsyButton]]) {
-  $(closeId).addEventListener('click', () => { currentPanel = null; updatePanels(); trigger.focus(); });
-}
+$('close-profiles').addEventListener('click', () => { currentPanel = null; updatePanels(); profilesButton.focus(); });
 updateProfileControls();
 
 function requestPaint() {
@@ -194,13 +138,8 @@ function tick(time) {
     }
     if (age >= 20) { setPlaying(false); announceAge(); }
   }
-  if (seizureMoving()) {
-    const seconds = Math.max(0, (time - seizureStarted) / 1000);
-    seizureElapsed = selectedEffect.animation === 'spread' ? Math.min(10, seconds) : seconds;
-    if (selectedEffect.animation === 'spread' && seizureElapsed >= 10) seizureRunning = false;
-  }
   paint(age);
-  if (playing || seizureMoving()) requestPaint();
+  if (playing) requestPaint();
 }
 
 let yearlyAccumulator = 0;
@@ -218,41 +157,19 @@ playButton.addEventListener('click', () => {
 });
 $('reset').addEventListener('click', () => {
   setPlaying(false);
-  setEpilepsyMode(false);
   currentPanel = null; profileValues.fill(0); updateProfileControls(); updatePanels();
   setAge(0);
   resetViews();
   announceAge();
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { setPlaying(false); stopSeizureAnimation(); } });
-$('information').addEventListener('click', () => { setPlaying(false); stopSeizureAnimation(); about.showModal(); });
-epilepsyButton.addEventListener('click', () => {
-  if (epilepsyMode && currentPanel !== 'epilepsy') { currentPanel = 'epilepsy'; updatePanels(); }
-  else setEpilepsyMode(!epilepsyMode);
-});
-$('replay-focal').addEventListener('click', () => restartFocalEffect());
-$('clear-focal').addEventListener('click', () => { clearFocal(); $('announcement').textContent = 'Foyer effacé.'; });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { setPlaying(false); } });
+$('information').addEventListener('click', () => { setPlaying(false); about.showModal(); });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !about.open && currentPanel === 'profile') {
-    currentPanel = null; updatePanels(); profilesButton.focus(); return;
+    currentPanel = null; updatePanels(); profilesButton.focus();
   }
-  if (event.key === 'Escape' && !about.open && epilepsyMode) setEpilepsyMode(false);
 });
-reducedMotion.addEventListener('change', () => { if (reducedMotion.matches) stopSeizureAnimation(); requestPaint(); });
-effectSelect.replaceChildren(...EPILEPSY_EFFECTS.map((effect) => {
-  const option = document.createElement('option'); option.value = effect.id; option.textContent = effect.label; return option;
-}));
-effectSelect.addEventListener('change', () => {
-  selectedEffect = epilepsyEffect(effectSelect.value);
-  updateEffectControls();
-  restartFocalEffect();
-  $('announcement').textContent = `${selectedEffect.label}. ${selectedEffect.description}`;
-});
-$('development-delay').addEventListener('input', () => {
-  developmentDelayMonths = Number($('development-delay').value);
-  updateEffectControls();
-});
-updateEffectControls();
+reducedMotion.addEventListener('change', requestPaint);
 $('close-about').addEventListener('click', () => about.close());
 about.addEventListener('click', (event) => {
   if (event.target !== about) return;
@@ -285,9 +202,8 @@ function showFailure(message, error) {
   range.disabled = true;
   playButton.disabled = true;
   $('reset').disabled = true;
-  epilepsyButton.disabled = true;
   profilesButton.disabled = true;
-  setEpilepsyMode(false);
+  updatePanels();
   stage.setAttribute('aria-busy', 'false');
   $('loading').hidden = true;
   $('failure-message').textContent = message;
@@ -323,7 +239,6 @@ async function initialize() {
     const sulcalDepth = new Float32Array(buffer, 16 + vertexCount * 12, vertexCount);
     const indices = new Uint16Array(buffer, 16 + vertexCount * 16, indexCount);
     const positions = new Float32Array(vertexCount * 3);
-    const focalDistances = new Float32Array(vertexCount).fill(UNREACHED);
     for (let i = 0; i < vertexCount; i++) {
       const [x, y, z] = native.subarray(i * 3, i * 3 + 3);
       positions.set([y, z, x], i * 3);
@@ -331,7 +246,6 @@ async function initialize() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('sulcalDepth', new THREE.BufferAttribute(sulcalDepth, 1));
-    geometry.setAttribute('seizureDistance', new THREE.BufferAttribute(focalDistances, 1));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
     geometry.computeBoundingBox();
     const corticalCenter = geometry.boundingBox.getCenter(new THREE.Vector3());
@@ -351,13 +265,6 @@ async function initialize() {
     const ageUniform = { value: age };
     const profileA = new THREE.Vector3(), profileB = new THREE.Vector4(), profileC = new THREE.Vector3(), profileD = new THREE.Vector3();
     const profileUniformA = { value: profileA }, profileUniformB = { value: profileB }, profileUniformC = { value: profileC }, profileUniformD = { value: profileD };
-    const seizureUniform = { value: 0 };
-    const seizureTimeUniform = { value: 0 };
-    const staticSeizureUniform = { value: 0 };
-    const effectUniform = { value: 0 };
-    const delayUniform = { value: developmentDelayMonths / 12 };
-    const radiusUniform = { value: selectedEffect.radius };
-    const focalColor = new THREE.Color('#a06ac2');
     const palette = BRAIN_PALETTE.map((color) => new THREE.Color(color));
     const material = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
     material.onBeforeCompile = (shader) => {
@@ -366,23 +273,11 @@ async function initialize() {
       shader.uniforms.uProfileB = profileUniformB;
       shader.uniforms.uProfileC = profileUniformC;
       shader.uniforms.uProfileD = profileUniformD;
-      shader.uniforms.uSeizure = seizureUniform;
-      shader.uniforms.uSeizureTime = seizureTimeUniform;
-      shader.uniforms.uStaticSeizure = staticSeizureUniform;
-      shader.uniforms.uFocalColor = { value: focalColor };
-      shader.uniforms.uEpilepsyEffect = effectUniform;
-      shader.uniforms.uDevelopmentDelay = delayUniform;
-      shader.uniforms.uEffectRadius = radiusUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec4 profileInfluenceB;\nattribute vec3 profileInfluenceC;\nattribute vec3 profileInfluenceD;\nuniform vec3 uProfileA;\nuniform vec4 uProfileB;\nuniform vec3 uProfileC;\nuniform vec3 uProfileD;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
+      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec4 profileInfluenceB;\nattribute vec3 profileInfluenceC;\nattribute vec3 profileInfluenceD;\nuniform vec3 uProfileA;\nuniform vec4 uProfileB;\nuniform vec3 uProfileC;\nuniform vec3 uProfileD;\nattribute float sulcalDepth;\nvarying float vMaturity;\nvarying float vSulc;\nuniform float uAge;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
-        float effectiveAge = uAge;
-        if (uSeizure > 0.5 && uEpilepsyEffect > 1.5) {
-          float influence = 1.0 - smoothstep(0.0, uEffectRadius, seizureDistance);
-          effectiveAge = max(0.0, uAge - uDevelopmentDelay * influence);
-        }
-        vMaturity = regionalColour(effectiveAge, maturationEarly, maturationLate);
+        vMaturity = regionalColour(uAge, maturationEarly, maturationLate);
         vec3 remainingA = vec3(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceA) * uProfileA;
         vec4 remainingB = vec4(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceB) * uProfileB;
         vec3 remainingC = vec3(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceC) * uProfileC;
@@ -393,10 +288,8 @@ async function initialize() {
           * remainingD.x * remainingD.y * remainingD.z;
         vMaturity *= clamp(profileRemaining, 0.0, 1.0);
         vSulc = sulcalDepth;
-        vSeizureDistance = min(160.0, seizureDistance);
-        vSurfacePoint = transformed;
       `);
-      shader.fragmentShader = `varying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uSeizure;\nuniform float uSeizureTime;\nuniform float uStaticSeizure;\nuniform float uEpilepsyEffect;\nuniform float uEffectRadius;\nuniform vec3 uFocalColor;\nuniform vec3 uColor0;\nuniform vec3 uColor1;\nuniform vec3 uColor2;\nuniform vec3 uColor3;\nuniform vec3 uColor4;\nuniform vec3 uColor5;\nuniform vec3 uColor6;\n${shader.fragmentShader}`;
+      shader.fragmentShader = `varying float vMaturity;\nvarying float vSulc;\nuniform vec3 uColor0;\nuniform vec3 uColor1;\nuniform vec3 uColor2;\nuniform vec3 uColor3;\nuniform vec3 uColor4;\nuniform vec3 uColor5;\nuniform vec3 uColor6;\n${shader.fragmentShader}`;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
         #include <color_fragment>
         float p = clamp(vMaturity, 0.0, 1.0) * 6.0;
@@ -405,28 +298,6 @@ async function initialize() {
                     p < 3.0 ? mix(uColor2, uColor3, p - 2.0) :
                     p < 4.0 ? mix(uColor3, uColor4, p - 3.0) :
                     p < 5.0 ? mix(uColor4, uColor5, p - 4.0) : mix(uColor5, uColor6, p - 5.0);
-        float coverage = 0.0;
-        float edge = 0.0;
-        if (uEpilepsyEffect < 0.5) {
-          float phase = uStaticSeizure > 0.5 ? 1.0 : smoothstep(0.0, 8.0, uSeizureTime);
-          float front = mix(22.0, uEffectRadius, phase);
-          coverage = uSeizure * (1.0 - smoothstep(front - 9.0, front + 6.0, vSeizureDistance));
-          edge = uSeizure * (1.0 - smoothstep(1.2, 4.0, abs(vSeizureDistance - front)));
-          heat = mix(heat, uFocalColor, coverage * 0.85);
-        } else if (uEpilepsyEffect < 1.5) {
-          float breath = uStaticSeizure > 0.5 ? 1.0 : 1.0 + 0.09 * sin(uSeizureTime * 1.5707963);
-          float localRadius = uEffectRadius * breath;
-          coverage = uSeizure * (1.0 - smoothstep(localRadius * 0.45, localRadius, vSeizureDistance));
-          float rings = min(abs(vSeizureDistance - localRadius * 0.55), abs(vSeizureDistance - localRadius));
-          edge = uSeizure * (1.0 - smoothstep(1.0, 3.0, rings));
-          heat = mix(heat, uFocalColor, coverage * 0.85);
-        } else {
-          coverage = uSeizure * (1.0 - smoothstep(uEffectRadius * 0.7, uEffectRadius, vSeizureDistance));
-          edge = uSeizure * (1.0 - smoothstep(1.0, 3.0, abs(vSeizureDistance - uEffectRadius * 0.8)));
-          float stripe = 1.0 - smoothstep(0.07, 0.18, abs(fract((vSurfacePoint.x + vSurfacePoint.y) * 0.16) - 0.5));
-          heat = mix(heat, uFocalColor, coverage * (0.08 + stripe * 0.28));
-        }
-        heat = mix(heat, mix(uFocalColor, vec3(1.0), 0.55), edge * 0.9);
         float groove = 1.0 - 0.38 * smoothstep(-0.5, 1.3, vSulc);
         diffuseColor.rgb = heat * groove;
       `);
@@ -437,46 +308,6 @@ async function initialize() {
     scene.add(mesh);
     const cerebellum = createCerebellum(THREE, cerebellumData, corticalCenter);
     scene.add(cerebellum.group);
-    const focalMarker = new THREE.Mesh(new THREE.SphereGeometry(1.8, 12, 8), new THREE.MeshBasicMaterial({ color: focalColor }));
-    focalMarker.visible = false;
-    scene.add(focalMarker);
-    let focalVertex = -1;
-    function updateFocalReadout() {
-      const readout = $('focal-readout');
-      readout.hidden = focalVertex < 0;
-      $('clear-focal').hidden = focalVertex < 0;
-      $('replay-focal').disabled = focalVertex < 0;
-      const state = focalVertex < 0 ? 'Choisissez une zone' : selectedEffect.animation === 'spread' ? (seizureRunning ? 'Diffusion en cours' : 'Zone atteinte conservée') : 'Activité localisée';
-      $('effect-state').textContent = state;
-      if (focalVertex < 0) { readout.textContent = ''; delete readout.dataset.region; return; }
-      const id = vertexLabels?.[focalVertex] || 0;
-      let value = '';
-      if (selectedEffect.hasDelay) {
-        const parts = ageParts(developmentDelayMonths / 12);
-        value += ` · décalage illustratif : ${parts.value} ${parts.unit}`;
-      }
-      const text = `Foyer : ${regionName(id)}${value}`;
-      if (readout.textContent !== text) readout.textContent = text;
-      readout.title = text;
-      readout.dataset.region = String(id);
-    }
-    clearFocal = () => {
-      focalVertex = -1;
-      seizureRunning = false;
-      seizureUniform.value = 0;
-      focalMarker.visible = false;
-      updateFocalReadout();
-      requestPaint();
-    };
-    restartFocalEffect = () => {
-      if (focalVertex < 0) return;
-      seizureElapsed = 0;
-      seizureStarted = performance.now();
-      seizureRunning = selectedEffect.animation !== 'none' && !reducedMotion.matches;
-      previousTime = 0;
-      updateFocalReadout();
-      requestPaint();
-    };
     scene.add(new THREE.HemisphereLight(0xffffff, 0x888e7a, 2.1));
     const key = new THREE.DirectionalLight(0xfff7e8, 2.4);
     key.position.set(-130, 200, -220);
@@ -501,77 +332,26 @@ async function initialize() {
     updateLateral();
     resetViews = () => { yaw = -Math.PI / 2; pitch = 0.06; updateLateral(); requestPaint(); };
 
-    const raycaster = new THREE.Raycaster();
-    const hitPosition = new THREE.Vector3();
-    const hitNormal = new THREE.Vector3();
-    function placeFocal(surface, camera, clientX, clientY) {
-      // Refresh viewport/camera and metric state before projecting the click.
-      paint(age);
-      const bounds = surface.getBoundingClientRect();
-      const pointer = new THREE.Vector2((clientX - bounds.left) / bounds.width * 2 - 1, 1 - (clientY - bounds.top) / bounds.height * 2);
-      camera.updateMatrixWorld();
-      raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObject(mesh, false)[0];
-      const internalHit = raycaster.intersectObjects(cerebellum.meshes, false)[0];
-      if (internalHit && (!hit || internalHit.distance < hit.distance)) {
-        $('announcement').textContent = 'Choisissez une zone du cortex pour ces scénarios d’épilepsie.';
-        return;
-      }
-      if (!hit) return;
-      let nearest = -1;
-      let nearestDistance = Infinity;
-      for (const vertex of [hit.face.a, hit.face.b, hit.face.c]) {
-        hitPosition.fromBufferAttribute(geometry.attributes.position, vertex);
-        const distance = hitPosition.distanceToSquared(hit.point);
-        if (distance < nearestDistance) { nearestDistance = distance; nearest = vertex; }
-      }
-      focalVertex = nearest;
-      focalDistances.set(surfaceDistances(surfaceGraph, nearest, 120));
-      geometry.attributes.seizureDistance.needsUpdate = true;
-      focalMarker.position.fromBufferAttribute(geometry.attributes.position, nearest);
-      hitNormal.fromBufferAttribute(geometry.attributes.normal, nearest).normalize();
-      focalMarker.position.addScaledVector(hitNormal, 1.5);
-      focalMarker.visible = true;
-      seizureUniform.value = 1;
-      setPlaying(false);
-      restartFocalEffect();
-      updateFocalReadout();
-      $('announcement').textContent = `${$('focal-readout').textContent}. ${selectedEffect.label}.`;
-      requestPaint();
-    }
-    function bindSurface(surface, camera, canRotate) {
-      let drag = null;
-      surface.addEventListener('pointerdown', (event) => {
-        if (!event.isPrimary || event.button !== 0) return;
-        drag = { x: event.clientX, y: event.clientY, yaw, pitch, id: event.pointerId, moved: false };
-        surface.setPointerCapture(event.pointerId);
-      });
-      surface.addEventListener('pointermove', (event) => {
-        if (!drag || drag.id !== event.pointerId) return;
-        if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 6) drag.moved = true;
-        if (!canRotate || !drag.moved) return;
-        yaw = drag.yaw + (event.clientX - drag.x) * 0.007;
-        pitch = Math.max(-1.15, Math.min(1.15, drag.pitch + (event.clientY - drag.y) * 0.007));
-        updateLateral();
-        requestPaint();
-      });
-      surface.addEventListener('pointerup', (event) => {
-        if (drag?.id === event.pointerId && !drag.moved && epilepsyMode) placeFocal(surface, camera, event.clientX, event.clientY);
-        drag = null;
-      });
-      const stopDrag = () => { drag = null; };
-      surface.addEventListener('pointercancel', stopDrag);
-      surface.addEventListener('lostpointercapture', stopDrag);
-    }
-    bindSurface($('lateral'), lateralCamera, true);
-    bindSurface($('superior'), topCamera, false);
+    const lateralSurface = $('lateral');
+    let drag = null;
+    lateralSurface.addEventListener('pointerdown', (event) => {
+      if (!event.isPrimary || event.button !== 0) return;
+      drag = { x: event.clientX, y: event.clientY, yaw, pitch, id: event.pointerId, moved: false };
+      lateralSurface.setPointerCapture(event.pointerId);
+    });
+    lateralSurface.addEventListener('pointermove', (event) => {
+      if (!drag || drag.id !== event.pointerId) return;
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 6) drag.moved = true;
+      if (!drag.moved) return;
+      yaw = drag.yaw + (event.clientX - drag.x) * 0.007;
+      pitch = Math.max(-1.15, Math.min(1.15, drag.pitch + (event.clientY - drag.y) * 0.007));
+      updateLateral(); requestPaint();
+    });
+    const stopDrag = () => { drag = null; };
+    lateralSurface.addEventListener('pointerup', stopDrag);
+    lateralSurface.addEventListener('pointercancel', stopDrag);
+    lateralSurface.addEventListener('lostpointercapture', stopDrag);
     $('brain').addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && epilepsyMode) {
-        event.preventDefault();
-        const bounds = $('lateral').getBoundingClientRect();
-        placeFocal($('lateral'), lateralCamera, bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
-        return;
-      }
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
       event.preventDefault();
       if (event.key === 'Home') { resetViews(); return; }
@@ -626,19 +406,11 @@ async function initialize() {
       }
       if (!width || !height) return;
       ageUniform.value = value;
-      seizureTimeUniform.value = seizureElapsed;
-      staticSeizureUniform.value = reducedMotion.matches ? 1 : 0;
-      effectUniform.value = selectedEffect.shader;
-      delayUniform.value = developmentDelayMonths / 12;
-      radiusUniform.value = selectedEffect.radius;
-      focalColor.set(selectedEffect.color);
-      focalMarker.material.color.copy(focalColor);
       const profile = profileValues;
       profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4], profile[5], profile[6]);
       profileC.set(profile[7], profile[8], profile[9]);
       profileD.set(profile[10], profile[11], profile[12]);
       cerebellum.update(value, cerebellarProfileAdjustment(profile));
-      updateFocalReadout();
       renderer.setScissorTest(false);
       renderer.clear();
       renderer.setScissorTest(true);
@@ -660,7 +432,6 @@ async function initialize() {
     range.disabled = false;
     playButton.disabled = false;
     $('reset').disabled = false;
-    epilepsyButton.disabled = false;
     profilesButton.disabled = !vertexLabels;
     if (!vertexLabels) profilesButton.title = 'Atlas anatomique indisponible. Rechargez la page pour réessayer.';
   } catch (error) {
