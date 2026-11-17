@@ -8,37 +8,37 @@ import { AGE_INSIGHTS, insightForAge } from '../age-insights.js';
 import { buildMaturationCurves, colourAtAge, AGE_KNOTS, REGIONAL_CURVES, curveForLabel } from '../maturation.js';
 import { BRAIN_PALETTE, setScaleColour } from '../colour-scale.js';
 import { Color } from '../vendor/three.module.min.js';
-import { buildProfileInfluences, profileColourStage, profileAdjustment, cerebellarProfileAdjustment, PROFILE_DOMAINS } from '../development-profiles.js';
+import { buildProfileInfluences, profileColourStage, profileAdjustment, profileInfluenceResponse, cerebellarProfileAdjustment, PROFILE_DOMAINS } from '../development-profiles.js';
 
 const atlasSource = JSON.parse(await readFile(new URL('../assets/atlas-source.json', import.meta.url), 'utf8'));
 
 test('deficit-only profiles preserve the reference and stay bounded without changing age', () => {
   const neutral = Array(PROFILE_DOMAINS.length).fill(0);
-  assert.equal(PROFILE_DOMAINS.length, 7);
-  assert.equal(profileAdjustment(Array(7).fill(1), neutral), 0);
+  assert.equal(PROFILE_DOMAINS.length, 10);
+  assert.equal(profileAdjustment(Array(10).fill(1), neutral), 0);
   assert.equal(cerebellarProfileAdjustment(neutral), 0);
-  for (const age of [0,.5,2,8,20]) for (const base of [0,.1,.5,.9,1]) {
-    assert.equal(profileColourStage(base, age, 0), base);
+  for (const base of [0,.1,.5,.9,1]) {
+    assert.equal(profileColourStage(base, 0), base);
     let previous = base;
     for (const adjustment of [-.1,-.3,-.5,-.8,-1]) {
-      const stage = profileColourStage(base, age, adjustment);
+      const stage = profileColourStage(base, adjustment);
       assert(stage >= 0 && stage <= previous);
-      if (age === 0) assert.equal(stage, base);
       previous = stage;
     }
-    assert.equal(profileColourStage(base, age, 1), base, 'positive adjustments cannot advance the reference');
+    assert.equal(profileColourStage(base, 1), base, 'positive adjustments cannot advance the reference');
+    assert.equal(profileColourStage(base, -1), 0, 'full-scale colour contrast reaches the red stop regardless of the reference colour');
   }
 });
 
-test('seven profile influences remain on their own disconnected hemisphere', () => {
+test('ten profile influences remain on their own disconnected hemisphere', () => {
   const graph = buildSurfaceGraph(new Float32Array([0,0,0, 3,0,0, 0,4,0, 0,0,1, 3,0,1, 0,4,1]), new Uint16Array([0,1,2, 3,4,5]));
   const influences = buildProfileInfluences(new Uint16Array([14,14,14,0,0,0]), graph);
   assert(influences[0] > .9);
-  assert(influences.subarray(21).every(value => value === 0));
+  assert(influences.subarray(30).every(value => value === 0));
   assert(buildProfileInfluences(null, graph).every(value => value === 0));
 });
 
-test('the seven domains retain distinct overlapping influences and increasing deficits cannot cancel each other', async () => {
+test('the ten domains retain distinct overlapping influences and increasing deficits cannot cancel each other', async () => {
   const bytes = await readFile(new URL('../assets/cortex.bin', import.meta.url));
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const header = new DataView(buffer), count = header.getUint32(4, true);
@@ -47,10 +47,10 @@ test('the seven domains retain distinct overlapping influences and increasing de
   const atlas = await readFile(new URL('../assets/destrieux-labels.bin', import.meta.url));
   const labels = Uint16Array.from({ length: count }, (_, i) => atlas.readUInt16LE(i * 2));
   const influences = buildProfileInfluences(labels, buildSurfaceGraph(positions, triangles));
-  assert.equal(influences.length, count * 7);
+  assert.equal(influences.length, count * 10);
   const mean = (region, channel) => {
     let total = 0, n = 0;
-    for (let i = 0; i < count; i++) if (labels[i] === region) { total += influences[i * 7 + channel]; n++; }
+    for (let i = 0; i < count; i++) if (labels[i] === region) { total += influences[i * 10 + channel]; n++; }
     return total / n;
   };
   assert(influences.every(value => Number.isFinite(value) && value >= 0 && value <= 1));
@@ -62,22 +62,44 @@ test('the seven domains retain distinct overlapping influences and increasing de
     assert(mean(offset+25,3) > .8);
     assert(mean(offset+15,4) > .8);
     assert(mean(offset+6,6) > .8);
+    assert(mean(offset+12,7) > .85 && mean(offset+12,8) < .1);
+    assert(mean(offset+28,8) > .85 && mean(offset+28,7) < .1);
+    assert(mean(offset+56,9) > .85 && mean(offset+56,7) < .1);
   }
   for (let i = 0; i < count; i += 97) {
-    const weights = influences.subarray(i*7, i*7+7);
-    const values = Array(7).fill(-.2);
+    const weights = influences.subarray(i*10, i*10+10);
+    const values = Array(10).fill(-.2);
     const initial = profileAdjustment(weights, values);
     assert(initial >= -1 && initial <= 0);
-    for (let channel = 0; channel < 7; channel++) {
+    for (let channel = 0; channel < 10; channel++) {
       const stronger = [...values]; stronger[channel] = -.8;
       assert(profileAdjustment(weights, stronger) <= initial, 'increasing one deficit cannot reduce the combined effect');
     }
   }
-  const motor = [0,0,-1,0,0,0,0], coordination = [0,0,0,0,0,-1,0];
+  const curves = buildMaturationCurves(positions, labels, buildSurfaceGraph(positions, triangles));
+  for (let channel = 0; channel < 10; channel++) {
+    const values = Array(10).fill(0); values[channel] = -1;
+    for (const age of [16,20]) {
+      let redCores = 0;
+      for (let i = 0; i < count; i++) {
+        if (influences[i*10+channel] < .9) continue;
+        const base = colourAtAge(age, ...curves.subarray(i*8,i*8+8));
+        const adjustment = profileAdjustment(influences.subarray(i*10,i*10+10),values);
+        assert.equal(profileColourStage(base,adjustment),0);
+        if(base>.6) redCores++;
+      }
+      assert(redCores>50, `${PROFILE_DOMAINS[channel].id}: advanced reference areas must reach red at ${age}`);
+    }
+  }
+  assert.equal(profileInfluenceResponse(0),0);
+  assert.equal(profileInfluenceResponse(.9),1);
+  assert(profileInfluenceResponse(.3)>0 && profileInfluenceResponse(.3)<1);
+  const motor = [0,0,-1,0,0,0,0,0,0,0], coordination = [0,0,0,0,0,-1,0,0,0,0];
   assert(cerebellarProfileAdjustment(motor) < 0);
   assert(cerebellarProfileAdjustment(coordination) < cerebellarProfileAdjustment(motor));
-  assert(cerebellarProfileAdjustment([0,0,-1,0,0,-1,0]) < cerebellarProfileAdjustment(coordination));
-  assert.equal(cerebellarProfileAdjustment([-1,-1,0,-1,-1,0,-1]), 0);
+  assert.equal(cerebellarProfileAdjustment(coordination), -1, 'coordination can reach red in the cerebellum');
+  assert(cerebellarProfileAdjustment([0,0,-1,0,0,-.5,0,0,0,0]) < cerebellarProfileAdjustment([0,0,0,0,0,-.5,0,0,0,0]));
+  assert.equal(cerebellarProfileAdjustment([-1,-1,0,-1,-1,0,-1,-1,-1,-1]), 0);
 });
 
 test('paired cerebellar surfaces preserve anatomy, labels and outward closed geometry', async () => {

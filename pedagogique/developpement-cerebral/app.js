@@ -6,7 +6,7 @@ import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
 import { mountResearch } from './research-evidence.js';
 import { BRAIN_PALETTE } from './colour-scale.js';
-import { PROFILE_DOMAINS, profileLevel, buildProfileInfluences, cerebellarProfileAdjustment } from './development-profiles.js';
+import { PROFILE_DOMAINS, PROFILE_CORE_THRESHOLD, profileLevel, buildProfileInfluences, cerebellarProfileAdjustment } from './development-profiles.js';
 
 const $ = (id) => document.getElementById(id);
 const range = $('age');
@@ -340,10 +340,11 @@ async function initialize() {
     const influences = new THREE.InterleavedBuffer(buildProfileInfluences(vertexLabels, surfaceGraph), PROFILE_DOMAINS.length);
     geometry.setAttribute('profileInfluenceA', new THREE.InterleavedBufferAttribute(influences, 3, 0));
     geometry.setAttribute('profileInfluenceB', new THREE.InterleavedBufferAttribute(influences, 4, 3));
+    geometry.setAttribute('profileInfluenceC', new THREE.InterleavedBufferAttribute(influences, 3, 7));
 
     const ageUniform = { value: age };
-    const profileA = new THREE.Vector3(), profileB = new THREE.Vector4();
-    const profileUniformA = { value: profileA }, profileUniformB = { value: profileB };
+    const profileA = new THREE.Vector3(), profileB = new THREE.Vector4(), profileC = new THREE.Vector3();
+    const profileUniformA = { value: profileA }, profileUniformB = { value: profileB }, profileUniformC = { value: profileC };
     const seizureUniform = { value: 0 };
     const seizureTimeUniform = { value: 0 };
     const staticSeizureUniform = { value: 0 };
@@ -357,6 +358,7 @@ async function initialize() {
       shader.uniforms.uAge = ageUniform;
       shader.uniforms.uProfileA = profileUniformA;
       shader.uniforms.uProfileB = profileUniformB;
+      shader.uniforms.uProfileC = profileUniformC;
       shader.uniforms.uSeizure = seizureUniform;
       shader.uniforms.uSeizureTime = seizureTimeUniform;
       shader.uniforms.uStaticSeizure = staticSeizureUniform;
@@ -365,7 +367,7 @@ async function initialize() {
       shader.uniforms.uDevelopmentDelay = delayUniform;
       shader.uniforms.uEffectRadius = radiusUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec4 profileInfluenceB;\nuniform vec3 uProfileA;\nuniform vec4 uProfileB;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
+      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec4 profileInfluenceB;\nattribute vec3 profileInfluenceC;\nuniform vec3 uProfileA;\nuniform vec4 uProfileB;\nuniform vec3 uProfileC;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         float effectiveAge = uAge;
@@ -374,13 +376,13 @@ async function initialize() {
           effectiveAge = max(0.0, uAge - uDevelopmentDelay * influence);
         }
         vMaturity = regionalColour(effectiveAge, maturationEarly, maturationLate);
-        vec3 remainingA = vec3(1.0) + profileInfluenceA * uProfileA;
-        vec4 remainingB = vec4(1.0) + profileInfluenceB * uProfileB;
-        float profileShift = remainingA.x * remainingA.y * remainingA.z
-          * remainingB.x * remainingB.y * remainingB.z * remainingB.w - 1.0;
-        float profileStrength = (1.0 - exp(-max(0.0, effectiveAge) / 1.5)) * 0.34;
-        float profileRoom = 1.0 - abs(vMaturity - 0.5) * 1.2;
-        vMaturity = clamp(vMaturity + profileShift * profileStrength * profileRoom, 0.0, 1.0);
+        vec3 remainingA = vec3(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceA) * uProfileA;
+        vec4 remainingB = vec4(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceB) * uProfileB;
+        vec3 remainingC = vec3(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceC) * uProfileC;
+        float profileRemaining = remainingA.x * remainingA.y * remainingA.z
+          * remainingB.x * remainingB.y * remainingB.z * remainingB.w
+          * remainingC.x * remainingC.y * remainingC.z;
+        vMaturity *= clamp(profileRemaining, 0.0, 1.0);
         vSulc = sulcalDepth;
         vSeizureDistance = min(160.0, seizureDistance);
         vSurfacePoint = transformed;
@@ -624,6 +626,7 @@ async function initialize() {
       focalMarker.material.color.copy(focalColor);
       const profile = profileValues;
       profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4], profile[5], profile[6]);
+      profileC.set(profile[7], profile[8], profile[9]);
       cerebellum.update(value, cerebellarProfileAdjustment(profile));
       updateFocalReadout();
       renderer.setScissorTest(false);

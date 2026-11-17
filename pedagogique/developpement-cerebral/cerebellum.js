@@ -52,7 +52,7 @@ export function createCerebellum(THREE, data, corticalCenter) {
       if (age === lastAge && adjustment === lastAdjustment) return;
       lastAge = age; lastAdjustment = adjustment;
       for (const mesh of meshes) {
-        setScaleColour(mesh.material.color, profileColourStage(cerebellumColourStage(age), age, adjustment), palette);
+        setScaleColour(mesh.material.color, profileColourStage(cerebellumColourStage(age), adjustment), palette);
       }
     },
   };
