@@ -1,6 +1,6 @@
 # Sources, représentation et limites
 
-La [revue documentaire du 17 novembre 2026](RESEARCH_REVIEW.md) examine douze études primaires : populations, âges, régions, mesures et limites. Le volet « Repères & sources → Les études » permet de les consulter par région dans la page. Les tendances sont étayées qualitativement ; aucune publication ne valide les teintes ou les valeurs numériques de l’animation.
+La [revue documentaire du 17 novembre 2026](RESEARCH_REVIEW.md) examine douze études développementales et une étude de compréhension du langage : populations, âges, régions, mesures et limites. Le volet « Repères & sources → Les études » permet de les consulter par région dans la page. Les tendances sont étayées qualitativement ; aucune publication ne valide les teintes ou les valeurs numériques de l’animation.
 
 ## Anatomie réelle, couleurs illustratives
 
@@ -8,7 +8,7 @@ La page représente une **progression schématique de 0 à 20 ans**. Les limites
 
 Le cortex et le cervelet ont la forme fixe d’un gabarit moyen **adulte**. Le curseur ne simule ni la croissance anatomique ni la variabilité entre personnes. La palette à sept repères rouge → orange → jaune → vert → turquoise → bleu → bleu profond est interpolée en continu et expliquée dans l’aide.
 
-La couleur corticale inclut désormais un état initial régional illustratif et une composante lente qui se poursuit au-delà des fenêtres principales. Ces paramètres évitent de suggérer un départ uniforme à zéro ou une fin de développement à vingt ans. La formule et ses constantes éditoriales sont données dans la revue ; elles ne sont pas ajustées aux études.
+La couleur corticale provient de 19 trajectoires anatomiques explicites, avec huit repères d’âge et une interpolation monotone. Les 64 petites variations artificielles ont été retirées. Les 74 labels par hémisphère sont tous attribués, avec deux passes de lissage à 82 % du sommet et 18 % de la moyenne de ses voisins. Les références guident les contrastes qualitatifs, sans fournir les valeurs numériques des repères. Une région garde la même trajectoire à chaque chargement.
 
 ## Repérage des régions corticales
 
@@ -21,7 +21,7 @@ L’atlas **Destrieux 2010** fournit 74 régions par hémisphère sur fsaverage5
 
 ## Bandes sensorielles et motrices dorsales
 
-Les labels des gyri postcentral et précentral, de la région paracentrale et des sillons centraux définissent des bandes à progression illustrative précoce dans chaque hémisphère. Les régions visuelles primaires sont approchées par le cunéus, le gyrus lingual, le pôle occipital et le sillon calcarin. Toutes les régions dorsales d’association ne sont pas assimilées à des aires sensorielles primaires.
+Les labels des gyri postcentral et précentral, de la région paracentrale et des sillons centraux définissent des bandes à progression illustrative précoce dans chaque hémisphère. Le sillon calcarin sert de repère pour la vision primaire ; le cunéus, le gyrus lingual et le pôle occipital sont traités comme des régions voisines distinctes, sans assimiler la totalité de ces labels à V1. Toutes les régions dorsales d’association ne sont pas assimilées à des aires sensorielles primaires.
 
 Deoni et al. (2015), *Cortical maturation and myelination in healthy toddlers and young children*, https://pmc.ncbi.nlm.nih.gov/articles/PMC4463864/, fournit un repère général : la myélinisation est relativement précoce dans les cortex sensorimoteurs et sensoriels primaires. Cette étude ne fournit pas les valeurs numériques des fenêtres d’animation.
 
@@ -64,17 +64,17 @@ Ces plages sont **éditoriales**, pas des seuils biologiques ou des dates d’ac
 
 ## Profils contrastés : une métaphore pédagogique
 
-L’objectif est de montrer qu’à un même âge, des points d’appui et des besoins de soutien peuvent coexister. Les exemples « langage en appui / attention à soutenir », « attention en appui / langage à soutenir » et « coordination en appui / langage à soutenir » sont des **scénarios éditoriaux**, pas des profils diagnostiques ou des observations d’élèves. La personnalisation propose trois réglages qualitatifs, sans âge mental, QI ni mesure des capacités.
+L’objectif est de montrer que des capacités et des besoins de soutien différents peuvent coexister, y compris en déficience intellectuelle. Cinq dimensions sont réglables : **sens des mots**, **consigne et contexte**, **mémoire des étapes**, **attention et organisation**, **coordination**. Les exemples sont fictifs, sans âge mental, QI, prédiction d’un comportement ou mesure des capacités.
 
-Source de cadrage : [AAIDD, Defining Criteria for Intellectual Disability](https://www.aaidd.org/intellectual-disability/definition). L’AAIDD souligne la coexistence possible de forces et de limitations et l’importance des soutiens individualisés. La déficience intellectuelle relève d’une évaluation du fonctionnement intellectuel et adaptatif ; la présente illustration ne permet ni de la reconnaître ni de la simuler à partir de trois réglages. Aucun exemple n’est intitulé « déficience intellectuelle » ou associé à un diagnostic.
+Le premier exemple met le sens des mots en appui et l’interprétation de l’attente à soutenir. « Prépare-toi pour sortir » exige de déduire des actions implicites à partir du contexte. Le bouton « Rendre l’attente explicite » remplace cette phrase par des actions concrètes. Il ne change ni la couleur, ni l’âge. Un autre exemple distingue la compréhension des mots et le maintien d’une suite d’étapes. La reformulation est un appui possible, sans effet garanti ni effet anatomique simulé.
 
-Les fonctions reposent sur des réseaux distribués qui se chevauchent. Les poids de `development-profiles.js` sont des approximations spatiales choisies pour la démonstration, sans ajustement à un connectome, à des observations IRM ou à des données psychométriques. Le langage concerne surtout des repères temporaux, frontaux inférieurs et pariétaux ; l’attention, des repères frontopariétaux et cingulaires ; la coordination, des repères sensorimoteurs et le cervelet. L’influence du cervelet reste globale, sans attribution à des lobules fonctionnels mesurés. Une aisance en langage ne se traduit pas scientifiquement par une avance anatomique locale.
+Source comportementale : [Polišenská et al., 2018](https://doi.org/10.1044/2018_JSLHR-L-17-0029), *Receptive Language Skills in Slovak-Speaking Children With Intellectual Disability: Understanding Words, Sentences, and Stories*. Cette petite étude compare 14 enfants avec DI et 14 témoins. Elle justifie la distinction des exigences de compréhension, sans cartographier leurs réseaux cérébraux ou établir un profil universel de DI. Source de cadrage : [AAIDD](https://www.aaidd.org/intellectual-disability/definition), coexistence de forces et limitations et importance des soutiens individualisés.
 
-Le maillage reçoit trois influences par sommet, identiques dans leur principe pour les deux hémisphères. Trois passes de lissage suivent les arêtes corticales (65 % du sommet, 35 % de la moyenne des voisins). Elles ne traversent pas de composante disjointe. Les influences communes sont normalisées pour que leur somme ne dépasse pas un : des ajustements opposés peuvent se compenser dans les zones partagées.
+Les cinq influences spatiales se chevauchent : repères temporaux et frontopariétaux pour les mots et le contexte, frontopariétaux/cingulaires pour les aspects exécutifs, sensorimoteurs et cérébelleux pour la coordination. Ces poids ne sont pas ajustés à un connectome, à des données d’imagerie ou à une évaluation psychométrique. Une facilité en vocabulaire ne signifie pas une avance anatomique locale. Les deux hémisphères suivent la même convention.
 
-Les réglages valent −1, 0 ou +1 uniquement dans le code ; l’interface affiche « À soutenir », « Intermédiaire » ou « En appui ». Le mélange modifie le paramètre de couleur de base avec une intensité bornée, croissant progressivement après la naissance : `0,3 × (1 − exp(−âge/1,5))`, pondérée par l’influence spatiale et une marge dépendant de la couleur de base. Le résultat est borné à l’intervalle 0–1. Ce calcul ne décale pas l’âge global et ne constitue pas une mesure de maturité. À réglages nuls, le rendu est identique au repère illustratif.
+Trois passes de lissage suivent les arêtes du maillage (65 % du sommet, 35 % de la moyenne des voisins). Les cinq poids restent dans 0–1 sans former des domaines exclusifs. Pour les réglages actifs `v` et les influences `w`, la contribution est `somme(w × v) / max(1, somme(w × |v|))`. Des réglages opposés se compensent dans les régions partagées ; les domaines inactifs ne diluent pas le contraste. La force de couleur vaut `0,34 × (1 − exp(−âge/1,5))`, avec une marge liée à la couleur de base. Le résultat est borné à 0–1. Ces constantes sont illustratives. À réglages nuls, le rendu est identique au repère ; la contribution s’annule à la naissance.
 
-Le bouton de comparaison conserve exactement l’âge et les choix ; il annule temporairement les contributions du profil. Le profil persiste lorsque son volet est réduit et peut se combiner aux scénarios focaux. Cette combinaison n’est pas un modèle causal entre déficience intellectuelle, épilepsie et développement. Sans atlas, les profils sont désactivés et l’illustration ordinaire reste utilisable.
+La comparaison conserve l’âge et les choix. Le profil et les formulations persistent lorsque le volet est réduit. Ils peuvent se combiner aux scénarios focaux sans modèle causal entre DI, épilepsie et développement. Sans atlas, les profils sont désactivés.
 
 ## Mode épilepsie
 
@@ -94,4 +94,4 @@ La réduction des animations donne trois formes statiques distinctes. Les animat
 
 L’atlas adapté reste sous **CC BY-NC-SA 4.0**, avec le texte complet dans `assets/ctdev-license.txt`. Le cervelet garde séparément la licence **FreeSurfer v1.0** dans `assets/freesurfer-license.txt`. Les sources, avis et modifications sont conservés dans `THIRD_PARTY_NOTICES.txt` et ne sont pas remplacés par la licence générale du code.
 
-Les tests vérifient les maillages cérébelleux fermés et orientés, les identités anatomiques, les trajectoires auditives/langagières et dorsales des deux côtés, la couverture des 241 sélections mensuelles par les repères, la palette et les composants disjoints du cortex. Les tests des profils vérifient aussi les bornes et l’identité du réglage zéro, les influences distribuées/partagées et le lissage sur composantes disjointes. Ils vérifient l’implémentation et ne constituent pas une validation clinique.
+Les tests vérifient les maillages cérébelleux fermés et orientés, les identités anatomiques, les trajectoires auditives/langagières et dorsales des deux côtés, la couverture des 241 sélections mensuelles par les repères, la palette et les composants disjoints du cortex. Les tests des profils vérifient les cinq dimensions, la distinction entre mots/contexte/mémoire, les bornes, l’identité du réglage zéro, le chevauchement des influences et le lissage sur composantes disjointes. Ils vérifient l’implémentation et ne constituent pas une validation clinique.

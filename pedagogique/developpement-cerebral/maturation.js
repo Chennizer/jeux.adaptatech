@@ -1,168 +1,143 @@
-// Illustrative spatial kernels in native fsaverage RAS millimetres.
-// These are NOT an anatomical parcellation or fitted developmental data.
-// Each kernel supplies a start/end age and an ellipsoidal spatial influence.
-export const REGIONS = [
-  { center: [0, -88, 12], spread: [65, 27, 43], start: -1, end: 12 }, // visual
-  { center: [0, -22, 65], spread: [67, 23, 27], start: -1, end: 15 }, // sensorimotor
-  { center: [0, -61, 49], spread: [66, 30, 31], start: 0, end: 20 }, // parietal association
-  { center: [0, -25, -23], spread: [70, 42, 25], start: 0, end: 24 }, // temporal association
-  { center: [0, 12, 55], spread: [60, 25, 28], start: 1, end: 23 }, // frontal association
-  { center: [0, 53, 20], spread: [57, 27, 42], start: 2, end: 29 }, // prefrontal
-  { center: [0, 30, -20], spread: [54, 29, 24], start: 1, end: 27 }, // ventral frontal
+// Qualitative regional trajectories, not a measured percentage of maturity.
+// Anchors distinguish prenatal state, infancy, childhood and adolescence.
+// Anatomical assignment replaces the previous 64 artificial spatial patches.
+export const AGE_KNOTS = Object.freeze([0, .5, 1, 2, 5, 10, 15, 20]);
+export const REGIONAL_CURVES = Object.freeze({
+  somatosensory: { label: 'Somatosensoriel primaire', refs: ['natu','deoni'], values: [.22,.49,.62,.72,.81,.88,.92,.95] },
+  motor: { label: 'Moteur primaire', refs: ['natu','deoni'], values: [.20,.44,.57,.68,.78,.86,.91,.94] },
+  visual: { label: 'Vision primaire — repères calcarins', refs: ['natu','deoni'], values: [.21,.47,.61,.72,.82,.89,.93,.96] },
+  auditory: { label: 'Audition primaire — Heschl', refs: ['natu','leroy'], values: [.23,.50,.63,.73,.82,.88,.92,.95] },
+  visualAssociation: { label: 'Association visuelle occipitale', refs: ['natu','gogtay'], values: [.11,.25,.36,.48,.64,.79,.87,.93] },
+  visualTemporal: { label: 'Association visuelle temporale', refs: ['natu','gogtay'], values: [.07,.14,.21,.30,.46,.65,.79,.88] },
+  premotor: { label: 'Prémoteur et intégration sensorimotrice', refs: ['deoni','gogtay'], values: [.14,.30,.42,.53,.68,.81,.89,.94] },
+  auditoryAssociation: { label: 'Association auditive temporale', refs: ['leroy','emerson'], values: [.14,.26,.34,.43,.57,.73,.85,.92] },
+  temporal: { label: 'Association temporale et sémantique', refs: ['leroy','emerson'], values: [.08,.13,.18,.25,.39,.57,.73,.86] },
+  temporalSulcus: { label: 'Sillon temporal supérieur', refs: ['leroy','emerson'], values: [.07,.12,.17,.23,.37,.55,.71,.85] },
+  frontalOpercular: { label: 'Frontal inférieur operculaire', refs: ['leroy','perani'], values: [.13,.23,.29,.35,.46,.63,.78,.89] },
+  frontalLanguage: { label: 'Frontal inférieur associatif', refs: ['leroy','emerson','whitaker'], values: [.10,.16,.21,.28,.39,.56,.73,.86] },
+  parietal: { label: 'Association pariétale', refs: ['gogtay','fair'], values: [.10,.17,.23,.31,.46,.65,.80,.90] },
+  frontoparietal: { label: 'Régions frontopariétales de contrôle', refs: ['fair','whitaker'], values: [.06,.11,.16,.23,.35,.52,.69,.84] },
+  prefrontal: { label: 'Préfrontal associatif', refs: ['gogtay','whitaker','grydeland'], values: [.04,.08,.12,.18,.28,.43,.60,.78] },
+  orbitofrontal: { label: 'Orbitofrontal', refs: ['gogtay','whitaker'], values: [.07,.12,.18,.25,.37,.54,.70,.84] },
+  cingulate: { label: 'Cingulaire et réseaux médians', refs: ['fair','grydeland'], values: [.12,.21,.29,.38,.52,.68,.80,.90] },
+  insula: { label: 'Insula et régions périsylviennes', refs: ['gogtay','grydeland'], values: [.12,.25,.35,.46,.62,.77,.86,.93] },
+  medialTemporal: { label: 'Temporal médian', refs: ['gogtay','grydeland'], values: [.10,.18,.26,.36,.51,.68,.81,.91] }
+});
+
+// Destrieux labels describe gyri/sulci, not exact functional boundaries.
+// Every one of the 74 labels has an explicit assignment, bilaterally.
+const GROUPS = {
+  somatosensory: [28,67], motor: [3,29,45], visual: [44], auditory: [33,74],
+  visualAssociation: [2,11,19,20,22,42,57,58,59,61,65],
+  visualTemporal: [21,51,60], premotor: [4,68,69],
+  auditoryAssociation: [34,35,36,41], temporal: [37,38,43,72], temporalSulcus: [73],
+  frontalOpercular: [12,40], frontalLanguage: [13,14,39,52],
+  parietal: [25,26,27,55,71], frontoparietal: [15,16,30,53,54,56],
+  prefrontal: [1,5], orbitofrontal: [24,31,62,63,64,70],
+  cingulate: [6,7,8,9,10,32,46,66], insula: [17,18,47,48,49], medialTemporal: [23,50]
+};
+const LABEL_CURVES = new Map(Object.entries(GROUPS).flatMap(([key, labels]) => labels.map(label => [label,key])));
+export function curveForLabel(label) {
+  return REGIONAL_CURVES[LABEL_CURVES.get(label ? (label - 1) % 74 + 1 : 0)] || null;
+}
+
+// Atlas-unavailable fallback: a coarse continuous field, without fake patches.
+const FALLBACK = [
+  ['visual',[0,-88,12],[65,27,43]], ['motor',[0,-22,65],[67,23,27]],
+  ['parietal',[0,-61,49],[66,30,31]], ['temporal',[0,-25,-23],[70,42,25]],
+  ['frontoparietal',[0,12,55],[60,25,28]], ['prefrontal',[0,53,20],[57,27,42]],
+  ['orbitofrontal',[0,30,-20],[54,29,24]]
 ];
-
-export function maturationWindow(x, y, z) {
-  let total = 0;
-  let start = 0;
-  let end = 0;
-  for (const region of REGIONS) {
-    const dx = (x - region.center[0]) / region.spread[0];
-    const dy = (y - region.center[1]) / region.spread[1];
-    const dz = (z - region.center[2]) / region.spread[2];
-    const weight = Math.exp(-1.5 * (dx * dx + dy * dy + dz * dz));
-    total += weight;
-    start += weight * region.start;
-    end += weight * region.end;
+function fallbackCurve(x,y,z) {
+  const result = Array(8).fill(0); let total = 0;
+  for (const [key, center, spread] of FALLBACK) {
+    const d = [x,y,z].reduce((sum,v,j) => sum + ((v-center[j])/spread[j])**2,0);
+    const weight = Math.exp(-1.5*d); total += weight;
+    REGIONAL_CURVES[key].values.forEach((value,j) => { result[j] += value*weight; });
   }
-  return [start / total, end / total];
+  return result.map(value => value/total);
 }
-
-const PATCH_COUNT = 64;
-
-// Repeatable variation: patches retain the same timing on every load and view.
-function variation(index, salt) {
-  const value = Math.sin((index + 1) * 127.1 + salt * 311.7) * 43758.5453;
-  return value - Math.floor(value);
-}
-
-function createPatches(positions) {
-  // Sample the left cortical surface; mirror the field across hemispheres.
-  // Farthest-point sampling spreads patches over the actual folded geometry.
-  const count = positions.length / 6;
-  const distances = new Float64Array(count).fill(Infinity);
-  const patches = [];
-  let next = 0;
-  for (let patch = 0; patch < PATCH_COUNT; patch++) {
-    const x = Math.abs(positions[next * 3]);
-    const y = positions[next * 3 + 1];
-    const z = positions[next * 3 + 2];
-    const [baseStart, baseEnd] = maturationWindow(x, y, z);
-    const shift = (variation(patch, 1) * 2 - 1) * 5.2;
-    const start = Math.max(0, baseStart + shift * 0.35 + variation(patch, 2) * 2);
-    const end = Math.max(start + 5.5, baseEnd * (0.82 + variation(patch, 3) * 0.4) + shift);
-    // An immediate infant phase makes changes visible before the slower phase.
-    // Timing and amplitude are illustrative, with stronger early sensory changes.
-    const earlyPriority = Math.max(0, Math.min(1, (29 - baseEnd) / 17));
-    const earlyShare = Math.max(0.12, Math.min(0.8, 0.12 + earlyPriority * 0.64 + (variation(patch, 4) - 0.5) * 0.2));
-    const earlyYears = 0.3 + (1 - earlyPriority) * 1.9 + variation(patch, 5) * 0.35;
-    patches.push({ x, y, z, start, end, earlyShare, earlyYears });
-    let furthest = -1;
-    for (let i = 0; i < count; i++) {
-      const dx = Math.abs(positions[i * 3]) - x;
-      const dy = positions[i * 3 + 1] - y;
-      const dz = positions[i * 3 + 2] - z;
-      distances[i] = Math.min(distances[i], dx * dx + dy * dy + dz * dz);
-      if (distances[i] > furthest) {
-        furthest = distances[i];
-        next = i;
+export function buildMaturationCurves(positions, labels, graph = null) {
+  const count = positions.length/3;
+  let curves = new Float32Array(count*8);
+  for (let i=0;i<count;i++) {
+    const curve = curveForLabel(labels?.[i]);
+    curves.set(curve?.values || fallbackCurve(Math.abs(positions[i*3]),positions[i*3+1],positions[i*3+2]),i*8);
+  }
+  // Only the immediate surface neighbours soften anatomical boundaries.
+  // Distinct regions keep their own trajectories; disjoint hemispheres never mix.
+  if (graph) for (let pass=0;pass<2;pass++) {
+    const next = new Float32Array(curves.length);
+    for (let i=0;i<count;i++) {
+      const degree=graph.offsets[i+1]-graph.offsets[i];
+      for (let k=0;k<8;k++) {
+        let sum=0;
+        for (let j=graph.offsets[i];j<graph.offsets[i+1];j++) sum+=curves[graph.neighbors[j]*8+k];
+        next[i*8+k]=degree ? curves[i*8+k]*.82+sum/degree*.18 : curves[i*8+k];
       }
     }
+    curves=next;
   }
-  return patches;
+  return curves;
 }
 
-// Destrieux anatomical labels locate early sensory/motor bands accurately.
-// The timings below remain illustrative; labels do not supply maturity data.
-const SENSORY_WINDOWS = new Map([
-  [3, [0.70, 0.55, 17]], // paracentral (dorsal/medial sensorimotor)
-  [28, [0.74, 0.50, 16]], // postcentral: primary somatosensory
-  [29, [0.70, 0.55, 17]], // precentral: primary motor
-  [45, [0.72, 0.52, 17]], // central sulcus
-  [67, [0.68, 0.55, 18]], // postcentral sulcus
-  [68, [0.66, 0.60, 18]], [69, [0.68, 0.57, 18]], // precentral sulci
-  [11, [0.72, 0.50, 16]], [22, [0.69, 0.55, 17]], // visual: cuneus, lingual
-  [42, [0.73, 0.50, 16]], [44, [0.75, 0.48, 16]], // occipital pole, calcarine
-]);
-
-// Anatomical proxies for a distributed, bilateral auditory/language network.
-// These different colour windows are illustrative, not functional boundaries,
-// fitted developmental estimates, or an assertion of inactivity in red regions.
-const AUDITORY_LANGUAGE_WINDOWS = new Map([
-  [33, [0, 18, 0.74, 0.48]], // Heschl / transverse temporal: primary auditory
-  [34, [0, 22, 0.52, 0.85]], // superior temporal: auditory association
-  [36, [0, 23, 0.48, 0.95]], // planum temporale
-  [35, [0, 25, 0.36, 1.15]], // planum polare
-  [38, [0, 26, 0.36, 1.25]], // middle temporal: broader language network
-  [73, [0, 26, 0.38, 1.15]], // superior temporal sulcus
-  [12, [0, 27, 0.28, 1.40]], // inferior frontal, opercular part
-  [14, [0, 29, 0.24, 1.50]], // inferior frontal, triangular part
-  [13, [0, 30, 0.22, 1.70]], // inferior frontal, orbital part
-  [25, [0, 27, 0.31, 1.20]], // angular
-  [26, [0, 26, 0.38, 1.00]], // supramarginal
-]);
-
-export function buildMaturationWindows(positions, sulcalDepth, corticalLabels = null) {
-  const patches = createPatches(positions);
-  // Per vertex: slower phase start/end, infant share, infant time constant.
-  const windows = new Float32Array(positions.length / 3 * 4);
-  for (let i = 0; i < positions.length / 3; i++) {
-    const x = Math.abs(positions[i * 3]);
-    const depth = sulcalDepth[i];
-    // Small, fixed offsets soften patch contours along the cortical folds.
-    const y = positions[i * 3 + 1] + depth * 2;
-    const z = positions[i * 3 + 2] - depth * 2;
-    let total = 0;
-    let start = 0;
-    let end = 0;
-    let earlyShare = 0;
-    let earlyYears = 0;
-    for (const patch of patches) {
-      const dx = x - patch.x;
-      const dy = y - patch.y;
-      const dz = z - patch.z;
-      const distance = dx * dx + dy * dy + dz * dz + 45;
-      // A local falloff keeps patches distinct while blending their edges.
-      const weight = 1 / (distance * distance * distance);
-      total += weight;
-      start += weight * patch.start;
-      end += weight * patch.end;
-      earlyShare += weight * patch.earlyShare;
-      earlyYears += weight * patch.earlyYears;
-    }
-    windows[i * 4] = start / total;
-    windows[i * 4 + 1] = end / total;
-    windows[i * 4 + 2] = earlyShare / total;
-    windows[i * 4 + 3] = earlyYears / total;
-    const label = corticalLabels?.[i] || 0;
-    const sensory = SENSORY_WINDOWS.get(label ? (label - 1) % 74 + 1 : 0);
-    if (sensory) {
-      windows[i * 4] = 0;
-      windows[i * 4 + 1] = Math.min(windows[i * 4 + 1], sensory[2]);
-      windows[i * 4 + 2] = Math.max(windows[i * 4 + 2], sensory[0]);
-      windows[i * 4 + 3] = Math.min(windows[i * 4 + 3], sensory[1]);
-    }
-    const auditoryLanguage = AUDITORY_LANGUAGE_WINDOWS.get(label ? (label - 1) % 74 + 1 : 0);
-    if (auditoryLanguage) windows.set(auditoryLanguage, i * 4);
+// Monotone cubic Hermite interpolation in log(1+age). Unlike independent
+// smoothsteps it keeps a nonzero slope at the age anchors. GLSL below matches.
+const TIMES=AGE_KNOTS.map(age=>Math.log1p(age));
+function slope(values,k) {
+  if(k===0)return (values[1]-values[0])/(TIMES[1]-TIMES[0]);
+  if(k===7)return (values[7]-values[6])/(TIMES[7]-TIMES[6]);
+  const h0=TIMES[k]-TIMES[k-1],h1=TIMES[k+1]-TIMES[k];
+  const d0=(values[k]-values[k-1])/h0,d1=(values[k+1]-values[k])/h1;
+  if(d0<=0||d1<=0)return 0;
+  return 3*(h0+h1)/((2*h1+h0)/d0+(h1+2*h0)/d1);
+}
+export function colourAtAge(age, ...values) {
+  if(values.length!==8)throw new Error('Eight regional colour anchors required');
+  const x=Math.log1p(Math.max(0,age));
+  if(age>=20) {
+    const remaining=1-values[7];
+    return remaining<=0?1:values[7]+remaining*(1-Math.exp(-(x-TIMES[7])*slope(values,7)/remaining));
   }
-  return windows;
+  let k=0;while(k<6&&x>TIMES[k+1])k++;
+  const h=TIMES[k+1]-TIMES[k],t=(x-TIMES[k])/h,t2=t*t,t3=t2*t;
+  return (2*t3-3*t2+1)*values[k]+(t3-2*t2+t)*h*slope(values,k)+(-2*t3+3*t2)*values[k+1]+(t3-t2)*h*slope(values,k+1);
 }
-
-export function maturityAtAge(age, start, end, earlyShare = 0, earlyYears = 1) {
-  const t = Math.max(0, Math.min(1, (age - start) / (end - start)));
-  // An initial regional contrast and an ongoing tail avoid implying that all
-  // development starts at birth or stops at a nominal window end. These
-  // constants are editorial choices, not estimates from the cited studies.
-  const later = 0.9 * t * t * (3 - 2 * t) + 0.1 * (1 - Math.exp(-Math.max(0, age) / 25));
-  const infant = 1 - Math.exp(-Math.max(0, age) / earlyYears);
-  const birth = 0.22 * earlyShare;
-  return birth + (1 - birth) * (later * (1 - earlyShare) + infant * earlyShare);
+export const COLOUR_CURVE_GLSL = `
+float colourTime(int k) {
+  ${TIMES.map((value,i)=>`if(k==${i})return ${value.toFixed(10)};`).join('\n  ')}
+  return ${TIMES[7].toFixed(10)};
 }
+float colourAnchor(int k, vec4 early, vec4 late) {
+  if(k<4)return early[k];
+  return late[k-4];
+}
+float colourSlope(int k, vec4 early, vec4 late) {
+  if(k==0)return (early.y-early.x)/(colourTime(1)-colourTime(0));
+  if(k==7)return (late.w-late.z)/(colourTime(7)-colourTime(6));
+  float h0=colourTime(k)-colourTime(k-1),h1=colourTime(k+1)-colourTime(k);
+  float d0=(colourAnchor(k,early,late)-colourAnchor(k-1,early,late))/h0;
+  float d1=(colourAnchor(k+1,early,late)-colourAnchor(k,early,late))/h1;
+  if(d0<=0.0||d1<=0.0)return 0.0;
+  return 3.0*(h0+h1)/((2.0*h1+h0)/d0+(h1+2.0*h0)/d1);
+}
+float regionalColour(float age, vec4 early, vec4 late) {
+  float x=log(1.0+max(0.0,age));
+  if(age>=20.0){
+    float remaining=1.0-late.w;
+    return late.w+remaining*(1.0-exp(-(x-colourTime(7))*colourSlope(7,early,late)/max(0.00001,remaining)));
+  }
+  int k=0;
+  for(int j=1;j<7;j++){if(x>colourTime(j))k=j;}
+  float h=colourTime(k+1)-colourTime(k),t=(x-colourTime(k))/h,t2=t*t,t3=t2*t;
+  return (2.0*t3-3.0*t2+1.0)*colourAnchor(k,early,late)+(t3-2.0*t2+t)*h*colourSlope(k,early,late)
+    +(-2.0*t3+3.0*t2)*colourAnchor(k+1,early,late)+(t3-t2)*h*colourSlope(k+1,early,late);
+}`;
 
 export function ageParts(age) {
   const months = Math.max(0, Math.min(240, Math.round(age * 12)));
   if (months < 12) return { value: String(months), unit: 'mois' };
-  const years = Math.floor(months / 12);
-  const remainder = months % 12;
+  const years = Math.floor(months / 12),remainder = months % 12;
   const unit = years === 1 ? 'an' : 'ans';
   return { value: String(years), unit: remainder ? `${unit} ${remainder} mois` : unit };
 }

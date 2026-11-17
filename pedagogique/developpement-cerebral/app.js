@@ -1,4 +1,4 @@
-import { buildMaturationWindows, ageParts } from './maturation.js';
+import { buildMaturationCurves, COLOUR_CURVE_GLSL, ageParts } from './maturation.js';
 import { loadCorticalAtlas, regionName } from './cortical-atlas.js';
 import { buildSurfaceGraph, surfaceDistances, UNREACHED } from './cortical-network.js';
 import { EPILEPSY_EFFECTS, epilepsyEffect } from './epilepsy-effects.js';
@@ -6,7 +6,7 @@ import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
 import { mountResearch } from './research-evidence.js';
 import { BRAIN_PALETTE } from './colour-scale.js';
-import { PROFILE_DOMAINS, DEVELOPMENT_PROFILES, profileLevel, buildProfileInfluences } from './development-profiles.js';
+import { PROFILE_DOMAINS, DEVELOPMENT_PROFILES, profileLevel, buildProfileInfluences, classroomExample } from './development-profiles.js';
 
 const $ = (id) => document.getElementById(id);
 const range = $('age');
@@ -20,7 +20,8 @@ const effectSelect = $('epilepsy-effect');
 const profilesButton = $('profiles');
 let currentPanel = null;
 let selectedProfile = DEVELOPMENT_PROFILES[0];
-const profileValues = new Float32Array(3);
+const profileValues = new Float32Array(PROFILE_DOMAINS.length);
+let supportExplicit = false;
 let comparingProfile = false;
 let profileInitialized = false;
 let selectedEffect = EPILEPSY_EFFECTS[0];
@@ -125,11 +126,30 @@ function updateAgeInsight() {
   $('age-insight').dataset.phase = String(insight.from);
   $('insight-range').textContent = insight.range;
   $('stage-context').textContent = active ? 'Profil illustratif' : comparingProfile ? 'Repère illustratif' : 'En développement';
+  $('scale-context').textContent = active ? 'Contrastes du profil' : 'Progression illustrative';
+  $('scale-detail').textContent = active ? 'Réseaux qui se chevauchent' : 'Le développement continue';
+  $('illustration-scale').setAttribute('aria-label', active ? 'Contrastes illustratifs des réseaux, sans mesure de maturité ou de capacité' : 'Progression illustrative du rouge au vert puis au bleu, sans pourcentage de maturité');
   $('insight-title').textContent = active ? selectedProfile.title || 'Un profil singulier' : insight.title;
   $('insight-themes').textContent = active ? PROFILE_DOMAINS
-    .flatMap((domain, i) => profileValues[i] === 0 ? [] : [`${domain.id === 'attention' ? 'Attention' : domain.label} ${profileLevel(profileValues[i]).toLowerCase()}`]).join(' · ') : insight.themes.join(' · ');
+    .flatMap((domain, i) => profileValues[i] === 0 ? [] : [`${domain.short} ${profileLevel(profileValues[i]).toLowerCase()}`]).slice(0,3).join(' · ') : insight.themes.join(' · ');
 }
 
+function updateClassroomExample() {
+  const example = classroomExample(profileValues);
+  $('example-instruction').textContent = `« ${supportExplicit ? example.support : example.instruction} »`;
+  $('example-resource').textContent = example.resource;
+  $('example-difficulty').textContent = example.difficulty;
+  $('example-explanation').textContent = example.explanation;
+  $('example-explanation').hidden = !supportExplicit;
+  $('explain-expectation').textContent = supportExplicit ? 'Revoir la consigne initiale' : example.supportLabel;
+  $('explain-expectation').setAttribute('aria-pressed', String(supportExplicit));
+  $('example-instruction').dataset.explicit = String(supportExplicit);
+}
+$('explain-expectation').addEventListener('click', () => {
+  setPlaying(false);
+  supportExplicit = !supportExplicit; updateClassroomExample();
+  $('announcement').textContent = supportExplicit ? 'La formulation de la consigne change. L’âge et les couleurs du cerveau restent identiques.' : 'Retour à la consigne initiale.';
+});
 function updateProfileControls() {
   $('development-profile').value = selectedProfile.id;
   PROFILE_DOMAINS.forEach((domain, i) => {
@@ -143,13 +163,14 @@ function updateProfileControls() {
   $('compare-profile').disabled = !hasProfileVariation();
   $('compare-profile').setAttribute('aria-pressed', String(comparingProfile));
   $('compare-profile').textContent = comparingProfile ? 'Revenir au profil' : 'Voir le repère au même âge';
-  updateAgeInsight(); requestPaint();
+  updateClassroomExample(); updateAgeInsight(); requestPaint();
 }
 
 function selectProfile(id) {
   selectedProfile = DEVELOPMENT_PROFILES.find(profile => profile.id === id) || DEVELOPMENT_PROFILES[0];
   if (selectedProfile.values) profileValues.set(selectedProfile.values);
-  comparingProfile = false; profileInitialized = true;
+  if (selectedProfile.id === 'custom') $('profile-settings').open = true;
+  comparingProfile = false; profileInitialized = true; supportExplicit = false;
   setPlaying(false); updateProfileControls();
 }
 $('development-profile').replaceChildren(...DEVELOPMENT_PROFILES.map(profile => {
@@ -160,10 +181,11 @@ for (const [i, domain] of PROFILE_DOMAINS.entries()) {
   const heading = document.createElement('div'); heading.className = 'profile-domain-heading';
   const label = document.createElement('label'); label.htmlFor = `profile-${domain.id}`; label.textContent = domain.label;
   const output = document.createElement('output'); output.id = `value-${domain.id}`; output.htmlFor = `profile-${domain.id}`;
-  const input = document.createElement('input'); input.id = `profile-${domain.id}`; input.type = 'range'; input.min = '-1'; input.max = '1'; input.step = '1'; input.value = '0';
-  heading.append(label, output); row.append(heading, input); $('profile-domains').append(row);
+  const description = document.createElement('p'); description.id = `description-${domain.id}`; description.className = 'domain-description'; description.textContent = domain.description;
+  const input = document.createElement('input'); input.setAttribute('aria-describedby', description.id); input.id = `profile-${domain.id}`; input.type = 'range'; input.min = '-1'; input.max = '1'; input.step = '1'; input.value = '0';
+  heading.append(label, output); row.append(heading, description, input); $('profile-domains').append(row);
   input.addEventListener('input', () => {
-    profileValues[i] = Number(input.value); selectedProfile = DEVELOPMENT_PROFILES.at(-1); comparingProfile = false;
+    profileValues[i] = Number(input.value); selectedProfile = DEVELOPMENT_PROFILES.at(-1); comparingProfile = false; supportExplicit = false;
     setPlaying(false); updateProfileControls();
   });
   input.addEventListener('change', () => { $('announcement').textContent = `${domain.label} : ${profileLevel(profileValues[i])}. Profil illustratif.`; });
@@ -175,7 +197,7 @@ $('development-profile').addEventListener('change', () => {
 profilesButton.addEventListener('click', () => {
   if (currentPanel === 'profile') currentPanel = null;
   else {
-    if (!profileInitialized) selectProfile('language_attention');
+    if (!profileInitialized) selectProfile('words_expectations');
     currentPanel = 'profile';
   }
   setPlaying(false); updatePanels(); requestPaint();
@@ -343,7 +365,6 @@ async function initialize() {
     const sulcalDepth = new Float32Array(buffer, 16 + vertexCount * 12, vertexCount);
     const indices = new Uint16Array(buffer, 16 + vertexCount * 16, indexCount);
     const positions = new Float32Array(vertexCount * 3);
-    const windows = buildMaturationWindows(native, sulcalDepth, vertexLabels);
     const focalDistances = new Float32Array(vertexCount).fill(UNREACHED);
     for (let i = 0; i < vertexCount; i++) {
       const [x, y, z] = native.subarray(i * 3, i * 3 + 3);
@@ -352,7 +373,6 @@ async function initialize() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('sulcalDepth', new THREE.BufferAttribute(sulcalDepth, 1));
-    geometry.setAttribute('maturation', new THREE.BufferAttribute(windows, 4));
     geometry.setAttribute('seizureDistance', new THREE.BufferAttribute(focalDistances, 1));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
     geometry.computeBoundingBox();
@@ -361,11 +381,16 @@ async function initialize() {
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     const surfaceGraph = buildSurfaceGraph(positions, indices);
-    geometry.setAttribute('profileInfluence', new THREE.BufferAttribute(buildProfileInfluences(vertexLabels, surfaceGraph), 3));
+    const curves = new THREE.InterleavedBuffer(buildMaturationCurves(native, vertexLabels, surfaceGraph), 8);
+    geometry.setAttribute('maturationEarly', new THREE.InterleavedBufferAttribute(curves, 4, 0));
+    geometry.setAttribute('maturationLate', new THREE.InterleavedBufferAttribute(curves, 4, 4));
+    const influences = new THREE.InterleavedBuffer(buildProfileInfluences(vertexLabels, surfaceGraph), PROFILE_DOMAINS.length);
+    geometry.setAttribute('profileInfluenceA', new THREE.InterleavedBufferAttribute(influences, 3, 0));
+    geometry.setAttribute('profileInfluenceB', new THREE.InterleavedBufferAttribute(influences, 2, 3));
 
     const ageUniform = { value: age };
-    const profileVector = new THREE.Vector3();
-    const profileUniform = { value: profileVector };
+    const profileA = new THREE.Vector3(), profileB = new THREE.Vector2();
+    const profileUniformA = { value: profileA }, profileUniformB = { value: profileB };
     const seizureUniform = { value: 0 };
     const seizureTimeUniform = { value: 0 };
     const staticSeizureUniform = { value: 0 };
@@ -377,7 +402,8 @@ async function initialize() {
     const material = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uAge = ageUniform;
-      shader.uniforms.uProfile = profileUniform;
+      shader.uniforms.uProfileA = profileUniformA;
+      shader.uniforms.uProfileB = profileUniformB;
       shader.uniforms.uSeizure = seizureUniform;
       shader.uniforms.uSeizureTime = seizureTimeUniform;
       shader.uniforms.uStaticSeizure = staticSeizureUniform;
@@ -386,7 +412,7 @@ async function initialize() {
       shader.uniforms.uDevelopmentDelay = delayUniform;
       shader.uniforms.uEffectRadius = radiusUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec4 maturation;\nattribute vec3 profileInfluence;\nuniform vec3 uProfile;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${shader.vertexShader}`;
+      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec2 profileInfluenceB;\nuniform vec3 uProfileA;\nuniform vec2 uProfileB;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         float effectiveAge = uAge;
@@ -394,14 +420,10 @@ async function initialize() {
           float influence = 1.0 - smoothstep(0.0, uEffectRadius, seizureDistance);
           effectiveAge = max(0.0, uAge - uDevelopmentDelay * influence);
         }
-        // Qualitative continuity, not fitted myelin/volume/maturity measurements.
-        float later = 0.9 * smoothstep(maturation.x, maturation.y, effectiveAge)
-          + 0.1 * (1.0 - exp(-max(0.0, effectiveAge) / 25.0));
-        float infant = 1.0 - exp(-max(0.0, effectiveAge) / maturation.w);
-        float birth = 0.22 * maturation.z;
-        vMaturity = birth + (1.0 - birth) * mix(later, infant, maturation.z);
-        float profileShift = clamp(dot(profileInfluence, uProfile), -1.0, 1.0);
-        float profileStrength = (1.0 - exp(-max(0.0, effectiveAge) / 1.5)) * 0.3;
+        vMaturity = regionalColour(effectiveAge, maturationEarly, maturationLate);
+        float profileWeight = dot(profileInfluenceA, abs(uProfileA)) + dot(profileInfluenceB, abs(uProfileB));
+        float profileShift = (dot(profileInfluenceA, uProfileA) + dot(profileInfluenceB, uProfileB)) / max(1.0, profileWeight);
+        float profileStrength = (1.0 - exp(-max(0.0, effectiveAge) / 1.5)) * 0.34;
         float profileRoom = 1.0 - abs(vMaturity - 0.5) * 1.2;
         vMaturity = clamp(vMaturity + profileShift * profileStrength * profileRoom, 0.0, 1.0);
         vSulc = sulcalDepth;
@@ -645,8 +667,9 @@ async function initialize() {
       radiusUniform.value = selectedEffect.radius;
       focalColor.set(selectedEffect.color);
       focalMarker.material.color.copy(focalColor);
-      profileVector.set(...(showingProfile() ? profileValues : [0, 0, 0]));
-      cerebellum.update(value, profileVector.z * .7);
+      const profile = showingProfile() ? profileValues : [0,0,0,0,0];
+      profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4]);
+      cerebellum.update(value, profile[4] * .7);
       updateFocalReadout();
       renderer.setScissorTest(false);
       renderer.clear();

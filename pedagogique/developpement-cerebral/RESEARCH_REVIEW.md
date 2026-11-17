@@ -1,6 +1,6 @@
 # Progression cérébrale : revue des preuves et décisions de représentation
 
-Revue documentaire du **17 novembre 2026**. Douze études primaires, publiées de 2004 à 2025, sont présentées dans l’interface. Cette analyse examine la pertinence scientifique de l’illustration ; elle ne constitue pas une validation clinique ni une revue systématique exhaustive.
+Revue documentaire du **17 novembre 2026**. Douze études développementales, publiées de 2004 à 2025, et une étude comportementale sur la compréhension du langage sont présentées dans l’interface. Cette analyse examine la pertinence scientifique de l’illustration ; elle ne constitue pas une validation clinique ni une revue systématique exhaustive.
 
 ## Conclusion de la validation
 
@@ -61,29 +61,33 @@ L’atlas Destrieux fournit des limites anatomiques de gyri et de sillons, **pas
 | Attention et contrôle | Repères frontopariétaux et cingulaires du profil illustratif | Réseaux documentés [8], mais leurs poids spatiaux dans le profil sont éditoriaux. |
 | Cervelet | Deux surfaces globales, sans parcellisation lobulaire | Anatomie réelle adulte ; la couleur globale ne représente pas les trajectoires des différents lobules. |
 
-Le rendu garde une symétrie de principe entre hémisphères. Il ne reproduit ni la variabilité de latéralisation, ni les connexions profondes, ni les différences individuelles. Les 64 petites variations par hémisphère sont une texture pédagogique déterministe ; elles ne correspondent pas à 64 observations scientifiques.
+Le rendu garde une symétrie de principe entre hémisphères. Il ne reproduit ni la variabilité de latéralisation, ni les connexions profondes, ni les différences individuelles. Les anciennes 64 variations artificielles ont été retirées. Dix-neuf trajectoires sont désormais attribuées explicitement aux 74 labels par hémisphère ; les références associées à chacune sont conservées dans `REGIONAL_CURVES`.
 
-## Corrections apportées après la revue
+## Raffinement du modèle de couleur
 
-1. **Un état initial régional différencié.** Le cortex n’est plus entièrement au même niveau rouge à la naissance. Une petite composante initiale dépend de la pondération infantile déjà présente dans l’illustration. Cela rend visible une continuité prénatale ; cela ne mesure pas cette période.
-2. **Une progression qui ne s’arrête pas à une borne arbitraire.** Une composante lente reste présente après la fenêtre principale de couleur. L’interface rappelle que le développement continue au-delà des 20 ans affichés.
-3. **Une interprétation plus précise du langage.** Le texte n’affirme plus un ordre temporel puis frontal valable partout. Les fenêtres de couleur distinctes restent des choix d’animation.
-4. **Des preuves accessibles par région.** Le volet « Les études » sépare âges observés, mesure, résultat et limite. Les détails restent en dehors du graphique principal.
+Le modèle spatial précédent créait une grande partie de sa granularité avec 64 variations ajoutées. Il est remplacé par **19 trajectoires reliées aux régions anatomiques**, couvrant les 74 labels Destrieux de chaque hémisphère.
 
-### Calcul de couleur, entièrement illustratif
+| Distinction rendue visible | Appui qualitatif | Limite |
+| --- | --- | --- |
+| Somatosensoriel, moteur, vision et audition primaires | Changements précoces et régionaux [1, 2, 5] | Aucune teinte n’est une fraction de tissu mesurée. |
+| Calcarin et aires visuelles d’association | Trajectoires différentes dans la hiérarchie visuelle [1] | Les labels entiers du cunéus et du pôle occipital ne sont pas assimilés à V1. |
+| Heschl et association auditive | Différences précoces au sein des régions périsylviennes [5] | Pas de fin de développement commune. |
+| Frontal inférieur operculaire et sillon temporal supérieur | Le frontal peut présenter des caractéristiques précoces [4, 5] | La page ne force plus toutes les régions frontales à suivre toutes les temporales. |
+| Pariétal, frontopariétal et pôle préfrontal | Transformations prolongées et régionales [7–10] | Les réseaux de contrôle ne sont pas une seule région. |
 
-Pour une fenêtre locale `(début, fin, part infantile s, constante infantile τ)` et un âge `a ≥ 0` :
+Chaque trajectoire définit huit repères à **0, 0,5, 1, 2, 5, 10, 15 et 20 ans**. Leurs valeurs sont des choix pédagogiques guidés par ces distinctions, **pas des moyennes extraites des articles**. Il n’y a pas de mélange de volumes, d’épaisseur et de connectivité en un score biologique. Le choix de teintes vise une chronologie relative lisible, pas une estimation de capacité.
 
-```text
-phase tardive = 0,9 × smoothstep(début, fin, a) + 0,1 × (1 − exp(−a/25))
-phase infantile = 1 − exp(−a/τ)
-état initial = 0,22 × s
-couleur de base = état initial + (1 − état initial) × ((1 − s) × phase tardive + s × phase infantile)
-```
+`colourAtAge` interpole ces repères avec une courbe cubique monotone sur `log(1 + âge)`. Les pentes intérieures sont des moyennes harmoniques pondérées des pentes adjacentes ; elles évitent les dépassements et gardent une continuité de pente entre périodes. Après vingt ans, la couleur poursuit asymptotiquement son évolution, sans date de fin fixée. Le shader utilise la même interpolation. Deux passes de lissage local (82 % du sommet, 18 % de ses voisins) adoucissent les frontières, sans changer la topologie ni relier les hémisphères.
 
-**0,9, 0,1, 25 et 0,22 sont des choix de représentation**, tout comme les fenêtres locales et les fractions infantiles. Aucun de ces nombres n’a été estimé à partir des articles. Ils assurent des contrastes et une continuité visuelle ; ils ne sont pas des proportions de tissu. `maturityAtAge` est le nom historique de la fonction de couleur, pas celui d’une mesure scientifique. Le shader et le calcul de référence emploient la même formule.
+Sans atlas, une interpolation spatiale grossière sert de secours, sans variations aléatoires. Le cervelet conserve son interpolation qualitative distincte et son gabarit adulte. Les profils et les scénarios d’épilepsie ne sont pas validés par ces publications ; aucune couleur ne permet de déduire une DI ou une performance scolaire.
 
-Le cervelet conserve son interpolation qualitative distincte. Les profils modifient le paramètre de couleur ; le scénario local d’épilepsie modifie un âge effectif illustratif. **Ni ces profils, ni ce décalage, ni la diffusion géométrique des crises ne sont validés par les publications développementales.** Aucune couleur ne permet de déduire une déficience intellectuelle ou une performance scolaire.
+## Comprendre les mots, l’attente et les étapes
+
+**[13] [Polišenská et al., 2018](https://doi.org/10.1044/2018_JSLHR-L-17-0029)**, *Receptive Language Skills in Slovak-Speaking Children With Intellectual Disability: Understanding Words, Sentences, and Stories*, compare 14 enfants avec DI et 14 témoins. Les exigences de compréhension diffèrent selon la tâche. Petit échantillon en slovaque, sans cartographie cérébrale ; ce travail ne définit pas tous les profils individuels.
+
+Le profil ne résume plus le langage à un seul réglage. Il distingue le sens des mots, la consigne et son contexte, la mémoire des étapes, l’attention et l’organisation, et la coordination. Les influences anatomiques sont distribuées et partagées ; leur distinction reste une métaphore pédagogique. La compréhension d’une attente implicite peut mobiliser plusieurs capacités et dépend aussi de la formulation, du contexte, de l’expérience et des supports proposés.
+
+L’exemple fictif « Prépare-toi pour sortir » illustre une connaissance du mot « sortir » qui ne suffit pas à préciser les actions attendues. La reformulation nomme ces actions, sans modifier le cerveau affiché. Un second exemple différencie compréhension et maintien d’étapes successives. La réponse observable ne permet pas, à elle seule, d’identifier la capacité en cause ; les exemples ne sont pas un bilan et ne prédisent pas la réponse à une aide.
 
 ## Les titres par âge sont des repères pédagogiques
 

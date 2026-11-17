@@ -12,17 +12,21 @@ Le seul mode de couleurs est une **illustration** continue à sept repères : ro
 
 ## Recherche et lecture des couleurs
 
-« Repères & sources » ouvre deux onglets : lire l’illustration et consulter douze études primaires par région. Chaque fiche précise la fenêtre d’âge, l’échantillon, la mesure, le résultat et sa limite. Aucun appel externe n’est effectué pour afficher ces fiches ; les liens ouvrent les publications à la demande. La [revue complète](RESEARCH_REVIEW.md), datée du 17 novembre 2026, documente la sélection, la correspondance avec les régions et les limites. Les preuves soutiennent les grandes tendances, sans valider les couleurs numériques.
+« Repères & sources » ouvre deux onglets : lire l’illustration et consulter treize études primaires par région ou par capacité. Chaque fiche précise la fenêtre d’âge, l’échantillon, la mesure, le résultat et sa limite. Aucun appel externe n’est effectué pour afficher ces fiches ; les liens ouvrent les publications à la demande. La [revue complète](RESEARCH_REVIEW.md), datée du 17 novembre 2026, documente la sélection, la correspondance avec les régions et les limites. Les preuves soutiennent les grandes tendances, sans valider les couleurs numériques.
 
-La couleur corticale présente des contrastes dès la naissance et continue à évoluer après ses fenêtres principales. L’état initial et la composante lente sont des conventions pédagogiques explicites, sans estimation de maturité. Le gabarit anatomique adulte reste fixe. Les textes ne prétendent pas qu’un ordre temporal puis frontal décrive toutes les composantes du langage.
+Le modèle de couleur est désormais construit sur **19 trajectoires régionales**, attribuées explicitement aux 74 labels Destrieux de chaque hémisphère. Les 64 variations spatiales artificielles ont été retirées. Chaque trajectoire comporte huit repères : naissance, 6 mois, 1, 2, 5, 10, 15 et 20 ans. Une interpolation cubique monotone sur `log(1 + âge)` garde des transitions continues et un raffinement après vingt ans. Deux passes de lissage très locales sur le maillage adoucissent les frontières sans mélanger les hémisphères.
 
-## Profils de développement contrastés
+La vision primaire calcarine est distinguée des aires visuelles d’association ; Heschl des régions auditives associatives ; le frontal inférieur operculaire du sillon temporal supérieur ; les réseaux frontopariétaux du pôle préfrontal. Les rythmes sont donc différenciés par région et par période, avec un état initial présent à la naissance. Les références guident qualitativement ces distinctions ; les valeurs des huit repères restent des conventions de couleur, sans ajustement à une mesure d’imagerie. Le gabarit anatomique adulte reste fixe.
 
-Le bouton **Profils** ouvre trois exemples et des réglages indépendants de **langage**, **attention/concentration** et **coordination**. Le premier exemple met le langage en appui et l’attention à soutenir. Les autres inversent ce contraste ou mettent la coordination en appui. Chaque réglage propose « À soutenir », « Intermédiaire » et « En appui » ; ils servent à modifier l’illustration, sans score psychométrique, QI ou âge mental.
+## Capacités contrastées et situations de classe
 
-**Voir le repère au même âge** compare la vue au repère illustratif, puis **Revenir au profil** restitue les choix. L’âge chronologique et les réglages sont conservés. Fermer le volet conserve les variations ; le titre « Profil illustratif » reste visible. Choisir le repère illustratif enlève les variations et la remise à zéro globale revient à la naissance sans profil.
+Le bouton **Profils** ouvre quatre exemples. Le premier illustre **des mots compris et une attente à préciser**. Les cinq réglages indépendants sont : sens des mots, consigne/contexte, mémoire des étapes, attention/organisation et coordination. Ils sont accessibles dans « Ajuster les cinq capacités », pour conserver un volet épuré. Chaque réglage propose « À soutenir », « Intermédiaire » et « En appui », sans score psychométrique ni âge mental.
 
-Les variations affectent plusieurs influences corticales bilatérales et partiellement communes. Le repérage du langage est temporal, frontal inférieur et pariétal ; celui de l’attention est notamment frontopariétal et cingulaire. La coordination influe aussi sur le cervelet. Les poids et le mélange de couleurs sont **des conventions pédagogiques**, pas une parcellisation fonctionnelle validée. Une force en langage n’est pas une mesure d’avance anatomique. Les points d’appui et les besoins d’aide peuvent coexister, notamment en présence d’une déficience intellectuelle ; aucun exemple ne correspond à un diagnostic ou à une carte unique de ce trouble. Voir les références AAIDD dans `SCIENTIFIC_SOURCES.md`.
+La situation « Prépare-toi pour sortir » montre qu’une élève peut connaître le sens de « sortir » sans en déduire tout ce qu’elle doit ranger, prendre et faire. **Rendre l’attente explicite** reformule la consigne en actions concrètes, sans changer l’âge ou les couleurs. Un autre exemple distingue compréhension des mots et maintien des étapes : le bouton propose alors une étape à la fois. Ces exemples sont fictifs, indépendants de l’âge exploré, et les aides proposées ne garantissent pas une réponse particulière.
+
+**Voir le repère au même âge** compare la vue au repère illustratif, puis **Revenir au profil** restitue les choix. Fermer le volet conserve les variations. La remise à zéro globale revient à la naissance sans profil.
+
+Les cinq influences corticales se chevauchent. Les contributions sont normalisées selon les seuls domaines actifs, de sorte qu’un domaine non modifié ne dilue pas le contraste et que des ajustements opposés peuvent se compenser. La coordination influe aussi sur le cervelet. Les poids sont des conventions pédagogiques, sans parcellisation fonctionnelle validée. Les couleurs n’associent pas une capacité mesurée à une maturité anatomique. Des forces et besoins peuvent coexister en déficience intellectuelle ; aucun exemple ne correspond à une carte diagnostique unique.
 
 ## Épilepsie dans le volet de droite
 
@@ -36,14 +40,7 @@ Un clic ou un toucher choisit le foyer ; un autre le déplace. Changer d’effet
 
 ## Audition, langage et régions précoces
 
-Le modèle combine 64 sous-zones illustratives par hémisphère avec des **repères anatomiques Destrieux** :
-
-- Gyri postcentral et précentral, région paracentrale et sillons centraux : bandes sensorielles et motrices dorsales précoces, conservées dans les deux hémisphères.
-- Régions visuelles : cunéus, gyrus lingual, pôle occipital et sillon calcarin.
-- Audition primaire : gyrus temporal transverse, repère anatomique du gyrus de Heschl.
-- Audition associative et langage : gyrus temporal supérieur, planum temporale, planum polare, gyrus temporal moyen et sillon temporal supérieur ; régions frontales inférieures operculaire, triangulaire et orbitaire ; gyri angulaire et supramarginal.
-
-Les fenêtres de couleur de l’audition primaire, des régions temporales et des régions frontales sont différentes. Elles rendent visibles des changements précoces et un raffinement prolongé. Les régions sont des repères gyralement définis, pas des limites fonctionnelles exactes. Le langage est distribué et n’est pas réduit à deux centres. Les paramètres restent illustratifs, sans ajustement à des données longitudinales ni simulation de latéralisation.
+Le modèle couvre toutes les régions de l’atlas avec des courbes propres à leur ensemble anatomique. `REGIONAL_CURVES` conserve les huit repères et les références utilisées pour chaque trajectoire ; `curveForLabel` permet d’auditer l’attribution. La correspondance est bilatérale, sans simulation de latéralisation. Les limites gyrales ne sont pas des frontières fonctionnelles exactes. Sans atlas, un champ spatial grossier assure le rendu de secours et les profils sont désactivés.
 
 Les thèmes affichés reposent sur des repères généraux de communication et de développement. Les tranches sont éditoriales ; elles ne décrivent pas une bascule biologique à une date précise. Les textes ne sont pas calculés à partir de la couleur des régions. Sources et limites : [SCIENTIFIC_SOURCES.md](SCIENTIFIC_SOURCES.md).
 
@@ -53,8 +50,8 @@ Les thèmes affichés reposent sur des repères généraux de communication et d
 - `assets/cerebellum.bin` : deux hémisphères cérébelleux, 32 694 sommets et 65 376 triangles, extraits des labels FreeSurfer 7+8 et 46+47. En-tête uint32 (`0x43424C31`, total sommets, total indices, nombre de parties), positions RAS float32 puis indices uint32 locaux à chaque partie. Les offsets, labels, empreintes et bornes sont dans `assets/cerebellum-source.json`.
 - `tools/prepare-cerebellum.py --segmentation chemin/aseg.mgz` reproduit le cervelet avec NumPy, SciPy, NiBabel et scikit-image. L’entrée est vérifiée par SHA-256. Le gabarit fsaverage est fixé au commit MNE testing data `20cc221d737a37a6ee3a9c007e91bd69541fefe9`.
 - `assets/destrieux-labels.bin` : un uint16 par sommet, 0 sans label, 1–74 à gauche et 75–148 à droite. `tools/prepare-atlas.py` extrait seulement les labels anatomiques au commit CTdev `418ff157bd8036e01a5d823754bbd7cff5fdda1b`. Les noms et empreintes figurent dans `assets/atlas-source.json`.
-- `development-profiles.js` définit les exemples, les trois domaines, leurs influences anatomiques approximatives et le mélange illustratif. Les influences sont lissées le long des arêtes corticales et normalisées lorsqu’elles se chevauchent.
-- `maturation.js` définit les fenêtres illustratives, `age-insights.js` les repères textuels, `colour-scale.js` la palette, `cortical-network.js` les distances géodésiques du cortex et `epilepsy-effects.js` le registre extensible des effets.
+- `development-profiles.js` définit les situations de classe, les cinq domaines, leurs influences anatomiques approximatives et le mélange illustratif. Les influences sont lissées le long des arêtes corticales ; la contribution est normalisée selon les domaines actifs.
+- `maturation.js` définit les trajectoires anatomiques et leur interpolation, `age-insights.js` les repères textuels, `colour-scale.js` la palette, `cortical-network.js` les distances géodésiques du cortex et `epilepsy-effects.js` le registre extensible des effets.
 - Three.js 0.170.0 est servi depuis `vendor/`. Le rendu se déclenche à la demande ou pendant une animation. Le cortex et le cervelet gardent une anatomie adulte fixe, sans simulation de croissance.
 - Les actifs d’atlas restent sous **CC BY-NC-SA 4.0** et le cervelet sous la licence **FreeSurfer v1.0**, séparément du code. Les avis complets sont dans `THIRD_PARTY_NOTICES.txt` et les fichiers de licence associés.
 

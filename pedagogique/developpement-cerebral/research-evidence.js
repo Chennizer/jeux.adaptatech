@@ -1,5 +1,14 @@
 // Primary studies reviewed 2026-11-17. None supplies the animation's colour values.
 export const STUDIES = {
+  polisenska: {
+    citation: 'Polišenská et al. · 2018',
+    title: 'Receptive Language Skills in Slovak-Speaking Children With Intellectual Disability: Understanding Words, Sentences, and Stories',
+    url: 'https://doi.org/10.1044/2018_JSLHR-L-17-0029',
+    ages: 'Enfants d’âge préscolaire et scolaire', sample: '14 enfants avec DI et 14 enfants témoins',
+    measure: 'Compréhension de mots, de phrases et de récits',
+    finding: 'Les niveaux de compréhension diffèrent selon la tâche : reconnaître des mots, comprendre des phrases et comprendre un récit ne sont pas équivalents.',
+    limit: 'Petite étude en slovaque, sans cartographie cérébrale. Elle ne décrit pas tous les élèves avec DI et ne valide pas les couleurs des profils.'
+  },
   natu: {
     citation: 'Natu et al. · 2021',
     title: 'Infants’ cortex undergoes microstructural growth coupled with myelination during development',
@@ -111,6 +120,7 @@ export const STUDIES = {
 };
 
 export const EVIDENCE_GROUPS = [
+  { id: 'capacities', label: 'Capacités & consignes', title: 'Comprendre des mots et comprendre toute l’attente', description: 'Le sens des mots, les relations dans une phrase, les implicites du contexte et le maintien des étapes sont des exigences distinctes. Le profil pédagogique les sépare sans en faire des zones exclusives.', studies: ['polisenska','fair','emerson'] },
   { id: 'sensorimotor', label: 'Sens & mouvement', title: 'Des régions précoces, encore en transformation', description: 'Les cortex somatosensoriel et moteur, autour du sillon central, ont des caractéristiques précoces. Les régions dorsales d’association ont d’autres trajectoires.', studies: ['natu', 'deoni', 'gogtay'] },
   { id: 'vision', label: 'Vision', title: 'Plusieurs calendriers au sein du cortex visuel', description: 'V1, près du sillon calcarin, se distingue des aires visuelles d’association. Être relativement avancé à la naissance ne signifie pas avoir terminé son développement.', studies: ['natu', 'deoni'] },
   { id: 'language', label: 'Audition & langage', title: 'Un réseau actif très tôt, qui se réorganise', description: 'Heschl, les régions temporales et les régions frontales inférieures ne forment pas une simple chaîne de zones qui s’allument l’une après l’autre.', studies: ['perani', 'leroy', 'emerson'] },
@@ -120,6 +130,7 @@ export const EVIDENCE_GROUPS = [
 ];
 
 export function mountResearch(dialog) {
+  dialog.querySelector('#study-count').textContent = String(Object.keys(STUDIES).length);
   const select = dialog.querySelector('#evidence-region');
   const title = dialog.querySelector('#evidence-title');
   const description = dialog.querySelector('#evidence-description');
