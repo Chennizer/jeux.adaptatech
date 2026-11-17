@@ -235,6 +235,9 @@ async function initialize() {
     // Vendored and version-pinned: no external request is needed at runtime.
     const THREE = await import('./vendor/three.module.min.js');
     renderer = new THREE.WebGLRenderer({ canvas: $('brain'), antialias: true, alpha: true, powerPreference: 'low-power' });
+    // The translated views can overlap in their transparent margins.
+    // Clear colour once per frame so the second view cannot erase the first.
+    renderer.autoClear = false;
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -414,6 +417,7 @@ async function initialize() {
       const bottom = stageBounds.bottom - bounds.bottom;
       renderer.setViewport(left, bottom, bounds.width, bounds.height);
       renderer.setScissor(left, bottom, bounds.width, bounds.height);
+      renderer.clearDepth();
       renderer.render(scene, camera);
     }
     paint = (value) => {
