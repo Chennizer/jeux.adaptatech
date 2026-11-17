@@ -132,7 +132,7 @@ test('dorsal sensory bands and distinct auditory/language trajectories use both 
   }
   for (const offset of [0,74]) {
     assert(mean(offset + 33, 0.5) > mean(offset + 34, 0.5) + 0.1, 'primary audition progresses ahead of auditory association');
-    assert(mean(offset + 34, 0.5) > mean(offset + 12, 0.5) + 0.1, 'temporal and frontal trajectories differ');
+    assert(Math.abs(mean(offset + 34, 0.5) - mean(offset + 12, 0.5)) > 0.1, 'illustrative temporal and frontal trajectories remain distinct, without claiming a measured order');
     assert(mean(offset + 33, 2) > mean(offset + 14, 2) + 0.4);
     for (const region of [33,34,36,35,38,73,12,14,13,25,26]) {
       assert(mean(offset + region, 1) > mean(offset + region, 0.5));
@@ -141,6 +141,21 @@ test('dorsal sensory bands and distinct auditory/language trajectories use both 
   }
   const fallback = buildMaturationWindows(positions, sulcal);
   assert(fallback.every(Number.isFinite));
+  // The animation should neither erase prenatal regional differences nor
+  // suggest that reaching a window's nominal end completes development.
+  for (const offset of [0,74]) {
+    assert(mean(offset + 28, 0) > mean(offset + 14, 0));
+    for (const region of [28,29,33,34,14,42]) {
+      let previous = mean(offset + region, 0);
+      assert(previous > 0 && previous < 1);
+      for (let month = 1; month <= 240; month++) {
+        const current = mean(offset + region, month / 12);
+        assert(current >= previous && current < 1);
+        previous = current;
+      }
+      assert(mean(offset + region, 21) > mean(offset + region, 20), 'colour keeps changing after the displayed age range');
+    }
+  }
 });
 
 test('display palette passes through green and reaches blue with clamped endpoints', () => {

@@ -1,10 +1,14 @@
 # Sources, représentation et limites
 
+La [revue documentaire du 17 novembre 2026](RESEARCH_REVIEW.md) examine douze études primaires : populations, âges, régions, mesures et limites. Le volet « Repères & sources → Les études » permet de les consulter par région dans la page. Les tendances sont étayées qualitativement ; aucune publication ne valide les teintes ou les valeurs numériques de l’animation.
+
 ## Anatomie réelle, couleurs illustratives
 
 La page représente une **progression schématique de 0 à 20 ans**. Les limites de certaines régions viennent d’un atlas réel, mais les courbes de couleur sont des paramètres d’animation : elles ne mesurent pas une maturité, une capacité individuelle, la myéline ou une épaisseur. Une région rouge est déjà fonctionnelle ; une région bleue n’est pas nécessairement arrivée au terme de son développement.
 
 Le cortex et le cervelet ont la forme fixe d’un gabarit moyen **adulte**. Le curseur ne simule ni la croissance anatomique ni la variabilité entre personnes. La palette à sept repères rouge → orange → jaune → vert → turquoise → bleu → bleu profond est interpolée en continu et expliquée dans l’aide.
+
+La couleur corticale inclut désormais un état initial régional illustratif et une composante lente qui se poursuit au-delà des fenêtres principales. Ces paramètres évitent de suggérer un départ uniforme à zéro ou une fin de développement à vingt ans. La formule et ses constantes éditoriales sont données dans la revue ; elles ne sont pas ajustées aux études.
 
 ## Repérage des régions corticales
 
@@ -33,7 +37,7 @@ Des fenêtres illustratives distinctes concernent :
 | Régions frontales inférieures | 12 : operculaire ; 14 : triangulaire ; 13 : orbitaire | Phase précoce présente, puis progression plus étalée |
 | Régions pariétales associées | 25 : angulaire ; 26 : supramarginal | Raffinement prolongé |
 
-Les labels de droite ajoutent 74 à l’identifiant. Ces régions sont des **repères anatomiques**, pas une parcellisation fonctionnelle exacte de l’audition ou du langage. Le réseau du langage est distribué, participe aussi à d’autres fonctions et est actif dès la petite enfance. La même logique de progression est représentée dans les deux hémisphères, sans simuler les changements de latéralisation. Les paramètres dans `maturation.js` sont illustratifs, sans ajustement aux courbes de ces publications :
+Les labels de droite ajoutent 74 à l’identifiant. Ces régions sont des **repères anatomiques**, pas une parcellisation fonctionnelle exacte de l’audition ou du langage. Le réseau du langage est distribué, participe aussi à d’autres fonctions et est actif dès la petite enfance. Un ordre « temporal puis frontal » ne vaut pas pour tous les marqueurs et tous les âges : Leroy et al. (2011), https://doi.org/10.1523/JNEUROSCI.4141-10.2011, apporte notamment un contre-exemple chez le jeune nourrisson. La même logique de progression est représentée dans les deux hémisphères, sans simuler les changements de latéralisation. Les paramètres dans `maturation.js` sont illustratifs, sans ajustement aux courbes de ces publications :
 
 - Deoni et al. (2015), cité ci-dessus : contexte de myélinisation sensorielle précoce.
 - Emerson et al. (2016), *Longitudinal Study of the Emerging Functional Connectivity Asymmetry of Primary Language Regions during Infancy*, https://pmc.ncbi.nlm.nih.gov/articles/PMC5083015/ : évolution de l’organisation fonctionnelle des régions temporales et frontales pendant la petite enfance.

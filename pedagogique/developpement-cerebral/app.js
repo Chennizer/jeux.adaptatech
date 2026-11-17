@@ -4,6 +4,7 @@ import { buildSurfaceGraph, surfaceDistances, UNREACHED } from './cortical-netwo
 import { EPILEPSY_EFFECTS, epilepsyEffect } from './epilepsy-effects.js';
 import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
+import { mountResearch } from './research-evidence.js';
 import { BRAIN_PALETTE } from './colour-scale.js';
 import { PROFILE_DOMAINS, DEVELOPMENT_PROFILES, profileLevel, buildProfileInfluences } from './development-profiles.js';
 
@@ -13,6 +14,7 @@ const stage = $('stage');
 const playButton = $('play');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const about = $('about');
+mountResearch(about);
 const epilepsyButton = $('epilepsy');
 const effectSelect = $('epilepsy-effect');
 const profilesButton = $('profiles');
@@ -273,6 +275,7 @@ $('development-delay').addEventListener('input', () => {
 updateEffectControls();
 $('close-about').addEventListener('click', () => about.close());
 about.addEventListener('click', (event) => {
+  if (event.target !== about) return;
   const rect = about.getBoundingClientRect();
   if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) about.close();
 });
@@ -391,9 +394,12 @@ async function initialize() {
           float influence = 1.0 - smoothstep(0.0, uEffectRadius, seizureDistance);
           effectiveAge = max(0.0, uAge - uDevelopmentDelay * influence);
         }
-        float later = smoothstep(maturation.x, maturation.y, effectiveAge);
+        // Qualitative continuity, not fitted myelin/volume/maturity measurements.
+        float later = 0.9 * smoothstep(maturation.x, maturation.y, effectiveAge)
+          + 0.1 * (1.0 - exp(-max(0.0, effectiveAge) / 25.0));
         float infant = 1.0 - exp(-max(0.0, effectiveAge) / maturation.w);
-        vMaturity = mix(later, infant, maturation.z);
+        float birth = 0.22 * maturation.z;
+        vMaturity = birth + (1.0 - birth) * mix(later, infant, maturation.z);
         float profileShift = clamp(dot(profileInfluence, uProfile), -1.0, 1.0);
         float profileStrength = (1.0 - exp(-max(0.0, effectiveAge) / 1.5)) * 0.3;
         float profileRoom = 1.0 - abs(vMaturity - 0.5) * 1.2;

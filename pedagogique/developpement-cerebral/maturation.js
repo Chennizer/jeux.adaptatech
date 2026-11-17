@@ -149,9 +149,13 @@ export function buildMaturationWindows(positions, sulcalDepth, corticalLabels = 
 
 export function maturityAtAge(age, start, end, earlyShare = 0, earlyYears = 1) {
   const t = Math.max(0, Math.min(1, (age - start) / (end - start)));
-  const later = t * t * (3 - 2 * t);
+  // An initial regional contrast and an ongoing tail avoid implying that all
+  // development starts at birth or stops at a nominal window end. These
+  // constants are editorial choices, not estimates from the cited studies.
+  const later = 0.9 * t * t * (3 - 2 * t) + 0.1 * (1 - Math.exp(-Math.max(0, age) / 25));
   const infant = 1 - Math.exp(-Math.max(0, age) / earlyYears);
-  return later * (1 - earlyShare) + infant * earlyShare;
+  const birth = 0.22 * earlyShare;
+  return birth + (1 - birth) * (later * (1 - earlyShare) + infant * earlyShare);
 }
 
 export function ageParts(age) {
