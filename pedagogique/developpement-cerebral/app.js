@@ -6,7 +6,7 @@ import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
 import { mountResearch } from './research-evidence.js';
 import { BRAIN_PALETTE } from './colour-scale.js';
-import { PROFILE_DOMAINS, DEVELOPMENT_PROFILES, profileLevel, buildProfileInfluences, classroomExample } from './development-profiles.js';
+import { PROFILE_DOMAINS, profileLevel, buildProfileInfluences, cerebellarProfileAdjustment } from './development-profiles.js';
 
 const $ = (id) => document.getElementById(id);
 const range = $('age');
@@ -19,11 +19,7 @@ const epilepsyButton = $('epilepsy');
 const effectSelect = $('epilepsy-effect');
 const profilesButton = $('profiles');
 let currentPanel = null;
-let selectedProfile = DEVELOPMENT_PROFILES[0];
 const profileValues = new Float32Array(PROFILE_DOMAINS.length);
-let supportExplicit = false;
-let comparingProfile = false;
-let profileInitialized = false;
 let selectedEffect = EPILEPSY_EFFECTS[0];
 let developmentDelayMonths = Number($('development-delay').value);
 let age = Number(range.value) / 12;
@@ -115,101 +111,58 @@ function updatePanels() {
 }
 
 const hasProfileVariation = () => profileValues.some(value => value !== 0);
-const showingProfile = () => hasProfileVariation() && !comparingProfile;
+const showingProfile = hasProfileVariation;
 let currentInsightKey = '';
 function updateAgeInsight() {
   const insight = insightForAge(age);
   const active = showingProfile();
-  const key = `${insight.from}:${active}:${selectedProfile.id}:${profileValues.join(',')}`;
+  const key = `${insight.from}:${active}`;
   if (key === currentInsightKey) return;
   currentInsightKey = key;
   $('age-insight').dataset.phase = String(insight.from);
   $('insight-range').textContent = insight.range;
-  $('stage-context').textContent = active ? 'Profil illustratif' : comparingProfile ? 'Repère illustratif' : 'En développement';
+  $('stage-context').textContent = active ? 'Profil personnalisé' : 'En développement';
   $('scale-context').textContent = active ? 'Contrastes du profil' : 'Progression illustrative';
-  $('scale-detail').textContent = active ? 'Réseaux qui se chevauchent' : 'Le développement continue';
+  $('scale-detail').textContent = active ? 'Variations par domaine' : 'Le développement continue';
   $('illustration-scale').setAttribute('aria-label', active ? 'Contrastes illustratifs des réseaux, sans mesure de maturité ou de capacité' : 'Progression illustrative du rouge au vert puis au bleu, sans pourcentage de maturité');
-  $('insight-title').textContent = active ? selectedProfile.title || 'Un profil singulier' : insight.title;
-  $('insight-themes').textContent = active ? PROFILE_DOMAINS
-    .flatMap((domain, i) => profileValues[i] === 0 ? [] : [`${domain.short} ${profileLevel(profileValues[i]).toLowerCase()}`]).slice(0,3).join(' · ') : insight.themes.join(' · ');
+  $('insight-title').textContent = insight.title;
+  $('insight-themes').textContent = insight.themes.join(' · ');
 }
 
-function updateClassroomExample() {
-  const example = classroomExample(profileValues);
-  $('example-instruction').textContent = `« ${supportExplicit ? example.support : example.instruction} »`;
-  $('example-resource').textContent = example.resource;
-  $('example-difficulty').textContent = example.difficulty;
-  $('example-explanation').textContent = example.explanation;
-  $('example-explanation').hidden = !supportExplicit;
-  $('explain-expectation').textContent = supportExplicit ? 'Revoir la consigne initiale' : example.supportLabel;
-  $('explain-expectation').setAttribute('aria-pressed', String(supportExplicit));
-  $('example-instruction').dataset.explicit = String(supportExplicit);
-}
-$('explain-expectation').addEventListener('click', () => {
-  setPlaying(false);
-  supportExplicit = !supportExplicit; updateClassroomExample();
-  $('announcement').textContent = supportExplicit ? 'La formulation de la consigne change. L’âge et les couleurs du cerveau restent identiques.' : 'Retour à la consigne initiale.';
-});
 function updateProfileControls() {
-  $('development-profile').value = selectedProfile.id;
   PROFILE_DOMAINS.forEach((domain, i) => {
     const input = $(`profile-${domain.id}`);
     input.value = String(profileValues[i]);
     input.setAttribute('aria-valuetext', profileLevel(profileValues[i]));
-    input.style.setProperty('--position', `${(profileValues[i] + 1) * 50}%`);
-    $(`value-${domain.id}`).textContent = profileLevel(profileValues[i]);
+    input.style.setProperty('--position', `${(profileValues[i] + 1) * 100}%`);
   });
   $('experience').classList.toggle('profile-active', hasProfileVariation());
-  $('compare-profile').disabled = !hasProfileVariation();
-  $('compare-profile').setAttribute('aria-pressed', String(comparingProfile));
-  $('compare-profile').textContent = comparingProfile ? 'Revenir au profil' : 'Voir le repère au même âge';
-  updateClassroomExample(); updateAgeInsight(); requestPaint();
+  updateAgeInsight(); requestPaint();
 }
 
-function selectProfile(id) {
-  selectedProfile = DEVELOPMENT_PROFILES.find(profile => profile.id === id) || DEVELOPMENT_PROFILES[0];
-  if (selectedProfile.values) profileValues.set(selectedProfile.values);
-  if (selectedProfile.id === 'custom') $('profile-settings').open = true;
-  comparingProfile = false; profileInitialized = true; supportExplicit = false;
-  setPlaying(false); updateProfileControls();
-}
-$('development-profile').replaceChildren(...DEVELOPMENT_PROFILES.map(profile => {
-  const option = document.createElement('option'); option.value = profile.id; option.textContent = profile.label; return option;
-}));
 for (const [i, domain] of PROFILE_DOMAINS.entries()) {
   const row = document.createElement('div'); row.className = 'profile-domain';
-  const heading = document.createElement('div'); heading.className = 'profile-domain-heading';
   const label = document.createElement('label'); label.htmlFor = `profile-${domain.id}`; label.textContent = domain.label;
-  const output = document.createElement('output'); output.id = `value-${domain.id}`; output.htmlFor = `profile-${domain.id}`;
-  const description = document.createElement('p'); description.id = `description-${domain.id}`; description.className = 'domain-description'; description.textContent = domain.description;
-  const input = document.createElement('input'); input.setAttribute('aria-describedby', description.id); input.id = `profile-${domain.id}`; input.type = 'range'; input.min = '-1'; input.max = '1'; input.step = '1'; input.value = '0';
-  heading.append(label, output); row.append(heading, description, input); $('profile-domains').append(row);
+  const input = document.createElement('input');
+  input.id = `profile-${domain.id}`; input.type = 'range';
+  input.min = '-1'; input.max = '0'; input.step = '0.01'; input.value = '0';
+  input.setAttribute('aria-describedby', 'profile-scale');
+  row.append(label, input); $('profile-domains').append(row);
   input.addEventListener('input', () => {
-    profileValues[i] = Number(input.value); selectedProfile = DEVELOPMENT_PROFILES.at(-1); comparingProfile = false; supportExplicit = false;
+    profileValues[i] = Number(input.value);
     setPlaying(false); updateProfileControls();
   });
-  input.addEventListener('change', () => { $('announcement').textContent = `${domain.label} : ${profileLevel(profileValues[i])}. Profil illustratif.`; });
+  input.addEventListener('change', () => {
+    $('announcement').textContent = `${domain.label} : ${profileLevel(profileValues[i])}. L’âge reste inchangé.`;
+  });
 }
-$('development-profile').addEventListener('change', () => {
-  selectProfile($('development-profile').value);
-  $('announcement').textContent = `Profil illustratif : ${selectedProfile.label}. L’âge reste inchangé.`;
-});
 profilesButton.addEventListener('click', () => {
-  if (currentPanel === 'profile') currentPanel = null;
-  else {
-    if (!profileInitialized) selectProfile('words_expectations');
-    currentPanel = 'profile';
-  }
-  setPlaying(false); updatePanels(); requestPaint();
+  currentPanel = currentPanel === 'profile' ? null : 'profile';
+  setPlaying(false); updatePanels();
 });
 for (const [closeId, trigger] of [['close-profiles', profilesButton], ['close-epilepsy', epilepsyButton]]) {
   $(closeId).addEventListener('click', () => { currentPanel = null; updatePanels(); trigger.focus(); });
 }
-$('compare-profile').addEventListener('click', () => {
-  comparingProfile = !comparingProfile;
-  setPlaying(false); updateProfileControls();
-  $('announcement').textContent = comparingProfile ? 'Repère illustratif au même âge.' : 'Retour au profil illustratif, au même âge.';
-});
 updateProfileControls();
 
 function requestPaint() {
@@ -261,7 +214,7 @@ playButton.addEventListener('click', () => {
 $('reset').addEventListener('click', () => {
   setPlaying(false);
   setEpilepsyMode(false);
-  currentPanel = null; selectProfile('reference'); updatePanels();
+  currentPanel = null; profileValues.fill(0); updateProfileControls(); updatePanels();
   setAge(0);
   resetViews();
   announceAge();
@@ -386,10 +339,10 @@ async function initialize() {
     geometry.setAttribute('maturationLate', new THREE.InterleavedBufferAttribute(curves, 4, 4));
     const influences = new THREE.InterleavedBuffer(buildProfileInfluences(vertexLabels, surfaceGraph), PROFILE_DOMAINS.length);
     geometry.setAttribute('profileInfluenceA', new THREE.InterleavedBufferAttribute(influences, 3, 0));
-    geometry.setAttribute('profileInfluenceB', new THREE.InterleavedBufferAttribute(influences, 2, 3));
+    geometry.setAttribute('profileInfluenceB', new THREE.InterleavedBufferAttribute(influences, 4, 3));
 
     const ageUniform = { value: age };
-    const profileA = new THREE.Vector3(), profileB = new THREE.Vector2();
+    const profileA = new THREE.Vector3(), profileB = new THREE.Vector4();
     const profileUniformA = { value: profileA }, profileUniformB = { value: profileB };
     const seizureUniform = { value: 0 };
     const seizureTimeUniform = { value: 0 };
@@ -412,7 +365,7 @@ async function initialize() {
       shader.uniforms.uDevelopmentDelay = delayUniform;
       shader.uniforms.uEffectRadius = radiusUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec2 profileInfluenceB;\nuniform vec3 uProfileA;\nuniform vec2 uProfileB;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
+      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec4 profileInfluenceB;\nuniform vec3 uProfileA;\nuniform vec4 uProfileB;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         float effectiveAge = uAge;
@@ -421,8 +374,10 @@ async function initialize() {
           effectiveAge = max(0.0, uAge - uDevelopmentDelay * influence);
         }
         vMaturity = regionalColour(effectiveAge, maturationEarly, maturationLate);
-        float profileWeight = dot(profileInfluenceA, abs(uProfileA)) + dot(profileInfluenceB, abs(uProfileB));
-        float profileShift = (dot(profileInfluenceA, uProfileA) + dot(profileInfluenceB, uProfileB)) / max(1.0, profileWeight);
+        vec3 remainingA = vec3(1.0) + profileInfluenceA * uProfileA;
+        vec4 remainingB = vec4(1.0) + profileInfluenceB * uProfileB;
+        float profileShift = remainingA.x * remainingA.y * remainingA.z
+          * remainingB.x * remainingB.y * remainingB.z * remainingB.w - 1.0;
         float profileStrength = (1.0 - exp(-max(0.0, effectiveAge) / 1.5)) * 0.34;
         float profileRoom = 1.0 - abs(vMaturity - 0.5) * 1.2;
         vMaturity = clamp(vMaturity + profileShift * profileStrength * profileRoom, 0.0, 1.0);
@@ -667,9 +622,9 @@ async function initialize() {
       radiusUniform.value = selectedEffect.radius;
       focalColor.set(selectedEffect.color);
       focalMarker.material.color.copy(focalColor);
-      const profile = showingProfile() ? profileValues : [0,0,0,0,0];
-      profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4]);
-      cerebellum.update(value, profile[4] * .7);
+      const profile = profileValues;
+      profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4], profile[5], profile[6]);
+      cerebellum.update(value, cerebellarProfileAdjustment(profile));
       updateFocalReadout();
       renderer.setScissorTest(false);
       renderer.clear();

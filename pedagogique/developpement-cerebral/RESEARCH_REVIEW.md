@@ -85,9 +85,9 @@ Sans atlas, une interpolation spatiale grossière sert de secours, sans variatio
 
 **[13] [Polišenská et al., 2018](https://doi.org/10.1044/2018_JSLHR-L-17-0029)**, *Receptive Language Skills in Slovak-Speaking Children With Intellectual Disability: Understanding Words, Sentences, and Stories*, compare 14 enfants avec DI et 14 témoins. Les exigences de compréhension diffèrent selon la tâche. Petit échantillon en slovaque, sans cartographie cérébrale ; ce travail ne définit pas tous les profils individuels.
 
-Le profil ne résume plus le langage à un seul réglage. Il distingue le sens des mots, la consigne et son contexte, la mémoire des étapes, l’attention et l’organisation, et la coordination. Les influences anatomiques sont distribuées et partagées ; leur distinction reste une métaphore pédagogique. La compréhension d’une attente implicite peut mobiliser plusieurs capacités et dépend aussi de la formulation, du contexte, de l’expérience et des supports proposés.
+Le volet simplifié présente sept domaines : communications expressive et réceptive, motricité, compréhension des consignes, mémoire des étapes, coordination et autorégulation. Leur influence anatomique est distribuée et partagée ; elle reste une métaphore pédagogique. Les scénarios prédéfinis et les situations de classe ont été retirés.
 
-L’exemple fictif « Prépare-toi pour sortir » illustre une connaissance du mot « sortir » qui ne suffit pas à préciser les actions attendues. La reformulation nomme ces actions, sans modifier le cerveau affiché. Un second exemple différencie compréhension et maintien d’étapes successives. La réponse observable ne permet pas, à elle seule, d’identifier la capacité en cause ; les exemples ne sont pas un bilan et ne prédisent pas la réponse à une aide.
+Chaque curseur part du repère neurotypique illustratif et se déplace vers des déficits croissants, sans modifier l’âge. Ce repère ne constitue pas une norme mesurée. Un cumul multiplicatif borné assure qu’accentuer un déficit ne compense pas celui d’un autre domaine. Tous les curseurs au repère restituent exactement les couleurs de base. Les communications, les fonctions motrices et les autres catégories ne se réduisent pas à des zones exclusives ou à une carte diagnostique de DI.
 
 ## Les titres par âge sont des repères pédagogiques
 
