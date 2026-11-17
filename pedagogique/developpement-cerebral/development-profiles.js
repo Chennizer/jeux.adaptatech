@@ -1,4 +1,4 @@
-// Ten illustrative domains. Zero preserves the age-based reference exactly;
+// Thirteen illustrative domains. Zero preserves the age-based reference exactly;
 // negative values represent increasing difficulties, never a mental age.
 export const PROFILE_DOMAINS = Object.freeze([
   { id: 'expressive', label: 'Communication expressive' },
@@ -10,7 +10,10 @@ export const PROFILE_DOMAINS = Object.freeze([
   { id: 'regulation', label: 'Autorégulation' },
   { id: 'inhibition', label: 'Inhibition' },
   { id: 'sensory', label: 'Traitement sensoriel' },
-  { id: 'flexibility', label: 'Flexibilité cognitive' }
+  { id: 'flexibility', label: 'Flexibilité cognitive' },
+  { id: 'vision', label: 'Vision' },
+  { id: 'hearing', label: 'Audition' },
+  { id: 'touch', label: 'Toucher' }
 ]);
 
 export function profileLevel(value) {
@@ -30,9 +33,13 @@ const MEMORY = new Map([[15,1],[16,.8],[27,.9],[26,.7],[56,1],[53,.8],[54,.75],[
 const COORDINATION = new Map([[3,.8],[28,.65],[29,.65],[45,.45],[67,.55],[68,.95],[69,.95],[27,.6],[56,.5]]);
 const REGULATION = new Map([[1,.7],[5,.7],[6,1],[7,.9],[8,.5],[15,.85],[16,.9],[18,.75],[24,.65],[31,.5],[53,.7],[54,.6],[62,.5],[64,.5]]);
 const INHIBITION = new Map([[12,1],[14,.85],[15,.9],[16,.75],[18,.75],[24,.8],[6,.9],[7,.8],[39,.7],[40,.8],[52,1],[53,.75]]);
-const SENSORY = new Map([[28,1],[67,.85],[29,.3],[44,1],[11,.75],[22,.75],[42,.85],[33,1],[74,.85],[34,.5],[17,.6],[18,.65],[26,.6],[27,.65],[56,.6]]);
+// General integration is distinct from the three sensory input modalities.
+const SENSORY = new Map([[17,.7],[18,.85],[26,.8],[27,1],[56,1],[25,.6],[30,.5],[19,.4],[20,.45],[34,.4],[73,.4]]);
 const FLEXIBILITY = new Map([[15,1],[16,.85],[53,.9],[54,.8],[27,.85],[56,1],[25,.55],[26,.6],[6,.7],[7,.8],[14,.65],[18,.55]]);
-const NETWORKS = [EXPRESSIVE, RECEPTIVE, MOTOR, INSTRUCTIONS, MEMORY, COORDINATION, REGULATION, INHIBITION, SENSORY, FLEXIBILITY];
+const VISION = new Map([[44,1],[11,.9],[22,.9],[42,1],[2,.65],[19,.75],[20,.8],[57,.65],[58,.65],[59,.55],[61,.7],[65,.55],[21,.4],[51,.4]]);
+const HEARING = new Map([[33,1],[74,.95],[34,.8],[35,.55],[36,.9],[41,.5],[73,.4]]);
+const TOUCH = new Map([[28,1],[67,.95],[3,.6],[4,.65],[45,.5],[26,.45],[27,.4]]);
+const NETWORKS = [EXPRESSIVE, RECEPTIVE, MOTOR, INSTRUCTIONS, MEMORY, COORDINATION, REGULATION, INHIBITION, SENSORY, FLEXIBILITY, VISION, HEARING, TOUCH];
 
 // Editorial contrast threshold: strong network cores can reach the red stop.
 // This is not a measured impairment or an estimate of remaining ability.

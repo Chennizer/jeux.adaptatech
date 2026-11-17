@@ -341,10 +341,11 @@ async function initialize() {
     geometry.setAttribute('profileInfluenceA', new THREE.InterleavedBufferAttribute(influences, 3, 0));
     geometry.setAttribute('profileInfluenceB', new THREE.InterleavedBufferAttribute(influences, 4, 3));
     geometry.setAttribute('profileInfluenceC', new THREE.InterleavedBufferAttribute(influences, 3, 7));
+    geometry.setAttribute('profileInfluenceD', new THREE.InterleavedBufferAttribute(influences, 3, 10));
 
     const ageUniform = { value: age };
-    const profileA = new THREE.Vector3(), profileB = new THREE.Vector4(), profileC = new THREE.Vector3();
-    const profileUniformA = { value: profileA }, profileUniformB = { value: profileB }, profileUniformC = { value: profileC };
+    const profileA = new THREE.Vector3(), profileB = new THREE.Vector4(), profileC = new THREE.Vector3(), profileD = new THREE.Vector3();
+    const profileUniformA = { value: profileA }, profileUniformB = { value: profileB }, profileUniformC = { value: profileC }, profileUniformD = { value: profileD };
     const seizureUniform = { value: 0 };
     const seizureTimeUniform = { value: 0 };
     const staticSeizureUniform = { value: 0 };
@@ -359,6 +360,7 @@ async function initialize() {
       shader.uniforms.uProfileA = profileUniformA;
       shader.uniforms.uProfileB = profileUniformB;
       shader.uniforms.uProfileC = profileUniformC;
+      shader.uniforms.uProfileD = profileUniformD;
       shader.uniforms.uSeizure = seizureUniform;
       shader.uniforms.uSeizureTime = seizureTimeUniform;
       shader.uniforms.uStaticSeizure = staticSeizureUniform;
@@ -367,7 +369,7 @@ async function initialize() {
       shader.uniforms.uDevelopmentDelay = delayUniform;
       shader.uniforms.uEffectRadius = radiusUniform;
       palette.forEach((color, i) => { shader.uniforms[`uColor${i}`] = { value: color }; });
-      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec4 profileInfluenceB;\nattribute vec3 profileInfluenceC;\nuniform vec3 uProfileA;\nuniform vec4 uProfileB;\nuniform vec3 uProfileC;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
+      shader.vertexShader = `attribute vec4 maturationEarly;\nattribute vec4 maturationLate;\nattribute vec3 profileInfluenceA;\nattribute vec4 profileInfluenceB;\nattribute vec3 profileInfluenceC;\nattribute vec3 profileInfluenceD;\nuniform vec3 uProfileA;\nuniform vec4 uProfileB;\nuniform vec3 uProfileC;\nuniform vec3 uProfileD;\nattribute float sulcalDepth;\nattribute float seizureDistance;\nvarying float vMaturity;\nvarying float vSulc;\nvarying float vSeizureDistance;\nvarying vec3 vSurfacePoint;\nuniform float uAge;\nuniform float uSeizure;\nuniform float uEpilepsyEffect;\nuniform float uDevelopmentDelay;\nuniform float uEffectRadius;\n${COLOUR_CURVE_GLSL}\n${shader.vertexShader}`;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         float effectiveAge = uAge;
@@ -379,9 +381,11 @@ async function initialize() {
         vec3 remainingA = vec3(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceA) * uProfileA;
         vec4 remainingB = vec4(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceB) * uProfileB;
         vec3 remainingC = vec3(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceC) * uProfileC;
+        vec3 remainingD = vec3(1.0) + smoothstep(0.0, ${PROFILE_CORE_THRESHOLD.toFixed(2)}, profileInfluenceD) * uProfileD;
         float profileRemaining = remainingA.x * remainingA.y * remainingA.z
           * remainingB.x * remainingB.y * remainingB.z * remainingB.w
-          * remainingC.x * remainingC.y * remainingC.z;
+          * remainingC.x * remainingC.y * remainingC.z
+          * remainingD.x * remainingD.y * remainingD.z;
         vMaturity *= clamp(profileRemaining, 0.0, 1.0);
         vSulc = sulcalDepth;
         vSeizureDistance = min(160.0, seizureDistance);
@@ -627,6 +631,7 @@ async function initialize() {
       const profile = profileValues;
       profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4], profile[5], profile[6]);
       profileC.set(profile[7], profile[8], profile[9]);
+      profileD.set(profile[10], profile[11], profile[12]);
       cerebellum.update(value, cerebellarProfileAdjustment(profile));
       updateFocalReadout();
       renderer.setScissorTest(false);

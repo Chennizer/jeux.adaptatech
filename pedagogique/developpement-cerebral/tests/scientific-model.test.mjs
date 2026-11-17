@@ -14,8 +14,8 @@ const atlasSource = JSON.parse(await readFile(new URL('../assets/atlas-source.js
 
 test('deficit-only profiles preserve the reference and stay bounded without changing age', () => {
   const neutral = Array(PROFILE_DOMAINS.length).fill(0);
-  assert.equal(PROFILE_DOMAINS.length, 10);
-  assert.equal(profileAdjustment(Array(10).fill(1), neutral), 0);
+  assert.equal(PROFILE_DOMAINS.length, 13);
+  assert.equal(profileAdjustment(Array(13).fill(1), neutral), 0);
   assert.equal(cerebellarProfileAdjustment(neutral), 0);
   for (const base of [0,.1,.5,.9,1]) {
     assert.equal(profileColourStage(base, 0), base);
@@ -30,15 +30,15 @@ test('deficit-only profiles preserve the reference and stay bounded without chan
   }
 });
 
-test('ten profile influences remain on their own disconnected hemisphere', () => {
+test('thirteen profile influences remain on their own disconnected hemisphere', () => {
   const graph = buildSurfaceGraph(new Float32Array([0,0,0, 3,0,0, 0,4,0, 0,0,1, 3,0,1, 0,4,1]), new Uint16Array([0,1,2, 3,4,5]));
   const influences = buildProfileInfluences(new Uint16Array([14,14,14,0,0,0]), graph);
   assert(influences[0] > .9);
-  assert(influences.subarray(30).every(value => value === 0));
+  assert(influences.subarray(39).every(value => value === 0));
   assert(buildProfileInfluences(null, graph).every(value => value === 0));
 });
 
-test('the ten domains retain distinct overlapping influences and increasing deficits cannot cancel each other', async () => {
+test('the thirteen domains retain distinct overlapping influences and increasing deficits cannot cancel each other', async () => {
   const bytes = await readFile(new URL('../assets/cortex.bin', import.meta.url));
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const header = new DataView(buffer), count = header.getUint32(4, true);
@@ -47,10 +47,10 @@ test('the ten domains retain distinct overlapping influences and increasing defi
   const atlas = await readFile(new URL('../assets/destrieux-labels.bin', import.meta.url));
   const labels = Uint16Array.from({ length: count }, (_, i) => atlas.readUInt16LE(i * 2));
   const influences = buildProfileInfluences(labels, buildSurfaceGraph(positions, triangles));
-  assert.equal(influences.length, count * 10);
+  assert.equal(influences.length, count * 13);
   const mean = (region, channel) => {
     let total = 0, n = 0;
-    for (let i = 0; i < count; i++) if (labels[i] === region) { total += influences[i * 10 + channel]; n++; }
+    for (let i = 0; i < count; i++) if (labels[i] === region) { total += influences[i * 13 + channel]; n++; }
     return total / n;
   };
   assert(influences.every(value => Number.isFinite(value) && value >= 0 && value <= 1));
@@ -63,28 +63,38 @@ test('the ten domains retain distinct overlapping influences and increasing defi
     assert(mean(offset+15,4) > .8);
     assert(mean(offset+6,6) > .8);
     assert(mean(offset+12,7) > .85 && mean(offset+12,8) < .1);
-    assert(mean(offset+28,8) > .85 && mean(offset+28,7) < .1);
+    assert(mean(offset+27,8) > .85 && mean(offset+27,7) < .1);
     assert(mean(offset+56,9) > .85 && mean(offset+56,7) < .1);
+    // Input modalities have separate cores, and general sensory integration
+    // is not a fourth copy of the primary sensory map.
+    assert(mean(offset+44,10) > .85);
+    assert(mean(offset+33,11) > .85);
+    assert(mean(offset+28,12) > .85);
+    for (const [label, channel] of [[44,10],[33,11],[28,12]]) {
+      for (const other of [10,11,12].filter(k => k !== channel)) assert(mean(offset+label,other) < .05);
+      assert(mean(offset+label,8) < .1);
+    }
+    assert(mean(offset+27,8) > mean(offset+27,12) + .4);
   }
   for (let i = 0; i < count; i += 97) {
-    const weights = influences.subarray(i*10, i*10+10);
-    const values = Array(10).fill(-.2);
+    const weights = influences.subarray(i*13, i*13+13);
+    const values = Array(13).fill(-.2);
     const initial = profileAdjustment(weights, values);
     assert(initial >= -1 && initial <= 0);
-    for (let channel = 0; channel < 10; channel++) {
+    for (let channel = 0; channel < 13; channel++) {
       const stronger = [...values]; stronger[channel] = -.8;
       assert(profileAdjustment(weights, stronger) <= initial, 'increasing one deficit cannot reduce the combined effect');
     }
   }
   const curves = buildMaturationCurves(positions, labels, buildSurfaceGraph(positions, triangles));
-  for (let channel = 0; channel < 10; channel++) {
-    const values = Array(10).fill(0); values[channel] = -1;
+  for (let channel = 0; channel < 13; channel++) {
+    const values = Array(13).fill(0); values[channel] = -1;
     for (const age of [16,20]) {
       let redCores = 0;
       for (let i = 0; i < count; i++) {
-        if (influences[i*10+channel] < .9) continue;
+        if (influences[i*13+channel] < .9) continue;
         const base = colourAtAge(age, ...curves.subarray(i*8,i*8+8));
-        const adjustment = profileAdjustment(influences.subarray(i*10,i*10+10),values);
+        const adjustment = profileAdjustment(influences.subarray(i*13,i*13+13),values);
         assert.equal(profileColourStage(base,adjustment),0);
         if(base>.6) redCores++;
       }
@@ -99,7 +109,7 @@ test('the ten domains retain distinct overlapping influences and increasing defi
   assert(cerebellarProfileAdjustment(coordination) < cerebellarProfileAdjustment(motor));
   assert.equal(cerebellarProfileAdjustment(coordination), -1, 'coordination can reach red in the cerebellum');
   assert(cerebellarProfileAdjustment([0,0,-1,0,0,-.5,0,0,0,0]) < cerebellarProfileAdjustment([0,0,0,0,0,-.5,0,0,0,0]));
-  assert.equal(cerebellarProfileAdjustment([-1,-1,0,-1,-1,0,-1,-1,-1,-1]), 0);
+  assert.equal(cerebellarProfileAdjustment([-1,-1,0,-1,-1,0,-1,-1,-1,-1,-1,-1,-1]), 0);
 });
 
 test('paired cerebellar surfaces preserve anatomy, labels and outward closed geometry', async () => {
