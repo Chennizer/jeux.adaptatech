@@ -20,7 +20,6 @@ export function mountAgeDescriptions({ root, button, filter, domains, getAge }) 
     const key = `${filter.value}:${record?.id ?? 'empty'}`;
     if (key === currentKey) return;
     currentKey = key;
-    root.scrollTop = 0;
     root.dataset.record = record?.id ?? '';
     $('repere-content').hidden = !record;
     $('repere-empty').hidden = Boolean(record);

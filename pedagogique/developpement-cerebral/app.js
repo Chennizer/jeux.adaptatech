@@ -63,6 +63,7 @@ function updatePanels() {
   profilesButton.setAttribute('aria-expanded', String(currentPanel === 'profile'));
   reperesButton.setAttribute('aria-expanded', String(currentPanel === 'milestones'));
   $('experience').classList.toggle('milestones-mode', currentPanel === 'milestones');
+  if (currentPanel !== 'milestones') $('experience').classList.remove('compact-reperes', 'tight-reperes');
   ageDescriptions.setActive(currentPanel === 'milestones');
   requestPaint();
 }
@@ -394,18 +395,23 @@ async function initialize() {
       }
     }
     const projected = new THREE.Vector3();
-    function renderView(element, camera, baseHeight) {
+    function prepareView(element, camera, baseHeight) {
       const bounds = element.getBoundingClientRect();
-      const stageBounds = stage.getBoundingClientRect();
-      const aspect = bounds.width / bounds.height;
+      // Ignore floating-point noise from the translation when fitting cameras.
+      const viewWidth = Math.round(bounds.width * 64) / 64;
+      const pixelHeight = Math.round(bounds.height * 64) / 64;
+      const aspect = viewWidth / pixelHeight;
       // Fit the rotated bounding box so dragging never clips the anatomy.
       camera.updateMatrixWorld();
       let extentX = 0;
       let extentY = 0;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const corner of corners) {
         projected.copy(corner).applyMatrix4(camera.matrixWorldInverse);
         extentX = Math.max(extentX, Math.abs(projected.x));
         extentY = Math.max(extentY, Math.abs(projected.y));
+        minX = Math.min(minX, projected.x); maxX = Math.max(maxX, projected.x);
+        minY = Math.min(minY, projected.y); maxY = Math.max(maxY, projected.y);
       }
       const viewHeight = Math.max(baseHeight, 205 / aspect, extentY * 2.12, extentX * 2.12 / aspect);
       camera.left = -viewHeight * aspect / 2;
@@ -413,12 +419,93 @@ async function initialize() {
       camera.top = viewHeight / 2;
       camera.bottom = -viewHeight / 2;
       camera.updateProjectionMatrix();
-      const left = bounds.left - stageBounds.left;
-      const bottom = stageBounds.bottom - bounds.bottom;
-      renderer.setViewport(left, bottom, bounds.width, bounds.height);
-      renderer.setScissor(left, bottom, bounds.width, bounds.height);
+      const scale = pixelHeight / viewHeight;
+      return { element, camera, width: viewWidth, height: pixelHeight,
+        imageWidth: (maxX - minX) * scale, imageHeight: (maxY - minY) * scale,
+        insetX: viewWidth / 2 + minX * scale, insetY: pixelHeight / 2 - maxY * scale };
+    }
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    function arrangeViews(side, top) {
+      const active = currentPanel === 'milestones';
+      const phone = width <= 650 && height > width;
+      const initialTop = parseFloat(getComputedStyle($('experience')).getPropertyValue('--scene-top'));
+      const originTop = $('experience').getBoundingClientRect().top;
+      const bottom = $('play').closest('.timeline').getBoundingClientRect().top - originTop - 12;
+      const rowSpace = width - 32 - side.imageWidth - top.imageWidth - 44;
+      const canStackModels = side.imageHeight + top.imageHeight + 24 <= bottom - initialTop;
+      const compact = active && (phone || height < 440 || (rowSpace < 220 && !(height > width && canStackModels)));
+      $('experience').classList.toggle('compact-reperes', compact);
+      $('experience').classList.toggle('tight-reperes', compact && height < 440);
+      const margin = compact ? 12 : clamp(width * .02, 16, 36);
+      const gap = compact ? 16 : clamp(width * .025, 20, 36);
+      const textGap = compact ? 16 : clamp(width * .025, 24, 40);
+      const usable = width - margin * 2;
+      const sceneTop = compact ? 64 : initialTop;
+      const rowWidth = side.imageWidth + gap + top.imageWidth;
+      const columnWidth = Math.max(side.imageWidth, top.imageWidth);
+      const columnHeight = side.imageHeight + gap + top.imageHeight;
+      let vertical = rowWidth > usable;
+      let stackedText = phone;
+      let textWidth = Math.min(360, usable);
+      if (active && !phone) {
+        const alongsideRow = usable - rowWidth - textGap;
+        const columnFits = usable - columnWidth - textGap >= 220 && columnHeight <= bottom - sceneTop;
+        if (columnFits && height > width && alongsideRow < 280) {
+          vertical = true; textWidth = Math.min(360, usable - columnWidth - textGap);
+        } else if (alongsideRow >= 160) {
+          vertical = false; textWidth = Math.min(360, alongsideRow);
+        } else if (columnFits) {
+          vertical = true; textWidth = Math.min(360, usable - columnWidth - textGap);
+        } else {
+          stackedText = true;
+        }
+      }
+      const copy = $('age-callout');
+      if (active) copy.style.width = `${textWidth}px`;
+      const textHeight = active ? copy.getBoundingClientRect().height : 0;
+      const groupWidth = vertical ? columnWidth : rowWidth;
+      const groupHeight = vertical ? columnHeight : Math.max(side.imageHeight, top.imageHeight);
+      let groupX, groupY, textX = 0, textY = 0;
+      if (active && stackedText) {
+        groupX = (width - groupWidth) / 2;
+        textX = (width - textWidth) / 2;
+        if (vertical) {
+          textY = sceneTop;
+          groupY = textY + textHeight + textGap;
+        } else {
+          groupY = sceneTop;
+          textY = groupY + groupHeight + textGap;
+        }
+      } else {
+        const totalWidth = groupWidth + (active ? textGap + textWidth : 0);
+        groupX = (width - totalWidth) / 2;
+        groupY = sceneTop + (bottom - sceneTop - groupHeight) / 2;
+        if (active) {
+          textX = groupX + groupWidth + textGap;
+          const centre = vertical ? groupY + side.imageHeight + gap + top.imageHeight / 2 : groupY + groupHeight / 2;
+          textY = clamp(centre - textHeight / 2, sceneTop, bottom - textHeight);
+        }
+      }
+      function position(view, x, y) {
+        view.left = x - view.insetX; view.top = y - view.insetY;
+        view.element.style.setProperty('--view-x', `${view.left - view.element.offsetLeft}px`);
+        view.element.style.setProperty('--view-y', `${view.top - view.element.offsetTop}px`);
+      }
+      if (vertical) {
+        position(side, groupX + (groupWidth - side.imageWidth) / 2, groupY);
+        position(top, groupX + (groupWidth - top.imageWidth) / 2, groupY + side.imageHeight + gap);
+      } else {
+        position(side, groupX, groupY + (groupHeight - side.imageHeight) / 2);
+        position(top, groupX + side.imageWidth + gap, groupY + (groupHeight - top.imageHeight) / 2);
+      }
+      if (active) { copy.style.left = `${textX}px`; copy.style.top = `${textY}px`; }
+    }
+    function renderView(view) {
+      const bottom = height - view.top - view.height;
+      renderer.setViewport(view.left, bottom, view.width, view.height);
+      renderer.setScissor(view.left, bottom, view.width, view.height);
       renderer.clearDepth();
-      renderer.render(scene, camera);
+      renderer.render(scene, view.camera);
     }
     paint = (value) => {
       if (stage.clientWidth !== width || stage.clientHeight !== height) {
@@ -436,11 +523,15 @@ async function initialize() {
       renderer.setScissorTest(false);
       renderer.clear();
       renderer.setScissorTest(true);
-      renderView($('lateral'), lateralCamera, 172);
-      renderView($('superior'), topCamera, 214);
+      const side = prepareView($('lateral'), lateralCamera, 172);
+      const top = prepareView($('superior'), topCamera, 214);
+      arrangeViews(side, top);
+      renderView(side);
+      renderView(top);
       renderer.setScissorTest(false);
     };
     new ResizeObserver(requestPaint).observe(stage);
+    new ResizeObserver(requestPaint).observe($('age-callout'));
     $('brain').addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       showFailure('L’affichage 3D a été interrompu. Réessayez pour le relancer.', new Error('WebGL context lost'));
