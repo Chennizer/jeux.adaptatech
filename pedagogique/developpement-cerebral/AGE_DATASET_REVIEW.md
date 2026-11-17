@@ -30,7 +30,7 @@ Ce sont des réponses à des items avec l’âge de passation, principalement de
 - En cas de manque pour une catégorie, le texte précédent disparaît et un message discret explique cette absence. On n’interpole pas un jalon manquant. En particulier, la couverture des modalités sensorielles est précoce ; son absence ultérieure ne signifie pas un développement achevé.
 - Le contenu suit exclusivement l’âge chronologique et la catégorie choisie. Les déficits illustratifs ne changent ni le texte, ni son âge source, ni sa sélection.
 - Les mentions de réseaux sont de larges **associations pédagogiques éditoriales**. Elles ne proviennent pas d’une localisation cérébrale démontrée par les listes CDC/ASHA et ne pointent pas vers une parcelle précise du maillage. Elles ne calibrent pas les couleurs.
-- Une description s’affiche près de la vue fixe. L’affichage Repères est masqué par défaut ; le volet Profils et les Repères sont mutuellement exclusifs pour limiter l’encombrement. Fermer conserve la catégorie choisie ; la remise à zéro générale revient à Automatique.
+- Les deux vues gardent la même taille et la même position, que les Repères soient ouverts ou fermés. Sur grand écran suffisamment haut, la description se place sous la vue fixe ; sur les autres formats, elle remplace temporairement le titre en haut à gauche, sans réduire les cerveaux. L’encart compact défile si nécessaire. L’affichage Repères est masqué par défaut ; le volet Profils et les Repères sont mutuellement exclusifs pour limiter l’encombrement. Fermer conserve la catégorie choisie ; la remise à zéro générale revient à Automatique.
 
 ## Réutilisation et maintenance
 
