@@ -3,6 +3,7 @@ import { loadCorticalAtlas } from './cortical-atlas.js';
 import { buildSurfaceGraph } from './cortical-network.js';
 import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
+import { mountAgeDescriptions } from './age-descriptions.js';
 import { mountResearch } from './research-evidence.js';
 import { BRAIN_PALETTE } from './colour-scale.js';
 import { PROFILE_DOMAINS, PROFILE_CORE_THRESHOLD, profileLevel, buildProfileInfluences, cerebellarProfileAdjustment } from './development-profiles.js';
@@ -24,6 +25,11 @@ let frame = 0;
 let previousTime = 0;
 let paint = () => {};
 let resetViews = () => {};
+const reperesButton = $('reperes');
+const ageDescriptions = mountAgeDescriptions({
+  root: $('age-callout'), button: reperesButton, filter: $('repere-domain'),
+  domains: PROFILE_DOMAINS, getAge: () => age
+});
 
 function setPlaying(next) {
   playing = next;
@@ -48,12 +54,17 @@ function setAge(value) {
   $('age-unit').textContent = unit;
   range.setAttribute('aria-valuetext', `${displayed} ${unit}`);
   updateAgeInsight();
+  ageDescriptions.update();
   requestPaint();
 }
 
 function updatePanels() {
   $('profile-options').hidden = currentPanel !== 'profile';
   profilesButton.setAttribute('aria-expanded', String(currentPanel === 'profile'));
+  reperesButton.setAttribute('aria-expanded', String(currentPanel === 'milestones'));
+  $('experience').classList.toggle('milestones-mode', currentPanel === 'milestones');
+  ageDescriptions.setActive(currentPanel === 'milestones');
+  requestPaint();
 }
 
 const hasProfileVariation = () => profileValues.some(value => value !== 0);
@@ -112,6 +123,11 @@ profilesButton.addEventListener('click', () => {
   setPlaying(false); updatePanels();
 });
 $('close-profiles').addEventListener('click', () => { currentPanel = null; updatePanels(); profilesButton.focus(); });
+reperesButton.addEventListener('click', () => {
+  currentPanel = currentPanel === 'milestones' ? null : 'milestones';
+  updatePanels();
+});
+$('close-reperes').addEventListener('click', () => { currentPanel = null; updatePanels(); reperesButton.focus(); });
 updateProfileControls();
 
 function requestPaint() {
@@ -158,6 +174,7 @@ playButton.addEventListener('click', () => {
 $('reset').addEventListener('click', () => {
   setPlaying(false);
   currentPanel = null; profileValues.fill(0); updateProfileControls(); updatePanels();
+  ageDescriptions.reset();
   setAge(0);
   resetViews();
   announceAge();
@@ -165,8 +182,9 @@ $('reset').addEventListener('click', () => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) { setPlaying(false); } });
 $('information').addEventListener('click', () => { setPlaying(false); about.showModal(); });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !about.open && currentPanel === 'profile') {
-    currentPanel = null; updatePanels(); profilesButton.focus();
+  if (event.key === 'Escape' && !about.open && currentPanel) {
+    const trigger = currentPanel === 'profile' ? profilesButton : reperesButton;
+    currentPanel = null; updatePanels(); trigger.focus();
   }
 });
 reducedMotion.addEventListener('change', requestPaint);

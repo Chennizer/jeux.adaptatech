@@ -62,6 +62,10 @@ Ces régions participent aussi à d’autres fonctions et sont déjà actives av
 - ASHA, *Communication Milestones*, https://www.asha.org/public/developmental-milestones/communication-milestones/ ; exemples pour [la naissance à un an](https://www.asha.org/public/developmental-milestones/communication-milestones-birth-to-1-year/) et [19–24 mois](https://www.asha.org/public/developmental-milestones/communication-milestones-19-to-24-months/). Les autres tranches ASHA jusqu’à cinq ans sont liées depuis cet index.
 - NIMH, *The Teen Brain: 7 Things to Know*, https://www.nimh.nih.gov/health/publications/the-teen-brain-7-things-to-know : raffinement à l’adolescence, apprentissage, relations et planification. Le développement ne se termine pas à 20 ans.
 
+## Descriptions activables près de la vue fixe
+
+Un catalogue complémentaire de **32 descriptions activables** accompagne la vue fixe. Le [bilan des jeux de données et ressources](AGE_DATASET_REVIEW.md) détaille les sources, leurs âges et leurs limites. Les textes sont une synthèse éditoriale, sans importation de microdonnées childdevdata. Les fenêtres d’affichage sont distinctes des âges sources ; les activités proposées ne sont pas des normes de développement. Les associations de réseaux restent larges et les textes ne dépendent pas des réglages du profil. Ce catalogue n’ajoute pas de mesure pour calibrer les couleurs.
+
 ## Profils contrastés : une métaphore pédagogique
 
 Le volet contient treize curseurs : communication expressive, communication réceptive, motricité, compréhension des consignes, mémoire des étapes, coordination, autorégulation, inhibition, traitement sensoriel, flexibilité cognitive, vision, audition et toucher. Ils partent tous du repère neurotypique à droite et vont vers la gauche pour illustrer des déficits. Aucun profil prédéfini n’est appliqué à l’ouverture. Les scénarios de classe et leur reformulation ont été retirés.

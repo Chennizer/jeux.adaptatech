@@ -10,6 +10,10 @@ Le graphique occupe **tout l’écran**, avec des commandes superposées qui ne 
 
 Le seul mode de couleurs est une **illustration** continue à sept repères : rouge, orange, jaune, vert, turquoise, bleu et bleu profond. L’échelle reste visible. Elle n’est pas un pourcentage de maturité, un bilan individuel ou une mesure d’épaisseur. Une région rouge est déjà fonctionnelle et le bleu ne signifie pas un développement achevé.
 
+Le bouton **Repères**, fermé par défaut, active 32 courtes descriptions sourcées près du cerveau fixe. Automatique affiche seize textes successifs de la naissance à vingt ans ; le menu permet aussi de sélectionner l’un des treize domaines. Les textes changent aux limites de leur fenêtre d’âge et restent stables pendant une pause. Si une catégorie ne dispose d’aucune entrée pour cet âge, le texte disparaît au profit d’un message discret, sans inventer de jalon. La vue fixe se décale pour laisser place au texte ; sur téléphone, le texte se place à côté de la vue du dessus. Le canvas conserve toute la taille de l’écran. Profils et Repères s’ouvrent alternativement ; fermer conserve les choix, et la remise à zéro revient à Automatique.
+
+Ces descriptions sont une synthèse française originale du CDC, de l’ASHA, de MedlinePlus, du HHS, du NIMH, de Harvard et d’une étude d’imagerie. Leur nature et l’âge de la source restent visibles. Les fenêtres de présentation ne sont pas des dates biologiques d’apparition ou de disparition. Les activités proposées sont distinguées des compétences observables. Les descriptions suivent l’âge choisi, indépendamment des sliders de profil. Le jeu ouvert childdevdata a été examiné mais ses observations individuelles ne sont pas importées. Le [bilan de recherche](AGE_DATASET_REVIEW.md) explique les sources, la couverture inégale et la provenance du [catalogue JSON](data/age-descriptions.fr.json).
+
 ## Recherche et lecture des couleurs
 
 Le petit bouton Sources, en bas à droite, ouvre deux onglets : lire l’illustration et consulter treize études primaires par région ou par capacité. Chaque fiche précise la fenêtre d’âge, l’échantillon, la mesure, le résultat et sa limite. Aucun appel externe n’est effectué pour afficher ces fiches ; les liens ouvrent les publications à la demande. La [revue complète](RESEARCH_REVIEW.md), datée du 17 novembre 2026, documente la sélection, la correspondance avec les régions et les limites. Les preuves soutiennent les grandes tendances, sans valider les couleurs numériques.
@@ -44,6 +48,7 @@ Les thèmes affichés reposent sur des repères généraux de communication et d
 - `assets/destrieux-labels.bin` : un uint16 par sommet, 0 sans label, 1–74 à gauche et 75–148 à droite. `tools/prepare-atlas.py` extrait seulement les labels anatomiques au commit CTdev `418ff157bd8036e01a5d823754bbd7cff5fdda1b`. Les noms et empreintes figurent dans `assets/atlas-source.json`.
 - `development-profiles.js` définit les treize domaines, leurs influences anatomiques approximatives et le cumul borné des déficits. Les influences sont lissées le long des arêtes corticales.
 - `maturation.js` définit les trajectoires anatomiques et leur interpolation, `age-insights.js` les repères textuels, `colour-scale.js` la palette, `cortical-network.js` les voisinages du maillage utilisés pour le lissage.
+- `data/age-descriptions.fr.json` contient les descriptions, fenêtres mensuelles, catégories et sources ; `age-descriptions.js` assure la sélection par âge et l’affichage activable. Il charge un seul fichier local, indépendamment de l’anatomie, sans données individuelles ni requête externe.
 - Three.js 0.170.0 est servi depuis `vendor/`. Le rendu se déclenche à la demande ou pendant une animation. Le cortex et le cervelet gardent une anatomie adulte fixe, sans simulation de croissance.
 - Les actifs d’atlas restent sous **CC BY-NC-SA 4.0** et le cervelet sous la licence **FreeSurfer v1.0**, séparément du code. Les avis complets sont dans `THIRD_PARTY_NOTICES.txt` et les fichiers de licence associés.
 
@@ -53,9 +58,11 @@ Depuis la racine du dépôt :
 
 ```sh
 python3 -m http.server 5173
-node --test pedagogique/developpement-cerebral/tests/scientific-model.test.mjs
+node --test pedagogique/developpement-cerebral/tests/*.test.mjs
 ```
 
 Ouvrir `http://localhost:5173/pedagogique/developpement-cerebral/` avec WebGL 2. Les modules et fichiers binaires nécessitent HTTP, pas `file://`.
 
 Les tests couvrent les maillages fermés et orientés du cervelet, les identités anatomiques, les bandes dorsales et les trajectoires auditives/langagières bilatérales, la palette, les repères des 241 choix mensuels et le lissage sans mélange entre hémisphères disjoints. Les tests couvrent aussi l’identité du réglage zéro, les bornes des variations, l’accès au rouge à 16 et 20 ans pour les treize domaines, les influences partagées et leur lissage sans saut entre hémisphères. Le parcours navigateur vérifie les interactions, le retour exact au repère au même âge, les treize réglages indépendants, les volets à droite, le rendu, les petits écrans et le bouton Sources en bas à droite.
+
+Les descriptions ont des contrôles supplémentaires : sources et catégories valides, conservation des âges sources, nature des guides d’activités, couverture automatique exacte de chaque mois et entrée/sortie des fenêtres filtrées sans combler les manques. Le parcours navigateur vérifie l’activation, les filtres, les changements à la lecture, le focus au clavier, l’indépendance vis-à-vis des profils, huit tailles d’écran et l’accès aux sources.
