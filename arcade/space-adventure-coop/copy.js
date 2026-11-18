@@ -1,10 +1,12 @@
 export const copy = {
   en: {
     language: 'Language', soundOn: 'Sound on', soundOff: 'Sound off',
+    multiplayer: 'Multiplayer',
     intro: 'Team up on two screens. Each player chooses switch or eye gaze.',
     controls: 'Your controls', switch: 'Switch', gaze: 'Eye gaze',
     switchHint: 'Space or Enter to fire', gazeHint: 'Look at an enemy for one second',
     create: 'Create room', join: 'Join', code: 'Room code', copy: 'Copy invite link', link: 'Invite link',
+    copyCode: 'Copy code', codeCopied: 'Room code copied.', copyCodeManual: 'Copy the selected room code.',
     copied: 'Invite link copied.', copyManual: 'Copy the selected invite link.',
     p1: 'Player 1', p2: 'Player 2', you: 'you', absent: 'Waiting to join', online: 'Connected',
     ready: 'Ready', unready: 'Cancel ready', readyState: 'Ready', leave: 'Leave room',
@@ -22,10 +24,12 @@ export const copy = {
   },
   fr: {
     language: 'Langue', soundOn: 'Son activé', soundOff: 'Son désactivé',
+    multiplayer: 'Multijoueur',
     intro: 'Jouez en équipe sur deux écrans. Chaque joueur choisit le contacteur ou le regard.',
     controls: 'Vos commandes', switch: 'Contacteur', gaze: 'Regard',
     switchHint: 'ESPACE ou ENTRÉE pour tirer', gazeHint: 'Fixez un ennemi pendant une seconde',
     create: 'Créer une salle', join: 'Rejoindre', code: 'Code de la salle', copy: 'Copier le lien', link: 'Lien d’invitation',
+    copyCode: 'Copier le code', codeCopied: 'Code de salle copié.', copyCodeManual: 'Copiez le code de salle sélectionné.',
     copied: 'Lien d’invitation copié.', copyManual: 'Copiez le lien d’invitation sélectionné.',
     p1: 'Joueur 1', p2: 'Joueur 2', you: 'vous', absent: 'En attente', online: 'Connecté',
     ready: 'Prêt', unready: 'Annuler', readyState: 'Prêt', leave: 'Quitter la salle',
@@ -43,10 +47,12 @@ export const copy = {
   },
   ja: {
     language: '言語', soundOn: 'サウンドオン', soundOff: 'サウンドオフ',
+    multiplayer: 'マルチプレイ',
     intro: '2台の画面で協力プレイ。プレイヤーごとにスイッチまたは視線入力を選べます。',
     controls: '操作方法', switch: 'スイッチ', gaze: '視線入力',
     switchHint: 'スペースまたは Enter で発射', gazeHint: '敵を1秒間見つめて発射',
     create: 'ルームを作る', join: '参加', code: 'ルームコード', copy: '招待リンクをコピー', link: '招待リンク',
+    copyCode: 'コードをコピー', codeCopied: 'ルームコードをコピーしました。', copyCodeManual: '選択されたルームコードをコピーしてください。',
     copied: '招待リンクをコピーしました。', copyManual: '選択された招待リンクをコピーしてください。',
     p1: 'プレイヤー1', p2: 'プレイヤー2', you: 'あなた', absent: '参加待ち', online: '接続済み',
     ready: '準備完了', unready: '準備を取り消す', readyState: '準備完了', leave: 'ルームを退出',

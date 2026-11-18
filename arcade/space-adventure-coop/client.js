@@ -8,6 +8,7 @@ const defaultWorker = 'space-adventure-coop.gui98789.workers.dev';
 const siteDomains = ['www.adaptatech.org', 'adaptatech.org'];
 const playerCards = [get('player-1'), get('player-2')];
 const inputButtons = [...document.querySelectorAll('[data-input]')];
+const inviteValue = get('invite-value');
 const initialCode = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
 const settings = readStorage(localStorage, 'siteLanguage');
 let language = Object.hasOwn(copy, settings) ? settings : 'fr';
@@ -57,7 +58,7 @@ function updateLanguage() {
   get('language').value = language;
   for (const element of document.querySelectorAll('[data-copy]')) setText(element, text(element.dataset.copy));
   get('field').setAttribute('aria-label', text('field'));
-  get('join-link').setAttribute('aria-label', text('link'));
+  inviteValue.setAttribute('aria-label', text(inviteValue.dataset.copyLabel));
   render();
 }
 
@@ -74,7 +75,7 @@ function render() {
   get('room').hidden = !joined;
   get('create').disabled = Boolean(session) && !joined;
   get('join').querySelector('button').disabled = Boolean(session) && !joined;
-  get('controls').disabled = Boolean(me?.ready);
+  get('controls').disabled = Boolean(session && (!authenticated || me?.ready));
   for (const button of inputButtons) button.setAttribute('aria-pressed', String(button.dataset.input === input));
 
   setText(get('status'), text(status || (joined && (state?.players.every(player => player.connected) ? 'bothReady' : 'waiting'))));
@@ -255,7 +256,7 @@ function reset(reason = '', forget = false) {
   authenticated = false;
   status = reason;
   previous?.close();
-  get('join-link').hidden = true;
+  inviteValue.hidden = true;
   field.hide();
   render();
 }
@@ -297,20 +298,28 @@ get('ready').addEventListener('click', () => {
   status = '';
   if (state) send({ type: 'ready', input, ready: !state.players[seat].ready });
 });
-get('copy').addEventListener('click', async () => {
-  const url = inviteLink(session.code).href;
-  try {
-    await navigator.clipboard.writeText(url);
-    status = 'copied';
-  } catch {
-    const link = get('join-link');
-    link.value = url;
-    link.hidden = false;
-    link.select();
-    status = 'copyManual';
+async function copyInvite(event) {
+  const room = session;
+  if (!room) return;
+  const isCode = event.currentTarget.id === 'copy-code';
+  const value = isCode ? room.code : inviteLink(room.code).href;
+  const copied = await navigator.clipboard?.writeText(value).then(() => true, () => false);
+  if (room !== session) return;
+  inviteValue.hidden = Boolean(copied);
+  if (copied) {
+    status = isCode ? 'codeCopied' : 'copied';
+  } else {
+    inviteValue.value = value;
+    inviteValue.dataset.copyLabel = isCode ? 'code' : 'link';
+    inviteValue.setAttribute('aria-label', text(inviteValue.dataset.copyLabel));
+    inviteValue.select();
+    status = isCode ? 'copyCodeManual' : 'copyManual';
   }
   render();
-});
+}
+
+get('copy-code').addEventListener('click', copyInvite);
+get('copy').addEventListener('click', copyInvite);
 get('leave').addEventListener('click', leave);
 get('exit').addEventListener('click', leave);
 get('fire').addEventListener('click', () => fire());

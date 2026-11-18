@@ -9,7 +9,12 @@ const PLAYER_KEY = /^[a-f0-9]{32}$/;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === '/') return Response.redirect(new URL(GAME_PATH, url), 302);
+    if (url.pathname === '/') {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: new URL(GAME_PATH, url).href, 'X-Robots-Tag': 'noindex' }
+      });
+    }
     if (!url.pathname.startsWith('/parties/')) return env.ASSETS.fetch(request);
 
     const code = url.pathname.slice(PARTIES_PATH.length);
