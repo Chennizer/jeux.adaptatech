@@ -97,20 +97,26 @@
   function stem(index) {
     const leaf = ' fill="#59bb60" stroke="#318c49" stroke-width="2.6" stroke-linejoin="round"';
     const light = ' fill="#97d36a" stroke="#4c9b4f" stroke-width="2.6" stroke-linejoin="round"';
+    // Hinge each leaf at its attachment so the two sides can unfold independently.
+    const hinge = (side, x, y, artwork) => '<g class="plant-leaf plant-leaf--' + side + '" style="transform-origin:' + x + 'px ' + y + 'px">' + artwork + '</g>';
     let leaves;
     if (index === 2) {
-      leaves = '<path d="M137 320C72 289 80 165 61 132C125 152 145 249 137 320Z"' + leaf + '/>' +
-        '<path d="M143 297C209 251 197 123 223 85C152 123 147 235 143 297Z"' + light + '/>';
+      leaves = hinge('left', 137, 320, '<path d="M137 320C72 289 80 165 61 132C125 152 145 249 137 320Z"' + leaf + '/>') +
+        hinge('right', 143, 297, '<path d="M143 297C209 251 197 123 223 85C152 123 147 235 143 297Z"' + light + '/>');
     } else if (index === 5) {
-      leaves = '<path d="M140 279L78 192M140 231L206 145" fill="none" stroke="#42875c" stroke-width="4"/>' +
-        '<path d="M108 236Q69 233 52 206Q86 203 108 236ZM92 213Q62 194 63 167Q87 180 92 213ZM169 198Q173 157 200 137Q207 171 169 198ZM182 177Q216 178 236 152Q207 143 182 177Z"' + leaf + '/>';
+      leaves = hinge('left', 140, 279, '<path d="M140 279L78 192" fill="none" stroke="#42875c" stroke-width="4"/>' +
+        '<path d="M108 236Q69 233 52 206Q86 203 108 236ZM92 213Q62 194 63 167Q87 180 92 213Z"' + leaf + '/>') +
+        hinge('right', 140, 231, '<path d="M140 231L206 145" fill="none" stroke="#42875c" stroke-width="4"/>' +
+        '<path d="M169 198Q173 157 200 137Q207 171 169 198ZM182 177Q216 178 236 152Q207 143 182 177Z"' + leaf + '/>');
     } else if (index === 4) {
-      leaves = '<path d="M134 284L101 257L78 254L86 235L55 216L74 209L64 180L90 190L95 166L114 204L121 222L135 238Z"' + leaf + '/>' +
-        '<path d="M145 242L171 206L193 200L186 181L217 156L195 157L204 131L179 144L171 130L163 169L147 194Z"' + light + '/>';
+      leaves = hinge('left', 134, 284, '<path d="M134 284L101 257L78 254L86 235L55 216L74 209L64 180L90 190L95 166L114 204L121 222L135 238Z"' + leaf + '/>') +
+        hinge('right', 145, 242, '<path d="M145 242L171 206L193 200L186 181L217 156L195 157L204 131L179 144L171 130L163 169L147 194Z"' + light + '/>');
     } else {
-      leaves = '<path d="M136 282C89 289 51 253 43 221C85 215 121 244 136 282Z"' + leaf + '/>' +
-        '<path d="M142 230C187 225 220 191 227 155C184 158 151 191 142 230Z"' + light + '/>' +
-        '<path d="M132 278L67 238M148 225L207 178" fill="none" stroke="#c7e0a1" stroke-opacity=".7" stroke-width="2"/>';
+      const vein = ' fill="none" stroke="#c7e0a1" stroke-opacity=".7" stroke-width="2"';
+      leaves = hinge('left', 136, 282, '<path d="M136 282C89 289 51 253 43 221C85 215 121 244 136 282Z"' + leaf + '/>' +
+        '<path d="M132 278L67 238"' + vein + '/>') +
+        hinge('right', 142, 230, '<path d="M142 230C187 225 220 191 227 155C184 158 151 191 142 230Z"' + light + '/>' +
+        '<path d="M148 225L207 178"' + vein + '/>');
     }
     return '<svg class="stem-art" viewBox="0 0 280 340" preserveAspectRatio="none" aria-hidden="true">' +
       '<path class="plant-stem" d="' + stemPaths[index] + '" fill="none" stroke="#36924f" stroke-width="13" stroke-linecap="round"/>' +
