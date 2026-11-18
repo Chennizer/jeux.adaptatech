@@ -1,5 +1,5 @@
 import { Server, routePartykitRequest } from 'partyserver';
-import { GAME_PATH, INPUT_MODES, PARTIES_PATH, ROOM_CODE, SNAPSHOT_MS } from '../../arcade/space-adventure-coop/protocol.js';
+import { DIFFICULTIES, GAME_PATH, INPUT_MODES, MAX_FRAME_BYTES, ONLINE_PARTIES_PATH, PARTIES_PATH, ROOM_CODE, SNAPSHOT_MS } from '../../arcade/space-adventure-coop/protocol.js';
 import { createRound, finishRound, fire, snapshot, stepRound, STEP_MS } from './match.js';
 
 const ROOM_LIFETIME_MS = 2 * 60 * 60 * 1000;
@@ -17,8 +17,8 @@ export default {
     }
     if (!url.pathname.startsWith('/parties/')) return env.ASSETS.fetch(request);
 
-    const code = url.pathname.slice(PARTIES_PATH.length);
-    if (!url.pathname.startsWith(PARTIES_PATH) || !ROOM_CODE.test(code)) return new Response('Room not found', { status: 404 });
+    const path = [PARTIES_PATH, ONLINE_PARTIES_PATH].find(prefix => url.pathname.startsWith(prefix));
+    if (!path || !ROOM_CODE.test(url.pathname.slice(path.length))) return new Response('Room not found', { status: 404 });
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 426 });
     const origin = request.headers.get('Origin');
     const allowedOrigins = (env.FRONTEND_ORIGINS || '').split(',').map(value => value.trim());
@@ -28,10 +28,70 @@ export default {
   }
 };
 
-export class GameRoom extends Server {
+class RoomSeats extends Server {
   static options = { hibernate: true };
 
   slots = null;
+
+  onCreate() {}
+
+  seatStorage() { return { slots: this.slots }; }
+
+  async join(connection, { key, create, input, difficulty }) {
+    if (typeof key !== 'string' || !PLAYER_KEY.test(key) || !INPUT_MODES.includes(input)) return;
+    let created = false;
+    if (!this.slots) {
+      if (create !== true) return this.reject(connection, 'missing');
+      this.slots = [{ key, input }, null];
+      this.onCreate(difficulty);
+      created = true;
+    }
+
+    let seat = this.slots.findIndex(player => player?.key === key);
+    if (seat < 0 && create === true) return this.reject(connection, 'code-taken');
+    const existing = seat < 0 ? null : this.connectedPlayers()[seat];
+    if (seat < 0) {
+      seat = this.slots.indexOf(null);
+      if (seat < 0) return this.reject(connection, 'full');
+      this.slots[seat] = { key, input };
+    }
+
+    connection.setState({ seat, ready: existing?.state.ready ?? false });
+    if (existing) {
+      existing.setState(null);
+      existing.close(4002, 'Player connected on another tab');
+    }
+
+    const saved = this.ctx.storage.put(this.seatStorage());
+    if (created) await this.ctx.storage.setAlarm(Date.now() + ROOM_LIFETIME_MS);
+    await saved;
+    this.send(connection, { type: 'welcome', seat, input: this.slots[seat]?.input ?? input });
+    this.onPlayerJoin(connection);
+  }
+
+  connectedPlayers(except) {
+    const players = [null, null];
+    for (const connection of this.getConnections()) {
+      if (connection.state && connection.id !== except) players[connection.state.seat] = connection;
+    }
+    return players;
+  }
+
+  send(connection, message) {
+    try {
+      connection.send(typeof message === 'string' ? message : JSON.stringify(message));
+    } catch {
+      connection.close(1011, 'Connection interrupted');
+    }
+  }
+
+  reject(connection, reason) {
+    this.send(connection, { type: 'error', reason });
+    connection.close(4001, reason);
+  }
+}
+
+export class GameRoom extends RoomSeats {
   round = null;
   loop = null;
 
@@ -80,46 +140,6 @@ export class GameRoom extends Server {
     }
 
     if (message.type === 'leave') await this.leave(connection);
-  }
-
-  async join(connection, { key, create, input }) {
-    if (typeof key !== 'string' || !PLAYER_KEY.test(key) || !INPUT_MODES.includes(input)) return;
-    let created = false;
-    if (!this.slots) {
-      if (create !== true) return this.reject(connection, 'missing');
-      this.slots = [{ key, input }, null];
-      created = true;
-    }
-
-    let seat = this.slots.findIndex(player => player?.key === key);
-    if (seat < 0 && create === true) return this.reject(connection, 'code-taken');
-    const existing = seat < 0 ? null : this.connectedPlayers()[seat];
-    if (seat < 0) {
-      seat = this.slots.indexOf(null);
-      if (seat < 0) return this.reject(connection, 'full');
-      this.slots[seat] = { key, input };
-    }
-
-    connection.setState({ seat, ready: existing?.state.ready ?? false });
-    if (existing) {
-      existing.setState(null);
-      existing.close(4002, 'Player connected on another tab');
-    }
-
-    const saved = this.ctx.storage.put('slots', this.slots);
-    if (created) await this.ctx.storage.setAlarm(Date.now() + ROOM_LIFETIME_MS);
-    await saved;
-    this.send(connection, { type: 'welcome', seat, input: this.slots[seat]?.input ?? input });
-    this.resumeIfReady();
-    this.publish();
-  }
-
-  connectedPlayers(except) {
-    const players = [null, null];
-    for (const connection of this.getConnections()) {
-      if (connection.state && connection.id !== except) players[connection.state.seat] = connection;
-    }
-    return players;
   }
 
   resumeIfReady() {
@@ -206,16 +226,171 @@ export class GameRoom extends Server {
     if (this.round) this.round.effects = [];
   }
 
-  send(connection, message) {
-    try {
-      connection.send(typeof message === 'string' ? message : JSON.stringify(message));
-    } catch {
-      connection.close(1011, 'Connection interrupted');
+  onPlayerJoin() {
+    this.resumeIfReady();
+    this.publish();
+  }
+}
+
+const CHECKPOINT_INTERVAL = 10_000;
+
+function isOnlineFrame(frame) {
+  return frame && typeof frame === 'object' && Number.isFinite(frame.now) &&
+    Number.isSafeInteger(frame.score) && frame.score >= 0 && Number.isSafeInteger(frame.lives) &&
+    frame.players?.blue && frame.players?.red && frame.player && frame.energy && frame.timers &&
+    Array.isArray(frame.enemies) && Array.isArray(frame.bullets) && Array.isArray(frame.effects);
+}
+
+export class OnlineRoom extends RoomSeats {
+  difficulty = 'normal';
+  match = null;
+  frame = null;
+  lastFrameAt = 0;
+  lastSavedAt = 0;
+  lastGuestFireAt = 0;
+
+  async onStart() {
+    const stored = await this.ctx.storage.get(['slots', 'difficulty', 'match', 'frame']);
+    this.slots = stored.get('slots') ?? null;
+    this.difficulty = stored.get('difficulty') ?? 'normal';
+    this.match = stored.get('match') ?? null;
+    this.frame = stored.get('frame') ?? null;
+  }
+
+  onCreate(difficulty) {
+    if (DIFFICULTIES.includes(difficulty)) this.difficulty = difficulty;
+  }
+
+  seatStorage() {
+    return { slots: this.slots, difficulty: this.difficulty };
+  }
+
+  onPlayerJoin(connection) {
+    this.publish();
+    if (this.frame && this.match?.phase === 'playing') {
+      this.send(connection, { type: 'frame', roundId: this.match.id, data: this.frame });
     }
   }
 
-  reject(connection, reason) {
-    this.send(connection, { type: 'error', reason });
-    connection.close(4001, reason);
+  async onMessage(connection, raw) {
+    if (typeof raw !== 'string' || raw.length > MAX_FRAME_BYTES) return;
+    let message;
+    try { message = JSON.parse(raw); } catch { return; }
+    if (!message || typeof message !== 'object') return;
+
+    if (message.type === 'hello' && !connection.state && raw.length <= 512) {
+      await this.join(connection, message);
+      return;
+    }
+    if (!connection.state || !this.slots) return;
+    const { seat } = connection.state;
+    const players = this.connectedPlayers();
+
+    if (message.type === 'difficulty' && seat === 0 && this.match?.phase !== 'playing') {
+      if (!DIFFICULTIES.includes(message.difficulty) || connection.state.ready) return;
+      this.difficulty = message.difficulty;
+      await this.checkpoint();
+      this.publish();
+      return;
+    }
+
+    if (message.type === 'ready' && this.match?.phase !== 'playing') {
+      if (!INPUT_MODES.includes(message.input) || typeof message.ready !== 'boolean') return;
+      this.slots[seat].input = message.input;
+      connection.setState({ seat, ready: message.ready });
+      if (players.every(player => player?.state.ready)) {
+        this.match = {
+          id: crypto.randomUUID(), difficulty: this.difficulty, phase: 'playing', score: 0,
+          inputs: this.slots.map(player => player.input)
+        };
+        for (const player of players) player.setState({ seat: player.state.seat, ready: false });
+        this.frame = null;
+        this.lastFrameAt = 0;
+        this.lastGuestFireAt = 0;
+        await this.ctx.storage.setAlarm(Date.now() + ROOM_LIFETIME_MS);
+      }
+      await this.checkpoint();
+      this.publish();
+      return;
+    }
+
+    if (message.type === 'leave') {
+      this.slots[seat] = null;
+      connection.setState(null);
+      this.finish();
+      await this.checkpoint();
+      connection.close(1000, 'Left room');
+      this.publish();
+      return;
+    }
+
+    if (this.match?.phase !== 'playing' || message.roundId !== this.match.id) return;
+
+    if (message.type === 'finish' && seat === 0) {
+      this.finish();
+      await this.checkpoint();
+      this.publish();
+      return;
+    }
+
+    if (!players.every(Boolean)) return;
+
+    if (message.type === 'frame' && seat === 0 && isOnlineFrame(message.data)) {
+      const now = Date.now();
+      if (now - this.lastFrameAt < 45) return;
+      this.lastFrameAt = now;
+      this.frame = message.data;
+      this.send(players[1], raw);
+      if (now - this.lastSavedAt >= CHECKPOINT_INTERVAL) await this.checkpoint();
+    }
+
+    if (message.type === 'fire' && seat === 1) {
+      const gaze = this.match.inputs[seat] === 'gaze';
+      if (gaze && (!Number.isSafeInteger(message.targetId) || message.targetId < 1)) return;
+      const now = Date.now();
+      if (now - this.lastGuestFireAt < (gaze ? 750 : 75)) return;
+      this.lastGuestFireAt = now;
+      this.send(players[0], { type: 'fire', roundId: this.match.id, seat, targetId: message.targetId });
+    }
+  }
+
+  finish() {
+    if (this.match?.phase !== 'playing') return;
+    this.match.phase = 'finished';
+    this.match.score = this.frame?.score ?? 0;
+    this.frame = null;
+  }
+
+  async onClose(connection) {
+    if (!connection.state) return;
+    if (this.match?.phase === 'playing') await this.checkpoint();
+    this.publish(connection.id);
+  }
+
+  async onAlarm() {
+    this.slots = null;
+    this.match = null;
+    this.frame = null;
+    this.difficulty = 'normal';
+    for (const connection of this.getConnections()) this.reject(connection, 'missing');
+    await this.ctx.storage.deleteAll();
+  }
+
+  checkpoint() {
+    this.lastSavedAt = Date.now();
+    return this.ctx.storage.put({ ...this.seatStorage(), match: this.match, frame: this.frame });
+  }
+
+  publish(except) {
+    if (!this.slots) return;
+    const players = this.connectedPlayers(except);
+    const phase = this.match?.phase === 'playing' && !players.every(Boolean) ? 'paused' : this.match?.phase ?? 'lobby';
+    const message = JSON.stringify({
+      type: 'state', phase, difficulty: this.difficulty, round: this.match, hasFrame: Boolean(this.frame),
+      players: this.slots.map((player, i) => ({
+        connected: Boolean(players[i]), ready: players[i]?.state.ready ?? false, input: player?.input ?? null
+      }))
+    });
+    for (const player of players) if (player) this.send(player, message);
   }
 }

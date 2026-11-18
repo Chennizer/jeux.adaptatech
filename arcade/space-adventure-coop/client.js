@@ -1,378 +1,334 @@
 import { copy } from './copy.js';
-import { createField } from './field.js';
-import { DWELL_MS, GAME_PATH, INPUT_MODES, PARTIES_PATH, ROOM_ALPHABET, ROOM_CODE } from './protocol.js';
+import {
+  DIFFICULTIES, DWELL_MS, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, ONLINE_PARTIES_PATH,
+  ONLINE_WORLD, ROOM_ALPHABET, ROOM_CODE
+} from './protocol.js';
 
 const get = id => document.getElementById(id);
-const field = createField(get('field'), fire);
 const defaultWorker = 'space-adventure-coop.gui98789.workers.dev';
 const siteDomains = ['www.adaptatech.org', 'adaptatech.org'];
-const playerCards = [get('player-1'), get('player-2')];
-const inputButtons = [...document.querySelectorAll('[data-input]')];
-const inviteValue = get('invite-value');
-const initialCode = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
-const settings = readStorage(localStorage, 'siteLanguage');
-let language = Object.hasOwn(copy, settings) ? settings : 'fr';
-let input = readStorage(localStorage, 'spaceAdventureCoopInput') === 'gaze' ? 'gaze' : 'switch';
-let sound = false;
-let socket = null;
-let session = null;
+const accessButtons = [...document.querySelectorAll('[data-access]')];
+const difficultyButtons = [...document.querySelectorAll('#stop-action-mode-segmented-control [data-mode]')];
+const playerRows = [...get('room-players').children];
+
+let input = localStorage.getItem('spaceAdventureCoopInput') === 'gaze' ? 'gaze' : 'switch';
+let difficulty = 'normal';
+let game;
+let session;
+let socket;
 let seat = null;
-let state = null;
-let authenticated = false;
+let state;
 let status = '';
-let reconnectTimer = null;
-let connectionAttempts = 0;
-let lastSnapshot = 0;
-let lastEffect = 0;
-let previousRound = null;
+let reconnectTimer;
+let attempts = 0;
+let activeRound;
+let incomingFrame;
+let lastPublishedAt = 0;
+let lastReceivedAt = 0;
+let readyPending = false;
 
-const music = new Audio('/songs/space/spacearcade1.mp3');
-music.loop = true;
-music.volume = .35;
-music.preload = 'none';
-const effects = {
-  fire: '/sounds/spaceadventure/missile.mp3',
-  destroy: '/sounds/spaceadventure/shipdestroyed.mp3',
-  breach: '/sounds/spaceadventure/shield.mp3'
+function text(key) {
+  return (copy[document.documentElement.lang] ?? copy.fr)[key] ?? '';
+}
+
+const online = {
+  ...ONLINE_WORLD,
+  frameInterval: FRAME_INTERVAL,
+  get input() { return input; },
+  get isHost() { return seat === 0; },
+  get inputs() { return state?.round?.inputs ?? [input, input]; },
+  get gazeField() { return this.inputs.every(mode => mode === 'gaze'); },
+  attach(engine) { game = engine; },
+  chooseDifficulty,
+  render,
+  ready,
+  fire(targetId) {
+    if (state?.phase !== 'playing' || !session?.connected) return;
+    if (this.isHost) game.fire(seat, targetId);
+    else send({ type: 'fire', roundId: activeRound, targetId });
+  },
+  publish(makeFrame) {
+    if (!this.isHost || state?.phase !== 'playing' || !session?.connected || socket?.bufferedAmount > 96_000) return;
+    const now = performance.now();
+    if (now - lastPublishedAt < FRAME_INTERVAL) return;
+    lastPublishedAt = now;
+    send({ type: 'frame', roundId: activeRound, data: makeFrame() });
+  },
+  finish() {
+    if (activeRound) send({ type: 'finish', roundId: activeRound });
+  }
 };
+window.spaceAdventureOnline = online;
 
-function readStorage(storage, name) {
-  try { return storage.getItem(name); } catch { return null; }
-}
-
-function writeStorage(storage, name, value) {
-  try {
-    if (value === null) storage.removeItem(name);
-    else storage.setItem(name, value);
-  } catch { /* the room still works with temporary browser storage */ }
-}
-
-function text(key) { return copy[language][key] ?? ''; }
-
-function setText(element, value) {
-  if (element.textContent !== value) element.textContent = value;
-}
-
-function updateLanguage() {
-  document.documentElement.lang = language;
-  get('language').value = language;
-  for (const element of document.querySelectorAll('[data-copy]')) setText(element, text(element.dataset.copy));
-  get('field').setAttribute('aria-label', text('field'));
-  inviteValue.setAttribute('aria-label', text(inviteValue.dataset.copyLabel));
-  render();
-}
-
-function render() {
-  const joined = seat !== null;
-  const phase = state?.phase;
-  const inGame = joined && ['playing', 'paused'].includes(phase);
-  const paused = inGame && (!authenticated || phase === 'paused');
-  const wasInGame = !get('mission').hidden;
-  const me = joined && state?.players[seat];
-  get('lobby').hidden = inGame;
-  get('mission').hidden = !inGame;
-  get('entry').hidden = joined;
-  get('room').hidden = !joined;
-  get('create').disabled = Boolean(session) && !joined;
-  get('join').querySelector('button').disabled = Boolean(session) && !joined;
-  get('controls').disabled = Boolean(session && (!authenticated || me?.ready));
-  for (const button of inputButtons) button.setAttribute('aria-pressed', String(button.dataset.input === input));
-
-  setText(get('status'), text(status || (joined && (state?.players.every(player => player.connected) ? 'bothReady' : 'waiting'))));
-  setText(get('sound'), text(sound ? 'soundOn' : 'soundOff'));
-  get('sound').setAttribute('aria-pressed', String(sound));
-
-  if (joined) {
-    get('room-code').textContent = session.code;
-    get('ready').disabled = !authenticated || !state;
-    setText(get('ready'), text(me?.ready ? 'unready' : 'ready'));
-    playerCards.forEach((card, i) => {
-      const player = state?.players[i];
-      card.classList.toggle('is-you', i === seat);
-      setText(card.querySelector('strong'), `${text(i === 0 ? 'p1' : 'p2')}${i === seat ? ` (${text('you')})` : ''}`);
-      const label = player?.connected ? `${text(player.input)} · ${text(player.ready ? 'readyState' : 'online')}` : text('absent');
-      setText(card.querySelector('.player-status'), label);
-    });
-  }
-
-  const finished = joined && phase === 'finished';
-  get('result').hidden = !finished;
-  if (finished) setText(get('result'), text('result').replace('{score}', state.round.score));
-
-  if (inGame) {
-    const { score, remaining } = state.round;
-    const seconds = Math.ceil(remaining / 1000);
-    setText(get('timer'), `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`);
-    setText(get('score'), String(score));
-    setText(get('ship'), text(seat === 0 ? 'blue' : 'red'));
-    setText(get('mission-hint'), text(input === 'switch' ? 'fireHint' : 'gazePlayHint'));
-    get('fire').hidden = input !== 'switch';
-    get('fire').disabled = paused;
-    get('pause').hidden = !paused;
-    if (paused) setText(get('pause'), text(authenticated ? 'paused' : 'reconnecting'));
-    if (!wasInGame) get('field').focus({ preventScroll: true });
-  } else if (wasInGame) {
-    field.hide();
-    if (joined) get('ready').focus();
-  }
-  if (!inGame || paused) music.pause();
-}
-
-function keyForRoom(code) {
-  const name = `spaceAdventureCoop.${code}`;
-  let key = readStorage(sessionStorage, name);
-  if (!key) {
-    key = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
-    writeStorage(sessionStorage, name, key);
-  }
-  return key;
-}
-
-function inviteLink(code) {
+function invite(code) {
   const url = new URL(GAME_PATH, location.origin);
-  url.searchParams.set('room', code);
+  if (code) url.searchParams.set('room', code);
   return url;
 }
 
 function connect(code, create = false) {
   if (session || !ROOM_CODE.test(code)) return;
-  session = { code, create, key: keyForRoom(code) };
+  const storageKey = `spaceAdventureCoop.online.${code}`;
+  const key = sessionStorage.getItem(storageKey) ??
+    Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+  sessionStorage.setItem(storageKey, key);
+  session = { code, key, storageKey, create };
   status = 'connecting';
-  connectionAttempts = 0;
+  attempts = 0;
   openSocket();
 }
 
 function openSocket() {
-  if (!session) return;
-  const { code, key, create } = session;
-  const url = new URL(`${PARTIES_PATH}${code}`, location.href);
+  const current = session;
+  if (!current) return;
+  const url = new URL(`${ONLINE_PARTIES_PATH}${current.code}`, location.href);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   if (siteDomains.includes(location.hostname) || location.hostname.endsWith('.netlify.app')) url.host = defaultWorker;
   const next = new WebSocket(url);
   socket = next;
-  render();
-
-  const timeout = setTimeout(() => {
-    if (socket === next && !authenticated) reconnect(next);
-  }, 5000);
-  next.addEventListener('open', () => {
-    if (socket === next) send({ type: 'hello', key, create, input });
-  });
-  next.addEventListener('message', event => {
+  const timeout = setTimeout(() => { if (!current.connected) next.close(); }, 5000);
+  next.addEventListener('open', () => send({
+    type: 'hello', key: current.key, create: current.create, input, difficulty
+  }));
+  next.addEventListener('message', ({ data }) => {
     if (socket !== next) return;
-    let message;
-    try { message = JSON.parse(event.data); } catch { return; }
-
+    const message = JSON.parse(data);
     if (message.type === 'error') {
-      const reason = { missing: 'missing', full: 'full', 'code-taken': 'taken' }[message.reason] ?? 'unavailable';
-      reset(reason, true);
+      reset(message.reason, true);
     } else if (message.type === 'welcome') {
       clearTimeout(timeout);
-      authenticated = true;
-      connectionAttempts = 0;
-      status = '';
-      const joining = seat === null;
+      current.connected = true;
+      current.create = false;
+      attempts = 0;
+      const changedSeat = seat !== message.seat;
       seat = message.seat;
-      session.create = false;
       input = message.input;
-      history.replaceState(null, '', inviteLink(code));
+      status = '';
+      history.replaceState(null, '', invite(current.code));
+      if (changedSeat) game.assignShip(seat === 0 ? 'blue' : 'red');
       render();
-      if (joining && state) get('ready').focus();
-    } else if (message.type === 'state' && authenticated) {
-      const firstState = !state;
-      receiveState(message);
-      if (firstState && ['lobby', 'finished'].includes(state.phase)) get('ready').focus();
+    } else if (message.type === 'state') {
+      if (message.phase === 'playing' && state?.phase !== 'playing') lastReceivedAt = performance.now();
+      state = message;
+      readyPending = false;
+      if (status === 'reconnecting') status = '';
+      render();
+    } else if (message.type === 'frame' && state?.round?.id === message.roundId) {
+      lastReceivedAt = performance.now();
+      incomingFrame = message.data;
+      if (activeRound === message.roundId && !online.isHost) game.receive(incomingFrame);
+      else render();
+    } else if (message.type === 'fire' && online.isHost && message.roundId === activeRound) {
+      game.fire(message.seat, message.targetId);
     }
   });
-
   next.addEventListener('close', event => {
     clearTimeout(timeout);
-    reconnect(next, event.code);
+    if (socket !== next) return;
+    current.connected = false;
+    socket = null;
+    game?.pause(true);
+    if (event.code === 4002) return reset('replaced');
+    if (attempts >= 5) return reset('unavailable');
+    status = seat === null ? 'connecting' : 'reconnecting';
+    reconnectTimer = setTimeout(openSocket, Math.min(5000, 500 * 2 ** attempts++));
+    render();
   });
-}
-
-function reconnect(next, code) {
-  if (socket !== next) return;
-  if (code === 4002) return reset('replaced', false);
-  if (connectionAttempts >= 5) return reset('unavailable', false);
-  socket = null;
-  next.close();
-  authenticated = false;
-  field.disable();
-  status = seat === null ? 'connecting' : 'reconnecting';
-  reconnectTimer = setTimeout(openSocket, Math.min(5000, 500 * (2 ** connectionAttempts++)));
   render();
-}
-
-function receiveState(message) {
-  const active = message.phase === 'playing';
-  const wasActive = state?.phase === 'playing' && status !== 'reconnecting';
-  state = message;
-  if (!active && message.players[seat]?.ready) input = message.players[seat].input;
-  if (status === 'connecting' || status === 'reconnecting') status = '';
-  lastSnapshot = Date.now();
-  render();
-  if (message.phase !== 'playing' && message.phase !== 'paused') return;
-
-  const round = message.round;
-  if (previousRound !== round.id) {
-    previousRound = round.id;
-    lastEffect = 0;
-    music.currentTime = 0;
-  }
-  const freshEffects = round.effects.filter(effect => effect.id > lastEffect);
-  for (const effect of freshEffects) {
-    lastEffect = effect.id;
-    if (sound && active) {
-      const audio = new Audio(effects[effect.kind]);
-      audio.volume = .45;
-      audio.play().catch(() => {});
-    }
-  }
-  field.update(round, seat, input, active, freshEffects);
-  if (active && sound && (!wasActive || music.paused)) music.play().catch(() => {});
 }
 
 function send(message) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+  if (socket?.readyState !== WebSocket.OPEN) return false;
   socket.send(JSON.stringify(message));
   return true;
 }
 
-function fire(targetId) {
-  if (!authenticated || state?.phase !== 'playing' || typeof targetId === 'number' && input !== 'gaze') return false;
-  return send({ type: 'fire', targetId });
-}
-
 function reset(reason = '', forget = false) {
   clearTimeout(reconnectTimer);
-  if (forget && session) writeStorage(sessionStorage, `spaceAdventureCoop.${session.code}`, null);
+  if (forget && session) sessionStorage.removeItem(session.storageKey);
   const previous = socket;
   socket = null;
   session = null;
   seat = null;
   state = null;
-  previousRound = null;
-  authenticated = false;
+  activeRound = null;
+  incomingFrame = null;
+  readyPending = false;
   status = reason;
   previous?.close();
-  inviteValue.hidden = true;
-  field.hide();
+  get('room-share-value').hidden = true;
+  game?.lobby();
   render();
 }
 
 function leave() {
   send({ type: 'leave' });
-  history.replaceState(null, '', GAME_PATH);
-  get('code').value = '';
+  history.replaceState(null, '', invite());
+  get('room-input').value = '';
   reset('', true);
-  get('create').focus();
+  get('create-room').focus();
 }
 
-get('language').addEventListener('change', event => {
-  language = event.target.value;
-  writeStorage(localStorage, 'siteLanguage', language);
-  updateLanguage();
-});
+function chooseDifficulty(mode) {
+  if (!DIFFICULTIES.includes(mode) || seat === 1) return;
+  difficulty = mode;
+  if (session?.connected && state?.phase === 'lobby') send({ type: 'difficulty', difficulty });
+}
 
-for (const button of inputButtons) button.addEventListener('click', () => {
-  if (!INPUT_MODES.includes(button.dataset.input)) return;
-  input = button.dataset.input;
-  writeStorage(localStorage, 'spaceAdventureCoopInput', input);
-  if (authenticated && state?.phase !== 'playing' && state?.phase !== 'paused') send({ type: 'ready', input, ready: false });
+function ready() {
+  const me = state?.players[seat];
+  if (!session?.connected || !me || readyPending || !game?.loaded || !state.players.every(player => player.connected)) return;
+  if (state.phase === 'finished' && me.ready) return;
+  if (!['lobby', 'finished'].includes(state.phase)) return;
+  readyPending = send({ type: 'ready', input, ready: !me.ready });
+  status = '';
+  render();
+}
+
+function render() {
+  const joined = seat !== null;
+  const me = state?.players[seat];
+  const phase = state?.phase ?? 'lobby';
+  const inGame = phase === 'playing' || phase === 'paused';
+  const paused = inGame && (phase === 'paused' || !session?.connected);
+  const finished = phase === 'finished';
+  const canReady = Boolean(game?.loaded && session?.connected && !readyPending && state?.players.every(player => player.connected));
+  get('room-entry').hidden = joined;
+  get('room-info').hidden = !joined;
+  get('create-room').disabled = Boolean(session);
+  get('join-room-button').disabled = Boolean(session);
+  get('room-code').textContent = session?.code ?? '';
+  get('room-status').textContent = text(status || (joined && state?.players.some(player => !player.connected) ? 'waiting' : ''));
+  get('exit-room').hidden = !inGame && !finished;
+  get('online-pause').hidden = !paused;
+  if (paused) get('online-pause').textContent = text(session?.connected ? 'paused' : 'reconnecting');
+
+  for (const button of accessButtons) {
+    const selected = button.dataset.access === input;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    button.disabled = Boolean(session && (!session.connected || me?.ready || inGame));
+  }
+  for (const button of difficultyButtons) button.disabled = seat === 1 || inGame || Boolean(me?.ready);
+  if (game && state?.difficulty) {
+    difficulty = state.difficulty;
+    game.setDifficulty(difficulty);
+  }
+
+  const readyButton = get('control-panel-start-button');
+  readyButton.disabled = !canReady || inGame;
+  readyButton.textContent = text(!game?.loaded ? 'loading' : me?.ready ? 'cancel' : 'ready');
+  get('continue-button').disabled = !canReady || Boolean(me?.ready);
+  get('continue-button').textContent = text(me?.ready ? 'retryWaiting' : 'retry');
+  if (finished) get('retry-hint').textContent = text(me?.ready ? 'retryWaiting' : (input === 'gaze' ? 'retry' : ''));
+
+  state?.players.forEach((player, i) => {
+    const ship = text(i === 0 ? 'blue' : 'red');
+    const name = i === seat ? `${ship} (${text('you')})` : ship;
+    const detail = player.connected ? `${text(player.input)} · ${text(player.ready ? 'ready' : 'connected')}` : text('absent');
+    const label = `${name} · ${detail}`;
+    if (playerRows[i].textContent !== label) playerRows[i].textContent = label;
+  });
+
+  if (!game?.loaded || !state?.round) return;
+  if (inGame && activeRound !== state.round.id) {
+    if (state.hasFrame && !incomingFrame) return;
+    activeRound = state.round.id;
+    lastPublishedAt = 0;
+    game.start();
+    if (incomingFrame) game.receive(incomingFrame, online.isHost);
+    incomingFrame = null;
+  }
+  if (inGame) game.pause(paused);
+  if (finished) {
+    activeRound = null;
+    incomingFrame = null;
+    game.result(state.round.score);
+  }
+}
+
+async function copyRoom(kind) {
+  const current = session;
+  if (!current) return;
+  const value = kind === 'code' ? current.code : invite(current.code).href;
+  const copied = await navigator.clipboard?.writeText(value).then(() => true, () => false);
+  if (session !== current) return;
+  const fallback = get('room-share-value');
+  fallback.hidden = Boolean(copied);
+  if (!copied) {
+    fallback.value = value;
+    fallback.setAttribute('aria-label', text(kind));
+    fallback.select();
+  }
+  status = copied ? 'copied' : 'manual';
+  render();
+}
+
+for (const button of accessButtons) button.addEventListener('click', () => {
+  if (!INPUT_MODES.includes(button.dataset.access)) return;
+  input = button.dataset.access;
+  localStorage.setItem('spaceAdventureCoopInput', input);
+  if (session?.connected) send({ type: 'ready', input, ready: false });
   render();
 });
-
-get('create').addEventListener('click', () => {
+get('create-room').addEventListener('click', () => {
   const code = Array.from(crypto.getRandomValues(new Uint8Array(8)), byte => ROOM_ALPHABET[byte & 31]).join('');
   connect(code, true);
 });
-get('join').addEventListener('submit', event => {
+get('join-room').addEventListener('submit', event => {
   event.preventDefault();
-  const code = get('code').value.trim().toUpperCase();
+  const code = get('room-input').value.trim().toUpperCase();
   if (ROOM_CODE.test(code)) connect(code);
   else { status = 'invalid'; render(); }
 });
+get('copy-room-code').addEventListener('click', () => copyRoom('code'));
+get('copy-room-link').addEventListener('click', () => copyRoom('link'));
+get('leave-room').addEventListener('click', leave);
+get('exit-room').addEventListener('click', leave);
 
-get('ready').addEventListener('click', () => {
-  status = '';
-  if (state) send({ type: 'ready', input, ready: !state.players[seat].ready });
-});
-async function copyInvite(event) {
-  const room = session;
-  if (!room) return;
-  const isCode = event.currentTarget.id === 'copy-code';
-  const value = isCode ? room.code : inviteLink(room.code).href;
-  const copied = await navigator.clipboard?.writeText(value).then(() => true, () => false);
-  if (room !== session) return;
-  inviteValue.hidden = Boolean(copied);
-  if (copied) {
-    status = isCode ? 'codeCopied' : 'copied';
-  } else {
-    inviteValue.value = value;
-    inviteValue.dataset.copyLabel = isCode ? 'code' : 'link';
-    inviteValue.setAttribute('aria-label', text(inviteValue.dataset.copyLabel));
-    inviteValue.select();
-    status = isCode ? 'copyCodeManual' : 'copyManual';
-  }
-  render();
+let dwell;
+function clearDwell() {
+  if (!dwell) return;
+  cancelAnimationFrame(dwell.frame);
+  dwell.button.removeAttribute('data-dwelling');
+  dwell = null;
 }
-
-get('copy-code').addEventListener('click', copyInvite);
-get('copy').addEventListener('click', copyInvite);
-get('leave').addEventListener('click', leave);
-get('exit').addEventListener('click', leave);
-get('fire').addEventListener('click', () => fire());
-get('sound').addEventListener('click', () => {
-  sound = !sound;
-  if (sound && authenticated && state?.phase === 'playing') music.play().catch(() => {});
-  else music.pause();
-  render();
-});
-
-document.addEventListener('keydown', event => {
-  if (event.defaultPrevented || input !== 'switch' || state?.phase !== 'playing' ||
-      (event.code !== 'Space' && event.key !== 'Enter') || event.target.closest('button, input, select, a')) return;
-  event.preventDefault();
-  if (!event.repeat) fire();
-});
-
-let menuDwell = null;
-function clearMenuDwell() {
-  if (!menuDwell) return;
-  cancelAnimationFrame(menuDwell.frame);
-  menuDwell.button.removeAttribute('data-dwelling');
-  menuDwell = null;
-}
-
 document.addEventListener('pointerover', event => {
-  const button = event.target.closest('[data-dwell]');
-  if (button === menuDwell?.button) return;
-  clearMenuDwell();
-  if (!button || button.disabled || (input !== 'gaze' && button.dataset.input !== 'gaze') || event.pointerType === 'touch') return;
-  const dwell = { button, frame: 0, start: performance.now() };
-  menuDwell = dwell;
+  const button = event.target.closest('.online-room button, [data-access], #stop-action-mode-segmented-control button, #exit-room');
+  if (button === dwell?.button) return;
+  clearDwell();
+  if (!button || button.disabled || (input !== 'gaze' && button.dataset.access !== 'gaze') || event.pointerType === 'touch') return;
+  const start = performance.now();
+  dwell = { button, frame: 0 };
   button.setAttribute('data-dwelling', '');
-  const progress = now => {
-    if (menuDwell !== dwell || !button.matches(':hover') || button.disabled || !button.checkVisibility()) return clearMenuDwell();
-    const portion = Math.min(1, (now - dwell.start) / DWELL_MS);
-    button.style.setProperty('--dwell', `${portion * 100}%`);
-    if (portion < 1) dwell.frame = requestAnimationFrame(progress);
+  const step = now => {
+    if (!button.matches(':hover') || !button.checkVisibility() || button.disabled) return clearDwell();
+    const amount = Math.min(1, (now - start) / DWELL_MS);
+    button.style.setProperty('--dwell', `${amount * 100}%`);
+    if (amount < 1) dwell.frame = requestAnimationFrame(step);
     else button.click();
   };
-  dwell.frame = requestAnimationFrame(progress);
+  dwell.frame = requestAnimationFrame(step);
 });
 document.addEventListener('pointerout', event => {
-  if (menuDwell && !menuDwell.button.contains(event.relatedTarget)) clearMenuDwell();
+  if (dwell && !dwell.button.contains(event.relatedTarget)) clearDwell();
 });
-window.addEventListener('blur', clearMenuDwell);
-
+window.addEventListener('blur', clearDwell);
+window.addEventListener('offline', () => socket?.close());
+window.addEventListener('online', () => {
+  if (!session || socket) return;
+  clearTimeout(reconnectTimer);
+  openSocket();
+});
 setInterval(() => {
-  if (socket && authenticated && state?.phase === 'playing' && Date.now() - lastSnapshot > 4000) reconnect(socket);
+  if (seat === 1 && session?.connected && state?.phase === 'playing' &&
+      performance.now() - lastReceivedAt > 4500) socket?.close();
 }, 1000);
 
-updateLanguage();
+await import('../space-invaders-fruits/game.js');
+render();
+const initialCode = new URLSearchParams(location.search).get('room')?.toUpperCase() ?? '';
 if (ROOM_CODE.test(initialCode)) {
-  get('code').value = initialCode;
-  if (readStorage(sessionStorage, `spaceAdventureCoop.${initialCode}`)) connect(initialCode);
+  get('room-input').value = initialCode;
+  if (sessionStorage.getItem(`spaceAdventureCoop.online.${initialCode}`)) connect(initialCode);
 }

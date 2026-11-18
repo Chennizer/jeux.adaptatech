@@ -8,3 +8,9 @@ export const ROOM_CODE = /^[23456789A-HJ-NP-Z]{8}$/;
 export const INPUT_MODES = ['switch', 'gaze'];
 export const GAME_PATH = '/arcade/space-adventure-coop/';
 export const PARTIES_PATH = '/parties/game-room/';
+
+export const ONLINE_PARTIES_PATH = '/parties/online-room/';
+export const ONLINE_WORLD = { width: 1280, height: 720 };
+export const FRAME_INTERVAL = 100;
+export const MAX_FRAME_BYTES = 96_000;
+export const DIFFICULTIES = ['normal', 'hard', 'competitive'];
