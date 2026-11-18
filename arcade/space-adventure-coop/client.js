@@ -26,6 +26,7 @@ let reconnectTimer;
 let attempts = 0;
 let activeRound;
 let incomingFrame;
+let hostActed = false;
 let lastPublishedAt = 0;
 let lastReceivedAt = 0;
 let lastRequestedAt = 0;
@@ -57,15 +58,21 @@ const online = {
   },
   fire(targetId) {
     if (state?.phase !== 'playing' || !session?.connected) return;
-    if (this.isHost) game.fire(seat, targetId);
-    else send({ type: 'fire', roundId: activeRound, targetId });
+    if (this.isHost) {
+      game.fire(seat, targetId);
+      hostActed = true;
+    } else {
+      send({ type: 'fire', roundId: activeRound, targetId });
+    }
   },
   publish(makeFrame) {
     if (!this.isHost || state?.phase !== 'playing' || !session?.connected || socket?.bufferedAmount > 96_000) return;
     const now = performance.now();
     if (now - lastPublishedAt < FRAME_INTERVAL) return;
     lastPublishedAt = now;
-    send({ type: 'frame', roundId: activeRound, data: makeFrame() });
+    if (send({ type: 'frame', roundId: activeRound, activity: hostActed, data: makeFrame() })) {
+      hostActed = false;
+    }
   },
   finish() {
     if (activeRound) send({ type: 'finish', roundId: activeRound });
@@ -109,6 +116,10 @@ function openSocket() {
     pingSentAt = 0;
     const message = JSON.parse(data);
     if (message.type === 'error') {
+      if (message.reason === 'idle' || message.reason === 'reconnect-expired') {
+        history.replaceState(null, '', invite());
+        get('room-input').value = '';
+      }
       reset(message.reason, true);
     } else if (message.type === 'welcome') {
       clearTimeout(timeout);
@@ -170,6 +181,7 @@ function reset(reason = '', forget = false) {
   state = null;
   activeRound = null;
   incomingFrame = null;
+  hostActed = false;
   readyPending = false;
   status = reason;
   previous?.close();
@@ -251,7 +263,10 @@ function render() {
   readyButton.textContent = text(!game?.loaded ? 'loading' : me?.ready ? 'cancel' : 'ready');
   get('continue-button').disabled = !canReady || Boolean(me?.ready);
   get('continue-button').textContent = text(me?.ready ? 'retryWaiting' : 'retry');
-  if (finished) get('retry-hint').textContent = text(me?.ready ? 'retryWaiting' : (input === 'gaze' ? 'retry' : ''));
+  if (finished) {
+    const hint = state.round?.reason === 'idle' ? 'idleRound' : (input === 'gaze' ? 'retry' : '');
+    get('retry-hint').textContent = text(me?.ready ? 'retryWaiting' : hint);
+  }
 
   state?.players.forEach((player, i) => {
     const ship = text(i === 0 ? 'blue' : 'red');
@@ -266,6 +281,7 @@ function render() {
     if (state.hasFrame && !incomingFrame) return;
     activeRound = state.round.id;
     lastPublishedAt = 0;
+    hostActed = false;
     game.start();
     if (incomingFrame) game.receive(incomingFrame, online.isHost);
     incomingFrame = null;

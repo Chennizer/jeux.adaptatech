@@ -4,6 +4,8 @@ The online page shares the original Space Adventure engine, menu styles, ships, 
 
 The host runs the game engine in a shared 16:9 arena. The room relays the guest's inputs, mirrors the host's game state, and pauses when a player disconnects. Both players can replay from the results screen. Online scores stay in the room.
 
+An idle lobby closes after five minutes. A round ends after two minutes without player input, with one minute on the results screen to start a replay. A player who disconnects during a round has one minute to rejoin. The room closes immediately after both players leave.
+
 Run these commands from `workers/space-adventure-coop` with Node.js 22 or newer.
 
 ```sh

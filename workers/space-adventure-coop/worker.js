@@ -42,12 +42,11 @@ class RoomSeats extends Server {
 
   async join(connection, { key, create, input, difficulty }) {
     if (typeof key !== 'string' || !PLAYER_KEY.test(key) || !INPUT_MODES.includes(input)) return;
-    let created = false;
+    let initialAlarm = null;
     if (!this.slots) {
       if (create !== true) return this.reject(connection, 'missing');
       this.slots = [{ key, input }, null];
-      this.onCreate(difficulty);
-      created = true;
+      initialAlarm = this.onCreate(difficulty) ?? Date.now() + ROOM_LIFETIME_MS;
     }
 
     let seat = this.slots.findIndex(player => player?.key === key);
@@ -66,10 +65,10 @@ class RoomSeats extends Server {
     }
 
     const saved = this.ctx.storage.put(this.seatStorage());
-    if (created) await this.ctx.storage.setAlarm(Date.now() + ROOM_LIFETIME_MS);
+    if (initialAlarm !== null) await this.ctx.storage.setAlarm(initialAlarm);
     await saved;
     this.send(connection, { type: 'welcome', seat, input: this.slots[seat]?.input ?? input });
-    this.onPlayerJoin(connection);
+    await this.onPlayerJoin(connection);
   }
 
   connectedPlayers(except) {
@@ -236,6 +235,12 @@ export class GameRoom extends RoomSeats {
 }
 
 const CHECKPOINT_INTERVAL = 10_000;
+const IDLE_TIMEOUT_MS = {
+  lobby: 5 * 60_000,
+  playing: 2 * 60_000,
+  finished: 60_000,
+  reconnect: 60_000
+};
 
 function isOnlineFrame(frame) {
   return frame && typeof frame === 'object' && Number.isFinite(frame.now) &&
@@ -248,6 +253,7 @@ export class OnlineRoom extends RoomSeats {
   difficulty = 'normal';
   match = null;
   frame = null;
+  expiry = null;
   lastFrameAt = 0;
   lastFrameRequestAt = 0;
   lastSavedAt = 0;
@@ -255,22 +261,36 @@ export class OnlineRoom extends RoomSeats {
 
   async onStart() {
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(ROOM_PING, ROOM_PONG));
-    const stored = await this.ctx.storage.get(['slots', 'difficulty', 'match', 'frame']);
+    const stored = await this.ctx.storage.get(['slots', 'difficulty', 'match', 'frame', 'expiry']);
     this.slots = stored.get('slots') ?? null;
     this.difficulty = stored.get('difficulty') ?? 'normal';
     this.match = stored.get('match') ?? null;
     this.frame = stored.get('frame') ?? null;
+    this.expiry = stored.get('expiry') ?? null;
+    if (this.slots && !this.expiry) {
+      const phase = this.match?.phase ?? 'lobby';
+      const disconnected = phase === 'playing' && !this.connectedPlayers().every(Boolean);
+      await this.scheduleExpiry(disconnected ? 'reconnect' : phase);
+    }
   }
 
   onCreate(difficulty) {
     if (DIFFICULTIES.includes(difficulty)) this.difficulty = difficulty;
+    return this.renewExpiry('lobby');
   }
 
   seatStorage() {
-    return { slots: this.slots, difficulty: this.difficulty };
+    return { slots: this.slots, difficulty: this.difficulty, expiry: this.expiry };
   }
 
-  onPlayerJoin(connection) {
+  async onPlayerJoin(connection) {
+    const phase = this.match?.phase ?? 'lobby';
+    const bothConnected = this.connectedPlayers().every(Boolean);
+    if (phase === 'playing') {
+      if (bothConnected && this.expiry?.phase === 'reconnect') await this.scheduleExpiry('playing');
+    } else if (bothConnected || this.expiry?.phase === 'reconnect') {
+      await this.scheduleExpiry(phase);
+    }
     this.publish();
     if (this.frame && this.match?.phase === 'playing') {
       this.send(connection, { type: 'frame', roundId: this.match.id, data: this.frame });
@@ -294,7 +314,7 @@ export class OnlineRoom extends RoomSeats {
     if (message.type === 'difficulty' && seat === 0 && this.match?.phase !== 'playing') {
       if (!DIFFICULTIES.includes(message.difficulty) || connection.state.ready) return;
       this.difficulty = message.difficulty;
-      await this.checkpoint();
+      await this.scheduleExpiry(this.match?.phase ?? 'lobby');
       this.publish();
       return;
     }
@@ -313,9 +333,8 @@ export class OnlineRoom extends RoomSeats {
         this.lastFrameAt = 0;
         this.lastFrameRequestAt = 0;
         this.lastGuestFireAt = 0;
-        await this.ctx.storage.setAlarm(Date.now() + ROOM_LIFETIME_MS);
       }
-      await this.checkpoint();
+      await this.scheduleExpiry(this.match?.phase ?? 'lobby');
       this.publish();
       return;
     }
@@ -323,9 +342,13 @@ export class OnlineRoom extends RoomSeats {
     if (message.type === 'leave') {
       this.slots[seat] = null;
       connection.setState(null);
-      this.finish();
-      await this.checkpoint();
       connection.close(1000, 'Left room');
+      if (!this.slots.some(Boolean)) {
+        await this.closeRoom('idle');
+        return;
+      }
+      this.finish();
+      await this.scheduleExpiry(this.match?.phase ?? 'lobby');
       this.publish();
       return;
     }
@@ -334,7 +357,7 @@ export class OnlineRoom extends RoomSeats {
 
     if (message.type === 'finish' && seat === 0) {
       this.finish();
-      await this.checkpoint();
+      await this.scheduleExpiry('finished');
       this.publish();
       return;
     }
@@ -354,7 +377,7 @@ export class OnlineRoom extends RoomSeats {
       this.lastFrameAt = now;
       this.frame = message.data;
       this.send(players[1], raw);
-      if (now - this.lastSavedAt >= CHECKPOINT_INTERVAL) await this.checkpoint();
+      await this.saveProgress(now, message.activity === true);
     }
 
     if (message.type === 'fire' && seat === 1) {
@@ -364,28 +387,77 @@ export class OnlineRoom extends RoomSeats {
       if (now - this.lastGuestFireAt < (gaze ? 750 : 75)) return;
       this.lastGuestFireAt = now;
       this.send(players[0], { type: 'fire', roundId: this.match.id, seat, targetId: message.targetId });
+      await this.saveProgress(now, true);
     }
   }
 
-  finish() {
+  async saveProgress(now, activity) {
+    // Coalesce renewals so the deadline survives hibernation without a write for every input.
+    const activityAt = Math.ceil(now / CHECKPOINT_INTERVAL) * CHECKPOINT_INTERVAL;
+    const extended = activity && this.expiry.at < activityAt + IDLE_TIMEOUT_MS.playing;
+    if (extended) this.renewExpiry('playing', activityAt);
+    if (now - this.lastSavedAt >= CHECKPOINT_INTERVAL) {
+      await this.checkpoint();
+    } else if (extended) {
+      await this.ctx.storage.put('expiry', this.expiry);
+    }
+  }
+
+  finish(reason) {
     if (this.match?.phase !== 'playing') return;
     this.match.phase = 'finished';
     this.match.score = this.frame?.score ?? 0;
+    if (reason) this.match.reason = reason;
     this.frame = null;
   }
 
   async onClose(connection) {
-    if (!connection.state) return;
-    if (this.match?.phase === 'playing') await this.checkpoint();
+    if (!connection.state || !this.slots) return;
+    const remaining = this.connectedPlayers(connection.id);
+    if (this.expiry?.phase !== 'reconnect') {
+      if (this.match?.phase === 'playing' || (!remaining.some(Boolean) &&
+          this.expiry?.at > Date.now() + IDLE_TIMEOUT_MS.reconnect)) {
+        await this.scheduleExpiry('reconnect');
+      }
+    }
     this.publish(connection.id);
   }
 
   async onAlarm() {
+    if (!this.expiry) return;
+    if (this.expiry.at > Date.now()) {
+      await this.ctx.storage.setAlarm(this.expiry.at);
+      return;
+    }
+    if (this.expiry.phase === 'playing') {
+      this.finish('idle');
+      await this.scheduleExpiry('finished');
+      this.publish();
+      return;
+    }
+    await this.closeRoom(this.expiry.phase === 'reconnect' ? 'reconnect-expired' : 'idle');
+  }
+
+  renewExpiry(phase, now = Date.now()) {
+    this.expiry = { phase, at: now + IDLE_TIMEOUT_MS[phase] };
+    return this.expiry.at;
+  }
+
+  async scheduleExpiry(phase) {
+    const at = this.renewExpiry(phase);
+    await Promise.all([this.ctx.storage.setAlarm(at), this.checkpoint()]);
+  }
+
+  async closeRoom(reason) {
     this.slots = null;
     this.match = null;
     this.frame = null;
+    this.expiry = null;
     this.difficulty = 'normal';
-    for (const connection of this.getConnections()) this.reject(connection, 'missing');
+    for (const connection of this.getConnections()) {
+      if (connection.state) this.reject(connection, reason);
+    }
+    await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
   }
 
