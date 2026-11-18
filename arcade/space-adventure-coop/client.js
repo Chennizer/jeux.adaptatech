@@ -1,7 +1,7 @@
 import { copy } from './copy.js';
 import {
   DIFFICULTIES, DWELL_MS, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, ONLINE_PARTIES_PATH,
-  ONLINE_WORLD, ROOM_ALPHABET, ROOM_CODE
+  ONLINE_WORLD, ROOM_ALPHABET, ROOM_CODE, ROOM_PING
 } from './protocol.js';
 
 const get = id => document.getElementById(id);
@@ -10,6 +10,9 @@ const siteDomains = ['www.adaptatech.org', 'adaptatech.org'];
 const accessButtons = [...document.querySelectorAll('[data-access]')];
 const difficultyButtons = [...document.querySelectorAll('#stop-action-mode-segmented-control [data-mode]')];
 const playerRows = [...get('room-players').children];
+const fullscreenButton = get('fullscreen-room');
+const PING_AFTER_MS = 8000;
+const PING_TIMEOUT_MS = 8000;
 
 let input = localStorage.getItem('spaceAdventureCoopInput') === 'gaze' ? 'gaze' : 'switch';
 let difficulty = 'normal';
@@ -25,6 +28,9 @@ let activeRound;
 let incomingFrame;
 let lastPublishedAt = 0;
 let lastReceivedAt = 0;
+let lastRequestedAt = 0;
+let lastMessageAt = 0;
+let pingSentAt = 0;
 let readyPending = false;
 
 function text(key) {
@@ -42,6 +48,13 @@ const online = {
   chooseDifficulty,
   render,
   ready,
+  requestFrame() {
+    if (seat !== 1 || document.hidden || state?.phase !== 'playing' || !session?.connected) return;
+    const now = performance.now();
+    if (now - lastReceivedAt < FRAME_INTERVAL * 2 || now - lastRequestedAt < FRAME_INTERVAL) return;
+    lastRequestedAt = now;
+    send({ type: 'frame-request', roundId: activeRound });
+  },
   fire(targetId) {
     if (state?.phase !== 'playing' || !session?.connected) return;
     if (this.isHost) game.fire(seat, targetId);
@@ -92,6 +105,8 @@ function openSocket() {
   }));
   next.addEventListener('message', ({ data }) => {
     if (socket !== next) return;
+    lastMessageAt = performance.now();
+    pingSentAt = 0;
     const message = JSON.parse(data);
     if (message.type === 'error') {
       reset(message.reason, true);
@@ -120,6 +135,8 @@ function openSocket() {
       else render();
     } else if (message.type === 'fire' && online.isHost && message.roundId === activeRound) {
       game.fire(message.seat, message.targetId);
+    } else if (message.type === 'frame-request' && online.isHost && message.roundId === activeRound) {
+      game.advanceBackgroundFrame();
     }
   });
   next.addEventListener('close', event => {
@@ -156,6 +173,7 @@ function reset(reason = '', forget = false) {
   readyPending = false;
   status = reason;
   previous?.close();
+  if (document.fullscreenElement === document.documentElement) document.exitFullscreen().catch(() => {});
   get('room-share-value').hidden = true;
   game?.lobby();
   render();
@@ -180,9 +198,21 @@ function ready() {
   if (!session?.connected || !me || readyPending || !game?.loaded || !state.players.every(player => player.connected)) return;
   if (state.phase === 'finished' && me.ready) return;
   if (!['lobby', 'finished'].includes(state.phase)) return;
+  if (!me.ready) enterFullscreen();
   readyPending = send({ type: 'ready', input, ready: !me.ready });
   status = '';
   render();
+}
+
+function enterFullscreen() {
+  if (!document.fullscreenEnabled || document.fullscreenElement || navigator.userActivation?.isActive === false) return;
+  document.documentElement.requestFullscreen().catch(() => {});
+}
+
+function renderFullscreenButton() {
+  const phase = state?.phase;
+  fullscreenButton.hidden = !document.fullscreenEnabled || Boolean(document.fullscreenElement) ||
+    (phase !== 'playing' && phase !== 'paused');
 }
 
 function render() {
@@ -200,6 +230,7 @@ function render() {
   get('room-code').textContent = session?.code ?? '';
   get('room-status').textContent = text(status || (joined && state?.players.some(player => !player.connected) ? 'waiting' : ''));
   get('exit-room').hidden = !inGame && !finished;
+  renderFullscreenButton();
   get('online-pause').hidden = !paused;
   if (paused) get('online-pause').textContent = text(session?.connected ? 'paused' : 'reconnecting');
 
@@ -285,6 +316,8 @@ get('copy-room-code').addEventListener('click', () => copyRoom('code'));
 get('copy-room-link').addEventListener('click', () => copyRoom('link'));
 get('leave-room').addEventListener('click', leave);
 get('exit-room').addEventListener('click', leave);
+fullscreenButton.addEventListener('click', enterFullscreen);
+document.addEventListener('fullscreenchange', renderFullscreenButton);
 
 let dwell;
 function clearDwell() {
@@ -294,7 +327,7 @@ function clearDwell() {
   dwell = null;
 }
 document.addEventListener('pointerover', event => {
-  const button = event.target.closest('.online-room button, [data-access], #stop-action-mode-segmented-control button, #exit-room');
+  const button = event.target.closest('.online-room button, [data-access], #stop-action-mode-segmented-control button, .online-play-controls button');
   if (button === dwell?.button) return;
   clearDwell();
   if (!button || button.disabled || (input !== 'gaze' && button.dataset.access !== 'gaze') || event.pointerType === 'touch') return;
@@ -320,9 +353,19 @@ window.addEventListener('online', () => {
   clearTimeout(reconnectTimer);
   openSocket();
 });
+document.addEventListener('visibilitychange', () => {
+  lastMessageAt = performance.now();
+  pingSentAt = 0;
+});
 setInterval(() => {
-  if (seat === 1 && session?.connected && state?.phase === 'playing' &&
-      performance.now() - lastReceivedAt > 4500) socket?.close();
+  if (document.hidden || !session?.connected || socket?.readyState !== WebSocket.OPEN) return;
+  const now = performance.now();
+  if (pingSentAt) {
+    if (now - pingSentAt >= PING_TIMEOUT_MS) socket.close();
+  } else if (now - lastMessageAt >= PING_AFTER_MS) {
+    pingSentAt = now;
+    socket.send(ROOM_PING);
+  }
 }, 1000);
 
 await import('../space-invaders-fruits/game.js');

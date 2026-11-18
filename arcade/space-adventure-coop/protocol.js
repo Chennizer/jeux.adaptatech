@@ -13,4 +13,6 @@ export const ONLINE_PARTIES_PATH = '/parties/online-room/';
 export const ONLINE_WORLD = { width: 1280, height: 720 };
 export const FRAME_INTERVAL = 100;
 export const MAX_FRAME_BYTES = 96_000;
+export const ROOM_PING = '{"type":"ping"}';
+export const ROOM_PONG = '{"type":"pong"}';
 export const DIFFICULTIES = ['normal', 'hard', 'competitive'];

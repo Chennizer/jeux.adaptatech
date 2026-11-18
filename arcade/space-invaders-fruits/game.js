@@ -1004,7 +1004,7 @@
         }
       }
 
-      if (usesGazeControls()) {
+      if (usesGazeControls() && (!online || !document.hidden)) {
         updateEyegazeDwell();
       }
     } else {
@@ -2513,7 +2513,7 @@
 
   function tick(ts) {
     if (!running) return;
-    if (pausedAt !== null) {
+    if (pausedAt !== null || (online?.isHost && document.hidden)) {
       rafId = requestAnimationFrame(tick);
       return;
     }
@@ -2529,11 +2529,29 @@
       interpolateOnlineFrame();
       updateFx(dt);
       if (!gameOverPending && usesGazeControls()) updateEyegazeDwell();
+      online.requestFrame();
     }
 
     drawFrame();
     if (online && running) online.publish(captureOnlineFrame);
     rafId = requestAnimationFrame(tick);
+  }
+
+  function advanceBackgroundFrame() {
+    if (!running || pausedAt !== null || !document.hidden) return;
+    const now = gameNow();
+    let remaining = Math.min(0.25, Math.max(0, (now - lastTs) / 1000));
+    lastTs = now;
+    hoveredEnemyId = null;
+    hoverStartAt = 0;
+    // The guest can ask for a frame while the browser pauses the host's animation loop.
+    while (running && remaining > 0) {
+      const step = Math.min(remaining, 1 / 60);
+      updateStars(step);
+      updateGame(step);
+      remaining -= step;
+    }
+    if (running) online.publish(captureOnlineFrame);
   }
 
   function drawFrame() {
@@ -3101,6 +3119,7 @@
     start: startGame,
     pause: setOnlinePaused,
     receive: applyOnlineFrame,
+    advanceBackgroundFrame,
     fire: fireOnlinePlayer,
     result: showOnlineResult,
     lobby: returnToOnlineLobby

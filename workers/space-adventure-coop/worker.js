@@ -1,5 +1,8 @@
 import { Server, routePartykitRequest } from 'partyserver';
-import { DIFFICULTIES, GAME_PATH, INPUT_MODES, MAX_FRAME_BYTES, ONLINE_PARTIES_PATH, PARTIES_PATH, ROOM_CODE, SNAPSHOT_MS } from '../../arcade/space-adventure-coop/protocol.js';
+import {
+  DIFFICULTIES, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, MAX_FRAME_BYTES, ONLINE_PARTIES_PATH, PARTIES_PATH,
+  ROOM_CODE, ROOM_PING, ROOM_PONG, SNAPSHOT_MS
+} from '../../arcade/space-adventure-coop/protocol.js';
 import { createRound, finishRound, fire, snapshot, stepRound, STEP_MS } from './match.js';
 
 const ROOM_LIFETIME_MS = 2 * 60 * 60 * 1000;
@@ -246,10 +249,12 @@ export class OnlineRoom extends RoomSeats {
   match = null;
   frame = null;
   lastFrameAt = 0;
+  lastFrameRequestAt = 0;
   lastSavedAt = 0;
   lastGuestFireAt = 0;
 
   async onStart() {
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(ROOM_PING, ROOM_PONG));
     const stored = await this.ctx.storage.get(['slots', 'difficulty', 'match', 'frame']);
     this.slots = stored.get('slots') ?? null;
     this.difficulty = stored.get('difficulty') ?? 'normal';
@@ -306,6 +311,7 @@ export class OnlineRoom extends RoomSeats {
         for (const player of players) player.setState({ seat: player.state.seat, ready: false });
         this.frame = null;
         this.lastFrameAt = 0;
+        this.lastFrameRequestAt = 0;
         this.lastGuestFireAt = 0;
         await this.ctx.storage.setAlarm(Date.now() + ROOM_LIFETIME_MS);
       }
@@ -334,6 +340,13 @@ export class OnlineRoom extends RoomSeats {
     }
 
     if (!players.every(Boolean)) return;
+
+    if (message.type === 'frame-request' && seat === 1) {
+      const now = Date.now();
+      if (now - this.lastFrameAt < FRAME_INTERVAL || now - this.lastFrameRequestAt < FRAME_INTERVAL) return;
+      this.lastFrameRequestAt = now;
+      this.send(players[0], { type: 'frame-request', roundId: this.match.id });
+    }
 
     if (message.type === 'frame' && seat === 0 && isOnlineFrame(message.data)) {
       const now = Date.now();
