@@ -54,6 +54,8 @@
 
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
+  let arenaWidth;
+  let arenaHeight;
 
   const enemySprites = [];
   const enemyImagePaths = [
@@ -310,15 +312,27 @@
     menuStarsRafId = requestAnimationFrame(tickMenuStars);
   }
 
-  function resizeCanvas() {
-    canvas.width = online?.width ?? window.innerWidth;
-    canvas.height = online?.height ?? window.innerHeight;
-    player.y = canvas.height - 90;
-    if (player.x === 0) player.x = canvas.width * 0.5;
-    players.blue.y = canvas.height - 90;
-    players.red.y = canvas.height - 90;
-    players.blue.x = canvas.width * 0.28;
-    players.red.x = canvas.width * 0.72;
+  function resizeCanvas(resetPositions = !online) {
+    arenaWidth = online?.width ?? window.innerWidth;
+    arenaHeight = online?.height ?? window.innerHeight;
+    // Keep the online arena and its network coordinates fixed as the screen size changes.
+    const pixelScale = online ? Math.min(3, Math.max(1, canvas.clientWidth * window.devicePixelRatio / arenaWidth)) : 1;
+    const pixelWidth = Math.round(arenaWidth * pixelScale);
+    const pixelHeight = Math.round(arenaHeight * pixelScale);
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+    ctx.setTransform(pixelWidth / arenaWidth, 0, 0, pixelHeight / arenaHeight, 0, 0);
+    if (online) ctx.imageSmoothingQuality = 'high';
+    if (resetPositions) {
+      player.y = arenaHeight - 90;
+      if (player.x === 0) player.x = arenaWidth * 0.5;
+      players.blue.y = arenaHeight - 90;
+      players.red.y = arenaHeight - 90;
+      players.blue.x = arenaWidth * 0.28;
+      players.red.x = arenaWidth * 0.72;
+    }
     updateAmmoMeterLayout();
   }
 
@@ -326,8 +340,8 @@
     stars.length = 0;
     for (let i = 0; i < STAR_COUNT; i += 1) {
       stars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
+        x: Math.random() * arenaWidth,
+        y: Math.random() * arenaHeight,
         z: Math.random() * 1,
         size: 1 + Math.random() * 2.5
       });
@@ -338,9 +352,9 @@
     const speed = 160;
     for (const star of stars) {
       star.y += speed * (0.35 + star.z) * dt;
-      if (star.y > canvas.height + 4) {
+      if (star.y > arenaHeight + 4) {
         star.y = -8;
-        star.x = Math.random() * canvas.width;
+        star.x = Math.random() * arenaWidth;
         star.z = Math.random();
         star.size = 1 + Math.random() * 2.5;
       }
@@ -349,7 +363,7 @@
 
   function drawStars() {
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, arenaWidth, arenaHeight);
     for (const star of stars) {
       const alpha = 0.35 + star.z * 0.65;
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
@@ -682,7 +696,7 @@
 
       enemies.push({
         id: nextEnemyId++,
-        x: (online ? canvas.width : window.innerWidth) * lane,
+        x: (online ? arenaWidth : window.innerWidth) * lane,
         y: rowY,
         size: tileSize,
         speed: 0,
@@ -702,15 +716,15 @@
 
     const baseSpeed = 58;
     const speedMultiplier = difficulty === 'competitive' ? 1.5 : difficulty === 'hard' ? 1.25 : 1;
-    const switchSize = Math.max(120, canvas.width * SWITCH_ENEMY_VW);
+    const switchSize = Math.max(120, arenaWidth * SWITCH_ENEMY_VW);
     const isHeavyEnemy = type === 'tank' || type === 'laser';
     const enemySize = isHeavyEnemy
       ? switchSize * 1.5
       : switchSize * NORMAL_SWITCH_ENEMY_SIZE_MULTIPLIER;
     const actualSpeed = baseSpeed * speedMultiplier * (type === 'laser' ? 1.04 : 1);
-    const leftSafeZone = canvas.width * 0.1;
+    const leftSafeZone = arenaWidth * 0.1;
     const minX = Math.max(leftSafeZone + enemySize * 0.5, 30 + enemySize * 0.5);
-    const maxX = Math.max(minX, canvas.width - Math.max(60, enemySize * 0.5 + 20));
+    const maxX = Math.max(minX, arenaWidth - Math.max(60, enemySize * 0.5 + 20));
     const maxHp = getEnemyMaxHp({ type });
 
     enemies.push({
@@ -850,13 +864,13 @@
     }
 
     motionTime += dt;
-    const centerX = canvas.width * 0.5;
-    const horizontalRange = canvas.width / 12;
+    const centerX = arenaWidth * 0.5;
+    const horizontalRange = arenaWidth / 12;
     if (inputMode === 'switch2p') {
       player.x = centerX;
-      const sway = Math.sin(motionTime * 0.8) * (canvas.width / 30);
-      players.blue.x = canvas.width * 0.28 + sway;
-      players.red.x = canvas.width * 0.72 - sway;
+      const sway = Math.sin(motionTime * 0.8) * (arenaWidth / 30);
+      players.blue.x = arenaWidth * 0.28 + sway;
+      players.red.x = arenaWidth * 0.72 - sway;
     } else {
       player.x = centerX + Math.sin(motionTime * 0.6) * horizontalRange;
       players.blue.x = player.x;
@@ -907,7 +921,7 @@
       b.x += b.vx * dt;
       b.y += b.vy * dt;
 
-      if (b.y < -20 || b.y > canvas.height + 20 || b.x < -20 || b.x > canvas.width + 20) {
+      if (b.y < -20 || b.y > arenaHeight + 20 || b.x < -20 || b.x > arenaWidth + 20) {
         bullets.splice(i, 1);
       }
     }
@@ -962,7 +976,7 @@
           }
         }
 
-        if (usesGazeField() && e.y - e.size * 0.5 > canvas.height) {
+        if (usesGazeField() && e.y - e.size * 0.5 > arenaHeight) {
           enemies.splice(i, 1);
           if (loseLife()) return;
           continue;
@@ -1058,7 +1072,7 @@
 
   function getEyegazeRowY(rowIndex) {
     const size = getEyegazeTileSize();
-    const fieldTop = canvas.height * EYEGAZE_FIELD_TOP_RATIO;
+    const fieldTop = arenaHeight * EYEGAZE_FIELD_TOP_RATIO;
     const rows = getEyegazeRowCount();
     const clampedRow = Math.max(0, Math.min(rows - 1, rowIndex));
     return fieldTop + size * 0.5 + clampedRow * (size + EYEGAZE_ROW_GAP_PX);
@@ -1067,8 +1081,8 @@
   function getEyegazeTileSize() {
     const cols = getEyegazeColumnLanes().length;
     const rows = getEyegazeRowCount();
-    const byWidth = canvas.width * (cols === 2 ? 0.44 : 0.34);
-    const fieldHeight = canvas.height * EYEGAZE_FIELD_HEIGHT_RATIO;
+    const byWidth = arenaWidth * (cols === 2 ? 0.44 : 0.34);
+    const fieldHeight = arenaHeight * EYEGAZE_FIELD_HEIGHT_RATIO;
     const byHeight = (fieldHeight - EYEGAZE_ROW_GAP_PX * (rows - 1)) / rows;
     return Math.max(110, Math.min(byWidth, byHeight));
   }
@@ -1147,7 +1161,7 @@
     const flashStrength = flashActive ? Math.sin(Math.PI * flashProgress) : 0;
     const redBoost = Math.round(120 * flashStrength);
 
-    const gradient = ctx.createLinearGradient(0, y, canvas.width, y);
+    const gradient = ctx.createLinearGradient(0, y, arenaWidth, y);
     gradient.addColorStop(0, `rgba(${120 + redBoost}, 190, 255, 0.05)`);
     gradient.addColorStop(0.5, `rgba(${120 + redBoost}, ${190 - redBoost * 0.4}, ${255 - redBoost * 0.6}, ${0.6 + pulseStrength * 0.8})`);
     gradient.addColorStop(1, `rgba(${120 + redBoost}, 190, 255, 0.05)`);
@@ -1156,10 +1170,10 @@
     ctx.lineWidth = 3.5 + pulse * 1.2;
     ctx.beginPath();
     ctx.moveTo(12, y);
-    ctx.lineTo(canvas.width - 12, y);
+    ctx.lineTo(arenaWidth - 12, y);
     ctx.stroke();
 
-    const layerWidth = canvas.width - 24;
+    const layerWidth = arenaWidth - 24;
     const layerLeft = 12;
     const shieldDepth = 64;
     const shieldGrad = ctx.createLinearGradient(0, y, 0, y + shieldDepth);
@@ -1175,7 +1189,7 @@
     ctx.lineWidth = 7 + pulse * 2;
     ctx.beginPath();
     ctx.moveTo(12, y);
-    ctx.lineTo(canvas.width - 12, y);
+    ctx.lineTo(arenaWidth - 12, y);
     ctx.stroke();
     ctx.restore();
   }
@@ -1183,12 +1197,12 @@
   function getDangerLineY() {
     const cols = getEyegazeColumnLanes().length;
     const rows = getEyegazeRowCount();
-    const byWidth = canvas.width * (cols === 2 ? 0.44 : 0.34);
-    const legacyFieldHeight = canvas.height * EYEGAZE_LEGACY_FIELD_HEIGHT_RATIO;
+    const byWidth = arenaWidth * (cols === 2 ? 0.44 : 0.34);
+    const legacyFieldHeight = arenaHeight * EYEGAZE_LEGACY_FIELD_HEIGHT_RATIO;
     const legacyByHeight = (legacyFieldHeight - EYEGAZE_LEGACY_ROW_GAP_PX * (rows - 1)) / rows;
     const legacyTileSize = Math.max(110, Math.min(byWidth, legacyByHeight));
     const bottomRowCenterY =
-      canvas.height * EYEGAZE_LEGACY_FIELD_TOP_RATIO +
+      arenaHeight * EYEGAZE_LEGACY_FIELD_TOP_RATIO +
       legacyTileSize * 0.5 +
       (rows - 1) * (legacyTileSize + EYEGAZE_LEGACY_ROW_GAP_PX);
     return bottomRowCenterY + legacyTileSize * 0.5 + 18;
@@ -1205,8 +1219,8 @@
   function getPlayerRenderSize() {
     if (playerSprite.complete && playerSprite.naturalWidth > 0) {
       const aspectRatio = playerSprite.naturalHeight / playerSprite.naturalWidth || 0.8;
-      const baseShipWidth = Math.max(140, canvas.width * PLAYER_SHIP_VW);
-      const smallScreenScale = Math.max(0.9, Math.min(1, canvas.height / 1080));
+      const baseShipWidth = Math.max(140, arenaWidth * PLAYER_SHIP_VW);
+      const smallScreenScale = Math.max(0.9, Math.min(1, arenaHeight / 1080));
       const drawWidth = baseShipWidth * smallScreenScale;
       const drawHeight = drawWidth * aspectRatio;
       return { drawWidth, drawHeight };
@@ -1218,6 +1232,7 @@
     if (inputMode === 'switch2p') {
       drawSinglePlayerShip(players.blue, 'blue');
       drawSinglePlayerShip(players.red, 'red');
+      online?.positionPlayerNames(players.blue.x, players.red.x);
       return;
     }
     drawSinglePlayerShip(player, selectedShip);
@@ -1935,7 +1950,7 @@
 
     ctx.save();
     ctx.fillStyle = `rgba(255, 245, 210, ${0.16 * strength})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, arenaWidth, arenaHeight);
     ctx.restore();
   }
 
@@ -1947,21 +1962,21 @@
 
     ctx.save();
     const grad = ctx.createRadialGradient(
-      canvas.width * 0.5,
-      canvas.height * 0.72,
-      canvas.width * 0.08,
-      canvas.width * 0.5,
-      canvas.height * 0.55,
-      canvas.width * 0.8
+      arenaWidth * 0.5,
+      arenaHeight * 0.72,
+      arenaWidth * 0.08,
+      arenaWidth * 0.5,
+      arenaHeight * 0.55,
+      arenaWidth * 0.8
     );
     grad.addColorStop(0, 'rgba(255,0,0,0)');
     grad.addColorStop(1, `rgba(120,0,0,${vignetteAlpha})`);
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, arenaWidth, arenaHeight);
 
     const pulse = 0.08 + Math.sin(elapsed * 0.04) * 0.04;
     ctx.fillStyle = `rgba(255, 120, 90, ${Math.max(0.04, pulse)})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, arenaWidth, arenaHeight);
     ctx.restore();
   }
 
@@ -2030,8 +2045,8 @@
 
   function findEyegazeTarget() {
     const bounds = online && canvas.getBoundingClientRect();
-    const x = bounds ? (gazeX - bounds.left) * canvas.width / bounds.width : gazeX;
-    const y = bounds ? (gazeY - bounds.top) * canvas.height / bounds.height : gazeY;
+    const x = bounds ? (gazeX - bounds.left) * arenaWidth / bounds.width : gazeX;
+    const y = bounds ? (gazeY - bounds.top) * arenaHeight / bounds.height : gazeY;
     for (let i = enemies.length - 1; i >= 0; i -= 1) {
       const e = enemies[i];
       if ((!online && !e.eyegazeTile) || e.resolved || e.attackState) continue;
@@ -2468,10 +2483,10 @@
     if (inputMode !== 'eyegaze' && usesAmmoMeter()) {
       const shieldY = getDangerLineY();
       const barHeight = 180;
-      const availableSpace = Math.max(0, canvas.height - shieldY);
+      const availableSpace = Math.max(0, arenaHeight - shieldY);
       const arenaTop = shieldY + Math.max(0, (availableSpace - barHeight) / 2);
       const bounds = online && canvas.getBoundingClientRect();
-      const top = bounds ? bounds.top + arenaTop * bounds.height / canvas.height : arenaTop;
+      const top = bounds ? bounds.top + arenaTop * bounds.height / arenaHeight : arenaTop;
       ammoMeter.style.left = '20px';
       ammoMeter.style.top = `${top}px`;
       ammoMeter.style.transform = 'none';
@@ -2748,7 +2763,7 @@
       onlineEffects.length = 0;
       players.blue.cooldown = 0;
       players.red.cooldown = 0;
-      resizeCanvas();
+      resizeCanvas(true);
     }
     score = 0;
     lives = getStartingShields();
@@ -2768,7 +2783,7 @@
     gameOverPending = false;
     gameOverPendingAt = 0;
     normalModeEndsAt = difficulty === 'normal' ? gameNow() + NORMAL_MODE_DURATION_MS : 0;
-    player.x = canvas.width * 0.5;
+    player.x = arenaWidth * 0.5;
     running = true;
     updateHudLanguage();
     updateShipPanelLanguage();
@@ -3081,7 +3096,9 @@
   window.addEventListener('resize', () => {
     resizeCanvas();
     resizeMenuStarsCanvas();
-    if (!running) {
+    if (online && running) {
+      drawFrame();
+    } else if (!running) {
       drawStars();
       drawPlayer();
     }
@@ -3094,7 +3111,7 @@
     if (shieldsBarNode) createSegments(shieldsBarNode, 10);
   });
 
-  resizeCanvas();
+  resizeCanvas(true);
   loadSprites();
   makeStars();
   applyShipChoice('blue');

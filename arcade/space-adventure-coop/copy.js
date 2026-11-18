@@ -1,17 +1,17 @@
 export const copy = {
   fr: {
-    loading: 'Chargement…', ready: 'Prêt', cancel: 'Annuler', waiting: 'Partage le code ou le lien avec ton partenaire.',
+    loading: 'Chargement…', ready: 'Prêt', cancel: 'Annuler', waiting: 'Partage le code ou le lien avec le deuxième joueur.',
     absent: 'En attente', connected: 'Connecté', you: 'toi', switch: 'Contacteur', gaze: 'Regard',
     blue: 'Guardian Switch', red: 'Crimson Gaze', code: 'Code de la salle', link: 'Lien d’invitation',
     copied: 'Copié.', manual: 'Copie la valeur sélectionnée.', invalid: 'Saisis le code à huit caractères.',
     missing: 'Cette salle a expiré ou n’existe pas.', full: 'Cette salle est complète.',
     'code-taken': 'Ce code est déjà utilisé. Crée une autre salle.', replaced: 'Cette place est ouverte dans un autre onglet.',
     connecting: 'Connexion à la salle…', reconnecting: 'Connexion interrompue. Reconnexion…',
-    paused: 'En attente de ton partenaire…', unavailable: 'Impossible de joindre le serveur de jeu.',
+    paused: 'En attente du deuxième joueur…', unavailable: 'Impossible de joindre le serveur de jeu.',
     idle: 'La salle a été fermée après une période d’inactivité.',
     'reconnect-expired': 'La salle a fermé. Le délai de reconnexion est dépassé.',
     idleRound: 'La partie s’est terminée après deux minutes sans action.',
-    retry: 'Rejouer', retryWaiting: 'En attente de ton partenaire pour rejouer.'
+    retry: 'Rejouer', retryWaiting: 'En attente du deuxième joueur pour rejouer.'
   },
   en: {
     loading: 'Loading…', ready: 'Ready', cancel: 'Cancel', waiting: 'Share the code or invite link with your partner.',

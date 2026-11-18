@@ -1,7 +1,7 @@
 import { copy } from './copy.js';
 import {
   DIFFICULTIES, DWELL_MS, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, ONLINE_PARTIES_PATH,
-  ONLINE_WORLD, ROOM_ALPHABET, ROOM_CODE, ROOM_PING
+  ONLINE_WORLD, ROOM_ALPHABET, ROOM_CODE, ROOM_PING, cleanPlayerName
 } from './protocol.js';
 
 const get = id => document.getElementById(id);
@@ -10,6 +10,9 @@ const siteDomains = ['www.adaptatech.org', 'adaptatech.org'];
 const accessButtons = [...document.querySelectorAll('[data-access]')];
 const difficultyButtons = [...document.querySelectorAll('#stop-action-mode-segmented-control [data-mode]')];
 const playerRows = [...get('room-players').children];
+const pilotNames = [...document.querySelectorAll('.ship-card .pilot-name')];
+const gamePilotNames = [...get('game-pilot-names').children];
+const nameInput = get('player-name');
 const fullscreenButton = get('fullscreen-room');
 const PING_AFTER_MS = 8000;
 const PING_TIMEOUT_MS = 8000;
@@ -34,6 +37,8 @@ let lastMessageAt = 0;
 let pingSentAt = 0;
 let readyPending = false;
 
+nameInput.value = cleanPlayerName(localStorage.getItem('spaceAdventureCoopName'));
+
 function text(key) {
   return (copy[document.documentElement.lang] ?? copy.fr)[key] ?? '';
 }
@@ -45,6 +50,11 @@ const online = {
   get isHost() { return seat === 0; },
   get inputs() { return state?.round?.inputs ?? [input, input]; },
   get gazeField() { return this.inputs.every(mode => mode === 'gaze'); },
+  playerName(index) { return state?.players[index]?.name ?? ''; },
+  positionPlayerNames(blueX, redX) {
+    if (!gamePilotNames[0].hidden) gamePilotNames[0].style.left = `${100 * blueX / this.width}%`;
+    if (!gamePilotNames[1].hidden) gamePilotNames[1].style.left = `${100 * redX / this.width}%`;
+  },
   attach(engine) { game = engine; },
   chooseDifficulty,
   render,
@@ -88,6 +98,7 @@ function invite(code) {
 
 function connect(code, create = false) {
   if (session || !ROOM_CODE.test(code)) return;
+  saveName();
   const storageKey = `spaceAdventureCoop.online.${code}`;
   const key = sessionStorage.getItem(storageKey) ??
     Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -108,7 +119,7 @@ function openSocket() {
   socket = next;
   const timeout = setTimeout(() => { if (!current.connected) next.close(); }, 5000);
   next.addEventListener('open', () => send({
-    type: 'hello', key: current.key, create: current.create, input, difficulty
+    type: 'hello', key: current.key, create: current.create, input, difficulty, name: nameInput.value
   }));
   next.addEventListener('message', ({ data }) => {
     if (socket !== next) return;
@@ -129,6 +140,7 @@ function openSocket() {
       const changedSeat = seat !== message.seat;
       seat = message.seat;
       input = message.input;
+      if (changedSeat && typeof message.name === 'string') nameInput.value = message.name;
       status = '';
       history.replaceState(null, '', invite(current.code));
       if (changedSeat) game.assignShip(seat === 0 ? 'blue' : 'red');
@@ -239,6 +251,7 @@ function render() {
   get('room-info').hidden = !joined;
   get('create-room').disabled = Boolean(session);
   get('join-room-button').disabled = Boolean(session);
+  nameInput.disabled = Boolean(session && (!session.connected || me?.ready || phase !== 'lobby'));
   get('room-code').textContent = session?.code ?? '';
   get('room-status').textContent = text(status || (joined && state?.players.some(player => !player.connected) ? 'waiting' : ''));
   get('exit-room').hidden = !inGame && !finished;
@@ -268,11 +281,18 @@ function render() {
     get('retry-hint').textContent = text(me?.ready ? 'retryWaiting' : hint);
   }
 
-  state?.players.forEach((player, i) => {
+  pilotNames.forEach((badge, i) => {
+    const nickname = online.playerName(i);
+    for (const nameTag of [badge, gamePilotNames[i]]) {
+      nameTag.hidden = !nickname;
+      if (nameTag.textContent !== nickname) nameTag.textContent = nickname;
+    }
+    const player = state?.players[i];
+    if (!player) return;
     const ship = text(i === 0 ? 'blue' : 'red');
-    const name = i === seat ? `${ship} (${text('you')})` : ship;
+    const name = nickname ? `${nickname} · ${ship}` : ship;
     const detail = player.connected ? `${text(player.input)} · ${text(player.ready ? 'ready' : 'connected')}` : text('absent');
-    const label = `${name} · ${detail}`;
+    const label = `${name}${i === seat ? ` (${text('you')})` : ''} · ${detail}`;
     if (playerRows[i].textContent !== label) playerRows[i].textContent = label;
   });
 
@@ -318,6 +338,13 @@ for (const button of accessButtons) button.addEventListener('click', () => {
   if (session?.connected) send({ type: 'ready', input, ready: false });
   render();
 });
+function saveName() {
+  const name = cleanPlayerName(nameInput.value);
+  nameInput.value = name;
+  localStorage.setItem('spaceAdventureCoopName', name);
+  if (session?.connected && state?.phase === 'lobby' && name !== online.playerName(seat)) send({ type: 'name', name });
+}
+nameInput.addEventListener('change', saveName);
 get('create-room').addEventListener('click', () => {
   const code = Array.from(crypto.getRandomValues(new Uint8Array(8)), byte => ROOM_ALPHABET[byte & 31]).join('');
   connect(code, true);

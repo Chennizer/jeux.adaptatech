@@ -1,7 +1,7 @@
 import { Server, routePartykitRequest } from 'partyserver';
 import {
   DIFFICULTIES, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, MAX_FRAME_BYTES, ONLINE_PARTIES_PATH, PARTIES_PATH,
-  ROOM_CODE, ROOM_PING, ROOM_PONG, SNAPSHOT_MS
+  ROOM_CODE, ROOM_PING, ROOM_PONG, SNAPSHOT_MS, cleanPlayerName
 } from '../../arcade/space-adventure-coop/protocol.js';
 import { createRound, finishRound, fire, snapshot, stepRound, STEP_MS } from './match.js';
 
@@ -40,12 +40,12 @@ class RoomSeats extends Server {
 
   seatStorage() { return { slots: this.slots }; }
 
-  async join(connection, { key, create, input, difficulty }) {
+  async join(connection, { key, create, input, difficulty, name }) {
     if (typeof key !== 'string' || !PLAYER_KEY.test(key) || !INPUT_MODES.includes(input)) return;
     let initialAlarm = null;
     if (!this.slots) {
       if (create !== true) return this.reject(connection, 'missing');
-      this.slots = [{ key, input }, null];
+      this.slots = [{ key, input, name: cleanPlayerName(name) }, null];
       initialAlarm = this.onCreate(difficulty) ?? Date.now() + ROOM_LIFETIME_MS;
     }
 
@@ -55,7 +55,7 @@ class RoomSeats extends Server {
     if (seat < 0) {
       seat = this.slots.indexOf(null);
       if (seat < 0) return this.reject(connection, 'full');
-      this.slots[seat] = { key, input };
+      this.slots[seat] = { key, input, name: cleanPlayerName(name) };
     }
 
     connection.setState({ seat, ready: existing?.state.ready ?? false });
@@ -64,10 +64,11 @@ class RoomSeats extends Server {
       existing.close(4002, 'Player connected on another tab');
     }
 
+    const player = this.slots[seat];
     const saved = this.ctx.storage.put(this.seatStorage());
     if (initialAlarm !== null) await this.ctx.storage.setAlarm(initialAlarm);
     await saved;
-    this.send(connection, { type: 'welcome', seat, input: this.slots[seat]?.input ?? input });
+    this.send(connection, { type: 'welcome', seat, input: player.input, name: player.name ?? '' });
     await this.onPlayerJoin(connection);
   }
 
@@ -311,6 +312,16 @@ export class OnlineRoom extends RoomSeats {
     const { seat } = connection.state;
     const players = this.connectedPlayers();
 
+    if (message.type === 'name' && !this.match && !connection.state.ready && raw.length <= 512) {
+      if (typeof message.name !== 'string') return;
+      const name = cleanPlayerName(message.name);
+      if (name === (this.slots[seat].name ?? '')) return;
+      this.slots[seat].name = name;
+      await this.ctx.storage.put('slots', this.slots);
+      this.publish();
+      return;
+    }
+
     if (message.type === 'difficulty' && seat === 0 && this.match?.phase !== 'playing') {
       if (!DIFFICULTIES.includes(message.difficulty) || connection.state.ready) return;
       this.difficulty = message.difficulty;
@@ -473,7 +484,8 @@ export class OnlineRoom extends RoomSeats {
     const message = JSON.stringify({
       type: 'state', phase, difficulty: this.difficulty, round: this.match, hasFrame: Boolean(this.frame),
       players: this.slots.map((player, i) => ({
-        connected: Boolean(players[i]), ready: players[i]?.state.ready ?? false, input: player?.input ?? null
+        connected: Boolean(players[i]), ready: players[i]?.state.ready ?? false, input: player?.input ?? null,
+        name: player?.name ?? ''
       }))
     });
     for (const player of players) if (player) this.send(player, message);
