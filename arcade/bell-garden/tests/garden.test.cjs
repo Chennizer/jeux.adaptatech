@@ -8,6 +8,7 @@ const vm = require('node:vm');
 // Web Audio doubles. These checks do not substitute for browser or hardware QA.
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const artScript = fs.readFileSync(path.join(__dirname, '../garden-art.js'), 'utf8');
+const instrumentScript = fs.readFileSync(path.join(__dirname, '../garden-instrument.js'), 'utf8');
 const musicScript = fs.readFileSync(path.join(__dirname, '../garden-music.js'), 'utf8');
 const script = fs.readFileSync(path.join(__dirname, '../garden.js'), 'utf8');
 
@@ -180,6 +181,7 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, mus
     setInterval: (fn, delay) => schedule(fn, delay, delay), clearInterval: id => jobs.delete(id)
   };
   vm.runInNewContext(artScript, context);
+  vm.runInNewContext(instrumentScript, context);
   vm.runInNewContext(musicScript, context);
   vm.runInNewContext(script, context);
   const flowers = $('garden').children;
@@ -231,7 +233,7 @@ test('a pointer tap rings once; all six flowers have distinct notes and immediat
   assert.equal(new Set(fundamentals).size, 6);
   h.flowers[0].emit('click');
   assert.equal(h.played(), 7);
-  h.advance(1050);
+  h.advance(1850);
   assert.ok(h.flowers.every(flower => !flower.classList.contains('is-playing')));
 });
 
@@ -365,7 +367,7 @@ test('rapid playing has bounded polyphony, and menu volume/mute control the mast
 test('all menu translations and invisible flower names follow the shared language', () => {
   const h = harness();
   assert.ok(h.translated.every(e => typeof e.textContent === 'string' && e.textContent.length > 0));
-  assert.match(h.flowers[0].getAttribute('aria-label'), /Play bell C/);
+  assert.match(h.flowers[0].getAttribute('aria-label'), /Play flower note C/);
   h.click('language-toggle');
   assert.equal(h.document.documentElement.lang, 'ja');
   assert.equal(h.storage.get('siteLanguage'), 'ja');
@@ -503,7 +505,7 @@ test('music advances through the calm playlist and loops without restarting on e
   h.flowers[0].emit('pointerdown');
   assert.equal(player.playCalls, 1);
   assert.ok(Math.abs(player.volume - .025) < .00001);
-  h.advance(900);
+  h.advance(1800);
   assert.equal(player.volume, .1);
   player.emit('ended');
   assert.equal(player.src, '../../songs/zenitude/v5calmmusic2.mp3');
@@ -571,17 +573,17 @@ test('autoplay rejection does not loop through tracks or interrupt visual play',
   assert.equal(h.flowers[0].classList.contains('is-playing'), true);
 });
 
-test('the longer activation can be retriggered without ending the newest bounce early', () => {
+test('growth can be retriggered without ending the newest note response early', () => {
   const h = harness();
   h.start();
   const flower = h.flowers[0];
   flower.emit('pointerdown');
-  h.advance(800);
+  h.advance(1200);
   assert.equal(flower.classList.contains('is-playing'), true);
   flower.emit('pointerdown');
-  h.advance(800);
+  h.advance(1200);
   assert.equal(flower.classList.contains('is-playing'), true);
-  h.advance(250);
+  h.advance(650);
   assert.equal(flower.classList.contains('is-playing'), false);
   assert.equal(h.played(), 2);
 });
@@ -622,4 +624,19 @@ test('the old music default is lowered once and explicit custom levels are prese
   assert.equal(Number(custom.$('music-volume').value), 35);
   const chosen = harness({ saved: { musicVolume: 20, musicMixVersion: 2 } });
   assert.equal(Number(chosen.$('music-volume').value), 20);
+});
+
+test('the flower keeps growing through its sounding note and settles after the voice ends', () => {
+  const h = harness();
+  h.start();
+  const flower = h.flowers[2];
+  flower.emit('pointerdown');
+  h.advance(1500);
+  assert.equal(flower.classList.contains('is-playing'), true);
+  assert.ok(h.audioContexts[0].oscillators.some(voice => !voice.ended));
+  assert.ok(Math.abs(h.$('garden-music').volume - .025) < .00001);
+  h.advance(350);
+  assert.equal(flower.classList.contains('is-playing'), false);
+  assert.ok(h.audioContexts[0].oscillators.every(voice => voice.ended && voice.disconnected));
+  assert.equal(h.$('garden-music').volume, .1);
 });

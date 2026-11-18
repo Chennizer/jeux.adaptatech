@@ -4,7 +4,7 @@
 
   const kinds = Object.freeze([
     { name: 'bell', light: '#ffb4c3', color: '#ff568b', shade: '#c92762', size: 158, crown: 1.18, cap: .86, fillRadius: 123 },
-    { name: 'daisy', light: '#fff5a3', color: '#ffd035', shade: '#e99911', size: 190, crown: 1.22, cap: .99, fillRadius: 116 },
+    { name: 'daisy', light: '#fff5a3', color: '#ffd035', shade: '#e99911', size: 190, crown: 1.22, cap: .88, fillRadius: 116 },
     { name: 'tulip', light: '#d4b5ff', color: '#a96af5', shade: '#7340bd', size: 148, crown: 1.06, cap: .81, fillRadius: 123 },
     { name: 'anemone', light: '#b0f6df', color: '#28d4b2', shade: '#099c89', size: 174, crown: 1.19, cap: .95, fillRadius: 116 },
     { name: 'poppy', light: '#ffd089', color: '#ff9146', shade: '#e45b30', size: 136, crown: 1.28, cap: .73, fillRadius: 131 },

@@ -87,12 +87,12 @@
         if (!wanted()) pause();
         else if (player.paused) play(true);
       },
-      duck() {
+      duck(durationMs = 900) {
         if (!wanted() || player.paused) return;
         clearTimeout(duckTimer);
         ducked = true;
         applyVolume();
-        duckTimer = setTimeout(() => { ducked = false; applyVolume(); }, 900);
+        duckTimer = setTimeout(() => { ducked = false; applyVolume(); }, durationMs);
       }
     });
   }

@@ -9,13 +9,13 @@
       dwellTime: 'Temps de fixation', scanTime: 'Intervalle de balayage', background: 'Fond',
       skyTheme: 'Jardin', darkTheme: 'Noir', lightTheme: 'Blanc', options: 'Options', volume: 'Volume des fleurs',
       music: 'Musique', musicVolume: 'Volume de la musique', musicUnavailable: 'La musique n’a pas pu démarrer. Réessayez en appuyant sur Commencer.',
-      mute: 'Couper les clochettes', gentleEffects: 'Réduire les animations', fullscreen: 'Plein écran',
+      mute: 'Couper les notes des fleurs', gentleEffects: 'Réduire les animations', fullscreen: 'Plein écran',
       start: 'Commencer', resume: 'Reprendre', backToArcade: 'Retour à l’arcade',
       tapHint: 'Touchez une fleur. Clavier : flèches puis Espace, ou touches 1 à 6.',
       gazeHint: 'Fixez une fleur pour la faire chanter. Regardez ailleurs pour la rejouer.',
       scanHint: 'Espace : jouer la fleur illuminée. La sélection avance automatiquement.',
       stepHint: 'Entrée : fleur suivante. Espace : jouer la fleur illuminée.',
-      flowerGroup: 'Fleurs musicales', playNote: 'Jouer la clochette', language: 'Changer la langue',
+      flowerGroup: 'Fleurs musicales', playNote: 'Jouer la note', language: 'Changer la langue',
       soundUnavailable: 'Le son n’a pas pu démarrer. Appuyez sur Commencer pour réessayer.',
       notes: ['Do', 'Ré', 'Mi', 'Sol', 'La', 'Do aigu']
     },
@@ -26,13 +26,13 @@
       dwellTime: 'Dwell time', scanTime: 'Scanning interval', background: 'Background',
       skyTheme: 'Garden', darkTheme: 'Black', lightTheme: 'White', options: 'Options', volume: 'Flower volume',
       music: 'Music', musicVolume: 'Music volume', musicUnavailable: 'Music couldn’t start. Press Start to try again.',
-      mute: 'Mute the bells', gentleEffects: 'Reduce animations', fullscreen: 'Fullscreen',
+      mute: 'Mute flower notes', gentleEffects: 'Reduce animations', fullscreen: 'Fullscreen',
       start: 'Start', resume: 'Resume', backToArcade: 'Back to the arcade',
       tapHint: 'Touch a flower. Keyboard: arrows then Space, or keys 1–6.',
       gazeHint: 'Look at a flower to make it sing. Look away before playing it again.',
       scanHint: 'Space: play the glowing flower. The glow moves automatically.',
       stepHint: 'Enter: next flower. Space: play the glowing flower.',
-      flowerGroup: 'Musical flowers', playNote: 'Play bell', language: 'Change language',
+      flowerGroup: 'Musical flowers', playNote: 'Play flower note', language: 'Change language',
       soundUnavailable: 'Sound couldn’t start. Press Start to try again.',
       notes: ['C', 'D', 'E', 'G', 'A', 'High C']
     },
@@ -43,13 +43,13 @@
       dwellTime: '注視時間', scanTime: 'スキャン間隔', background: '背景',
       skyTheme: '庭', darkTheme: '黒', lightTheme: '白', options: '設定', volume: '花の音量',
       music: '音楽', musicVolume: '音楽の音量', musicUnavailable: '音楽を開始できませんでした。「開始」を押して再試行してください。',
-      mute: 'ベルを消音', gentleEffects: 'アニメーションを減らす', fullscreen: '全画面',
+      mute: '花の音を消す', gentleEffects: 'アニメーションを減らす', fullscreen: '全画面',
       start: '開始', resume: '再開', backToArcade: 'アーケードに戻る',
       tapHint: '花に触れてください。矢印キーで選び、スペースキーで演奏。1〜6キーでも演奏できます。',
       gazeHint: '花を見つめて音を鳴らしましょう。同じ花を鳴らすには一度視線を外してください。',
       scanHint: 'スペースキーで光っている花を演奏します。光は自動で次の花へ移動します。',
       stepHint: 'Enter：次の花。スペース：光っている花を演奏。',
-      flowerGroup: '音楽の花', playNote: 'ベルを演奏', language: '言語を変更',
+      flowerGroup: '音楽の花', playNote: '花の音を演奏', language: '言語を変更',
       soundUnavailable: '音を開始できませんでした。「開始」を押して再試行してください。',
       notes: ['ド', 'レ', 'ミ', 'ソ', 'ラ', '高いド']
     }
@@ -61,7 +61,7 @@
   const screen = $('game-screen');
   const modeButtons = ['mode-tap', 'mode-gaze', 'mode-switch'].map($);
   const flowers = [];
-  const frequencies = [261.63, 293.66, 329.63, 392, 440, 523.25];
+  const instrument = window.BellGardenInstrument;
   const art = window.BellGardenArt;
   const animationTimers = new Map();
   const voices = new Set();
@@ -118,6 +118,7 @@
     button.style.setProperty('--plant-size', kind.size);
     button.style.setProperty('--crown-factor', kind.crown);
     button.style.setProperty('--height-cap', kind.cap);
+    button.style.setProperty('--note-duration', instrument.durationMs + 'ms');
     button.style.setProperty('--sway-duration', [8.2, 9.1, 7.8, 8.8, 9.6, 8.5][index] + 's');
     button.style.setProperty('--sway-delay', [-3.2, -6.1, -1.8, -4.7, -2.4, -5.5][index] + 's');
     button.style.setProperty('--sway-angle', [1.2, 1.5, .9, 1.4, 1.6, 1.3][index] + 'deg');
@@ -258,12 +259,12 @@
     voices.forEach(voice => voice.stop());
   }
 
-  function ringBell(index) {
+  function playPlantNote(index) {
     if (!ensureAudio()) return;
     // Bound overlapping voices, including rapid switch presses and multi-touch.
     if (voices.size >= 12) voices.values().next().value.stop();
     const nodes = [];
-    let remaining = 4;
+    let remaining = instrument.partials.length;
     let stopped = false;
     const voice = {
       stop() {
@@ -278,14 +279,14 @@
       }
     };
     voices.add(voice);
-    [[1, .27, 2.2], [2.756, .09, 1.45], [5.404, .035, .8], [8.933, .012, .45]].forEach(([ratio, level, duration]) => {
+    instrument.partials.forEach(({ ratio, level, attack, decay }) => {
       const oscillator = audio.createOscillator();
       const gain = audio.createGain();
       oscillator.type = 'sine';
-      oscillator.frequency.value = frequencies[index] * ratio;
+      oscillator.frequency.value = instrument.frequencies[index] * ratio;
       gain.gain.setValueAtTime(0, audio.currentTime);
-      gain.gain.linearRampToValueAtTime(level, audio.currentTime + .008);
-      gain.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + duration);
+      gain.gain.linearRampToValueAtTime(level, audio.currentTime + attack);
+      gain.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + decay);
       oscillator.connect(gain);
       gain.connect(master);
       oscillator.onended = () => {
@@ -295,7 +296,7 @@
       };
       nodes.push([oscillator, gain]);
       oscillator.start();
-      oscillator.stop(audio.currentTime + duration + .05);
+      oscillator.stop(audio.currentTime + decay + .05);
     });
   }
 
@@ -309,13 +310,13 @@
     animationTimers.set(flower, setTimeout(() => {
       flower.classList.remove('is-playing');
       animationTimers.delete(flower);
-    }, 1050));
+    }, instrument.durationMs + 50));
   }
 
   function playFlower(index) {
     if (!canPlay()) return;
-    ringBell(index);
-    if (!$('mute-toggle').checked) music.duck();
+    playPlantNote(index);
+    if (!$('mute-toggle').checked) music.duck(instrument.durationMs);
     animateFlower(index);
     if (mode !== 'scan') selectFlower(index, mode === 'step');
   }
