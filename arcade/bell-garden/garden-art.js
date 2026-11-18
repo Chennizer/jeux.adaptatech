@@ -3,12 +3,12 @@
   'use strict';
 
   const kinds = Object.freeze([
-    { name: 'bell', light: '#ffb4c3', color: '#ff568b', shade: '#c92762', size: 158, crown: 1.18, cap: .86 },
-    { name: 'daisy', light: '#fff5a3', color: '#ffd035', shade: '#e99911', size: 190, crown: 1.22, cap: .99 },
-    { name: 'tulip', light: '#d4b5ff', color: '#a96af5', shade: '#7340bd', size: 148, crown: 1.06, cap: .81 },
-    { name: 'anemone', light: '#b0f6df', color: '#28d4b2', shade: '#099c89', size: 174, crown: 1.19, cap: .95 },
-    { name: 'poppy', light: '#ffd089', color: '#ff9146', shade: '#e45b30', size: 136, crown: 1.28, cap: .73 },
-    { name: 'cosmos', light: '#ffc5e9', color: '#f369bd', shade: '#c23991', size: 180, crown: 1.13, cap: .90 }
+    { name: 'bell', light: '#ffb4c3', color: '#ff568b', shade: '#c92762', size: 158, crown: 1.18, cap: .86, fillRadius: 123 },
+    { name: 'daisy', light: '#fff5a3', color: '#ffd035', shade: '#e99911', size: 190, crown: 1.22, cap: .99, fillRadius: 116 },
+    { name: 'tulip', light: '#d4b5ff', color: '#a96af5', shade: '#7340bd', size: 148, crown: 1.06, cap: .81, fillRadius: 123 },
+    { name: 'anemone', light: '#b0f6df', color: '#28d4b2', shade: '#099c89', size: 174, crown: 1.19, cap: .95, fillRadius: 116 },
+    { name: 'poppy', light: '#ffd089', color: '#ff9146', shade: '#e45b30', size: 136, crown: 1.28, cap: .73, fillRadius: 131 },
+    { name: 'cosmos', light: '#ffc5e9', color: '#f369bd', shade: '#c23991', size: 180, crown: 1.13, cap: .90, fillRadius: 100 }
   ]);
 
   function crown(index) {
@@ -70,9 +70,19 @@
         '<path d="M125 137H154M140 124V151M130 126L150 146M127 148L152 127" stroke="#e9ad45" stroke-width="3" stroke-linecap="round"/>';
     }
 
+    // Reuse the painted silhouette so highlights never spill into the button area.
+    const maskId = 'garden-flower-mask-' + kind.name;
+    const glowId = 'garden-flower-glow-' + kind.name;
+    const silhouette = shape.replace(/fill="(?!none")[^"]*"/g, 'fill="#fff"').replace(/stroke="(?!none")[^"]*"/g, 'stroke="#fff"');
     return '<svg class="flower-crown" viewBox="0 0 280 280" aria-hidden="true"><defs>' +
       '<linearGradient id="' + id + '" x1=".15" y1="0" x2=".85" y2="1"><stop stop-color="' + kind.light + '"/><stop offset=".5" stop-color="' + kind.color + '"/><stop offset="1" stop-color="' + kind.shade + '"/></linearGradient>' +
-      '</defs>' + shape + '</svg>';
+      '<radialGradient id="' + glowId + '"><stop stop-color="#fffdf0"/><stop offset=".7" stop-color="#ffedbc"/><stop offset="1" stop-color="#ffe09a"/></radialGradient>' +
+      '<mask id="' + maskId + '" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="0" y="0" width="280" height="280">' + silhouette + '</mask>' +
+      '</defs><g class="flower-artwork">' + shape + '</g>' +
+      '<g class="flower-highlight" mask="url(#' + maskId + ')">' +
+      '<rect class="scan-highlight" x="0" y="0" width="280" height="280" fill="url(#' + glowId + ')" opacity="0"/>' +
+      '<circle class="gaze-highlight" cx="140" cy="140" r="' + kind.fillRadius + '" fill="url(#' + glowId + ')" stroke="#fff9e7" stroke-width="2.5" opacity="0"/>' +
+      '</g></svg>';
   }
 
   const stemPaths = [
@@ -118,7 +128,7 @@
 
   function flower(index) {
     return '<span class="plant" aria-hidden="true"><span class="plant-sway"><span class="flower-response">' +
-      stem(index) + crown(index) + '</span></span>' + roots() + '</span><span class="dwell-fill" aria-hidden="true"></span>';
+      stem(index) + crown(index) + '</span></span>' + roots() + '</span>';
   }
 
   const art = Object.freeze({ kinds, crown, stem, roots, flower });

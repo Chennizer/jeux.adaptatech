@@ -1,11 +1,11 @@
-/* Quiet, local spring/summer accompaniment, independent of the bell synth. */
+/* Gentle local accompaniment, independent of the bell synth. */
 (() => {
   'use strict';
 
   const tracks = Object.freeze([
-    '../../songs/spring/spring1.mp3',
-    '../../songs/spring/spring3.mp3',
-    '../../songs/season/summer1.mp3'
+    '../../songs/zenitude/v5calmmusic1.mp3',
+    '../../songs/zenitude/v5calmmusic2.mp3',
+    '../../songs/zenitude/v5calmmusic3.mp3'
   ]);
 
   function create(player, { canPlay, enabled, volume, onFailure }) {
@@ -17,7 +17,7 @@
     let ducked = false;
     let duckTimer = null;
     const wanted = () => canPlay() && enabled() && volume() > 0;
-    const applyVolume = () => { player.volume = Math.min(1, Math.max(0, volume())) * (ducked ? .35 : 1); };
+    const applyVolume = () => { player.volume = Math.min(1, Math.max(0, volume())) * (ducked ? .25 : 1); };
 
     function pause() {
       attempt++;

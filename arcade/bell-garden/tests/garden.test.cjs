@@ -231,7 +231,7 @@ test('a pointer tap rings once; all six flowers have distinct notes and immediat
   assert.equal(new Set(fundamentals).size, 6);
   h.flowers[0].emit('click');
   assert.equal(h.played(), 7);
-  h.advance(700);
+  h.advance(1050);
   assert.ok(h.flowers.every(flower => !flower.classList.contains('is-playing')));
 });
 
@@ -477,8 +477,8 @@ test('background music starts with play, preserves position across the menu, and
   assert.equal(player.playCalls, 0);
   h.start();
   assert.equal(player.paused, false);
-  assert.equal(player.volume, .2);
-  assert.equal(player.src, '../../songs/spring/spring1.mp3');
+  assert.equal(player.volume, .1);
+  assert.equal(player.src, '../../songs/zenitude/v5calmmusic1.mp3');
   player.currentTime = 24;
   h.click('settings-button');
   assert.equal(player.paused, true);
@@ -496,21 +496,21 @@ test('background music starts with play, preserves position across the menu, and
   assert.equal(player.paused, true);
 });
 
-test('music advances through the spring/summer playlist and loops without restarting on each note', () => {
+test('music advances through the calm playlist and loops without restarting on each note', () => {
   const h = harness();
   h.start();
   const player = h.$('garden-music');
   h.flowers[0].emit('pointerdown');
   assert.equal(player.playCalls, 1);
-  assert.ok(Math.abs(player.volume - .07) < .00001);
+  assert.ok(Math.abs(player.volume - .025) < .00001);
   h.advance(900);
-  assert.equal(player.volume, .2);
+  assert.equal(player.volume, .1);
   player.emit('ended');
-  assert.equal(player.src, '../../songs/spring/spring3.mp3');
+  assert.equal(player.src, '../../songs/zenitude/v5calmmusic2.mp3');
   player.emit('ended');
-  assert.equal(player.src, '../../songs/season/summer1.mp3');
+  assert.equal(player.src, '../../songs/zenitude/v5calmmusic3.mp3');
   player.emit('ended');
-  assert.equal(player.src, '../../songs/spring/spring1.mp3');
+  assert.equal(player.src, '../../songs/zenitude/v5calmmusic1.mp3');
   assert.equal(player.playCalls, 4);
 });
 
@@ -546,9 +546,9 @@ test('missing music tracks have bounded retries, report an accessible error, and
   h.start();
   const player = h.$('garden-music');
   player.emit('error');
-  assert.equal(player.src, '../../songs/spring/spring3.mp3');
+  assert.equal(player.src, '../../songs/zenitude/v5calmmusic2.mp3');
   player.emit('error');
-  assert.equal(player.src, '../../songs/season/summer1.mp3');
+  assert.equal(player.src, '../../songs/zenitude/v5calmmusic3.mp3');
   player.emit('error');
   assert.equal(player.paused, true);
   assert.equal(player.playCalls, 3);
@@ -569,4 +569,57 @@ test('autoplay rejection does not loop through tracks or interrupt visual play',
   assert.equal(h.$('music-notice').hidden, false);
   h.flowers[0].emit('pointerdown');
   assert.equal(h.flowers[0].classList.contains('is-playing'), true);
+});
+
+test('the longer activation can be retriggered without ending the newest bounce early', () => {
+  const h = harness();
+  h.start();
+  const flower = h.flowers[0];
+  flower.emit('pointerdown');
+  h.advance(800);
+  assert.equal(flower.classList.contains('is-playing'), true);
+  flower.emit('pointerdown');
+  h.advance(800);
+  assert.equal(flower.classList.contains('is-playing'), true);
+  h.advance(250);
+  assert.equal(flower.classList.contains('is-playing'), false);
+  assert.equal(h.played(), 2);
+});
+
+test('moving from scanning to gaze clears the selection and restarts progress on each visit', () => {
+  const h = harness({ mode: 'scan' });
+  h.start();
+  h.advance(1500);
+  assert.equal(h.flowers[1].classList.contains('is-selected'), true);
+  h.click('settings-button');
+  h.selectMode('gaze');
+  h.start();
+  assert.ok(h.flowers.every(flower => !flower.classList.contains('is-selected')));
+  const flower = h.flowers[1];
+  flower.emit('pointerenter', { pointerType: 'mouse' });
+  assert.equal(flower.classList.contains('is-dwelling'), true);
+  h.advance(600);
+  flower.emit('pointerleave');
+  assert.equal(flower.classList.contains('is-dwelling'), false);
+  flower.emit('pointerenter', { pointerType: 'mouse' });
+  h.advance(799);
+  assert.equal(h.played(), 0);
+  h.advance(1);
+  assert.equal(h.played(), 1);
+  assert.equal(flower.classList.contains('is-dwelling'), false);
+  assert.equal(flower.classList.contains('is-playing'), true);
+});
+
+test('the old music default is lowered once and explicit custom levels are preserved', () => {
+  const legacy = harness({ saved: { musicVolume: 20 } });
+  assert.equal(Number(legacy.$('music-volume').value), 10);
+  legacy.start();
+  assert.equal(legacy.$('garden-music').volume, .1);
+  const saved = JSON.parse(legacy.storage.get('bellGardenSettings'));
+  assert.equal(saved.musicMixVersion, 2);
+  assert.equal(saved.musicVolume, 10);
+  const custom = harness({ saved: { musicVolume: 35 } });
+  assert.equal(Number(custom.$('music-volume').value), 35);
+  const chosen = harness({ saved: { musicVolume: 20, musicMixVersion: 2 } });
+  assert.equal(Number(chosen.$('music-volume').value), 20);
 });

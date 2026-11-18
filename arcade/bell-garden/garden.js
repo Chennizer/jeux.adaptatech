@@ -13,8 +13,8 @@
       start: 'Commencer', resume: 'Reprendre', backToArcade: 'Retour à l’arcade',
       tapHint: 'Touchez une fleur. Clavier : flèches puis Espace, ou touches 1 à 6.',
       gazeHint: 'Fixez une fleur pour la faire chanter. Regardez ailleurs pour la rejouer.',
-      scanHint: 'Espace : jouer la fleur encadrée. Le cadre avance automatiquement.',
-      stepHint: 'Entrée : fleur suivante. Espace : jouer la fleur encadrée.',
+      scanHint: 'Espace : jouer la fleur illuminée. La sélection avance automatiquement.',
+      stepHint: 'Entrée : fleur suivante. Espace : jouer la fleur illuminée.',
       flowerGroup: 'Fleurs musicales', playNote: 'Jouer la clochette', language: 'Changer la langue',
       soundUnavailable: 'Le son n’a pas pu démarrer. Appuyez sur Commencer pour réessayer.',
       notes: ['Do', 'Ré', 'Mi', 'Sol', 'La', 'Do aigu']
@@ -30,8 +30,8 @@
       start: 'Start', resume: 'Resume', backToArcade: 'Back to the arcade',
       tapHint: 'Touch a flower. Keyboard: arrows then Space, or keys 1–6.',
       gazeHint: 'Look at a flower to make it sing. Look away before playing it again.',
-      scanHint: 'Space: play the outlined flower. The outline advances automatically.',
-      stepHint: 'Enter: next flower. Space: play the outlined flower.',
+      scanHint: 'Space: play the glowing flower. The glow moves automatically.',
+      stepHint: 'Enter: next flower. Space: play the glowing flower.',
       flowerGroup: 'Musical flowers', playNote: 'Play bell', language: 'Change language',
       soundUnavailable: 'Sound couldn’t start. Press Start to try again.',
       notes: ['C', 'D', 'E', 'G', 'A', 'High C']
@@ -47,8 +47,8 @@
       start: '開始', resume: '再開', backToArcade: 'アーケードに戻る',
       tapHint: '花に触れてください。矢印キーで選び、スペースキーで演奏。1〜6キーでも演奏できます。',
       gazeHint: '花を見つめて音を鳴らしましょう。同じ花を鳴らすには一度視線を外してください。',
-      scanHint: 'スペースキーで枠のある花を演奏します。枠は自動で移動します。',
-      stepHint: 'Enter：次の花。スペース：枠のある花を演奏。',
+      scanHint: 'スペースキーで光っている花を演奏します。光は自動で次の花へ移動します。',
+      stepHint: 'Enter：次の花。スペース：光っている花を演奏。',
       flowerGroup: '音楽の花', playNote: 'ベルを演奏', language: '言語を変更',
       soundUnavailable: '音を開始できませんでした。「開始」を押して再試行してください。',
       notes: ['ド', 'レ', 'ミ', 'ソ', 'ラ', '高いド']
@@ -90,6 +90,8 @@
       for (const [id, min, max, key] of [['dwell-time', 300, 2500, 'dwell'], ['scan-time', 600, 4000, 'scan'], ['volume', 0, 100, 'volume'], ['music-volume', 0, 100, 'musicVolume']]) {
         if (Number.isFinite(saved[key])) $(id).value = Math.min(max, Math.max(min, saved[key]));
       }
+      // Lower the previous default once, while retaining custom volume choices.
+      if (saved.musicMixVersion !== 2 && saved.musicVolume === 20) $('music-volume').value = '10';
       if (['sky', 'dark', 'light'].includes(saved.theme)) $('theme').value = saved.theme;
       for (const [id, key] of [['gentle-effects', 'gentle'], ['mute-toggle', 'muted'], ['fullscreen-toggle', 'fullscreen'], ['music-enabled', 'music']]) {
         if (typeof saved[key] === 'boolean') $(id).checked = saved[key];
@@ -307,7 +309,7 @@
     animationTimers.set(flower, setTimeout(() => {
       flower.classList.remove('is-playing');
       animationTimers.delete(flower);
-    }, 700));
+    }, 1050));
   }
 
   function playFlower(index) {
@@ -354,7 +356,7 @@
         mode, dwell: Number($('dwell-time').value), scan: Number($('scan-time').value),
         volume: Number($('volume').value), gentle: $('gentle-effects').checked,
         theme: $('theme').value, muted: $('mute-toggle').checked, fullscreen: $('fullscreen-toggle').checked,
-        music: $('music-enabled').checked, musicVolume: Number($('music-volume').value)
+        music: $('music-enabled').checked, musicVolume: Number($('music-volume').value), musicMixVersion: 2
       }));
     } catch (_) { /* Session settings still work without storage. */ }
   }
