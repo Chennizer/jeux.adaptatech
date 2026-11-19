@@ -172,7 +172,7 @@ function tick(time) {
     if (age >= 20) { setPlaying(false); announceAge(); }
   }
   paint(age, time);
-  if (playing || (galaxyStarted !== null && !reducedMotion.matches)) requestPaint();
+  if (playing || galaxyStarted !== null) requestPaint();
 }
 
 let yearlyAccumulator = 0;
@@ -522,16 +522,25 @@ async function initialize() {
       }
       if (active) { copy.style.left = `${textX}px`; copy.style.top = `${textY}px`; }
     }
+    const restingRotation = new THREE.Quaternion();
     function renderView(view) {
-      view.camera.zoom = reducedMotion.matches ? 1 : 1 + galaxyStrength * .06;
+      const moving = !reducedMotion.matches && galaxyStrength > 0;
+      restingRotation.copy(view.camera.quaternion);
+      if (moving) view.camera.rotateZ(Math.sin(galaxySeconds * 1.9) * .023 * galaxyStrength);
+      view.camera.zoom = moving ? 1 + galaxyStrength * (.055 + Math.sin(galaxySeconds * 3.4) * .02) : 1;
       view.camera.updateProjectionMatrix();
-      const bottom = height - view.top - view.height;
+      const bob = moving ? Math.sin(galaxySeconds * 1.8) * 3 * galaxyStrength : 0;
+      const bottom = height - view.top - view.height + bob;
       renderer.setViewport(view.left, bottom, view.width, view.height);
       renderer.setScissor(view.left, bottom, view.width, view.height);
       renderer.clearDepth();
       renderer.render(scene, view.camera);
+      if (moving) {
+        view.camera.quaternion.copy(restingRotation);
+        view.camera.updateMatrixWorld();
+      }
     }
-    let galaxyStrength = 0;
+    let galaxyStrength = 0, galaxySeconds = 0;
     paint = (value, time = performance.now()) => {
       if (stage.clientWidth !== width || stage.clientHeight !== height) {
         width = stage.clientWidth;
@@ -539,10 +548,11 @@ async function initialize() {
         renderer.setSize(width, height, false);
       }
       if (!width || !height) return;
-      const seconds = galaxyStarted === null ? 0 : (time - galaxyStarted) / 1000;
-      galaxyStrength = galaxyStarted === null ? 0 : reducedMotion.matches ? 1 : galaxyEnvelope(seconds);
-      galaxy.update(reducedMotion.matches ? 0 : seconds, galaxyStrength);
-      if (galaxyStarted !== null) $('experience').style.setProperty('--galaxy-strength', galaxyStrength.toFixed(4));
+      galaxySeconds = galaxyStarted === null ? 0 : (time - galaxyStarted) / 1000;
+      galaxyStrength = galaxyStarted === null ? 0 : galaxyEnvelope(galaxySeconds);
+      galaxy.update(galaxySeconds, galaxyStrength, !reducedMotion.matches);
+      const glow = galaxyStrength * (reducedMotion.matches ? 1 : .9 + .15 * Math.sin(galaxySeconds * 2.4));
+      if (galaxyStarted !== null) $('experience').style.setProperty('--galaxy-strength', glow.toFixed(4));
       ageUniform.value = value;
       const profile = profileValues;
       profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4], profile[5], profile[6]);
