@@ -4,6 +4,7 @@ import { buildSurfaceGraph } from './cortical-network.js';
 import { loadCerebellum, createCerebellum } from './cerebellum.js';
 import { insightForAge } from './age-insights.js';
 import { mountAgeDescriptions } from './age-descriptions.js';
+import { createGalaxyEffect, galaxyEnvelope, GALAXY_DURATION } from './galaxy-brain.js';
 import { mountResearch } from './research-evidence.js';
 import { BRAIN_PALETTE } from './colour-scale.js';
 import { PROFILE_DOMAINS, PROFILE_CORE_THRESHOLD, profileLevel, buildProfileInfluences, cerebellarProfileAdjustment } from './development-profiles.js';
@@ -25,6 +26,21 @@ let frame = 0;
 let previousTime = 0;
 let paint = () => {};
 let resetViews = () => {};
+const galaxyButton = $('galaxy');
+let galaxyStarted = null, galaxyTimer = 0;
+function setGalaxy(active) {
+  clearTimeout(galaxyTimer);
+  galaxyStarted = active ? performance.now() : null;
+  galaxyButton.setAttribute('aria-pressed', String(active));
+  galaxyButton.setAttribute('aria-label', active ? 'Arrêter l’effet Galaxy Brain' : 'Lancer l’effet Galaxy Brain');
+  $('experience').classList.toggle('galaxy-active', active);
+  if (active) {
+    setPlaying(false);
+    galaxyTimer = setTimeout(() => setGalaxy(false), GALAXY_DURATION);
+  } else $('experience').style.removeProperty('--galaxy-strength');
+  requestPaint();
+}
+galaxyButton.addEventListener('click', () => setGalaxy(galaxyStarted === null));
 const reperesButton = $('reperes');
 const ageDescriptions = mountAgeDescriptions({
   root: $('age-callout'), button: reperesButton, filter: $('repere-domain'),
@@ -155,8 +171,8 @@ function tick(time) {
     }
     if (age >= 20) { setPlaying(false); announceAge(); }
   }
-  paint(age);
-  if (playing) requestPaint();
+  paint(age, time);
+  if (playing || (galaxyStarted !== null && !reducedMotion.matches)) requestPaint();
 }
 
 let yearlyAccumulator = 0;
@@ -173,6 +189,7 @@ playButton.addEventListener('click', () => {
   if (!playing) announceAge();
 });
 $('reset').addEventListener('click', () => {
+  setGalaxy(false);
   setPlaying(false);
   currentPanel = null; profileValues.fill(0); updateProfileControls(); updatePanels();
   ageDescriptions.reset();
@@ -180,15 +197,16 @@ $('reset').addEventListener('click', () => {
   resetViews();
   announceAge();
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { setPlaying(false); } });
-$('information').addEventListener('click', () => { setPlaying(false); about.showModal(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { setPlaying(false); setGalaxy(false); } });
+$('information').addEventListener('click', () => { setPlaying(false); setGalaxy(false); about.showModal(); });
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !about.open && galaxyStarted !== null) setGalaxy(false);
   if (event.key === 'Escape' && !about.open && currentPanel) {
     const trigger = currentPanel === 'profile' ? profilesButton : reperesButton;
     currentPanel = null; updatePanels(); trigger.focus();
   }
 });
-reducedMotion.addEventListener('change', requestPaint);
+reducedMotion.addEventListener('change', () => { setGalaxy(false); requestPaint(); });
 $('close-about').addEventListener('click', () => about.close());
 about.addEventListener('click', (event) => {
   if (event.target !== about) return;
@@ -215,6 +233,7 @@ document.addEventListener('fullscreenchange', () => {
 $('retry').addEventListener('click', () => location.reload());
 
 function showFailure(message, error) {
+  setGalaxy(false);
   currentPanel = null;
   setPlaying(false);
   ready = false;
@@ -222,6 +241,7 @@ function showFailure(message, error) {
   playButton.disabled = true;
   $('reset').disabled = true;
   profilesButton.disabled = true;
+  galaxyButton.disabled = true;
   updatePanels();
   stage.setAttribute('aria-busy', 'false');
   $('loading').hidden = true;
@@ -330,6 +350,7 @@ async function initialize() {
     scene.add(mesh);
     const cerebellum = createCerebellum(THREE, cerebellumData, corticalCenter);
     scene.add(cerebellum.group);
+    const galaxy = createGalaxyEffect(THREE, scene, [material, ...cerebellum.meshes.map(mesh => mesh.material)], renderer.getPixelRatio());
     scene.add(new THREE.HemisphereLight(0xffffff, 0x888e7a, 2.1));
     const key = new THREE.DirectionalLight(0xfff7e8, 2.4);
     key.position.set(-130, 200, -220);
@@ -396,6 +417,7 @@ async function initialize() {
     }
     const projected = new THREE.Vector3();
     function prepareView(element, camera, baseHeight) {
+      camera.zoom = 1;
       const bounds = element.getBoundingClientRect();
       // Ignore floating-point noise from the translation when fitting cameras.
       const viewWidth = Math.round(bounds.width * 64) / 64;
@@ -501,19 +523,26 @@ async function initialize() {
       if (active) { copy.style.left = `${textX}px`; copy.style.top = `${textY}px`; }
     }
     function renderView(view) {
+      view.camera.zoom = reducedMotion.matches ? 1 : 1 + galaxyStrength * .06;
+      view.camera.updateProjectionMatrix();
       const bottom = height - view.top - view.height;
       renderer.setViewport(view.left, bottom, view.width, view.height);
       renderer.setScissor(view.left, bottom, view.width, view.height);
       renderer.clearDepth();
       renderer.render(scene, view.camera);
     }
-    paint = (value) => {
+    let galaxyStrength = 0;
+    paint = (value, time = performance.now()) => {
       if (stage.clientWidth !== width || stage.clientHeight !== height) {
         width = stage.clientWidth;
         height = stage.clientHeight;
         renderer.setSize(width, height, false);
       }
       if (!width || !height) return;
+      const seconds = galaxyStarted === null ? 0 : (time - galaxyStarted) / 1000;
+      galaxyStrength = galaxyStarted === null ? 0 : reducedMotion.matches ? 1 : galaxyEnvelope(seconds);
+      galaxy.update(reducedMotion.matches ? 0 : seconds, galaxyStrength);
+      if (galaxyStarted !== null) $('experience').style.setProperty('--galaxy-strength', galaxyStrength.toFixed(4));
       ageUniform.value = value;
       const profile = profileValues;
       profileA.set(profile[0], profile[1], profile[2]); profileB.set(profile[3], profile[4], profile[5], profile[6]);
@@ -546,6 +575,7 @@ async function initialize() {
     playButton.disabled = false;
     $('reset').disabled = false;
     profilesButton.disabled = !vertexLabels;
+    galaxyButton.disabled = false;
     if (!vertexLabels) profilesButton.title = 'Atlas anatomique indisponible. Rechargez la page pour réessayer.';
   } catch (error) {
     renderer?.dispose();
