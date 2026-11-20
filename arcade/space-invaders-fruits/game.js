@@ -1,3 +1,5 @@
+import { ONLINE_WORLD } from '../space-adventure-coop/protocol.js';
+
 (() => {
   const online = window.spaceAdventureOnline;
   const controlPanel = document.getElementById('control-panel');
@@ -24,10 +26,8 @@
   const gameOverScore = document.getElementById('game-over-score');
   const ammoMeter = document.getElementById('ammo-meter');
   const ammoMeterFill = document.getElementById('ammo-meter-fill');
-  const ammoMeterTrack = document.querySelector('#ammo-meter .ammo-meter-track');
   const ammoMeterRight = document.getElementById('ammo-meter-right');
   const ammoMeterFillRight = document.getElementById('ammo-meter-fill-right');
-  const ammoMeterTrackRight = document.querySelector('#ammo-meter-right .ammo-meter-track');
   const scoreRegisterPanel = document.getElementById('score-register-panel');
   const scoreUiLayout = document.getElementById('score-ui-layout');
   const scoreRegisterQuestion = document.getElementById('score-register-question');
@@ -54,8 +54,7 @@
 
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
-  let arenaWidth;
-  let arenaHeight;
+  const { width: arenaWidth, height: arenaHeight } = ONLINE_WORLD;
 
   const enemySprites = [];
   const enemyImagePaths = [
@@ -312,11 +311,9 @@
     menuStarsRafId = requestAnimationFrame(tickMenuStars);
   }
 
-  function resizeCanvas(resetPositions = !online) {
-    arenaWidth = online?.width ?? window.innerWidth;
-    arenaHeight = online?.height ?? window.innerHeight;
-    // Keep the online arena and its network coordinates fixed as the screen size changes.
-    const pixelScale = online ? Math.min(3, Math.max(1, canvas.clientWidth * window.devicePixelRatio / arenaWidth)) : 1;
+  function resizeCanvas(resetPositions = false) {
+    // Draw the same arena at the screen's pixel density in every game mode.
+    const pixelScale = Math.min(3, Math.max(1, canvas.clientWidth * window.devicePixelRatio / arenaWidth));
     const pixelWidth = Math.round(arenaWidth * pixelScale);
     const pixelHeight = Math.round(arenaHeight * pixelScale);
     if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
@@ -324,7 +321,7 @@
       canvas.height = pixelHeight;
     }
     ctx.setTransform(pixelWidth / arenaWidth, 0, 0, pixelHeight / arenaHeight, 0, 0);
-    if (online) ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = 'high';
     if (resetPositions) {
       player.y = arenaHeight - 90;
       if (player.x === 0) player.x = arenaWidth * 0.5;
@@ -696,7 +693,7 @@
 
       enemies.push({
         id: nextEnemyId++,
-        x: (online ? arenaWidth : window.innerWidth) * lane,
+        x: arenaWidth * lane,
         y: rowY,
         size: tileSize,
         speed: 0,
@@ -2044,9 +2041,10 @@
   }
 
   function findEyegazeTarget() {
-    const bounds = online && canvas.getBoundingClientRect();
-    const x = bounds ? (gazeX - bounds.left) * arenaWidth / bounds.width : gazeX;
-    const y = bounds ? (gazeY - bounds.top) * arenaHeight / bounds.height : gazeY;
+    const bounds = canvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return null;
+    const x = (gazeX - bounds.left) * arenaWidth / bounds.width;
+    const y = (gazeY - bounds.top) * arenaHeight / bounds.height;
     for (let i = enemies.length - 1; i >= 0; i -= 1) {
       const e = enemies[i];
       if ((!online && !e.eyegazeTile) || e.resolved || e.attackState) continue;
@@ -2479,51 +2477,15 @@
   }
 
   function updateAmmoMeterLayout() {
-    if (!ammoMeter || !ammoMeterTrack) return;
-    if (inputMode !== 'eyegaze' && usesAmmoMeter()) {
-      const shieldY = getDangerLineY();
-      const barHeight = 180;
-      const availableSpace = Math.max(0, arenaHeight - shieldY);
-      const arenaTop = shieldY + Math.max(0, (availableSpace - barHeight) / 2);
-      const bounds = online && canvas.getBoundingClientRect();
-      const top = bounds ? bounds.top + arenaTop * bounds.height / arenaHeight : arenaTop;
-      ammoMeter.style.left = '20px';
-      ammoMeter.style.top = `${top}px`;
-      ammoMeter.style.transform = 'none';
-      ammoMeterTrack.style.width = '56px';
-      ammoMeterTrack.style.height = `${barHeight}px`;
-      if (ammoMeterRight && ammoMeterTrackRight) {
-        ammoMeterRight.style.right = '20px';
-        ammoMeterRight.style.left = 'auto';
-        ammoMeterRight.style.top = `${top}px`;
-        ammoMeterRight.style.transform = 'none';
-        ammoMeterTrackRight.style.width = '56px';
-        ammoMeterTrackRight.style.height = `${barHeight}px`;
-      }
-      return;
-    }
-    ammoMeter.style.left = '20px';
-    ammoMeter.style.top = '50%';
-    ammoMeter.style.transform = 'translateY(-50%)';
-    ammoMeterTrack.style.width = '72px';
-    ammoMeterTrack.style.height = '260px';
-    if (ammoMeterRight && ammoMeterTrackRight) {
-      ammoMeterRight.style.right = '20px';
-      ammoMeterRight.style.left = 'auto';
-      ammoMeterRight.style.top = '50%';
-      ammoMeterRight.style.transform = 'translateY(-50%)';
-      ammoMeterTrackRight.style.width = '72px';
-      ammoMeterTrackRight.style.height = '260px';
-    }
+    const shield = getDangerLineY() / arenaHeight;
+    const top = shield + Math.max(0, (1 - shield - 0.25) / 2);
+    hud.style.setProperty('--ammo-top', `${100 * top}%`);
   }
 
   function updateHudLayout() {
     if (!hud) return;
-    if (inputMode === 'switch2p' && usesAmmoMeter()) {
-      hud.style.right = '110px';
-    } else {
-      hud.style.right = '18px';
-    }
+    const rightMeter = inputMode === 'switch2p' && usesAmmoMeter() && online?.inputs[1] !== 'gaze';
+    hud.style.setProperty('--hud-right', rightMeter ? '8.6%' : '1.4%');
   }
 
   function tick(ts) {
@@ -2755,6 +2717,7 @@
     setScoreUiVisible(false);
     resetScorePanel();
 
+    resizeCanvas(true);
     if (online) {
       onlineTimeOffset = 0;
       pausedAt = null;
@@ -2763,7 +2726,6 @@
       onlineEffects.length = 0;
       players.blue.cooldown = 0;
       players.red.cooldown = 0;
-      resizeCanvas(true);
     }
     score = 0;
     lives = getStartingShields();
@@ -2925,12 +2887,16 @@
     inputMode = mode === 'eyegaze' ? 'eyegaze' : mode === 'switch2p' ? 'switch2p' : 'switch';
     document.body.setAttribute('data-input-mode', inputMode);
 
-    const buttons = Array.from(document.querySelectorAll('.input-mode-btn'));
-    buttons.forEach((button) => {
-      const selected = button.dataset.inputMode === inputMode;
-      button.classList.toggle('selected', selected);
-      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-    });
+    if (!online) {
+      const buttons = document.querySelectorAll('.input-mode-btn');
+      for (const button of buttons) {
+        const selected = button.dataset.inputMode === inputMode;
+        button.classList.toggle('selected', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      }
+      const multiplayer = document.getElementById('multiplayer-toggle');
+      multiplayer.search = `?mode=multiplayer&input=${inputMode === 'eyegaze' ? 'gaze' : 'switch'}`;
+    }
 
     updateShipCardSelection();
     updateAmmoMeter();
@@ -3067,9 +3033,11 @@
     online?.render();
   });
 
-  Array.from(document.querySelectorAll('.input-mode-btn')).forEach((button) => {
-    button.addEventListener('click', () => applyInputMode(button.dataset.inputMode));
-  });
+  if (!online) {
+    for (const button of document.querySelectorAll('.input-mode-btn')) {
+      button.addEventListener('click', () => applyInputMode(button.dataset.inputMode));
+    }
+  }
 
   Array.from(document.querySelectorAll('#stop-action-mode-segmented-control .stop-action-mode-btn')).forEach((button) => {
     button.addEventListener('click', () => {
@@ -3078,14 +3046,19 @@
     });
   });
 
-  if (!online) for (const card of shipCards) {
-    card.addEventListener('click', () => applyShipChoice(card.dataset.ship));
+  for (const card of shipCards) {
+    if (online) {
+      card.disabled = true;
+      card.removeAttribute('aria-pressed');
+    } else {
+      card.addEventListener('click', () => applyShipChoice(card.dataset.ship));
+    }
   }
 
   window.addEventListener('resize', () => {
     resizeCanvas();
     resizeMenuStarsCanvas();
-    if (online && running) {
+    if (running) {
       drawFrame();
     } else if (!running) {
       drawStars();

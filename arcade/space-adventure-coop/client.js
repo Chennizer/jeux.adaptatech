@@ -18,7 +18,10 @@ const PING_AFTER_MS = 8000;
 const PING_TIMEOUT_MS = 8000;
 const MAX_CODE_ATTEMPTS = 3;
 
-let input = localStorage.getItem('spaceAdventureCoopInput') === 'gaze' ? 'gaze' : 'switch';
+const requestedInput = new URLSearchParams(location.search).get('input');
+let input = INPUT_MODES.includes(requestedInput) ? requestedInput :
+  (localStorage.getItem('spaceAdventureCoopInput') === 'gaze' ? 'gaze' : 'switch');
+localStorage.setItem('spaceAdventureCoopInput', input);
 let difficulty = 'normal';
 let game;
 let session;
@@ -93,6 +96,7 @@ window.spaceAdventureOnline = online;
 
 function invite(code) {
   const url = new URL(GAME_PATH, location.origin);
+  url.searchParams.set('mode', 'multiplayer');
   if (code) url.searchParams.set('room', code);
   return url;
 }
@@ -263,6 +267,7 @@ function render() {
   const canReady = Boolean(game?.loaded && session?.connected && !readyPending && state?.players.every(player => player.connected));
   get('room-entry').hidden = joined;
   get('room-info').hidden = !joined;
+  get('button-container').hidden = !joined;
   get('create-room').disabled = Boolean(session);
   get('join-room-button').disabled = Boolean(session);
   nameInput.disabled = Boolean(session && (!session.connected || me?.ready || phase !== 'lobby'));
@@ -370,6 +375,9 @@ get('copy-room-code').addEventListener('click', () => copyRoom('code'));
 get('copy-room-link').addEventListener('click', () => copyRoom('link'));
 get('leave-room').addEventListener('click', leave);
 get('exit-room').addEventListener('click', leave);
+get('leave-multiplayer').addEventListener('click', event => {
+  if (session && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) leave();
+});
 fullscreenButton.addEventListener('click', enterFullscreen);
 document.addEventListener('fullscreenchange', renderFullscreenButton);
 

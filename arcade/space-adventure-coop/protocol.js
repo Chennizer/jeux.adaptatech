@@ -8,7 +8,8 @@ export const ROOM_CODE_LENGTH = 4;
 export const LEGACY_ROOM_CODE = new RegExp(`^[${ROOM_ALPHABET}]{8}$`);
 export const ROOM_CODE = new RegExp(`^(?:[${ROOM_ALPHABET}]{${ROOM_CODE_LENGTH}}|[${ROOM_ALPHABET}]{8})$`);
 export const INPUT_MODES = ['switch', 'gaze'];
-export const GAME_PATH = '/arcade/space-adventure-coop/';
+export const GAME_PATH = '/arcade/space-invaders-fruits/';
+export const LEGACY_GAME_PATH = '/arcade/space-adventure-coop/';
 export const PARTIES_PATH = '/parties/game-room/';
 
 export const ONLINE_PARTIES_PATH = '/parties/online-room/';

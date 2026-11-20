@@ -1,14 +1,13 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GAME_PATH } from '../../arcade/space-adventure-coop/protocol.js';
+import { GAME_PATH, LEGACY_GAME_PATH } from '../../arcade/space-adventure-coop/protocol.js';
 
 const root = new URL('../../', import.meta.url);
 const staging = new URL('.assets/', import.meta.url);
 const paths = [
   'arcade/space-adventure-coop',
-  'arcade/space-invaders-fruits/game.css',
-  'arcade/space-invaders-fruits/game.js',
+  'arcade/space-invaders-fruits',
   'css/control-panel.css',
   'css/games.css',
   'css/gaming.css',
@@ -32,5 +31,5 @@ for (const path of paths) {
   await cp(new URL(path, root), target, { recursive: true });
 }
 
-const gameRoutes = [GAME_PATH.slice(0, -1), GAME_PATH, `${GAME_PATH}index.html`];
+const gameRoutes = [GAME_PATH, LEGACY_GAME_PATH].flatMap(path => [path.slice(0, -1), path, `${path}index.html`]);
 await writeFile(new URL('_headers', staging), gameRoutes.map(route => `${route}\n  X-Robots-Tag: noindex\n`).join('\n'));
