@@ -2418,7 +2418,7 @@
       document.body.style.cursor = '';
       return;
     }
-    const inGameplayFlow = running || gameOverScreen?.style.display === 'flex';
+    const inGameplayFlow = running || (!online && gameOverScreen?.style.display === 'flex');
     document.body.style.cursor = inGameplayFlow ? 'none' : '';
   }
 
@@ -2842,13 +2842,7 @@
 
     if (online) {
       setScoreUiVisible(false);
-      gameOverMenuVisible = true;
-      if (usesGazeControls()) {
-        retryEyegazeTiles.style.display = 'grid';
-        startEyegazeRetryMonitor();
-      } else {
-        restartButton.style.display = 'inline-flex';
-      }
+      restartButton.style.display = 'inline-flex';
     } else if (inputMode === 'eyegaze') {
       setScoreUiVisible(false);
       if (retryHint) retryHint.textContent = lang === 'fr' ? 'Réessayer ?' : lang === 'ja' ? 'もう一度？' : 'Try again?';
@@ -2885,7 +2879,7 @@
   }
 
   function startEyegazeRetryMonitor() {
-    if (!usesGazeControls()) return;
+    if (inputMode !== 'eyegaze') return;
     const loop = () => {
       if (running || !gameOverScreen || gameOverScreen.style.display !== 'flex' || !gameOverMenuVisible) return;
       const retryRect = retryEyegazeTile?.getBoundingClientRect();
@@ -2893,7 +2887,7 @@
       if (!retryRect || !registerRect) return;
       const now = performance.now();
       const insideRetry = gazeX >= retryRect.left && gazeX <= retryRect.right && gazeY >= retryRect.top && gazeY <= retryRect.bottom;
-      const insideRegister = !online && gazeX >= registerRect.left && gazeX <= registerRect.right && gazeY >= registerRect.top && gazeY <= registerRect.bottom;
+      const insideRegister = gazeX >= registerRect.left && gazeX <= registerRect.right && gazeY >= registerRect.top && gazeY <= registerRect.bottom;
 
       if (insideRetry) {
         if (!retryHoverStartAt) retryHoverStartAt = now;
@@ -2902,14 +2896,9 @@
         registerHoverStartAt = 0;
         if (registerEyegazeFill) registerEyegazeFill.style.transform = 'scale(0)';
         if (progress >= 1) {
-          retryHoverStartAt = 0;
-          if (online) {
-            online.ready();
-          } else {
-            playSfx('retry');
-            startGame();
-            return;
-          }
+          playSfx('retry');
+          startGame();
+          return;
         }
       } else if (insideRegister) {
         if (!registerHoverStartAt) registerHoverStartAt = now;
@@ -3025,7 +3014,7 @@
   function updateGazePointer(x, y) {
     gazeX = x;
     gazeY = y;
-    const eyegazeActive = usesGazeControls() && (running || gameOverScreen?.style.display === 'flex');
+    const eyegazeActive = usesGazeControls() && (running || (!online && gameOverScreen?.style.display === 'flex'));
     if (!eyegazeActive) {
       if (gazePointer) gazePointer.style.opacity = '0';
       return;

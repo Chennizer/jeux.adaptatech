@@ -1,7 +1,7 @@
 import { Server, routePartykitRequest } from 'partyserver';
 import {
-  DIFFICULTIES, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, MAX_FRAME_BYTES, ONLINE_PARTIES_PATH, PARTIES_PATH,
-  ROOM_CODE, ROOM_PING, ROOM_PONG, SNAPSHOT_MS, cleanPlayerName
+  DIFFICULTIES, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, LEGACY_ROOM_CODE, MAX_FRAME_BYTES, ONLINE_PARTIES_PATH,
+  PARTIES_PATH, ROOM_CODE, ROOM_PING, ROOM_PONG, SNAPSHOT_MS, cleanPlayerName
 } from '../../arcade/space-adventure-coop/protocol.js';
 import { createRound, finishRound, fire, snapshot, stepRound, STEP_MS } from './match.js';
 
@@ -21,7 +21,8 @@ export default {
     if (!url.pathname.startsWith('/parties/')) return env.ASSETS.fetch(request);
 
     const path = [PARTIES_PATH, ONLINE_PARTIES_PATH].find(prefix => url.pathname.startsWith(prefix));
-    if (!path || !ROOM_CODE.test(url.pathname.slice(path.length))) return new Response('Room not found', { status: 404 });
+    const codePattern = path === PARTIES_PATH ? LEGACY_ROOM_CODE : ROOM_CODE;
+    if (!path || !codePattern.test(url.pathname.slice(path.length))) return new Response('Room not found', { status: 404 });
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 426 });
     const origin = request.headers.get('Origin');
     const allowedOrigins = (env.FRONTEND_ORIGINS || '').split(',').map(value => value.trim());

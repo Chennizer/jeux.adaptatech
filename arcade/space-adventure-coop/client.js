@@ -1,7 +1,7 @@
 import { copy } from './copy.js';
 import {
-  DIFFICULTIES, DWELL_MS, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, ONLINE_PARTIES_PATH,
-  ONLINE_WORLD, ROOM_ALPHABET, ROOM_CODE, ROOM_PING, cleanPlayerName
+  DIFFICULTIES, FRAME_INTERVAL, GAME_PATH, INPUT_MODES, ONLINE_PARTIES_PATH,
+  ONLINE_WORLD, ROOM_ALPHABET, ROOM_CODE, ROOM_CODE_LENGTH, ROOM_PING, cleanPlayerName
 } from './protocol.js';
 
 const get = id => document.getElementById(id);
@@ -16,6 +16,7 @@ const nameInput = get('player-name');
 const fullscreenButton = get('fullscreen-room');
 const PING_AFTER_MS = 8000;
 const PING_TIMEOUT_MS = 8000;
+const MAX_CODE_ATTEMPTS = 3;
 
 let input = localStorage.getItem('spaceAdventureCoopInput') === 'gaze' ? 'gaze' : 'switch';
 let difficulty = 'normal';
@@ -96,14 +97,21 @@ function invite(code) {
   return url;
 }
 
-function connect(code, create = false) {
+function createRoom(remaining = MAX_CODE_ATTEMPTS) {
+  const bytes = crypto.getRandomValues(new Uint8Array(ROOM_CODE_LENGTH));
+  const code = Array.from(bytes, byte => ROOM_ALPHABET[byte % ROOM_ALPHABET.length]).join('');
+  connect(code, true, remaining - 1);
+}
+
+function connect(code, create = false, codeRetries = 0) {
   if (session || !ROOM_CODE.test(code)) return;
   saveName();
   const storageKey = `spaceAdventureCoop.online.${code}`;
-  const key = sessionStorage.getItem(storageKey) ??
+  const storedKey = create ? null : sessionStorage.getItem(storageKey);
+  const key = storedKey ??
     Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
-  sessionStorage.setItem(storageKey, key);
-  session = { code, key, storageKey, create };
+  if (!create) sessionStorage.setItem(storageKey, key);
+  session = { code, key, storageKey, create, codeRetries };
   status = 'connecting';
   attempts = 0;
   openSocket();
@@ -127,6 +135,11 @@ function openSocket() {
     pingSentAt = 0;
     const message = JSON.parse(data);
     if (message.type === 'error') {
+      if (message.reason === 'code-taken' && current.create && current.codeRetries > 0) {
+        reset('connecting');
+        createRoom(current.codeRetries);
+        return;
+      }
       if (message.reason === 'idle' || message.reason === 'reconnect-expired') {
         history.replaceState(null, '', invite());
         get('room-input').value = '';
@@ -135,6 +148,7 @@ function openSocket() {
     } else if (message.type === 'welcome') {
       clearTimeout(timeout);
       current.connected = true;
+      if (current.create) sessionStorage.setItem(current.storageKey, current.key);
       current.create = false;
       attempts = 0;
       const changedSeat = seat !== message.seat;
@@ -185,7 +199,7 @@ function send(message) {
 
 function reset(reason = '', forget = false) {
   clearTimeout(reconnectTimer);
-  if (forget && session) sessionStorage.removeItem(session.storageKey);
+  if (forget && session && !session.create) sessionStorage.removeItem(session.storageKey);
   const previous = socket;
   socket = null;
   session = null;
@@ -277,7 +291,7 @@ function render() {
   get('continue-button').disabled = !canReady || Boolean(me?.ready);
   get('continue-button').textContent = text(me?.ready ? 'retryWaiting' : 'retry');
   if (finished) {
-    const hint = state.round?.reason === 'idle' ? 'idleRound' : (input === 'gaze' ? 'retry' : '');
+    const hint = state.round?.reason === 'idle' ? 'idleRound' : '';
     get('retry-hint').textContent = text(me?.ready ? 'retryWaiting' : hint);
   }
 
@@ -345,10 +359,7 @@ function saveName() {
   if (session?.connected && state?.phase === 'lobby' && name !== online.playerName(seat)) send({ type: 'name', name });
 }
 nameInput.addEventListener('change', saveName);
-get('create-room').addEventListener('click', () => {
-  const code = Array.from(crypto.getRandomValues(new Uint8Array(8)), byte => ROOM_ALPHABET[byte & 31]).join('');
-  connect(code, true);
-});
+get('create-room').addEventListener('click', () => createRoom());
 get('join-room').addEventListener('submit', event => {
   event.preventDefault();
   const code = get('room-input').value.trim().toUpperCase();
@@ -362,34 +373,6 @@ get('exit-room').addEventListener('click', leave);
 fullscreenButton.addEventListener('click', enterFullscreen);
 document.addEventListener('fullscreenchange', renderFullscreenButton);
 
-let dwell;
-function clearDwell() {
-  if (!dwell) return;
-  cancelAnimationFrame(dwell.frame);
-  dwell.button.removeAttribute('data-dwelling');
-  dwell = null;
-}
-document.addEventListener('pointerover', event => {
-  const button = event.target.closest('.online-room button, [data-access], #stop-action-mode-segmented-control button, .online-play-controls button');
-  if (button === dwell?.button) return;
-  clearDwell();
-  if (!button || button.disabled || (input !== 'gaze' && button.dataset.access !== 'gaze') || event.pointerType === 'touch') return;
-  const start = performance.now();
-  dwell = { button, frame: 0 };
-  button.setAttribute('data-dwelling', '');
-  const step = now => {
-    if (!button.matches(':hover') || !button.checkVisibility() || button.disabled) return clearDwell();
-    const amount = Math.min(1, (now - start) / DWELL_MS);
-    button.style.setProperty('--dwell', `${amount * 100}%`);
-    if (amount < 1) dwell.frame = requestAnimationFrame(step);
-    else button.click();
-  };
-  dwell.frame = requestAnimationFrame(step);
-});
-document.addEventListener('pointerout', event => {
-  if (dwell && !dwell.button.contains(event.relatedTarget)) clearDwell();
-});
-window.addEventListener('blur', clearDwell);
 window.addEventListener('offline', () => socket?.close());
 window.addEventListener('online', () => {
   if (!session || socket) return;
