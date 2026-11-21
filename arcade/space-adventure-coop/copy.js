@@ -1,7 +1,7 @@
 export const copy = {
   fr: {
     loading: 'Chargement…', ready: 'Prêt', cancel: 'Annuler', waiting: 'Partage le code ou le lien avec le deuxième joueur.',
-    absent: 'En attente', connected: 'Connecté', you: 'toi', switch: 'Contacteur', gaze: 'Regard',
+    absent: 'En attente', connected: 'Connecté', you: 'toi', switch: 'Switch', gaze: 'Eyegaze',
     blue: 'Guardian Switch', red: 'Crimson Gaze', code: 'Code de la salle', link: 'Lien d’invitation',
     copied: 'Copié.', manual: 'Copie la valeur sélectionnée.', invalid: 'Saisis le code à quatre caractères.',
     missing: 'Cette salle a expiré ou n’existe pas.', full: 'Cette salle est complète.',
