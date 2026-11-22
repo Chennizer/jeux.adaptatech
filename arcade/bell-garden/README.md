@@ -6,9 +6,11 @@ The entrance uses the shared arcade control-panel styles and layout, with just i
 
 The garden has a bright blue sky, a large sun with rounded rays, a vivid layered meadow, drifting clouds, and occasional passing birds. Plant stems and their ground shadows share a fixed baseline; the meadow extends behind all rows in portrait layouts. Flower heads retain their proportions while stems adapt to the available height. Growth begins with a small anticipatory dip, then a bending stretch and a soft spring back. Each flower leans differently; the bloom follows slightly later, while left and right leaves unfold on separate hinges with staggered timing. All motion settles within the note duration. Independent wind and leaf motions pivot above stationary roots, and hit targets stay fixed. The upper sky is outside the flower targets in landscape play. Ambient motion pauses while the menu is open, the tab is hidden, or the window is inactive. Reduced-animation mode and the system motion preference disable wind, cloud movement, birds, and the growth animation; the flower still lights up when played.
 
+Each played note also releases a small spray of pollen and musical-note shapes. A cartoon butterfly flutters over to the latest flower and leaves after five seconds of quiet. Playing three different flowers reveals a soft rainbow for three seconds; discovery has no time limit and never triggers extra sounds. All input modes share these surprises. Particles use a fixed pool of seven elements per flower. Butterfly placement stays inside the viewport and updates on resize. Opening the menu or leaving the window clears active surprises and drag gestures. Reduced-animation settings hide all three effects; plain black/white backgrounds omit the butterfly and rainbow.
+
 ## Controls
 
-- **Touch / mouse / keyboard:** press a flower; use keys 1–6, or arrows and Space. Focused flower buttons also support native Enter activation.
+- **Touch / mouse / keyboard:** press a flower, or hold and swipe across the flowers to strum them. Strumming plays each newly entered flower and ends on release or cancellation. Use keys 1–6, or arrows and Space. Focused flower buttons also support native Enter activation.
 - **Eye gaze:** dwell for 300–2500 ms (default 800 ms). A warm fill grows from the flower's centre, clipped to its painted silhouette. Look away before activating the same flower again.
 - **One switch:** automatic scanning at 600–4000 ms per flower (default 1500 ms); Space plays the highlighted flower. Selection lights the bloom itself without drawing a rectangular frame.
 - **Two switches:** Enter advances the bloom highlight; Space plays that flower.
@@ -28,4 +30,4 @@ From the repository root:
 node --test arcade/bell-garden/tests/garden.test.cjs
 ```
 
-The checks exercise the page script with deterministic DOM, timing, Web Audio, and media doubles, including input modes, menu transitions, keyboard navigation, audio cleanup, saved settings, translations, playlist looping, music controls, and playback failures. They also check that the game contains no visible text. Browser rendering, real audio mixing, and assistive devices still need manual verification.
+The checks exercise the page script with deterministic DOM, timing, Web Audio, and media doubles, including input modes, strumming and cancellation, untimed discovery across every control mode, butterfly positioning and cleanup, reduced-motion settings, menu transitions, keyboard navigation, audio cleanup, saved settings, translations, playlist looping, music controls, and playback failures. They also check that the game contains no visible text. Browser rendering, real audio mixing, and assistive devices still need manual verification.

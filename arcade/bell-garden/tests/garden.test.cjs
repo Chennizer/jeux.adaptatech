@@ -12,7 +12,7 @@ const instrumentScript = fs.readFileSync(path.join(__dirname, '../garden-instrum
 const musicScript = fs.readFileSync(path.join(__dirname, '../garden-music.js'), 'utf8');
 const script = fs.readFileSync(path.join(__dirname, '../garden.js'), 'utf8');
 
-function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, musicBlocked = false, saved } = {}) {
+function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, musicBlocked = false, reducedMotion = false, saved } = {}) {
   let now = 0;
   let timerId = 0;
   const jobs = new Map();
@@ -60,7 +60,9 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, mus
       this.value = '';
       this.checked = false;
       this.textContent = '';
-      this.style = { setProperty() {} };
+      const properties = new Map();
+      this.style = { setProperty: (name, value) => properties.set(name, String(value)), getPropertyValue: name => properties.get(name) || '' };
+      this.rect = { left: 0, top: 0, width: 60, height: 60 };
       this.classList = {
         add: (...names) => names.forEach(name => this.classes.add(name)),
         remove: (...names) => names.forEach(name => this.classes.delete(name)),
@@ -80,10 +82,20 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, mus
     append(element) { this.children.push(element); }
     setAttribute(key, value) { this.attributes[key] = String(value); }
     getAttribute(key) { return this.attributes[key]; }
-    closest() {
+    closest(selector) {
+      if (selector === '.flower') return this.classes.has('flower') ? this : null;
       return ['input', 'select', 'textarea', 'a'].includes(this.tagName) ||
         (this.tagName === 'button' && !this.classes.has('flower')) ? this : null;
     }
+    querySelector(selector) {
+      if (selector !== '.plant') return null;
+      if (!this.plant) {
+        this.plant = new Element('span');
+        this.plant.rect = { left: 30 + Number(this.dataset.index) * 155, top: 400, width: 120, height: 250 };
+      }
+      return this.plant;
+    }
+    getBoundingClientRect() { return this.rect; }
     focus() { document.activeElement = this; this.emit('focus'); }
   }
   class MediaElement extends Element {
@@ -121,12 +133,16 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, mus
   const $ = id => elements.get(id);
   $('theme').value = 'sky';
   $('switch-mode').value = 'scan';
+  $('game-screen').rect = { left: 0, top: 0, width: 1024, height: 768 };
+  $('garden-butterfly').rect = { left: 0, top: 0, width: 64, height: 54 };
+  let hitTarget = null;
   const document = Object.assign(new Events(), {
     hidden: false,
     body: new Element('body'),
     documentElement: new Element('html'),
     getElementById: $,
     createElement: tag => new Element(tag),
+    elementFromPoint: () => hitTarget,
     querySelectorAll: selector => selector === '[data-i18n]' ? translated : []
   });
 
@@ -173,7 +189,7 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, mus
     getItem(key) { if (brokenStorage) throw new Error('Storage disabled'); return storage.get(key) || null; },
     setItem(key, value) { if (brokenStorage) throw new Error('Storage disabled'); storage.set(key, value); }
   };
-  const window = Object.assign(new Events(), { matchMedia: () => ({ matches: false }) });
+  const window = Object.assign(new Events(), { matchMedia: () => ({ matches: reducedMotion }) });
   if (audioSupport) window.AudioContext = AudioContext;
   const context = {
     document, window, localStorage,
@@ -196,7 +212,11 @@ function harness({ mode = 'tap', audioSupport = true, brokenStorage = false, mus
     } else click('mode-' + next);
   };
   const played = () => (audioContexts[0]?.oscillators.length || 0) / 4;
-  return { $, document, window, flowers, translated, audioContexts, storage, advance, key, click, start, selectMode, played };
+  const moveTo = (index, values = {}) => {
+    hitTarget = flowers[index] || null;
+    document.emit('pointermove', { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100, ...values });
+  };
+  return { $, document, window, flowers, translated, audioContexts, storage, advance, key, click, start, selectMode, played, moveTo };
 
 }
 
@@ -639,4 +659,131 @@ test('the flower keeps growing through its sounding note and settles after the v
   assert.equal(flower.classList.contains('is-playing'), false);
   assert.ok(h.audioContexts[0].oscillators.every(voice => voice.ended && voice.disconnected));
   assert.equal(h.$('garden-music').volume, .1);
+});
+
+test('held touch and mouse gestures strum each newly entered flower without hover or click duplicates', () => {
+  for (const pointerType of ['touch', 'mouse']) {
+    const h = harness();
+    h.start();
+    h.moveTo(1, { pointerType, buttons: 1 });
+    assert.equal(h.played(), 0);
+    h.flowers[0].emit('pointerdown', { pointerId: 1, pointerType });
+    h.moveTo(0, { pointerType, buttons: 1 });
+    h.moveTo(1, { pointerType, buttons: 1 });
+    h.moveTo(1, { pointerType, buttons: 1 });
+    h.moveTo(2, { pointerType, buttons: 1 });
+    h.flowers[2].emit('click', { detail: 1 });
+    assert.equal(h.played(), 3);
+    h.moveTo(0, { pointerType, buttons: 1 });
+    assert.equal(h.played(), 4);
+    h.document.emit('pointerup', { pointerId: 1 });
+    h.moveTo(3, { pointerType, buttons: 1 });
+    assert.equal(h.played(), 4);
+  }
+});
+
+test('strumming cancels on pointer cancellation, release outside the page, and menu transitions', () => {
+  const h = harness();
+  h.start();
+  h.flowers[0].emit('pointerdown', { pointerId: 1 });
+  h.moveTo(1, { pointerId: 2 });
+  assert.equal(h.played(), 1);
+  h.document.emit('pointercancel', { pointerId: 1 });
+  h.moveTo(1);
+  assert.equal(h.played(), 1);
+  h.flowers[0].emit('pointerdown', { pointerId: 1 });
+  h.moveTo(1, { pointerType: 'mouse', buttons: 0 });
+  h.moveTo(1, { pointerType: 'mouse', buttons: 1 });
+  assert.equal(h.played(), 2);
+  h.flowers[0].emit('pointerdown', { pointerId: 1 });
+  h.click('settings-button');
+  h.start();
+  h.moveTo(1);
+  assert.equal(h.played(), 3);
+});
+
+test('three distinct notes reveal a rainbow at any pace; repeated notes and selection do not count', () => {
+  const h = harness();
+  h.start();
+  const screen = h.$('game-screen');
+  h.key('1'); h.key('1'); h.key('1');
+  assert.equal(screen.classList.contains('garden-celebrating'), false);
+  h.advance(60000);
+  h.key('2');
+  h.flowers[2].emit('pointerenter', { pointerType: 'mouse' });
+  h.flowers[2].focus();
+  assert.equal(screen.classList.contains('garden-celebrating'), false);
+  h.advance(60000);
+  h.key('3');
+  assert.equal(screen.classList.contains('garden-celebrating'), true);
+  assert.equal(h.played(), 5); // The reward never plays additional notes.
+  h.advance(3000);
+  assert.equal(screen.classList.contains('garden-celebrating'), false);
+  h.key('3'); h.key('4');
+  assert.equal(screen.classList.contains('garden-celebrating'), false);
+  h.key('5');
+  assert.equal(screen.classList.contains('garden-celebrating'), true);
+});
+
+test('dwell, scanning and stepping earn the same butterfly visits and rainbow as touch', () => {
+  for (const mode of ['gaze', 'scan', 'step']) {
+    const h = harness({ mode });
+    h.start();
+    for (let i = 0; i < 3; i++) {
+      if (mode === 'gaze') {
+        h.flowers[i].emit('pointerenter', { pointerType: 'mouse' });
+        h.advance(800);
+        h.flowers[i].emit('pointerleave');
+      } else {
+        if (i && mode === 'scan') h.advance(1500);
+        if (i && mode === 'step') h.key('Enter');
+        h.key('Space');
+      }
+      assert.equal(h.$('garden-butterfly').classList.contains('is-visiting'), true);
+    }
+    assert.equal(h.$('game-screen').classList.contains('garden-celebrating'), true);
+    assert.equal(h.played(), 3);
+    h.flowers[4].emit('pointerdown', { pointerId: 1 });
+    h.moveTo(5);
+    assert.equal(h.played(), 4); // Drag gestures are exclusive to touch mode.
+  }
+});
+
+test('the butterfly stays within the viewport on resize and effects stop while the garden is inactive', () => {
+  const h = harness();
+  h.start();
+  h.key('1'); h.key('2'); h.key('3');
+  const butterfly = h.$('garden-butterfly');
+  const screen = h.$('game-screen');
+  screen.rect = { left: 0, top: 0, width: 390, height: 844 };
+  h.flowers[2].querySelector('.plant').rect = { left: 500, top: -100, width: 150, height: 250 };
+  h.window.emit('resize');
+  assert.equal(butterfly.style.getPropertyValue('--visitor-x'), '318px');
+  assert.equal(butterfly.style.getPropertyValue('--visitor-y'), '8px');
+  h.window.emit('blur');
+  assert.equal(butterfly.classList.contains('is-visiting'), false);
+  assert.equal(screen.classList.contains('garden-celebrating'), false);
+  h.advance(10000);
+  h.window.emit('focus');
+  assert.equal(butterfly.classList.contains('is-visiting'), false);
+  h.key('4');
+  assert.equal(butterfly.classList.contains('is-visiting'), true);
+  h.advance(4000);
+  h.key('5');
+  h.advance(4000);
+  assert.equal(butterfly.classList.contains('is-visiting'), true);
+  h.advance(1000);
+  assert.equal(butterfly.classList.contains('is-visiting'), false);
+});
+
+test('reduced motion and plain backgrounds keep surprises quiet while every note remains playable', () => {
+  for (const options of [{ saved: { gentle: true } }, { reducedMotion: true }, { saved: { theme: 'dark' } }]) {
+    const h = harness(options);
+    h.start();
+    h.key('1'); h.key('2'); h.key('3');
+    assert.equal(h.played(), 3);
+    assert.equal(h.$('garden-butterfly').classList.contains('is-visiting'), false);
+    assert.equal(h.$('game-screen').classList.contains('garden-celebrating'), false);
+    assert.ok(h.flowers.every((flower, i) => i > 2 || flower.classList.contains('is-playing')));
+  }
 });

@@ -11,7 +11,7 @@
       music: 'Musique', musicVolume: 'Volume de la musique', musicUnavailable: 'La musique n’a pas pu démarrer. Réessayez en appuyant sur Commencer.',
       mute: 'Couper les notes des fleurs', gentleEffects: 'Réduire les animations', fullscreen: 'Plein écran',
       start: 'Commencer', resume: 'Reprendre', backToArcade: 'Retour à l’arcade',
-      tapHint: 'Touchez une fleur. Clavier : flèches puis Espace, ou touches 1 à 6.',
+      tapHint: 'Touchez les fleurs ou glissez de l’une à l’autre. Clavier : flèches puis Espace, ou touches 1 à 6.',
       gazeHint: 'Fixez une fleur pour la faire chanter. Regardez ailleurs pour la rejouer.',
       scanHint: 'Espace : jouer la fleur illuminée. La sélection avance automatiquement.',
       stepHint: 'Entrée : fleur suivante. Espace : jouer la fleur illuminée.',
@@ -28,7 +28,7 @@
       music: 'Music', musicVolume: 'Music volume', musicUnavailable: 'Music couldn’t start. Press Start to try again.',
       mute: 'Mute flower notes', gentleEffects: 'Reduce animations', fullscreen: 'Fullscreen',
       start: 'Start', resume: 'Resume', backToArcade: 'Back to the arcade',
-      tapHint: 'Touch a flower. Keyboard: arrows then Space, or keys 1–6.',
+      tapHint: 'Touch flowers or slide across them. Keyboard: arrows then Space, or keys 1–6.',
       gazeHint: 'Look at a flower to make it sing. Look away before playing it again.',
       scanHint: 'Space: play the glowing flower. The glow moves automatically.',
       stepHint: 'Enter: next flower. Space: play the glowing flower.',
@@ -45,7 +45,7 @@
       music: '音楽', musicVolume: '音楽の音量', musicUnavailable: '音楽を開始できませんでした。「開始」を押して再試行してください。',
       mute: '花の音を消す', gentleEffects: 'アニメーションを減らす', fullscreen: '全画面',
       start: '開始', resume: '再開', backToArcade: 'アーケードに戻る',
-      tapHint: '花に触れてください。矢印キーで選び、スペースキーで演奏。1〜6キーでも演奏できます。',
+      tapHint: '花に触れるか、花の上をなぞって演奏。矢印キーとスペース、または1〜6キーでも演奏できます。',
       gazeHint: '花を見つめて音を鳴らしましょう。同じ花を鳴らすには一度視線を外してください。',
       scanHint: 'スペースキーで光っている花を演奏します。光は自動で次の花へ移動します。',
       stepHint: 'Enter：次の花。スペース：光っている花を演奏。',
@@ -59,12 +59,18 @@
   const garden = $('garden');
   const panel = $('control-panel');
   const screen = $('game-screen');
+  const visitor = $('garden-butterfly');
   const modeButtons = ['mode-tap', 'mode-gaze', 'mode-switch'].map($);
   const flowers = [];
   const instrument = window.BellGardenInstrument;
   const art = window.BellGardenArt;
   const animationTimers = new Map();
   const voices = new Set();
+  const discoveries = new Set();
+  let visitorTarget = null;
+  let visitorTimer = null;
+  let celebrationTimer = null;
+  let strum = null;
   let language = 'fr';
   let started = false;
   let menuOpen = true;
@@ -130,6 +136,7 @@
       cancelDwell();
       dwellLocked = button;
       playFlower(index);
+      if (canPlay() && mode === 'tap') strum = { pointerId: event.pointerId, last: index };
     });
     button.addEventListener('click', event => { if (event.detail === 0) playFlower(index); });
     button.addEventListener('pointerenter', event => {
@@ -313,15 +320,57 @@
     }, instrument.durationMs + 50));
   }
 
+  function positionVisitor() {
+    if (visitorTarget === null) return;
+    // Use the stationary plant box, keeping the visitor out of the moving hit target.
+    const bounds = flowers[visitorTarget].querySelector('.plant').getBoundingClientRect();
+    const viewport = screen.getBoundingClientRect();
+    const size = visitor.getBoundingClientRect().width || 60;
+    const crownSize = bounds.width * art.kinds[visitorTarget].crown;
+    const clamp = (value, limit) => Math.max(8, Math.min(Math.max(8, limit - size - 8), value));
+    visitor.style.setProperty('--visitor-x', clamp(bounds.left - viewport.left + bounds.width * .7 - size / 2, viewport.width) + 'px');
+    visitor.style.setProperty('--visitor-y', clamp(bounds.top - viewport.top + crownSize * .16 - size / 2, viewport.height) + 'px');
+  }
+
+  function delightFlower(index) {
+    discoveries.add(index);
+    const surprise = discoveries.size >= 3;
+    if (surprise) discoveries.clear();
+    if ($('gentle-effects').checked || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || $('theme').value !== 'sky') return;
+    visitorTarget = index;
+    positionVisitor();
+    visitor.classList.add('is-visiting');
+    clearTimeout(visitorTimer);
+    visitorTimer = setTimeout(() => {
+      visitor.classList.remove('is-visiting');
+      visitorTarget = null;
+    }, 5000);
+    // Discover at your own pace: no speed window and no unsolicited extra notes.
+    if (surprise) {
+      clearTimeout(celebrationTimer);
+      screen.classList.remove('garden-celebrating');
+      void screen.offsetWidth;
+      screen.classList.add('garden-celebrating');
+      celebrationTimer = setTimeout(() => screen.classList.remove('garden-celebrating'), 3000);
+    }
+  }
+
   function playFlower(index) {
     if (!canPlay()) return;
     playPlantNote(index);
     if (!$('mute-toggle').checked) music.duck(instrument.durationMs);
     animateFlower(index);
+    delightFlower(index);
     if (mode !== 'scan') selectFlower(index, mode === 'step');
   }
 
   function pauseGarden() {
+    strum = null;
+    visitorTarget = null;
+    clearTimeout(visitorTimer);
+    clearTimeout(celebrationTimer);
+    visitor.classList.remove('is-visiting');
+    screen.classList.remove('garden-celebrating');
     document.body.classList.add('garden-paused');
     music.pause();
     stopScanning();
@@ -411,6 +460,22 @@
     try { localStorage.setItem('siteLanguage', language); } catch (_) { /* Session language still changes. */ }
     updateLanguage();
   });
+
+  document.addEventListener('pointermove', event => {
+    if (!strum || event.pointerId !== strum.pointerId || !canPlay() || mode !== 'tap') return;
+    if (event.pointerType === 'mouse' && !(event.buttons & 1)) { strum = null; return; }
+    // Hit-test beneath implicit touch capture, so swipes work with fingers as well as a mouse.
+    const flower = document.elementFromPoint(event.clientX, event.clientY)?.closest('.flower');
+    const index = flower ? flowers.indexOf(flower) : -1;
+    if (index < 0) { strum.last = null; return; }
+    if (index === strum.last) return;
+    strum.last = index;
+    playFlower(index);
+  });
+  const endStrum = event => { if (event.pointerId === strum?.pointerId) strum = null; };
+  document.addEventListener('pointerup', endStrum);
+  document.addEventListener('pointercancel', endStrum);
+  window.addEventListener('resize', () => { if (canPlay()) positionVisitor(); });
 
   document.addEventListener('keydown', event => {
     if (!canPlay() || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;

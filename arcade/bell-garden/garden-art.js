@@ -133,8 +133,15 @@
   }
 
   function flower(index) {
+    const kind = kinds[index];
+    const paths = [[-70, -33], [-45, -74], [-16, -90], [28, -82], [61, -55], [78, -12], [12, -57]];
+    const pollen = '<span class="pollen-spray">' + paths.map(([x, y], mote) => {
+      const note = mote === 1 || mote === 4;
+      return '<span class="pollen-mote' + (note ? ' pollen-mote--note' : '') + '" style="--pollen-x:' + x + 'px;--pollen-y:' + y + 'px;--pollen-turn:' + (mote % 2 ? -25 : 30) + 'deg;--pollen-delay:' + (mote * 35) + 'ms;--pollen-color:' + (note ? kind.shade : mote % 2 ? kind.light : '#ffe58a') + '">' +
+        (note ? '<svg viewBox="0 0 20 24"><path d="M8 4L18 1V17C18 21 11 23 10 19C9 16 13 14 16 15V6L10 8V19C10 23 3 25 2 21C1 18 5 16 8 17Z"/></svg>' : '') + '</span>';
+    }).join('') + '</span>';
     return '<span class="plant" aria-hidden="true"><span class="plant-sway"><span class="flower-response">' +
-      stem(index) + crown(index) + '</span></span>' + roots() + '</span>';
+      stem(index) + crown(index) + pollen + '</span></span>' + roots() + '</span>';
   }
 
   const art = Object.freeze({ kinds, crown, stem, roots, flower });
