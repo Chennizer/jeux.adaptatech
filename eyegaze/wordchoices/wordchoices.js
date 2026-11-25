@@ -47,6 +47,7 @@
   const selectedWord = document.getElementById('selected-word');
   const grid = document.getElementById('word-grid');
   const gridFrame = grid.parentElement;
+  const graphemeSegmenter = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter() : null;
 
   function readSettings() {
     try {
@@ -199,6 +200,26 @@
     }));
   }
 
+  function largestFittingFontSize(label, minSize, maxSize, space) {
+    function fits(fontSize) {
+      label.style.fontSize = `${fontSize}px`;
+      return label.offsetWidth <= space.width && label.offsetHeight <= space.height;
+    }
+
+    if (fits(maxSize)) return maxSize;
+    let lower = minSize;
+    let upper = maxSize - 1;
+    while (lower <= upper) {
+      const fontSize = Math.floor((lower + upper) / 2);
+      if (fits(fontSize)) {
+        lower = fontSize + 1;
+      } else {
+        upper = fontSize - 1;
+      }
+    }
+    return upper >= minSize ? upper : 0;
+  }
+
   function sizeTiles() {
     if (board.hidden) return;
     const count = grid.childElementCount;
@@ -219,17 +240,29 @@
     grid.style.setProperty('--word-size', `${size}px`);
 
     const tile = grid.firstElementChild;
-    const { paddingTop, paddingBottom } = getComputedStyle(tile);
-    const availableHeight = Math.ceil(tile.clientHeight - parseFloat(paddingTop) - parseFloat(paddingBottom));
+    const { paddingLeft, paddingRight, paddingTop, paddingBottom } = getComputedStyle(tile);
+    const space = {
+      width: Math.ceil(tile.clientWidth - parseFloat(paddingLeft) - parseFloat(paddingRight)),
+      height: Math.ceil(tile.clientHeight - parseFloat(paddingTop) - parseFloat(paddingBottom))
+    };
+    const minSingleLineFontSize = 10;
+    const minWrappedFontSize = 8;
     const preferredFontSize = Math.max(12, Math.floor(size * .28));
 
     grid.querySelectorAll('.word-tile-label').forEach(label => {
-      let fontSize = preferredFontSize;
-      label.style.fontSize = `${fontSize}px`;
-      while (fontSize > 10 && label.offsetHeight > availableHeight) {
-        fontSize = Math.max(10, Math.floor(fontSize * .8));
-        label.style.fontSize = `${fontSize}px`;
+      const text = label.textContent;
+      const characters = graphemeSegmenter?.segment(text) ?? text.normalize();
+      const minSingleLineSize = [...characters].length < 10
+        ? minSingleLineFontSize
+        : Math.max(minSingleLineFontSize, Math.ceil(preferredFontSize * .8));
+
+      label.classList.add('is-single-line');
+      let fontSize = largestFittingFontSize(label, minSingleLineSize, preferredFontSize, space);
+      if (!fontSize) {
+        label.classList.remove('is-single-line');
+        fontSize = largestFittingFontSize(label, minWrappedFontSize, preferredFontSize, space) || minWrappedFontSize;
       }
+      label.style.fontSize = `${fontSize}px`;
     });
   }
 
