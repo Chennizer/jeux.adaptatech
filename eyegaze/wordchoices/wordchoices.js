@@ -218,10 +218,15 @@
     grid.style.setProperty('--word-gap', `${gap}px`);
     grid.style.setProperty('--word-size', `${size}px`);
 
+    const tile = grid.firstElementChild;
+    const { paddingTop, paddingBottom } = getComputedStyle(tile);
+    const availableHeight = Math.ceil(tile.clientHeight - parseFloat(paddingTop) - parseFloat(paddingBottom));
+    const preferredFontSize = Math.max(12, Math.floor(size * .28));
+
     grid.querySelectorAll('.word-tile-label').forEach(label => {
-      let fontSize = Math.max(12, Math.min(96, Math.floor(size * .23)));
+      let fontSize = preferredFontSize;
       label.style.fontSize = `${fontSize}px`;
-      while (fontSize > 10 && label.scrollHeight > label.clientHeight) {
+      while (fontSize > 10 && label.offsetHeight > availableHeight) {
         fontSize = Math.max(10, Math.floor(fontSize * .8));
         label.style.fontSize = `${fontSize}px`;
       }
