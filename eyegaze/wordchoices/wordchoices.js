@@ -42,7 +42,6 @@
   const gazePointer = document.getElementById('gazePointer');
   const board = document.getElementById('word-board');
   const editBoard = document.getElementById('edit-board');
-  const instruction = document.getElementById('board-instruction');
   const selection = document.getElementById('board-selection');
   const selectedWord = document.getElementById('selected-word');
   const grid = document.getElementById('word-grid');
@@ -156,7 +155,6 @@
     selectedTile = tile;
     selectedTile.classList.add('is-selected');
     selectedWord.textContent = tile.textContent;
-    instruction.hidden = true;
     selection.hidden = false;
 
     if (readAloud.checked) {
@@ -312,7 +310,6 @@
     selectedTile = null;
     selectedWord.textContent = '';
     selection.hidden = true;
-    instruction.hidden = false;
     document.body.classList.add(theme.value);
     root.classList.toggle('hide-native-cursor', showPointer.checked);
     gazePointer.style.setProperty('--gp-size', `${pointerSize.value}px`);
