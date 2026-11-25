@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title class="translate" data-fr="Graffiti (commande oculaire)" data-en="Graffiti (eye gaze)" data-ja="グラフィティ（視線操作）">Graffiti (commande oculaire)</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --ui-scale: 1;
+      --sidebar-w: clamp(110px, calc(140px * var(--ui-scale)), 200px);
+      --swatch-size: clamp(64px, calc(82px * var(--ui-scale)), 108px);
+      --swatch-gap: clamp(10px, calc(14px * var(--ui-scale)), 18px);
+      --swatch-border: clamp(4px, calc(5px * var(--ui-scale)), 7px);
+      --swatch-outline: clamp(3px, calc(4px * var(--ui-scale)), 6px);
+      --brush-btn: clamp(42px, calc(52px * var(--ui-scale)), 64px);
+      --brush-gap: clamp(8px, calc(10px * var(--ui-scale)), 14px);
+      --cursor-outline: clamp(2px, calc(3px * var(--ui-scale)), 4px);
+      --dwell-time: 850ms;
+      --dwell-red: rgba(255, 89, 100, 0.55);
+    }
+
+    *{ box-sizing: border-box; }
+
+    body{
+      margin: 0;
+      font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+      color: #f8f8f8;
+      background: #05060b;
+      overflow: hidden;
+    }
+
+    .game-wrap{ width: 100vw; height: 100vh; position: relative; }
+
+    #paintCanvas{
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background:
+        radial-gradient(circle at 18% 22%, rgba(255,255,255,0.06), transparent 40%),
+        radial-gradient(circle at 82% 10%, rgba(255,255,255,0.05), transparent 38%),
+        linear-gradient(90deg, #0c0c12 0%, #0f172a 50%, #0c0c12 100%);
+      cursor: none;
+    }
+
+    #sidebar{
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(8px);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      padding: clamp(10px, calc(16px * var(--ui-scale)), 20px);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(12px, calc(16px * var(--ui-scale)), 22px);
+      z-index: 20;
+    }
+
+    .panel-title{
+      margin: 0;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      font-size: clamp(14px, calc(16px * var(--ui-scale)), 18px);
+      text-transform: uppercase;
+    }
+
+    #palette{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--swatch-gap);
+      align-content: start;
+    }
+
+    .swatch{
+      width: var(--swatch-size);
+      height: var(--swatch-size);
+      border-radius: 50%;
+      border: var(--swatch-border) solid #0f172a;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.28), inset 0 0 0 2px rgba(255,255,255,0.12);
+      overflow: hidden;
+      position: relative;
+      margin-inline: auto;
+      cursor: none;
+      transition: transform 0.12s ease;
+    }
+
+    .swatch.active{
+      transform: scale(1.04);
+    }
+    .swatch.active::before{
+      content: "";
+      position: absolute;
+      inset: calc(var(--swatch-outline) + 4px);
+      border: var(--swatch-outline) solid #fff;
+      border-radius: 50%;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .dwell{
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 100%; height: 100%;
+      transform: translate(-50%, -50%) scale(0.08);
+      transform-origin: center center;
+      pointer-events: none;
+      border-radius: 50%;
+      background: var(--dwell-red);
+      opacity: 0.85;
+      z-index: 1;
+    }
+    .dwell.run{ animation: dwellGrow var(--dwell-time) linear forwards; }
+
+    @keyframes dwellGrow{
+      from{ transform: translate(-50%, -50%) scale(0.08); }
+      to  { transform: translate(-50%, -50%) scale(1.02); }
+    }
+
+    #brushes, #musicPanel, #actions{
+      display: flex;
+      flex-direction: column;
+      gap: var(--brush-gap);
+      align-items: center;
+    }
+
+    .brushBtn, .musicBtn, #clearBtn{
+      width: var(--brush-btn);
+      height: var(--brush-btn);
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.08);
+      display: grid;
+      place-items: center;
+      position: relative;
+      cursor: none;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+      color: #fff;
+    }
+
+    .brushBtn span{
+      display: block;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .brushBtn.small span{ width: 8px; height: 8px; }
+    .brushBtn.medium span{ width: 16px; height: 16px; }
+    .brushBtn.large span{ width: 28px; height: 28px; }
+
+    .brushBtn.active,
+    .musicBtn.active,
+    #clearBtn.active{
+      border-color: #7dd3fc;
+      background: rgba(125,211,252,0.18);
+      box-shadow: 0 0 0 2px rgba(125,211,252,0.25), 0 6px 20px rgba(0,0,0,0.25);
+    }
+
+    .musicBtn{
+      width: auto;
+      padding-inline: 12px;
+      border-radius: 18px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    #clearBtn{
+      width: auto;
+      padding: 10px 12px;
+      border-radius: 16px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    #cursorPreview{
+      position: fixed;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      transform: translate(-50%, -50%);
+      outline: var(--cursor-outline) solid rgba(255,255,255,0.7);
+      z-index: 30;
+      box-shadow: 0 0 20px rgba(255,255,255,0.3);
+    }
+
+    #hud{
+      position: fixed;
+      top: 14px; right: 16px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 25;
+      backdrop-filter: blur(6px);
+      font-weight: 700;
+    }
+
+    #hud label{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    #hud input[type="range"]{
+      width: 140px;
+      accent-color: #7dd3fc;
+    }
+
+    #overlay{
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 30% 20%, rgba(125,211,252,0.1), transparent 45%),
+                  radial-gradient(circle at 70% 40%, rgba(239,68,68,0.08), transparent 40%),
+                  #030712;
+      display: grid;
+      place-items: center;
+      z-index: 40;
+      padding: 20px;
+    }
+
+    .overlay-card{
+      max-width: 860px;
+      width: min(92vw, 860px);
+      background: rgba(15,23,42,0.9);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: clamp(20px, 4vw, 36px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      color: #e5e7eb;
+    }
+
+    .overlay-card h1{
+      margin-top: 0;
+      font-size: clamp(32px, 6vw, 72px);
+      letter-spacing: 0.08em;
+      color: #7dd3fc;
+      font-family: 'Permanent Marker', cursive;
+      text-transform: uppercase;
+    }
+
+    .overlay-card p{ line-height: 1.6; font-size: 1.05rem; }
+
+    .overlay-actions{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+      align-items: center;
+    }
+
+    .start-btn{
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(120deg, #22d3ee, #2563eb);
+      color: #020617;
+      padding: 14px 18px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 12px 30px rgba(37,99,235,0.35);
+    }
+
+    .music-picker{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .music-chip{
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      background: rgba(255,255,255,0.06);
+    }
+    .music-chip.active{ border-color: #7dd3fc; background: rgba(125,211,252,0.2); color: #0b1021; }
+
+    @media (max-width: 820px){
+      :root{ --ui-scale: 0.85; }
+      #sidebar{ width: calc(var(--sidebar-w) - 12px); }
+    }
+  </style>
+</head>
+<body class="dark">
+  <div class="game-wrap">
+    <canvas id="paintCanvas"></canvas>
+    <div id="cursorPreview"></div>
+
+    <aside id="sidebar" aria-label="Palette">
+      <h3 class="panel-title translate" data-fr="Couleurs" data-en="Colors" data-ja="色">Couleurs</h3>
+      <div id="palette" aria-live="polite"></div>
+
+      <h3 class="panel-title translate" data-fr="Taille du spray" data-en="Spray size" data-ja="スプレーのサイズ">Taille du spray</h3>
+      <div id="brushes"></div>
+
+      <h3 class="panel-title translate" data-fr="Musique" data-en="Music" data-ja="音楽">Musique</h3>
+      <div id="musicPanel"></div>
+
+      <div id="actions">
+        <button id="clearBtn" class="translate" data-fr="Effacer" data-en="Clear" data-ja="消す">Effacer</button>
+      </div>
+    </aside>
+
+    <div id="hud">
+      <label class="translate" data-fr="Volume" data-en="Volume" data-ja="音量">Volume
+        <input type="range" id="musicVolume" min="0" max="1" step="0.01" value="0.5">
+      </label>
+      <label class="translate" data-fr="Muet" data-en="Mute" data-ja="ミュート">Muet
+        <input type="checkbox" id="musicMute">
+      </label>
+    </div>
+
+    <div id="overlay">
+      <div class="overlay-card">
+        <h1>Graffiti Oculaire</h1>
+        <p class="translate" data-fr="Survolez pour choisir une couleur, puis déplacez le curseur pour peindre. Aucun clic nécessaire : chaque déplacement laisse une trace comme une bombe de peinture." data-en="Hover to pick a color, then move the cursor to paint. No clicks needed: every movement sprays color like a can." data-ja="ホバーして色を選び、カーソルを動かすだけでペイントできます。クリックは不要で、動きがそのままスプレーになります。">Survolez pour choisir une couleur, puis déplacez le curseur pour peindre. Aucun clic nécessaire : chaque déplacement laisse une trace comme une bombe de peinture.</p>
+        <p class="translate" data-fr="Choisissez votre ambiance sonore : Punk rock ou Hip hop, comme dans le jeu original." data-en="Pick your vibe: Punk rock or Hip hop, just like the original game." data-ja="オリジナルと同じく、パンクロックとヒップホップから雰囲気を選べます。">Choisissez votre ambiance sonore : Punk rock ou Hip hop, comme dans le jeu original.</p>
+
+        <div class="overlay-actions">
+          <div class="music-picker" aria-label="Choisir la musique">
+            <button class="music-chip active" data-style="punk">Punk rock</button>
+            <button class="music-chip" data-style="hiphop">Hip hop</button>
+          </div>
+          <button class="start-btn" id="startBtn">Commencer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('paintCanvas');
+    const ctx = canvas.getContext('2d');
+    const cursorPreview = document.getElementById('cursorPreview');
+    const paletteEl = document.getElementById('palette');
+    const brushesEl = document.getElementById('brushes');
+    const musicPanel = document.getElementById('musicPanel');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const musicChips = Array.from(document.querySelectorAll('.music-chip'));
+    const clearBtn = document.getElementById('clearBtn');
+    const musicVolume = document.getElementById('musicVolume');
+    const musicMute = document.getElementById('musicMute');
+    const sidebar = document.getElementById('sidebar');
+
+    const colors = [
+      '#f97316', '#facc15', '#84cc16', '#14b8a6', '#22d3ee', '#2563eb',
+      '#a855f7', '#ec4899', '#f472b6', '#fff', '#0ea5e9', '#f59e0b'
+    ];
+
+    const brushSizes = [10, 22, 38];
+
+    const musicTracks = {
+      punk: '../../songs/grafiti/grafitipunkrock1.mp3',
+      hiphop: '../../songs/grafiti/grafitihiphop1.mp3'
+    };
+
+    let activeColor = colors[0];
+    let activeSize = brushSizes[1];
+    let paintingEnabled = false;
+    let overUI = false;
+    let lastPoint = null;
+    let musicStyle = 'punk';
+    let musicAudio = null;
+
+    function resize(){
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function setCursor(x, y){
+      cursorPreview.style.left = `${x}px`;
+      cursorPreview.style.top = `${y}px`;
+      cursorPreview.style.width = `${activeSize * 1.4}px`;
+      cursorPreview.style.height = `${activeSize * 1.4}px`;
+      cursorPreview.style.background = activeColor;
+    }
+
+    function sprayDot(x, y){
+      const density = Math.max(14, Math.floor(activeSize * 2.2));
+      for(let i=0; i<density; i++){
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * activeSize * 0.85;
+        const px = x + Math.cos(angle) * radius;
+        const py = y + Math.sin(angle) * radius;
+        const alpha = Math.random() * 0.35 + 0.45;
+        ctx.fillStyle = hexToRgba(activeColor, alpha);
+        ctx.fillRect(px, py, 1.2, 1.2);
+      }
+      ctx.fillStyle = hexToRgba(activeColor, 0.6);
+      ctx.beginPath();
+      ctx.arc(x, y, activeSize * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function sprayLine(start, end){
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const dist = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.floor(dist / 4));
+      for(let i=0; i<=steps; i++){
+        const t = i / steps;
+        sprayDot(start.x + dx * t, start.y + dy * t);
+      }
+    }
+
+    function hexToRgba(hex, alpha){
+      const normalized = hex.replace('#', '');
+      const bigint = parseInt(normalized, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function makeDwell(el, onComplete){
+      const dwell = document.createElement('div');
+      dwell.className = 'dwell';
+      el.appendChild(dwell);
+      let timer = null;
+
+      const start = () => {
+        dwell.classList.add('run');
+        timer = setTimeout(() => {
+          onComplete();
+          dwell.classList.remove('run');
+        }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dwell-time')));
+      };
+
+      const stop = () => {
+        dwell.classList.remove('run');
+        clearTimeout(timer);
+      };
+
+      el.addEventListener('pointerenter', start);
+      el.addEventListener('pointerleave', stop);
+    }
+
+    function buildPalette(){
+      colors.forEach((c, idx) => {
+        const swatch = document.createElement('div');
+        swatch.className = 'swatch';
+        swatch.style.background = c;
+        if(idx === 0) swatch.classList.add('active');
+        makeDwell(swatch, () => setColor(c, swatch));
+        paletteEl.appendChild(swatch);
+      });
+    }
+
+    function setColor(c, el){
+      activeColor = c;
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      el.classList.add('active');
+      const x = parseFloat(cursorPreview.style.left) || window.innerWidth * 0.5;
+      const y = parseFloat(cursorPreview.style.top) || window.innerHeight * 0.5;
+      setCursor(x, y);
+    }
+
+    function buildBrushes(){
+      brushSizes.forEach((size, idx) => {
+        const btn = document.createElement('button');
+        btn.className = `brushBtn ${idx === 0 ? 'small' : idx === 1 ? 'medium' : 'large'}`;
+        if(size === activeSize) btn.classList.add('active');
+        const dot = document.createElement('span');
+        btn.appendChild(dot);
+        makeDwell(btn, () => setBrush(size, btn));
+        brushesEl.appendChild(btn);
+      });
+    }
+
+    function setBrush(size, btn){
+      activeSize = size;
+      document.querySelectorAll('.brushBtn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    function buildMusicPanel(){
+      ['punk', 'hiphop'].forEach(style => {
+        const btn = document.createElement('button');
+        btn.textContent = style === 'punk' ? 'Punk' : 'Hip hop';
+        btn.className = 'musicBtn';
+        if(style === musicStyle) btn.classList.add('active');
+        makeDwell(btn, () => switchMusic(style, btn));
+        musicPanel.appendChild(btn);
+      });
+    }
+
+    function switchMusic(style, btn){
+      musicStyle = style;
+      document.querySelectorAll('.musicBtn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if(musicAudio){
+        musicAudio.pause();
+      }
+      musicAudio = new Audio(musicTracks[musicStyle]);
+      musicAudio.loop = true;
+      musicAudio.volume = musicVolume.value;
+      if(!musicMute.checked){
+        musicAudio.play();
+      }
+    }
+
+    function clearCanvas(){
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+    }
+
+    function startGame(){
+      paintingEnabled = true;
+      overlay.style.display = 'none';
+      switchMusic(musicStyle, musicPanel.querySelector('.musicBtn'));
+    }
+
+    canvas.addEventListener('pointermove', (e) => {
+      setCursor(e.clientX, e.clientY);
+      if(!paintingEnabled || overUI) { lastPoint = null; return; }
+      const point = { x: e.clientX, y: e.clientY };
+      if(!lastPoint){
+        sprayDot(point.x, point.y);
+      } else {
+        sprayLine(lastPoint, point);
+      }
+      lastPoint = point;
+    });
+
+    canvas.addEventListener('pointerleave', () => { lastPoint = null; });
+
+    sidebar.addEventListener('pointerenter', () => { overUI = true; lastPoint = null; });
+    sidebar.addEventListener('pointerleave', () => { overUI = false; });
+
+    makeDwell(clearBtn, () => { clearCanvas(); clearBtn.classList.add('active'); setTimeout(() => clearBtn.classList.remove('active'), 300); });
+
+    startBtn.addEventListener('click', startGame);
+    musicChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        musicChips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        musicStyle = chip.dataset.style;
+      });
+    });
+
+    musicVolume.addEventListener('input', () => {
+      if(musicAudio) musicAudio.volume = musicVolume.value;
+    });
+
+    musicMute.addEventListener('change', () => {
+      if(!musicAudio) return;
+      if(musicMute.checked){
+        musicAudio.pause();
+      } else {
+        musicAudio.play();
+      }
+    });
+
+    buildPalette();
+    buildBrushes();
+    buildMusicPanel();
+    setCursor(window.innerWidth * 0.6, window.innerHeight * 0.5);
+  </script>
+</body>
+</html>
