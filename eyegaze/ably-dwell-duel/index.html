@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Eyegaze Dwell Duel</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Arial", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #000;
+        color: #f5f5f5;
+        overflow: hidden;
+      }
+
+      .hud {
+        position: fixed;
+        top: 24px;
+        left: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        z-index: 10;
+      }
+
+      .hud h1 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 600;
+      }
+
+      .hud p {
+        margin: 0;
+        font-size: 14px;
+        max-width: 320px;
+        color: #c9c9c9;
+      }
+
+      .scores {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        font-size: 16px;
+      }
+
+      .score {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.1);
+        min-width: 120px;
+        text-align: center;
+      }
+
+      .status {
+        font-size: 12px;
+        color: #8aff8a;
+      }
+
+      .arena {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .target {
+        position: absolute;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%, #fffb9f, #ff5fcf);
+        box-shadow: 0 0 24px rgba(255, 95, 207, 0.8);
+        transform: translate(-50%, -50%);
+      }
+
+      .cursor {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+
+      .cursor.local {
+        background: #4ef2ff;
+        box-shadow: 0 0 16px rgba(78, 242, 255, 0.9);
+      }
+
+      .cursor.remote {
+        background: #ff9955;
+        box-shadow: 0 0 16px rgba(255, 153, 85, 0.9);
+      }
+
+      .dwell-ring {
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        transform: translate(-50%, -50%);
+        opacity: 0;
+        transition: opacity 120ms ease;
+      }
+
+      .dwell-ring.active {
+        opacity: 1;
+      }
+
+      .footer {
+        position: fixed;
+        bottom: 18px;
+        left: 24px;
+        font-size: 12px;
+        color: #8f8f8f;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hud">
+      <h1>Eyegaze Dwell Duel</h1>
+      <p>
+        Two-player eyegaze challenge. Dwell your cursor on the glowing target to score. The target
+        moves for both players when anyone scores.
+      </p>
+      <div class="scores">
+        <div class="score" id="localScore">You: 0</div>
+        <div class="score" id="remoteScore">Opponent: 0</div>
+      </div>
+      <div class="status" id="status">Connecting to Ably…</div>
+    </div>
+    <div class="arena" id="arena">
+      <div class="target" id="target"></div>
+      <div class="dwell-ring" id="dwellRing"></div>
+      <div class="cursor local" id="localCursor"></div>
+      <div class="cursor remote" id="remoteCursor"></div>
+    </div>
+    <div class="footer">Share this page with your opponent. Keep it open on both PCs.</div>
+
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <script>
+      const ABLY_KEY = "cdtKhA.qjdiYA:nbUbeaXqiQWHgQF1F9Nn0glvP62CRod3LcbAQDWJaIE";
+      const CHANNEL_NAME = "eyegaze-dwell-duel";
+      const DWELL_TIME_MS = 900;
+      const TARGET_RADIUS = 60;
+
+      const arena = document.getElementById("arena");
+      const target = document.getElementById("target");
+      const dwellRing = document.getElementById("dwellRing");
+      const localCursor = document.getElementById("localCursor");
+      const remoteCursor = document.getElementById("remoteCursor");
+      const localScoreEl = document.getElementById("localScore");
+      const remoteScoreEl = document.getElementById("remoteScore");
+      const statusEl = document.getElementById("status");
+
+      const clientId =
+        localStorage.getItem("eyegaze-duel-id") ||
+        `player-${Math.random().toString(16).slice(2, 8)}`;
+      localStorage.setItem("eyegaze-duel-id", clientId);
+
+      const state = {
+        target: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+        scores: { [clientId]: 0 },
+        lastUpdate: Date.now(),
+      };
+
+      const realtime = new Ably.Realtime({ key: ABLY_KEY, clientId });
+      const channel = realtime.channels.get(CHANNEL_NAME);
+
+      const setStatus = (text, ok = true) => {
+        statusEl.textContent = text;
+        statusEl.style.color = ok ? "#8aff8a" : "#ff9a9a";
+      };
+
+      const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+      const randomTarget = () => {
+        const padding = 120;
+        return {
+          x: clamp(
+            Math.random() * window.innerWidth,
+            padding,
+            window.innerWidth - padding,
+          ),
+          y: clamp(
+            Math.random() * window.innerHeight,
+            padding,
+            window.innerHeight - padding,
+          ),
+        };
+      };
+
+      const applyTarget = (targetPos) => {
+        state.target = targetPos;
+        target.style.left = `${targetPos.x}px`;
+        target.style.top = `${targetPos.y}px`;
+        dwellRing.style.left = `${targetPos.x}px`;
+        dwellRing.style.top = `${targetPos.y}px`;
+      };
+
+      const updateScores = () => {
+        const localScore = state.scores[clientId] || 0;
+        const opponentId = Object.keys(state.scores).find((id) => id !== clientId);
+        const remoteScore = opponentId ? state.scores[opponentId] || 0 : 0;
+        localScoreEl.textContent = `You: ${localScore}`;
+        remoteScoreEl.textContent = `Opponent: ${remoteScore}`;
+      };
+
+      const publishState = () => {
+        channel.publish("state", {
+          target: state.target,
+          scores: state.scores,
+          updatedBy: clientId,
+          timestamp: Date.now(),
+        });
+      };
+
+      realtime.connection.on("connected", () => {
+        setStatus("Connected. Waiting for opponent…");
+        setTimeout(() => {
+          if (Date.now() - state.lastUpdate > 1500) {
+            state.target = randomTarget();
+            publishState();
+          }
+        }, 1200);
+      });
+
+      realtime.connection.on("failed", () => {
+        setStatus("Connection failed. Check your network.", false);
+      });
+
+      channel.subscribe("state", (message) => {
+        const data = message.data;
+        if (!data || !data.target) {
+          return;
+        }
+        state.lastUpdate = Date.now();
+        state.scores = data.scores || state.scores;
+        applyTarget(data.target);
+        updateScores();
+        if (data.updatedBy && data.updatedBy !== clientId) {
+          setStatus("Opponent connected. Keep dwelling!");
+        }
+      });
+
+      channel.subscribe("cursor", (message) => {
+        if (!message.data || message.data.id === clientId) {
+          return;
+        }
+        remoteCursor.style.left = `${message.data.x}px`;
+        remoteCursor.style.top = `${message.data.y}px`;
+      });
+
+      let lastCursorPublish = 0;
+      const cursorPublishInterval = 40;
+
+      const publishCursor = (x, y) => {
+        const now = Date.now();
+        if (now - lastCursorPublish < cursorPublishInterval) {
+          return;
+        }
+        lastCursorPublish = now;
+        channel.publish("cursor", { id: clientId, x, y });
+      };
+
+      let dwellStart = null;
+      let dwellActive = false;
+
+      const handlePointerMove = (event) => {
+        const x = event.clientX;
+        const y = event.clientY;
+        localCursor.style.left = `${x}px`;
+        localCursor.style.top = `${y}px`;
+        publishCursor(x, y);
+
+        const dx = x - state.target.x;
+        const dy = y - state.target.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const insideTarget = distance < TARGET_RADIUS;
+
+        if (insideTarget) {
+          if (!dwellStart) {
+            dwellStart = Date.now();
+            dwellRing.classList.add("active");
+          }
+          const elapsed = Date.now() - dwellStart;
+          dwellRing.style.transform = `translate(-50%, -50%) scale(${1 + elapsed / DWELL_TIME_MS})`;
+          if (elapsed >= DWELL_TIME_MS && !dwellActive) {
+            dwellActive = true;
+            state.scores[clientId] = (state.scores[clientId] || 0) + 1;
+            state.target = randomTarget();
+            publishState();
+            updateScores();
+            setTimeout(() => {
+              dwellActive = false;
+            }, 300);
+          }
+        } else {
+          dwellStart = null;
+          dwellActive = false;
+          dwellRing.classList.remove("active");
+          dwellRing.style.transform = "translate(-50%, -50%)";
+        }
+      };
+
+      arena.addEventListener("mousemove", handlePointerMove);
+      arena.addEventListener("touchmove", (event) => {
+        if (event.touches.length > 0) {
+          handlePointerMove(event.touches[0]);
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        applyTarget(state.target);
+      });
+
+      applyTarget(state.target);
+      updateScores();
+    </script>
+  </body>
+</html>
