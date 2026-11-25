@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title class="translate" data-fr="Parcours mélodique" data-en="Melody Path" data-ja="メロディーパス">Parcours mélodique</title>
+
+  <link rel="stylesheet" href="../../css/games.css" />
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css" />
+
+  <style>
+    :root {
+      --bg-start: #0b1020;
+      --bg-end: #151a2d;
+      --accent: #14b8a6;
+      --accent-soft: rgba(20, 184, 166, 0.25);
+      --node-size: 64px;
+      --node-ring: 6px;
+      --text-soft: rgba(255, 255, 255, 0.75);
+    }
+
+    body {
+      margin: 0;
+      font-family: "Arial", sans-serif;
+      background: radial-gradient(circle at top, var(--bg-start), var(--bg-end));
+      color: #fff;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body.menu-open {
+      background: #000;
+      color: #fff;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 2px solid #009688;
+      background: #fff;
+      color: #009688;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    body.menu-open #langToggle {
+      background: #111;
+      color: #14b8a6;
+      border-color: #14b8a6;
+    }
+
+    .hide-native-cursor,
+    .hide-native-cursor * {
+      cursor: none !important;
+    }
+
+    #game-screen {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: none;
+    }
+
+    #game-header {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      z-index: 2;
+    }
+
+    #game-header h1 {
+      font-size: 2.2rem;
+      margin: 0 0 8px;
+      letter-spacing: 0.02em;
+    }
+
+    #game-header p {
+      margin: 0;
+      font-size: 1.05rem;
+      color: var(--text-soft);
+    }
+
+    #reset-button {
+      position: absolute;
+      top: 24px;
+      right: 32px;
+      background: transparent;
+      color: #fff;
+      border: 2px solid var(--accent);
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease;
+      z-index: 2;
+    }
+
+    #reset-button:hover {
+      background: var(--accent);
+      color: #0b1020;
+    }
+
+    #path-container {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+    }
+
+    #path-stage {
+      position: relative;
+      width: min(90vw, 1000px);
+      height: min(70vh, 620px);
+    }
+
+    #path-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #path-svg polyline {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.2);
+      stroke-width: 6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    #path-svg polyline.active-line {
+      stroke: var(--accent);
+      filter: drop-shadow(0 0 10px rgba(20, 184, 166, 0.7));
+    }
+
+    .path-node {
+      position: absolute;
+      width: var(--node-size);
+      height: var(--node-size);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      transform: translate(-50%, -50%);
+      transition: transform 0.2s ease, border 0.2s ease, background 0.2s ease;
+    }
+
+    .path-node.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 18px rgba(20, 184, 166, 0.4);
+      transform: translate(-50%, -50%) scale(1.05);
+    }
+
+    .path-node.completed {
+      background: rgba(20, 184, 166, 0.2);
+      border-color: rgba(20, 184, 166, 0.8);
+      box-shadow: 0 0 22px rgba(20, 184, 166, 0.7);
+    }
+
+    .path-node::after {
+      content: "";
+      position: absolute;
+      inset: calc(var(--node-ring) * -1);
+      border-radius: 50%;
+      background: conic-gradient(
+        var(--accent) calc(var(--progress, 0) * 1%),
+        transparent 0
+      );
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .path-node.active::after {
+      opacity: 0.8;
+    }
+
+    #status-pill {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 24px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 1rem;
+      color: var(--text-soft);
+      backdrop-filter: blur(12px);
+    }
+
+    #gazePointer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: var(--gp-size, 36px);
+      height: var(--gp-size, 36px);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10000;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    #gazePointer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff3b30;
+      box-shadow: 0 0 12px rgba(255, 59, 48, 0.5);
+    }
+
+    #gazePointer.gp-dwell::before {
+      animation: gpPulse 700ms ease-in-out infinite alternate;
+    }
+
+    @keyframes gpPulse {
+      from {
+        transform: scale(1);
+      }
+      to {
+        transform: scale(1.08);
+      }
+    }
+
+    @media (max-width: 768px) {
+      :root {
+        --node-size: 54px;
+      }
+
+      #game-header h1 {
+        font-size: 1.7rem;
+      }
+    }
+  </style>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-B45TJG4GBJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-B45TJG4GBJ');
+  </script>
+</head>
+<body class="menu-open">
+  <button id="langToggle" title="Changer la langue / Switch language">FR / EN</button>
+
+  <div id="game-options" class="modal" style="display: flex;">
+    <div id="control-panel-options">
+      <div id="options-title-bar">
+        <h2 id="options-main-title" class="translate" data-fr="Parcours mélodique" data-en="Melody Path" data-ja="メロディーパス">Parcours mélodique</h2>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <div id="options-inline-container">
+        <div class="options-column">
+          <div class="option-item">
+            <label class="teal-label">
+              <input type="checkbox" id="muteSound" />
+              <span class="translate" data-fr="Désactiver les sons" data-en="Mute sounds" data-ja="サウンドをミュート">Désactiver les sons</span>
+            </label>
+          </div>
+
+          <div class="option-item">
+            <label for="volumeSlider" class="teal-label">
+              <span class="translate" data-fr="Volume" data-en="Volume" data-ja="音量">Volume</span>
+              <span id="volumeValue">80</span>%
+            </label>
+            <input type="range" id="volumeSlider" class="styled-slider" min="0" max="100" value="80" />
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="themeSelect" class="teal-label label-block translate" data-fr="Thème" data-en="Theme" data-ja="テーマ">Thème</label>
+            <select id="themeSelect" class="styled-select">
+              <option value="night" selected class="translate" data-fr="Nuit" data-en="Night" data-ja="ナイト">Nuit</option>
+              <option value="dawn" class="translate" data-fr="Aube" data-en="Dawn" data-ja="夜明け">Aube</option>
+            </select>
+          </div>
+
+          <div class="option-item">
+            <label for="trailStrength" class="teal-label">
+              <span class="translate" data-fr="Brillance du chemin" data-en="Path glow" data-ja="経路の光">Brillance du chemin</span>
+              <span id="trailValue">70</span>%
+            </label>
+            <input type="range" id="trailStrength" class="styled-slider" min="30" max="100" value="70" />
+          </div>
+        </div>
+
+        <div class="options-column">
+          <div class="option-item">
+            <label for="dwellTime" class="teal-label">
+              <span class="translate" data-fr="Temps de fixation" data-en="Dwell time" data-ja="注視時間">Temps de fixation</span>
+              <span id="dwellValue">1200</span> ms
+            </label>
+            <input type="range" id="dwellTime" class="styled-slider" min="300" max="4000" step="100" value="1200" />
+          </div>
+
+          <div class="option-item gp-compact">
+            <label class="teal-label">
+              <input type="checkbox" id="showGazePointer" checked />
+              <span class="translate" data-fr="Afficher le pointeur (cache la souris)" data-en="Show gaze pointer (hide mouse)" data-ja="視線ポインターを表示（マウスを非表示）">Afficher le pointeur (cache la souris)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-divider"></div>
+
+      <button id="start-button" class="button translate" data-fr="Commencer" data-en="Start" data-ja="開始">Commencer</button>
+    </div>
+  </div>
+
+  <main id="game-screen">
+    <div id="game-header">
+      <h1 class="translate" data-fr="Suis le chemin lumineux" data-en="Follow the glowing path" data-ja="光る道をたどろう">Suis le chemin lumineux</h1>
+      <p class="translate" data-fr="Chaque point joué ajoute une note à la mélodie." data-en="Each point you touch adds a note to the melody." data-ja="点に触れるたびにメロディーが追加されます。">Chaque point joué ajoute une note à la mélodie.</p>
+    </div>
+
+    <button id="reset-button" class="translate" data-fr="Recommencer" data-en="Restart" data-ja="リスタート">Recommencer</button>
+
+    <div id="path-container">
+      <div id="path-stage">
+        <svg id="path-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          <polyline id="path-line" points="12,80 26,62 38,70 52,46 66,58 78,38 90,50" />
+          <polyline id="path-line-active" class="active-line" points="12,80 26,62 38,70 52,46 66,58 78,38 90,50" />
+        </svg>
+      </div>
+    </div>
+
+    <div id="status-pill" class="translate" data-fr="Regarde chaque cercle pour jouer la mélodie." data-en="Look at each circle to play the melody." data-ja="各サークルを見てメロディーを演奏します。">Regarde chaque cercle pour jouer la mélodie.</div>
+  </main>
+
+  <div id="gazePointer" aria-hidden="true"></div>
+
+  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <script>
+    const nodes = [
+      { x: 12, y: 80, note: "C4" },
+      { x: 26, y: 62, note: "D4" },
+      { x: 38, y: 70, note: "E4" },
+      { x: 52, y: 46, note: "G4" },
+      { x: 66, y: 58, note: "A4" },
+      { x: 78, y: 38, note: "C5" },
+      { x: 90, y: 50, note: "D5" }
+    ];
+
+    const gameOptions = document.getElementById('game-options');
+    const startButton = document.getElementById('start-button');
+    const gameScreen = document.getElementById('game-screen');
+    const pathStage = document.getElementById('path-stage');
+    const pathLineActive = document.getElementById('path-line-active');
+    const resetButton = document.getElementById('reset-button');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeValue = document.getElementById('volumeValue');
+    const dwellSlider = document.getElementById('dwellTime');
+    const dwellValue = document.getElementById('dwellValue');
+    const showGazePointer = document.getElementById('showGazePointer');
+    const gazePointer = document.getElementById('gazePointer');
+    const trailStrength = document.getElementById('trailStrength');
+    const trailValue = document.getElementById('trailValue');
+    const muteSound = document.getElementById('muteSound');
+    const themeSelect = document.getElementById('themeSelect');
+    const langToggle = document.getElementById('langToggle');
+
+    let currentIndex = 0;
+    let dwellStart = null;
+    let pointerPosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let synth = null;
+
+    let currentLang = 'fr';
+
+    langToggle.addEventListener('click', () => {
+      currentLang = currentLang === 'fr' ? 'en' : 'fr';
+      document.querySelectorAll('[data-fr]').forEach(el => {
+        el.textContent = el.dataset[currentLang];
+      });
+      langToggle.textContent = currentLang === 'fr' ? 'EN' : 'FR';
+    });
+
+    function createNodes() {
+      nodes.forEach((node, index) => {
+        const div = document.createElement('div');
+        div.className = 'path-node';
+        div.dataset.index = index;
+        div.style.left = `${node.x}%`;
+        div.style.top = `${node.y}%`;
+        div.textContent = index + 1;
+        pathStage.appendChild(div);
+      });
+      highlightActiveNode();
+    }
+
+    function highlightActiveNode() {
+      const nodeElements = document.querySelectorAll('.path-node');
+      nodeElements.forEach((nodeEl, index) => {
+        nodeEl.classList.toggle('active', index === currentIndex);
+        nodeEl.style.setProperty('--progress', '0');
+      });
+      updatePathGlow();
+    }
+
+    function updatePathGlow() {
+      const glowPercent = Number(trailStrength.value);
+      pathLineActive.style.stroke = `rgba(20, 184, 166, ${glowPercent / 100})`;
+      pathLineActive.style.filter = `drop-shadow(0 0 ${glowPercent / 4}px rgba(20, 184, 166, ${glowPercent / 100}))`;
+    }
+
+    function setTheme() {
+      if (themeSelect.value === 'dawn') {
+        document.documentElement.style.setProperty('--bg-start', '#1d2142');
+        document.documentElement.style.setProperty('--bg-end', '#3f2b5b');
+      } else {
+        document.documentElement.style.setProperty('--bg-start', '#0b1020');
+        document.documentElement.style.setProperty('--bg-end', '#151a2d');
+      }
+    }
+
+    function resetPath() {
+      currentIndex = 0;
+      dwellStart = null;
+      document.querySelectorAll('.path-node').forEach(node => {
+        node.classList.remove('completed');
+        node.style.setProperty('--progress', '0');
+      });
+      highlightActiveNode();
+    }
+
+    function playNote(note) {
+      if (muteSound.checked || !synth) return;
+      const volume = Number(volumeSlider.value) / 100;
+      synth.volume.value = Tone.gainToDb(volume);
+      synth.triggerAttackRelease(note, '8n');
+    }
+
+    function advanceNode() {
+      const currentNode = document.querySelector(`.path-node[data-index='${currentIndex}']`);
+      if (currentNode) {
+        currentNode.classList.remove('active');
+        currentNode.classList.add('completed');
+      }
+      playNote(nodes[currentIndex].note);
+      currentIndex += 1;
+      if (currentIndex >= nodes.length) {
+        currentIndex = 0;
+      }
+      highlightActiveNode();
+      dwellStart = null;
+    }
+
+    function handleDwell(nodeEl, delta) {
+      const dwellTime = Number(dwellSlider.value);
+      const progress = Math.min(delta / dwellTime, 1);
+      nodeEl.style.setProperty('--progress', `${progress * 100}`);
+      if (delta >= dwellTime) {
+        advanceNode();
+      }
+    }
+
+    function checkPointer() {
+      const nodeEl = document.querySelector(`.path-node[data-index='${currentIndex}']`);
+      if (!nodeEl) return;
+
+      const rect = nodeEl.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const radius = rect.width / 2 + 10;
+      const dx = pointerPosition.x - centerX;
+      const dy = pointerPosition.y - centerY;
+      const distance = Math.hypot(dx, dy);
+      const inside = distance <= radius;
+
+      if (inside) {
+        gazePointer.classList.add('gp-dwell');
+        if (!dwellStart) {
+          dwellStart = performance.now();
+        }
+        const elapsed = performance.now() - dwellStart;
+        handleDwell(nodeEl, elapsed);
+      } else {
+        dwellStart = null;
+        nodeEl.style.setProperty('--progress', '0');
+        gazePointer.classList.remove('gp-dwell');
+      }
+    }
+
+    function animate() {
+      if (gameScreen.style.display === 'block') {
+        checkPointer();
+      }
+      requestAnimationFrame(animate);
+    }
+
+    volumeSlider.addEventListener('input', () => {
+      volumeValue.textContent = volumeSlider.value;
+    });
+
+    dwellSlider.addEventListener('input', () => {
+      dwellValue.textContent = dwellSlider.value;
+    });
+
+    trailStrength.addEventListener('input', () => {
+      trailValue.textContent = trailStrength.value;
+      updatePathGlow();
+    });
+
+    themeSelect.addEventListener('change', setTheme);
+
+    resetButton.addEventListener('click', resetPath);
+
+    startButton.addEventListener('click', async () => {
+      await Tone.start();
+      synth = new Tone.Synth({
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.02, decay: 0.2, sustain: 0.4, release: 0.6 }
+      }).toDestination();
+
+      gameOptions.style.display = 'none';
+      gameScreen.style.display = 'block';
+      document.body.classList.remove('menu-open');
+
+      setTheme();
+      updatePathGlow();
+      resetPath();
+
+      if (showGazePointer.checked) {
+        document.body.classList.add('hide-native-cursor');
+        gazePointer.style.opacity = '1';
+      } else {
+        document.body.classList.remove('hide-native-cursor');
+        gazePointer.style.opacity = '0';
+      }
+    });
+
+    document.addEventListener('mousemove', (event) => {
+      pointerPosition = { x: event.clientX, y: event.clientY };
+      gazePointer.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
+    });
+
+    showGazePointer.addEventListener('change', () => {
+      if (showGazePointer.checked) {
+        document.body.classList.add('hide-native-cursor');
+        gazePointer.style.opacity = '1';
+      } else {
+        document.body.classList.remove('hide-native-cursor');
+        gazePointer.style.opacity = '0';
+      }
+    });
+
+    createNodes();
+    animate();
+  </script>
+</body>
+</html>
