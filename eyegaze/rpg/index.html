@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Duel des Lanternes — Prototype RPG</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+      color: #f8eacb;
+      overflow: hidden;
+    }
+    body { display: flex; }
+
+    #layout {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+
+    #modePanel {
+      width: clamp(220px, 24vw, 320px);
+      background: #050505;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 10px 0 26px rgba(0,0,0,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(32px, 5vh, 72px) clamp(16px, 1.8vw, 32px);
+      position: relative;
+      z-index: 12;
+    }
+
+    #modePanel .panel-ornaments {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    #modePanel .panel-ornaments img {
+      position: absolute;
+      width: clamp(110px, 16vw, 160px);
+      opacity: 0.18;
+      filter: blur(0.2px) drop-shadow(0 6px 10px rgba(0,0,0,0.55));
+    }
+    #modePanel .panel-ornaments .branch-corner {
+      bottom: clamp(18px, 6vh, 32px);
+      left: clamp(12px, 2vw, 28px);
+      transform: rotate(-12deg);
+    }
+
+    .player-panel {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(28px, 5vh, 48px);
+      align-items: center;
+      text-align: center;
+    }
+
+    .player-hearts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: clamp(6px, 1vw, 10px);
+      justify-content: center;
+      width: 100%;
+    }
+    .heart {
+      font-size: clamp(18px, 2.4vw, 28px);
+      line-height: 1;
+      text-shadow: 0 4px 14px rgba(0,0,0,0.55);
+      transition: transform 0.25s ease, opacity 0.2s ease, filter 0.25s ease;
+    }
+    .heart.lost {
+      opacity: 0.2;
+      filter: grayscale(0.6) blur(0.2px);
+      transform: scale(0.92);
+    }
+
+    .panel-title {
+      font-size: clamp(1.2rem, 2.2vw, 1.6rem);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,240,200,0.85);
+      margin-bottom: clamp(4px, 1vh, 12px);
+    }
+
+    .panel-subtitle {
+      font-size: clamp(0.8rem, 1.8vw, 1rem);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,240,200,0.45);
+    }
+
+    #abilityList {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      gap: clamp(24px, 5vh, 40px);
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .ability-card {
+      position: relative;
+      width: clamp(140px, 18vw, 220px);
+      aspect-ratio: 1;
+      border-radius: 24px;
+      background: linear-gradient(160deg, rgba(18,18,22,0.95), rgba(30,30,38,0.92));
+      border: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, opacity 0.2s ease;
+      pointer-events: auto;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.5);
+    }
+    .ability-card img {
+      width: 68%;
+      height: 68%;
+      object-fit: contain;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,0.55));
+      pointer-events: none;
+      user-select: none;
+    }
+    .ability-card .label {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(0.7rem, 1.6vw, 0.95rem);
+      letter-spacing: 0.12em;
+      color: rgba(255,240,200,0.72);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      pointer-events: none;
+    }
+    .ability-card .badge {
+      position: absolute;
+      top: clamp(10px, 2vh, 18px);
+      right: clamp(12px, 2vw, 20px);
+      padding: 4px 10px;
+      font-size: clamp(0.65rem, 1.4vw, 0.85rem);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(255, 210, 120, 0.16);
+      border: 1px solid rgba(255,210,120,0.35);
+      border-radius: 999px;
+      color: rgba(255,240,200,0.75);
+      pointer-events: none;
+    }
+    .ability-card:hover { transform: translateY(-8px); }
+    .ability-card:active { transform: translateY(2px) scale(0.98); }
+    .ability-card.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      border-color: rgba(255,255,255,0.04);
+      box-shadow: none;
+    }
+    .ability-card.disabled:hover,
+    .ability-card.disabled:active {
+      transform: none;
+    }
+    .ability-card.active {
+      border-color: rgba(255,210,120,0.5);
+      box-shadow: 0 16px 36px rgba(255,180,60,0.22);
+    }
+
+    .ability-description {
+      font-size: clamp(0.75rem, 1.6vw, 0.95rem);
+      line-height: 1.55;
+      color: rgba(255,240,200,0.72);
+      letter-spacing: 0.04em;
+      min-height: clamp(60px, 12vh, 90px);
+    }
+
+    #playArea {
+      flex: 1;
+      position: relative;
+      background: #010101;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #playArea::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url("../../images/samurai/samurainightbg.png") center/cover no-repeat;
+      opacity: 0.7;
+      filter: saturate(1.1);
+    }
+    #playArea::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 60% 40%, rgba(255,180,90,0.25), transparent 55%),
+                  radial-gradient(circle at 40% 70%, rgba(90,130,255,0.18), transparent 60%);
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    #battleStage {
+      position: relative;
+      z-index: 10;
+      width: min(960px, 94vw);
+      max-width: 960px;
+      min-height: min(640px, 92vh);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(24px, 5vh, 40px);
+    }
+
+    .hud {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(16px, 3vh, 28px);
+      align-items: flex-start;
+    }
+
+    .turn-badge {
+      padding: 8px 18px;
+      border-radius: 999px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: clamp(0.7rem, 1.6vw, 0.9rem);
+      background: rgba(15,15,20,0.75);
+      border: 1px solid rgba(255,210,120,0.35);
+      color: rgba(255,240,200,0.85);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    .turn-badge.enemy {
+      background: rgba(35,0,0,0.55);
+      border-color: rgba(255,120,120,0.45);
+      color: rgba(255,200,200,0.85);
+    }
+    .turn-badge.player {
+      background: rgba(0,35,40,0.55);
+      border-color: rgba(120,220,255,0.45);
+      color: rgba(200,240,255,0.9);
+    }
+
+    .enemy-status {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: min(360px, 65vw);
+    }
+    .enemy-status .name {
+      font-size: clamp(1rem, 2.4vw, 1.4rem);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .health-bar {
+      position: relative;
+      width: 100%;
+      height: clamp(14px, 2vh, 20px);
+      border-radius: 999px;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.12);
+      overflow: hidden;
+    }
+    .health-bar .value {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(255,110,110,0.9), rgba(255,180,120,0.9));
+      transform-origin: left center;
+      transition: transform 0.4s ease;
+    }
+
+    #enemyArea {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(24px, 5vh, 60px);
+    }
+    #enemySprite {
+      width: clamp(200px, 32vw, 320px);
+      filter: drop-shadow(0 18px 40px rgba(0,0,0,0.85));
+      transition: transform 0.25s ease;
+    }
+    #enemySprite.enemy-hit {
+      animation: enemyHit 0.6s ease;
+    }
+    #enemySprite.enemy-attack {
+      animation: enemyAttack 0.6s ease;
+    }
+
+    @keyframes enemyHit {
+      0%, 100% { transform: translateX(0) scale(1); }
+      25% { transform: translateX(-12px) rotate(-2deg) scale(0.96); }
+      50% { transform: translateX(18px) rotate(1deg) scale(1.02); }
+      75% { transform: translateX(-8px) rotate(-1deg) scale(0.98); }
+    }
+
+    @keyframes enemyAttack {
+      0% { transform: translateX(0) scale(1); }
+      40% { transform: translateX(-18px) scale(1.05); }
+      70% { transform: translateX(10px) scale(0.98); }
+      100% { transform: translateX(0) scale(1); }
+    }
+
+    .floating-text {
+      position: absolute;
+      font-weight: 700;
+      font-size: clamp(1rem, 2.8vw, 1.6rem);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #fff5d6;
+      text-shadow: 0 6px 18px rgba(0,0,0,0.85);
+      pointer-events: none;
+      animation: floatUp 0.9s ease forwards;
+    }
+    .floating-text.enemy {
+      color: #ffb4a2;
+    }
+    .floating-text.player {
+      color: #c6f6ff;
+    }
+    @keyframes floatUp {
+      0% { opacity: 0; transform: translate(-50%, 10px) scale(0.9); }
+      20% { opacity: 1; transform: translate(-50%, -10px) scale(1.05); }
+      80% { opacity: 1; transform: translate(-50%, -48px) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -68px) scale(0.96); }
+    }
+
+    #battleLog {
+      min-height: clamp(80px, 14vh, 120px);
+      background: linear-gradient(180deg, rgba(8,8,12,0.85), rgba(12,12,20,0.92));
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: clamp(16px, 2.8vh, 28px) clamp(20px, 3vw, 36px);
+      font-size: clamp(0.9rem, 2vw, 1.15rem);
+      line-height: 1.6;
+      letter-spacing: 0.04em;
+      color: rgba(255,240,210,0.85);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.5);
+    }
+
+    #startOverlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(0,0,0,0.78);
+      z-index: 40;
+    }
+    #startBtn {
+      padding: 14px 26px;
+      border: 2px solid #d4a100;
+      color: #f8eacb;
+      background: rgba(0,0,0,0.9);
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+    }
+    #startBtn:active { transform: translateY(1px); }
+
+    #endOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.82);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 45;
+      text-align: center;
+      padding: 32px;
+    }
+    #endOverlay h2 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+    #endOverlay p {
+      max-width: 460px;
+      font-size: clamp(1rem, 2.2vw, 1.2rem);
+      color: rgba(255,240,210,0.8);
+      margin: 0;
+      line-height: 1.6;
+    }
+    #restartBtn {
+      padding: 12px 22px;
+      border-radius: 10px;
+      border: 2px solid rgba(255,210,120,0.5);
+      background: rgba(18,18,26,0.8);
+      color: rgba(255,240,220,0.9);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+    }
+    #restartBtn:active { transform: translateY(1px); }
+
+    @media (max-width: 860px) {
+      #layout {
+        flex-direction: column;
+      }
+      #modePanel {
+        flex-direction: row;
+        width: 100vw;
+        max-width: none;
+        min-height: clamp(220px, 48vh, 320px);
+        border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+      }
+      .player-panel {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: center;
+      }
+      .player-hearts {
+        justify-content: flex-start;
+        max-width: min(360px, 70vw);
+      }
+      #abilityList {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .ability-card .label {
+        bottom: clamp(-18px, -3vh, -12px);
+      }
+      #battleStage {
+        padding: clamp(16px, 4vh, 32px);
+        min-height: min(520px, 90vh);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="layout">
+    <aside id="modePanel">
+      <div class="panel-ornaments" aria-hidden="true">
+        <img src="../../images/samurai/cherryblossom.png" alt="" class="branch-corner" />
+      </div>
+      <div class="player-panel">
+        <div>
+          <div class="panel-title">Énergie</div>
+          <div class="player-hearts" id="playerHearts" aria-label="Points de vie"></div>
+          <div class="panel-subtitle" id="playerLifeLabel">10 vies</div>
+        </div>
+        <div>
+          <div class="panel-title">Techniques</div>
+          <div id="abilityList" role="group" aria-label="Techniques disponibles">
+            <div class="ability-card" data-ability="chi" role="button" aria-pressed="false">
+              <span class="badge">Chi</span>
+              <img src="../../images/samurai/chi.png" alt="Technique Chi" />
+              <div class="label">Impulsion</div>
+            </div>
+            <div class="ability-card" data-ability="katana" role="button" aria-pressed="false">
+              <span class="badge">Katana</span>
+              <img src="../../images/samurai/katana.png" alt="Coup de katana" />
+              <div class="label">Frappe</div>
+            </div>
+          </div>
+          <div class="ability-description" id="abilityDescription">Choisissez une technique pour attaquer l'ennemi.</div>
+        </div>
+      </div>
+    </aside>
+    <main id="playArea">
+      <div id="startOverlay">
+        <button id="startBtn">Commencer • Plein écran</button>
+      </div>
+      <div id="battleStage">
+        <header class="hud">
+          <span id="turnBadge" class="turn-badge player">Tour du joueur</span>
+          <div class="enemy-status">
+            <span class="name">Oni errant</span>
+            <div class="health-bar" aria-label="Santé de l'ennemi">
+              <div class="value" id="enemyHealthValue"></div>
+            </div>
+          </div>
+        </header>
+        <section id="enemyArea">
+          <img src="../../images/samurai/moonrock1.png" alt="Oni errant" id="enemySprite" />
+        </section>
+        <div id="battleLog" role="status" aria-live="polite">Choisissez une technique pour commencer le duel.</div>
+      </div>
+      <div id="endOverlay" role="alertdialog" aria-modal="true" aria-hidden="true">
+        <h2 id="endTitle">Victoire !</h2>
+        <p id="endMessage">Le duel est terminé.</p>
+        <button id="restartBtn">Rejouer</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const abilities = {
+        chi: {
+          id: "chi",
+          name: "Impulsion de chi",
+          desc: "Canalisez votre énergie intérieure pour projeter une onde lumineuse (3-5 dégâts).",
+          min: 3,
+          max: 5,
+          sound: new Audio("../../sounds/samurai/energyball.mp3"),
+        },
+        katana: {
+          id: "katana",
+          name: "Frappe de katana",
+          desc: "Un coup précis qui peut briser l'armure ennemie (4-6 dégâts).",
+          min: 4,
+          max: 6,
+          sound: new Audio("../../sounds/katana.mp3"),
+        },
+      };
+
+      const enemyAttacks = [
+        {
+          name: "Griffe spectrale",
+          min: 1,
+          max: 2,
+          line: "L'oni charge ses griffes éthérées !",
+        },
+        {
+          name: "Onde obscure",
+          min: 2,
+          max: 3,
+          line: "Une vague d'ombre vous submerge !",
+        },
+        {
+          name: "Hurlement astral",
+          min: 1,
+          max: 3,
+          line: "Le cri de l'oni résonne dans la vallée...",
+        },
+      ];
+
+      const enemyHitSound = new Audio("../../sounds/samurai/spacerockexplosion1.mp3");
+
+      const state = {
+        playerHP: 10,
+        playerMax: 10,
+        enemyHP: 22,
+        enemyMax: 22,
+        turn: "player",
+        locked: true,
+        activeAbility: null,
+      };
+
+      const heartsContainer = document.getElementById("playerHearts");
+      const playerLifeLabel = document.getElementById("playerLifeLabel");
+      const abilityCards = Array.from(document.querySelectorAll(".ability-card"));
+      const abilityDescription = document.getElementById("abilityDescription");
+      const turnBadge = document.getElementById("turnBadge");
+      const enemyHealthValue = document.getElementById("enemyHealthValue");
+      const enemySprite = document.getElementById("enemySprite");
+      const battleLog = document.getElementById("battleLog");
+      const startOverlay = document.getElementById("startOverlay");
+      const startBtn = document.getElementById("startBtn");
+      const endOverlay = document.getElementById("endOverlay");
+      const endTitle = document.getElementById("endTitle");
+      const endMessage = document.getElementById("endMessage");
+      const restartBtn = document.getElementById("restartBtn");
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function initHearts() {
+        heartsContainer.innerHTML = "";
+        for (let i = 0; i < state.playerMax; i += 1) {
+          const span = document.createElement("span");
+          span.className = "heart";
+          span.textContent = "\u2764\ufe0f";
+          heartsContainer.appendChild(span);
+        }
+        updateHearts();
+      }
+
+      function updateHearts() {
+        const hearts = heartsContainer.children;
+        for (let i = 0; i < hearts.length; i += 1) {
+          hearts[i].classList.toggle("lost", i >= state.playerHP);
+        }
+        if (playerLifeLabel) {
+          const label = state.playerHP <= 1 ? "vie" : "vies";
+          playerLifeLabel.textContent = `${state.playerHP} / ${state.playerMax} ${label}`;
+        }
+      }
+
+      function updateEnemyHealthBar() {
+        const pct = state.enemyHP / state.enemyMax;
+        enemyHealthValue.style.transform = `scaleX(${clamp(pct, 0, 1)})`;
+      }
+
+      function setTurn(turn) {
+        state.turn = turn;
+        turnBadge.classList.toggle("player", turn === "player");
+        turnBadge.classList.toggle("enemy", turn === "enemy");
+        turnBadge.textContent = turn === "player" ? "Tour du joueur" : "Tour de l'ennemi";
+        abilityCards.forEach(card => {
+          if (turn === "player" && !state.locked) {
+            card.classList.remove("disabled");
+            card.setAttribute("aria-disabled", "false");
+          } else {
+            card.classList.add("disabled");
+            card.setAttribute("aria-disabled", "true");
+          }
+        });
+      }
+
+      function randomInt(min, max) {
+        const mi = Math.ceil(min);
+        const ma = Math.floor(max);
+        return Math.floor(Math.random() * (ma - mi + 1)) + mi;
+      }
+
+      function showFloatingText(text, originEl, type = "player") {
+        if (!originEl) return;
+        const rect = originEl.getBoundingClientRect();
+        const stage = battleLog.parentElement;
+        const stageRect = stage.getBoundingClientRect();
+        const fx = document.createElement("div");
+        fx.className = `floating-text ${type}`;
+        fx.textContent = text;
+        const offsetX = rect.left + rect.width / 2;
+        const offsetY = rect.top + rect.height / 2;
+        fx.style.left = `${offsetX - stageRect.left}px`;
+        fx.style.top = `${offsetY - stageRect.top}px`;
+        stage.appendChild(fx);
+        setTimeout(() => fx.remove(), 900);
+      }
+
+      function clearAbilitySelection() {
+        abilityCards.forEach(card => {
+          card.classList.remove("active");
+          card.setAttribute("aria-pressed", "false");
+        });
+      }
+
+      function handleAbilitySelect(id) {
+        if (state.locked || state.turn !== "player") return;
+        const ability = abilities[id];
+        if (!ability) return;
+        state.locked = true;
+        state.activeAbility = ability;
+        clearAbilitySelection();
+        const card = abilityCards.find(c => c.dataset.ability === id);
+        if (card) {
+          card.classList.add("active");
+          card.setAttribute("aria-pressed", "true");
+          card.blur();
+        }
+        abilityDescription.textContent = ability.desc;
+        executePlayerAttack(ability);
+      }
+
+      function executePlayerAttack(ability) {
+        const dmg = randomInt(ability.min, ability.max);
+        battleLog.textContent = `${ability.name} inflige ${dmg} dégâts !`;
+        tryPlay(ability.sound);
+        enemySprite.classList.remove("enemy-hit");
+        void enemySprite.offsetWidth;
+        enemySprite.classList.add("enemy-hit");
+        showFloatingText(`-${dmg}`, enemySprite, "enemy");
+        state.enemyHP = clamp(state.enemyHP - dmg, 0, state.enemyMax);
+        updateEnemyHealthBar();
+
+        if (state.enemyHP <= 0) {
+          setTimeout(() => finishBattle(true), 700);
+        } else {
+          setTimeout(() => {
+            state.locked = false;
+            beginEnemyTurn();
+          }, 700);
+        }
+      }
+
+      function beginEnemyTurn() {
+        setTurn("enemy");
+        state.locked = true;
+        const attack = enemyAttacks[Math.floor(Math.random() * enemyAttacks.length)];
+        battleLog.textContent = attack.line;
+        setTimeout(() => executeEnemyAttack(attack), 800);
+      }
+
+      function executeEnemyAttack(attack) {
+        const dmg = randomInt(attack.min, attack.max);
+        enemySprite.classList.remove("enemy-attack");
+        void enemySprite.offsetWidth;
+        enemySprite.classList.add("enemy-attack");
+        tryPlay(enemyHitSound);
+        state.playerHP = clamp(state.playerHP - dmg, 0, state.playerMax);
+        updateHearts();
+        showFloatingText(`-${dmg}`, enemySprite, "player");
+        if (state.playerHP <= 0) {
+          battleLog.textContent = "Vous êtes à terre...";
+          setTimeout(() => finishBattle(false), 600);
+        } else {
+          battleLog.textContent = `${attack.name} vous touche pour ${dmg} dégâts.`;
+          setTimeout(() => {
+            state.locked = false;
+            setTurn("player");
+            state.activeAbility = null;
+            clearAbilitySelection();
+            abilityDescription.textContent = "Choisissez une technique pour attaquer l'ennemi.";
+            battleLog.textContent = "À vous de jouer ! Choisissez une technique.";
+          }, 700);
+        }
+      }
+
+      function finishBattle(playerWon) {
+        state.locked = true;
+        setTurn(playerWon ? "player" : "enemy");
+        endOverlay.style.display = "flex";
+        endOverlay.setAttribute("aria-hidden", "false");
+        if (playerWon) {
+          endTitle.textContent = "Victoire !";
+          endMessage.textContent = "Votre maîtrise des lanternes a dissipé l'oni.";
+        } else {
+          endTitle.textContent = "Défaite";
+          endMessage.textContent = "L'oni reste dans la vallée. Reprenez votre souffle et retentez.";
+        }
+      }
+
+      function resetBattle() {
+        state.playerHP = state.playerMax;
+        state.enemyHP = state.enemyMax;
+        state.turn = "player";
+        state.locked = false;
+        state.activeAbility = null;
+        clearAbilitySelection();
+        abilityDescription.textContent = "Choisissez une technique pour attaquer l'ennemi.";
+        battleLog.textContent = "Le duel recommence. À vous l'initiative !";
+        updateHearts();
+        updateEnemyHealthBar();
+        endOverlay.style.display = "none";
+        endOverlay.setAttribute("aria-hidden", "true");
+        setTurn("player");
+      }
+
+      function tryPlay(audio) {
+        if (!audio) return;
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
+
+      function enterFullscreen() {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          el.requestFullscreen().catch(() => {});
+        }
+      }
+
+      abilityCards.forEach(card => {
+        card.addEventListener("click", () => handleAbilitySelect(card.dataset.ability));
+        card.addEventListener("mouseenter", () => {
+          if (state.locked && state.turn !== "player") return;
+          const ability = abilities[card.dataset.ability];
+          if (ability) {
+            abilityDescription.textContent = ability.desc;
+          }
+        });
+        card.addEventListener("mouseleave", () => {
+          if (!state.activeAbility) {
+            abilityDescription.textContent = "Choisissez une technique pour attaquer l'ennemi.";
+          }
+        });
+      });
+
+      startBtn.addEventListener("click", () => {
+        startOverlay.style.display = "none";
+        state.locked = false;
+        setTurn("player");
+        battleLog.textContent = "Le duel commence. Choisissez votre première technique.";
+        enterFullscreen();
+      });
+
+      restartBtn.addEventListener("click", () => {
+        resetBattle();
+      });
+
+      window.addEventListener("keydown", (ev) => {
+        if (state.locked || state.turn !== "player") return;
+        if (ev.key === "1") {
+          handleAbilitySelect("chi");
+        } else if (ev.key === "2") {
+          handleAbilitySelect("katana");
+        }
+      });
+
+      initHearts();
+      updateEnemyHealthBar();
+      setTurn("enemy");
+    })();
+  </script>
+</body>
+</html>
