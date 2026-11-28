@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eyegaze Duel</title>
+  <link rel="stylesheet" href="../../css/games.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel-bg: rgba(10, 10, 10, 0.85);
+      --panel-border: rgba(255, 255, 255, 0.2);
+      --panel-text: #f8fafc;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #000;
+      color: #fff;
+      font-family: "Arial", sans-serif;
+      overflow: hidden;
+    }
+
+    .hud {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      border-radius: 16px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      z-index: 5;
+      text-align: center;
+      max-width: 90vw;
+    }
+
+    .hud h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      letter-spacing: 0.03em;
+    }
+
+    .hud p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #cbd5f5;
+    }
+
+    .scoreboard {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-weight: 700;
+    }
+
+    .scorecard {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 0.85rem;
+    }
+
+    .target {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #0b0b0b;
+      transition: transform 0.15s ease;
+      box-shadow: 0 0 24px rgba(255, 255, 255, 0.15);
+    }
+
+    .target.active {
+      transform: scale(1.08);
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
+    }
+
+    .progress-ring {
+      width: 70px;
+      height: 70px;
+      border-radius: 999px;
+      border: 4px solid rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .remote-cursor {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      border: 2px solid #38bdf8;
+      background: rgba(56, 189, 248, 0.25);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 3;
+    }
+
+    .remote-label {
+      position: absolute;
+      top: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.65rem;
+      color: #38bdf8;
+      white-space: nowrap;
+    }
+
+    .status {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      z-index: 4;
+    }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <div>
+      <h1>Eyegaze Duel</h1>
+      <p>Dwell on the colored circle to score. Keep your eyes steady!</p>
+    </div>
+    <div class="scoreboard">
+      <div class="scorecard" id="playerLabel">You: 0</div>
+      <div class="scorecard" id="opponentLabel">Opponent: 0</div>
+    </div>
+  </div>
+
+  <div class="target" id="target">
+    <div class="progress-ring" id="progressRing">Hold</div>
+  </div>
+
+  <div class="status" id="status">Connecting to Ably…</div>
+
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+  <script>
+    const ABLY_KEY = "cdtKhA.qjdiYA:nbUbeaXqiQWHgQF1F9Nn0glvP62CRod3LcbAQDWJaIE";
+    const CHANNEL_NAME = "eyegaze-duel";
+    const DWELL_TIME = 1200;
+
+    const target = document.getElementById("target");
+    const progressRing = document.getElementById("progressRing");
+    const statusEl = document.getElementById("status");
+    const playerLabel = document.getElementById("playerLabel");
+    const opponentLabel = document.getElementById("opponentLabel");
+
+    const playerId = localStorage.getItem("eyegaze-duel-id") || `player-${Math.floor(Math.random() * 100000)}`;
+    localStorage.setItem("eyegaze-duel-id", playerId);
+
+    const ably = new Ably.Realtime({ key: ABLY_KEY, clientId: playerId });
+    const channel = ably.channels.get(CHANNEL_NAME);
+
+    const playerScores = new Map();
+    playerScores.set(playerId, 0);
+
+    let lastPosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let dwellStart = null;
+    let dwellActive = false;
+
+    const colors = ["#f97316", "#22c55e", "#e879f9", "#38bdf8", "#facc15"];
+
+    const updateScores = () => {
+      const myScore = playerScores.get(playerId) || 0;
+      const opponentScore = Array.from(playerScores.entries())
+        .filter(([id]) => id !== playerId)
+        .map(([, score]) => score)
+        .sort((a, b) => b - a)[0] || 0;
+      playerLabel.textContent = `You: ${myScore}`;
+      opponentLabel.textContent = `Opponent: ${opponentScore}`;
+    };
+
+    const placeTarget = () => {
+      const size = 120;
+      const padding = 30;
+      const maxX = window.innerWidth - size - padding;
+      const maxY = window.innerHeight - size - padding;
+      const x = Math.max(padding, Math.random() * maxX);
+      const y = Math.max(padding + 120, Math.random() * maxY);
+      target.style.left = `${x}px`;
+      target.style.top = `${y}px`;
+      target.style.background = colors[Math.floor(Math.random() * colors.length)];
+      progressRing.textContent = "Hold";
+    };
+
+    const isOverTarget = () => {
+      const rect = target.getBoundingClientRect();
+      return (
+        lastPosition.x >= rect.left &&
+        lastPosition.x <= rect.right &&
+        lastPosition.y >= rect.top &&
+        lastPosition.y <= rect.bottom
+      );
+    };
+
+    const handleDwell = () => {
+      if (isOverTarget()) {
+        if (!dwellStart) {
+          dwellStart = performance.now();
+        }
+        const elapsed = performance.now() - dwellStart;
+        const progress = Math.min(1, elapsed / DWELL_TIME);
+        progressRing.textContent = `${Math.ceil((1 - progress) * 10) / 10}s`;
+        target.classList.add("active");
+        if (elapsed >= DWELL_TIME && !dwellActive) {
+          dwellActive = true;
+          const newScore = (playerScores.get(playerId) || 0) + 1;
+          playerScores.set(playerId, newScore);
+          updateScores();
+          channel.publish("score", { clientId: playerId, score: newScore });
+          placeTarget();
+          setTimeout(() => {
+            dwellActive = false;
+          }, 200);
+        }
+      } else {
+        dwellStart = null;
+        target.classList.remove("active");
+        progressRing.textContent = "Hold";
+      }
+      requestAnimationFrame(handleDwell);
+    };
+
+    const sendCursor = () => {
+      channel.publish("cursor", { clientId: playerId, x: lastPosition.x, y: lastPosition.y });
+    };
+
+    const createRemoteCursor = (clientId) => {
+      const cursor = document.createElement("div");
+      cursor.className = "remote-cursor";
+      const label = document.createElement("div");
+      label.className = "remote-label";
+      label.textContent = clientId.replace("player-", "P");
+      cursor.appendChild(label);
+      document.body.appendChild(cursor);
+      return cursor;
+    };
+
+    const remoteCursors = new Map();
+
+    channel.subscribe("cursor", (message) => {
+      if (!message.data || message.data.clientId === playerId) {
+        return;
+      }
+      let cursor = remoteCursors.get(message.data.clientId);
+      if (!cursor) {
+        cursor = createRemoteCursor(message.data.clientId);
+        remoteCursors.set(message.data.clientId, cursor);
+      }
+      cursor.style.left = `${message.data.x}px`;
+      cursor.style.top = `${message.data.y}px`;
+    });
+
+    channel.subscribe("score", (message) => {
+      if (!message.data || !message.data.clientId) {
+        return;
+      }
+      playerScores.set(message.data.clientId, message.data.score || 0);
+      updateScores();
+    });
+
+    ably.connection.on("connected", () => {
+      statusEl.textContent = "Connected. Move your gaze to play.";
+    });
+
+    ably.connection.on("failed", () => {
+      statusEl.textContent = "Connection failed. Please refresh.";
+    });
+
+    document.addEventListener("pointermove", (event) => {
+      lastPosition = { x: event.clientX, y: event.clientY };
+    });
+
+    window.addEventListener("resize", placeTarget);
+
+    placeTarget();
+    updateScores();
+    handleDwell();
+    setInterval(sendCursor, 80);
+  </script>
+</body>
+</html>
