@@ -707,15 +707,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (e.data === YT.PlayerState.ENDED) {
           delete videoResumePositions[videoUrl];
-          videoPlaying = false;
-          videoContainer.style.display = 'none';
+          resetToChoicesScreen();
           if (mode === 'flashcard') {
             currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
             renderFlashcard();
             startFlashcardTimer();
           }
-          resumeGameActivity();
-          tileContainer.style.display = 'flex';
         }
       };
 
@@ -789,16 +786,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   videoPlayer.addEventListener('ended', () => {
     delete videoResumePositions[currentVideoUrl || videoSource.src];
-    videoPlaying = false;
-    videoContainer.style.display = 'none';
+    resetToChoicesScreen();
     if (mode === 'flashcard') {
       currentSelectedIndex = (currentSelectedIndex + 1) % selectedTileIndices.length;
       renderFlashcard();
       startFlashcardTimer();
     }
-    resumeGameActivity();
-    tileContainer.style.display = 'flex';
-    currentVideoUrl = null;
   });
 
   chooseTilesButton.addEventListener('click', () => {
