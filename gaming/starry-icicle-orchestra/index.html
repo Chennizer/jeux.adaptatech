@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>Orchestre stalactites — Jeu switch</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <link rel="stylesheet" href="../../css/otherswitch.css"/>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#050813;color:#fff;font-family:"Inter",system-ui,sans-serif;}
+    canvas{display:block;position:fixed;inset:0;z-index:0;}
+    #langToggle{position:fixed;top:14px;right:14px;z-index:10001;padding:.4rem 1rem;border-radius:999px;border:2px solid #8ef6ff;background:rgba(5,8,19,.78);color:#8ef6ff;font-weight:700;cursor:pointer;letter-spacing:.02em;}
+    #promptOverlay{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1.5rem;gap:1.25rem;}
+    #promptOverlay p{max-width:min(720px,85vw);font-size:1.2rem;line-height:1.6;}
+    #startButton{padding:1rem 2.4rem;border-radius:14px;border:none;background:#8ef6ff;color:#002c35;font-size:1.25rem;font-weight:700;cursor:pointer;}
+    #startButton:hover{filter:brightness(1.12);} 
+  </style>
+</head>
+<body>
+  <button id="langToggle" title="Changer de langue / Switch language">FR / EN</button>
+  <div id="promptOverlay">
+    <p class="translate" data-fr="Appuyez sur Espace pour illuminer une stalactite et envoyer une vague lumineuse." data-en="Press Space to light an icicle and send a luminous wave.">Appuyez sur Espace pour illuminer une stalactite et envoyer une vague lumineuse.</p>
+    <p class="translate" data-fr="Les vagues déclenchent des rubans d'aurores et des étincelles stellaires." data-en="Each wave launches aurora ribbons and star sparkles.">Les vagues déclenchent des rubans d'aurores et des étincelles stellaires.</p>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+  <script>
+    let currentLang = (document.documentElement.lang || 'fr').toLowerCase() === 'en' ? 'en' : 'fr';
+    function applyTranslations(){
+      document.querySelectorAll('.translate').forEach(el=>{
+        const fr = el.getAttribute('data-fr');
+        const en = el.getAttribute('data-en');
+        const txt = currentLang === 'fr' ? fr : en;
+        if(txt != null){
+          if(['P','BUTTON','H1','H2','H3','DIV'].includes(el.tagName)) el.innerHTML = txt; else el.textContent = txt;
+        }
+      });
+      document.documentElement.lang = currentLang;
+      document.title = currentLang === 'fr' ? 'Orchestre stalactites — Jeu switch' : 'Starry Icicle Orchestra — Switch game';
+    }
+    document.getElementById('langToggle').addEventListener('pointerup', ()=>{
+      currentLang = currentLang === 'fr' ? 'en' : 'fr';
+      applyTranslations();
+    });
+    applyTranslations();
+
+    let started = false;
+    let icicles = [];
+    let auroraTrails = [];
+    let sparkleBursts = [];
+    let starfield = [];
+    let waveTrails = [];
+    let nextIndex = 0;
+
+    function startExperience(){
+      if(started) return;
+      started = true;
+      document.getElementById('promptOverlay')?.remove();
+      document.getElementById('langToggle').style.display = 'none';
+      if (typeof fullscreen === 'function') { fullscreen(true); } else { document.documentElement.requestFullscreen?.(); }
+    }
+
+    document.getElementById('startButton').addEventListener('pointerup', (ev)=>{
+      ev.preventDefault();
+      startExperience();
+    });
+
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      angleMode(RADIANS);
+      initIcicles();
+      initStarfield();
+    }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+      initIcicles();
+      initStarfield();
+    }
+
+    function draw(){
+      drawSky();
+      drawStars();
+      drawAuroraTrails();
+      drawIcicles();
+      updateSparkles();
+      updateWaveTrails();
+    }
+
+    function drawSky(){
+      const top = color(10,18,38);
+      const mid = color(12,25,52);
+      const bot = color(20,35,66);
+      for(let y=0;y<height;y++){
+        const t = y/height;
+        const col = t < 0.55 ? lerpColor(top, mid, constrain(t/0.55,0,1)) : lerpColor(mid, bot, constrain((t-0.55)/0.45,0,1));
+        stroke(col);
+        line(0,y,width,y);
+      }
+    }
+
+    function initStarfield(){
+      starfield = [];
+      const count = floor(width*height*0.00012);
+      for(let i=0;i<count;i++){
+        starfield.push({
+          x: random(width),
+          y: random(height*0.6),
+          size: random(1,3),
+          baseAlpha: random(120,220),
+          twinkleSpeed: random(0.002,0.006),
+          phase: random(TWO_PI)
+        });
+      }
+    }
+
+    function drawStars(){
+      noStroke();
+      for(const s of starfield){
+        const tw = s.baseAlpha + sin(millis()*s.twinkleSpeed + s.phase)*50;
+        fill(210,240,255, tw);
+        circle(s.x, s.y, s.size);
+      }
+    }
+
+    function initIcicles(){
+      icicles = [];
+      const count = max(8, floor(width/110));
+      const gap = width/(count+1);
+      for(let i=0;i<count;i++){
+        const x = gap*(i+1);
+        const length = random(height*0.2,height*0.32);
+        const widthIcicle = random(18,32);
+        icicles.push({
+          x,
+          width: widthIcicle,
+          length,
+          pulse: 0,
+          activeUntil: 0,
+          shimmer: random(TWO_PI),
+          color: color(random([ '#7de8ff','#8ff9ff','#b4f3ff','#c4f6ff' ])),
+          wavePoints: []
+        });
+      }
+    }
+
+    function drawIcicles(){
+      noStroke();
+      for(const ic of icicles){
+        const baseX = ic.x;
+        const topY = height*0.08;
+        const baseY = topY + ic.length;
+        const actT = constrain((ic.activeUntil - millis())/600,0,1);
+        const brightness = 0.4 + ic.pulse*0.6 + actT;
+        const col = color(
+          red(ic.color)*brightness,
+          green(ic.color)*brightness,
+          blue(ic.color)*brightness
+        );
+        fill(col.levels[0], col.levels[1], col.levels[2], 220);
+        beginShape();
+        vertex(baseX - ic.width/2, topY);
+        bezierVertex(baseX - ic.width*0.6, topY + ic.length*0.45,
+                     baseX - ic.width*0.2, baseY - ic.length*0.15,
+                     baseX, baseY);
+        bezierVertex(baseX + ic.width*0.2, baseY - ic.length*0.15,
+                     baseX + ic.width*0.6, topY + ic.length*0.45,
+                     baseX + ic.width/2, topY);
+        endShape(CLOSE);
+
+        const waveAlpha = map(ic.pulse,0,1,0,160);
+        if(ic.wavePoints.length){
+          stroke(red(ic.color), green(ic.color), blue(ic.color), waveAlpha);
+          strokeWeight(2.5);
+          noFill();
+          beginShape();
+          for(const w of ic.wavePoints){
+            const y = lerp(topY, baseY, w.t);
+            const sway = sin(w.phase + millis()*w.speed) * ic.width * 0.4 * (1-w.t);
+            vertex(baseX + sway, y);
+          }
+          endShape();
+        }
+
+        ic.pulse = max(0, ic.pulse - 0.02);
+        ic.wavePoints = ic.wavePoints.filter(w => w.t < 1);
+        for(const w of ic.wavePoints){
+          w.t += w.advance;
+        }
+      }
+    }
+
+    function drawAuroraTrails(){
+      auroraTrails = auroraTrails.filter(a => millis() - a.birth < a.life);
+      for(const a of auroraTrails){
+        const t = (millis() - a.birth) / a.life;
+        const alpha = 180 * (1 - t);
+        stroke(a.color.levels[0], a.color.levels[1], a.color.levels[2], alpha);
+        strokeWeight(3);
+        noFill();
+        beginShape();
+        for(let i=0;i<a.points.length;i++){
+          const pt = a.points[i];
+          const wave = sin((millis()*a.speed)+pt.phase)*a.amplitude*(1-t);
+          vertex(pt.x, pt.y + wave + t * a.fall);
+        }
+        endShape();
+      }
+    }
+
+    function updateSparkles(){
+      sparkleBursts = sparkleBursts.filter(s => millis() - s.birth < s.life);
+      for(const s of sparkleBursts){
+        const t = (millis() - s.birth) / s.life;
+        const alpha = 255 * (1 - t);
+        noStroke();
+        fill(s.color.levels[0], s.color.levels[1], s.color.levels[2], alpha);
+        circle(s.x, s.y, s.size * (0.4 + t));
+      }
+    }
+
+    function updateWaveTrails(){
+      waveTrails = waveTrails.filter(w => millis() - w.birth < w.life);
+      for(const w of waveTrails){
+        const t = (millis() - w.birth) / w.life;
+        const alpha = 180 * (1 - t);
+        noStroke();
+        fill(w.color.levels[0], w.color.levels[1], w.color.levels[2], alpha);
+        ellipse(w.x, w.y + t*w.travel, w.radius*(1+t*1.5), w.radius*0.35);
+      }
+    }
+
+    function triggerIcicle(){
+      const now = millis();
+      const ic = icicles[nextIndex % icicles.length];
+      nextIndex++;
+      ic.pulse = 1;
+      ic.activeUntil = now + 600;
+      ic.wavePoints = [];
+      const steps = 8;
+      for(let i=0;i<=steps;i++){
+        ic.wavePoints.push({
+          t: i/steps * 0.05,
+          advance: random(0.01,0.03),
+          speed: random(0.001,0.0035),
+          phase: random(TWO_PI)
+        });
+      }
+
+      const baseY = height*0.08 + ic.length;
+      const palette = [color('#92faff'), color('#7cfbff'), color('#b3f0ff')];
+      const waveColor = random(palette);
+      waveTrails.push({
+        birth: now,
+        life: 2400,
+        x: ic.x,
+        y: baseY,
+        radius: random(80,140),
+        travel: random(height*0.25,height*0.4),
+        color: waveColor
+      });
+
+      const auroraPoints = [];
+      const segments = 16;
+      for(let i=0;i<=segments;i++){
+        const x = map(i,0,segments, ic.x - 200, ic.x + 200);
+        const y = height*0.18 + noise(now*0.0003 + i*0.14)*20;
+        auroraPoints.push({x, y, phase: random(TWO_PI)});
+      }
+      auroraTrails.push({
+        birth: now,
+        life: 3600,
+        points: auroraPoints,
+        amplitude: random(14,26),
+        speed: random(0.001,0.0018),
+        fall: random(height*0.25,height*0.4),
+        color: waveColor
+      });
+
+      const burstCount = 26;
+      for(let i=0;i<burstCount;i++){
+        const ang = random(TWO_PI);
+        const dist = random(10,80);
+        sparkleBursts.push({
+          birth: now,
+          life: random(1400,2200),
+          x: ic.x + cos(ang)*dist,
+          y: baseY + sin(ang)*dist*0.6,
+          size: random(4,9),
+          color: waveColor
+        });
+      }
+    }
+
+    function keyPressed(){
+      if(!started){
+        if(key === ' ' || keyCode === 32){
+          startExperience();
+        }
+        return;
+      }
+      if(key === ' ' || keyCode === 32){
+        triggerIcicle();
+      } else if(keyCode === ENTER){
+        auroraTrails = [];
+        sparkleBursts = [];
+        waveTrails = [];
+        icicles.forEach(ic => { ic.pulse = 0; ic.wavePoints = []; ic.activeUntil = 0; });
+        nextIndex = 0;
+      }
+    }
+
+    function touchStarted(){
+      if(!started){
+        startExperience();
+        return false;
+      }
+      triggerIcicle();
+      return false;
+    }
+  </script>
+</body>
+</html>
