@@ -113,6 +113,46 @@ async function clearFileHandles() {
   } catch {}
 }
 
+function makeFallbackThumbnail(fileName = '') {
+  const canvas = document.createElement('canvas');
+  const cw = 640;
+  const ch = 360;
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  const name = typeof fileName === 'string' && fileName.trim() ? fileName.trim() : 'Video';
+
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash + name.charCodeAt(i)) % 360;
+  }
+
+  ctx.fillStyle = `hsl(${hash}, 65%, 45%)`;
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.fillRect(0, ch - 96, cw, 96);
+
+  const extMatch = name.match(/\.([^.]+)$/);
+  const label = (extMatch ? extMatch[1] : name).slice(0, 12).toUpperCase();
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 72px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label || 'VIDEO', cw / 2, ch / 2);
+
+  return canvas.toDataURL('image/png');
+}
+
+function isEmptyDataUrl(dataUrl) {
+  return (
+    !dataUrl ||
+    dataUrl === 'data:,' ||
+    /^data:image\/[a-zA-Z0-9.+-]+;base64,$/.test(dataUrl)
+  );
+}
+
 // Generate a thumbnail for a given video File
 async function makeThumbnailFromVideo(file) {
   return new Promise((resolve) => {
@@ -124,36 +164,77 @@ async function makeThumbnailFromVideo(file) {
     video.crossOrigin = 'anonymous';
     video.src = url;
 
-    const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
+    let timeoutId;
+
+    const cleanup = () => {
+      try { URL.revokeObjectURL(url); } catch {}
+      video.removeAttribute('src');
+      video.load?.();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const fallback = () => finish(makeFallbackThumbnail(file?.name));
 
     video.addEventListener('loadedmetadata', () => {
       try {
         const t = Math.min(10, Math.max(0, (video.duration || 0) - 0.1));
         video.currentTime = t;
-      } catch {}
+      } catch {
+        fallback();
+      }
     }, { once: true });
 
     video.addEventListener('seeked', () => {
       try {
-        const w = video.videoWidth || 640;
-        const h = video.videoHeight || 360;
-        const cw = 640, ch = 360;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) {
+          fallback();
+          return;
+        }
+        const cw = 640;
+        const ch = 360;
         const canvas = document.createElement('canvas');
-        canvas.width = cw; canvas.height = ch;
+        canvas.width = cw;
+        canvas.height = ch;
         const ctx = canvas.getContext('2d');
         const scale = Math.min(cw / w, ch / h);
-        const dw = w * scale, dh = h * scale;
-        const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+        const dw = w * scale;
+        const dh = h * scale;
+        const dx = (cw - dw) / 2;
+        const dy = (ch - dh) / 2;
         ctx.drawImage(video, dx, dy, dw, dh);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        if (isEmptyDataUrl(dataUrl)) {
+          fallback();
+        } else {
+          finish(dataUrl);
+        }
       } catch {
-        resolve('');
+        fallback();
       }
-      cleanup();
     }, { once: true });
 
-    video.addEventListener('error', () => { cleanup(); resolve(''); }, { once: true });
-    setTimeout(() => { cleanup(); resolve(''); }, 3000);
+    video.addEventListener('error', fallback, { once: true });
+
+    timeoutId = setTimeout(fallback, 3000);
+    const clearTimer = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+    video.addEventListener('seeked', clearTimer, { once: true });
+    video.addEventListener('error', clearTimer, { once: true });
   });
 }
 
