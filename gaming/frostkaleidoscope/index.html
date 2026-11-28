@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Kaléidoscope givré — Jeu Switch</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js" integrity="sha512-M/mg2MGIpiObO0MDYIBNFG/34qrX2GHLsvV/b+ALp8tYX2mrW/b2p+TrOCpPn1LSEgWJ+BYCkvvl0Kks47GF+A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js" integrity="sha512-sTIZhrcmGXsh9DbYrVjq0VHr4XbjuVypCnHRer0oi30mPGTUwFW0ErNdNmVnxcMT1ku+9pW7IxwQj1caMW0VTg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <style>
+    :root{
+      color-scheme: dark;
+      --overlay-bg: rgba(2,5,12,.85);
+      --teal: #04c8bb;
+      --pill-bg: rgba(5,12,22,.92);
+      --accent: #52f2ff;
+      --text-muted: rgba(255,255,255,.68);
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0;height:100%;width:100%;overflow:hidden;font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#050914;color:#fff;}
+    canvas{display:block;position:fixed;inset:0;z-index:0;}
+
+    #langToggle{
+      position:fixed;top:14px;right:14px;z-index:10001;
+      display:flex;align-items:center;justify-content:center;
+      padding:.38rem .85rem;border-radius:999px;border:2px solid var(--teal);
+      background:var(--pill-bg);color:var(--teal);font-size:.9rem;font-weight:700;letter-spacing:.03em;
+      cursor:pointer;transition:transform .08s ease,box-shadow .2s ease;background-clip:padding-box;
+    }
+    #langToggle:hover{box-shadow:0 0 0 3px rgba(4,200,187,.18);} 
+    #langToggle:active{transform:translateY(1px);}    
+
+    #promptOverlay{
+      position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:radial-gradient(circle at 40% 30%, rgba(43,113,166,.35) 0%, rgba(6,10,25,.94) 60%);
+      padding:1.5rem;text-align:center;transition:opacity .45s ease;
+    }
+    #promptOverlay.hidden{opacity:0;pointer-events:none;}
+    #promptOverlay h1{margin:0 0 1.1rem 0;font-size:2.1rem;font-weight:700;letter-spacing:.02em;}
+    #promptOverlay p{max-width:min(960px,90vw);margin:.2rem auto 1.45rem auto;font-size:1.1rem;line-height:1.6;color:var(--text-muted);}
+    #promptOverlay small{display:block;margin-top:.9rem;font-size:.95rem;color:rgba(255,255,255,.55);}
+
+    #startButton{
+      border:none;border-radius:14px;padding:1rem 2.6rem;font-size:1.25rem;font-weight:700;cursor:pointer;
+      background:linear-gradient(120deg,#34d8ff,#7b5bff 55%,#ff3dac);
+      color:#fff;box-shadow:0 12px 40px rgba(19,77,208,.35);transition:transform .08s ease,box-shadow .25s ease;
+    }
+    #startButton:hover{box-shadow:0 12px 50px rgba(40,149,255,.55);} 
+    #startButton:active{transform:translateY(2px);}   
+
+    #hintBar{
+      position:fixed;left:50%;bottom:20px;transform:translateX(-50%);
+      background:rgba(5,10,22,.8);backdrop-filter:blur(12px);
+      padding:.75rem 1.5rem;border-radius:999px;z-index:10002;font-size:.95rem;color:rgba(255,255,255,.78);
+      display:flex;gap:.75rem;align-items:center;opacity:0;pointer-events:none;transition:opacity .45s ease;
+    }
+    #hintBar.visible{opacity:1;}
+    #hintBar span{display:flex;align-items:center;gap:.4rem;}
+    #hintBar kbd{
+      display:inline-flex;align-items:center;justify-content:center;
+      min-width:2rem;padding:.2rem .7rem;border-radius:.6rem;border:1px solid rgba(255,255,255,.3);
+      font-size:.85rem;background:rgba(255,255,255,.1);color:#fff;font-weight:600;box-shadow:inset 0 0 10px rgba(0,0,0,.35);
+      text-transform:uppercase;letter-spacing:.03em;
+    }
+
+    @media (max-width:640px){
+      #promptOverlay h1{font-size:1.7rem;}
+      #promptOverlay p{font-size:1rem;}
+      #startButton{width:min(320px,80vw);}
+      #hintBar{flex-direction:column;gap:.45rem;bottom:16px;padding:.65rem 1.2rem;}
+    }
+  </style>
+</head>
+<body>
+  <button id="langToggle" type="button" title="Changer de langue / Change language">FR / EN</button>
+  <div id="promptOverlay">
+    <h1 class="translate" data-fr="Kaléidoscope givré" data-en="Frost Kaleidoscope">Kaléidoscope givré</h1>
+    <p class="translate"
+       data-fr="Appuyez sur Commencer puis déclenchez le kaléidoscope avec la barre d'espace. Chaque impulsion peint une nouvelle rosace glacée rendue en direct dans p5.js."
+       data-en="Press Start and fire the kaleidoscope with the space bar. Each activation paints a new frosty mandala rendered live in p5.js.">
+      Appuyez sur Commencer puis déclenchez le kaléidoscope avec la barre d'espace. Chaque impulsion peint une nouvelle rosace glacée rendue en direct dans p5.js.
+    </p>
+    <small class="translate"
+           data-fr="Raccourcis : espace = motif · Entrée = effacer"
+           data-en="Shortcuts: space = motif · Enter = clear">Raccourcis : espace = motif · Entrée = effacer</small>
+    <button id="startButton" class="translate" data-fr="Commencer" data-en="Start">Commencer</button>
+  </div>
+  <div id="hintBar" class="translate" data-fr="<span><kbd>Espace</kbd> = nouveau motif</span><span><kbd>Entrée</kbd> = effacer</span>"
+       data-en="<span><kbd>Space</kbd> = new motif</span><span><kbd>Enter</kbd> = clear</span>">
+    <span><kbd>Espace</kbd> = nouveau motif</span><span><kbd>Entrée</kbd> = effacer</span>
+  </div>
+
+  <script>
+    (function(){
+      const stored = (localStorage.getItem('siteLanguage') || document.documentElement.lang || 'fr').toLowerCase();
+      let currentLang = stored === 'en' ? 'en' : 'fr';
+      const langToggle = document.getElementById('langToggle');
+      function applyTranslations(){
+        document.documentElement.lang = currentLang;
+        document.title = currentLang === 'fr' ? 'Kaléidoscope givré — Jeu Switch' : 'Frost Kaleidoscope — Switch Game';
+        document.querySelectorAll('.translate').forEach(el=>{
+          const fr = el.getAttribute('data-fr');
+          const en = el.getAttribute('data-en');
+          if(!fr && !en) return;
+          if(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'BUTTON'){
+            el.textContent = currentLang === 'fr' ? (fr || el.textContent) : (en || el.textContent);
+          }else{
+            el.innerHTML = currentLang === 'fr' ? (fr || el.innerHTML) : (en || el.innerHTML);
+          }
+        });
+        langToggle.textContent = currentLang === 'fr' ? 'FR / EN' : 'EN / FR';
+      }
+      langToggle.addEventListener('pointerup', (ev)=>{
+        ev.preventDefault();
+        ev.stopPropagation();
+        currentLang = currentLang === 'fr' ? 'en' : 'fr';
+        localStorage.setItem('siteLanguage', currentLang);
+        applyTranslations();
+      });
+      applyTranslations();
+      window.__switchLang = ()=>{
+        currentLang = currentLang === 'fr' ? 'en' : 'fr';
+        localStorage.setItem('siteLanguage', currentLang);
+        applyTranslations();
+      };
+      window.__getLang = ()=>currentLang;
+    })();
+  </script>
+
+  <script>
+    let gfxBuffer;
+    let bursts = [];
+    let auroraDust = [];
+    let started = false;
+    let overlayVisible = true;
+    let hintTimer = 0;
+
+    const overlay = document.getElementById('promptOverlay');
+    const hintBar = document.getElementById('hintBar');
+    const startButton = document.getElementById('startButton');
+    const langToggle = document.getElementById('langToggle');
+
+    class KaleidoBurst{
+      constructor(baseSize){
+        this.symmetry = Math.floor(random(7, 13));
+        this.rotation = random(360);
+        this.rotSpeed = random(-22, 22);
+        this.duration = random(9, 15);
+        this.elapsed = 0;
+        this.hue = random(180, 250);
+        this.hueShift = random(40, 110);
+        this.baseSize = baseSize * random(0.38, 0.62);
+        this.shards = [];
+        const shardCount = Math.floor(random(4, 7));
+        for(let i=0;i<shardCount;i++){
+          this.shards.push(this._makeShard());
+        }
+        this.rings = [];
+        const ringCount = Math.floor(random(2,4));
+        for(let i=0;i<ringCount;i++){
+          this.rings.push({
+            delay: i * random(0.12,0.2),
+            width: random(0.45,0.9),
+            thickness: random(0.04,0.09),
+            hueShift: random(-30,60),
+            life:0
+          });
+        }
+      }
+      _makeShard(){
+        const spread = random(14, 32);
+        const nodes = Math.floor(random(5, 8));
+        const points = [];
+        for(let i=0;i<nodes;i++){
+          const t = nodes === 1 ? 0 : i/(nodes-1);
+          const ang = lerp(-spread, spread, t) + random(-3,3);
+          const radius = this.baseSize * (0.25 + 0.7 * Math.pow(t,1.2)) * random(0.92,1.08);
+          const wobble = (noise(random(1000)) - 0.5) * this.baseSize * 0.12 * (1-t);
+          const x = sin(ang) * radius + wobble;
+          const y = -cos(ang) * radius;
+          points.push({x,y});
+        }
+        for(let i=nodes-1;i>=0;i--){
+          const anchor = points[i];
+          const shrink = random(0.32,0.58);
+          points.push({x:anchor.x*shrink, y:anchor.y*shrink + this.baseSize*random(0.01,0.06)});
+        }
+        return {
+          points,
+          glowWidth: random(1.4,2.4),
+          alpha: random(0.6,0.95),
+          hueJitter: random(-30, 45),
+          pulseFreq: random(0.5, 1.6),
+          pulseOffset: random(TWO_PI)
+        };
+      }
+      update(dt){
+        this.elapsed += dt;
+        this.rotation += this.rotSpeed * dt;
+        this.rings.forEach(r=>{ if(this.elapsed > r.delay) r.life = Math.min(r.life + dt, this.duration); });
+      }
+      render(pg){
+        const t = constrain(this.elapsed / this.duration, 0, 1);
+        const fade = 1 - easeInCubic(t);
+        const grow = easeOutExpo(Math.min(1, t * 1.12));
+        pg.push();
+        pg.translate(pg.width/2, pg.height/2);
+        pg.blendMode(ADD);
+        const step = 360 / this.symmetry;
+        for(let i=0;i<this.symmetry;i++){
+          pg.push();
+          pg.rotate(this.rotation + i*step);
+          this._drawShard(pg, grow, fade, false);
+          pg.scale(-1,1);
+          this._drawShard(pg, grow, fade*0.9, true);
+          pg.pop();
+        }
+        pg.blendMode(ADD);
+        this.rings.forEach(r=>{
+          if(this.elapsed < r.delay) return;
+          const ringT = constrain((this.elapsed - r.delay)/this.duration, 0, 1);
+          const ringAlpha = (1 - ringT) * fade * 0.6;
+          if(ringAlpha <= 0.001) return;
+          const ringRadius = this.baseSize * (0.7 + r.width * easeOutCubic(Math.min(1, ringT*1.15)));
+          pg.noFill();
+          pg.strokeWeight(this.baseSize * r.thickness * (0.8 + 0.2*sin((this.elapsed*0.5)+r.delay)));
+          pg.stroke((this.hue + r.hueShift) % 360, 65, 95, ringAlpha);
+          pg.circle(0,0, ringRadius*2);
+        });
+        pg.pop();
+      }
+      _drawShard(pg, grow, fade, mirrored){
+        const baseHue = (this.hue + this.hueShift * Math.sin((this.elapsed*0.18)+(mirrored?0.6:0))) % 360;
+        this.shards.forEach(shard=>{
+          const pulse = 0.75 + 0.25 * Math.sin(this.elapsed * shard.pulseFreq + shard.pulseOffset);
+          const alpha = Math.max(0, fade * shard.alpha * pulse);
+          if(alpha <= 0.002) return;
+          const fillColor = pg.color((baseHue + shard.hueJitter + (mirrored?-15:15)) % 360, 70, 95, alpha);
+          pg.noStroke();
+          pg.fill(fillColor);
+          pg.beginShape();
+          const len = shard.points.length;
+          for(let i=0;i<len;i++){
+            const pt = shard.points[i];
+            pg.vertex(pt.x * grow, pt.y * grow);
+          }
+          pg.endShape(CLOSE);
+          pg.noFill();
+          pg.strokeWeight(shard.glowWidth * (0.6 + 0.4*pulse));
+          pg.stroke((baseHue + shard.hueJitter*0.4) % 360, 40, 100, alpha*0.7);
+          pg.beginShape();
+          for(let i=0;i<len;i++){
+            const pt = shard.points[i];
+            pg.vertex(pt.x * grow, pt.y * grow);
+          }
+          pg.endShape(CLOSE);
+        });
+      }
+      isDone(){
+        return this.elapsed >= this.duration;
+      }
+    }
+
+    class AuroraParticle{
+      constructor(){
+        this.reset(true);
+      }
+      reset(initial){
+        this.depth = random(0.35, 1);
+        this.x = random(width);
+        this.y = initial ? random(height) : -random(40, 160);
+        this.speed = lerp(14, 42, this.depth);
+        this.size = lerp(0.8, 2.8, this.depth);
+        this.hue = random(180, 220);
+        this.alpha = lerp(0.35, 0.7, this.depth);
+        this.driftPhase = random(TWO_PI);
+      }
+      update(dt){
+        this.y += this.speed * dt;
+        this.x += Math.sin(this.driftPhase + frameCount*0.005) * 18 * dt;
+        if(this.y > height + 40){
+          this.reset(false);
+        }
+      }
+      render(){
+        noStroke();
+        fill(this.hue, 45, 95, this.alpha);
+        const glowSize = this.size * 4.2;
+        drawingContext.save();
+        drawingContext.shadowBlur = glowSize;
+        drawingContext.shadowColor = color(this.hue, 60, 100, this.alpha*1.4).toString();
+        ellipse(this.x, this.y, this.size*3, this.size*6);
+        drawingContext.restore();
+      }
+    }
+
+    function setup(){
+      createCanvas(windowWidth, windowHeight);
+      colorMode(HSB,360,100,100,1);
+      angleMode(DEGREES);
+      gfxBuffer = createGraphics(windowWidth, windowHeight);
+      gfxBuffer.colorMode(HSB,360,100,100,1);
+      gfxBuffer.angleMode(DEGREES);
+      gfxBuffer.clear();
+      auroraDust = [];
+      const dustCount = Math.floor((windowWidth*windowHeight)/22000);
+      for(let i=0;i<dustCount;i++){
+        auroraDust.push(new AuroraParticle());
+      }
+    }
+
+    function windowResized(){
+      resizeCanvas(windowWidth, windowHeight);
+      const prev = gfxBuffer;
+      gfxBuffer = createGraphics(windowWidth, windowHeight);
+      gfxBuffer.colorMode(HSB,360,100,100,1);
+      gfxBuffer.angleMode(DEGREES);
+      gfxBuffer.clear();
+      gfxBuffer.image(prev, 0, 0, windowWidth, windowHeight);
+      auroraDust = [];
+      const dustCount = Math.floor((windowWidth*windowHeight)/22000);
+      for(let i=0;i<dustCount;i++){
+        auroraDust.push(new AuroraParticle());
+      }
+    }
+
+    function draw(){
+      const ctx = drawingContext;
+      ctx.save();
+      ctx.setTransform(1,0,0,1,0,0);
+      const gradient = ctx.createLinearGradient(0,0,0,height);
+      gradient.addColorStop(0,'#071627');
+      gradient.addColorStop(0.45,'#0a0f2a');
+      gradient.addColorStop(1,'#150a2e');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0,0,width,height);
+      ctx.restore();
+
+      const dt = deltaTime/1000;
+      if(gfxBuffer){
+        gfxBuffer.push();
+        gfxBuffer.noStroke();
+        gfxBuffer.fill(230, 40, 4, 0.08);
+        gfxBuffer.rect(0,0,gfxBuffer.width,gfxBuffer.height);
+        gfxBuffer.pop();
+        for(let i=bursts.length-1;i>=0;i--){
+          const burst = bursts[i];
+          burst.update(dt);
+          burst.render(gfxBuffer);
+          if(burst.isDone()) bursts.splice(i,1);
+        }
+        image(gfxBuffer,0,0,width,height);
+      }
+
+      blendMode(ADD);
+      auroraDust.forEach(p=>{p.update(dt); p.render();});
+      blendMode(BLEND);
+
+      hintTimer += dt;
+      if(started && hintTimer > 0.8){
+        hintBar.classList.add('visible');
+      }
+    }
+
+    function triggerBurst(){
+      if(!gfxBuffer) return;
+      const base = Math.min(gfxBuffer.width, gfxBuffer.height) * 0.5;
+      bursts.push(new KaleidoBurst(base));
+      if(bursts.length > 6){
+        bursts.splice(0, bursts.length - 6);
+      }
+      hintTimer = 0;
+      hintBar.classList.remove('visible');
+    }
+
+    function resetScene(){
+      if(!gfxBuffer) return;
+      bursts.length = 0;
+      gfxBuffer.clear();
+      triggerBurst();
+    }
+
+    function hideOverlay(){
+      if(!overlayVisible) return;
+      overlayVisible = false;
+      overlay.classList.add('hidden');
+      setTimeout(()=>{overlay.style.display='none';}, 500);
+      started = true;
+      hintTimer = 0;
+      triggerBurst();
+    }
+
+    startButton.addEventListener('pointerup', (ev)=>{
+      ev.preventDefault();
+      ev.stopPropagation();
+      hideOverlay();
+    });
+
+    document.addEventListener('pointerup', (ev)=>{
+      if(langToggle.contains(ev.target)) return;
+      if(!started){
+        hideOverlay();
+      }else if(!overlayVisible){
+        triggerBurst();
+      }
+    });
+
+    document.addEventListener('keydown', (ev)=>{
+      if(ev.code === 'Space' || ev.key === ' '){
+        ev.preventDefault();
+        if(!started){
+          hideOverlay();
+        }else{
+          triggerBurst();
+        }
+      }else if(ev.code === 'Enter'){
+        ev.preventDefault();
+        if(started){
+          resetScene();
+        }
+      }
+    });
+
+    window.addEventListener('blur', ()=>{
+      // pause hint when focus leaves
+      hintTimer = 0;
+      hintBar.classList.remove('visible');
+    });
+
+    function easeOutExpo(t){
+      return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    }
+    function easeInCubic(t){
+      return t * t * t;
+    }
+    function easeOutCubic(t){
+      const inv = 1 - t;
+      return 1 - inv * inv * inv;
+    }
+
+  </script>
+</body>
+</html>
