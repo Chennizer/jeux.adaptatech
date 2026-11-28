@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="translate" data-fr="Protecteur de planète" data-en="Planet Protector">Planet Protector</title>
+  <link rel="stylesheet" href="../../css/games.css">
+  <link rel="stylesheet" href="../../css/choiceeyegaze.css">
+</head>
+<body class="game">
+  <div id="menu-placeholder"></div>
+  <canvas id="gameCanvas"></canvas>
+  <audio id="hitSound" src="../../sounds/space/twinklingstar1.mp3" preload="auto"></audio>
+
+  <script src="../../js/eyegaze-menu.js"></script>
+  <script src="../../js/eyegazeMenuLoader.js"></script>
+  <script src="../../js/translationonly.js"></script>
+  <script>
+    let speedInput;
+    loadEyegazeMenu({
+      title: "Planet Protector",
+      customOptions: `
+        <div class="option-item">
+          <label for="speed-input" class="teal-label">
+            <span class="translate" data-fr="Vitesse des astéroïdes:" data-en="Asteroid speed:">Vitesse des astéroïdes:</span>
+            <span id="speedVal">1</span>
+          </label>
+          <input type="range" id="speed-input" class="styled-slider" min="1" max="5" value="1">
+        </div>
+      `
+    }).then(() => {
+      initEyegazeMenu();
+      const startButton = document.getElementById('startButton');
+      speedInput = document.getElementById('speed-input');
+      const speedVal = document.getElementById('speedVal');
+      speedVal.textContent = speedInput.value;
+      speedInput.addEventListener('input', () => {
+        speedVal.textContent = speedInput.value;
+      });
+      if (startButton) {
+        startButton.addEventListener('click', startGame);
+      }
+    });
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let crosshair = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let asteroids = [];
+    let spawnTimer = 0;
+    let lastTime = 0;
+    let running = false;
+    let score = 0;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    window.addEventListener('pointermove', e => {
+      crosshair.x = e.clientX;
+      crosshair.y = e.clientY;
+    });
+
+    function startGame() {
+      eyegazeSettings.hideOverlay();
+      document.body.classList.add('hide-cursor');
+      running = true;
+      asteroids = [];
+      spawnTimer = 0;
+      score = 0;
+      lastTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop(timestamp) {
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+      spawnTimer += dt;
+      if (spawnTimer > 1000) {
+        spawnTimer = 0;
+        spawnAsteroid();
+      }
+      updateAsteroids(dt);
+      draw();
+      if (running) requestAnimationFrame(gameLoop);
+    }
+
+    function spawnAsteroid() {
+      const r = 20 + Math.random() * 20;
+      const x = r + Math.random() * (canvas.width - 2 * r);
+      const speed = (1 + Math.random() * 1.5) * (parseInt(speedInput.value) || 1);
+      asteroids.push({ x, y: -r, r, speed, hover: 0 });
+    }
+
+    function updateAsteroids(dt) {
+      for (let i = asteroids.length - 1; i >= 0; i--) {
+        const a = asteroids[i];
+        a.y += a.speed;
+        const dx = crosshair.x - a.x;
+        const dy = crosshair.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < a.r) {
+          a.hover += dt;
+          if (a.hover >= eyegazeSettings.dwellTime) {
+            asteroids.splice(i, 1);
+            playHit();
+            score++;
+            continue;
+          }
+        } else {
+          a.hover = 0;
+        }
+        if (a.y - a.r > canvas.height) {
+          gameOver();
+          break;
+        }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#1e3a8a';
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2, canvas.height - 40, 30, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#9ca3af';
+      asteroids.forEach(a => {
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.strokeStyle = '#f87171';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(crosshair.x, crosshair.y, 20, 0, Math.PI * 2);
+      ctx.moveTo(crosshair.x - 25, crosshair.y);
+      ctx.lineTo(crosshair.x + 25, crosshair.y);
+      ctx.moveTo(crosshair.x, crosshair.y - 25);
+      ctx.lineTo(crosshair.x, crosshair.y + 25);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = '20px sans-serif';
+      ctx.fillText('Score: ' + score, 20, 30);
+    }
+
+    function gameOver() {
+      running = false;
+      document.body.classList.remove('hide-cursor');
+      alert('Game over! Score: ' + score);
+    }
+
+    function playHit() {
+      const audio = document.getElementById('hitSound');
+      audio.volume = eyegazeSettings.sfxMuted ? 0 : eyegazeSettings.sfxVolume / 100;
+      audio.currentTime = 0;
+      audio.play();
+    }
+  </script>
+</body>
+</html>
